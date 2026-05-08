@@ -1,0 +1,20 @@
+{
+  "name": "orgiq-infra",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "synth": "cdk synth",
+    "deploy": "cdk deploy",
+    "diff": "cdk diff"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.195.0",
+    "constructs": "^10.4.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.0",
+    "ts-node": "^10.9.0",
+    "aws-cdk": "^2.195.0"
+  }
+}

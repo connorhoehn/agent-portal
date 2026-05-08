@@ -1,0 +1,63 @@
+services:
+  jupyter:
+    build: ./notebooks
+    container_name: orgiq-jupyter
+    ports:
+      - "${JUPYTER_PORT:-8888}:8888"
+    volumes:
+      - ./notebooks:/workspace
+      - ~/.aws:/root/.aws:ro
+    environment:
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_DEFAULT_REGION=${AWS_REGION:-us-east-1}
+      - AWS_PROFILE=${AWS_PROFILE:-bedrock}
+    working_dir: /workspace
+    restart: unless-stopped
+    networks:
+      - orgiq-network
+
+  middleware:
+    build:
+      context: ./middleware
+      target: development
+      ssh:
+        - default
+    container_name: orgiq-middleware
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./middleware/src:/app/src
+      - ~/.aws:/home/node/.aws:ro
+    environment:
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - AWS_PROFILE=${AWS_PROFILE:-bedrock}
+      - NEPTUNE_GRAPH_ID=${NEPTUNE_GRAPH_ID:-}
+      - AGENTCORE_ENDPOINT=${AGENTCORE_ENDPOINT:-}
+      - NODE_ENV=development
+      - PORT=3001
+    restart: unless-stopped
+    networks:
+      - orgiq-network
+
+  portal:
+    build:
+      context: ./portal
+      target: development
+      args:
+        GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    container_name: orgiq-portal
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./portal:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:3001
+      - VITE_WS_URL=ws://localhost:3001
+    restart: unless-stopped
+    networks:
+      - orgiq-network
+
+networks:
+  orgiq-network:
+    driver: bridge

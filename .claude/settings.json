@@ -1,0 +1,58 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker compose *)",
+      "Bash(docker build *)",
+      "Bash(docker run *)",
+      "Bash(docker ps *)",
+      "Bash(docker logs *)",
+      "Bash(docker exec *)",
+      "Bash(aws *)",
+      "Bash(agentcore *)",
+      "Bash(npx cdk *)",
+      "Bash(npx tsc *)",
+      "Bash(npm *)",
+      "Bash(pip *)",
+      "Bash(uv *)",
+      "Bash(python *)",
+      "Bash(jupyter *)",
+      "Bash(git status*)",
+      "Bash(git log*)",
+      "Bash(git diff*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git branch*)",
+      "Bash(git checkout*)",
+      "Bash(ls *)",
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Bash(wc *)",
+      "Bash(curl *)",
+      "Bash(mkdir *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Bash(touch *)",
+      "Bash(rm -rf node_modules*)",
+      "Bash(rm -rf dist*)",
+      "Bash(rm -rf cdk.out*)",
+      "Bash(rm -rf .venv*)"
+    ]
+  },
+  "env": {
+    "AWS_REGION": "us-east-1",
+    "AWS_PROFILE": "bedrock"
+  },
+  "hooks": {
+    "PreToolCall": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$CLAUDE_TOOL_INPUT\" | grep -q 'Gremlin\\|SPARQL\\|gremlin\\|sparql'; then echo 'BLOCKED: Neptune Analytics only supports openCypher. Do not use Gremlin or SPARQL.' && exit 1; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

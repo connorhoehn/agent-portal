@@ -1,0 +1,30 @@
+[
+  {
+    "id": "t-001",
+    "name": "Platform Engineering",
+    "org_path": "Engineering/Platform",
+    "charter": "Build and maintain core platform infrastructure including APIs, authentication, CI/CD pipelines, and developer tooling.",
+    "member_ids": ["p-001", "p-002", "p-003", "p-004", "p-005"]
+  },
+  {
+    "id": "t-002",
+    "name": "Product",
+    "org_path": "Product",
+    "charter": "Define product strategy, conduct user research, manage roadmaps, and ensure features deliver measurable customer value.",
+    "member_ids": ["p-006", "p-007", "p-008", "p-009", "p-010"]
+  },
+  {
+    "id": "t-003",
+    "name": "Data Platform",
+    "org_path": "Engineering/Data",
+    "charter": "Design and operate data pipelines, ML infrastructure, analytics platforms, and real-time streaming systems.",
+    "member_ids": ["p-011", "p-012", "p-013", "p-014", "p-015"]
+  },
+  {
+    "id": "t-004",
+    "name": "Design Systems",
+    "org_path": "Design",
+    "charter": "Maintain the component library, establish design patterns, ensure accessibility compliance, and build shared frontend infrastructure.",
+    "member_ids": ["p-016", "p-017", "p-018", "p-019", "p-020"]
+  }
+]

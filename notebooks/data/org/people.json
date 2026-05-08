@@ -1,0 +1,22 @@
+[
+  {"id": "p-001", "name": "Alex Chen", "email": "alex.chen@orgiq.dev", "title": "Staff Engineer", "department": "Platform Engineering", "hire_date": "2020-03-15", "manager_id": "p-005"},
+  {"id": "p-002", "name": "Maria Santos", "email": "maria.santos@orgiq.dev", "title": "Senior Engineer", "department": "Platform Engineering", "hire_date": "2021-06-01", "manager_id": "p-005"},
+  {"id": "p-003", "name": "James Wright", "email": "james.wright@orgiq.dev", "title": "Engineer", "department": "Platform Engineering", "hire_date": "2023-01-10", "manager_id": "p-005"},
+  {"id": "p-004", "name": "Priya Patel", "email": "priya.patel@orgiq.dev", "title": "Senior Engineer", "department": "Platform Engineering", "hire_date": "2021-09-20", "manager_id": "p-005"},
+  {"id": "p-005", "name": "David Kim", "email": "david.kim@orgiq.dev", "title": "Engineering Manager", "department": "Platform Engineering", "hire_date": "2019-11-01", "manager_id": null},
+  {"id": "p-006", "name": "Sarah Johnson", "email": "sarah.johnson@orgiq.dev", "title": "Senior Product Manager", "department": "Product", "hire_date": "2020-08-15", "manager_id": "p-010"},
+  {"id": "p-007", "name": "Tom Nakamura", "email": "tom.nakamura@orgiq.dev", "title": "Product Manager", "department": "Product", "hire_date": "2022-03-01", "manager_id": "p-010"},
+  {"id": "p-008", "name": "Lisa Chang", "email": "lisa.chang@orgiq.dev", "title": "UX Researcher", "department": "Product", "hire_date": "2022-07-15", "manager_id": "p-010"},
+  {"id": "p-009", "name": "Ryan O'Brien", "email": "ryan.obrien@orgiq.dev", "title": "Technical Writer", "department": "Product", "hire_date": "2023-04-01", "manager_id": "p-010"},
+  {"id": "p-010", "name": "Nina Kowalski", "email": "nina.kowalski@orgiq.dev", "title": "Director of Product", "department": "Product", "hire_date": "2019-05-20", "manager_id": null},
+  {"id": "p-011", "name": "Carlos Rivera", "email": "carlos.rivera@orgiq.dev", "title": "Staff Data Engineer", "department": "Data Platform", "hire_date": "2020-01-15", "manager_id": "p-015"},
+  {"id": "p-012", "name": "Emma Wilson", "email": "emma.wilson@orgiq.dev", "title": "Senior Data Engineer", "department": "Data Platform", "hire_date": "2021-04-01", "manager_id": "p-015"},
+  {"id": "p-013", "name": "Ahmed Hassan", "email": "ahmed.hassan@orgiq.dev", "title": "ML Engineer", "department": "Data Platform", "hire_date": "2022-01-10", "manager_id": "p-015"},
+  {"id": "p-014", "name": "Yuki Tanaka", "email": "yuki.tanaka@orgiq.dev", "title": "Data Analyst", "department": "Data Platform", "hire_date": "2023-06-15", "manager_id": "p-015"},
+  {"id": "p-015", "name": "Marcus Thompson", "email": "marcus.thompson@orgiq.dev", "title": "Engineering Manager", "department": "Data Platform", "hire_date": "2019-08-01", "manager_id": null},
+  {"id": "p-016", "name": "Olivia Park", "email": "olivia.park@orgiq.dev", "title": "Senior Designer", "department": "Design Systems", "hire_date": "2020-11-01", "manager_id": "p-020"},
+  {"id": "p-017", "name": "Jordan Lee", "email": "jordan.lee@orgiq.dev", "title": "Frontend Engineer", "department": "Design Systems", "hire_date": "2021-12-01", "manager_id": "p-020"},
+  {"id": "p-018", "name": "Rachel Green", "email": "rachel.green@orgiq.dev", "title": "Design Engineer", "department": "Design Systems", "hire_date": "2022-09-15", "manager_id": "p-020"},
+  {"id": "p-019", "name": "Kevin Nguyen", "email": "kevin.nguyen@orgiq.dev", "title": "Accessibility Specialist", "department": "Design Systems", "hire_date": "2023-02-01", "manager_id": "p-020"},
+  {"id": "p-020", "name": "Diana Martinez", "email": "diana.martinez@orgiq.dev", "title": "Head of Design", "department": "Design Systems", "hire_date": "2019-06-15", "manager_id": null}
+]

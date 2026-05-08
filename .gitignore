@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+cdk.out/
+.env
+config.json
+resource_tracker.json
+*.pkl
+.ipynb_checkpoints/
+*.egg-info/
+.DS_Store
