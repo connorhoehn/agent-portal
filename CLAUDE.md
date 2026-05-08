@@ -17,7 +17,7 @@ expertise → serves conversational search. See CONSTITUTION.md for full spec.
 ```bash
 docker-compose up --build            # jupyter + middleware + portal
 docker-compose up jupyter            # Just notebooks at :8888
-docker-compose up middleware portal  # App stack at :3001 + :5173
+docker-compose up middleware portal  # App stack at :3001 + :5183
 ```
 
 **Agents are NOT in docker-compose.** Develop agents with:

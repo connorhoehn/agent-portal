@@ -47,7 +47,7 @@ services:
         GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     container_name: orgiq-portal
     ports:
-      - "5173:5173"
+      - "5183:5183"
     volumes:
       - ./portal:/app
       - /app/node_modules

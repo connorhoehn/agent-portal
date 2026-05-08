@@ -4,6 +4,7 @@ const NAV_ITEMS = [
   { path: '/agents', label: 'Agent Flow' },
   { path: '/graph', label: 'Org Graph' },
   { path: '/search', label: 'Search' },
+  { path: '/invoke', label: 'Invoke Agent' },
   { path: '/scores', label: 'Scores' },
   { path: '/ingest', label: 'Ingest' },
   { path: '/observability', label: 'Observability' },
@@ -13,17 +14,18 @@ export function Layout() {
   return (
     <div style={{ display: 'flex', height: '100vh' }}>
       <aside style={{
-        width: 240,
+        width: 200,
         borderRight: '1px solid var(--color-border)',
         background: 'var(--color-surface)',
         display: 'flex',
         flexDirection: 'column',
       }}>
         <div style={{
-          padding: '16px 20px',
+          padding: '16px 16px',
           fontWeight: 700,
           fontSize: 18,
           borderBottom: '1px solid var(--color-border)',
+          color: 'var(--color-primary)',
         }}>
           OrgIQ
         </div>
@@ -39,7 +41,8 @@ export function Layout() {
                 color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)',
                 background: isActive ? 'var(--color-surface-hover)' : 'transparent',
                 textDecoration: 'none',
-                fontSize: 14,
+                fontSize: 13,
+                fontWeight: isActive ? 500 : 400,
                 marginBottom: 2,
               })}
             >
@@ -47,8 +50,11 @@ export function Layout() {
             </NavLink>
           ))}
         </nav>
+        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--color-border)', fontSize: 10, color: 'var(--color-text-tertiary)' }}>
+          v0.2.0 · Mock Mode
+        </div>
       </aside>
-      <main style={{ flex: 1, overflow: 'auto' }}>
+      <main style={{ flex: 1, overflow: 'auto', padding: 24 }}>
         <Outlet />
       </main>
     </div>

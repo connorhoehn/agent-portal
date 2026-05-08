@@ -35,7 +35,8 @@
       "Bash(rm -rf node_modules*)",
       "Bash(rm -rf dist*)",
       "Bash(rm -rf cdk.out*)",
-      "Bash(rm -rf .venv*)"
+      "Bash(rm -rf .venv*)",
+      "Bash(.claude/scripts/*)"
     ]
   },
   "env": {
