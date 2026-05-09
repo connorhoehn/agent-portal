@@ -11,8 +11,10 @@ export interface AgentCoreRuntimeStackProps extends cdk.StackProps {
   readonly memoryId: string;
   /** Bedrock Guardrail ID (injected as env var) */
   readonly guardrailId: string;
-  /** Neptune Analytics graph ID (injected as env var) */
-  readonly neptuneGraphId: string;
+  /** Aurora Serverless v2 cluster ARN (graph + vector store, injected as env var) */
+  readonly auroraClusterArn: string;
+  /** Secrets Manager secret ARN for Aurora credentials (injected as env var) */
+  readonly auroraCredentialsSecretArn: string;
   /** Bedrock Knowledge Base ID (injected as env var) */
   readonly knowledgeBaseId: string;
   /** The model ID for agent inference */
@@ -55,7 +57,7 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
     super(scope, id, props);
 
     const prefix = props.prefix ?? 'orgiq';
-    const modelId = props.modelId ?? 'anthropic.claude-sonnet-4-20250514';
+    const modelId = props.modelId ?? 'amazon.nova-pro-v1:0';
     this.runtimeIds = {};
 
     // -------------------------------------------------------------------
@@ -130,7 +132,8 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
               MEMORY_ID: props.memoryId,
               GUARDRAIL_ID: props.guardrailId,
               MODEL_ID: modelId,
-              NEPTUNE_GRAPH_ID: props.neptuneGraphId,
+              AURORA_CLUSTER_ARN: props.auroraClusterArn,
+              AURORA_SECRET_ARN: props.auroraCredentialsSecretArn,
               KB_ID: props.knowledgeBaseId,
               PROJECT_PREFIX: prefix,
             },
@@ -160,7 +163,8 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
               MEMORY_ID: props.memoryId,
               GUARDRAIL_ID: props.guardrailId,
               MODEL_ID: modelId,
-              NEPTUNE_GRAPH_ID: props.neptuneGraphId,
+              AURORA_CLUSTER_ARN: props.auroraClusterArn,
+              AURORA_SECRET_ARN: props.auroraCredentialsSecretArn,
               KB_ID: props.knowledgeBaseId,
               PROJECT_PREFIX: prefix,
             },

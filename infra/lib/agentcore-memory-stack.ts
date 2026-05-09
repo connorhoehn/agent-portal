@@ -113,7 +113,7 @@ export class AgentCoreMemoryStack extends cdk.Stack {
               },
               configuration: {
                 summaryConfiguration: {
-                  modelId: 'anthropic.claude-sonnet-4-20250514',
+                  modelId: 'amazon.nova-lite-v1:0',
                   maxSummaryTokens: 2048,
                   consolidationInterval: 5, // Summarize every 5 conversations
                 },

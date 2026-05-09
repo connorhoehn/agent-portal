@@ -22,7 +22,12 @@ class ResourceTracker:
     def _load(self) -> Dict:
         if self.tracker_file.exists():
             with open(self.tracker_file) as f:
-                return json.load(f)
+                data = json.load(f)
+            # Migrate stale keys from older tracker files
+            for stale_key in ("neptune_graphs", "opensearch_collections", "opensearch_policies"):
+                data.pop(stale_key, None)
+            data.setdefault("lambda_functions", [])
+            return data
         return {
             "project_prefix": PROJECT_PREFIX,
             "region": None,
@@ -30,10 +35,8 @@ class ResourceTracker:
             "s3_buckets": [],
             "knowledge_bases": [],
             "data_sources": [],
-            "opensearch_collections": [],
-            "opensearch_policies": [],
             "iam_roles": [],
-            "neptune_graphs": [],
+            "lambda_functions": [],
             "agentcore_agents": [],
             "agentcore_gateways": [],
             "agentcore_memories": [],
@@ -69,28 +72,17 @@ class ResourceTracker:
             self.resources["data_sources"].append(entry)
             self._save()
 
-    def add_opensearch_collection(self, collection_arn: str, collection_name: str):
-        entry = {"arn": collection_arn, "name": collection_name}
-        if entry not in self.resources["opensearch_collections"]:
-            self.resources["opensearch_collections"].append(entry)
-            self._save()
-
-    def add_opensearch_policy(self, policy_name: str, policy_type: str):
-        entry = {"name": policy_name, "type": policy_type}
-        if entry not in self.resources["opensearch_policies"]:
-            self.resources["opensearch_policies"].append(entry)
-            self._save()
-
     def add_iam_role(self, role_arn: str, role_name: str):
         entry = {"arn": role_arn, "name": role_name}
         if entry not in self.resources["iam_roles"]:
             self.resources["iam_roles"].append(entry)
             self._save()
 
-    def add_neptune_graph(self, graph_id: str, graph_name: str):
-        entry = {"id": graph_id, "name": graph_name}
-        if entry not in self.resources["neptune_graphs"]:
-            self.resources["neptune_graphs"].append(entry)
+    def add_lambda_function(self, function_arn: str, function_name: str):
+        entry = {"arn": function_arn, "name": function_name}
+        bucket = self.resources.setdefault("lambda_functions", [])
+        if entry not in bucket:
+            bucket.append(entry)
             self._save()
 
     def add_agentcore_agent(self, agent_id: str, agent_name: str):
@@ -138,7 +130,6 @@ class ResourceTracker:
         return self.resources
 
     def clear(self):
-        self.resources = self._load.__func__(self)  # type: ignore
         self.resources = {
             "project_prefix": PROJECT_PREFIX,
             "region": None,
@@ -146,10 +137,8 @@ class ResourceTracker:
             "s3_buckets": [],
             "knowledge_bases": [],
             "data_sources": [],
-            "opensearch_collections": [],
-            "opensearch_policies": [],
             "iam_roles": [],
-            "neptune_graphs": [],
+            "lambda_functions": [],
             "agentcore_agents": [],
             "agentcore_gateways": [],
             "agentcore_memories": [],
@@ -190,17 +179,16 @@ class ResourceCleanup:
             return
 
         print("Cleaning up resources...")
+        # Dependency order: data sources before KBs, Lambdas before roles
         self._delete_data_sources(resources.get("data_sources", []))
         self._delete_knowledge_bases(resources.get("knowledge_bases", []))
         self._delete_bedrock_flows(resources.get("bedrock_flows", []))
         self._delete_guardrails(resources.get("guardrails", []))
         self._delete_managed_prompts(resources.get("managed_prompts", []))
-        self._delete_neptune_graphs(resources.get("neptune_graphs", []))
-        self._delete_opensearch_collections(resources.get("opensearch_collections", []))
+        self._delete_lambda_functions(resources.get("lambda_functions", []))
         self._delete_s3_buckets(resources.get("s3_buckets", []))
         self._delete_dynamodb_tables(resources.get("dynamodb_tables", []))
         self._delete_iam_roles(resources.get("iam_roles", []))
-        self._delete_opensearch_policies(resources.get("opensearch_policies", []))
         print("Cleanup complete.")
         self.tracker.clear()
 
@@ -235,14 +223,14 @@ class ResourceCleanup:
             except ClientError as e:
                 print(f"  Failed to delete data source {ds['ds_id']}: {e}")
 
-    def _delete_neptune_graphs(self, graphs: List):
-        client = boto3.client("neptune-graph", region_name=self.region)
-        for graph in graphs:
+    def _delete_lambda_functions(self, functions: List):
+        client = boto3.client("lambda", region_name=self.region)
+        for fn in functions:
             try:
-                client.delete_graph(graphIdentifier=graph["id"], skipSnapshot=True)
-                print(f"  Deleted Neptune graph: {graph['name']}")
+                client.delete_function(FunctionName=fn["name"])
+                print(f"  Deleted Lambda: {fn['name']}")
             except ClientError as e:
-                print(f"  Failed to delete graph {graph['name']}: {e}")
+                print(f"  Failed to delete Lambda {fn['name']}: {e}")
 
     def _delete_guardrails(self, guardrails: List):
         client = boto3.client("bedrock", region_name=self.region)
@@ -271,15 +259,6 @@ class ResourceCleanup:
             except ClientError as e:
                 print(f"  Failed to delete flow {flow['name']}: {e}")
 
-    def _delete_opensearch_collections(self, collections: List):
-        client = boto3.client("opensearchserverless", region_name=self.region)
-        for coll in collections:
-            try:
-                client.delete_collection(id=coll["arn"].split("/")[-1])
-                print(f"  Deleted collection: {coll['name']}")
-            except ClientError as e:
-                print(f"  Failed to delete collection {coll['name']}: {e}")
-
     def _delete_dynamodb_tables(self, tables: List):
         client = boto3.client("dynamodb", region_name=self.region)
         for table_name in tables:
@@ -306,20 +285,3 @@ class ResourceCleanup:
                 print(f"  Deleted IAM role: {role_name}")
             except ClientError as e:
                 print(f"  Failed to delete role {role['name']}: {e}")
-
-    def _delete_opensearch_policies(self, policies: List):
-        client = boto3.client("opensearchserverless", region_name=self.region)
-        for policy in policies:
-            try:
-                policy_type_map = {
-                    "access": "delete_access_policy",
-                    "encryption": "delete_security_policy",
-                    "network": "delete_security_policy",
-                }
-                method_name = policy_type_map.get(policy["type"])
-                if method_name:
-                    method = getattr(client, method_name)
-                    method(name=policy["name"], type=policy["type"])
-                print(f"  Deleted policy: {policy['name']}")
-            except ClientError as e:
-                print(f"  Failed to delete policy {policy['name']}: {e}")

@@ -156,9 +156,19 @@ export class FoundationStack extends cdk.Stack {
     // Outputs
     // -------------------------------------------------------------------
 
+    new cdk.CfnOutput(this, 'DocumentsBucketName', {
+      value: this.documentsBucket.bucketName,
+      exportName: `${prefix}-documents-bucket-name`,
+    });
+
     new cdk.CfnOutput(this, 'DocumentsBucketArn', {
       value: this.documentsBucket.bucketArn,
       exportName: `${prefix}-documents-bucket-arn`,
+    });
+
+    new cdk.CfnOutput(this, 'ArtifactsBucketName', {
+      value: this.artifactsBucket.bucketName,
+      exportName: `${prefix}-artifacts-bucket-name`,
     });
 
     new cdk.CfnOutput(this, 'ArtifactsBucketArn', {
@@ -166,9 +176,19 @@ export class FoundationStack extends cdk.Stack {
       exportName: `${prefix}-artifacts-bucket-arn`,
     });
 
+    new cdk.CfnOutput(this, 'ScoresTableName', {
+      value: this.scoresTable.tableName,
+      exportName: `${prefix}-scores-table-name`,
+    });
+
     new cdk.CfnOutput(this, 'ScoresTableArn', {
       value: this.scoresTable.tableArn,
       exportName: `${prefix}-scores-table-arn`,
+    });
+
+    new cdk.CfnOutput(this, 'SessionsTableName', {
+      value: this.sessionsTable.tableName,
+      exportName: `${prefix}-sessions-table-name`,
     });
 
     new cdk.CfnOutput(this, 'AgentBaseRoleArn', {

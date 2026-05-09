@@ -6,8 +6,10 @@ import type { Construct } from 'constructs';
 
 export interface AgentCoreGatewayStackProps extends cdk.StackProps {
   readonly prefix?: string;
-  /** Neptune Analytics graph ID for graph-traversal tool */
-  readonly neptuneGraphId: string;
+  /** Aurora Serverless v2 cluster ARN for graph-traversal and pagerank tools */
+  readonly auroraClusterArn: string;
+  /** Secrets Manager secret ARN for Aurora credentials */
+  readonly auroraCredentialsSecretArn: string;
   /** Bedrock Knowledge Base ID for kb-query tool */
   readonly knowledgeBaseId: string;
   /** Policy Engine ID to attach to gateway */
@@ -102,17 +104,24 @@ export class AgentCoreGatewayStack extends cdk.Stack {
       ],
     });
 
-    // Neptune access for graph-traversal and compute-pagerank tools
+    // Aurora Data API access for graph-traversal and compute-pagerank tools (Apache AGE)
     toolsLambdaRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'NeptuneAccess',
+      sid: 'AuroraAgeAccess',
       effect: iam.Effect.ALLOW,
       actions: [
-        'neptune-graph:ReadDataViaQuery',
-        'neptune-graph:WriteDataViaQuery',
-        'neptune-graph:GetQueryStatus',
-        'neptune-graph:GetGraphSummary',
+        'rds-data:ExecuteStatement',
+        'rds-data:BatchExecuteStatement',
+        'rds-data:BeginTransaction',
+        'rds-data:CommitTransaction',
+        'rds-data:RollbackTransaction',
       ],
-      resources: [`arn:aws:neptune-graph:${this.region}:${this.account}:graph/${props.neptuneGraphId}`],
+      resources: [props.auroraClusterArn],
+    }));
+    toolsLambdaRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'AuroraCredentials',
+      effect: iam.Effect.ALLOW,
+      actions: ['secretsmanager:GetSecretValue'],
+      resources: [props.auroraCredentialsSecretArn],
     }));
 
     // Knowledge Base access for kb-query tool
@@ -155,7 +164,7 @@ export class AgentCoreGatewayStack extends cdk.Stack {
 
     const graphTraversalLambda = new lambda.Function(this, 'GraphTraversalLambda', {
       functionName: `${prefix}-gateway-graph-traversal`,
-      description: 'MCP tool: Execute openCypher queries against the knowledge graph',
+      description: 'MCP tool: Execute Cypher queries against Aurora AGE knowledge graph',
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'graph_traversal.handler',
       code: lambda.Code.fromAsset('lambda/gateway-tools'),
@@ -163,14 +172,15 @@ export class AgentCoreGatewayStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,
       environment: {
-        NEPTUNE_GRAPH_ID: props.neptuneGraphId,
+        AURORA_CLUSTER_ARN: props.auroraClusterArn,
+        AURORA_SECRET_ARN: props.auroraCredentialsSecretArn,
         REGION: this.region,
       },
     });
 
     const computePageRankLambda = new lambda.Function(this, 'ComputePageRankLambda', {
       functionName: `${prefix}-gateway-compute-pagerank`,
-      description: 'MCP tool: Compute PageRank scores for org graph nodes',
+      description: 'MCP tool: Compute PageRank scores via Aurora AGE graph queries',
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'compute_pagerank.handler',
       code: lambda.Code.fromAsset('lambda/gateway-tools'),
@@ -178,7 +188,8 @@ export class AgentCoreGatewayStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(60),
       memorySize: 512,
       environment: {
-        NEPTUNE_GRAPH_ID: props.neptuneGraphId,
+        AURORA_CLUSTER_ARN: props.auroraClusterArn,
+        AURORA_SECRET_ARN: props.auroraCredentialsSecretArn,
         REGION: this.region,
       },
     });
@@ -271,12 +282,12 @@ export class AgentCoreGatewayStack extends cdk.Stack {
       },
       {
         name: 'graph-traversal',
-        description: 'Execute openCypher queries against the organizational knowledge graph (Neptune Analytics)',
+        description: 'Execute Cypher queries against the Aurora AGE organizational knowledge graph',
         lambdaArn: graphTraversalLambda.functionArn,
         toolSchema: {
           type: 'object',
           properties: {
-            query: { type: 'string', description: 'openCypher query to execute' },
+            query: { type: 'string', description: 'Cypher query to execute via Apache AGE' },
             parameters: { type: 'object', description: 'Query parameters map' },
             explain: { type: 'boolean', description: 'Return query plan instead of results', default: false },
           },

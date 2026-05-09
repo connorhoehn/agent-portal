@@ -9,89 +9,36 @@ export interface KnowledgeBaseStackProps extends cdk.StackProps {
   readonly documentsBucket: s3.IBucket;
   /** ARN of the base agent role to grant KB access */
   readonly agentRoleArn: string;
+  /** Aurora Serverless v2 cluster ARN (used as vector store) */
+  readonly auroraClusterArn: string;
+  /** Secrets Manager secret ARN for Aurora credentials */
+  readonly auroraCredentialsSecretArn: string;
 }
 
 /**
- * OrgIQ-KnowledgeBase: OpenSearch Serverless collection + Bedrock Knowledge Base.
- * Uses Titan Embeddings V2 at 1024 dimensions.
- * NOTE: OpenSearch Serverless has a 2 OCU minimum billing even when idle.
+ * OrgIQ-KnowledgeBase: Bedrock Knowledge Base backed by Aurora pgvector.
+ *
+ * Replaces OpenSearch Serverless (was ~$345/mo idle) with Aurora Serverless v2
+ * pgvector, shared with the AGE graph cluster (~$0.06/hr idle floor).
+ *
+ * Prerequisites (run notebook 02 or the init script before ingesting):
+ *   CREATE EXTENSION IF NOT EXISTS vector;
+ *   CREATE TABLE IF NOT EXISTS bedrock_kb (
+ *     id uuid PRIMARY KEY,
+ *     embedding vector(1024),
+ *     text text,
+ *     metadata json
+ *   );
+ *   CREATE INDEX ON bedrock_kb USING hnsw (embedding vector_cosine_ops);
  */
 export class KnowledgeBaseStack extends cdk.Stack {
-  /** The Knowledge Base ID */
   public readonly knowledgeBaseId: string;
-  /** The OpenSearch Serverless collection ARN */
-  public readonly collectionArn: string;
+  public readonly knowledgeBaseArn: string;
 
   constructor(scope: Construct, id: string, props: KnowledgeBaseStackProps) {
     super(scope, id, props);
 
     const prefix = props.prefix ?? 'orgiq';
-    const collectionName = `${prefix}-kb-collection`;
-    const indexName = `${prefix}-kb-index`;
-
-    // -------------------------------------------------------------------
-    // OpenSearch Serverless — Encryption Policy
-    // -------------------------------------------------------------------
-
-    const encryptionPolicy = new cdk.aws_opensearchserverless.CfnSecurityPolicy(
-      this, 'EncryptionPolicy', {
-        name: `${prefix}-enc-policy`,
-        type: 'encryption',
-        policy: JSON.stringify({
-          Rules: [
-            {
-              ResourceType: 'collection',
-              Resource: [`collection/${collectionName}`],
-            },
-          ],
-          AWSOwnedKey: true,
-        }),
-      },
-    );
-
-    // -------------------------------------------------------------------
-    // OpenSearch Serverless — Network Policy
-    // -------------------------------------------------------------------
-
-    const networkPolicy = new cdk.aws_opensearchserverless.CfnSecurityPolicy(
-      this, 'NetworkPolicy', {
-        name: `${prefix}-net-policy`,
-        type: 'network',
-        policy: JSON.stringify([
-          {
-            Rules: [
-              {
-                ResourceType: 'collection',
-                Resource: [`collection/${collectionName}`],
-              },
-              {
-                ResourceType: 'dashboard',
-                Resource: [`collection/${collectionName}`],
-              },
-            ],
-            AllowFromPublic: true,
-          },
-        ]),
-      },
-    );
-
-    // -------------------------------------------------------------------
-    // OpenSearch Serverless — Collection
-    // -------------------------------------------------------------------
-
-    const collection = new cdk.aws_opensearchserverless.CfnCollection(
-      this, 'KBCollection', {
-        name: collectionName,
-        type: 'VECTORSEARCH',
-        description: 'OrgIQ Knowledge Base vector store (Titan Embeddings V2, 1024d)',
-        standbyReplicas: 'DISABLED', // Cost optimization for dev
-      },
-    );
-
-    collection.addDependency(encryptionPolicy);
-    collection.addDependency(networkPolicy);
-
-    this.collectionArn = collection.attrArn;
 
     // -------------------------------------------------------------------
     // IAM Role for Bedrock Knowledge Base service
@@ -100,23 +47,32 @@ export class KnowledgeBaseStack extends cdk.Stack {
     const kbRole = new iam.Role(this, 'KBServiceRole', {
       roleName: `${prefix}-kb-service-role`,
       assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
-      description: 'Service role for Bedrock Knowledge Base to access OpenSearch and S3',
+      description: 'Service role for Bedrock Knowledge Base (Aurora pgvector + S3 data source)',
     });
 
     // S3 read access to documents bucket
     props.documentsBucket.grantRead(kbRole);
 
-    // OpenSearch Serverless data access
+    // Aurora Data API access for vector reads/writes
     kbRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'OpenSearchServerlessAccess',
+      sid: 'AuroraDataApi',
       effect: iam.Effect.ALLOW,
       actions: [
-        'aoss:APIAccessAll',
+        'rds-data:ExecuteStatement',
+        'rds-data:BatchExecuteStatement',
       ],
-      resources: [collection.attrArn],
+      resources: [props.auroraClusterArn],
     }));
 
-    // Bedrock embedding model access
+    // Read Aurora credentials secret
+    kbRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'AuroraCredentialsSecret',
+      effect: iam.Effect.ALLOW,
+      actions: ['secretsmanager:GetSecretValue'],
+      resources: [props.auroraCredentialsSecretArn],
+    }));
+
+    // Bedrock Titan embedding model access
     kbRole.addToPolicy(new iam.PolicyStatement({
       sid: 'BedrockEmbeddingAccess',
       effect: iam.Effect.ALLOW,
@@ -127,46 +83,7 @@ export class KnowledgeBaseStack extends cdk.Stack {
     }));
 
     // -------------------------------------------------------------------
-    // OpenSearch Serverless — Data Access Policy
-    // -------------------------------------------------------------------
-
-    new cdk.aws_opensearchserverless.CfnAccessPolicy(this, 'DataAccessPolicy', {
-      name: `${prefix}-data-access`,
-      type: 'data',
-      policy: JSON.stringify([
-        {
-          Rules: [
-            {
-              ResourceType: 'index',
-              Resource: [`index/${collectionName}/*`],
-              Permission: [
-                'aoss:CreateIndex',
-                'aoss:UpdateIndex',
-                'aoss:DescribeIndex',
-                'aoss:ReadDocument',
-                'aoss:WriteDocument',
-              ],
-            },
-            {
-              ResourceType: 'collection',
-              Resource: [`collection/${collectionName}`],
-              Permission: [
-                'aoss:CreateCollectionItems',
-                'aoss:DescribeCollectionItems',
-                'aoss:UpdateCollectionItems',
-              ],
-            },
-          ],
-          Principal: [
-            kbRole.roleArn,
-            props.agentRoleArn,
-          ],
-        },
-      ]),
-    });
-
-    // -------------------------------------------------------------------
-    // Bedrock Knowledge Base (L1 - CfnKnowledgeBase)
+    // Bedrock Knowledge Base — RDS (Aurora pgvector) storage
     // -------------------------------------------------------------------
 
     const knowledgeBase = new cdk.aws_bedrock.CfnKnowledgeBase(this, 'KnowledgeBase', {
@@ -185,25 +102,27 @@ export class KnowledgeBaseStack extends cdk.Stack {
         },
       },
       storageConfiguration: {
-        type: 'OPENSEARCH_SERVERLESS',
-        opensearchServerlessConfiguration: {
-          collectionArn: collection.attrArn,
+        type: 'RDS',
+        rdsConfiguration: {
+          resourceArn: props.auroraClusterArn,
+          credentialsSecretArn: props.auroraCredentialsSecretArn,
+          databaseName: 'orgiq',
+          tableName: 'bedrock_kb',
           fieldMapping: {
-            metadataField: 'metadata',
+            primaryKeyField: 'id',
             textField: 'text',
+            metadataField: 'metadata',
             vectorField: 'embedding',
           },
-          vectorIndexName: indexName,
         },
       },
     });
 
-    knowledgeBase.addDependency(collection);
-
     this.knowledgeBaseId = knowledgeBase.attrKnowledgeBaseId;
+    this.knowledgeBaseArn = knowledgeBase.attrKnowledgeBaseArn;
 
     // -------------------------------------------------------------------
-    // Bedrock Knowledge Base — S3 Data Source
+    // S3 Data Source
     // -------------------------------------------------------------------
 
     new cdk.aws_bedrock.CfnDataSource(this, 'S3DataSource', {
@@ -233,7 +152,7 @@ export class KnowledgeBaseStack extends cdk.Stack {
     // -------------------------------------------------------------------
 
     const agentRole = iam.Role.fromRoleArn(this, 'AgentBaseRole', props.agentRoleArn);
-    (agentRole as iam.Role).addToPolicy?.(new iam.PolicyStatement({
+    agentRole.addToPrincipalPolicy(new iam.PolicyStatement({
       sid: 'KnowledgeBaseRetrieve',
       effect: iam.Effect.ALLOW,
       actions: [
@@ -255,16 +174,6 @@ export class KnowledgeBaseStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'KnowledgeBaseArn', {
       value: knowledgeBase.attrKnowledgeBaseArn,
       exportName: `${prefix}-knowledge-base-arn`,
-    });
-
-    new cdk.CfnOutput(this, 'CollectionEndpoint', {
-      value: collection.attrCollectionEndpoint,
-      exportName: `${prefix}-opensearch-endpoint`,
-    });
-
-    new cdk.CfnOutput(this, 'CollectionArn', {
-      value: collection.attrArn,
-      exportName: `${prefix}-opensearch-collection-arn`,
     });
   }
 }

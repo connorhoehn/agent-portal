@@ -7,19 +7,17 @@ import type { Construct } from 'constructs';
 
 export interface ObservabilityStackProps extends cdk.StackProps {
   readonly prefix?: string;
-  /** Monthly budget limit in USD */
   readonly monthlyBudgetUsd?: number;
-  /** Email address for budget alerts */
   readonly alertEmail?: string;
-  /** Neptune Analytics graph ID for metrics */
-  readonly neptuneGraphId: string;
+  /** Aurora cluster identifier for metrics */
+  readonly auroraClusterIdentifier: string;
   /** Knowledge Base ID for metrics */
   readonly knowledgeBaseId: string;
 }
 
 /**
  * OrgIQ-Observability: CloudWatch dashboard + budget alarm.
- * Monitors Neptune per-NCU-hour billing and OpenSearch 2 OCU minimum.
+ * Monitors Aurora Serverless v2 ACU billing, Bedrock, DynamoDB, and KB metrics.
  */
 export class ObservabilityStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: ObservabilityStackProps) {
@@ -51,61 +49,53 @@ export class ObservabilityStack extends cdk.Stack {
       defaultInterval: cdk.Duration.hours(6),
     });
 
-    // --- Neptune Analytics Metrics ---
-    const neptuneMemoryWidget = new cloudwatch.GraphWidget({
-      title: 'Neptune Analytics — Memory Utilization',
+    // --- Aurora Serverless v2 Metrics ---
+    const auroraAcuWidget = new cloudwatch.GraphWidget({
+      title: 'Aurora Serverless v2 — ACU Utilization',
       left: [
         new cloudwatch.Metric({
-          namespace: 'AWS/NeptuneGraph',
-          metricName: 'UsedMemory',
-          dimensionsMap: { GraphId: props.neptuneGraphId },
+          namespace: 'AWS/RDS',
+          metricName: 'ServerlessDatabaseCapacity',
+          dimensionsMap: { DBClusterIdentifier: props.auroraClusterIdentifier },
           statistic: 'Average',
           period: cdk.Duration.minutes(5),
-        }),
-      ],
-      width: 12,
-      height: 6,
-    });
-
-    const neptuneQueryWidget = new cloudwatch.GraphWidget({
-      title: 'Neptune Analytics — Query Performance',
-      left: [
-        new cloudwatch.Metric({
-          namespace: 'AWS/NeptuneGraph',
-          metricName: 'QueryLatency',
-          dimensionsMap: { GraphId: props.neptuneGraphId },
-          statistic: 'p99',
-          period: cdk.Duration.minutes(5),
+          label: 'ACU (current)',
         }),
       ],
       right: [
         new cloudwatch.Metric({
-          namespace: 'AWS/NeptuneGraph',
-          metricName: 'QueryCount',
-          dimensionsMap: { GraphId: props.neptuneGraphId },
-          statistic: 'Sum',
+          namespace: 'AWS/RDS',
+          metricName: 'CPUUtilization',
+          dimensionsMap: { DBClusterIdentifier: props.auroraClusterIdentifier },
+          statistic: 'Average',
           period: cdk.Duration.minutes(5),
+          label: 'CPU %',
         }),
       ],
       width: 12,
       height: 6,
     });
 
-    // --- OpenSearch Serverless Metrics ---
-    const ossComputeWidget = new cloudwatch.GraphWidget({
-      title: 'OpenSearch Serverless — OCU Usage',
+    const auroraConnectionsWidget = new cloudwatch.GraphWidget({
+      title: 'Aurora — Connections & Latency',
       left: [
         new cloudwatch.Metric({
-          namespace: 'AWS/AOSS',
-          metricName: 'SearchOCU',
+          namespace: 'AWS/RDS',
+          metricName: 'DatabaseConnections',
+          dimensionsMap: { DBClusterIdentifier: props.auroraClusterIdentifier },
           statistic: 'Average',
           period: cdk.Duration.minutes(5),
+          label: 'Connections',
         }),
+      ],
+      right: [
         new cloudwatch.Metric({
-          namespace: 'AWS/AOSS',
-          metricName: 'IndexingOCU',
-          statistic: 'Average',
+          namespace: 'AWS/RDS',
+          metricName: 'CommitLatency',
+          dimensionsMap: { DBClusterIdentifier: props.auroraClusterIdentifier },
+          statistic: 'p99',
           period: cdk.Duration.minutes(5),
+          label: 'Commit latency p99 (ms)',
         }),
       ],
       width: 12,
@@ -114,7 +104,7 @@ export class ObservabilityStack extends cdk.Stack {
 
     // --- Bedrock Metrics ---
     const bedrockInvocationsWidget = new cloudwatch.GraphWidget({
-      title: 'Bedrock — Model Invocations',
+      title: 'Bedrock — Model Invocations (Nova)',
       left: [
         new cloudwatch.Metric({
           namespace: 'AWS/Bedrock',
@@ -195,7 +185,7 @@ export class ObservabilityStack extends cdk.Stack {
 
     // --- Knowledge Base Metrics ---
     const kbWidget = new cloudwatch.GraphWidget({
-      title: 'Bedrock Knowledge Base — Retrieve Operations',
+      title: 'Bedrock KB — Retrieve Operations (pgvector)',
       left: [
         new cloudwatch.Metric({
           namespace: 'AWS/Bedrock',
@@ -219,27 +209,26 @@ export class ObservabilityStack extends cdk.Stack {
     });
 
     // Assemble dashboard rows
-    dashboard.addWidgets(neptuneMemoryWidget, neptuneQueryWidget);
-    dashboard.addWidgets(ossComputeWidget, bedrockInvocationsWidget);
-    dashboard.addWidgets(bedrockThrottlesWidget, dynamoWidget);
-    dashboard.addWidgets(kbWidget);
+    dashboard.addWidgets(auroraAcuWidget, auroraConnectionsWidget);
+    dashboard.addWidgets(bedrockInvocationsWidget, bedrockThrottlesWidget);
+    dashboard.addWidgets(dynamoWidget, kbWidget);
 
     // -------------------------------------------------------------------
     // CloudWatch Alarms
     // -------------------------------------------------------------------
 
-    // Neptune high memory utilization
-    new cloudwatch.Alarm(this, 'NeptuneHighMemoryAlarm', {
-      alarmName: `${prefix}-neptune-high-memory`,
-      alarmDescription: 'Neptune Analytics memory utilization exceeds 80%',
+    // Aurora high ACU alarm (approaching max capacity)
+    new cloudwatch.Alarm(this, 'AuroraHighAcuAlarm', {
+      alarmName: `${prefix}-aurora-high-acu`,
+      alarmDescription: 'Aurora Serverless v2 ACU nearing max (4 ACU)',
       metric: new cloudwatch.Metric({
-        namespace: 'AWS/NeptuneGraph',
-        metricName: 'UsedMemoryPercent',
-        dimensionsMap: { GraphId: props.neptuneGraphId },
+        namespace: 'AWS/RDS',
+        metricName: 'ServerlessDatabaseCapacity',
+        dimensionsMap: { DBClusterIdentifier: props.auroraClusterIdentifier },
         statistic: 'Average',
         period: cdk.Duration.minutes(5),
       }),
-      threshold: 80,
+      threshold: 3.5,
       evaluationPeriods: 3,
       comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
@@ -262,7 +251,7 @@ export class ObservabilityStack extends cdk.Stack {
     }).addAlarmAction(new cdk.aws_cloudwatch_actions.SnsAction(alertTopic));
 
     // -------------------------------------------------------------------
-    // Budget Alarm (critical for OpenSearch 2 OCU minimum + Neptune NCU)
+    // Budget Alarm
     // -------------------------------------------------------------------
 
     new budgets.CfnBudget(this, 'MonthlyBudget', {
@@ -270,10 +259,7 @@ export class ObservabilityStack extends cdk.Stack {
         budgetName: `${prefix}-monthly-budget`,
         budgetType: 'COST',
         timeUnit: 'MONTHLY',
-        budgetLimit: {
-          amount: budgetUsd,
-          unit: 'USD',
-        },
+        budgetLimit: { amount: budgetUsd, unit: 'USD' },
       },
       notificationsWithSubscribers: alertEmail ? [
         {
@@ -283,12 +269,7 @@ export class ObservabilityStack extends cdk.Stack {
             threshold: 80,
             thresholdType: 'PERCENTAGE',
           },
-          subscribers: [
-            {
-              subscriptionType: 'EMAIL',
-              address: alertEmail,
-            },
-          ],
+          subscribers: [{ subscriptionType: 'EMAIL', address: alertEmail }],
         },
         {
           notification: {
@@ -297,12 +278,7 @@ export class ObservabilityStack extends cdk.Stack {
             threshold: 100,
             thresholdType: 'PERCENTAGE',
           },
-          subscribers: [
-            {
-              subscriptionType: 'EMAIL',
-              address: alertEmail,
-            },
-          ],
+          subscribers: [{ subscriptionType: 'EMAIL', address: alertEmail }],
         },
         {
           notification: {
@@ -311,12 +287,7 @@ export class ObservabilityStack extends cdk.Stack {
             threshold: 120,
             thresholdType: 'PERCENTAGE',
           },
-          subscribers: [
-            {
-              subscriptionType: 'EMAIL',
-              address: alertEmail,
-            },
-          ],
+          subscribers: [{ subscriptionType: 'EMAIL', address: alertEmail }],
         },
       ] : [],
     });
@@ -326,13 +297,7 @@ export class ObservabilityStack extends cdk.Stack {
     // -------------------------------------------------------------------
 
     new cdk.CfnOutput(this, 'DashboardUrl', {
-      value: `https://${this.region}.console.aws.amazon.com/cloudwatch/home?region=${this.region}#dashboards:name=${prefix}-dashboard`,
-      exportName: `${prefix}-dashboard-url`,
-    });
-
-    new cdk.CfnOutput(this, 'AlertTopicArn', {
-      value: alertTopic.topicArn,
-      exportName: `${prefix}-alert-topic-arn`,
+      value: `https://${this.region}.console.aws.amazon.com/cloudwatch/home#dashboards:name=${prefix}-dashboard`,
     });
   }
 }

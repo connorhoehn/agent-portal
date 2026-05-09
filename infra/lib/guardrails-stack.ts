@@ -46,7 +46,7 @@ export class GuardrailsStack extends cdk.Stack {
           { type: 'IP_ADDRESS', action: 'ANONYMIZE' },
           { type: 'US_BANK_ACCOUNT_NUMBER', action: 'BLOCK' },
           { type: 'DRIVER_ID', action: 'BLOCK' },
-          { type: 'PASSPORT_NUMBER', action: 'BLOCK' },
+          { type: 'US_PASSPORT_NUMBER', action: 'BLOCK' },
         ],
         regexesConfig: [
           {

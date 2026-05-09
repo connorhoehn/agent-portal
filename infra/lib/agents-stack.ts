@@ -4,8 +4,10 @@ import type { Construct } from 'constructs';
 
 export interface AgentsStackProps extends cdk.StackProps {
   readonly prefix?: string;
-  /** Neptune Analytics graph ARN for graph-builder and search agents */
-  readonly neptuneGraphArn: string;
+  /** Aurora Serverless v2 cluster ARN (graph + vector store) */
+  readonly auroraClusterArn: string;
+  /** Secrets Manager secret ARN for Aurora credentials */
+  readonly auroraCredentialsSecretArn: string;
   /** Knowledge Base ARN for search agent */
   readonly knowledgeBaseArn: string;
   /** Guardrail ARN to apply to all agents */
@@ -20,11 +22,6 @@ export interface AgentsStackProps extends cdk.StackProps {
   readonly sessionsTableArn: string;
 }
 
-/**
- * Agent names as defined in CLAUDE.md:
- * orgiq-supervisor, orgiq-search, orgiq-scoring, orgiq-advisor,
- * orgiq-ingestion, orgiq-graph-builder
- */
 const AGENT_NAMES = [
   'supervisor',
   'search',
@@ -37,9 +34,9 @@ const AGENT_NAMES = [
 /**
  * OrgIQ-Agents: IAM roles for all 6 AgentCore Runtime agents + Managed Prompts.
  * Each agent gets a specific role with least-privilege access.
+ * Graph access uses Aurora + Apache AGE via RDS Data API (replaces Neptune).
  */
 export class AgentsStack extends cdk.Stack {
-  /** Map of agent name to its IAM role */
   public readonly agentRoles: Record<string, iam.Role>;
 
   constructor(scope: Construct, id: string, props: AgentsStackProps) {
@@ -47,6 +44,37 @@ export class AgentsStack extends cdk.Stack {
 
     const prefix = props.prefix ?? 'orgiq';
     this.agentRoles = {};
+
+    // -------------------------------------------------------------------
+    // Shared Aurora Data API policy statement (re-used per agent)
+    // -------------------------------------------------------------------
+
+    const auroraReadStatement = new iam.PolicyStatement({
+      sid: 'AuroraAgeRead',
+      effect: iam.Effect.ALLOW,
+      actions: ['rds-data:ExecuteStatement'],
+      resources: [props.auroraClusterArn],
+    });
+
+    const auroraWriteStatement = new iam.PolicyStatement({
+      sid: 'AuroraAgeWrite',
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'rds-data:ExecuteStatement',
+        'rds-data:BatchExecuteStatement',
+        'rds-data:BeginTransaction',
+        'rds-data:CommitTransaction',
+        'rds-data:RollbackTransaction',
+      ],
+      resources: [props.auroraClusterArn],
+    });
+
+    const auroraSecretStatement = new iam.PolicyStatement({
+      sid: 'AuroraCredentials',
+      effect: iam.Effect.ALLOW,
+      actions: ['secretsmanager:GetSecretValue'],
+      resources: [props.auroraCredentialsSecretArn],
+    });
 
     // -------------------------------------------------------------------
     // Per-Agent IAM Roles
@@ -65,7 +93,7 @@ export class AgentsStack extends cdk.Stack {
         ],
       });
 
-      // Common permissions: Bedrock invoke + guardrail apply
+      // Common: Bedrock invoke (Amazon Nova models) + guardrail
       role.addToPolicy(new iam.PolicyStatement({
         sid: 'BedrockInvoke',
         effect: iam.Effect.ALLOW,
@@ -77,16 +105,11 @@ export class AgentsStack extends cdk.Stack {
         resources: ['*'],
       }));
 
-      // Session table access for all agents
+      // Common: sessions table
       role.addToPolicy(new iam.PolicyStatement({
         sid: 'SessionsAccess',
         effect: iam.Effect.ALLOW,
-        actions: [
-          'dynamodb:GetItem',
-          'dynamodb:PutItem',
-          'dynamodb:UpdateItem',
-          'dynamodb:Query',
-        ],
+        actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:Query'],
         resources: [props.sessionsTableArn, `${props.sessionsTableArn}/index/*`],
       }));
 
@@ -97,68 +120,40 @@ export class AgentsStack extends cdk.Stack {
     // Agent-specific permissions
     // -------------------------------------------------------------------
 
-    // Supervisor: can invoke other agents (A2A)
+    // Supervisor: A2A agent invocation
     this.agentRoles['supervisor'].addToPolicy(new iam.PolicyStatement({
       sid: 'A2AInvoke',
       effect: iam.Effect.ALLOW,
-      actions: [
-        'bedrock:InvokeAgent',
-        'bedrock:InvokeFlow',
-      ],
+      actions: ['bedrock:InvokeAgent', 'bedrock:InvokeFlow'],
       resources: ['*'],
     }));
 
-    // Search: Knowledge Base retrieve + Neptune read
+    // Search: KB retrieve + Aurora AGE read (Cypher graph queries)
     this.agentRoles['search'].addToPolicy(new iam.PolicyStatement({
       sid: 'KnowledgeBaseRetrieve',
       effect: iam.Effect.ALLOW,
       actions: ['bedrock:Retrieve', 'bedrock:RetrieveAndGenerate'],
       resources: [props.knowledgeBaseArn],
     }));
-    this.agentRoles['search'].addToPolicy(new iam.PolicyStatement({
-      sid: 'NeptuneRead',
-      effect: iam.Effect.ALLOW,
-      actions: [
-        'neptune-graph:ReadDataViaQuery',
-        'neptune-graph:GetQueryStatus',
-        'neptune-graph:GetGraphSummary',
-      ],
-      resources: [props.neptuneGraphArn],
-    }));
+    this.agentRoles['search'].addToPolicy(auroraReadStatement);
+    this.agentRoles['search'].addToPolicy(auroraSecretStatement);
 
-    // Scoring: DynamoDB scores table + Neptune read for graph metrics
+    // Scoring: DynamoDB scores + Aurora AGE read for graph metrics
     this.agentRoles['scoring'].addToPolicy(new iam.PolicyStatement({
       sid: 'ScoresTableAccess',
       effect: iam.Effect.ALLOW,
       actions: [
-        'dynamodb:GetItem',
-        'dynamodb:PutItem',
-        'dynamodb:UpdateItem',
-        'dynamodb:Query',
-        'dynamodb:BatchWriteItem',
+        'dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem',
+        'dynamodb:Query', 'dynamodb:BatchWriteItem',
       ],
       resources: [props.scoresTableArn, `${props.scoresTableArn}/index/*`],
     }));
-    this.agentRoles['scoring'].addToPolicy(new iam.PolicyStatement({
-      sid: 'NeptuneRead',
-      effect: iam.Effect.ALLOW,
-      actions: [
-        'neptune-graph:ReadDataViaQuery',
-        'neptune-graph:GetGraphSummary',
-      ],
-      resources: [props.neptuneGraphArn],
-    }));
+    this.agentRoles['scoring'].addToPolicy(auroraReadStatement);
+    this.agentRoles['scoring'].addToPolicy(auroraSecretStatement);
 
-    // Advisor: Neptune read + KB retrieve (combines graph context with docs)
-    this.agentRoles['advisor'].addToPolicy(new iam.PolicyStatement({
-      sid: 'NeptuneRead',
-      effect: iam.Effect.ALLOW,
-      actions: [
-        'neptune-graph:ReadDataViaQuery',
-        'neptune-graph:GetGraphSummary',
-      ],
-      resources: [props.neptuneGraphArn],
-    }));
+    // Advisor: Aurora AGE read + KB retrieve
+    this.agentRoles['advisor'].addToPolicy(auroraReadStatement);
+    this.agentRoles['advisor'].addToPolicy(auroraSecretStatement);
     this.agentRoles['advisor'].addToPolicy(new iam.PolicyStatement({
       sid: 'KnowledgeBaseRetrieve',
       effect: iam.Effect.ALLOW,
@@ -166,7 +161,7 @@ export class AgentsStack extends cdk.Stack {
       resources: [props.knowledgeBaseArn],
     }));
 
-    // Ingestion: S3 read + write, Neptune write
+    // Ingestion: S3 read + artifacts write (triggers graph-builder via A2A)
     this.agentRoles['ingestion'].addToPolicy(new iam.PolicyStatement({
       sid: 'DocumentsBucketRead',
       effect: iam.Effect.ALLOW,
@@ -180,20 +175,9 @@ export class AgentsStack extends cdk.Stack {
       resources: [`${props.artifactsBucketArn}/*`],
     }));
 
-    // Graph-builder: Neptune full write + S3 artifacts read
-    this.agentRoles['graph-builder'].addToPolicy(new iam.PolicyStatement({
-      sid: 'NeptuneFullAccess',
-      effect: iam.Effect.ALLOW,
-      actions: [
-        'neptune-graph:ReadDataViaQuery',
-        'neptune-graph:WriteDataViaQuery',
-        'neptune-graph:DeleteDataViaQuery',
-        'neptune-graph:GetQueryStatus',
-        'neptune-graph:CancelQuery',
-        'neptune-graph:GetGraphSummary',
-      ],
-      resources: [props.neptuneGraphArn],
-    }));
+    // Graph-builder: Aurora AGE full write + S3 artifacts read
+    this.agentRoles['graph-builder'].addToPolicy(auroraWriteStatement);
+    this.agentRoles['graph-builder'].addToPolicy(auroraSecretStatement);
     this.agentRoles['graph-builder'].addToPolicy(new iam.PolicyStatement({
       sid: 'ArtifactsRead',
       effect: iam.Effect.ALLOW,
@@ -202,7 +186,7 @@ export class AgentsStack extends cdk.Stack {
     }));
 
     // -------------------------------------------------------------------
-    // Bedrock Managed Prompts (versioned system prompts for each agent)
+    // Bedrock Managed Prompts
     // -------------------------------------------------------------------
 
     const promptConfigs: Record<string, { description: string; template: string }> = {
@@ -227,11 +211,11 @@ Always cite your sources and indicate which specialist provided the information.
         description: 'System prompt for OrgIQ Search agent — retrieves from KB and graph',
         template: `You are the OrgIQ Search agent. Your role is to:
 1. Search the organizational knowledge base for relevant documents
-2. Query the Neptune knowledge graph for people, teams, skills, and relationships
+2. Query the Aurora + Apache AGE knowledge graph for people, teams, skills, and relationships
 3. Combine vector search results with graph traversal for comprehensive answers
 4. Return structured results with relevance scores and source citations
 
-Use openCypher queries for graph traversal. Use Knowledge Base retrieve for document search.
+Use Cypher queries (via Apache AGE) for graph traversal. Use Knowledge Base retrieve for document search.
 Always return the source of each piece of information (document title, graph path, etc.).`,
       },
       scoring: {
@@ -242,14 +226,13 @@ Always return the source of each piece of information (document title, graph pat
 3. Generate leaderboards by team, skill, or domain
 4. Explain scoring methodology when asked
 
-Scores are stored as properties on Person nodes in the graph.
-Use the Code Interpreter for complex graph algorithms.
+Scores are stored as properties on Person nodes in the Aurora AGE graph.
 All scores should be normalized to 0-100 scale.`,
       },
       advisor: {
         description: 'System prompt for OrgIQ Advisor agent — strategic recommendations',
         template: `You are the OrgIQ Advisor agent. Your role is to:
-1. Analyze organizational patterns from the knowledge graph
+1. Analyze organizational patterns from the Aurora AGE knowledge graph
 2. Identify expertise gaps, collaboration opportunities, and knowledge silos
 3. Provide strategic recommendations for team composition and knowledge transfer
 4. Surface hidden connections and potential mentorship pairings
@@ -272,13 +255,14 @@ Track processing status and report errors for failed documents.`,
         description: 'System prompt for OrgIQ Graph-Builder agent — constructs knowledge graph',
         template: `You are the OrgIQ Graph-Builder agent. Your role is to:
 1. Extract entities and relationships from processed documents
-2. Write openCypher MERGE statements to build the knowledge graph
+2. Write Cypher MERGE statements via Apache AGE to build the knowledge graph
 3. Maintain graph schema consistency (Person, Team, Skill, Decision, Project nodes)
 4. Generate and store vector embeddings for graph nodes (Titan Embeddings V2, 1024d)
 
 IMPORTANT: Use MERGE over CREATE for idempotent graph writes.
-Neptune Analytics is openCypher ONLY — never use Gremlin or SPARQL.
-Embed all node labels and key properties for vector similarity search.`,
+Use Apache AGE Cypher syntax via the Aurora RDS Data API.
+Example: SELECT * FROM ag_catalog.cypher('orgiq_graph', $$ MERGE (p:Person {id: 'alice'}) SET p.name = 'Alice' RETURN p $$) as (p ag_catalog.agtype);
+Embed all node labels and key properties for vector similarity search in pgvector.`,
       },
     };
 
@@ -290,11 +274,7 @@ Embed all node labels and key properties for vector similarity search.`,
           {
             name: 'default',
             templateType: 'TEXT',
-            templateConfiguration: {
-              text: {
-                text: config.template,
-              },
-            },
+            templateConfiguration: { text: { text: config.template } },
           },
         ],
         defaultVariant: 'default',

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import * as cdk from 'aws-cdk-lib';
 import { FoundationStack } from '../lib/foundation-stack';
-import { NeptuneStack } from '../lib/neptune-stack';
+import { AuroraStack } from '../lib/aurora-stack';
 import { KnowledgeBaseStack } from '../lib/knowledge-base-stack';
 import { GuardrailsStack } from '../lib/guardrails-stack';
 import { AgentsStack } from '../lib/agents-stack';
@@ -32,27 +32,31 @@ const foundation = new FoundationStack(app, 'OrgIQ-Foundation', {
 });
 
 // -------------------------------------------------------------------
-// Stack 2: Neptune Analytics (knowledge graph with vector search)
+// Stack 2: Aurora Serverless v2 (pgvector + Apache AGE)
+// Replaces Neptune Analytics and OpenSearch Serverless.
+// Idle cost: ~$0.06/hr (0.5 ACU min). Enable with: cdk deploy OrgIQ-Aurora
 // -------------------------------------------------------------------
-const neptune = new NeptuneStack(app, 'OrgIQ-Neptune', {
+const aurora = new AuroraStack(app, 'OrgIQ-Aurora', {
   env,
   prefix,
   agentRoleArn: foundation.agentBaseRole.roleArn,
-  description: 'OrgIQ Neptune: Analytics graph with 1024d vector search (openCypher)',
+  description: 'OrgIQ Aurora: Serverless v2 PostgreSQL with pgvector + Apache AGE graph',
 });
-neptune.addDependency(foundation);
+aurora.addDependency(foundation);
 
 // -------------------------------------------------------------------
-// Stack 3: Knowledge Base (OpenSearch Serverless + Bedrock KB)
+// Stack 3: Knowledge Base (Bedrock KB backed by Aurora pgvector)
 // -------------------------------------------------------------------
 const knowledgeBase = new KnowledgeBaseStack(app, 'OrgIQ-KnowledgeBase', {
   env,
   prefix,
   documentsBucket: foundation.documentsBucket,
   agentRoleArn: foundation.agentBaseRole.roleArn,
-  description: 'OrgIQ Knowledge Base: OpenSearch Serverless + Bedrock KB + S3 data source',
+  auroraClusterArn: aurora.clusterArn,
+  auroraCredentialsSecretArn: aurora.credentialsSecretArn,
+  description: 'OrgIQ Knowledge Base: Bedrock KB with Aurora pgvector storage + S3 data source',
 });
-knowledgeBase.addDependency(foundation);
+knowledgeBase.addDependency(aurora);
 
 // -------------------------------------------------------------------
 // Stack 4: Guardrails (PII, content policy, grounding)
@@ -69,8 +73,9 @@ const guardrails = new GuardrailsStack(app, 'OrgIQ-Guardrails', {
 const agents = new AgentsStack(app, 'OrgIQ-Agents', {
   env,
   prefix,
-  neptuneGraphArn: neptune.graphArn,
-  knowledgeBaseArn: `arn:aws:bedrock:${env.region}:${env.account}:knowledge-base/${knowledgeBase.knowledgeBaseId}`,
+  auroraClusterArn: aurora.clusterArn,
+  auroraCredentialsSecretArn: aurora.credentialsSecretArn,
+  knowledgeBaseArn: knowledgeBase.knowledgeBaseArn,
   guardrailArn: guardrails.guardrailArn,
   documentsBucketArn: foundation.documentsBucket.bucketArn,
   artifactsBucketArn: foundation.artifactsBucket.bucketArn,
@@ -79,7 +84,7 @@ const agents = new AgentsStack(app, 'OrgIQ-Agents', {
   description: 'OrgIQ Agents: IAM roles for 6 AgentCore agents + Managed Prompts',
 });
 agents.addDependency(foundation);
-agents.addDependency(neptune);
+agents.addDependency(aurora);
 agents.addDependency(knowledgeBase);
 agents.addDependency(guardrails);
 
@@ -89,13 +94,13 @@ agents.addDependency(guardrails);
 const observability = new ObservabilityStack(app, 'OrgIQ-Observability', {
   env,
   prefix,
-  neptuneGraphId: neptune.graphId,
+  auroraClusterIdentifier: `${prefix}-aurora`,
   knowledgeBaseId: knowledgeBase.knowledgeBaseId,
   monthlyBudgetUsd,
   alertEmail,
-  description: 'OrgIQ Observability: CloudWatch dashboard + budget alarms',
+  description: 'OrgIQ Observability: CloudWatch dashboard (Aurora ACU + Bedrock) + budget alarm',
 });
-observability.addDependency(neptune);
+observability.addDependency(aurora);
 observability.addDependency(knowledgeBase);
 
 // ===================================================================
@@ -103,7 +108,7 @@ observability.addDependency(knowledgeBase);
 // ===================================================================
 
 // -------------------------------------------------------------------
-// Stack 7: AgentCore Memory (semantic, user preference, summary strategies)
+// Stack 7: AgentCore Memory
 // -------------------------------------------------------------------
 const agentCoreMemory = new AgentCoreMemoryStack(app, 'OrgIQ-AgentCoreMemory', {
   env,
@@ -112,7 +117,7 @@ const agentCoreMemory = new AgentCoreMemoryStack(app, 'OrgIQ-AgentCoreMemory', {
 });
 
 // -------------------------------------------------------------------
-// Stack 8: AgentCore Policy Engine (Cedar policies for access control)
+// Stack 8: AgentCore Policy Engine
 // -------------------------------------------------------------------
 const agentCorePolicy = new AgentCorePolicyStack(app, 'OrgIQ-AgentCorePolicy', {
   env,
@@ -123,7 +128,7 @@ const agentCorePolicy = new AgentCorePolicyStack(app, 'OrgIQ-AgentCorePolicy', {
 agentCorePolicy.addDependency(guardrails);
 
 // -------------------------------------------------------------------
-// Stack 9: AgentCore Runtime (6 agent runtimes with endpoints)
+// Stack 9: AgentCore Runtime (6 agent runtimes)
 // -------------------------------------------------------------------
 const agentCoreRuntime = new AgentCoreRuntimeStack(app, 'OrgIQ-AgentCoreRuntime', {
   env,
@@ -131,23 +136,25 @@ const agentCoreRuntime = new AgentCoreRuntimeStack(app, 'OrgIQ-AgentCoreRuntime'
   agentRoles: agents.agentRoles,
   memoryId: agentCoreMemory.memoryId,
   guardrailId: guardrails.guardrailId,
-  neptuneGraphId: neptune.graphId,
+  auroraClusterArn: aurora.clusterArn,
+  auroraCredentialsSecretArn: aurora.credentialsSecretArn,
   knowledgeBaseId: knowledgeBase.knowledgeBaseId,
   description: 'OrgIQ AgentCore Runtime: 6 agent runtimes with lifecycle and endpoint config',
 });
 agentCoreRuntime.addDependency(agents);
 agentCoreRuntime.addDependency(agentCoreMemory);
-agentCoreRuntime.addDependency(neptune);
+agentCoreRuntime.addDependency(aurora);
 agentCoreRuntime.addDependency(knowledgeBase);
 agentCoreRuntime.addDependency(guardrails);
 
 // -------------------------------------------------------------------
-// Stack 10: AgentCore MCP Gateway (tool registry + agent-as-tool targets)
+// Stack 10: AgentCore MCP Gateway
 // -------------------------------------------------------------------
 const agentCoreGateway = new AgentCoreGatewayStack(app, 'OrgIQ-AgentCoreGateway', {
   env,
   prefix,
-  neptuneGraphId: neptune.graphId,
+  auroraClusterArn: aurora.clusterArn,
+  auroraCredentialsSecretArn: aurora.credentialsSecretArn,
   knowledgeBaseId: knowledgeBase.knowledgeBaseId,
   policyEngineId: agentCorePolicy.policyEngineId,
   agentRoles: agents.agentRoles,
@@ -156,7 +163,7 @@ const agentCoreGateway = new AgentCoreGatewayStack(app, 'OrgIQ-AgentCoreGateway'
 });
 agentCoreGateway.addDependency(agentCorePolicy);
 agentCoreGateway.addDependency(agentCoreRuntime);
-agentCoreGateway.addDependency(neptune);
+agentCoreGateway.addDependency(aurora);
 agentCoreGateway.addDependency(knowledgeBase);
 
 app.synth();
