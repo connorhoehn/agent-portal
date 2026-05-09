@@ -184,7 +184,7 @@ when {
         action: 'createPolicyEngine',
         parameters: {
           name: `${prefix}-policy-engine`,
-          description: 'OrgIQ Policy Engine — Cedar-based access control for agent tools and resources',
+          description: 'OrgIQ Policy Engine - Cedar-based access control for agent tools and resources',
           mode: 'LOG_ONLY', // Start in monitoring mode; switch to ENFORCE after validation
           configuration: {
             guardrailArn: props.guardrailArn,
@@ -198,7 +198,7 @@ when {
         parameters: {
           policyEngineId: new cr.PhysicalResourceIdReference(),
           name: `${prefix}-policy-engine`,
-          description: 'OrgIQ Policy Engine — Cedar-based access control for agent tools and resources',
+          description: 'OrgIQ Policy Engine - Cedar-based access control for agent tools and resources',
           mode: 'LOG_ONLY',
         },
         physicalResourceId: cr.PhysicalResourceId.fromResponse('policyEngineId'),

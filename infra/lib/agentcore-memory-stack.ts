@@ -71,7 +71,7 @@ export class AgentCoreMemoryStack extends cdk.Stack {
         action: 'createMemory',
         parameters: {
           name: `${prefix}-memory`,
-          description: 'OrgIQ memory store — semantic knowledge, user preferences, and conversation summaries',
+          description: 'OrgIQ memory store - semantic knowledge, user preferences, and conversation summaries',
           eventExpiryDuration: 7776000, // 90 days in seconds
           memoryStrategies: [
             {
@@ -129,7 +129,7 @@ export class AgentCoreMemoryStack extends cdk.Stack {
         parameters: {
           memoryId: new cr.PhysicalResourceIdReference(),
           name: `${prefix}-memory`,
-          description: 'OrgIQ memory store — semantic knowledge, user preferences, and conversation summaries',
+          description: 'OrgIQ memory store - semantic knowledge, user preferences, and conversation summaries',
           eventExpiryDuration: 7776000,
         },
         physicalResourceId: cr.PhysicalResourceId.fromResponse('memoryId'),

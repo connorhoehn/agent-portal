@@ -1,14 +1,13 @@
 import * as cdk from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as cr from 'aws-cdk-lib/custom-resources';
 import type { Construct } from 'constructs';
 
 export interface KnowledgeBaseStackProps extends cdk.StackProps {
   readonly prefix?: string;
   /** The documents S3 bucket to use as a data source */
   readonly documentsBucket: s3.IBucket;
-  /** ARN of the base agent role to grant KB access */
-  readonly agentRoleArn: string;
   /** Aurora Serverless v2 cluster ARN (used as vector store) */
   readonly auroraClusterArn: string;
   /** Secrets Manager secret ARN for Aurora credentials */
@@ -44,43 +43,110 @@ export class KnowledgeBaseStack extends cdk.Stack {
     // IAM Role for Bedrock Knowledge Base service
     // -------------------------------------------------------------------
 
+    // All permissions are bundled as inlinePolicies on the Role resource so they are
+    // fully attached before CloudFormation creates the KnowledgeBase resource.
+    // Using addToPolicy() creates a separate AWS::IAM::Policy that races with KB creation,
+    // causing Bedrock's validation call to fail with a 403 before the policy is attached.
     const kbRole = new iam.Role(this, 'KBServiceRole', {
       roleName: `${prefix}-kb-service-role`,
       assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
       description: 'Service role for Bedrock Knowledge Base (Aurora pgvector + S3 data source)',
+      inlinePolicies: {
+        KBAccess: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              sid: 'AuroraDataApi',
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'rds-data:ExecuteStatement',
+                'rds-data:BatchExecuteStatement',
+              ],
+              resources: [props.auroraClusterArn],
+            }),
+            new iam.PolicyStatement({
+              sid: 'AuroraDescribe',
+              effect: iam.Effect.ALLOW,
+              actions: ['rds:DescribeDBClusters'],
+              resources: [props.auroraClusterArn],
+            }),
+            new iam.PolicyStatement({
+              sid: 'AuroraCredentialsSecret',
+              effect: iam.Effect.ALLOW,
+              actions: ['secretsmanager:GetSecretValue'],
+              resources: [props.auroraCredentialsSecretArn],
+            }),
+            new iam.PolicyStatement({
+              sid: 'BedrockEmbeddingAccess',
+              effect: iam.Effect.ALLOW,
+              actions: ['bedrock:InvokeModel'],
+              resources: [
+                `arn:aws:bedrock:${this.region}::foundation-model/amazon.titan-embed-text-v2:0`,
+              ],
+            }),
+            new iam.PolicyStatement({
+              sid: 'S3DocumentsRead',
+              effect: iam.Effect.ALLOW,
+              actions: ['s3:GetObject', 's3:ListBucket'],
+              resources: [
+                props.documentsBucket.bucketArn,
+                `${props.documentsBucket.bucketArn}/*`,
+              ],
+            }),
+          ],
+        }),
+      },
     });
 
-    // S3 read access to documents bucket
-    props.documentsBucket.grantRead(kbRole);
+    // -------------------------------------------------------------------
+    // Aurora schema init — runs before KnowledgeBase creation
+    // RDS Data API accepts one statement per call, so chain three CRs.
+    // -------------------------------------------------------------------
 
-    // Aurora Data API access for vector reads/writes
-    kbRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'AuroraDataApi',
-      effect: iam.Effect.ALLOW,
-      actions: [
-        'rds-data:ExecuteStatement',
-        'rds-data:BatchExecuteStatement',
-      ],
-      resources: [props.auroraClusterArn],
-    }));
+    const rdsCall = (id: string, sql: string): cr.AwsCustomResource =>
+      new cr.AwsCustomResource(this, id, {
+        onCreate: {
+          service: 'RDSDataService',
+          action: 'executeStatement',
+          parameters: {
+            resourceArn: props.auroraClusterArn,
+            secretArn: props.auroraCredentialsSecretArn,
+            database: 'orgiq',
+            sql,
+          },
+          physicalResourceId: cr.PhysicalResourceId.of(id),
+        },
+        policy: cr.AwsCustomResourcePolicy.fromStatements([
+          new iam.PolicyStatement({
+            actions: ['rds-data:ExecuteStatement'],
+            resources: [props.auroraClusterArn],
+          }),
+          new iam.PolicyStatement({
+            actions: ['secretsmanager:GetSecretValue'],
+            resources: [props.auroraCredentialsSecretArn],
+          }),
+        ]),
+      });
 
-    // Read Aurora credentials secret
-    kbRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'AuroraCredentialsSecret',
-      effect: iam.Effect.ALLOW,
-      actions: ['secretsmanager:GetSecretValue'],
-      resources: [props.auroraCredentialsSecretArn],
-    }));
+    const dbExtension = rdsCall('DbInitExtension', 'CREATE EXTENSION IF NOT EXISTS vector');
 
-    // Bedrock Titan embedding model access
-    kbRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'BedrockEmbeddingAccess',
-      effect: iam.Effect.ALLOW,
-      actions: ['bedrock:InvokeModel'],
-      resources: [
-        `arn:aws:bedrock:${this.region}::foundation-model/amazon.titan-embed-text-v2:0`,
-      ],
-    }));
+    const dbTable = rdsCall(
+      'DbInitTable',
+      'CREATE TABLE IF NOT EXISTS bedrock_kb (id uuid PRIMARY KEY, embedding vector(1024), text text, metadata json)',
+    );
+    dbTable.node.addDependency(dbExtension);
+
+    const dbIndex = rdsCall(
+      'DbInitIndex',
+      'CREATE INDEX IF NOT EXISTS bedrock_kb_emb_idx ON bedrock_kb USING hnsw (embedding vector_cosine_ops)',
+    );
+    dbIndex.node.addDependency(dbTable);
+
+    // Bedrock also requires a GIN full-text index on the text column
+    const dbTextIndex = rdsCall(
+      'DbInitTextIndex',
+      "CREATE INDEX IF NOT EXISTS bedrock_kb_text_idx ON bedrock_kb USING gin (to_tsvector('simple', text))",
+    );
+    dbTextIndex.node.addDependency(dbIndex);
 
     // -------------------------------------------------------------------
     // Bedrock Knowledge Base — RDS (Aurora pgvector) storage
@@ -88,7 +154,7 @@ export class KnowledgeBaseStack extends cdk.Stack {
 
     const knowledgeBase = new cdk.aws_bedrock.CfnKnowledgeBase(this, 'KnowledgeBase', {
       name: `${prefix}-knowledge-base`,
-      description: 'OrgIQ document knowledge base — meeting transcripts, PRDs, wiki exports',
+      description: 'OrgIQ document knowledge base - meeting transcripts, PRDs, wiki exports',
       roleArn: kbRole.roleArn,
       knowledgeBaseConfiguration: {
         type: 'VECTOR',
@@ -118,6 +184,8 @@ export class KnowledgeBaseStack extends cdk.Stack {
       },
     });
 
+    knowledgeBase.node.addDependency(dbTextIndex);
+
     this.knowledgeBaseId = knowledgeBase.attrKnowledgeBaseId;
     this.knowledgeBaseArn = knowledgeBase.attrKnowledgeBaseArn;
 
@@ -146,21 +214,6 @@ export class KnowledgeBaseStack extends cdk.Stack {
         },
       },
     });
-
-    // -------------------------------------------------------------------
-    // Grant agent role KB retrieve access
-    // -------------------------------------------------------------------
-
-    const agentRole = iam.Role.fromRoleArn(this, 'AgentBaseRole', props.agentRoleArn);
-    agentRole.addToPrincipalPolicy(new iam.PolicyStatement({
-      sid: 'KnowledgeBaseRetrieve',
-      effect: iam.Effect.ALLOW,
-      actions: [
-        'bedrock:Retrieve',
-        'bedrock:RetrieveAndGenerate',
-      ],
-      resources: [knowledgeBase.attrKnowledgeBaseArn],
-    }));
 
     // -------------------------------------------------------------------
     // Outputs

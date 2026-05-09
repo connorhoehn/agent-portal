@@ -205,7 +205,7 @@ export class AgentCoreGatewayStack extends cdk.Stack {
         action: 'createMcpGateway',
         parameters: {
           name: `${prefix}-gateway`,
-          description: 'OrgIQ MCP Gateway — unified tool registry for all agents',
+          description: 'OrgIQ MCP Gateway - unified tool registry for all agents',
           authorizationType: 'AWS_IAM',
           policyEngineConfiguration: {
             policyEngineId: props.policyEngineId,
@@ -219,7 +219,7 @@ export class AgentCoreGatewayStack extends cdk.Stack {
         parameters: {
           mcpGatewayId: new cr.PhysicalResourceIdReference(),
           name: `${prefix}-gateway`,
-          description: 'OrgIQ MCP Gateway — unified tool registry for all agents',
+          description: 'OrgIQ MCP Gateway - unified tool registry for all agents',
           policyEngineConfiguration: {
             policyEngineId: props.policyEngineId,
           },

@@ -51,7 +51,6 @@ const knowledgeBase = new KnowledgeBaseStack(app, 'OrgIQ-KnowledgeBase', {
   env,
   prefix,
   documentsBucket: foundation.documentsBucket,
-  agentRoleArn: foundation.agentBaseRole.roleArn,
   auroraClusterArn: aurora.clusterArn,
   auroraCredentialsSecretArn: aurora.credentialsSecretArn,
   description: 'OrgIQ Knowledge Base: Bedrock KB with Aurora pgvector storage + S3 data source',
