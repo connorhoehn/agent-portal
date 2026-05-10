@@ -50,11 +50,13 @@ Requires `~/.aws` credentials via SSO. Run `aws sso login --profile bedrock` fir
 | S3 buckets, DynamoDB tables | CDK |
 | IAM roles | CDK |
 | CloudWatch dashboards + budget alarm | CDK |
-| Agent Runtime (microVM) | AgentCore CLI (`agentcore deploy`) |
-| MCP Gateway + tool targets | AgentCore CLI (`agentcore add gateway`) |
-| AgentCore Memory | AgentCore CLI (`agentcore add memory`) |
-| AgentCore Policy Engine | AgentCore CLI (`agentcore add policy-engine`) |
-| AgentCore Identity/Credentials | AgentCore CLI (`agentcore add credential`) |
+| Agent Runtime (ECR repos + execution roles) | CDK (`CfnRuntime` — phase 1) |
+| Agent Runtime (CfnRuntime + CfnRuntimeEndpoint) | CDK with `--context deployRuntimes=true` |
+| MCP Gateway + targets + Cedar policies | CDK (`CfnGateway`, `CfnGatewayTarget`, `CfnPolicy`) |
+| AgentCore Memory | CDK (`CfnMemory`) |
+| AgentCore Policy Engine | CDK (`CfnPolicyEngine`) |
+| Custom Evaluators + Online Evaluation | CDK (`CfnEvaluator`, `CfnOnlineEvaluationConfig`) |
+| Online Evaluation (enable after runtimes) | CDK with `--context enableEval=true` |
 
 ## Agent Dockerfile requirements (AgentCore Runtime)
 
@@ -112,27 +114,29 @@ If you need new features in those packages, note it as a TODO — don't cross-re
 ## Common workflows
 
 ```bash
-# Deploy all infrastructure
-cd infra && npx cdk deploy --all
+# Deploy all infrastructure (11 stacks) — cleans up orphaned resources first
+cd infra && ./scripts/deploy.sh
 
-# Deploy a single agent
-cd agents/supervisor && agentcore deploy
+# Deploy a single stack
+cd infra && ./scripts/deploy.sh OrgIQ-Aurora
 
-# Check agent status
-agentcore status
+# Phase 2: deploy runtimes after pushing container images to ECR
+cd infra && ./scripts/deploy.sh OrgIQ-AgentCoreRuntime --context deployRuntimes=true
+
+# Enable online evaluation after runtimes are running
+cd infra && ./scripts/deploy.sh OrgIQ-AgentCoreTelemetry --context enableEval=true
+
+# Destroy everything — drains Cedar policies and orphan gateways first
+cd infra && ./scripts/destroy.sh
+
+# Run CDK synth (dry-run)
+cd infra && npx cdk synth
 
 # Invoke deployed agent
 agentcore invoke --agent orgiq-supervisor --prompt "Who knows auth best?"
 
 # Test agent locally
 cd agents/search && agentcore dev "Find Kubernetes experts"
-
-# Run CDK synth (dry-run)
-cd infra && npx cdk synth
-
-# Destroy everything
-cd infra && npx cdk destroy --all
-# Then check resource tracker in notebooks for orphaned resources
 ```
 
 ## Gotchas

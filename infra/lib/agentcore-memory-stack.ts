@@ -1,28 +1,13 @@
 import * as cdk from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
-import * as cr from 'aws-cdk-lib/custom-resources';
+import * as bedrockagentcore from 'aws-cdk-lib/aws-bedrockagentcore';
 import type { Construct } from 'constructs';
 
 export interface AgentCoreMemoryStackProps extends cdk.StackProps {
   readonly prefix?: string;
 }
 
-/**
- * OrgIQ-AgentCoreMemory: AgentCore Memory store configuration.
- *
- * Creates a memory store with three strategies:
- * - Semantic: Factual knowledge about the organization (entities, relationships)
- * - UserPreference: User interaction preferences (formatting, verbosity, etc.)
- * - Summary: Conversation summaries for long-term context
- *
- * Events expire after 90 days. Namespaces isolate per-actor memory.
- *
- * NOTE: AgentCore Memory does not yet have CloudFormation resource types.
- * This stack uses CustomResources. If `@aws-cdk/aws-bedrock-agentcore-alpha`
- * L2 constructs become available, migrate to those.
- */
 export class AgentCoreMemoryStack extends cdk.Stack {
-  /** The Memory Store ID */
   public readonly memoryId: string;
 
   constructor(scope: Construct, id: string, props?: AgentCoreMemoryStackProps) {
@@ -31,129 +16,75 @@ export class AgentCoreMemoryStack extends cdk.Stack {
     const prefix = props?.prefix ?? 'orgiq';
 
     // -------------------------------------------------------------------
-    // IAM Role for CustomResource Lambda (manages Memory store)
+    // Execution role — bedrock-agentcore service reads/writes memory events
     // -------------------------------------------------------------------
 
-    const crRole = new iam.Role(this, 'MemoryCRRole', {
-      roleName: `${prefix}-memory-cr-role`,
-      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
-      description: 'Role for CustomResource Lambda that manages AgentCore Memory resources',
-      managedPolicies: [
-        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
-      ],
-    });
-
-    crRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'AgentCoreMemoryManagement',
-      effect: iam.Effect.ALLOW,
-      actions: [
-        'bedrock:CreateMemory',
-        'bedrock:UpdateMemory',
-        'bedrock:DeleteMemory',
-        'bedrock:GetMemory',
-        'bedrock:ListMemories',
-        'bedrock:CreateMemoryStrategy',
-        'bedrock:UpdateMemoryStrategy',
-        'bedrock:DeleteMemoryStrategy',
-        'bedrock:ListMemoryStrategies',
-      ],
-      resources: ['*'],
-    }));
-
-    // -------------------------------------------------------------------
-    // AgentCore Memory Store
-    // -------------------------------------------------------------------
-
-    const memoryStore = new cr.AwsCustomResource(this, 'MemoryStore', {
-      resourceType: 'Custom::AgentCoreMemory',
-      onCreate: {
-        service: 'BedrockAgentRuntime',
-        action: 'createMemory',
-        parameters: {
-          name: `${prefix}-memory`,
-          description: 'OrgIQ memory store - semantic knowledge, user preferences, and conversation summaries',
-          eventExpiryDuration: 7776000, // 90 days in seconds
-          memoryStrategies: [
-            {
-              strategyName: 'semantic',
-              type: 'SEMANTIC',
-              description: 'Factual knowledge about the organization extracted from conversations',
-              namespaceConfiguration: {
-                namespacePattern: `/${prefix}/{actorId}/semantic/`,
-              },
-              configuration: {
-                semanticConfiguration: {
-                  embeddingModelId: 'amazon.titan-embed-text-v2:0',
-                  embeddingDimension: 1024,
-                  maxMemories: 10000,
-                  similarityThreshold: 0.7,
-                },
-              },
-            },
-            {
-              strategyName: 'user-preference',
-              type: 'USER_PREFERENCE',
-              description: 'User interaction preferences (formatting, verbosity, focus areas)',
-              namespaceConfiguration: {
-                namespacePattern: `/${prefix}/{actorId}/prefs/`,
-              },
-              configuration: {
-                userPreferenceConfiguration: {
-                  maxPreferences: 100,
-                  consolidationEnabled: true,
-                },
-              },
-            },
-            {
-              strategyName: 'summary',
-              type: 'SUMMARY',
-              description: 'Conversation summaries for long-term context across sessions',
-              namespaceConfiguration: {
-                namespacePattern: `/${prefix}/{actorId}/summary/`,
-              },
-              configuration: {
-                summaryConfiguration: {
-                  modelId: 'amazon.nova-lite-v1:0',
-                  maxSummaryTokens: 2048,
-                  consolidationInterval: 5, // Summarize every 5 conversations
-                },
-              },
-            },
+    const memoryRole = new iam.Role(this, 'MemoryExecutionRole', {
+      roleName: `${prefix}-memory-execution-role`,
+      assumedBy: new iam.ServicePrincipal('bedrock-agentcore.amazonaws.com'),
+      description: 'Execution role for OrgIQ AgentCore Memory store',
+      inlinePolicies: {
+        MemoryAccess: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              sid: 'MemoryEventAccess',
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'bedrock-agentcore:CreateEvent',
+                'bedrock-agentcore:ListEvents',
+                'bedrock-agentcore:RetrieveMemories',
+                'bedrock-agentcore:ListMemoryRecords',
+              ],
+              resources: ['*'],
+            }),
           ],
-        },
-        physicalResourceId: cr.PhysicalResourceId.fromResponse('memoryId'),
+        }),
       },
-      onUpdate: {
-        service: 'BedrockAgentRuntime',
-        action: 'updateMemory',
-        parameters: {
-          memoryId: new cr.PhysicalResourceIdReference(),
-          name: `${prefix}-memory`,
-          description: 'OrgIQ memory store - semantic knowledge, user preferences, and conversation summaries',
-          eventExpiryDuration: 7776000,
-        },
-        physicalResourceId: cr.PhysicalResourceId.fromResponse('memoryId'),
-      },
-      onDelete: {
-        service: 'BedrockAgentRuntime',
-        action: 'deleteMemory',
-        parameters: {
-          memoryId: new cr.PhysicalResourceIdReference(),
-        },
-      },
-      role: crRole,
-      policy: cr.AwsCustomResourcePolicy.fromSdkCalls({
-        resources: cr.AwsCustomResourcePolicy.ANY_RESOURCE,
-      }),
     });
 
-    this.memoryId = memoryStore.getResponseField('memoryId');
-
     // -------------------------------------------------------------------
-    // IAM Policy for agents to access memory
+    // Memory Store
     // -------------------------------------------------------------------
 
-    const memoryAccessPolicy = new iam.ManagedPolicy(this, 'MemoryAccessPolicy', {
+    const safeName = prefix.replace(/-/g, '_');
+
+    const memory = new bedrockagentcore.CfnMemory(this, 'Memory', {
+      name: `${safeName}_memory`,
+      description: 'OrgIQ memory store — semantic knowledge, user preferences, and conversation summaries',
+      eventExpiryDuration: 90,
+      memoryExecutionRoleArn: memoryRole.roleArn,
+      memoryStrategies: [
+        {
+          semanticMemoryStrategy: {
+            name: 'semantic',
+            description: 'Factual knowledge about the organization extracted from conversations',
+            namespaceTemplates: [`/${prefix}/{actorId}/semantic`],
+          },
+        },
+        {
+          summaryMemoryStrategy: {
+            name: 'summary',
+            description: 'Conversation summaries for long-term context across sessions',
+            namespaceTemplates: [`/${prefix}/{actorId}/{sessionId}/summary`],
+          },
+        },
+        {
+          userPreferenceMemoryStrategy: {
+            name: 'user_preference',
+            description: 'User interaction preferences (formatting, verbosity, focus areas)',
+            namespaceTemplates: [`/${prefix}/{actorId}/prefs`],
+          },
+        },
+      ],
+    });
+
+    this.memoryId = memory.attrMemoryId;
+
+    // -------------------------------------------------------------------
+    // IAM Managed Policy for agents to access the memory store
+    // -------------------------------------------------------------------
+
+    new iam.ManagedPolicy(this, 'MemoryAccessPolicy', {
       managedPolicyName: `${prefix}-memory-access-policy`,
       description: 'Allows AgentCore agents to read/write to the OrgIQ memory store',
       statements: [
@@ -161,14 +92,12 @@ export class AgentCoreMemoryStack extends cdk.Stack {
           sid: 'AgentCoreMemoryAccess',
           effect: iam.Effect.ALLOW,
           actions: [
-            'bedrock:InvokeMemory',
-            'bedrock:RetrieveMemory',
-            'bedrock:WriteMemory',
-            'bedrock:DeleteMemoryEvent',
+            'bedrock-agentcore:CreateEvent',
+            'bedrock-agentcore:ListEvents',
+            'bedrock-agentcore:RetrieveMemories',
+            'bedrock-agentcore:ListMemoryRecords',
           ],
-          resources: [
-            `arn:aws:bedrock:${this.region}:${this.account}:memory/*`,
-          ],
+          resources: [`arn:aws:bedrock-agentcore:${this.region}:${this.account}:memory/*`],
         }),
       ],
     });
@@ -178,13 +107,13 @@ export class AgentCoreMemoryStack extends cdk.Stack {
     // -------------------------------------------------------------------
 
     new cdk.CfnOutput(this, 'MemoryId', {
-      value: this.memoryId,
+      value: memory.attrMemoryId,
       exportName: `${prefix}-memory-id`,
     });
 
-    new cdk.CfnOutput(this, 'MemoryAccessPolicyArn', {
-      value: memoryAccessPolicy.managedPolicyArn,
-      exportName: `${prefix}-memory-access-policy-arn`,
+    new cdk.CfnOutput(this, 'MemoryArn', {
+      value: memory.attrMemoryArn,
+      exportName: `${prefix}-memory-arn`,
     });
   }
 }

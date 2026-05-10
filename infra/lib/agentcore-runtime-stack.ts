@@ -1,29 +1,20 @@
 import * as cdk from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
-import * as cr from 'aws-cdk-lib/custom-resources';
+import * as ecr from 'aws-cdk-lib/aws-ecr';
+import * as bedrockagentcore from 'aws-cdk-lib/aws-bedrockagentcore';
 import type { Construct } from 'constructs';
 
 export interface AgentCoreRuntimeStackProps extends cdk.StackProps {
   readonly prefix?: string;
-  /** Map of agent name to IAM role ARN */
   readonly agentRoles: Record<string, iam.Role>;
-  /** AgentCore Memory store ID (injected as env var) */
   readonly memoryId: string;
-  /** Bedrock Guardrail ID (injected as env var) */
   readonly guardrailId: string;
-  /** Aurora Serverless v2 cluster ARN (graph + vector store, injected as env var) */
   readonly auroraClusterArn: string;
-  /** Secrets Manager secret ARN for Aurora credentials (injected as env var) */
   readonly auroraCredentialsSecretArn: string;
-  /** Bedrock Knowledge Base ID (injected as env var) */
   readonly knowledgeBaseId: string;
-  /** The model ID for agent inference */
   readonly modelId?: string;
 }
 
-/**
- * Agent names as defined in CLAUDE.md.
- */
 const AGENT_NAMES = [
   'supervisor',
   'search',
@@ -34,197 +25,142 @@ const AGENT_NAMES = [
 ] as const;
 
 /**
- * OrgIQ-AgentCoreRuntime: Deploys 6 agent runtimes to AgentCore Runtime.
+ * OrgIQ-AgentCoreRuntime: ECR repos, execution roles, and CfnRuntime resources.
  *
- * NOTE: AgentCore Runtime does not yet have native CloudFormation resource types.
- * This stack uses CustomResources backed by AwsSdk calls to the
- * bedrock-agent-runtime control plane. If the control plane API changes,
- * update the service/action references accordingly.
+ * After deploying this stack, push container images to the ECR repos:
+ *   cd agents/<name>
+ *   aws ecr get-login-password | docker login --username AWS --password-stdin <ecr-uri>
+ *   docker buildx build --platform linux/arm64 -t <ecr-uri>:latest --push .
  *
- * Alternative: If `@aws-cdk/aws-bedrock-agentcore-alpha` L2 constructs become
- * available, replace the CustomResources with those constructs.
- *
- * POST-DEPLOY STEP: After CDK deploy, you must still push container images:
- *   cd agents/<name> && agentcore deploy
- * The CDK stack creates the runtime configuration; `agentcore deploy` handles
- * the Docker build + push via CodeBuild.
+ * Runtime resources will be PENDING until the image exists in ECR.
  */
 export class AgentCoreRuntimeStack extends cdk.Stack {
-  /** Map of agent name to runtime ID */
-  public readonly runtimeIds: Record<string, string>;
+  public readonly runtimeIds: Record<string, string> = {};
+  public readonly ecrRepos: Record<string, ecr.Repository> = {};
 
   constructor(scope: Construct, id: string, props: AgentCoreRuntimeStackProps) {
     super(scope, id, props);
 
     const prefix = props.prefix ?? 'orgiq';
     const modelId = props.modelId ?? 'amazon.nova-pro-v1:0';
-    this.runtimeIds = {};
 
-    // -------------------------------------------------------------------
-    // IAM Role for CustomResource Lambda (manages AgentCore runtimes)
-    // -------------------------------------------------------------------
-
-    const crRole = new iam.Role(this, 'AgentCoreCustomResourceRole', {
-      roleName: `${prefix}-agentcore-cr-role`,
-      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
-      description: 'Role for CustomResource Lambda that manages AgentCore Runtime resources',
-      managedPolicies: [
-        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
-      ],
-    });
-
-    crRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'AgentCoreRuntimeManagement',
-      effect: iam.Effect.ALLOW,
-      actions: [
-        'bedrock:CreateAgentRuntime',
-        'bedrock:UpdateAgentRuntime',
-        'bedrock:DeleteAgentRuntime',
-        'bedrock:GetAgentRuntime',
-        'bedrock:CreateAgentRuntimeEndpoint',
-        'bedrock:UpdateAgentRuntimeEndpoint',
-        'bedrock:DeleteAgentRuntimeEndpoint',
-        'bedrock:GetAgentRuntimeEndpoint',
-        'bedrock:ListAgentRuntimeEndpoints',
-      ],
-      resources: ['*'],
-    }));
-
-    crRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'PassRoleToAgentCore',
-      effect: iam.Effect.ALLOW,
-      actions: ['iam:PassRole'],
-      resources: Object.values(props.agentRoles).map(r => r.roleArn),
-    }));
-
-    // -------------------------------------------------------------------
-    // AgentCore Runtimes (one per agent)
-    // -------------------------------------------------------------------
+    // Phase 1 (default): create ECR repos + execution roles
+    // Phase 2 (after images pushed): add CfnRuntime + CfnRuntimeEndpoint
+    //   cdk deploy OrgIQ-AgentCoreRuntime --context deployRuntimes=true
+    const deployRuntimes = this.node.tryGetContext('deployRuntimes') === 'true';
 
     for (const agentName of AGENT_NAMES) {
       const agentRole = props.agentRoles[agentName];
       if (!agentRole) continue;
 
+      const pascal = this.pascal(agentName);
       const runtimeName = `${prefix}-${agentName}`;
-      const pascalName = this.capitalize(agentName);
+      // agentRuntimeName and endpoint name must match [a-zA-Z][a-zA-Z0-9_]{0,47} — no hyphens
+      const safeRuntimeName = `${prefix}_${agentName.replace(/-/g, '_')}`;
 
-      // Create AgentCore Runtime via CustomResource (AwsSdk)
-      const runtime = new cr.AwsCustomResource(this, `${pascalName}Runtime`, {
-        resourceType: 'Custom::AgentCoreRuntime',
-        onCreate: {
-          service: 'BedrockAgentRuntime',
-          action: 'createAgentRuntime',
-          parameters: {
-            agentRuntimeName: runtimeName,
-            description: `OrgIQ ${agentName} agent runtime`,
-            roleArn: agentRole.roleArn,
-            agentRuntimeArtifact: {
-              containerConfiguration: {
-                containerUri: `placeholder-${agentName}`, // Updated by `agentcore deploy`
-              },
-            },
-            lifecycleConfiguration: {
-              idleTimeoutSeconds: 300, // 5 minutes
-              maxLifetimeSeconds: 28800, // 8 hours
-            },
-            environmentVariables: {
-              AGENT_NAME: agentName,
-              MEMORY_ID: props.memoryId,
-              GUARDRAIL_ID: props.guardrailId,
-              MODEL_ID: modelId,
-              AURORA_CLUSTER_ARN: props.auroraClusterArn,
-              AURORA_SECRET_ARN: props.auroraCredentialsSecretArn,
-              KB_ID: props.knowledgeBaseId,
-              PROJECT_PREFIX: prefix,
-            },
-            authorizationConfiguration: {
-              authorizationType: 'AWS_IAM',
-            },
-            networkConfiguration: {
-              networkMode: 'PUBLIC',
-            },
-          },
-          physicalResourceId: cr.PhysicalResourceId.fromResponse('agentRuntimeId'),
+      // ECR repo for agent container image (built by `docker buildx --platform linux/arm64`)
+      const repo = new ecr.Repository(this, `${pascal}Repo`, {
+        repositoryName: runtimeName,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+        emptyOnDelete: true,
+        lifecycleRules: [{ maxImageCount: 5 }],
+      });
+      this.ecrRepos[agentName] = repo;
+
+      // Runtime execution role — trusted by bedrock-agentcore service
+      const executionRole = new iam.Role(this, `${pascal}ExecutionRole`, {
+        roleName: `${runtimeName}-execution-role`,
+        assumedBy: new iam.ServicePrincipal('bedrock-agentcore.amazonaws.com'),
+        description: `Execution role for ${runtimeName} AgentCore Runtime`,
+        inlinePolicies: {
+          RuntimeAccess: new iam.PolicyDocument({
+            statements: [
+              new iam.PolicyStatement({
+                sid: 'BedrockInvoke',
+                actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
+                resources: ['*'],
+              }),
+              new iam.PolicyStatement({
+                sid: 'EcrAccess',
+                actions: ['ecr:BatchGetImage', 'ecr:GetDownloadUrlForLayer'],
+                resources: [repo.repositoryArn],
+              }),
+              new iam.PolicyStatement({
+                sid: 'EcrAuth',
+                actions: ['ecr:GetAuthorizationToken'],
+                resources: ['*'],
+              }),
+              new iam.PolicyStatement({
+                sid: 'Logs',
+                actions: ['logs:CreateLogGroup', 'logs:CreateLogStream', 'logs:PutLogEvents'],
+                resources: [`arn:aws:logs:${this.region}:${this.account}:log-group:/aws/bedrock-agentcore/*`],
+              }),
+              new iam.PolicyStatement({
+                sid: 'Xray',
+                actions: ['xray:PutTraceSegments', 'xray:PutTelemetryRecords'],
+                resources: ['*'],
+              }),
+              new iam.PolicyStatement({
+                sid: 'Metrics',
+                actions: ['cloudwatch:PutMetricData'],
+                resources: ['*'],
+                conditions: { StringEquals: { 'cloudwatch:namespace': 'bedrock-agentcore' } },
+              }),
+              new iam.PolicyStatement({
+                sid: 'AgentCoreWorkload',
+                actions: ['bedrock-agentcore:GetWorkloadAccessToken', 'bedrock-agentcore:GetWorkloadAccessTokenForJwt'],
+                resources: ['*'],
+              }),
+            ],
+          }),
         },
-        onUpdate: {
-          service: 'BedrockAgentRuntime',
-          action: 'updateAgentRuntime',
-          parameters: {
-            agentRuntimeId: new cr.PhysicalResourceIdReference(),
-            agentRuntimeName: runtimeName,
-            description: `OrgIQ ${agentName} agent runtime`,
-            roleArn: agentRole.roleArn,
-            lifecycleConfiguration: {
-              idleTimeoutSeconds: 300,
-              maxLifetimeSeconds: 28800,
-            },
-            environmentVariables: {
-              AGENT_NAME: agentName,
-              MEMORY_ID: props.memoryId,
-              GUARDRAIL_ID: props.guardrailId,
-              MODEL_ID: modelId,
-              AURORA_CLUSTER_ARN: props.auroraClusterArn,
-              AURORA_SECRET_ARN: props.auroraCredentialsSecretArn,
-              KB_ID: props.knowledgeBaseId,
-              PROJECT_PREFIX: prefix,
-            },
-          },
-          physicalResourceId: cr.PhysicalResourceId.fromResponse('agentRuntimeId'),
-        },
-        onDelete: {
-          service: 'BedrockAgentRuntime',
-          action: 'deleteAgentRuntime',
-          parameters: {
-            agentRuntimeId: new cr.PhysicalResourceIdReference(),
-          },
-        },
-        role: crRole,
-        policy: cr.AwsCustomResourcePolicy.fromSdkCalls({
-          resources: cr.AwsCustomResourcePolicy.ANY_RESOURCE,
-        }),
       });
 
-      // Create a default endpoint for the runtime
-      const endpoint = new cr.AwsCustomResource(this, `${pascalName}Endpoint`, {
-        resourceType: 'Custom::AgentCoreRuntimeEndpoint',
-        onCreate: {
-          service: 'BedrockAgentRuntime',
-          action: 'createAgentRuntimeEndpoint',
-          parameters: {
-            agentRuntimeId: runtime.getResponseField('agentRuntimeId'),
-            name: `${runtimeName}-default`,
-            description: `Default endpoint for ${agentName} agent`,
-          },
-          physicalResourceId: cr.PhysicalResourceId.fromResponse('agentRuntimeEndpointId'),
-        },
-        onDelete: {
-          service: 'BedrockAgentRuntime',
-          action: 'deleteAgentRuntimeEndpoint',
-          parameters: {
-            agentRuntimeId: runtime.getResponseField('agentRuntimeId'),
-            agentRuntimeEndpointId: new cr.PhysicalResourceIdReference(),
-          },
-        },
-        role: crRole,
-        policy: cr.AwsCustomResourcePolicy.fromSdkCalls({
-          resources: cr.AwsCustomResourcePolicy.ANY_RESOURCE,
-        }),
+      new cdk.CfnOutput(this, `${pascal}EcrUri`, {
+        value: repo.repositoryUri,
+        description: `ECR URI for ${agentName} — push ARM64 image then redeploy with --context deployRuntimes=true`,
       });
 
+      if (!deployRuntimes) continue;
+
+      // AgentCore Runtime resource (requires image in ECR)
+      const runtime = new bedrockagentcore.CfnRuntime(this, `${pascal}Runtime`, {
+        agentRuntimeName: safeRuntimeName,
+        description: `OrgIQ ${agentName} agent runtime`,
+        roleArn: executionRole.roleArn,
+        agentRuntimeArtifact: {
+          containerConfiguration: {
+            containerUri: `${repo.repositoryUri}:latest`,
+          },
+        },
+        networkConfiguration: { networkMode: 'PUBLIC' },
+        protocolConfiguration: 'HTTP',
+        environmentVariables: {
+          AGENT_NAME: agentName,
+          MEMORY_ID: props.memoryId,
+          GUARDRAIL_ID: props.guardrailId,
+          MODEL_ID: modelId,
+          AURORA_CLUSTER_ARN: props.auroraClusterArn,
+          AURORA_SECRET_ARN: props.auroraCredentialsSecretArn,
+          KB_ID: props.knowledgeBaseId,
+          PROJECT_PREFIX: prefix,
+        },
+      });
+
+      this.runtimeIds[agentName] = runtime.attrAgentRuntimeId;
+
+      const endpoint = new bedrockagentcore.CfnRuntimeEndpoint(this, `${pascal}Endpoint`, {
+        name: `${safeRuntimeName}_endpoint`,
+        agentRuntimeId: runtime.attrAgentRuntimeId,
+        description: `Default endpoint for ${agentName} agent`,
+      });
       endpoint.node.addDependency(runtime);
 
-      // Store runtime ID for cross-stack references
-      const runtimeId = runtime.getResponseField('agentRuntimeId');
-
-      new cdk.CfnOutput(this, `${pascalName}RuntimeId`, {
-        value: runtimeId,
+      new cdk.CfnOutput(this, `${pascal}RuntimeId`, {
+        value: runtime.attrAgentRuntimeId,
         exportName: `${prefix}-${agentName}-runtime-id`,
       });
     }
-
-    // -------------------------------------------------------------------
-    // Outputs
-    // -------------------------------------------------------------------
 
     new cdk.CfnOutput(this, 'ModelId', {
       value: modelId,
@@ -232,7 +168,7 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
     });
   }
 
-  private capitalize(str: string): string {
-    return str.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('');
+  private pascal(name: string): string {
+    return name.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('');
   }
 }

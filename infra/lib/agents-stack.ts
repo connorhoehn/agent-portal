@@ -113,6 +113,17 @@ export class AgentsStack extends cdk.Stack {
         resources: [props.sessionsTableArn, `${props.sessionsTableArn}/index/*`],
       }));
 
+      // PassRole for AgentCore Runtime execution roles (named ${prefix}-<agentName>-execution-role)
+      role.addToPolicy(new iam.PolicyStatement({
+        sid: 'PassToAgentCore',
+        effect: iam.Effect.ALLOW,
+        actions: ['iam:PassRole'],
+        resources: [`arn:aws:iam::${this.account}:role/${prefix}-*-execution-role`],
+        conditions: {
+          StringEquals: { 'iam:PassedToService': 'bedrock-agentcore.amazonaws.com' },
+        },
+      }));
+
       this.agentRoles[agentName] = role;
     }
 

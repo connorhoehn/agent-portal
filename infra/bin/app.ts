@@ -10,6 +10,7 @@ import { AgentCoreMemoryStack } from '../lib/agentcore-memory-stack';
 import { AgentCorePolicyStack } from '../lib/agentcore-policy-stack';
 import { AgentCoreRuntimeStack } from '../lib/agentcore-runtime-stack';
 import { AgentCoreGatewayStack } from '../lib/agentcore-gateway-stack';
+import { AgentCoreTelemetryStack } from '../lib/agentcore-telemetry-stack';
 
 const app = new cdk.App();
 
@@ -155,14 +156,27 @@ const agentCoreGateway = new AgentCoreGatewayStack(app, 'OrgIQ-AgentCoreGateway'
   auroraClusterArn: aurora.clusterArn,
   auroraCredentialsSecretArn: aurora.credentialsSecretArn,
   knowledgeBaseId: knowledgeBase.knowledgeBaseId,
+  policyEngineArn: agentCorePolicy.policyEngineArn,
   policyEngineId: agentCorePolicy.policyEngineId,
   agentRoles: agents.agentRoles,
-  artifactsBucketArn: foundation.artifactsBucket.bucketArn,
-  description: 'OrgIQ AgentCore Gateway: MCP Gateway with Lambda tools + agent-as-tool targets',
+  description: 'OrgIQ AgentCore Gateway: MCP Gateway with Lambda tools + Cedar policy enforcement',
 });
 agentCoreGateway.addDependency(agentCorePolicy);
 agentCoreGateway.addDependency(agentCoreRuntime);
 agentCoreGateway.addDependency(aurora);
 agentCoreGateway.addDependency(knowledgeBase);
+
+// -------------------------------------------------------------------
+// Stack 11: AgentCore Telemetry (evaluators, online eval, CW dashboard)
+// Enable online evaluation after runtimes are deployed:
+//   cdk deploy OrgIQ-AgentCoreTelemetry --context enableEval=true
+// -------------------------------------------------------------------
+const agentCoreTelemetry = new AgentCoreTelemetryStack(app, 'OrgIQ-AgentCoreTelemetry', {
+  env,
+  prefix,
+  description: 'OrgIQ AgentCore Telemetry: custom evaluators, online eval config, X-Ray, CloudWatch dashboard',
+});
+agentCoreTelemetry.addDependency(agentCoreRuntime);
+agentCoreTelemetry.addDependency(agentCoreGateway);
 
 app.synth();

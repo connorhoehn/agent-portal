@@ -1,54 +1,22 @@
 import * as cdk from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
-import * as cr from 'aws-cdk-lib/custom-resources';
+import * as bedrockagentcore from 'aws-cdk-lib/aws-bedrockagentcore';
 import type { Construct } from 'constructs';
 
 export interface AgentCoreGatewayStackProps extends cdk.StackProps {
   readonly prefix?: string;
-  /** Aurora Serverless v2 cluster ARN for graph-traversal and pagerank tools */
   readonly auroraClusterArn: string;
-  /** Secrets Manager secret ARN for Aurora credentials */
   readonly auroraCredentialsSecretArn: string;
-  /** Bedrock Knowledge Base ID for kb-query tool */
   readonly knowledgeBaseId: string;
-  /** Policy Engine ID to attach to gateway */
+  readonly policyEngineArn: string;
   readonly policyEngineId: string;
-  /** Map of agent name to IAM role for agent-as-tool targets */
   readonly agentRoles: Record<string, iam.Role>;
-  /** Artifacts bucket ARN for Lambda code */
-  readonly artifactsBucketArn: string;
 }
 
-/**
- * Agent names exposed as MCP tools for the supervisor.
- */
-const SPECIALIST_AGENTS = [
-  'search',
-  'scoring',
-  'advisor',
-  'ingestion',
-  'graph-builder',
-] as const;
-
-/**
- * OrgIQ-AgentCoreGateway: MCP Gateway configuration.
- *
- * Creates an MCP Gateway with:
- * - Lambda targets for custom tools (KB query, graph traversal, PageRank)
- * - Agent-as-tool targets (specialist agents exposed as MCP tools for supervisor)
- * - Policy Engine attachment for access control
- *
- * NOTE: AgentCore MCP Gateway does not yet have CloudFormation resource types.
- * This stack uses CustomResources backed by AwsSdk calls. If the API naming
- * changes, update the service/action references.
- *
- * POST-DEPLOY STEP: Deploy Lambda function code separately:
- *   cd infra/lambda/gateway-tools && ./deploy.sh
- */
 export class AgentCoreGatewayStack extends cdk.Stack {
-  /** The MCP Gateway ID */
-  public readonly gatewayId: string;
+  public readonly gatewayIdentifier: string;
+  public readonly gatewayUrl: string;
 
   constructor(scope: Construct, id: string, props: AgentCoreGatewayStackProps) {
     super(scope, id, props);
@@ -56,43 +24,7 @@ export class AgentCoreGatewayStack extends cdk.Stack {
     const prefix = props.prefix ?? 'orgiq';
 
     // -------------------------------------------------------------------
-    // IAM Role for CustomResource Lambda (manages MCP Gateway)
-    // -------------------------------------------------------------------
-
-    const crRole = new iam.Role(this, 'GatewayCRRole', {
-      roleName: `${prefix}-gateway-cr-role`,
-      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
-      description: 'Role for CustomResource Lambda that manages MCP Gateway resources',
-      managedPolicies: [
-        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
-      ],
-    });
-
-    crRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'AgentCoreMCPGatewayManagement',
-      effect: iam.Effect.ALLOW,
-      actions: [
-        'bedrock:CreateMcpGateway',
-        'bedrock:UpdateMcpGateway',
-        'bedrock:DeleteMcpGateway',
-        'bedrock:GetMcpGateway',
-        'bedrock:CreateMcpGatewayTarget',
-        'bedrock:UpdateMcpGatewayTarget',
-        'bedrock:DeleteMcpGatewayTarget',
-        'bedrock:ListMcpGatewayTargets',
-      ],
-      resources: ['*'],
-    }));
-
-    crRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'PassRoleToGateway',
-      effect: iam.Effect.ALLOW,
-      actions: ['iam:PassRole'],
-      resources: ['*'],
-    }));
-
-    // -------------------------------------------------------------------
-    // IAM Role for Gateway Lambda Tools
+    // IAM Role for Lambda tool functions
     // -------------------------------------------------------------------
 
     const toolsLambdaRole = new iam.Role(this, 'GatewayToolsLambdaRole', {
@@ -102,49 +34,46 @@ export class AgentCoreGatewayStack extends cdk.Stack {
       managedPolicies: [
         iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
       ],
+      inlinePolicies: {
+        ToolsAccess: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              sid: 'AuroraAgeAccess',
+              effect: iam.Effect.ALLOW,
+              actions: [
+                'rds-data:ExecuteStatement',
+                'rds-data:BatchExecuteStatement',
+                'rds-data:BeginTransaction',
+                'rds-data:CommitTransaction',
+                'rds-data:RollbackTransaction',
+              ],
+              resources: [props.auroraClusterArn],
+            }),
+            new iam.PolicyStatement({
+              sid: 'AuroraCredentials',
+              effect: iam.Effect.ALLOW,
+              actions: ['secretsmanager:GetSecretValue'],
+              resources: [props.auroraCredentialsSecretArn],
+            }),
+            new iam.PolicyStatement({
+              sid: 'KnowledgeBaseAccess',
+              effect: iam.Effect.ALLOW,
+              actions: ['bedrock:Retrieve', 'bedrock:RetrieveAndGenerate'],
+              resources: [`arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/${props.knowledgeBaseId}`],
+            }),
+            new iam.PolicyStatement({
+              sid: 'BedrockInvoke',
+              effect: iam.Effect.ALLOW,
+              actions: ['bedrock:InvokeModel'],
+              resources: ['*'],
+            }),
+          ],
+        }),
+      },
     });
 
-    // Aurora Data API access for graph-traversal and compute-pagerank tools (Apache AGE)
-    toolsLambdaRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'AuroraAgeAccess',
-      effect: iam.Effect.ALLOW,
-      actions: [
-        'rds-data:ExecuteStatement',
-        'rds-data:BatchExecuteStatement',
-        'rds-data:BeginTransaction',
-        'rds-data:CommitTransaction',
-        'rds-data:RollbackTransaction',
-      ],
-      resources: [props.auroraClusterArn],
-    }));
-    toolsLambdaRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'AuroraCredentials',
-      effect: iam.Effect.ALLOW,
-      actions: ['secretsmanager:GetSecretValue'],
-      resources: [props.auroraCredentialsSecretArn],
-    }));
-
-    // Knowledge Base access for kb-query tool
-    toolsLambdaRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'KnowledgeBaseAccess',
-      effect: iam.Effect.ALLOW,
-      actions: [
-        'bedrock:Retrieve',
-        'bedrock:RetrieveAndGenerate',
-      ],
-      resources: [`arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/${props.knowledgeBaseId}`],
-    }));
-
-    // Bedrock invoke for RetrieveAndGenerate
-    toolsLambdaRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'BedrockInvoke',
-      effect: iam.Effect.ALLOW,
-      actions: ['bedrock:InvokeModel'],
-      resources: ['*'],
-    }));
-
     // -------------------------------------------------------------------
-    // Lambda Functions for Custom MCP Tools
+    // Lambda Functions for MCP Tool Targets
     // -------------------------------------------------------------------
 
     const kbQueryLambda = new lambda.Function(this, 'KBQueryLambda', {
@@ -156,6 +85,7 @@ export class AgentCoreGatewayStack extends cdk.Stack {
       role: toolsLambdaRole,
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,
+      tracing: lambda.Tracing.ACTIVE,
       environment: {
         KB_ID: props.knowledgeBaseId,
         REGION: this.region,
@@ -171,6 +101,7 @@ export class AgentCoreGatewayStack extends cdk.Stack {
       role: toolsLambdaRole,
       timeout: cdk.Duration.seconds(30),
       memorySize: 256,
+      tracing: lambda.Tracing.ACTIVE,
       environment: {
         AURORA_CLUSTER_ARN: props.auroraClusterArn,
         AURORA_SECRET_ARN: props.auroraCredentialsSecretArn,
@@ -187,6 +118,7 @@ export class AgentCoreGatewayStack extends cdk.Stack {
       role: toolsLambdaRole,
       timeout: cdk.Duration.seconds(60),
       memorySize: 512,
+      tracing: lambda.Tracing.ACTIVE,
       environment: {
         AURORA_CLUSTER_ARN: props.auroraClusterArn,
         AURORA_SECRET_ARN: props.auroraCredentialsSecretArn,
@@ -195,212 +127,243 @@ export class AgentCoreGatewayStack extends cdk.Stack {
     });
 
     // -------------------------------------------------------------------
-    // MCP Gateway (via CustomResource)
+    // Gateway IAM Role — trusted by bedrock-agentcore, can invoke Lambdas
+    // Trust policy uses StringLike wildcard since gateway ARN is only known
+    // after gateway creation, and this role must be created first.
     // -------------------------------------------------------------------
 
-    const gateway = new cr.AwsCustomResource(this, 'MCPGateway', {
-      resourceType: 'Custom::MCPGateway',
-      onCreate: {
-        service: 'BedrockAgentRuntime',
-        action: 'createMcpGateway',
-        parameters: {
-          name: `${prefix}-gateway`,
-          description: 'OrgIQ MCP Gateway - unified tool registry for all agents',
-          authorizationType: 'AWS_IAM',
-          policyEngineConfiguration: {
-            policyEngineId: props.policyEngineId,
+    const gatewayRole = new iam.Role(this, 'GatewayRole', {
+      roleName: `${prefix}-mcp-gateway-role`,
+      assumedBy: new iam.ServicePrincipal('bedrock-agentcore.amazonaws.com', {
+        conditions: {
+          StringLike: {
+            'aws:SourceArn': `arn:aws:bedrock-agentcore:${this.region}:${this.account}:gateway/*`,
           },
         },
-        physicalResourceId: cr.PhysicalResourceId.fromResponse('mcpGatewayId'),
-      },
-      onUpdate: {
-        service: 'BedrockAgentRuntime',
-        action: 'updateMcpGateway',
-        parameters: {
-          mcpGatewayId: new cr.PhysicalResourceIdReference(),
-          name: `${prefix}-gateway`,
-          description: 'OrgIQ MCP Gateway - unified tool registry for all agents',
-          policyEngineConfiguration: {
-            policyEngineId: props.policyEngineId,
-          },
-        },
-        physicalResourceId: cr.PhysicalResourceId.fromResponse('mcpGatewayId'),
-      },
-      onDelete: {
-        service: 'BedrockAgentRuntime',
-        action: 'deleteMcpGateway',
-        parameters: {
-          mcpGatewayId: new cr.PhysicalResourceIdReference(),
-        },
-      },
-      role: crRole,
-      policy: cr.AwsCustomResourcePolicy.fromSdkCalls({
-        resources: cr.AwsCustomResourcePolicy.ANY_RESOURCE,
       }),
+      description: 'Execution role for OrgIQ MCP Gateway',
+      inlinePolicies: {
+        GatewayAccess: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              sid: 'InvokeLambdaTools',
+              effect: iam.Effect.ALLOW,
+              actions: ['lambda:InvokeFunction'],
+              resources: [
+                kbQueryLambda.functionArn,
+                graphTraversalLambda.functionArn,
+                computePageRankLambda.functionArn,
+              ],
+            }),
+            new iam.PolicyStatement({
+              sid: 'PolicyEngineAccess',
+              effect: iam.Effect.ALLOW,
+              actions: ['bedrock-agentcore:*'],
+              resources: ['*'],
+            }),
+            new iam.PolicyStatement({
+              sid: 'Logs',
+              effect: iam.Effect.ALLOW,
+              actions: ['logs:CreateLogGroup', 'logs:CreateLogStream', 'logs:PutLogEvents'],
+              resources: [`arn:aws:logs:${this.region}:${this.account}:log-group:/aws/bedrock-agentcore/*`],
+            }),
+          ],
+        }),
+      },
     });
 
-    const gatewayId = gateway.getResponseField('mcpGatewayId');
-    this.gatewayId = gatewayId;
+    // Allow the AgentCore gateway service to invoke these Lambdas directly
+    kbQueryLambda.grantInvoke(new iam.ServicePrincipal('bedrock-agentcore.amazonaws.com'));
+    graphTraversalLambda.grantInvoke(new iam.ServicePrincipal('bedrock-agentcore.amazonaws.com'));
+    computePageRankLambda.grantInvoke(new iam.ServicePrincipal('bedrock-agentcore.amazonaws.com'));
 
     // -------------------------------------------------------------------
-    // Lambda Targets (custom tools)
+    // MCP Gateway
     // -------------------------------------------------------------------
 
-    const lambdaTargets: Array<{
-      name: string;
-      description: string;
-      lambdaArn: string;
-      toolSchema: object;
-    }> = [
-      {
-        name: 'knowledge-base-query',
-        description: 'Search the organizational knowledge base for documents, transcripts, and wiki content',
-        lambdaArn: kbQueryLambda.functionArn,
-        toolSchema: {
-          type: 'object',
-          properties: {
-            query: { type: 'string', description: 'Natural language search query' },
-            maxResults: { type: 'number', description: 'Maximum results to return (1-25)', default: 10 },
-            filters: {
-              type: 'object',
-              description: 'Optional metadata filters',
-              properties: {
-                documentType: { type: 'string', enum: ['transcript', 'prd', 'wiki', 'jira'] },
-                team: { type: 'string' },
-                dateRange: {
-                  type: 'object',
-                  properties: {
-                    start: { type: 'string', format: 'date' },
-                    end: { type: 'string', format: 'date' },
-                  },
-                },
-              },
-            },
-          },
-          required: ['query'],
-        },
+    const gateway = new bedrockagentcore.CfnGateway(this, 'McpGateway', {
+      name: `${prefix}-mcp-gateway`,
+      description: 'OrgIQ MCP Gateway — exposes KB query, graph traversal, and PageRank tools',
+      roleArn: gatewayRole.roleArn,
+      protocolType: 'MCP',
+      authorizerType: 'AWS_IAM',
+      policyEngineConfiguration: {
+        arn: props.policyEngineArn,
+        mode: 'ENFORCE',
       },
-      {
-        name: 'graph-traversal',
-        description: 'Execute Cypher queries against the Aurora AGE organizational knowledge graph',
-        lambdaArn: graphTraversalLambda.functionArn,
-        toolSchema: {
-          type: 'object',
-          properties: {
-            query: { type: 'string', description: 'Cypher query to execute via Apache AGE' },
-            parameters: { type: 'object', description: 'Query parameters map' },
-            explain: { type: 'boolean', description: 'Return query plan instead of results', default: false },
-          },
-          required: ['query'],
-        },
-      },
-      {
-        name: 'compute-pagerank',
-        description: 'Compute PageRank scores for nodes in the organizational knowledge graph',
-        lambdaArn: computePageRankLambda.functionArn,
-        toolSchema: {
-          type: 'object',
-          properties: {
-            nodeLabel: { type: 'string', description: 'Node label to compute PageRank for (Person, Team, Skill)', default: 'Person' },
-            dampingFactor: { type: 'number', description: 'PageRank damping factor (0-1)', default: 0.85 },
-            maxIterations: { type: 'number', description: 'Maximum iterations', default: 20 },
-            writeBack: { type: 'boolean', description: 'Write scores back to graph nodes', default: false },
-          },
-        },
-      },
+    });
+
+    this.gatewayIdentifier = gateway.attrGatewayIdentifier;
+    this.gatewayUrl = gateway.attrGatewayUrl;
+
+    // Full ARN constructed from the dynamic gateway identifier
+    const gatewayArn = `arn:aws:bedrock-agentcore:${this.region}:${this.account}:gateway/${gateway.attrGatewayIdentifier}`;
+
+    // -------------------------------------------------------------------
+    // MCP Gateway Targets (one per Lambda tool)
+    // credentialProviderType GATEWAY_IAM_ROLE — gateway assumes its own
+    // IAM role (gatewayRole above) to invoke Lambda
+    // -------------------------------------------------------------------
+
+    const credentialProviderConfigurations = [
+      { credentialProviderType: 'GATEWAY_IAM_ROLE' },
     ];
 
-    for (const target of lambdaTargets) {
-      const targetResource = new cr.AwsCustomResource(this, `Target${this.capitalize(target.name)}`, {
-        resourceType: 'Custom::MCPGatewayTarget',
-        onCreate: {
-          service: 'BedrockAgentRuntime',
-          action: 'createMcpGatewayTarget',
-          parameters: {
-            mcpGatewayId: gatewayId,
-            name: target.name,
-            description: target.description,
-            targetConfiguration: {
-              lambdaTarget: {
-                lambdaArn: target.lambdaArn,
-                toolSchema: JSON.stringify(target.toolSchema),
-              },
+    const kbQueryTarget = new bedrockagentcore.CfnGatewayTarget(this, 'KBQueryTarget', {
+      name: `${prefix}-kb-query`,
+      description: 'Retrieve relevant information from the OrgIQ Knowledge Base',
+      gatewayIdentifier: gateway.attrGatewayIdentifier,
+      credentialProviderConfigurations,
+      targetConfiguration: {
+        mcp: {
+          lambda: {
+            lambdaArn: kbQueryLambda.functionArn,
+            toolSchema: {
+              inlinePayload: [
+                {
+                  name: 'knowledge-base-query',
+                  description: 'Query the OrgIQ Knowledge Base for relevant organizational information',
+                  inputSchema: {
+                    type: 'object',
+                    properties: {
+                      query: { type: 'string', description: 'The search query' },
+                      maxResults: { type: 'number', description: 'Maximum number of results to return (default 5)' },
+                    },
+                    required: ['query'],
+                  },
+                },
+              ],
             },
           },
-          physicalResourceId: cr.PhysicalResourceId.fromResponse('mcpGatewayTargetId'),
         },
-        onDelete: {
-          service: 'BedrockAgentRuntime',
-          action: 'deleteMcpGatewayTarget',
-          parameters: {
-            mcpGatewayId: gatewayId,
-            mcpGatewayTargetId: new cr.PhysicalResourceIdReference(),
-          },
-        },
-        role: crRole,
-        policy: cr.AwsCustomResourcePolicy.fromSdkCalls({
-          resources: cr.AwsCustomResourcePolicy.ANY_RESOURCE,
-        }),
-      });
+      },
+    });
+    kbQueryTarget.node.addDependency(gateway);
 
-      targetResource.node.addDependency(gateway);
-    }
-
-    // -------------------------------------------------------------------
-    // Agent-as-Tool Targets (specialist agents exposed for supervisor)
-    // -------------------------------------------------------------------
-
-    for (const agentName of SPECIALIST_AGENTS) {
-      const agentToolTarget = new cr.AwsCustomResource(this, `AgentTarget${this.capitalize(agentName)}`, {
-        resourceType: 'Custom::MCPGatewayAgentTarget',
-        onCreate: {
-          service: 'BedrockAgentRuntime',
-          action: 'createMcpGatewayTarget',
-          parameters: {
-            mcpGatewayId: gatewayId,
-            name: `invoke-${agentName}`,
-            description: `Invoke the OrgIQ ${agentName} specialist agent`,
-            targetConfiguration: {
-              agentTarget: {
-                agentRuntimeName: `${prefix}-${agentName}`,
-                authorizationType: 'AWS_IAM',
-              },
+    const graphTraversalTarget = new bedrockagentcore.CfnGatewayTarget(this, 'GraphTraversalTarget', {
+      name: `${prefix}-graph-traversal`,
+      description: 'Execute Cypher queries against the Aurora AGE organizational knowledge graph',
+      gatewayIdentifier: gateway.attrGatewayIdentifier,
+      credentialProviderConfigurations,
+      targetConfiguration: {
+        mcp: {
+          lambda: {
+            lambdaArn: graphTraversalLambda.functionArn,
+            toolSchema: {
+              inlinePayload: [
+                {
+                  name: 'graph-traversal',
+                  description: 'Execute openCypher queries against the organizational knowledge graph',
+                  inputSchema: {
+                    type: 'object',
+                    properties: {
+                      query: { type: 'string', description: 'openCypher query to execute' },
+                      parameters: { type: 'object', description: 'Query parameters as key-value pairs' },
+                    },
+                    required: ['query'],
+                  },
+                },
+              ],
             },
           },
-          physicalResourceId: cr.PhysicalResourceId.fromResponse('mcpGatewayTargetId'),
         },
-        onDelete: {
-          service: 'BedrockAgentRuntime',
-          action: 'deleteMcpGatewayTarget',
-          parameters: {
-            mcpGatewayId: gatewayId,
-            mcpGatewayTargetId: new cr.PhysicalResourceIdReference(),
+      },
+    });
+    graphTraversalTarget.node.addDependency(gateway);
+
+    const computePageRankTarget = new bedrockagentcore.CfnGatewayTarget(this, 'ComputePageRankTarget', {
+      name: `${prefix}-compute-pagerank`,
+      description: 'Compute PageRank expertise scores for people in the knowledge graph',
+      gatewayIdentifier: gateway.attrGatewayIdentifier,
+      credentialProviderConfigurations,
+      targetConfiguration: {
+        mcp: {
+          lambda: {
+            lambdaArn: computePageRankLambda.functionArn,
+            toolSchema: {
+              inlinePayload: [
+                {
+                  name: 'compute-pagerank',
+                  description: 'Compute PageRank scores for expertise ranking in the organizational graph',
+                  inputSchema: {
+                    type: 'object',
+                    properties: {
+                      topic: { type: 'string', description: 'Limit PageRank to nodes related to this topic (optional)' },
+                      iterations: { type: 'number', description: 'Number of PageRank iterations (default 20)' },
+                      dampingFactor: { type: 'number', description: 'Damping factor for PageRank (default 0.85)' },
+                      limit: { type: 'number', description: 'Maximum number of ranked results to return (default 10)' },
+                    },
+                    required: [],
+                  },
+                },
+              ],
+            },
           },
         },
-        role: crRole,
-        policy: cr.AwsCustomResourcePolicy.fromSdkCalls({
-          resources: cr.AwsCustomResourcePolicy.ANY_RESOURCE,
-        }),
+      },
+    });
+    computePageRankTarget.node.addDependency(gateway);
+
+    // -------------------------------------------------------------------
+    // Cedar Policies
+    // Gateway uses AWS_IAM authorizer → principal must be AgentCore::IamEntity
+    // Resource must be the full gateway ARN, not just the gateway ID
+    // Policy names must match ^[A-Za-z][A-Za-z0-9_]*$ — no hyphens
+    // -------------------------------------------------------------------
+
+    const safeName = prefix.replace(/-/g, '_');
+
+    // Action wildcard — docs show action names follow "TargetName__toolName" pattern;
+    // using wildcard here so policies validate cleanly. IamEntity principal still gates by role.
+    const agentPolicies: Array<{
+      id: string;
+      name: string;
+      agentKey: string;
+    }> = [
+      { id: 'PolicySupervisorFullAccess', name: `${safeName}_supervisor_full_access`, agentKey: 'supervisor' },
+      { id: 'PolicySearchToolsAccess', name: `${safeName}_search_tools_access`, agentKey: 'search' },
+      { id: 'PolicyScoringToolsAccess', name: `${safeName}_scoring_tools_access`, agentKey: 'scoring' },
+      { id: 'PolicyAdvisorToolsAccess', name: `${safeName}_advisor_tools_access`, agentKey: 'advisor' },
+      { id: 'PolicyIngestionToolsAccess', name: `${safeName}_ingestion_tools_access`, agentKey: 'ingestion' },
+      { id: 'PolicyGraphBuilderToolsAccess', name: `${safeName}_graph_builder_tools_access`, agentKey: 'graph-builder' },
+    ];
+
+    let prevPolicy: bedrockagentcore.CfnPolicy | undefined;
+
+    for (const { id, name, agentKey } of agentPolicies) {
+      const role = props.agentRoles[agentKey];
+      if (!role) continue;
+
+      const statement =
+        `permit (\n  principal == AgentCore::IamEntity::"${role.roleArn}",\n  action,\n  resource == AgentCore::Gateway::"${gatewayArn}"\n);`;
+
+      const policy = new bedrockagentcore.CfnPolicy(this, id, {
+        name,
+        description: `OrgIQ Cedar policy: ${name}`,
+        policyEngineId: props.policyEngineId,
+        definition: { cedar: { statement } },
       });
-
-      agentToolTarget.node.addDependency(gateway);
+      // Policies must wait for targets — policy engine validates action names against existing targets
+      policy.node.addDependency(kbQueryTarget);
+      policy.node.addDependency(graphTraversalTarget);
+      policy.node.addDependency(computePageRankTarget);
+      // Chain sequentially to avoid concurrent stabilization timeouts
+      if (prevPolicy) policy.node.addDependency(prevPolicy);
+      prevPolicy = policy;
     }
-
-    // -------------------------------------------------------------------
-    // Grant MCP Gateway permission to invoke Lambda tools
-    // -------------------------------------------------------------------
-
-    kbQueryLambda.grantInvoke(new iam.ServicePrincipal('bedrock.amazonaws.com'));
-    graphTraversalLambda.grantInvoke(new iam.ServicePrincipal('bedrock.amazonaws.com'));
-    computePageRankLambda.grantInvoke(new iam.ServicePrincipal('bedrock.amazonaws.com'));
 
     // -------------------------------------------------------------------
     // Outputs
     // -------------------------------------------------------------------
 
-    new cdk.CfnOutput(this, 'GatewayId', {
-      value: gatewayId,
+    new cdk.CfnOutput(this, 'GatewayIdentifier', {
+      value: gateway.attrGatewayIdentifier,
       exportName: `${prefix}-mcp-gateway-id`,
+    });
+
+    new cdk.CfnOutput(this, 'GatewayUrl', {
+      value: gateway.attrGatewayUrl,
+      exportName: `${prefix}-mcp-gateway-url`,
     });
 
     new cdk.CfnOutput(this, 'KBQueryLambdaArn', {
@@ -417,9 +380,5 @@ export class AgentCoreGatewayStack extends cdk.Stack {
       value: computePageRankLambda.functionArn,
       exportName: `${prefix}-gateway-compute-pagerank-lambda-arn`,
     });
-  }
-
-  private capitalize(str: string): string {
-    return str.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join('');
   }
 }
