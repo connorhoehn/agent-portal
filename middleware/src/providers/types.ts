@@ -130,6 +130,7 @@ export interface SandboxExecution {
   durationMs: number;
   sessionId: string;
   timestamp: string;
+  error?: string;
 }
 
 export interface AgentInvokeResult {

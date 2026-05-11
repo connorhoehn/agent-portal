@@ -127,6 +127,9 @@ export function useAgUiStream(endpoint: string): UseAgUiStreamReturn {
           setSessionId(event.sessionId);
         }
         break;
+      case 'RUN_ERROR':
+        setError(typeof event.error === 'string' ? event.error : 'Agent run failed');
+        break;
       case 'TEXT_MESSAGE_START':
         currentMsg.current.id = event.messageId as string;
         break;
