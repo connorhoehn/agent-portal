@@ -57,7 +57,7 @@ interface BedrockInvocation {
 
 function ObservabilityPage() {
   const { data: summary } = useFetch<ObsSummary>('/api/observability/summary', 30000);
-  const { data: guardrail } = useFetch<GuardrailMetrics>('/api/capabilities/guardrail/metrics?hours=24', 60000);
+  const { data: guardrail } = useFetch<GuardrailMetrics>('/api/capabilities/guardrail/metrics?hours=6', 60000);
   const { data: recent } = useFetch<{ invocations: Invocation[] }>('/api/observability/recent-invocations?limit=50', 5000);
   const { data: bedrock } = useFetch<{ entries: BedrockInvocation[] }>('/api/observability/bedrock-invocations?limit=20&sinceMin=60', 20000);
   const { data: capEvents } = useFetch<{ events: CapabilityEvent[] }>('/api/observability/capability-events?limit=50', 5000);
@@ -75,7 +75,7 @@ function ObservabilityPage() {
       <Card padding="md" style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <h2 style={{ fontSize: 14, fontWeight: 600 }}>
-            Guardrail Activity (24h){' '}
+            Guardrail Activity (6h){' '}
             <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)', fontWeight: 400 }}>
               from AWS/Bedrock metrics
             </span>
@@ -312,7 +312,7 @@ function GuardrailSparkline({ series }: { series: Array<{ timestamp: string; inv
     }).join(' ');
 
   if (series.length === 0) {
-    return <div style={{ padding: 16, color: 'var(--color-text-tertiary)', fontSize: 12, textAlign: 'center' }}>No guardrail activity in the last 24h.</div>;
+    return <div style={{ padding: 16, color: 'var(--color-text-tertiary)', fontSize: 12, textAlign: 'center' }}>No guardrail activity in the last 6h.</div>;
   }
 
   return (

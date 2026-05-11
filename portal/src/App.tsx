@@ -4,7 +4,6 @@ import { Layout } from './components/shell/Layout';
 
 const AgentFlowPage = lazy(() => import('./pages/AgentFlowPage'));
 const OrgGraphPage = lazy(() => import('./pages/OrgGraphPage'));
-const SearchPage = lazy(() => import('./pages/SearchPage'));
 const ScoresPage = lazy(() => import('./pages/ScoresPage'));
 const IngestPage = lazy(() => import('./pages/IngestPage'));
 const ObservabilityPage = lazy(() => import('./pages/ObservabilityPage'));
@@ -23,7 +22,7 @@ export function App() {
         <Route index element={<Navigate to="/agents" replace />} />
         <Route path="agents" element={<Suspense fallback={<Loading />}><AgentFlowPage /></Suspense>} />
         <Route path="graph" element={<Suspense fallback={<Loading />}><OrgGraphPage /></Suspense>} />
-        <Route path="search" element={<Suspense fallback={<Loading />}><SearchPage /></Suspense>} />
+        <Route path="search" element={<Navigate to="/invoke" replace />} />
         <Route path="invoke" element={<Suspense fallback={<Loading />}><InvokePage /></Suspense>} />
         <Route path="scores" element={<Suspense fallback={<Loading />}><ScoresPage /></Suspense>} />
         <Route path="ingest" element={<Suspense fallback={<Loading />}><IngestPage /></Suspense>} />

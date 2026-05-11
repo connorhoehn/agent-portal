@@ -103,7 +103,7 @@ interface GuardrailMetrics {
 
 function GuardrailsTab() {
   const { data: guardrail, refresh } = useFetch<Guardrail>('/api/capabilities/guardrail', 30000);
-  const { data: metrics } = useFetch<GuardrailMetrics>('/api/capabilities/guardrail/metrics?hours=24', 60000);
+  const { data: metrics } = useFetch<GuardrailMetrics>('/api/capabilities/guardrail/metrics?hours=6', 60000);
   const [newTopic, setNewTopic] = useState({ name: '', definition: '' });
   const [addingTopic, setAddingTopic] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -178,7 +178,7 @@ function GuardrailsTab() {
       {/* Metrics — last 24h */}
       <Card padding="md">
         <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
-          Activity (last 24h){' '}
+          Activity (last 6h){' '}
           <span style={{ fontWeight: 400, fontSize: 12, color: 'var(--color-text-tertiary)' }}>
             from AWS/Bedrock metrics
           </span>
@@ -356,13 +356,19 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
 
   const sessions = data?.sessions ?? [];
   const active = sessions.filter(s => s.status !== 'TERMINATED');
+  const terminated = sessions
+    .filter(s => s.status === 'TERMINATED')
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  const lastEverActive = sessions.length > 0
+    ? sessions.slice().sort((a, b) => b.lastActivityAt.localeCompare(a.lastActivityAt))[0]
+    : null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-        <StatCard label="Active Sessions" value={String(sessions.filter(s => s.status === 'ACTIVE').length)} accent />
-        <StatCard label="Idle Sessions" value={String(sessions.filter(s => s.status === 'IDLE').length)} />
-        <StatCard label="Total Executions" value={String(sessions.reduce((a, s) => a + s.executionCount, 0))} />
+        <StatCard label="Active Sessions" value={String(active.length)} accent />
+        <StatCard label="Sessions (lifetime)" value={String(sessions.length)} />
+        <StatCard label="Last Activity" value={lastEverActive ? formatAge(lastEverActive.lastActivityAt) : '—'} />
       </div>
 
       <Card padding="md">
@@ -419,13 +425,7 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
         )}
       </Card>
 
-      {active.length === 0 ? (
-        <Card padding="md">
-          <div style={{ textAlign: 'center', padding: 32, color: 'var(--color-text-secondary)', fontSize: 13 }}>
-            No active code interpreter sessions. Sessions start automatically when graph-builder or scoring agents need code execution.
-          </div>
-        </Card>
-      ) : (
+      {active.length > 0 && (
         <Card padding="md">
           <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Active Sessions</h2>
           {active.map(session => (
@@ -439,8 +439,8 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
               >
                 <Chip tone={session.status === 'ACTIVE' ? 'success' : 'default'} size="xs">{session.status}</Chip>
                 <span style={{ fontWeight: 500, fontSize: 13 }}>{session.agentName}</span>
-                <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', flex: 1 }}>
-                  {session.sessionId} · {session.executionCount} executions · {session.memoryUsageMb}MB
+                <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', flex: 1, fontFamily: 'monospace' }}>
+                  {session.sessionId}
                 </span>
                 <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
                   Last active {formatAge(session.lastActivityAt)}
@@ -457,11 +457,11 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
                 <div style={{ padding: '12px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>LAST EXECUTED CODE</div>
-                    <pre style={{ margin: 0, fontSize: 11, background: 'var(--color-surface)', padding: 10, borderRadius: 'var(--radius-sm)', overflow: 'auto', maxHeight: 120 }}>{session.lastCode}</pre>
+                    <pre style={{ margin: 0, fontSize: 11, background: 'var(--color-surface)', padding: 10, borderRadius: 'var(--radius-sm)', overflow: 'auto', maxHeight: 120 }}>{session.lastCode || '(no recorded code)'}</pre>
                   </div>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>LAST OUTPUT</div>
-                    <pre style={{ margin: 0, fontSize: 11, background: 'var(--color-surface)', padding: 10, borderRadius: 'var(--radius-sm)', overflow: 'auto', maxHeight: 120 }}>{session.lastOutput}</pre>
+                    <pre style={{ margin: 0, fontSize: 11, background: 'var(--color-surface)', padding: 10, borderRadius: 'var(--radius-sm)', overflow: 'auto', maxHeight: 120 }}>{session.lastOutput || '(no recorded output)'}</pre>
                   </div>
                 </div>
               )}
@@ -469,6 +469,57 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
           ))}
         </Card>
       )}
+
+      <Card padding="md">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <h2 style={{ fontSize: 14, fontWeight: 600 }}>
+            Past Sessions{' '}
+            <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-text-tertiary)' }}>
+              from AgentCore Data Plane · code interpreter sessions auto-terminate after execution
+            </span>
+          </h2>
+          <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+            {terminated.length} terminated
+          </span>
+        </div>
+        {terminated.length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+            No past sessions yet. Run code above or invoke the scoring agent to trigger one.
+          </div>
+        ) : (
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableTh>Started</TableTh>
+                <TableTh>Session</TableTh>
+                <TableTh>Name</TableTh>
+                <TableTh>Duration</TableTh>
+                <TableTh>Status</TableTh>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {terminated.slice(0, 20).map(s => {
+                const dur = new Date(s.lastActivityAt).getTime() - new Date(s.startedAt).getTime();
+                return (
+                  <TableRow key={s.sessionId}>
+                    <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }}>
+                      {new Date(s.startedAt).toLocaleString()}
+                    </TableTd>
+                    <TableTd style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--color-text-tertiary)' }}>
+                      {s.sessionId.length > 22 ? s.sessionId.slice(0, 16) + '…' : s.sessionId}
+                    </TableTd>
+                    <TableTd style={{ fontSize: 12 }}>{s.agentName}</TableTd>
+                    <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                      {dur > 0 ? `${(dur / 1000).toFixed(1)}s` : '—'}
+                    </TableTd>
+                    <TableTd><Chip tone="default" size="xs">{s.status}</Chip></TableTd>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </Card>
     </div>
   );
 }
@@ -559,6 +610,9 @@ function BrowserTab() {
 
   const sessions = data?.sessions ?? [];
   const open = sessions.filter(s => s.status !== 'CLOSED');
+  const closed = sessions
+    .filter(s => s.status === 'CLOSED')
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 
   const statusTone = (s: BrowserSession['status']): 'success' | 'warning' | 'default' =>
     s === 'ACTIVE' ? 'success' : s === 'IDLE' ? 'warning' : 'default';
@@ -707,6 +761,53 @@ function BrowserTab() {
           )}
         </Card>
       )}
+
+      {/* Past sessions */}
+      <Card padding="md">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <h2 style={{ fontSize: 14, fontWeight: 600 }}>
+            Past Sessions{' '}
+            <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-text-tertiary)' }}>
+              from AgentCore Data Plane
+            </span>
+          </h2>
+          <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+            {closed.length} closed
+          </span>
+        </div>
+        {closed.length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+            No past sessions yet. Launch one above or invoke the search agent with a Browse-the-web prompt.
+          </div>
+        ) : (
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableTh>Started</TableTh>
+                <TableTh>Agent</TableTh>
+                <TableTh>Last URL</TableTh>
+                <TableTh>Requests</TableTh>
+                <TableTh>Status</TableTh>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {closed.slice(0, 20).map(s => (
+                <TableRow key={s.sessionId}>
+                  <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }}>
+                    {new Date(s.startedAt).toLocaleString()}
+                  </TableTd>
+                  <TableTd style={{ fontSize: 12 }}>{s.agentName}</TableTd>
+                  <TableTd style={{ fontSize: 11, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.currentUrl}>
+                    {s.currentUrl === 'about:blank' ? <span style={{ color: 'var(--color-text-tertiary)' }}>—</span> : s.currentUrl}
+                  </TableTd>
+                  <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{s.requestCount}</TableTd>
+                  <TableTd><Chip tone="default" size="xs">{s.status}</Chip></TableTd>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </Card>
     </div>
   );
 }

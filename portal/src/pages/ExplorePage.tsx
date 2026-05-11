@@ -106,6 +106,11 @@ function ExplorePage() {
   const [topK, setTopK] = useState(4);
   const [minStrength, setMinStrength] = useState(0.6);
   const [input, setInput] = useState('');
+  // When the agent's last response cited people, we narrow the graph to just
+  // those + their direct connections. The user can hit "Show full graph" to
+  // restore. We track an explicit "user wants full graph" flag so the filter
+  // doesn't re-apply after they reset.
+  const [filterToReplies, setFilterToReplies] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -120,11 +125,6 @@ function ExplorePage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages, isStreaming]);
 
-  const filteredEdges = useMemo(
-    () => (data ? filterEdges(data.edges, topK, minStrength) : []),
-    [data, topK, minStrength],
-  );
-
   // IDs the agent cited in its last assistant turn → drives the spotlight.
   const citedIds = useMemo(() => {
     const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
@@ -132,12 +132,48 @@ function ExplorePage() {
     return new Set(extractRefIds(lastAssistant.content, data.nodes));
   }, [messages, data]);
 
+  // Reset the filter flag whenever a new assistant message arrives so each
+  // fresh response gets to narrow the graph.
+  useEffect(() => {
+    if (citedIds.size > 0) setFilterToReplies(true);
+  }, [citedIds]);
+
+  // When filtering, the visible node set is `cited + selected + their direct
+  // neighbors via the unfiltered edge list`. Edges are then filtered separately
+  // by top-K/min-strength against the visible subset.
+  const { visibleNodes, baseEdges } = useMemo(() => {
+    if (!data) return { visibleNodes: [] as GraphPerson[], baseEdges: [] as GraphRelationship[] };
+    const filterActive = filterToReplies && citedIds.size > 0;
+    if (!filterActive) {
+      return { visibleNodes: data.nodes, baseEdges: data.edges };
+    }
+    // Anchor set = cited + currently selected (so user can keep building a
+    // selection across responses).
+    const anchors = new Set<string>([...citedIds, ...selectedIds]);
+    const neighbors = new Set<string>();
+    for (const e of data.edges) {
+      if (anchors.has(e.source)) neighbors.add(e.target);
+      if (anchors.has(e.target)) neighbors.add(e.source);
+    }
+    const keep = new Set<string>([...anchors, ...neighbors]);
+    const nodes = data.nodes.filter(n => keep.has(n.id));
+    const edges = data.edges.filter(e => keep.has(e.source) && keep.has(e.target));
+    return { visibleNodes: nodes, baseEdges: edges };
+  }, [data, filterToReplies, citedIds, selectedIds]);
+
+  const filteredEdges = useMemo(
+    () => filterEdges(baseEdges, topK, minStrength),
+    [baseEdges, topK, minStrength],
+  );
+
   // Combine cited + hovered ref into a spotlight set.
   const spotlight = useMemo(() => {
     const s = new Set(citedIds);
     if (hoveredRef) s.add(hoveredRef);
     return s;
   }, [citedIds, hoveredRef]);
+
+  const isFiltered = filterToReplies && citedIds.size > 0 && data && visibleNodes.length < data.nodes.length;
 
   function toggleSelect(id: string) {
     setSelectedIds(prev => {
@@ -177,8 +213,25 @@ function ExplorePage() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '8px 16px', borderBottom: '1px solid var(--color-border)', fontSize: 12 }}>
         <span style={{ fontWeight: 600 }}>Explore</span>
         <span style={{ color: 'var(--color-text-tertiary)' }}>
-          <b>{data.nodes.length}</b> people · <b>{filteredEdges.length}</b> / {data.edges.length} edges shown
+          <b>{visibleNodes.length}</b>{isFiltered ? ` / ${data.nodes.length}` : ''} people · <b>{filteredEdges.length}</b> edges shown
         </span>
+        {isFiltered && (
+          <button
+            onClick={() => setFilterToReplies(false)}
+            style={{
+              fontSize: 11,
+              padding: '3px 10px',
+              background: 'var(--color-primary, #6366f1)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 4,
+              cursor: 'pointer',
+              fontWeight: 500,
+            }}
+          >
+            ✕ Show full graph
+          </button>
+        )}
         <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-text-secondary)' }}>
           Top-K
           <input type="range" min={1} max={10} value={topK} onChange={e => setTopK(parseInt(e.target.value, 10))} style={{ width: 80 }} />
@@ -204,7 +257,7 @@ function ExplorePage() {
         {/* Graph */}
         <div style={{ flex: 1, position: 'relative' }}>
           <OrgGraph
-            people={data.nodes}
+            people={visibleNodes}
             relationships={filteredEdges}
             departments={data.departments}
             multiSelectIds={selectedIds}

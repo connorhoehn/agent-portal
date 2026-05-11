@@ -4,7 +4,6 @@ const NAV_ITEMS = [
   { path: '/explore', label: 'Explore' },
   { path: '/agents', label: 'Agent Flow' },
   { path: '/graph', label: 'Org Graph' },
-  { path: '/search', label: 'Search' },
   { path: '/invoke', label: 'Invoke Agent' },
   { path: '/scores', label: 'Scores' },
   { path: '/ingest', label: 'Ingest' },

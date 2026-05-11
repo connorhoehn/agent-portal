@@ -78,40 +78,12 @@ function InvokePage() {
   return (
     <div style={{ display: 'flex', height: '100%' }}>
       {/* Agent selector sidebar */}
-      <div style={{ width: 220, borderRight: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)', fontWeight: 600, fontSize: 13, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          Agents
-        </div>
-        <div style={{ flex: 1, padding: '8px 0', overflowY: 'auto' }}>
-          {(agents ?? []).map(agent => (
-            <div
-              key={agent.id}
-              onClick={() => { setSelectedId(agent.id); reset(); }}
-              style={{
-                padding: '8px 16px',
-                cursor: 'pointer',
-                background: selectedId === agent.id ? 'var(--color-surface-hover)' : undefined,
-                borderLeft: selectedId === agent.id ? '3px solid var(--color-primary)' : '3px solid transparent',
-              }}
-            >
-              <div style={{ fontSize: 13, fontWeight: 500 }}>{agent.name}</div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-                {agent.protocol.toUpperCase()} · {agent.model}
-              </div>
-            </div>
-          ))}
-        </div>
-        {selectedAgent && (
-          <div style={{ padding: '12px 16px', borderTop: '1px solid var(--color-border)', fontSize: 11 }}>
-            <div style={{ color: 'var(--color-text-tertiary)', marginBottom: 4 }}>Tools:</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {selectedAgent.tools.map(t => (
-                <span key={t} style={{ padding: '2px 6px', background: 'var(--color-surface-hover)', borderRadius: 3, fontSize: 10, fontFamily: 'monospace' }}>{t}</span>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+      <AgentSelectorSidebar
+        agents={agents ?? []}
+        selectedAgent={selectedAgent}
+        selectedId={selectedId}
+        onSelect={id => { setSelectedId(id); reset(); }}
+      />
 
       {/* Session sidebar */}
       <div style={{ width: 220, borderRight: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column' }}>
@@ -292,6 +264,98 @@ function MessageContent({ content }: { content: string }) {
         ) : (
           <div key={i} style={{ whiteSpace: 'pre-wrap' }}>{seg.body}</div>
         ),
+      )}
+    </div>
+  );
+}
+
+function AgentSelectorSidebar({
+  agents,
+  selectedAgent,
+  selectedId,
+  onSelect,
+}: {
+  agents: AgentDef[];
+  selectedAgent: AgentDef | undefined;
+  selectedId: string;
+  onSelect: (id: string) => void;
+}) {
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const supervisor = agents.find(a => a.id.endsWith('supervisor'));
+  const subAgents = agents.filter(a => !a.id.endsWith('supervisor'));
+
+  return (
+    <div style={{ width: 220, borderRight: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)' }}>
+        <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          Orchestrator
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+          Routes your question to the right sub-agent
+        </div>
+      </div>
+      <div style={{ padding: '8px 0', overflowY: 'auto', flex: 1 }}>
+        {supervisor && (
+          <div
+            onClick={() => onSelect(supervisor.id)}
+            style={{
+              padding: '10px 16px',
+              cursor: 'pointer',
+              background: selectedId === supervisor.id ? 'var(--color-surface-hover)' : undefined,
+              borderLeft: selectedId === supervisor.id ? '3px solid var(--color-primary)' : '3px solid transparent',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{supervisor.name}</div>
+              <span style={{ fontSize: 9, padding: '1px 6px', background: 'var(--color-primary)', color: '#fff', borderRadius: 8, letterSpacing: '0.02em', textTransform: 'uppercase' }}>
+                recommended
+              </span>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+              {supervisor.protocol.toUpperCase()} · {supervisor.model || 'nova-pro'}
+            </div>
+          </div>
+        )}
+
+        <div style={{ padding: '12px 16px 4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Sub-agents
+          </span>
+          <button
+            onClick={() => setShowAdvanced(s => !s)}
+            style={{ fontSize: 10, background: 'none', border: 'none', color: 'var(--color-text-tertiary)', cursor: 'pointer', padding: 0 }}
+          >
+            {showAdvanced ? 'Hide' : 'Show'}
+          </button>
+        </div>
+        {showAdvanced && subAgents.map(agent => (
+          <div
+            key={agent.id}
+            onClick={() => onSelect(agent.id)}
+            style={{
+              padding: '6px 16px',
+              cursor: 'pointer',
+              background: selectedId === agent.id ? 'var(--color-surface-hover)' : undefined,
+              borderLeft: selectedId === agent.id ? '3px solid var(--color-primary)' : '3px solid transparent',
+              opacity: 0.85,
+            }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 500 }}>{agent.name}</div>
+            <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)' }}>
+              {agent.protocol.toUpperCase()}
+            </div>
+          </div>
+        ))}
+      </div>
+      {selectedAgent && selectedAgent.tools.length > 0 && (
+        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--color-border)', fontSize: 11 }}>
+          <div style={{ color: 'var(--color-text-tertiary)', marginBottom: 4 }}>Tools:</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {selectedAgent.tools.map(t => (
+              <span key={t} style={{ padding: '2px 6px', background: 'var(--color-surface-hover)', borderRadius: 3, fontSize: 10, fontFamily: 'monospace' }}>{t}</span>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
