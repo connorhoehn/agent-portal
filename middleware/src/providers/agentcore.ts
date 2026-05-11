@@ -568,10 +568,21 @@ export const realAgentCore: AgentCoreProvider = {
       raw = text;
     }
 
+    // Extract sandbox executions the agent appended to its response dict so
+    // the middleware can record them with the invocation without CW Logs queries.
+    let sandboxExecutions: import('./types.js').SandboxExecution[] | undefined;
+    if (raw && typeof raw === 'object') {
+      const execs = (raw as Record<string, unknown>)['sandboxExecutions'];
+      if (Array.isArray(execs) && execs.length > 0) {
+        sandboxExecutions = execs as import('./types.js').SandboxExecution[];
+      }
+    }
+
     return {
       text: extractText(raw),
       raw,
       runtimeSessionId: resp.runtimeSessionId,
+      ...(sandboxExecutions ? { sandboxExecutions } : {}),
     };
   },
 
@@ -869,6 +880,22 @@ export const realAgentCore: AgentCoreProvider = {
       return null;
     }
   },
+
+  async evaluateInBrowser(sessionId: string, expression: string): Promise<unknown> {
+    try {
+      return await withCdpSession(sessionId, async (call) => {
+        const res = (await call('Runtime.evaluate', {
+          expression,
+          returnByValue: true,
+          awaitPromise: true,
+        })) as { result?: { value?: unknown; description?: string } };
+        return res.result?.value ?? null;
+      });
+    } catch (err) {
+      console.warn('[agentcore] evaluateInBrowser failed:', (err as Error).message);
+      return null;
+    }
+  },
 };
 
 // ─── Mock provider ────────────────────────────────────────────────────────────
@@ -990,5 +1017,15 @@ export const mockAgentCore: AgentCoreProvider = {
       imageDataUrl: `data:image/png;base64,${onePx}`,
       takenAt: new Date().toISOString(),
     };
+  },
+
+  async evaluateInBrowser(sessionId: string, _expression: string): Promise<unknown> {
+    const s = _mockBrowser.find((x) => x.sessionId === sessionId);
+    if (!s) return null;
+    return JSON.stringify({
+      title: `Mock page at ${new URL(s.currentUrl).hostname}`,
+      text: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
+      links: [],
+    });
   },
 };

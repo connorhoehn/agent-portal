@@ -124,11 +124,20 @@ export interface AgentInvokeToolCall {
   result: unknown;
 }
 
+export interface SandboxExecution {
+  code: string;
+  output: string;
+  durationMs: number;
+  sessionId: string;
+  timestamp: string;
+}
+
 export interface AgentInvokeResult {
   text: string;
   toolCalls?: AgentInvokeToolCall[];
   raw?: unknown;
   runtimeSessionId?: string;
+  sandboxExecutions?: SandboxExecution[];
 }
 
 export interface BrowserScreenshot {
@@ -157,6 +166,7 @@ export interface AgentCoreProvider {
   closeBrowserSession(sessionId: string): Promise<boolean>;
   navigateBrowser(sessionId: string, url: string): Promise<BrowserSession | null>;
   screenshotBrowser(sessionId: string): Promise<BrowserScreenshot | null>;
+  evaluateInBrowser(sessionId: string, expression: string): Promise<unknown>;
 }
 
 // ── Guardrails ─────────────────────────────────────────────────────────────────

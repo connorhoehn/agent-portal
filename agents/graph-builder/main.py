@@ -22,6 +22,8 @@ _rds = boto3.client("rds-data", region_name=REGION)
 _bedrock_runtime = boto3.client("bedrock-runtime", region_name=REGION)
 _agentcore_data = boto3.client("bedrock-agentcore", region_name=REGION)
 
+_sandbox_log: list[dict] = []
+
 # Each relationship label maps to the edge table that stores it.
 # Cross-checked with schema/orgiq_schema.sql.
 _REL_TABLES = {
@@ -390,6 +392,7 @@ def run_in_sandbox(python_code: str) -> str:
         return json.dumps({"error": "CODE_INTERPRETER_ID env var is missing — sandbox unavailable"})
 
     session_id = ""
+    started = time.time()
     try:
         start = _agentcore_data.start_code_interpreter_session(
             codeInterpreterIdentifier=CODE_INTERPRETER_ID,
@@ -422,9 +425,25 @@ def run_in_sandbox(python_code: str) -> str:
                 chunks.append(json.dumps(event["output"], default=str))
 
         output = "\n".join(chunks).strip() or "(no stdout)"
+        _sandbox_log.append({
+            "code": python_code,
+            "output": output,
+            "durationMs": int((time.time() - started) * 1000),
+            "sessionId": session_id,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        })
         return json.dumps({"sessionId": session_id, "output": output})
     except Exception as e:
-        return json.dumps({"error": f"sandbox error: {e}", "sessionId": session_id})
+        err_output = f"sandbox error: {e}"
+        _sandbox_log.append({
+            "code": python_code,
+            "output": err_output,
+            "durationMs": int((time.time() - started) * 1000),
+            "sessionId": session_id,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "error": str(e),
+        })
+        return json.dumps({"error": err_output, "sessionId": session_id})
     finally:
         if session_id:
             try:
@@ -475,6 +494,9 @@ _agent = Agent(
 
 @app.entrypoint
 async def handle(payload: dict) -> dict:
+    global _sandbox_log
+    _sandbox_log = []
+
     if isinstance(payload, dict):
         input_text = (
             payload.get("input_text")
@@ -489,7 +511,13 @@ async def handle(payload: dict) -> dict:
         return {"agent": "graph-builder", "error": "missing input_text/prompt/message"}
 
     result = _agent(input_text)
-    return {"agent": "graph-builder", "response": str(result)}
+    executions = list(_sandbox_log)
+    _sandbox_log = []
+
+    response: dict = {"agent": "graph-builder", "response": str(result)}
+    if executions:
+        response["sandboxExecutions"] = executions
+    return response
 
 
 if __name__ == "__main__":

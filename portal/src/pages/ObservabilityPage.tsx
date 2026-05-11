@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Card, PageSection, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 
@@ -17,6 +18,15 @@ interface GuardrailMetrics {
   series: Array<{ timestamp: string; invocations: number; interventions: number }>;
 }
 
+interface SandboxExecution {
+  code: string;
+  output: string;
+  durationMs: number;
+  sessionId: string;
+  timestamp: string;
+  error?: string;
+}
+
 interface Invocation {
   id: string;
   agentId: string;
@@ -28,6 +38,7 @@ interface Invocation {
   guardrailIntervened: boolean;
   runtimeSessionId?: string;
   error?: string;
+  sandboxExecutions?: SandboxExecution[];
 }
 
 interface CapabilityEvent {
@@ -146,6 +157,8 @@ function ObservabilityPage() {
           </Table>
         )}
       </Card>
+
+      <CodeInterpreterTraces invocations={recent?.invocations ?? []} />
 
       <Card padding="md" style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
@@ -320,6 +333,163 @@ function GuardrailSparkline({ series }: { series: Array<{ timestamp: string; inv
       <polyline fill="none" stroke="var(--color-primary, #6366f1)" strokeWidth="1.5" points={points('invocations')} />
       <polyline fill="none" stroke="#dc2626" strokeWidth="1.5" points={points('interventions')} />
     </svg>
+  );
+}
+
+// ─── Code Interpreter Traces ──────────────────────────────────────────────────
+
+const monoStyle: React.CSSProperties = {
+  fontFamily: '"Fira Code", "Cascadia Code", monospace',
+  fontSize: 11.5,
+  lineHeight: 1.55,
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-word',
+  margin: 0,
+  padding: '10px 12px',
+  borderRadius: 'var(--radius-sm)',
+  overflowX: 'auto',
+};
+
+function CodeInterpreterTraces({ invocations }: { invocations: Invocation[] }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [expandedExec, setExpandedExec] = useState<Set<string>>(new Set());
+
+  const traced = invocations.filter(i => (i.sandboxExecutions?.length ?? 0) > 0);
+
+  const toggle = (id: string) =>
+    setExpanded(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+
+  const toggleExec = (key: string) =>
+    setExpandedExec(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s; });
+
+  return (
+    <Card padding="md" style={{ marginBottom: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>Code Interpreter Traces</h2>
+        <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+          invocations that triggered run_in_sandbox · live ring buffer
+        </span>
+        {traced.length > 0 && (
+          <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: 'var(--color-primary)' }}>
+            {traced.length} invocation{traced.length !== 1 ? 's' : ''} ·{' '}
+            {traced.reduce((n, i) => n + (i.sandboxExecutions?.length ?? 0), 0)} execution{traced.reduce((n, i) => n + (i.sandboxExecutions?.length ?? 0), 0) !== 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
+
+      {traced.length === 0 ? (
+        <div style={{ padding: '20px 0', textAlign: 'center', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+          No Code Interpreter executions yet. Ask the scoring or graph-builder agent a computational question (e.g. "compute PageRank" or "run expertise scoring 5 different ways") and executions will appear here.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {traced.map(inv => {
+            const isOpen = expanded.has(inv.id);
+            const execCount = inv.sandboxExecutions?.length ?? 0;
+            return (
+              <div key={inv.id} style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
+                {/* Invocation header row */}
+                <div
+                  onClick={() => toggle(inv.id)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                    cursor: 'pointer', background: isOpen ? 'var(--color-surface-hover)' : 'var(--color-surface)',
+                    userSelect: 'none',
+                  }}
+                >
+                  <span style={{ fontSize: 13, color: 'var(--color-text-tertiary)' }}>{isOpen ? '▾' : '▸'}</span>
+                  <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }}>
+                    {new Date(inv.startedAt).toLocaleTimeString()}
+                  </span>
+                  <span style={{
+                    padding: '1px 7px', borderRadius: 99, fontSize: 11, fontWeight: 600,
+                    background: 'var(--color-surface-hover)', color: 'var(--color-primary)',
+                  }}>
+                    {inv.agentName.replace('orgiq-', '')}
+                  </span>
+                  <span style={{ fontSize: 12, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {inv.promptSnippet}
+                  </span>
+                  <span style={{
+                    padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap',
+                    background: 'var(--color-primary)', color: '#fff',
+                  }}>
+                    {execCount} sandbox run{execCount !== 1 ? 's' : ''}
+                  </span>
+                  <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }}>
+                    {(inv.durationMs / 1000).toFixed(1)}s total
+                  </span>
+                </div>
+
+                {/* Sandbox execution list */}
+                {isOpen && (
+                  <div style={{ borderTop: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
+                    {(inv.sandboxExecutions ?? []).map((exec, idx) => {
+                      const execKey = `${inv.id}-${idx}`;
+                      const execOpen = expandedExec.has(execKey);
+                      return (
+                        <div key={execKey} style={{ borderBottom: idx < execCount - 1 ? '1px solid var(--color-border)' : undefined }}>
+                          {/* Execution summary row */}
+                          <div
+                            onClick={() => toggleExec(execKey)}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px 8px 28px',
+                              cursor: 'pointer', userSelect: 'none',
+                              background: execOpen ? 'var(--color-surface)' : 'transparent',
+                            }}
+                          >
+                            <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>{execOpen ? '▾' : '▸'}</span>
+                            <span style={{
+                              padding: '1px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700,
+                              background: exec.error ? 'var(--color-error-bg, #fee2e2)' : 'var(--color-success-bg, #dcfce7)',
+                              color: exec.error ? 'var(--color-error, #dc2626)' : 'var(--color-success, #16a34a)',
+                            }}>
+                              run {idx + 1}
+                            </span>
+                            <code style={{ fontSize: 11, color: 'var(--color-text-secondary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {exec.code.trim().split('\n').find(l => l.trim() && !l.startsWith('#')) ?? exec.code.trim().slice(0, 80)}
+                            </code>
+                            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }}>
+                              {exec.durationMs}ms · {exec.sessionId.slice(-8)}
+                            </span>
+                          </div>
+
+                          {/* Full code + output */}
+                          {execOpen && (
+                            <div style={{ padding: '0 14px 12px 28px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                              <div>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>INPUT — generated code</div>
+                                <pre style={{ ...monoStyle, background: 'var(--color-surface)', border: '1px solid var(--color-border)', maxHeight: 300, overflowY: 'auto' }}>
+                                  {exec.code}
+                                </pre>
+                              </div>
+                              <div>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>
+                                  OUTPUT{exec.error ? ' — error' : ''}
+                                </div>
+                                <pre style={{
+                                  ...monoStyle,
+                                  background: exec.error ? 'var(--color-error-bg, #fee2e2)' : 'var(--color-bg)',
+                                  border: '1px solid var(--color-border)',
+                                  color: exec.error ? 'var(--color-error, #dc2626)' : 'var(--color-text)',
+                                  maxHeight: 300, overflowY: 'auto',
+                                }}>
+                                  {exec.output || '(no output)'}
+                                </pre>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
   );
 }
 

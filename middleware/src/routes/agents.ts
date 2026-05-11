@@ -114,6 +114,7 @@ agentsRouter.post('/:agentId/invoke', asyncHandler(async (req, res) => {
     responseSnippet: snippet(result.text),
     guardrailIntervened: intervened,
     ...(result.runtimeSessionId ? { runtimeSessionId: result.runtimeSessionId } : {}),
+    ...(result.sandboxExecutions?.length ? { sandboxExecutions: result.sandboxExecutions } : {}),
   });
 
   // Persist turn to AgentCore Memory so the session shows up in the sidebar
