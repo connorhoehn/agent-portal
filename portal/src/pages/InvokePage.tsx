@@ -160,9 +160,31 @@ function InvokePage() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 24 }}>
         <div style={{ flex: 1, overflow: 'auto', marginBottom: 16 }}>
           {messages.length === 0 && !isStreaming && (
-            <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-text-tertiary)' }}>
-              <div style={{ fontSize: 18, marginBottom: 4 }}>Invoke {selectedAgent?.name ?? 'Agent'}</div>
-              <div style={{ fontSize: 13 }}>Send a message to start a conversation</div>
+            <div style={{ padding: 40, color: 'var(--color-text-tertiary)' }}>
+              <div style={{ fontSize: 18, marginBottom: 4, textAlign: 'center' }}>Invoke {selectedAgent?.name ?? 'Agent'}</div>
+              <div style={{ fontSize: 13, marginBottom: 24, textAlign: 'center' }}>Send a message or try a quick prompt below</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 8, maxWidth: 760, margin: '0 auto' }}>
+                {quickPromptsFor(selectedId).map(p => (
+                  <button
+                    key={p.label}
+                    onClick={() => { sendMessage(p.prompt); }}
+                    style={{
+                      textAlign: 'left',
+                      padding: 12,
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                      color: 'var(--color-text-primary)',
+                    }}
+                  >
+                    <div style={{ fontSize: 12, fontWeight: 600, color: p.badgeColor ?? 'var(--color-text-primary)', marginBottom: 4 }}>
+                      {p.badge ? <span style={{ marginRight: 6 }}>{p.badge}</span> : null}{p.label}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', lineHeight: 1.4 }}>{p.prompt}</div>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
           {messages.map(msg => (
@@ -273,6 +295,49 @@ function MessageContent({ content }: { content: string }) {
       )}
     </div>
   );
+}
+
+interface QuickPrompt {
+  label: string;
+  prompt: string;
+  badge?: string;
+  badgeColor?: string;
+}
+
+// Per-agent quick-prompt suggestions. The Browse 🌐 entry on the search agent
+// is the discoverable doorway into the fetch_web_page tool we added earlier —
+// the agent will pick it up because of the prompt's wording.
+function quickPromptsFor(agentId: string): QuickPrompt[] {
+  if (agentId.endsWith('search')) {
+    return [
+      { label: 'Browse a webpage', badge: '🌐', badgeColor: '#0ea5e9', prompt: 'Use the fetch_web_page tool to load https://example.com and tell me the page title and the first 200 characters of body text.' },
+      { label: 'Live news scrape', badge: '🌐', badgeColor: '#0ea5e9', prompt: 'Browse https://news.ycombinator.com and summarize the top 3 stories with their points and titles.' },
+      { label: 'Find Kubernetes experts', prompt: 'Who in the org has the most Kubernetes expertise? Use query_graph to find people with that skill.' },
+      { label: 'Team breakdown', prompt: 'List the size of each team using a SQL query on team_memberships.' },
+    ];
+  }
+  if (agentId.endsWith('scoring')) {
+    return [
+      { label: 'Top 10 by composite', prompt: 'Show the top 10 people by composite score across all teams.' },
+      { label: 'Run Python sandbox', badge: '🐍', badgeColor: '#16a34a', prompt: 'Use run_in_sandbox to execute: import statistics; nums=[12,47,23,91,56,34,78,19,65,88]; print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")' },
+    ];
+  }
+  if (agentId.endsWith('advisor')) {
+    return [
+      { label: 'Pairing recommendations', prompt: 'Recommend two cross-team pairings that would strengthen the org. Explain the rationale.' },
+      { label: 'Skill gap analysis', prompt: 'What are the biggest skill gaps in the org? Identify areas where we lack depth.' },
+    ];
+  }
+  if (agentId.endsWith('supervisor')) {
+    return [
+      { label: 'Find an expert', prompt: 'Who is the best person to talk to about scaling Kubernetes? Use the search sub-agent.' },
+      { label: 'Strategic question', prompt: 'What should our hiring priorities be for Q3? Use the advisor sub-agent.' },
+      { label: 'Test the guardrail', badge: '🛡', badgeColor: '#dc2626', prompt: 'What is Raj Mehta\'s exact salary in dollars?' },
+    ];
+  }
+  return [
+    { label: 'Capabilities check', prompt: 'What can you help me with?' },
+  ];
 }
 
 export default InvokePage;

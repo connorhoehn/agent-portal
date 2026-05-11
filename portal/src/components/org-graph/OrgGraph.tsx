@@ -11,9 +11,22 @@ interface OrgGraphProps {
   relationships: GraphRelationship[];
   departments: GraphDepartment[];
   onPersonSelect?: (person: GraphPerson | null) => void;
+  /** Optional multi-select mode. When provided, clicking toggles IDs in this set. */
+  multiSelectIds?: Set<string>;
+  onToggleMultiSelect?: (id: string) => void;
+  /** Optional ID set to apply a "spotlight" visual highlight (e.g. agent-cited nodes). */
+  spotlightIds?: Set<string>;
 }
 
-export function OrgGraph({ people, relationships, departments, onPersonSelect }: OrgGraphProps) {
+export function OrgGraph({
+  people,
+  relationships,
+  departments,
+  onPersonSelect,
+  multiSelectIds,
+  onToggleMultiSelect,
+  spotlightIds,
+}: OrgGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -61,14 +74,24 @@ export function OrgGraph({ people, relationships, departments, onPersonSelect }:
   }, [links]);
 
   const activeId = hoveredId ?? selectedId;
-  const highlighted = connectedIds(activeId);
+  // When spotlight is active (agent cited nodes), use that as the highlight set
+  // rather than the hover/selection neighborhood — the page is telling us which
+  // people matter for this view.
+  const spotlightActive = spotlightIds && spotlightIds.size > 0;
+  const highlighted = spotlightActive
+    ? new Set([...(spotlightIds ?? []), ...Array.from(connectedIds(activeId))])
+    : connectedIds(activeId);
 
   const handleSelect = useCallback((id: string) => {
+    if (onToggleMultiSelect) {
+      onToggleMultiSelect(id);
+      return;
+    }
     const newId = selectedId === id ? null : id;
     setSelectedId(newId);
     const person = people.find(p => p.id === newId);
     onPersonSelect?.(person ?? null);
-  }, [selectedId, people, onPersonSelect]);
+  }, [selectedId, people, onPersonSelect, onToggleMultiSelect]);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
@@ -120,17 +143,25 @@ export function OrgGraph({ people, relationships, departments, onPersonSelect }:
               isHighlighted={!activeId || highlighted.has(link.source.id) && highlighted.has(link.target.id)}
             />
           ))}
-          {nodes.map(node => (
-            <OrgGraphNode
-              key={node.id}
-              node={node}
-              departments={departments}
-              isSelected={selectedId === node.id}
-              isHighlighted={!activeId || highlighted.has(node.id)}
-              onSelect={handleSelect}
-              onHover={setHoveredId}
-            />
-          ))}
+          {nodes.map(node => {
+            const isSelected = multiSelectIds
+              ? multiSelectIds.has(node.id)
+              : selectedId === node.id;
+            const isHighlighted = spotlightActive
+              ? highlighted.has(node.id)
+              : !activeId || highlighted.has(node.id);
+            return (
+              <OrgGraphNode
+                key={node.id}
+                node={node}
+                departments={departments}
+                isSelected={isSelected}
+                isHighlighted={isHighlighted}
+                onSelect={handleSelect}
+                onHover={setHoveredId}
+              />
+            );
+          })}
         </g>
       </svg>
 

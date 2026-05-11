@@ -253,9 +253,29 @@ export interface GuardrailMetricsSummary {
   series: GuardrailMetricPoint[];
 }
 
+export interface BedrockInvocationEntry {
+  requestId: string;
+  timestamp: string;
+  agent: string;        // derived from execution role ARN
+  modelId: string;
+  operation: string;    // ConverseStream | Converse | InvokeModel
+  promptSnippet: string;
+  responseSnippet: string;
+  inputTokens: number;
+  outputTokens: number;
+  durationGuess: number; // not directly logged — leave 0
+  intervened: boolean;
+  interventions: Array<{
+    source: 'INPUT' | 'OUTPUT';
+    policyType: string;       // TopicPolicy, SensitiveInformationPolicy, etc.
+    detail: string;           // matched topic name / PII type / etc.
+  }>;
+}
+
 export interface CloudWatchProvider {
   getSummary(): Promise<ObservabilitySummary>;
   listTraces(limit: number): Promise<Trace[]>;
   getTrace(traceId: string): Promise<Trace | null>;
   getGuardrailMetrics(guardrailId: string, hours: number): Promise<GuardrailMetricsSummary>;
+  listBedrockInvocations(opts: { limit: number; sinceMs?: number }): Promise<BedrockInvocationEntry[]>;
 }

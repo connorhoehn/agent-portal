@@ -1,4 +1,7 @@
 import * as cdk from 'aws-cdk-lib';
+import * as iam from 'aws-cdk-lib/aws-iam';
+import * as logs from 'aws-cdk-lib/aws-logs';
+import { AwsCustomResource, AwsCustomResourcePolicy, PhysicalResourceId } from 'aws-cdk-lib/custom-resources';
 import type { Construct } from 'constructs';
 
 export interface GuardrailsStackProps extends cdk.StackProps {
@@ -161,6 +164,95 @@ export class GuardrailsStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'GuardrailVersion', {
       value: guardrailVersion.attrVersion,
       exportName: `${prefix}-guardrail-version`,
+    });
+
+    // -------------------------------------------------------------------
+    // Bedrock Model Invocation Logging — account-wide
+    //
+    // Captures every Bedrock InvokeModel / Converse / ConverseStream call
+    // (and its guardrail assessment, if any) to a CloudWatch log group. This
+    // is the per-event source of truth for guardrail interventions — far
+    // higher fidelity than the lagging CloudWatch metric counts.
+    //
+    // There's no CFN type for PutModelInvocationLoggingConfiguration, so we
+    // use an SDK-call custom resource. The configuration is global per
+    // (account, region), so this lives once here in the Guardrails stack.
+    // -------------------------------------------------------------------
+
+    const invocationLogGroup = new logs.LogGroup(this, 'BedrockInvocationLogs', {
+      logGroupName: `/${prefix}/bedrock-invocations`,
+      retention: logs.RetentionDays.TWO_WEEKS,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    const loggingRole = new iam.Role(this, 'BedrockInvocationLoggingRole', {
+      roleName: `${prefix}-bedrock-invocation-logging-role`,
+      assumedBy: new iam.ServicePrincipal('bedrock.amazonaws.com'),
+      description: 'Role Bedrock uses to write model invocation logs',
+    });
+    invocationLogGroup.grantWrite(loggingRole);
+
+    const loggingConfig = new AwsCustomResource(this, 'BedrockInvocationLoggingConfig', {
+      onCreate: {
+        service: 'bedrock',
+        action: 'PutModelInvocationLoggingConfiguration',
+        parameters: {
+          loggingConfig: {
+            cloudWatchConfig: {
+              logGroupName: invocationLogGroup.logGroupName,
+              roleArn: loggingRole.roleArn,
+            },
+            textDataDeliveryEnabled: true,
+            imageDataDeliveryEnabled: false,
+            embeddingDataDeliveryEnabled: false,
+            videoDataDeliveryEnabled: false,
+          },
+        },
+        physicalResourceId: PhysicalResourceId.of(`${prefix}-bedrock-invocation-logging`),
+      },
+      onUpdate: {
+        service: 'bedrock',
+        action: 'PutModelInvocationLoggingConfiguration',
+        parameters: {
+          loggingConfig: {
+            cloudWatchConfig: {
+              logGroupName: invocationLogGroup.logGroupName,
+              roleArn: loggingRole.roleArn,
+            },
+            textDataDeliveryEnabled: true,
+            imageDataDeliveryEnabled: false,
+            embeddingDataDeliveryEnabled: false,
+            videoDataDeliveryEnabled: false,
+          },
+        },
+        physicalResourceId: PhysicalResourceId.of(`${prefix}-bedrock-invocation-logging`),
+      },
+      onDelete: {
+        service: 'bedrock',
+        action: 'DeleteModelInvocationLoggingConfiguration',
+      },
+      policy: AwsCustomResourcePolicy.fromStatements([
+        new iam.PolicyStatement({
+          actions: [
+            'bedrock:PutModelInvocationLoggingConfiguration',
+            'bedrock:DeleteModelInvocationLoggingConfiguration',
+            'bedrock:GetModelInvocationLoggingConfiguration',
+          ],
+          resources: ['*'],
+        }),
+        new iam.PolicyStatement({
+          // Required to associate the role with the logging config.
+          actions: ['iam:PassRole'],
+          resources: [loggingRole.roleArn],
+        }),
+      ]),
+    });
+    loggingConfig.node.addDependency(loggingRole);
+
+    new cdk.CfnOutput(this, 'InvocationLogGroupName', {
+      value: invocationLogGroup.logGroupName,
+      description: 'CloudWatch log group capturing Bedrock invocation logs (incl. guardrail trace)',
+      exportName: `${prefix}-bedrock-invocation-log-group`,
     });
   }
 }

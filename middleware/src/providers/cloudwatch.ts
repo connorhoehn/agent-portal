@@ -26,10 +26,15 @@ import {
   Statistic,
   type GetMetricStatisticsCommandInput,
 } from '@aws-sdk/client-cloudwatch';
+import {
+  CloudWatchLogsClient,
+  FilterLogEventsCommand,
+} from '@aws-sdk/client-cloudwatch-logs';
 import { config } from '../config.js';
 import { mockTraces } from '../mock/traces.js';
 import { mockAgents } from '../mock/agent-statuses.js';
 import type {
+  BedrockInvocationEntry,
   CloudWatchProvider,
   GuardrailMetricPoint,
   GuardrailMetricsSummary,
@@ -70,6 +75,10 @@ export const mockCloudWatch: CloudWatchProvider = {
     return mockTraces.find((t) => t.traceId === traceId) ?? null;
   },
 
+  async listBedrockInvocations(): Promise<BedrockInvocationEntry[]> {
+    return [];
+  },
+
   async getGuardrailMetrics(_guardrailId, hours): Promise<GuardrailMetricsSummary> {
     // Synthesize a flat-zero series so the UI still renders during offline dev.
     const now = Date.now();
@@ -91,6 +100,24 @@ export const mockCloudWatch: CloudWatchProvider = {
 
 const xray = new XRayClient({ region: config.region });
 const cw = new CloudWatchClient({ region: config.region });
+const cwLogs = new CloudWatchLogsClient({ region: config.region });
+
+const BEDROCK_INVOCATION_LOG_GROUP = '/orgiq/bedrock-invocations';
+
+// Pull agent name out of `arn:...:assumed-role/orgiq-<agent>-execution-role/...`.
+function agentFromRoleArn(arn: string | undefined): string {
+  if (!arn) return 'unknown';
+  const m = arn.match(/assumed-role\/[^/]+/);
+  if (!m) return 'unknown';
+  const role = m[0].replace('assumed-role/', '');
+  const name = role.replace(/^orgiq-/, '').replace(/-execution-role$/, '');
+  return name || 'unknown';
+}
+
+function snippetText(text: string, max = 200): string {
+  if (!text) return '';
+  return text.length > max ? text.slice(0, max - 1) + '…' : text;
+}
 
 const ZERO_SUMMARY: ObservabilitySummary = {
   totalInvocations24h: 0,
@@ -297,6 +324,102 @@ export const realCloudWatch: CloudWatchProvider = {
       return mapXRayTrace(xt);
     } catch {
       return null;
+    }
+  },
+
+  async listBedrockInvocations({ limit, sinceMs }): Promise<BedrockInvocationEntry[]> {
+    const startTime = Date.now() - (sinceMs ?? 60 * 60 * 1000); // default last 1h
+    try {
+      const resp = await cwLogs.send(
+        new FilterLogEventsCommand({
+          logGroupName: BEDROCK_INVOCATION_LOG_GROUP,
+          startTime,
+          limit: Math.max(limit, 100), // overshoot — many events aren't JSON (validation messages)
+        }),
+      );
+      const events = resp.events ?? [];
+      const out: BedrockInvocationEntry[] = [];
+      for (const e of events) {
+        const text = e.message ?? '';
+        if (!text.startsWith('{')) continue;
+        let msg: any;
+        try {
+          msg = JSON.parse(text);
+        } catch {
+          continue;
+        }
+        const inputBody = msg.input?.inputBodyJson ?? {};
+        const outputBody = msg.output?.outputBodyJson ?? {};
+
+        // Last user message → prompt; assistant text → response
+        const messages = inputBody.messages ?? [];
+        const lastUser = [...messages].reverse().find((m: any) => m.role === 'user');
+        const prompt = lastUser?.content?.[0]?.text ?? '';
+        const responseBlocks = outputBody?.output?.message?.content ?? [];
+        const response = responseBlocks
+          .map((c: any) => c?.text ?? '')
+          .join('')
+          .trim();
+
+        // Detect interventions from guardrail trace
+        const interventions: BedrockInvocationEntry['interventions'] = [];
+        const trace = outputBody?.trace?.guardrail;
+        if (trace && typeof trace === 'object') {
+          const collectFromAssessments = (assessments: any, source: 'INPUT' | 'OUTPUT') => {
+            if (!assessments) return;
+            const lists = Array.isArray(assessments) ? assessments : [assessments];
+            for (const a of lists) {
+              for (const t of a?.topicPolicy?.topics ?? []) {
+                if (t.action === 'BLOCKED' || t.detected) {
+                  interventions.push({ source, policyType: 'TopicPolicy', detail: t.name ?? 'unknown' });
+                }
+              }
+              for (const f of a?.contentPolicy?.filters ?? []) {
+                if (f.action === 'BLOCKED' || f.detected) {
+                  interventions.push({ source, policyType: 'ContentPolicy', detail: f.type ?? 'unknown' });
+                }
+              }
+              for (const f of a?.sensitiveInformationPolicy?.piiEntities ?? []) {
+                if (f.action === 'BLOCKED' || f.action === 'ANONYMIZED') {
+                  interventions.push({ source, policyType: 'PII', detail: f.type ?? 'unknown' });
+                }
+              }
+              for (const w of a?.wordPolicy?.customWords ?? []) {
+                if (w.action === 'BLOCKED' || w.detected) {
+                  interventions.push({ source, policyType: 'WordPolicy', detail: w.match ?? 'unknown' });
+                }
+              }
+            }
+          };
+          for (const [, ass] of Object.entries(trace.inputAssessment ?? {})) {
+            collectFromAssessments(ass, 'INPUT');
+          }
+          for (const [, ass] of Object.entries(trace.outputAssessments ?? {})) {
+            collectFromAssessments(ass, 'OUTPUT');
+          }
+        }
+
+        out.push({
+          requestId: msg.requestId ?? '',
+          timestamp: msg.timestamp ?? new Date(e.timestamp ?? Date.now()).toISOString(),
+          agent: agentFromRoleArn(msg.identity?.arn),
+          modelId: msg.modelId ?? '',
+          operation: msg.operation ?? '',
+          promptSnippet: snippetText(prompt),
+          responseSnippet: snippetText(response),
+          inputTokens: Number(msg.input?.inputTokenCount ?? 0),
+          outputTokens: Number(msg.output?.outputTokenCount ?? 0),
+          durationGuess: 0,
+          intervened: interventions.length > 0,
+          interventions,
+        });
+        if (out.length >= limit) break;
+      }
+      // Newest first
+      return out.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+    } catch (err) {
+      console.warn('[cloudwatch] listBedrockInvocations failed:', (err as Error).message);
+      return [];
     }
   },
 

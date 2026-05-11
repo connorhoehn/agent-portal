@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router';
 
 const NAV_ITEMS = [
+  { path: '/explore', label: 'Explore' },
   { path: '/agents', label: 'Agent Flow' },
   { path: '/graph', label: 'Org Graph' },
   { path: '/search', label: 'Search' },

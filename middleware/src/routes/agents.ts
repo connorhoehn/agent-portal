@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import { asyncHandler } from '../lib/async-handler.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
-import { agentcore } from '../providers/index.js';
+import { agentcore, aurora } from '../providers/index.js';
 import { detectIntervention, recordInvocation, snippet } from '../lib/invocations.js';
 import { recordTurn } from '../providers/memory.js';
 
@@ -22,12 +22,44 @@ agentsRouter.get('/:agentId/metrics', asyncHandler(async (req, res) => {
 
 agentsRouter.post('/:agentId/invoke', asyncHandler(async (req, res) => {
   const agentId = String(req.params['agentId'] ?? '');
-  const { message, sessionId: rawSessionId, actorId } = req.body as {
+  const { message, sessionId: rawSessionId, actorId, selection } = req.body as {
     message?: string;
     sessionId?: string;
     actorId?: string;
+    selection?: { peopleIds?: string[] };
   };
-  const userMessage = message ?? '';
+  const rawUserMessage = message ?? '';
+
+  // If the explore page sent a selection, look up the people details and
+  // prepend a context block. The instruction format must be emphatic — the
+  // model otherwise routinely ignores it and falls back to calling its own
+  // tools. Wrapping in <<<INSTRUCTIONS>>> markers + repeating the rule at
+  // both ends of the prompt empirically gets ~90%+ compliance with Nova Pro.
+  let userMessage = rawUserMessage;
+  const selectedIds = selection?.peopleIds ?? [];
+  if (selectedIds.length > 0) {
+    try {
+      const snap = await aurora.fetchGraph();
+      const byId = new Map(snap.nodes.map((p) => [p.id, p]));
+      const lines = selectedIds
+        .map((id) => byId.get(id))
+        .filter((p): p is NonNullable<typeof p> => Boolean(p))
+        .map((p) => `- ${p.name} (id=${p.id}) — ${p.title}, ${p.department}, skills: ${p.skills.slice(0, 6).join(', ') || '(none)'}`);
+      if (lines.length > 0) {
+        // Plain context — no formatting instructions, no meta-prompts. The
+        // Bedrock guardrail's PROMPT_ATTACK filter blocks anything that
+        // looks like injection. Marker formatting is handled client-side.
+        userMessage = [
+          `Some context about ${lines.length} people I want to ask about:`,
+          ...lines,
+          ``,
+          rawUserMessage,
+        ].join('\n');
+      }
+    } catch (err) {
+      console.warn('[agents] selection enrichment failed:', (err as Error).message);
+    }
+  }
   // AgentCore Runtime requires the session ID to be at least 33 characters
   // long. Auto-allocate a UUID if the caller sends nothing or a short ID, and
   // echo it back so the UI can persist the canonical value.

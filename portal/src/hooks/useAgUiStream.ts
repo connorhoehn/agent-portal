@@ -7,12 +7,16 @@ interface AgUiMessage {
   toolCalls?: Array<{ id: string; name: string; args: string; result?: string }>;
 }
 
+interface SendOptions {
+  selection?: { peopleIds: string[] };
+}
+
 interface UseAgUiStreamReturn {
   messages: AgUiMessage[];
   isStreaming: boolean;
   error: string | null;
   sessionId: string | null;
-  sendMessage: (content: string) => void;
+  sendMessage: (content: string, opts?: SendOptions) => void;
   reset: () => void;
   loadHistory: (sid: string, msgs: AgUiMessage[]) => void;
 }
@@ -34,7 +38,7 @@ export function useAgUiStream(endpoint: string): UseAgUiStreamReturn {
     setSessionIdState(sid);
   }, []);
 
-  const sendMessage = useCallback(async (content: string) => {
+  const sendMessage = useCallback(async (content: string, opts?: SendOptions) => {
     setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'user', content, toolCalls: [] }]);
     setIsStreaming(true);
     setError(null);
@@ -48,7 +52,11 @@ export function useAgUiStream(endpoint: string): UseAgUiStreamReturn {
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: content, ...(currentSid ? { sessionId: currentSid } : {}) }),
+        body: JSON.stringify({
+          message: content,
+          ...(currentSid ? { sessionId: currentSid } : {}),
+          ...(opts?.selection ? { selection: opts.selection } : {}),
+        }),
         signal: controller.signal,
       });
 

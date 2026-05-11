@@ -1,4 +1,3 @@
-import { Fragment, useState } from 'react';
 import { Card, PageSection, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 
@@ -10,35 +9,6 @@ interface ObsSummary {
   successRate: string;
   traceCount: number;
 }
-
-interface TraceSpan {
-  spanId: string;
-  parentSpanId: string | null;
-  name: string;
-  kind: string;
-  startTimeMs: number;
-  durationMs: number;
-  status: string;
-}
-
-interface Trace {
-  traceId: string;
-  agentName: string;
-  startTime: string;
-  totalDurationMs: number;
-  spanCount: number;
-  status: string;
-  tokensIn: number;
-  tokensOut: number;
-  spans: TraceSpan[];
-}
-
-const SPAN_COLORS: Record<string, string> = {
-  agent: '#2563eb',
-  tool: '#16a34a',
-  llm: '#9333ea',
-  retrieval: '#d97706',
-};
 
 interface GuardrailMetrics {
   totalInvocations: number;
@@ -60,14 +30,37 @@ interface Invocation {
   error?: string;
 }
 
+interface CapabilityEvent {
+  id: string;
+  kind: 'browser_navigate' | 'browser_screenshot' | 'browser_launch' | 'browser_close' | 'code_execute';
+  startedAt: string;
+  durationMs: number;
+  sessionId: string;
+  detail: Record<string, string | number | boolean | undefined>;
+  ok: boolean;
+  error?: string;
+}
+
+interface BedrockInvocation {
+  requestId: string;
+  timestamp: string;
+  agent: string;
+  modelId: string;
+  operation: string;
+  promptSnippet: string;
+  responseSnippet: string;
+  inputTokens: number;
+  outputTokens: number;
+  intervened: boolean;
+  interventions: Array<{ source: 'INPUT' | 'OUTPUT'; policyType: string; detail: string }>;
+}
+
 function ObservabilityPage() {
   const { data: summary } = useFetch<ObsSummary>('/api/observability/summary', 30000);
-  const { data: tracesData } = useFetch<{ traces: Trace[] }>('/api/observability/traces');
   const { data: guardrail } = useFetch<GuardrailMetrics>('/api/capabilities/guardrail/metrics?hours=24', 60000);
   const { data: recent } = useFetch<{ invocations: Invocation[] }>('/api/observability/recent-invocations?limit=50', 5000);
-  const [expandedTrace, setExpandedTrace] = useState<string | null>(null);
-
-  const traces = tracesData?.traces ?? [];
+  const { data: bedrock } = useFetch<{ entries: BedrockInvocation[] }>('/api/observability/bedrock-invocations?limit=20&sinceMin=60', 20000);
+  const { data: capEvents } = useFetch<{ events: CapabilityEvent[] }>('/api/observability/capability-events?limit=50', 5000);
 
   return (
     <PageSection title="Observability">
@@ -154,84 +147,145 @@ function ObservabilityPage() {
         )}
       </Card>
 
-      <Card padding="md">
-        <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Recent Traces</h2>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableTh>Agent</TableTh>
-              <TableTh>Time</TableTh>
-              <TableTh>Duration</TableTh>
-              <TableTh>Spans</TableTh>
-              <TableTh>Tokens</TableTh>
-              <TableTh>Status</TableTh>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {traces.map(trace => (
-              <Fragment key={trace.traceId}>
-                <TableRow
-                  onClick={() => setExpandedTrace(expandedTrace === trace.traceId ? null : trace.traceId)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <TableTd style={{ fontWeight: 500 }}>{trace.agentName}</TableTd>
-                  <TableTd style={{ fontSize: 12 }}>{new Date(trace.startTime).toLocaleTimeString()}</TableTd>
-                  <TableTd>{(trace.totalDurationMs / 1000).toFixed(2)}s</TableTd>
-                  <TableTd>{trace.spanCount}</TableTd>
-                  <TableTd style={{ fontSize: 12 }}>{trace.tokensIn + trace.tokensOut}</TableTd>
+      <Card padding="md" style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <h2 style={{ fontSize: 14, fontWeight: 600 }}>
+            Bedrock Invocations{' '}
+            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 400 }}>
+              from /orgiq/bedrock-invocations · ~30s lag · full guardrail trace
+            </span>
+          </h2>
+          <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+            {bedrock?.entries.filter(e => e.intervened).length ?? 0} intervened in last hour
+          </span>
+        </div>
+        {(bedrock?.entries ?? []).length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+            No Bedrock calls in the last hour. Invoke an agent and wait ~30s.
+          </div>
+        ) : (
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableTh>When</TableTh>
+                <TableTh>Agent</TableTh>
+                <TableTh>Op</TableTh>
+                <TableTh>Prompt</TableTh>
+                <TableTh>Tokens</TableTh>
+                <TableTh>Status</TableTh>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {(bedrock?.entries ?? []).map(b => (
+                <TableRow key={b.requestId}>
+                  <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }}>
+                    {new Date(b.timestamp).toLocaleTimeString()}
+                  </TableTd>
+                  <TableTd style={{ fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' }}>{b.agent}</TableTd>
+                  <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontFamily: 'monospace' }}>{b.operation}</TableTd>
+                  <TableTd style={{ fontSize: 12, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={b.promptSnippet}>
+                    {b.promptSnippet}
+                  </TableTd>
+                  <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{b.inputTokens}↓ / {b.outputTokens}↑</TableTd>
                   <TableTd>
-                    <Chip tone={trace.status === 'ok' ? 'success' : 'danger'} size="xs">{trace.status}</Chip>
+                    {b.intervened ? (
+                      <span title={b.interventions.map(i => `${i.source}: ${i.policyType}/${i.detail}`).join('\n')}>
+                        <Chip tone="warning" size="xs">{b.interventions[0]?.detail || 'blocked'}</Chip>
+                      </span>
+                    ) : (
+                      <Chip tone="success" size="xs">ok</Chip>
+                    )}
                   </TableTd>
                 </TableRow>
-                {expandedTrace === trace.traceId && (
-                  <TableRow key={`${trace.traceId}-detail`}>
-                    <TableTd colSpan={6} style={{ padding: 0 }}>
-                      <TraceWaterfall spans={trace.spans} totalDurationMs={trace.totalDurationMs} />
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </Card>
+
+      <Card padding="md">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <h2 style={{ fontSize: 14, fontWeight: 600 }}>
+            Capability Events{' '}
+            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 400 }}>
+              browser + code interpreter activity · live · 5s refresh
+            </span>
+          </h2>
+        </div>
+        {(capEvents?.events ?? []).length === 0 ? (
+          <div style={{ padding: 24, textAlign: 'center', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+            No browser or code-interpreter activity yet. Use the Capabilities page to trigger some.
+          </div>
+        ) : (
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableTh>When</TableTh>
+                <TableTh>Kind</TableTh>
+                <TableTh>Session</TableTh>
+                <TableTh>Detail</TableTh>
+                <TableTh>Duration</TableTh>
+                <TableTh>Status</TableTh>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {(capEvents?.events ?? []).map(ev => {
+                const detailText = formatCapDetail(ev);
+                return (
+                  <TableRow key={ev.id}>
+                    <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }}>
+                      {new Date(ev.startedAt).toLocaleTimeString()}
+                    </TableTd>
+                    <TableTd>
+                      <Chip tone={ev.kind.startsWith('browser') ? 'default' : 'info' as any} size="xs">
+                        {ev.kind.replace('_', ' ')}
+                      </Chip>
+                    </TableTd>
+                    <TableTd style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--color-text-tertiary)' }}>
+                      {ev.sessionId ? ev.sessionId.slice(0, 12) + '…' : '—'}
+                    </TableTd>
+                    <TableTd style={{ fontSize: 12, maxWidth: 380, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={detailText}>
+                      {detailText}
+                    </TableTd>
+                    <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                      {(ev.durationMs / 1000).toFixed(2)}s
+                    </TableTd>
+                    <TableTd>
+                      {ev.ok ? (
+                        <Chip tone="success" size="xs">ok</Chip>
+                      ) : (
+                        <Chip tone="danger" size="xs">err</Chip>
+                      )}
                     </TableTd>
                   </TableRow>
-                )}
-              </Fragment>
-            ))}
-          </TableBody>
-        </Table>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
       </Card>
     </PageSection>
   );
 }
 
-function TraceWaterfall({ spans, totalDurationMs }: { spans: TraceSpan[]; totalDurationMs: number }) {
-  return (
-    <div style={{ padding: '12px 16px', background: 'var(--color-surface-hover, #f8fafc)' }}>
-      {spans.map(span => {
-        const left = (span.startTimeMs / totalDurationMs) * 100;
-        const width = Math.max((span.durationMs / totalDurationMs) * 100, 1);
-        const color = SPAN_COLORS[span.kind] ?? '#64748b';
-
-        return (
-          <div key={span.spanId} style={{ display: 'flex', alignItems: 'center', marginBottom: 4, height: 24 }}>
-            <div style={{ width: 180, fontSize: 11, color: 'var(--color-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {span.name}
-            </div>
-            <div style={{ flex: 1, position: 'relative', height: 16 }}>
-              <div style={{
-                position: 'absolute',
-                left: `${left}%`,
-                width: `${width}%`,
-                height: '100%',
-                background: span.status === 'error' ? '#fecaca' : `${color}30`,
-                border: `1px solid ${span.status === 'error' ? '#ef4444' : color}`,
-                borderRadius: 3,
-              }} />
-            </div>
-            <div style={{ width: 60, fontSize: 10, textAlign: 'right', color: 'var(--color-text-tertiary)', flexShrink: 0 }}>
-              {span.durationMs}ms
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
+function formatCapDetail(ev: CapabilityEvent): string {
+  const d = ev.detail || {};
+  switch (ev.kind) {
+    case 'browser_launch':
+      return `${d['agentName'] ?? ''} → ${d['url'] ?? 'about:blank'}${d['pageTitle'] ? ` (${d['pageTitle']})` : ''}`;
+    case 'browser_navigate':
+      return `→ ${d['url']}${d['pageTitle'] ? ` (${d['pageTitle']})` : ''}`;
+    case 'browser_screenshot':
+      return `${d['bytes']} bytes`;
+    case 'browser_close':
+      return 'session closed';
+    case 'code_execute':
+      return `${d['codeSnippet']} → ${d['outputSnippet']}`;
+    default:
+      return JSON.stringify(d);
+  }
 }
+
 
 function StatCard({ label, value, accent, danger }: { label: string; value: string; accent?: boolean; danger?: boolean }) {
   return (
