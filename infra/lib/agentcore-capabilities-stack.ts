@@ -37,6 +37,7 @@ export class AgentCoreCapabilitiesStack extends cdk.Stack {
     super(scope, id, props);
 
     const prefix = props.prefix ?? 'orgiq';
+    const safePrefix = prefix.replace(/-/g, '_');
 
     // -------------------------------------------------------------------
     // Shared execution role for AgentCore sandbox resources
@@ -70,7 +71,7 @@ export class AgentCoreCapabilitiesStack extends cdk.Stack {
     // -------------------------------------------------------------------
 
     const codeInterpreter = new bedrockagentcore.CfnCodeInterpreterCustom(this, 'CodeInterpreter', {
-      name: `${prefix}-code-interpreter`,
+      name: `${safePrefix}_code_interpreter`,
       description: 'OrgIQ sandboxed Python execution for graph-builder NER and scoring algorithms',
       executionRoleArn: sandboxRole.roleArn,
       networkConfiguration: { networkMode: 'SANDBOX' },
@@ -84,7 +85,7 @@ export class AgentCoreCapabilitiesStack extends cdk.Stack {
     // -------------------------------------------------------------------
 
     const browser = new bedrockagentcore.CfnBrowserCustom(this, 'Browser', {
-      name: `${prefix}-browser`,
+      name: `${safePrefix}_browser`,
       description: 'OrgIQ headless browser for agent web research',
       executionRoleArn: sandboxRole.roleArn,
       networkConfiguration: { networkMode: 'PUBLIC' },
@@ -94,7 +95,7 @@ export class AgentCoreCapabilitiesStack extends cdk.Stack {
     this.browserArn = browser.attrBrowserArn;
 
     const browserProfile = new bedrockagentcore.CfnBrowserProfile(this, 'BrowserProfile', {
-      name: `${prefix}-browser-profile`,
+      name: `${safePrefix}_browser_profile`,
       description: 'OrgIQ default browser profile for persistent session state',
     });
     browserProfile.node.addDependency(browser);
