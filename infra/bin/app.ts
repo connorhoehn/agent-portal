@@ -11,6 +11,7 @@ import { AgentCorePolicyStack } from '../lib/agentcore-policy-stack';
 import { AgentCoreRuntimeStack } from '../lib/agentcore-runtime-stack';
 import { AgentCoreGatewayStack } from '../lib/agentcore-gateway-stack';
 import { AgentCoreTelemetryStack } from '../lib/agentcore-telemetry-stack';
+import { AgentCoreCapabilitiesStack } from '../lib/agentcore-capabilities-stack';
 
 const app = new cdk.App();
 
@@ -128,7 +129,34 @@ const agentCorePolicy = new AgentCorePolicyStack(app, 'OrgIQ-AgentCorePolicy', {
 agentCorePolicy.addDependency(guardrails);
 
 // -------------------------------------------------------------------
-// Stack 9: AgentCore Runtime (6 agent runtimes)
+// Stack 9: AgentCore Capabilities (Code Interpreter, Browser, Workload Identity)
+// Deploy before Runtime so capability IDs flow into agent env vars.
+// Override portal callback URL: cdk deploy --context portalUrl=https://your-domain.com
+// -------------------------------------------------------------------
+const portalUrl = app.node.tryGetContext('portalUrl') as string | undefined;
+const allowedOauth2ReturnUrls = portalUrl
+  ? [`${portalUrl}/auth/callback`]
+  : undefined; // falls back to localhost dev URLs defined in the stack
+
+const agentCoreCapabilities = new AgentCoreCapabilitiesStack(app, 'OrgIQ-AgentCoreCapabilities', {
+  env,
+  prefix,
+  codeInterpreterAgentRoles: [
+    agents.agentRoles['graph-builder'],
+    agents.agentRoles['scoring'],
+  ],
+  browserAgentRoles: [
+    agents.agentRoles['supervisor'],
+    agents.agentRoles['search'],
+    agents.agentRoles['advisor'],
+  ],
+  allowedOauth2ReturnUrls,
+  description: 'OrgIQ AgentCore Capabilities: Code Interpreter, Browser, Workload Identity',
+});
+agentCoreCapabilities.addDependency(agents);
+
+// -------------------------------------------------------------------
+// Stack 10: AgentCore Runtime (6 agent runtimes)
 // -------------------------------------------------------------------
 const agentCoreRuntime = new AgentCoreRuntimeStack(app, 'OrgIQ-AgentCoreRuntime', {
   env,
@@ -139,16 +167,20 @@ const agentCoreRuntime = new AgentCoreRuntimeStack(app, 'OrgIQ-AgentCoreRuntime'
   auroraClusterArn: aurora.clusterArn,
   auroraCredentialsSecretArn: aurora.credentialsSecretArn,
   knowledgeBaseId: knowledgeBase.knowledgeBaseId,
+  codeInterpreterId: agentCoreCapabilities.codeInterpreterId,
+  browserId: agentCoreCapabilities.browserId,
+  browserProfileId: agentCoreCapabilities.browserProfileId,
   description: 'OrgIQ AgentCore Runtime: 6 agent runtimes with lifecycle and endpoint config',
 });
 agentCoreRuntime.addDependency(agents);
 agentCoreRuntime.addDependency(agentCoreMemory);
+agentCoreRuntime.addDependency(agentCoreCapabilities);
 agentCoreRuntime.addDependency(aurora);
 agentCoreRuntime.addDependency(knowledgeBase);
 agentCoreRuntime.addDependency(guardrails);
 
 // -------------------------------------------------------------------
-// Stack 10: AgentCore MCP Gateway
+// Stack 11: AgentCore MCP Gateway
 // -------------------------------------------------------------------
 const agentCoreGateway = new AgentCoreGatewayStack(app, 'OrgIQ-AgentCoreGateway', {
   env,
@@ -167,7 +199,7 @@ agentCoreGateway.addDependency(aurora);
 agentCoreGateway.addDependency(knowledgeBase);
 
 // -------------------------------------------------------------------
-// Stack 11: AgentCore Telemetry (evaluators, online eval, CW dashboard)
+// Stack 12: AgentCore Telemetry (evaluators, online eval, CW dashboard)
 // Enable online evaluation after runtimes are deployed:
 //   cdk deploy OrgIQ-AgentCoreTelemetry --context enableEval=true
 // -------------------------------------------------------------------

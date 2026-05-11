@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { path: '/scores', label: 'Scores' },
   { path: '/ingest', label: 'Ingest' },
   { path: '/observability', label: 'Observability' },
+  { path: '/capabilities', label: 'Capabilities' },
 ];
 
 export function Layout() {

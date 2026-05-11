@@ -13,6 +13,9 @@ export interface AgentCoreRuntimeStackProps extends cdk.StackProps {
   readonly auroraCredentialsSecretArn: string;
   readonly knowledgeBaseId: string;
   readonly modelId?: string;
+  readonly codeInterpreterId?: string;
+  readonly browserId?: string;
+  readonly browserProfileId?: string;
 }
 
 const AGENT_NAMES = [
@@ -116,6 +119,23 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
         },
       });
 
+      // Supervisor needs A2A: list runtimes for discovery + invoke sub-agents
+      if (agentName === 'supervisor') {
+        executionRole.addToPolicy(new iam.PolicyStatement({
+          sid: 'A2ARuntimeDiscovery',
+          actions: [
+            'bedrock-agentcore-control:ListAgentRuntimes',
+            'bedrock-agentcore-control:GetAgentRuntime',
+          ],
+          resources: ['*'],
+        }));
+        executionRole.addToPolicy(new iam.PolicyStatement({
+          sid: 'A2AInvokeSubAgents',
+          actions: ['bedrock-agentcore:InvokeAgentRuntime'],
+          resources: [`arn:aws:bedrock-agentcore:${this.region}:${this.account}:runtime/${prefix}_*`],
+        }));
+      }
+
       new cdk.CfnOutput(this, `${pascal}EcrUri`, {
         value: repo.repositoryUri,
         description: `ECR URI for ${agentName} — push ARM64 image then redeploy with --context deployRuntimes=true`,
@@ -144,6 +164,9 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
           AURORA_SECRET_ARN: props.auroraCredentialsSecretArn,
           KB_ID: props.knowledgeBaseId,
           PROJECT_PREFIX: prefix,
+          ...(props.codeInterpreterId && { CODE_INTERPRETER_ID: props.codeInterpreterId }),
+          ...(props.browserId && { BROWSER_ID: props.browserId }),
+          ...(props.browserProfileId && { BROWSER_PROFILE_ID: props.browserProfileId }),
         },
       });
 

@@ -7,6 +7,7 @@ import { graphRouter } from './routes/graph.js';
 import { scoresRouter } from './routes/scores.js';
 import { ingestRouter } from './routes/ingest.js';
 import { observabilityRouter } from './routes/observability.js';
+import { capabilitiesRouter } from './routes/capabilities.js';
 
 const app = express();
 
@@ -22,6 +23,7 @@ app.use('/api/graph', graphRouter);
 app.use('/api/scores', scoresRouter);
 app.use('/api/ingest', ingestRouter);
 app.use('/api/observability', observabilityRouter);
+app.use('/api/capabilities', capabilitiesRouter);
 
 app.use(errorHandler);
 

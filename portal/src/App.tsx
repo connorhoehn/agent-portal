@@ -9,6 +9,7 @@ const ScoresPage = lazy(() => import('./pages/ScoresPage'));
 const IngestPage = lazy(() => import('./pages/IngestPage'));
 const ObservabilityPage = lazy(() => import('./pages/ObservabilityPage'));
 const InvokePage = lazy(() => import('./pages/InvokePage'));
+const CapabilitiesPage = lazy(() => import('./pages/CapabilitiesPage'));
 
 function Loading() {
   return <div style={{ padding: 24, color: '#94a3b8' }}>Loading...</div>;
@@ -26,6 +27,7 @@ export function App() {
         <Route path="scores" element={<Suspense fallback={<Loading />}><ScoresPage /></Suspense>} />
         <Route path="ingest" element={<Suspense fallback={<Loading />}><IngestPage /></Suspense>} />
         <Route path="observability" element={<Suspense fallback={<Loading />}><ObservabilityPage /></Suspense>} />
+        <Route path="capabilities" element={<Suspense fallback={<Loading />}><CapabilitiesPage /></Suspense>} />
       </Route>
     </Routes>
   );

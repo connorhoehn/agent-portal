@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as rds from 'aws-cdk-lib/aws-rds';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as cr from 'aws-cdk-lib/custom-resources';
 import type { Construct } from 'constructs';
 
@@ -116,71 +117,74 @@ export class AuroraStack extends cdk.Stack {
     this.clusterEndpoint = cluster.clusterEndpoint.hostname;
 
     // ---------------------------------------------------------------
-    // Fast-delete: pre-delete the writer instance then the cluster
-    // with SkipFinalSnapshot + DeleteAutomatedBackups before CFN's
-    // own cleanup pass. Turns a 30+ min destroy into ~2 min.
-    //
-    // Delete order (CFN reverses dependencies):
-    //   1. WriterDeleter.onDelete  → DeleteDBInstance
-    //   2. ClusterDeleter.onDelete → DeleteDBCluster (SkipFinalSnapshot)
-    //   3. CFN retains the L2 cluster + instance resources (already gone)
+    // Fast-delete: a polling Lambda that calls DeleteDBCluster with
+    // SkipFinalSnapshot=true and WAITS until the cluster is fully gone
+    // before returning. This ensures CFN's subnet group / param group
+    // cleanup never races against a still-deleting cluster.
     // ---------------------------------------------------------------
 
-    const clusterDeleter = new cr.AwsCustomResource(this, 'ClusterDeleter', {
-      installLatestAwsSdk: false,
-      policy: cr.AwsCustomResourcePolicy.fromStatements([
-        new iam.PolicyStatement({
-          actions: ['rds:DeleteDBCluster', 'rds:DescribeDBClusters'],
-          resources: ['*'],
+    const deleterRole = new iam.Role(this, 'AuroraDeleterRole', {
+      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
+      ],
+      inlinePolicies: {
+        RdsDelete: new iam.PolicyDocument({
+          statements: [new iam.PolicyStatement({
+            actions: ['rds:DeleteDBCluster', 'rds:DescribeDBClusters'],
+            resources: ['*'],
+          })],
         }),
-      ]),
-      onCreate: {
-        service: 'RDS',
-        action: 'describeDBClusters',
-        parameters: { DBClusterIdentifier: cluster.clusterIdentifier },
-        physicalResourceId: cr.PhysicalResourceId.of(`${cluster.clusterIdentifier}-deleter`),
-      },
-      onDelete: {
-        service: 'RDS',
-        action: 'deleteDBCluster',
-        parameters: {
-          DBClusterIdentifier: cluster.clusterIdentifier,
-          SkipFinalSnapshot: true,
-          DeleteAutomatedBackups: true,
-        },
-        ignoreErrorCodesMatching: 'DBClusterNotFoundFault',
       },
     });
-    clusterDeleter.node.addDependency(cluster);
 
-    const writerDeleter = new cr.AwsCustomResource(this, 'WriterDeleter', {
-      installLatestAwsSdk: false,
-      policy: cr.AwsCustomResourcePolicy.fromStatements([
-        new iam.PolicyStatement({
-          actions: ['rds:DeleteDBInstance', 'rds:DescribeDBClusters'],
-          resources: ['*'],
-        }),
-      ]),
-      onCreate: {
-        service: 'RDS',
-        action: 'describeDBClusters',
-        parameters: { DBClusterIdentifier: cluster.clusterIdentifier },
-        physicalResourceId: cr.PhysicalResourceId.of(`${cluster.clusterIdentifier}-writer-deleter`),
-      },
-      onDelete: {
-        service: 'RDS',
-        action: 'deleteDBInstance',
-        parameters: {
-          DBInstanceIdentifier: cluster.instanceIdentifiers[0],
-          DeleteAutomatedBackups: true,
-        },
-        ignoreErrorCodesMatching: 'DBInstanceNotFoundFault|InvalidDBInstanceStateFault',
-      },
+    const deleterFn = new lambda.Function(this, 'AuroraDeleterFn', {
+      runtime: lambda.Runtime.PYTHON_3_12,
+      handler: 'index.handler',
+      timeout: cdk.Duration.minutes(14),
+      role: deleterRole,
+      code: lambda.Code.fromInline(`
+import boto3, time
+
+def handler(event, context):
+    if event['RequestType'] != 'Delete':
+        return {'PhysicalResourceId': event.get('PhysicalResourceId', 'aurora-deleter')}
+    cluster_id = event['ResourceProperties']['ClusterId']
+    rds = boto3.client('rds')
+    try:
+        rds.delete_db_cluster(
+            DBClusterIdentifier=cluster_id,
+            SkipFinalSnapshot=True,
+            DeleteAutomatedBackups=True,
+        )
+    except rds.exceptions.DBClusterNotFoundFault:
+        return {'PhysicalResourceId': cluster_id}
+    except Exception as e:
+        if 'DBClusterNotFoundFault' in str(e):
+            return {'PhysicalResourceId': cluster_id}
+        raise
+    for _ in range(80):
+        time.sleep(10)
+        try:
+            rds.describe_db_clusters(DBClusterIdentifier=cluster_id)
+        except Exception as e:
+            if 'DBClusterNotFoundFault' in str(e) or 'not found' in str(e).lower():
+                return {'PhysicalResourceId': cluster_id}
+    raise Exception(f'Timed out waiting for cluster {cluster_id} to delete')
+`),
     });
-    // writerDeleter depends on clusterDeleter → writerDeleter is deleted FIRST
-    writerDeleter.node.addDependency(clusterDeleter);
 
-    // Tell CFN to skip its own delete of the cluster/writer — already gone
+    const auroraDeleter = new cdk.CustomResource(this, 'AuroraFastDeleter', {
+      serviceToken: new cr.Provider(this, 'AuroraDeleterProvider', {
+        onEventHandler: deleterFn,
+      }).serviceToken,
+      properties: { ClusterId: cluster.clusterIdentifier },
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+    auroraDeleter.node.addDependency(cluster);
+
+    // CFN retains the L2 cluster + writer — already deleted by the time
+    // CFN's cleanup pass runs, so skipping them avoids a double-delete error
     (cluster.node.defaultChild as rds.CfnDBCluster).applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
     const cfnWriter = cluster.node.findChild('writer').node.findChild('Resource') as rds.CfnDBInstance;
     cfnWriter.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
