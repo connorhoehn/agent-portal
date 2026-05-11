@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { path: '/ingest', label: 'Ingest' },
   { path: '/observability', label: 'Observability' },
   { path: '/capabilities', label: 'Capabilities' },
+  { path: '/code-interpreter', label: 'Code Interpreter' },
 ];
 
 export function Layout() {

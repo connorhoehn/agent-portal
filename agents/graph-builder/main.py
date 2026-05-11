@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import time
 
 import boto3
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
@@ -15,9 +16,11 @@ AURORA_SECRET_ARN = os.environ.get("AURORA_SECRET_ARN", "")
 DB_NAME = os.environ.get("PROJECT_PREFIX", "orgiq")
 MODEL_ID = os.environ.get("MODEL_ID", "amazon.nova-pro-v1:0")
 EMBED_MODEL = "amazon.titan-embed-text-v2:0"
+CODE_INTERPRETER_ID = os.environ.get("CODE_INTERPRETER_ID", "")
 
 _rds = boto3.client("rds-data", region_name=REGION)
 _bedrock_runtime = boto3.client("bedrock-runtime", region_name=REGION)
+_agentcore_data = boto3.client("bedrock-agentcore", region_name=REGION)
 
 # Each relationship label maps to the edge table that stores it.
 # Cross-checked with schema/orgiq_schema.sql.
@@ -368,6 +371,71 @@ JSON:"""
     })
 
 
+@tool
+def run_in_sandbox(python_code: str) -> str:
+    """Execute a Python snippet inside the AgentCore code-interpreter sandbox.
+
+    Use this for data transformation, text parsing, regex extraction, JSON
+    reshaping, or any computation that's cleaner in Python than SQL. The
+    sandbox has Python 3 + numpy/pandas but NO network or database access —
+    embed any input data as constants inside the code and use print() to
+    surface results.
+
+    Args:
+        python_code: A complete Python program. Use print() to surface results.
+    Returns:
+        JSON with the captured stdout, or an error message.
+    """
+    if not CODE_INTERPRETER_ID:
+        return json.dumps({"error": "CODE_INTERPRETER_ID env var is missing — sandbox unavailable"})
+
+    session_id = ""
+    try:
+        start = _agentcore_data.start_code_interpreter_session(
+            codeInterpreterIdentifier=CODE_INTERPRETER_ID,
+            name=f"graph-builder-sandbox-{int(time.time())}",
+        )
+        session_id = start.get("sessionId", "")
+
+        resp = _agentcore_data.invoke_code_interpreter(
+            codeInterpreterIdentifier=CODE_INTERPRETER_ID,
+            sessionId=session_id,
+            name="executeCode",
+            arguments={"code": python_code, "language": "python"},
+        )
+
+        chunks: list[str] = []
+        for event in resp.get("stream", []) or []:
+            if not isinstance(event, dict):
+                continue
+            if "result" in event:
+                r = event["result"]
+                if isinstance(r, dict):
+                    for content in r.get("content", []) or []:
+                        if isinstance(content, dict) and "text" in content:
+                            chunks.append(content["text"])
+                        else:
+                            chunks.append(json.dumps(content, default=str))
+                else:
+                    chunks.append(str(r))
+            elif "output" in event:
+                chunks.append(json.dumps(event["output"], default=str))
+
+        output = "\n".join(chunks).strip() or "(no stdout)"
+        return json.dumps({"sessionId": session_id, "output": output})
+    except Exception as e:
+        return json.dumps({"error": f"sandbox error: {e}", "sessionId": session_id})
+    finally:
+        if session_id:
+            try:
+                _agentcore_data.stop_code_interpreter_session(
+                    codeInterpreterIdentifier=CODE_INTERPRETER_ID,
+                    sessionId=session_id,
+                )
+            except Exception:
+                pass
+
+
 def _model_kwargs() -> dict:
     kw: dict = {"model_id": MODEL_ID}
     gid = os.environ.get("GUARDRAIL_ID", "")
@@ -384,6 +452,7 @@ _agent = Agent(
     tools=[
         merge_person, merge_skill, merge_team, merge_project,
         merge_relationship, embed_and_store, extract_and_build,
+        run_in_sandbox,
     ],
     system_prompt=(
         "You are the OrgIQ Graph-Builder agent. Build and maintain the organizational "
@@ -391,6 +460,9 @@ _agent = Agent(
         "Primary workflow: extract_and_build(document_text) handles the full pipeline.\n"
         "For targeted edits: use merge_person, merge_skill, merge_team, merge_project, "
         "merge_relationship directly.\n\n"
+        "Use run_in_sandbox for any data transformation or parsing that's cleaner in "
+        "Python — e.g. deduplication logic, regex extraction, JSON reshaping before "
+        "feeding into merge_* tools. Embed input data as inline constants.\n\n"
         "Critical rules:\n"
         "- All writes are idempotent (INSERT ... ON CONFLICT DO UPDATE)\n"
         "- Use lowercase_underscore slugs for all node IDs\n"

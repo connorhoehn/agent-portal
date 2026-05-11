@@ -9,6 +9,7 @@ const IngestPage = lazy(() => import('./pages/IngestPage'));
 const ObservabilityPage = lazy(() => import('./pages/ObservabilityPage'));
 const InvokePage = lazy(() => import('./pages/InvokePage'));
 const CapabilitiesPage = lazy(() => import('./pages/CapabilitiesPage'));
+const CodeInterpreterDemoPage = lazy(() => import('./pages/CodeInterpreterDemoPage'));
 const ExplorePage = lazy(() => import('./pages/ExplorePage'));
 
 function Loading() {
@@ -28,6 +29,7 @@ export function App() {
         <Route path="ingest" element={<Suspense fallback={<Loading />}><IngestPage /></Suspense>} />
         <Route path="observability" element={<Suspense fallback={<Loading />}><ObservabilityPage /></Suspense>} />
         <Route path="capabilities" element={<Suspense fallback={<Loading />}><CapabilitiesPage /></Suspense>} />
+        <Route path="code-interpreter" element={<Suspense fallback={<Loading />}><CodeInterpreterDemoPage /></Suspense>} />
         <Route path="explore" element={<Suspense fallback={<Loading />}><ExplorePage /></Suspense>} />
       </Route>
     </Routes>
