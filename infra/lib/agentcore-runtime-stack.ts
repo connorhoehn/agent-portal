@@ -14,7 +14,9 @@ export interface AgentCoreRuntimeStackProps extends cdk.StackProps {
   readonly knowledgeBaseId: string;
   readonly modelId?: string;
   readonly codeInterpreterId?: string;
+  readonly codeInterpreterArn?: string;
   readonly browserId?: string;
+  readonly browserArn?: string;
   readonly browserProfileId?: string;
 }
 
@@ -183,6 +185,45 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
         value: runtime.attrAgentRuntimeId,
         exportName: `${prefix}-${agentName}-runtime-id`,
       });
+    }
+
+    // Grant capability access to the appropriate agent roles now that both
+    // AgentsStack (roles) and AgentCoreCapabilitiesStack (ARNs) are resolved.
+    // These grants live here to avoid a cross-stack dependency cycle.
+    if (props.codeInterpreterArn) {
+      for (const agentName of ['graph-builder', 'scoring'] as const) {
+        props.agentRoles[agentName]?.addToPolicy(new iam.PolicyStatement({
+          sid: 'CodeInterpreterInvoke',
+          actions: [
+            'bedrock-agentcore:InvokeCodeInterpreter',
+            'bedrock-agentcore:StartCodeInterpreterSession',
+            'bedrock-agentcore:StopCodeInterpreterSession',
+            'bedrock-agentcore:ExecuteCodeInterpreterCode',
+            'bedrock-agentcore:ListCodeInterpreterSessions',
+          ],
+          resources: [props.codeInterpreterArn],
+        }));
+      }
+    }
+
+    if (props.browserArn) {
+      for (const agentName of ['supervisor', 'search', 'advisor'] as const) {
+        props.agentRoles[agentName]?.addToPolicy(new iam.PolicyStatement({
+          sid: 'BrowserInvoke',
+          actions: [
+            'bedrock-agentcore:InvokeBrowser',
+            'bedrock-agentcore:StartBrowserSession',
+            'bedrock-agentcore:StopBrowserSession',
+            'bedrock-agentcore:TakeBrowserScreenshot',
+            'bedrock-agentcore:ClickBrowserElement',
+            'bedrock-agentcore:SendKeystrokesToBrowser',
+            'bedrock-agentcore:ScrollBrowserElement',
+            'bedrock-agentcore:NavigateBrowserToPage',
+            'bedrock-agentcore:GetBrowserPageSource',
+          ],
+          resources: [props.browserArn],
+        }));
+      }
     }
 
     new cdk.CfnOutput(this, 'ModelId', {

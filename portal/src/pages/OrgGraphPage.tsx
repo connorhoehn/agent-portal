@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card } from '@connorhoehn/ui-components';
+import { Card } from '@connorhoehnslalom/ui-components';
 import { OrgGraph } from '../components/org-graph';
 import type { GraphPerson } from '../components/org-graph';
 import { useFetch } from '../hooks/useFetch';

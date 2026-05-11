@@ -598,7 +598,7 @@ portal/
 | IaC (agents) | **AgentCore CLI** | Manages Runtime, Gateway, Memory, Policy lifecycle |
 | Middleware | **Express + distributed-core** | AG-UI SSE proxy, WebSocket bridge, Neptune client |
 | Frontend | **React 19 + Vite 7** | Matches ui-components, uses @xyflow/react for graphs |
-| Component library | **@connorhoehn/ui-components** | Node editor, observability, ingest, social, hooks |
+| Component library | **@connorhoehnslalom/ui-components** | Node editor, observability, ingest, social, hooks |
 | Local dev | **docker-compose** | jupyter + middleware + portal, hot-reload volumes |
 | Agent containers | **Multistage Docker** (uv + python:3.12-slim) | ARM64, non-root, OTEL instrumented |
 
@@ -714,7 +714,7 @@ separately and deployed to AgentCore Runtime via `agentcore deploy`.
 
 ### Dependency setup
 
-Portal needs access to `@connorhoehn/ui-components` from GitHub Packages:
+Portal needs access to `@connorhoehnslalom/ui-components` from GitHub Packages:
 ```bash
 # portal/.npmrc
 @connorhoehn:registry=https://npm.pkg.github.com

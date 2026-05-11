@@ -141,19 +141,9 @@ const allowedOauth2ReturnUrls = portalUrl
 const agentCoreCapabilities = new AgentCoreCapabilitiesStack(app, 'OrgIQ-AgentCoreCapabilities', {
   env,
   prefix,
-  codeInterpreterAgentRoles: [
-    agents.agentRoles['graph-builder'],
-    agents.agentRoles['scoring'],
-  ],
-  browserAgentRoles: [
-    agents.agentRoles['supervisor'],
-    agents.agentRoles['search'],
-    agents.agentRoles['advisor'],
-  ],
   allowedOauth2ReturnUrls,
   description: 'OrgIQ AgentCore Capabilities: Code Interpreter, Browser, Workload Identity',
 });
-agentCoreCapabilities.addDependency(agents);
 
 // -------------------------------------------------------------------
 // Stack 10: AgentCore Runtime (6 agent runtimes)
@@ -168,7 +158,9 @@ const agentCoreRuntime = new AgentCoreRuntimeStack(app, 'OrgIQ-AgentCoreRuntime'
   auroraCredentialsSecretArn: aurora.credentialsSecretArn,
   knowledgeBaseId: knowledgeBase.knowledgeBaseId,
   codeInterpreterId: agentCoreCapabilities.codeInterpreterId,
+  codeInterpreterArn: agentCoreCapabilities.codeInterpreterArn,
   browserId: agentCoreCapabilities.browserId,
+  browserArn: agentCoreCapabilities.browserArn,
   browserProfileId: agentCoreCapabilities.browserProfileId,
   description: 'OrgIQ AgentCore Runtime: 6 agent runtimes with lifecycle and endpoint config',
 });

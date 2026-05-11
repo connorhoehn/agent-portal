@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, PageSection, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip } from '@connorhoehn/ui-components';
+import { Card, PageSection, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip } from '@connorhoehnslalom/ui-components';
 import { useFetch } from '../hooks/useFetch';
 
 // ─── Types ────────────────────────────────────────────────────────────────────

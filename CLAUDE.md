@@ -85,7 +85,7 @@ Requires `~/.aws` credentials via SSO. Run `aws sso login --profile bedrock` fir
 ## Existing project dependencies
 
 - **ui-components** (`~/projects/ui-components`): Published to GitHub Packages as
-  `@connorhoehn/ui-components`. Portal consumes via `.npmrc` with GitHub token.
+  `@connorhoehnslalom/ui-components`. Portal consumes via `.npmrc` with GitHub token.
   Peer deps: react 19, @xyflow/react 12, recharts 3, yjs 13, @tiptap/react 3.
 
 - **distributed-core** (`~/projects/distributed-core`): WebSocketAdapter + EventBus.
@@ -98,7 +98,7 @@ If you need new features in those packages, note it as a TODO — don't cross-re
 ## Portal .npmrc setup
 
 ```
-@connorhoehn:registry=https://npm.pkg.github.com
+@connorhoehnslalom:registry=https://npm.pkg.github.com
 //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
 ```
 
@@ -148,4 +148,4 @@ cd agents/search && agentcore dev "Find Kubernetes experts"
 - Titan Embeddings V2 dimension must be specified at embedding time AND match Neptune/OpenSearch config.
 - OpenSearch Serverless has 2 OCU minimum billing even when idle. Budget alarm is critical.
 - Neptune Analytics billing is per-NCU-hour even when idle. Shut down via CDK destroy when not in use.
-- `@connorhoehn/ui-components` requires `GITHUB_TOKEN` env var for npm install to work.
+- `@connorhoehnslalom/ui-components` requires `GITHUB_TOKEN` env var for npm install to work.

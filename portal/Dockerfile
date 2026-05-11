@@ -8,9 +8,10 @@ FROM node:20-slim AS deps
 WORKDIR /app
 
 ARG GITHUB_TOKEN
-RUN printf "@connorhoehn:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=%s\n" "${GITHUB_TOKEN}" > .npmrc
+RUN printf "@connorhoehnslalom:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=%s\n" "${GITHUB_TOKEN}" > .npmrc
 
 COPY package.json ./
+RUN npm config set strict-ssl false
 RUN --mount=type=cache,target=/root/.npm \
     npm install && rm -f .npmrc
 

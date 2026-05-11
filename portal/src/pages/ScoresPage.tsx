@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
-import { Card, PageSection, Table, TableHead, TableBody, TableRow, TableTh, TableTd } from '@connorhoehn/ui-components';
+import { Card, PageSection, Table, TableHead, TableBody, TableRow, TableTh, TableTd } from '@connorhoehnslalom/ui-components';
 import { useFetch } from '../hooks/useFetch';
 
 interface ScoreEntry {

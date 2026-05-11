@@ -5,10 +5,6 @@ import type { Construct } from 'constructs';
 
 export interface AgentCoreCapabilitiesStackProps extends cdk.StackProps {
   readonly prefix?: string;
-  /** Agent roles that should get code interpreter access (graph-builder, scoring) */
-  readonly codeInterpreterAgentRoles: iam.IRole[];
-  /** Agent roles that should get browser access (supervisor, search, advisor) */
-  readonly browserAgentRoles: iam.IRole[];
   /** OAuth2 return URLs for the workload identity (portal + middleware) */
   readonly allowedOauth2ReturnUrls?: string[];
 }
@@ -83,21 +79,6 @@ export class AgentCoreCapabilitiesStack extends cdk.Stack {
     this.codeInterpreterId = codeInterpreter.attrCodeInterpreterId;
     this.codeInterpreterArn = codeInterpreter.attrCodeInterpreterArn;
 
-    // Grant code interpreter usage to graph-builder and scoring agents
-    for (const role of props.codeInterpreterAgentRoles) {
-      role.addToPrincipalPolicy(new iam.PolicyStatement({
-        sid: 'CodeInterpreterInvoke',
-        actions: [
-          'bedrock-agentcore:InvokeCodeInterpreter',
-          'bedrock-agentcore:StartCodeInterpreterSession',
-          'bedrock-agentcore:StopCodeInterpreterSession',
-          'bedrock-agentcore:ExecuteCodeInterpreterCode',
-          'bedrock-agentcore:ListCodeInterpreterSessions',
-        ],
-        resources: [codeInterpreter.attrCodeInterpreterArn],
-      }));
-    }
-
     // -------------------------------------------------------------------
     // Browser — headless web browser for web research
     // -------------------------------------------------------------------
@@ -112,7 +93,6 @@ export class AgentCoreCapabilitiesStack extends cdk.Stack {
     this.browserId = browser.attrBrowserId;
     this.browserArn = browser.attrBrowserArn;
 
-    // Browser profile — persists session cookies, bookmarks, and preferences
     const browserProfile = new bedrockagentcore.CfnBrowserProfile(this, 'BrowserProfile', {
       name: `${prefix}-browser-profile`,
       description: 'OrgIQ default browser profile for persistent session state',
@@ -120,25 +100,6 @@ export class AgentCoreCapabilitiesStack extends cdk.Stack {
     browserProfile.node.addDependency(browser);
 
     this.browserProfileId = browserProfile.attrProfileId;
-
-    // Grant browser usage to supervisor, search, and advisor agents
-    for (const role of props.browserAgentRoles) {
-      role.addToPrincipalPolicy(new iam.PolicyStatement({
-        sid: 'BrowserInvoke',
-        actions: [
-          'bedrock-agentcore:InvokeBrowser',
-          'bedrock-agentcore:StartBrowserSession',
-          'bedrock-agentcore:StopBrowserSession',
-          'bedrock-agentcore:TakeBrowserScreenshot',
-          'bedrock-agentcore:ClickBrowserElement',
-          'bedrock-agentcore:SendKeystrokesToBrowser',
-          'bedrock-agentcore:ScrollBrowserElement',
-          'bedrock-agentcore:NavigateBrowserToPage',
-          'bedrock-agentcore:GetBrowserPageSource',
-        ],
-        resources: [browser.attrBrowserArn],
-      }));
-    }
 
     // -------------------------------------------------------------------
     // Workload Identity — OIDC/OAuth2 token federation
