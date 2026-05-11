@@ -99,20 +99,16 @@ export class AgentCoreTelemetryStack extends cdk.Stack {
     });
 
     // -------------------------------------------------------------------
-    // Pre-create CloudWatch Log Groups for AgentCore runtimes
-    // (runtimes create their own groups on first start, but pre-creating
-    //  lets the dashboard and evaluation configs reference them immediately)
+    // CloudWatch Log Group retention — AgentCore Runtime creates the groups
+    // automatically on first invocation; we apply retention policy only.
     // -------------------------------------------------------------------
 
-    const runtimeLogGroups: logs.LogGroup[] = [];
     for (const agentName of AGENT_NAMES) {
       const safeAgent = agentName.replace(/-/g, '_');
-      const lg = new logs.LogGroup(this, `${this.pascal(agentName)}LogGroup`, {
+      new logs.LogRetention(this, `${this.pascal(agentName)}LogRetention`, {
         logGroupName: `/aws/bedrock-agentcore/runtimes/${prefix}_${safeAgent}`,
         retention: logs.RetentionDays.ONE_MONTH,
-        removalPolicy: cdk.RemovalPolicy.RETAIN,
       });
-      runtimeLogGroups.push(lg);
     }
 
     // -------------------------------------------------------------------
