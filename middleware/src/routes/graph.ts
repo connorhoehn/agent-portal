@@ -1,27 +1,17 @@
 import { Router } from 'express';
-import { mockPeople, mockRelationships, departments } from '../mock/people.js';
+import { aurora } from '../providers/index.js';
+import { asyncHandler } from '../lib/async-handler.js';
 
 export const graphRouter = Router();
 
-graphRouter.get('/entities', (_req, res) => {
-  res.json({
-    nodes: mockPeople,
-    edges: mockRelationships,
-    departments,
-  });
-});
+graphRouter.get('/entities', asyncHandler(async (_req, res) => {
+  const snapshot = await aurora.fetchGraph();
+  res.json(snapshot);
+}));
 
-graphRouter.get('/people/:personId', (req, res) => {
-  const person = mockPeople.find(p => p.id === req.params['personId']);
-  if (!person) { res.status(404).json({ error: 'Person not found' }); return; }
-
-  const connections = mockRelationships
-    .filter(r => r.source === person.id || r.target === person.id)
-    .map(r => {
-      const otherId = r.source === person.id ? r.target : r.source;
-      const other = mockPeople.find(p => p.id === otherId);
-      return { ...r, otherPerson: other ? { id: other.id, name: other.name, title: other.title } : null };
-    });
-
-  res.json({ ...person, connections });
-});
+graphRouter.get('/people/:personId', asyncHandler(async (req, res) => {
+  const personId = req.params['personId'];
+  const detail = typeof personId === 'string' ? await aurora.fetchPersonGraph(personId) : null;
+  if (!detail) { res.status(404).json({ error: 'Person not found' }); return; }
+  res.json(detail);
+}));

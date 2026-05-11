@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@connorhoehnslalom/ui-components": "^2.0.0",
+    "@connorhoehnslalom/ui-components": "github:connorhoehnslalom/ui-components#main",
     "@xyflow/react": "^12.10.0",
     "amazon-cognito-identity-js": "^6.3.16",
     "d3-force": "^3.0.0",

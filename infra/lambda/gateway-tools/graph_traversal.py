@@ -1,71 +1,79 @@
 """
-MCP Gateway Lambda tool: Graph Traversal
+MCP Gateway Lambda tool: Graph Traversal (Aurora SQL backend).
 
-Executes openCypher queries against the OrgIQ Neptune Analytics graph.
-Supports parameterized queries and query plan explanation.
+Executes read-only SQL queries against the OrgIQ relational graph in Aurora
+(see schema/orgiq_schema.sql) via the RDS Data API. Mirrors the previous
+Cypher-based tool — the calling agent now writes SQL JOINs instead of MATCH.
 """
 
 import json
 import os
+import re
 
 import boto3
 
-NEPTUNE_GRAPH_ID = os.environ['NEPTUNE_GRAPH_ID']
+AURORA_CLUSTER_ARN = os.environ['AURORA_CLUSTER_ARN']
+AURORA_SECRET_ARN = os.environ['AURORA_SECRET_ARN']
+DB_NAME = os.environ.get('PROJECT_PREFIX', 'orgiq')
 REGION = os.environ.get('REGION', 'us-east-1')
 
-neptune = boto3.client('neptune-graph', region_name=REGION)
+_rds = boto3.client('rds-data', region_name=REGION)
+
+_READONLY_RE = re.compile(r'^\s*(WITH|SELECT|EXPLAIN)\b', re.IGNORECASE)
+
+
+def _records_to_dicts(resp: dict) -> list:
+    cols = [c.get('name', f'col{i}') for i, c in enumerate(resp.get('columnMetadata', []))]
+    out = []
+    for record in resp.get('records', []):
+        row = {}
+        for col, cell in zip(cols, record):
+            row[col] = list(cell.values())[0] if cell else None
+        out.append(row)
+    return out
 
 
 def handler(event: dict, context) -> dict:
-    """Handle MCP tool invocation for graph traversal queries."""
     body = event if isinstance(event, dict) else json.loads(event)
 
-    query = body['query']
+    sql = body.get('sql') or body.get('query', '')
     parameters = body.get('parameters', {})
     explain = body.get('explain', False)
 
-    # Validate query doesn't contain destructive operations unless authorized
-    query_upper = query.upper().strip()
-    destructive_keywords = ['DELETE', 'REMOVE', 'DROP', 'DETACH']
-    for keyword in destructive_keywords:
-        if keyword in query_upper and not query_upper.startswith('MATCH'):
-            return {
-                'statusCode': 403,
-                'body': json.dumps({
-                    'error': f'Destructive operation "{keyword}" not allowed via MCP tool. Use graph-builder agent directly.',
-                }),
-            }
+    if not _READONLY_RE.match(sql) or ';' in sql.strip().rstrip(';'):
+        return {
+            'statusCode': 403,
+            'body': json.dumps({
+                'error': 'Only single read-only SELECT/WITH/EXPLAIN statements are allowed via this MCP tool. Use graph-builder agent for writes.',
+            }),
+        }
 
-    if explain:
-        # Return query execution plan
-        response = neptune.execute_query(
-            graphIdentifier=NEPTUNE_GRAPH_ID,
-            queryString=f'EXPLAIN {query}',
-            language='OPEN_CYPHER',
-            parameters=parameters,
-        )
-    else:
-        # Execute the query
-        response = neptune.execute_query(
-            graphIdentifier=NEPTUNE_GRAPH_ID,
-            queryString=query,
-            language='OPEN_CYPHER',
-            parameters=parameters,
-        )
+    statement = f'EXPLAIN {sql}' if explain and not sql.upper().startswith('EXPLAIN') else sql
 
-    # Parse the response payload
-    payload = response.get('payload')
-    if payload:
-        result_data = json.loads(payload.read().decode('utf-8'))
-    else:
-        result_data = {'results': []}
+    rds_params = [
+        {'name': k, 'value': {'stringValue': str(v)} if not isinstance(v, (int, float, bool)) else (
+            {'longValue': v} if isinstance(v, int) else
+            {'doubleValue': v} if isinstance(v, float) else
+            {'booleanValue': v}
+        )}
+        for k, v in parameters.items()
+    ]
+
+    response = _rds.execute_statement(
+        resourceArn=AURORA_CLUSTER_ARN,
+        secretArn=AURORA_SECRET_ARN,
+        database=DB_NAME,
+        sql=statement,
+        parameters=rds_params,
+        includeResultMetadata=True,
+    )
 
     return {
         'statusCode': 200,
         'body': json.dumps({
-            'query': query,
+            'sql': sql,
             'parameters': parameters,
             'explain': explain,
-            'results': result_data.get('results', []),
-        }),
+            'results': _records_to_dicts(response),
+        }, default=str),
     }

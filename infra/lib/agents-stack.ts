@@ -34,7 +34,7 @@ const AGENT_NAMES = [
 /**
  * OrgIQ-Agents: IAM roles for all 6 AgentCore Runtime agents + Managed Prompts.
  * Each agent gets a specific role with least-privilege access.
- * Graph access uses Aurora + Apache AGE via RDS Data API (replaces Neptune).
+ * Graph access uses Aurora relational tables via RDS Data API (see schema/orgiq_schema.sql).
  */
 export class AgentsStack extends cdk.Stack {
   public readonly agentRoles: Record<string, iam.Role>;
@@ -50,14 +50,14 @@ export class AgentsStack extends cdk.Stack {
     // -------------------------------------------------------------------
 
     const auroraReadStatement = new iam.PolicyStatement({
-      sid: 'AuroraAgeRead',
+      sid: 'AuroraDataApiRead',
       effect: iam.Effect.ALLOW,
       actions: ['rds-data:ExecuteStatement'],
       resources: [props.auroraClusterArn],
     });
 
     const auroraWriteStatement = new iam.PolicyStatement({
-      sid: 'AuroraAgeWrite',
+      sid: 'AuroraDataApiWrite',
       effect: iam.Effect.ALLOW,
       actions: [
         'rds-data:ExecuteStatement',
@@ -139,7 +139,7 @@ export class AgentsStack extends cdk.Stack {
       resources: ['*'],
     }));
 
-    // Search: KB retrieve + Aurora AGE read (Cypher graph queries)
+    // Search: KB retrieve + Aurora read (SQL graph queries via RDS Data API)
     this.agentRoles['search'].addToPolicy(new iam.PolicyStatement({
       sid: 'KnowledgeBaseRetrieve',
       effect: iam.Effect.ALLOW,
@@ -149,7 +149,7 @@ export class AgentsStack extends cdk.Stack {
     this.agentRoles['search'].addToPolicy(auroraReadStatement);
     this.agentRoles['search'].addToPolicy(auroraSecretStatement);
 
-    // Scoring: DynamoDB scores + Aurora AGE read for graph metrics
+    // Scoring: DynamoDB scores + Aurora read+write (in-degree CTE + score update-back)
     this.agentRoles['scoring'].addToPolicy(new iam.PolicyStatement({
       sid: 'ScoresTableAccess',
       effect: iam.Effect.ALLOW,
@@ -162,7 +162,7 @@ export class AgentsStack extends cdk.Stack {
     this.agentRoles['scoring'].addToPolicy(auroraReadStatement);
     this.agentRoles['scoring'].addToPolicy(auroraSecretStatement);
 
-    // Advisor: Aurora AGE read + KB retrieve
+    // Advisor: Aurora read + KB retrieve
     this.agentRoles['advisor'].addToPolicy(auroraReadStatement);
     this.agentRoles['advisor'].addToPolicy(auroraSecretStatement);
     this.agentRoles['advisor'].addToPolicy(new iam.PolicyStatement({
@@ -186,7 +186,7 @@ export class AgentsStack extends cdk.Stack {
       resources: [`${props.artifactsBucketArn}/*`],
     }));
 
-    // Graph-builder: Aurora AGE full write + S3 artifacts read
+    // Graph-builder: Aurora full write + S3 artifacts read
     this.agentRoles['graph-builder'].addToPolicy(auroraWriteStatement);
     this.agentRoles['graph-builder'].addToPolicy(auroraSecretStatement);
     this.agentRoles['graph-builder'].addToPolicy(new iam.PolicyStatement({
@@ -222,34 +222,34 @@ Always cite your sources and indicate which specialist provided the information.
         description: 'System prompt for OrgIQ Search agent - retrieves from KB and graph',
         template: `You are the OrgIQ Search agent. Your role is to:
 1. Search the organizational knowledge base for relevant documents
-2. Query the Aurora + Apache AGE knowledge graph for people, teams, skills, and relationships
-3. Combine vector search results with graph traversal for comprehensive answers
+2. Query the Aurora relational graph (people, skills, teams, projects, decisions + edge tables) via read-only SQL through RDS Data API
+3. Combine vector search results with relational JOIN traversal for comprehensive answers
 4. Return structured results with relevance scores and source citations
 
-Use Cypher queries (via Apache AGE) for graph traversal. Use Knowledge Base retrieve for document search.
-Always return the source of each piece of information (document title, graph path, etc.).`,
+Use query_graph(sql) for relational traversal. Use Knowledge Base retrieve for document search.
+Always return the source of each piece of information (document title, table path, etc.).`,
       },
       scoring: {
         description: 'System prompt for OrgIQ Scoring agent - calculates expertise metrics',
         template: `You are the OrgIQ Scoring agent. Your role is to:
-1. Calculate expertise scores using PageRank, betweenness centrality, and custom algorithms
+1. Calculate expertise scores using weighted in-degree centrality across all edge tables
 2. Maintain score snapshots in DynamoDB for historical tracking
 3. Generate leaderboards by team, skill, or domain
 4. Explain scoring methodology when asked
 
-Scores are stored as properties on Person nodes in the Aurora AGE graph.
+Scores are stored in the people.expertise_score column in Aurora and snapshotted to DynamoDB.
 All scores should be normalized to 0-100 scale.`,
       },
       advisor: {
         description: 'System prompt for OrgIQ Advisor agent - strategic recommendations',
         template: `You are the OrgIQ Advisor agent. Your role is to:
-1. Analyze organizational patterns from the Aurora AGE knowledge graph
+1. Analyze organizational patterns from the Aurora relational graph (nodes + edge tables)
 2. Identify expertise gaps, collaboration opportunities, and knowledge silos
 3. Provide strategic recommendations for team composition and knowledge transfer
 4. Surface hidden connections and potential mentorship pairings
 
 Base all recommendations on graph data and document evidence. Never speculate without data.
-Cite specific graph relationships and document sources.`,
+Cite specific edge traversals (e.g. team_memberships → person_skills) and document sources.`,
       },
       ingestion: {
         description: 'System prompt for OrgIQ Ingestion agent - processes documents',
@@ -266,14 +266,13 @@ Track processing status and report errors for failed documents.`,
         description: 'System prompt for OrgIQ Graph-Builder agent - constructs knowledge graph',
         template: `You are the OrgIQ Graph-Builder agent. Your role is to:
 1. Extract entities and relationships from processed documents
-2. Write Cypher MERGE statements via Apache AGE to build the knowledge graph
-3. Maintain graph schema consistency (Person, Team, Skill, Decision, Project nodes)
+2. Write upsert statements (INSERT ... ON CONFLICT DO UPDATE) via the merge_* tools to maintain the relational graph in Aurora
+3. Maintain schema consistency across node tables (people, skills, teams, projects, decisions) and edge tables (person_skills, team_memberships, collaborations, project_contributions, decision_participants, mentions)
 4. Generate and store vector embeddings for graph nodes (Titan Embeddings V2, 1024d)
 
-IMPORTANT: Use MERGE over CREATE for idempotent graph writes.
-Use Apache AGE Cypher syntax via the Aurora RDS Data API.
-Example: SELECT * FROM ag_catalog.cypher('orgiq_graph', $$ MERGE (p:Person {id: 'alice'}) SET p.name = 'Alice' RETURN p $$) as (p ag_catalog.agtype);
-Embed all node labels and key properties for vector similarity search in pgvector.`,
+IMPORTANT: All writes must be idempotent. Use the supplied tools (merge_person, merge_skill,
+merge_team, merge_project, merge_relationship) rather than constructing raw SQL.
+Embed all node labels and key properties into node_embeddings for vector similarity search.`,
       },
     };
 

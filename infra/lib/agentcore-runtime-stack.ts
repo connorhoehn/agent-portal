@@ -52,7 +52,31 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
     // Phase 1 (default): create ECR repos + execution roles
     // Phase 2 (after images pushed): add CfnRuntime + CfnRuntimeEndpoint
     //   cdk deploy OrgIQ-AgentCoreRuntime --context deployRuntimes=true
+    //
+    // Optionally restrict to a subset of agents whose images are actually in
+    // ECR via --context onlyAgents=supervisor[,search,...]. When unset, all
+    // six runtimes are created (which requires all six images to exist).
     const deployRuntimes = this.node.tryGetContext('deployRuntimes') === 'true';
+    const onlyAgentsCtx = this.node.tryGetContext('onlyAgents') as string | undefined;
+    const onlyAgents = onlyAgentsCtx
+      ? new Set(onlyAgentsCtx.split(',').map(s => s.trim()).filter(Boolean))
+      : null;
+
+    // Shared base image for all 6 agents. Built once via agents/base/build.sh
+    // and pre-loaded with strands-agents + bedrock-agentcore + ag-ui deps, so
+    // per-agent rebuilds become a single COPY layer (<10s).
+    const baseRepo = new ecr.Repository(this, 'AgentBaseRepo', {
+      repositoryName: `${prefix}-agent-base`,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      emptyOnDelete: true,
+      lifecycleRules: [{ maxImageCount: 5 }],
+    });
+
+    new cdk.CfnOutput(this, 'AgentBaseEcrUri', {
+      value: baseRepo.repositoryUri,
+      description: 'ECR URI for shared agent base image — push once via agents/base/build.sh',
+      exportName: `${prefix}-agent-base-ecr-uri`,
+    });
 
     for (const agentName of AGENT_NAMES) {
       const agentRole = props.agentRoles[agentName];
@@ -82,13 +106,25 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
             statements: [
               new iam.PolicyStatement({
                 sid: 'BedrockInvoke',
-                actions: ['bedrock:InvokeModel', 'bedrock:InvokeModelWithResponseStream'],
+                // Converse/ConverseStream/ApplyGuardrail are needed when the
+                // BedrockModel is configured with a guardrail (the SDK calls
+                // bedrock:ApplyGuardrail implicitly inside ConverseStream).
+                actions: [
+                  'bedrock:InvokeModel',
+                  'bedrock:InvokeModelWithResponseStream',
+                  'bedrock:Converse',
+                  'bedrock:ConverseStream',
+                  'bedrock:ApplyGuardrail',
+                ],
                 resources: ['*'],
               }),
               new iam.PolicyStatement({
                 sid: 'EcrAccess',
+                // Agents pull layers from BOTH their per-agent repo and the
+                // shared base image repo. Without baseRepo here, the runtime
+                // fails on layer resolution at container start.
                 actions: ['ecr:BatchGetImage', 'ecr:GetDownloadUrlForLayer'],
-                resources: [repo.repositoryArn],
+                resources: [repo.repositoryArn, baseRepo.repositoryArn],
               }),
               new iam.PolicyStatement({
                 sid: 'EcrAuth',
@@ -138,12 +174,94 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
         }));
       }
 
+      // Data-plane permissions every agent's tools need. Granted to the
+      // execution role (the one the runtime container actually assumes) — the
+      // separate AgentsStack roles are for non-AgentCore-Runtime deployments
+      // and aren't in the call path here.
+      executionRole.addToPolicy(new iam.PolicyStatement({
+        sid: 'AuroraRdsData',
+        actions: [
+          'rds-data:ExecuteStatement',
+          'rds-data:BatchExecuteStatement',
+          'rds-data:BeginTransaction',
+          'rds-data:CommitTransaction',
+          'rds-data:RollbackTransaction',
+        ],
+        resources: [props.auroraClusterArn],
+      }));
+      executionRole.addToPolicy(new iam.PolicyStatement({
+        sid: 'AuroraSecret',
+        actions: ['secretsmanager:GetSecretValue'],
+        resources: [props.auroraCredentialsSecretArn],
+      }));
+      executionRole.addToPolicy(new iam.PolicyStatement({
+        sid: 'KnowledgeBaseRetrieve',
+        actions: [
+          'bedrock:Retrieve',
+          'bedrock:RetrieveAndGenerate',
+        ],
+        resources: [`arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/${props.knowledgeBaseId}`],
+      }));
+      executionRole.addToPolicy(new iam.PolicyStatement({
+        sid: 'S3DocsRead',
+        actions: ['s3:GetObject', 's3:ListBucket'],
+        resources: [
+          `arn:aws:s3:::${prefix}-documents-${this.account}-${this.region}`,
+          `arn:aws:s3:::${prefix}-documents-${this.account}-${this.region}/*`,
+        ],
+      }));
+      executionRole.addToPolicy(new iam.PolicyStatement({
+        sid: 'ScoresTableReadWrite',
+        actions: [
+          'dynamodb:GetItem',
+          'dynamodb:PutItem',
+          'dynamodb:UpdateItem',
+          'dynamodb:Query',
+          'dynamodb:Scan',
+          'dynamodb:BatchGetItem',
+          'dynamodb:BatchWriteItem',
+        ],
+        resources: [`arn:aws:dynamodb:${this.region}:${this.account}:table/${prefix}-scores`],
+      }));
+
+      // Code interpreter — needed by graph-builder + scoring for their
+      // run_in_sandbox tools. Granted to ALL execution roles since it's
+      // cheap and other agents may want it later.
+      if (props.codeInterpreterArn) {
+        executionRole.addToPolicy(new iam.PolicyStatement({
+          sid: 'CodeInterpreterInvoke',
+          actions: [
+            'bedrock-agentcore:InvokeCodeInterpreter',
+            'bedrock-agentcore:StartCodeInterpreterSession',
+            'bedrock-agentcore:StopCodeInterpreterSession',
+            'bedrock-agentcore:GetCodeInterpreterSession',
+            'bedrock-agentcore:ListCodeInterpreterSessions',
+          ],
+          resources: [props.codeInterpreterArn],
+        }));
+      }
+
+      // Browser — needed by supervisor + search + advisor for web research.
+      // Granted to ALL execution roles for similar future-proofing.
+      if (props.browserArn) {
+        executionRole.addToPolicy(new iam.PolicyStatement({
+          sid: 'BrowserInvoke',
+          // The automation stream WebSocket endpoint is gated by a separate
+          // IAM action — grant `bedrock-agentcore:*` on the browser ARN so we
+          // pick up whichever specific action AWS uses for stream access
+          // (likely AccessBrowserSession / ConnectBrowserAutomationStream).
+          actions: ['bedrock-agentcore:*'],
+          resources: [props.browserArn, `${props.browserArn}/*`],
+        }));
+      }
+
       new cdk.CfnOutput(this, `${pascal}EcrUri`, {
         value: repo.repositoryUri,
         description: `ECR URI for ${agentName} — push ARM64 image then redeploy with --context deployRuntimes=true`,
       });
 
       if (!deployRuntimes) continue;
+      if (onlyAgents && !onlyAgents.has(agentName)) continue;
 
       // AgentCore Runtime resource (requires image in ECR)
       const runtime = new bedrockagentcore.CfnRuntime(this, `${pascal}Runtime`, {
@@ -161,6 +279,9 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
           AGENT_NAME: agentName,
           MEMORY_ID: props.memoryId,
           GUARDRAIL_ID: props.guardrailId,
+          // DRAFT means agents always see the latest portal edits without rebuild.
+          // Switch to a numbered version (e.g. "2") for audited rollouts.
+          GUARDRAIL_VERSION: 'DRAFT',
           MODEL_ID: modelId,
           AURORA_CLUSTER_ARN: props.auroraClusterArn,
           AURORA_SECRET_ARN: props.auroraCredentialsSecretArn,

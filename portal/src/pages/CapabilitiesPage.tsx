@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, PageSection, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip } from '@connorhoehnslalom/ui-components';
+import { Card, PageSection, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -94,8 +94,16 @@ function CapabilitiesPage() {
 
 // ─── Guardrails Tab ───────────────────────────────────────────────────────────
 
+interface GuardrailMetrics {
+  totalInvocations: number;
+  totalInterventions: number;
+  interventionRate: string;
+  series: Array<{ timestamp: string; invocations: number; interventions: number }>;
+}
+
 function GuardrailsTab() {
   const { data: guardrail, refresh } = useFetch<Guardrail>('/api/capabilities/guardrail', 30000);
+  const { data: metrics } = useFetch<GuardrailMetrics>('/api/capabilities/guardrail/metrics?hours=24', 60000);
   const [newTopic, setNewTopic] = useState({ name: '', definition: '' });
   const [addingTopic, setAddingTopic] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -114,6 +122,14 @@ function GuardrailsTab() {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled }),
+    });
+    refresh();
+  }
+
+  async function removeTopic(name: string) {
+    if (!confirm(`Delete denied topic "${name}"? This persists to AWS immediately.`)) return;
+    await fetch(`/api/capabilities/guardrail/topics/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
     });
     refresh();
   }
@@ -157,6 +173,31 @@ function GuardrailsTab() {
             <div style={{ fontSize: 16, fontWeight: 600 }}>{(guardrail.relevanceThreshold * 100).toFixed(0)}%</div>
           </div>
         </div>
+      </Card>
+
+      {/* Metrics — last 24h */}
+      <Card padding="md">
+        <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
+          Activity (last 24h){' '}
+          <span style={{ fontWeight: 400, fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+            from AWS/Bedrock metrics
+          </span>
+        </h2>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 16 }}>
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>INVOCATIONS</div>
+            <div style={{ fontSize: 20, fontWeight: 600 }}>{metrics?.totalInvocations ?? 0}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>INTERVENTIONS</div>
+            <div style={{ fontSize: 20, fontWeight: 600 }}>{metrics?.totalInterventions ?? 0}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>RATE</div>
+            <div style={{ fontSize: 20, fontWeight: 600 }}>{metrics?.interventionRate ?? '0.0'}%</div>
+          </div>
+        </div>
+        <MetricsSparkline series={metrics?.series ?? []} />
       </Card>
 
       {/* PII Filters */}
@@ -241,6 +282,7 @@ function GuardrailsTab() {
               <TableTh>Topic</TableTh>
               <TableTh>Definition</TableTh>
               <TableTh>Enabled</TableTh>
+              <TableTh></TableTh>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -250,6 +292,15 @@ function GuardrailsTab() {
                 <TableTd style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{topic.definition}</TableTd>
                 <TableTd>
                   <Toggle value={topic.enabled} onChange={v => toggleTopic(topic.name, v)} />
+                </TableTd>
+                <TableTd>
+                  <button
+                    onClick={() => removeTopic(topic.name)}
+                    aria-label={`Remove ${topic.name}`}
+                    style={{ fontSize: 11, padding: '2px 8px', background: 'none', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
+                  >
+                    Remove
+                  </button>
                 </TableTd>
               </TableRow>
             ))}
@@ -265,6 +316,38 @@ function GuardrailsTab() {
 function CodeInterpreterTab() {
   const { data, refresh } = useFetch<{ sessions: CodeSession[] }>('/api/capabilities/code-sessions', 10000);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [code, setCode] = useState<string>(`# Sandbox starts fresh each run — no network, but has numpy/pandas.
+import statistics
+nums = [12, 47, 23, 91, 56, 34, 78, 19, 65, 88]
+print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`);
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<{ output: string; durationMs: number; sessionId: string; error?: string } | null>(null);
+
+  async function runCode() {
+    setRunning(true);
+    // NB: don't clear result here — keep the previous output visible while we
+    // wait so the panel doesn't flicker / appear to vanish between runs.
+    try {
+      const r = await fetch('/api/capabilities/code-interpreter/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, language: 'python' }),
+      });
+      const body = await r.json();
+      setResult(body);
+    } catch (e) {
+      setResult({ output: '', durationMs: 0, sessionId: '', error: (e as Error).message });
+    } finally {
+      setRunning(false);
+      // We don't refresh() the sessions list here — the 10s poll picks it up
+      // naturally, and a fast refresh just re-renders the Active Sessions
+      // card right under the result, pushing it off-screen.
+    }
+  }
+
+  function clearResult() {
+    setResult(null);
+  }
 
   async function terminateSession(sessionId: string) {
     await fetch(`/api/capabilities/code-sessions/${sessionId}`, { method: 'DELETE' });
@@ -281,6 +364,60 @@ function CodeInterpreterTab() {
         <StatCard label="Idle Sessions" value={String(sessions.filter(s => s.status === 'IDLE').length)} />
         <StatCard label="Total Executions" value={String(sessions.reduce((a, s) => a + s.executionCount, 0))} />
       </div>
+
+      <Card padding="md">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <h2 style={{ fontSize: 14, fontWeight: 600 }}>
+            Run Python{' '}
+            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 400 }}>
+              isolated AgentCore sandbox · no network · ~$0.10/hr while running
+            </span>
+          </h2>
+          <button
+            onClick={runCode}
+            disabled={running || !code.trim()}
+            style={{ padding: '6px 18px', fontSize: 12, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-sm)', cursor: running ? 'wait' : 'pointer', opacity: running ? 0.6 : 1 }}
+          >
+            {running ? 'Running…' : 'Run'}
+          </button>
+        </div>
+        <textarea
+          value={code}
+          onChange={e => setCode(e.target.value)}
+          spellCheck={false}
+          style={{
+            width: '100%', minHeight: 160, padding: 12, fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+            border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)',
+            background: 'var(--color-surface)', color: 'var(--color-text-primary)', resize: 'vertical', outline: 'none',
+          }}
+        />
+        {result && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                {result.error ? (
+                  <span style={{ color: 'var(--color-danger, #dc2626)' }}>Error · {result.durationMs}ms</span>
+                ) : (
+                  <>Output · {result.durationMs}ms{result.sessionId ? <> · <code>{result.sessionId}</code></> : null}</>
+                )}
+              </div>
+              <button
+                onClick={clearResult}
+                style={{ fontSize: 11, padding: '2px 8px', background: 'none', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
+              >
+                Clear
+              </button>
+            </div>
+            <pre style={{
+              margin: 0, padding: 12, fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+              background: result.error ? '#fef2f2' : 'var(--color-surface-hover)',
+              color: result.error ? '#991b1b' : 'var(--color-text-primary)',
+              border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)',
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 240, overflow: 'auto',
+            }}>{result.error ?? result.output}</pre>
+          </div>
+        )}
+      </Card>
 
       {active.length === 0 ? (
         <Card padding="md">
@@ -343,9 +480,19 @@ function BrowserTab() {
   const [newSessionAgent, setNewSessionAgent] = useState('');
   const [newSessionUrl, setNewSessionUrl] = useState('');
   const [launching, setLaunching] = useState(false);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [navUrl, setNavUrl] = useState('https://example.com');
+  const [navigating, setNavigating] = useState(false);
+  const [screenshotDataUrl, setScreenshotDataUrl] = useState<string | null>(null);
+  const [screenshotting, setScreenshotting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   async function closeSession(sessionId: string) {
     await fetch(`/api/capabilities/browser-sessions/${sessionId}`, { method: 'DELETE' });
+    if (selectedSessionId === sessionId) {
+      setSelectedSessionId(null);
+      setScreenshotDataUrl(null);
+    }
     refresh();
   }
 
@@ -361,6 +508,53 @@ function BrowserTab() {
     setNewSessionUrl('');
     setLaunching(false);
     refresh();
+  }
+
+  async function navigate() {
+    if (!selectedSessionId || !navUrl) return;
+    setNavigating(true);
+    setActionError(null);
+    try {
+      const r = await fetch(`/api/capabilities/browser-sessions/${selectedSessionId}/navigate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: navUrl }),
+      });
+      if (!r.ok) {
+        const body = await r.text();
+        setActionError(`Navigate failed: ${body}`);
+      } else {
+        // Auto-screenshot after navigate so the user sees the page
+        await screenshot();
+      }
+    } catch (e) {
+      setActionError(`Navigate error: ${(e as Error).message}`);
+    } finally {
+      setNavigating(false);
+      refresh();
+    }
+  }
+
+  async function screenshot() {
+    if (!selectedSessionId) return;
+    setScreenshotting(true);
+    setActionError(null);
+    try {
+      const r = await fetch(`/api/capabilities/browser-sessions/${selectedSessionId}/screenshot`, {
+        method: 'POST',
+      });
+      if (!r.ok) {
+        const body = await r.text();
+        setActionError(`Screenshot failed: ${body}`);
+      } else {
+        const body = await r.json();
+        setScreenshotDataUrl(body.imageDataUrl ?? null);
+      }
+    } catch (e) {
+      setActionError(`Screenshot error: ${(e as Error).message}`);
+    } finally {
+      setScreenshotting(false);
+    }
   }
 
   const sessions = data?.sessions ?? [];
@@ -421,33 +615,98 @@ function BrowserTab() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {open.map(session => (
-                <TableRow key={session.sessionId}>
-                  <TableTd style={{ fontWeight: 500 }}>{session.agentName}</TableTd>
-                  <TableTd><Chip tone={statusTone(session.status)} size="xs">{session.status}</Chip></TableTd>
-                  <TableTd style={{ fontSize: 11, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {session.currentUrl === 'about:blank' ? <span style={{ color: 'var(--color-text-tertiary)' }}>—</span> : (
-                      <a href={session.currentUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>
-                        {session.currentUrl}
-                      </a>
-                    )}
-                  </TableTd>
-                  <TableTd>{session.requestCount}</TableTd>
-                  <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{formatAge(session.lastActivityAt)}</TableTd>
-                  <TableTd>
-                    <button
-                      onClick={() => closeSession(session.sessionId)}
-                      style={{ fontSize: 11, padding: '2px 8px', background: 'none', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
-                    >
-                      Close
-                    </button>
-                  </TableTd>
-                </TableRow>
-              ))}
+              {open.map(session => {
+                const isSelected = session.sessionId === selectedSessionId;
+                return (
+                  <TableRow
+                    key={session.sessionId}
+                    onClick={() => {
+                      setSelectedSessionId(session.sessionId);
+                      setScreenshotDataUrl(null);
+                      setActionError(null);
+                    }}
+                    style={{
+                      cursor: 'pointer',
+                      background: isSelected ? 'var(--color-surface-hover, #f3f4f6)' : undefined,
+                    } as any}
+                  >
+                    <TableTd style={{ fontWeight: 500 }}>{session.agentName}</TableTd>
+                    <TableTd><Chip tone={statusTone(session.status)} size="xs">{session.status}</Chip></TableTd>
+                    <TableTd style={{ fontSize: 11, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {session.currentUrl === 'about:blank' ? <span style={{ color: 'var(--color-text-tertiary)' }}>—</span> : (
+                        <a href={session.currentUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>
+                          {session.currentUrl}
+                        </a>
+                      )}
+                    </TableTd>
+                    <TableTd>{session.requestCount}</TableTd>
+                    <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{formatAge(session.lastActivityAt)}</TableTd>
+                    <TableTd>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); closeSession(session.sessionId); }}
+                        style={{ fontSize: 11, padding: '2px 8px', background: 'none', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
+                      >
+                        Close
+                      </button>
+                    </TableTd>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         )}
       </Card>
+
+      {/* Interact with selected session */}
+      {selectedSessionId && (
+        <Card padding="md">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <h2 style={{ fontSize: 14, fontWeight: 600 }}>Interact — <code style={{ fontFamily: 'monospace', fontSize: 12 }}>{selectedSessionId}</code></h2>
+            <button
+              onClick={() => { setSelectedSessionId(null); setScreenshotDataUrl(null); setActionError(null); }}
+              style={{ fontSize: 11, padding: '2px 8px', background: 'none', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
+            >
+              Done
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            <input
+              value={navUrl}
+              onChange={e => setNavUrl(e.target.value)}
+              placeholder="https://..."
+              onKeyDown={e => e.key === 'Enter' && navigate()}
+              style={{ flex: 1, padding: '7px 10px', fontSize: 12, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', background: 'var(--color-surface)' }}
+            />
+            <button
+              onClick={navigate}
+              disabled={navigating || !navUrl}
+              style={{ padding: '7px 16px', fontSize: 12, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer', opacity: navigating ? 0.6 : 1 }}
+            >
+              {navigating ? 'Navigating…' : 'Navigate'}
+            </button>
+            <button
+              onClick={screenshot}
+              disabled={screenshotting}
+              style={{ padding: '7px 16px', fontSize: 12, background: 'none', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', opacity: screenshotting ? 0.6 : 1 }}
+            >
+              {screenshotting ? 'Capturing…' : 'Screenshot'}
+            </button>
+          </div>
+
+          {actionError && (
+            <div style={{ padding: 8, background: '#fef2f2', color: '#991b1b', fontSize: 12, borderRadius: 4, marginBottom: 12 }}>
+              {actionError}
+            </div>
+          )}
+
+          {screenshotDataUrl && (
+            <div style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: 4, background: '#fafafa' }}>
+              <img src={screenshotDataUrl} alt="Browser screenshot" style={{ maxWidth: '100%', display: 'block' }} />
+            </div>
+          )}
+        </Card>
+      )}
     </div>
   );
 }
@@ -490,6 +749,40 @@ function formatAge(iso: string): string {
   const m = Math.floor(s / 60);
   if (m < 60) return `${m}m ago`;
   return `${Math.floor(m / 60)}h ago`;
+}
+
+function MetricsSparkline({ series }: { series: Array<{ timestamp: string; invocations: number; interventions: number }> }) {
+  const width = 600;
+  const height = 80;
+  const padding = 4;
+  const maxVal = Math.max(1, ...series.map(p => Math.max(p.invocations, p.interventions)));
+  const points = (key: 'invocations' | 'interventions') =>
+    series.map((p, i) => {
+      const x = padding + (i / Math.max(series.length - 1, 1)) * (width - padding * 2);
+      const y = height - padding - (p[key] / maxVal) * (height - padding * 2);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+
+  if (series.length === 0) {
+    return (
+      <div style={{ textAlign: 'center', padding: 20, color: 'var(--color-text-tertiary)', fontSize: 12 }}>
+        No metrics yet — guardrail hasn't been invoked recently.
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ width: '100%', height: 80, display: 'block' }}>
+        <polyline fill="none" stroke="var(--color-primary, #6366f1)" strokeWidth="1.5" points={points('invocations')} />
+        <polyline fill="none" stroke="#dc2626" strokeWidth="1.5" points={points('interventions')} />
+      </svg>
+      <div style={{ display: 'flex', gap: 16, fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 4 }}>
+        <span><span style={{ display: 'inline-block', width: 8, height: 2, background: 'var(--color-primary, #6366f1)', marginRight: 4, verticalAlign: 'middle' }} />invocations</span>
+        <span><span style={{ display: 'inline-block', width: 8, height: 2, background: '#dc2626', marginRight: 4, verticalAlign: 'middle' }} />interventions</span>
+      </div>
+    </div>
+  );
 }
 
 export default CapabilitiesPage;

@@ -27,12 +27,11 @@ services:
       - "3001:3001"
     volumes:
       - ./middleware/src:/app/src
-      - ~/.aws:/home/node/.aws:ro
+      - ./middleware/.env.aws:/app/.env.aws:ro
+      - ~/.aws:/root/.aws:ro
     environment:
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - AWS_PROFILE=${AWS_PROFILE:-bedrock}
-      - NEPTUNE_GRAPH_ID=${NEPTUNE_GRAPH_ID:-}
-      - AGENTCORE_ENDPOINT=${AGENTCORE_ENDPOINT:-}
       - NODE_ENV=development
       - PORT=3001
     restart: unless-stopped
@@ -43,8 +42,10 @@ services:
     build:
       context: ./portal
       target: development
-      args:
-        GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      ssh:
+        - default
+      additional_contexts:
+        ui_components: ../ui-components
     container_name: orgiq-portal
     ports:
       - "5183:5183"
@@ -54,6 +55,7 @@ services:
     environment:
       - VITE_API_URL=http://localhost:3001
       - VITE_WS_URL=ws://localhost:3001
+      - API_PROXY_TARGET=http://middleware:3001
     restart: unless-stopped
     networks:
       - orgiq-network

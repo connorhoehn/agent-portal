@@ -1,10 +1,18 @@
 import json
 import os
+import re
+import time
 
 import boto3
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
+from bedrock_agentcore.tools.browser_client import BrowserClient
 from strands import Agent, tool
 from strands.models.bedrock import BedrockModel
+
+try:
+    import websocket as ws_client  # the `websocket-client` library
+except ImportError:
+    ws_client = None
 
 app = BedrockAgentCoreApp()
 
@@ -14,10 +22,23 @@ AURORA_CLUSTER_ARN = os.environ.get("AURORA_CLUSTER_ARN", "")
 AURORA_SECRET_ARN = os.environ.get("AURORA_SECRET_ARN", "")
 DB_NAME = os.environ.get("PROJECT_PREFIX", "orgiq")
 MODEL_ID = os.environ.get("MODEL_ID", "amazon.nova-pro-v1:0")
-GRAPH_NAME = f"{os.environ.get('PROJECT_PREFIX', 'orgiq')}_graph"
+BROWSER_ID = os.environ.get("BROWSER_ID", "")
 
 _bedrock = boto3.client("bedrock-agent-runtime", region_name=REGION)
 _rds = boto3.client("rds-data", region_name=REGION)
+
+_READONLY_RE = re.compile(r"^\s*(WITH|SELECT)\b", re.IGNORECASE)
+
+
+def _records_to_dicts(resp: dict) -> list:
+    cols = [c.get("name", f"col{i}") for i, c in enumerate(resp.get("columnMetadata", []))]
+    out = []
+    for record in resp.get("records", []):
+        row = {}
+        for col, cell in zip(cols, record):
+            row[col] = list(cell.values())[0] if cell else None
+        out.append(row)
+    return out
 
 
 @tool
@@ -27,9 +48,6 @@ def query_knowledge_base(query: str, max_results: int = 5) -> str:
     Args:
         query: Natural language search query
         max_results: Number of results to return (default 5, max 20)
-
-    Returns:
-        JSON list of results with content, relevance score, and S3 source URI
     """
     response = _bedrock.retrieve(
         knowledgeBaseId=KB_ID,
@@ -50,50 +68,225 @@ def query_knowledge_base(query: str, max_results: int = 5) -> str:
 
 
 @tool
-def query_graph(cypher: str) -> str:
-    """Execute an openCypher query against the organizational knowledge graph (Aurora + Apache AGE).
+def query_graph(sql: str) -> str:
+    """Execute a read-only SQL query against the OrgIQ relational graph in Aurora.
 
-    Use MATCH/RETURN patterns to find people, teams, skills, and relationships.
-    Example: MATCH (p:Person)-[:HAS_SKILL]->(s:Skill {name: 'Kubernetes'}) RETURN p.name, p.email LIMIT 10
+    Schema (see schema/orgiq_schema.sql):
+      Nodes: people(id, name, email, title, team, expertise_score, ...)
+             skills(id, name, domain)
+             teams(id, name, parent_id)
+             projects(id, name, status)
+             decisions(id, topic, summary, decided_at)
+             documents(id, source, source_uri, title)
+      Edges: person_skills(person_id, skill_id, weight)
+             team_memberships(person_id, team_id, role)
+             collaborations(person_a_id, person_b_id, weight)
+             project_contributions(person_id, project_id, role)
+             decision_participants(person_id, decision_id, role)
+             mentions(document_id, entity_type, entity_id, count)
+
+    Example — find Kubernetes experts:
+      SELECT p.name, p.email, COALESCE(p.expertise_score, 0) AS score
+      FROM people p
+      JOIN person_skills ps ON ps.person_id = p.id
+      JOIN skills s ON s.id = ps.skill_id
+      WHERE LOWER(s.name) LIKE '%kubernetes%'
+      ORDER BY score DESC LIMIT 10
 
     Args:
-        cypher: openCypher query string
+        sql: PostgreSQL SELECT (or WITH ... SELECT) statement.
 
     Returns:
-        JSON array of result rows
+        JSON array of result rows keyed by column name.
     """
-    sql = (
-        f"SELECT * FROM ag_catalog.cypher('{GRAPH_NAME}', $$ {cypher} $$) "
-        f"as (result ag_catalog.agtype)"
-    )
+    if not _READONLY_RE.match(sql) or ";" in sql.strip().rstrip(";"):
+        return json.dumps({"error": "Only single read-only SELECT/WITH statements are allowed."})
+
     response = _rds.execute_statement(
         resourceArn=AURORA_CLUSTER_ARN,
         secretArn=AURORA_SECRET_ARN,
         database=DB_NAME,
         sql=sql,
+        includeResultMetadata=True,
     )
-    records = []
-    for row in response.get("records", []):
-        records.append([list(field.values())[0] for field in row if field])
-    return json.dumps(records, ensure_ascii=False)
+    return json.dumps(_records_to_dicts(response), ensure_ascii=False, default=str)
 
 
-_model = BedrockModel(model_id=MODEL_ID)
+# ── Browser tool (AgentCore Browser sandbox via SigV4-signed CDP) ─────────────
+
+def _cdp_call(ws, method: str, params: dict | None = None, timeout_s: float = 10.0) -> dict:
+    """Send a single CDP JSON-RPC command, wait for the response with matching id."""
+    msg_id = int(time.time() * 1000) % 1_000_000
+    ws.send(json.dumps({"id": msg_id, "method": method, "params": params or {}}))
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        ws.settimeout(max(0.1, deadline - time.time()))
+        raw = ws.recv()
+        msg = json.loads(raw)
+        if msg.get("id") == msg_id:
+            if "error" in msg:
+                raise RuntimeError(f"CDP {method}: {msg['error']}")
+            return msg.get("result", {})
+    raise TimeoutError(f"CDP {method} timed out")
+
+
+@tool
+def fetch_web_page(url: str) -> str:
+    """Open a URL in an AgentCore Browser sandbox and return the page title and
+    text content. Use this when you need to ground answers in fresh web content
+    (e.g. competitor research, public profile lookups, doc pages).
+
+    The sandbox is short-lived — each call spins up a fresh session, navigates,
+    extracts the page, and closes the session. ~5-10s overhead per call.
+
+    Args:
+        url: The full URL to fetch (https://...)
+    Returns:
+        JSON: {"sessionId", "url", "title", "text"} (text truncated to 5000 chars)
+        or {"error": "..."}
+    """
+    if not BROWSER_ID:
+        return json.dumps({"error": "BROWSER_ID env var missing — browser sandbox unavailable"})
+    if ws_client is None:
+        return json.dumps({"error": "websocket-client package missing"})
+
+    client = BrowserClient(region=REGION)
+    started = False
+    ws = None
+    try:
+        session_id = client.start(identifier=BROWSER_ID, name=f"search-{int(time.time())}")
+        started = True
+
+        ws_url, headers = client.generate_ws_headers()
+        # websocket-client takes headers as a list of "Key: value" strings and
+        # lets us suppress the auto-added ones, giving us tight control over
+        # the SigV4-signed handshake.
+        header_list = [f"{k}: {v}" for k, v in headers.items()
+                       if k.lower() not in {"upgrade", "connection",
+                                            "sec-websocket-version",
+                                            "sec-websocket-key"}]
+
+        ws = ws_client.create_connection(
+            ws_url,
+            header=header_list,
+            suppress_origin=True,
+            timeout=15,
+        )
+
+        # AgentCore Browser CDP requires attaching to a page target first
+        # (multi-target flow). Discover and attach to the first 'page' target.
+        targets = _cdp_call(ws, "Target.getTargets")
+        page_target = next(
+            (t for t in targets.get("targetInfos", []) if t.get("type") == "page"),
+            None,
+        )
+        if not page_target:
+            raise RuntimeError("No page target available in browser session")
+        attach = _cdp_call(ws, "Target.attachToTarget", {
+            "targetId": page_target["targetId"],
+            "flatten": True,
+        })
+        cdp_session_id = attach.get("sessionId")
+
+        def _cdp_target(method: str, params: dict | None = None, timeout_s: float = 15.0) -> dict:
+            msg_id = int(time.time() * 1000) % 1_000_000
+            ws.send(json.dumps({
+                "sessionId": cdp_session_id,
+                "id": msg_id,
+                "method": method,
+                "params": params or {},
+            }))
+            deadline = time.time() + timeout_s
+            while time.time() < deadline:
+                ws.settimeout(max(0.1, deadline - time.time()))
+                msg = json.loads(ws.recv())
+                if msg.get("id") == msg_id and msg.get("sessionId") == cdp_session_id:
+                    if "error" in msg:
+                        raise RuntimeError(f"CDP {method}: {msg['error']}")
+                    return msg.get("result", {})
+            raise TimeoutError(f"CDP {method} timed out")
+
+        _cdp_target("Page.navigate", {"url": url}, timeout_s=20.0)
+        time.sleep(2.5)
+
+        title_res = _cdp_target("Runtime.evaluate", {
+            "expression": "document.title",
+            "returnByValue": True,
+        })
+        text_res = _cdp_target("Runtime.evaluate", {
+            "expression": "(document.body && document.body.innerText || '').slice(0, 5000)",
+            "returnByValue": True,
+        })
+
+        title = (title_res.get("result") or {}).get("value", "") or ""
+        text = (text_res.get("result") or {}).get("value", "") or ""
+
+        return json.dumps({
+            "sessionId": session_id,
+            "url": url,
+            "title": title,
+            "text": text,
+        })
+    except Exception as e:
+        return json.dumps({"error": f"browser error: {e}"})
+    finally:
+        if ws is not None:
+            try:
+                ws.close()
+            except Exception:
+                pass
+        if started:
+            try:
+                client.stop()
+            except Exception:
+                pass
+
+
+def _model_kwargs() -> dict:
+    kw: dict = {"model_id": MODEL_ID}
+    gid = os.environ.get("GUARDRAIL_ID", "")
+    if gid:
+        kw["guardrail_id"] = gid
+        kw["guardrail_version"] = os.environ.get("GUARDRAIL_VERSION", "DRAFT")
+        kw["guardrail_trace"] = "enabled"
+    return kw
+
+
+_model = BedrockModel(**_model_kwargs())
 _agent = Agent(
     model=_model,
-    tools=[query_knowledge_base, query_graph],
+    tools=[query_knowledge_base, query_graph, fetch_web_page],
     system_prompt=(
-        "You are the OrgIQ Search agent. Your role is to find people, teams, skills, "
-        "documents, and decisions in the organizational knowledge base and graph.\n\n"
-        "Use query_knowledge_base for document search and semantic retrieval.\n"
-        "Use query_graph for relationship traversal (who knows whom, who has a skill, etc.).\n\n"
-        "Always return source citations. Combine both tools for comprehensive answers."
+        "You are the OrgIQ Search agent. Find people, teams, skills, documents, and "
+        "decisions in the organizational knowledge base and relational graph.\n\n"
+        "Use query_knowledge_base for document/semantic search.\n"
+        "Use query_graph(sql) for relational traversal — JOINs across the edge tables "
+        "(person_skills, team_memberships, collaborations, project_contributions, "
+        "decision_participants, mentions).\n"
+        "Use fetch_web_page(url) when you need live external web content — e.g. to "
+        "look up a public profile, scrape a docs page, or check a competitor site. "
+        "Only call this for genuinely external info; for org-internal questions, "
+        "prefer the KB and graph tools.\n\n"
+        "Always return source citations. Combine tools for comprehensive answers."
     ),
 )
 
 
-@app.entrypoint()
-async def handle(input_text: str, **kwargs) -> dict:
+@app.entrypoint
+async def handle(payload: dict) -> dict:
+    if isinstance(payload, dict):
+        input_text = (
+            payload.get("input_text")
+            or payload.get("prompt")
+            or payload.get("message")
+            or ""
+        )
+    else:
+        input_text = str(payload)
+
+    if not input_text:
+        return {"agent": "search", "error": "missing input_text/prompt/message"}
+
     result = _agent(input_text)
     return {"agent": "search", "response": str(result)}
 

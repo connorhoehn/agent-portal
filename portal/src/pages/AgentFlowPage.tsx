@@ -38,14 +38,24 @@ const AGENT_COLORS: Record<string, string> = {
   'orgiq-graph-builder': '#64748b',
 };
 
+// Real AgentCore runtime IDs look like 'orgiq_supervisor-0D95cZBsPU' — the
+// 10-char base62 suffix is AWS-generated. Strip it, then swap underscores for
+// hyphens so it matches the layout-table keys (and the mock data, which is
+// already in canonical hyphenated form).
+function canonicalKey(id: string): string {
+  return id
+    .replace(/-[A-Za-z0-9]{10}$/, '')
+    .replace(/_/g, '-');
+}
+
 function buildNodes(agents: AgentDef[]): Node[] {
   return agents.map(agent => {
-    const pos = AGENT_POSITIONS[agent.id] ?? { x: 300, y: 300 };
-    const color = AGENT_COLORS[agent.id] ?? '#64748b';
-    const statusColor = STATUS_COLORS[agent.status];
+    const key = canonicalKey(agent.id);
+    const pos = AGENT_POSITIONS[key] ?? { x: 300, y: 300 };
+    const color = AGENT_COLORS[key] ?? '#64748b';
 
     return {
-      id: agent.id,
+      id: key,
       position: pos,
       data: { label: '' },
       style: {
@@ -59,8 +69,8 @@ function buildNodes(agents: AgentDef[]): Node[] {
       sourcePosition: Position.Bottom,
       targetPosition: Position.Top,
     };
-  }).map((node, _, all) => {
-    const agent = agents.find(a => a.id === node.id)!;
+  }).map((node) => {
+    const agent = agents.find(a => canonicalKey(a.id) === node.id)!;
     const statusColor = STATUS_COLORS[agent.status];
     return {
       ...node,

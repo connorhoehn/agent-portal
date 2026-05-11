@@ -6,6 +6,8 @@ __pycache__/
 *.pyo
 cdk.out/
 .env
+.env.aws
+.scratch/
 config.json
 resource_tracker.json
 *.pkl

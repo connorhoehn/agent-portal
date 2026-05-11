@@ -72,15 +72,16 @@ Requires `~/.aws` credentials via SSO. Run `aws sso login --profile bedrock` fir
 
 - TypeScript strict mode for middleware, infra, portal
 - Python 3.12+ for agents and notebooks
-- openCypher for all Neptune queries (Neptune Analytics does NOT support Gremlin/SPARQL)
+- Org graph lives in Aurora PostgreSQL as relational tables (no Neptune, no AGE — see `schema/orgiq_schema.sql`)
+- Graph access via RDS Data API + parameterized SQL. Read tools enforce SELECT/WITH only.
 - AG-UI protocol for agent→frontend streaming (16 event types, SSE transport)
 - A2A protocol for agent→agent communication
 - Cedar for policy authoring (natural language → Cedar via AgentCore Policy)
 - All notebooks share `config.json` for cross-notebook state (progressive enrichment)
 - Resource tracker (`cleanup_utils.py`) tracks all AWS resources for safe teardown
-- `MERGE` over `CREATE` in openCypher for idempotent graph writes
-- Scores stored as node properties on Person nodes (not separate Score nodes)
-- Titan Embeddings V2 at 1024 dimensions everywhere (Neptune graph + OpenSearch KB)
+- `INSERT ... ON CONFLICT DO UPDATE` for idempotent upserts (handled by graph-builder `merge_*` tools)
+- Scores stored as columns on `people` (expertise_score, pagerank_score, composite_score)
+- Titan Embeddings V2 at 1024 dimensions everywhere (`node_embeddings` table in Aurora + Bedrock KB)
 
 ## Existing project dependencies
 
@@ -104,7 +105,7 @@ If you need new features in those packages, note it as a TODO — don't cross-re
 
 ## Naming conventions
 
-- AWS resources: prefix `orgiq-` (e.g., `orgiq-knowledge-base`, `orgiq-neptune-graph`)
+- AWS resources: prefix `orgiq-` (e.g., `orgiq-knowledge-base`, `orgiq-aurora`)
 - CDK stack names: `OrgIQ-Foundation`, `OrgIQ-Neptune`, `OrgIQ-KnowledgeBase`, etc.
 - Agent names: `orgiq-supervisor`, `orgiq-search`, `orgiq-scoring`, `orgiq-advisor`,
   `orgiq-ingestion`, `orgiq-graph-builder`
@@ -141,11 +142,11 @@ cd agents/search && agentcore dev "Find Kubernetes experts"
 
 ## Gotchas
 
-- Neptune Analytics is openCypher ONLY. Don't try Gremlin or SPARQL.
+- Aurora does NOT support Apache AGE — the graph is modeled as relational tables, not Cypher. Schema in `schema/orgiq_schema.sql`.
 - AgentCore Runtime requires ARM64 Docker images. Local `agentcore dev` runs on host arch.
 - `agentcore deploy` uses remote CodeBuild — no local Docker needed for deployment.
 - AG-UI uses POST for SSE (not GET EventSource). Frontend must use fetch + ReadableStream.
-- Titan Embeddings V2 dimension must be specified at embedding time AND match Neptune/OpenSearch config.
+- Titan Embeddings V2 dimension must be specified at embedding time AND match the `vector(1024)` column type.
 - OpenSearch Serverless has 2 OCU minimum billing even when idle. Budget alarm is critical.
 - Neptune Analytics billing is per-NCU-hour even when idle. Shut down via CDK destroy when not in use.
 - `@connorhoehnslalom/ui-components` requires `GITHUB_TOKEN` env var for npm install to work.

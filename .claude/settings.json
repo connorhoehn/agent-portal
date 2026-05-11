@@ -41,19 +41,6 @@
   },
   "env": {
     "AWS_REGION": "us-east-1",
-    "AWS_PROFILE": "bedrock"
-  },
-  "hooks": {
-    "PreToolCall": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if echo \"$CLAUDE_TOOL_INPUT\" | grep -q 'Gremlin\\|SPARQL\\|gremlin\\|sparql'; then echo 'BLOCKED: Neptune Analytics only supports openCypher. Do not use Gremlin or SPARQL.' && exit 1; fi"
-          }
-        ]
-      }
-    ]
+    "AWS_PROFILE": "default"
   }
 }

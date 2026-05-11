@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { RadarChart, PolarGrid, PolarAngleAxis, Radar, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
-import { Card, PageSection, Table, TableHead, TableBody, TableRow, TableTh, TableTd } from '@connorhoehnslalom/ui-components';
+import { Card, PageSection, Table, TableHead, TableBody, TableRow, TableTh, TableTd } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 
 interface ScoreEntry {
@@ -44,8 +44,8 @@ function ScoresPage() {
     <PageSection title="Scoring Dashboard">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
         <StatCard label="Total People Scored" value={String(data.total)} />
-        <StatCard label="Avg Composite" value={String(Math.round(data.entries.reduce((s, e) => s + e.composite, 0) / data.entries.length))} />
-        <StatCard label="Top Score" value={String(data.entries[0]?.composite ?? 0)} />
+        <StatCard label="Avg Composite" value={data.entries.length > 0 ? String(Math.round(data.entries.reduce((s, e) => s + e.composite, 0) / data.entries.length)) : '—'} />
+        <StatCard label="Top Score" value={data.entries.length > 0 ? String(data.entries[0]?.composite ?? 0) : '—'} />
         <StatCard label="Departments" value="4" />
       </div>
 

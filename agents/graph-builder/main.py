@@ -14,15 +14,23 @@ AURORA_CLUSTER_ARN = os.environ.get("AURORA_CLUSTER_ARN", "")
 AURORA_SECRET_ARN = os.environ.get("AURORA_SECRET_ARN", "")
 DB_NAME = os.environ.get("PROJECT_PREFIX", "orgiq")
 MODEL_ID = os.environ.get("MODEL_ID", "amazon.nova-pro-v1:0")
-PREFIX = os.environ.get("PROJECT_PREFIX", "orgiq")
-GRAPH_NAME = f"{PREFIX}_graph"
 EMBED_MODEL = "amazon.titan-embed-text-v2:0"
 
 _rds = boto3.client("rds-data", region_name=REGION)
 _bedrock_runtime = boto3.client("bedrock-runtime", region_name=REGION)
 
+# Each relationship label maps to the edge table that stores it.
+# Cross-checked with schema/orgiq_schema.sql.
+_REL_TABLES = {
+    "HAS_SKILL":        ("person_skills",          "person_id", "skill_id"),
+    "MEMBER_OF":        ("team_memberships",       "person_id", "team_id"),
+    "WORKED_ON":        ("project_contributions",  "person_id", "project_id"),
+    "MADE":             ("decision_participants",  "person_id", "decision_id"),
+    "PARTICIPATED_IN":  ("decision_participants",  "person_id", "decision_id"),
+}
 
-def _exec_sql(sql: str, parameters: list = None) -> dict:
+
+def _exec_sql(sql: str, parameters: list | None = None) -> dict:
     kwargs = dict(
         resourceArn=AURORA_CLUSTER_ARN,
         secretArn=AURORA_SECRET_ARN,
@@ -34,76 +42,106 @@ def _exec_sql(sql: str, parameters: list = None) -> dict:
     return _rds.execute_statement(**kwargs)
 
 
-def _cypher(query: str) -> list:
-    sql = (
-        f"SELECT * FROM ag_catalog.cypher('{GRAPH_NAME}', $$ {query} $$) "
-        f"as (result ag_catalog.agtype)"
-    )
-    resp = _exec_sql(sql)
-    return [[list(f.values())[0] for f in row if f] for row in resp.get("records", [])]
+def _p(name: str, value, type_hint: str | None = None) -> dict:
+    """Build an RDS Data API parameter. Handles str/int/float/None."""
+    if value is None:
+        return {"name": name, "value": {"isNull": True}}
+    if isinstance(value, bool):
+        return {"name": name, "value": {"booleanValue": value}}
+    if isinstance(value, int):
+        return {"name": name, "value": {"longValue": value}}
+    if isinstance(value, float):
+        return {"name": name, "value": {"doubleValue": value}}
+    return {"name": name, "value": {"stringValue": str(value)}}
 
 
 def _safe_id(value: str) -> str:
-    """Normalise a string to a safe graph node id (lowercase, underscores)."""
     return re.sub(r"[^a-z0-9_]", "_", value.lower().strip())
 
 
 @tool
 def merge_person(person_id: str, name: str, email: str = "", team: str = "", role: str = "") -> str:
-    """Create or update a Person node in the knowledge graph (idempotent MERGE).
+    """Upsert a Person row.
 
     Args:
-        person_id: Unique identifier (e.g. 'alice_smith' or email prefix)
+        person_id: Unique identifier (e.g. 'alice_smith')
         name: Full display name
         email: Work email address (optional)
         team: Team or department name (optional)
         role: Job title / role (optional)
 
     Returns:
-        JSON confirmation with node id
+        JSON confirmation with row id
     """
     safe = _safe_id(person_id)
-    props = f"name: '{name}'"
-    if email:
-        props += f", email: '{email}'"
-    if team:
-        props += f", team: '{team}'"
-    if role:
-        props += f", role: '{role}'"
-
-    cypher = (
-        f"MERGE (p:Person {{id: '{safe}'}}) "
-        f"SET p += {{{props}}} "
-        f"RETURN p.id as id"
+    _exec_sql(
+        """
+        INSERT INTO people (id, name, email, title, team, updated_at)
+        VALUES (:id, :name, :email, :title, :team, NOW())
+        ON CONFLICT (id) DO UPDATE SET
+          name       = EXCLUDED.name,
+          email      = COALESCE(NULLIF(EXCLUDED.email, ''), people.email),
+          title      = COALESCE(NULLIF(EXCLUDED.title, ''), people.title),
+          team       = COALESCE(NULLIF(EXCLUDED.team,  ''), people.team),
+          updated_at = NOW()
+        """,
+        parameters=[
+            _p("id", safe), _p("name", name),
+            _p("email", email or ""), _p("title", role or ""), _p("team", team or ""),
+        ],
     )
-    _cypher(cypher)
     return json.dumps({"merged": "Person", "id": safe})
 
 
 @tool
 def merge_skill(skill_id: str, name: str, domain: str = "") -> str:
-    """Create or update a Skill node in the knowledge graph (idempotent MERGE).
+    """Upsert a Skill row.
 
     Args:
-        skill_id: Unique identifier (e.g. 'kubernetes' or 'machine_learning')
-        name: Display name for the skill
-        domain: Broader domain category (e.g. 'Infrastructure', 'ML', 'Frontend')
+        skill_id: Unique identifier (e.g. 'kubernetes')
+        name: Display name
+        domain: Broader domain (e.g. 'Infrastructure', 'ML')
 
     Returns:
-        JSON confirmation with node id
+        JSON confirmation
     """
     safe = _safe_id(skill_id)
-    props = f"name: '{name}'"
-    if domain:
-        props += f", domain: '{domain}'"
-
-    cypher = (
-        f"MERGE (s:Skill {{id: '{safe}'}}) "
-        f"SET s += {{{props}}} "
-        f"RETURN s.id as id"
+    _exec_sql(
+        """
+        INSERT INTO skills (id, name, domain)
+        VALUES (:id, :name, :domain)
+        ON CONFLICT (id) DO UPDATE SET
+          name   = EXCLUDED.name,
+          domain = COALESCE(NULLIF(EXCLUDED.domain, ''), skills.domain)
+        """,
+        parameters=[_p("id", safe), _p("name", name), _p("domain", domain or "")],
     )
-    _cypher(cypher)
     return json.dumps({"merged": "Skill", "id": safe})
+
+
+@tool
+def merge_team(team_id: str, name: str) -> str:
+    """Upsert a Team row."""
+    safe = _safe_id(team_id)
+    _exec_sql(
+        "INSERT INTO teams (id, name) VALUES (:id, :name) "
+        "ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name",
+        parameters=[_p("id", safe), _p("name", name)],
+    )
+    return json.dumps({"merged": "Team", "id": safe})
+
+
+@tool
+def merge_project(project_id: str, name: str, status: str = "") -> str:
+    """Upsert a Project row."""
+    safe = _safe_id(project_id)
+    _exec_sql(
+        "INSERT INTO projects (id, name, status) VALUES (:id, :name, :status) "
+        "ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, "
+        "status = COALESCE(NULLIF(EXCLUDED.status, ''), projects.status)",
+        parameters=[_p("id", safe), _p("name", name), _p("status", status or "")],
+    )
+    return json.dumps({"merged": "Project", "id": safe})
 
 
 @tool
@@ -115,59 +153,69 @@ def merge_relationship(
     rel_type: str,
     weight: float = 1.0,
 ) -> str:
-    """Create or update a relationship between two nodes (idempotent MERGE).
+    """Upsert a relationship row in the appropriate edge table.
 
-    Common relationship types:
-    - HAS_SKILL: Person → Skill
-    - MEMBER_OF: Person → Team
-    - WORKED_WITH: Person → Person
-    - WORKED_ON: Person → Project
-    - MADE: Person → Decision
-    - MENTIONS: Document → Person
+    Supported relationship types map to edge tables in schema/orgiq_schema.sql:
+      HAS_SKILL        → person_skills
+      MEMBER_OF        → team_memberships
+      WORKED_ON        → project_contributions
+      MADE             → decision_participants
+      PARTICIPATED_IN  → decision_participants
+      WORKED_WITH      → collaborations (canonical id ordering)
 
     Args:
         from_id: Source node id
-        from_label: Source node label (Person, Skill, Team, Project, Decision)
+        from_label: Source node label (Person, Team, Skill, Project, Decision)
         to_id: Target node id
         to_label: Target node label
-        rel_type: Relationship type in UPPER_SNAKE_CASE
-        weight: Relationship strength 0.0–1.0 (default 1.0)
-
-    Returns:
-        JSON confirmation
+        rel_type: Relationship type (UPPER_SNAKE_CASE)
+        weight: Relationship strength 0.0-1.0 (default 1.0)
     """
     from_safe = _safe_id(from_id)
     to_safe = _safe_id(to_id)
+    rel = rel_type.upper().strip()
 
-    cypher = (
-        f"MATCH (a:{from_label} {{id: '{from_safe}'}}), (b:{to_label} {{id: '{to_safe}'}}) "
-        f"MERGE (a)-[r:{rel_type}]->(b) "
-        f"SET r.weight = {weight} "
-        f"RETURN type(r) as rel"
+    if rel == "WORKED_WITH":
+        a, b = sorted([from_safe, to_safe])
+        if a == b:
+            return json.dumps({"skipped": "self-loop", "id": a})
+        _exec_sql(
+            """
+            INSERT INTO collaborations (person_a_id, person_b_id, weight, last_seen)
+            VALUES (:a, :b, :weight, NOW())
+            ON CONFLICT (person_a_id, person_b_id) DO UPDATE SET
+              weight    = GREATEST(collaborations.weight, EXCLUDED.weight),
+              last_seen = NOW()
+            """,
+            parameters=[_p("a", a), _p("b", b), _p("weight", float(weight))],
+        )
+        return json.dumps({"merged": rel, "a": a, "b": b})
+
+    mapping = _REL_TABLES.get(rel)
+    if not mapping:
+        return json.dumps({"error": f"unknown rel_type: {rel}", "from": from_safe, "to": to_safe})
+
+    table, src_col, dst_col = mapping
+    _exec_sql(
+        f"""
+        INSERT INTO {table} ({src_col}, {dst_col}, weight)
+        VALUES (:src, :dst, :weight)
+        ON CONFLICT ({src_col}, {dst_col}) DO UPDATE SET
+          weight = GREATEST({table}.weight, EXCLUDED.weight)
+        """,
+        parameters=[_p("src", from_safe), _p("dst", to_safe), _p("weight", float(weight))],
     )
-    try:
-        _cypher(cypher)
-        return json.dumps({"merged": rel_type, "from": from_safe, "to": to_safe})
-    except Exception as e:
-        return json.dumps({"error": str(e), "from": from_safe, "to": to_safe})
+    return json.dumps({"merged": rel, "from": from_safe, "to": to_safe})
 
 
 @tool
 def embed_and_store(node_id: str, node_label: str, content: str) -> str:
-    """Generate a Titan Embeddings V2 (1024d) vector for a node and store it in pgvector.
-
-    The embedding table schema:
-      CREATE TABLE IF NOT EXISTS node_embeddings (
-        node_id TEXT PRIMARY KEY, node_type TEXT, content TEXT, embedding vector(1024)
-      );
+    """Embed a node (Titan V2, 1024d) and upsert into node_embeddings.
 
     Args:
-        node_id: The graph node id to embed
-        node_label: Node type label (Person, Skill, Team, Project, Decision)
-        content: Text to embed (typically name + description + key properties)
-
-    Returns:
-        JSON with {node_id, dimensions, stored: true}
+        node_id: Row id in the source table (people.id, skills.id, etc.)
+        node_label: Source table name as a label (Person, Skill, Team, Project, Decision)
+        content: Text to embed (name + description + key properties)
     """
     response = _bedrock_runtime.invoke_model(
         modelId=EMBED_MODEL,
@@ -177,22 +225,20 @@ def embed_and_store(node_id: str, node_label: str, content: str) -> str:
     embedding = json.loads(response["body"].read())["embedding"]
     vector_str = "[" + ",".join(f"{v:.8f}" for v in embedding) + "]"
 
-    # Ensure the table exists (idempotent)
     _exec_sql(
-        "CREATE TABLE IF NOT EXISTS node_embeddings "
-        "(node_id TEXT PRIMARY KEY, node_type TEXT, content TEXT, embedding vector(1024))"
-    )
-
-    _exec_sql(
-        "INSERT INTO node_embeddings (node_id, node_type, content, embedding) "
-        "VALUES (:node_id, :node_type, :content, CAST(:embedding AS vector)) "
-        "ON CONFLICT (node_id) DO UPDATE "
-        "SET node_type = EXCLUDED.node_type, content = EXCLUDED.content, embedding = EXCLUDED.embedding",
+        """
+        INSERT INTO node_embeddings (node_id, node_type, content, embedding)
+        VALUES (:node_id, :node_type, :content, CAST(:embedding AS vector))
+        ON CONFLICT (node_id) DO UPDATE SET
+          node_type = EXCLUDED.node_type,
+          content   = EXCLUDED.content,
+          embedding = EXCLUDED.embedding
+        """,
         parameters=[
-            {"name": "node_id", "value": {"stringValue": node_id}},
-            {"name": "node_type", "value": {"stringValue": node_label}},
-            {"name": "content", "value": {"stringValue": content[:4096]}},
-            {"name": "embedding", "value": {"stringValue": vector_str}},
+            _p("node_id", node_id),
+            _p("node_type", node_label),
+            _p("content", content[:4096]),
+            _p("embedding", vector_str),
         ],
     )
     return json.dumps({"node_id": node_id, "dimensions": len(embedding), "stored": True})
@@ -200,22 +246,18 @@ def embed_and_store(node_id: str, node_label: str, content: str) -> str:
 
 @tool
 def extract_and_build(document_text: str, source_key: str = "") -> str:
-    """Extract entities from document text and write them to the knowledge graph.
+    """Extract entities + relationships from a document and write them to Aurora.
 
-    This is the main entry point for graph construction. It:
-    1. Uses Bedrock to NER-extract entities from the document
-    2. MERGEs Person, Skill, Team, Project, Decision nodes
-    3. Creates relationships between extracted entities
-    4. Generates embeddings for all new nodes
+    Pipeline:
+      1. Bedrock NER extracts {people, skills, teams, projects, relationships}
+      2. Upserts each entity via merge_* tools
+      3. Embeds people + skills into node_embeddings
 
     Args:
-        document_text: Raw text content to process (max 20,000 characters)
-        source_key: S3 key of the source document for provenance tracking (optional)
-
-    Returns:
-        JSON summary of {nodes_created, relationships_created, embeddings_stored}
+        document_text: Raw text (max 20,000 chars)
+        source_key: S3 key for provenance (optional)
     """
-    prompt = f"""Extract entities from this organizational document for a knowledge graph.
+    prompt = f"""Extract entities from this organizational document for an org-knowledge graph.
 Return ONLY valid JSON — no explanation, no markdown.
 
 Document (source: {source_key or 'unknown'}):
@@ -235,7 +277,7 @@ JSON schema:
 Rules:
 - Use lowercase_underscore slugs for all ids
 - Only extract entities explicitly mentioned in the text
-- Relationship types: HAS_SKILL, MEMBER_OF, WORKED_WITH, WORKED_ON, MADE, MENTIONS
+- Relationship types: HAS_SKILL, MEMBER_OF, WORKED_WITH, WORKED_ON, MADE, PARTICIPATED_IN
 
 JSON:"""
 
@@ -258,7 +300,7 @@ JSON:"""
     try:
         extracted = json.loads(raw_text[start:end])
     except json.JSONDecodeError as e:
-        return json.dumps({"error": f"JSON parse failed: {e}", "raw": raw_text[start:start+500]})
+        return json.dumps({"error": f"JSON parse failed: {e}", "raw": raw_text[start:start + 500]})
 
     nodes_created = 0
     rels_created = 0
@@ -296,20 +338,14 @@ JSON:"""
         embeds_stored += 1
 
     for team in extracted.get("teams", []):
-        safe = _safe_id(team.get("id", team.get("name", "")))
-        _cypher(
-            f"MERGE (t:Team {{id: '{safe}'}}) "
-            f"SET t.name = '{team.get('name', '')}' "
-            f"RETURN t.id"
-        )
+        merge_team(team_id=team.get("id", team.get("name", "")), name=team.get("name", ""))
         nodes_created += 1
 
     for project in extracted.get("projects", []):
-        safe = _safe_id(project.get("id", project.get("name", "")))
-        _cypher(
-            f"MERGE (p:Project {{id: '{safe}'}}) "
-            f"SET p.name = '{project.get('name', '')}' "
-            f"RETURN p.id"
+        merge_project(
+            project_id=project.get("id", project.get("name", "")),
+            name=project.get("name", ""),
+            status=project.get("status", ""),
         )
         nodes_created += 1
 
@@ -332,27 +368,54 @@ JSON:"""
     })
 
 
-_model = BedrockModel(model_id=MODEL_ID)
+def _model_kwargs() -> dict:
+    kw: dict = {"model_id": MODEL_ID}
+    gid = os.environ.get("GUARDRAIL_ID", "")
+    if gid:
+        kw["guardrail_id"] = gid
+        kw["guardrail_version"] = os.environ.get("GUARDRAIL_VERSION", "DRAFT")
+        kw["guardrail_trace"] = "enabled"
+    return kw
+
+
+_model = BedrockModel(**_model_kwargs())
 _agent = Agent(
     model=_model,
-    tools=[merge_person, merge_skill, merge_relationship, embed_and_store, extract_and_build],
+    tools=[
+        merge_person, merge_skill, merge_team, merge_project,
+        merge_relationship, embed_and_store, extract_and_build,
+    ],
     system_prompt=(
         "You are the OrgIQ Graph-Builder agent. Build and maintain the organizational "
-        "knowledge graph in Aurora PostgreSQL with Apache AGE and pgvector.\n\n"
-        "Primary workflow: extract_and_build(document_text) — this handles the full pipeline.\n\n"
-        "For targeted edits: use merge_person, merge_skill, merge_relationship directly.\n\n"
+        "knowledge graph in Aurora PostgreSQL (relational tables) with pgvector embeddings.\n\n"
+        "Primary workflow: extract_and_build(document_text) handles the full pipeline.\n"
+        "For targeted edits: use merge_person, merge_skill, merge_team, merge_project, "
+        "merge_relationship directly.\n\n"
         "Critical rules:\n"
-        "- Always use MERGE (never CREATE) for idempotent graph writes\n"
+        "- All writes are idempotent (INSERT ... ON CONFLICT DO UPDATE)\n"
         "- Use lowercase_underscore slugs for all node IDs\n"
         "- Embed nodes after creation with embed_and_store\n"
         "- Titan Embeddings V2 at 1024 dimensions — do not change this\n"
-        "- Store vector embeddings in the node_embeddings pgvector table"
+        "- Vector embeddings are stored in the node_embeddings table"
     ),
 )
 
 
-@app.entrypoint()
-async def handle(input_text: str, **kwargs) -> dict:
+@app.entrypoint
+async def handle(payload: dict) -> dict:
+    if isinstance(payload, dict):
+        input_text = (
+            payload.get("input_text")
+            or payload.get("prompt")
+            or payload.get("message")
+            or ""
+        )
+    else:
+        input_text = str(payload)
+
+    if not input_text:
+        return {"agent": "graph-builder", "error": "missing input_text/prompt/message"}
+
     result = _agent(input_text)
     return {"agent": "graph-builder", "response": str(result)}
 

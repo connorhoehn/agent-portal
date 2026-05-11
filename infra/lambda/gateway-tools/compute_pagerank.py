@@ -1,9 +1,9 @@
 """
-MCP Gateway Lambda tool: Compute PageRank
+MCP Gateway Lambda tool: Compute PageRank against the Aurora relational graph.
 
-Computes PageRank scores for nodes in the OrgIQ Neptune Analytics graph.
-Uses iterative openCypher queries to approximate PageRank.
-Optionally writes scores back to graph node properties.
+Reads node and edge data from the orgiq_schema tables (see schema/orgiq_schema.sql)
+via RDS Data API, runs an iterative PageRank in-memory, and optionally writes
+the normalized score back to people.pagerank_score.
 """
 
 import json
@@ -11,141 +11,132 @@ import os
 
 import boto3
 
-NEPTUNE_GRAPH_ID = os.environ['NEPTUNE_GRAPH_ID']
+AURORA_CLUSTER_ARN = os.environ['AURORA_CLUSTER_ARN']
+AURORA_SECRET_ARN = os.environ['AURORA_SECRET_ARN']
+DB_NAME = os.environ.get('PROJECT_PREFIX', 'orgiq')
 REGION = os.environ.get('REGION', 'us-east-1')
 
-neptune = boto3.client('neptune-graph', region_name=REGION)
+_rds = boto3.client('rds-data', region_name=REGION)
 
 
-def execute_query(query: str, parameters: dict = None) -> dict:
-    """Execute an openCypher query against Neptune Analytics."""
-    params = {
-        'graphIdentifier': NEPTUNE_GRAPH_ID,
-        'queryString': query,
-        'language': 'OPEN_CYPHER',
-    }
+def _exec(sql: str, parameters: list | None = None) -> dict:
+    kwargs = dict(
+        resourceArn=AURORA_CLUSTER_ARN,
+        secretArn=AURORA_SECRET_ARN,
+        database=DB_NAME,
+        sql=sql,
+        includeResultMetadata=True,
+    )
     if parameters:
-        params['parameters'] = parameters
+        kwargs['parameters'] = parameters
+    return _rds.execute_statement(**kwargs)
 
-    response = neptune.execute_query(**params)
-    payload = response.get('payload')
-    if payload:
-        return json.loads(payload.read().decode('utf-8'))
-    return {'results': []}
+
+def _rows(resp: dict) -> list:
+    cols = [c.get('name') for c in resp.get('columnMetadata', [])]
+    return [
+        dict(zip(cols, [list(cell.values())[0] if cell else None for cell in record]))
+        for record in resp.get('records', [])
+    ]
+
+
+# Edge tables that touch the `people` table — the union forms a directed graph
+# treating all edges as inbound to the person side. `collaborations` is undirected
+# so we expand it into both directions.
+_PEOPLE_EDGES_SQL = """
+WITH edges AS (
+  SELECT person_id    AS source_id, skill_id       AS target_id FROM person_skills
+  UNION ALL
+  SELECT person_id    AS source_id, team_id        AS target_id FROM team_memberships
+  UNION ALL
+  SELECT person_id    AS source_id, project_id     AS target_id FROM project_contributions
+  UNION ALL
+  SELECT person_id    AS source_id, decision_id    AS target_id FROM decision_participants
+  UNION ALL
+  SELECT person_a_id  AS source_id, person_b_id    AS target_id FROM collaborations
+  UNION ALL
+  SELECT person_b_id  AS source_id, person_a_id    AS target_id FROM collaborations
+)
+SELECT source_id, target_id FROM edges
+"""
 
 
 def handler(event: dict, context) -> dict:
-    """Handle MCP tool invocation for PageRank computation."""
     body = event if isinstance(event, dict) else json.loads(event)
 
-    node_label = body.get('nodeLabel', 'Person')
-    damping_factor = body.get('dampingFactor', 0.85)
-    max_iterations = body.get('maxIterations', 20)
-    write_back = body.get('writeBack', False)
+    damping_factor = float(body.get('dampingFactor', 0.85))
+    max_iterations = int(body.get('maxIterations', 20))
+    write_back = bool(body.get('writeBack', False))
 
-    # Step 1: Get all nodes and their outgoing relationship counts
-    count_query = f"""
-    MATCH (n:{node_label})
-    OPTIONAL MATCH (n)-[r]->()
-    RETURN n.id AS nodeId, n.name AS nodeName, count(r) AS outDegree
-    """
-    count_result = execute_query(count_query)
-    nodes = count_result.get('results', [])
-
+    # Nodes = all people (PageRank is scored on people; other tables are targets only)
+    nodes = _rows(_exec('SELECT id, name FROM people'))
     if not nodes:
         return {
             'statusCode': 200,
-            'body': json.dumps({
-                'nodeLabel': node_label,
-                'message': f'No {node_label} nodes found in graph',
-                'scores': [],
-            }),
+            'body': json.dumps({'message': 'No people in graph', 'scores': []}),
         }
 
-    # Step 2: Get adjacency (who points to whom)
-    adjacency_query = f"""
-    MATCH (source:{node_label})-[r]->(target:{node_label})
-    RETURN source.id AS sourceId, target.id AS targetId
-    """
-    adjacency_result = execute_query(adjacency_query)
-    edges = adjacency_result.get('results', [])
+    edges = _rows(_exec(_PEOPLE_EDGES_SQL))
 
-    # Step 3: Compute PageRank iteratively
-    node_ids = [n['nodeId'] for n in nodes]
+    node_ids = [n['id'] for n in nodes]
+    node_set = set(node_ids)
     n = len(node_ids)
 
-    if n == 0:
-        return {
-            'statusCode': 200,
-            'body': json.dumps({
-                'nodeLabel': node_label,
-                'message': 'No nodes to compute PageRank for',
-                'scores': [],
-            }),
-        }
-
-    # Initialize scores
-    scores = {nid: 1.0 / n for nid in node_ids}
-
-    # Build adjacency structures
-    out_degree = {node['nodeId']: max(node['outDegree'], 1) for node in nodes}
-    incoming = {nid: [] for nid in node_ids}
-    for edge in edges:
-        source = edge.get('sourceId')
-        target = edge.get('targetId')
-        if target in incoming and source in node_ids:
-            incoming[target].append(source)
+    # Build adjacency: out_degree and incoming map, restricted to person→person/anything.
+    # For PageRank, we only count edges originating from people (other entities have no rank to redistribute).
+    out_degree: dict[str, int] = {nid: 0 for nid in node_ids}
+    incoming: dict[str, list[str]] = {nid: [] for nid in node_ids}
+    for e in edges:
+        src, tgt = e['source_id'], e['target_id']
+        if src in node_set:
+            out_degree[src] = out_degree.get(src, 0) + 1
+        if tgt in node_set and src in node_set:
+            incoming[tgt].append(src)
 
     # Iterate
+    scores = {nid: 1.0 / n for nid in node_ids}
     for _ in range(max_iterations):
         new_scores = {}
         for nid in node_ids:
             rank_sum = sum(
-                scores.get(src, 0) / out_degree.get(src, 1)
+                scores.get(src, 0.0) / max(out_degree.get(src, 1), 1)
                 for src in incoming[nid]
             )
             new_scores[nid] = (1 - damping_factor) / n + damping_factor * rank_sum
         scores = new_scores
 
-    # Normalize to 0-100 scale
-    max_score = max(scores.values()) if scores else 1
-    normalized = {
-        nid: round((score / max_score) * 100, 2)
-        for nid, score in scores.items()
-    }
-
-    # Build results with names
-    name_map = {n['nodeId']: n.get('nodeName', n['nodeId']) for n in nodes}
+    max_score = max(scores.values()) or 1.0
+    name_map = {n['id']: n.get('name', n['id']) for n in nodes}
     results = sorted(
         [
-            {'nodeId': nid, 'name': name_map.get(nid, nid), 'pageRank': normalized[nid]}
-            for nid in node_ids
+            {
+                'nodeId': nid,
+                'name': name_map.get(nid, nid),
+                'pageRank': round((score / max_score) * 100, 2),
+            }
+            for nid, score in scores.items()
         ],
         key=lambda x: x['pageRank'],
         reverse=True,
     )
 
-    # Step 4: Optionally write back to graph
     if write_back:
         for item in results:
-            write_query = f"""
-            MATCH (n:{node_label} {{id: $nodeId}})
-            SET n.pageRank = $score
-            RETURN n.id AS nodeId
-            """
-            execute_query(write_query, {
-                'nodeId': item['nodeId'],
-                'score': item['pageRank'],
-            })
+            _exec(
+                'UPDATE people SET pagerank_score = :score, scored_at = NOW() WHERE id = :id',
+                parameters=[
+                    {'name': 'score', 'value': {'doubleValue': float(item['pageRank'])}},
+                    {'name': 'id', 'value': {'stringValue': item['nodeId']}},
+                ],
+            )
 
     return {
         'statusCode': 200,
         'body': json.dumps({
-            'nodeLabel': node_label,
             'dampingFactor': damping_factor,
             'iterations': max_iterations,
             'writtenBack': write_back,
             'nodeCount': len(results),
-            'scores': results[:50],  # Return top 50 for response size limit
+            'scores': results[:50],
         }),
     }

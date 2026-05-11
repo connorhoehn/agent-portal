@@ -1,7 +1,84 @@
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// Load .env.aws (CloudFormation-derived resource IDs) on import. Process env wins.
+const envPath = resolve(__dirname, '../.env.aws');
+try {
+  const text = readFileSync(envPath, 'utf8');
+  for (const line of text.split('\n')) {
+    const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
+    if (m && process.env[m[1]!] === undefined) {
+      process.env[m[1]!] = m[2];
+    }
+  }
+} catch {
+  // .env.aws is optional — middleware can run in pure mock mode without it.
+}
+
+const env = (key: string, fallback = ''): string => process.env[key] ?? fallback;
+const flag = (key: string): boolean => process.env[key] === 'true';
+
 export const config = {
-  port: parseInt(process.env['PORT'] ?? '3001', 10),
-  mockMode: process.env['MOCK_MODE'] !== 'false' && !process.env['AGENTCORE_ENDPOINT'],
-  agentcoreEndpoint: process.env['AGENTCORE_ENDPOINT'] ?? '',
-  neptuneGraphId: process.env['NEPTUNE_GRAPH_ID'] ?? '',
-  region: process.env['AWS_REGION'] ?? 'us-east-1',
+  port: parseInt(env('PORT', '3001'), 10),
+  region: env('AWS_REGION', 'us-east-1'),
+  accountId: env('AWS_ACCOUNT_ID'),
+
+  // Per-domain mock kill-switches. When true, the provider returns mock data
+  // instead of calling AWS. Use for offline dev or when a stack is scaled to zero.
+  mock: {
+    aurora: flag('MOCK_AURORA'),
+    agentcore: flag('MOCK_AGENTCORE'),
+    guardrails: flag('MOCK_GUARDRAILS'),
+    cloudwatch: flag('MOCK_CLOUDWATCH'),
+  },
+
+  aurora: {
+    clusterArn: env('AURORA_CLUSTER_ARN'),
+    secretArn: env('AURORA_SECRET_ARN'),
+    database: env('AURORA_DB_NAME', 'orgiq'),
+  },
+
+  foundation: {
+    scoresTable: env('SCORES_TABLE', 'orgiq-scores'),
+    sessionsTable: env('SESSIONS_TABLE', 'orgiq-sessions'),
+    documentsBucket: env('DOCUMENTS_BUCKET'),
+    artifactsBucket: env('ARTIFACTS_BUCKET'),
+  },
+
+  knowledgeBase: {
+    id: env('KNOWLEDGE_BASE_ID'),
+  },
+
+  guardrail: {
+    id: env('GUARDRAIL_ID'),
+    version: env('GUARDRAIL_VERSION', '1'),
+  },
+
+  agentcore: {
+    memoryId: env('MEMORY_ID'),
+    browserId: env('BROWSER_ID'),
+    browserProfileId: env('BROWSER_PROFILE_ID'),
+    codeInterpreterId: env('CODE_INTERPRETER_ID'),
+    workloadIdentityArn: env('WORKLOAD_IDENTITY_ARN'),
+    policyEngineId: env('POLICY_ENGINE_ID'),
+    gatewayId: env('GATEWAY_ID'),
+    gatewayUrl: env('GATEWAY_URL'),
+  },
+
+  telemetry: {
+    qualityEvaluatorId: env('QUALITY_EVALUATOR_ID'),
+    toolSelectionEvaluatorId: env('TOOL_SELECTION_EVALUATOR_ID'),
+  },
+
+  ecr: {
+    supervisor: env('SUPERVISOR_ECR_URI'),
+    search: env('SEARCH_ECR_URI'),
+    scoring: env('SCORING_ECR_URI'),
+    advisor: env('ADVISOR_ECR_URI'),
+    ingestion: env('INGESTION_ECR_URI'),
+    graphBuilder: env('GRAPH_BUILDER_ECR_URI'),
+  },
 } as const;

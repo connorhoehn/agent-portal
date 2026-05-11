@@ -2,32 +2,37 @@ import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import { asyncHandler } from '../lib/async-handler.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
-import { mockAgents } from '../mock/agent-statuses.js';
-import { selectMockResponse } from '../mock/responses.js';
+import { agentcore } from '../providers/index.js';
+import { detectIntervention, recordInvocation, snippet } from '../lib/invocations.js';
+import { recordTurn } from '../providers/memory.js';
 
 export const agentsRouter = Router();
 
-agentsRouter.get('/', (_req, res) => {
-  res.json(mockAgents);
-});
+agentsRouter.get('/', asyncHandler(async (_req, res) => {
+  const runtimes = await agentcore.listRuntimes();
+  res.json(runtimes);
+}));
 
-agentsRouter.get('/:agentId/metrics', (req, res) => {
-  const agent = mockAgents.find(a => a.id === req.params['agentId']);
-  if (!agent) { res.status(404).json({ error: 'Agent not found' }); return; }
-  res.json({
-    agentId: agent.id,
-    latencyP50Ms: agent.latencyP50Ms,
-    latencyP99Ms: agent.latencyP99Ms,
-    invocationsLast24h: agent.invocationsLast24h,
-    errorsLast24h: agent.errorsLast24h,
-    tokensLast24h: agent.tokensLast24h,
-    successRate: ((agent.invocationsLast24h - agent.errorsLast24h) / agent.invocationsLast24h * 100).toFixed(1),
-  });
-});
+agentsRouter.get('/:agentId/metrics', asyncHandler(async (req, res) => {
+  const agentId = String(req.params['agentId'] ?? '');
+  const metrics = await agentcore.getRuntimeMetrics(agentId);
+  if (!metrics) { res.status(404).json({ error: 'Agent not found' }); return; }
+  res.json(metrics);
+}));
 
 agentsRouter.post('/:agentId/invoke', asyncHandler(async (req, res) => {
-  const { message } = req.body as { message?: string };
+  const agentId = String(req.params['agentId'] ?? '');
+  const { message, sessionId: rawSessionId, actorId } = req.body as {
+    message?: string;
+    sessionId?: string;
+    actorId?: string;
+  };
   const userMessage = message ?? '';
+  // AgentCore Runtime requires the session ID to be at least 33 characters
+  // long. Auto-allocate a UUID if the caller sends nothing or a short ID, and
+  // echo it back so the UI can persist the canonical value.
+  const sessionId =
+    rawSessionId && rawSessionId.length >= 33 ? rawSessionId : randomUUID() + randomUUID().slice(0, 4);
 
   initSSE(res);
 
@@ -35,32 +40,93 @@ agentsRouter.post('/:agentId/invoke', asyncHandler(async (req, res) => {
   const runId = randomUUID();
   const messageId = randomUUID();
 
-  const mockResponse = selectMockResponse(userMessage);
+  writeSSE(res, { type: 'RUN_STARTED', threadId, runId, sessionId });
 
-  writeSSE(res, { type: 'RUN_STARTED', threadId, runId });
-  writeSSE(res, { type: 'TEXT_MESSAGE_START', messageId, role: 'assistant' });
+  const startedAt = new Date();
+  let result;
+  try {
+    result = await agentcore.invokeAgent(agentId, {
+      message: userMessage,
+      sessionId,
+    });
+  } catch (err) {
+    const errMsg = (err as Error).message || 'invoke failed';
+    // Record the failure so the Observability feed reflects it.
+    recordInvocation({
+      id: runId,
+      agentId,
+      agentName: agentId,
+      startedAt: startedAt.toISOString(),
+      durationMs: Date.now() - startedAt.getTime(),
+      promptSnippet: snippet(userMessage),
+      responseSnippet: '',
+      guardrailIntervened: false,
+      error: errMsg,
+    });
+    writeSSE(res, { type: 'RUN_ERROR', error: errMsg });
+    writeSSE(res, { type: 'RUN_FINISHED', threadId, runId });
+    endSSE(res);
+    return;
+  }
 
-  for (const toolCall of mockResponse.toolCalls) {
+  // Record successful invocation with intervention detection.
+  const intervened = await detectIntervention(result.text);
+  recordInvocation({
+    id: runId,
+    agentId,
+    agentName: agentId,
+    startedAt: startedAt.toISOString(),
+    durationMs: Date.now() - startedAt.getTime(),
+    promptSnippet: snippet(userMessage),
+    responseSnippet: snippet(result.text),
+    guardrailIntervened: intervened,
+    ...(result.runtimeSessionId ? { runtimeSessionId: result.runtimeSessionId } : {}),
+  });
+
+  // Persist turn to AgentCore Memory so the session shows up in the sidebar
+  // and can be replayed later. Use the caller-provided sessionId so a single
+  // chat thread accumulates events under one Memory session.
+  void recordTurn({
+    sessionId,
+    ...(actorId ? { actorId } : {}),
+    userMessage,
+    assistantMessage: result.text,
+  });
+
+  // Tool calls (mock provider emits these; real supervisor doesn't yet because
+  // the entrypoint returns a single dict instead of streaming tool events).
+  for (const toolCall of result.toolCalls ?? []) {
     const toolCallId = randomUUID();
     writeSSE(res, { type: 'TOOL_CALL_START', toolCallId, name: toolCall.name });
-    await delay(200 + Math.random() * 300);
+    await delay(150);
     writeSSE(res, { type: 'TOOL_CALL_ARGS', toolCallId, delta: toolCall.args });
-    await delay(100);
+    await delay(75);
     writeSSE(res, { type: 'TOOL_CALL_END', toolCallId, result: toolCall.result });
   }
 
-  const words = mockResponse.response.split(' ');
-  for (let i = 0; i < words.length; i++) {
+  writeSSE(res, { type: 'TEXT_MESSAGE_START', messageId, role: 'assistant' });
+
+  const tokens = tokenize(result.text);
+  for (const token of tokens) {
     if (res.writableEnded) return;
-    const delta = words[i] + (i < words.length - 1 ? ' ' : '');
-    writeSSE(res, { type: 'TEXT_MESSAGE_CONTENT', messageId, delta });
-    await delay(25 + Math.random() * 45);
+    writeSSE(res, { type: 'TEXT_MESSAGE_CONTENT', messageId, delta: token });
+    await delay(15);
   }
 
   writeSSE(res, { type: 'TEXT_MESSAGE_END', messageId });
-  writeSSE(res, { type: 'RUN_FINISHED', threadId, runId });
+  writeSSE(res, {
+    type: 'RUN_FINISHED',
+    threadId,
+    runId,
+    ...(result.runtimeSessionId ? { runtimeSessionId: result.runtimeSessionId } : {}),
+  });
   endSSE(res);
 }));
+
+function tokenize(text: string): string[] {
+  // Preserve whitespace as delimiters so the client reconstructs the text exactly.
+  return text.split(/(\s+)/).filter(Boolean);
+}
 
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));

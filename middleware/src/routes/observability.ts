@@ -1,32 +1,41 @@
 import { Router } from 'express';
-import { mockTraces } from '../mock/traces.js';
-import { mockAgents } from '../mock/agent-statuses.js';
+import { cloudwatch } from '../providers/index.js';
+import { asyncHandler } from '../lib/async-handler.js';
+import { getRecentInvocations } from '../lib/invocations.js';
 
 export const observabilityRouter = Router();
 
-observabilityRouter.get('/summary', (_req, res) => {
-  const totalInvocations = mockAgents.reduce((sum, a) => sum + a.invocationsLast24h, 0);
-  const totalErrors = mockAgents.reduce((sum, a) => sum + a.errorsLast24h, 0);
-  const totalTokens = mockAgents.reduce((sum, a) => sum + a.tokensLast24h, 0);
-  const avgLatency = Math.round(mockAgents.reduce((sum, a) => sum + a.latencyP50Ms, 0) / mockAgents.length);
-
-  res.json({
-    totalInvocations24h: totalInvocations,
-    totalErrors24h: totalErrors,
-    totalTokens24h: totalTokens,
-    avgLatencyMs: avgLatency,
-    successRate: ((totalInvocations - totalErrors) / totalInvocations * 100).toFixed(1),
-    traceCount: mockTraces.length,
-  });
+observabilityRouter.get('/recent-invocations', (req, res) => {
+  const limit = Math.max(1, Math.min(200, parseInt((req.query['limit'] as string) ?? '50', 10) || 50));
+  res.json({ invocations: getRecentInvocations(limit) });
 });
 
-observabilityRouter.get('/traces', (req, res) => {
-  const limit = parseInt(req.query['limit'] as string ?? '10', 10);
-  res.json({ traces: mockTraces.slice(0, limit) });
-});
+observabilityRouter.get(
+  '/summary',
+  asyncHandler(async (_req, res) => {
+    const summary = await cloudwatch.getSummary();
+    res.json(summary);
+  }),
+);
 
-observabilityRouter.get('/traces/:traceId', (req, res) => {
-  const trace = mockTraces.find(t => t.traceId === req.params['traceId']);
-  if (!trace) { res.status(404).json({ error: 'Trace not found' }); return; }
-  res.json(trace);
-});
+observabilityRouter.get(
+  '/traces',
+  asyncHandler(async (req, res) => {
+    const limit = parseInt((req.query['limit'] as string) ?? '10', 10);
+    const traces = await cloudwatch.listTraces(limit);
+    res.json({ traces });
+  }),
+);
+
+observabilityRouter.get(
+  '/traces/:traceId',
+  asyncHandler(async (req, res) => {
+    const traceId = req.params['traceId'] as string;
+    const trace = await cloudwatch.getTrace(traceId);
+    if (!trace) {
+      res.status(404).json({ error: 'Trace not found' });
+      return;
+    }
+    res.json(trace);
+  }),
+);

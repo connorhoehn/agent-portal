@@ -11,16 +11,28 @@ interface UseAgUiStreamReturn {
   messages: AgUiMessage[];
   isStreaming: boolean;
   error: string | null;
+  sessionId: string | null;
   sendMessage: (content: string) => void;
   reset: () => void;
+  loadHistory: (sid: string, msgs: AgUiMessage[]) => void;
 }
 
 export function useAgUiStream(endpoint: string): UseAgUiStreamReturn {
   const [messages, setMessages] = useState<AgUiMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sessionId, setSessionIdState] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const currentMsg = useRef<{ id: string; content: string; toolCalls: AgUiMessage['toolCalls'] }>({ id: '', content: '', toolCalls: [] });
+  // sessionId mirror in a ref so the memoized sendMessage callback (which has
+  // [endpoint] deps only) reads the latest value, not the closure-captured
+  // initial null. Without this, every send creates a new Memory session.
+  const sessionIdRef = useRef<string | null>(null);
+
+  const setSessionId = useCallback((sid: string | null) => {
+    sessionIdRef.current = sid;
+    setSessionIdState(sid);
+  }, []);
 
   const sendMessage = useCallback(async (content: string) => {
     setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'user', content, toolCalls: [] }]);
@@ -32,10 +44,11 @@ export function useAgUiStream(endpoint: string): UseAgUiStreamReturn {
     abortRef.current = controller;
 
     try {
+      const currentSid = sessionIdRef.current;
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: content }),
+        body: JSON.stringify({ message: content, ...(currentSid ? { sessionId: currentSid } : {}) }),
         signal: controller.signal,
       });
 
@@ -83,6 +96,13 @@ export function useAgUiStream(endpoint: string): UseAgUiStreamReturn {
 
   function handleEvent(event: Record<string, unknown>) {
     switch (event.type) {
+      case 'RUN_STARTED':
+        // Middleware echoes back the canonical sessionId on every run; capture
+        // it so subsequent sendMessage calls continue the same Memory thread.
+        if (typeof event.sessionId === 'string' && event.sessionId) {
+          setSessionId(event.sessionId);
+        }
+        break;
       case 'TEXT_MESSAGE_START':
         currentMsg.current.id = event.messageId as string;
         break;
@@ -113,7 +133,16 @@ export function useAgUiStream(endpoint: string): UseAgUiStreamReturn {
     setMessages([]);
     setIsStreaming(false);
     setError(null);
-  }, []);
+    setSessionId(null);
+  }, [setSessionId]);
 
-  return { messages, isStreaming, error, sendMessage, reset };
+  const loadHistory = useCallback((sid: string, msgs: AgUiMessage[]) => {
+    abortRef.current?.abort();
+    setMessages(msgs);
+    setIsStreaming(false);
+    setError(null);
+    setSessionId(sid);
+  }, [setSessionId]);
+
+  return { messages, isStreaming, error, sessionId, sendMessage, reset, loadHistory };
 }

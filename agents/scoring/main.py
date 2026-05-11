@@ -15,88 +15,121 @@ AURORA_SECRET_ARN = os.environ.get("AURORA_SECRET_ARN", "")
 DB_NAME = os.environ.get("PROJECT_PREFIX", "orgiq")
 MODEL_ID = os.environ.get("MODEL_ID", "amazon.nova-pro-v1:0")
 PREFIX = os.environ.get("PROJECT_PREFIX", "orgiq")
-GRAPH_NAME = f"{PREFIX}_graph"
 SCORES_TABLE = f"{PREFIX}-scores"
+CODE_INTERPRETER_ID = os.environ.get("CODE_INTERPRETER_ID", "")
 
 _rds = boto3.client("rds-data", region_name=REGION)
 _dynamo = boto3.client("dynamodb", region_name=REGION)
+_agentcore_data = boto3.client("bedrock-agentcore", region_name=REGION)
 
 
-def _cypher(query: str) -> list:
-    sql = (
-        f"SELECT * FROM ag_catalog.cypher('{GRAPH_NAME}', $$ {query} $$) "
-        f"as (result ag_catalog.agtype)"
-    )
-    resp = _rds.execute_statement(
+def _exec_sql(sql: str, parameters: list | None = None) -> dict:
+    kwargs = dict(
         resourceArn=AURORA_CLUSTER_ARN,
         secretArn=AURORA_SECRET_ARN,
         database=DB_NAME,
         sql=sql,
     )
-    return [[list(f.values())[0] for f in row if f] for row in resp.get("records", [])]
+    if parameters:
+        kwargs["parameters"] = parameters
+    return _rds.execute_statement(**kwargs)
+
+
+def _p(name: str, value) -> dict:
+    if value is None:
+        return {"name": name, "value": {"isNull": True}}
+    if isinstance(value, int):
+        return {"name": name, "value": {"longValue": value}}
+    if isinstance(value, float):
+        return {"name": name, "value": {"doubleValue": value}}
+    return {"name": name, "value": {"stringValue": str(value)}}
+
+
+def _records_to_rows(resp: dict) -> list:
+    """Flatten RDS Data API columnar output into a list of value-only rows."""
+    rows = []
+    for record in resp.get("records", []):
+        rows.append([list(cell.values())[0] if cell else None for cell in record])
+    return rows
+
+
+# In-degree across all edge tables. The CTE union mirrors what Cypher's
+# `(p)<-[r]-()` traversal used to do — every edge that points at a Person
+# contributes one inbound count.
+_IN_DEGREE_CTE = """
+WITH inbound AS (
+  SELECT person_id   AS target_id, weight FROM person_skills
+  UNION ALL
+  SELECT person_id   AS target_id, weight FROM team_memberships
+  UNION ALL
+  SELECT person_id   AS target_id, weight FROM project_contributions
+  UNION ALL
+  SELECT person_id   AS target_id, weight FROM decision_participants
+  UNION ALL
+  SELECT person_a_id AS target_id, weight FROM collaborations
+  UNION ALL
+  SELECT person_b_id AS target_id, weight FROM collaborations
+  UNION ALL
+  SELECT entity_id   AS target_id, count::numeric AS weight
+    FROM mentions WHERE entity_type = 'person'
+)
+"""
 
 
 @tool
 def compute_expertise_scores(topic: str = "", limit: int = 20) -> str:
-    """Compute in-degree centrality scores as a PageRank proxy for expertise ranking.
+    """Compute weighted in-degree centrality as a PageRank proxy and persist scores.
 
-    Counts how many relationships point to each Person node (collaboration mentions,
-    skill associations, decision participation). Higher in-degree = more influential.
-
-    Scores are written back as `expertise_score` properties on Person nodes in the graph
-    and saved as snapshots to DynamoDB.
+    Counts all inbound edges per person (skill, team, project, decision, collaboration,
+    mention) weighted by edge weight. Normalized 0-100 and written back to
+    people.expertise_score plus snapshotted to DynamoDB.
 
     Args:
-        topic: Optional skill or domain to restrict scoring (e.g. 'Kubernetes', 'ML')
+        topic: Optional skill name/domain filter (substring match, case-insensitive)
         limit: Maximum number of ranked people to return (default 20)
-
-    Returns:
-        JSON list of {id, name, score, normalized_score} sorted by score desc
     """
     if topic:
-        cypher = (
-            f"MATCH (p:Person)-[:HAS_SKILL]->(s:Skill) "
-            f"WHERE toLower(s.name) CONTAINS toLower('{topic}') "
-            f"OPTIONAL MATCH (p)<-[r]-() "
-            f"WITH p, count(r) as in_degree "
-            f"RETURN p.id as id, p.name as name, in_degree "
-            f"ORDER BY in_degree DESC LIMIT {limit}"
-        )
+        sql = _IN_DEGREE_CTE + """
+        SELECT p.id, p.name, COALESCE(SUM(i.weight), 0) AS score
+          FROM people p
+          JOIN person_skills ps ON ps.person_id = p.id
+          JOIN skills s ON s.id = ps.skill_id
+          LEFT JOIN inbound i ON i.target_id = p.id
+         WHERE LOWER(s.name) LIKE LOWER(:topic)
+            OR LOWER(s.domain) LIKE LOWER(:topic)
+         GROUP BY p.id, p.name
+         ORDER BY score DESC
+         LIMIT :limit
+        """
+        params = [_p("topic", f"%{topic}%"), _p("limit", int(limit))]
     else:
-        cypher = (
-            f"MATCH (p:Person) "
-            f"OPTIONAL MATCH (p)<-[r]-() "
-            f"WITH p, count(r) as in_degree "
-            f"RETURN p.id as id, p.name as name, in_degree "
-            f"ORDER BY in_degree DESC LIMIT {limit}"
-        )
+        sql = _IN_DEGREE_CTE + """
+        SELECT p.id, p.name, COALESCE(SUM(i.weight), 0) AS score
+          FROM people p
+          LEFT JOIN inbound i ON i.target_id = p.id
+         GROUP BY p.id, p.name
+         ORDER BY score DESC
+         LIMIT :limit
+        """
+        params = [_p("limit", int(limit))]
 
-    rows = _cypher(cypher)
+    rows = _records_to_rows(_exec_sql(sql, parameters=params))
     if not rows:
         return json.dumps([])
 
-    max_score = max(float(r[2]) for r in rows) if rows else 1.0
-    max_score = max_score if max_score > 0 else 1.0
-
-    results = []
+    max_score = max(float(r[2]) for r in rows) or 1.0
     snapshot_time = int(time.time())
+    results = []
 
-    for row in rows:
-        person_id, name, raw_score = str(row[0]), str(row[1]), float(row[2])
+    for person_id, name, raw_score in rows:
+        person_id, name, raw_score = str(person_id), str(name), float(raw_score)
         normalized = round((raw_score / max_score) * 100, 2)
 
-        # Write back normalized score to graph node
-        update_cypher = (
-            f"MATCH (p:Person {{id: '{person_id}'}}) "
-            f"SET p.expertise_score = {normalized} "
-            f"RETURN p.id"
+        _exec_sql(
+            "UPDATE people SET expertise_score = :score, scored_at = NOW() WHERE id = :id",
+            parameters=[_p("score", normalized), _p("id", person_id)],
         )
-        try:
-            _cypher(update_cypher)
-        except Exception:
-            pass  # score update is best-effort
 
-        # Snapshot to DynamoDB
         try:
             _dynamo.put_item(
                 TableName=SCORES_TABLE,
@@ -111,7 +144,7 @@ def compute_expertise_scores(topic: str = "", limit: int = 20) -> str:
                 },
             )
         except Exception:
-            pass  # DynamoDB write is best-effort
+            pass  # DynamoDB snapshot is best-effort
 
         results.append(
             {"id": person_id, "name": name, "score": raw_score, "normalized_score": normalized}
@@ -122,15 +155,12 @@ def compute_expertise_scores(topic: str = "", limit: int = 20) -> str:
 
 @tool
 def get_scores(person_id: str = "", topic: str = "", limit: int = 10) -> str:
-    """Retrieve the most recent expertise scores from DynamoDB.
+    """Retrieve the most recent expertise score snapshots from DynamoDB.
 
     Args:
         person_id: Filter to a specific person (optional)
-        topic: Filter to a specific topic/skill domain (optional)
+        topic: Filter to a specific topic/domain (optional)
         limit: Maximum results (default 10)
-
-    Returns:
-        JSON list of score records
     """
     if person_id:
         response = _dynamo.query(
@@ -141,11 +171,7 @@ def get_scores(person_id: str = "", topic: str = "", limit: int = 10) -> str:
             Limit=limit,
         )
     else:
-        # Scan recent snapshots — in production use a GSI on timestamp
-        response = _dynamo.scan(
-            TableName=SCORES_TABLE,
-            Limit=limit * 3,
-        )
+        response = _dynamo.scan(TableName=SCORES_TABLE, Limit=limit * 3)
 
     items = response.get("Items", [])
     results = [
@@ -166,47 +192,40 @@ def get_scores(person_id: str = "", topic: str = "", limit: int = 10) -> str:
 
 @tool
 def get_leaderboard(team: str = "", skill: str = "", limit: int = 10) -> str:
-    """Generate an expertise leaderboard filtered by team or skill domain.
+    """Generate an expertise leaderboard, optionally filtered by team and/or skill.
 
-    Queries the live graph for current scores rather than DynamoDB snapshots.
+    Reads live people.expertise_score (populated by compute_expertise_scores).
 
     Args:
-        team: Filter to members of a specific team (optional)
-        skill: Filter to people with a specific skill (optional)
-        limit: Number of entries in the leaderboard (default 10)
-
-    Returns:
-        JSON leaderboard with rank, person, score, and metadata
+        team: Filter to members of a specific team name (optional)
+        skill: Filter to people with a skill matching this name (optional)
+        limit: Number of leaderboard entries (default 10)
     """
-    if team and skill:
-        cypher = (
-            f"MATCH (p:Person)-[:MEMBER_OF]->(t:Team {{name: '{team}'}}), "
-            f"(p)-[:HAS_SKILL]->(s:Skill) "
-            f"WHERE toLower(s.name) CONTAINS toLower('{skill}') "
-            f"RETURN p.id, p.name, coalesce(p.expertise_score, 0) as score "
-            f"ORDER BY score DESC LIMIT {limit}"
-        )
-    elif team:
-        cypher = (
-            f"MATCH (p:Person)-[:MEMBER_OF]->(t:Team {{name: '{team}'}}) "
-            f"RETURN p.id, p.name, coalesce(p.expertise_score, 0) as score "
-            f"ORDER BY score DESC LIMIT {limit}"
-        )
-    elif skill:
-        cypher = (
-            f"MATCH (p:Person)-[:HAS_SKILL]->(s:Skill) "
-            f"WHERE toLower(s.name) CONTAINS toLower('{skill}') "
-            f"RETURN p.id, p.name, coalesce(p.expertise_score, 0) as score "
-            f"ORDER BY score DESC LIMIT {limit}"
-        )
-    else:
-        cypher = (
-            f"MATCH (p:Person) WHERE p.expertise_score IS NOT NULL "
-            f"RETURN p.id, p.name, p.expertise_score as score "
-            f"ORDER BY score DESC LIMIT {limit}"
-        )
+    where = ["p.expertise_score IS NOT NULL"]
+    joins = []
+    params: list[dict] = [_p("limit", int(limit))]
 
-    rows = _cypher(cypher)
+    if team:
+        joins.append("JOIN team_memberships tm ON tm.person_id = p.id")
+        joins.append("JOIN teams t ON t.id = tm.team_id")
+        where.append("LOWER(t.name) = LOWER(:team)")
+        params.append(_p("team", team))
+
+    if skill:
+        joins.append("JOIN person_skills ps ON ps.person_id = p.id")
+        joins.append("JOIN skills s ON s.id = ps.skill_id")
+        where.append("(LOWER(s.name) LIKE LOWER(:skill) OR LOWER(s.domain) LIKE LOWER(:skill))")
+        params.append(_p("skill", f"%{skill}%"))
+
+    sql = (
+        "SELECT DISTINCT p.id, p.name, COALESCE(p.expertise_score, 0) AS score "
+        "FROM people p "
+        + " ".join(joins)
+        + " WHERE " + " AND ".join(where)
+        + " ORDER BY score DESC LIMIT :limit"
+    )
+
+    rows = _records_to_rows(_exec_sql(sql, parameters=params))
     leaderboard = [
         {"rank": i + 1, "id": str(r[0]), "name": str(r[1]), "score": float(r[2])}
         for i, r in enumerate(rows)
@@ -214,24 +233,119 @@ def get_leaderboard(team: str = "", skill: str = "", limit: int = 10) -> str:
     return json.dumps(leaderboard, ensure_ascii=False)
 
 
-_model = BedrockModel(model_id=MODEL_ID)
+@tool
+def run_in_sandbox(python_code: str) -> str:
+    """Execute a Python snippet inside the AgentCore code-interpreter sandbox.
+
+    Use this for numerical computation, statistics, custom centrality formulas,
+    or anything more naturally expressed in Python than SQL. The sandbox has
+    Python 3 + numpy/pandas but NO network access — embed any input data as
+    constants inside the code. Print results to stdout; the captured stdout
+    is returned to you.
+
+    Args:
+        python_code: A complete Python program. Use print() to surface results.
+    Returns:
+        JSON with the captured stdout, or an error message.
+    """
+    if not CODE_INTERPRETER_ID:
+        return json.dumps({"error": "CODE_INTERPRETER_ID env var is missing — sandbox unavailable"})
+
+    session_id = ""
+    try:
+        start = _agentcore_data.start_code_interpreter_session(
+            codeInterpreterIdentifier=CODE_INTERPRETER_ID,
+            name=f"scoring-sandbox-{int(time.time())}",
+        )
+        session_id = start.get("sessionId", "")
+
+        resp = _agentcore_data.invoke_code_interpreter(
+            codeInterpreterIdentifier=CODE_INTERPRETER_ID,
+            sessionId=session_id,
+            name="executeCode",
+            arguments={"code": python_code, "language": "python"},
+        )
+
+        # Consume the streaming response.
+        chunks: list[str] = []
+        for event in resp.get("stream", []) or []:
+            if not isinstance(event, dict):
+                continue
+            if "result" in event:
+                r = event["result"]
+                if isinstance(r, dict):
+                    for content in r.get("content", []) or []:
+                        if isinstance(content, dict) and "text" in content:
+                            chunks.append(content["text"])
+                        else:
+                            chunks.append(json.dumps(content, default=str))
+                else:
+                    chunks.append(str(r))
+            elif "output" in event:
+                chunks.append(json.dumps(event["output"], default=str))
+
+        output = "\n".join(chunks).strip() or "(no stdout)"
+        return json.dumps({"sessionId": session_id, "output": output})
+    except Exception as e:
+        return json.dumps({"error": f"sandbox error: {e}", "sessionId": session_id})
+    finally:
+        if session_id:
+            try:
+                _agentcore_data.stop_code_interpreter_session(
+                    codeInterpreterIdentifier=CODE_INTERPRETER_ID,
+                    sessionId=session_id,
+                )
+            except Exception:
+                pass
+
+
+def _model_kwargs() -> dict:
+    kw: dict = {"model_id": MODEL_ID}
+    gid = os.environ.get("GUARDRAIL_ID", "")
+    if gid:
+        kw["guardrail_id"] = gid
+        kw["guardrail_version"] = os.environ.get("GUARDRAIL_VERSION", "DRAFT")
+        kw["guardrail_trace"] = "enabled"
+    return kw
+
+
+_model = BedrockModel(**_model_kwargs())
 _agent = Agent(
     model=_model,
-    tools=[compute_expertise_scores, get_scores, get_leaderboard],
+    tools=[compute_expertise_scores, get_scores, get_leaderboard, run_in_sandbox],
     system_prompt=(
         "You are the OrgIQ Scoring agent. Compute and report expertise scores, "
         "leaderboards, and influence metrics.\n\n"
-        "Scoring approach: in-degree centrality as a PageRank proxy. "
-        "Scores are normalized 0-100. Higher = more mentioned/collaborated with.\n\n"
-        "When asked to score, use compute_expertise_scores (optionally filtered by topic).\n"
-        "When asked for current scores/rankings, use get_leaderboard or get_scores.\n"
+        "Scoring approach: weighted in-degree centrality across all edge tables "
+        "(person_skills, team_memberships, project_contributions, decision_participants, "
+        "collaborations, mentions). Scores are normalized 0-100.\n\n"
+        "Use compute_expertise_scores to (re)run scoring, optionally filtered by topic.\n"
+        "Use get_leaderboard for current rankings (reads people.expertise_score).\n"
+        "Use get_scores for historical snapshots from DynamoDB.\n"
+        "Use run_in_sandbox for any computation that's clearer in Python than SQL — "
+        "PageRank variants, statistical tests, custom centrality formulas, "
+        "or post-processing of leaderboard data. Always pass any data the snippet "
+        "needs as inline constants because the sandbox has no Aurora access.\n\n"
         "Always explain the scoring methodology when presenting results."
     ),
 )
 
 
-@app.entrypoint()
-async def handle(input_text: str, **kwargs) -> dict:
+@app.entrypoint
+async def handle(payload: dict) -> dict:
+    if isinstance(payload, dict):
+        input_text = (
+            payload.get("input_text")
+            or payload.get("prompt")
+            or payload.get("message")
+            or ""
+        )
+    else:
+        input_text = str(payload)
+
+    if not input_text:
+        return {"agent": "scoring", "error": "missing input_text/prompt/message"}
+
     result = _agent(input_text)
     return {"agent": "scoring", "response": str(result)}
 

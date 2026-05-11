@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAgUiStream } from '../hooks/useAgUiStream';
 import { useFetch } from '../hooks/useFetch';
 
@@ -11,19 +11,69 @@ interface AgentDef {
   tools: string[];
 }
 
+interface SessionSummary {
+  sessionId: string;
+  actorId: string;
+  createdAt: string;
+}
+
+interface MemoryEvent {
+  eventId: string;
+  sessionId: string;
+  timestamp: string;
+  role: 'USER' | 'ASSISTANT' | 'OTHER';
+  text: string;
+}
+
 function InvokePage() {
   const { data: agents } = useFetch<AgentDef[]>('/api/agents');
   const [selectedId, setSelectedId] = useState('orgiq-supervisor');
-  const { messages, isStreaming, error, sendMessage, reset } = useAgUiStream(`/api/agents/${selectedId}/invoke`);
+  const {
+    messages,
+    isStreaming,
+    error,
+    sessionId,
+    sendMessage,
+    reset,
+    loadHistory,
+  } = useAgUiStream(`/api/agents/${selectedId}/invoke`);
   const [input, setInput] = useState('');
+  const { data: sessionList, refresh: refreshSessions } = useFetch<{ sessions: SessionSummary[] }>(
+    '/api/sessions',
+    15000,
+  );
 
   const selectedAgent = agents?.find(a => a.id === selectedId);
+
+  useEffect(() => {
+    if (!isStreaming) {
+      const t = setTimeout(() => refreshSessions(), 1500);
+      return () => clearTimeout(t);
+    }
+  }, [isStreaming, refreshSessions]);
 
   const handleSend = () => {
     if (!input.trim() || isStreaming) return;
     sendMessage(input.trim());
     setInput('');
   };
+
+  async function loadSession(sid: string) {
+    const r = await fetch(`/api/sessions/${encodeURIComponent(sid)}/events`);
+    if (!r.ok) return;
+    const body = (await r.json()) as { events: MemoryEvent[] };
+    const msgs = body.events
+      .filter(e => e.role === 'USER' || e.role === 'ASSISTANT')
+      .map(e => ({
+        id: e.eventId + ':' + e.role,
+        role: e.role === 'USER' ? ('user' as const) : ('assistant' as const),
+        content: e.text,
+        toolCalls: [],
+      }));
+    loadHistory(sid, msgs);
+  }
+
+  const sessions = sessionList?.sessions ?? [];
 
   return (
     <div style={{ display: 'flex', height: '100%' }}>
@@ -63,6 +113,49 @@ function InvokePage() {
         )}
       </div>
 
+      {/* Session sidebar */}
+      <div style={{ width: 220, borderRight: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sessions</span>
+          <button
+            onClick={reset}
+            title="New session"
+            style={{ fontSize: 11, padding: '2px 8px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)', cursor: 'pointer' }}
+          >
+            + New
+          </button>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+          {sessions.length === 0 && (
+            <div style={{ padding: '12px 16px', fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+              No sessions yet — send a message to start one.
+            </div>
+          )}
+          {sessions.map(s => {
+            const selected = s.sessionId === sessionId;
+            return (
+              <div
+                key={s.sessionId}
+                onClick={() => loadSession(s.sessionId)}
+                style={{
+                  padding: '8px 14px',
+                  cursor: 'pointer',
+                  background: selected ? 'var(--color-surface-hover)' : undefined,
+                  borderLeft: selected ? '3px solid var(--color-primary)' : '3px solid transparent',
+                }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {s.sessionId.slice(0, 8)}…{s.sessionId.slice(-4)}
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                  {new Date(s.createdAt).toLocaleString()}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Chat area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 24 }}>
         <div style={{ flex: 1, overflow: 'auto', marginBottom: 16 }}>
@@ -86,7 +179,7 @@ function InvokePage() {
                   ))}
                 </div>
               )}
-              <div style={{ fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{msg.content}</div>
+              <MessageContent content={msg.content} />
             </div>
           ))}
           {isStreaming && <div style={{ color: 'var(--color-text-tertiary)', fontSize: 13 }}>Streaming...</div>}
@@ -109,6 +202,75 @@ function InvokePage() {
           }}>Send</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Split assistant content on <thinking>…</thinking> so the chain-of-thought
+// renders as a collapsed detail block instead of cluttering the response.
+type Segment = { kind: 'text' | 'thinking'; body: string };
+
+function parseSegments(content: string): Segment[] {
+  const out: Segment[] = [];
+  const re = /<thinking>([\s\S]*?)<\/thinking>/gi;
+  let cursor = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) {
+    if (m.index > cursor) {
+      out.push({ kind: 'text', body: content.slice(cursor, m.index) });
+    }
+    out.push({ kind: 'thinking', body: m[1] ?? '' });
+    cursor = m.index + m[0].length;
+  }
+  if (cursor < content.length) {
+    out.push({ kind: 'text', body: content.slice(cursor) });
+  }
+  // Handle an unclosed <thinking> tag during streaming
+  const openIdx = content.lastIndexOf('<thinking>');
+  const closeIdx = content.lastIndexOf('</thinking>');
+  if (openIdx > closeIdx) {
+    const partial = content.slice(openIdx + '<thinking>'.length);
+    const before = content.slice(0, openIdx);
+    return [
+      ...(before ? [{ kind: 'text' as const, body: before }] : []),
+      { kind: 'thinking', body: partial },
+    ];
+  }
+  return out;
+}
+
+function MessageContent({ content }: { content: string }) {
+  const segments = parseSegments(content);
+  if (segments.length === 0) {
+    return <div style={{ fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{content}</div>;
+  }
+  return (
+    <div style={{ fontSize: 14, lineHeight: 1.6 }}>
+      {segments.map((seg, i) =>
+        seg.kind === 'thinking' ? (
+          <details
+            key={i}
+            style={{
+              margin: '6px 0',
+              padding: '6px 10px',
+              background: 'var(--color-surface-hover, #f3f4f6)',
+              borderLeft: '3px solid var(--color-text-tertiary, #94a3b8)',
+              borderRadius: 4,
+              fontSize: 12,
+              color: 'var(--color-text-tertiary, #64748b)',
+            }}
+          >
+            <summary style={{ cursor: 'pointer', userSelect: 'none', fontWeight: 500 }}>
+              thinking
+            </summary>
+            <div style={{ whiteSpace: 'pre-wrap', marginTop: 6, fontStyle: 'italic' }}>
+              {seg.body.trim()}
+            </div>
+          </details>
+        ) : (
+          <div key={i} style={{ whiteSpace: 'pre-wrap' }}>{seg.body}</div>
+        ),
+      )}
     </div>
   );
 }

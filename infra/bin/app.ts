@@ -34,7 +34,7 @@ const foundation = new FoundationStack(app, 'OrgIQ-Foundation', {
 });
 
 // -------------------------------------------------------------------
-// Stack 2: Aurora Serverless v2 (pgvector + Apache AGE)
+// Stack 2: Aurora Serverless v2 (pgvector for embeddings + relational tables for the org graph)
 // Replaces Neptune Analytics and OpenSearch Serverless.
 // Idle cost: ~$0.06/hr (0.5 ACU min). Enable with: cdk deploy OrgIQ-Aurora
 // -------------------------------------------------------------------
@@ -42,7 +42,7 @@ const aurora = new AuroraStack(app, 'OrgIQ-Aurora', {
   env,
   prefix,
   agentRoleArn: foundation.agentBaseRole.roleArn,
-  description: 'OrgIQ Aurora: Serverless v2 PostgreSQL with pgvector + Apache AGE graph',
+  description: 'OrgIQ Aurora: Serverless v2 PostgreSQL with pgvector + relational org-graph schema',
 });
 aurora.addDependency(foundation);
 

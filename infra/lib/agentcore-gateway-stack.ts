@@ -94,7 +94,7 @@ export class AgentCoreGatewayStack extends cdk.Stack {
 
     const graphTraversalLambda = new lambda.Function(this, 'GraphTraversalLambda', {
       functionName: `${prefix}-gateway-graph-traversal`,
-      description: 'MCP tool: Execute Cypher queries against Aurora AGE knowledge graph',
+      description: 'MCP tool: Execute read-only SQL graph queries against Aurora relational schema',
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'graph_traversal.handler',
       code: lambda.Code.fromAsset('lambda/gateway-tools'),
@@ -105,13 +105,14 @@ export class AgentCoreGatewayStack extends cdk.Stack {
       environment: {
         AURORA_CLUSTER_ARN: props.auroraClusterArn,
         AURORA_SECRET_ARN: props.auroraCredentialsSecretArn,
+        PROJECT_PREFIX: prefix,
         REGION: this.region,
       },
     });
 
     const computePageRankLambda = new lambda.Function(this, 'ComputePageRankLambda', {
       functionName: `${prefix}-gateway-compute-pagerank`,
-      description: 'MCP tool: Compute PageRank scores via Aurora AGE graph queries',
+      description: 'MCP tool: Compute PageRank scores over the Aurora relational org-graph edges',
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'compute_pagerank.handler',
       code: lambda.Code.fromAsset('lambda/gateway-tools'),
@@ -122,6 +123,7 @@ export class AgentCoreGatewayStack extends cdk.Stack {
       environment: {
         AURORA_CLUSTER_ARN: props.auroraClusterArn,
         AURORA_SECRET_ARN: props.auroraCredentialsSecretArn,
+        PROJECT_PREFIX: prefix,
         REGION: this.region,
       },
     });
@@ -242,7 +244,7 @@ export class AgentCoreGatewayStack extends cdk.Stack {
 
     const graphTraversalTarget = new bedrockagentcore.CfnGatewayTarget(this, 'GraphTraversalTarget', {
       name: `${prefix}-graph-traversal`,
-      description: 'Execute Cypher queries against the Aurora AGE organizational knowledge graph',
+      description: 'Execute read-only SQL graph queries against the Aurora relational schema',
       gatewayIdentifier: gateway.attrGatewayIdentifier,
       credentialProviderConfigurations,
       targetConfiguration: {
@@ -253,14 +255,14 @@ export class AgentCoreGatewayStack extends cdk.Stack {
               inlinePayload: [
                 {
                   name: 'graph-traversal',
-                  description: 'Execute openCypher queries against the organizational knowledge graph',
+                  description: 'Execute read-only SQL (SELECT/WITH) against the OrgIQ relational graph schema',
                   inputSchema: {
                     type: 'object',
                     properties: {
-                      query: { type: 'string', description: 'openCypher query to execute' },
-                      parameters: { type: 'object', description: 'Query parameters as key-value pairs' },
+                      sql: { type: 'string', description: 'PostgreSQL SELECT or WITH statement' },
+                      parameters: { type: 'object', description: 'Named query parameters as key-value pairs' },
                     },
-                    required: ['query'],
+                    required: ['sql'],
                   },
                 },
               ],

@@ -199,7 +199,17 @@ JSON:"""
     return content
 
 
-_model = BedrockModel(model_id=MODEL_ID)
+def _model_kwargs() -> dict:
+    kw: dict = {"model_id": MODEL_ID}
+    gid = os.environ.get("GUARDRAIL_ID", "")
+    if gid:
+        kw["guardrail_id"] = gid
+        kw["guardrail_version"] = os.environ.get("GUARDRAIL_VERSION", "DRAFT")
+        kw["guardrail_trace"] = "enabled"
+    return kw
+
+
+_model = BedrockModel(**_model_kwargs())
 _agent = Agent(
     model=_model,
     tools=[list_documents, read_document, sync_knowledge_base, check_ingestion_status, extract_entities_preview],
@@ -217,8 +227,21 @@ _agent = Agent(
 )
 
 
-@app.entrypoint()
-async def handle(input_text: str, **kwargs) -> dict:
+@app.entrypoint
+async def handle(payload: dict) -> dict:
+    if isinstance(payload, dict):
+        input_text = (
+            payload.get("input_text")
+            or payload.get("prompt")
+            or payload.get("message")
+            or ""
+        )
+    else:
+        input_text = str(payload)
+
+    if not input_text:
+        return {"agent": "ingestion", "error": "missing input_text/prompt/message"}
+
     result = _agent(input_text)
     return {"agent": "ingestion", "response": str(result)}
 

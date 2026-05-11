@@ -87,7 +87,9 @@ export class AuroraStack extends cdk.Stack {
     );
 
     // ---------------------------------------------------------------
-    // Aurora Serverless v2 cluster (PostgreSQL 16, pgvector + AGE)
+    // Aurora Serverless v2 cluster (PostgreSQL 16, pgvector).
+    // Graph data is modeled as plain relational tables — see
+    // schema/orgiq_schema.sql at the repo root.
     // ---------------------------------------------------------------
 
     const cluster = new rds.DatabaseCluster(this, 'AuroraCluster', {

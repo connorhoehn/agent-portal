@@ -171,7 +171,22 @@ def build_graph(instruction: str, session_id: str = "") -> str:
     return _invoke_sub_agent(runtime_id, instruction, session_id)
 
 
-_model = BedrockModel(model_id=MODEL_ID)
+def _model_kwargs() -> dict:
+    """Build BedrockModel kwargs, applying guardrail config when configured.
+
+    GUARDRAIL_VERSION=DRAFT means "use the live editable spec" — UI edits go
+    into effect on the very next InvokeModel call without rebuilding this image.
+    """
+    kw: dict = {"model_id": MODEL_ID}
+    gid = os.environ.get("GUARDRAIL_ID", "")
+    if gid:
+        kw["guardrail_id"] = gid
+        kw["guardrail_version"] = os.environ.get("GUARDRAIL_VERSION", "DRAFT")
+        kw["guardrail_trace"] = "enabled"
+    return kw
+
+
+_model = BedrockModel(**_model_kwargs())
 _agent = Agent(
     model=_model,
     tools=[search_organization, get_expertise_scores, get_strategic_advice, ingest_documents, build_graph],
@@ -190,9 +205,24 @@ _agent = Agent(
 )
 
 
-@app.entrypoint()
-async def handle(input_text: str, **kwargs) -> dict:
-    session_id = kwargs.get("session_id", "")
+@app.entrypoint
+async def handle(payload: dict) -> dict:
+    # Accept either {"input_text": "..."} (A2A convention used by sub-agent
+    # invocations from the supervisor) or {"prompt"/"message": "..."} from
+    # the CLI / middleware. Fall back to stringifying the whole payload.
+    if isinstance(payload, dict):
+        input_text = (
+            payload.get("input_text")
+            or payload.get("prompt")
+            or payload.get("message")
+            or ""
+        )
+    else:
+        input_text = str(payload)
+
+    if not input_text:
+        return {"agent": "supervisor", "error": "missing input_text/prompt/message"}
+
     result = _agent(input_text)
     return {"agent": "supervisor", "response": str(result)}
 

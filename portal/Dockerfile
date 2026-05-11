@@ -1,19 +1,25 @@
 # syntax=docker/dockerfile:1
 
 # ── Stage 1: install deps ──────────────────────────────────────────────────────
-# npm cache stays on the host so packages aren't re-downloaded on rebuild.
-# GITHUB_TOKEN is consumed here and NOT baked into the image (npmrc is deleted).
+# SSH agent is forwarded via --mount=type=ssh so private GitHub deps can be
+# cloned without baking credentials into the image.
 FROM node:20-slim AS deps
+
+RUN apt-get update && apt-get install -y --no-install-recommends git openssh-client && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-ARG GITHUB_TOKEN
-RUN printf "@connorhoehnslalom:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=%s\n" "${GITHUB_TOKEN}" > .npmrc
-
 COPY package.json ./
 RUN npm config set strict-ssl false
-RUN --mount=type=cache,target=/root/.npm \
-    npm install && rm -f .npmrc
+RUN mkdir -p -m 0700 ~/.ssh && ssh-keyscan github.com >> ~/.ssh/known_hosts
+RUN --mount=type=ssh \
+    --mount=type=cache,target=/root/.npm \
+    npm install
+# Inject pre-built dist AND matching package.json — ui-components has no prepare
+# script so npm won't build it. Copying both keeps the exports map in sync with
+# what's actually in dist/. Pass the sibling repo as additional_contexts.ui_components.
+COPY --from=ui_components package.json ./node_modules/@connorhoehnslalom/ui-components/package.json
+COPY --from=ui_components dist/ ./node_modules/@connorhoehnslalom/ui-components/dist/
 
 # ── Stage 2: dev server ────────────────────────────────────────────────────────
 FROM node:20-slim AS development

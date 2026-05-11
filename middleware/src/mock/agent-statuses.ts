@@ -36,7 +36,7 @@ export const mockAgents: AgentDef[] = [
     status: 'healthy',
     protocol: 'a2a',
     model: 'nova-pro-v1',
-    tools: ['search_knowledge_base', 'query_aurora_age_graph', 'vector_search'],
+    tools: ['search_knowledge_base', 'query_graph', 'vector_search'],
     guardrails: ['pii-filter', 'grounding'],
     endpoint: 'https://runtime.agentcore.us-east-1.amazonaws.com/orgiq-search',
     latencyP50Ms: 890,

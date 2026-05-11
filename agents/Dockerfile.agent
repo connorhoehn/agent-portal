@@ -1,0 +1,16 @@
+# syntax=docker/dockerfile:1.7
+#
+# Shared agent Dockerfile. All 6 OrgIQ Strands agents use this — invoked with
+# `-f agents/Dockerfile.agent <agent-dir>` so the build context is each agent's
+# own directory but the recipe is identical.
+#
+# All Python deps are baked into orgiq-agent-base. This file just copies the
+# agent's source code on top, which makes per-agent rebuilds <10 seconds.
+
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+# Copy the agent's main.py + any local modules onto the base image. The base
+# already set WORKDIR /app and chowned it to bedrock_agentcore, but we re-chown
+# the new files explicitly so the runtime user can read them.
+COPY --chown=bedrock_agentcore:bedrock_agentcore . /app/
