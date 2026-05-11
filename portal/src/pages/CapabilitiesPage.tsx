@@ -526,26 +526,447 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
 
 // ─── Browser Tab ──────────────────────────────────────────────────────────────
 
+interface JourneyStep {
+  index: number;
+  startedAt: string;
+  url: string;
+  pageTitle: string;
+  textSnippet: string;
+  imageDataUrl?: string;
+  question?: string;
+  answer?: string;
+}
+
+type BrowserMode = 'qa' | 'journey' | 'sessions';
+
 function BrowserTab() {
+  const [mode, setMode] = useState<BrowserMode>('qa');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--color-border)' }}>
+        {([
+          ['qa', '🔎 Web Q&A', 'Ask a question about a webpage'],
+          ['journey', '🛤  Journey Recorder', 'Record a multi-step web visit'],
+          ['sessions', '⚙ Sessions', 'Raw AgentCore session list'],
+        ] as const).map(([id, label, hint]) => (
+          <button
+            key={id}
+            onClick={() => setMode(id)}
+            title={hint}
+            style={{
+              padding: '8px 14px',
+              fontSize: 12,
+              fontWeight: mode === id ? 600 : 400,
+              color: mode === id ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+              background: 'none',
+              border: 'none',
+              borderBottom: mode === id ? '2px solid var(--color-primary)' : '2px solid transparent',
+              cursor: 'pointer',
+              marginBottom: -1,
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {mode === 'qa' && <WebQATab />}
+      {mode === 'journey' && <JourneyTab />}
+      {mode === 'sessions' && <SessionsRawTab />}
+    </div>
+  );
+}
+
+// ── Web Q&A: URL + question → screenshot + Nova Lite answer ────────────────
+
+function WebQATab() {
+  const [url, setUrl] = useState('https://example.com');
+  const [question, setQuestion] = useState('What is this page about?');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ url: string; pageTitle: string; imageDataUrl: string | null; answer: string } | null>(null);
+
+  async function ask() {
+    if (!url.trim() || !question.trim()) return;
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      const r = await fetch('/api/capabilities/browser/web-qa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, question }),
+      });
+      const body = await r.json();
+      if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+      setResult(body);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card padding="md">
+      <div style={{ marginBottom: 12 }}>
+        <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Ask a webpage</h2>
+        <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+          Spins up a sandboxed Chrome, screenshots the page, sends it + your question to Nova Lite (multimodal). Returns an answer grounded in the visible content.
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+        <input
+          value={url}
+          onChange={e => setUrl(e.target.value)}
+          placeholder="https://..."
+          style={inputStyle()}
+        />
+        <input
+          value={question}
+          onChange={e => setQuestion(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && ask()}
+          placeholder="What do you want to know about this page?"
+          style={inputStyle()}
+        />
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button onClick={ask} disabled={busy || !url || !question} style={primaryBtnStyle(busy || !url || !question)}>
+            {busy ? 'Asking…' : 'Ask the page'}
+          </button>
+        </div>
+      </div>
+
+      {error && <div style={errBoxStyle()}>{error}</div>}
+
+      {result && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 12 }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+              Screenshot ({result.pageTitle || result.url})
+            </div>
+            {result.imageDataUrl ? (
+              <div style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: 4, background: '#fafafa' }}>
+                <img src={result.imageDataUrl} alt="page" style={{ width: '100%', display: 'block' }} />
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>(no screenshot)</div>
+            )}
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+              Answer
+            </div>
+            <div style={{ fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{result.answer}</div>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ── Journey Recorder: build a sequence of URL visits with carousel + timeline ──
+
+function JourneyTab() {
+  const { data: sessionsData, refresh: refreshSessions } = useFetch<{ sessions: BrowserSession[] }>('/api/capabilities/browser-sessions', 10000);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [url, setUrl] = useState('https://example.com');
+  const [label, setLabel] = useState('journey');
+  const [navigating, setNavigating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<'carousel' | 'timeline'>('carousel');
+  const [carouselIdx, setCarouselIdx] = useState(0);
+
+  const { data: journeyData, refresh: refreshJourney } = useFetch<{ steps: JourneyStep[] }>(
+    activeSessionId ? `/api/capabilities/browser-sessions/${activeSessionId}/journey` : '',
+    5000,
+  );
+  const steps = journeyData?.steps ?? [];
+
+  const openSessions = (sessionsData?.sessions ?? []).filter(s => s.status !== 'CLOSED');
+
+  async function startJourney() {
+    setNavigating(true);
+    setError(null);
+    try {
+      const r = await fetch('/api/capabilities/browser-sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentName: label, url }),
+      });
+      const body = await r.json();
+      if (!r.ok || !body.session?.sessionId) throw new Error(body.error || 'launch failed');
+      setActiveSessionId(body.session.sessionId);
+      // First step gets a screenshot — call navigate explicitly with capture flag
+      // to populate the journey ring (the launch endpoint navigates but doesn't
+      // capture into the journey).
+      await fetch(`/api/capabilities/browser-sessions/${body.session.sessionId}/navigate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, captureScreenshot: true }),
+      });
+      setCarouselIdx(0);
+      refreshJourney();
+      refreshSessions();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setNavigating(false);
+    }
+  }
+
+  async function stepTo(nextUrl: string) {
+    if (!activeSessionId) return;
+    setNavigating(true);
+    setError(null);
+    try {
+      const r = await fetch(`/api/capabilities/browser-sessions/${activeSessionId}/navigate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: nextUrl, captureScreenshot: true }),
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.error || 'navigate failed');
+      }
+      refreshJourney();
+      // Jump carousel to the new step
+      setCarouselIdx(steps.length);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setNavigating(false);
+    }
+  }
+
+  async function endJourney() {
+    if (!activeSessionId) return;
+    await fetch(`/api/capabilities/browser-sessions/${activeSessionId}`, { method: 'DELETE' });
+    refreshSessions();
+    setActiveSessionId(null);
+    setCarouselIdx(0);
+  }
+
+  return (
+    <Card padding="md">
+      <div style={{ marginBottom: 12 }}>
+        <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Journey Recorder</h2>
+        <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+          Record an ordered series of web pages with screenshots. Replay as a carousel or scrollable timeline.
+        </div>
+      </div>
+
+      {!activeSessionId ? (
+        <div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <input
+              value={label}
+              onChange={e => setLabel(e.target.value)}
+              placeholder="Journey label (e.g. competitor-research)"
+              style={inputStyle()}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                value={url}
+                onChange={e => setUrl(e.target.value)}
+                placeholder="Starting URL"
+                onKeyDown={e => e.key === 'Enter' && startJourney()}
+                style={{ ...inputStyle(), flex: 1 }}
+              />
+              <button onClick={startJourney} disabled={navigating || !url} style={primaryBtnStyle(navigating || !url)}>
+                {navigating ? 'Starting…' : 'Start journey'}
+              </button>
+            </div>
+          </div>
+
+          {openSessions.length > 0 && (
+            <div style={{ marginTop: 16, padding: 10, background: 'var(--color-surface-hover)', borderRadius: 4 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                Or resume an open session
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {openSessions.map(s => (
+                  <button
+                    key={s.sessionId}
+                    onClick={() => { setActiveSessionId(s.sessionId); refreshJourney(); }}
+                    style={{
+                      textAlign: 'left',
+                      padding: '6px 10px',
+                      fontSize: 12,
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 4,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <code style={{ fontFamily: 'monospace', fontSize: 11 }}>{s.sessionId}</code>
+                    <span style={{ marginLeft: 8, color: 'var(--color-text-tertiary)' }}>{s.agentName}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            <input
+              value={url}
+              onChange={e => setUrl(e.target.value)}
+              placeholder="Next URL"
+              onKeyDown={e => e.key === 'Enter' && stepTo(url)}
+              style={{ ...inputStyle(), flex: 1 }}
+            />
+            <button onClick={() => stepTo(url)} disabled={navigating || !url} style={primaryBtnStyle(navigating || !url)}>
+              {navigating ? 'Navigating…' : 'Navigate (record)'}
+            </button>
+            <button onClick={endJourney} style={{ ...primaryBtnStyle(false), background: 'var(--color-danger, #dc2626)' }}>
+              End
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+              {steps.length} step{steps.length !== 1 ? 's' : ''} · session <code style={{ fontFamily: 'monospace', fontSize: 11 }}>{activeSessionId.slice(0, 12)}…</code>
+            </span>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button onClick={() => setView('carousel')} style={tabBtn(view === 'carousel')}>Carousel</button>
+              <button onClick={() => setView('timeline')} style={tabBtn(view === 'timeline')}>Timeline</button>
+            </div>
+          </div>
+
+          {error && <div style={errBoxStyle()}>{error}</div>}
+
+          {steps.length === 0 ? (
+            <div style={{ padding: 24, textAlign: 'center', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+              No steps captured yet. Enter a URL above.
+            </div>
+          ) : view === 'carousel' ? (
+            <Carousel steps={steps} idx={Math.min(carouselIdx, steps.length - 1)} onIdx={setCarouselIdx} />
+          ) : (
+            <Timeline steps={steps} onJump={(i) => { setView('carousel'); setCarouselIdx(i); }} />
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function Carousel({ steps, idx, onIdx }: { steps: JourneyStep[]; idx: number; onIdx: (i: number) => void }) {
+  const step = steps[idx];
+  if (!step) return null;
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+        <button onClick={() => onIdx(Math.max(0, idx - 1))} disabled={idx === 0} style={carouselArrowStyle(idx === 0)}>‹</button>
+        <div style={{ flex: 1, textAlign: 'center' }}>
+          <div style={{ fontSize: 12, fontWeight: 600 }}>{step.pageTitle || step.url}</div>
+          <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--color-text-tertiary)', marginTop: 2 }}>{step.url}</div>
+          <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+            Step {idx + 1} of {steps.length} · {new Date(step.startedAt).toLocaleTimeString()}
+          </div>
+        </div>
+        <button onClick={() => onIdx(Math.min(steps.length - 1, idx + 1))} disabled={idx === steps.length - 1} style={carouselArrowStyle(idx === steps.length - 1)}>›</button>
+      </div>
+      {step.imageDataUrl ? (
+        <div style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: 4, background: '#fafafa' }}>
+          <img src={step.imageDataUrl} alt={step.pageTitle} style={{ width: '100%', display: 'block' }} />
+        </div>
+      ) : (
+        <div style={{ padding: 24, textAlign: 'center', fontSize: 12, color: 'var(--color-text-tertiary)' }}>(no screenshot)</div>
+      )}
+      {step.question && (
+        <div style={{ marginTop: 10, padding: 10, background: 'var(--color-surface-hover)', borderRadius: 4 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)' }}>Q: {step.question}</div>
+          <div style={{ fontSize: 12, marginTop: 4 }}>{step.answer}</div>
+        </div>
+      )}
+      {/* Thumbnail strip */}
+      <div style={{ display: 'flex', gap: 6, marginTop: 12, overflowX: 'auto', paddingBottom: 4 }}>
+        {steps.map((s, i) => (
+          <button
+            key={s.index}
+            onClick={() => onIdx(i)}
+            style={{
+              flex: '0 0 auto',
+              border: i === idx ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+              padding: 0,
+              background: 'var(--color-surface)',
+              cursor: 'pointer',
+              width: 80,
+              height: 50,
+              overflow: 'hidden',
+              borderRadius: 3,
+            }}
+            title={s.pageTitle || s.url}
+          >
+            {s.imageDataUrl ? (
+              <img src={s.imageDataUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <span style={{ fontSize: 9, color: 'var(--color-text-tertiary)' }}>{i + 1}</span>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Timeline({ steps, onJump }: { steps: JourneyStep[]; onJump: (i: number) => void }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 480, overflowY: 'auto' }}>
+      {steps.map((step, i) => (
+        <div
+          key={step.index}
+          onClick={() => onJump(i)}
+          style={{
+            display: 'flex',
+            gap: 12,
+            padding: 8,
+            border: '1px solid var(--color-border)',
+            borderRadius: 4,
+            cursor: 'pointer',
+            background: 'var(--color-surface)',
+          }}
+        >
+          <div style={{ flex: '0 0 120px', height: 76, overflow: 'hidden', borderRadius: 3, background: '#fafafa' }}>
+            {step.imageDataUrl ? (
+              <img src={step.imageDataUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontSize: 10, color: 'var(--color-text-tertiary)' }}>no shot</div>
+            )}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-tertiary)' }}>#{i + 1}</span>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>{step.pageTitle || step.url}</span>
+            </div>
+            <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--color-text-tertiary)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {step.url}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+              {new Date(step.startedAt).toLocaleTimeString()}
+            </div>
+            {step.question && (
+              <div style={{ marginTop: 6, fontSize: 11, color: 'var(--color-text-secondary)', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any }}>
+                <b>Q:</b> {step.question}
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Sessions: raw open + closed session lists (admin power-user view) ───────
+
+function SessionsRawTab() {
   const { data, refresh } = useFetch<{ sessions: BrowserSession[] }>('/api/capabilities/browser-sessions', 10000);
-  const [newSessionAgent, setNewSessionAgent] = useState('');
+  const [newSessionAgent, setNewSessionAgent] = useState('portal');
   const [newSessionUrl, setNewSessionUrl] = useState('');
   const [launching, setLaunching] = useState(false);
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const [navUrl, setNavUrl] = useState('https://example.com');
-  const [navigating, setNavigating] = useState(false);
-  const [screenshotDataUrl, setScreenshotDataUrl] = useState<string | null>(null);
-  const [screenshotting, setScreenshotting] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-
-  async function closeSession(sessionId: string) {
-    await fetch(`/api/capabilities/browser-sessions/${sessionId}`, { method: 'DELETE' });
-    if (selectedSessionId === sessionId) {
-      setSelectedSessionId(null);
-      setScreenshotDataUrl(null);
-    }
-    refresh();
-  }
 
   async function launchSession() {
     if (!newSessionAgent) return;
@@ -555,57 +976,14 @@ function BrowserTab() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ agentName: newSessionAgent, url: newSessionUrl || undefined }),
     });
-    setNewSessionAgent('');
     setNewSessionUrl('');
     setLaunching(false);
     refresh();
   }
 
-  async function navigate() {
-    if (!selectedSessionId || !navUrl) return;
-    setNavigating(true);
-    setActionError(null);
-    try {
-      const r = await fetch(`/api/capabilities/browser-sessions/${selectedSessionId}/navigate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: navUrl }),
-      });
-      if (!r.ok) {
-        const body = await r.text();
-        setActionError(`Navigate failed: ${body}`);
-      } else {
-        // Auto-screenshot after navigate so the user sees the page
-        await screenshot();
-      }
-    } catch (e) {
-      setActionError(`Navigate error: ${(e as Error).message}`);
-    } finally {
-      setNavigating(false);
-      refresh();
-    }
-  }
-
-  async function screenshot() {
-    if (!selectedSessionId) return;
-    setScreenshotting(true);
-    setActionError(null);
-    try {
-      const r = await fetch(`/api/capabilities/browser-sessions/${selectedSessionId}/screenshot`, {
-        method: 'POST',
-      });
-      if (!r.ok) {
-        const body = await r.text();
-        setActionError(`Screenshot failed: ${body}`);
-      } else {
-        const body = await r.json();
-        setScreenshotDataUrl(body.imageDataUrl ?? null);
-      }
-    } catch (e) {
-      setActionError(`Screenshot error: ${(e as Error).message}`);
-    } finally {
-      setScreenshotting(false);
-    }
+  async function closeSession(sessionId: string) {
+    await fetch(`/api/capabilities/browser-sessions/${sessionId}`, { method: 'DELETE' });
+    refresh();
   }
 
   const sessions = data?.sessions ?? [];
@@ -613,7 +991,6 @@ function BrowserTab() {
   const closed = sessions
     .filter(s => s.status === 'CLOSED')
     .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
-
   const statusTone = (s: BrowserSession['status']): 'success' | 'warning' | 'default' =>
     s === 'ACTIVE' ? 'success' : s === 'IDLE' ? 'warning' : 'default';
 
@@ -623,14 +1000,12 @@ function BrowserTab() {
       <Card padding="md">
         <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Launch Browser Session</h2>
         <div style={{ display: 'flex', gap: 8 }}>
-          <select
+          <input
+            placeholder="Session label (any text)"
             value={newSessionAgent}
             onChange={e => setNewSessionAgent(e.target.value)}
             style={{ flex: '0 0 160px', padding: '7px 10px', fontSize: 12, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', background: 'var(--color-surface)' }}
-          >
-            <option value="">Select agent…</option>
-            {['supervisor', 'search', 'advisor'].map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
+          />
           <input
             placeholder="Starting URL (optional)"
             value={newSessionUrl}
@@ -650,7 +1025,7 @@ function BrowserTab() {
       {/* Active sessions */}
       <Card padding="md">
         <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
-          Sessions <span style={{ color: 'var(--color-text-tertiary)', fontWeight: 400 }}>({open.length} open)</span>
+          Open Sessions <span style={{ color: 'var(--color-text-tertiary)', fontWeight: 400 }}>({open.length})</span>
         </h2>
         {open.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 24, color: 'var(--color-text-secondary)', fontSize: 13 }}>
@@ -660,7 +1035,7 @@ function BrowserTab() {
           <Table>
             <TableHead>
               <TableRow>
-                <TableTh>Agent</TableTh>
+                <TableTh>Label</TableTh>
                 <TableTh>Status</TableTh>
                 <TableTh>Current URL</TableTh>
                 <TableTh>Requests</TableTh>
@@ -669,98 +1044,33 @@ function BrowserTab() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {open.map(session => {
-                const isSelected = session.sessionId === selectedSessionId;
-                return (
-                  <TableRow
-                    key={session.sessionId}
-                    onClick={() => {
-                      setSelectedSessionId(session.sessionId);
-                      setScreenshotDataUrl(null);
-                      setActionError(null);
-                    }}
-                    style={{
-                      cursor: 'pointer',
-                      background: isSelected ? 'var(--color-surface-hover, #f3f4f6)' : undefined,
-                    } as any}
-                  >
-                    <TableTd style={{ fontWeight: 500 }}>{session.agentName}</TableTd>
-                    <TableTd><Chip tone={statusTone(session.status)} size="xs">{session.status}</Chip></TableTd>
-                    <TableTd style={{ fontSize: 11, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {session.currentUrl === 'about:blank' ? <span style={{ color: 'var(--color-text-tertiary)' }}>—</span> : (
-                        <a href={session.currentUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>
-                          {session.currentUrl}
-                        </a>
-                      )}
-                    </TableTd>
-                    <TableTd>{session.requestCount}</TableTd>
-                    <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{formatAge(session.lastActivityAt)}</TableTd>
-                    <TableTd>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); closeSession(session.sessionId); }}
-                        style={{ fontSize: 11, padding: '2px 8px', background: 'none', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
-                      >
-                        Close
-                      </button>
-                    </TableTd>
-                  </TableRow>
-                );
-              })}
+              {open.map(session => (
+                <TableRow key={session.sessionId}>
+                  <TableTd style={{ fontWeight: 500 }}>{session.agentName}</TableTd>
+                  <TableTd><Chip tone={statusTone(session.status)} size="xs">{session.status}</Chip></TableTd>
+                  <TableTd style={{ fontSize: 11, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {session.currentUrl === 'about:blank' ? <span style={{ color: 'var(--color-text-tertiary)' }}>—</span> : (
+                      <a href={session.currentUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>
+                        {session.currentUrl}
+                      </a>
+                    )}
+                  </TableTd>
+                  <TableTd>{session.requestCount}</TableTd>
+                  <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{formatAge(session.lastActivityAt)}</TableTd>
+                  <TableTd>
+                    <button
+                      onClick={() => closeSession(session.sessionId)}
+                      style={{ fontSize: 11, padding: '2px 8px', background: 'none', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
+                    >
+                      Close
+                    </button>
+                  </TableTd>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
         )}
       </Card>
-
-      {/* Interact with selected session */}
-      {selectedSessionId && (
-        <Card padding="md">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <h2 style={{ fontSize: 14, fontWeight: 600 }}>Interact — <code style={{ fontFamily: 'monospace', fontSize: 12 }}>{selectedSessionId}</code></h2>
-            <button
-              onClick={() => { setSelectedSessionId(null); setScreenshotDataUrl(null); setActionError(null); }}
-              style={{ fontSize: 11, padding: '2px 8px', background: 'none', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
-            >
-              Done
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            <input
-              value={navUrl}
-              onChange={e => setNavUrl(e.target.value)}
-              placeholder="https://..."
-              onKeyDown={e => e.key === 'Enter' && navigate()}
-              style={{ flex: 1, padding: '7px 10px', fontSize: 12, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', background: 'var(--color-surface)' }}
-            />
-            <button
-              onClick={navigate}
-              disabled={navigating || !navUrl}
-              style={{ padding: '7px 16px', fontSize: 12, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer', opacity: navigating ? 0.6 : 1 }}
-            >
-              {navigating ? 'Navigating…' : 'Navigate'}
-            </button>
-            <button
-              onClick={screenshot}
-              disabled={screenshotting}
-              style={{ padding: '7px 16px', fontSize: 12, background: 'none', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', opacity: screenshotting ? 0.6 : 1 }}
-            >
-              {screenshotting ? 'Capturing…' : 'Screenshot'}
-            </button>
-          </div>
-
-          {actionError && (
-            <div style={{ padding: 8, background: '#fef2f2', color: '#991b1b', fontSize: 12, borderRadius: 4, marginBottom: 12 }}>
-              {actionError}
-            </div>
-          )}
-
-          {screenshotDataUrl && (
-            <div style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: 4, background: '#fafafa' }}>
-              <img src={screenshotDataUrl} alt="Browser screenshot" style={{ maxWidth: '100%', display: 'block' }} />
-            </div>
-          )}
-        </Card>
-      )}
 
       {/* Past sessions */}
       <Card padding="md">
@@ -813,6 +1123,70 @@ function BrowserTab() {
 }
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
+
+function inputStyle(): React.CSSProperties {
+  return {
+    padding: '7px 10px',
+    fontSize: 12,
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-sm)',
+    background: 'var(--color-surface)',
+    outline: 'none',
+  };
+}
+
+function primaryBtnStyle(disabled: boolean): React.CSSProperties {
+  return {
+    padding: '7px 16px',
+    fontSize: 12,
+    background: 'var(--color-primary)',
+    color: '#fff',
+    border: 'none',
+    borderRadius: 'var(--radius-sm)',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    opacity: disabled ? 0.6 : 1,
+    fontWeight: 500,
+  };
+}
+
+function errBoxStyle(): React.CSSProperties {
+  return {
+    padding: 8,
+    background: '#fef2f2',
+    color: '#991b1b',
+    fontSize: 12,
+    borderRadius: 4,
+    marginBottom: 12,
+  };
+}
+
+function tabBtn(active: boolean): React.CSSProperties {
+  return {
+    fontSize: 11,
+    padding: '4px 10px',
+    background: active ? 'var(--color-primary)' : 'var(--color-surface)',
+    color: active ? '#fff' : 'var(--color-text-secondary)',
+    border: '1px solid ' + (active ? 'var(--color-primary)' : 'var(--color-border)'),
+    borderRadius: 4,
+    cursor: 'pointer',
+    fontWeight: active ? 600 : 400,
+  };
+}
+
+function carouselArrowStyle(disabled: boolean): React.CSSProperties {
+  return {
+    width: 32,
+    height: 32,
+    borderRadius: '50%',
+    border: '1px solid var(--color-border)',
+    background: 'var(--color-surface)',
+    color: 'var(--color-text-primary)',
+    fontSize: 18,
+    fontWeight: 600,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    opacity: disabled ? 0.3 : 1,
+  };
+}
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (

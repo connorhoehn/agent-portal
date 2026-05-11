@@ -5,6 +5,7 @@ import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 import { agentcore, aurora } from '../providers/index.js';
 import { detectIntervention, recordInvocation, snippet } from '../lib/invocations.js';
 import { recordTurn } from '../providers/memory.js';
+import { maybeGenerateTitle } from '../lib/session-titles.js';
 
 export const agentsRouter = Router();
 
@@ -124,6 +125,10 @@ agentsRouter.post('/:agentId/invoke', asyncHandler(async (req, res) => {
     userMessage,
     assistantMessage: result.text,
   });
+
+  // Fire-and-forget: generate a friendly title from the user's first message
+  // so the sidebar can show something better than the raw UUID.
+  maybeGenerateTitle(sessionId, rawUserMessage);
 
   // Tool calls (mock provider emits these; real supervisor doesn't yet because
   // the entrypoint returns a single dict instead of streaming tool events).

@@ -15,6 +15,7 @@ interface SessionSummary {
   sessionId: string;
   actorId: string;
   createdAt: string;
+  title?: string;
 }
 
 interface MemoryEvent {
@@ -117,7 +118,7 @@ function InvokePage() {
                 }}
               >
                 <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {s.sessionId.slice(0, 8)}…{s.sessionId.slice(-4)}
+                  {s.title || <span style={{ color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>Untitled session</span>}
                 </div>
                 <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
                   {new Date(s.createdAt).toLocaleString()}

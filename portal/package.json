@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@connorhoehnslalom/ui-components": "github:connorhoehnslalom/ui-components#main",
     "@xyflow/react": "^12.10.0",
     "amazon-cognito-identity-js": "^6.3.16",

@@ -1,9 +1,22 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
+import {
+  BedrockRuntimeClient,
+  ConverseCommand,
+} from '@aws-sdk/client-bedrock-runtime';
 import { asyncHandler } from '../lib/async-handler.js';
 import { guardrails, agentcore, cloudwatch } from '../providers/index.js';
 import { config } from '../config.js';
-import { recordCapabilityEvent, snippet } from '../lib/invocations.js';
+import {
+  recordCapabilityEvent,
+  snippet,
+  appendJourneyStep,
+  getJourney,
+  clearJourney,
+} from '../lib/invocations.js';
+
+const _bedrockRt = new BedrockRuntimeClient({ region: config.region });
+const VISION_MODEL = 'amazon.nova-lite-v1:0';
 
 export const capabilitiesRouter = Router();
 
@@ -147,9 +160,29 @@ capabilitiesRouter.delete('/browser-sessions/:sessionId', asyncHandler(async (re
 
 capabilitiesRouter.post('/browser-sessions/:sessionId/navigate', asyncHandler(async (req, res) => {
   const sessionId = req.params['sessionId'] as string;
-  const { url } = req.body as { url: string };
+  const { url, captureScreenshot } = req.body as { url: string; captureScreenshot?: boolean };
   const startedAt = new Date();
   const session = await agentcore.navigateBrowser(sessionId, url);
+
+  // If the caller wants the navigation captured as a journey step, screenshot
+  // immediately + push it into the per-session journey ring.
+  let imageDataUrl: string | undefined;
+  if (session && captureScreenshot) {
+    try {
+      const shot = await agentcore.screenshotBrowser(sessionId);
+      imageDataUrl = shot?.imageDataUrl;
+    } catch {
+      // ignore — journey step is still recorded without an image
+    }
+    appendJourneyStep(sessionId, {
+      startedAt: startedAt.toISOString(),
+      url,
+      pageTitle: session.pageTitle ?? '',
+      textSnippet: '',
+      ...(imageDataUrl ? { imageDataUrl } : {}),
+    });
+  }
+
   recordCapabilityEvent({
     id: randomUUID(),
     kind: 'browser_navigate',
@@ -161,7 +194,120 @@ capabilitiesRouter.post('/browser-sessions/:sessionId/navigate', asyncHandler(as
     ...(session ? {} : { error: 'navigate failed' }),
   });
   if (!session) { res.status(404).json({ error: 'Session not found' }); return; }
-  res.json({ ok: true, session });
+  res.json({ ok: true, session, imageDataUrl: imageDataUrl ?? null });
+}));
+
+// ── Journey: ordered (url → screenshot → text) steps per session ──────────────
+
+capabilitiesRouter.get('/browser-sessions/:sessionId/journey', (req, res) => {
+  const sessionId = req.params['sessionId'] as string;
+  res.json({ steps: getJourney(sessionId) });
+});
+
+capabilitiesRouter.delete('/browser-sessions/:sessionId/journey', (req, res) => {
+  const sessionId = req.params['sessionId'] as string;
+  clearJourney(sessionId);
+  res.json({ ok: true });
+});
+
+// ── Web Q&A: launch → navigate → screenshot → vision-model answer ─────────────
+
+capabilitiesRouter.post('/browser/web-qa', asyncHandler(async (req, res) => {
+  const { url, question, sessionId: existingSessionId, label } = req.body as {
+    url?: string;
+    question?: string;
+    sessionId?: string;
+    label?: string;
+  };
+  if (!url || !question) {
+    res.status(400).json({ error: 'url and question are required' });
+    return;
+  }
+
+  let sessionId = existingSessionId ?? '';
+  let createdHere = false;
+  const startedAt = new Date();
+
+  try {
+    if (!sessionId) {
+      const session = await agentcore.createBrowserSession({ agentName: label || 'web-qa' });
+      sessionId = session.sessionId;
+      createdHere = true;
+    }
+
+    // Navigate (the navigate provider updates the internal state cache too).
+    const nav = await agentcore.navigateBrowser(sessionId, url);
+    if (!nav) {
+      res.status(502).json({ error: 'navigate failed' });
+      return;
+    }
+
+    // Screenshot.
+    const shot = await agentcore.screenshotBrowser(sessionId);
+    const imageBytes = shot?.imageDataUrl ? Buffer.from(shot.imageDataUrl.split(',')[1] ?? '', 'base64') : undefined;
+
+    // Vision-model answer. Nova Lite is multimodal — we send the screenshot
+    // plus the user question and a short instruction. Cheaper than Pro for
+    // a single Q&A turn.
+    let answer = '';
+    if (imageBytes && imageBytes.length > 0) {
+      try {
+        const visionResp = await _bedrockRt.send(
+          new ConverseCommand({
+            modelId: VISION_MODEL,
+            system: [{
+              text: 'You answer questions about a web page using a screenshot of it as evidence. Keep answers concise (3-5 sentences). If the page does not contain the answer, say so explicitly.',
+            }],
+            messages: [{
+              role: 'user',
+              content: [
+                { image: { format: 'png', source: { bytes: imageBytes } } },
+                { text: `Page URL: ${url}\nPage title: ${nav.pageTitle ?? ''}\n\nQuestion: ${question}` },
+              ],
+            }],
+            inferenceConfig: { maxTokens: 400, temperature: 0.2 },
+          }),
+        );
+        const blocks = visionResp.output?.message?.content ?? [];
+        answer = blocks.map((c) => ('text' in c ? c.text : '')).join('').trim();
+      } catch (err) {
+        answer = `(vision call failed: ${(err as Error).message})`;
+      }
+    } else {
+      answer = '(no screenshot captured — cannot answer)';
+    }
+
+    appendJourneyStep(sessionId, {
+      startedAt: startedAt.toISOString(),
+      url,
+      pageTitle: nav.pageTitle ?? '',
+      textSnippet: '',
+      question,
+      answer,
+      ...(shot?.imageDataUrl ? { imageDataUrl: shot.imageDataUrl } : {}),
+    });
+
+    recordCapabilityEvent({
+      id: randomUUID(),
+      kind: 'browser_navigate',
+      startedAt: startedAt.toISOString(),
+      durationMs: Date.now() - startedAt.getTime(),
+      sessionId,
+      detail: { url, pageTitle: nav.pageTitle ?? '', qa: true },
+      ok: true,
+    });
+
+    res.json({
+      sessionId,
+      createdHere,
+      url,
+      pageTitle: nav.pageTitle ?? '',
+      imageDataUrl: shot?.imageDataUrl ?? null,
+      answer,
+    });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
 }));
 
 capabilitiesRouter.post('/browser-sessions/:sessionId/screenshot', asyncHandler(async (req, res) => {
