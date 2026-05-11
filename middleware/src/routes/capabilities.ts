@@ -14,6 +14,14 @@ import {
   getJourney,
   clearJourney,
 } from '../lib/invocations.js';
+import {
+  startCrawl,
+  getCrawl,
+  listCrawls,
+  cancelCrawl,
+  subscribeCrawl,
+} from '../lib/crawler.js';
+import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 
 const _bedrockRt = new BedrockRuntimeClient({ region: config.region });
 const VISION_MODEL = 'amazon.nova-lite-v1:0';
@@ -327,3 +335,64 @@ capabilitiesRouter.post('/browser-sessions/:sessionId/screenshot', asyncHandler(
   if (!shot) { res.status(404).json({ error: 'Session not found or screenshot failed' }); return; }
   res.json(shot);
 }));
+
+// ── Doc Discovery Crawler ─────────────────────────────────────────────────────
+
+capabilitiesRouter.post('/browser/crawl', asyncHandler(async (req, res) => {
+  const { startUrl, maxPages, includePattern, sameOriginOnly, label } = req.body as {
+    startUrl?: string;
+    maxPages?: number;
+    includePattern?: string;
+    sameOriginOnly?: boolean;
+    label?: string;
+  };
+  if (!startUrl || typeof startUrl !== 'string') {
+    res.status(400).json({ error: 'startUrl required' });
+    return;
+  }
+  try { new URL(startUrl); } catch { res.status(400).json({ error: 'startUrl must be a valid URL' }); return; }
+  const crawl = await startCrawl({ startUrl, maxPages, includePattern, sameOriginOnly, label });
+  res.status(201).json({ crawl });
+}));
+
+capabilitiesRouter.get('/browser/crawl', (_req, res) => {
+  res.json({ crawls: listCrawls() });
+});
+
+capabilitiesRouter.get('/browser/crawl/:crawlId', (req, res) => {
+  const crawl = getCrawl(req.params['crawlId'] as string);
+  if (!crawl) { res.status(404).json({ error: 'Crawl not found' }); return; }
+  res.json({ crawl });
+});
+
+capabilitiesRouter.post('/browser/crawl/:crawlId/cancel', (req, res) => {
+  const ok = cancelCrawl(req.params['crawlId'] as string);
+  if (!ok) { res.status(404).json({ error: 'Crawl not found' }); return; }
+  res.json({ ok: true });
+});
+
+capabilitiesRouter.get('/browser/crawl/:crawlId/stream', (req, res) => {
+  const crawlId = req.params['crawlId'] as string;
+  const crawl = getCrawl(crawlId);
+  if (!crawl) { res.status(404).json({ error: 'Crawl not found' }); return; }
+
+  initSSE(res);
+  // Send current state immediately so a late subscriber catches up.
+  writeSSE(res, { type: 'snapshot', session: crawl });
+
+  const unsubscribe = subscribeCrawl(crawlId, (ev) => {
+    writeSSE(res, ev);
+    if (ev.type === 'completed' || ev.type === 'cancelled' || ev.type === 'failed') {
+      endSSE(res);
+    }
+  });
+
+  // If the crawl already finished before we subscribed, close immediately.
+  if (crawl.status !== 'running') {
+    writeSSE(res, { type: crawl.status === 'completed' ? 'completed' : crawl.status === 'cancelled' ? 'cancelled' : 'failed', session: crawl });
+    endSSE(res);
+    return;
+  }
+
+  req.on('close', () => { unsubscribe(); endSSE(res); });
+});

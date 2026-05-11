@@ -14,8 +14,10 @@ import {
   ListDataSourcesCommand,
   GetDataSourceCommand,
   ListIngestionJobsCommand,
+  GetIngestionJobCommand,
   StartIngestionJobCommand,
 } from '@aws-sdk/client-bedrock-agent';
+import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { config } from '../config.js';
 
 export interface KbSummary {
@@ -51,6 +53,7 @@ export interface IngestionJobSummary {
   documentsIndexed: number;
   documentsFailed: number;
   documentsDeleted: number;
+  failureReasons: string[];
 }
 
 const _client = (): BedrockAgentClient =>
@@ -158,6 +161,7 @@ export async function listIngestionJobs(dataSourceId?: string, limit = 20): Prom
           documentsIndexed: Number((stats as any).numberOfNewDocumentsIndexed ?? 0) + Number((stats as any).numberOfModifiedDocumentsIndexed ?? 0),
           documentsFailed: Number((stats as any).numberOfDocumentsFailed ?? 0),
           documentsDeleted: Number((stats as any).numberOfDocumentsDeleted ?? 0),
+          failureReasons: [],
         });
       }
     }
@@ -186,5 +190,75 @@ export async function startIngestionJob(dataSourceId: string, description?: stri
   } catch (err) {
     console.warn('[kb] startIngestionJob failed:', (err as Error).message);
     return null;
+  }
+}
+
+export async function getIngestionJob(jobId: string, dataSourceId: string): Promise<IngestionJobSummary | null> {
+  const kbId = config.knowledgeBase.id;
+  if (!kbId) return null;
+  try {
+    const resp = await _client().send(
+      new GetIngestionJobCommand({ knowledgeBaseId: kbId, dataSourceId, ingestionJobId: jobId }),
+    );
+    const j = resp.ingestionJob;
+    if (!j) return null;
+    const stats = j.statistics ?? {};
+    const startMs = j.startedAt instanceof Date ? j.startedAt.getTime() : 0;
+    const endMs = j.updatedAt instanceof Date ? j.updatedAt.getTime() : Date.now();
+    return {
+      jobId: j.ingestionJobId ?? jobId,
+      dataSourceId,
+      status: String(j.status ?? ''),
+      startedAt: j.startedAt instanceof Date ? j.startedAt.toISOString() : new Date().toISOString(),
+      updatedAt: j.updatedAt instanceof Date ? j.updatedAt.toISOString() : new Date().toISOString(),
+      description: j.description ?? '',
+      durationMs: startMs > 0 ? Math.max(0, endMs - startMs) : 0,
+      documentsScanned: Number((stats as any).numberOfDocumentsScanned ?? 0),
+      documentsIndexed: Number((stats as any).numberOfNewDocumentsIndexed ?? 0) + Number((stats as any).numberOfModifiedDocumentsIndexed ?? 0),
+      documentsFailed: Number((stats as any).numberOfDocumentsFailed ?? 0),
+      documentsDeleted: Number((stats as any).numberOfDocumentsDeleted ?? 0),
+      failureReasons: j.failureReasons ?? [],
+    };
+  } catch (err) {
+    console.warn('[kb] getIngestionJob failed:', (err as Error).message);
+    return null;
+  }
+}
+
+export interface S3QueueSummary {
+  total: number;
+  pendingSinceLastSync: number;
+  lastModified: string | null;
+  bucket: string;
+}
+
+export async function countS3Documents(lastSyncAt?: string): Promise<S3QueueSummary> {
+  const bucket = config.foundation.documentsBucket;
+  if (!bucket) return { total: 0, pendingSinceLastSync: 0, lastModified: null, bucket: '' };
+  const syncCutoff = lastSyncAt ? new Date(lastSyncAt) : null;
+  try {
+    const s3 = new S3Client({ region: config.region });
+    let total = 0;
+    let pending = 0;
+    let lastModified: Date | null = null;
+    let continuationToken: string | undefined;
+    do {
+      const resp = await s3.send(
+        new ListObjectsV2Command({ Bucket: bucket, MaxKeys: 1000, ContinuationToken: continuationToken }),
+      );
+      for (const obj of resp.Contents ?? []) {
+        total++;
+        if (obj.LastModified) {
+          if (!lastModified || obj.LastModified > lastModified) lastModified = obj.LastModified;
+          if (syncCutoff && obj.LastModified > syncCutoff) pending++;
+        }
+      }
+      continuationToken = resp.NextContinuationToken;
+    } while (continuationToken && total < 5000);
+    if (!syncCutoff) pending = total;
+    return { total, pendingSinceLastSync: pending, lastModified: lastModified?.toISOString() ?? null, bucket };
+  } catch (err) {
+    console.warn('[kb] countS3Documents failed:', (err as Error).message);
+    return { total: 0, pendingSinceLastSync: 0, lastModified: null, bucket };
   }
 }

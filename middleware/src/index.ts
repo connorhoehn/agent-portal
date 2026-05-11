@@ -9,6 +9,7 @@ import { ingestRouter } from './routes/ingest.js';
 import { observabilityRouter } from './routes/observability.js';
 import { capabilitiesRouter } from './routes/capabilities.js';
 import { sessionsRouter } from './routes/sessions.js';
+import { initScheduler } from './lib/ingest-scheduler.js';
 
 const app = express();
 
@@ -33,6 +34,8 @@ app.use('/api/capabilities', capabilitiesRouter);
 app.use('/api/sessions', sessionsRouter);
 
 app.use(errorHandler);
+
+initScheduler();
 
 app.listen(config.port, '0.0.0.0', () => {
   const mockedDomains = Object.entries(config.mock).filter(([, v]) => v).map(([k]) => k);

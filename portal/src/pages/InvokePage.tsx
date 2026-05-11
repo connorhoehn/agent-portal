@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAgUiStream } from '../hooks/useAgUiStream';
+import type { LiveToolCall } from '../hooks/useAgUiStream';
 import { useFetch } from '../hooks/useFetch';
 
 interface AgentDef {
@@ -32,6 +33,8 @@ function InvokePage() {
   const {
     messages,
     isStreaming,
+    streamingText,
+    activeToolCalls,
     error,
     sessionId,
     sendMessage,
@@ -39,6 +42,7 @@ function InvokePage() {
     loadHistory,
   } = useAgUiStream(`/api/agents/${selectedId}/invoke`);
   const [input, setInput] = useState('');
+  const bottomRef = useRef<HTMLDivElement>(null);
   const { data: sessionList, refresh: refreshSessions } = useFetch<{ sessions: SessionSummary[] }>(
     '/api/sessions',
     15000,
@@ -52,6 +56,13 @@ function InvokePage() {
       return () => clearTimeout(t);
     }
   }, [isStreaming, refreshSessions]);
+
+  // Auto-scroll to bottom whenever new content arrives during streaming
+  useEffect(() => {
+    if (isStreaming) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, [streamingText, activeToolCalls, isStreaming]);
 
   const handleSend = () => {
     if (!input.trim() || isStreaming) return;
@@ -177,8 +188,15 @@ function InvokePage() {
               <MessageContent content={msg.content} />
             </div>
           ))}
-          {isStreaming && <div style={{ color: 'var(--color-text-tertiary)', fontSize: 13 }}>Streaming...</div>}
+          {isStreaming && (
+            <StreamingMessage
+              agentName={selectedAgent?.name ?? 'Agent'}
+              activeToolCalls={activeToolCalls}
+              text={streamingText}
+            />
+          )}
           {error && <div style={{ color: 'var(--color-danger)', fontSize: 13 }}>Error: {error}</div>}
+          <div ref={bottomRef} />
         </div>
 
         <div style={{ display: 'flex', gap: 8 }}>
@@ -267,6 +285,99 @@ function MessageContent({ content }: { content: string }) {
         ),
       )}
     </div>
+  );
+}
+
+function StreamingMessage({ agentName, activeToolCalls, text }: {
+  agentName: string;
+  activeToolCalls: LiveToolCall[];
+  text: string;
+}) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>
+        {agentName}
+      </div>
+      {activeToolCalls.length > 0 && (
+        <div style={{ marginBottom: 6 }}>
+          {activeToolCalls.map(tc => (
+            <div
+              key={tc.id}
+              style={{
+                fontSize: 11,
+                padding: '5px 10px',
+                background: tc.done ? 'var(--color-info-bg, #eff6ff)' : '#fef9c3',
+                border: `1px solid ${tc.done ? '#bfdbfe' : '#fde68a'}`,
+                borderRadius: 4,
+                marginBottom: 4,
+                fontFamily: 'monospace',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 8,
+              }}
+            >
+              <span style={{
+                display: 'inline-block',
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: tc.done ? '#22c55e' : '#f59e0b',
+                flexShrink: 0,
+                marginTop: 2,
+              }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontWeight: 600 }}>{tc.name}</span>
+                  {tc.done
+                    ? <span style={{ color: '#16a34a', fontSize: 10 }}>done</span>
+                    : <span style={{ color: '#92400e', fontSize: 10 }}>running…</span>}
+                </div>
+                {tc.args && (
+                  <div style={{ color: 'var(--color-text-secondary)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                    {tc.args.length > 120 ? tc.args.slice(0, 120) + '…' : tc.args}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {text ? (
+        <MessageContent content={text} />
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-text-tertiary)', fontSize: 13 }}>
+          <ThinkingDots />
+          <span>Thinking…</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ThinkingDots() {
+  return (
+    <span style={{ display: 'inline-flex', gap: 3 }}>
+      {[0, 1, 2].map(i => (
+        <span
+          key={i}
+          style={{
+            display: 'inline-block',
+            width: 5,
+            height: 5,
+            borderRadius: '50%',
+            background: 'var(--color-text-tertiary)',
+            opacity: 0.4,
+            animation: `thinkingDot 1.2s ${i * 0.2}s infinite ease-in-out`,
+          }}
+        />
+      ))}
+      <style>{`
+        @keyframes thinkingDot {
+          0%, 80%, 100% { opacity: 0.4; transform: scale(1); }
+          40% { opacity: 1; transform: scale(1.3); }
+        }
+      `}</style>
+    </span>
   );
 }
 

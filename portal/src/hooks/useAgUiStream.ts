@@ -7,6 +7,14 @@ interface AgUiMessage {
   toolCalls?: Array<{ id: string; name: string; args: string; result?: string }>;
 }
 
+export interface LiveToolCall {
+  id: string;
+  name: string;
+  args: string;
+  result?: string;
+  done: boolean;
+}
+
 interface SendOptions {
   selection?: { peopleIds: string[] };
 }
@@ -14,6 +22,8 @@ interface SendOptions {
 interface UseAgUiStreamReturn {
   messages: AgUiMessage[];
   isStreaming: boolean;
+  streamingText: string;
+  activeToolCalls: LiveToolCall[];
   error: string | null;
   sessionId: string | null;
   sendMessage: (content: string, opts?: SendOptions) => void;
@@ -24,6 +34,8 @@ interface UseAgUiStreamReturn {
 export function useAgUiStream(endpoint: string): UseAgUiStreamReturn {
   const [messages, setMessages] = useState<AgUiMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingText, setStreamingText] = useState('');
+  const [activeToolCalls, setActiveToolCalls] = useState<LiveToolCall[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionIdState] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -41,6 +53,8 @@ export function useAgUiStream(endpoint: string): UseAgUiStreamReturn {
   const sendMessage = useCallback(async (content: string, opts?: SendOptions) => {
     setMessages(prev => [...prev, { id: crypto.randomUUID(), role: 'user', content, toolCalls: [] }]);
     setIsStreaming(true);
+    setStreamingText('');
+    setActiveToolCalls([]);
     setError(null);
     currentMsg.current = { id: '', content: '', toolCalls: [] };
 
@@ -97,6 +111,8 @@ export function useAgUiStream(endpoint: string): UseAgUiStreamReturn {
           toolCalls: currentMsg.current.toolCalls,
         }]);
       }
+      setStreamingText('');
+      setActiveToolCalls([]);
       setIsStreaming(false);
       abortRef.current = null;
     }
@@ -114,23 +130,32 @@ export function useAgUiStream(endpoint: string): UseAgUiStreamReturn {
       case 'TEXT_MESSAGE_START':
         currentMsg.current.id = event.messageId as string;
         break;
-      case 'TEXT_MESSAGE_CONTENT':
-        currentMsg.current.content += event.delta as string;
+      case 'TEXT_MESSAGE_CONTENT': {
+        const delta = event.delta as string;
+        currentMsg.current.content += delta;
+        setStreamingText(prev => prev + delta);
         break;
-      case 'TOOL_CALL_START':
-        currentMsg.current.toolCalls = [
-          ...(currentMsg.current.toolCalls ?? []),
-          { id: event.toolCallId as string, name: event.name as string, args: '', result: undefined },
-        ];
+      }
+      case 'TOOL_CALL_START': {
+        const tc = { id: event.toolCallId as string, name: event.name as string, args: '', result: undefined };
+        currentMsg.current.toolCalls = [...(currentMsg.current.toolCalls ?? []), tc];
+        setActiveToolCalls(prev => [...prev, { ...tc, done: false }]);
         break;
+      }
       case 'TOOL_CALL_ARGS': {
-        const tc = currentMsg.current.toolCalls?.find(t => t.id === event.toolCallId);
-        if (tc) tc.args += event.delta as string;
+        const tcRef = currentMsg.current.toolCalls?.find(t => t.id === event.toolCallId);
+        if (tcRef) tcRef.args += event.delta as string;
+        setActiveToolCalls(prev => prev.map(t =>
+          t.id === event.toolCallId ? { ...t, args: t.args + (event.delta as string) } : t,
+        ));
         break;
       }
       case 'TOOL_CALL_END': {
-        const tc = currentMsg.current.toolCalls?.find(t => t.id === event.toolCallId);
-        if (tc) tc.result = event.result as string;
+        const tcRef = currentMsg.current.toolCalls?.find(t => t.id === event.toolCallId);
+        if (tcRef) tcRef.result = event.result as string;
+        setActiveToolCalls(prev => prev.map(t =>
+          t.id === event.toolCallId ? { ...t, result: String(event.result ?? ''), done: true } : t,
+        ));
         break;
       }
     }
@@ -140,6 +165,8 @@ export function useAgUiStream(endpoint: string): UseAgUiStreamReturn {
     abortRef.current?.abort();
     setMessages([]);
     setIsStreaming(false);
+    setStreamingText('');
+    setActiveToolCalls([]);
     setError(null);
     setSessionId(null);
   }, [setSessionId]);
@@ -148,9 +175,11 @@ export function useAgUiStream(endpoint: string): UseAgUiStreamReturn {
     abortRef.current?.abort();
     setMessages(msgs);
     setIsStreaming(false);
+    setStreamingText('');
+    setActiveToolCalls([]);
     setError(null);
     setSessionId(sid);
   }, [setSessionId]);
 
-  return { messages, isStreaming, error, sessionId, sendMessage, reset, loadHistory };
+  return { messages, isStreaming, streamingText, activeToolCalls, error, sessionId, sendMessage, reset, loadHistory };
 }

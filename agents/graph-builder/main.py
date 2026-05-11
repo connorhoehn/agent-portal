@@ -2,6 +2,7 @@ import json
 import os
 import re
 import time
+from contextvars import ContextVar
 
 import boto3
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
@@ -22,7 +23,7 @@ _rds = boto3.client("rds-data", region_name=REGION)
 _bedrock_runtime = boto3.client("bedrock-runtime", region_name=REGION)
 _agentcore_data = boto3.client("bedrock-agentcore", region_name=REGION)
 
-_sandbox_log: list[dict] = []
+_sandbox_log: ContextVar[list[dict]] = ContextVar("sandbox_log", default=[])
 
 # Each relationship label maps to the edge table that stores it.
 # Cross-checked with schema/orgiq_schema.sql.
@@ -425,24 +426,26 @@ def run_in_sandbox(python_code: str) -> str:
                 chunks.append(json.dumps(event["output"], default=str))
 
         output = "\n".join(chunks).strip() or "(no stdout)"
-        _sandbox_log.append({
+        entry = {
             "code": python_code,
             "output": output,
             "durationMs": int((time.time() - started) * 1000),
             "sessionId": session_id,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        })
+        }
+        _sandbox_log.get().append(entry)
         return json.dumps({"sessionId": session_id, "output": output})
     except Exception as e:
         err_output = f"sandbox error: {e}"
-        _sandbox_log.append({
+        entry = {
             "code": python_code,
             "output": err_output,
             "durationMs": int((time.time() - started) * 1000),
             "sessionId": session_id,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "error": str(e),
-        })
+        }
+        _sandbox_log.get().append(entry)
         return json.dumps({"error": err_output, "sessionId": session_id})
     finally:
         if session_id:
@@ -494,30 +497,29 @@ _agent = Agent(
 
 @app.entrypoint
 async def handle(payload: dict) -> dict:
-    global _sandbox_log
-    _sandbox_log = []
+    token = _sandbox_log.set([])
+    try:
+        if isinstance(payload, dict):
+            input_text = (
+                payload.get("input_text")
+                or payload.get("prompt")
+                or payload.get("message")
+                or ""
+            )
+        else:
+            input_text = str(payload)
 
-    if isinstance(payload, dict):
-        input_text = (
-            payload.get("input_text")
-            or payload.get("prompt")
-            or payload.get("message")
-            or ""
-        )
-    else:
-        input_text = str(payload)
+        if not input_text:
+            return {"agent": "graph-builder", "error": "missing input_text/prompt/message"}
 
-    if not input_text:
-        return {"agent": "graph-builder", "error": "missing input_text/prompt/message"}
-
-    result = _agent(input_text)
-    executions = list(_sandbox_log)
-    _sandbox_log = []
-
-    response: dict = {"agent": "graph-builder", "response": str(result)}
-    if executions:
-        response["sandboxExecutions"] = executions
-    return response
+        result = _agent(input_text)
+        executions = list(_sandbox_log.get())
+        response: dict = {"agent": "graph-builder", "response": str(result)}
+        if executions:
+            response["sandboxExecutions"] = executions
+        return response
+    finally:
+        _sandbox_log.reset(token)
 
 
 if __name__ == "__main__":
