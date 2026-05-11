@@ -73,7 +73,7 @@ export class AgentCoreCapabilitiesStack extends cdk.Stack {
       name: `${prefix}-code-interpreter`,
       description: 'OrgIQ sandboxed Python execution for graph-builder NER and scoring algorithms',
       executionRoleArn: sandboxRole.roleArn,
-      networkConfiguration: { networkMode: 'RESTRICTED' },
+      networkConfiguration: { networkMode: 'SANDBOX' },
     });
 
     this.codeInterpreterId = codeInterpreter.attrCodeInterpreterId;
