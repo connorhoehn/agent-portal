@@ -1,0 +1,200 @@
+import { useMemo, useState } from 'react';
+import { Card } from '@connorhoehnslalom/ui-components/shared';
+import { useFetch } from '../../hooks/useFetch';
+import type { CrawlSession, CrawlTarget } from '../../components/ingest/types';
+import { TargetsTable } from '../../components/ingest/TargetsTable';
+import { ActiveRunsStrip } from '../../components/ingest/ActiveRunsStrip';
+import { RunDetailDrawer } from '../../components/ingest/RunDetailDrawer';
+import { NewTargetModal } from '../../components/ingest/NewTargetModal';
+import type { TargetDraft } from '../../components/ingest/NewTargetModal';
+import { EmptyState, PulseDot, primaryBtnStyle } from '../../components/ingest/ui';
+
+function CrawlTargetsPage() {
+  const { data: targetsData, refresh: refreshTargets } = useFetch<{ targets: CrawlTarget[] }>(
+    '/api/ingest/crawl-targets',
+    30_000,
+  );
+  const { data: crawlsData, refresh: refreshCrawls } = useFetch<{ crawls: CrawlSession[] }>(
+    '/api/ingest/crawls',
+    10_000,
+  );
+
+  const targets = targetsData?.targets ?? [];
+  const crawls = crawlsData?.crawls ?? [];
+
+  const [targetBusy, setTargetBusy] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
+
+  const [drawerCrawlId, setDrawerCrawlId] = useState<string | null>(null);
+  const [drawerInitial, setDrawerInitial] = useState<CrawlSession | null>(null);
+
+  const [showNewTarget, setShowNewTarget] = useState(false);
+  const [editTarget, setEditTarget] = useState<CrawlTarget | null>(null);
+
+  const activeCrawls = useMemo(() => crawls.filter(c => c.status === 'running'), [crawls]);
+
+  async function saveTarget(draft: TargetDraft) {
+    setActionMessage(null);
+    const url = editTarget
+      ? `/api/ingest/crawl-targets/${encodeURIComponent(editTarget.id)}`
+      : '/api/ingest/crawl-targets';
+    const method = editTarget ? 'PATCH' : 'POST';
+    const r = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(draft),
+    });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({})) as { error?: string };
+      throw new Error(body.error ?? `Failed to save target (${r.status})`);
+    }
+    setActionMessage({
+      tone: 'ok',
+      text: editTarget ? `Target "${draft.label}" updated` : `Target "${draft.label}" created`,
+    });
+    setShowNewTarget(false);
+    setEditTarget(null);
+    refreshTargets();
+  }
+
+  async function runTarget(t: CrawlTarget) {
+    setTargetBusy(t.id);
+    setActionMessage(null);
+    try {
+      const r = await fetch(`/api/ingest/crawl-targets/${encodeURIComponent(t.id)}/run`, { method: 'POST' });
+      const body = await r.json() as { session?: CrawlSession; error?: string };
+      if (!r.ok || !body.session) {
+        setActionMessage({ tone: 'err', text: body.error ?? 'Failed to start crawl' });
+      } else {
+        setActionMessage({ tone: 'ok', text: `Crawl started for "${t.label}"` });
+        refreshCrawls();
+        setDrawerCrawlId(body.session.id);
+        setDrawerInitial(body.session);
+      }
+    } catch (e) {
+      setActionMessage({ tone: 'err', text: (e as Error).message });
+    } finally {
+      setTargetBusy(null);
+      refreshTargets();
+    }
+  }
+
+  async function deleteTarget(t: CrawlTarget) {
+    if (!confirm(`Delete crawl target "${t.label}"? Run history is preserved.`)) return;
+    const r = await fetch(`/api/ingest/crawl-targets/${encodeURIComponent(t.id)}`, { method: 'DELETE' });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({})) as { error?: string };
+      setActionMessage({ tone: 'err', text: body.error ?? 'Failed to delete target' });
+      return;
+    }
+    setActionMessage({ tone: 'ok', text: `Target "${t.label}" deleted` });
+    refreshTargets();
+  }
+
+  async function toggleTarget(t: CrawlTarget, enabled: boolean) {
+    const r = await fetch(`/api/ingest/crawl-targets/${encodeURIComponent(t.id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({})) as { error?: string };
+      setActionMessage({ tone: 'err', text: body.error ?? 'Failed to toggle target' });
+      return;
+    }
+    refreshTargets();
+  }
+
+  async function cancelCrawl(id: string) {
+    const r = await fetch(`/api/ingest/crawl/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({})) as { error?: string };
+      setActionMessage({ tone: 'err', text: body.error ?? 'Failed to cancel crawl' });
+      return;
+    }
+    setActionMessage({ tone: 'ok', text: 'Crawl cancellation requested' });
+    refreshCrawls();
+  }
+
+  function openCrawl(id: string) {
+    const initial = crawls.find(c => c.id === id) ?? null;
+    setDrawerInitial(initial);
+    setDrawerCrawlId(id);
+  }
+
+  return (
+    <div style={{ padding: 24 }}>
+      {actionMessage && (
+        <div style={{
+          padding: 10, marginBottom: 12, borderRadius: 4, fontSize: 12,
+          background: actionMessage.tone === 'ok' ? '#ecfdf5' : '#fef2f2',
+          color: actionMessage.tone === 'ok' ? '#065f46' : '#991b1b',
+        }}>
+          {actionMessage.text}
+        </div>
+      )}
+
+      {/* Crawl Targets */}
+      <Card padding="md" style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <h2 style={{ fontSize: 14, fontWeight: 600 }}>Crawl Targets</h2>
+          <button onClick={() => setShowNewTarget(true)} style={primaryBtnStyle(false)}>
+            + New Target
+          </button>
+        </div>
+        {targets.length === 0 ? (
+          <EmptyState>
+            No crawl targets yet. Define a target to start ingesting public web content with vision-LLM extraction.
+          </EmptyState>
+        ) : (
+          <TargetsTable
+            targets={targets}
+            busyId={targetBusy}
+            onRun={runTarget}
+            onEdit={(t) => setEditTarget(t)}
+            onDelete={deleteTarget}
+            onToggle={toggleTarget}
+          />
+        )}
+      </Card>
+
+      {/* Active Crawls — only when something is running */}
+      {activeCrawls.length > 0 && (
+        <Card padding="md" style={{ marginBottom: 16, borderLeft: '3px solid var(--color-warning)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <PulseDot active color="var(--color-warning)" />
+            <h2 style={{ fontSize: 14, fontWeight: 600 }}>
+              Active Crawls{' '}
+              <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 400 }}>
+                · {activeCrawls.length} running
+              </span>
+            </h2>
+          </div>
+          <ActiveRunsStrip
+            sessions={activeCrawls}
+            onCancel={cancelCrawl}
+            onOpen={openCrawl}
+          />
+        </Card>
+      )}
+
+      {/* Right-side drawer for crawl run details (uses PageDetailModal internally) */}
+      <RunDetailDrawer
+        crawlId={drawerCrawlId}
+        initialSession={drawerInitial}
+        onClose={() => { setDrawerCrawlId(null); setDrawerInitial(null); }}
+      />
+
+      {/* Target create/edit modal */}
+      {(showNewTarget || editTarget) && (
+        <NewTargetModal
+          existing={editTarget}
+          onSave={saveTarget}
+          onCancel={() => { setShowNewTarget(false); setEditTarget(null); }}
+        />
+      )}
+    </div>
+  );
+}
+
+export default CrawlTargetsPage;
