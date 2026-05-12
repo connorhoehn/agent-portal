@@ -226,7 +226,8 @@ Consider: was a faster/simpler tool available? Was the tool capable of answering
         dataSourceConfig: {
           cloudWatchLogs: {
             logGroupNames,
-            serviceNames: [`${prefix}_supervisor_endpoint`],
+            // serviceNames triggers X-Ray aws/spans validation; omit until
+            // X-Ray → CloudWatch Logs integration is enabled in the account.
           },
         },
         evaluators: [
