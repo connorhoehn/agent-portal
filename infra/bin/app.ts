@@ -148,20 +148,24 @@ const agentCoreCapabilities = new AgentCoreCapabilitiesStack(app, 'OrgIQ-AgentCo
 // -------------------------------------------------------------------
 // Stack 10: AgentCore Runtime (6 agent runtimes)
 // -------------------------------------------------------------------
+// Use Fn.importValue with stable exportNames to avoid CDK auto-generated hash-based
+// exports (ExportsOutputFnGetAtt...) whose hashes change when the runtime stack template
+// changes (e.g. deployRuntimes=true / enableEval=true), causing UPDATE_FAILED on the
+// source stacks due to the CloudFormation cross-stack export deletion lock.
 const agentCoreRuntime = new AgentCoreRuntimeStack(app, 'OrgIQ-AgentCoreRuntime', {
   env,
   prefix,
   agentRoles: agents.agentRoles,
-  memoryId: agentCoreMemory.memoryId,
-  guardrailId: guardrails.guardrailId,
-  auroraClusterArn: aurora.clusterArn,
-  auroraCredentialsSecretArn: aurora.credentialsSecretArn,
-  knowledgeBaseId: knowledgeBase.knowledgeBaseId,
-  codeInterpreterId: agentCoreCapabilities.codeInterpreterId,
-  codeInterpreterArn: agentCoreCapabilities.codeInterpreterArn,
-  browserId: agentCoreCapabilities.browserId,
-  browserArn: agentCoreCapabilities.browserArn,
-  browserProfileId: agentCoreCapabilities.browserProfileId,
+  memoryId: cdk.Fn.importValue(`${prefix}-memory-id`),
+  guardrailId: cdk.Fn.importValue(`${prefix}-guardrail-id`),
+  auroraClusterArn: cdk.Fn.importValue(`${prefix}-aurora-cluster-arn`),
+  auroraCredentialsSecretArn: cdk.Fn.importValue(`${prefix}-aurora-secret-arn`),
+  knowledgeBaseId: cdk.Fn.importValue(`${prefix}-knowledge-base-id`),
+  codeInterpreterId: cdk.Fn.importValue(`${prefix}-code-interpreter-id`),
+  codeInterpreterArn: cdk.Fn.importValue(`${prefix}-code-interpreter-arn`),
+  browserId: cdk.Fn.importValue(`${prefix}-browser-id`),
+  browserArn: cdk.Fn.importValue(`${prefix}-browser-arn`),
+  browserProfileId: cdk.Fn.importValue(`${prefix}-browser-profile-id`),
   description: 'OrgIQ AgentCore Runtime: 6 agent runtimes with lifecycle and endpoint config',
 });
 agentCoreRuntime.addDependency(agents);
