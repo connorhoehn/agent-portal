@@ -10,7 +10,7 @@ services:
     environment:
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - AWS_DEFAULT_REGION=${AWS_REGION:-us-east-1}
-      - AWS_PROFILE=${AWS_PROFILE:-bedrock}
+      - AWS_PROFILE=${AWS_PROFILE:-default}
     working_dir: /workspace
     restart: unless-stopped
     networks:
@@ -29,7 +29,7 @@ services:
       - ~/.aws:/root/.aws:ro
     environment:
       - AWS_REGION=${AWS_REGION:-us-east-1}
-      - AWS_PROFILE=${AWS_PROFILE:-bedrock}
+      - AWS_PROFILE=${AWS_PROFILE:-default}
       - NODE_ENV=development
       - PORT=3001
     restart: unless-stopped
