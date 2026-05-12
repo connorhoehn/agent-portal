@@ -112,7 +112,7 @@ function MemoryPage() {
                     <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{s.actorId}</TableTd>
                     <TableTd>
                       <Link
-                        to="/invoke"
+                        to={`/invoke?session=${encodeURIComponent(s.sessionId)}`}
                         style={{
                           fontSize: 11,
                           padding: '2px 8px',

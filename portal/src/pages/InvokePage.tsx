@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { useAgUiStream } from '../hooks/useAgUiStream';
 import type { LiveToolCall } from '../hooks/useAgUiStream';
 import { useFetch } from '../hooks/useFetch';
@@ -47,8 +48,22 @@ function InvokePage() {
     '/api/sessions',
     15000,
   );
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const selectedAgent = agents?.find(a => a.id === selectedId);
+
+  // Honor deep-links like /invoke?session=<id> from Memory / Sessions pages.
+  // Load once on mount (or whenever the param changes), then strip the param
+  // so a manual reload doesn't keep re-loading the same session over fresh state.
+  useEffect(() => {
+    const sid = searchParams.get('session');
+    if (!sid) return;
+    void loadSession(sid);
+    const next = new URLSearchParams(searchParams);
+    next.delete('session');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.get('session')]);
 
   useEffect(() => {
     if (!isStreaming) {

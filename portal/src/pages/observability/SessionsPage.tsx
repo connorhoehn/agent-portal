@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router';
 import {
   Card,
   Table,
@@ -120,6 +121,7 @@ function SessionsPage() {
                 <TableTh>Last Message</TableTh>
                 <TableTh>Messages</TableTh>
                 <TableTh>Session ID</TableTh>
+                <TableTh></TableTh>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -184,6 +186,23 @@ function SessionsPage() {
                     title={s.sessionId}
                   >
                     {s.sessionId.slice(0, 12)}…
+                  </TableTd>
+                  <TableTd>
+                    <Link
+                      to={`/invoke?session=${encodeURIComponent(s.sessionId)}`}
+                      style={{
+                        fontSize: 11,
+                        padding: '2px 8px',
+                        background: 'none',
+                        border: '1px solid var(--color-border)',
+                        color: 'var(--color-text-secondary)',
+                        borderRadius: 'var(--radius-sm)',
+                        cursor: 'pointer',
+                        textDecoration: 'none',
+                      }}
+                    >
+                      Open
+                    </Link>
                   </TableTd>
                 </TableRow>
               ))}
