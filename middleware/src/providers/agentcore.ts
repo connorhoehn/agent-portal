@@ -421,14 +421,16 @@ async function withCdpSession<T>(
   });
 }
 
+const THINKING_RE = /<thinking>[\s\S]*?<\/thinking>/gi;
+
 function extractText(raw: unknown): string {
   if (raw == null) return '';
-  if (typeof raw === 'string') return raw;
+  if (typeof raw === 'string') return raw.replace(THINKING_RE, '').trim();
   if (typeof raw === 'object') {
     const obj = raw as Record<string, unknown>;
     for (const key of ['response', 'text', 'message', 'output', 'content']) {
       const v = obj[key];
-      if (typeof v === 'string') return v;
+      if (typeof v === 'string') return v.replace(THINKING_RE, '').trim();
     }
     return JSON.stringify(raw);
   }
@@ -886,6 +888,24 @@ export const realAgentCore: AgentCoreProvider = {
     // Callers that need page content should use fetchPageContent() instead.
     return null;
   },
+
+  async clickBrowser(sessionId: string, x: number, y: number): Promise<boolean> {
+    const browserId = config.agentcore.browserId;
+    if (!browserId) return false;
+    try {
+      await dataClient().send(
+        new InvokeBrowserCommand({
+          browserIdentifier: browserId,
+          sessionId,
+          action: { mouseClick: { button: 'left', x, y, clickCount: 1 } as any },
+        }),
+      );
+      return true;
+    } catch (err) {
+      console.warn('[agentcore] clickBrowser failed:', (err as Error).message);
+      return false;
+    }
+  },
 };
 
 // ─── Mock provider ────────────────────────────────────────────────────────────
@@ -1017,5 +1037,9 @@ export const mockAgentCore: AgentCoreProvider = {
       text: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
       links: [],
     });
+  },
+
+  async clickBrowser(sessionId: string, _x: number, _y: number): Promise<boolean> {
+    return _mockBrowser.some((s) => s.sessionId === sessionId);
   },
 };

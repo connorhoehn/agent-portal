@@ -31,8 +31,13 @@ export class AgentCoreTelemetryStack extends cdk.Stack {
     const prefix = props.prefix ?? 'orgiq';
     const safeName = prefix.replace(/-/g, '_');
     const modelId = props.modelId ?? 'us.amazon.nova-pro-v1:0';
+    // enableEval=true creates evaluator definitions + dashboard.
+    // enableOnlineEvalConfig=true also creates CfnOnlineEvaluationConfig — only set
+    // this AFTER agents are running so X-Ray has created the aws/spans log group.
     const enableOnlineEval = props.enableOnlineEvaluation
       ?? this.node.tryGetContext('enableEval') === 'true';
+    const enableOnlineEvalConfig = enableOnlineEval
+      && this.node.tryGetContext('enableOnlineEvalConfig') === 'true';
 
     // -------------------------------------------------------------------
     // IAM Role for evaluation execution
@@ -211,7 +216,7 @@ Consider: was a faster/simpler tool available? Was the tool capable of answering
     // Reads from all 6 runtime log groups with 10% sampling
     // -------------------------------------------------------------------
 
-    if (enableOnlineEval) {
+    if (enableOnlineEvalConfig) {
       // CfnOnlineEvaluationConfig limits: logGroupNames ≤ 5, serviceNames ≤ 1.
       // Monitor the 5 user-facing agents; graph-builder is internal so excluded.
       const monitoredAgents = AGENT_NAMES.filter(n => n !== 'graph-builder');
@@ -219,23 +224,29 @@ Consider: was a faster/simpler tool available? Was the tool capable of answering
         `/aws/bedrock-agentcore/runtimes/${prefix}_${name.replace(/-/g, '_')}`
       );
 
-      const onlineEvalConfig = new bedrockagentcore.CfnOnlineEvaluationConfig(this, 'OnlineEvalConfig', {
-        onlineEvaluationConfigName: `${safeName}_online_eval`,
-        description: 'Continuous quality monitoring for 5 user-facing OrgIQ agents',
-        evaluationExecutionRoleArn: evalRole.roleArn,
-        dataSourceConfig: {
-          cloudWatchLogs: {
-            logGroupNames,
-            // serviceNames triggers X-Ray aws/spans validation; omit until
-            // X-Ray → CloudWatch Logs integration is enabled in the account.
+      // CDK L1 type incorrectly marks serviceNames as required — omitting it causes CDK's
+      // runtime validator to fail, but the actual CloudFormation API accepts the resource
+      // without it. Use raw CfnResource to bypass CDK's validator entirely.
+      const onlineEvalConfig = new cdk.CfnResource(this, 'OnlineEvalConfig', {
+        type: 'AWS::BedrockAgentCore::OnlineEvaluationConfig',
+        properties: {
+          OnlineEvaluationConfigName: `${safeName}_online_eval`,
+          Description: 'Continuous quality monitoring for 5 user-facing OrgIQ agents',
+          EvaluationExecutionRoleArn: evalRole.roleArn,
+          DataSourceConfig: {
+            CloudWatchLogs: {
+              LogGroupNames: logGroupNames,
+              // ServiceNames intentionally omitted: triggers aws/spans validation which
+              // requires X-Ray → CW Logs integration to be enabled in the account first.
+            },
           },
-        },
-        evaluators: [
-          { evaluatorId: qualityEvaluator.attrEvaluatorId },
-          { evaluatorId: toolSelectionEvaluator.attrEvaluatorId },
-        ],
-        rule: {
-          samplingConfig: { samplingPercentage: 10 },
+          Evaluators: [
+            { EvaluatorId: qualityEvaluator.attrEvaluatorId },
+            { EvaluatorId: toolSelectionEvaluator.attrEvaluatorId },
+          ],
+          Rule: {
+            SamplingConfig: { SamplingPercentage: 10 },
+          },
         },
       });
       // Ensure log groups exist before OnlineEvalConfig tries to access them.

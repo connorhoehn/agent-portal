@@ -127,6 +127,7 @@ export async function recordTurn(opts: {
 }): Promise<void> {
   const memoryId = config.agentcore.memoryId;
   if (!memoryId) return;
+  if (!opts.userMessage.trim() || !opts.assistantMessage.trim()) return;
   try {
     await _client().send(
       new CreateEventCommand({

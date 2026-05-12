@@ -15,3 +15,4 @@ resource_tracker.json
 *.egg-info/
 .DS_Store
 .playwright-mcp/
+.env.aws

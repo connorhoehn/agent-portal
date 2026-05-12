@@ -162,8 +162,8 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
         executionRole.addToPolicy(new iam.PolicyStatement({
           sid: 'A2ARuntimeDiscovery',
           actions: [
-            'bedrock-agentcore-control:ListAgentRuntimes',
-            'bedrock-agentcore-control:GetAgentRuntime',
+            'bedrock-agentcore:ListAgentRuntimes',
+            'bedrock-agentcore:GetAgentRuntime',
           ],
           resources: ['*'],
         }));

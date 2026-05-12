@@ -168,6 +168,9 @@ export interface AgentCoreProvider {
   navigateBrowser(sessionId: string, url: string): Promise<BrowserSession | null>;
   screenshotBrowser(sessionId: string): Promise<BrowserScreenshot | null>;
   evaluateInBrowser(sessionId: string, expression: string): Promise<unknown>;
+  /** Send a left-button mouseClick at the given pixel coordinates. Used by the
+   *  crawler's SPA mode to traverse JS-driven nav links the model identified. */
+  clickBrowser(sessionId: string, x: number, y: number): Promise<boolean>;
 }
 
 // ── Guardrails ─────────────────────────────────────────────────────────────────

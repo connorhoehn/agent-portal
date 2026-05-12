@@ -40,8 +40,8 @@ export class GuardrailsStack extends cdk.Stack {
       // -------------------------------------------------------------------
       sensitiveInformationPolicyConfig: {
         piiEntitiesConfig: [
-          { type: 'EMAIL', action: 'ANONYMIZE' },
-          { type: 'PHONE', action: 'ANONYMIZE' },
+          // EMAIL and PHONE intentionally omitted — org directory queries legitimately
+          // return colleague contact info; anonymizing breaks the core search use case.
           { type: 'US_SOCIAL_SECURITY_NUMBER', action: 'BLOCK' },
           { type: 'CREDIT_DEBIT_CARD_NUMBER', action: 'BLOCK' },
           { type: 'AWS_ACCESS_KEY', action: 'BLOCK' },
