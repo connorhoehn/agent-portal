@@ -1,110 +1,46 @@
-// Doc-discovery crawler. BFS over a starting URL with depth/page caps, using
-// the existing AgentCore Browser CDP session for navigation, screenshot, and
-// link extraction. Extracted page text is uploaded to the documents S3 bucket
-// so the existing KB ingestion pipeline can index it.
+// Vision-LLM crawler. Drives the AgentCore Browser to load a starting URL,
+// captures a screenshot, asks Nova Pro to extract a structured summary
+// + discovered links, and uploads three artifacts per page (PNG screenshot,
+// KB-ready markdown, raw Nova JSON) to S3. SPA mode also clicks JS-driven
+// nav buttons by pixel coordinates to surface virtual routes.
+//
+// All exported names match the previous module so routes/* don't need edits.
+// The shared shape contract lives in ./crawler-types.ts — keep this in sync.
 
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { agentcore } from '../providers/index.js';
 import { appendJourneyStep, recordCapabilityEvent } from './invocations.js';
 import { config } from '../config.js';
+import { extractFromScreenshot } from './vision-extractor.js';
+import type {
+  CrawlEvent,
+  CrawlMode,
+  CrawlPage,
+  CrawlSession,
+  DiscoveredLink,
+} from './crawler-types.js';
 
-// AgentCore Browser doesn't expose CDP for JS evaluation. Fetch the page
-// server-side to extract title, body text, and links instead.
-async function fetchPageContent(url: string): Promise<{ title: string; text: string; links: string[] }> {
-  try {
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'OrgIQ-Crawler/1.0' },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!res.ok) return { title: '', text: '', links: [] };
-    const html = await res.text();
-    // Extract title
-    const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
-    const title = titleMatch ? titleMatch[1]!.trim() : '';
-    // Strip tags and collapse whitespace for body text
-    const text = html
-      .replace(/<script[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[\s\S]*?<\/style>/gi, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 50000);
-    // Extract absolute links
-    const linkRe = /href=["']([^"']+)["']/gi;
-    const links: string[] = [];
-    let m: RegExpExecArray | null;
-    while ((m = linkRe.exec(html)) !== null) {
-      try {
-        const abs = new URL(m[1]!, url).href;
-        if ((abs.startsWith('http://') || abs.startsWith('https://')) && !abs.includes('#') && !links.includes(abs)) {
-          links.push(abs);
-          if (links.length >= 200) break;
-        }
-      } catch { /* skip invalid URLs */ }
-    }
-    return { title, text, links };
-  } catch (err) {
-    console.warn('[crawler] fetchPageContent failed:', (err as Error).message);
-    return { title: '', text: '', links: [] };
-  }
+// Re-export types from the contract so existing imports of CrawlPage/CrawlSession/
+// CrawlEvent from this module keep working.
+export type { CrawlEvent, CrawlMode, CrawlPage, CrawlSession, DiscoveredLink } from './crawler-types.js';
+
+// ── Pricing (Nova Pro, mid-2026 rates) ────────────────────────────────────────
+// $0.0008 per 1k input tokens, $0.0032 per 1k output tokens.
+const PRICE_IN_PER_TOKEN = 0.0008 / 1000;
+const PRICE_OUT_PER_TOKEN = 0.0032 / 1000;
+
+function pageCost(tokensIn: number, tokensOut: number): number {
+  return tokensIn * PRICE_IN_PER_TOKEN + tokensOut * PRICE_OUT_PER_TOKEN;
 }
 
-export interface CrawlPage {
-  url: string;
-  title: string;
-  textSnippet: string;     // first ~500 chars (for UI)
-  contentLength: number;   // full extracted length
-  depth: number;
-  parentUrl: string | null;
-  linksFound: string[];    // outbound links discovered on this page
-  s3Key: string | null;    // populated after successful upload
-  screenshotTaken: boolean;
-  crawledAt: string;
-  error: string | null;
-}
-
-export interface CrawlSession {
-  id: string;
-  sessionId: string;            // underlying browser sessionId
-  startUrl: string;
-  maxPages: number;
-  includePattern: string | null;
-  sameOriginOnly: boolean;
-  status: 'running' | 'completed' | 'cancelled' | 'failed';
-  pages: CrawlPage[];
-  queued: number;
-  startedAt: string;
-  completedAt: string | null;
-  error: string | null;
-}
-
-export type CrawlEvent =
-  | { type: 'started';   session: CrawlSession }
-  | { type: 'page';      page: CrawlPage; session: CrawlSession }
-  | { type: 'completed'; session: CrawlSession }
-  | { type: 'failed';    session: CrawlSession; error: string }
-  | { type: 'cancelled'; session: CrawlSession };
+// ── In-memory registries ──────────────────────────────────────────────────────
 
 type Subscriber = (ev: CrawlEvent) => void;
 
 const _sessions = new Map<string, CrawlSession>();
 const _subscribers = new Map<string, Set<Subscriber>>();
 const _cancelFlags = new Set<string>();
-
-
-function slugify(url: string): string {
-  return url
-    .replace(/^https?:\/\//, '')
-    .replace(/[^a-z0-9]+/gi, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 120)
-    .toLowerCase() || 'page';
-}
 
 function emit(crawlId: string, ev: CrawlEvent): void {
   const subs = _subscribers.get(crawlId);
@@ -140,29 +76,80 @@ export function cancelCrawl(crawlId: string): boolean {
   return true;
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function slugify(url: string): string {
+  return url
+    .replace(/^https?:\/\//, '')
+    .replace(/[^a-z0-9]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 120)
+    .toLowerCase() || 'page';
+}
+
+function safeOrigin(url: string): string {
+  try { return new URL(url).origin; } catch { return ''; }
+}
+
+function safeRegex(pattern: string): RegExp | null {
+  try { return new RegExp(pattern); } catch { return null; }
+}
+
+function hashBytes(bytes: Buffer): string {
+  return createHash('sha1').update(bytes).digest('hex').slice(0, 12);
+}
+
+function decodeDataUrl(dataUrl: string): Buffer {
+  // data:image/png;base64,XXX  →  Buffer of raw PNG bytes.
+  const comma = dataUrl.indexOf(',');
+  const b64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+  return Buffer.from(b64, 'base64');
+}
+
+function renderMarkdown(url: string, title: string, summary: string, mainText: string, crawledAt: string, crawlId: string): string {
+  const heading = title || url;
+  return `# ${heading}\n\n` +
+    `Source: ${url}\n` +
+    `Crawled: ${crawledAt}\n` +
+    `Crawl: ${crawlId}\n\n` +
+    (summary ? `## Summary\n\n${summary}\n\n` : '') +
+    (mainText ? `## Content\n\n${mainText}\n` : '');
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
+
 export interface StartCrawlInput {
   startUrl: string;
   maxPages?: number;
+  mode?: CrawlMode;
   includePattern?: string;
   sameOriginOnly?: boolean;
   label?: string;
+  targetId?: string | null;
+  scheduleId?: string | null;
 }
 
 export async function startCrawl(input: StartCrawlInput): Promise<CrawlSession> {
   const maxPages = Math.max(1, Math.min(50, input.maxPages ?? 10));
+  const mode: CrawlMode = input.mode ?? 'browser';
   const includePattern = input.includePattern?.trim() || null;
   const sameOriginOnly = input.sameOriginOnly !== false;
 
+  // 'fetch' mode doesn't actually need a browser session, but we still start
+  // one so callers can poke the live session id during the run if they want.
+  // For all three modes we close the session in the finally of runLoop.
   const browser = await agentcore.createBrowserSession({
     agentName: input.label ?? 'doc-crawler',
     url: input.startUrl,
   });
 
+  const id = randomUUID();
   const crawl: CrawlSession = {
-    id: randomUUID(),
+    id,
     sessionId: browser.sessionId,
     startUrl: input.startUrl,
     maxPages,
+    mode,
     includePattern,
     sameOriginOnly,
     status: 'running',
@@ -171,12 +158,17 @@ export async function startCrawl(input: StartCrawlInput): Promise<CrawlSession> 
     startedAt: new Date().toISOString(),
     completedAt: null,
     error: null,
+    scheduleId: input.scheduleId ?? null,
+    targetId: input.targetId ?? null,
+    s3Prefix: `crawled/${id}`,
+    totalScreenshotBytes: 0,
+    totalMarkdownBytes: 0,
+    estimatedCostUsd: 0,
   };
   _sessions.set(crawl.id, crawl);
   emit(crawl.id, { type: 'started', session: crawl });
 
-  // Run the loop in the background. The HTTP handler returns the initial session
-  // immediately and clients subscribe to /stream for progress.
+  // Background loop; HTTP handler returns the initial session immediately.
   void runLoop(crawl).catch((err) => {
     console.warn('[crawler] loop threw:', (err as Error).message);
   });
@@ -184,15 +176,21 @@ export async function startCrawl(input: StartCrawlInput): Promise<CrawlSession> 
   return crawl;
 }
 
+// ── Run loop ──────────────────────────────────────────────────────────────────
+
+interface QueueItem {
+  url: string;
+  depth: number;
+  parent: string | null;
+}
+
 async function runLoop(crawl: CrawlSession): Promise<void> {
   const s3 = new S3Client({ region: config.region });
   const bucket = config.foundation.documentsBucket;
-  const prefix = `crawled/${crawl.id}`;
 
   const visited = new Set<string>();
-  const queue: Array<{ url: string; depth: number; parent: string | null }> = [
-    { url: crawl.startUrl, depth: 0, parent: null },
-  ];
+  const seenScreenshotHashes = new Set<string>();
+  const queue: QueueItem[] = [{ url: crawl.startUrl, depth: 0, parent: null }];
   const startOrigin = safeOrigin(crawl.startUrl);
   const includeRegex = crawl.includePattern ? safeRegex(crawl.includePattern) : null;
 
@@ -203,7 +201,7 @@ async function runLoop(crawl: CrawlSession): Promise<void> {
         crawl.completedAt = new Date().toISOString();
         _cancelFlags.delete(crawl.id);
         emit(crawl.id, { type: 'cancelled', session: crawl });
-        break;
+        return;
       }
 
       const job = queue.shift()!;
@@ -211,92 +209,36 @@ async function runLoop(crawl: CrawlSession): Promise<void> {
       visited.add(job.url);
       crawl.queued = queue.length;
 
-      const page: CrawlPage = {
-        url: job.url,
-        title: '',
-        textSnippet: '',
-        contentLength: 0,
-        depth: job.depth,
-        parentUrl: job.parent,
-        linksFound: [],
-        s3Key: null,
-        screenshotTaken: false,
-        crawledAt: new Date().toISOString(),
-        error: null,
-      };
-
-      try {
-        // Fetch page content server-side (AgentCore Browser has no JS eval API).
-        const extracted = await fetchPageContent(job.url);
-        page.title = extracted.title;
-        page.contentLength = extracted.text.length;
-        page.textSnippet = extracted.text.slice(0, 500);
-        page.linksFound = extracted.links;
-
-        // Navigate the browser session to the URL for the screenshot.
-        await agentcore.navigateBrowser(crawl.sessionId, job.url);
-
-        const shot = await agentcore.screenshotBrowser(crawl.sessionId);  // navigateBrowser already settled for 3s
-        if (shot) page.screenshotTaken = true;
-
-        if (bucket && extracted.text) {
-          const key = `${prefix}/${String(crawl.pages.length).padStart(3, '0')}-${slugify(job.url)}.md`;
-          const body = `# ${extracted.title || job.url}\n\nSource: ${job.url}\nCrawled: ${page.crawledAt}\nCrawl: ${crawl.id}\n\n${extracted.text}\n`;
-          try {
-            await s3.send(new PutObjectCommand({
-              Bucket: bucket,
-              Key: key,
-              Body: body,
-              ContentType: 'text/markdown',
-              Metadata: {
-                'source-url': job.url.slice(0, 1024),
-                'crawl-id': crawl.id,
-                'depth': String(job.depth),
-              },
-            }));
-            page.s3Key = key;
-          } catch (err) {
-            page.error = `s3 upload failed: ${(err as Error).message}`;
-          }
-        }
-
-        appendJourneyStep(crawl.sessionId, {
-          startedAt: page.crawledAt,
-          url: job.url,
-          pageTitle: extracted.title,
-          textSnippet: page.textSnippet,
-          imageDataUrl: shot?.imageDataUrl,
-        });
-
-        recordCapabilityEvent({
-          id: randomUUID(),
-          kind: 'browser_navigate',
-          startedAt: page.crawledAt,
-          durationMs: Date.now() - new Date(page.crawledAt).getTime(),
-          sessionId: crawl.sessionId,
-          detail: { url: job.url, title: extracted.title, source: 'crawl', crawlId: crawl.id },
-          ok: !page.error,
-          ...(page.error ? { error: page.error } : {}),
-        });
-
-        // Enqueue child links subject to filters.
-        const remaining = crawl.maxPages - crawl.pages.length - 1;
-        if (remaining > 0) {
-          for (const link of extracted.links) {
-            if (visited.has(link)) continue;
-            if (queue.some((q) => q.url === link)) continue;
-            if (crawl.sameOriginOnly && safeOrigin(link) !== startOrigin) continue;
-            if (includeRegex && !includeRegex.test(new URL(link).pathname)) continue;
-            queue.push({ url: link, depth: job.depth + 1, parent: job.url });
-          }
-        }
-      } catch (err) {
-        page.error = (err as Error).message;
-      }
-
+      const page = await processPage(crawl, job, s3, bucket, seenScreenshotHashes);
       crawl.pages.push(page);
       crawl.queued = queue.length;
       emit(crawl.id, { type: 'page', page, session: crawl });
+
+      // Enqueue normal (non-SPA) discovered links.
+      const remaining = crawl.maxPages - crawl.pages.length;
+      if (remaining > 0) {
+        for (const link of page.discoveredLinks) {
+          if (link.isSpaLink) continue;
+          const target = link.targetUrl;
+          if (!target) continue;
+          if (visited.has(target)) continue;
+          if (queue.some((q) => q.url === target)) continue;
+          if (crawl.sameOriginOnly && safeOrigin(target) !== startOrigin) continue;
+          if (includeRegex) {
+            try {
+              if (!includeRegex.test(new URL(target).pathname)) continue;
+            } catch { continue; }
+          }
+          queue.push({ url: target, depth: job.depth + 1, parent: job.url });
+        }
+      }
+
+      // SPA traversal: click each isSpaLink with coordinates, screenshot,
+      // and process the resulting "virtual" page if the content actually
+      // changed.
+      if (crawl.mode === 'browser_spa' && page.status === 'done') {
+        await traverseSpaLinks(crawl, page, s3, bucket, seenScreenshotHashes);
+      }
     }
 
     if (crawl.status === 'running') {
@@ -314,11 +256,361 @@ async function runLoop(crawl: CrawlSession): Promise<void> {
   }
 }
 
-function safeOrigin(url: string): string {
-  try { return new URL(url).origin; } catch { return ''; }
+// ── Per-page processing ───────────────────────────────────────────────────────
+
+function makePage(url: string, depth: number, parent: string | null): CrawlPage {
+  return {
+    url,
+    title: '',
+    depth,
+    parentUrl: parent,
+    crawledAt: new Date().toISOString(),
+    status: 'pending',
+    error: null,
+    s3ScreenshotKey: null,
+    s3MarkdownKey: null,
+    s3AnalysisKey: null,
+    summary: '',
+    mainText: '',
+    discoveredLinks: [],
+    contentLength: 0,
+    screenshotBytes: 0,
+    visionTokensIn: 0,
+    visionTokensOut: 0,
+    visionLatencyMs: 0,
+    kbIngestedAt: null,
+  };
 }
 
-function safeRegex(pattern: string): RegExp | null {
-  try { return new RegExp(pattern); } catch { return null; }
+function setStatus(crawl: CrawlSession, page: CrawlPage, status: CrawlPage['status']): void {
+  page.status = status;
+  emit(crawl.id, { type: 'page-status', page, session: crawl });
 }
 
+async function processPage(
+  crawl: CrawlSession,
+  job: QueueItem,
+  s3: S3Client,
+  bucket: string,
+  seenHashes: Set<string>,
+): Promise<CrawlPage> {
+  const page = makePage(job.url, job.depth, job.parent);
+
+  try {
+    if (crawl.mode === 'fetch') {
+      await runFetchMode(page, job.url);
+    } else {
+      // browser + browser_spa share the same per-page pipeline; SPA-specific
+      // traversal happens in runLoop after the page is emitted.
+      await runBrowserMode(crawl, page, job.url, s3, bucket, seenHashes);
+    }
+  } catch (err) {
+    page.error = (err as Error).message;
+    page.status = 'failed';
+  }
+
+  // Capabilities-page event log (kept for back-compat).
+  appendJourneyStep(crawl.sessionId, {
+    startedAt: page.crawledAt,
+    url: page.url,
+    pageTitle: page.title,
+    textSnippet: page.summary || page.mainText.slice(0, 500),
+  });
+
+  recordCapabilityEvent({
+    id: randomUUID(),
+    kind: 'browser_navigate',
+    startedAt: page.crawledAt,
+    durationMs: Date.now() - new Date(page.crawledAt).getTime(),
+    sessionId: crawl.sessionId,
+    detail: {
+      url: page.url,
+      title: page.title,
+      source: 'crawl',
+      crawlId: crawl.id,
+      mode: crawl.mode,
+    },
+    ok: !page.error,
+    ...(page.error ? { error: page.error } : {}),
+  });
+
+  return page;
+}
+
+// ── 'fetch' mode: cheap server-side text scrape ───────────────────────────────
+
+async function runFetchMode(page: CrawlPage, url: string): Promise<void> {
+  page.status = 'navigating';
+  let html = '';
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'OrgIQ-Crawler/1.0' },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) {
+      page.error = `HTTP ${res.status}`;
+      page.status = 'failed';
+      return;
+    }
+    html = await res.text();
+  } catch (err) {
+    page.error = (err as Error).message;
+    page.status = 'failed';
+    return;
+  }
+
+  page.status = 'extracting';
+  const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
+  page.title = titleMatch ? titleMatch[1]!.trim() : '';
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 50000);
+  page.mainText = text;
+  page.contentLength = text.length;
+  page.summary = text.slice(0, 500);
+
+  // Extract absolute links so the BFS still has somewhere to go.
+  const linkRe = /href=["']([^"']+)["']/gi;
+  const links: DiscoveredLink[] = [];
+  const seen = new Set<string>();
+  let m: RegExpExecArray | null;
+  while ((m = linkRe.exec(html)) !== null) {
+    try {
+      const abs = new URL(m[1]!, url).href;
+      if (!/^https?:\/\//.test(abs)) continue;
+      if (abs.includes('#')) continue;
+      if (seen.has(abs)) continue;
+      seen.add(abs);
+      links.push({ label: '', targetUrl: abs, isSpaLink: false });
+      if (links.length >= 50) break;
+    } catch { /* skip */ }
+  }
+  page.discoveredLinks = links;
+  page.status = 'done';
+}
+
+// ── 'browser' + 'browser_spa' mode: AgentCore Browser + Nova Pro ──────────────
+
+async function runBrowserMode(
+  crawl: CrawlSession,
+  page: CrawlPage,
+  url: string,
+  s3: S3Client,
+  bucket: string,
+  seenHashes: Set<string>,
+): Promise<void> {
+  setStatus(crawl, page, 'navigating');
+  const nav = await agentcore.navigateBrowser(crawl.sessionId, url);
+  if (!nav) {
+    page.error = 'navigate failed';
+    page.status = 'failed';
+    return;
+  }
+
+  const shot = await agentcore.screenshotBrowser(crawl.sessionId);
+  if (!shot?.imageDataUrl) {
+    page.error = 'screenshot failed';
+    page.status = 'failed';
+    return;
+  }
+  const pngBytes = decodeDataUrl(shot.imageDataUrl);
+  page.screenshotBytes = pngBytes.length;
+  const hash = hashBytes(pngBytes);
+  seenHashes.add(hash);
+
+  setStatus(crawl, page, 'extracting');
+  const vision = await extractFromScreenshot(pngBytes, url);
+  page.title = vision.title;
+  page.summary = vision.summary;
+  page.mainText = vision.mainText;
+  page.discoveredLinks = vision.discoveredLinks;
+  page.contentLength = vision.mainText.length;
+  page.visionTokensIn = vision.tokensIn;
+  page.visionTokensOut = vision.tokensOut;
+  page.visionLatencyMs = vision.latencyMs;
+
+  // Roll cost into the session aggregate.
+  crawl.estimatedCostUsd = +(crawl.estimatedCostUsd + pageCost(vision.tokensIn, vision.tokensOut)).toFixed(6);
+
+  if (bucket) {
+    setStatus(crawl, page, 'uploading');
+    await uploadArtifacts(crawl, page, pngBytes, vision, s3, bucket);
+  }
+
+  setStatus(crawl, page, 'done');
+}
+
+// ── SPA traversal ─────────────────────────────────────────────────────────────
+
+async function traverseSpaLinks(
+  crawl: CrawlSession,
+  parentPage: CrawlPage,
+  s3: S3Client,
+  bucket: string,
+  seenHashes: Set<string>,
+): Promise<void> {
+  const candidates = parentPage.discoveredLinks.filter(
+    (l) => l.isSpaLink && typeof l.clickX === 'number' && typeof l.clickY === 'number',
+  );
+  let virtualCounter = 0;
+
+  for (const link of candidates) {
+    if (crawl.pages.length >= crawl.maxPages) break;
+    if (_cancelFlags.has(crawl.id)) return;
+
+    const x = link.clickX!;
+    const y = link.clickY!;
+
+    // Re-navigate to the parent URL first so each SPA click starts from a
+    // known baseline. Avoids cascading state from previous clicks.
+    await agentcore.navigateBrowser(crawl.sessionId, parentPage.url);
+
+    const clicked = await agentcore.clickBrowser(crawl.sessionId, x, y);
+    if (!clicked) continue;
+
+    // Give the SPA a moment to re-render.
+    await new Promise((r) => setTimeout(r, 2000));
+
+    const shot = await agentcore.screenshotBrowser(crawl.sessionId);
+    if (!shot?.imageDataUrl) continue;
+    const pngBytes = decodeDataUrl(shot.imageDataUrl);
+    const hash = hashBytes(pngBytes);
+    if (seenHashes.has(hash)) continue; // duplicate content, skip
+    seenHashes.add(hash);
+
+    // SPA route synthetic URL — Nova can't always read the actual route from
+    // the screenshot, so anchor to the parent URL plus a virtual fragment so
+    // downstream artifacts have unique keys.
+    virtualCounter += 1;
+    const virtualUrl = `${parentPage.url}#virtual-${String(virtualCounter).padStart(2, '0')}-${slugify(link.label)}`;
+
+    const virtualPage = makePage(virtualUrl, parentPage.depth + 1, parentPage.url);
+    virtualPage.screenshotBytes = pngBytes.length;
+    setStatus(crawl, virtualPage, 'extracting');
+
+    const vision = await extractFromScreenshot(pngBytes, virtualUrl);
+    virtualPage.title = vision.title || link.label;
+    virtualPage.summary = vision.summary;
+    virtualPage.mainText = vision.mainText;
+    virtualPage.discoveredLinks = vision.discoveredLinks;
+    virtualPage.contentLength = vision.mainText.length;
+    virtualPage.visionTokensIn = vision.tokensIn;
+    virtualPage.visionTokensOut = vision.tokensOut;
+    virtualPage.visionLatencyMs = vision.latencyMs;
+    crawl.estimatedCostUsd = +(crawl.estimatedCostUsd + pageCost(vision.tokensIn, vision.tokensOut)).toFixed(6);
+
+    if (bucket) {
+      setStatus(crawl, virtualPage, 'uploading');
+      await uploadArtifacts(crawl, virtualPage, pngBytes, vision, s3, bucket);
+    }
+    setStatus(crawl, virtualPage, 'done');
+
+    appendJourneyStep(crawl.sessionId, {
+      startedAt: virtualPage.crawledAt,
+      url: virtualPage.url,
+      pageTitle: virtualPage.title,
+      textSnippet: virtualPage.summary,
+    });
+
+    crawl.pages.push(virtualPage);
+    emit(crawl.id, { type: 'page', page: virtualPage, session: crawl });
+  }
+}
+
+// ── S3 artifact upload ────────────────────────────────────────────────────────
+
+async function uploadArtifacts(
+  crawl: CrawlSession,
+  page: CrawlPage,
+  pngBytes: Buffer,
+  vision: { title: string; summary: string; mainText: string; discoveredLinks: DiscoveredLink[]; tokensIn: number; tokensOut: number; latencyMs: number },
+  s3: S3Client,
+  bucket: string,
+): Promise<void> {
+  const seq = String(crawl.pages.length).padStart(3, '0');
+  const slug = slugify(page.url);
+  const prefix = crawl.s3Prefix;
+  const screenshotKey = `${prefix}/screenshots/${seq}-${slug}.png`;
+  const markdownKey = `${prefix}/${seq}-${slug}.md`;
+  const analysisKey = `${prefix}/analysis/${seq}-${slug}.json`;
+
+  const markdown = renderMarkdown(page.url, vision.title, vision.summary, vision.mainText, page.crawledAt, crawl.id);
+  const markdownBytes = Buffer.byteLength(markdown, 'utf8');
+  const analysis = JSON.stringify(
+    {
+      url: page.url,
+      crawledAt: page.crawledAt,
+      crawlId: crawl.id,
+      title: vision.title,
+      summary: vision.summary,
+      mainText: vision.mainText,
+      discoveredLinks: vision.discoveredLinks,
+      tokensIn: vision.tokensIn,
+      tokensOut: vision.tokensOut,
+      latencyMs: vision.latencyMs,
+    },
+    null,
+    2,
+  );
+
+  const metadata = {
+    'source-url': page.url.slice(0, 1024),
+    'crawl-id': crawl.id,
+    'depth': String(page.depth),
+  };
+
+  const uploads = await Promise.allSettled([
+    s3.send(new PutObjectCommand({
+      Bucket: bucket,
+      Key: screenshotKey,
+      Body: pngBytes,
+      ContentType: 'image/png',
+      Metadata: metadata,
+    })),
+    s3.send(new PutObjectCommand({
+      Bucket: bucket,
+      Key: markdownKey,
+      Body: markdown,
+      ContentType: 'text/markdown',
+      Metadata: metadata,
+    })),
+    s3.send(new PutObjectCommand({
+      Bucket: bucket,
+      Key: analysisKey,
+      Body: analysis,
+      ContentType: 'application/json',
+      Metadata: metadata,
+    })),
+  ]);
+
+  const [shotRes, mdRes, jsonRes] = uploads;
+  if (shotRes.status === 'fulfilled') {
+    page.s3ScreenshotKey = screenshotKey;
+    crawl.totalScreenshotBytes += pngBytes.length;
+  } else {
+    console.warn('[crawler] screenshot upload failed:', (shotRes.reason as Error).message);
+  }
+  if (mdRes.status === 'fulfilled') {
+    page.s3MarkdownKey = markdownKey;
+    crawl.totalMarkdownBytes += markdownBytes;
+  } else {
+    console.warn('[crawler] markdown upload failed:', (mdRes.reason as Error).message);
+  }
+  if (jsonRes.status === 'fulfilled') {
+    page.s3AnalysisKey = analysisKey;
+  } else {
+    console.warn('[crawler] analysis upload failed:', (jsonRes.reason as Error).message);
+  }
+
+  if (!page.s3MarkdownKey && !page.s3ScreenshotKey && !page.s3AnalysisKey) {
+    page.error = 's3 upload failed';
+  }
+}

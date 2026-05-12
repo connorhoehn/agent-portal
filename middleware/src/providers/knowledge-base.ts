@@ -17,8 +17,10 @@ import {
   GetIngestionJobCommand,
   StartIngestionJobCommand,
 } from '@aws-sdk/client-bedrock-agent';
-import { S3Client, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { S3Client, ListObjectsV2Command, PutObjectCommand } from '@aws-sdk/client-s3';
+import { extname, basename } from 'node:path';
 import { config } from '../config.js';
+import type { StorageBreakdown } from '../lib/crawler-types.js';
 
 export interface KbSummary {
   id: string;
@@ -225,6 +227,112 @@ export async function getIngestionJob(jobId: string, dataSourceId: string): Prom
   }
 }
 
+// ─── Upload ───────────────────────────────────────────────────────────────────
+
+export interface UploadResult {
+  key: string;
+  bucket: string;
+  size: number;
+  contentType: string;
+  url: string;
+}
+
+export async function uploadDocument(
+  filename: string,
+  body: Buffer,
+  contentType: string,
+  prefix = 'uploads',
+): Promise<UploadResult> {
+  const bucket = config.foundation.documentsBucket;
+  if (!bucket) throw new Error('DOCUMENTS_BUCKET not configured');
+  const s3 = new S3Client({ region: config.region });
+  const date = new Date().toISOString().slice(0, 10);
+  const safe = basename(filename).replace(/[^a-zA-Z0-9._-]/g, '_');
+  const key = `${prefix}/${date}/${safe}`;
+  await s3.send(new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    Body: body,
+    ContentType: contentType,
+    Metadata: { 'uploaded-at': new Date().toISOString(), 'original-name': filename.slice(0, 512) },
+  }));
+  return { key, bucket, size: body.length, contentType, url: `s3://${bucket}/${key}` };
+}
+
+// ─── Stats ────────────────────────────────────────────────────────────────────
+
+export interface IngestStats {
+  s3: {
+    bucket: string;
+    total: number;
+    totalSizeBytes: number;
+    byExtension: Record<string, { count: number; sizeBytes: number }>;
+    byPrefix: Record<string, number>;
+    newestKey: string | null;
+    newestAt: string | null;
+  };
+  kb: KbSummary | null;
+  recentJobs: IngestionJobSummary[];
+  lastSync: { completedAt: string | null; documentsIndexed: number; documentsFailed: number };
+}
+
+export async function getIngestStats(): Promise<IngestStats> {
+  const bucket = config.foundation.documentsBucket;
+  const s3Stats: IngestStats['s3'] = {
+    bucket: bucket ?? '',
+    total: 0,
+    totalSizeBytes: 0,
+    byExtension: {},
+    byPrefix: {},
+    newestKey: null,
+    newestAt: null,
+  };
+
+  if (bucket) {
+    try {
+      const s3 = new S3Client({ region: config.region });
+      let token: string | undefined;
+      let newestTime = 0;
+      do {
+        const resp = await s3.send(new ListObjectsV2Command({ Bucket: bucket, MaxKeys: 1000, ContinuationToken: token }));
+        for (const obj of resp.Contents ?? []) {
+          const size = obj.Size ?? 0;
+          s3Stats.total++;
+          s3Stats.totalSizeBytes += size;
+          // extension bucket
+          const ext = extname(obj.Key ?? '').toLowerCase() || '(none)';
+          const cur = s3Stats.byExtension[ext] ?? { count: 0, sizeBytes: 0 };
+          s3Stats.byExtension[ext] = { count: cur.count + 1, sizeBytes: cur.sizeBytes + size };
+          // top-level prefix bucket
+          const topPrefix = (obj.Key ?? '').split('/')[0] ?? '(root)';
+          s3Stats.byPrefix[topPrefix] = (s3Stats.byPrefix[topPrefix] ?? 0) + 1;
+          // newest
+          const ms = obj.LastModified?.getTime() ?? 0;
+          if (ms > newestTime) { newestTime = ms; s3Stats.newestKey = obj.Key ?? null; s3Stats.newestAt = obj.LastModified?.toISOString() ?? null; }
+        }
+        token = resp.NextContinuationToken;
+      } while (token && s3Stats.total < 5000);
+    } catch (err) {
+      console.warn('[kb] getIngestStats s3 scan failed:', (err as Error).message);
+    }
+  }
+
+  const [kb, recentJobs] = await Promise.all([getKb(), listIngestionJobs(undefined, 5)]);
+  const lastComplete = recentJobs.find(j => j.status === 'COMPLETE');
+  return {
+    s3: s3Stats,
+    kb,
+    recentJobs,
+    lastSync: {
+      completedAt: lastComplete?.updatedAt ?? null,
+      documentsIndexed: lastComplete?.documentsIndexed ?? 0,
+      documentsFailed: lastComplete?.documentsFailed ?? 0,
+    },
+  };
+}
+
+// ─── Queue ────────────────────────────────────────────────────────────────────
+
 export interface S3QueueSummary {
   total: number;
   pendingSinceLastSync: number;
@@ -261,4 +369,105 @@ export async function countS3Documents(lastSyncAt?: string): Promise<S3QueueSumm
     console.warn('[kb] countS3Documents failed:', (err as Error).message);
     return { total: 0, pendingSinceLastSync: 0, lastModified: null, bucket };
   }
+}
+
+// ─── Crawl → KB sync ──────────────────────────────────────────────────────────
+// The KB data source covers the entire bucket (no per-prefix scoping at the
+// data-source level), so we just call StartIngestionJob on the first S3 data
+// source attached to the KB and stamp the crawl id into the description so the
+// UI can correlate the job back to the run.
+
+export async function triggerKbSyncForCrawl(
+  crawlId: string,
+): Promise<{ jobId: string; status: string; dataSourceId: string } | null> {
+  const kbId = config.knowledgeBase.id;
+  if (!kbId) return null;
+  try {
+    const sources = await listDataSources();
+    // Prefer S3-backed sources; otherwise fall back to the first one available.
+    const target = sources.find(s => s.type === 'S3') ?? sources[0];
+    if (!target) {
+      console.warn('[kb] triggerKbSyncForCrawl: no data sources attached to KB');
+      return null;
+    }
+    const job = await startIngestionJob(target.id, `Crawl sync: ${crawlId}`);
+    if (!job) return null;
+    return { ...job, dataSourceId: target.id };
+  } catch (err) {
+    console.warn('[kb] triggerKbSyncForCrawl failed:', (err as Error).message);
+    return null;
+  }
+}
+
+// ─── Storage breakdown ────────────────────────────────────────────────────────
+// Wider lens than getIngestStats — used by the new Ingest page summary cards.
+// Aggregates the documents bucket by extension and by first-level prefix, and
+// reports the KB document count from the most recent COMPLETE ingestion job.
+
+export async function getStorageBreakdown(): Promise<StorageBreakdown> {
+  const bucket = config.foundation.documentsBucket ?? '';
+  const byTypeMap = new Map<string, { count: number; bytes: number }>();
+  const byPrefixMap = new Map<string, { count: number; bytes: number }>();
+  let totalObjects = 0;
+  let totalBytes = 0;
+
+  if (bucket) {
+    try {
+      const s3 = new S3Client({ region: config.region });
+      let token: string | undefined;
+      do {
+        const resp = await s3.send(new ListObjectsV2Command({
+          Bucket: bucket,
+          MaxKeys: 1000,
+          ContinuationToken: token,
+        }));
+        for (const obj of resp.Contents ?? []) {
+          const size = obj.Size ?? 0;
+          totalObjects++;
+          totalBytes += size;
+          const ext = (extname(obj.Key ?? '').toLowerCase() || '(none)');
+          const e = byTypeMap.get(ext) ?? { count: 0, bytes: 0 };
+          byTypeMap.set(ext, { count: e.count + 1, bytes: e.bytes + size });
+          const top = (obj.Key ?? '').split('/')[0] || '(root)';
+          const p = byPrefixMap.get(top) ?? { count: 0, bytes: 0 };
+          byPrefixMap.set(top, { count: p.count + 1, bytes: p.bytes + size });
+        }
+        token = resp.NextContinuationToken;
+      } while (token && totalObjects < 10000);
+    } catch (err) {
+      console.warn('[kb] getStorageBreakdown s3 scan failed:', (err as Error).message);
+    }
+  }
+
+  const byType = Array.from(byTypeMap.entries())
+    .map(([extension, v]) => ({ extension, ...v }))
+    .sort((a, b) => b.bytes - a.bytes);
+  const byPrefix = Array.from(byPrefixMap.entries())
+    .map(([prefix, v]) => ({ prefix, ...v }))
+    .sort((a, b) => b.count - a.count);
+
+  // KB doc count: use the most recent COMPLETE ingestion job's indexed count.
+  // The bedrock-agent SDK pinned in this repo doesn't ship
+  // ListKnowledgeBaseDocuments, so the last-job snapshot is our best proxy.
+  let totalDocuments = 0;
+  let lastIngestedAt: string | null = null;
+  try {
+    const recent = await listIngestionJobs(undefined, 10);
+    const lastComplete = recent.find(j => j.status === 'COMPLETE');
+    if (lastComplete) {
+      totalDocuments = lastComplete.documentsIndexed;
+      lastIngestedAt = lastComplete.updatedAt;
+    }
+  } catch (err) {
+    console.warn('[kb] getStorageBreakdown kb stats failed:', (err as Error).message);
+  }
+
+  return {
+    bucket,
+    totalObjects,
+    totalBytes,
+    byType,
+    byPrefix,
+    kb: { totalDocuments, lastIngestedAt },
+  };
 }
