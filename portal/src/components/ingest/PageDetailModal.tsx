@@ -3,6 +3,7 @@ import { Card, Chip, Table, TableHead, TableBody, TableRow, TableTh, TableTd } f
 import { PAGE_STATUS_TONE, formatBytes, formatDuration } from './types';
 import type { CrawlPage } from './types';
 import { ModalBackdrop, secondaryBtnStyle, smallBtnStyle } from './ui';
+import { Markdown } from '../Markdown';
 
 type Tab = 'screenshot' | 'markdown' | 'analysis' | 'links';
 
@@ -207,21 +208,9 @@ function MarkdownTab({ text }: { text: string }) {
     );
   }
   return (
-    <pre
-      style={{
-        whiteSpace: 'pre-wrap',
-        wordBreak: 'break-word',
-        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-        fontSize: 12,
-        color: 'var(--color-text-primary)',
-        background: 'var(--color-surface-raised)',
-        padding: 12,
-        borderRadius: 4,
-        margin: 0,
-      }}
-    >
-      {text}
-    </pre>
+    <div style={{ padding: 12, background: 'var(--color-surface-raised)', borderRadius: 4 }}>
+      <Markdown size={13}>{text}</Markdown>
+    </div>
   );
 }
 
