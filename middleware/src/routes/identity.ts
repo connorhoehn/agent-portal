@@ -24,13 +24,18 @@ const ROLE_DESCRIPTIONS: Record<string, { label: string; summary: string; capabi
   },
   'org-leader': {
     label: 'Org Leader',
-    summary: 'VPs / Directors. Full org visibility and expertise leaderboards.',
-    capabilities: ['Search', 'ViewOrgChart', 'ViewLeaderboard'],
+    summary: 'VPs / Directors. Full org visibility, leaderboards, and system observability.',
+    capabilities: ['Search', 'ViewOrgChart', 'ViewLeaderboard', 'ViewObservability'],
   },
   'hr-admin': {
     label: 'HR Admin',
-    summary: 'People Ops. Sees salary + performance data, edits guardrails and policies.',
-    capabilities: ['Search', 'ViewOrgChart', 'ViewLeaderboard', 'ViewSalary', 'ViewPerformance', 'EditGuardrail', 'EditPolicy', 'ViewIdentityAdmin'],
+    summary: 'People Ops. Sees salary + performance, edits guardrails/policies, manages ingest.',
+    capabilities: [
+      'Search', 'ViewOrgChart', 'ViewLeaderboard',
+      'ViewSalary', 'ViewPerformance',
+      'EditGuardrail', 'EditPolicy', 'ViewIdentityAdmin',
+      'ViewObservability', 'ManageIngest',
+    ],
   },
 };
 

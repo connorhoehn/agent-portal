@@ -13,6 +13,7 @@ import { capabilitiesRouter } from './routes/capabilities.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { sessionRouter } from './routes/session.js';
 import { identityRouter } from './routes/identity.js';
+import { requireAction } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
 import { initCrawlTargets } from './lib/crawl-targets.js';
 
@@ -39,8 +40,8 @@ app.use('/api/identity', identityRouter);
 app.use('/api/agents', agentsRouter);
 app.use('/api/graph', graphRouter);
 app.use('/api/scores', scoresRouter);
-app.use('/api/ingest', ingestRouter);
-app.use('/api/observability', observabilityRouter);
+app.use('/api/ingest', requireAction('ManageIngest'), ingestRouter);
+app.use('/api/observability', requireAction('ViewObservability'), observabilityRouter);
 app.use('/api/capabilities', capabilitiesRouter);
 app.use('/api/sessions', sessionsRouter);
 

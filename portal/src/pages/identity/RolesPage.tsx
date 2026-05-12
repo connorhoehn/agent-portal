@@ -10,6 +10,7 @@ interface RoleInfo {
 const ALL_ACTIONS = [
   'Search', 'ViewOrgChart', 'ViewLeaderboard',
   'ViewSalary', 'ViewPerformance',
+  'ViewObservability', 'ManageIngest',
   'EditGuardrail', 'EditPolicy', 'ViewIdentityAdmin',
 ];
 
@@ -21,7 +22,7 @@ function RolesPage() {
   if (!data) return null;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
       <header>
         <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Roles</h2>
         <p style={{ margin: '4px 0 0', color: 'var(--color-text-secondary)', fontSize: 13 }}>

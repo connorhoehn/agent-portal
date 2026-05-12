@@ -10,7 +10,9 @@ permit (
     OrgIQ::Action::"ViewPerformance",
     OrgIQ::Action::"EditGuardrail",
     OrgIQ::Action::"EditPolicy",
-    OrgIQ::Action::"ViewIdentityAdmin"
+    OrgIQ::Action::"ViewIdentityAdmin",
+    OrgIQ::Action::"ViewObservability",
+    OrgIQ::Action::"ManageIngest"
   ],
   resource
 )

@@ -58,7 +58,11 @@ export function App() {
         <Route path="invoke" element={<Page element={<InvokePage />} />} />
         <Route path="scores" element={<Page element={<ScoresPage />} />} />
 
-        <Route path="ingest" element={<Page element={<IngestLayout />} />}>
+        <Route path="ingest" element={
+          <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
+            <Page element={<IngestLayout />} />
+          </RequireRole>
+        }>
           <Route index element={<Navigate to="summary" replace />} />
           <Route path="summary" element={<Page element={<IngestSummaryPage />} />} />
           <Route path="crawl" element={<Page element={<IngestCrawlPage />} />} />
@@ -68,7 +72,11 @@ export function App() {
           <Route path="schedules" element={<Page element={<IngestSchedulesPage />} />} />
         </Route>
 
-        <Route path="observability" element={<Page element={<ObservabilityLayout />} />}>
+        <Route path="observability" element={
+          <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/" replace />}>
+            <Page element={<ObservabilityLayout />} />
+          </RequireRole>
+        }>
           <Route index element={<Navigate to="summary" replace />} />
           <Route path="summary" element={<Page element={<ObservabilitySummaryPage />} />} />
           <Route path="invocations" element={<Page element={<ObservabilityInvocationsPage />} />} />

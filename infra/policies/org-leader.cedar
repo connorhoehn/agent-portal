@@ -5,7 +5,8 @@ permit (
   action in [
     OrgIQ::Action::"Search",
     OrgIQ::Action::"ViewOrgChart",
-    OrgIQ::Action::"ViewLeaderboard"
+    OrgIQ::Action::"ViewLeaderboard",
+    OrgIQ::Action::"ViewObservability"
   ],
   resource
 )

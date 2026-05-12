@@ -17,8 +17,8 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/agents', label: 'Architecture' },
   { path: '/invoke', label: 'Agent Tools' },
   { path: '/scores', label: 'Scores' },
-  { path: '/ingest', label: 'Ingest' },
-  { path: '/observability', label: 'Observability' },
+  { path: '/ingest', label: 'Ingest', requireRoles: ['hr-admin'] },
+  { path: '/observability', label: 'Observability', requireRoles: ['org-leader', 'hr-admin'] },
   { path: '/capabilities', label: 'Platform Services' },
   { path: '/identity', label: 'Identity', requireRoles: ['hr-admin'] },
 ];

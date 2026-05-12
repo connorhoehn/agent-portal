@@ -21,7 +21,9 @@
       "ViewLeaderboard":    { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
       "EditGuardrail":      { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
       "EditPolicy":         { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
-      "ViewIdentityAdmin":  { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } }
+      "ViewIdentityAdmin":  { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
+      "ViewObservability":  { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
+      "ManageIngest":       { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } }
     }
   }
 }

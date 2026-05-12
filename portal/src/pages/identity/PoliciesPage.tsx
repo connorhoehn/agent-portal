@@ -20,7 +20,7 @@ function PoliciesPage() {
   if (!data) return null;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
       <header>
         <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Cedar Policies</h2>
         <p style={{ margin: '4px 0 0', color: 'var(--color-text-secondary)', fontSize: 13 }}>
@@ -55,12 +55,14 @@ function PoliciesPage() {
           <pre style={{
             margin: 0,
             padding: 12,
-            background: 'var(--color-bg, #0f172a)',
+            background: 'var(--color-surface-hover)',
             border: '1px solid var(--color-border)',
             borderRadius: 'var(--radius-sm, 4px)',
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
             fontSize: 12,
             lineHeight: 1.5,
             color: 'var(--color-text-primary)',
+            whiteSpace: 'pre-wrap',
             overflowX: 'auto',
           }}>{p.statement ?? '(empty)'}</pre>
         </article>
