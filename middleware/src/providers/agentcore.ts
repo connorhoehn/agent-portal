@@ -811,24 +811,23 @@ export const realAgentCore: AgentCoreProvider = {
   },
 
   async navigateBrowser(sessionId: string, url: string): Promise<BrowserSession | null> {
+    const browserId = config.agentcore.browserId;
+    if (!browserId) return null;
+    const invoke = (action: Record<string, unknown>) =>
+      dataClient().send(new InvokeBrowserCommand({ browserIdentifier: browserId, sessionId, action: action as any }));
     try {
-      const result = await withCdpSession(sessionId, async (call) => {
-        await call('Page.navigate', { url });
-        // Settle time so the title resolves. Page.loadEventFired would be more
-        // correct but adds event-subscription complexity for a UX nicety.
-        await new Promise((r) => setTimeout(r, 1500));
-        const titleRes = (await call('Runtime.evaluate', {
-          expression: 'document.title',
-          returnByValue: true,
-        })) as { result?: { value?: string } };
-        return titleRes.result?.value ?? '';
-      });
+      // Focus the address bar (Ctrl+L), clear it, type the URL, then navigate.
+      await invoke({ keyShortcut: { keys: ['ctrl', 'l'] } });
+      await new Promise((r) => setTimeout(r, 200));
+      await invoke({ keyShortcut: { keys: ['ctrl', 'a'] } });
+      await invoke({ keyType: { text: url } });
+      await invoke({ keyPress: { key: 'Return', presses: 1 } });
+      // Wait for page load.
+      await new Promise((r) => setTimeout(r, 3000));
 
-      if (result == null) return null;
-      const title = result as string;
       const prev = _browserUrlState.get(sessionId);
       const requests = (prev?.requests ?? 0) + 1;
-      _browserUrlState.set(sessionId, { url, title, requests });
+      _browserUrlState.set(sessionId, { url, title: '', requests });
 
       const now = new Date().toISOString();
       return {
@@ -838,12 +837,12 @@ export const realAgentCore: AgentCoreProvider = {
         startedAt: now,
         lastActivityAt: now,
         currentUrl: url,
-        pageTitle: title,
+        pageTitle: '',
         requestCount: requests,
         profileId: config.agentcore.browserProfileId,
       };
     } catch (err) {
-      console.warn('[agentcore] navigateBrowser CDP call failed:', (err as Error).message);
+      console.warn('[agentcore] navigateBrowser failed:', (err as Error).message);
       return null;
     }
   },
@@ -881,20 +880,11 @@ export const realAgentCore: AgentCoreProvider = {
     }
   },
 
-  async evaluateInBrowser(sessionId: string, expression: string): Promise<unknown> {
-    try {
-      return await withCdpSession(sessionId, async (call) => {
-        const res = (await call('Runtime.evaluate', {
-          expression,
-          returnByValue: true,
-          awaitPromise: true,
-        })) as { result?: { value?: unknown; description?: string } };
-        return res.result?.value ?? null;
-      });
-    } catch (err) {
-      console.warn('[agentcore] evaluateInBrowser failed:', (err as Error).message);
-      return null;
-    }
+  async evaluateInBrowser(_sessionId: string, _expression: string): Promise<unknown> {
+    // AgentCore Browser does not expose a CDP automation stream — the action API
+    // only supports mouse/keyboard/screenshot. JS evaluation is unavailable.
+    // Callers that need page content should use fetchPageContent() instead.
+    return null;
   },
 };
 

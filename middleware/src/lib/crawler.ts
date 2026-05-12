@@ -9,6 +9,51 @@ import { agentcore } from '../providers/index.js';
 import { appendJourneyStep, recordCapabilityEvent } from './invocations.js';
 import { config } from '../config.js';
 
+// AgentCore Browser doesn't expose CDP for JS evaluation. Fetch the page
+// server-side to extract title, body text, and links instead.
+async function fetchPageContent(url: string): Promise<{ title: string; text: string; links: string[] }> {
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'OrgIQ-Crawler/1.0' },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return { title: '', text: '', links: [] };
+    const html = await res.text();
+    // Extract title
+    const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
+    const title = titleMatch ? titleMatch[1]!.trim() : '';
+    // Strip tags and collapse whitespace for body text
+    const text = html
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 50000);
+    // Extract absolute links
+    const linkRe = /href=["']([^"']+)["']/gi;
+    const links: string[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = linkRe.exec(html)) !== null) {
+      try {
+        const abs = new URL(m[1]!, url).href;
+        if ((abs.startsWith('http://') || abs.startsWith('https://')) && !abs.includes('#') && !links.includes(abs)) {
+          links.push(abs);
+          if (links.length >= 200) break;
+        }
+      } catch { /* skip invalid URLs */ }
+    }
+    return { title, text, links };
+  } catch (err) {
+    console.warn('[crawler] fetchPageContent failed:', (err as Error).message);
+    return { title: '', text: '', links: [] };
+  }
+}
+
 export interface CrawlPage {
   url: string;
   title: string;
@@ -51,20 +96,6 @@ const _sessions = new Map<string, CrawlSession>();
 const _subscribers = new Map<string, Set<Subscriber>>();
 const _cancelFlags = new Set<string>();
 
-const EXTRACT_JS = `
-(() => {
-  const root = document.querySelector('main, article, [role=main], #content, .content') || document.body;
-  const text = (root.innerText || '').slice(0, 50000);
-  const here = location.href;
-  const links = Array.from(document.querySelectorAll('a[href]'))
-    .map(a => { try { return new URL(a.href, here).href; } catch { return ''; } })
-    .filter(h => h && (h.startsWith('http://') || h.startsWith('https://')))
-    .filter(h => !h.includes('#'))
-    .filter((h, i, arr) => arr.indexOf(h) === i)
-    .slice(0, 200);
-  return JSON.stringify({ title: document.title || '', text, links });
-})()
-`.trim();
 
 function slugify(url: string): string {
   return url
@@ -195,17 +226,17 @@ async function runLoop(crawl: CrawlSession): Promise<void> {
       };
 
       try {
-        await agentcore.navigateBrowser(crawl.sessionId, job.url);
-        await new Promise((r) => setTimeout(r, 1500));
-
-        const raw = await agentcore.evaluateInBrowser(crawl.sessionId, EXTRACT_JS);
-        const extracted = parseExtracted(raw);
+        // Fetch page content server-side (AgentCore Browser has no JS eval API).
+        const extracted = await fetchPageContent(job.url);
         page.title = extracted.title;
         page.contentLength = extracted.text.length;
         page.textSnippet = extracted.text.slice(0, 500);
         page.linksFound = extracted.links;
 
-        const shot = await agentcore.screenshotBrowser(crawl.sessionId);
+        // Navigate the browser session to the URL for the screenshot.
+        await agentcore.navigateBrowser(crawl.sessionId, job.url);
+
+        const shot = await agentcore.screenshotBrowser(crawl.sessionId);  // navigateBrowser already settled for 3s
         if (shot) page.screenshotTaken = true;
 
         if (bucket && extracted.text) {
@@ -291,25 +322,3 @@ function safeRegex(pattern: string): RegExp | null {
   try { return new RegExp(pattern); } catch { return null; }
 }
 
-interface Extracted { title: string; text: string; links: string[]; }
-function parseExtracted(raw: unknown): Extracted {
-  if (typeof raw === 'string') {
-    try {
-      const obj = JSON.parse(raw) as Partial<Extracted>;
-      return {
-        title: obj.title ?? '',
-        text: obj.text ?? '',
-        links: Array.isArray(obj.links) ? obj.links.filter((x) => typeof x === 'string') : [],
-      };
-    } catch { /* fall through */ }
-  }
-  if (raw && typeof raw === 'object') {
-    const o = raw as Partial<Extracted>;
-    return {
-      title: o.title ?? '',
-      text: o.text ?? '',
-      links: Array.isArray(o.links) ? o.links.filter((x) => typeof x === 'string') : [],
-    };
-  }
-  return { title: '', text: '', links: [] };
-}
