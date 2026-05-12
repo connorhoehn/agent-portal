@@ -55,6 +55,18 @@ export const config = {
   guardrail: {
     id: env('GUARDRAIL_ID'),
     version: env('GUARDRAIL_VERSION', '1'),
+    // Per-role guardrail IDs. Middleware passes the matching one to the
+    // supervisor on each invoke based on the caller's session role.
+    byRole: {
+      member: env('GUARDRAIL_ID_MEMBER') || env('GUARDRAIL_ID'),
+      'org-leader': env('GUARDRAIL_ID_ORG_LEADER') || env('GUARDRAIL_ID'),
+      'hr-admin': env('GUARDRAIL_ID_HR_ADMIN') || env('GUARDRAIL_ID'),
+    },
+  },
+
+  auth: {
+    policyStoreId: env('POLICY_STORE_ID'),
+    sessionSigningSecretArn: env('SESSION_SIGNING_SECRET_ARN'),
   },
 
   agentcore: {

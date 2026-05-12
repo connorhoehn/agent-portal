@@ -6,6 +6,7 @@ import { agentcore, aurora } from '../providers/index.js';
 import { detectIntervention, recordInvocation, snippet } from '../lib/invocations.js';
 import { recordTurn } from '../providers/memory.js';
 import { maybeGenerateTitle } from '../lib/session-titles.js';
+import { requireAction } from '../lib/authz.js';
 
 export const agentsRouter = Router();
 
@@ -21,7 +22,7 @@ agentsRouter.get('/:agentId/metrics', asyncHandler(async (req, res) => {
   res.json(metrics);
 }));
 
-agentsRouter.post('/:agentId/invoke', asyncHandler(async (req, res) => {
+agentsRouter.post('/:agentId/invoke', requireAction('Search'), asyncHandler(async (req, res) => {
   const agentId = String(req.params['agentId'] ?? '');
   const { message, sessionId: rawSessionId, actorId, selection } = req.body as {
     message?: string;
@@ -81,6 +82,7 @@ agentsRouter.post('/:agentId/invoke', asyncHandler(async (req, res) => {
     result = await agentcore.invokeAgent(agentId, {
       message: userMessage,
       sessionId,
+      ...(req.session ? { auth: { sub: req.session.sub, role: req.session.role } } : {}),
     });
   } catch (err) {
     const errMsg = (err as Error).message || 'invoke failed';

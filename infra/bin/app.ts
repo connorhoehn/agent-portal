@@ -12,6 +12,7 @@ import { AgentCoreRuntimeStack } from '../lib/agentcore-runtime-stack';
 import { AgentCoreGatewayStack } from '../lib/agentcore-gateway-stack';
 import { AgentCoreTelemetryStack } from '../lib/agentcore-telemetry-stack';
 import { AgentCoreCapabilitiesStack } from '../lib/agentcore-capabilities-stack';
+import { AuthorizationStack } from '../lib/authorization-stack';
 
 const app = new cdk.App();
 
@@ -66,6 +67,17 @@ const guardrails = new GuardrailsStack(app, 'OrgIQ-Guardrails', {
   env,
   prefix,
   description: 'OrgIQ Guardrails: PII filtering, content policy, topic denials',
+});
+
+// -------------------------------------------------------------------
+// Stack 4b: Authorization (Verified Permissions + Cedar policies + cookie key)
+// User-facing RBAC for masquerade roles. Middleware calls AVP IsAuthorized;
+// supervisor reads role-mapped guardrail IDs at agent-invoke time.
+// -------------------------------------------------------------------
+const authorization = new AuthorizationStack(app, 'OrgIQ-Authorization', {
+  env,
+  prefix,
+  description: 'OrgIQ Authorization: Cedar policies + AVP policy store + session signing key',
 });
 
 // -------------------------------------------------------------------
@@ -158,6 +170,9 @@ const agentCoreRuntime = new AgentCoreRuntimeStack(app, 'OrgIQ-AgentCoreRuntime'
   agentRoles: agents.agentRoles,
   memoryId: cdk.Fn.importValue(`${prefix}-memory-id`),
   guardrailId: cdk.Fn.importValue(`${prefix}-guardrail-id`),
+  guardrailIdMember: cdk.Fn.importValue(`${prefix}-guardrail-id-member`),
+  guardrailIdOrgLeader: cdk.Fn.importValue(`${prefix}-guardrail-id-org-leader`),
+  guardrailIdHrAdmin: cdk.Fn.importValue(`${prefix}-guardrail-id-hr-admin`),
   auroraClusterArn: cdk.Fn.importValue(`${prefix}-aurora-cluster-arn`),
   auroraCredentialsSecretArn: cdk.Fn.importValue(`${prefix}-aurora-secret-arn`),
   knowledgeBaseId: cdk.Fn.importValue(`${prefix}-knowledge-base-id`),
@@ -206,5 +221,10 @@ const agentCoreTelemetry = new AgentCoreTelemetryStack(app, 'OrgIQ-AgentCoreTele
 });
 agentCoreTelemetry.addDependency(agentCoreRuntime);
 agentCoreTelemetry.addDependency(agentCoreGateway);
+
+// Authorization is deployed in parallel with the rest of the app — neither
+// stack imports from the other. Middleware reads POLICY_STORE_ID and
+// SESSION_SIGNING_SECRET_ARN from this stack's exports at runtime.
+void authorization;
 
 app.synth();

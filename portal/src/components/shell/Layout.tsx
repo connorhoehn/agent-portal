@@ -1,5 +1,7 @@
 import { NavLink, Outlet } from 'react-router';
 import { useFetch } from '../../hooks/useFetch';
+import { useSession } from '../../lib/auth';
+import { MasqueradeMenu } from './MasqueradeMenu';
 
 interface Health {
   status: string;
@@ -8,18 +10,25 @@ interface Health {
   region: string;
 }
 
-const NAV_ITEMS = [
+type NavItem = { path: string; label: string; requireRoles?: string[] };
+
+const NAV_ITEMS: NavItem[] = [
   { path: '/explore', label: 'Explore' },
   { path: '/agents', label: 'Architecture' },
   { path: '/invoke', label: 'Agent Tools' },
   { path: '/scores', label: 'Scores' },
   { path: '/ingest', label: 'Ingest' },
   { path: '/observability', label: 'Observability' },
-  { path: '/capabilities', label: 'Capabilities' },
+  { path: '/capabilities', label: 'Platform Services' },
+  { path: '/identity', label: 'Identity', requireRoles: ['hr-admin'] },
 ];
 
 export function Layout() {
   const { data: health } = useFetch<Health>('/api/health', 30_000);
+  const { session } = useSession();
+  const navItems = NAV_ITEMS.filter(item =>
+    !item.requireRoles || (session && item.requireRoles.includes(session.role)),
+  );
   const mockedSubsystems = health
     ? Object.entries(health.mocks).filter(([, v]) => v).map(([k]) => k)
     : [];
@@ -53,7 +62,7 @@ export function Layout() {
           OrgIQ
         </div>
         <nav style={{ padding: '12px 8px', flex: 1 }}>
-          {NAV_ITEMS.map(item => (
+          {navItems.map(item => (
             <NavLink
               key={item.path}
               to={item.path}
@@ -78,8 +87,20 @@ export function Layout() {
           <span>{statusLabel}</span>
         </div>
       </aside>
-      <main style={{ flex: 1, overflow: 'auto', padding: 24 }}>
-        <Outlet />
+      <main style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+        <header style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          padding: '10px 24px',
+          borderBottom: '1px solid var(--color-border)',
+          background: 'var(--color-surface)',
+        }}>
+          <MasqueradeMenu />
+        </header>
+        <div style={{ flex: 1, overflow: 'auto', padding: 24 }}>
+          <Outlet />
+        </div>
       </main>
     </div>
   );

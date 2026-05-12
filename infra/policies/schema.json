@@ -1,0 +1,27 @@
+{
+  "OrgIQ": {
+    "entityTypes": {
+      "User": {
+        "shape": {
+          "type": "Record",
+          "attributes": {
+            "role": { "type": "String", "required": true }
+          }
+        }
+      },
+      "Application": {
+        "shape": { "type": "Record", "attributes": {} }
+      }
+    },
+    "actions": {
+      "Search":             { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
+      "ViewSalary":         { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
+      "ViewPerformance":    { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
+      "ViewOrgChart":       { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
+      "ViewLeaderboard":    { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
+      "EditGuardrail":      { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
+      "EditPolicy":         { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
+      "ViewIdentityAdmin":  { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } }
+    }
+  }
+}

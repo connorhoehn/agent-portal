@@ -551,6 +551,7 @@ export const realAgentCore: AgentCoreProvider = {
       message: payload.message,
       prompt: payload.message,
       input_text: payload.message,
+      ...(payload.auth ? { auth: payload.auth } : {}),
     });
 
     const resp = await dataClient().send(

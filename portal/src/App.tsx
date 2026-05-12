@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router';
 import { Layout } from './components/shell/Layout';
+import { RequireRole } from './lib/auth';
 
 const AgentFlowPage = lazy(() => import('./pages/AgentFlowPage'));
 const ScoresPage = lazy(() => import('./pages/ScoresPage'));
@@ -24,6 +25,11 @@ const CapabilitiesGuardrailsPage = lazy(() => import('./pages/capabilities/Guard
 const CapabilitiesCodeInterpreterPage = lazy(() => import('./pages/capabilities/CodeInterpreterPage'));
 const CapabilitiesBrowserPage = lazy(() => import('./pages/capabilities/BrowserPage'));
 const CapabilitiesMemoryPage = lazy(() => import('./pages/capabilities/MemoryPage'));
+
+// Identity Management sub-pages (HRAdmin only)
+const IdentityLayout = lazy(() => import('./pages/identity/IdentityLayout'));
+const IdentityRolesPage = lazy(() => import('./pages/identity/RolesPage'));
+const IdentityPoliciesPage = lazy(() => import('./pages/identity/PoliciesPage'));
 
 // Observability sub-pages
 const ObservabilityLayout = lazy(() => import('./pages/observability/ObservabilityLayout'));
@@ -78,6 +84,16 @@ export function App() {
           <Route path="code-interpreter" element={<Page element={<CapabilitiesCodeInterpreterPage />} />} />
           <Route path="browser" element={<Page element={<CapabilitiesBrowserPage />} />} />
           <Route path="memory" element={<Page element={<CapabilitiesMemoryPage />} />} />
+        </Route>
+
+        <Route path="identity" element={
+          <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
+            <Page element={<IdentityLayout />} />
+          </RequireRole>
+        }>
+          <Route index element={<Navigate to="roles" replace />} />
+          <Route path="roles" element={<Page element={<IdentityRolesPage />} />} />
+          <Route path="policies" element={<Page element={<IdentityPoliciesPage />} />} />
         </Route>
 
         <Route path="code-interpreter" element={<Page element={<CodeInterpreterDemoPage />} />} />

@@ -254,8 +254,38 @@ def run_in_sandbox(python_code: str) -> str:
                 pass
 
 
-def _model_kwargs() -> dict:
-    """Build BedrockModel kwargs, applying guardrail config when configured.
+SUPERVISOR_TOOLS = [
+    search_organization, get_expertise_scores, get_strategic_advice,
+    ingest_documents, build_graph, run_in_sandbox,
+]
+
+SYSTEM_PROMPT = (
+    "You are the OrgIQ Supervisor agent — the primary interface for organizational intelligence queries.\n\n"
+    "Route queries to the appropriate specialist:\n"
+    "- search_organization: find people, expertise, documents, teams, decisions\n"
+    "- get_expertise_scores: PageRank, leaderboards, influence metrics\n"
+    "- get_strategic_advice: gap analysis, team composition, mentorship, collaboration\n"
+    "- ingest_documents: sync new documents into the knowledge base\n"
+    "- build_graph: update the knowledge graph from documents or manual input\n"
+    "- run_in_sandbox: execute Python in a sandbox for calculations, statistics, or data manipulation\n\n"
+    "For complex queries, route to multiple specialists and synthesize their responses.\n"
+    "When a user asks you to compute, calculate, or run code, use run_in_sandbox.\n"
+    "Always cite which specialist provided each piece of information.\n"
+    "Maintain conversation context across multi-turn interactions."
+)
+
+# Per-role guardrail IDs, populated from env at module load. Middleware passes
+# the caller's role in the invoke payload; we map it here to one of these.
+ROLE_GUARDRAIL_IDS: dict[str, str] = {
+    "member": os.environ.get("GUARDRAIL_ID_MEMBER", ""),
+    "org-leader": os.environ.get("GUARDRAIL_ID_ORG_LEADER", ""),
+    "hr-admin": os.environ.get("GUARDRAIL_ID_HR_ADMIN", ""),
+}
+DEFAULT_ROLE = "member"
+
+
+def _model_kwargs(guardrail_id: str = "") -> dict:
+    """Build BedrockModel kwargs with the role-specific guardrail attached.
 
     GUARDRAIL_VERSION=DRAFT means "use the live editable spec" — UI edits go
     into effect on the very next InvokeModel call without rebuilding this image.
@@ -265,7 +295,7 @@ def _model_kwargs() -> dict:
         "temperature": float(os.environ.get("MODEL_TEMPERATURE", "0.2")),
         "max_tokens": int(os.environ.get("MODEL_MAX_TOKENS", "2048")),
     }
-    gid = os.environ.get("GUARDRAIL_ID", "")
+    gid = guardrail_id or os.environ.get("GUARDRAIL_ID", "")
     if gid:
         kw["guardrail_id"] = gid
         kw["guardrail_version"] = os.environ.get("GUARDRAIL_VERSION", "DRAFT")
@@ -273,25 +303,32 @@ def _model_kwargs() -> dict:
     return kw
 
 
-_model = BedrockModel(**_model_kwargs())
-_agent = Agent(
-    model=_model,
-    tools=[search_organization, get_expertise_scores, get_strategic_advice, ingest_documents, build_graph, run_in_sandbox],
-    system_prompt=(
-        "You are the OrgIQ Supervisor agent — the primary interface for organizational intelligence queries.\n\n"
-        "Route queries to the appropriate specialist:\n"
-        "- search_organization: find people, expertise, documents, teams, decisions\n"
-        "- get_expertise_scores: PageRank, leaderboards, influence metrics\n"
-        "- get_strategic_advice: gap analysis, team composition, mentorship, collaboration\n"
-        "- ingest_documents: sync new documents into the knowledge base\n"
-        "- build_graph: update the knowledge graph from documents or manual input\n"
-        "- run_in_sandbox: execute Python in a sandbox for calculations, statistics, or data manipulation\n\n"
-        "For complex queries, route to multiple specialists and synthesize their responses.\n"
-        "When a user asks you to compute, calculate, or run code, use run_in_sandbox.\n"
-        "Always cite which specialist provided each piece of information.\n"
-        "Maintain conversation context across multi-turn interactions."
-    ),
-)
+def _build_agent(guardrail_id: str) -> Agent:
+    return Agent(
+        model=BedrockModel(**_model_kwargs(guardrail_id)),
+        tools=SUPERVISOR_TOOLS,
+        system_prompt=SYSTEM_PROMPT,
+    )
+
+
+# Cache one Agent per role. Falls back to single-guardrail mode if the per-role
+# env vars aren't set (back-compat with pre-RBAC deployments).
+_AGENTS_BY_ROLE: dict[str, Agent] = {}
+for _role, _gid in ROLE_GUARDRAIL_IDS.items():
+    if _gid:
+        _AGENTS_BY_ROLE[_role] = _build_agent(_gid)
+if not _AGENTS_BY_ROLE:
+    _AGENTS_BY_ROLE[DEFAULT_ROLE] = _build_agent("")
+log.info("Supervisor initialized with roles: %s", sorted(_AGENTS_BY_ROLE.keys()))
+
+
+def _resolve_role(payload: dict) -> str:
+    """Pick the agent for the caller. Unknown / missing roles fall back to member."""
+    auth = payload.get("auth") if isinstance(payload, dict) else None
+    role = (auth or {}).get("role") if isinstance(auth, dict) else None
+    if role and role in _AGENTS_BY_ROLE:
+        return role
+    return DEFAULT_ROLE if DEFAULT_ROLE in _AGENTS_BY_ROLE else next(iter(_AGENTS_BY_ROLE))
 
 
 @app.entrypoint
@@ -312,12 +349,14 @@ async def handle(payload: dict) -> dict:
     if not input_text:
         return {"agent": "supervisor", "error": "missing input_text/prompt/message"}
 
-    log.info("Supervisor handling: %s", input_text[:120])
-    result = _invoke_with_retry(input_text)
-    return {"agent": "supervisor", "response": str(result)}
+    role = _resolve_role(payload if isinstance(payload, dict) else {})
+    agent = _AGENTS_BY_ROLE[role]
+    log.info("Supervisor handling (role=%s): %s", role, input_text[:120])
+    result = _invoke_with_retry(agent, input_text)
+    return {"agent": "supervisor", "role": role, "response": str(result)}
 
 
-def _invoke_with_retry(input_text: str):
+def _invoke_with_retry(agent: Agent, input_text: str):
     """Invoke the agent, retrying on Nova's transient modelStreamErrorException.
 
     Nova occasionally emits malformed tool-use token sequences during ConverseStream
@@ -327,7 +366,7 @@ def _invoke_with_retry(input_text: str):
     last_exc: Exception | None = None
     for attempt in range(1, MODEL_STREAM_RETRY_ATTEMPTS + 1):
         try:
-            return _agent(input_text)
+            return agent(input_text)
         except Exception as exc:
             msg = str(exc)
             if "modelStreamErrorException" not in msg and "invalid sequence" not in msg:

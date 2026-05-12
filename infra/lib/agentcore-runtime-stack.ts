@@ -40,6 +40,10 @@ export interface AgentCoreRuntimeStackProps extends cdk.StackProps {
   readonly agentRoles: Record<string, iam.Role>;
   readonly memoryId: string;
   readonly guardrailId: string;
+  /** Per-role guardrail IDs — supervisor selects one based on caller's role. */
+  readonly guardrailIdMember?: string;
+  readonly guardrailIdOrgLeader?: string;
+  readonly guardrailIdHrAdmin?: string;
   readonly auroraClusterArn: string;
   readonly auroraCredentialsSecretArn: string;
   readonly knowledgeBaseId: string;
@@ -321,6 +325,12 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
           ...(props.codeInterpreterId && { CODE_INTERPRETER_ID: props.codeInterpreterId }),
           ...(props.browserId && { BROWSER_ID: props.browserId }),
           ...(props.browserProfileId && { BROWSER_PROFILE_ID: props.browserProfileId }),
+          // Supervisor-only edge enforcement: it picks one of three guardrails
+          // per request based on the caller's role. Sub-agents trust the
+          // supervisor's enforcement and stay on the default guardrail.
+          ...(agentName === 'supervisor' && props.guardrailIdMember && { GUARDRAIL_ID_MEMBER: props.guardrailIdMember }),
+          ...(agentName === 'supervisor' && props.guardrailIdOrgLeader && { GUARDRAIL_ID_ORG_LEADER: props.guardrailIdOrgLeader }),
+          ...(agentName === 'supervisor' && props.guardrailIdHrAdmin && { GUARDRAIL_ID_HR_ADMIN: props.guardrailIdHrAdmin }),
         },
       });
 

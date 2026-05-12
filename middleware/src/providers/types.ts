@@ -158,7 +158,11 @@ export interface AgentCoreProvider {
   listRuntimes(): Promise<AgentRuntimeSummary[]>;
   getRuntime(agentId: string): Promise<AgentRuntimeSummary | null>;
   getRuntimeMetrics(agentId: string): Promise<AgentMetrics | null>;
-  invokeAgent(agentId: string, payload: { message: string; sessionId?: string }): Promise<AgentInvokeResult>;
+  invokeAgent(agentId: string, payload: {
+    message: string;
+    sessionId?: string;
+    auth?: { sub: string; role: string };
+  }): Promise<AgentInvokeResult>;
   listCodeSessions(): Promise<CodeSession[]>;
   terminateCodeSession(sessionId: string): Promise<boolean>;
   executeCode(code: string, language?: 'python'): Promise<CodeExecutionResult>;

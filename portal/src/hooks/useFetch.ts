@@ -14,7 +14,7 @@ export function useFetch<T>(url: string, pollIntervalMs?: number): UseFetchRetur
 
   const fetchData = useCallback(async () => {
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, { credentials: 'include' });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
       const json = await res.json();
       setData(json);
