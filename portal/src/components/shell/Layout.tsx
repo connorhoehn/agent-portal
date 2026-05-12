@@ -1,4 +1,12 @@
 import { NavLink, Outlet } from 'react-router';
+import { useFetch } from '../../hooks/useFetch';
+
+interface Health {
+  status: string;
+  service: string;
+  mocks: Record<string, boolean>;
+  region: string;
+}
 
 const NAV_ITEMS = [
   { path: '/explore', label: 'Explore' },
@@ -11,6 +19,21 @@ const NAV_ITEMS = [
 ];
 
 export function Layout() {
+  const { data: health } = useFetch<Health>('/api/health', 30_000);
+  const mockedSubsystems = health
+    ? Object.entries(health.mocks).filter(([, v]) => v).map(([k]) => k)
+    : [];
+  const statusLabel = !health
+    ? '…'
+    : mockedSubsystems.length === 0
+      ? `Live · ${health.region}`
+      : `Mock: ${mockedSubsystems.join(', ')}`;
+  const statusColor = !health
+    ? 'var(--color-text-tertiary)'
+    : mockedSubsystems.length === 0
+      ? 'var(--color-success, #10b981)'
+      : 'var(--color-warning, #f59e0b)';
+
   return (
     <div style={{ display: 'flex', height: '100vh' }}>
       <aside style={{
@@ -50,8 +73,9 @@ export function Layout() {
             </NavLink>
           ))}
         </nav>
-        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--color-border)', fontSize: 10, color: 'var(--color-text-tertiary)' }}>
-          v0.2.0 · Mock Mode
+        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--color-border)', fontSize: 10, color: 'var(--color-text-tertiary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: statusColor, display: 'inline-block' }} />
+          <span>{statusLabel}</span>
         </div>
       </aside>
       <main style={{ flex: 1, overflow: 'auto', padding: 24 }}>

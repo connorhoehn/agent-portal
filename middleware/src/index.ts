@@ -17,14 +17,16 @@ const app = express();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 
-app.get('/health', (_req, res) => {
+function healthHandler(_req: express.Request, res: express.Response): void {
   res.json({
     status: 'ok',
     service: 'orgiq-middleware',
     mocks: config.mock,
     region: config.region,
   });
-});
+}
+app.get('/health', healthHandler);
+app.get('/api/health', healthHandler);
 
 app.use('/api/agents', agentsRouter);
 app.use('/api/graph', graphRouter);
