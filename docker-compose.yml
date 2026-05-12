@@ -20,8 +20,6 @@ services:
     build:
       context: ./middleware
       target: development
-      ssh:
-        - default
     container_name: orgiq-middleware
     ports:
       - "3001:3001"
@@ -42,8 +40,6 @@ services:
     build:
       context: ./portal
       target: development
-      ssh:
-        - default
       additional_contexts:
         ui_components: ../ui-components
     container_name: orgiq-portal
