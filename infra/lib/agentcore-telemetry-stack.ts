@@ -51,14 +51,22 @@ export class AgentCoreTelemetryStack extends cdk.Stack {
               resources: ['*'],
             }),
             new iam.PolicyStatement({
+              sid: 'CloudWatchLogsDescribe',
+              // DescribeLogGroups is a list operation — must use * resource.
+              actions: ['logs:DescribeLogGroups'],
+              resources: ['*'],
+            }),
+            new iam.PolicyStatement({
               sid: 'CloudWatchLogsRead',
               actions: [
                 'logs:GetLogEvents',
                 'logs:FilterLogEvents',
-                'logs:DescribeLogGroups',
                 'logs:DescribeLogStreams',
               ],
-              resources: [`arn:aws:logs:${this.region}:${this.account}:log-group:/aws/bedrock-agentcore/*`],
+              resources: [
+                `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/bedrock-agentcore/*`,
+                `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/bedrock-agentcore/*:*`,
+              ],
             }),
             new iam.PolicyStatement({
               sid: 'XRayRead',
@@ -99,16 +107,17 @@ export class AgentCoreTelemetryStack extends cdk.Stack {
     });
 
     // -------------------------------------------------------------------
-    // CloudWatch Log Group retention — AgentCore Runtime creates the groups
-    // automatically on first invocation; we apply retention policy only.
+    // CloudWatch Log Group retention — pre-create groups so OnlineEvalConfig
+    // can reference them without a race condition.
     // -------------------------------------------------------------------
 
+    const logRetentions: logs.LogRetention[] = [];
     for (const agentName of AGENT_NAMES) {
       const safeAgent = agentName.replace(/-/g, '_');
-      new logs.LogRetention(this, `${this.pascal(agentName)}LogRetention`, {
+      logRetentions.push(new logs.LogRetention(this, `${this.pascal(agentName)}LogRetention`, {
         logGroupName: `/aws/bedrock-agentcore/runtimes/${prefix}_${safeAgent}`,
         retention: logs.RetentionDays.ONE_MONTH,
-      });
+      }));
     }
 
     // -------------------------------------------------------------------
@@ -203,7 +212,7 @@ Consider: was a faster/simpler tool available? Was the tool capable of answering
         `/aws/bedrock-agentcore/runtimes/${prefix}_${name.replace(/-/g, '_')}`
       );
 
-      new bedrockagentcore.CfnOnlineEvaluationConfig(this, 'OnlineEvalConfig', {
+      const onlineEvalConfig = new bedrockagentcore.CfnOnlineEvaluationConfig(this, 'OnlineEvalConfig', {
         onlineEvaluationConfigName: `${safeName}_online_eval`,
         description: 'Continuous quality monitoring for 5 user-facing OrgIQ agents',
         evaluationExecutionRoleArn: evalRole.roleArn,
@@ -221,6 +230,8 @@ Consider: was a faster/simpler tool available? Was the tool capable of answering
           samplingConfig: { samplingPercentage: 10 },
         },
       });
+      // Ensure log groups exist before OnlineEvalConfig tries to access them.
+      for (const lr of logRetentions) onlineEvalConfig.node.addDependency(lr);
     }
 
     // -------------------------------------------------------------------
