@@ -10,8 +10,6 @@ export interface AgentsStackProps extends cdk.StackProps {
   readonly auroraCredentialsSecretArn: string;
   /** Knowledge Base ARN for search agent */
   readonly knowledgeBaseArn: string;
-  /** Guardrail ARN to apply to all agents */
-  readonly guardrailArn: string;
   /** Documents bucket ARN for ingestion agent */
   readonly documentsBucketArn: string;
   /** Artifacts bucket ARN for all agents */

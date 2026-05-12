@@ -39,7 +39,6 @@ export interface AgentCoreRuntimeStackProps extends cdk.StackProps {
   readonly prefix?: string;
   readonly agentRoles: Record<string, iam.Role>;
   readonly memoryId: string;
-  readonly guardrailId: string;
   /** Per-role guardrail IDs — supervisor selects one based on caller's role. */
   readonly guardrailIdMember?: string;
   readonly guardrailIdOrgLeader?: string;
@@ -313,7 +312,9 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
         environmentVariables: {
           AGENT_NAME: agentName,
           MEMORY_ID: props.memoryId,
-          GUARDRAIL_ID: props.guardrailId,
+          // Sub-agents run without a guardrail — the supervisor enforces at the
+          // edge based on the caller's role. Supervisor still gets per-role IDs
+          // via GUARDRAIL_ID_MEMBER/ORG_LEADER/HR_ADMIN below.
           // DRAFT means agents always see the latest portal edits without rebuild.
           // Switch to a numbered version (e.g. "2") for audited rollouts.
           GUARDRAIL_VERSION: 'DRAFT',

@@ -4,7 +4,6 @@ import type { Construct } from 'constructs';
 
 export interface AgentCorePolicyStackProps extends cdk.StackProps {
   readonly prefix?: string;
-  readonly guardrailArn: string;
 }
 
 export class AgentCorePolicyStack extends cdk.Stack {
@@ -45,9 +44,5 @@ export class AgentCorePolicyStack extends cdk.Stack {
       exportName: `${prefix}-policy-engine-arn`,
     });
 
-    new cdk.CfnOutput(this, 'GuardrailArn', {
-      value: props.guardrailArn,
-      description: 'Guardrail ARN referenced by Cedar PII policy',
-    });
   }
 }

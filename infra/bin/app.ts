@@ -89,7 +89,6 @@ const agents = new AgentsStack(app, 'OrgIQ-Agents', {
   auroraClusterArn: aurora.clusterArn,
   auroraCredentialsSecretArn: aurora.credentialsSecretArn,
   knowledgeBaseArn: knowledgeBase.knowledgeBaseArn,
-  guardrailArn: guardrails.guardrailArn,
   documentsBucketArn: foundation.documentsBucket.bucketArn,
   artifactsBucketArn: foundation.artifactsBucket.bucketArn,
   scoresTableArn: foundation.scoresTable.tableArn,
@@ -99,7 +98,8 @@ const agents = new AgentsStack(app, 'OrgIQ-Agents', {
 agents.addDependency(foundation);
 agents.addDependency(aurora);
 agents.addDependency(knowledgeBase);
-agents.addDependency(guardrails);
+// Agents no longer depends on Guardrails — IAM policies use bedrock:ApplyGuardrail
+// on resource:* and the guardrail ID itself is passed at runtime via env vars.
 
 // -------------------------------------------------------------------
 // Stack 6: Observability (CloudWatch dashboard + budget alarm)
@@ -135,10 +135,10 @@ const agentCoreMemory = new AgentCoreMemoryStack(app, 'OrgIQ-AgentCoreMemory', {
 const agentCorePolicy = new AgentCorePolicyStack(app, 'OrgIQ-AgentCorePolicy', {
   env,
   prefix,
-  guardrailArn: guardrails.guardrailArn,
   description: 'OrgIQ AgentCore Policy: Cedar-based access control for agent tools',
 });
-agentCorePolicy.addDependency(guardrails);
+// No dependency on guardrails — the policy engine doesn't reference the
+// guardrail ARN. Cedar PII rules in the gateway stack reference it directly.
 
 // -------------------------------------------------------------------
 // Stack 9: AgentCore Capabilities (Code Interpreter, Browser, Workload Identity)
@@ -169,7 +169,8 @@ const agentCoreRuntime = new AgentCoreRuntimeStack(app, 'OrgIQ-AgentCoreRuntime'
   prefix,
   agentRoles: agents.agentRoles,
   memoryId: cdk.Fn.importValue(`${prefix}-memory-id`),
-  guardrailId: cdk.Fn.importValue(`${prefix}-guardrail-id`),
+  // Sub-agents no longer get a guardrail — enforcement lives only on the
+  // supervisor edge, which selects from the three role-keyed IDs below.
   guardrailIdMember: cdk.Fn.importValue(`${prefix}-guardrail-id-member`),
   guardrailIdOrgLeader: cdk.Fn.importValue(`${prefix}-guardrail-id-org-leader`),
   guardrailIdHrAdmin: cdk.Fn.importValue(`${prefix}-guardrail-id-hr-admin`),
