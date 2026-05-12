@@ -52,8 +52,13 @@ export class AgentCoreTelemetryStack extends cdk.Stack {
             }),
             new iam.PolicyStatement({
               sid: 'CloudWatchLogsDescribe',
-              // DescribeLogGroups is a list operation — must use * resource.
-              actions: ['logs:DescribeLogGroups'],
+              // DescribeLogGroups + Insights query management are list/control ops — need * resource.
+              actions: [
+                'logs:DescribeLogGroups',
+                'logs:StartQuery',
+                'logs:StopQuery',
+                'logs:GetQueryResults',
+              ],
               resources: ['*'],
             }),
             new iam.PolicyStatement({
@@ -66,6 +71,8 @@ export class AgentCoreTelemetryStack extends cdk.Stack {
               resources: [
                 `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/bedrock-agentcore/*`,
                 `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/bedrock-agentcore/*:*`,
+                `arn:aws:logs:${this.region}:${this.account}:log-group:aws/spans`,
+                `arn:aws:logs:${this.region}:${this.account}:log-group:aws/spans:*`,
               ],
             }),
             new iam.PolicyStatement({
