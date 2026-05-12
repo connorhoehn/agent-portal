@@ -1,10 +1,24 @@
-import React, { useState, useEffect, useRef, Fragment } from 'react';
+import React, { useState, useEffect, useRef, useMemo, Fragment } from 'react';
 import {
   Card, PageSection, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
+import type {
+  CrawlSession,
+  CrawlStatus,
+  CrawlTarget,
+  StorageBreakdown,
+} from '../components/ingest/types';
+import { TargetsTable } from '../components/ingest/TargetsTable';
+import { ActiveRunsStrip } from '../components/ingest/ActiveRunsStrip';
+import { RunHistoryTable } from '../components/ingest/RunHistoryTable';
+import { RunDetailDrawer } from '../components/ingest/RunDetailDrawer';
+import { NewTargetModal } from '../components/ingest/NewTargetModal';
+import type { TargetDraft } from '../components/ingest/NewTargetModal';
+import { StorageBreakdownCard } from '../components/ingest/StorageBreakdownCard';
+import { EmptyState, PulseDot, Toggle, labelStyle, primaryBtnStyle, secondaryBtnStyle } from '../components/ingest/ui';
 
-// ─── Interfaces ──────────────────────────────────────────────────────────────
+// ─── KB / data-source / job interfaces (existing) ────────────────────────────
 
 interface KbSummary {
   id: string; name: string; status: string; description: string;
@@ -34,10 +48,10 @@ interface IngestSchedule {
   createdAt: string; lastRunAt: string | null; lastJobId: string | null; lastStatus: string | null;
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Constants ───────────────────────────────────────────────────────────────
 
-const JOB_STATUS_TONE: Record<string, 'success' | 'warning' | 'danger' | 'default'> = {
-  COMPLETE: 'success', IN_PROGRESS: 'warning', STARTING: 'warning', FAILED: 'danger', STOPPED: 'default',
+const JOB_STATUS_TONE: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> = {
+  COMPLETE: 'success', IN_PROGRESS: 'warning', STARTING: 'warning', FAILED: 'danger', STOPPED: 'neutral',
 };
 
 const ACTIVE_STATUSES = new Set(['IN_PROGRESS', 'STARTING']);
@@ -51,7 +65,7 @@ const CRON_PRESETS = [
   { label: 'Custom…',          expr: '__custom__'   },
 ];
 
-// ─── SSE hook ─────────────────────────────────────────────────────────────────
+// ─── KB sync SSE hook (existing — preserved) ─────────────────────────────────
 
 function useIngestionStream(
   jobId: string | null,
@@ -86,23 +100,47 @@ function useIngestionStream(
   return { liveJob, streamDone };
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// ─── Page ────────────────────────────────────────────────────────────────────
 
 function IngestPage() {
+  // Existing endpoints
   const { data: kbData } = useFetch<{ kb: KbSummary | null }>('/api/ingest/kb', 60_000);
   const { data: sourcesData, refresh: refreshSources } = useFetch<{ sources: DataSource[] }>('/api/ingest/data-sources', 30_000);
   const { data: jobsData, refresh: refreshJobs } = useFetch<{ jobs: IngestionJob[] }>('/api/ingest/jobs?limit=20', 10_000);
   const { data: queueData } = useFetch<S3Queue>('/api/ingest/queue', 60_000);
 
+  // New (Track B) endpoints
+  const { data: targetsData, refresh: refreshTargets } = useFetch<{ targets: CrawlTarget[] }>('/api/ingest/crawl-targets', 30_000);
+  const { data: crawlsData, refresh: refreshCrawls } = useFetch<{ crawls: CrawlSession[] }>('/api/ingest/crawls', 10_000);
+  const { data: storageData } = useFetch<StorageBreakdown>('/api/ingest/storage', 60_000);
+
   const [triggering, setTriggering] = useState<string | null>(null);
+  const [targetBusy, setTargetBusy] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
+
+  // Drawer + modal state for crawl runs
+  const [drawerCrawlId, setDrawerCrawlId] = useState<string | null>(null);
+  const [drawerInitial, setDrawerInitial] = useState<CrawlSession | null>(null);
+  const [runFilter, setRunFilter] = useState<'all' | CrawlStatus>('all');
+
+  // Target modal state
+  const [showNewTarget, setShowNewTarget] = useState(false);
+  const [editTarget, setEditTarget] = useState<CrawlTarget | null>(null);
 
   const kb = kbData?.kb ?? null;
   const sources = sourcesData?.sources ?? [];
   const jobs = jobsData?.jobs ?? [];
+  const targets = targetsData?.targets ?? [];
+  const crawls = crawlsData?.crawls ?? [];
 
   const activeJob = jobs.find(j => ACTIVE_STATUSES.has(j.status)) ?? null;
   const lastCompleteJob = jobs.find(j => j.status === 'COMPLETE') ?? null;
+
+  const activeCrawls = useMemo(() => crawls.filter(c => c.status === 'running'), [crawls]);
+  const historyCrawls = useMemo(
+    () => [...crawls].sort((a, b) => +new Date(b.startedAt) - +new Date(a.startedAt)),
+    [crawls],
+  );
 
   const { liveJob, streamDone } = useIngestionStream(
     activeJob?.jobId ?? null,
@@ -111,6 +149,8 @@ function IngestPage() {
   );
 
   const totalIndexed = jobs.reduce((s, j) => s + j.documentsIndexed, 0);
+
+  // ── Actions ────────────────────────────────────────────────────────────────
 
   async function triggerSync(dataSourceId: string) {
     setTriggering(dataSourceId);
@@ -134,6 +174,95 @@ function IngestPage() {
       setTriggering(null);
       refreshSources();
     }
+  }
+
+  async function saveTarget(draft: TargetDraft) {
+    setActionMessage(null);
+    const url = editTarget
+      ? `/api/ingest/crawl-targets/${encodeURIComponent(editTarget.id)}`
+      : '/api/ingest/crawl-targets';
+    const method = editTarget ? 'PATCH' : 'POST';
+    const r = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(draft),
+    });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({})) as { error?: string };
+      throw new Error(body.error ?? `Failed to save target (${r.status})`);
+    }
+    setActionMessage({
+      tone: 'ok',
+      text: editTarget ? `Target "${draft.label}" updated` : `Target "${draft.label}" created`,
+    });
+    setShowNewTarget(false);
+    setEditTarget(null);
+    refreshTargets();
+  }
+
+  async function runTarget(t: CrawlTarget) {
+    setTargetBusy(t.id);
+    setActionMessage(null);
+    try {
+      const r = await fetch(`/api/ingest/crawl-targets/${encodeURIComponent(t.id)}/run`, { method: 'POST' });
+      const body = await r.json() as { session?: CrawlSession; error?: string };
+      if (!r.ok || !body.session) {
+        setActionMessage({ tone: 'err', text: body.error ?? 'Failed to start crawl' });
+      } else {
+        setActionMessage({ tone: 'ok', text: `Crawl started for "${t.label}"` });
+        refreshCrawls();
+        setDrawerCrawlId(body.session.id);
+        setDrawerInitial(body.session);
+      }
+    } catch (e) {
+      setActionMessage({ tone: 'err', text: (e as Error).message });
+    } finally {
+      setTargetBusy(null);
+      refreshTargets();
+    }
+  }
+
+  async function deleteTarget(t: CrawlTarget) {
+    if (!confirm(`Delete crawl target "${t.label}"? Run history is preserved.`)) return;
+    const r = await fetch(`/api/ingest/crawl-targets/${encodeURIComponent(t.id)}`, { method: 'DELETE' });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({})) as { error?: string };
+      setActionMessage({ tone: 'err', text: body.error ?? 'Failed to delete target' });
+      return;
+    }
+    setActionMessage({ tone: 'ok', text: `Target "${t.label}" deleted` });
+    refreshTargets();
+  }
+
+  async function toggleTarget(t: CrawlTarget, enabled: boolean) {
+    const r = await fetch(`/api/ingest/crawl-targets/${encodeURIComponent(t.id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({})) as { error?: string };
+      setActionMessage({ tone: 'err', text: body.error ?? 'Failed to toggle target' });
+      return;
+    }
+    refreshTargets();
+  }
+
+  async function cancelCrawl(id: string) {
+    const r = await fetch(`/api/ingest/crawl/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({})) as { error?: string };
+      setActionMessage({ tone: 'err', text: body.error ?? 'Failed to cancel crawl' });
+      return;
+    }
+    setActionMessage({ tone: 'ok', text: 'Crawl cancellation requested' });
+    refreshCrawls();
+  }
+
+  function openCrawl(id: string) {
+    const initial = crawls.find(c => c.id === id) ?? null;
+    setDrawerInitial(initial);
+    setDrawerCrawlId(id);
   }
 
   return (
@@ -166,12 +295,13 @@ function IngestPage() {
         </Card>
       )}
 
-      {/* Stats row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 16 }}>
-        <StatCard label="Data Sources"       value={String(sources.length)} />
-        <StatCard label="Recent Jobs"        value={String(jobs.length)} />
+      {/* Stats row — now 5 tiles incl. storage */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16, marginBottom: 16 }}>
+        <StatCard label="Crawl Targets"      value={String(targets.length)} />
+        <StatCard label="Recent Crawls"      value={String(crawls.length)} />
         <StatCard label="Docs Indexed (recent)" value={String(totalIndexed)} accent />
-        <QueueCard queue={queueData} lastCompleteJob={lastCompleteJob} />
+        <QueueCard queue={queueData ?? null} lastCompleteJob={lastCompleteJob} />
+        <StorageBreakdownCard storage={storageData ?? null} />
       </div>
 
       {/* Action banner */}
@@ -185,7 +315,7 @@ function IngestPage() {
         </div>
       )}
 
-      {/* Live monitor — visible only while a job is active or just finished */}
+      {/* Live KB-sync monitor — preserved from existing logic */}
       {activeJob && (
         <LiveJobMonitor
           baseJob={activeJob}
@@ -195,77 +325,173 @@ function IngestPage() {
         />
       )}
 
-      {/* Data Sources */}
+      {/* Crawl Targets */}
       <Card padding="md" style={{ marginBottom: 16 }}>
-        <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Data Sources</h2>
-        {sources.length === 0 ? (
-          <EmptyState>No data sources attached to this Knowledge Base.</EmptyState>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <h2 style={{ fontSize: 14, fontWeight: 600 }}>Crawl Targets</h2>
+          <button onClick={() => setShowNewTarget(true)} style={primaryBtnStyle(false)}>
+            + New Target
+          </button>
+        </div>
+        {targets.length === 0 ? (
+          <EmptyState>
+            No crawl targets yet. Define a target to start ingesting public web content with vision-LLM extraction.
+          </EmptyState>
         ) : (
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableTh>Name</TableTh><TableTh>Type</TableTh>
-                <TableTh>Source URI</TableTh><TableTh>Status</TableTh><TableTh></TableTh>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {sources.map(ds => (
-                <TableRow key={ds.id}>
-                  <TableTd>
-                    <div style={{ fontWeight: 500 }}>{ds.name}</div>
-                    <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--color-text-tertiary)' }}>{ds.id}</div>
-                  </TableTd>
-                  <TableTd style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>{ds.type}</TableTd>
-                  <TableTd style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--color-text-secondary)', maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ds.sourceUri}>
-                    {ds.sourceUri || '—'}
-                  </TableTd>
-                  <TableTd>
-                    <Chip tone={ds.status === 'AVAILABLE' ? 'success' : 'warning'} size="xs">{ds.status}</Chip>
-                  </TableTd>
-                  <TableTd>
-                    <button
-                      onClick={() => triggerSync(ds.id)}
-                      disabled={triggering === ds.id || !!activeJob}
-                      style={syncBtnStyle(triggering === ds.id || !!activeJob)}
-                    >
-                      {triggering === ds.id ? 'Syncing…' : activeJob ? 'In Progress' : 'Sync now'}
-                    </button>
-                  </TableTd>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <TargetsTable
+            targets={targets}
+            busyId={targetBusy}
+            onRun={runTarget}
+            onEdit={(t) => setEditTarget(t)}
+            onDelete={deleteTarget}
+            onToggle={toggleTarget}
+          />
         )}
       </Card>
 
-      {/* Job History */}
+      {/* Active Crawls — only when something is running */}
+      {activeCrawls.length > 0 && (
+        <Card padding="md" style={{ marginBottom: 16, borderLeft: '3px solid var(--color-warning)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <PulseDot active color="var(--color-warning)" />
+            <h2 style={{ fontSize: 14, fontWeight: 600 }}>
+              Active Crawls{' '}
+              <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 400 }}>
+                · {activeCrawls.length} running
+              </span>
+            </h2>
+          </div>
+          <ActiveRunsStrip
+            sessions={activeCrawls}
+            onCancel={cancelCrawl}
+            onOpen={openCrawl}
+          />
+        </Card>
+      )}
+
+      {/* Crawl Run History */}
       <Card padding="md" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <h2 style={{ fontSize: 14, fontWeight: 600 }}>
-            Job History{' '}
+            Crawl Run History{' '}
             <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 400 }}>· 10s refresh</span>
           </h2>
-          {jobs[0] && (
-            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-              last: {new Date(jobs[0].startedAt).toLocaleString()}
-            </span>
-          )}
         </div>
-        {jobs.length === 0 ? (
-          <EmptyState>No ingestion jobs yet. Click "Sync now" on a data source.</EmptyState>
+        {historyCrawls.length === 0 ? (
+          <EmptyState>No crawl runs yet. Trigger one from a target above.</EmptyState>
         ) : (
-          <JobHistoryTable jobs={jobs} />
+          <RunHistoryTable
+            sessions={historyCrawls}
+            targets={targets}
+            filter={runFilter}
+            onFilter={setRunFilter}
+            onOpen={openCrawl}
+          />
         )}
       </Card>
 
-      {/* Schedules */}
-      <SchedulesPanel sources={sources} />
+      {/* Data Sources + KB Sync — kept but de-emphasized */}
+      <details style={{ marginBottom: 16 }} open={sources.length > 0 && targets.length === 0}>
+        <summary
+          style={{
+            cursor: 'pointer',
+            fontSize: 13,
+            fontWeight: 600,
+            color: 'var(--color-text-secondary)',
+            padding: '8px 0',
+          }}
+        >
+          KB Data Sources & Job History ({sources.length} sources · {jobs.length} recent jobs)
+        </summary>
+
+        {/* Data Sources */}
+        <Card padding="md" style={{ marginBottom: 16, marginTop: 8 }}>
+          <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Data Sources</h3>
+          {sources.length === 0 ? (
+            <EmptyState>No data sources attached to this Knowledge Base.</EmptyState>
+          ) : (
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableTh>Name</TableTh><TableTh>Type</TableTh>
+                  <TableTh>Source URI</TableTh><TableTh>Status</TableTh><TableTh></TableTh>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {sources.map(ds => (
+                  <TableRow key={ds.id}>
+                    <TableTd>
+                      <div style={{ fontWeight: 500 }}>{ds.name}</div>
+                      <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--color-text-tertiary)' }}>{ds.id}</div>
+                    </TableTd>
+                    <TableTd style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>{ds.type}</TableTd>
+                    <TableTd style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--color-text-secondary)', maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ds.sourceUri}>
+                      {ds.sourceUri || '—'}
+                    </TableTd>
+                    <TableTd>
+                      <Chip tone={ds.status === 'AVAILABLE' ? 'success' : 'warning'} size="xs">{ds.status}</Chip>
+                    </TableTd>
+                    <TableTd>
+                      <button
+                        onClick={() => triggerSync(ds.id)}
+                        disabled={triggering === ds.id || !!activeJob}
+                        style={syncBtnStyle(triggering === ds.id || !!activeJob)}
+                      >
+                        {triggering === ds.id ? 'Syncing…' : activeJob ? 'In Progress' : 'Sync now'}
+                      </button>
+                    </TableTd>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </Card>
+
+        {/* KB Job History */}
+        <Card padding="md" style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <h3 style={{ fontSize: 13, fontWeight: 600 }}>
+              KB Job History{' '}
+              <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 400 }}>· 10s refresh</span>
+            </h3>
+            {jobs[0] && (
+              <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                last: {new Date(jobs[0].startedAt).toLocaleString()}
+              </span>
+            )}
+          </div>
+          {jobs.length === 0 ? (
+            <EmptyState>No ingestion jobs yet.</EmptyState>
+          ) : (
+            <JobHistoryTable jobs={jobs} />
+          )}
+        </Card>
+
+        {/* Schedules */}
+        <SchedulesPanel sources={sources} />
+      </details>
+
+      {/* Right-side drawer for crawl run details */}
+      <RunDetailDrawer
+        crawlId={drawerCrawlId}
+        initialSession={drawerInitial}
+        onClose={() => { setDrawerCrawlId(null); setDrawerInitial(null); }}
+      />
+
+      {/* Target create/edit modal */}
+      {(showNewTarget || editTarget) && (
+        <NewTargetModal
+          existing={editTarget}
+          onSave={saveTarget}
+          onCancel={() => { setShowNewTarget(false); setEditTarget(null); }}
+        />
+      )}
 
     </PageSection>
   );
 }
 
-// ─── Live Job Monitor ─────────────────────────────────────────────────────────
+// ─── Live KB Job Monitor (existing — preserved) ──────────────────────────────
 
 function LiveJobMonitor({
   baseJob, liveJob, streamDone, style,
@@ -293,7 +519,7 @@ function LiveJobMonitor({
             {job.jobId.slice(0, 12)}…
           </span>
         </div>
-        <Chip tone={JOB_STATUS_TONE[job.status] ?? 'default'} size="xs">{job.status}</Chip>
+        <Chip tone={JOB_STATUS_TONE[job.status] ?? 'neutral'} size="xs">{job.status}</Chip>
       </div>
 
       {job.documentsScanned > 0 && (
@@ -317,7 +543,7 @@ function LiveJobMonitor({
   );
 }
 
-// ─── Queue Card ───────────────────────────────────────────────────────────────
+// ─── Queue Card ──────────────────────────────────────────────────────────────
 
 function QueueCard({ queue, lastCompleteJob }: { queue: S3Queue | null; lastCompleteJob: IngestionJob | null }) {
   const pending = queue?.pendingSinceLastSync ?? 0;
@@ -344,7 +570,7 @@ function QueueCard({ queue, lastCompleteJob }: { queue: S3Queue | null; lastComp
   );
 }
 
-// ─── Job History Table ────────────────────────────────────────────────────────
+// ─── KB Job History Table (existing — preserved) ─────────────────────────────
 
 function JobHistoryTable({ jobs }: { jobs: IngestionJob[] }) {
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -384,7 +610,7 @@ function JobHistoryTable({ jobs }: { jobs: IngestionJob[] }) {
                 {j.jobId.slice(0, 12)}…
               </TableTd>
               <TableTd>
-                <Chip tone={JOB_STATUS_TONE[j.status] ?? 'default'} size="xs">{j.status}</Chip>
+                <Chip tone={JOB_STATUS_TONE[j.status] ?? 'neutral'} size="xs">{j.status}</Chip>
               </TableTd>
               <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
                 {j.durationMs > 0 ? `${(j.durationMs / 1000).toFixed(1)}s` : '—'}
@@ -429,7 +655,7 @@ function JobHistoryTable({ jobs }: { jobs: IngestionJob[] }) {
   );
 }
 
-// ─── Schedules Panel ──────────────────────────────────────────────────────────
+// ─── Schedules Panel (existing — preserved) ─────────────────────────────────
 
 function SchedulesPanel({ sources }: { sources: DataSource[] }) {
   const { data, refresh } = useFetch<{ schedules: IngestSchedule[] }>('/api/ingest/schedules', 30_000);
@@ -453,7 +679,7 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
   return (
     <Card padding="md">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <h2 style={{ fontSize: 14, fontWeight: 600 }}>Schedules</h2>
+        <h3 style={{ fontSize: 13, fontWeight: 600 }}>KB Sync Schedules</h3>
         <button onClick={() => setShowForm(v => !v)} style={secondaryBtnStyle}>
           {showForm ? 'Cancel' : '+ New Schedule'}
         </button>
@@ -490,7 +716,7 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
                 </TableTd>
                 <TableTd>
                   {s.lastStatus
-                    ? <Chip tone={JOB_STATUS_TONE[s.lastStatus] ?? 'default'} size="xs">{s.lastStatus}</Chip>
+                    ? <Chip tone={JOB_STATUS_TONE[s.lastStatus] ?? 'neutral'} size="xs">{s.lastStatus}</Chip>
                     : <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>—</span>}
                 </TableTd>
                 <TableTd>
@@ -513,7 +739,7 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
   );
 }
 
-// ─── Schedule Form ────────────────────────────────────────────────────────────
+// ─── Schedule Form (existing — preserved) ───────────────────────────────────
 
 function ScheduleForm({ sources, onCreated }: { sources: DataSource[]; onCreated: () => void }) {
   const [dsId, setDsId] = useState(sources[0]?.id ?? '');
@@ -597,7 +823,7 @@ function ScheduleForm({ sources, onCreated }: { sources: DataSource[]; onCreated
   );
 }
 
-// ─── Small reusable components ────────────────────────────────────────────────
+// ─── Small reusable components ──────────────────────────────────────────────
 
 function KVStat({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
@@ -630,62 +856,7 @@ function MiniStat({ label, value, danger }: { label: string; value: number; dang
   );
 }
 
-function PulseDot({ active, color }: { active: boolean; color: string }) {
-  return (
-    <span style={{
-      display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: color,
-      animation: active ? 'orgiq-pulse 1.5s ease-in-out infinite' : 'none',
-    }}>
-      <style>{`@keyframes orgiq-pulse{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
-    </span>
-  );
-}
-
-function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!enabled)}
-      style={{
-        width: 36, height: 20, borderRadius: 10, border: 'none', cursor: 'pointer', padding: 0,
-        background: enabled ? 'var(--color-success)' : 'var(--color-border)',
-        position: 'relative', transition: 'background 0.2s',
-      }}
-    >
-      <span style={{
-        display: 'block', width: 14, height: 14, borderRadius: '50%', background: '#fff',
-        position: 'absolute', top: 3, left: enabled ? 19 : 3, transition: 'left 0.2s',
-      }} />
-    </button>
-  );
-}
-
-function EmptyState({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{ padding: 24, textAlign: 'center', color: 'var(--color-text-tertiary)', fontSize: 13 }}>
-      {children}
-    </div>
-  );
-}
-
-// ─── Style helpers ────────────────────────────────────────────────────────────
-
-const labelStyle: React.CSSProperties = {
-  display: 'block', fontSize: 11, fontWeight: 500,
-  color: 'var(--color-text-secondary)', marginBottom: 4,
-};
-
-const secondaryBtnStyle: React.CSSProperties = {
-  fontSize: 12, padding: '5px 12px', background: 'transparent',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', cursor: 'pointer',
-};
-
-function primaryBtnStyle(disabled: boolean): React.CSSProperties {
-  return {
-    fontSize: 12, padding: '6px 16px', background: 'var(--color-primary)', color: '#fff',
-    border: 'none', borderRadius: 'var(--radius-sm)',
-    cursor: disabled ? 'wait' : 'pointer', opacity: disabled ? 0.6 : 1,
-  };
-}
+// ─── Style helpers ──────────────────────────────────────────────────────────
 
 function syncBtnStyle(disabled: boolean): React.CSSProperties {
   return {
