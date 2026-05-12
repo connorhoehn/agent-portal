@@ -5,6 +5,8 @@
     "exclude": ["node_modules", "dist", "cdk.out", "**/*.js", "**/*.d.ts"]
   },
   "context": {
-    "projectPrefix": "orgiq"
+    "projectPrefix": "orgiq",
+    "deployRuntimes": "true",
+    "enableEval": "true"
   }
 }
