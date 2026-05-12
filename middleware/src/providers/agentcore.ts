@@ -897,7 +897,7 @@ export const realAgentCore: AgentCoreProvider = {
         new InvokeBrowserCommand({
           browserIdentifier: browserId,
           sessionId,
-          action: { mouseClick: { button: 'left', x, y, clickCount: 1 } as any },
+          action: { mouseClick: { button: 'LEFT', x, y, clickCount: 1 } as any },
         }),
       );
       return true;

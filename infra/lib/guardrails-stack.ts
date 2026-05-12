@@ -109,7 +109,10 @@ export class GuardrailsStack extends cdk.Stack {
           { type: 'HATE', inputStrength: 'HIGH', outputStrength: 'HIGH' },
           { type: 'INSULTS', inputStrength: 'MEDIUM', outputStrength: 'HIGH' },
           { type: 'MISCONDUCT', inputStrength: 'HIGH', outputStrength: 'HIGH' },
-          { type: 'PROMPT_ATTACK', inputStrength: 'HIGH', outputStrength: 'NONE' },
+          // MEDIUM (not HIGH) — HIGH false-positives on long structured agentic
+          // prompts (multi-step "do X, then Y, then summarize" patterns) which
+          // are legitimate use of the supervisor's run_in_sandbox tool.
+          { type: 'PROMPT_ATTACK', inputStrength: 'MEDIUM', outputStrength: 'NONE' },
         ],
       },
 
