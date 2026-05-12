@@ -107,7 +107,7 @@ function SessionsPage() {
             }}
           >
             {sessions.length === 0
-              ? 'No chat sessions yet. Start a conversation on the Invoke Agent page.'
+              ? 'No chat sessions yet. Start a conversation on the Agent Tools page.'
               : 'No sessions match the current filter.'}
           </div>
         ) : (

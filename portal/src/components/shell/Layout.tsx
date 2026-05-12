@@ -2,8 +2,8 @@ import { NavLink, Outlet } from 'react-router';
 
 const NAV_ITEMS = [
   { path: '/explore', label: 'Explore' },
-  { path: '/agents', label: 'Agent Flow' },
-  { path: '/invoke', label: 'Invoke Agent' },
+  { path: '/agents', label: 'Architecture' },
+  { path: '/invoke', label: 'Agent Tools' },
   { path: '/scores', label: 'Scores' },
   { path: '/ingest', label: 'Ingest' },
   { path: '/observability', label: 'Observability' },

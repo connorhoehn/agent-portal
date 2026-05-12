@@ -141,7 +141,7 @@ function InvocationsPage() {
             }}
           >
             {allInvocations.length === 0
-              ? "No invocations yet. Send a message via the Invoke Agent page and it'll appear here within 5 seconds."
+              ? "No invocations yet. Send a message via the Agent Tools page and it'll appear here within 5 seconds."
               : 'No invocations match the current filters.'}
           </div>
         ) : (
