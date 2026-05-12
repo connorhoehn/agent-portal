@@ -3,8 +3,37 @@ import { cloudwatch } from '../providers/index.js';
 import { asyncHandler } from '../lib/async-handler.js';
 import { getRecentInvocations, getCapabilityEvents } from '../lib/invocations.js';
 import type { CapabilityEventKind } from '../lib/invocations.js';
+import { recentAuthzEvents, subscribeAuthz, type AuthzQuery } from '../lib/audit.js';
+import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 
 export const observabilityRouter = Router();
+
+// ── Authorization decision audit log ─────────────────────────────────────────
+
+observabilityRouter.get('/authz', (req, res) => {
+  const q: AuthzQuery = {};
+  const decision = req.query['decision'] as string | undefined;
+  if (decision === 'ALLOW' || decision === 'DENY') q.decision = decision;
+  const role = req.query['role'] as string | undefined;
+  if (role) q.role = role;
+  const action = req.query['action'] as string | undefined;
+  if (action) q.action = action;
+  const sinceMin = parseInt((req.query['sinceMin'] as string) ?? '60', 10);
+  if (Number.isFinite(sinceMin) && sinceMin > 0) q.sinceMs = sinceMin * 60_000;
+  const limit = parseInt((req.query['limit'] as string) ?? '200', 10);
+  if (Number.isFinite(limit) && limit > 0) q.limit = Math.min(limit, 1000);
+  res.json({ events: recentAuthzEvents(q) });
+});
+
+observabilityRouter.get('/authz/stream', (req, res) => {
+  initSSE(res);
+  // Send the recent buffer immediately so a fresh subscriber catches up.
+  for (const ev of recentAuthzEvents({ limit: 50 }).reverse()) {
+    writeSSE(res, { type: 'authz', ...ev });
+  }
+  const unsubscribe = subscribeAuthz(ev => writeSSE(res, { type: 'authz', ...ev }));
+  req.on('close', () => { unsubscribe(); endSSE(res); });
+});
 
 observabilityRouter.get('/recent-invocations', (req, res) => {
   const limit = Math.max(1, Math.min(200, parseInt((req.query['limit'] as string) ?? '50', 10) || 50));

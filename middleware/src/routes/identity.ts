@@ -15,6 +15,7 @@ import {
   DeletePolicyCommand,
   GetSchemaCommand,
   PutSchemaCommand,
+  IsAuthorizedCommand,
 } from '@aws-sdk/client-verifiedpermissions';
 import { asyncHandler } from '../lib/async-handler.js';
 import { clearAuthzCache, requireAction } from '../lib/authz.js';
@@ -56,6 +57,42 @@ const ROLE_DESCRIPTIONS: Record<string, { label: string; summary: string; capabi
 identityRouter.get('/roles', (_req, res) => {
   res.json(ROLES.map(r => ({ id: r, ...ROLE_DESCRIPTIONS[r]! })));
 });
+
+// ── Policy simulator: dry-run AVP IsAuthorized for arbitrary (role, action) ──
+//
+// Returns the decision and the determining policies — useful for HRAdmin to
+// validate a Cedar edit before saving. Read-only side effects.
+
+identityRouter.post('/policies/test', asyncHandler(async (req, res) => {
+  const policyStoreId = ensureStore(res); if (!policyStoreId) return;
+  const { role, action, resourceId } = req.body as { role?: string; action?: string; resourceId?: string };
+  if (!role || !action) {
+    res.status(400).json({ error: 'role and action are required' });
+    return;
+  }
+  try {
+    const out = await client.send(new IsAuthorizedCommand({
+      policyStoreId,
+      principal: { entityType: 'OrgIQ::User', entityId: role },
+      action: { actionType: 'OrgIQ::Action', actionId: action },
+      resource: { entityType: 'OrgIQ::Application', entityId: resourceId || 'app' },
+      entities: {
+        entityList: [{
+          identifier: { entityType: 'OrgIQ::User', entityId: role },
+          attributes: { role: { string: role } },
+          parents: [],
+        }],
+      },
+    }));
+    res.json({
+      decision: out.decision,
+      determiningPolicies: (out.determiningPolicies ?? []).map(p => ({ policyId: p.policyId })),
+      errors: (out.errors ?? []).map(e => ({ errorDescription: e.errorDescription })),
+    });
+  } catch (err) {
+    res.status(400).json({ error: (err as Error).message });
+  }
+}));
 
 // ── Policies CRUD ─────────────────────────────────────────────────────────────
 

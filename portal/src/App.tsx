@@ -31,6 +31,7 @@ const IdentityLayout = lazy(() => import('./pages/identity/IdentityLayout'));
 const IdentityRolesPage = lazy(() => import('./pages/identity/RolesPage'));
 const IdentityPoliciesPage = lazy(() => import('./pages/identity/PoliciesPage'));
 const IdentitySchemaPage = lazy(() => import('./pages/identity/SchemaPage'));
+const IdentityTestPage = lazy(() => import('./pages/identity/PolicyTestPage'));
 
 // Observability sub-pages
 const ObservabilityLayout = lazy(() => import('./pages/observability/ObservabilityLayout'));
@@ -39,6 +40,7 @@ const ObservabilityInvocationsPage = lazy(() => import('./pages/observability/In
 const ObservabilityCapabilityEventsPage = lazy(() => import('./pages/observability/CapabilityEventsPage'));
 const ObservabilityAgentMetricsPage = lazy(() => import('./pages/observability/AgentMetricsPage'));
 const ObservabilitySessionsPage = lazy(() => import('./pages/observability/SessionsPage'));
+const ObservabilityAuthzPage = lazy(() => import('./pages/observability/AuthzLogPage'));
 
 function Loading() {
   return <div style={{ padding: 24, color: '#94a3b8' }}>Loading...</div>;
@@ -84,6 +86,7 @@ export function App() {
           <Route path="capability-events" element={<Page element={<ObservabilityCapabilityEventsPage />} />} />
           <Route path="agents" element={<Page element={<ObservabilityAgentMetricsPage />} />} />
           <Route path="sessions" element={<Page element={<ObservabilitySessionsPage />} />} />
+          <Route path="authz" element={<Page element={<ObservabilityAuthzPage />} />} />
         </Route>
 
         <Route path="capabilities" element={<Page element={<CapabilitiesLayout />} />}>
@@ -104,6 +107,7 @@ export function App() {
           <Route path="roles" element={<Page element={<IdentityRolesPage />} />} />
           <Route path="policies" element={<Page element={<IdentityPoliciesPage />} />} />
           <Route path="schema" element={<Page element={<IdentitySchemaPage />} />} />
+          <Route path="test" element={<Page element={<IdentityTestPage />} />} />
         </Route>
 
         <Route path="code-interpreter" element={<Page element={<CodeInterpreterDemoPage />} />} />

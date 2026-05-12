@@ -29,6 +29,7 @@ function ObservabilityLayout() {
     { path: 'capability-events', label: 'Capability Events', hint: 'Browser & code' },
     { path: 'agents',            label: 'Agent Metrics',     hint: 'Per-agent stats' },
     { path: 'sessions',          label: 'Sessions',          hint: 'Chat threads' },
+    { path: 'authz',             label: 'Authz Log',         hint: 'Live AVP decisions' },
   ];
 
   // Surface error count on the Summary tab when present.
