@@ -196,21 +196,21 @@ Consider: was a faster/simpler tool available? Was the tool capable of answering
     // -------------------------------------------------------------------
 
     if (enableOnlineEval) {
-      const logGroupNames = AGENT_NAMES.map(name =>
+      // CfnOnlineEvaluationConfig limits: logGroupNames ≤ 5, serviceNames ≤ 1.
+      // Monitor the 5 user-facing agents; graph-builder is internal so excluded.
+      const monitoredAgents = AGENT_NAMES.filter(n => n !== 'graph-builder');
+      const logGroupNames = monitoredAgents.map(name =>
         `/aws/bedrock-agentcore/runtimes/${prefix}_${name.replace(/-/g, '_')}`
-      );
-      const serviceNames = AGENT_NAMES.map(name =>
-        `${prefix}_${name.replace(/-/g, '_')}_endpoint`
       );
 
       new bedrockagentcore.CfnOnlineEvaluationConfig(this, 'OnlineEvalConfig', {
         onlineEvaluationConfigName: `${safeName}_online_eval`,
-        description: 'Continuous quality monitoring for all 6 OrgIQ AgentCore agents',
+        description: 'Continuous quality monitoring for 5 user-facing OrgIQ agents',
         evaluationExecutionRoleArn: evalRole.roleArn,
         dataSourceConfig: {
           cloudWatchLogs: {
             logGroupNames,
-            serviceNames,
+            serviceNames: [`${prefix}_supervisor_endpoint`],
           },
         },
         evaluators: [
