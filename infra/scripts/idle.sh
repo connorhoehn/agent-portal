@@ -50,8 +50,9 @@ wait_for_aurora_status() {
     [ "$s" = "$target" ] && return 0
     [ "$s" = "not-found" ] && return 1
     tries=$((tries + 1))
-    if [ "$tries" -gt 60 ]; then
-      echo "  timed out waiting for status=$target (last=$s)"
+    # Aurora cluster stop can take 8-10 min while writer instances drain.
+    if [ "$tries" -gt 180 ]; then
+      echo "  timed out waiting for status=$target (last=$s) after 15 min"
       return 2
     fi
     sleep 5
@@ -93,7 +94,7 @@ cmd_down() {
   s=$(aurora_status)
   case "$s" in
     available)
-      echo "Stopping Aurora cluster $AURORA_CLUSTER…"
+      echo "Stopping Aurora cluster $AURORA_CLUSTER..."
       aws rds stop-db-cluster --db-cluster-identifier "$AURORA_CLUSTER" >/dev/null
       wait_for_aurora_status stopped || true
       echo ""
@@ -103,7 +104,7 @@ cmd_down() {
       echo "  Aurora already stopped — nothing to do."
       ;;
     stopping)
-      echo "  Aurora is already stopping — waiting…"
+      echo "  Aurora is already stopping — waiting..."
       wait_for_aurora_status stopped || true
       ;;
     starting|configuring-iam-database-auth|modifying|backing-up)
@@ -126,7 +127,7 @@ cmd_up() {
   s=$(aurora_status)
   case "$s" in
     stopped)
-      echo "Starting Aurora cluster $AURORA_CLUSTER…"
+      echo "Starting Aurora cluster $AURORA_CLUSTER..."
       aws rds start-db-cluster --db-cluster-identifier "$AURORA_CLUSTER" >/dev/null
       wait_for_aurora_status available || true
       echo ""
@@ -136,7 +137,7 @@ cmd_up() {
       echo "  Aurora already running — nothing to do."
       ;;
     starting)
-      echo "  Aurora is already starting — waiting…"
+      echo "  Aurora is already starting — waiting..."
       wait_for_aurora_status available || true
       ;;
     stopping|modifying|backing-up)
