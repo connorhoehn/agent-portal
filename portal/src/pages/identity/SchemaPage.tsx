@@ -1,52 +1,87 @@
-// SchemaPage — view and edit the AVP Cedar schema. The full JSON edit lets
-// HRAdmin add/remove actions or entity types in one shot. AVP server-side
-// validation rejects malformed schemas; the error surfaces inline.
+// Schema editor — entity types are read-only chips; actions are editable
+// via TagEditor. Adding/removing actions calls PUT /api/identity/schema.
+// AVP rejects schema changes that drop actions referenced by live policies;
+// the rejection text surfaces inline.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { TagEditor } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 interface SchemaResponse {
-  schema: unknown;
+  schema: {
+    OrgIQ?: {
+      entityTypes?: Record<string, unknown>;
+      actions?: Record<string, { appliesTo?: { principalTypes?: string[]; resourceTypes?: string[] } }>;
+    };
+  };
   raw: string;
 }
 
+const NS = 'OrgIQ';
+const DEFAULT_APPLIES_TO = {
+  principalTypes: ['User'],
+  resourceTypes: ['Application'],
+};
+
 function SchemaPage() {
   const { data, isLoading, error, refresh } = useFetch<SchemaResponse>('/api/identity/schema');
-  const [draft, setDraft] = useState<string>('');
-  const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
+  const [pendingActions, setPendingActions] = useState<string[] | null>(null);
 
+  const liveActions = useMemo(
+    () => Object.keys(data?.schema?.OrgIQ?.actions ?? {}).sort(),
+    [data],
+  );
+
+  // Reset local edits when the live schema reloads (e.g. after Save).
   useEffect(() => {
-    if (data) {
-      const pretty = JSON.stringify(data.schema, null, 2);
-      setDraft(pretty);
-    }
+    setPendingActions(null);
   }, [data]);
 
   if (isLoading) return <div style={{ padding: 24, color: 'var(--color-text-tertiary)' }}>Loading schema…</div>;
   if (error) return <div style={{ padding: 24, color: 'var(--color-error, #ef4444)' }}>Error: {error}</div>;
   if (!data) return null;
 
+  const namespace = data.schema?.[NS];
+  const entityTypes = Object.keys(namespace?.entityTypes ?? {}).sort();
+  const actions = pendingActions ?? liveActions;
+  const dirty = pendingActions !== null && pendingActions.join(',') !== liveActions.join(',');
+
+  function setActions(next: string[]) {
+    setPendingActions(next);
+  }
+
   async function save() {
+    if (!pendingActions || !data) return;
     setBusy(true); setErrMsg(null);
     try {
-      // Validate JSON locally first — gives a faster + clearer error than AVP.
-      let parsed: unknown;
-      try { parsed = JSON.parse(draft); } catch (e) {
-        throw new Error(`JSON parse error: ${(e as Error).message}`);
+      // Build the new schema doc by overwriting the actions map.
+      const nextActions: Record<string, { appliesTo: typeof DEFAULT_APPLIES_TO }> = {};
+      for (const id of pendingActions) {
+        // Preserve existing appliesTo if the action already exists; default for new ones.
+        const existing = namespace?.actions?.[id];
+        nextActions[id] = {
+          appliesTo: (existing?.appliesTo as typeof DEFAULT_APPLIES_TO) ?? DEFAULT_APPLIES_TO,
+        };
       }
+      const nextSchema = {
+        ...data.schema,
+        [NS]: {
+          ...(namespace ?? {}),
+          actions: nextActions,
+        },
+      };
       const res = await fetch('/api/identity/schema', {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ schema: parsed }),
+        body: JSON.stringify({ schema: nextSchema }),
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.detail ?? j.error ?? `${res.status}`);
       }
-      setEditing(false);
       await refresh();
     } catch (e) {
       setErrMsg((e as Error).message);
@@ -55,10 +90,10 @@ function SchemaPage() {
     }
   }
 
-  // Build a flattened action list view for the read-only display.
-  const namespaces = (data.schema && typeof data.schema === 'object')
-    ? Object.entries(data.schema as Record<string, { actions?: Record<string, unknown>; entityTypes?: Record<string, unknown> }>)
-    : [];
+  function discard() {
+    setPendingActions(null);
+    setErrMsg(null);
+  }
 
   return (
     <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -66,60 +101,52 @@ function SchemaPage() {
         <div>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Schema</h2>
           <p style={{ margin: '4px 0 0', color: 'var(--color-text-secondary)', fontSize: 13 }}>
-            Cedar schema enforced by AVP. Removing actions referenced by live policies will fail validation.
+            Cedar entity types and actions enforced by AVP. Removing actions referenced by a live policy will fail validation.
           </p>
         </div>
-        {!editing && <button onClick={() => setEditing(true)} style={btnPrimary}>Edit</button>}
-        {editing && (
+        {dirty && (
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => { setEditing(false); setErrMsg(null); setDraft(JSON.stringify(data.schema, null, 2)); }} disabled={busy} style={btnSecondary}>Cancel</button>
-            <button onClick={save} disabled={busy} style={btnPrimary}>Save</button>
+            <button onClick={discard} disabled={busy} style={btnSecondary}>Discard</button>
+            <button onClick={save} disabled={busy} style={btnPrimary}>Save changes</button>
           </div>
         )}
       </header>
 
       {errMsg && <div style={errorBanner}>{errMsg}</div>}
 
-      {editing ? (
-        <textarea
-          value={draft}
-          onChange={e => setDraft(e.target.value)}
-          spellCheck={false}
-          rows={Math.max(20, draft.split('\n').length + 2)}
-          style={textarea}
-        />
-      ) : (
-        <>
-          {namespaces.map(([ns, body]) => (
-            <article key={ns} style={card}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Namespace: <code>{ns}</code></div>
+      <article style={card}>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Namespace: <code>{NS}</code></div>
 
-              <div style={{ marginBottom: 16 }}>
-                <div style={sectionLabel}>Entity types</div>
-                <div style={chipRow}>
-                  {Object.keys(body.entityTypes ?? {}).map(t => (
-                    <span key={t} style={chip}>{t}</span>
-                  ))}
-                </div>
-              </div>
+        <div style={{ marginBottom: 20 }}>
+          <div style={sectionLabel}>Entity types</div>
+          <div style={chipRow}>
+            {entityTypes.length > 0
+              ? entityTypes.map(t => <span key={t} style={chip}>{t}</span>)
+              : <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>(none)</span>}
+          </div>
+          <div style={hint}>
+            Entity types are fixed in this schema. Edit raw JSON via the AVP API to add custom entities.
+          </div>
+        </div>
 
-              <div>
-                <div style={sectionLabel}>Actions</div>
-                <div style={chipRow}>
-                  {Object.keys(body.actions ?? {}).map(a => (
-                    <span key={a} style={chip}>{a}</span>
-                  ))}
-                </div>
-              </div>
-            </article>
-          ))}
+        <div>
+          <div style={sectionLabel}>Actions</div>
+          <TagEditor
+            value={actions}
+            onChange={setActions}
+            placeholder="add action…"
+            lowercase={false}
+          />
+          <div style={hint}>
+            Type an action name and press Enter. New actions inherit appliesTo: {DEFAULT_APPLIES_TO.principalTypes.join(', ')} → {DEFAULT_APPLIES_TO.resourceTypes.join(', ')}.
+          </div>
+        </div>
+      </article>
 
-          <article style={card}>
-            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, color: 'var(--color-text-secondary)' }}>Raw schema (JSON)</div>
-            <pre style={preBlock}>{JSON.stringify(data.schema, null, 2)}</pre>
-          </article>
-        </>
-      )}
+      <details>
+        <summary style={{ fontSize: 11, color: 'var(--color-text-tertiary)', cursor: 'pointer' }}>Raw schema (JSON)</summary>
+        <pre style={preBlock}>{JSON.stringify(data.schema, null, 2)}</pre>
+      </details>
     </div>
   );
 }
@@ -136,7 +163,7 @@ const sectionLabel: React.CSSProperties = {
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
   color: 'var(--color-text-tertiary)',
-  marginBottom: 6,
+  marginBottom: 8,
 };
 
 const chipRow: React.CSSProperties = {
@@ -155,8 +182,14 @@ const chip: React.CSSProperties = {
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
 };
 
+const hint: React.CSSProperties = {
+  marginTop: 6,
+  fontSize: 11,
+  color: 'var(--color-text-tertiary)',
+};
+
 const preBlock: React.CSSProperties = {
-  margin: 0,
+  margin: '6px 0 0',
   padding: 12,
   background: 'var(--color-surface-hover)',
   border: '1px solid var(--color-border)',
@@ -167,20 +200,6 @@ const preBlock: React.CSSProperties = {
   color: 'var(--color-text-primary)',
   whiteSpace: 'pre-wrap',
   overflowX: 'auto',
-};
-
-const textarea: React.CSSProperties = {
-  width: '100%',
-  padding: 12,
-  background: 'var(--color-surface-hover)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm, 4px)',
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-  fontSize: 12,
-  lineHeight: 1.5,
-  color: 'var(--color-text-primary)',
-  resize: 'vertical',
-  boxSizing: 'border-box',
 };
 
 const btnPrimary: React.CSSProperties = {
