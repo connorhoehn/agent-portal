@@ -3,7 +3,6 @@ import { Routes, Route, Navigate } from 'react-router';
 import { Layout } from './components/shell/Layout';
 
 const AgentFlowPage = lazy(() => import('./pages/AgentFlowPage'));
-const OrgGraphPage = lazy(() => import('./pages/OrgGraphPage'));
 const ScoresPage = lazy(() => import('./pages/ScoresPage'));
 const InvokePage = lazy(() => import('./pages/InvokePage'));
 const CodeInterpreterDemoPage = lazy(() => import('./pages/CodeInterpreterDemoPage'));
@@ -48,7 +47,7 @@ export function App() {
       <Route element={<Layout />}>
         <Route index element={<Navigate to="/agents" replace />} />
         <Route path="agents" element={<Page element={<AgentFlowPage />} />} />
-        <Route path="graph" element={<Page element={<OrgGraphPage />} />} />
+        <Route path="graph" element={<Navigate to="/explore" replace />} />
         <Route path="search" element={<Navigate to="/invoke" replace />} />
         <Route path="invoke" element={<Page element={<InvokePage />} />} />
         <Route path="scores" element={<Page element={<ScoresPage />} />} />
