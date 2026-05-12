@@ -20,6 +20,9 @@ MEMORY_ID = os.environ.get("MEMORY_ID", "")
 GUARDRAIL_ID = os.environ.get("GUARDRAIL_ID", "")
 CODE_INTERPRETER_ID = os.environ.get("CODE_INTERPRETER_ID", "")
 
+MAX_SANDBOX_OUTPUT_CHARS = int(os.environ.get("MAX_SANDBOX_OUTPUT_CHARS", "4000"))
+MODEL_STREAM_RETRY_ATTEMPTS = int(os.environ.get("MODEL_STREAM_RETRY_ATTEMPTS", "2"))
+
 _agentcore_control = boto3.client("bedrock-agentcore-control", region_name=REGION)
 _agentcore_runtime = boto3.client("bedrock-agentcore", region_name=REGION)
 
@@ -234,6 +237,9 @@ def run_in_sandbox(python_code: str) -> str:
                 chunks.append(json.dumps(event["output"], default=str))
 
         output = "\n".join(chunks).strip() or "(no stdout)"
+        if len(output) > MAX_SANDBOX_OUTPUT_CHARS:
+            omitted = len(output) - MAX_SANDBOX_OUTPUT_CHARS
+            output = output[:MAX_SANDBOX_OUTPUT_CHARS] + f"\n... (truncated, {omitted} chars omitted)"
         return json.dumps({"sessionId": session_id, "output": output})
     except Exception as e:
         return json.dumps({"error": f"sandbox error: {e}", "sessionId": session_id})
@@ -254,7 +260,11 @@ def _model_kwargs() -> dict:
     GUARDRAIL_VERSION=DRAFT means "use the live editable spec" — UI edits go
     into effect on the very next InvokeModel call without rebuilding this image.
     """
-    kw: dict = {"model_id": MODEL_ID}
+    kw: dict = {
+        "model_id": MODEL_ID,
+        "temperature": float(os.environ.get("MODEL_TEMPERATURE", "0.2")),
+        "max_tokens": int(os.environ.get("MODEL_MAX_TOKENS", "2048")),
+    }
     gid = os.environ.get("GUARDRAIL_ID", "")
     if gid:
         kw["guardrail_id"] = gid
@@ -303,8 +313,33 @@ async def handle(payload: dict) -> dict:
         return {"agent": "supervisor", "error": "missing input_text/prompt/message"}
 
     log.info("Supervisor handling: %s", input_text[:120])
-    result = _agent(input_text)
+    result = _invoke_with_retry(input_text)
     return {"agent": "supervisor", "response": str(result)}
+
+
+def _invoke_with_retry(input_text: str):
+    """Invoke the agent, retrying on Nova's transient modelStreamErrorException.
+
+    Nova occasionally emits malformed tool-use token sequences during ConverseStream
+    when the context grows. The failure is non-deterministic, so a fresh attempt
+    usually succeeds. Other exceptions propagate unchanged.
+    """
+    last_exc: Exception | None = None
+    for attempt in range(1, MODEL_STREAM_RETRY_ATTEMPTS + 1):
+        try:
+            return _agent(input_text)
+        except Exception as exc:
+            msg = str(exc)
+            if "modelStreamErrorException" not in msg and "invalid sequence" not in msg:
+                raise
+            last_exc = exc
+            log.warning(
+                "modelStreamErrorException on attempt %d/%d — retrying. %s",
+                attempt, MODEL_STREAM_RETRY_ATTEMPTS, msg[:200],
+            )
+            time.sleep(1.0 * attempt)
+    assert last_exc is not None
+    raise last_exc
 
 
 if __name__ == "__main__":

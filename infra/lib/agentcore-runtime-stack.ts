@@ -1,8 +1,39 @@
+import { execFileSync } from 'child_process';
 import * as cdk from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
 import * as bedrockagentcore from 'aws-cdk-lib/aws-bedrockagentcore';
 import type { Construct } from 'constructs';
+
+/**
+ * Resolve `<repo>:latest` to a digest-pinned URI at synth time so CFN sees a
+ * diff (and rolls the runtime) every time a new image is pushed. Falls back
+ * to `:latest` if the image doesn't yet exist — keeps first-time deploys
+ * working in the documented "Runtime PENDING until image is pushed" flow.
+ */
+function resolveContainerUri(repoUri: string, repoName: string, region: string): string {
+  try {
+    const digest = execFileSync(
+      'aws',
+      [
+        'ecr', 'describe-images',
+        '--repository-name', repoName,
+        '--image-ids', 'imageTag=latest',
+        '--region', region,
+        '--query', 'imageDetails[0].imageDigest',
+        '--output', 'text',
+      ],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+    ).trim();
+    if (digest.startsWith('sha256:')) {
+      return `${repoUri}@${digest}`;
+    }
+  } catch {
+    // No :latest tag yet — first deploy. Re-run ./scripts/deploy.sh after
+    // ./agents/build-all.sh to pin the digest and force a runtime roll.
+  }
+  return `${repoUri}:latest`;
+}
 
 export interface AgentCoreRuntimeStackProps extends cdk.StackProps {
   readonly prefix?: string;
@@ -270,7 +301,7 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
         roleArn: executionRole.roleArn,
         agentRuntimeArtifact: {
           containerConfiguration: {
-            containerUri: `${repo.repositoryUri}:latest`,
+            containerUri: resolveContainerUri(repo.repositoryUri, runtimeName, this.region),
           },
         },
         networkConfiguration: { networkMode: 'PUBLIC' },
