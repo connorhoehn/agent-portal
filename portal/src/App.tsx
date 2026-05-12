@@ -30,6 +30,7 @@ const CapabilitiesMemoryPage = lazy(() => import('./pages/capabilities/MemoryPag
 const IdentityLayout = lazy(() => import('./pages/identity/IdentityLayout'));
 const IdentityRolesPage = lazy(() => import('./pages/identity/RolesPage'));
 const IdentityPoliciesPage = lazy(() => import('./pages/identity/PoliciesPage'));
+const IdentitySchemaPage = lazy(() => import('./pages/identity/SchemaPage'));
 
 // Observability sub-pages
 const ObservabilityLayout = lazy(() => import('./pages/observability/ObservabilityLayout'));
@@ -102,6 +103,7 @@ export function App() {
           <Route index element={<Navigate to="roles" replace />} />
           <Route path="roles" element={<Page element={<IdentityRolesPage />} />} />
           <Route path="policies" element={<Page element={<IdentityPoliciesPage />} />} />
+          <Route path="schema" element={<Page element={<IdentitySchemaPage />} />} />
         </Route>
 
         <Route path="code-interpreter" element={<Page element={<CodeInterpreterDemoPage />} />} />

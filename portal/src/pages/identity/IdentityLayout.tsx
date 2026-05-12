@@ -3,6 +3,7 @@ import { SubNavLayout, type SubNavItem } from '../../components/shell/SubNavLayo
 const ITEMS: SubNavItem[] = [
   { path: 'roles',    label: 'Roles',    hint: 'Cedar permission matrix' },
   { path: 'policies', label: 'Policies', hint: 'AVP Cedar source' },
+  { path: 'schema',   label: 'Schema',   hint: 'Entity types + actions' },
 ];
 
 function IdentityLayout() {

@@ -9,17 +9,18 @@ export interface AuthorizationStackProps extends cdk.StackProps {
   readonly prefix?: string;
 }
 
-const ROLES = ['member', 'org-leader', 'hr-admin'] as const;
-type Role = typeof ROLES[number];
-
 /**
- * OrgIQ-Authorization: AWS Verified Permissions policy store + Cedar policies
- * for the three masquerade roles, plus a signing-key secret consumed by the
- * middleware to mint signed session cookies.
+ * OrgIQ-Authorization: AWS Verified Permissions policy store + the signing-key
+ * secret the middleware uses to mint signed session cookies.
  *
- * The middleware calls AVP IsAuthorized on every request that touches a gated
- * action. Cedar source files live in infra/policies/*.cedar; this stack ships
- * them verbatim so AVP is the source of truth at runtime.
+ * Policies are NOT managed here — they're seeded by the middleware on first
+ * boot from middleware/seeds/*.cedar, then edited at runtime via the
+ * Identity Management UI. This means `cdk deploy` does not overwrite live
+ * Cedar policies after the initial seed.
+ *
+ * Schema starts from middleware/seeds/schema.json but can also be updated via
+ * the UI at runtime (AVP PutSchema). CDK will only push schema changes if the
+ * source JSON in this repo changes.
  */
 export class AuthorizationStack extends cdk.Stack {
   public readonly policyStoreId: string;
@@ -30,30 +31,20 @@ export class AuthorizationStack extends cdk.Stack {
     super(scope, id, props);
 
     const prefix = props?.prefix ?? 'orgiq';
-    const policiesDir = join(__dirname, '..', 'policies');
-    const schemaJson = readFileSync(join(policiesDir, 'schema.json'), 'utf8');
+    // Initial schema is sourced from the middleware seeds — single source of
+    // truth so both CDK and the middleware boot path read the same JSON.
+    const schemaJson = readFileSync(
+      join(__dirname, '..', '..', 'middleware', 'seeds', 'schema.json'),
+      'utf8',
+    );
 
     const store = new verifiedpermissions.CfnPolicyStore(this, 'PolicyStore', {
-      description: 'OrgIQ Cedar policies for member / org-leader / hr-admin masquerade roles',
+      description: 'OrgIQ Cedar policies — runtime-managed by middleware after first-boot seed',
       validationSettings: { mode: 'STRICT' },
       schema: { cedarJson: schemaJson },
     });
     this.policyStoreId = store.attrPolicyStoreId;
     this.policyStoreArn = store.attrArn;
-
-    for (const role of ROLES) {
-      const cedar = readFileSync(join(policiesDir, `${role}.cedar`), 'utf8');
-      const pascal = role.split('-').map(s => s[0]!.toUpperCase() + s.slice(1)).join('');
-      new verifiedpermissions.CfnPolicy(this, `${pascal}Policy`, {
-        policyStoreId: store.attrPolicyStoreId,
-        definition: {
-          static: {
-            description: `OrgIQ ${role} role permissions`,
-            statement: cedar,
-          },
-        },
-      });
-    }
 
     // Cookie-signing secret. Middleware reads this on boot and uses HMAC-SHA256
     // to sign the session cookie payload. Rotating the secret forces every

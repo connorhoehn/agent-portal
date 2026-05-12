@@ -22,6 +22,7 @@ import {
   subscribeCrawl,
 } from '../lib/crawler.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
+import { requireAction } from '../lib/authz.js';
 
 const _bedrockRt = new BedrockRuntimeClient({ region: config.region });
 const VISION_MODEL = 'amazon.nova-lite-v1:0';
@@ -41,28 +42,28 @@ capabilitiesRouter.get('/guardrail/metrics', asyncHandler(async (req, res) => {
   res.json(summary);
 }));
 
-capabilitiesRouter.patch('/guardrail/pii', asyncHandler(async (req, res) => {
+capabilitiesRouter.patch('/guardrail/pii', requireAction('EditGuardrail'), asyncHandler(async (req, res) => {
   const { type, action, enabled } = req.body as { type: string; action?: string; enabled?: boolean };
   const filter = await guardrails.togglePiiFilter(type, { action, enabled });
   if (!filter) { res.json({ ok: true }); return; }
   res.json({ ok: true, filter });
 }));
 
-capabilitiesRouter.patch('/guardrail/topics/:name', asyncHandler(async (req, res) => {
+capabilitiesRouter.patch('/guardrail/topics/:name', requireAction('EditGuardrail'), asyncHandler(async (req, res) => {
   const { enabled, definition } = req.body as { enabled?: boolean; definition?: string };
   const topic = await guardrails.updateDeniedTopic(req.params['name'] as string, { enabled, definition });
   if (!topic) { res.status(404).json({ error: 'Topic not found' }); return; }
   res.json({ ok: true, topic });
 }));
 
-capabilitiesRouter.post('/guardrail/topics', asyncHandler(async (req, res) => {
+capabilitiesRouter.post('/guardrail/topics', requireAction('EditGuardrail'), asyncHandler(async (req, res) => {
   const { name, definition } = req.body as { name: string; definition: string };
   if (!name || !definition) { res.status(400).json({ error: 'name and definition required' }); return; }
   const topic = await guardrails.addDeniedTopic({ name, definition });
   res.status(201).json({ ok: true, topic });
 }));
 
-capabilitiesRouter.delete('/guardrail/topics/:name', asyncHandler(async (req, res) => {
+capabilitiesRouter.delete('/guardrail/topics/:name', requireAction('EditGuardrail'), asyncHandler(async (req, res) => {
   const name = decodeURIComponent(req.params['name'] as string);
   const ok = await guardrails.removeDeniedTopic(name);
   if (!ok) { res.status(404).json({ error: 'Topic not found' }); return; }

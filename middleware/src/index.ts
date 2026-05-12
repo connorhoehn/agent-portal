@@ -16,6 +16,7 @@ import { identityRouter } from './routes/identity.js';
 import { requireAction } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
 import { initCrawlTargets } from './lib/crawl-targets.js';
+import { ensureSchema, seedPoliciesIfMissing } from './lib/policy-seeds.js';
 
 const app = express();
 
@@ -49,6 +50,10 @@ app.use(errorHandler);
 
 initScheduler();
 initCrawlTargets();
+
+// Seed AVP if it's empty. Idempotent — safe on every boot.
+ensureSchema().catch(err => console.error('[seed] schema seed failed:', err));
+seedPoliciesIfMissing().catch(err => console.error('[seed] policy seed failed:', err));
 
 app.listen(config.port, '0.0.0.0', () => {
   const mockedDomains = Object.entries(config.mock).filter(([, v]) => v).map(([k]) => k);

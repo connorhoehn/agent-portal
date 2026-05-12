@@ -48,6 +48,7 @@ function GuardrailsPage() {
   async function togglePii(type: string, enabled: boolean) {
     await fetch(`/api/capabilities/guardrail/pii`, {
       method: 'PATCH',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type, enabled }),
     });
@@ -57,6 +58,7 @@ function GuardrailsPage() {
   async function toggleTopic(name: string, enabled: boolean) {
     await fetch(`/api/capabilities/guardrail/topics/${encodeURIComponent(name)}`, {
       method: 'PATCH',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled }),
     });
@@ -67,6 +69,7 @@ function GuardrailsPage() {
     if (!confirm(`Delete denied topic "${name}"? This persists to AWS immediately.`)) return;
     await fetch(`/api/capabilities/guardrail/topics/${encodeURIComponent(name)}`, {
       method: 'DELETE',
+      credentials: 'include',
     });
     refresh();
   }
@@ -76,6 +79,7 @@ function GuardrailsPage() {
     setSaving(true);
     await fetch('/api/capabilities/guardrail/topics', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newTopic),
     });

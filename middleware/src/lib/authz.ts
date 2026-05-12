@@ -72,3 +72,12 @@ export function requireAction(action: string) {
 export async function isAllowed(role: Role, action: string): Promise<boolean> {
   return (await evaluate(role, action)) === 'ALLOW';
 }
+
+/**
+ * Drop every cached Cedar decision. Call this from mutating routes
+ * (CreatePolicy / UpdatePolicy / DeletePolicy / PutSchema) so the next
+ * IsAuthorized check reflects the new state.
+ */
+export function clearAuthzCache(): void {
+  cache.clear();
+}
