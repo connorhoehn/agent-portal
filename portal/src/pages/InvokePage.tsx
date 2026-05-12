@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router';
 import { useAgUiStream } from '../hooks/useAgUiStream';
 import type { LiveToolCall } from '../hooks/useAgUiStream';
 import { useFetch } from '../hooks/useFetch';
+import { Markdown } from '../components/Markdown';
 
 interface AgentDef {
   id: string;
@@ -200,7 +201,7 @@ function InvokePage() {
                   ))}
                 </div>
               )}
-              <MessageContent content={msg.content} />
+              <MessageContent content={msg.content} role={msg.role} />
             </div>
           ))}
           {isStreaming && (
@@ -267,10 +268,17 @@ function parseSegments(content: string): Segment[] {
   return out;
 }
 
-function MessageContent({ content }: { content: string }) {
+function MessageContent({ content, role }: { content: string; role: 'user' | 'assistant' }) {
+  // User messages: render verbatim (no markdown interpretation — user typed
+  // it, they expect it back as-is). Assistant messages: render markdown for
+  // headings, lists, tables, code blocks — common in Nova Pro output.
+  if (role === 'user') {
+    return <div style={{ fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{content}</div>;
+  }
+
   const segments = parseSegments(content);
   if (segments.length === 0) {
-    return <div style={{ fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{content}</div>;
+    return <Markdown>{content}</Markdown>;
   }
   return (
     <div style={{ fontSize: 14, lineHeight: 1.6 }}>
@@ -296,7 +304,7 @@ function MessageContent({ content }: { content: string }) {
             </div>
           </details>
         ) : (
-          <div key={i} style={{ whiteSpace: 'pre-wrap' }}>{seg.body}</div>
+          <Markdown key={i}>{seg.body}</Markdown>
         ),
       )}
     </div>
@@ -358,7 +366,7 @@ function StreamingMessage({ agentName, activeToolCalls, text }: {
         </div>
       )}
       {text ? (
-        <MessageContent content={text} />
+        <MessageContent content={text} role="assistant" />
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-text-tertiary)', fontSize: 13 }}>
           <ThinkingDots />
