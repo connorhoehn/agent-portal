@@ -158,54 +158,94 @@ function Row({
   }
 
   const name = node.agentName ?? node.agentId;
+  // "Ghost" node: the parent record has not yet been ingested. The middleware
+  // returns a placeholder `agent_id: '(record not found)'` so the chain still
+  // renders. Style it distinctly (dashed border, muted text, info chip) so
+  // researchers know it's not a real row yet.
+  const isGhost =
+    node.agentId === '(record not found)' || node.agentId === '(lookup failed)';
+
+  const rowStyle: CSSProperties = isGhost
+    ? {
+        ...row,
+        borderStyle: 'dashed',
+        borderColor: 'var(--color-border)',
+        background: 'var(--color-bg)',
+        opacity: 0.78,
+      }
+    : {
+        ...row,
+        background: isCurrent ? 'var(--color-surface-hover)' : undefined,
+        borderColor: isCurrent ? 'var(--color-primary, #6366f1)' : 'transparent',
+      };
 
   return (
     <div
       role="button"
       tabIndex={0}
-      onClick={() => onNavigate(node.invocationId)}
+      onClick={() => !isGhost && onNavigate(node.invocationId)}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') onNavigate(node.invocationId);
+        if ((e.key === 'Enter' || e.key === ' ') && !isGhost) onNavigate(node.invocationId);
       }}
-      style={{
-        ...row,
-        background: isCurrent ? 'var(--color-surface-hover)' : undefined,
-        borderColor: isCurrent ? 'var(--color-primary, #6366f1)' : 'transparent',
-      }}
-      title={isParent ? 'Parent invocation — click to open' : 'Click to open'}
+      style={rowStyle}
+      title={
+        isGhost
+          ? 'Referenced parent has not been ingested yet. Likely the CW Logs poller has not caught its trace or the agent did not emit one.'
+          : isParent
+            ? 'Parent invocation — click to open'
+            : 'Click to open'
+      }
     >
       <span style={connectorStyle}>{connector}</span>
-      <span style={dot} aria-hidden="true">
-        ◉
+      <span style={isGhost ? ghostDot : dot} aria-hidden="true">
+        {isGhost ? '◌' : '◉'}
       </span>
-      <span style={agentName}>{name}</span>
-      {isParent && (
+      <span style={isGhost ? ghostName : agentName}>
+        {isGhost ? `parent ${node.invocationId.slice(0, 8)}…` : name}
+      </span>
+      {isGhost && (
+        <Chip tone="warning" size="xs">
+          not yet ingested
+        </Chip>
+      )}
+      {!isGhost && isParent && (
         <Chip tone="neutral" size="xs">
           parent
         </Chip>
       )}
-      {isCurrent && !isParent && (
+      {!isGhost && isCurrent && !isParent && (
         <Chip tone="neutral" size="xs">
           current
         </Chip>
       )}
-      <span style={metaSep}>·</span>
-      <span style={meta}>judge</span>
-      <Chip tone={judgeTone(node.judgeScore)} size="xs">
-        {fmt(node.judgeScore)}
-      </Chip>
-      <span style={metaSep}>·</span>
-      <span style={meta}>dur {fmtDur(node.durationMs)}</span>
-      {node.totalCostUsd != null && (
+      {!isGhost && (
         <>
           <span style={metaSep}>·</span>
-          <CostChip cost={node.totalCostUsd} />
+          <span style={meta}>judge</span>
+          <Chip tone={judgeTone(node.judgeScore)} size="xs">
+            {fmt(node.judgeScore)}
+          </Chip>
+          <span style={metaSep}>·</span>
+          <span style={meta}>dur {fmtDur(node.durationMs)}</span>
+          {node.totalCostUsd != null && (
+            <>
+              <span style={metaSep}>·</span>
+              <CostChip cost={node.totalCostUsd} />
+            </>
+          )}
         </>
       )}
+      {isGhost && (
+        <span style={ghostHint}>
+          referenced parent — poller has not caught its trace yet
+        </span>
+      )}
       <span style={spacer} />
-      <span style={viewArrow} aria-hidden="true">
-        view →
-      </span>
+      {!isGhost && (
+        <span style={viewArrow} aria-hidden="true">
+          view →
+        </span>
+      )}
     </div>
   );
 }
@@ -264,6 +304,24 @@ const spacer: CSSProperties = { flex: 1 };
 const viewArrow: CSSProperties = {
   fontSize: 11,
   color: 'var(--color-primary, #6366f1)',
+  fontFamily: 'system-ui, sans-serif',
+};
+
+const ghostDot: CSSProperties = {
+  color: 'var(--color-text-tertiary)',
+  fontSize: 11,
+};
+
+const ghostName: CSSProperties = {
+  fontWeight: 500,
+  color: 'var(--color-text-tertiary)',
+  fontFamily: 'ui-monospace, monospace',
+};
+
+const ghostHint: CSSProperties = {
+  fontSize: 10.5,
+  color: 'var(--color-text-tertiary)',
+  fontStyle: 'italic',
   fontFamily: 'system-ui, sans-serif',
 };
 
