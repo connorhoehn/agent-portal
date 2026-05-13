@@ -10,6 +10,7 @@ import { scoresRouter } from './routes/scores.js';
 import { ingestRouter } from './routes/ingest.js';
 import { observabilityRouter } from './routes/observability.js';
 import { approvalsRouter } from './routes/approvals.js';
+import { harnessRouter } from './routes/harness.js';
 import { capabilitiesRouter } from './routes/capabilities.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { sessionRouter } from './routes/session.js';
@@ -48,6 +49,9 @@ app.use('/api/ingest', requireAction('ManageIngest'), ingestRouter);
 // (the agent's identity is captured as `agentId` in the request body instead).
 // Decision posting is Cedar-gated inside the router itself.
 app.use('/api/observability/approvals', approvalsRouter);
+// Harness routes — mounted ungated so the test runner (infra/scripts/harness.py)
+// can POST results without a session cookie. Same rationale as approvals.
+app.use('/api/observability/harness', harnessRouter);
 app.use('/api/observability', requireAction('ViewObservability'), observabilityRouter);
 app.use('/api/capabilities', capabilitiesRouter);
 app.use('/api/sessions', sessionsRouter);

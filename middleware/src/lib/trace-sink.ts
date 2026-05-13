@@ -50,6 +50,19 @@ export interface TraceInput {
   piiDetected?: boolean;
 }
 
+// Result of a synchronous processTrace() call. The async enqueue() path
+// discards this; the new sync /api/observability/harness/trace endpoint
+// returns it to the caller so harness runners can score per-case.
+export interface TraceResult {
+  invocationId: string;
+  judgeScore: number | null;
+  judgeRationale: string | null;
+  schemaValid: boolean | null;
+  embeddingComputed: boolean;
+  sampled: boolean;             // false if the sampling die rolled against us
+  inserted: boolean;            // false if the Aurora INSERT failed
+}
+
 // ── Sampling config cache ─────────────────────────────────────────────────────
 //
 // We pull `observability.sampling_config` once every 60s. The cache is shared
@@ -278,21 +291,49 @@ function snip(text: string, max = 500): string {
  * but never thrown — callers can ignore the return value entirely.
  */
 export function enqueue(input: TraceInput): void {
-  // We deliberately do NOT await this. If the caller awaits enqueue(), they
-  // still don't pay for the pipeline because everything past the entry point
-  // is wrapped in process().
-  void process(input).catch((err) => {
+  // We deliberately do NOT await this. The harness `processTrace` returns a
+  // result; we discard it here for the production async path.
+  void processTrace(input).catch((err) => {
     console.warn('[trace-sink] pipeline error:', (err as Error).message);
   });
 }
 
-async function process(input: TraceInput): Promise<void> {
-  // Sampling decision must happen synchronously inline so we don't pay for an
-  // Aurora round-trip on a sampling miss. The cache is refreshed every 60s.
-  await loadSamplingConfig();
+/**
+ * Run the trace pipeline synchronously and return its outcome.
+ *
+ * Production code uses `enqueue()` which fires this in the background; the
+ * sync `/api/observability/harness/trace` endpoint awaits it so harness
+ * runners get per-case judge scores back inline.
+ *
+ * Rules:
+ *  - `templateId` starting with `test:` always samples (rate=1) regardless
+ *    of `observability.sampling_config`. This guarantees test runs always
+ *    persist a row, even on cold-start before the sampling cache is loaded.
+ *  - Embedding / judge / schema failures are swallowed and reflected as
+ *    nulls on the returned result. Aurora INSERT failures throw so callers
+ *    can map them to 5xx.
+ */
+export async function processTrace(input: TraceInput): Promise<TraceResult> {
+  const isTestTemplate = typeof input.templateId === 'string'
+    && input.templateId.startsWith('test:');
 
-  const { rate, schema } = decideSampling(input.templateId);
-  if (Math.random() >= rate) return;
+  // Sampling: test:* templates always sample; everything else honours config.
+  let schema: object | null = null;
+  let sampled = true;
+  if (isTestTemplate) {
+    // Still load config so schema-by-template can apply if the researcher
+    // configured a schema for a test:* template id.
+    await loadSamplingConfig();
+    const cfg = decideSampling(input.templateId);
+    schema = cfg.schema ?? null;
+  } else {
+    await loadSamplingConfig();
+    const cfg = decideSampling(input.templateId);
+    schema = cfg.schema ?? null;
+    if (Math.random() >= cfg.rate) {
+      sampled = false;
+    }
+  }
 
   // We always assign an invocationId — the upstream caller may not have one
   // that's a real UUID. Idempotency via ON CONFLICT means duplicate enqueues
@@ -300,6 +341,18 @@ async function process(input: TraceInput): Promise<void> {
   const invocationId = input.invocationId && /^[0-9a-f-]{36}$/i.test(input.invocationId)
     ? input.invocationId
     : randomUUID();
+
+  if (!sampled) {
+    return {
+      invocationId,
+      judgeScore: null,
+      judgeRationale: null,
+      schemaValid: null,
+      embeddingComputed: false,
+      sampled: false,
+      inserted: false,
+    };
+  }
 
   const agentId = input.agentId || 'unknown';
   const agentName = input.agentName || agentId;
@@ -320,7 +373,10 @@ async function process(input: TraceInput): Promise<void> {
     schemaValid = parsed === undefined ? false : validate(parsed, schema);
   }
 
-  // 3. Persist trace row.
+  // 3. Persist trace row. For sync callers, INSERT failure is the only
+  // signal that bubbles up as an error — every other step swallows.
+  let inserted = false;
+  let insertError: unknown = null;
   try {
     await insertTrace({
       invocationId,
@@ -337,9 +393,11 @@ async function process(input: TraceInput): Promise<void> {
       guardrailAction: input.guardrailAction,
       durationMs: input.durationMs,
     });
+    inserted = true;
   } catch (err) {
     console.warn('[trace-sink] insertTrace failed:',
       (err as Error).message);
+    insertError = err;
     // Don't return — still publish metrics from in-memory values.
   }
 
@@ -370,6 +428,23 @@ async function process(input: TraceInput): Promise<void> {
   }
 
   await Promise.allSettled(metricCalls);
+
+  // For the sync harness path, re-throw the insert error AFTER metrics so
+  // callers can map it to a 5xx — the metric-publishing best-effort side
+  // effects still complete.
+  if (insertError) {
+    throw insertError;
+  }
+
+  return {
+    invocationId,
+    judgeScore: judge ? judge.score : null,
+    judgeRationale: judge ? judge.rationale : null,
+    schemaValid,
+    embeddingComputed: !!embedding,
+    sampled: true,
+    inserted,
+  };
 }
 
 // ── Test hooks ────────────────────────────────────────────────────────────────
@@ -386,4 +461,4 @@ export function _resetCachesForTest(): void {
 // triggers .env.aws loading the same way the rest of the providers do.
 void config;
 
-export const traceSink = { enqueue };
+export const traceSink = { enqueue, processTrace };

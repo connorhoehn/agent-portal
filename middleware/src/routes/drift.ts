@@ -41,6 +41,7 @@ driftRouter.get('/summary', asyncHandler(async (req, res) => {
       SELECT *
         FROM observability.invocation_traces
        WHERE ts > now() - (INTERVAL '1 hour' * :hours)
+         AND (template_id NOT LIKE 'test:%' OR template_id IS NULL)
     ),
     centroids AS (
       SELECT agent_id,
@@ -122,6 +123,7 @@ driftRouter.get('/outliers', asyncHandler(async (req, res) => {
         FROM observability.invocation_traces
        WHERE ts > now() - INTERVAL '1 hour'
          AND output_embedding IS NOT NULL
+         AND (template_id NOT LIKE 'test:%' OR template_id IS NULL)
     ),
     centroids AS (
       SELECT agent_id, AVG(output_embedding) AS centroid
@@ -203,6 +205,7 @@ driftRouter.get('/timeseries', asyncHandler(async (req, res) => {
              ) AS bucket_start
         FROM observability.invocation_traces
        WHERE ts > now() - (INTERVAL '1 hour' * :hours)
+         AND (template_id NOT LIKE 'test:%' OR template_id IS NULL)
              ${whereAgent}
     ),
     centroids AS (
@@ -274,6 +277,7 @@ driftRouter.get('/templates', asyncHandler(async (req, res) => {
       SELECT *
         FROM observability.invocation_traces
        WHERE ts > now() - (INTERVAL '1 hour' * :hours)
+         AND (template_id NOT LIKE 'test:%' OR template_id IS NULL)
     ),
     centroids AS (
       SELECT agent_id, template_id, AVG(output_embedding) AS centroid
