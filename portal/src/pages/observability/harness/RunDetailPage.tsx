@@ -18,6 +18,8 @@ import {
   Chip,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
+import { CostChip } from '../../../components/observability/CostChip';
+import { ModeChip } from '../../../components/observability/ModeChip';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -37,6 +39,9 @@ interface TestRun {
   startedAt: string;
   finishedAt: string | null;
   notes: string | null;
+  // Sprint 1 fields (nullable until Agent A's migration lands).
+  mode?: 'live' | 'sim' | string | null;
+  totalCostUsd?: number | null;
 }
 
 interface TestResult {
@@ -56,6 +61,10 @@ interface TestResult {
   // joined when GET /runs/:id
   agentId?: string;
   prompt?: string;
+  // Sprint 1 cost + provenance (nullable until Agent A's migration lands).
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  estCostUsd?: number | null;
 }
 
 interface RunDetailResp {
@@ -286,11 +295,25 @@ function RunDetailPage() {
       <Card padding="md">
         <div style={headerRow}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <h2 style={h2title}>{run.label}</h2>
               <Chip tone={statusTone(run.status)} size="xs">
                 {run.status}
               </Chip>
+              <ModeChip mode={run.mode} />
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  fontSize: 11,
+                  color: 'var(--color-text-tertiary)',
+                }}
+                title="total cost across all results in this run"
+              >
+                <CostChip cost={run.totalCostUsd} />
+                <span>total</span>
+              </span>
             </div>
             <div style={subline}>
               started <strong>{new Date(run.startedAt).toLocaleString()}</strong>
@@ -412,6 +435,7 @@ function RunDetailPage() {
                   <TableTh>Schema</TableTh>
                   <TableTh>Tags</TableTh>
                   <TableTh>Duration</TableTh>
+                  <TableTh>Cost</TableTh>
                   <TableTh>Response</TableTh>
                 </TableRow>
               </TableHead>
@@ -446,6 +470,9 @@ function RunDetailPage() {
                         <TableTd style={numCell}>
                           {r.durationMs != null ? `${r.durationMs}ms` : '—'}
                         </TableTd>
+                        <TableTd style={{ whiteSpace: 'nowrap' }}>
+                          <CostChip cost={r.estCostUsd} />
+                        </TableTd>
                         <TableTd
                           style={snippetCell}
                           title={r.responseSnippet ?? undefined}
@@ -455,7 +482,7 @@ function RunDetailPage() {
                       </TableRow>
                       {isOpen && (
                         <TableRow key={`${r.testId}-detail`}>
-                          <TableTd colSpan={8} style={detailRowCell}>
+                          <TableTd colSpan={9} style={detailRowCell}>
                             <ResultDetail result={r} />
                           </TableTd>
                         </TableRow>
@@ -571,6 +598,21 @@ function ResultDetail({ result }: { result: TestResult }) {
       <div style={detailFull}>
         <div style={detailHintLine}>
           reference similarity: <strong>{fmt(result.referenceSimilarity)}</strong>
+          {(result.inputTokens != null || result.outputTokens != null) && (
+            <>
+              <span style={dot}>·</span>
+              tokens:{' '}
+              <strong>
+                input: {result.inputTokens ?? '—'} · output: {result.outputTokens ?? '—'}
+              </strong>
+            </>
+          )}
+          {result.estCostUsd != null && (
+            <>
+              <span style={dot}>·</span>
+              cost: <CostChip cost={result.estCostUsd} />
+            </>
+          )}
           {result.invocationId && (
             <>
               <span style={dot}>·</span>

@@ -34,6 +34,8 @@ import {
   Legend,
 } from 'recharts';
 import { useFetch } from '../../hooks/useFetch';
+import { CostChip } from '../../components/observability/CostChip';
+import { PromptVersionChip } from '../../components/observability/PromptVersionChip';
 
 interface DriftSummary {
   agentId: string;
@@ -54,6 +56,14 @@ interface DriftOutlier {
   distance: number;
   ts: string;
   judgeRationale?: string | null;
+  // Sprint 1 cost + provenance (nullable until Agent A's migration lands).
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  estCostUsd?: number | null;
+  judgeCostUsd?: number | null;
+  totalCostUsd?: number | null;
+  promptVersion?: string | null;
+  modelId?: string | null;
 }
 
 interface DriftTimePoint {
@@ -365,6 +375,7 @@ function DriftPage() {
                 <TableTh>Response</TableTh>
                 <TableTh>Judge</TableTh>
                 <TableTh>Distance</TableTh>
+                <TableTh>Cost</TableTh>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -395,10 +406,13 @@ function DriftPage() {
                       <TableTd>
                         <Chip tone={driftP95Tone(o.distance)} size="xs">{fmt(o.distance)}</Chip>
                       </TableTd>
+                      <TableTd style={{ whiteSpace: 'nowrap' }}>
+                        <CostChip cost={o.totalCostUsd} />
+                      </TableTd>
                     </TableRow>
                     {isOpen && (
                       <TableRow key={`${o.invocationId}-detail`}>
-                        <TableTd colSpan={6} style={{ padding: 12, background: 'var(--color-bg)' }}>
+                        <TableTd colSpan={7} style={{ padding: 12, background: 'var(--color-bg)' }}>
                           <OutlierDetail outlier={o} />
                         </TableTd>
                       </TableRow>
@@ -436,7 +450,15 @@ function OutlierDetail({ outlier }: { outlier: DriftOutlier }) {
   return (
     <div style={detailGrid}>
       <div>
-        <div style={detailLabel}>OUTLIER · distance {fmt(outlier.distance)}</div>
+        <div style={detailLabel}>OUTLIER</div>
+        <div style={outlierMetaRow}>
+          <span>distance {fmt(outlier.distance)}</span>
+          <span style={dotSep}>·</span>
+          <span>judge {fmt(outlier.judgeScore)}</span>
+          <span style={dotSep}>·</span>
+          <CostChip cost={outlier.totalCostUsd} />
+          <PromptVersionChip promptVersion={outlier.promptVersion} />
+        </div>
         <pre style={detailPre}>{outlier.responseSnippet}</pre>
         {outlier.judgeRationale && (
           <div style={detailHint}>judge: {outlier.judgeRationale}</div>
@@ -534,6 +556,11 @@ const detailLabel: CSSProperties = {
   marginBottom: 4, letterSpacing: 0.5,
 };
 const detailHintInline: CSSProperties = { fontWeight: 400, color: 'var(--color-text-tertiary)' };
+const outlierMetaRow: CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
+  fontSize: 11, color: 'var(--color-text-secondary)', marginBottom: 6,
+};
+const dotSep: CSSProperties = { color: 'var(--color-text-tertiary)' };
 const detailHint: CSSProperties = {
   fontSize: 10.5, color: 'var(--color-text-tertiary)', marginTop: 6, fontStyle: 'italic',
 };
