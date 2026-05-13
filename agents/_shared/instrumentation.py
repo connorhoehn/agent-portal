@@ -46,6 +46,7 @@ import logging
 import os
 import time
 import uuid
+from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import wraps
@@ -129,6 +130,13 @@ class TraceContext:
     user_id: str | None = None
     session_id: str | None = None
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    # Bedrock Converse usage accumulators. Populated by the boto3 monkey-patch
+    # installed via `install_bedrock_usage_capture()` — Strands manages its own
+    # bedrock-runtime client internally and the `usage` block in each Converse
+    # response is otherwise invisible to agent code. The patch sums across
+    # every Converse / ConverseStream call made during the invocation.
+    bedrock_input_tokens: int = 0
+    bedrock_output_tokens: int = 0
 
     @classmethod
     def from_request_payload(cls, payload: Any) -> "TraceContext":
@@ -165,6 +173,26 @@ class TraceContext:
     def record_tool_call(self, entry: dict[str, Any]) -> None:
         """Append one observation. Caller already truncated samples."""
         self.tool_calls.append(entry)
+
+    # ── Bedrock Converse usage accumulation ──
+
+    def accumulate_usage(self, input_tokens: int, output_tokens: int) -> None:
+        """Add one Converse response's usage counts onto this context.
+
+        Called by the boto3 patch installed via `install_bedrock_usage_capture`.
+        Both arguments are best-effort ints; non-int / negative values are
+        coerced to zero so a malformed Converse response never poisons the
+        running totals.
+        """
+        try:
+            it = int(input_tokens)
+            ot = int(output_tokens)
+        except (TypeError, ValueError):
+            return
+        if it > 0:
+            self.bedrock_input_tokens += it
+        if ot > 0:
+            self.bedrock_output_tokens += ot
 
     # ── Bundle assembly ──
 
@@ -203,10 +231,19 @@ class TraceContext:
             body["templateId"] = template_id
         if duration_ms is not None:
             body["durationMs"] = int(duration_ms)
-        if input_tokens is not None:
-            body["inputTokens"] = int(input_tokens)
-        if output_tokens is not None:
-            body["outputTokens"] = int(output_tokens)
+        # Token totals: prefer an explicit caller-supplied value (tests/scripts
+        # may want to override) but otherwise fall back to whatever the boto3
+        # Converse patch accumulated onto this context across the invocation.
+        effective_input = input_tokens if input_tokens is not None else (
+            self.bedrock_input_tokens if self.bedrock_input_tokens > 0 else None
+        )
+        effective_output = output_tokens if output_tokens is not None else (
+            self.bedrock_output_tokens if self.bedrock_output_tokens > 0 else None
+        )
+        if effective_input is not None:
+            body["inputTokens"] = int(effective_input)
+        if effective_output is not None:
+            body["outputTokens"] = int(effective_output)
         if prompt_version:
             body["promptVersion"] = prompt_version
         if model_id:
@@ -226,6 +263,194 @@ class TraceContext:
         if self.tool_calls:
             body["toolCalls"] = list(self.tool_calls)
         return body
+
+
+# ── Shared active-context registry ────────────────────────────────────────────
+#
+# Each agent module still owns its per-module ContextVar (used by the
+# `@instrumented_tool(_current_ctx.get)` decorator and by inter-agent code
+# like the supervisor's `_invoke_sub_agent`). We *additionally* mirror the
+# active context onto a single process-wide ContextVar here so the boto3
+# Converse patch — which lives in this module and can't see each agent's
+# private ContextVar — has somewhere to deposit usage counts.
+#
+# Agents call `set_active_ctx(ctx)` alongside their existing
+# `_current_ctx.set(ctx)` at the start of `handle()`, and
+# `reset_active_ctx(token)` in the `finally`.
+
+_active_ctx: ContextVar["TraceContext | None"] = ContextVar(
+    "orgiq_active_ctx", default=None
+)
+
+
+def set_active_ctx(ctx: "TraceContext | None") -> Token:
+    """Mirror the per-agent TraceContext onto the shared ContextVar.
+
+    Returns the `Token` produced by `ContextVar.set` so the caller can
+    `reset_active_ctx(token)` in a `finally` clause and restore the previous
+    value — critical when an agent invocation is itself nested under another
+    in-process invocation (rare, but Strands' async runtime allows it).
+    """
+    return _active_ctx.set(ctx)
+
+
+def reset_active_ctx(token: Token) -> None:
+    """Restore the shared active-context to its prior value. Errors absorbed."""
+    try:
+        _active_ctx.reset(token)
+    except Exception:  # noqa: BLE001 — observability must never crash the agent
+        pass
+
+
+def get_active_ctx() -> "TraceContext | None":
+    """Read the currently-active TraceContext. None when no agent is running."""
+    return _active_ctx.get()
+
+
+# ── boto3 Bedrock Converse usage capture ──────────────────────────────────────
+
+_INSTALLED = False
+
+
+def install_bedrock_usage_capture() -> None:
+    """Patch boto3 bedrock-runtime clients to record Converse usage onto the
+    active TraceContext. Idempotent — calling twice has no extra effect.
+
+    AgentCore Runtime spins up the agent before user code runs; Strands then
+    creates its own bedrock-runtime client. We patch botocore's
+    `BaseClient._make_api_call` so any client (including Strands') captures
+    usage from the response and increments the active context's counters.
+
+    How it works:
+        * Every boto3 client method ultimately funnels through
+          `BaseClient._make_api_call(operation_name, api_params)`. We wrap that
+          method (once, module-globally) so every existing AND future client —
+          including the one Strands constructs internally — gets the hook.
+        * On the way back from the original call, if the bound client's
+          `meta.service_model.service_name == 'bedrock-runtime'` and the
+          operation is `Converse` or `ConverseStream`, we look up the active
+          TraceContext and add `usage.inputTokens` + `usage.outputTokens` to
+          it.
+
+    Token counts are best-effort. If no context is active OR the response
+    shape changed, we silently skip — never block the agent.
+
+    Edge cases tokens may not flow:
+        * **ConverseStream**: the AWS SDK exposes the response as an
+          EventStream. The `usage` block lives in the *terminal*
+          `metadata` event, which is only materialised when the consumer
+          iterates the stream. Strands does iterate it, but our wrapper
+          returns before iteration starts, so we cannot read usage from
+          the wrapper's return value alone. For ConverseStream we instead
+          wrap the `stream` iterator so the metadata event is captured on
+          the consumer's behalf. If something other than Strands consumes
+          a partial stream and bails out before the metadata frame, those
+          tokens are lost (correct behaviour — usage is only known when
+          the model finishes).
+        * **Cross-region / SigV4 retries**: each retry produces its own
+          `_make_api_call` invocation, so we'd double-count. botocore's
+          retry logic wraps `_make_api_call` from the *outside* (in the
+          endpoint layer), so successful retries reach our wrapper only
+          once. Failed attempts that raise short-circuit before we touch
+          usage. Verified empirically; treat as a known assumption.
+        * **No active TraceContext**: usage is silently dropped. This is
+          expected during cold-start, health checks (`/ping`), or any
+          Converse call made outside of `handle()`.
+        * **Response shape change**: Bedrock has been stable on
+          `{"usage": {"inputTokens": N, "outputTokens": M}}` since launch
+          but any deviation (missing key, str instead of int, etc.) is
+          coerced via `accumulate_usage` which absorbs the error.
+        * **Threaded agents**: ContextVar values propagate to threads
+          started with `contextvars.copy_context()` (which Strands uses
+          for its async loop), but a bare `threading.Thread` would NOT
+          inherit the active context. Agents that fan out via raw threads
+          must propagate manually.
+    """
+    global _INSTALLED
+    if _INSTALLED:
+        return
+
+    try:
+        from botocore.client import BaseClient
+    except Exception as exc:  # noqa: BLE001 — boto3 should always be present, but be defensive
+        log.warning("instrumentation: botocore unavailable — usage capture disabled: %s", exc)
+        _INSTALLED = True  # don't retry on every call
+        return
+
+    _original_make_api_call = BaseClient._make_api_call
+
+    def _wrap_stream(stream: Any) -> Any:
+        """Wrap a ConverseStream EventStream so the terminal metadata frame's
+        usage block is captured as the consumer iterates. Falls back to the
+        raw stream if the value doesn't look iterable."""
+        if stream is None:
+            return stream
+        try:
+            iterator = iter(stream)
+        except TypeError:
+            return stream
+
+        def _gen() -> Any:
+            try:
+                for event in iterator:
+                    # Best-effort sniff for the metadata frame. The Converse
+                    # streaming protocol delivers usage in `metadata.usage`.
+                    try:
+                        if isinstance(event, dict):
+                            md = event.get("metadata")
+                            if isinstance(md, dict):
+                                usage = md.get("usage")
+                                if isinstance(usage, dict):
+                                    ctx = _active_ctx.get()
+                                    if ctx is not None:
+                                        ctx.accumulate_usage(
+                                            usage.get("inputTokens", 0) or 0,
+                                            usage.get("outputTokens", 0) or 0,
+                                        )
+                    except Exception:  # noqa: BLE001
+                        pass
+                    yield event
+            except Exception:
+                raise
+
+        return _gen()
+
+    def _patched_make_api_call(self: Any, operation_name: str, api_params: Any) -> Any:
+        # Always call through to the original. We only post-process responses
+        # for the bedrock-runtime Converse / ConverseStream operations.
+        response = _original_make_api_call(self, operation_name, api_params)
+        try:
+            service_name = getattr(
+                getattr(self, "meta", None), "service_model", None
+            )
+            service_name = (
+                service_name.service_name if service_name is not None else None
+            )
+            if service_name == "bedrock-runtime":
+                if operation_name == "Converse" and isinstance(response, dict):
+                    usage = response.get("usage") or {}
+                    if isinstance(usage, dict):
+                        ctx = _active_ctx.get()
+                        if ctx is not None:
+                            ctx.accumulate_usage(
+                                usage.get("inputTokens", 0) or 0,
+                                usage.get("outputTokens", 0) or 0,
+                            )
+                elif operation_name == "ConverseStream" and isinstance(response, dict):
+                    stream = response.get("stream")
+                    if stream is not None:
+                        response["stream"] = _wrap_stream(stream)
+        except Exception as exc:  # noqa: BLE001 — observability must never crash the agent
+            log.debug("instrumentation: usage capture skipped: %s", exc)
+        return response
+
+    try:
+        BaseClient._make_api_call = _patched_make_api_call  # type: ignore[assignment]
+        _INSTALLED = True
+        log.info("instrumentation: bedrock-runtime Converse usage capture installed")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("instrumentation: failed to install usage capture: %s", exc)
+        _INSTALLED = True
 
 
 # ── Decorator ─────────────────────────────────────────────────────────────────

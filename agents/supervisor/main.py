@@ -17,10 +17,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.approval_tool import request_approval  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
     TraceContext,
+    install_bedrock_usage_capture,
     instrumented_tool,
     post_trace,
+    reset_active_ctx,
+    set_active_ctx,
     short_prompt_hash,
 )
+
+# Patch boto3's bedrock-runtime client BEFORE Strands constructs its own —
+# otherwise the Converse calls Strands makes internally bypass usage capture
+# and the trace bundle reports `inputTokens` / `outputTokens` as missing.
+install_bedrock_usage_capture()
 
 # Per-invocation trace buffer. Set by `handle()` before the Agent call and
 # read by every instrumented tool wrapper. ContextVar gives us correct
@@ -413,6 +421,9 @@ async def handle(payload: dict) -> dict:
     # observable behaviour — every catch below swallows.
     ctx = TraceContext.from_request_payload(payload if isinstance(payload, dict) else {})
     token = _current_ctx.set(ctx)
+    # Mirror onto the shared ContextVar so the boto3 Converse patch can find
+    # the active TraceContext from inside the patched _make_api_call.
+    shared_token = set_active_ctx(ctx)
 
     log.info(
         "Supervisor handling (role=%s, invocation=%s, parent=%s): %s",
@@ -424,6 +435,7 @@ async def handle(payload: dict) -> dict:
         result = _invoke_with_retry(agent, input_text)
     finally:
         _current_ctx.reset(token)
+        reset_active_ctx(shared_token)
     duration_ms = int((time.monotonic() - t0) * 1000)
 
     response_text = str(result)
