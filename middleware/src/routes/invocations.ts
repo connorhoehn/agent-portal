@@ -403,7 +403,10 @@ invocationsRouter.get('/:invocationId', asyncHandler(async (req, res) => {
     toolCalls = [];
   }
 
-  // 3) Parent summary (one row, if present).
+  // 3) Parent summary (one row, if present). If the child references a parent
+  // invocation_id that hasn't been ingested yet (CW Logs poller lag, agent
+  // didn't emit, etc), still return a "ghost" parent — the UI shows
+  // "(record not found)" rather than the misleading "no parent" empty state.
   let parent: ParentSummary | null = null;
   if (invocation.parentInvocationId) {
     try {
@@ -422,10 +425,23 @@ invocationsRouter.get('/:invocationId', asyncHandler(async (req, res) => {
           agentName: String(r['agent_name'] ?? ''),
           ts: String(r['ts'] ?? ''),
         };
+      } else {
+        // Ghost parent — id is known but row is missing.
+        parent = {
+          invocationId: invocation.parentInvocationId,
+          agentId: '(record not found)',
+          agentName: '(record not found)',
+          ts: '',
+        };
       }
     } catch (err) {
       console.warn('[invocations] /:id parent lookup failed:', (err as Error).message);
-      parent = null;
+      parent = {
+        invocationId: invocation.parentInvocationId,
+        agentId: '(lookup failed)',
+        agentName: '(lookup failed)',
+        ts: '',
+      };
     }
   }
 

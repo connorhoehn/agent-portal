@@ -7,7 +7,7 @@
 //   GET  /api/observability/approvals/stream            (SSE)
 //   POST /api/observability/approvals/:id/decision      { decision, note? }
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import {
   Card,
@@ -224,8 +224,8 @@ function ApprovalQueuePage() {
               {sorted.map((a) => {
                 const open = expandedPayload.has(a.approvalId);
                 return (
-                  <>
-                    <TableRow key={a.approvalId}>
+                  <Fragment key={a.approvalId}>
+                    <TableRow>
                       <TableTd style={tsCell}>
                         {new Date(a.requestedAt).toLocaleTimeString()}
                       </TableTd>
@@ -283,7 +283,7 @@ function ApprovalQueuePage() {
                         </TableTd>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </TableBody>

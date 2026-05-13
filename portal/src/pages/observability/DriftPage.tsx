@@ -11,7 +11,7 @@
 //   GET /outliers?agentId=&limit=
 //   GET /neighbors/:invocationId?limit=
 
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
@@ -395,8 +395,8 @@ function DriftPage() {
               {outlierRows.map((o) => {
                 const isOpen = expanded === o.invocationId;
                 return (
-                  <>
-                    <TableRow key={o.invocationId}>
+                  <Fragment key={o.invocationId}>
+                    <TableRow>
                       <TableTd style={tsCell}>{new Date(o.ts).toLocaleTimeString()}</TableTd>
                       <TableTd style={monoCell}>{o.templateId ?? '(none)'}</TableTd>
                       <TableTd
@@ -445,7 +445,7 @@ function DriftPage() {
                         </TableTd>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </TableBody>

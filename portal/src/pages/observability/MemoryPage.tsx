@@ -11,7 +11,7 @@
 //
 // Polling: 30s, matches DriftPage.
 
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import {
   Card,
@@ -257,9 +257,8 @@ function MemoryPage() {
               {events.map((e) => {
                 const isOpen = expanded === e.memoryEventId;
                 return (
-                  <>
+                  <Fragment key={e.memoryEventId}>
                     <TableRow
-                      key={e.memoryEventId}
                       onClick={() => setExpanded(isOpen ? null : e.memoryEventId)}
                       style={{ cursor: 'pointer' }}
                     >
@@ -294,7 +293,7 @@ function MemoryPage() {
                         </TableTd>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </TableBody>
