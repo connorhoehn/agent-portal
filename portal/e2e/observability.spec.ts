@@ -185,7 +185,7 @@ test.describe('observability pages', () => {
 
   test('invocation search page renders filter UI', async ({ page }) => {
     await page.goto('/observability/invocations/search');
-    await expect(page.getByPlaceholder(/Search prompt/i).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/Search prompt/i).first()).toBeVisible({ timeout: 10_000 });
     await expect(page.getByRole('button', { name: /^Search$/i }).first()).toBeVisible();
     await page.screenshot({ path: `${SHOT_DIR}/11-invocation-search.png`, fullPage: true });
   });
