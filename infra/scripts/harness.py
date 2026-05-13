@@ -2,25 +2,35 @@
 """
 OrgIQ test harness runner.
 
-Replays curated (prompt, agent) test cases through Bedrock Nova-Pro, pushes
-each response through the middleware trace-sink for judging + schema
-validation, then records pass/fail in observability.test_results.
+Two modes, picked with --mode {live,sim}:
 
-The simulated agent system prompts live in `infra/scripts/agent_prompts.yaml`.
-The runner forwards (system, user) to amazon.nova-pro-v1:0 (Converse API,
-temperature 0, maxTokens 600), captures the response, then POSTs to the
-locked middleware contract:
+  * sim  — call Bedrock Nova-Pro directly with each agent's role-play
+            system prompt from infra/scripts/agent_prompts.yaml. This is the
+            legacy path: judges what the prompt SHOULD do, not what the
+            deployed agent actually does. Cheap + fast + reproducible.
 
-    POST   /api/observability/harness/runs                 -> {runId}
-    POST   /api/observability/harness/trace                -> {invocationId, judgeScore, ...}
+  * live — invoke the deployed AgentCore runtimes via
+            bedrock-agentcore.invoke_agent_runtime. This exercises the
+            ACTUAL deployed image with the ACTUAL tool plumbing, A2A links,
+            and agent code. May fail in ways sim never sees — that's the
+            point. Closes the simulation/reality gap.
+
+Both modes push the response through the middleware trace-sink for judging
++ schema validation, stamp prompt+model provenance, and record pass/fail in
+observability.test_results.
+
+Middleware contract:
+    POST   /api/observability/prompt-versions               -> {promptVersion}
+    POST   /api/observability/harness/runs                  -> {runId}
+    POST   /api/observability/harness/trace                 -> {..., est_cost_usd, ...}
     POST   /api/observability/harness/runs/{id}/results
     PATCH  /api/observability/harness/runs/{id}
     GET    /api/observability/harness/runs/{id}
 
 Usage:
     python3 infra/scripts/harness.py list
-    python3 infra/scripts/harness.py run --label "main@$(git rev-parse --short HEAD)"
-    python3 infra/scripts/harness.py run --case search.expert.k8s.001
+    python3 infra/scripts/harness.py run --label "..." --mode live
+    python3 infra/scripts/harness.py run --case search.expert.k8s.001 --mode sim
     python3 infra/scripts/harness.py status <run_id>
     python3 infra/scripts/harness.py diff <run_a> <run_b>
 
@@ -47,6 +57,17 @@ REGION = "us-east-1"
 DATABASE = "orgiq"
 NOVA_PRO_MODEL_ID = "amazon.nova-pro-v1:0"
 DEFAULT_MIDDLEWARE = os.environ.get("MIDDLEWARE_URL", "http://localhost:3001")
+DEFAULT_MODE = "live"   # Sprint 1 default — exercise the deployed runtimes.
+
+# Bedrock pricing (USD per 1K tokens) — must match middleware/src/lib/pricing.ts.
+# Duplicated here so the runner can compute est_cost_usd for test_results
+# without round-tripping through middleware just for the math.
+BEDROCK_PRICING_PER_1K: dict[str, tuple[float, float]] = {
+    "amazon.nova-pro-v1:0":         (0.0008,   0.0032),
+    "amazon.nova-lite-v1:0":        (0.00006,  0.00024),
+    "amazon.nova-micro-v1:0":       (0.000035, 0.00014),
+    "amazon.titan-embed-text-v2:0": (0.00002,  0.0),
+}
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROMPTS_PATH = SCRIPT_DIR / "agent_prompts.yaml"
@@ -236,11 +257,25 @@ def _http(method: str, url: str, body: dict | None = None, timeout: int = 60) ->
         raise RuntimeError(f"{method} {url} failed: {e.reason}") from None
 
 
-# ── Bedrock Converse call ─────────────────────────────────────────────────────
+# ── Bedrock Converse call (sim mode) ──────────────────────────────────────────
 
 
-def call_bedrock(system_prompt: str, user_prompt: str) -> tuple[str, int]:
-    """Returns (response_text, duration_ms). Raises on failure."""
+def estimate_cost_usd(model_id: str, input_tokens: int, output_tokens: int) -> float:
+    """Mirror of middleware.lib.pricing.estimateCost. Returns 0 for unknown ids."""
+    price = BEDROCK_PRICING_PER_1K.get(model_id)
+    if not price:
+        return 0.0
+    return (input_tokens / 1000.0) * price[0] + (output_tokens / 1000.0) * price[1]
+
+
+def call_bedrock(system_prompt: str, user_prompt: str) -> tuple[str, int, int, int]:
+    """Sim-mode invocation. Returns (response_text, duration_ms, input_tokens,
+    output_tokens). Raises on failure.
+
+    The Converse response includes a `usage` block; we surface it so the
+    runner can populate trace + test_results with real token counts and let
+    the middleware compute (and persist) the cost.
+    """
     bedrock = _boto3().client("bedrock-runtime", region_name=REGION)
     t0 = time.perf_counter()
     resp = bedrock.converse(
@@ -252,7 +287,130 @@ def call_bedrock(system_prompt: str, user_prompt: str) -> tuple[str, int]:
     duration_ms = int((time.perf_counter() - t0) * 1000)
     parts = resp.get("output", {}).get("message", {}).get("content", [])
     text = "".join(p.get("text", "") for p in parts).strip()
-    return text, duration_ms
+    usage = resp.get("usage", {}) or {}
+    input_tokens = int(usage.get("inputTokens") or 0)
+    output_tokens = int(usage.get("outputTokens") or 0)
+    return text, duration_ms, input_tokens, output_tokens
+
+
+# ── AgentCore Runtime call (live mode) ────────────────────────────────────────
+
+_AGENT_ARN_CACHE: dict[str, str] = {}
+
+
+def _load_agent_runtime_arns() -> dict[str, str]:
+    """Map agentRuntimeName -> agentRuntimeArn. Cached for the run."""
+    if _AGENT_ARN_CACHE:
+        return _AGENT_ARN_CACHE
+    ctrl = _boto3().client("bedrock-agentcore-control", region_name=REGION)
+    # The SDK paginates by maxResults; agents are 6 today, but query 50 to be safe.
+    runtimes: list[dict] = []
+    next_token: str | None = None
+    while True:
+        kwargs: dict[str, Any] = {"maxResults": 50}
+        if next_token:
+            kwargs["nextToken"] = next_token
+        resp = ctrl.list_agent_runtimes(**kwargs)
+        runtimes.extend(resp.get("agentRuntimes", []))
+        next_token = resp.get("nextToken")
+        if not next_token:
+            break
+    for r in runtimes:
+        name = r.get("agentRuntimeName")
+        arn = r.get("agentRuntimeArn")
+        if name and arn:
+            _AGENT_ARN_CACHE[name] = arn
+    return _AGENT_ARN_CACHE
+
+
+def _agent_id_to_runtime_name(agent_id: str) -> str:
+    """orgiq-supervisor -> orgiq_supervisor (deployed runtimes use _)."""
+    return agent_id.replace("-", "_")
+
+
+def _parse_agent_response(body_bytes: bytes) -> tuple[str, dict]:
+    """Extract (response_text, usage_dict) from an AgentCore invocation body.
+
+    AgentCore runtimes don't publish a single canonical response shape — each
+    agent's Strands/AG-UI handler dictates it. We try the most common shapes
+    in order:
+        1. JSON with `response` (Strands @entrypoint default)
+        2. JSON with `message` (older Strands shape)
+        3. JSON-lines stream — last line is treated as the final message
+        4. Raw text fallback
+    Usage is extracted from `usage`, `metadata.usage`, or empty dict.
+    """
+    if not body_bytes:
+        return "", {}
+    raw = body_bytes.decode("utf-8", errors="replace").strip()
+    if not raw:
+        return "", {}
+
+    # Try whole-body JSON first.
+    try:
+        obj = json.loads(raw)
+        if isinstance(obj, dict):
+            text = obj.get("response") or obj.get("message") or obj.get("text") or ""
+            if not text and "output" in obj:
+                text = str(obj["output"])
+            usage = obj.get("usage") or obj.get("metadata", {}).get("usage") or {}
+            return str(text), usage if isinstance(usage, dict) else {}
+        if isinstance(obj, str):
+            return obj, {}
+    except json.JSONDecodeError:
+        pass
+
+    # Try JSON-lines: parse last non-empty line.
+    lines = [ln for ln in raw.splitlines() if ln.strip()]
+    if lines:
+        last = lines[-1]
+        try:
+            obj = json.loads(last)
+            if isinstance(obj, dict):
+                text = obj.get("response") or obj.get("message") or obj.get("text") or ""
+                usage = obj.get("usage") or obj.get("metadata", {}).get("usage") or {}
+                if text:
+                    return str(text), usage if isinstance(usage, dict) else {}
+        except json.JSONDecodeError:
+            pass
+
+    # Last resort: return raw text.
+    return raw, {}
+
+
+def call_agent_runtime(agent_id: str, user_prompt: str) -> tuple[str, int, int, int]:
+    """Live-mode invocation. Returns (response_text, duration_ms, input_tokens,
+    output_tokens). Raises on any failure (caller catches and records as fail
+    row — live mode is allowed to fail per case without crashing the run)."""
+    runtime_name = _agent_id_to_runtime_name(agent_id)
+    arns = _load_agent_runtime_arns()
+    arn = arns.get(runtime_name)
+    if not arn:
+        raise RuntimeError(f"no deployed runtime found for {runtime_name}")
+    rt = _boto3().client("bedrock-agentcore", region_name=REGION)
+    payload = json.dumps({"prompt": user_prompt}).encode("utf-8")
+    t0 = time.perf_counter()
+    resp = rt.invoke_agent_runtime(
+        agentRuntimeArn=arn,
+        qualifier="DEFAULT",
+        payload=payload,
+    )
+    body_stream = resp.get("response")
+    body_bytes = b""
+    if body_stream is not None:
+        # Streaming body — read in full. (boto3 returns a StreamingBody for
+        # invoke_agent_runtime; .read() drains it.)
+        try:
+            body_bytes = body_stream.read()
+        except AttributeError:
+            # If it's already bytes, use directly.
+            body_bytes = bytes(body_stream) if body_stream else b""
+    duration_ms = int((time.perf_counter() - t0) * 1000)
+
+    text, usage = _parse_agent_response(body_bytes)
+    input_tokens = int(usage.get("inputTokens") or 0)
+    output_tokens = int(usage.get("outputTokens") or 0)
+    return text, duration_ms, input_tokens, output_tokens
 
 
 # ── Tag-matching rules ────────────────────────────────────────────────────────
@@ -398,6 +556,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     middleware = args.middleware
     git_sha = args.git_sha or detect_git_sha()
     label = args.label
+    mode = args.mode
 
     cases = fetch_active_cases(case_id=args.case, agent_id=args.agent)
     if not cases:
@@ -413,12 +572,51 @@ def cmd_run(args: argparse.Namespace) -> int:
         )
         return 2
 
-    # 1. Create run row via middleware.
+    # Pre-flight for live mode: probe the runtimes once so a missing ARN
+    # surfaces NOW (before we create the run row), and log the response
+    # shape from one supervisor call so the parser assumptions stay honest.
+    if mode == "live":
+        try:
+            arns = _load_agent_runtime_arns()
+            print(f"live: found {len(arns)} deployed runtime(s)")
+            unique_agents = sorted({c["agent_id"] for c in cases})
+            unknown = [a for a in unique_agents if _agent_id_to_runtime_name(a) not in arns]
+            if unknown:
+                print(
+                    f"  warn: no runtime ARN for agent(s): {unknown} "
+                    f"— these cases will fail in live mode",
+                    file=sys.stderr,
+                )
+        except Exception as e:
+            print(f"failed to list agent runtimes: {e}", file=sys.stderr)
+            return 5
+
+    # 1a. Register prompt versions for every distinct agent (M6 provenance).
+    #     The middleware hashes content -> short SHA and returns it. We stamp
+    #     that SHA on every trace row produced by that agent so researchers
+    #     can answer "which prompt produced this regression".
+    prompt_version_by_agent: dict[str, str] = {}
+    for agent_id in sorted({c["agent_id"] for c in cases if c["agent_id"] in prompts}):
+        try:
+            resp = _http(
+                "POST",
+                f"{middleware}/api/observability/prompt-versions",
+                {"agentId": agent_id, "content": prompts[agent_id]},
+            )
+            pv = resp.get("promptVersion")
+            if pv:
+                prompt_version_by_agent[agent_id] = pv
+        except (HttpError, RuntimeError) as e:
+            print(f"  warn: failed to register prompt for {agent_id}: {e}",
+                  file=sys.stderr)
+
+    # 1b. Create run row via middleware.
     create_body = {
         "label": label,
         "gitSha": git_sha,
         "judgeModelId": NOVA_PRO_MODEL_ID,
         "totalCases": len(cases),
+        "mode": mode,
     }
     try:
         created = _http("POST", f"{middleware}/api/observability/harness/runs", create_body)
@@ -429,7 +627,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     if not run_id:
         print(f"middleware did not return runId: {created}", file=sys.stderr)
         return 3
-    print(f"run {run_id} started — {len(cases)} case(s), judge={NOVA_PRO_MODEL_ID}")
+    print(f"run {run_id} started — {len(cases)} case(s), mode={mode}, judge={NOVA_PRO_MODEL_ID}")
     if git_sha:
         print(f"git_sha={git_sha} label={label!r}")
 
@@ -439,7 +637,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     for i, case in enumerate(cases, start=1):
         test_id = case["test_id"]
         agent_id = case["agent_id"]
-        system_prompt = prompts[agent_id]
+        system_prompt = prompts.get(agent_id, "")
+        prompt_version = prompt_version_by_agent.get(agent_id)
 
         case_start = time.perf_counter()
         invocation_id: str | None = None
@@ -448,19 +647,30 @@ def cmd_run(args: argparse.Namespace) -> int:
         schema_valid: bool | None = None
         response_text = ""
         duration_ms = 0
+        input_tokens = 0
+        output_tokens = 0
+        est_cost_usd: float | None = None
         fail_reasons: list[str] = []
         tag_hits: dict[str, bool] = {}
         passed = False
 
-        # 2. Call Bedrock.
+        # 2. Invoke the agent (live or sim).
         try:
-            response_text, duration_ms = call_bedrock(system_prompt, case["prompt"])
+            if mode == "live":
+                response_text, duration_ms, input_tokens, output_tokens = (
+                    call_agent_runtime(agent_id, case["prompt"])
+                )
+            else:
+                response_text, duration_ms, input_tokens, output_tokens = (
+                    call_bedrock(system_prompt, case["prompt"])
+                )
         except Exception as e:
-            fail_reasons.append(f"bedrock-error:{type(e).__name__}")
+            err_kind = "agentcore-error" if mode == "live" else "bedrock-error"
+            fail_reasons.append(f"{err_kind}:{type(e).__name__}")
             elapsed = time.perf_counter() - case_start
             print(
                 f"[{i}/{len(cases)}] {test_id:<42}  "
-                f"BEDROCK-ERROR  ({elapsed:.1f}s) {e}",
+                f"{err_kind.upper()}  ({elapsed:.1f}s) {e}",
                 flush=True,
             )
             # Still record a fail row so the run is complete.
@@ -479,6 +689,9 @@ def cmd_run(args: argparse.Namespace) -> int:
                         "responseSnippet": "",
                         "failReasons": fail_reasons,
                         "durationMs": int(elapsed * 1000),
+                        "inputTokens": None,
+                        "outputTokens": None,
+                        "estCostUsd": None,
                     },
                 )
             except (HttpError, RuntimeError) as post_err:
@@ -486,15 +699,28 @@ def cmd_run(args: argparse.Namespace) -> int:
             failed_n += 1
             continue
 
-        # 3. POST to sync trace endpoint.
-        trace_body = {
+        # Compute the agent-side est_cost_usd locally so we can populate
+        # test_results even if the trace endpoint fails. For live mode where
+        # the agent didn't report tokens, this is 0.0 (visible signal that
+        # we need agent-side token emission in Sprint 2).
+        est_cost_usd = estimate_cost_usd(
+            NOVA_PRO_MODEL_ID, input_tokens, output_tokens
+        ) if (input_tokens or output_tokens) else None
+
+        # 3. POST to sync trace endpoint with tokens + provenance.
+        trace_body: dict[str, Any] = {
             "agentId": agent_id,
             "agentName": agent_id.replace("orgiq-", "").capitalize(),
             "templateId": case.get("template_id") or "",
             "prompt": case["prompt"],
             "response": response_text,
             "durationMs": duration_ms,
+            "inputTokens": input_tokens or None,
+            "outputTokens": output_tokens or None,
+            "modelId": NOVA_PRO_MODEL_ID,
         }
+        if prompt_version:
+            trace_body["promptVersion"] = prompt_version
         try:
             trace_resp = _http(
                 "POST",
@@ -506,6 +732,11 @@ def cmd_run(args: argparse.Namespace) -> int:
             judge_score = trace_resp.get("judgeScore")
             judge_rationale = trace_resp.get("judgeRationale") or ""
             schema_valid = trace_resp.get("schemaValid")
+            # Prefer the cost the middleware computed (it's the canonical
+            # source); fall back to our locally-computed value if missing.
+            trace_cost = trace_resp.get("estCostUsd")
+            if isinstance(trace_cost, (int, float)):
+                est_cost_usd = float(trace_cost)
         except (HttpError, RuntimeError) as e:
             fail_reasons.append(f"trace-sink-error:{type(e).__name__}")
             print(f"  warn: trace-sink failed for {test_id}: {e}", file=sys.stderr)
@@ -521,7 +752,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         else:
             failed_n += 1
 
-        # 5. POST result.
+        # 5. POST result with tokens + cost.
         try:
             _http(
                 "POST",
@@ -537,6 +768,9 @@ def cmd_run(args: argparse.Namespace) -> int:
                     "responseSnippet": response_text[:500],
                     "failReasons": fail_reasons,
                     "durationMs": duration_ms,
+                    "inputTokens": input_tokens or None,
+                    "outputTokens": output_tokens or None,
+                    "estCostUsd": est_cost_usd,
                 },
             )
         except (HttpError, RuntimeError) as e:
@@ -546,8 +780,13 @@ def cmd_run(args: argparse.Namespace) -> int:
         score_str = f"score={judge_score:.2f}" if isinstance(judge_score, (int, float)) else "score=n/a"
         verdict = "PASS" if passed else "FAIL"
         secs = duration_ms / 1000.0
+        tok_str = (f"tok={input_tokens}/{output_tokens}"
+                   if (input_tokens or output_tokens) else "tok=?")
+        cost_str = (f"${est_cost_usd:.4f}" if isinstance(est_cost_usd, (int, float))
+                    else "$?")
         print(
-            f"[{i}/{len(cases)}] {test_id:<42}  {score_str:<11}  {verdict}  ({secs:.1f}s)",
+            f"[{i}/{len(cases)}] {test_id:<42}  {score_str:<11}  "
+            f"{verdict}  {tok_str:<14}  {cost_str:<8}  ({secs:.1f}s)",
             flush=True,
         )
 
@@ -735,6 +974,16 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--case", help="run a single test_id")
     pr.add_argument("--agent", help="filter by agent_id")
     pr.add_argument("--git-sha", help="override git_sha (auto-detected if omitted)")
+    pr.add_argument(
+        "--mode",
+        choices=["live", "sim"],
+        default=DEFAULT_MODE,
+        help=(
+            f"live: invoke deployed AgentCore runtimes (real agents). "
+            f"sim: call Bedrock Nova-Pro directly with role-play prompts. "
+            f"default: {DEFAULT_MODE}"
+        ),
+    )
 
     ps = sub.add_parser("status", help="print run summary + pass rate")
     ps.add_argument("run_id")
