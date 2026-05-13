@@ -30,6 +30,9 @@ function ObservabilityLayout() {
     { path: 'agents',            label: 'Agent Metrics',     hint: 'Per-agent stats' },
     { path: 'sessions',          label: 'Sessions',          hint: 'Chat threads' },
     { path: 'authz',             label: 'Authz Log',         hint: 'Live AVP decisions' },
+    { path: 'drift',             label: 'Drift',             hint: 'Schema + judge + embedding drift' },
+    { path: 'quality',           label: 'Quality',           hint: 'Judge scores + feedback' },
+    { path: 'approvals',         label: 'Approval Queue',    hint: 'Pending HITL decisions' },
   ];
 
   // Surface error count on the Summary tab when present.
