@@ -31,6 +31,10 @@ import {
   GetQueryResultsCommand,
   type GetQueryResultsCommandOutput,
 } from '@aws-sdk/client-cloudwatch-logs';
+import {
+  BedrockAgentCoreControlClient,
+  ListAgentRuntimesCommand,
+} from '@aws-sdk/client-bedrock-agentcore-control';
 import { config } from '../config.js';
 import { processTrace, type TraceInput } from './trace-sink.js';
 
@@ -95,6 +99,25 @@ async function discoverLogGroups(): Promise<string[]> {
     return _logGroupCache.groups;
   }
 
+  // First: get the set of CURRENTLY DEPLOYED runtime IDs. AgentCore retains
+  // log groups for old runtime versions even after the runtime is replaced,
+  // so without this filter we end up trying to query 40+ stale groups —
+  // which trips StartQuery's combined-list-length limit (~512 chars on
+  // logGroupNames). Filter to active runtimes only.
+  const activeRuntimeIds = new Set<string>();
+  try {
+    const ctrl = new BedrockAgentCoreControlClient({ region: config.region });
+    const resp = await ctrl.send(new ListAgentRuntimesCommand({ maxResults: 50 }));
+    for (const r of resp.agentRuntimes ?? []) {
+      if (r.agentRuntimeId) activeRuntimeIds.add(r.agentRuntimeId);
+    }
+  } catch (err) {
+    console.warn('[cw-ingest] list-agent-runtimes failed:',
+      (err as Error).message);
+    // Fall through — we'll filter on the orgiq_ prefix alone and hope the
+    // group count stays under StartQuery's limits.
+  }
+
   const collected: string[] = [];
   let nextToken: string | undefined;
   try {
@@ -109,16 +132,24 @@ async function discoverLogGroups(): Promise<string[]> {
         if (!lg.logGroupName) continue;
         // Trim the prefix to get the suffix (`<runtime-id>-DEFAULT`).
         const suffix = lg.logGroupName.slice(LOG_GROUP_PREFIX.length);
-        if (suffix.startsWith(AGENT_RUNTIME_PREFIX)) {
-          collected.push(lg.logGroupName);
+        if (!suffix.startsWith(AGENT_RUNTIME_PREFIX)) continue;
+        // ORGIQ_TRACE lines come from agent stdout — AgentCore routes that to
+        // the `-DEFAULT` log group, not the `-<endpoint>` ones.
+        if (!suffix.endsWith('-DEFAULT')) continue;
+        // If we resolved active runtimes, require the suffix to start with one
+        // of them. Strips out stale-version log groups that AgentCore keeps
+        // around indefinitely.
+        if (activeRuntimeIds.size > 0) {
+          const runtimeId = suffix.replace(/-DEFAULT$/, '');
+          if (!activeRuntimeIds.has(runtimeId)) continue;
         }
+        collected.push(lg.logGroupName);
       }
       nextToken = resp.nextToken;
     } while (nextToken);
   } catch (err) {
     console.warn('[cw-ingest] discoverLogGroups failed:',
       (err as Error).message);
-    // Keep last good cache if we have one; otherwise return [].
     if (_logGroupCache) return _logGroupCache.groups;
     return [];
   }
@@ -136,9 +167,17 @@ async function discoverLogGroups(): Promise<string[]> {
  * mean "no agents emitted ORGIQ_TRACE in this window" or "Insights returned
  * an empty result set". The middleware log line distinguishes them.
  */
+// CW Logs has 30-60s ingestion delay before lines become queryable via
+// Insights. If the poll window's endTs is `now`, the most recent agent
+// emissions won't show up because they're still propagating. Lag the cursor
+// by INGEST_LAG_S so queries hit the *eventually-consistent* portion of the
+// stream. The price is a fixed extra ~minute of latency per trace; the
+// alternative is missing every trace until the cursor laps it.
+const INGEST_LAG_S = 60;
+
 export async function pollOnce(): Promise<{ ingested: number; errors: number }> {
   const startTs = _lastPollTs;
-  const endTs = Math.floor(Date.now() / 1000);
+  const endTs = Math.floor(Date.now() / 1000) - INGEST_LAG_S;
   // Defensive: if endTs <= startTs we'd have a zero-width query that some
   // SDKs reject. Bail and let the next tick widen the window.
   if (endTs <= startTs) {
@@ -146,6 +185,7 @@ export async function pollOnce(): Promise<{ ingested: number; errors: number }> 
   }
 
   const logGroups = await discoverLogGroups();
+  console.log(`[cw-ingest] discovered ${logGroups.length} log group(s)`);
   if (logGroups.length === 0) {
     // Advance the cursor so we don't replay a wider window once log groups
     // appear; the worst-case is the first 30s of new runtime output goes
@@ -157,9 +197,13 @@ export async function pollOnce(): Promise<{ ingested: number; errors: number }> 
   // CW Logs Insights query string. We filter server-side to keep the result
   // set tiny + cheap, and sort by @timestamp so the JSON parse loop processes
   // bundles in roughly chronological order.
+  // Match ORGIQ_TRACE: anywhere in the line — AgentCore Runtime sometimes
+  // concatenates adjacent stdout writes into a single CW Logs @message, so
+  // the prefix can appear after preceding text. The downstream parser
+  // re-anchors on indexOf(prefix) and extracts the JSON object.
   const queryString = `
     fields @timestamp, @message
-    | filter @message like /^ORGIQ_TRACE:/
+    | filter @message like /ORGIQ_TRACE:/
     | sort @timestamp asc
     | limit ${QUERY_LIMIT}
   `;
@@ -209,15 +253,28 @@ export async function pollOnce(): Promise<{ ingested: number; errors: number }> 
   let ingested = 0;
   let errors = 0;
   const rows = result.results ?? [];
+  let matched = 0;
+  console.log(`[cw-ingest] query returned ${rows.length} row(s) from window [${startTs}, ${endTs}]`);
   for (const row of rows) {
     // Each row is an array of {field, value} pairs; @message holds the line.
     const msgField = row.find((f) => f.field === '@message');
     const raw = msgField?.value;
     if (typeof raw !== 'string') continue;
-    const line = raw.trim();
-    if (!line.startsWith(ORGIQ_TRACE_PREFIX)) continue;
-    const json = line.slice(ORGIQ_TRACE_PREFIX.length).trim();
-    if (!json) continue;
+    // AgentCore Runtime concatenates adjacent stdout writes into one CW Logs
+    // @message field, so the ORGIQ_TRACE: prefix can appear AFTER preceding
+    // text (the agent's natural response). Find it anywhere in the line.
+    const prefixIdx = raw.indexOf(ORGIQ_TRACE_PREFIX);
+    if (prefixIdx < 0) continue;
+    matched++;
+    // Extract from the start of the JSON object — find the first `{` after the
+    // prefix and consume until the matching `}` to handle multiple traces in
+    // one merged line. Conservative: grab the substring from `{` through the
+    // last `}` and let JSON.parse decide if it's valid.
+    const afterPrefix = raw.slice(prefixIdx + ORGIQ_TRACE_PREFIX.length);
+    const firstBrace = afterPrefix.indexOf('{');
+    const lastBrace = afterPrefix.lastIndexOf('}');
+    if (firstBrace < 0 || lastBrace <= firstBrace) continue;
+    const json = afterPrefix.slice(firstBrace, lastBrace + 1);
     let bundle: TraceInput;
     try {
       bundle = JSON.parse(json) as TraceInput;
@@ -242,6 +299,7 @@ export async function pollOnce(): Promise<{ ingested: number; errors: number }> 
   // Advance the cursor only after a successful query (regardless of whether
   // we ingested anything). On query failure we leave it alone so the next
   // poll re-attempts the same window.
+  console.log(`[cw-ingest] matched ${matched} ORGIQ_TRACE line(s); persisted ${ingested}, parse errors ${errors}`);
   _lastPollTs = endTs;
   return { ingested, errors };
 }
@@ -284,12 +342,12 @@ export function startTracePoller(): void {
   _intervalHandle = setInterval(() => {
     pollOnce()
       .then((r) => {
-        // Suppress the every-30s noise unless something happened.
-        if (r.ingested > 0 || r.errors > 0) {
-          console.log(
-            `[cw-ingest] poll: ingested ${r.ingested}, errors ${r.errors}`,
-          );
-        }
+        // Verbose when debugging — temporarily log every poll so we can see
+        // whether the loop is actually firing + how many lines it found.
+        // Suppress to ingested/errors only when running cleanly.
+        console.log(
+          `[cw-ingest] poll: ingested ${r.ingested}, errors ${r.errors}`,
+        );
       })
       .catch((err) =>
         console.warn('[cw-ingest] poll failed:', (err as Error).message),
