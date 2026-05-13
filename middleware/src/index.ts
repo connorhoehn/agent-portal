@@ -11,6 +11,7 @@ import { ingestRouter } from './routes/ingest.js';
 import { observabilityRouter } from './routes/observability.js';
 import { approvalsRouter } from './routes/approvals.js';
 import { harnessRouter } from './routes/harness.js';
+import { costRouter } from './routes/cost.js';
 import { capabilitiesRouter } from './routes/capabilities.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { sessionRouter } from './routes/session.js';
@@ -52,6 +53,10 @@ app.use('/api/observability/approvals', approvalsRouter);
 // Harness routes — mounted ungated so the test runner (infra/scripts/harness.py)
 // can POST results without a session cookie. Same rationale as approvals.
 app.use('/api/observability/harness', harnessRouter);
+// Cost aggregation routes — mounted BEFORE the gated /api/observability mount,
+// same pattern as approvals/harness. Read-only aggregates derived from the
+// per-row cost columns on observability.invocation_traces.
+app.use('/api/observability/cost', costRouter);
 app.use('/api/observability', requireAction('ViewObservability'), observabilityRouter);
 app.use('/api/capabilities', capabilitiesRouter);
 app.use('/api/sessions', sessionsRouter);
