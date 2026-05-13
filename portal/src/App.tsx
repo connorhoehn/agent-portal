@@ -41,6 +41,9 @@ const ObservabilityCapabilityEventsPage = lazy(() => import('./pages/observabili
 const ObservabilityAgentMetricsPage = lazy(() => import('./pages/observability/AgentMetricsPage'));
 const ObservabilitySessionsPage = lazy(() => import('./pages/observability/SessionsPage'));
 const ObservabilityAuthzPage = lazy(() => import('./pages/observability/AuthzLogPage'));
+const ObservabilityDriftPage = lazy(() => import('./pages/observability/DriftPage'));
+const ObservabilityQualityPage = lazy(() => import('./pages/observability/QualityPage'));
+const ObservabilityApprovalsPage = lazy(() => import('./pages/observability/ApprovalQueuePage'));
 
 function Loading() {
   return <div style={{ padding: 24, color: '#94a3b8' }}>Loading...</div>;
@@ -87,6 +90,9 @@ export function App() {
           <Route path="agents" element={<Page element={<ObservabilityAgentMetricsPage />} />} />
           <Route path="sessions" element={<Page element={<ObservabilitySessionsPage />} />} />
           <Route path="authz" element={<Page element={<ObservabilityAuthzPage />} />} />
+          <Route path="drift" element={<Page element={<ObservabilityDriftPage />} />} />
+          <Route path="quality" element={<Page element={<ObservabilityQualityPage />} />} />
+          <Route path="approvals" element={<Page element={<ObservabilityApprovalsPage />} />} />
         </Route>
 
         <Route path="capabilities" element={<Page element={<CapabilitiesLayout />} />}>
