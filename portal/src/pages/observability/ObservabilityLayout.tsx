@@ -33,6 +33,7 @@ function ObservabilityLayout() {
     { path: 'drift',             label: 'Drift',             hint: 'Schema + judge + embedding drift' },
     { path: 'quality',           label: 'Quality',           hint: 'Judge scores + feedback' },
     { path: 'approvals',         label: 'Approval Queue',    hint: 'Pending HITL decisions' },
+    { path: 'harness',           label: 'Harness',           hint: 'Replay test set + view runs' },
   ];
 
   // Surface error count on the Summary tab when present.
