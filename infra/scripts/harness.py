@@ -277,18 +277,26 @@ def estimate_cost_usd(model_id: str, input_tokens: int, output_tokens: int) -> f
     return (input_tokens / 1000.0) * price[0] + (output_tokens / 1000.0) * price[1]
 
 
-def call_bedrock(system_prompt: str, user_prompt: str) -> tuple[str, int, int, int]:
+def call_bedrock(
+    system_prompt: str,
+    user_prompt: str,
+    model_id: str = NOVA_PRO_MODEL_ID,
+) -> tuple[str, int, int, int]:
     """Sim-mode invocation. Returns (response_text, duration_ms, input_tokens,
     output_tokens). Raises on failure.
 
     The Converse response includes a `usage` block; we surface it so the
     runner can populate trace + test_results with real token counts and let
     the middleware compute (and persist) the cost.
+
+    ``model_id`` defaults to Nova-Pro but accepts any AWS-native model in
+    BEDROCK_PRICING_PER_1K (Sprint 4 M10). The harness CLI exposes this via
+    ``--model``.
     """
     bedrock = _boto3().client("bedrock-runtime", region_name=REGION)
     t0 = time.perf_counter()
     resp = bedrock.converse(
-        modelId=NOVA_PRO_MODEL_ID,
+        modelId=model_id,
         system=[{"text": system_prompt}],
         messages=[{"role": "user", "content": [{"text": user_prompt}]}],
         inferenceConfig={"temperature": 0.0, "maxTokens": 600},
@@ -646,6 +654,12 @@ def cmd_run(args: argparse.Namespace) -> int:
     git_sha = args.git_sha or detect_git_sha()
     label = args.label
     mode = args.mode
+    # Sprint 4 (M10) — allow overriding the model for sim-mode runs so a
+    # researcher can do `--model amazon.nova-lite-v1:0` to test cheaper models
+    # without redeploying the agent. For live mode the deployed runtime decides
+    # which model to use, so we still record the requested model on the run's
+    # notes field for traceability but don't actually swap the inference call.
+    model_id: str = args.model
 
     cases = fetch_active_cases(case_id=args.case, agent_id=args.agent)
     if not cases:
@@ -700,13 +714,25 @@ def cmd_run(args: argparse.Namespace) -> int:
                   file=sys.stderr)
 
     # 1b. Create run row via middleware.
-    create_body = {
+    # Sprint 4 (M10): record the agent model the runner is using as a note on
+    # the run row. For sim mode this is the model the Converse call uses; for
+    # live mode it's a hint about what the operator expected the deployed agent
+    # to use. The middleware compare endpoint surfaces notes so a model-compare
+    # page can read which model produced each side.
+    run_notes_parts: list[str] = []
+    if model_id and model_id != NOVA_PRO_MODEL_ID:
+        run_notes_parts.append(f"agentModel={model_id}")
+    elif mode == "sim":
+        run_notes_parts.append(f"agentModel={model_id}")
+    create_body: dict[str, Any] = {
         "label": label,
         "gitSha": git_sha,
         "judgeModelId": NOVA_PRO_MODEL_ID,
         "totalCases": len(cases),
         "mode": mode,
     }
+    if run_notes_parts:
+        create_body["notes"] = " ".join(run_notes_parts)
     try:
         created = _http("POST", f"{middleware}/api/observability/harness/runs", create_body)
     except (HttpError, RuntimeError) as e:
@@ -716,7 +742,11 @@ def cmd_run(args: argparse.Namespace) -> int:
     if not run_id:
         print(f"middleware did not return runId: {created}", file=sys.stderr)
         return 3
-    print(f"run {run_id} started — {len(cases)} case(s), mode={mode}, judge={NOVA_PRO_MODEL_ID}")
+    print(
+        f"run {run_id} started — {len(cases)} case(s), mode={mode}, "
+        f"agent_model={model_id if mode == 'sim' else '<deployed>'}, "
+        f"judge={NOVA_PRO_MODEL_ID}"
+    )
     if git_sha:
         print(f"git_sha={git_sha} label={label!r}")
 
@@ -751,7 +781,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                 )
             else:
                 response_text, duration_ms, input_tokens, output_tokens = (
-                    call_bedrock(system_prompt, case["prompt"])
+                    call_bedrock(system_prompt, case["prompt"], model_id=model_id)
                 )
         except Exception as e:
             err_kind = "agentcore-error" if mode == "live" else "bedrock-error"
@@ -792,8 +822,12 @@ def cmd_run(args: argparse.Namespace) -> int:
         # test_results even if the trace endpoint fails. For live mode where
         # the agent didn't report tokens, this is 0.0 (visible signal that
         # we need agent-side token emission in Sprint 2).
+        # For sim mode the model is whatever --model was set to; for live
+        # mode we still record nova-pro because the deployed runtimes default
+        # to nova-pro (and we can't introspect what they actually used).
+        invoked_model = model_id if mode == "sim" else NOVA_PRO_MODEL_ID
         est_cost_usd = estimate_cost_usd(
-            NOVA_PRO_MODEL_ID, input_tokens, output_tokens
+            invoked_model, input_tokens, output_tokens
         ) if (input_tokens or output_tokens) else None
 
         # 3. POST to sync trace endpoint with tokens + provenance.
@@ -806,7 +840,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             "durationMs": duration_ms,
             "inputTokens": input_tokens or None,
             "outputTokens": output_tokens or None,
-            "modelId": NOVA_PRO_MODEL_ID,
+            "modelId": invoked_model,
         }
         if prompt_version:
             trace_body["promptVersion"] = prompt_version
@@ -1337,6 +1371,16 @@ def build_parser() -> argparse.ArgumentParser:
             f"live: invoke deployed AgentCore runtimes (real agents). "
             f"sim: call Bedrock Nova-Pro directly with role-play prompts. "
             f"default: {DEFAULT_MODE}"
+        ),
+    )
+    pr.add_argument(
+        "--model",
+        default=NOVA_PRO_MODEL_ID,
+        help=(
+            "agent model id used for sim-mode Converse calls. "
+            "AWS-native only — e.g. amazon.nova-pro-v1:0, amazon.nova-lite-v1:0, "
+            "amazon.nova-micro-v1:0. For live mode the deployed agent decides "
+            "(this is recorded as a note on the run row for traceability)."
         ),
     )
 

@@ -13,6 +13,7 @@ import { approvalsRouter } from './routes/approvals.js';
 import { harnessRouter } from './routes/harness.js';
 import { promptVersionsRouter } from './routes/prompt-versions.js';
 import { costRouter } from './routes/cost.js';
+import { calibrationRouter } from './routes/calibration.js';
 import { oncallRouter } from './routes/oncall.js';
 import { invocationsRouter } from './routes/invocations.js';
 import { toolCallsRouter } from './routes/tool-calls.js';
@@ -64,6 +65,11 @@ app.use('/api/observability/prompt-versions', promptVersionsRouter);
 // Cost aggregation routes — read-only aggregates over invocation_traces cost
 // columns. Mounted ungated for now; can be Cedar-gated later if PII surfaces.
 app.use('/api/observability/cost', costRouter);
+// Sprint 4 (M10) — judge calibration. Curated (prompt, response, human_score)
+// tuples + periodic judge re-runs to measure judge drift. Mounted ungated
+// like cost so the portal can render without a session, same rationale as the
+// rest of the observability surface.
+app.use('/api/observability/calibration', calibrationRouter);
 // Sprint 3 (M9) — on-call / incident response. Composes drift + cost +
 // errors + HITL + deploys into one timeline. Mounted ungated like cost so
 // the on-call surface keeps working past session expiry at 3am.

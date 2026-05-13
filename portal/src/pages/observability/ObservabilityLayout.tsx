@@ -37,6 +37,8 @@ function ObservabilityLayout() {
     { path: 'cost',              label: 'Cost',              hint: 'Spend by agent + deploy markers' },
     { path: 'approvals',         label: 'Approval Queue',    hint: 'Pending HITL decisions' },
     { path: 'harness',           label: 'Harness',           hint: 'Replay test set + view runs' },
+    { path: 'calibration',       label: 'Calibration',       hint: 'Judge vs human MAE drift' },
+    { path: 'model-compare',     label: 'Model Compare',     hint: 'Side-by-side run delta' },
   ];
 
   // Surface error count on the On-Call tab when present (it's items[0]; the
