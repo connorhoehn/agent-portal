@@ -24,6 +24,7 @@ function ObservabilityLayout() {
   const errorCount = summary?.totalErrors24h;
 
   const items: SubNavItem[] = [
+    { path: 'oncall',             label: 'On-Call',           hint: 'Live alarms + incident timeline' },
     { path: 'summary',            label: 'Summary',           hint: 'Health overview' },
     { path: 'invocations',        label: 'Recent',            hint: 'Last 50 agent calls', count: invocationCount },
     { path: 'invocations/search', label: 'Search',            hint: 'Triage by prompt / agent / score' },
@@ -38,7 +39,8 @@ function ObservabilityLayout() {
     { path: 'harness',           label: 'Harness',           hint: 'Replay test set + view runs' },
   ];
 
-  // Surface error count on the Summary tab when present.
+  // Surface error count on the On-Call tab when present (it's items[0]; the
+  // operator should see the badge on the operational tab first).
   if (errorCount && errorCount > 0) {
     items[0] = { ...items[0], count: errorCount };
   }
