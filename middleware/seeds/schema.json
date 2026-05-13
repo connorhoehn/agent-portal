@@ -10,7 +10,12 @@
         }
       },
       "Application": {
-        "shape": { "type": "Record", "attributes": {} }
+        "shape": {
+          "type": "Record",
+          "attributes": {
+            "amount": { "type": "Long", "required": false }
+          }
+        }
       }
     },
     "actions": {
@@ -24,7 +29,9 @@
       "ViewIdentityAdmin":  { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
       "ViewObservability":  { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
       "ManageIngest":       { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
-      "EditSchema":         { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } }
+      "EditSchema":         { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
+      "LabelFeedback":      { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
+      "ApproveTransaction": { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } }
     }
   }
 }

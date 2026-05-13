@@ -8,6 +8,13 @@ from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from strands import Agent, tool
 from strands.models.bedrock import BedrockModel
 
+# Shared HITL approval tool. Lives in agents/_shared so any agent that needs
+# to gate a high-stakes action behind human review can reuse it.
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from _shared.approval_tool import request_approval  # noqa: E402
+
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
@@ -257,6 +264,7 @@ def run_in_sandbox(python_code: str) -> str:
 SUPERVISOR_TOOLS = [
     search_organization, get_expertise_scores, get_strategic_advice,
     ingest_documents, build_graph, run_in_sandbox,
+    request_approval,
 ]
 
 SYSTEM_PROMPT = (
