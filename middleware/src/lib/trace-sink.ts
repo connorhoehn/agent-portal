@@ -55,6 +55,34 @@ export interface ToolCallInput {
   estCostUsd?: number;
 }
 
+// Sprint 4 (M11) — per-memory-op shape supplied alongside tool calls in the
+// trace bundle. One row per AgentCore Memory operation. Persisted to
+// observability.memory_events best-effort: a failure here NEVER bubbles up to
+// the parent trace insert.
+export interface MemoryEventInput {
+  kind: 'retrieve' | 'write' | 'summarize' | 'expire';
+  sessionId?: string;
+  memoryId?: string;
+  queryText?: string;
+  resultCount?: number;
+  durationMs?: number;
+  retrievedSummary?: string;    // truncated to 500 by sink
+  errored?: boolean;
+  errorMessage?: string;
+}
+
+// Sprint 4 (M12) — per-fired-rule shape supplied alongside the trace bundle
+// when a guardrail intervention occurred. One row per rule fired; an
+// invocation can have multiple. Persisted to observability.guardrail_
+// interventions best-effort.
+export interface GuardrailInterventionInput {
+  ruleName: string;
+  ruleCategory?: string;        // 'PII' | 'TOPIC' | 'CONTENT' | 'PROMPT_ATTACK'
+  severity?: 'LOW' | 'MEDIUM' | 'HIGH';
+  action: 'BLOCKED' | 'ANONYMIZED';
+  matchedText?: string;         // truncated to 200 by sink
+}
+
 export interface TraceInput {
   invocationId?: string;
   agentId: string;
@@ -87,6 +115,12 @@ export interface TraceInput {
   // row in observability.tool_calls. Inserted best-effort: if the tool-call
   // INSERT fails, the parent trace insert still succeeds.
   toolCalls?: ToolCallInput[];
+  // Sprint 4 (M11) — per-memory-op rows. Inserted best-effort to
+  // observability.memory_events. Never blocks the parent trace insert.
+  memoryEvents?: MemoryEventInput[];
+  // Sprint 4 (M12) — per-fired-rule rows. Inserted best-effort to
+  // observability.guardrail_interventions. Never blocks the parent insert.
+  guardrailInterventions?: GuardrailInterventionInput[];
 }
 
 // Result of a synchronous processTrace() call. The async enqueue() path
@@ -466,6 +500,134 @@ async function insertToolCalls(
   await exec(sql, params);
 }
 
+// Sprint 4 (M11) — best-effort batch INSERT of per-memory-op rows. Same shape
+// as insertToolCalls: capped + wrapped at the call site so failures don't
+// bubble. retrieved_summary truncated to 500, query_text untrimmed but logged
+// as-is from the agent.
+const MEMORY_EVENT_MAX_PER_INVOCATION = 50;
+const MEMORY_SUMMARY_MAX = 500;
+
+const VALID_MEMORY_KINDS = new Set(['retrieve', 'write', 'summarize', 'expire']);
+
+async function insertMemoryEvents(
+  invocationId: string,
+  agentId: string,
+  memoryEvents: MemoryEventInput[],
+): Promise<void> {
+  if (!memoryEvents || memoryEvents.length === 0) return;
+  const slice = memoryEvents.slice(0, MEMORY_EVENT_MAX_PER_INVOCATION);
+
+  const valueClauses: string[] = [];
+  const params: SqlParameter[] = [
+    strParam('iid', invocationId),
+    strParam('agent_id', agentId),
+  ];
+
+  let validCount = 0;
+  for (let i = 0; i < slice.length; i++) {
+    const me = slice[i]!;
+    if (!me || !VALID_MEMORY_KINDS.has(me.kind)) continue;
+
+    const k   = `mk_${validCount}`;
+    const ses = `ms_${validCount}`;
+    const mid = `mm_${validCount}`;
+    const qt  = `mq_${validCount}`;
+    const rc  = `mr_${validCount}`;
+    const dm  = `md_${validCount}`;
+    const rs  = `mrs_${validCount}`;
+    const er  = `me_${validCount}`;
+    const em  = `mem_${validCount}`;
+
+    valueClauses.push(
+      `(:iid::uuid, :agent_id, :${ses}, :${k}, :${mid}, :${qt}, :${rc}, :${dm}, :${rs}, :${er}, :${em})`,
+    );
+
+    params.push(strParam(k, me.kind));
+    params.push(nullableStr(ses, me.sessionId ?? null));
+    params.push(nullableStr(mid, me.memoryId ?? null));
+    params.push(nullableStr(qt,  me.queryText ?? null));
+    params.push(nullableInt(rc,  me.resultCount ?? null));
+    params.push(nullableInt(dm,  me.durationMs ?? null));
+    params.push(nullableStr(rs,  snipSample(me.retrievedSummary, MEMORY_SUMMARY_MAX)));
+    params.push(nullableBool(er, me.errored ?? false));
+    params.push(nullableStr(em,  me.errorMessage ?? null));
+
+    validCount++;
+  }
+
+  if (validCount === 0) return;
+
+  const sql = `INSERT INTO observability.memory_events (
+      invocation_id, agent_id, session_id, kind, memory_id, query_text,
+      result_count, duration_ms, retrieved_summary, errored, error_message
+    ) VALUES ${valueClauses.join(', ')}`;
+
+  await exec(sql, params);
+}
+
+// Sprint 4 (M12) — best-effort batch INSERT of per-fired-rule rows. Each entry
+// becomes one row in observability.guardrail_interventions. matched_text
+// truncated to 200 chars (intentionally tighter than tool/memory samples —
+// these can quote raw user content, so keep the storage footprint small).
+const GUARDRAIL_INTERVENTION_MAX_PER_INVOCATION = 50;
+const GUARDRAIL_MATCHED_TEXT_MAX = 200;
+
+const VALID_GUARDRAIL_ACTIONS = new Set(['BLOCKED', 'ANONYMIZED']);
+const VALID_GUARDRAIL_SEVERITIES = new Set(['LOW', 'MEDIUM', 'HIGH']);
+
+async function insertGuardrailInterventions(
+  invocationId: string,
+  agentId: string,
+  interventions: GuardrailInterventionInput[],
+): Promise<void> {
+  if (!interventions || interventions.length === 0) return;
+  const slice = interventions.slice(0, GUARDRAIL_INTERVENTION_MAX_PER_INVOCATION);
+
+  const valueClauses: string[] = [];
+  const params: SqlParameter[] = [
+    strParam('iid', invocationId),
+    strParam('agent_id', agentId),
+  ];
+
+  let validCount = 0;
+  for (let i = 0; i < slice.length; i++) {
+    const gi = slice[i]!;
+    if (!gi) continue;
+    const ruleName = typeof gi.ruleName === 'string' ? gi.ruleName.trim() : '';
+    const action = typeof gi.action === 'string' ? gi.action : '';
+    if (!ruleName || !VALID_GUARDRAIL_ACTIONS.has(action)) continue;
+    const severity = typeof gi.severity === 'string' && VALID_GUARDRAIL_SEVERITIES.has(gi.severity)
+      ? gi.severity
+      : null;
+
+    const rn = `gn_${validCount}`;
+    const rc = `gc_${validCount}`;
+    const sv = `gs_${validCount}`;
+    const ac = `ga_${validCount}`;
+    const mt = `gm_${validCount}`;
+
+    valueClauses.push(
+      `(:iid::uuid, :agent_id, :${rn}, :${rc}, :${sv}, :${ac}, :${mt})`,
+    );
+
+    params.push(strParam(rn, ruleName));
+    params.push(nullableStr(rc, gi.ruleCategory ?? null));
+    params.push(nullableStr(sv, severity));
+    params.push(strParam(ac, action));
+    params.push(nullableStr(mt, snipSample(gi.matchedText, GUARDRAIL_MATCHED_TEXT_MAX)));
+
+    validCount++;
+  }
+
+  if (validCount === 0) return;
+
+  const sql = `INSERT INTO observability.guardrail_interventions (
+      invocation_id, agent_id, rule_name, rule_category, severity, action, matched_text
+    ) VALUES ${valueClauses.join(', ')}`;
+
+  await exec(sql, params);
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 function snip(text: string, max = 500): string {
@@ -657,6 +819,29 @@ export async function processTrace(input: TraceInput): Promise<TraceResult> {
       await insertToolCalls(invocationId, input.toolCalls);
     } catch (err) {
       console.warn('[trace-sink] insertToolCalls failed:',
+        (err as Error).message);
+    }
+  }
+
+  // Sprint 4 (M11) — best-effort per-memory-op rows. Same isolation as tool
+  // calls: a failure here NEVER bubbles up.
+  if (inserted && Array.isArray(input.memoryEvents) && input.memoryEvents.length > 0) {
+    try {
+      await insertMemoryEvents(invocationId, agentId, input.memoryEvents);
+    } catch (err) {
+      console.warn('[trace-sink] insertMemoryEvents failed:',
+        (err as Error).message);
+    }
+  }
+
+  // Sprint 4 (M12) — best-effort per-fired-rule rows. Driven off the same
+  // trace bundle the agent supplies; the parent trace's guardrail_action is
+  // still the headline signal — these rows just give the breakdown.
+  if (inserted && Array.isArray(input.guardrailInterventions) && input.guardrailInterventions.length > 0) {
+    try {
+      await insertGuardrailInterventions(invocationId, agentId, input.guardrailInterventions);
+    } catch (err) {
+      console.warn('[trace-sink] insertGuardrailInterventions failed:',
         (err as Error).message);
     }
   }

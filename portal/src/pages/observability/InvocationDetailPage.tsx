@@ -21,6 +21,7 @@ import { TraceTree } from '../../components/observability/TraceTree';
 import type { TraceNode } from '../../components/observability/TraceTree';
 import { ToolWaterfall } from '../../components/observability/ToolWaterfall';
 import type { ToolCall } from '../../components/observability/ToolWaterfall';
+import { GuardrailRuleBadge } from '../../components/observability/GuardrailRuleBadge';
 
 // The "invocation" payload is intentionally permissive — Agent A's backend
 // returns every column from invocation_traces, so we type the known fields
@@ -340,6 +341,12 @@ function InvocationDetailPage() {
         <ToolWaterfall toolCalls={toolCalls} />
       </Card>
 
+      <MemoryOperationsCard invocationId={invocationId} />
+
+      {inv.guardrailAction && inv.guardrailAction !== 'NONE' && (
+        <GuardrailTraceCard invocationId={invocationId} />
+      )}
+
       <Card padding="md">
         <div style={headerRow}>
           <h2 style={h2}>Prompt</h2>
@@ -394,6 +401,175 @@ function InvocationDetailPage() {
 }
 
 // ── sub-components ────────────────────────────────────────────────────────────
+
+// Sprint 4 (M11) — what AgentCore Memory ops happened during this invocation?
+// Fetched on mount. Empty state when no memory events recorded for the row.
+interface MemoryEventRow {
+  memoryEventId: string;
+  kind: string;
+  sessionId: string | null;
+  queryText: string | null;
+  resultCount: number | null;
+  durationMs: number | null;
+  retrievedSummary: string | null;
+  errored: boolean;
+  errorMessage: string | null;
+  ts: string;
+}
+
+function MemoryOperationsCard({ invocationId }: { invocationId: string }) {
+  const [events, setEvents] = useState<MemoryEventRow[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setEvents(null);
+    fetch(
+      `/api/observability/memory/events?invocationId=${encodeURIComponent(invocationId)}&limit=50`,
+      { credentials: 'include' },
+    )
+      .then((r) => (r.ok ? r.json() : { events: [] }))
+      .then((j: { events?: MemoryEventRow[] }) => {
+        if (!cancelled) setEvents(j.events ?? []);
+      })
+      .catch(() => { if (!cancelled) setEvents([]); });
+    return () => { cancelled = true; };
+  }, [invocationId]);
+
+  const count = events?.length ?? 0;
+  return (
+    <Card padding="md">
+      <div style={headerRow}>
+        <h2 style={h2}>
+          Memory operations{' '}
+          <span style={hint}>
+            {events == null ? 'loading…' : `${count} op${count === 1 ? '' : 's'}`}
+          </span>
+        </h2>
+      </div>
+      {events == null ? (
+        <div style={loadingHint}>Loading…</div>
+      ) : events.length === 0 ? (
+        <EmptyState text="No memory operations recorded for this invocation." />
+      ) : (
+        <div style={memoryList}>
+          {events.map((e) => (
+            <div key={e.memoryEventId} style={memoryRow}>
+              <div style={memoryRowHeader}>
+                <Chip
+                  tone={
+                    e.errored
+                      ? 'danger'
+                      : e.kind === 'retrieve' && e.resultCount === 0
+                        ? 'warning'
+                        : 'neutral'
+                  }
+                  size="xs"
+                >
+                  {e.kind}
+                </Chip>
+                <span style={subduedSmall}>
+                  {e.resultCount == null ? '—' : `${e.resultCount} result${e.resultCount === 1 ? '' : 's'}`}
+                </span>
+                <span style={subduedSmall}>·</span>
+                <span style={subduedSmall}>
+                  {e.durationMs == null ? '—' : `${e.durationMs}ms`}
+                </span>
+                {e.sessionId && (
+                  <>
+                    <span style={subduedSmall}>·</span>
+                    <span style={subduedSmall}>session {e.sessionId}</span>
+                  </>
+                )}
+              </div>
+              {e.queryText && (
+                <div style={memoryQuery}>{e.queryText}</div>
+              )}
+              {e.retrievedSummary && (
+                <pre style={memoryPre}>{e.retrievedSummary}</pre>
+              )}
+              {e.errored && e.errorMessage && (
+                <pre style={{ ...memoryPre, color: 'var(--color-danger, #ef4444)' }}>
+                  {e.errorMessage}
+                </pre>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// Sprint 4 (M12) — guardrail rule trace: only rendered when the invocation's
+// guardrailAction is non-NONE. Fetches per-rule rows so the operator can see
+// *which* rules fired + on what substring.
+interface GuardrailInterventionRow {
+  interventionId: string;
+  ruleName: string;
+  ruleCategory: string | null;
+  severity: string | null;
+  action: string;
+  matchedText: string | null;
+  ts: string;
+}
+
+function GuardrailTraceCard({ invocationId }: { invocationId: string }) {
+  const [rows, setRows] = useState<GuardrailInterventionRow[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setRows(null);
+    fetch(
+      `/api/observability/guardrails-detail/interventions?invocationId=${encodeURIComponent(invocationId)}&limit=50`,
+      { credentials: 'include' },
+    )
+      .then((r) => (r.ok ? r.json() : { interventions: [] }))
+      .then((j: { interventions?: GuardrailInterventionRow[] }) => {
+        if (!cancelled) setRows(j.interventions ?? []);
+      })
+      .catch(() => { if (!cancelled) setRows([]); });
+    return () => { cancelled = true; };
+  }, [invocationId]);
+
+  return (
+    <Card padding="md">
+      <div style={headerRow}>
+        <h2 style={h2}>
+          Guardrail trace{' '}
+          <span style={hint}>
+            {rows == null ? 'loading…' : `${rows.length} rule${rows.length === 1 ? '' : 's'} fired`}
+          </span>
+        </h2>
+      </div>
+      {rows == null ? (
+        <div style={loadingHint}>Loading…</div>
+      ) : rows.length === 0 ? (
+        <EmptyState text="The invocation was intervened on, but no rule-level breakdown was captured." />
+      ) : (
+        <div style={memoryList}>
+          {rows.map((r) => (
+            <div key={r.interventionId} style={memoryRow}>
+              <div style={memoryRowHeader}>
+                <GuardrailRuleBadge
+                  ruleName={r.ruleName}
+                  action={r.action}
+                  severity={r.severity}
+                />
+                {r.ruleCategory && (
+                  <span style={subduedSmall}>{r.ruleCategory}</span>
+                )}
+                {r.severity && (
+                  <span style={subduedSmall}>severity {r.severity}</span>
+                )}
+              </div>
+              {r.matchedText && (
+                <pre style={memoryPre}>{r.matchedText}</pre>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
 
 function SchemaChip({ valid }: { valid: boolean | null }) {
   if (valid == null) {
@@ -667,6 +843,56 @@ const detailPre: CSSProperties = {
   background: 'var(--color-surface)',
   border: '1px solid var(--color-border)',
   maxHeight: 360,
+  overflowY: 'auto',
+};
+
+const loadingHint: CSSProperties = {
+  padding: 16,
+  fontSize: 12,
+  color: 'var(--color-text-tertiary)',
+};
+
+const memoryList: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 12,
+};
+
+const memoryRow: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+  padding: '10px 12px',
+  border: '1px solid var(--color-border)',
+  borderRadius: 4,
+  background: 'var(--color-bg)',
+};
+
+const memoryRowHeader: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  flexWrap: 'wrap',
+};
+
+const memoryQuery: CSSProperties = {
+  fontSize: 12,
+  color: 'var(--color-text-secondary)',
+  fontStyle: 'italic',
+};
+
+const memoryPre: CSSProperties = {
+  fontFamily: '"Fira Code", "Cascadia Code", monospace',
+  fontSize: 11,
+  lineHeight: 1.5,
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-word',
+  margin: 0,
+  padding: '8px 10px',
+  borderRadius: 3,
+  background: 'var(--color-surface)',
+  border: '1px solid var(--color-border)',
+  maxHeight: 200,
   overflowY: 'auto',
 };
 

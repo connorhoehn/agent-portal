@@ -14,6 +14,8 @@ import { harnessRouter } from './routes/harness.js';
 import { promptVersionsRouter } from './routes/prompt-versions.js';
 import { costRouter } from './routes/cost.js';
 import { oncallRouter } from './routes/oncall.js';
+import { memoryRouter } from './routes/memory.js';
+import { guardrailsDetailRouter } from './routes/guardrails-detail.js';
 import { invocationsRouter } from './routes/invocations.js';
 import { toolCallsRouter } from './routes/tool-calls.js';
 import { capabilitiesRouter } from './routes/capabilities.js';
@@ -68,6 +70,13 @@ app.use('/api/observability/cost', costRouter);
 // errors + HITL + deploys into one timeline. Mounted ungated like cost so
 // the on-call surface keeps working past session expiry at 3am.
 app.use('/api/observability/oncall', oncallRouter);
+// Sprint 4 (M11) — AgentCore Memory ops observability. Mounted ungated like
+// cost/oncall so trace bundles + portal can both reach it. /events POST is
+// best-effort and used by the seed script for synthetic data.
+app.use('/api/observability/memory', memoryRouter);
+// Sprint 4 (M12) — guardrail rule-level interventions. Surfaces *which* rule
+// fired (PII.email vs topic.violence) rather than just the bare BLOCKED flag.
+app.use('/api/observability/guardrails-detail', guardrailsDetailRouter);
 // Sprint 2 — invocation search + per-invocation drill-down (M3/M5 triage).
 // Mounted ungated so the portal triage page can hit it directly, same as cost.
 app.use('/api/observability/invocations', invocationsRouter);
