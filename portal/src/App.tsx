@@ -45,6 +45,7 @@ const ObservabilitySessionsPage = lazy(() => import('./pages/observability/Sessi
 const ObservabilityAuthzPage = lazy(() => import('./pages/observability/AuthzLogPage'));
 const ObservabilityDriftPage = lazy(() => import('./pages/observability/DriftPage'));
 const ObservabilityQualityPage = lazy(() => import('./pages/observability/QualityPage'));
+const ObservabilityCostPage = lazy(() => import('./pages/observability/CostPage'));
 const ObservabilityApprovalsPage = lazy(() => import('./pages/observability/ApprovalQueuePage'));
 const ObservabilityHarnessLayout = lazy(() => import('./pages/observability/harness/HarnessLayout'));
 const ObservabilityHarnessHomePage = lazy(() => import('./pages/observability/harness/HarnessHomePage'));
@@ -100,6 +101,7 @@ export function App() {
           <Route path="authz" element={<Page element={<ObservabilityAuthzPage />} />} />
           <Route path="drift" element={<Page element={<ObservabilityDriftPage />} />} />
           <Route path="quality" element={<Page element={<ObservabilityQualityPage />} />} />
+          <Route path="cost" element={<Page element={<ObservabilityCostPage />} />} />
           <Route path="approvals" element={<Page element={<ObservabilityApprovalsPage />} />} />
           <Route path="harness" element={<Page element={<ObservabilityHarnessLayout />} />}>
             <Route index element={<Page element={<ObservabilityHarnessHomePage />} />} />
