@@ -7,6 +7,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { useNavigate } from 'react-router';
 import {
   BarChart,
   Bar,
@@ -64,6 +65,7 @@ function isoSince24h(): string {
 }
 
 function QualityPage() {
+  const navigate = useNavigate();
   // Reuse the drift summary endpoint just to populate the agent picker — both
   // pages share the same set of sampled agents. If it 404s, fall back to an
   // empty list; user can still pick once the endpoint returns data.
@@ -301,8 +303,20 @@ function QualityPage() {
                       </Chip>
                     </TableTd>
                     <TableTd
-                      style={rationaleCell}
-                      title={r.judgeRationale}
+                      style={{
+                        ...rationaleCell,
+                        cursor: r.invocationId ? 'pointer' : undefined,
+                      }}
+                      title={
+                        r.invocationId
+                          ? `${r.judgeRationale} — click to open invocation`
+                          : r.judgeRationale
+                      }
+                      onClick={() => {
+                        if (r.invocationId) {
+                          navigate(`/observability/invocations/${r.invocationId}`);
+                        }
+                      }}
                     >
                       {r.judgeRationale}
                     </TableTd>

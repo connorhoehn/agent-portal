@@ -37,6 +37,8 @@ const IdentityTestPage = lazy(() => import('./pages/identity/PolicyTestPage'));
 const ObservabilityLayout = lazy(() => import('./pages/observability/ObservabilityLayout'));
 const ObservabilitySummaryPage = lazy(() => import('./pages/observability/SummaryPage'));
 const ObservabilityInvocationsPage = lazy(() => import('./pages/observability/InvocationsPage'));
+const ObservabilityInvocationSearchPage = lazy(() => import('./pages/observability/InvocationSearchPage'));
+const ObservabilityInvocationDetailPage = lazy(() => import('./pages/observability/InvocationDetailPage'));
 const ObservabilityCapabilityEventsPage = lazy(() => import('./pages/observability/CapabilityEventsPage'));
 const ObservabilityAgentMetricsPage = lazy(() => import('./pages/observability/AgentMetricsPage'));
 const ObservabilitySessionsPage = lazy(() => import('./pages/observability/SessionsPage'));
@@ -89,6 +91,8 @@ export function App() {
           <Route index element={<Navigate to="summary" replace />} />
           <Route path="summary" element={<Page element={<ObservabilitySummaryPage />} />} />
           <Route path="invocations" element={<Page element={<ObservabilityInvocationsPage />} />} />
+          <Route path="invocations/search" element={<Page element={<ObservabilityInvocationSearchPage />} />} />
+          <Route path="invocations/:invocationId" element={<Page element={<ObservabilityInvocationDetailPage />} />} />
           <Route path="capability-events" element={<Page element={<ObservabilityCapabilityEventsPage />} />} />
           <Route path="agents" element={<Page element={<ObservabilityAgentMetricsPage />} />} />
           <Route path="sessions" element={<Page element={<ObservabilitySessionsPage />} />} />

@@ -13,6 +13,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { useNavigate } from 'react-router';
 import {
   Card,
   Table,
@@ -125,6 +126,7 @@ const WINDOW_OPTIONS: Array<{ label: string; hours: number; bucket: number }> = 
 ];
 
 function DriftPage() {
+  const navigate = useNavigate();
   const [windowIdx, setWindowIdx] = useState(2); // 24h default
   const win = WINDOW_OPTIONS[windowIdx];
 
@@ -376,6 +378,7 @@ function DriftPage() {
                 <TableTh>Judge</TableTh>
                 <TableTh>Distance</TableTh>
                 <TableTh>Cost</TableTh>
+                <TableTh></TableTh>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -409,10 +412,25 @@ function DriftPage() {
                       <TableTd style={{ whiteSpace: 'nowrap' }}>
                         <CostChip cost={o.totalCostUsd} />
                       </TableTd>
+                      <TableTd style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
+                        {o.invocationId ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/observability/invocations/${o.invocationId}`);
+                            }}
+                            title="Open invocation detail"
+                            style={openLinkBtn}
+                          >
+                            →
+                          </button>
+                        ) : null}
+                      </TableTd>
                     </TableRow>
                     {isOpen && (
                       <TableRow key={`${o.invocationId}-detail`}>
-                        <TableTd colSpan={7} style={{ padding: 12, background: 'var(--color-bg)' }}>
+                        <TableTd colSpan={8} style={{ padding: 12, background: 'var(--color-bg)' }}>
                           <OutlierDetail outlier={o} />
                         </TableTd>
                       </TableRow>
@@ -563,6 +581,16 @@ const outlierMetaRow: CSSProperties = {
 const dotSep: CSSProperties = { color: 'var(--color-text-tertiary)' };
 const detailHint: CSSProperties = {
   fontSize: 10.5, color: 'var(--color-text-tertiary)', marginTop: 6, fontStyle: 'italic',
+};
+const openLinkBtn: CSSProperties = {
+  background: 'transparent',
+  border: '1px solid var(--color-border)',
+  borderRadius: 4,
+  color: 'var(--color-primary, #6366f1)',
+  cursor: 'pointer',
+  fontSize: 12,
+  padding: '2px 8px',
+  fontFamily: 'inherit',
 };
 const detailPre: CSSProperties = {
   fontFamily: '"Fira Code", "Cascadia Code", monospace',
