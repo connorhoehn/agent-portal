@@ -59,6 +59,15 @@ NOVA_PRO_MODEL_ID = "amazon.nova-pro-v1:0"
 DEFAULT_MIDDLEWARE = os.environ.get("MIDDLEWARE_URL", "http://localhost:3001")
 DEFAULT_MODE = "live"   # Sprint 1 default — exercise the deployed runtimes.
 
+# ── Sprint 2: boto3 timeout tuning ────────────────────────────────────────────
+# bedrock-agentcore.invoke_agent_runtime is the slowest call in live mode and
+# has been hitting 312s read-timeouts in observed runs. Cap it at 120s so
+# live-mode runs fail fast (and the operator gets a clear signal) rather than
+# the runner appearing to hang for 5 minutes per case.
+LIVE_INVOKE_READ_TIMEOUT_S = int(os.environ.get("HARNESS_INVOKE_READ_TIMEOUT", "120"))
+LIVE_INVOKE_CONNECT_TIMEOUT_S = int(os.environ.get("HARNESS_INVOKE_CONNECT_TIMEOUT", "10"))
+LIVE_INVOKE_MAX_RETRIES = int(os.environ.get("HARNESS_INVOKE_MAX_RETRIES", "2"))
+
 # Bedrock pricing (USD per 1K tokens) — must match middleware/src/lib/pricing.ts.
 # Duplicated here so the runner can compute est_cost_usd for test_results
 # without round-tripping through middleware just for the math.
@@ -297,12 +306,33 @@ def call_bedrock(system_prompt: str, user_prompt: str) -> tuple[str, int, int, i
 
 _AGENT_ARN_CACHE: dict[str, str] = {}
 
+# Track which agents emitted a missing-tokens warning so we only print it once
+# per agent per run. The first miss is signal ("instrument this agent"); the
+# subsequent ones are noise.
+_TOKEN_MISS_WARNED: set[str] = set()
+
+
+def _live_botocore_config():
+    """Tighter timeouts for live-mode runtime calls — see comment near the
+    LIVE_INVOKE_* constants. Lazy-imported so `list`/`diff` paths still work
+    without botocore installed."""
+    from botocore.config import Config  # type: ignore
+    return Config(
+        read_timeout=LIVE_INVOKE_READ_TIMEOUT_S,
+        connect_timeout=LIVE_INVOKE_CONNECT_TIMEOUT_S,
+        retries={"max_attempts": LIVE_INVOKE_MAX_RETRIES},
+    )
+
 
 def _load_agent_runtime_arns() -> dict[str, str]:
     """Map agentRuntimeName -> agentRuntimeArn. Cached for the run."""
     if _AGENT_ARN_CACHE:
         return _AGENT_ARN_CACHE
-    ctrl = _boto3().client("bedrock-agentcore-control", region_name=REGION)
+    ctrl = _boto3().client(
+        "bedrock-agentcore-control",
+        region_name=REGION,
+        config=_live_botocore_config(),
+    )
     # The SDK paginates by maxResults; agents are 6 today, but query 50 to be safe.
     runtimes: list[dict] = []
     next_token: str | None = None
@@ -328,6 +358,44 @@ def _agent_id_to_runtime_name(agent_id: str) -> str:
     return agent_id.replace("-", "_")
 
 
+def _extract_usage(obj: dict) -> dict:
+    """Pull a usage block out of an agent response.
+
+    Tried in order (Sprint 2):
+        1. ``usage`` at top level — Strands ``@entrypoint`` returning the
+           Converse response directly.
+        2. ``metadata.usage`` — some Strands integrations nest it.
+        3. ``response.usage`` (or any nested dict's ``usage``) — when the
+           agent emitted its own trace bundle inline as the response payload.
+
+    Returns ``{}`` when no shape matches. The caller decides whether ``{}``
+    means "missing — warn the operator" or just "skip cost calc".
+    """
+    if not isinstance(obj, dict):
+        return {}
+    usage = obj.get("usage")
+    if isinstance(usage, dict) and usage:
+        return usage
+    meta = obj.get("metadata")
+    if isinstance(meta, dict):
+        u = meta.get("usage")
+        if isinstance(u, dict) and u:
+            return u
+    # Some agents include their own trace bundle under `response` — e.g. if
+    # they wrap the Bedrock Converse result before returning. Walk one level.
+    nested = obj.get("response")
+    if isinstance(nested, dict):
+        u = nested.get("usage")
+        if isinstance(u, dict) and u:
+            return u
+        nm = nested.get("metadata")
+        if isinstance(nm, dict):
+            u = nm.get("usage")
+            if isinstance(u, dict) and u:
+                return u
+    return {}
+
+
 def _parse_agent_response(body_bytes: bytes) -> tuple[str, dict]:
     """Extract (response_text, usage_dict) from an AgentCore invocation body.
 
@@ -338,7 +406,8 @@ def _parse_agent_response(body_bytes: bytes) -> tuple[str, dict]:
         2. JSON with `message` (older Strands shape)
         3. JSON-lines stream — last line is treated as the final message
         4. Raw text fallback
-    Usage is extracted from `usage`, `metadata.usage`, or empty dict.
+    Usage is extracted via :func:`_extract_usage` (top-level, metadata.usage,
+    or response.usage when the agent emitted its trace bundle inline).
     """
     if not body_bytes:
         return "", {}
@@ -353,8 +422,8 @@ def _parse_agent_response(body_bytes: bytes) -> tuple[str, dict]:
             text = obj.get("response") or obj.get("message") or obj.get("text") or ""
             if not text and "output" in obj:
                 text = str(obj["output"])
-            usage = obj.get("usage") or obj.get("metadata", {}).get("usage") or {}
-            return str(text), usage if isinstance(usage, dict) else {}
+            usage = _extract_usage(obj)
+            return str(text), usage
         if isinstance(obj, str):
             return obj, {}
     except json.JSONDecodeError:
@@ -368,9 +437,9 @@ def _parse_agent_response(body_bytes: bytes) -> tuple[str, dict]:
             obj = json.loads(last)
             if isinstance(obj, dict):
                 text = obj.get("response") or obj.get("message") or obj.get("text") or ""
-                usage = obj.get("usage") or obj.get("metadata", {}).get("usage") or {}
+                usage = _extract_usage(obj)
                 if text:
-                    return str(text), usage if isinstance(usage, dict) else {}
+                    return str(text), usage
         except json.JSONDecodeError:
             pass
 
@@ -381,13 +450,22 @@ def _parse_agent_response(body_bytes: bytes) -> tuple[str, dict]:
 def call_agent_runtime(agent_id: str, user_prompt: str) -> tuple[str, int, int, int]:
     """Live-mode invocation. Returns (response_text, duration_ms, input_tokens,
     output_tokens). Raises on any failure (caller catches and records as fail
-    row — live mode is allowed to fail per case without crashing the run)."""
+    row — live mode is allowed to fail per case without crashing the run).
+
+    Sprint 2: uses a tightened botocore Config (read_timeout=120s) so a slow
+    agent fails fast instead of hanging for the full default 312s. The first
+    time an agent comes back with no usage block we print a warning to stderr —
+    that's the operator signal to instrument it (see agents/_shared/instrumentation.py)."""
     runtime_name = _agent_id_to_runtime_name(agent_id)
     arns = _load_agent_runtime_arns()
     arn = arns.get(runtime_name)
     if not arn:
         raise RuntimeError(f"no deployed runtime found for {runtime_name}")
-    rt = _boto3().client("bedrock-agentcore", region_name=REGION)
+    rt = _boto3().client(
+        "bedrock-agentcore",
+        region_name=REGION,
+        config=_live_botocore_config(),
+    )
     payload = json.dumps({"prompt": user_prompt}).encode("utf-8")
     t0 = time.perf_counter()
     resp = rt.invoke_agent_runtime(
@@ -410,6 +488,17 @@ def call_agent_runtime(agent_id: str, user_prompt: str) -> tuple[str, int, int, 
     text, usage = _parse_agent_response(body_bytes)
     input_tokens = int(usage.get("inputTokens") or 0)
     output_tokens = int(usage.get("outputTokens") or 0)
+
+    # First time we see tokenless output for this agent, tell the operator —
+    # missing usage means we won't be able to populate cost chips for this
+    # agent's traces. Once per agent per run is enough.
+    if not usage and agent_id not in _TOKEN_MISS_WARNED:
+        _TOKEN_MISS_WARNED.add(agent_id)
+        print(
+            f"  warn: {agent_id} returned no token usage — instrument the agent "
+            f"(see agents/_shared/instrumentation.py) or expect $? in cost columns",
+            file=sys.stderr,
+        )
     return text, duration_ms, input_tokens, output_tokens
 
 
@@ -913,6 +1002,237 @@ def _diff_runs(
     return regressions, fixes, neutral
 
 
+def cmd_replay(args: argparse.Namespace) -> int:
+    """Re-invoke a single past invocation against the CURRENT runtime.
+
+    Workflow: ``harness.py replay <invocation_id>``.
+
+    1. Fetches the historical invocation from middleware
+       (``GET /api/observability/invocations/:id``) — we need the agent_id +
+       original prompt + (optionally) template_id and prompt_version snapshot.
+    2. Invokes that agent's deployed runtime with the SAME prompt. This is the
+       "did our fix actually fix it?" verification path — pair it with the
+       portal's invocation-detail view to compare before/after side by side.
+    3. Records a one-case test_run labelled ``replay@<short-sha-of-source-inv>``
+       plus a single test_result so the replay is visible in the harness
+       history and can be diffed against any sibling run.
+
+    No tag-matching is performed (we don't have expected_tags for ad-hoc
+    invocations); the test_result records the response + judge score (if the
+    middleware /trace endpoint returns one) and is treated as PASS iff the
+    judge score is at or above the default 0.7 threshold.
+    """
+    middleware = args.middleware
+    invocation_id = args.invocation_id
+    git_sha = args.git_sha or detect_git_sha()
+
+    # 1. Fetch the source invocation. Endpoint is owned by Agent A in Sprint 2;
+    #    we fail with a clean message if it isn't deployed yet rather than
+    #    swallowing into a generic 404.
+    inv_url = f"{middleware}/api/observability/invocations/{invocation_id}"
+    try:
+        inv_resp = _http("GET", inv_url, timeout=15)
+    except HttpError as e:
+        if e.status == 404:
+            print(f"replay: invocation {invocation_id} not found at {middleware}",
+                  file=sys.stderr)
+            return 4
+        print(f"replay: failed to load source invocation: {e}", file=sys.stderr)
+        return 4
+    except RuntimeError as e:
+        print(f"replay: failed to load source invocation: {e}", file=sys.stderr)
+        return 4
+
+    inv = inv_resp.get("invocation") or inv_resp
+    agent_id = inv.get("agentId") or inv.get("agent_id")
+    prompt = inv.get("prompt") or inv.get("inputText")
+    template_id = inv.get("templateId") or inv.get("template_id") or ""
+    if not agent_id or not prompt:
+        print(
+            f"replay: invocation {invocation_id} missing agentId/prompt "
+            f"(got agentId={agent_id!r}, prompt={'<empty>' if not prompt else '<set>'})",
+            file=sys.stderr,
+        )
+        return 4
+
+    short = invocation_id[:8] if invocation_id else "unknown"
+    label = args.label or f"replay@{short}"
+    print(
+        f"replay: invocation={invocation_id} agent={agent_id} "
+        f"prompt={prompt[:80]!r} label={label!r}"
+    )
+
+    # 2. Create a fresh harness run for this single replay so it shows up in
+    #    the runs history and can be diff'd against any sibling run.
+    create_body = {
+        "label": label,
+        "gitSha": git_sha,
+        "judgeModelId": NOVA_PRO_MODEL_ID,
+        "totalCases": 1,
+        "mode": "live",
+    }
+    try:
+        created = _http(
+            "POST", f"{middleware}/api/observability/harness/runs", create_body
+        )
+    except (HttpError, RuntimeError) as e:
+        print(f"replay: failed to create run: {e}", file=sys.stderr)
+        return 3
+    run_id = created.get("runId") or created.get("run_id")
+    if not run_id:
+        print(f"replay: middleware did not return runId: {created}", file=sys.stderr)
+        return 3
+    print(f"replay: run {run_id} started")
+
+    # 3. Invoke the SAME agent with the SAME prompt against the current runtime.
+    case_start = time.perf_counter()
+    response_text = ""
+    duration_ms = 0
+    input_tokens = 0
+    output_tokens = 0
+    fail_reasons: list[str] = []
+    try:
+        response_text, duration_ms, input_tokens, output_tokens = (
+            call_agent_runtime(agent_id, prompt)
+        )
+    except Exception as e:
+        fail_reasons.append(f"agentcore-error:{type(e).__name__}")
+        print(f"replay: agentcore invocation failed: {e}", file=sys.stderr)
+        # still close out the run with a fail row so the operator sees what happened
+        elapsed_ms = int((time.perf_counter() - case_start) * 1000)
+        try:
+            _http(
+                "POST",
+                f"{middleware}/api/observability/harness/runs/{run_id}/results",
+                {
+                    "testId": f"replay:{invocation_id}",
+                    "invocationId": None,
+                    "passed": False,
+                    "judgeScore": None,
+                    "judgeRationale": "",
+                    "schemaValid": None,
+                    "tagHits": {},
+                    "responseSnippet": "",
+                    "failReasons": fail_reasons,
+                    "durationMs": elapsed_ms,
+                    "inputTokens": None,
+                    "outputTokens": None,
+                    "estCostUsd": None,
+                },
+            )
+        except (HttpError, RuntimeError) as post_err:
+            print(f"  warn: failed to record fail row: {post_err}", file=sys.stderr)
+        _finalize_run(middleware, run_id, passed_n=0, failed_n=1)
+        return 4
+
+    est_cost_usd = (
+        estimate_cost_usd(NOVA_PRO_MODEL_ID, input_tokens, output_tokens)
+        if (input_tokens or output_tokens) else None
+    )
+
+    # 4. POST to trace sink to get a judge score for this replay. Mirrors
+    #    cmd_run's body shape but omits expected_tags since we don't have any
+    #    for an ad-hoc invocation.
+    trace_body: dict[str, Any] = {
+        "agentId": agent_id,
+        "agentName": agent_id.replace("orgiq-", "").capitalize(),
+        "templateId": template_id,
+        "prompt": prompt,
+        "response": response_text,
+        "durationMs": duration_ms,
+        "inputTokens": input_tokens or None,
+        "outputTokens": output_tokens or None,
+        "modelId": NOVA_PRO_MODEL_ID,
+    }
+    invocation_id_new: str | None = None
+    judge_score: float | None = None
+    judge_rationale = ""
+    schema_valid: bool | None = None
+    try:
+        trace_resp = _http(
+            "POST",
+            f"{middleware}/api/observability/harness/trace",
+            trace_body,
+            timeout=90,
+        )
+        invocation_id_new = trace_resp.get("invocationId")
+        judge_score = trace_resp.get("judgeScore")
+        judge_rationale = trace_resp.get("judgeRationale") or ""
+        schema_valid = trace_resp.get("schemaValid")
+        trace_cost = trace_resp.get("estCostUsd")
+        if isinstance(trace_cost, (int, float)):
+            est_cost_usd = float(trace_cost)
+    except (HttpError, RuntimeError) as e:
+        fail_reasons.append(f"trace-sink-error:{type(e).__name__}")
+        print(f"  warn: trace-sink failed: {e}", file=sys.stderr)
+
+    passed = bool(
+        isinstance(judge_score, (int, float)) and judge_score >= 0.7
+    ) and schema_valid is not False
+
+    # 5. Record the one result row.
+    try:
+        _http(
+            "POST",
+            f"{middleware}/api/observability/harness/runs/{run_id}/results",
+            {
+                "testId": f"replay:{invocation_id}",
+                "invocationId": invocation_id_new,
+                "passed": passed,
+                "judgeScore": judge_score,
+                "judgeRationale": judge_rationale,
+                "schemaValid": schema_valid,
+                "tagHits": {},
+                "responseSnippet": response_text[:500],
+                "failReasons": fail_reasons,
+                "durationMs": duration_ms,
+                "inputTokens": input_tokens or None,
+                "outputTokens": output_tokens or None,
+                "estCostUsd": est_cost_usd,
+            },
+        )
+    except (HttpError, RuntimeError) as e:
+        print(f"  warn: failed to record result: {e}", file=sys.stderr)
+
+    score_str = f"score={judge_score:.2f}" if isinstance(judge_score, (int, float)) else "score=n/a"
+    verdict = "PASS" if passed else "FAIL"
+    tok_str = (f"tok={input_tokens}/{output_tokens}"
+               if (input_tokens or output_tokens) else "tok=?")
+    cost_str = (f"${est_cost_usd:.4f}" if isinstance(est_cost_usd, (int, float))
+                else "$?")
+    print(f"replay  {score_str}  {verdict}  {tok_str}  {cost_str}  ({duration_ms/1000:.1f}s)")
+
+    _finalize_run(
+        middleware, run_id,
+        passed_n=1 if passed else 0,
+        failed_n=0 if passed else 1,
+    )
+
+    portal = os.environ.get("PORTAL_URL", "http://localhost:5183")
+    print(f"  portal: {portal}/observability/harness/runs/{run_id}")
+    return 0 if passed else 4
+
+
+def _finalize_run(middleware: str, run_id: str, *, passed_n: int, failed_n: int) -> None:
+    completed = passed_n + failed_n
+    pass_rate = (passed_n / completed) if completed else 0.0
+    try:
+        _http(
+            "PATCH",
+            f"{middleware}/api/observability/harness/runs/{run_id}",
+            {
+                "status": "done",
+                "finishedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                "passRate": round(pass_rate, 3),
+                "completed": completed,
+                "passed": passed_n,
+                "failed": failed_n,
+            },
+        )
+    except (HttpError, RuntimeError) as e:
+        print(f"warn: failed to finalize run: {e}", file=sys.stderr)
+
+
 def cmd_diff(args: argparse.Namespace) -> int:
     middleware = args.middleware
     regressions, fixes, neutral = _diff_runs(middleware, args.run_a, args.run_b)
@@ -992,6 +1312,25 @@ def build_parser() -> argparse.ArgumentParser:
     pd.add_argument("run_a")
     pd.add_argument("run_b")
 
+    pre = sub.add_parser(
+        "replay",
+        help="re-invoke a past invocation against the current runtime and "
+             "record a new one-case run (Sprint 2)",
+    )
+    pre.add_argument(
+        "invocation_id",
+        help="invocation id (uuid) of the trace to replay — fetched from "
+             "/api/observability/invocations/:id",
+    )
+    pre.add_argument(
+        "--label",
+        help="override the run label (default: replay@<short-sha-of-source>)",
+    )
+    pre.add_argument(
+        "--git-sha",
+        help="override git_sha for the new run row (auto-detected if omitted)",
+    )
+
     return p
 
 
@@ -1003,6 +1342,7 @@ def main(argv: list[str] | None = None) -> int:
         "run": cmd_run,
         "status": cmd_status,
         "diff": cmd_diff,
+        "replay": cmd_replay,
     }[args.cmd]
     try:
         return handler(args)
