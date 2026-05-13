@@ -111,4 +111,65 @@ test.describe('observability pages', () => {
     }
     await page.screenshot({ path: `${SHOT_DIR}/04-approvals-after-approve.png`, fullPage: true });
   });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Sprint 1 — cost + provenance chips and the new cost aggregation API.
+  //
+  // Tolerance contract: cost data may be entirely null in this worktree (the
+  // schema migration owning the cost columns lives in Agent A's branch), and
+  // prompt-version provenance may not exist in production traces yet. Tests
+  // must verify *structure* (chip/header renders, endpoint shape), and skip
+  // gracefully when the prerequisite data isn't present.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  test('cost chips appear on drift outliers', async ({ page }) => {
+    await page.goto('/observability/drift');
+    // Wait for the outliers table to populate (existing flow)
+    await page.waitForSelector('svg.recharts-surface path.recharts-line-curve', { timeout: 10_000 });
+    // The outliers table should have a Cost column header (case-insensitive)
+    await expect(page.getByRole('cell', { name: /^Cost$/i }).first()).toBeVisible({ timeout: 10_000 });
+    await page.screenshot({ path: `${SHOT_DIR}/08-drift-with-cost.png`, fullPage: true });
+  });
+
+  test('harness run detail shows mode chip and total cost', async ({ page }) => {
+    const res = await page.request.get('/api/observability/harness/runs?limit=1');
+    const body = await res.json();
+    const runId = body.runs?.[0]?.runId;
+    if (!runId) test.skip();
+    await page.goto(`/observability/harness/runs/${runId}`);
+    // Mode chip — either LIVE or SIM
+    await expect(page.getByText(/^(LIVE|SIM)$/i).first()).toBeVisible({ timeout: 10_000 });
+    // Cost column header in the matrix
+    await expect(page.getByRole('cell', { name: /^Cost$/i }).first()).toBeVisible();
+    await page.screenshot({ path: `${SHOT_DIR}/09-harness-with-cost.png`, fullPage: true });
+  });
+
+  test('prompt version chip opens prompt modal', async ({ page }) => {
+    await page.goto('/observability/drift');
+    await page.waitForSelector('svg.recharts-surface path.recharts-line-curve', { timeout: 10_000 });
+    // Find the first prompt-version chip if any exists (it may not, if production
+    // traces don't have provenance yet — skip gracefully)
+    const chip = page.getByText(/^p:[a-f0-9]{6,12}/).first();
+    const count = await chip.count();
+    if (count === 0) test.skip();
+    await chip.click();
+    // Modal shows agent_id + content
+    await expect(page.getByText(/agent_id/i).first()).toBeVisible({ timeout: 5_000 });
+    await page.screenshot({ path: `${SHOT_DIR}/10-prompt-modal.png`, fullPage: true });
+  });
+
+  test('cost endpoint returns aggregate data', async ({ request }) => {
+    const res = await request.get('/api/observability/cost/per-agent?windowHours=24');
+    expect(res.ok()).toBeTruthy();
+    const body = await res.json();
+    expect(body).toHaveProperty('byAgent');
+    expect(Array.isArray(body.byAgent)).toBeTruthy();
+  });
+
+  test('cost timeseries endpoint returns bucketed data', async ({ request }) => {
+    const res = await request.get('/api/observability/cost/timeseries?windowHours=24&bucketMin=60');
+    expect(res.ok()).toBeTruthy();
+    const body = await res.json();
+    expect(body).toHaveProperty('points');
+  });
 });
