@@ -24,6 +24,7 @@ import { requireAction } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
 import { initCrawlTargets } from './lib/crawl-targets.js';
 import { ensureSchema, seedPoliciesIfMissing } from './lib/policy-seeds.js';
+import { startTracePoller } from './lib/cw-trace-ingest.js';
 
 const app = express();
 
@@ -80,6 +81,16 @@ app.use(errorHandler);
 
 initScheduler();
 initCrawlTargets();
+
+// Start the CW Logs Insights trace poller. Decouples agent telemetry from
+// HTTP reachability — deployed AgentCore runtimes can't necessarily reach
+// `http://middleware:3001`, but their stdout is always captured into
+// /aws/bedrock-agentcore/runtimes/<runtime>-DEFAULT. The poller scans those
+// log groups every 30s and feeds matching ORGIQ_TRACE:<json> lines through
+// the same processTrace() pipeline the HTTP endpoint uses. Idempotent at
+// the DB layer (ON CONFLICT DO NOTHING on invocation_id). Set
+// OBS_TRACE_POLLER_DISABLED=1 to skip in offline/test environments.
+startTracePoller();
 
 // Seed AVP if it's empty. Idempotent — safe on every boot.
 ensureSchema().catch(err => console.error('[seed] schema seed failed:', err));

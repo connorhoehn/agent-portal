@@ -322,13 +322,52 @@ def instrumented_tool(
 # ── HTTP sender ───────────────────────────────────────────────────────────────
 
 
-def post_trace(bundle: dict[str, Any], *, middleware_url: str | None = None) -> bool:
-    """Fire-and-forget POST of a trace bundle.
+def _emit_stdout_trace(bundle: dict[str, Any]) -> None:
+    """Emit the bundle as a single JSON line prefixed with ``ORGIQ_TRACE:``.
 
-    Returns True on success, False otherwise. NEVER raises — the agent must
-    keep running even if observability is down. Uses stdlib urllib so we don't
-    take a new dependency.
+    AgentCore Runtime captures agent stdout/stderr into CloudWatch Logs at
+    ``/aws/bedrock-agentcore/runtimes/<runtime-id>-DEFAULT``. The middleware
+    polls those log groups with CW Logs Insights, parses the JSON tail of
+    each ``ORGIQ_TRACE:`` line, and feeds the result through the same
+    ``processTrace`` pipeline as the HTTP endpoint. This decouples agents
+    from middleware reachability — the runtime never has to dial out.
+
+    Must NEVER raise: stdout failures (closed pipe, encoding error, OOM at
+    serialise time) silently no-op so the agent invocation completes.
     """
+    try:
+        # default=str keeps datetimes/UUIDs serialisable. ensure_ascii=False
+        # so non-Latin characters in samples survive the round-trip; the JSON
+        # is parsed back as UTF-8 by the middleware ingestor.
+        line = json.dumps(bundle, default=str, ensure_ascii=False)
+        print(f"ORGIQ_TRACE:{line}", flush=True)
+    except Exception:  # noqa: BLE001 — observability must never crash the agent
+        pass
+
+
+def post_trace(bundle: dict[str, Any], *, middleware_url: str | None = None) -> bool:
+    """Fire-and-forget delivery of a trace bundle.
+
+    Two paths, both best-effort:
+
+      1. HTTP POST to the middleware. Useful for local dev where the agent
+         can reach ``http://middleware:3001`` over the docker-compose network.
+      2. stdout emission of ``ORGIQ_TRACE:<json>``. The production path: the
+         AgentCore Runtime captures stdout into CloudWatch Logs, and the
+         middleware polls those log groups for ingestion. This avoids needing
+         the deployed runtime to dial back into a developer machine.
+
+    Returns True iff the HTTP POST succeeded. The stdout emission happens
+    unconditionally and never affects the return value — the middleware
+    INSERT path is idempotent on ``invocation_id``, so double-delivery
+    (HTTP succeeds + CW Logs ingestion picks it up too) is safe.
+
+    NEVER raises: the agent must keep running even if observability is down.
+    """
+    # Always emit on stdout first so a slow / failing HTTP POST can't
+    # accidentally swallow the trace before CW Logs can capture it.
+    _emit_stdout_trace(bundle)
+
     base = (middleware_url or MIDDLEWARE_URL).rstrip("/")
     url = f"{base}/api/observability/harness/trace"
     try:
