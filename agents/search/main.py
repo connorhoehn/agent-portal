@@ -1,7 +1,11 @@
 import json
+import logging
 import os
 import re
+import sys
 import time
+from contextvars import ContextVar
+from pathlib import Path
 
 import boto3
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
@@ -13,6 +17,23 @@ try:
     import websocket as ws_client  # the `websocket-client` library
 except ImportError:
     ws_client = None
+
+# Shared instrumentation — pull TraceContext + decorator from agents/_shared.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from _shared.instrumentation import (  # noqa: E402
+    TraceContext,
+    instrumented_tool,
+    post_trace,
+    short_prompt_hash,
+)
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
+
+# Per-invocation trace buffer (see supervisor/main.py for the design note).
+_current_ctx: ContextVar[TraceContext | None] = ContextVar(
+    "search_trace_ctx", default=None
+)
 
 app = BedrockAgentCoreApp()
 
@@ -42,6 +63,7 @@ def _records_to_dicts(resp: dict) -> list:
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def query_knowledge_base(query: str, max_results: int = 5) -> str:
     """Search the organizational knowledge base for documents, expertise, and decisions.
 
@@ -68,6 +90,7 @@ def query_knowledge_base(query: str, max_results: int = 5) -> str:
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def query_graph(sql: str) -> str:
     """Execute a read-only SQL query against the OrgIQ relational graph in Aurora.
 
@@ -131,6 +154,7 @@ def _cdp_call(ws, method: str, params: dict | None = None, timeout_s: float = 10
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def fetch_web_page(url: str) -> str:
     """Open a URL in an AgentCore Browser sandbox and return the page title and
     text content. Use this when you need to ground answers in fresh web content
@@ -252,23 +276,27 @@ def _model_kwargs() -> dict:
     return kw
 
 
+SYSTEM_PROMPT = (
+    "You are the OrgIQ Search agent. Find people, teams, skills, documents, and "
+    "decisions in the organizational knowledge base and relational graph.\n\n"
+    "Use query_knowledge_base for document/semantic search.\n"
+    "Use query_graph(sql) for relational traversal — JOINs across the edge tables "
+    "(person_skills, team_memberships, collaborations, project_contributions, "
+    "decision_participants, mentions).\n"
+    "Use fetch_web_page(url) when you need live external web content — e.g. to "
+    "look up a public profile, scrape a docs page, or check a competitor site. "
+    "Only call this for genuinely external info; for org-internal questions, "
+    "prefer the KB and graph tools.\n\n"
+    "Always return source citations. Combine tools for comprehensive answers."
+)
+
+_SYSTEM_PROMPT_SHA = short_prompt_hash(SYSTEM_PROMPT)
+
 _model = BedrockModel(**_model_kwargs())
 _agent = Agent(
     model=_model,
     tools=[query_knowledge_base, query_graph, fetch_web_page],
-    system_prompt=(
-        "You are the OrgIQ Search agent. Find people, teams, skills, documents, and "
-        "decisions in the organizational knowledge base and relational graph.\n\n"
-        "Use query_knowledge_base for document/semantic search.\n"
-        "Use query_graph(sql) for relational traversal — JOINs across the edge tables "
-        "(person_skills, team_memberships, collaborations, project_contributions, "
-        "decision_participants, mentions).\n"
-        "Use fetch_web_page(url) when you need live external web content — e.g. to "
-        "look up a public profile, scrape a docs page, or check a competitor site. "
-        "Only call this for genuinely external info; for org-internal questions, "
-        "prefer the KB and graph tools.\n\n"
-        "Always return source citations. Combine tools for comprehensive answers."
-    ),
+    system_prompt=SYSTEM_PROMPT,
 )
 
 
@@ -287,8 +315,44 @@ async def handle(payload: dict) -> dict:
     if not input_text:
         return {"agent": "search", "error": "missing input_text/prompt/message"}
 
-    result = _agent(input_text)
-    return {"agent": "search", "response": str(result)}
+    # ── Sprint 2 instrumentation ─────────────────────────────────────────────
+    # Picks up ``parentInvocationId`` when the supervisor invoked us via A2A.
+    ctx = TraceContext.from_request_payload(payload if isinstance(payload, dict) else {})
+    token = _current_ctx.set(ctx)
+
+    log.info(
+        "Search handling (invocation=%s, parent=%s): %s",
+        ctx.invocation_id, ctx.parent_invocation_id or "—", input_text[:120],
+    )
+
+    t0 = time.monotonic()
+    try:
+        result = _agent(input_text)
+    finally:
+        _current_ctx.reset(token)
+    duration_ms = int((time.monotonic() - t0) * 1000)
+
+    response_text = str(result)
+
+    try:
+        bundle = ctx.build_trace_bundle(
+            prompt=input_text,
+            response=response_text,
+            agent_id="orgiq-search",
+            agent_name="Search",
+            model_id=MODEL_ID,
+            duration_ms=duration_ms,
+            prompt_version=_SYSTEM_PROMPT_SHA,
+        )
+        post_trace(bundle)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("search: trace emission failed: %s", exc)
+
+    return {
+        "agent": "search",
+        "response": response_text,
+        "invocationId": ctx.invocation_id,
+    }
 
 
 if __name__ == "__main__":

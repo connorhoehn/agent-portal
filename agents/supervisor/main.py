@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import time
+from contextvars import ContextVar
 
 import boto3
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
@@ -14,6 +15,21 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.approval_tool import request_approval  # noqa: E402
+from _shared.instrumentation import (  # noqa: E402
+    TraceContext,
+    instrumented_tool,
+    post_trace,
+    short_prompt_hash,
+)
+
+# Per-invocation trace buffer. Set by `handle()` before the Agent call and
+# read by every instrumented tool wrapper. ContextVar gives us correct
+# isolation if the runtime ever services concurrent invocations on a single
+# process (Strands is sequential per-Converse-loop, but the entrypoint may
+# run multiple in parallel).
+_current_ctx: ContextVar[TraceContext | None] = ContextVar(
+    "supervisor_trace_ctx", default=None
+)
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -63,11 +79,30 @@ def _get_runtime_arn(agent_name: str) -> str:
 
 
 def _invoke_sub_agent(runtime_arn: str, input_text: str, session_id: str = "") -> str:
-    """Invoke a sub-agent via the AgentCore A2A invoke API."""
+    """Invoke a sub-agent via the AgentCore A2A invoke API.
+
+    Threads ``parentInvocationId`` from the supervisor's active TraceContext
+    into the sub-agent's payload so the middleware can stitch the trace tree
+    (supervisor invocation → sub-agent invocation). Sub-agents that have been
+    instrumented (Sprint 2: search) will read this field via
+    ``TraceContext.from_request_payload`` and stamp it on their own trace.
+    Sub-agents not yet instrumented just ignore the extra field.
+    """
+    payload_obj: dict = {"input_text": input_text}
+    parent_ctx = _current_ctx.get()
+    if parent_ctx is not None and parent_ctx.invocation_id:
+        payload_obj["parentInvocationId"] = parent_ctx.invocation_id
+        # Propagate the caller's user/session too — useful when the sub-agent
+        # logs a trace independently and we still want them linked to the same
+        # user thread in the portal.
+        if parent_ctx.user_id:
+            payload_obj["userId"] = parent_ctx.user_id
+        if parent_ctx.session_id:
+            payload_obj["sessionId"] = parent_ctx.session_id
     kwargs: dict = {
         "agentRuntimeArn": runtime_arn,
         "qualifier": "DEFAULT",
-        "payload": json.dumps({"input_text": input_text}),
+        "payload": json.dumps(payload_obj),
     }
     if session_id:
         kwargs["runtimeSessionId"] = session_id
@@ -97,6 +132,7 @@ def _invoke_sub_agent(runtime_arn: str, input_text: str, session_id: str = "") -
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def search_organization(query: str, session_id: str = "") -> str:
     """Route a search query to the Search agent for KB + graph retrieval.
 
@@ -116,6 +152,7 @@ def search_organization(query: str, session_id: str = "") -> str:
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def get_expertise_scores(request: str, session_id: str = "") -> str:
     """Route a scoring request to the Scoring agent for expertise metrics and leaderboards.
 
@@ -135,6 +172,7 @@ def get_expertise_scores(request: str, session_id: str = "") -> str:
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def get_strategic_advice(question: str, session_id: str = "") -> str:
     """Route a strategic question to the Advisor agent for org intelligence recommendations.
 
@@ -155,6 +193,7 @@ def get_strategic_advice(question: str, session_id: str = "") -> str:
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def ingest_documents(instruction: str, session_id: str = "") -> str:
     """Route a document ingestion task to the Ingestion agent.
 
@@ -174,6 +213,7 @@ def ingest_documents(instruction: str, session_id: str = "") -> str:
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def build_graph(instruction: str, session_id: str = "") -> str:
     """Route a graph construction task to the Graph-Builder agent.
 
@@ -194,6 +234,7 @@ def build_graph(instruction: str, session_id: str = "") -> str:
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def run_in_sandbox(python_code: str) -> str:
     """Execute a Python snippet inside the AgentCore code-interpreter sandbox.
 
@@ -339,6 +380,9 @@ def _resolve_role(payload: dict) -> str:
     return DEFAULT_ROLE if DEFAULT_ROLE in _AGENTS_BY_ROLE else next(iter(_AGENTS_BY_ROLE))
 
 
+_SYSTEM_PROMPT_SHA = short_prompt_hash(SYSTEM_PROMPT)
+
+
 @app.entrypoint
 async def handle(payload: dict) -> dict:
     # Accept either {"input_text": "..."} (A2A convention used by sub-agent
@@ -359,9 +403,54 @@ async def handle(payload: dict) -> dict:
 
     role = _resolve_role(payload if isinstance(payload, dict) else {})
     agent = _AGENTS_BY_ROLE[role]
-    log.info("Supervisor handling (role=%s): %s", role, input_text[:120])
-    result = _invoke_with_retry(agent, input_text)
-    return {"agent": "supervisor", "role": role, "response": str(result)}
+
+    # ── Sprint 2 instrumentation ─────────────────────────────────────────────
+    # Build a fresh TraceContext from the inbound payload (picks up
+    # parentInvocationId if this is a sub-agent invocation from another agent),
+    # stash it in the ContextVar so each instrumented_tool can record its
+    # observation, and emit a trace bundle to the middleware once the agent
+    # finishes. Failures in instrumentation must NOT change the agent's
+    # observable behaviour — every catch below swallows.
+    ctx = TraceContext.from_request_payload(payload if isinstance(payload, dict) else {})
+    token = _current_ctx.set(ctx)
+
+    log.info(
+        "Supervisor handling (role=%s, invocation=%s, parent=%s): %s",
+        role, ctx.invocation_id, ctx.parent_invocation_id or "—", input_text[:120],
+    )
+
+    t0 = time.monotonic()
+    try:
+        result = _invoke_with_retry(agent, input_text)
+    finally:
+        _current_ctx.reset(token)
+    duration_ms = int((time.monotonic() - t0) * 1000)
+
+    response_text = str(result)
+
+    try:
+        bundle = ctx.build_trace_bundle(
+            prompt=input_text,
+            response=response_text,
+            agent_id="orgiq-supervisor",
+            agent_name="Supervisor",
+            model_id=MODEL_ID,
+            duration_ms=duration_ms,
+            prompt_version=_SYSTEM_PROMPT_SHA,
+            # Strands' AgentResult doesn't currently expose usage in a stable
+            # shape; leave tokens unset and let the middleware compute zero
+            # cost. Agent A's harness will warn on the missing field.
+        )
+        post_trace(bundle)
+    except Exception as exc:  # noqa: BLE001 — observability MUST NOT crash the agent
+        log.warning("supervisor: trace emission failed: %s", exc)
+
+    return {
+        "agent": "supervisor",
+        "role": role,
+        "response": response_text,
+        "invocationId": ctx.invocation_id,
+    }
 
 
 def _invoke_with_retry(agent: Agent, input_text: str):
