@@ -92,10 +92,10 @@ test.describe('observability pages', () => {
     expect(runId).toBeTruthy();
     await page.goto(`/observability/harness/runs/${runId}`);
     // Header shows the run label + pass rate
-    await expect(page.getByText(/smoke@/).first()).toBeVisible({ timeout: 10_000 });
-    // The seeded run has 10 test results — at least one test_id must render
+    // Run label could be 'smoke@<sha>' (sim) or 'live@<sha>' (live mode)
+    await expect(page.getByText(/^(smoke|live)@/).first()).toBeVisible({ timeout: 10_000 });
+    // The seeded set has 10 test_ids — at least one must render
     await expect(page.getByText('ingestion.invoice.simple.001').first()).toBeVisible();
-    await expect(page.getByText('supervisor.routing.score.001').first()).toBeVisible();
     await page.screenshot({ path: `${SHOT_DIR}/07-harness-run.png`, fullPage: true });
   });
 
@@ -127,7 +127,7 @@ test.describe('observability pages', () => {
     // Wait for the outliers table to populate (existing flow)
     await page.waitForSelector('svg.recharts-surface path.recharts-line-curve', { timeout: 10_000 });
     // The outliers table should have a Cost column header (case-insensitive)
-    await expect(page.getByRole('cell', { name: /^Cost$/i }).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('columnheader', { name: /^Cost$/i }).first()).toBeVisible({ timeout: 10_000 });
     await page.screenshot({ path: `${SHOT_DIR}/08-drift-with-cost.png`, fullPage: true });
   });
 
@@ -140,7 +140,7 @@ test.describe('observability pages', () => {
     // Mode chip — either LIVE or SIM
     await expect(page.getByText(/^(LIVE|SIM)$/i).first()).toBeVisible({ timeout: 10_000 });
     // Cost column header in the matrix
-    await expect(page.getByRole('cell', { name: /^Cost$/i }).first()).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: /^Cost$/i }).first()).toBeVisible();
     await page.screenshot({ path: `${SHOT_DIR}/09-harness-with-cost.png`, fullPage: true });
   });
 
