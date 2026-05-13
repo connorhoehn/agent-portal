@@ -1,5 +1,8 @@
 import json
+import logging
 import os
+import time
+from contextvars import ContextVar
 
 import boto3
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
@@ -11,6 +14,20 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.approval_tool import request_approval  # noqa: E402
+from _shared.instrumentation import (  # noqa: E402
+    TraceContext,
+    instrumented_tool,
+    post_trace,
+    short_prompt_hash,
+)
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
+
+# Per-invocation trace buffer (see supervisor/main.py for the design note).
+_current_ctx: ContextVar[TraceContext | None] = ContextVar(
+    "ingestion_trace_ctx", default=None
+)
 
 app = BedrockAgentCoreApp()
 
@@ -39,6 +56,7 @@ def _get_data_source_id() -> str:
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def list_documents(prefix: str = "") -> str:
     """List documents available in the S3 documents bucket for ingestion.
 
@@ -67,6 +85,7 @@ def list_documents(prefix: str = "") -> str:
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def read_document(key: str) -> str:
     """Read the content of a document from the S3 documents bucket.
 
@@ -98,6 +117,7 @@ def read_document(key: str) -> str:
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def sync_knowledge_base() -> str:
     """Trigger an ingestion job to sync the S3 documents bucket into the Bedrock Knowledge Base.
 
@@ -124,6 +144,7 @@ def sync_knowledge_base() -> str:
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def check_ingestion_status(job_id: str) -> str:
     """Check the status of a Bedrock Knowledge Base ingestion job.
 
@@ -156,6 +177,7 @@ def check_ingestion_status(job_id: str) -> str:
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def extract_entities_preview(text: str) -> str:
     """Use Bedrock to preview what entities would be extracted from a document.
 
@@ -215,21 +237,25 @@ def _model_kwargs() -> dict:
     return kw
 
 
+SYSTEM_PROMPT = (
+    "You are the OrgIQ Ingestion agent. Process organizational documents into the knowledge base.\n\n"
+    "Supported formats: PDF, DOCX, Markdown, HTML, plain text, JSON (Jira/Confluence exports).\n\n"
+    "Standard workflow:\n"
+    "1. list_documents — see what's available for ingestion\n"
+    "2. read_document — inspect content for text files\n"
+    "3. extract_entities_preview — verify entities before committing\n"
+    "4. sync_knowledge_base — trigger Bedrock KB ingestion job\n"
+    "5. check_ingestion_status — monitor progress\n\n"
+    "After sync, the graph-builder agent handles entity extraction and graph construction."
+)
+
+_SYSTEM_PROMPT_SHA = short_prompt_hash(SYSTEM_PROMPT)
+
 _model = BedrockModel(**_model_kwargs())
 _agent = Agent(
     model=_model,
     tools=[list_documents, read_document, sync_knowledge_base, check_ingestion_status, extract_entities_preview, request_approval],
-    system_prompt=(
-        "You are the OrgIQ Ingestion agent. Process organizational documents into the knowledge base.\n\n"
-        "Supported formats: PDF, DOCX, Markdown, HTML, plain text, JSON (Jira/Confluence exports).\n\n"
-        "Standard workflow:\n"
-        "1. list_documents — see what's available for ingestion\n"
-        "2. read_document — inspect content for text files\n"
-        "3. extract_entities_preview — verify entities before committing\n"
-        "4. sync_knowledge_base — trigger Bedrock KB ingestion job\n"
-        "5. check_ingestion_status — monitor progress\n\n"
-        "After sync, the graph-builder agent handles entity extraction and graph construction."
-    ),
+    system_prompt=SYSTEM_PROMPT,
 )
 
 
@@ -248,8 +274,44 @@ async def handle(payload: dict) -> dict:
     if not input_text:
         return {"agent": "ingestion", "error": "missing input_text/prompt/message"}
 
-    result = _agent(input_text)
-    return {"agent": "ingestion", "response": str(result)}
+    # ── Sprint 2 instrumentation ─────────────────────────────────────────────
+    # Picks up ``parentInvocationId`` when the supervisor invoked us via A2A.
+    ctx = TraceContext.from_request_payload(payload if isinstance(payload, dict) else {})
+    token = _current_ctx.set(ctx)
+
+    log.info(
+        "Ingestion handling (invocation=%s, parent=%s): %s",
+        ctx.invocation_id, ctx.parent_invocation_id or "—", input_text[:120],
+    )
+
+    t0 = time.monotonic()
+    try:
+        result = _agent(input_text)
+    finally:
+        _current_ctx.reset(token)
+    duration_ms = int((time.monotonic() - t0) * 1000)
+
+    response_text = str(result)
+
+    try:
+        bundle = ctx.build_trace_bundle(
+            prompt=input_text,
+            response=response_text,
+            agent_id="orgiq-ingestion",
+            agent_name="Ingestion",
+            model_id=MODEL_ID,
+            duration_ms=duration_ms,
+            prompt_version=_SYSTEM_PROMPT_SHA,
+        )
+        post_trace(bundle)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("ingestion: trace emission failed: %s", exc)
+
+    return {
+        "agent": "ingestion",
+        "response": response_text,
+        "invocationId": ctx.invocation_id,
+    }
 
 
 if __name__ == "__main__":

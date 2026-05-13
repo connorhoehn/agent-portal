@@ -1,12 +1,32 @@
 import json
+import logging
 import os
+import sys
 import time
 from contextvars import ContextVar
+from pathlib import Path
 
 import boto3
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from strands import Agent, tool
 from strands.models.bedrock import BedrockModel
+
+# Shared instrumentation — pull TraceContext + decorator from agents/_shared.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from _shared.instrumentation import (  # noqa: E402
+    TraceContext,
+    instrumented_tool,
+    post_trace,
+    short_prompt_hash,
+)
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
+
+# Per-invocation trace buffer (see supervisor/main.py for the design note).
+_current_ctx: ContextVar[TraceContext | None] = ContextVar(
+    "scoring_trace_ctx", default=None
+)
 
 app = BedrockAgentCoreApp()
 
@@ -82,6 +102,7 @@ WITH inbound AS (
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def compute_expertise_scores(topic: str = "", limit: int = 20) -> str:
     """Compute weighted in-degree centrality as a PageRank proxy and persist scores.
 
@@ -159,6 +180,7 @@ def compute_expertise_scores(topic: str = "", limit: int = 20) -> str:
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def get_scores(person_id: str = "", topic: str = "", limit: int = 10) -> str:
     """Retrieve the most recent expertise score snapshots from DynamoDB.
 
@@ -196,6 +218,7 @@ def get_scores(person_id: str = "", topic: str = "", limit: int = 10) -> str:
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def get_leaderboard(team: str = "", skill: str = "", limit: int = 10) -> str:
     """Generate an expertise leaderboard, optionally filtered by team and/or skill.
 
@@ -239,6 +262,7 @@ def get_leaderboard(team: str = "", skill: str = "", limit: int = 10) -> str:
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def run_in_sandbox(python_code: str) -> str:
     """Execute a Python snippet inside the AgentCore code-interpreter sandbox.
 
@@ -333,25 +357,29 @@ def _model_kwargs() -> dict:
     return kw
 
 
+SYSTEM_PROMPT = (
+    "You are the OrgIQ Scoring agent. Compute and report expertise scores, "
+    "leaderboards, and influence metrics.\n\n"
+    "Scoring approach: weighted in-degree centrality across all edge tables "
+    "(person_skills, team_memberships, project_contributions, decision_participants, "
+    "collaborations, mentions). Scores are normalized 0-100.\n\n"
+    "Use compute_expertise_scores to (re)run scoring, optionally filtered by topic.\n"
+    "Use get_leaderboard for current rankings (reads people.expertise_score).\n"
+    "Use get_scores for historical snapshots from DynamoDB.\n"
+    "Use run_in_sandbox for any computation that's clearer in Python than SQL — "
+    "PageRank variants, statistical tests, custom centrality formulas, "
+    "or post-processing of leaderboard data. Always pass any data the snippet "
+    "needs as inline constants because the sandbox has no Aurora access.\n\n"
+    "Always explain the scoring methodology when presenting results."
+)
+
+_SYSTEM_PROMPT_SHA = short_prompt_hash(SYSTEM_PROMPT)
+
 _model = BedrockModel(**_model_kwargs())
 _agent = Agent(
     model=_model,
     tools=[compute_expertise_scores, get_scores, get_leaderboard, run_in_sandbox],
-    system_prompt=(
-        "You are the OrgIQ Scoring agent. Compute and report expertise scores, "
-        "leaderboards, and influence metrics.\n\n"
-        "Scoring approach: weighted in-degree centrality across all edge tables "
-        "(person_skills, team_memberships, project_contributions, decision_participants, "
-        "collaborations, mentions). Scores are normalized 0-100.\n\n"
-        "Use compute_expertise_scores to (re)run scoring, optionally filtered by topic.\n"
-        "Use get_leaderboard for current rankings (reads people.expertise_score).\n"
-        "Use get_scores for historical snapshots from DynamoDB.\n"
-        "Use run_in_sandbox for any computation that's clearer in Python than SQL — "
-        "PageRank variants, statistical tests, custom centrality formulas, "
-        "or post-processing of leaderboard data. Always pass any data the snippet "
-        "needs as inline constants because the sandbox has no Aurora access.\n\n"
-        "Always explain the scoring methodology when presenting results."
-    ),
+    system_prompt=SYSTEM_PROMPT,
 )
 
 
@@ -372,9 +400,45 @@ async def handle(payload: dict) -> dict:
         if not input_text:
             return {"agent": "scoring", "error": "missing input_text/prompt/message"}
 
-        result = _agent(input_text)
+        # ── Sprint 2 instrumentation ─────────────────────────────────────────
+        # Picks up ``parentInvocationId`` when the supervisor invoked us via A2A.
+        ctx = TraceContext.from_request_payload(payload if isinstance(payload, dict) else {})
+        ctx_token = _current_ctx.set(ctx)
+
+        log.info(
+            "Scoring handling (invocation=%s, parent=%s): %s",
+            ctx.invocation_id, ctx.parent_invocation_id or "—", input_text[:120],
+        )
+
+        t0 = time.monotonic()
+        try:
+            result = _agent(input_text)
+        finally:
+            _current_ctx.reset(ctx_token)
+        duration_ms = int((time.monotonic() - t0) * 1000)
+
+        response_text = str(result)
+
+        try:
+            bundle = ctx.build_trace_bundle(
+                prompt=input_text,
+                response=response_text,
+                agent_id="orgiq-scoring",
+                agent_name="Scoring",
+                model_id=MODEL_ID,
+                duration_ms=duration_ms,
+                prompt_version=_SYSTEM_PROMPT_SHA,
+            )
+            post_trace(bundle)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("scoring: trace emission failed: %s", exc)
+
         executions = list(_sandbox_log.get())
-        response: dict = {"agent": "scoring", "response": str(result)}
+        response: dict = {
+            "agent": "scoring",
+            "response": response_text,
+            "invocationId": ctx.invocation_id,
+        }
         if executions:
             response["sandboxExecutions"] = executions
         return response

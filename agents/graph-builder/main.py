@@ -1,13 +1,33 @@
 import json
+import logging
 import os
 import re
+import sys
 import time
 from contextvars import ContextVar
+from pathlib import Path
 
 import boto3
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from strands import Agent, tool
 from strands.models.bedrock import BedrockModel
+
+# Shared instrumentation — pull TraceContext + decorator from agents/_shared.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from _shared.instrumentation import (  # noqa: E402
+    TraceContext,
+    instrumented_tool,
+    post_trace,
+    short_prompt_hash,
+)
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
+
+# Per-invocation trace buffer (see supervisor/main.py for the design note).
+_current_ctx: ContextVar[TraceContext | None] = ContextVar(
+    "graph_builder_trace_ctx", default=None
+)
 
 app = BedrockAgentCoreApp()
 
@@ -66,6 +86,7 @@ def _safe_id(value: str) -> str:
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def merge_person(person_id: str, name: str, email: str = "", team: str = "", role: str = "") -> str:
     """Upsert a Person row.
 
@@ -100,6 +121,7 @@ def merge_person(person_id: str, name: str, email: str = "", team: str = "", rol
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def merge_skill(skill_id: str, name: str, domain: str = "") -> str:
     """Upsert a Skill row.
 
@@ -126,6 +148,7 @@ def merge_skill(skill_id: str, name: str, domain: str = "") -> str:
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def merge_team(team_id: str, name: str) -> str:
     """Upsert a Team row."""
     safe = _safe_id(team_id)
@@ -138,6 +161,7 @@ def merge_team(team_id: str, name: str) -> str:
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def merge_project(project_id: str, name: str, status: str = "") -> str:
     """Upsert a Project row."""
     safe = _safe_id(project_id)
@@ -151,6 +175,7 @@ def merge_project(project_id: str, name: str, status: str = "") -> str:
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def merge_relationship(
     from_id: str,
     from_label: str,
@@ -215,6 +240,7 @@ def merge_relationship(
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def embed_and_store(node_id: str, node_label: str, content: str) -> str:
     """Embed a node (Titan V2, 1024d) and upsert into node_embeddings.
 
@@ -251,6 +277,7 @@ def embed_and_store(node_id: str, node_label: str, content: str) -> str:
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def extract_and_build(document_text: str, source_key: str = "") -> str:
     """Extract entities + relationships from a document and write them to Aurora.
 
@@ -375,6 +402,7 @@ JSON:"""
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def run_in_sandbox(python_code: str) -> str:
     """Execute a Python snippet inside the AgentCore code-interpreter sandbox.
 
@@ -468,6 +496,25 @@ def _model_kwargs() -> dict:
     return kw
 
 
+SYSTEM_PROMPT = (
+    "You are the OrgIQ Graph-Builder agent. Build and maintain the organizational "
+    "knowledge graph in Aurora PostgreSQL (relational tables) with pgvector embeddings.\n\n"
+    "Primary workflow: extract_and_build(document_text) handles the full pipeline.\n"
+    "For targeted edits: use merge_person, merge_skill, merge_team, merge_project, "
+    "merge_relationship directly.\n\n"
+    "Use run_in_sandbox for any data transformation or parsing that's cleaner in "
+    "Python — e.g. deduplication logic, regex extraction, JSON reshaping before "
+    "feeding into merge_* tools. Embed input data as inline constants.\n\n"
+    "Critical rules:\n"
+    "- All writes are idempotent (INSERT ... ON CONFLICT DO UPDATE)\n"
+    "- Use lowercase_underscore slugs for all node IDs\n"
+    "- Embed nodes after creation with embed_and_store\n"
+    "- Titan Embeddings V2 at 1024 dimensions — do not change this\n"
+    "- Vector embeddings are stored in the node_embeddings table"
+)
+
+_SYSTEM_PROMPT_SHA = short_prompt_hash(SYSTEM_PROMPT)
+
 _model = BedrockModel(**_model_kwargs())
 _agent = Agent(
     model=_model,
@@ -476,22 +523,7 @@ _agent = Agent(
         merge_relationship, embed_and_store, extract_and_build,
         run_in_sandbox,
     ],
-    system_prompt=(
-        "You are the OrgIQ Graph-Builder agent. Build and maintain the organizational "
-        "knowledge graph in Aurora PostgreSQL (relational tables) with pgvector embeddings.\n\n"
-        "Primary workflow: extract_and_build(document_text) handles the full pipeline.\n"
-        "For targeted edits: use merge_person, merge_skill, merge_team, merge_project, "
-        "merge_relationship directly.\n\n"
-        "Use run_in_sandbox for any data transformation or parsing that's cleaner in "
-        "Python — e.g. deduplication logic, regex extraction, JSON reshaping before "
-        "feeding into merge_* tools. Embed input data as inline constants.\n\n"
-        "Critical rules:\n"
-        "- All writes are idempotent (INSERT ... ON CONFLICT DO UPDATE)\n"
-        "- Use lowercase_underscore slugs for all node IDs\n"
-        "- Embed nodes after creation with embed_and_store\n"
-        "- Titan Embeddings V2 at 1024 dimensions — do not change this\n"
-        "- Vector embeddings are stored in the node_embeddings table"
-    ),
+    system_prompt=SYSTEM_PROMPT,
 )
 
 
@@ -512,9 +544,45 @@ async def handle(payload: dict) -> dict:
         if not input_text:
             return {"agent": "graph-builder", "error": "missing input_text/prompt/message"}
 
-        result = _agent(input_text)
+        # ── Sprint 2 instrumentation ─────────────────────────────────────────
+        # Picks up ``parentInvocationId`` when the supervisor invoked us via A2A.
+        ctx = TraceContext.from_request_payload(payload if isinstance(payload, dict) else {})
+        ctx_token = _current_ctx.set(ctx)
+
+        log.info(
+            "Graph-Builder handling (invocation=%s, parent=%s): %s",
+            ctx.invocation_id, ctx.parent_invocation_id or "—", input_text[:120],
+        )
+
+        t0 = time.monotonic()
+        try:
+            result = _agent(input_text)
+        finally:
+            _current_ctx.reset(ctx_token)
+        duration_ms = int((time.monotonic() - t0) * 1000)
+
+        response_text = str(result)
+
+        try:
+            bundle = ctx.build_trace_bundle(
+                prompt=input_text,
+                response=response_text,
+                agent_id="orgiq-graph-builder",
+                agent_name="Graph-Builder",
+                model_id=MODEL_ID,
+                duration_ms=duration_ms,
+                prompt_version=_SYSTEM_PROMPT_SHA,
+            )
+            post_trace(bundle)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("graph-builder: trace emission failed: %s", exc)
+
         executions = list(_sandbox_log.get())
-        response: dict = {"agent": "graph-builder", "response": str(result)}
+        response: dict = {
+            "agent": "graph-builder",
+            "response": response_text,
+            "invocationId": ctx.invocation_id,
+        }
         if executions:
             response["sandboxExecutions"] = executions
         return response

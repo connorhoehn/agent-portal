@@ -1,11 +1,33 @@
 import json
+import logging
 import os
 import re
+import sys
+import time
+from contextvars import ContextVar
+from pathlib import Path
 
 import boto3
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from strands import Agent, tool
 from strands.models.bedrock import BedrockModel
+
+# Shared instrumentation — pull TraceContext + decorator from agents/_shared.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from _shared.instrumentation import (  # noqa: E402
+    TraceContext,
+    instrumented_tool,
+    post_trace,
+    short_prompt_hash,
+)
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
+
+# Per-invocation trace buffer (see supervisor/main.py for the design note).
+_current_ctx: ContextVar[TraceContext | None] = ContextVar(
+    "advisor_trace_ctx", default=None
+)
 
 app = BedrockAgentCoreApp()
 
@@ -34,6 +56,7 @@ def _records_to_dicts(resp: dict) -> list:
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def query_graph(sql: str) -> str:
     """Execute a read-only SQL query against the OrgIQ relational graph in Aurora.
 
@@ -89,6 +112,7 @@ def query_graph(sql: str) -> str:
 
 
 @tool
+@instrumented_tool(_current_ctx.get)
 def retrieve_context(query: str, max_results: int = 5) -> str:
     """Retrieve supporting documents from the Bedrock Knowledge Base.
 
@@ -124,25 +148,29 @@ def _model_kwargs() -> dict:
     return kw
 
 
+SYSTEM_PROMPT = (
+    "You are the OrgIQ Advisor agent. Provide strategic recommendations based on "
+    "organizational graph analysis and document evidence.\n\n"
+    "Data backend: Aurora PostgreSQL relational schema modeling the org as nodes "
+    "(people/skills/teams/projects/decisions) plus edge tables. Use query_graph(sql) "
+    "for SQL JOINs and CTE traversals; use retrieve_context for KB document search.\n\n"
+    "Specialties:\n"
+    "- Expertise gap analysis (skills missing on teams)\n"
+    "- Knowledge silo detection (experts not connected to others)\n"
+    "- Collaboration opportunity identification\n"
+    "- Mentorship and succession planning\n"
+    "- Team composition recommendations\n\n"
+    "Always base recommendations on graph data and document evidence. Never speculate. "
+    "Cite specific edges (e.g., 'team_memberships → person_skills') and source documents."
+)
+
+_SYSTEM_PROMPT_SHA = short_prompt_hash(SYSTEM_PROMPT)
+
 _model = BedrockModel(**_model_kwargs())
 _agent = Agent(
     model=_model,
     tools=[query_graph, retrieve_context],
-    system_prompt=(
-        "You are the OrgIQ Advisor agent. Provide strategic recommendations based on "
-        "organizational graph analysis and document evidence.\n\n"
-        "Data backend: Aurora PostgreSQL relational schema modeling the org as nodes "
-        "(people/skills/teams/projects/decisions) plus edge tables. Use query_graph(sql) "
-        "for SQL JOINs and CTE traversals; use retrieve_context for KB document search.\n\n"
-        "Specialties:\n"
-        "- Expertise gap analysis (skills missing on teams)\n"
-        "- Knowledge silo detection (experts not connected to others)\n"
-        "- Collaboration opportunity identification\n"
-        "- Mentorship and succession planning\n"
-        "- Team composition recommendations\n\n"
-        "Always base recommendations on graph data and document evidence. Never speculate. "
-        "Cite specific edges (e.g., 'team_memberships → person_skills') and source documents."
-    ),
+    system_prompt=SYSTEM_PROMPT,
 )
 
 
@@ -161,8 +189,44 @@ async def handle(payload: dict) -> dict:
     if not input_text:
         return {"agent": "advisor", "error": "missing input_text/prompt/message"}
 
-    result = _agent(input_text)
-    return {"agent": "advisor", "response": str(result)}
+    # ── Sprint 2 instrumentation ─────────────────────────────────────────────
+    # Picks up ``parentInvocationId`` when the supervisor invoked us via A2A.
+    ctx = TraceContext.from_request_payload(payload if isinstance(payload, dict) else {})
+    token = _current_ctx.set(ctx)
+
+    log.info(
+        "Advisor handling (invocation=%s, parent=%s): %s",
+        ctx.invocation_id, ctx.parent_invocation_id or "—", input_text[:120],
+    )
+
+    t0 = time.monotonic()
+    try:
+        result = _agent(input_text)
+    finally:
+        _current_ctx.reset(token)
+    duration_ms = int((time.monotonic() - t0) * 1000)
+
+    response_text = str(result)
+
+    try:
+        bundle = ctx.build_trace_bundle(
+            prompt=input_text,
+            response=response_text,
+            agent_id="orgiq-advisor",
+            agent_name="Advisor",
+            model_id=MODEL_ID,
+            duration_ms=duration_ms,
+            prompt_version=_SYSTEM_PROMPT_SHA,
+        )
+        post_trace(bundle)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("advisor: trace emission failed: %s", exc)
+
+    return {
+        "agent": "advisor",
+        "response": response_text,
+        "invocationId": ctx.invocation_id,
+    }
 
 
 if __name__ == "__main__":
