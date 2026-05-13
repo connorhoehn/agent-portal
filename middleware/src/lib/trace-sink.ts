@@ -39,6 +39,22 @@ import { config } from '../config.js';
 // any extra context they have (template_id, guardrail action, pii flag). All
 // fields are optional except the IDs and the response text.
 
+// Sprint 2 — per-tool call shape supplied by the trace bundle. Each entry maps
+// 1:1 to a row in observability.tool_calls. Field budget intentionally narrow
+// so harness/runtime emitters can populate it cheaply.
+export interface ToolCallInput {
+  toolName: string;
+  startedAt?: string;           // ISO; defaults to now() at insert time
+  durationMs?: number;
+  inputSize?: number;
+  outputSize?: number;
+  errored?: boolean;
+  errorMessage?: string;
+  inputSample?: string;         // truncated to 500 by sink
+  outputSample?: string;        // truncated to 500 by sink
+  estCostUsd?: number;
+}
+
 export interface TraceInput {
   invocationId?: string;
   agentId: string;
@@ -61,6 +77,16 @@ export interface TraceInput {
   promptVersion?: string;
   modelId?: string;
   runtimeImageDigest?: string;
+  // Sprint 2 (M3) — trace stitching. parentInvocationId links this row to its
+  // caller so the portal can render the multi-agent call graph. user_id /
+  // session_id are soft tenant fields stamped by the runtime when known.
+  parentInvocationId?: string;  // uuid
+  userId?: string;
+  sessionId?: string;
+  // Sprint 2 (M4) — per-tool call instrumentation. Each entry is inserted as a
+  // row in observability.tool_calls. Inserted best-effort: if the tool-call
+  // INSERT fails, the parent trace insert still succeeds.
+  toolCalls?: ToolCallInput[];
 }
 
 // Result of a synchronous processTrace() call. The async enqueue() path
@@ -270,12 +296,22 @@ async function insertTrace(args: {
   promptVersion: string | null;
   modelId: string | null;
   runtimeImageDigest: string | null;
+  // Sprint 2 (M3) — stitching + tenant.
+  parentInvocationId: string | null;
+  userId: string | null;
+  sessionId: string | null;
 }): Promise<void> {
   // Embed the vector literal directly into the SQL (it's an internally-
   // generated array of numbers, not user input). RDS Data API has no
   // parameter binding for pgvector; we cast on the server with ::vector.
   const embeddingSql = args.embedding
     ? `'${toPgVectorLiteral(args.embedding)}'::vector`
+    : 'NULL';
+
+  // parent_invocation_id is a uuid column; emit literal NULL when absent so
+  // the cast-to-uuid never sees an empty string.
+  const parentSql = args.parentInvocationId
+    ? ':parent_invocation_id::uuid'
     : 'NULL';
 
   const sql = `INSERT INTO observability.invocation_traces (
@@ -287,7 +323,8 @@ async function insertTrace(args: {
       input_tokens, output_tokens,
       judge_input_tokens, judge_output_tokens,
       est_cost_usd, judge_cost_usd, total_cost_usd,
-      prompt_version, model_id, runtime_image_digest
+      prompt_version, model_id, runtime_image_digest,
+      parent_invocation_id, user_id, session_id
     ) VALUES (
       :iid::uuid, :agent_id, :agent_name, :template_id,
       :prompt_snippet, :response_snippet,
@@ -297,7 +334,8 @@ async function insertTrace(args: {
       :input_tokens, :output_tokens,
       :judge_input_tokens, :judge_output_tokens,
       :est_cost_usd, :judge_cost_usd, :total_cost_usd,
-      :prompt_version, :model_id, :runtime_image_digest
+      :prompt_version, :model_id, :runtime_image_digest,
+      ${parentSql}, :user_id, :session_id
     )
     ON CONFLICT (invocation_id) DO NOTHING`;
 
@@ -324,7 +362,106 @@ async function insertTrace(args: {
     nullableStr('prompt_version', args.promptVersion),
     nullableStr('model_id', args.modelId),
     nullableStr('runtime_image_digest', args.runtimeImageDigest),
+    nullableStr('user_id', args.userId),
+    nullableStr('session_id', args.sessionId),
   ];
+  if (args.parentInvocationId) {
+    params.push(strParam('parent_invocation_id', args.parentInvocationId));
+  }
+
+  await exec(sql, params);
+}
+
+// Sprint 2 (M4) — best-effort batch INSERT of per-tool call rows. Capped at 50
+// entries per invocation so a runaway agent can't tank the trace path. Wrapped
+// in a single try/catch so any failure here NEVER bubbles up to the trace
+// insert that just succeeded; we log and move on.
+const TOOL_CALL_MAX_PER_INVOCATION = 50;
+const TOOL_CALL_SAMPLE_MAX = 500;
+
+function snipSample(text: string | undefined, max = TOOL_CALL_SAMPLE_MAX): string | null {
+  if (text === undefined || text === null) return null;
+  if (typeof text !== 'string') return null;
+  if (text.length === 0) return '';
+  return text.length > max ? text.slice(0, max - 1) + '...' : text;
+}
+
+function isValidUuid(s: string | undefined | null): s is string {
+  return typeof s === 'string' && /^[0-9a-f-]{36}$/i.test(s);
+}
+
+async function insertToolCalls(
+  invocationId: string,
+  toolCalls: ToolCallInput[],
+): Promise<void> {
+  if (!toolCalls || toolCalls.length === 0) return;
+  // Defensive cap.
+  const slice = toolCalls.slice(0, TOOL_CALL_MAX_PER_INVOCATION);
+
+  // Build a single multi-row INSERT — N rows in one round-trip. Each row gets
+  // its own positional parameter set (:tn_0, :sa_0, ...). started_at falls
+  // back to now() if missing or unparseable, so a sloppy emitter still
+  // produces a chronologically-coherent row.
+  const valueClauses: string[] = [];
+  const params: SqlParameter[] = [
+    strParam('iid', invocationId),
+  ];
+
+  let validCount = 0;
+  for (let i = 0; i < slice.length; i++) {
+    const tc = slice[i]!;
+    const toolName = typeof tc.toolName === 'string' ? tc.toolName.trim() : '';
+    if (!toolName) continue;
+
+    const tn  = `tn_${validCount}`;
+    const sa  = `sa_${validCount}`;
+    const dm  = `dm_${validCount}`;
+    const isz = `isz_${validCount}`;
+    const osz = `osz_${validCount}`;
+    const err = `err_${validCount}`;
+    const em  = `em_${validCount}`;
+    const ism = `ism_${validCount}`;
+    const osm = `osm_${validCount}`;
+    const ec  = `ec_${validCount}`;
+
+    // started_at: prefer caller's ISO if it parses, else now() server-side.
+    let startedAtSql = 'now()';
+    let bindStartedAt = false;
+    if (typeof tc.startedAt === 'string' && tc.startedAt.trim()) {
+      const parsed = Date.parse(tc.startedAt);
+      if (Number.isFinite(parsed)) {
+        startedAtSql = `:${sa}::timestamptz`;
+        bindStartedAt = true;
+      }
+    }
+
+    valueClauses.push(
+      `(:iid::uuid, :${tn}, ${startedAtSql}, :${dm}, :${isz}, :${osz}, :${err}, :${em}, :${ism}, :${osm}, :${ec})`,
+    );
+
+    params.push(strParam(tn, toolName));
+    if (bindStartedAt) {
+      params.push(strParam(sa, tc.startedAt as string));
+    }
+    params.push(nullableInt(dm,  tc.durationMs ?? null));
+    params.push(nullableInt(isz, tc.inputSize ?? null));
+    params.push(nullableInt(osz, tc.outputSize ?? null));
+    params.push(nullableBool(err, tc.errored ?? false));
+    params.push(nullableStr(em,  tc.errorMessage ?? null));
+    params.push(nullableStr(ism, snipSample(tc.inputSample)));
+    params.push(nullableStr(osm, snipSample(tc.outputSample)));
+    params.push(nullableNumber(ec, tc.estCostUsd ?? null));
+
+    validCount++;
+  }
+
+  if (validCount === 0) return;
+
+  const sql = `INSERT INTO observability.tool_calls (
+      invocation_id, tool_name, started_at, duration_ms,
+      input_size, output_size, errored, error_message,
+      input_sample, output_sample, est_cost_usd
+    ) VALUES ${valueClauses.join(', ')}`;
 
   await exec(sql, params);
 }
@@ -466,6 +603,16 @@ export async function processTrace(input: TraceInput): Promise<TraceResult> {
   // signal that bubbles up as an error — every other step swallows.
   let inserted = false;
   let insertError: unknown = null;
+  const parentInvocationId = isValidUuid(input.parentInvocationId)
+    ? input.parentInvocationId
+    : null;
+  const userId = typeof input.userId === 'string' && input.userId.trim()
+    ? input.userId.trim()
+    : null;
+  const sessionId = typeof input.sessionId === 'string' && input.sessionId.trim()
+    ? input.sessionId.trim()
+    : null;
+
   try {
     await insertTrace({
       invocationId,
@@ -491,6 +638,9 @@ export async function processTrace(input: TraceInput): Promise<TraceResult> {
       promptVersion: input.promptVersion ?? null,
       modelId: input.modelId ?? null,
       runtimeImageDigest: input.runtimeImageDigest ?? null,
+      parentInvocationId,
+      userId,
+      sessionId,
     });
     inserted = true;
   } catch (err) {
@@ -498,6 +648,17 @@ export async function processTrace(input: TraceInput): Promise<TraceResult> {
       (err as Error).message);
     insertError = err;
     // Don't return — still publish metrics from in-memory values.
+  }
+
+  // Sprint 2 (M4) — best-effort per-tool call rows. Wrapped so a failure here
+  // NEVER bubbles up; the parent invocation row has already been persisted.
+  if (inserted && Array.isArray(input.toolCalls) && input.toolCalls.length > 0) {
+    try {
+      await insertToolCalls(invocationId, input.toolCalls);
+    } catch (err) {
+      console.warn('[trace-sink] insertToolCalls failed:',
+        (err as Error).message);
+    }
   }
 
   // 4. Publish CloudWatch metrics (don't block; let them race).

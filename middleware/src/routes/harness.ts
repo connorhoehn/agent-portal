@@ -273,6 +273,22 @@ harnessRouter.post('/trace', asyncHandler(async (req, res) => {
   if (typeof body.runtimeImageDigest === 'string' && body.runtimeImageDigest.trim()) {
     input.runtimeImageDigest = body.runtimeImageDigest.trim();
   }
+  // Sprint 2 (M3/M4) — trace stitching + per-tool calls passthrough. We
+  // accept these on /trace so the harness runner (sim mode) can emit
+  // multi-agent bundles even before the live-mode AgentCore path exists.
+  if (typeof body.parentInvocationId === 'string'
+      && /^[0-9a-f-]{36}$/i.test(body.parentInvocationId)) {
+    input.parentInvocationId = body.parentInvocationId;
+  }
+  if (typeof body.userId === 'string' && body.userId.trim()) {
+    input.userId = body.userId.trim();
+  }
+  if (typeof body.sessionId === 'string' && body.sessionId.trim()) {
+    input.sessionId = body.sessionId.trim();
+  }
+  if (Array.isArray(body.toolCalls)) {
+    input.toolCalls = body.toolCalls;
+  }
 
   // 30s ceiling — embedding + judge + INSERT must complete inside this window.
   const TIMEOUT_MS = 30_000;

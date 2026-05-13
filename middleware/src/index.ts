@@ -13,6 +13,8 @@ import { approvalsRouter } from './routes/approvals.js';
 import { harnessRouter } from './routes/harness.js';
 import { promptVersionsRouter } from './routes/prompt-versions.js';
 import { costRouter } from './routes/cost.js';
+import { invocationsRouter } from './routes/invocations.js';
+import { toolCallsRouter } from './routes/tool-calls.js';
 import { capabilitiesRouter } from './routes/capabilities.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { sessionRouter } from './routes/session.js';
@@ -60,6 +62,11 @@ app.use('/api/observability/prompt-versions', promptVersionsRouter);
 // Cost aggregation routes — read-only aggregates over invocation_traces cost
 // columns. Mounted ungated for now; can be Cedar-gated later if PII surfaces.
 app.use('/api/observability/cost', costRouter);
+// Sprint 2 — invocation search + per-invocation drill-down (M3/M5 triage).
+// Mounted ungated so the portal triage page can hit it directly, same as cost.
+app.use('/api/observability/invocations', invocationsRouter);
+// Sprint 2 — per-tool latency aggregates + error tail (M4).
+app.use('/api/observability/tools', toolCallsRouter);
 app.use('/api/observability', requireAction('ViewObservability'), observabilityRouter);
 app.use('/api/capabilities', capabilitiesRouter);
 app.use('/api/sessions', sessionsRouter);
