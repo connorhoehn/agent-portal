@@ -18,6 +18,9 @@
 //   GET /timeseries?windowHours=24&bucketMin=60
 //   GET /top?windowHours=24&limit=20
 //   GET /by-model?windowHours=24
+//   GET /a2a-overhead?windowHours=24       (Sprint 3 M7)
+//   GET /value-ratio?windowHours=24        (Sprint 3 M7)
+//   GET /deploy-markers?windowHours=168    (Sprint 3 M7)
 
 import { Router } from 'express';
 import { asyncHandler } from '../lib/async-handler.js';
@@ -343,5 +346,187 @@ costRouter.get('/by-model', asyncHandler(async (req, res) => {
   } catch (err) {
     console.warn('[cost] /by-model failed:', (err as Error).message);
     res.json({ byModel: [], withCost: 0, windowHours } satisfies CostByModelResponse);
+  }
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /a2a-overhead — Of total Bedrock cost, what % is supervisor → sub-agent
+// invocation overhead (multi-agent topology cost) vs direct user invocations?
+//
+// A2A invocations are those with parent_invocation_id IS NOT NULL — i.e. spawned
+// by another agent rather than initiated directly by a user request.
+// ─────────────────────────────────────────────────────────────────────────────
+interface CostA2AOverheadResponse {
+  totalCostUsd: number;
+  a2aCostUsd: number;
+  directCostUsd: number;
+  a2aFraction: number;
+  a2aInvocations: number;
+  directInvocations: number;
+  windowHours: number;
+}
+
+costRouter.get('/a2a-overhead', asyncHandler(async (req, res) => {
+  const windowHours = clampWindowHours(req.query['windowHours'] as string | undefined);
+
+  // SUM(...) FILTER (WHERE ...) gives us both branches in a single round-trip
+  // without GROUP BY gymnastics. Cost columns may be NULL on older rows — the
+  // COALESCE keeps the totals zero-safe.
+  const sql = `
+    SELECT COUNT(*)::bigint                                            AS total_invocations,
+           COUNT(*) FILTER (WHERE parent_invocation_id IS NOT NULL)::bigint    AS a2a_invocations,
+           COUNT(*) FILTER (WHERE parent_invocation_id IS NULL)::bigint        AS direct_invocations,
+           COALESCE(SUM(COALESCE(total_cost_usd, 0)), 0)::float8        AS total_cost_usd,
+           COALESCE(SUM(COALESCE(total_cost_usd, 0))
+                    FILTER (WHERE parent_invocation_id IS NOT NULL), 0)::float8 AS a2a_cost_usd,
+           COALESCE(SUM(COALESCE(total_cost_usd, 0))
+                    FILTER (WHERE parent_invocation_id IS NULL), 0)::float8     AS direct_cost_usd
+      FROM observability.invocation_traces
+     WHERE ts > now() - (INTERVAL '1 hour' * :hours)
+       AND (template_id NOT LIKE 'test:%' OR template_id IS NULL)`;
+
+  try {
+    const rows = await exec(sql, [{ name: 'hours', value: { longValue: windowHours } }]);
+    const r = rows[0] ?? {};
+    const totalCostUsd = r['total_cost_usd'] == null ? 0 : Number(r['total_cost_usd']);
+    const a2aCostUsd = r['a2a_cost_usd'] == null ? 0 : Number(r['a2a_cost_usd']);
+    const directCostUsd = r['direct_cost_usd'] == null ? 0 : Number(r['direct_cost_usd']);
+    const out: CostA2AOverheadResponse = {
+      totalCostUsd,
+      a2aCostUsd,
+      directCostUsd,
+      a2aFraction: totalCostUsd > 0 ? a2aCostUsd / totalCostUsd : 0,
+      a2aInvocations: Number(r['a2a_invocations'] ?? 0),
+      directInvocations: Number(r['direct_invocations'] ?? 0),
+      windowHours,
+    };
+    res.json(out);
+  } catch (err) {
+    console.warn('[cost] /a2a-overhead failed:', (err as Error).message);
+    const empty: CostA2AOverheadResponse = {
+      totalCostUsd: 0,
+      a2aCostUsd: 0,
+      directCostUsd: 0,
+      a2aFraction: 0,
+      a2aInvocations: 0,
+      directInvocations: 0,
+      windowHours,
+    };
+    res.json(empty);
+  }
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /value-ratio — Cost per "good" response per agent.
+//
+// Defined as: sum(total_cost_usd) / count(*) WHERE judge_score >= 0.7
+// Lower is better — agents that produce good answers cheaply.
+// ─────────────────────────────────────────────────────────────────────────────
+interface CostValueRatioRow {
+  agentId: string;
+  goodResponses: number;
+  goodCostUsd: number;
+  costPerGood: number | null;
+  totalResponses: number;
+  totalCostUsd: number;
+  goodRate: number;
+}
+
+interface CostValueRatioResponse {
+  byAgent: CostValueRatioRow[];
+  windowHours: number;
+}
+
+costRouter.get('/value-ratio', asyncHandler(async (req, res) => {
+  const windowHours = clampWindowHours(req.query['windowHours'] as string | undefined);
+
+  // Compute "good" cost+count branches inline using FILTER. costPerGood comes
+  // from the client side (null when goodResponses == 0).
+  const sql = `
+    SELECT agent_id,
+           COUNT(*)::bigint                                            AS total_responses,
+           COALESCE(SUM(COALESCE(total_cost_usd, 0)), 0)::float8        AS total_cost_usd,
+           COUNT(*) FILTER (WHERE judge_score >= 0.7)::bigint           AS good_responses,
+           COALESCE(SUM(COALESCE(total_cost_usd, 0))
+                    FILTER (WHERE judge_score >= 0.7), 0)::float8       AS good_cost_usd
+      FROM observability.invocation_traces
+     WHERE ts > now() - (INTERVAL '1 hour' * :hours)
+       AND (template_id NOT LIKE 'test:%' OR template_id IS NULL)
+     GROUP BY agent_id
+     ORDER BY agent_id ASC`;
+
+  try {
+    const rows = await exec(sql, [{ name: 'hours', value: { longValue: windowHours } }]);
+    const byAgent: CostValueRatioRow[] = rows.map((r) => {
+      const totalResponses = Number(r['total_responses'] ?? 0);
+      const totalCostUsd = r['total_cost_usd'] == null ? 0 : Number(r['total_cost_usd']);
+      const goodResponses = Number(r['good_responses'] ?? 0);
+      const goodCostUsd = r['good_cost_usd'] == null ? 0 : Number(r['good_cost_usd']);
+      return {
+        agentId: String(r['agent_id'] ?? 'unknown'),
+        goodResponses,
+        goodCostUsd,
+        costPerGood: goodResponses > 0 ? goodCostUsd / goodResponses : null,
+        totalResponses,
+        totalCostUsd,
+        goodRate: totalResponses > 0 ? goodResponses / totalResponses : 0,
+      };
+    });
+    const out: CostValueRatioResponse = { byAgent, windowHours };
+    res.json(out);
+  } catch (err) {
+    console.warn('[cost] /value-ratio failed:', (err as Error).message);
+    res.json({ byAgent: [], windowHours } satisfies CostValueRatioResponse);
+  }
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /deploy-markers — Prompt-version registration events for overlay on the
+// cost-over-time chart. Each marker is a (registeredAt, agentId, promptVersion)
+// triple from observability.prompt_versions, scoped to the same window.
+// ─────────────────────────────────────────────────────────────────────────────
+interface CostDeployMarker {
+  promptVersion: string;
+  agentId: string;
+  registeredAt: string;
+  notes: string | null;
+}
+
+interface CostDeployMarkersResponse {
+  markers: CostDeployMarker[];
+  windowHours: number;
+}
+
+costRouter.get('/deploy-markers', asyncHandler(async (req, res) => {
+  // Default to a 7-day window — deploy markers are sparse, so a wider lookback
+  // is more useful when the user picks a tight cost window.
+  const windowHours = clampWindowHours(
+    req.query['windowHours'] as string | undefined,
+    168,
+    24 * 30,
+  );
+
+  const sql = `
+    SELECT prompt_version,
+           agent_id,
+           registered_at::text       AS registered_at,
+           notes
+      FROM observability.prompt_versions
+     WHERE registered_at > now() - (INTERVAL '1 hour' * :hours)
+     ORDER BY registered_at ASC`;
+
+  try {
+    const rows = await exec(sql, [{ name: 'hours', value: { longValue: windowHours } }]);
+    const markers: CostDeployMarker[] = rows.map((r) => ({
+      promptVersion: String(r['prompt_version'] ?? ''),
+      agentId: String(r['agent_id'] ?? ''),
+      registeredAt: String(r['registered_at'] ?? ''),
+      notes: r['notes'] == null ? null : String(r['notes']),
+    }));
+    const out: CostDeployMarkersResponse = { markers, windowHours };
+    res.json(out);
+  } catch (err) {
+    console.warn('[cost] /deploy-markers failed:', (err as Error).message);
+    res.json({ markers: [], windowHours } satisfies CostDeployMarkersResponse);
   }
 }));

@@ -33,6 +33,7 @@ function ObservabilityLayout() {
     { path: 'authz',             label: 'Authz Log',         hint: 'Live AVP decisions' },
     { path: 'drift',             label: 'Drift',             hint: 'Schema + judge + embedding drift' },
     { path: 'quality',           label: 'Quality',           hint: 'Judge scores + feedback' },
+    { path: 'cost',              label: 'Cost',              hint: 'Spend by agent + deploy markers' },
     { path: 'approvals',         label: 'Approval Queue',    hint: 'Pending HITL decisions' },
     { path: 'harness',           label: 'Harness',           hint: 'Replay test set + view runs' },
   ];
