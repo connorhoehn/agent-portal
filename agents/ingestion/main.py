@@ -16,10 +16,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.approval_tool import request_approval  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
     TraceContext,
+    install_bedrock_usage_capture,
     instrumented_tool,
     post_trace,
+    reset_active_ctx,
+    set_active_ctx,
     short_prompt_hash,
 )
+
+# Patch boto3's bedrock-runtime client BEFORE Strands constructs its own —
+# otherwise Converse usage is invisible to our TraceContext.
+install_bedrock_usage_capture()
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -278,6 +285,7 @@ async def handle(payload: dict) -> dict:
     # Picks up ``parentInvocationId`` when the supervisor invoked us via A2A.
     ctx = TraceContext.from_request_payload(payload if isinstance(payload, dict) else {})
     token = _current_ctx.set(ctx)
+    shared_token = set_active_ctx(ctx)
 
     log.info(
         "Ingestion handling (invocation=%s, parent=%s): %s",
@@ -289,6 +297,7 @@ async def handle(payload: dict) -> dict:
         result = _agent(input_text)
     finally:
         _current_ctx.reset(token)
+        reset_active_ctx(shared_token)
     duration_ms = int((time.monotonic() - t0) * 1000)
 
     response_text = str(result)
