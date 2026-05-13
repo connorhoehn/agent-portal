@@ -938,3 +938,393 @@ harnessRouter.get('/coverage', asyncHandler(async (_req, res) => {
   });
   res.json({ byAgent });
 }));
+
+// ── Sprint 3 (M8) — run-vs-run comparison ──────────────────────────────────
+//
+// GET /runs/:runIdA/compare/:runIdB
+//   Returns runA, runB, plus per-test deltas bucketed into regressions /
+//   fixes / neutral (|Δ| < 0.05). Sums per-side cost + average duration into
+//   a summary block. The promptVersionDelta entry surfaces agents whose
+//   prompt-version SHA differs between runs A and B — the most actionable
+//   diff for a researcher who's about to ship.
+
+export interface ComparedResult {
+  testId: string;
+  agentId: string;
+  scoreA: number | null;
+  scoreB: number | null;
+  scoreDelta: number | null;
+  passedA: boolean | null;
+  passedB: boolean | null;
+  costDeltaUsd: number | null;
+  durationDeltaMs: number | null;
+  responseA?: string;
+  responseB?: string;
+}
+
+export interface PromptVersionDeltaEntry {
+  agentId: string;
+  fromVersion: string;
+  toVersion: string;
+}
+
+export interface CompareRunsSummary {
+  passRateA: number;
+  passRateB: number;
+  passRateDelta: number;
+  costAUsd: number | null;
+  costBUsd: number | null;
+  costDeltaUsd: number | null;
+  avgDurationMsA: number;
+  avgDurationMsB: number;
+  durationDeltaMs: number;
+  modeA: 'live' | 'sim';
+  modeB: 'live' | 'sim';
+  judgeModelA: string;
+  judgeModelB: string;
+  promptVersionDelta: PromptVersionDeltaEntry[];
+}
+
+const NEUTRAL_BAND = 0.05;
+
+async function fetchRunRow(id: string): Promise<TestRun | null> {
+  const rows = await exec(
+    `SELECT run_id::text AS run_id, label, git_sha, judge_model_id,
+            agent_versions::text AS agent_versions,
+            status, total_cases, completed, passed, failed, pass_rate,
+            started_at::text AS started_at,
+            finished_at::text AS finished_at,
+            notes, mode
+       FROM observability.test_runs
+      WHERE run_id = CAST(:id AS uuid)`,
+    [strParam('id', id)],
+  );
+  if (rows.length === 0) return null;
+  return rowToTestRun(rows[0]!);
+}
+
+interface JoinedResultRow {
+  test_id: string;
+  agent_id: string | null;
+  judge_score: number | null;
+  passed: boolean | null;
+  est_cost_usd: number | null;
+  duration_ms: number | null;
+  response_snippet: string | null;
+}
+
+async function fetchJoinedResults(runId: string): Promise<JoinedResultRow[]> {
+  const rows = await exec(
+    `SELECT r.test_id AS test_id,
+            COALESCE(c.agent_id, '') AS agent_id,
+            r.judge_score,
+            r.passed,
+            r.est_cost_usd,
+            r.duration_ms,
+            COALESCE(r.response_snippet, t.response_snippet) AS response_snippet
+       FROM observability.test_results r
+       LEFT JOIN observability.test_cases c ON c.test_id = r.test_id
+       LEFT JOIN observability.invocation_traces t
+         ON t.invocation_id = r.invocation_id
+      WHERE r.run_id = CAST(:id AS uuid)`,
+    [strParam('id', runId)],
+  );
+  return rows.map((r) => ({
+    test_id: String(r['test_id'] ?? ''),
+    agent_id: r['agent_id'] == null ? null : String(r['agent_id']),
+    judge_score: r['judge_score'] == null ? null : Number(r['judge_score']),
+    passed: r['passed'] == null ? null : Boolean(r['passed']),
+    est_cost_usd: r['est_cost_usd'] == null ? null : Number(r['est_cost_usd']),
+    duration_ms: r['duration_ms'] == null ? null : Number(r['duration_ms']),
+    response_snippet: r['response_snippet'] == null ? null : String(r['response_snippet']),
+  }));
+}
+
+function sumCost(rows: JoinedResultRow[]): number | null {
+  let any = false;
+  let total = 0;
+  for (const r of rows) {
+    if (r.est_cost_usd != null && Number.isFinite(r.est_cost_usd)) {
+      any = true;
+      total += r.est_cost_usd;
+    }
+  }
+  return any ? total : null;
+}
+
+function avgDurationMs(rows: JoinedResultRow[]): number {
+  let n = 0;
+  let total = 0;
+  for (const r of rows) {
+    if (r.duration_ms != null && Number.isFinite(r.duration_ms)) {
+      total += r.duration_ms;
+      n += 1;
+    }
+  }
+  return n === 0 ? 0 : total / n;
+}
+
+function computePassRate(run: TestRun): number {
+  if (run.passRate != null && Number.isFinite(run.passRate)) return run.passRate;
+  if (run.completed > 0) return run.passed / run.completed;
+  return 0;
+}
+
+function diffPromptVersions(
+  a: Record<string, string>,
+  b: Record<string, string>,
+): PromptVersionDeltaEntry[] {
+  const out: PromptVersionDeltaEntry[] = [];
+  const agentIds = new Set<string>([...Object.keys(a), ...Object.keys(b)]);
+  for (const agentId of agentIds) {
+    const fromVersion = a[agentId];
+    const toVersion = b[agentId];
+    if (!fromVersion || !toVersion) {
+      // One side missing — record only when both sides claim a version. Single-
+      // sided records aren't actionable as a delta. Skip.
+      if (fromVersion !== toVersion && fromVersion && toVersion) {
+        out.push({ agentId, fromVersion, toVersion });
+      }
+      continue;
+    }
+    if (fromVersion !== toVersion) {
+      out.push({ agentId, fromVersion, toVersion });
+    }
+  }
+  out.sort((x, y) => x.agentId.localeCompare(y.agentId));
+  return out;
+}
+
+harnessRouter.get('/runs/:runIdA/compare/:runIdB', asyncHandler(async (req, res) => {
+  const runIdA = String(req.params['runIdA'] ?? '');
+  const runIdB = String(req.params['runIdB'] ?? '');
+  if (!runIdA || !runIdB) {
+    throw new ValidationError('runIdA and runIdB are required');
+  }
+
+  const [runA, runB] = await Promise.all([fetchRunRow(runIdA), fetchRunRow(runIdB)]);
+  if (!runA || !runB) {
+    res.status(404).json({
+      error: 'run not found',
+      missing: [!runA ? runIdA : null, !runB ? runIdB : null].filter(Boolean),
+    });
+    return;
+  }
+
+  const [rowsA, rowsB] = await Promise.all([
+    fetchJoinedResults(runIdA),
+    fetchJoinedResults(runIdB),
+  ]);
+
+  const mapA = new Map<string, JoinedResultRow>(rowsA.map((r) => [r.test_id, r]));
+  const mapB = new Map<string, JoinedResultRow>(rowsB.map((r) => [r.test_id, r]));
+  const allTestIds = new Set<string>([...mapA.keys(), ...mapB.keys()]);
+
+  const regressions: ComparedResult[] = [];
+  const fixes: ComparedResult[] = [];
+  const neutral: ComparedResult[] = [];
+
+  for (const tid of allTestIds) {
+    const a = mapA.get(tid);
+    const b = mapB.get(tid);
+    const scoreA = a?.judge_score ?? null;
+    const scoreB = b?.judge_score ?? null;
+    const scoreDelta = (scoreA != null && scoreB != null) ? (scoreB - scoreA) : null;
+    const costA = a?.est_cost_usd ?? null;
+    const costB = b?.est_cost_usd ?? null;
+    const costDelta = (costA != null && costB != null) ? (costB - costA) : null;
+    const durA = a?.duration_ms ?? null;
+    const durB = b?.duration_ms ?? null;
+    const durDelta = (durA != null && durB != null) ? (durB - durA) : null;
+
+    const agentId = (a?.agent_id || b?.agent_id || '') ?? '';
+
+    const entry: ComparedResult = {
+      testId: tid,
+      agentId,
+      scoreA,
+      scoreB,
+      scoreDelta,
+      passedA: a?.passed ?? null,
+      passedB: b?.passed ?? null,
+      costDeltaUsd: costDelta,
+      durationDeltaMs: durDelta,
+    };
+    if (a?.response_snippet) entry.responseA = a.response_snippet;
+    if (b?.response_snippet) entry.responseB = b.response_snippet;
+
+    if (scoreDelta == null) {
+      // No score on one side — treat as neutral so the test still surfaces.
+      neutral.push(entry);
+      continue;
+    }
+    if (scoreDelta <= -NEUTRAL_BAND) regressions.push(entry);
+    else if (scoreDelta >= NEUTRAL_BAND) fixes.push(entry);
+    else neutral.push(entry);
+  }
+
+  // Sort by |Δ| desc; null deltas drop to bottom.
+  const byAbsDelta = (x: ComparedResult, y: ComparedResult): number => {
+    const ax = x.scoreDelta == null ? -1 : Math.abs(x.scoreDelta);
+    const ay = y.scoreDelta == null ? -1 : Math.abs(y.scoreDelta);
+    return ay - ax;
+  };
+  regressions.sort(byAbsDelta);
+  fixes.sort(byAbsDelta);
+  neutral.sort((x, y) => x.testId.localeCompare(y.testId));
+
+  const costAUsd = sumCost(rowsA);
+  const costBUsd = sumCost(rowsB);
+  const costDeltaUsd = (costAUsd != null && costBUsd != null) ? (costBUsd - costAUsd) : null;
+  const avgDurationMsA = avgDurationMs(rowsA);
+  const avgDurationMsB = avgDurationMs(rowsB);
+  const passRateA = computePassRate(runA);
+  const passRateB = computePassRate(runB);
+  const promptVersionDelta = diffPromptVersions(runA.agentVersions, runB.agentVersions);
+
+  const summary: CompareRunsSummary = {
+    passRateA,
+    passRateB,
+    passRateDelta: passRateB - passRateA,
+    costAUsd,
+    costBUsd,
+    costDeltaUsd,
+    avgDurationMsA,
+    avgDurationMsB,
+    durationDeltaMs: avgDurationMsB - avgDurationMsA,
+    modeA: runA.mode,
+    modeB: runB.mode,
+    judgeModelA: runA.judgeModelId,
+    judgeModelB: runB.judgeModelId,
+    promptVersionDelta,
+  };
+
+  res.json({
+    runA,
+    runB,
+    regressions,
+    fixes,
+    neutral,
+    summary,
+  });
+}));
+
+// ── Sprint 3 (M8) — promote a prompt version ───────────────────────────────
+//
+// POST /promote { promptVersion, agentId, notes? } → marks the version
+// production-blessed by stamping promoted_at / promoted_by / promote_notes
+// on observability.prompt_versions. Idempotent — re-promoting the same row
+// just refreshes promoted_at. agentId is required so a UI mis-click can't
+// silently promote a version from a different agent (we verify the SHA
+// belongs to the claimed agent).
+//
+// Promoted_by: we don't have a session on this route (mounted before the
+// Cedar gate so the harness CLI can hit it). Body may supply 'promotedBy'
+// for now — the portal will pass the current user's id once the gate is
+// extended.
+
+interface PromoteBody {
+  promptVersion?: string;
+  agentId?: string;
+  notes?: string | null;
+  promotedBy?: string | null;
+}
+
+harnessRouter.post('/promote', asyncHandler(async (req, res) => {
+  const body = (req.body ?? {}) as PromoteBody;
+  const promptVersion = typeof body.promptVersion === 'string' ? body.promptVersion.trim() : '';
+  const agentId = typeof body.agentId === 'string' ? body.agentId.trim() : '';
+  if (!promptVersion) throw new ValidationError('promptVersion is required');
+  if (!agentId) throw new ValidationError('agentId is required');
+
+  // Verify the SHA exists AND matches the claimed agent. Surfaces a 404 when
+  // the version is unknown (mistyped) and a 409 when it belongs to a
+  // different agent (UI bug or stale state).
+  const existing = await exec(
+    `SELECT agent_id FROM observability.prompt_versions
+      WHERE prompt_version = :pv`,
+    [strParam('pv', promptVersion)],
+  );
+  if (existing.length === 0) {
+    res.status(404).json({ error: 'prompt_version not found', promptVersion });
+    return;
+  }
+  const ownerAgentId = String(existing[0]?.['agent_id'] ?? '');
+  if (ownerAgentId && ownerAgentId !== agentId) {
+    res.status(409).json({
+      error: 'agentId mismatch — this prompt_version belongs to a different agent',
+      promptVersion,
+      expectedAgentId: ownerAgentId,
+      gotAgentId: agentId,
+    });
+    return;
+  }
+
+  const promotedBy = (typeof body.promotedBy === 'string' && body.promotedBy.trim())
+    ? body.promotedBy.trim()
+    : 'harness-runner';
+
+  const updated = await exec(
+    `UPDATE observability.prompt_versions
+        SET promoted_at = now(),
+            promoted_by = :promoted_by,
+            promote_notes = :promote_notes
+      WHERE prompt_version = :pv
+      RETURNING prompt_version, promoted_at::text AS promoted_at`,
+    [
+      strParam('pv', promptVersion),
+      strParam('promoted_by', promotedBy),
+      nullableStr('promote_notes', body.notes ?? null),
+    ],
+  );
+  if (updated.length === 0) {
+    // Race: row deleted between the SELECT and the UPDATE. Same shape as 404.
+    res.status(404).json({ error: 'prompt_version not found', promptVersion });
+    return;
+  }
+  const promotedAt = String(updated[0]?.['promoted_at'] ?? '');
+  res.json({ ok: true, promotedAt });
+}));
+
+// ── Sprint 3 (M8) — list promoted versions ─────────────────────────────────
+
+export interface PromotedPromptVersion {
+  promptVersion: string;
+  agentId: string;
+  content: string;
+  contentSha256: string;
+  registeredAt: string;
+  promotedAt: string;
+  promotedBy: string | null;
+  promoteNotes: string | null;
+  notes: string | null;
+}
+
+function rowToPromotedVersion(r: Record<string, unknown>): PromotedPromptVersion {
+  return {
+    promptVersion: String(r['prompt_version'] ?? ''),
+    agentId: String(r['agent_id'] ?? ''),
+    content: String(r['content'] ?? ''),
+    contentSha256: String(r['content_sha256'] ?? ''),
+    registeredAt: String(r['registered_at'] ?? ''),
+    promotedAt: String(r['promoted_at'] ?? ''),
+    promotedBy: r['promoted_by'] == null ? null : String(r['promoted_by']),
+    promoteNotes: r['promote_notes'] == null ? null : String(r['promote_notes']),
+    notes: r['notes'] == null ? null : String(r['notes']),
+  };
+}
+
+harnessRouter.get('/promoted-versions', asyncHandler(async (_req, res) => {
+  const rows = await exec(
+    `SELECT prompt_version, agent_id, content, content_sha256,
+            registered_at::text AS registered_at,
+            promoted_at::text AS promoted_at,
+            promoted_by, promote_notes, notes
+       FROM observability.prompt_versions
+      WHERE promoted_at IS NOT NULL
+      ORDER BY promoted_at DESC
+      LIMIT 200`,
+    [],
+  );
+  res.json({ versions: rows.map(rowToPromotedVersion) });
+}));

@@ -904,7 +904,11 @@ def cmd_run(args: argparse.Namespace) -> int:
     print(f"run {run_id} done in {total_elapsed:.1f}s")
     print(f"  pass-rate: {pass_rate:.0%}  ({passed_n} pass / {failed_n} fail / {completed} total)")
 
-    # Optional: compare to most recent prior run (regressions only).
+    portal = os.environ.get("PORTAL_URL", "http://localhost:5183")
+
+    # Optional: compare to most recent prior run (regressions only). When
+    # regressions exist we surface the portal compare URL so the operator
+    # can jump straight to the side-by-side diff.
     try:
         recent = _http(
             "GET",
@@ -917,10 +921,13 @@ def cmd_run(args: argparse.Namespace) -> int:
                 print(f"  regressions vs {prior_id}: {len(regressions)}")
                 for r in regressions[:5]:
                     print(f"    - {r['test_id']}  Δ {r['delta']:+.2f}")
+                print(
+                    "  Regressions detected. Compare runs side-by-side:\n"
+                    f"   {portal}/observability/harness/compare/{prior_id}/{run_id}"
+                )
     except (HttpError, RuntimeError):
         pass
 
-    portal = os.environ.get("PORTAL_URL", "http://localhost:5183")
     print(f"  portal: {portal}/observability/harness/runs/{run_id}")
     return 0 if completed == len(cases) else 4
 
@@ -1213,6 +1220,34 @@ def cmd_replay(args: argparse.Namespace) -> int:
     return 0 if passed else 4
 
 
+def cmd_promote(args: argparse.Namespace) -> int:
+    """Mark a prompt_version as production-blessed via the middleware promote
+    endpoint. Idempotent — repromoting the same row just refreshes
+    promoted_at. The middleware refuses if the version doesn't belong to the
+    claimed agent."""
+    body: dict[str, Any] = {
+        "agentId": args.agent,
+        "promptVersion": args.version,
+    }
+    if args.notes:
+        body["notes"] = args.notes
+    try:
+        resp = _http(
+            "POST",
+            f"{args.middleware}/api/observability/harness/promote",
+            body,
+        )
+    except HttpError as e:
+        print(f"promote failed: {e}", file=sys.stderr)
+        return 4
+    except RuntimeError as e:
+        print(f"promote failed: {e}", file=sys.stderr)
+        return 4
+    promoted_at = resp.get("promotedAt") or resp.get("promoted_at") or ""
+    print(f"promoted {args.agent} p:{args.version[:8]} at {promoted_at}")
+    return 0
+
+
 def _finalize_run(middleware: str, run_id: str, *, passed_n: int, failed_n: int) -> None:
     completed = passed_n + failed_n
     pass_rate = (passed_n / completed) if completed else 0.0
@@ -1312,6 +1347,18 @@ def build_parser() -> argparse.ArgumentParser:
     pd.add_argument("run_a")
     pd.add_argument("run_b")
 
+    pp = sub.add_parser(
+        "promote",
+        help="mark a prompt_version as production-blessed (Sprint 3)",
+    )
+    pp.add_argument("--agent", required=True, help="agent_id (e.g. orgiq-search)")
+    pp.add_argument(
+        "--version",
+        required=True,
+        help="prompt_version short SHA (as printed in trace rows / compare page)",
+    )
+    pp.add_argument("--notes", help="optional free-text note recorded on the row")
+
     pre = sub.add_parser(
         "replay",
         help="re-invoke a past invocation against the current runtime and "
@@ -1343,6 +1390,7 @@ def main(argv: list[str] | None = None) -> int:
         "status": cmd_status,
         "diff": cmd_diff,
         "replay": cmd_replay,
+        "promote": cmd_promote,
     }[args.cmd]
     try:
         return handler(args)

@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useParams, useNavigate } from 'react-router';
 import {
   Card,
   Table,
@@ -42,6 +42,9 @@ interface TestRun {
   // Sprint 1 fields (nullable until Agent A's migration lands).
   mode?: 'live' | 'sim' | string | null;
   totalCostUsd?: number | null;
+  // Sprint 3 (M8) — used by the promote modal so the user can bless this
+  // run's prompt versions for production.
+  agentVersions?: Record<string, string>;
 }
 
 interface TestResult {
@@ -136,7 +139,11 @@ function snip(s: string | null, max = 80): string {
 
 function RunDetailPage() {
   const params = useParams<{ runId: string }>();
+  const navigate = useNavigate();
   const runId = params.runId ?? '';
+
+  // Sprint 3 (M8) — promote modal toggle.
+  const [promoteOpen, setPromoteOpen] = useState(false);
 
   // Poll active runs every 5s; once terminal it's basically static so longer is fine.
   const { data: detailData, isLoading, error } = useFetch<RunDetailResp>(
@@ -342,13 +349,40 @@ function RunDetailPage() {
             </div>
             {run.notes && <div style={notesLine}>{run.notes}</div>}
           </div>
-          <div>
+          <div style={headerActions}>
+            <BaselinePicker
+              runs={allRuns}
+              currentRunId={runId}
+              onPick={(baselineId) => {
+                if (!baselineId) return;
+                navigate(
+                  `/observability/harness/compare/${encodeURIComponent(baselineId)}/${encodeURIComponent(runId)}`,
+                );
+              }}
+            />
+            {run.agentVersions && Object.keys(run.agentVersions).length > 0 && (
+              <button
+                type="button"
+                onClick={() => setPromoteOpen(true)}
+                style={primaryBtn}
+                title="Promote one or more of this run's prompt versions"
+              >
+                Promote prompt versions
+              </button>
+            )}
             <Link to="/observability/harness" style={btnLink}>
               ← Back to harness
             </Link>
           </div>
         </div>
       </Card>
+
+      {promoteOpen && run.agentVersions && (
+        <PromoteModal
+          agentVersions={run.agentVersions}
+          onClose={() => setPromoteOpen(false)}
+        />
+      )}
 
       {/* Regressions */}
       {hasRegressions && (
@@ -673,6 +707,182 @@ function ErrorBlock({
   );
 }
 
+// Sprint 3 (M8) — pick a baseline run to compare against this run. Up to 10
+// recent runs other than the current one are shown.
+function BaselinePicker({
+  runs,
+  currentRunId,
+  onPick,
+}: {
+  runs: TestRun[];
+  currentRunId: string;
+  onPick: (runId: string) => void;
+}) {
+  const candidates = useMemo(
+    () => runs.filter((r) => r.runId !== currentRunId).slice(0, 10),
+    [runs, currentRunId],
+  );
+  if (candidates.length === 0) return null;
+  return (
+    <label
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11 }}
+      title="Pick another run to side-by-side compare against this one"
+    >
+      <span style={{ color: 'var(--color-text-tertiary)' }}>Compare to baseline:</span>
+      <select
+        defaultValue=""
+        onChange={(e) => {
+          onPick(e.target.value);
+          // Reset so the same option can be picked again later if the user
+          // navigates back.
+          e.target.value = '';
+        }}
+        style={pickerSelect}
+      >
+        <option value="" disabled>
+          pick a run…
+        </option>
+        {candidates.map((c) => {
+          const short = c.runId.length > 8 ? c.runId.slice(0, 8) : c.runId;
+          return (
+            <option key={c.runId} value={c.runId}>
+              {short} · {c.label}
+            </option>
+          );
+        })}
+      </select>
+    </label>
+  );
+}
+
+// Sprint 3 (M8) — list each agentId → promptVersion in agentVersions and let
+// the user promote any of them. Tracks per-agent state so the UI can show a
+// success chip immediately on click without a refetch.
+function PromoteModal({
+  agentVersions,
+  onClose,
+}: {
+  agentVersions: Record<string, string>;
+  onClose: () => void;
+}) {
+  type RowState =
+    | { kind: 'idle' }
+    | { kind: 'pending' }
+    | { kind: 'done'; promotedAt: string }
+    | { kind: 'error'; message: string };
+  const [state, setState] = useState<Record<string, RowState>>({});
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  async function promote(agentId: string, promptVersion: string) {
+    setState((s) => ({ ...s, [agentId]: { kind: 'pending' } }));
+    try {
+      const res = await fetch('/api/observability/harness/promote', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ agentId, promptVersion }),
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        setState((s) => ({
+          ...s,
+          [agentId]: { kind: 'error', message: `${res.status} ${txt.slice(0, 100)}` },
+        }));
+        return;
+      }
+      const j = (await res.json()) as { promotedAt?: string };
+      setState((s) => ({
+        ...s,
+        [agentId]: { kind: 'done', promotedAt: j.promotedAt ?? new Date().toISOString() },
+      }));
+    } catch (e: unknown) {
+      setState((s) => ({
+        ...s,
+        [agentId]: { kind: 'error', message: e instanceof Error ? e.message : 'request failed' },
+      }));
+    }
+  }
+
+  const entries = Object.entries(agentVersions).sort((a, b) => a[0].localeCompare(b[0]));
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Promote prompt versions"
+      onClick={onClose}
+      style={modalOverlay}
+    >
+      <div onClick={(e) => e.stopPropagation()} style={modalBox}>
+        <div style={modalHeader}>
+          <h3 style={modalTitle}>Promote prompt versions</h3>
+          <button onClick={onClose} style={closeBtn} aria-label="Close">×</button>
+        </div>
+        <div style={modalBody}>
+          <p style={{ margin: '0 0 8px', color: 'var(--color-text-secondary)' }}>
+            Mark these prompt versions as production-blessed. Promote per-agent so a
+            partial decision (some agents OK, others still under review) stays clean.
+          </p>
+          {entries.length === 0 ? (
+            <div style={{ color: 'var(--color-text-tertiary)' }}>
+              This run did not record any prompt versions.
+            </div>
+          ) : (
+            entries.map(([agentId, pv]) => {
+              const short = pv.length > 8 ? pv.slice(0, 8) : pv;
+              const rs = state[agentId] ?? { kind: 'idle' as const };
+              return (
+                <div key={agentId} style={promoteRow}>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <span style={{ fontSize: 12, fontWeight: 500 }}>{agentId}</span>
+                    <span
+                      style={{
+                        ...monoInline,
+                        color: 'var(--color-text-tertiary)',
+                      }}
+                    >
+                      p:{short}
+                    </span>
+                  </div>
+                  <div>
+                    {rs.kind === 'idle' && (
+                      <button
+                        type="button"
+                        onClick={() => promote(agentId, pv)}
+                        style={promoteBtn}
+                      >
+                        Promote {agentId}
+                      </button>
+                    )}
+                    {rs.kind === 'pending' && (
+                      <Chip tone="warning" size="xs">promoting…</Chip>
+                    )}
+                    {rs.kind === 'done' && (
+                      <Chip tone="success" size="xs">
+                        ✓ promoted {new Date(rs.promotedAt).toLocaleTimeString()}
+                      </Chip>
+                    )}
+                    {rs.kind === 'error' && (
+                      <Chip tone="danger" size="xs">{rs.message}</Chip>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EmptyState({ text }: { text: string }) {
   return (
     <div
@@ -776,6 +986,95 @@ const btnLink: CSSProperties = {
   textDecoration: 'none',
   border: '1px solid transparent',
   borderRadius: 4,
+};
+const headerActions: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  flexWrap: 'wrap',
+};
+const primaryBtn: CSSProperties = {
+  padding: '4px 10px',
+  fontSize: 12,
+  fontWeight: 500,
+  color: '#fff',
+  background: 'var(--color-primary, #6366f1)',
+  border: '1px solid var(--color-primary, #6366f1)',
+  borderRadius: 4,
+  cursor: 'pointer',
+};
+const pickerSelect: CSSProperties = {
+  padding: '4px 8px',
+  fontSize: 12,
+  color: 'var(--color-text-primary)',
+  background: 'var(--color-surface)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 4,
+  cursor: 'pointer',
+};
+const modalOverlay: CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  background: 'rgba(0,0,0,0.45)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  zIndex: 1000,
+  padding: 24,
+};
+const modalBox: CSSProperties = {
+  background: 'var(--color-surface)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 6,
+  minWidth: 480,
+  maxWidth: 640,
+  maxHeight: '85vh',
+  display: 'flex',
+  flexDirection: 'column',
+  boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+};
+const modalHeader: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  padding: '12px 16px',
+  borderBottom: '1px solid var(--color-border)',
+};
+const modalTitle: CSSProperties = {
+  margin: 0,
+  fontSize: 14,
+  fontWeight: 600,
+};
+const modalBody: CSSProperties = {
+  padding: 16,
+  overflowY: 'auto',
+  fontSize: 12,
+};
+const closeBtn: CSSProperties = {
+  background: 'transparent',
+  border: 'none',
+  fontSize: 20,
+  lineHeight: 1,
+  color: 'var(--color-text-tertiary)',
+  cursor: 'pointer',
+  padding: '0 4px',
+};
+const promoteRow: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 12,
+  padding: '8px 0',
+  borderBottom: '1px solid var(--color-border)',
+};
+const promoteBtn: CSSProperties = {
+  padding: '4px 10px',
+  fontSize: 11,
+  color: 'var(--color-primary, #6366f1)',
+  background: 'transparent',
+  border: '1px solid var(--color-primary, #6366f1)',
+  borderRadius: 4,
+  cursor: 'pointer',
 };
 const detailRowCell: CSSProperties = {
   padding: 12,

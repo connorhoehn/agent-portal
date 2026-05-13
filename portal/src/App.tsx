@@ -49,6 +49,7 @@ const ObservabilityApprovalsPage = lazy(() => import('./pages/observability/Appr
 const ObservabilityHarnessLayout = lazy(() => import('./pages/observability/harness/HarnessLayout'));
 const ObservabilityHarnessHomePage = lazy(() => import('./pages/observability/harness/HarnessHomePage'));
 const ObservabilityHarnessRunDetailPage = lazy(() => import('./pages/observability/harness/RunDetailPage'));
+const ObservabilityHarnessCompareRunsPage = lazy(() => import('./pages/observability/harness/CompareRunsPage'));
 
 function Loading() {
   return <div style={{ padding: 24, color: '#94a3b8' }}>Loading...</div>;
@@ -103,6 +104,7 @@ export function App() {
           <Route path="harness" element={<Page element={<ObservabilityHarnessLayout />} />}>
             <Route index element={<Page element={<ObservabilityHarnessHomePage />} />} />
             <Route path="runs/:runId" element={<Page element={<ObservabilityHarnessRunDetailPage />} />} />
+            <Route path="compare/:runIdA/:runIdB" element={<Page element={<ObservabilityHarnessCompareRunsPage />} />} />
           </Route>
         </Route>
 
