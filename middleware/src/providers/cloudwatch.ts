@@ -23,6 +23,7 @@ import {
 import {
   CloudWatchClient,
   GetMetricStatisticsCommand,
+  PutMetricDataCommand,
   Statistic,
   type GetMetricStatisticsCommandInput,
 } from '@aws-sdk/client-cloudwatch';
@@ -519,3 +520,86 @@ export const realCloudWatch: CloudWatchProvider = {
     };
   },
 };
+
+// ── OrgIQ/Observability metric publishers ─────────────────────────────────────
+//
+// The trace-sink (middleware/src/lib/trace-sink.ts) calls these after embedding
+// + judging a sampled invocation. Each publishes a single datapoint into the
+// `OrgIQ/Observability` namespace; alarms in the AgentCoreTelemetry stack read
+// from the same namespace.
+//
+// All calls are fire-and-forget: failures log and swallow so an outage of
+// CloudWatch never blocks the agent invocation path.
+
+const OBS_NAMESPACE = 'OrgIQ/Observability';
+
+async function putMetric(
+  metricName: string,
+  value: number,
+  dimensions: Array<{ Name: string; Value: string }>,
+  unit: 'None' | 'Count' | 'Percent' = 'None',
+): Promise<void> {
+  if (!Number.isFinite(value)) return;
+  try {
+    await cw.send(
+      new PutMetricDataCommand({
+        Namespace: OBS_NAMESPACE,
+        MetricData: [
+          {
+            MetricName: metricName,
+            Value: value,
+            Unit: unit,
+            Dimensions: dimensions,
+            Timestamp: new Date(),
+          },
+        ],
+      }),
+    );
+  } catch (err) {
+    console.warn(`[cloudwatch] putMetric ${metricName} failed:`,
+      (err as Error).message);
+  }
+}
+
+/** Publish embedding-drift cosine distance (0..2). Dim: AgentId, TemplateId. */
+export async function putDriftMetric(
+  agentId: string,
+  templateId: string,
+  value: number,
+): Promise<void> {
+  await putMetric(
+    'EmbeddingDriftP95',
+    value,
+    [
+      { Name: 'AgentId', Value: agentId || 'unknown' },
+      { Name: 'TemplateId', Value: templateId || 'default' },
+    ],
+    'None',
+  );
+}
+
+/** Publish a single judge score (0..1). Dim: AgentId. */
+export async function putQualityMetric(
+  agentId: string,
+  score: number,
+): Promise<void> {
+  await putMetric(
+    'JudgeScore',
+    score,
+    [{ Name: 'AgentId', Value: agentId || 'unknown' }],
+    'None',
+  );
+}
+
+/** Publish per-invocation schema conformance as 0|1 (averaged in alarms). */
+export async function putSchemaMetric(
+  agentId: string,
+  conformance: number,
+): Promise<void> {
+  await putMetric(
+    'SchemaConformance',
+    conformance,
+    [{ Name: 'AgentId', Value: agentId || 'unknown' }],
+    'None',
+  );
+}

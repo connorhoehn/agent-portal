@@ -395,6 +395,113 @@ Consider: was a faster/simpler tool available? Was the tool capable of answering
     });
 
     // -------------------------------------------------------------------
+    // OrgIQ/Observability alarms (drift + quality data plane).
+    // -------------------------------------------------------------------
+    //
+    // The middleware's trace-sink publishes three metrics into the
+    // `OrgIQ/Observability` namespace (per sampled invocation):
+    //   - SchemaConformance     (0|1)   dim: AgentId
+    //   - JudgeScore            (0..1)  dim: AgentId
+    //   - EmbeddingDriftP95     (0..2)  dims: AgentId, TemplateId
+    //
+    // We materialize per-agent alarms for the user-facing agents. Each alarm
+    // uses `treatMissingData: NOT_BREACHING` so an idle agent doesn't trigger.
+
+    const userFacingAgents = AGENT_NAMES.filter(n => n !== 'graph-builder');
+
+    for (const agentName of userFacingAgents) {
+      const safeAgent = this.pascal(agentName);
+      const agentId = `${prefix}_${agentName.replace(/-/g, '_')}`;
+
+      // 1. Anomaly detector on JudgeScore — catches a drop in quality without
+      // needing a hand-tuned threshold. Fires when the 1h average judge score
+      // falls outside a 2-sigma band of historical values.
+      const judgeMetric = new cloudwatch.Metric({
+        namespace: 'OrgIQ/Observability',
+        metricName: 'JudgeScore',
+        dimensionsMap: { AgentId: agentId },
+        statistic: 'Average',
+        period: cdk.Duration.minutes(15),
+      });
+      new cloudwatch.CfnAnomalyDetector(this, `${safeAgent}JudgeAnomalyDetector`, {
+        namespace: 'OrgIQ/Observability',
+        metricName: 'JudgeScore',
+        stat: 'Average',
+        dimensions: [{ name: 'AgentId', value: agentId }],
+      });
+      new cloudwatch.CfnAlarm(this, `${safeAgent}JudgeAnomalyAlarm`, {
+        alarmName: `${prefix}-${agentName}-judge-anomaly`,
+        alarmDescription: `Judge score anomaly for ${agentName}`,
+        comparisonOperator: 'LessThanLowerThreshold',
+        evaluationPeriods: 3,
+        thresholdMetricId: 'ad1',
+        treatMissingData: 'notBreaching',
+        metrics: [
+          {
+            id: 'm1',
+            metricStat: {
+              metric: {
+                namespace: 'OrgIQ/Observability',
+                metricName: 'JudgeScore',
+                dimensions: [{ name: 'AgentId', value: agentId }],
+              },
+              period: 900,
+              stat: 'Average',
+            },
+            returnData: true,
+          },
+          {
+            id: 'ad1',
+            expression: 'ANOMALY_DETECTION_BAND(m1, 2)',
+            label: 'Expected JudgeScore (2 sigma)',
+            returnData: true,
+          },
+        ],
+      });
+      void judgeMetric; // reserved for future PutDashboard wiring
+
+      // 2. SchemaConformance threshold — fires when conformance drops below
+      // 0.98 for 2 out of 3 consecutive 5-minute periods.
+      new cloudwatch.Alarm(this, `${safeAgent}SchemaConformanceAlarm`, {
+        alarmName: `${prefix}-${agentName}-schema-conformance`,
+        alarmDescription: `Schema conformance for ${agentName} below 98%`,
+        metric: new cloudwatch.Metric({
+          namespace: 'OrgIQ/Observability',
+          metricName: 'SchemaConformance',
+          dimensionsMap: { AgentId: agentId },
+          statistic: 'Average',
+          period: cdk.Duration.minutes(5),
+        }),
+        threshold: 0.98,
+        evaluationPeriods: 3,
+        datapointsToAlarm: 2,
+        comparisonOperator: cloudwatch.ComparisonOperator.LESS_THAN_THRESHOLD,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      });
+
+      // 3. EmbeddingDriftP95 threshold — fires when the maximum p95 cosine
+      // distance across templates exceeds 0.4 for 3 out of 6 consecutive
+      // 1-hour periods. Aggregated with Maximum so any template breaching
+      // trips the alarm.
+      new cloudwatch.Alarm(this, `${safeAgent}EmbeddingDriftAlarm`, {
+        alarmName: `${prefix}-${agentName}-embedding-drift`,
+        alarmDescription: `Embedding drift p95 for ${agentName} above 0.4 cosine`,
+        metric: new cloudwatch.Metric({
+          namespace: 'OrgIQ/Observability',
+          metricName: 'EmbeddingDriftP95',
+          dimensionsMap: { AgentId: agentId },
+          statistic: 'Maximum',
+          period: cdk.Duration.hours(1),
+        }),
+        threshold: 0.4,
+        evaluationPeriods: 6,
+        datapointsToAlarm: 3,
+        comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      });
+    }
+
+    // -------------------------------------------------------------------
     // Outputs
     // -------------------------------------------------------------------
 

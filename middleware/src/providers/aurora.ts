@@ -91,7 +91,7 @@ function readField(cell: Field | undefined): unknown {
   return null;
 }
 
-async function exec(sql: string, params: SqlParameter[] = []): Promise<Record<string, any>[]> {
+export async function exec(sql: string, params: SqlParameter[] = []): Promise<Record<string, any>[]> {
   const resp = await client().send(
     new ExecuteStatementCommand({
       resourceArn: config.aurora.clusterArn,

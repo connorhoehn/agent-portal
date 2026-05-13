@@ -5,8 +5,14 @@ import { getRecentInvocations, getCapabilityEvents } from '../lib/invocations.js
 import type { CapabilityEventKind } from '../lib/invocations.js';
 import { recentAuthzEvents, subscribeAuthz, type AuthzQuery } from '../lib/audit.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
+import { driftRouter } from './drift.js';
+import { qualityRouter } from './quality.js';
 
 export const observabilityRouter = Router();
+
+// Drift + quality data plane (Aurora-backed; see lib/trace-sink.ts).
+observabilityRouter.use('/drift', driftRouter);
+observabilityRouter.use('/quality', qualityRouter);
 
 // ── Authorization decision audit log ─────────────────────────────────────────
 
