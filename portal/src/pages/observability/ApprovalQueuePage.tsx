@@ -83,7 +83,12 @@ function ApprovalQueuePage() {
       withCredentials: true,
     });
     es.onopen = () => setStreaming(true);
-    es.onerror = () => setStreaming(false);
+    es.onerror = () => {
+      // EventSource fires onerror on every transient reconnect — only treat
+      // CLOSED (terminal) as actually disconnected. CONNECTING is the browser
+      // automatically re-establishing and is not user-visible failure.
+      if (es.readyState === EventSource.CLOSED) setStreaming(false);
+    };
     es.onmessage = (ev) => {
       try {
         const obj = JSON.parse(ev.data) as StreamEvent;

@@ -168,6 +168,219 @@ driftRouter.get('/outliers', asyncHandler(async (req, res) => {
   }
 }));
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Time-series drift — bucketed P95 cosine distance over a longer window.
+// Researchers use this to see *when* drift started, not just the headline P95.
+// ─────────────────────────────────────────────────────────────────────────────
+interface DriftTimePoint {
+  bucketStart: string;       // ISO timestamp of bucket start
+  agentId: string;
+  count: number;
+  driftP95: number;
+  judgeP50: number | null;
+}
+
+driftRouter.get('/timeseries', asyncHandler(async (req, res) => {
+  const rawHours = parseInt((req.query['windowHours'] as string) ?? '24', 10);
+  const windowHours = Number.isFinite(rawHours) && rawHours > 0
+    ? Math.min(rawHours, 24 * 14)
+    : 24;
+  const rawBucket = parseInt((req.query['bucketMin'] as string) ?? '60', 10);
+  const bucketMin = Number.isFinite(rawBucket) && rawBucket >= 5
+    ? Math.min(rawBucket, 360)
+    : 60;
+  const agentId = (req.query['agentId'] as string | undefined)?.trim();
+
+  // Centroid is computed over the whole window (one anchor per agent).
+  // Then each bucket gets P95 distance against that anchor + median judge.
+  const whereAgent = agentId ? 'AND agent_id = :agent' : '';
+  const sql = `
+    WITH window_rows AS (
+      SELECT *,
+             to_timestamp(
+               floor(EXTRACT(EPOCH FROM ts) / (:bucket * 60))
+                 * (:bucket * 60)
+             ) AS bucket_start
+        FROM observability.invocation_traces
+       WHERE ts > now() - (INTERVAL '1 hour' * :hours)
+             ${whereAgent}
+    ),
+    centroids AS (
+      SELECT agent_id, AVG(output_embedding) AS centroid
+        FROM window_rows
+       WHERE output_embedding IS NOT NULL
+         AND (judge_score IS NULL OR judge_score >= 0.6)
+       GROUP BY agent_id
+    )
+    SELECT w.bucket_start::text AS bucket_start,
+           w.agent_id,
+           COUNT(*)::bigint AS cnt,
+           COALESCE(
+             PERCENTILE_CONT(0.95) WITHIN GROUP
+               (ORDER BY (w.output_embedding <=> c.centroid)::float8),
+             0
+           )::float8 AS drift_p95,
+           PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY w.judge_score)::float8 AS p50
+      FROM window_rows w
+      LEFT JOIN centroids c ON c.agent_id = w.agent_id
+     GROUP BY w.bucket_start, w.agent_id
+     ORDER BY w.bucket_start ASC, w.agent_id ASC`;
+
+  const params: import('@aws-sdk/client-rds-data').SqlParameter[] = [
+    { name: 'hours',  value: { longValue: windowHours } },
+    { name: 'bucket', value: { longValue: bucketMin } },
+  ];
+  if (agentId) params.push({ name: 'agent', value: { stringValue: agentId } });
+
+  try {
+    const rows = await exec(sql, params);
+    const out: DriftTimePoint[] = rows.map((r) => ({
+      bucketStart: String(r['bucket_start'] ?? ''),
+      agentId: String(r['agent_id'] ?? ''),
+      count: Number(r['cnt'] ?? 0),
+      driftP95: r['drift_p95'] == null ? 0 : Number(r['drift_p95']),
+      judgeP50: r['p50'] == null ? null : Number(r['p50']),
+    }));
+    res.json({ points: out, bucketMin, windowHours });
+  } catch (err) {
+    console.warn('[drift] /timeseries failed:', (err as Error).message);
+    res.json({ points: [], bucketMin, windowHours });
+  }
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Per-(agent, template) drift breakdown. Researchers care about *which prompt*
+// is drifting — not all templates degrade equally.
+// ─────────────────────────────────────────────────────────────────────────────
+interface DriftTemplateRow {
+  agentId: string;
+  templateId: string;
+  count: number;
+  judgeP50: number | null;
+  judgeP05: number | null;
+  schemaConformance: number;
+  driftP95: number;
+}
+
+driftRouter.get('/templates', asyncHandler(async (req, res) => {
+  const raw = parseInt((req.query['windowHours'] as string) ?? '1', 10);
+  const windowHours = Number.isFinite(raw) && raw > 0
+    ? Math.min(raw, 24 * 7)
+    : 1;
+  const minCount = Math.max(parseInt((req.query['minCount'] as string) ?? '3', 10) || 3, 1);
+
+  const sql = `
+    WITH window_rows AS (
+      SELECT *
+        FROM observability.invocation_traces
+       WHERE ts > now() - (INTERVAL '1 hour' * :hours)
+    ),
+    centroids AS (
+      SELECT agent_id, template_id, AVG(output_embedding) AS centroid
+        FROM window_rows
+       WHERE output_embedding IS NOT NULL
+         AND (judge_score IS NULL OR judge_score >= 0.6)
+       GROUP BY agent_id, template_id
+    )
+    SELECT w.agent_id,
+           COALESCE(w.template_id, '(none)') AS template_id,
+           COUNT(*)::bigint AS cnt,
+           PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY w.judge_score)::float8 AS p50,
+           PERCENTILE_CONT(0.05) WITHIN GROUP (ORDER BY w.judge_score)::float8 AS p05,
+           AVG(CASE WHEN w.schema_valid IS NULL THEN NULL
+                    WHEN w.schema_valid THEN 1.0 ELSE 0.0 END)::float8 AS conformance,
+           COALESCE(
+             PERCENTILE_CONT(0.95) WITHIN GROUP
+               (ORDER BY (w.output_embedding <=> c.centroid)::float8),
+             0
+           )::float8 AS drift_p95
+      FROM window_rows w
+      LEFT JOIN centroids c
+        ON c.agent_id = w.agent_id
+       AND COALESCE(c.template_id, '') = COALESCE(w.template_id, '')
+     GROUP BY w.agent_id, w.template_id
+    HAVING COUNT(*) >= :mincnt
+     ORDER BY drift_p95 DESC, p05 ASC NULLS LAST`;
+
+  const params: import('@aws-sdk/client-rds-data').SqlParameter[] = [
+    { name: 'hours',  value: { longValue: windowHours } },
+    { name: 'mincnt', value: { longValue: minCount } },
+  ];
+
+  try {
+    const rows = await exec(sql, params);
+    const out: DriftTemplateRow[] = rows.map((r) => ({
+      agentId: String(r['agent_id'] ?? ''),
+      templateId: String(r['template_id'] ?? '(none)'),
+      count: Number(r['cnt'] ?? 0),
+      judgeP50: r['p50'] == null ? null : Number(r['p50']),
+      judgeP05: r['p05'] == null ? null : Number(r['p05']),
+      schemaConformance: r['conformance'] == null ? 1 : Number(r['conformance']),
+      driftP95: r['drift_p95'] == null ? 0 : Number(r['drift_p95']),
+    }));
+    res.json({ templates: out });
+  } catch (err) {
+    console.warn('[drift] /templates failed:', (err as Error).message);
+    res.json({ templates: [] });
+  }
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Nearest known-good neighbors for an outlier. Lets a researcher diff a
+// drifted output against the closest trusted example to understand *what*
+// changed semantically.
+// ─────────────────────────────────────────────────────────────────────────────
+interface DriftNeighbor {
+  invocationId: string;
+  ts: string;
+  responseSnippet: string;
+  judgeScore: number | null;
+  distance: number;
+}
+
+driftRouter.get('/neighbors/:invocationId', asyncHandler(async (req, res) => {
+  const id = (req.params['invocationId'] as string).trim();
+  const limit = Math.min(Math.max(parseInt((req.query['limit'] as string) ?? '3', 10) || 3, 1), 20);
+
+  const sql = `
+    WITH probe AS (
+      SELECT agent_id, template_id, output_embedding
+        FROM observability.invocation_traces
+       WHERE invocation_id = :id::uuid
+    )
+    SELECT t.invocation_id::text AS invocation_id,
+           t.ts::text AS ts,
+           t.response_snippet,
+           t.judge_score,
+           (t.output_embedding <=> p.output_embedding)::float8 AS dist
+      FROM observability.invocation_traces t, probe p
+     WHERE t.invocation_id::text <> :id
+       AND t.agent_id = p.agent_id
+       AND t.output_embedding IS NOT NULL
+       AND (t.judge_score IS NULL OR t.judge_score >= 0.7)
+       AND t.ts > now() - INTERVAL '7 days'
+     ORDER BY t.output_embedding <=> p.output_embedding ASC
+     LIMIT :lim`;
+
+  try {
+    const rows = await exec(sql, [
+      { name: 'id',  value: { stringValue: id } },
+      { name: 'lim', value: { longValue: limit } },
+    ]);
+    const out: DriftNeighbor[] = rows.map((r) => ({
+      invocationId: String(r['invocation_id'] ?? ''),
+      ts: String(r['ts'] ?? ''),
+      responseSnippet: String(r['response_snippet'] ?? ''),
+      judgeScore: r['judge_score'] == null ? null : Number(r['judge_score']),
+      distance: r['dist'] == null ? 0 : Number(r['dist']),
+    }));
+    res.json({ neighbors: out });
+  } catch (err) {
+    console.warn('[drift] /neighbors failed:', (err as Error).message);
+    res.json({ neighbors: [] });
+  }
+}));
+
 // Defensive: keep an import path-resolved at module load so a bad
 // EMBEDDING_DIMENSIONS doesn't go unnoticed.
 void EMBEDDING_DIMENSIONS;

@@ -7,6 +7,16 @@ export function initSSE(res: Response): void {
     'Connection': 'keep-alive',
     'X-Accel-Buffering': 'no',
   });
+  // Heartbeat keeps the connection alive across vite proxies / load balancers
+  // that close idle HTTP sockets. SSE comment lines are ignored by EventSource.
+  const heartbeat = setInterval(() => {
+    if (res.writableEnded) {
+      clearInterval(heartbeat);
+      return;
+    }
+    res.write(': hb\n\n');
+  }, 25_000);
+  res.once('close', () => clearInterval(heartbeat));
 }
 
 export function writeSSE(res: Response, data: unknown): void {

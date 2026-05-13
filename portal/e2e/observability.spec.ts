@@ -26,14 +26,34 @@ test.describe('observability pages', () => {
     await page.screenshot({ path: `${SHOT_DIR}/00-nav.png`, fullPage: true });
   });
 
-  test('drift page renders with per-agent rollup', async ({ page }) => {
+  test('drift page renders rollup, timeseries, templates, outliers', async ({ page }) => {
     await page.goto('/observability/drift');
-    await expect(page.getByText('orgiq-supervisor').first()).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('orgiq-ingestion').first()).toBeVisible();
-    await expect(page.getByText('orgiq-scoring').first()).toBeVisible();
-    // The rollup shows count=50 for each of the 5 seeded agents.
-    await expect(page.getByText('50').first()).toBeVisible();
+    // Rollup
+    await expect(page.getByText('Drift Rollup')).toBeVisible({ timeout: 15_000 });
+    // Wait for the rollup header to show a non-zero agent count
+    await expect(page.getByText(/per-agent · [1-9]\d? agents?/)).toBeVisible({ timeout: 15_000 });
+    // Window picker
+    await expect(page.getByRole('button', { name: '24h' })).toBeVisible();
+    // Time-series chart (recharts line elements rendered)
+    await expect(page.getByText('Drift Over Time')).toBeVisible();
+    await page.waitForSelector('svg.recharts-surface path.recharts-line-curve', { timeout: 10_000 });
+    // By template
+    await expect(page.getByText('By Template')).toBeVisible();
+    await expect(page.getByText('txn_extract').first()).toBeVisible();
+    // Outliers
+    await expect(page.getByText(/^Outliers/)).toBeVisible();
     await page.screenshot({ path: `${SHOT_DIR}/01-drift.png`, fullPage: true });
+  });
+
+  test('drift outlier expansion fetches nearest neighbor', async ({ page }) => {
+    await page.goto('/observability/drift');
+    await page.waitForSelector('svg.recharts-surface', { timeout: 10_000 });
+    // Wait for outliers table to populate
+    const promptCells = page.locator('td', { hasText: 'seed:' });
+    await expect(promptCells.first()).toBeVisible({ timeout: 10_000 });
+    await promptCells.first().click();
+    await expect(page.getByText('NEAREST KNOWN-GOOD', { exact: false }).nth(1)).toBeVisible({ timeout: 10_000 });
+    await page.screenshot({ path: `${SHOT_DIR}/05-drift-neighbor.png`, fullPage: true });
   });
 
   test('quality page renders charts + invocations', async ({ page }) => {
