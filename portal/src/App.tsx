@@ -44,6 +44,7 @@ const ObservabilityAgentMetricsPage = lazy(() => import('./pages/observability/A
 const ObservabilitySessionsPage = lazy(() => import('./pages/observability/SessionsPage'));
 const ObservabilityAuthzPage = lazy(() => import('./pages/observability/AuthzLogPage'));
 const ObservabilityDriftPage = lazy(() => import('./pages/observability/DriftPage'));
+const ObservabilityOnCallPage = lazy(() => import('./pages/observability/OnCallPage'));
 const ObservabilityQualityPage = lazy(() => import('./pages/observability/QualityPage'));
 const ObservabilityApprovalsPage = lazy(() => import('./pages/observability/ApprovalQueuePage'));
 const ObservabilityHarnessLayout = lazy(() => import('./pages/observability/harness/HarnessLayout'));
@@ -89,6 +90,7 @@ export function App() {
           </RequireRole>
         }>
           <Route index element={<Navigate to="summary" replace />} />
+          <Route path="oncall" element={<Page element={<ObservabilityOnCallPage />} />} />
           <Route path="summary" element={<Page element={<ObservabilitySummaryPage />} />} />
           <Route path="invocations" element={<Page element={<ObservabilityInvocationsPage />} />} />
           <Route path="invocations/search" element={<Page element={<ObservabilityInvocationSearchPage />} />} />

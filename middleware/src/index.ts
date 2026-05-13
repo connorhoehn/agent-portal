@@ -13,6 +13,7 @@ import { approvalsRouter } from './routes/approvals.js';
 import { harnessRouter } from './routes/harness.js';
 import { promptVersionsRouter } from './routes/prompt-versions.js';
 import { costRouter } from './routes/cost.js';
+import { oncallRouter } from './routes/oncall.js';
 import { invocationsRouter } from './routes/invocations.js';
 import { toolCallsRouter } from './routes/tool-calls.js';
 import { capabilitiesRouter } from './routes/capabilities.js';
@@ -62,6 +63,10 @@ app.use('/api/observability/prompt-versions', promptVersionsRouter);
 // Cost aggregation routes — read-only aggregates over invocation_traces cost
 // columns. Mounted ungated for now; can be Cedar-gated later if PII surfaces.
 app.use('/api/observability/cost', costRouter);
+// Sprint 3 (M9) — on-call / incident response. Composes drift + cost +
+// errors + HITL + deploys into one timeline. Mounted ungated like cost so
+// the on-call surface keeps working past session expiry at 3am.
+app.use('/api/observability/oncall', oncallRouter);
 // Sprint 2 — invocation search + per-invocation drill-down (M3/M5 triage).
 // Mounted ungated so the portal triage page can hit it directly, same as cost.
 app.use('/api/observability/invocations', invocationsRouter);
