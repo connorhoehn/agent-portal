@@ -92,8 +92,8 @@ test.describe('observability pages', () => {
     expect(runId).toBeTruthy();
     await page.goto(`/observability/harness/runs/${runId}`);
     // Header shows the run label + pass rate
-    // Run label could be 'smoke@<sha>' (sim) or 'live@<sha>' (live mode)
-    await expect(page.getByText(/^(smoke|live)@/).first()).toBeVisible({ timeout: 10_000 });
+    // Run label could be smoke@<sha>, live@<sha>, validate2-cw@<sha>, etc — any label ending in @<sha>
+    await expect(page.getByText(/@[a-f0-9]{6,}/).first()).toBeVisible({ timeout: 10_000 });
     // The seeded set has 10 test_ids — at least one must render
     await expect(page.getByText('ingestion.invoice.simple.001').first()).toBeVisible();
     await page.screenshot({ path: `${SHOT_DIR}/07-harness-run.png`, fullPage: true });
