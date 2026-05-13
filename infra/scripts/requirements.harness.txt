@@ -1,0 +1,6 @@
+# Runtime dependencies for infra/scripts/harness.py.
+# Stdlib (urllib, json, argparse) covers HTTP + CLI — no `requests`.
+# pyyaml is optional: the harness has an inline fallback parser for
+# agent_prompts.yaml, but pyyaml is cleaner and recommended.
+boto3>=1.34
+pyyaml>=6.0
