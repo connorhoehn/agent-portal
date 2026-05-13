@@ -13,7 +13,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import {
   Card,
   Table,
@@ -37,6 +37,7 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { CostChip } from '../../components/observability/CostChip';
 import { PromptVersionChip } from '../../components/observability/PromptVersionChip';
+import { SaveAsTestCaseModal } from '../../components/observability/SaveAsTestCaseModal';
 
 interface DriftSummary {
   agentId: string;
@@ -165,6 +166,15 @@ function DriftPage() {
   );
 
   const [expanded, setExpanded] = useState<string | null>(null);
+
+  // Modal state for "+ Save as test case" launched from the outlier panel.
+  const [saveSource, setSaveSource] = useState<DriftOutlier | null>(null);
+  const [toast, setToast] = useState<React.ReactNode | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 5500);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   // Reshape timeseries for Recharts: one row per bucket, columns per agent.
   const chartData = useMemo(() => {
@@ -431,7 +441,7 @@ function DriftPage() {
                     {isOpen && (
                       <TableRow key={`${o.invocationId}-detail`}>
                         <TableTd colSpan={8} style={{ padding: 12, background: 'var(--color-bg)' }}>
-                          <OutlierDetail outlier={o} />
+                          <OutlierDetail outlier={o} onSave={setSaveSource} />
                         </TableTd>
                       </TableRow>
                     )}
@@ -442,13 +452,43 @@ function DriftPage() {
           </Table>
         )}
       </Card>
+
+      {toast && <div style={toastStyle}>{toast}</div>}
+
+      <SaveAsTestCaseModal
+        invocation={{
+          invocationId: saveSource?.invocationId ?? '',
+          agentId: saveSource?.agentId ?? '',
+          templateId: saveSource?.templateId ?? null,
+          prompt: saveSource?.promptSnippet ?? '',
+          response: saveSource?.responseSnippet ?? '',
+        }}
+        isOpen={!!saveSource}
+        onClose={() => setSaveSource(null)}
+        onSuccess={(testId) =>
+          setToast(
+            <span>
+              Test case <strong>{testId}</strong> saved.{' '}
+              <Link to="/observability/harness" style={toastLinkStyle}>
+                View in harness →
+              </Link>
+            </span>,
+          )
+        }
+      />
     </div>
   );
 }
 
 // Fetched on demand when a row is expanded. Shows the drifted output side-by-side
 // with the closest known-good neighbor — the researcher can diff them visually.
-function OutlierDetail({ outlier }: { outlier: DriftOutlier }) {
+function OutlierDetail({
+  outlier,
+  onSave,
+}: {
+  outlier: DriftOutlier;
+  onSave: (o: DriftOutlier) => void;
+}) {
   const [neighbors, setNeighbors] = useState<DriftNeighbor[] | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -466,40 +506,52 @@ function OutlierDetail({ outlier }: { outlier: DriftOutlier }) {
 
   const nearest = neighbors?.[0];
   return (
-    <div style={detailGrid}>
-      <div>
-        <div style={detailLabel}>OUTLIER</div>
-        <div style={outlierMetaRow}>
-          <span>distance {fmt(outlier.distance)}</span>
-          <span style={dotSep}>·</span>
-          <span>judge {fmt(outlier.judgeScore)}</span>
-          <span style={dotSep}>·</span>
-          <CostChip cost={outlier.totalCostUsd} />
-          <PromptVersionChip promptVersion={outlier.promptVersion} />
-        </div>
-        <pre style={detailPre}>{outlier.responseSnippet}</pre>
-        {outlier.judgeRationale && (
-          <div style={detailHint}>judge: {outlier.judgeRationale}</div>
-        )}
-      </div>
-      <div>
-        <div style={detailLabel}>
-          NEAREST KNOWN-GOOD{' '}
-          {nearest && (
-            <span style={detailHintInline}>
-              · distance {fmt(nearest.distance)} · judge {fmt(nearest.judgeScore)}
-            </span>
+    <div>
+      <div style={detailGrid}>
+        <div>
+          <div style={detailLabel}>OUTLIER</div>
+          <div style={outlierMetaRow}>
+            <span>distance {fmt(outlier.distance)}</span>
+            <span style={dotSep}>·</span>
+            <span>judge {fmt(outlier.judgeScore)}</span>
+            <span style={dotSep}>·</span>
+            <CostChip cost={outlier.totalCostUsd} />
+            <PromptVersionChip promptVersion={outlier.promptVersion} />
+          </div>
+          <pre style={detailPre}>{outlier.responseSnippet}</pre>
+          {outlier.judgeRationale && (
+            <div style={detailHint}>judge: {outlier.judgeRationale}</div>
           )}
         </div>
-        {neighbors == null ? (
-          <pre style={detailPre}>loading…</pre>
-        ) : nearest ? (
-          <pre style={detailPre}>{nearest.responseSnippet}</pre>
-        ) : (
-          <pre style={{ ...detailPre, color: 'var(--color-text-tertiary)' }}>
-            no trusted neighbor in last 7d
-          </pre>
-        )}
+        <div>
+          <div style={detailLabel}>
+            NEAREST KNOWN-GOOD{' '}
+            {nearest && (
+              <span style={detailHintInline}>
+                · distance {fmt(nearest.distance)} · judge {fmt(nearest.judgeScore)}
+              </span>
+            )}
+          </div>
+          {neighbors == null ? (
+            <pre style={detailPre}>loading…</pre>
+          ) : nearest ? (
+            <pre style={detailPre}>{nearest.responseSnippet}</pre>
+          ) : (
+            <pre style={{ ...detailPre, color: 'var(--color-text-tertiary)' }}>
+              no trusted neighbor in last 7d
+            </pre>
+          )}
+        </div>
+      </div>
+      <div style={outlierActionRow}>
+        <button
+          type="button"
+          onClick={() => onSave(outlier)}
+          style={saveBtn}
+          title="Lock this outlier in as a regression test case"
+        >
+          + Save as test case
+        </button>
       </div>
     </div>
   );
@@ -598,6 +650,36 @@ const detailPre: CSSProperties = {
   margin: 0, padding: '10px 12px', borderRadius: 'var(--radius-sm)',
   background: 'var(--color-surface)', border: '1px solid var(--color-border)',
   maxHeight: 300, overflowY: 'auto',
+};
+const outlierActionRow: CSSProperties = {
+  display: 'flex', justifyContent: 'flex-end', marginTop: 10,
+};
+const saveBtn: CSSProperties = {
+  padding: '6px 12px',
+  fontSize: 12,
+  background: 'var(--color-surface)',
+  color: 'var(--color-text-secondary)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 4,
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+};
+const toastStyle: CSSProperties = {
+  position: 'fixed',
+  bottom: 24,
+  right: 24,
+  zIndex: 1100,
+  padding: '10px 14px',
+  fontSize: 12,
+  background: 'var(--color-surface)',
+  color: 'var(--color-text-primary)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 6,
+  boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
+};
+const toastLinkStyle: CSSProperties = {
+  color: 'var(--color-primary, #6366f1)',
+  textDecoration: 'none',
 };
 
 export default DriftPage;

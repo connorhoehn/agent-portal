@@ -26,6 +26,7 @@ function ObservabilityLayout() {
   const items: SubNavItem[] = [
     { path: 'oncall',             label: 'On-Call',           hint: 'Live alarms + incident timeline' },
     { path: 'summary',            label: 'Summary',           hint: 'Health overview' },
+    { path: 'traffic',            label: 'Traffic',           hint: 'RPS + heatmap + top users' },
     { path: 'invocations',        label: 'Recent',            hint: 'Last 50 agent calls', count: invocationCount },
     { path: 'invocations/search', label: 'Search',            hint: 'Triage by prompt / agent / score' },
     { path: 'capability-events',  label: 'Capability Events', hint: 'Browser & code' },

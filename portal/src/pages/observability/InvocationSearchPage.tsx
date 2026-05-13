@@ -7,7 +7,7 @@
 // `useFetch` hook, defensive parsing, EmptyState component, CostChip +
 // PromptVersionChip reused verbatim from Sprint 1.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import {
@@ -147,6 +147,30 @@ function InvocationSearchPage() {
   // Applied filter state (only this drives the fetch URL — protects against
   // typing-as-you-go thrash).
   const [applied, setApplied] = useState<FilterState | null>(null);
+
+  // Pull deep-link query params on mount — TrafficPage Top-Users table links
+  // here with `?userId=u_alice` etc. We hydrate the draft + auto-apply so the
+  // researcher lands on a filtered table without having to hit Search.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const sp = new URLSearchParams(window.location.search);
+    const userId = sp.get('userId') ?? '';
+    const agentId = sp.get('agentId') ?? '';
+    const q = sp.get('q') ?? '';
+    if (!userId && !agentId && !q) return;
+    setDraft((d) => {
+      const next: FilterState = {
+        ...d,
+        ...(userId ? { userId } : {}),
+        ...(agentId ? { agentId } : {}),
+        ...(q ? { q } : {}),
+      };
+      setApplied(next);
+      return next;
+    });
+    // Only on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const url = applied ? buildUrl(applied) : '';
   const { data, isLoading, error } = useFetch<SearchResponse>(url, 30_000);

@@ -22,6 +22,7 @@ import type { TraceNode } from '../../components/observability/TraceTree';
 import { ToolWaterfall } from '../../components/observability/ToolWaterfall';
 import type { ToolCall } from '../../components/observability/ToolWaterfall';
 import { GuardrailRuleBadge } from '../../components/observability/GuardrailRuleBadge';
+import { SaveAsTestCaseModal } from '../../components/observability/SaveAsTestCaseModal';
 
 // The "invocation" payload is intentionally permissive — Agent A's backend
 // returns every column from invocation_traces, so we type the known fields
@@ -135,7 +136,7 @@ function InvocationDetailPage() {
     };
   }, [invocationId]);
 
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<React.ReactNode | null>(null);
   const [replayLoading, setReplayLoading] = useState(false);
 
   async function onReplay() {
@@ -144,20 +145,38 @@ function InvocationDetailPage() {
     try {
       const res = await fetch(
         `/api/observability/invocations/${encodeURIComponent(invocationId)}/replay`,
-        { method: 'POST', credentials: 'include' },
+        {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        },
       );
-      if (res.status === 501) {
+      const body = await res.json().catch(() => ({} as Record<string, unknown>));
+      if (res.status === 200 && typeof (body as { invocationId?: unknown }).invocationId === 'string') {
+        const newId = (body as { invocationId: string }).invocationId;
+        const dur = Number((body as { durationMs?: unknown }).durationMs) || 0;
+        setToast(
+          <span>
+            Replayed in {(dur / 1000).toFixed(1)}s ·{' '}
+            <Link to={`/observability/invocations/${newId}`} style={btnLink}>
+              open replay →
+            </Link>
+          </span>,
+        );
+      } else if (res.status === 501) {
         setToast('Replay coming soon');
-      } else if (!res.ok) {
-        setToast(`Replay failed: ${res.status} ${res.statusText}`);
       } else {
-        setToast('Replay queued.');
+        const msg = (body as { message?: string; error?: string }).message
+          ?? (body as { error?: string }).error
+          ?? `${res.status} ${res.statusText}`;
+        setToast(`Replay failed: ${msg}`);
       }
     } catch (e) {
       setToast(`Replay failed: ${e instanceof Error ? e.message : 'unknown'}`);
     } finally {
       setReplayLoading(false);
-      setTimeout(() => setToast(null), 3500);
+      setTimeout(() => setToast(null), 6500);
     }
   }
 
@@ -389,13 +408,27 @@ function InvocationDetailPage() {
 
       <RawMetadataCard invocation={inv} />
 
-      {saveOpen && (
-        <SaveAsTestCaseModal
-          prompt={prompt}
-          response={response}
-          onClose={() => setSaveOpen(false)}
-        />
-      )}
+      <SaveAsTestCaseModal
+        invocation={{
+          invocationId,
+          agentId: inv.agentId ?? '',
+          templateId: inv.templateId ?? null,
+          prompt,
+          response,
+        }}
+        isOpen={saveOpen}
+        onClose={() => setSaveOpen(false)}
+        onSuccess={(testId) =>
+          setToast(
+            <span>
+              Test case <strong>{testId}</strong> saved.{' '}
+              <Link to="/observability/harness" style={btnLink}>
+                View in harness →
+              </Link>
+            </span>,
+          )
+        }
+      />
     </div>
   );
 }
@@ -615,54 +648,6 @@ function RawMetadataCard({ invocation }: { invocation: InvocationRow }) {
       </div>
       {open && <pre style={detailPre}>{json}</pre>}
     </Card>
-  );
-}
-
-function SaveAsTestCaseModal({
-  prompt,
-  response,
-  onClose,
-}: {
-  prompt: string;
-  response: string;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-  return (
-    <div role="dialog" aria-modal="true" onClick={onClose} style={overlayStyle}>
-      <div onClick={(e) => e.stopPropagation()} style={modalStyle}>
-        <div style={modalHeader}>
-          <h3 style={modalTitle}>Save as test case</h3>
-          <button onClick={onClose} style={closeBtn} aria-label="Close">
-            ×
-          </button>
-        </div>
-        <div style={modalBody}>
-          <p style={modalHint}>
-            Sprint 3 will wire this to the harness test suite. For now, edit and copy
-            the prompt + expected response below.
-          </p>
-          <label style={modalFieldLabel}>PROMPT</label>
-          <textarea
-            defaultValue={prompt}
-            style={modalTextarea}
-            rows={6}
-          />
-          <label style={modalFieldLabel}>EXPECTED RESPONSE</label>
-          <textarea
-            defaultValue={response}
-            style={modalTextarea}
-            rows={8}
-          />
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -910,82 +895,5 @@ const toastStyle: CSSProperties = {
   boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
 };
 
-const overlayStyle: CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(0,0,0,0.45)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: 1000,
-  padding: 24,
-};
-
-const modalStyle: CSSProperties = {
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 6,
-  minWidth: 480,
-  maxWidth: 760,
-  maxHeight: '85vh',
-  display: 'flex',
-  flexDirection: 'column',
-  boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
-};
-
-const modalHeader: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: '12px 16px',
-  borderBottom: '1px solid var(--color-border)',
-};
-
-const modalTitle: CSSProperties = { margin: 0, fontSize: 14, fontWeight: 600 };
-
-const closeBtn: CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  fontSize: 20,
-  lineHeight: 1,
-  color: 'var(--color-text-tertiary)',
-  cursor: 'pointer',
-  padding: '0 4px',
-};
-
-const modalBody: CSSProperties = {
-  padding: 16,
-  overflowY: 'auto',
-  fontSize: 12,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 8,
-};
-
-const modalHint: CSSProperties = {
-  margin: 0,
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  fontStyle: 'italic',
-};
-
-const modalFieldLabel: CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
-  color: 'var(--color-text-tertiary)',
-  letterSpacing: 0.5,
-  textTransform: 'uppercase',
-};
-
-const modalTextarea: CSSProperties = {
-  fontFamily: '"Fira Code", "Cascadia Code", monospace',
-  fontSize: 11.5,
-  padding: '8px 10px',
-  border: '1px solid var(--color-border)',
-  borderRadius: 4,
-  background: 'var(--color-bg)',
-  color: 'var(--color-text-primary)',
-  resize: 'vertical',
-};
 
 export default InvocationDetailPage;
