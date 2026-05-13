@@ -1,5 +1,7 @@
 // HRAdmin: People Ops. Sees everything (incl. salary/performance) and is the
-// only role that can edit guardrails / authorization policies.
+// only role that can edit guardrails / authorization policies. HR can label
+// agent-output feedback for evaluator training, but cannot approve transactions
+// (that authority belongs to org leaders only).
 permit (
   principal,
   action in [
@@ -13,8 +15,17 @@ permit (
     OrgIQ::Action::"EditSchema",
     OrgIQ::Action::"ViewIdentityAdmin",
     OrgIQ::Action::"ViewObservability",
+    OrgIQ::Action::"LabelFeedback",
     OrgIQ::Action::"ManageIngest"
   ],
+  resource
+)
+when { principal.role == "hr-admin" };
+
+// HR is explicitly NOT a transaction approver. Separation of duties.
+forbid (
+  principal,
+  action == OrgIQ::Action::"ApproveTransaction",
   resource
 )
 when { principal.role == "hr-admin" };

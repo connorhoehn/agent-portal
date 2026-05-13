@@ -6,6 +6,12 @@ from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from strands import Agent, tool
 from strands.models.bedrock import BedrockModel
 
+# Shared HITL approval tool — used to gate high-stakes ingestion side-effects.
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from _shared.approval_tool import request_approval  # noqa: E402
+
 app = BedrockAgentCoreApp()
 
 REGION = os.environ.get("AWS_REGION", "us-east-1")
@@ -212,7 +218,7 @@ def _model_kwargs() -> dict:
 _model = BedrockModel(**_model_kwargs())
 _agent = Agent(
     model=_model,
-    tools=[list_documents, read_document, sync_knowledge_base, check_ingestion_status, extract_entities_preview],
+    tools=[list_documents, read_document, sync_knowledge_base, check_ingestion_status, extract_entities_preview, request_approval],
     system_prompt=(
         "You are the OrgIQ Ingestion agent. Process organizational documents into the knowledge base.\n\n"
         "Supported formats: PDF, DOCX, Markdown, HTML, plain text, JSON (Jira/Confluence exports).\n\n"

@@ -9,6 +9,7 @@ import { graphRouter } from './routes/graph.js';
 import { scoresRouter } from './routes/scores.js';
 import { ingestRouter } from './routes/ingest.js';
 import { observabilityRouter } from './routes/observability.js';
+import { approvalsRouter } from './routes/approvals.js';
 import { capabilitiesRouter } from './routes/capabilities.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { sessionRouter } from './routes/session.js';
@@ -42,6 +43,11 @@ app.use('/api/agents', agentsRouter);
 app.use('/api/graph', graphRouter);
 app.use('/api/scores', scoresRouter);
 app.use('/api/ingest', requireAction('ManageIngest'), ingestRouter);
+// Approvals are mounted BEFORE the gated observability router so that the
+// agent-facing POST /approvals/request endpoint doesn't require ViewObservability
+// (the agent's identity is captured as `agentId` in the request body instead).
+// Decision posting is Cedar-gated inside the router itself.
+app.use('/api/observability/approvals', approvalsRouter);
 app.use('/api/observability', requireAction('ViewObservability'), observabilityRouter);
 app.use('/api/capabilities', capabilitiesRouter);
 app.use('/api/sessions', sessionsRouter);
