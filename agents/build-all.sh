@@ -46,10 +46,11 @@ build_one() {
         --platform linux/arm64 \
         --provenance=false \
         --build-arg "BASE_IMAGE=${BASE}" \
+        --build-arg "AGENT_NAME=${agent}" \
         -f "${ROOT}/agents/Dockerfile.agent" \
         --push \
         -t "$uri" \
-        "${ROOT}/agents/${agent}" > "$log" 2>&1; then
+        "${ROOT}/agents/" > "$log" 2>&1; then
     echo "❌ $agent FAILED — see $log"
     return 1
   fi
