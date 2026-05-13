@@ -1,5 +1,6 @@
 import { SubNavLayout, type SubNavItem } from '../../components/shell/SubNavLayout';
 import { useFetch } from '../../hooks/useFetch';
+import { ObservabilityHelp } from './ObservabilityHelp';
 
 interface ObsSummary {
   totalInvocations24h: number;
@@ -50,7 +51,13 @@ function ObservabilityLayout() {
     items[0] = { ...items[0], count: errorCount };
   }
 
-  return <SubNavLayout title="Observability" items={items} />;
+  return (
+    <SubNavLayout
+      title="Observability"
+      items={items}
+      railHeader={<ObservabilityHelp />}
+    />
+  );
 }
 
 export default ObservabilityLayout;
