@@ -1,0 +1,863 @@
+// Harness routes — backend for the OrgIQ regression-test harness.
+//
+// Mounted at /api/observability/harness BEFORE the gated /api/observability
+// router so the runner (infra/scripts/harness.py) can hit these without a
+// session cookie. Same pattern as approvals.
+//
+// Surface:
+//   POST /trace                       — sync variant of trace-sink.enqueue
+//   GET    /cases                     — list active test cases
+//   GET    /cases/:id                 — fetch one
+//   POST   /cases                     — upsert (id auto-slugged from prompt)
+//   PATCH  /cases/:id                 — partial update
+//   DELETE /cases/:id                 — soft delete (sets active=false)
+//   POST   /runs                      — create a new run row
+//   GET    /runs                      — recent runs
+//   GET    /runs/:id                  — run + joined results
+//   GET    /runs/:id/status           — live counters
+//   POST   /runs/:runId/results       — upsert one result row
+//   PATCH  /runs/:id                  — partial update of run counters
+//   POST   /results/:invocationId/rejudge — re-run judge 3x on existing trace
+//   GET    /coverage                  — per-agent test coverage
+//
+// All Aurora I/O uses the RDS Data API via providers/aurora.ts exec().
+
+import { Router } from 'express';
+import { randomUUID } from 'node:crypto';
+import type { SqlParameter } from '@aws-sdk/client-rds-data';
+import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
+import { exec } from '../providers/aurora.js';
+import { processTrace, type TraceInput } from '../lib/trace-sink.js';
+import { judgeResponse } from '../lib/judge.js';
+
+export const harnessRouter = Router();
+
+// ── Shared types ───────────────────────────────────────────────────────────
+
+export interface TestCase {
+  testId: string;
+  agentId: string;
+  templateId: string | null;
+  prompt: string;
+  referenceOutput: string | null;
+  expectedTags: string[];
+  rubricOverride: string | null;
+  passThreshold: number;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+  notes: string | null;
+}
+
+export interface TestRun {
+  runId: string;
+  label: string;
+  gitSha: string | null;
+  judgeModelId: string;
+  agentVersions: Record<string, string>;
+  status: 'pending' | 'running' | 'done' | 'failed';
+  totalCases: number;
+  completed: number;
+  passed: number;
+  failed: number;
+  passRate: number | null;
+  startedAt: string;
+  finishedAt: string | null;
+  notes: string | null;
+}
+
+export interface TestResult {
+  runId: string;
+  testId: string;
+  invocationId: string | null;
+  passed: boolean | null;
+  judgeScore: number | null;
+  judgeRationale: string | null;
+  schemaValid: boolean | null;
+  tagHits: Record<string, boolean> | null;
+  referenceSimilarity: number | null;
+  responseSnippet: string | null;
+  failReasons: string[] | null;
+  durationMs: number | null;
+  ts: string;
+  // Joined fields, populated by GET /runs/:id:
+  agentId?: string;
+  prompt?: string;
+}
+
+// ── Parameter helpers (copy of approvals.ts conventions) ───────────────────
+
+function strParam(name: string, value: string): SqlParameter {
+  return { name, value: { stringValue: value } };
+}
+
+function nullableStr(name: string, value: string | null | undefined): SqlParameter {
+  if (value === null || value === undefined) return { name, value: { isNull: true } };
+  return { name, value: { stringValue: value } };
+}
+
+function nullableNumber(name: string, value: number | null | undefined): SqlParameter {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return { name, value: { isNull: true } };
+  }
+  return { name, value: { doubleValue: value } };
+}
+
+function nullableInt(name: string, value: number | null | undefined): SqlParameter {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return { name, value: { isNull: true } };
+  }
+  return { name, value: { longValue: Math.round(value) } };
+}
+
+function nullableBool(name: string, value: boolean | null | undefined): SqlParameter {
+  if (value === null || value === undefined) return { name, value: { isNull: true } };
+  return { name, value: { booleanValue: value } };
+}
+
+function boolParam(name: string, value: boolean): SqlParameter {
+  return { name, value: { booleanValue: value } };
+}
+
+function jsonParam(name: string, value: unknown): SqlParameter {
+  return { name, value: { stringValue: JSON.stringify(value ?? null) }, typeHint: 'JSON' };
+}
+
+// ── JSON parsing helpers (RDS Data API returns jsonb as text) ──────────────
+
+function parseJsonField<T>(raw: unknown, fallback: T): T {
+  if (raw == null) return fallback;
+  if (typeof raw === 'string') {
+    if (!raw.trim()) return fallback;
+    try { return JSON.parse(raw) as T; } catch { return fallback; }
+  }
+  if (typeof raw === 'object') return raw as T;
+  return fallback;
+}
+
+// ── Row coercion ───────────────────────────────────────────────────────────
+
+function rowToTestCase(r: Record<string, unknown>): TestCase {
+  return {
+    testId: String(r['test_id'] ?? ''),
+    agentId: String(r['agent_id'] ?? ''),
+    templateId: r['template_id'] == null ? null : String(r['template_id']),
+    prompt: String(r['prompt'] ?? ''),
+    referenceOutput: r['reference_output'] == null ? null : String(r['reference_output']),
+    expectedTags: parseJsonField<string[]>(r['expected_tags'], []),
+    rubricOverride: r['rubric_override'] == null ? null : String(r['rubric_override']),
+    passThreshold: r['pass_threshold'] == null ? 0.7 : Number(r['pass_threshold']),
+    active: r['active'] == null ? true : Boolean(r['active']),
+    createdAt: String(r['created_at'] ?? ''),
+    updatedAt: String(r['updated_at'] ?? ''),
+    notes: r['notes'] == null ? null : String(r['notes']),
+  };
+}
+
+function rowToTestRun(r: Record<string, unknown>): TestRun {
+  const status = String(r['status'] ?? 'pending') as TestRun['status'];
+  return {
+    runId: String(r['run_id'] ?? ''),
+    label: String(r['label'] ?? ''),
+    gitSha: r['git_sha'] == null ? null : String(r['git_sha']),
+    judgeModelId: String(r['judge_model_id'] ?? ''),
+    agentVersions: parseJsonField<Record<string, string>>(r['agent_versions'], {}),
+    status,
+    totalCases: Number(r['total_cases'] ?? 0),
+    completed: Number(r['completed'] ?? 0),
+    passed: Number(r['passed'] ?? 0),
+    failed: Number(r['failed'] ?? 0),
+    passRate: r['pass_rate'] == null ? null : Number(r['pass_rate']),
+    startedAt: String(r['started_at'] ?? ''),
+    finishedAt: r['finished_at'] == null ? null : String(r['finished_at']),
+    notes: r['notes'] == null ? null : String(r['notes']),
+  };
+}
+
+function rowToTestResult(r: Record<string, unknown>): TestResult {
+  const out: TestResult = {
+    runId: String(r['run_id'] ?? ''),
+    testId: String(r['test_id'] ?? ''),
+    invocationId: r['invocation_id'] == null ? null : String(r['invocation_id']),
+    passed: r['passed'] == null ? null : Boolean(r['passed']),
+    judgeScore: r['judge_score'] == null ? null : Number(r['judge_score']),
+    judgeRationale: r['judge_rationale'] == null ? null : String(r['judge_rationale']),
+    schemaValid: r['schema_valid'] == null ? null : Boolean(r['schema_valid']),
+    tagHits: parseJsonField<Record<string, boolean> | null>(r['tag_hits'], null),
+    referenceSimilarity: r['reference_similarity'] == null ? null : Number(r['reference_similarity']),
+    responseSnippet: r['response_snippet'] == null ? null : String(r['response_snippet']),
+    failReasons: parseJsonField<string[] | null>(r['fail_reasons'], null),
+    durationMs: r['duration_ms'] == null ? null : Number(r['duration_ms']),
+    ts: String(r['ts'] ?? ''),
+  };
+  if (r['agent_id'] != null) out.agentId = String(r['agent_id']);
+  if (r['prompt'] != null) out.prompt = String(r['prompt']);
+  return out;
+}
+
+// ── Slug helper for test_id auto-generation ────────────────────────────────
+
+function slugify(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+    .slice(0, 60);
+}
+
+function autoTestId(agentId: string, prompt: string): string {
+  const base = `${slugify(agentId)}-${slugify(prompt) || 'case'}`.slice(0, 80);
+  // Append a short random suffix to keep duplicates from colliding.
+  return `${base}-${randomUUID().slice(0, 6)}`;
+}
+
+// ── POST /trace — synchronous trace pipeline ───────────────────────────────
+// Wraps lib/trace-sink.processTrace. Behaviour deltas vs enqueue():
+//   - awaits embed/judge/INSERT
+//   - returns judge score + rationale to caller
+//   - template_id starting with 'test:' is always sampled (forced inside
+//     processTrace) so harness runs never silently drop on a sampling miss
+//   - non-Aurora failures degrade to nulls; Aurora INSERT failure → 500
+
+harnessRouter.post('/trace', asyncHandler(async (req, res) => {
+  const body = (req.body ?? {}) as Partial<TraceInput>;
+  const agentId = typeof body.agentId === 'string' ? body.agentId : '';
+  const prompt = typeof body.prompt === 'string' ? body.prompt : '';
+  const response = typeof body.response === 'string' ? body.response : '';
+  if (!agentId) throw new ValidationError('agentId is required');
+  if (!prompt) throw new ValidationError('prompt is required');
+  if (typeof body.response !== 'string') {
+    throw new ValidationError('response is required');
+  }
+
+  const input: TraceInput = {
+    agentId,
+    prompt,
+    response,
+  };
+  if (typeof body.invocationId === 'string') input.invocationId = body.invocationId;
+  if (typeof body.agentName === 'string') input.agentName = body.agentName;
+  if (typeof body.templateId === 'string') input.templateId = body.templateId;
+  if (typeof body.durationMs === 'number') input.durationMs = body.durationMs;
+  if (typeof body.guardrailAction === 'string') input.guardrailAction = body.guardrailAction;
+  if (typeof body.piiDetected === 'boolean') input.piiDetected = body.piiDetected;
+
+  // 30s ceiling — embedding + judge + INSERT must complete inside this window.
+  const TIMEOUT_MS = 30_000;
+  const timer = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('processTrace timeout')), TIMEOUT_MS),
+  );
+
+  try {
+    const result = await Promise.race([processTrace(input), timer]);
+    res.json({
+      invocationId: result.invocationId,
+      judgeScore: result.judgeScore,
+      judgeRationale: result.judgeRationale,
+      schemaValid: result.schemaValid,
+      embeddingComputed: result.embeddingComputed,
+    });
+  } catch (err) {
+    const msg = (err as Error).message ?? 'unknown';
+    if (msg === 'processTrace timeout') {
+      // Surface as 504 so the runner can retry; same as Aurora outage class.
+      res.status(504).json({ error: 'processTrace timeout', timeoutMs: TIMEOUT_MS });
+      return;
+    }
+    // Aurora INSERT failure path — bubble as 500 per contract. Other failures
+    // (embed/judge) are already absorbed inside processTrace and never throw.
+    console.warn('[harness] /trace failed:', msg);
+    res.status(500).json({ error: 'trace pipeline failed', detail: msg });
+  }
+}));
+
+// ── GET /cases ─────────────────────────────────────────────────────────────
+
+harnessRouter.get('/cases', asyncHandler(async (req, res) => {
+  const includeInactive = req.query['includeInactive'] === '1'
+    || req.query['includeInactive'] === 'true';
+  const sql = `
+    SELECT test_id, agent_id, template_id, prompt, reference_output,
+           expected_tags::text AS expected_tags,
+           rubric_override, pass_threshold, active,
+           created_at::text AS created_at,
+           updated_at::text AS updated_at,
+           notes
+      FROM observability.test_cases
+     ${includeInactive ? '' : 'WHERE active = true'}
+     ORDER BY agent_id ASC, test_id ASC`;
+  const rows = await exec(sql, []);
+  res.json({ cases: rows.map(rowToTestCase) });
+}));
+
+// ── GET /cases/:id ─────────────────────────────────────────────────────────
+
+harnessRouter.get('/cases/:id', asyncHandler(async (req, res) => {
+  const id = String(req.params['id'] ?? '');
+  const rows = await exec(
+    `SELECT test_id, agent_id, template_id, prompt, reference_output,
+            expected_tags::text AS expected_tags,
+            rubric_override, pass_threshold, active,
+            created_at::text AS created_at,
+            updated_at::text AS updated_at,
+            notes
+       FROM observability.test_cases
+      WHERE test_id = :id`,
+    [strParam('id', id)],
+  );
+  if (rows.length === 0) {
+    res.status(404).json({ error: 'test case not found' });
+    return;
+  }
+  res.json({ case: rowToTestCase(rows[0]!) });
+}));
+
+// ── POST /cases — insert-or-update ─────────────────────────────────────────
+
+interface UpsertCaseBody {
+  testId?: string;
+  agentId?: string;
+  templateId?: string | null;
+  prompt?: string;
+  referenceOutput?: string | null;
+  expectedTags?: unknown;
+  rubricOverride?: string | null;
+  passThreshold?: number;
+  active?: boolean;
+  notes?: string | null;
+}
+
+harnessRouter.post('/cases', asyncHandler(async (req, res) => {
+  const body = (req.body ?? {}) as UpsertCaseBody;
+  const agentId = typeof body.agentId === 'string' ? body.agentId : '';
+  const prompt = typeof body.prompt === 'string' ? body.prompt : '';
+  if (!agentId) throw new ValidationError('agentId is required');
+  if (!prompt) throw new ValidationError('prompt is required');
+
+  const testId = (typeof body.testId === 'string' && body.testId.trim())
+    ? body.testId.trim()
+    : autoTestId(agentId, prompt);
+
+  const expectedTags = Array.isArray(body.expectedTags)
+    ? (body.expectedTags as unknown[]).filter((t) => typeof t === 'string')
+    : [];
+  const passThreshold = (typeof body.passThreshold === 'number' && Number.isFinite(body.passThreshold))
+    ? Math.max(0, Math.min(1, body.passThreshold))
+    : 0.7;
+  const active = typeof body.active === 'boolean' ? body.active : true;
+
+  await exec(
+    `INSERT INTO observability.test_cases
+       (test_id, agent_id, template_id, prompt, reference_output,
+        expected_tags, rubric_override, pass_threshold, active, notes,
+        created_at, updated_at)
+     VALUES
+       (:test_id, :agent_id, :template_id, :prompt, :reference_output,
+        CAST(:expected_tags AS jsonb), :rubric_override, :pass_threshold,
+        :active, :notes, now(), now())
+     ON CONFLICT (test_id) DO UPDATE SET
+        agent_id = EXCLUDED.agent_id,
+        template_id = EXCLUDED.template_id,
+        prompt = EXCLUDED.prompt,
+        reference_output = EXCLUDED.reference_output,
+        expected_tags = EXCLUDED.expected_tags,
+        rubric_override = EXCLUDED.rubric_override,
+        pass_threshold = EXCLUDED.pass_threshold,
+        active = EXCLUDED.active,
+        notes = EXCLUDED.notes,
+        updated_at = now()`,
+    [
+      strParam('test_id', testId),
+      strParam('agent_id', agentId),
+      nullableStr('template_id', body.templateId ?? null),
+      strParam('prompt', prompt),
+      nullableStr('reference_output', body.referenceOutput ?? null),
+      jsonParam('expected_tags', expectedTags),
+      nullableStr('rubric_override', body.rubricOverride ?? null),
+      nullableNumber('pass_threshold', passThreshold),
+      boolParam('active', active),
+      nullableStr('notes', body.notes ?? null),
+    ],
+  );
+
+  res.status(201).json({ testId });
+}));
+
+// ── PATCH /cases/:id — partial update ──────────────────────────────────────
+
+harnessRouter.patch('/cases/:id', asyncHandler(async (req, res) => {
+  const id = String(req.params['id'] ?? '');
+  const body = (req.body ?? {}) as UpsertCaseBody;
+  const sets: string[] = [];
+  const params: SqlParameter[] = [strParam('id', id)];
+
+  if (typeof body.agentId === 'string') {
+    sets.push('agent_id = :agent_id'); params.push(strParam('agent_id', body.agentId));
+  }
+  if ('templateId' in body) {
+    sets.push('template_id = :template_id');
+    params.push(nullableStr('template_id', body.templateId ?? null));
+  }
+  if (typeof body.prompt === 'string') {
+    sets.push('prompt = :prompt'); params.push(strParam('prompt', body.prompt));
+  }
+  if ('referenceOutput' in body) {
+    sets.push('reference_output = :reference_output');
+    params.push(nullableStr('reference_output', body.referenceOutput ?? null));
+  }
+  if (Array.isArray(body.expectedTags)) {
+    const tags = (body.expectedTags as unknown[]).filter((t) => typeof t === 'string');
+    sets.push('expected_tags = CAST(:expected_tags AS jsonb)');
+    params.push(jsonParam('expected_tags', tags));
+  }
+  if ('rubricOverride' in body) {
+    sets.push('rubric_override = :rubric_override');
+    params.push(nullableStr('rubric_override', body.rubricOverride ?? null));
+  }
+  if (typeof body.passThreshold === 'number' && Number.isFinite(body.passThreshold)) {
+    sets.push('pass_threshold = :pass_threshold');
+    params.push(nullableNumber('pass_threshold', Math.max(0, Math.min(1, body.passThreshold))));
+  }
+  if (typeof body.active === 'boolean') {
+    sets.push('active = :active'); params.push(boolParam('active', body.active));
+  }
+  if ('notes' in body) {
+    sets.push('notes = :notes');
+    params.push(nullableStr('notes', body.notes ?? null));
+  }
+
+  if (sets.length === 0) {
+    res.json({ ok: true, changed: 0 });
+    return;
+  }
+  sets.push('updated_at = now()');
+
+  const rows = await exec(
+    `UPDATE observability.test_cases
+        SET ${sets.join(', ')}
+      WHERE test_id = :id
+      RETURNING test_id`,
+    params,
+  );
+  if (rows.length === 0) throw new NotFoundError('test case not found');
+  res.json({ ok: true });
+}));
+
+// ── DELETE /cases/:id — soft delete ────────────────────────────────────────
+
+harnessRouter.delete('/cases/:id', asyncHandler(async (req, res) => {
+  const id = String(req.params['id'] ?? '');
+  const rows = await exec(
+    `UPDATE observability.test_cases
+        SET active = false, updated_at = now()
+      WHERE test_id = :id
+      RETURNING test_id`,
+    [strParam('id', id)],
+  );
+  if (rows.length === 0) throw new NotFoundError('test case not found');
+  res.json({ ok: true });
+}));
+
+// ── POST /runs — create a new run row ──────────────────────────────────────
+
+interface CreateRunBody {
+  label?: string;
+  gitSha?: string | null;
+  judgeModelId?: string;
+  agentVersions?: Record<string, string>;
+  notes?: string | null;
+  totalCases?: number;
+}
+
+harnessRouter.post('/runs', asyncHandler(async (req, res) => {
+  const body = (req.body ?? {}) as CreateRunBody;
+  const label = typeof body.label === 'string' && body.label.trim()
+    ? body.label.trim()
+    : `run-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+  const judgeModelId = typeof body.judgeModelId === 'string' && body.judgeModelId.trim()
+    ? body.judgeModelId.trim()
+    : 'amazon.nova-pro-v1:0';
+  const agentVersions = (body.agentVersions && typeof body.agentVersions === 'object' && !Array.isArray(body.agentVersions))
+    ? body.agentVersions as Record<string, string>
+    : {};
+  const totalCases = (typeof body.totalCases === 'number' && Number.isFinite(body.totalCases))
+    ? Math.max(0, Math.floor(body.totalCases))
+    : 0;
+
+  const runId = randomUUID();
+  await exec(
+    `INSERT INTO observability.test_runs
+       (run_id, label, git_sha, judge_model_id, agent_versions,
+        status, total_cases, completed, passed, failed, started_at, notes)
+     VALUES
+       (CAST(:run_id AS uuid), :label, :git_sha, :judge_model_id,
+        CAST(:agent_versions AS jsonb),
+        'pending', :total_cases, 0, 0, 0, now(), :notes)`,
+    [
+      strParam('run_id', runId),
+      strParam('label', label),
+      nullableStr('git_sha', body.gitSha ?? null),
+      strParam('judge_model_id', judgeModelId),
+      jsonParam('agent_versions', agentVersions),
+      nullableInt('total_cases', totalCases),
+      nullableStr('notes', body.notes ?? null),
+    ],
+  );
+
+  res.status(201).json({ runId });
+}));
+
+// ── GET /runs — recent runs ────────────────────────────────────────────────
+
+harnessRouter.get('/runs', asyncHandler(async (req, res) => {
+  const rawLimit = parseInt((req.query['limit'] as string) ?? '14', 10);
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0
+    ? Math.min(rawLimit, 100)
+    : 14;
+  const rows = await exec(
+    `SELECT run_id::text AS run_id, label, git_sha, judge_model_id,
+            agent_versions::text AS agent_versions,
+            status, total_cases, completed, passed, failed, pass_rate,
+            started_at::text AS started_at,
+            finished_at::text AS finished_at,
+            notes
+       FROM observability.test_runs
+      ORDER BY started_at DESC
+      LIMIT :lim`,
+    [{ name: 'lim', value: { longValue: limit } }],
+  );
+  res.json({ runs: rows.map(rowToTestRun) });
+}));
+
+// ── GET /runs/:id — run + joined results ───────────────────────────────────
+
+harnessRouter.get('/runs/:id', asyncHandler(async (req, res) => {
+  const id = String(req.params['id'] ?? '');
+  const runRows = await exec(
+    `SELECT run_id::text AS run_id, label, git_sha, judge_model_id,
+            agent_versions::text AS agent_versions,
+            status, total_cases, completed, passed, failed, pass_rate,
+            started_at::text AS started_at,
+            finished_at::text AS finished_at,
+            notes
+       FROM observability.test_runs
+      WHERE run_id = CAST(:id AS uuid)`,
+    [strParam('id', id)],
+  );
+  if (runRows.length === 0) {
+    res.status(404).json({ error: 'run not found' });
+    return;
+  }
+  const resultRows = await exec(
+    `SELECT r.run_id::text AS run_id, r.test_id,
+            r.invocation_id::text AS invocation_id,
+            r.passed, r.judge_score, r.judge_rationale,
+            r.schema_valid,
+            r.tag_hits::text AS tag_hits,
+            r.reference_similarity, r.response_snippet,
+            r.fail_reasons::text AS fail_reasons,
+            r.duration_ms,
+            r.ts::text AS ts,
+            c.agent_id AS agent_id,
+            c.prompt AS prompt,
+            t.response_snippet AS trace_response_snippet
+       FROM observability.test_results r
+       LEFT JOIN observability.test_cases c ON c.test_id = r.test_id
+       LEFT JOIN observability.invocation_traces t
+         ON t.invocation_id = r.invocation_id
+      WHERE r.run_id = CAST(:id AS uuid)
+      ORDER BY r.ts ASC, r.test_id ASC`,
+    [strParam('id', id)],
+  );
+  const results: TestResult[] = resultRows.map((r) => {
+    const out = rowToTestResult(r);
+    // Prefer the result's own response_snippet; fall back to the trace's.
+    if (!out.responseSnippet && r['trace_response_snippet']) {
+      out.responseSnippet = String(r['trace_response_snippet']);
+    }
+    return out;
+  });
+  res.json({ run: rowToTestRun(runRows[0]!), results });
+}));
+
+// ── GET /runs/:id/status — live counters ───────────────────────────────────
+
+harnessRouter.get('/runs/:id/status', asyncHandler(async (req, res) => {
+  const id = String(req.params['id'] ?? '');
+  const rows = await exec(
+    `SELECT status, total_cases, completed, passed, failed, pass_rate
+       FROM observability.test_runs
+      WHERE run_id = CAST(:id AS uuid)`,
+    [strParam('id', id)],
+  );
+  if (rows.length === 0) {
+    res.status(404).json({ error: 'run not found' });
+    return;
+  }
+  const r = rows[0]!;
+  const total = Number(r['total_cases'] ?? 0);
+  const completed = Number(r['completed'] ?? 0);
+  const passed = Number(r['passed'] ?? 0);
+  const failed = Number(r['failed'] ?? 0);
+  const passRateRaw = r['pass_rate'];
+  const passRate = passRateRaw == null
+    ? (completed > 0 ? passed / completed : null)
+    : Number(passRateRaw);
+  res.json({
+    status: String(r['status'] ?? 'pending'),
+    total,
+    completed,
+    passed,
+    failed,
+    passRate,
+  });
+}));
+
+// ── POST /runs/:runId/results — upsert one result ──────────────────────────
+
+interface UpsertResultBody {
+  testId?: string;
+  invocationId?: string | null;
+  passed?: boolean | null;
+  judgeScore?: number | null;
+  judgeRationale?: string | null;
+  schemaValid?: boolean | null;
+  tagHits?: Record<string, boolean> | null;
+  referenceSimilarity?: number | null;
+  responseSnippet?: string | null;
+  failReasons?: string[] | null;
+  durationMs?: number | null;
+}
+
+harnessRouter.post('/runs/:runId/results', asyncHandler(async (req, res) => {
+  const runId = String(req.params['runId'] ?? '');
+  const body = (req.body ?? {}) as UpsertResultBody;
+  const testId = typeof body.testId === 'string' ? body.testId : '';
+  if (!testId) throw new ValidationError('testId is required');
+
+  const invocationId = (typeof body.invocationId === 'string' && /^[0-9a-f-]{36}$/i.test(body.invocationId))
+    ? body.invocationId
+    : null;
+
+  await exec(
+    `INSERT INTO observability.test_results
+       (run_id, test_id, invocation_id, passed, judge_score, judge_rationale,
+        schema_valid, tag_hits, reference_similarity, response_snippet,
+        fail_reasons, duration_ms, ts)
+     VALUES
+       (CAST(:run_id AS uuid), :test_id,
+        ${invocationId ? 'CAST(:invocation_id AS uuid)' : 'NULL'},
+        :passed, :judge_score, :judge_rationale,
+        :schema_valid,
+        CAST(:tag_hits AS jsonb),
+        :reference_similarity, :response_snippet,
+        CAST(:fail_reasons AS jsonb),
+        :duration_ms, now())
+     ON CONFLICT (run_id, test_id) DO UPDATE SET
+        invocation_id = EXCLUDED.invocation_id,
+        passed = EXCLUDED.passed,
+        judge_score = EXCLUDED.judge_score,
+        judge_rationale = EXCLUDED.judge_rationale,
+        schema_valid = EXCLUDED.schema_valid,
+        tag_hits = EXCLUDED.tag_hits,
+        reference_similarity = EXCLUDED.reference_similarity,
+        response_snippet = EXCLUDED.response_snippet,
+        fail_reasons = EXCLUDED.fail_reasons,
+        duration_ms = EXCLUDED.duration_ms,
+        ts = now()`,
+    [
+      strParam('run_id', runId),
+      strParam('test_id', testId),
+      ...(invocationId ? [strParam('invocation_id', invocationId)] : []),
+      nullableBool('passed', body.passed ?? null),
+      nullableNumber('judge_score', body.judgeScore ?? null),
+      nullableStr('judge_rationale', body.judgeRationale ?? null),
+      nullableBool('schema_valid', body.schemaValid ?? null),
+      jsonParam('tag_hits', body.tagHits ?? null),
+      nullableNumber('reference_similarity', body.referenceSimilarity ?? null),
+      nullableStr('response_snippet', body.responseSnippet ?? null),
+      jsonParam('fail_reasons', body.failReasons ?? null),
+      nullableInt('duration_ms', body.durationMs ?? null),
+    ],
+  );
+  res.json({ ok: true });
+}));
+
+// ── PATCH /runs/:id — partial counter / status update ──────────────────────
+
+interface PatchRunBody {
+  status?: TestRun['status'];
+  completed?: number;
+  passed?: number;
+  failed?: number;
+  finishedAt?: string | null;
+  passRate?: number | null;
+  totalCases?: number;
+  notes?: string | null;
+  agentVersions?: Record<string, string>;
+}
+
+harnessRouter.patch('/runs/:id', asyncHandler(async (req, res) => {
+  const id = String(req.params['id'] ?? '');
+  const body = (req.body ?? {}) as PatchRunBody;
+  const sets: string[] = [];
+  const params: SqlParameter[] = [strParam('id', id)];
+
+  if (typeof body.status === 'string') {
+    sets.push('status = :status'); params.push(strParam('status', body.status));
+  }
+  if (typeof body.completed === 'number' && Number.isFinite(body.completed)) {
+    sets.push('completed = :completed'); params.push(nullableInt('completed', body.completed));
+  }
+  if (typeof body.passed === 'number' && Number.isFinite(body.passed)) {
+    sets.push('passed = :passed'); params.push(nullableInt('passed', body.passed));
+  }
+  if (typeof body.failed === 'number' && Number.isFinite(body.failed)) {
+    sets.push('failed = :failed'); params.push(nullableInt('failed', body.failed));
+  }
+  if (typeof body.totalCases === 'number' && Number.isFinite(body.totalCases)) {
+    sets.push('total_cases = :total_cases'); params.push(nullableInt('total_cases', body.totalCases));
+  }
+  if ('finishedAt' in body) {
+    // 'auto' / true => now(); explicit ISO string => bind as timestamptz; null => null
+    if (body.finishedAt === null) {
+      sets.push('finished_at = NULL');
+    } else if (typeof body.finishedAt === 'string') {
+      sets.push('finished_at = :finished_at::timestamptz');
+      params.push(strParam('finished_at', body.finishedAt));
+    } else {
+      sets.push('finished_at = now()');
+    }
+  }
+  if ('passRate' in body) {
+    sets.push('pass_rate = :pass_rate');
+    params.push(nullableNumber('pass_rate', body.passRate ?? null));
+  }
+  if ('notes' in body) {
+    sets.push('notes = :notes');
+    params.push(nullableStr('notes', body.notes ?? null));
+  }
+  if (body.agentVersions && typeof body.agentVersions === 'object' && !Array.isArray(body.agentVersions)) {
+    sets.push('agent_versions = CAST(:agent_versions AS jsonb)');
+    params.push(jsonParam('agent_versions', body.agentVersions));
+  }
+
+  if (sets.length === 0) {
+    res.json({ ok: true, changed: 0 });
+    return;
+  }
+
+  const rows = await exec(
+    `UPDATE observability.test_runs
+        SET ${sets.join(', ')}
+      WHERE run_id = CAST(:id AS uuid)
+      RETURNING run_id`,
+    params,
+  );
+  if (rows.length === 0) throw new NotFoundError('run not found');
+  res.json({ ok: true });
+}));
+
+// ── POST /results/:invocationId/rejudge — re-run judge 3x ──────────────────
+
+harnessRouter.post('/results/:invocationId/rejudge', asyncHandler(async (req, res) => {
+  const invocationId = String(req.params['invocationId'] ?? '');
+  if (!/^[0-9a-f-]{36}$/i.test(invocationId)) {
+    throw new ValidationError('invocationId must be a UUID');
+  }
+  const rows = await exec(
+    `SELECT prompt_snippet, response_snippet
+       FROM observability.invocation_traces
+      WHERE invocation_id = CAST(:id AS uuid)`,
+    [strParam('id', invocationId)],
+  );
+  if (rows.length === 0) throw new NotFoundError('trace not found');
+  const trace = rows[0]!;
+  const prompt = String(trace['prompt_snippet'] ?? '');
+  const response = String(trace['response_snippet'] ?? '');
+
+  // Three independent invocations. Nova at temperature=0 should produce a
+  // tight distribution; the harness UI displays the spread as a stability
+  // signal.
+  const judgements = await Promise.all([
+    judgeResponse(prompt, response).catch(() => null),
+    judgeResponse(prompt, response).catch(() => null),
+    judgeResponse(prompt, response).catch(() => null),
+  ]);
+  const scores = judgements.map((j) => j ? j.score : NaN);
+  const rationales = judgements.map((j) => j ? j.rationale : '');
+  res.json({ scores, rationales });
+}));
+
+// ── GET /coverage — per-agent test coverage rollup ─────────────────────────
+
+interface CoverageRow {
+  agentId: string;
+  count: number;
+  lastRunPassed?: number;
+  lastRunTotal?: number;
+  lastRunAt?: string;
+}
+
+harnessRouter.get('/coverage', asyncHandler(async (_req, res) => {
+  // Count active cases per agent + join the most-recent run's pass numbers.
+  // We compute the latest run per agent by looking at when its results last
+  // landed in test_results. This is approximate (a run touches multiple
+  // agents) but matches what researchers want: "did the last time we tested
+  // this agent pass".
+  const rows = await exec(
+    `WITH counts AS (
+       SELECT agent_id, COUNT(*)::bigint AS cnt
+         FROM observability.test_cases
+        WHERE active = true
+        GROUP BY agent_id
+     ),
+     latest AS (
+       SELECT c.agent_id,
+              MAX(r.ts) AS last_ts
+         FROM observability.test_results r
+         JOIN observability.test_cases c ON c.test_id = r.test_id
+        GROUP BY c.agent_id
+     ),
+     last_run AS (
+       SELECT c.agent_id,
+              r.run_id,
+              SUM(CASE WHEN r.passed THEN 1 ELSE 0 END)::bigint AS passed,
+              COUNT(*)::bigint AS total,
+              MAX(r.ts) AS ts
+         FROM observability.test_results r
+         JOIN observability.test_cases c ON c.test_id = r.test_id
+         JOIN latest l ON l.agent_id = c.agent_id
+        WHERE r.run_id = (
+          SELECT r2.run_id
+            FROM observability.test_results r2
+            JOIN observability.test_cases c2 ON c2.test_id = r2.test_id
+           WHERE c2.agent_id = c.agent_id
+           ORDER BY r2.ts DESC
+           LIMIT 1
+        )
+        GROUP BY c.agent_id, r.run_id
+     )
+     SELECT counts.agent_id,
+            counts.cnt,
+            last_run.passed,
+            last_run.total,
+            last_run.ts::text AS last_ts
+       FROM counts
+       LEFT JOIN last_run ON last_run.agent_id = counts.agent_id
+      ORDER BY counts.agent_id ASC`,
+    [],
+  );
+
+  const byAgent: CoverageRow[] = rows.map((r) => {
+    const row: CoverageRow = {
+      agentId: String(r['agent_id'] ?? ''),
+      count: Number(r['cnt'] ?? 0),
+    };
+    if (r['passed'] != null) row.lastRunPassed = Number(r['passed']);
+    if (r['total'] != null) row.lastRunTotal = Number(r['total']);
+    if (r['last_ts'] != null) row.lastRunAt = String(r['last_ts']);
+    return row;
+  });
+  res.json({ byAgent });
+}));

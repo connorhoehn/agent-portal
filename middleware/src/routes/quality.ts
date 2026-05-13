@@ -56,6 +56,7 @@ qualityRouter.get('/scores', asyncHandler(async (req, res) => {
            judge_score, schema_valid, human_label
       FROM observability.invocation_traces
      WHERE ${sinceClause}
+       AND (template_id NOT LIKE 'test:%' OR template_id IS NULL)
        ${whereAgent}
      ORDER BY ts ASC
      LIMIT 5000`;
