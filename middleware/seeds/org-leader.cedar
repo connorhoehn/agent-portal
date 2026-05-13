@@ -22,4 +22,4 @@ permit (
   action == OrgIQ::Action::"ApproveTransaction",
   resource
 )
-when { principal.role == "org-leader" && resource.amount > 10000 };
+when { principal.role == "org-leader" && resource has amount && resource.amount > 10000 };

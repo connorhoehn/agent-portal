@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.vite/
+
+# Playwright artifacts (built by the e2e test runs)
+test-results/
+e2e-report/
+e2e-shots/
+playwright-report/

@@ -65,8 +65,9 @@ function ApprovalQueuePage() {
           credentials: 'include',
         });
         if (!res.ok) return;
-        const json = (await res.json()) as Approval[];
-        if (!cancelled && Array.isArray(json)) setItems(json);
+        const json = (await res.json()) as { approvals?: Approval[] } | Approval[];
+        const list = Array.isArray(json) ? json : (json.approvals ?? []);
+        if (!cancelled) setItems(list);
       } catch {
         // swallow — empty state handles it
       }

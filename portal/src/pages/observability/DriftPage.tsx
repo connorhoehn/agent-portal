@@ -90,10 +90,10 @@ function DriftPage() {
   const outlierUrl = selectedAgent
     ? `/api/observability/drift/outliers?agentId=${encodeURIComponent(selectedAgent)}&limit=20`
     : '';
-  const { data: outliers } = useFetch<DriftOutlier[]>(outlierUrl, 30_000);
-  const outlierRows = useMemo(
-    () => (Array.isArray(outliers) ? outliers : []),
-    [outliers],
+  const { data: outliersData } = useFetch<{ outliers?: DriftOutlier[] } | DriftOutlier[]>(outlierUrl, 30_000);
+  const outlierRows = useMemo<DriftOutlier[]>(
+    () => Array.isArray(outliersData) ? outliersData : (outliersData?.outliers ?? []),
+    [outliersData],
   );
 
   const [expanded, setExpanded] = useState<string | null>(null);

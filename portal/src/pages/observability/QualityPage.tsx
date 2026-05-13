@@ -80,9 +80,9 @@ function QualityPage() {
   const scoresUrl = selectedAgent
     ? `/api/observability/quality/scores?agentId=${encodeURIComponent(selectedAgent)}&since=${encodeURIComponent(since)}`
     : '';
-  const { data: scoresData, refresh } = useFetch<QualityScore[]>(scoresUrl, 30_000);
-  const scores = useMemo(
-    () => (Array.isArray(scoresData) ? scoresData : []),
+  const { data: scoresData, refresh } = useFetch<{ points?: QualityScore[] } | QualityScore[]>(scoresUrl, 30_000);
+  const scores = useMemo<QualityScore[]>(
+    () => Array.isArray(scoresData) ? scoresData : (scoresData?.points ?? []),
     [scoresData],
   );
 
