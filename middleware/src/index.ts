@@ -20,6 +20,7 @@ import { guardrailsDetailRouter } from './routes/guardrails-detail.js';
 import { trafficRouter } from './routes/traffic.js';
 import { invocationsRouter } from './routes/invocations.js';
 import { toolCallsRouter } from './routes/tool-calls.js';
+import { testFixturesRouter } from './routes/test-fixtures.js';
 import { capabilitiesRouter } from './routes/capabilities.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { sessionRouter } from './routes/session.js';
@@ -83,6 +84,8 @@ app.use('/api/observability/memory', memoryRouter);
 app.use('/api/observability/guardrails-detail', guardrailsDetailRouter);
 // Sprint 4 (M13) — traffic shape: RPS, hour-of-week heatmap, top users.
 app.use('/api/observability/traffic', trafficRouter);
+// Test fixtures — E2E-only reset utilities. NODE_ENV=production locks them.
+app.use('/api/observability/test-fixtures', testFixturesRouter);
 // Sprint 2 — invocation search + per-invocation drill-down (M3/M5 triage).
 // Mounted ungated so the portal triage page can hit it directly, same as cost.
 app.use('/api/observability/invocations', invocationsRouter);

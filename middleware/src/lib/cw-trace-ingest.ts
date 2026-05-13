@@ -185,7 +185,6 @@ export async function pollOnce(): Promise<{ ingested: number; errors: number }> 
   }
 
   const logGroups = await discoverLogGroups();
-  console.log(`[cw-ingest] discovered ${logGroups.length} log group(s)`);
   if (logGroups.length === 0) {
     // Advance the cursor so we don't replay a wider window once log groups
     // appear; the worst-case is the first 30s of new runtime output goes
@@ -254,7 +253,6 @@ export async function pollOnce(): Promise<{ ingested: number; errors: number }> 
   let errors = 0;
   const rows = result.results ?? [];
   let matched = 0;
-  console.log(`[cw-ingest] query returned ${rows.length} row(s) from window [${startTs}, ${endTs}]`);
   for (const row of rows) {
     // Each row is an array of {field, value} pairs; @message holds the line.
     const msgField = row.find((f) => f.field === '@message');
@@ -266,15 +264,32 @@ export async function pollOnce(): Promise<{ ingested: number; errors: number }> 
     const prefixIdx = raw.indexOf(ORGIQ_TRACE_PREFIX);
     if (prefixIdx < 0) continue;
     matched++;
-    // Extract from the start of the JSON object — find the first `{` after the
-    // prefix and consume until the matching `}` to handle multiple traces in
-    // one merged line. Conservative: grab the substring from `{` through the
-    // last `}` and let JSON.parse decide if it's valid.
+    // Walk the substring after the prefix and extract the *matching* JSON
+    // object using depth counting. We can't use lastIndexOf('}') — CW Logs
+    // concatenates adjacent stdout writes, so the @message can contain output
+    // AFTER the trace JSON whose stray `}` would cause us to slice past the
+    // end of the bundle.
     const afterPrefix = raw.slice(prefixIdx + ORGIQ_TRACE_PREFIX.length);
     const firstBrace = afterPrefix.indexOf('{');
-    const lastBrace = afterPrefix.lastIndexOf('}');
-    if (firstBrace < 0 || lastBrace <= firstBrace) continue;
-    const json = afterPrefix.slice(firstBrace, lastBrace + 1);
+    if (firstBrace < 0) continue;
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    let endBrace = -1;
+    for (let i = firstBrace; i < afterPrefix.length; i++) {
+      const ch = afterPrefix[i];
+      if (escape) { escape = false; continue; }
+      if (ch === '\\') { escape = true; continue; }
+      if (ch === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0) { endBrace = i; break; }
+      }
+    }
+    if (endBrace < 0) continue;
+    const json = afterPrefix.slice(firstBrace, endBrace + 1);
     let bundle: TraceInput;
     try {
       bundle = JSON.parse(json) as TraceInput;
@@ -299,7 +314,11 @@ export async function pollOnce(): Promise<{ ingested: number; errors: number }> 
   // Advance the cursor only after a successful query (regardless of whether
   // we ingested anything). On query failure we leave it alone so the next
   // poll re-attempts the same window.
-  console.log(`[cw-ingest] matched ${matched} ORGIQ_TRACE line(s); persisted ${ingested}, parse errors ${errors}`);
+  // Only log when something interesting happened — avoid spamming once-per-30s
+  // when there's no agent activity. matched but not persisted is worth seeing.
+  if (matched > 0 || errors > 0) {
+    console.log(`[cw-ingest] matched ${matched} line(s); persisted ${ingested}, parse errors ${errors}`);
+  }
   _lastPollTs = endTs;
   return { ingested, errors };
 }
@@ -342,12 +361,12 @@ export function startTracePoller(): void {
   _intervalHandle = setInterval(() => {
     pollOnce()
       .then((r) => {
-        // Verbose when debugging — temporarily log every poll so we can see
-        // whether the loop is actually firing + how many lines it found.
-        // Suppress to ingested/errors only when running cleanly.
-        console.log(
-          `[cw-ingest] poll: ingested ${r.ingested}, errors ${r.errors}`,
-        );
+        // Suppress per-poll noise — only log when ingestion actually happened
+        // or errors fired. The inner pollOnce already logs match/persist counts
+        // when matched > 0.
+        if (r.ingested > 0 || r.errors > 0) {
+          console.log(`[cw-ingest] poll: ingested ${r.ingested}, errors ${r.errors}`);
+        }
       })
       .catch((err) =>
         console.warn('[cw-ingest] poll failed:', (err as Error).message),
