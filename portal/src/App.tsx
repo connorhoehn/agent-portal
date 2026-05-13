@@ -49,6 +49,8 @@ const ObservabilityQualityPage = lazy(() => import('./pages/observability/Qualit
 const ObservabilityCostPage = lazy(() => import('./pages/observability/CostPage'));
 const ObservabilityCalibrationPage = lazy(() => import('./pages/observability/CalibrationPage'));
 const ObservabilityModelComparePage = lazy(() => import('./pages/observability/ModelComparePage'));
+const ObservabilityMemoryPage = lazy(() => import('./pages/observability/MemoryPage'));
+const ObservabilityGuardrailRulesPage = lazy(() => import('./pages/observability/GuardrailRulesPage'));
 const ObservabilityApprovalsPage = lazy(() => import('./pages/observability/ApprovalQueuePage'));
 const ObservabilityHarnessLayout = lazy(() => import('./pages/observability/harness/HarnessLayout'));
 const ObservabilityHarnessHomePage = lazy(() => import('./pages/observability/harness/HarnessHomePage'));
@@ -108,6 +110,8 @@ export function App() {
           <Route path="cost" element={<Page element={<ObservabilityCostPage />} />} />
           <Route path="calibration" element={<Page element={<ObservabilityCalibrationPage />} />} />
           <Route path="model-compare" element={<Page element={<ObservabilityModelComparePage />} />} />
+          <Route path="memory" element={<Page element={<ObservabilityMemoryPage />} />} />
+          <Route path="guardrail-rules" element={<Page element={<ObservabilityGuardrailRulesPage />} />} />
           <Route path="approvals" element={<Page element={<ObservabilityApprovalsPage />} />} />
           <Route path="harness" element={<Page element={<ObservabilityHarnessLayout />} />}>
             <Route index element={<Page element={<ObservabilityHarnessHomePage />} />} />
