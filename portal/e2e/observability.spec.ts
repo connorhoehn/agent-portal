@@ -71,6 +71,34 @@ test.describe('observability pages', () => {
     await page.screenshot({ path: `${SHOT_DIR}/03-approvals.png`, fullPage: true });
   });
 
+  test('harness home shows recent runs + coverage', async ({ page }) => {
+    await page.goto('/observability/harness');
+    await expect(page.getByText(/Test Harness/i)).toBeVisible({ timeout: 10_000 });
+    // The seeded smoke run should appear in the recent runs table.
+    await expect(page.getByText(/smoke@/).first()).toBeVisible({ timeout: 10_000 });
+    // Coverage bars: 5 agents with seeded test cases.
+    await expect(page.getByText('orgiq-supervisor').first()).toBeVisible();
+    await expect(page.getByText('orgiq-ingestion').first()).toBeVisible();
+    // [Run now] button should be there
+    await expect(page.getByRole('button', { name: /run now/i })).toBeVisible();
+    await page.screenshot({ path: `${SHOT_DIR}/06-harness-home.png`, fullPage: true });
+  });
+
+  test('harness run detail shows matrix + regressions or pass list', async ({ page }) => {
+    // Find the most recent run and visit its detail page
+    const res = await page.request.get('/api/observability/harness/runs?limit=1');
+    const body = await res.json();
+    const runId = body.runs?.[0]?.runId;
+    expect(runId).toBeTruthy();
+    await page.goto(`/observability/harness/runs/${runId}`);
+    // Header shows the run label + pass rate
+    await expect(page.getByText(/smoke@/).first()).toBeVisible({ timeout: 10_000 });
+    // The seeded run has 10 test results — at least one test_id must render
+    await expect(page.getByText('ingestion.invoice.simple.001').first()).toBeVisible();
+    await expect(page.getByText('supervisor.routing.score.001').first()).toBeVisible();
+    await page.screenshot({ path: `${SHOT_DIR}/07-harness-run.png`, fullPage: true });
+  });
+
   test('org-leader can approve an over-threshold transaction', async ({ page }) => {
     await page.goto('/observability/approvals');
     await expect(page.getByText('tx-demo-002').first()).toBeVisible({ timeout: 10_000 });
