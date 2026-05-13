@@ -24,9 +24,10 @@ function ObservabilityLayout() {
   const errorCount = summary?.totalErrors24h;
 
   const items: SubNavItem[] = [
-    { path: 'summary',           label: 'Summary',           hint: 'Health overview' },
-    { path: 'invocations',       label: 'Invocations',       hint: 'Recent agent calls', count: invocationCount },
-    { path: 'capability-events', label: 'Capability Events', hint: 'Browser & code' },
+    { path: 'summary',            label: 'Summary',           hint: 'Health overview' },
+    { path: 'invocations',        label: 'Recent',            hint: 'Last 50 agent calls', count: invocationCount },
+    { path: 'invocations/search', label: 'Search',            hint: 'Triage by prompt / agent / score' },
+    { path: 'capability-events',  label: 'Capability Events', hint: 'Browser & code' },
     { path: 'agents',            label: 'Agent Metrics',     hint: 'Per-agent stats' },
     { path: 'sessions',          label: 'Sessions',          hint: 'Chat threads' },
     { path: 'authz',             label: 'Authz Log',         hint: 'Live AVP decisions' },

@@ -449,7 +449,19 @@ function RunDetailPage() {
                         onClick={() => setExpanded(isOpen ? null : r.testId)}
                         style={{ cursor: 'pointer' }}
                       >
-                        <TableTd style={monoCell}>{r.testId}</TableTd>
+                        <TableTd style={monoCell}>
+                          {r.testId}
+                          {r.invocationId && (
+                            <Link
+                              to={`/observability/invocations/${r.invocationId}`}
+                              onClick={(e) => e.stopPropagation()}
+                              title="Open invocation detail"
+                              style={inlineOpenLink}
+                            >
+                              →
+                            </Link>
+                          )}
+                        </TableTd>
                         <TableTd style={agentCell}>{r.agentId ?? '—'}</TableTd>
                         <TableTd>
                           <PassChip passed={r.passed} />
@@ -616,7 +628,14 @@ function ResultDetail({ result }: { result: TestResult }) {
           {result.invocationId && (
             <>
               <span style={dot}>·</span>
-              invocation: <span style={monoInline}>{result.invocationId}</span>
+              invocation:{' '}
+              <Link
+                to={`/observability/invocations/${result.invocationId}`}
+                style={{ ...monoInline, color: 'var(--color-primary, #6366f1)' }}
+                title="Open invocation detail"
+              >
+                {result.invocationId} →
+              </Link>
             </>
           )}
           <span style={dot}>·</span>
@@ -742,6 +761,13 @@ const collapseBtn: CSSProperties = {
   fontWeight: 600,
   color: 'var(--color-text-primary)',
   cursor: 'pointer',
+};
+const inlineOpenLink: CSSProperties = {
+  marginLeft: 6,
+  color: 'var(--color-primary, #6366f1)',
+  textDecoration: 'none',
+  fontSize: 11,
+  fontFamily: 'system-ui, sans-serif',
 };
 const btnLink: CSSProperties = {
   padding: '2px 8px',
