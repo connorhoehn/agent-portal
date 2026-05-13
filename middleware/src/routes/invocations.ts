@@ -21,8 +21,18 @@
 
 import { Router } from 'express';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
+import {
+  BedrockAgentCoreClient,
+  InvokeAgentRuntimeCommand,
+} from '@aws-sdk/client-bedrock-agentcore';
+import {
+  BedrockAgentCoreControlClient,
+  ListAgentRuntimesCommand,
+} from '@aws-sdk/client-bedrock-agentcore-control';
 import { asyncHandler } from '../lib/async-handler.js';
 import { exec } from '../providers/aurora.js';
+import { config } from '../config.js';
+import { processTrace } from '../lib/trace-sink.js';
 
 export const invocationsRouter = Router();
 
@@ -494,18 +504,251 @@ invocationsRouter.get('/:invocationId', asyncHandler(async (req, res) => {
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /:invocationId/replay — stub for M4 finalisation.
+// POST /:invocationId/replay — Sprint 4 (M13).
 //
-// Returns 501 with a structured body so the portal can grey out the replay
-// button and surface the canned message. Wired up to a real async replay job
-// in a later milestone.
+// Replay flow:
+//   1. Look up the source invocation row in invocation_traces.
+//   2. Resolve the deployed runtime ARN by agent_id → orgiq_<id> match.
+//   3. Invoke the runtime via bedrock-agentcore InvokeAgentRuntime.
+//   4. Stream + parse the response, capture wall-clock.
+//   5. Pipe the replayed (prompt, response) bundle through processTrace, with
+//      parent_invocation_id pointing back at the source — the replay appears
+//      as a child in the trace tree.
+//
+// Body: { newPrompt?: string }  — when omitted, the source prompt is reused.
+//
+// Returns: { invocationId, response, durationMs, agentId, parentInvocationId,
+//            judgeScore }
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ARN cache for deployed runtimes — refreshed lazily on cache miss. AgentCore
+// runtime ARNs are stable for a given runtime id, so caching is safe.
+let _runtimeArnCache: Map<string, string> | null = null;
+let _runtimeCacheFetchedAt = 0;
+const RUNTIME_CACHE_TTL_MS = 5 * 60_000;
+
+async function getRuntimeArn(agentId: string): Promise<string | null> {
+  const runtimeName = agentId.replace(/-/g, '_'); // orgiq-supervisor → orgiq_supervisor
+  const now = Date.now();
+  if (
+    _runtimeArnCache &&
+    _runtimeArnCache.has(runtimeName) &&
+    now - _runtimeCacheFetchedAt < RUNTIME_CACHE_TTL_MS
+  ) {
+    return _runtimeArnCache.get(runtimeName) ?? null;
+  }
+  try {
+    const ctrl = new BedrockAgentCoreControlClient({ region: config.region });
+    const resp = await ctrl.send(new ListAgentRuntimesCommand({ maxResults: 50 }));
+    const cache = new Map<string, string>();
+    for (const r of resp.agentRuntimes ?? []) {
+      if (r.agentRuntimeName && r.agentRuntimeArn) {
+        cache.set(r.agentRuntimeName, r.agentRuntimeArn);
+      }
+      // Some deployments use agentRuntimeId as the key; index both shapes.
+      if (r.agentRuntimeId && r.agentRuntimeArn) {
+        cache.set(r.agentRuntimeId, r.agentRuntimeArn);
+      }
+    }
+    _runtimeArnCache = cache;
+    _runtimeCacheFetchedAt = now;
+    return cache.get(runtimeName) ?? null;
+  } catch (err) {
+    console.warn('[invocations] ListAgentRuntimes failed:',
+      (err as Error).message);
+    return null;
+  }
+}
+
+interface ReplayBody {
+  newPrompt?: string;
+}
+
+interface ReplayResponse {
+  invocationId: string;
+  response: string;
+  durationMs: number;
+  agentId: string;
+  parentInvocationId: string;
+  judgeScore: number | null;
+}
+
+// Mirror harness.py::_parse_agent_response — try common shapes.
+function parseAgentResponse(text: string): string {
+  const raw = text.trim();
+  if (!raw) return '';
+  try {
+    const obj = JSON.parse(raw);
+    if (obj && typeof obj === 'object') {
+      const o = obj as Record<string, unknown>;
+      const r = (o['response'] ?? o['message'] ?? o['text']) as unknown;
+      if (typeof r === 'string' && r) return r;
+      if (typeof o['output'] === 'string') return o['output'] as string;
+    }
+    if (typeof obj === 'string') return obj;
+  } catch {
+    // not a single JSON blob — try last-line JSON (NDJSON style).
+    const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
+    const last = lines[lines.length - 1];
+    if (last) {
+      try {
+        const obj = JSON.parse(last);
+        if (obj && typeof obj === 'object') {
+          const o = obj as Record<string, unknown>;
+          const r = (o['response'] ?? o['message'] ?? o['text']) as unknown;
+          if (typeof r === 'string' && r) return r;
+        }
+      } catch {
+        // fall through to raw
+      }
+    }
+  }
+  return raw;
+}
+
 invocationsRouter.post('/:invocationId/replay', asyncHandler(async (req, res) => {
-  // Keep the id string accessible so we can echo it back; no DB work yet.
   const id = String(req.params['invocationId'] ?? '').trim();
-  res.status(501).json({
-    error: 'not_implemented',
-    message: 'Replay will be added in M4 finalisation.',
-    invocationId: id,
-  });
+  if (!isUuid(id)) {
+    res.status(404).json({ error: 'invocation_not_found', invocationId: id });
+    return;
+  }
+  const body = (req.body ?? {}) as ReplayBody;
+  const overridePrompt =
+    typeof body.newPrompt === 'string' && body.newPrompt.trim()
+      ? body.newPrompt
+      : null;
+
+  // 1. Source row.
+  let sourceAgentId = '';
+  let sourcePrompt = '';
+  let sourceTemplateId: string | null = null;
+  let sourceUserId: string | null = null;
+  let sourceSessionId: string | null = null;
+  try {
+    const rows = await exec(
+      `SELECT agent_id,
+              COALESCE(prompt_snippet, '') AS prompt_snippet,
+              template_id,
+              user_id,
+              session_id
+         FROM observability.invocation_traces
+        WHERE invocation_id = :id::uuid`,
+      [{ name: 'id', value: { stringValue: id } }],
+    );
+    if (rows.length === 0) {
+      res.status(404).json({ error: 'invocation_not_found', invocationId: id });
+      return;
+    }
+    const r = rows[0]!;
+    sourceAgentId = String(r['agent_id'] ?? '');
+    sourcePrompt = String(r['prompt_snippet'] ?? '');
+    sourceTemplateId = r['template_id'] == null ? null : String(r['template_id']);
+    sourceUserId = r['user_id'] == null ? null : String(r['user_id']);
+    sourceSessionId = r['session_id'] == null ? null : String(r['session_id']);
+  } catch (err) {
+    console.warn('[invocations] /replay source lookup failed:',
+      (err as Error).message);
+    res.status(500).json({ error: 'replay_lookup_failed', invocationId: id });
+    return;
+  }
+
+  const finalPrompt = overridePrompt ?? sourcePrompt;
+  if (!sourceAgentId || !finalPrompt) {
+    res.status(400).json({
+      error: 'replay_missing_fields',
+      message: 'Source row had no agent_id or prompt to replay.',
+      invocationId: id,
+    });
+    return;
+  }
+
+  // 2. Resolve runtime ARN.
+  const arn = await getRuntimeArn(sourceAgentId);
+  if (!arn) {
+    res.status(503).json({
+      error: 'replay_runtime_unavailable',
+      message: `No deployed runtime found for agent ${sourceAgentId}.`,
+      invocationId: id,
+      agentId: sourceAgentId,
+    });
+    return;
+  }
+
+  // 3. Invoke the runtime.
+  const payload = new TextEncoder().encode(
+    JSON.stringify({ prompt: finalPrompt }),
+  );
+  let responseText = '';
+  let durationMs = 0;
+  try {
+    const client = new BedrockAgentCoreClient({ region: config.region });
+    const t0 = Date.now();
+    const out = await client.send(
+      new InvokeAgentRuntimeCommand({
+        agentRuntimeArn: arn,
+        qualifier: 'DEFAULT',
+        payload,
+      }),
+    );
+    durationMs = Date.now() - t0;
+    const stream = out.response;
+    if (stream) {
+      // SdkStream — transformToString() is the canonical drain.
+      const text = await (stream as unknown as {
+        transformToString: () => Promise<string>;
+      }).transformToString();
+      responseText = parseAgentResponse(text);
+    }
+  } catch (err) {
+    console.warn('[invocations] /replay InvokeAgentRuntime failed:',
+      (err as Error).message);
+    res.status(502).json({
+      error: 'replay_invoke_failed',
+      message: (err as Error).message,
+      invocationId: id,
+      agentId: sourceAgentId,
+    });
+    return;
+  }
+
+  // 4. Persist as child trace. parent_invocation_id links it back to the
+  // source so the trace tree shows the replay branch.
+  let result;
+  try {
+    result = await processTrace({
+      agentId: sourceAgentId,
+      agentName: sourceAgentId,
+      templateId: sourceTemplateId ?? undefined,
+      prompt: finalPrompt,
+      response: responseText,
+      durationMs,
+      parentInvocationId: id,
+      userId: sourceUserId ?? undefined,
+      sessionId: sourceSessionId ?? undefined,
+    });
+  } catch (err) {
+    console.warn('[invocations] /replay processTrace failed:',
+      (err as Error).message);
+    // The agent already responded; surface the response even though we
+    // couldn't persist. Caller still gets a usable result.
+    res.status(207).json({
+      error: 'replay_persist_failed',
+      message: (err as Error).message,
+      invocationId: id,
+      agentId: sourceAgentId,
+      response: responseText,
+      durationMs,
+    });
+    return;
+  }
+
+  const out: ReplayResponse = {
+    invocationId: result.invocationId,
+    response: responseText,
+    durationMs,
+    agentId: sourceAgentId,
+    parentInvocationId: id,
+    judgeScore: result.judgeScore,
+  };
+  res.status(200).json(out);
 }));

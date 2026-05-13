@@ -14,6 +14,7 @@ import { harnessRouter } from './routes/harness.js';
 import { promptVersionsRouter } from './routes/prompt-versions.js';
 import { costRouter } from './routes/cost.js';
 import { oncallRouter } from './routes/oncall.js';
+import { trafficRouter } from './routes/traffic.js';
 import { invocationsRouter } from './routes/invocations.js';
 import { toolCallsRouter } from './routes/tool-calls.js';
 import { capabilitiesRouter } from './routes/capabilities.js';
@@ -68,6 +69,9 @@ app.use('/api/observability/cost', costRouter);
 // errors + HITL + deploys into one timeline. Mounted ungated like cost so
 // the on-call surface keeps working past session expiry at 3am.
 app.use('/api/observability/oncall', oncallRouter);
+// Sprint 4 (M13) — traffic shape: RPS, hour-of-week heatmap, top users,
+// per-agent operational summary. Mounted ungated alongside cost/oncall.
+app.use('/api/observability/traffic', trafficRouter);
 // Sprint 2 — invocation search + per-invocation drill-down (M3/M5 triage).
 // Mounted ungated so the portal triage page can hit it directly, same as cost.
 app.use('/api/observability/invocations', invocationsRouter);
