@@ -29,6 +29,7 @@ import {
   Chip,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { CostChip } from '../../components/observability/CostChip';
 
 interface QualityScore {
   invocationId: string;
@@ -36,6 +37,14 @@ interface QualityScore {
   judgeScore: number;
   judgeRationale: string;
   ts: string;
+  // Sprint 1 cost + provenance (nullable until Agent A's migration lands).
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  estCostUsd?: number | null;
+  judgeCostUsd?: number | null;
+  totalCostUsd?: number | null;
+  promptVersion?: string | null;
+  modelId?: string | null;
 }
 
 interface DriftSummaryRow {
@@ -273,6 +282,7 @@ function QualityPage() {
                 <TableTh>When</TableTh>
                 <TableTh>Score</TableTh>
                 <TableTh>Rationale</TableTh>
+                <TableTh>Cost</TableTh>
                 <TableTh>Feedback</TableTh>
               </TableRow>
             </TableHead>
@@ -295,6 +305,9 @@ function QualityPage() {
                       title={r.judgeRationale}
                     >
                       {r.judgeRationale}
+                    </TableTd>
+                    <TableTd style={{ whiteSpace: 'nowrap' }}>
+                      <CostChip cost={r.totalCostUsd} />
                     </TableTd>
                     <TableTd>
                       {isNoting ? (

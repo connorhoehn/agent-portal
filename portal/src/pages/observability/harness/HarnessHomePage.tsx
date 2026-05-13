@@ -32,6 +32,8 @@ import {
   YAxis,
 } from 'recharts';
 import { useFetch } from '../../../hooks/useFetch';
+import { CostChip } from '../../../components/observability/CostChip';
+import { ModeChip } from '../../../components/observability/ModeChip';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -63,6 +65,9 @@ interface TestRun {
   startedAt: string;
   finishedAt: string | null;
   notes: string | null;
+  // Sprint 1 fields (nullable until Agent A's migration lands).
+  mode?: 'live' | 'sim' | string | null;
+  totalCostUsd?: number | null;
 }
 
 interface CoverageRow {
@@ -387,10 +392,12 @@ function HarnessHomePage() {
             <TableHead>
               <TableRow>
                 <TableTh>Label</TableTh>
+                <TableTh>Mode</TableTh>
                 <TableTh>Started</TableTh>
                 <TableTh>Progress</TableTh>
                 <TableTh>Pass rate</TableTh>
                 <TableTh>Δ</TableTh>
+                <TableTh>Cost</TableTh>
                 <TableTh>Status</TableTh>
                 <TableTh></TableTh>
               </TableRow>
@@ -410,6 +417,9 @@ function HarnessHomePage() {
                         )}
                       </div>
                     </TableTd>
+                    <TableTd style={{ whiteSpace: 'nowrap' }}>
+                      <ModeChip mode={r.mode} />
+                    </TableTd>
                     <TableTd style={tsCell}>
                       {new Date(r.startedAt).toLocaleString()}
                     </TableTd>
@@ -423,6 +433,9 @@ function HarnessHomePage() {
                     </TableTd>
                     <TableTd style={numCell}>
                       <RegressionDelta current={r} previous={prev} />
+                    </TableTd>
+                    <TableTd style={{ whiteSpace: 'nowrap' }}>
+                      <CostChip cost={r.totalCostUsd} />
                     </TableTd>
                     <TableTd>
                       <Chip tone={statusTone(r.status)} size="xs">

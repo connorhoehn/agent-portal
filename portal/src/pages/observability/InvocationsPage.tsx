@@ -11,6 +11,8 @@ import {
   Chip,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { CostChip } from '../../components/observability/CostChip';
+import { PromptVersionChip } from '../../components/observability/PromptVersionChip';
 
 interface SandboxExecution {
   code: string;
@@ -33,6 +35,14 @@ interface Invocation {
   runtimeSessionId?: string;
   error?: string;
   sandboxExecutions?: SandboxExecution[];
+  // Sprint 1 cost + provenance fields (nullable until Agent A's migration lands).
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  estCostUsd?: number | null;
+  judgeCostUsd?: number | null;
+  totalCostUsd?: number | null;
+  promptVersion?: string | null;
+  modelId?: string | null;
 }
 
 interface BedrockInvocation {
@@ -150,9 +160,11 @@ function InvocationsPage() {
               <TableRow>
                 <TableTh>When</TableTh>
                 <TableTh>Agent</TableTh>
+                <TableTh>Prompt ver.</TableTh>
                 <TableTh>Prompt</TableTh>
                 <TableTh>Response</TableTh>
                 <TableTh>Duration</TableTh>
+                <TableTh>Cost</TableTh>
                 <TableTh>Status</TableTh>
               </TableRow>
             </TableHead>
@@ -170,6 +182,9 @@ function InvocationsPage() {
                   </TableTd>
                   <TableTd style={{ fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' }}>
                     {inv.agentName}
+                  </TableTd>
+                  <TableTd style={{ whiteSpace: 'nowrap' }}>
+                    <PromptVersionChip promptVersion={inv.promptVersion} />
                   </TableTd>
                   <TableTd
                     style={{
@@ -204,6 +219,9 @@ function InvocationsPage() {
                   </TableTd>
                   <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
                     {(inv.durationMs / 1000).toFixed(1)}s
+                  </TableTd>
+                  <TableTd style={{ whiteSpace: 'nowrap' }}>
+                    <CostChip cost={inv.totalCostUsd} />
                   </TableTd>
                   <TableTd>
                     {inv.error ? (
