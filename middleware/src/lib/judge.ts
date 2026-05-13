@@ -17,9 +17,15 @@ import { config } from '../config.js';
 
 export const NOVA_PRO_MODEL_ID = 'amazon.nova-pro-v1:0';
 
+export interface JudgeUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
 export interface JudgeResult {
   score: number;     // 0..1, clamped
   rationale: string; // free-form, trimmed
+  usage: JudgeUsage; // token counts from the Converse response; zeros if missing
 }
 
 let _client: BedrockRuntimeClient | null = null;
@@ -108,6 +114,14 @@ Reply with the JSON object only.`;
       ?.map((c) => c.text ?? '')
       .join('')
       .trim() ?? '';
+
+    // Always extract usage from the Converse response, even on parse failure,
+    // so cost accounting reflects what the API actually charged us.
+    const usage: JudgeUsage = {
+      inputTokens: typeof resp.usage?.inputTokens === 'number' ? resp.usage.inputTokens : 0,
+      outputTokens: typeof resp.usage?.outputTokens === 'number' ? resp.usage.outputTokens : 0,
+    };
+
     if (!text) return null;
 
     const parsed = extractJson(text);
@@ -122,7 +136,7 @@ Reply with the JSON object only.`;
     const rationale = typeof obj['rationale'] === 'string'
       ? (obj['rationale'] as string).trim().slice(0, 500)
       : '';
-    return { score: clamp01(rawScore), rationale };
+    return { score: clamp01(rawScore), rationale, usage };
   } catch (err) {
     console.warn('[judge] nova-pro invoke failed:', (err as Error).message);
     return null;

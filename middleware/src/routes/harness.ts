@@ -64,6 +64,10 @@ export interface TestRun {
   startedAt: string;
   finishedAt: string | null;
   notes: string | null;
+  // M1 — 'live' invokes deployed AgentCore runtimes; 'sim' calls Bedrock
+  // Nova-Pro directly with role-play prompts (the legacy path). Defaults to
+  // 'sim' for backward compat with rows from before this column existed.
+  mode: 'live' | 'sim';
 }
 
 export interface TestResult {
@@ -80,6 +84,11 @@ export interface TestResult {
   failReasons: string[] | null;
   durationMs: number | null;
   ts: string;
+  // M2 — per-case cost + tokens, persisted alongside the result so the UI
+  // can render without re-joining invocation_traces.
+  inputTokens: number | null;
+  outputTokens: number | null;
+  estCostUsd: number | null;
   // Joined fields, populated by GET /runs/:id:
   agentId?: string;
   prompt?: string;
@@ -156,6 +165,8 @@ function rowToTestCase(r: Record<string, unknown>): TestCase {
 
 function rowToTestRun(r: Record<string, unknown>): TestRun {
   const status = String(r['status'] ?? 'pending') as TestRun['status'];
+  const modeRaw = r['mode'] == null ? 'sim' : String(r['mode']);
+  const mode: TestRun['mode'] = modeRaw === 'live' ? 'live' : 'sim';
   return {
     runId: String(r['run_id'] ?? ''),
     label: String(r['label'] ?? ''),
@@ -171,6 +182,7 @@ function rowToTestRun(r: Record<string, unknown>): TestRun {
     startedAt: String(r['started_at'] ?? ''),
     finishedAt: r['finished_at'] == null ? null : String(r['finished_at']),
     notes: r['notes'] == null ? null : String(r['notes']),
+    mode,
   };
 }
 
@@ -189,6 +201,9 @@ function rowToTestResult(r: Record<string, unknown>): TestResult {
     failReasons: parseJsonField<string[] | null>(r['fail_reasons'], null),
     durationMs: r['duration_ms'] == null ? null : Number(r['duration_ms']),
     ts: String(r['ts'] ?? ''),
+    inputTokens: r['input_tokens'] == null ? null : Number(r['input_tokens']),
+    outputTokens: r['output_tokens'] == null ? null : Number(r['output_tokens']),
+    estCostUsd: r['est_cost_usd'] == null ? null : Number(r['est_cost_usd']),
   };
   if (r['agent_id'] != null) out.agentId = String(r['agent_id']);
   if (r['prompt'] != null) out.prompt = String(r['prompt']);
@@ -241,6 +256,23 @@ harnessRouter.post('/trace', asyncHandler(async (req, res) => {
   if (typeof body.durationMs === 'number') input.durationMs = body.durationMs;
   if (typeof body.guardrailAction === 'string') input.guardrailAction = body.guardrailAction;
   if (typeof body.piiDetected === 'boolean') input.piiDetected = body.piiDetected;
+  // M2 — token + cost passthrough.
+  if (typeof body.inputTokens === 'number' && Number.isFinite(body.inputTokens)) {
+    input.inputTokens = body.inputTokens;
+  }
+  if (typeof body.outputTokens === 'number' && Number.isFinite(body.outputTokens)) {
+    input.outputTokens = body.outputTokens;
+  }
+  // M6 — provenance passthrough.
+  if (typeof body.promptVersion === 'string' && body.promptVersion.trim()) {
+    input.promptVersion = body.promptVersion.trim();
+  }
+  if (typeof body.modelId === 'string' && body.modelId.trim()) {
+    input.modelId = body.modelId.trim();
+  }
+  if (typeof body.runtimeImageDigest === 'string' && body.runtimeImageDigest.trim()) {
+    input.runtimeImageDigest = body.runtimeImageDigest.trim();
+  }
 
   // 30s ceiling — embedding + judge + INSERT must complete inside this window.
   const TIMEOUT_MS = 30_000;
@@ -256,6 +288,14 @@ harnessRouter.post('/trace', asyncHandler(async (req, res) => {
       judgeRationale: result.judgeRationale,
       schemaValid: result.schemaValid,
       embeddingComputed: result.embeddingComputed,
+      // M2 — token + cost echo so the runner can populate test_results.
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      judgeInputTokens: result.judgeInputTokens,
+      judgeOutputTokens: result.judgeOutputTokens,
+      estCostUsd: result.estCostUsd,
+      judgeCostUsd: result.judgeCostUsd,
+      totalCostUsd: result.totalCostUsd,
     });
   } catch (err) {
     const msg = (err as Error).message ?? 'unknown';
@@ -467,6 +507,7 @@ interface CreateRunBody {
   agentVersions?: Record<string, string>;
   notes?: string | null;
   totalCases?: number;
+  mode?: 'live' | 'sim';
 }
 
 harnessRouter.post('/runs', asyncHandler(async (req, res) => {
@@ -483,16 +524,20 @@ harnessRouter.post('/runs', asyncHandler(async (req, res) => {
   const totalCases = (typeof body.totalCases === 'number' && Number.isFinite(body.totalCases))
     ? Math.max(0, Math.floor(body.totalCases))
     : 0;
+  // M1 — mode defaults to 'sim' so older callers that don't know about
+  // live mode still produce well-formed rows. Any value other than the
+  // exact string 'live' collapses to 'sim'.
+  const mode: 'live' | 'sim' = body.mode === 'live' ? 'live' : 'sim';
 
   const runId = randomUUID();
   await exec(
     `INSERT INTO observability.test_runs
        (run_id, label, git_sha, judge_model_id, agent_versions,
-        status, total_cases, completed, passed, failed, started_at, notes)
+        status, total_cases, completed, passed, failed, started_at, notes, mode)
      VALUES
        (CAST(:run_id AS uuid), :label, :git_sha, :judge_model_id,
         CAST(:agent_versions AS jsonb),
-        'pending', :total_cases, 0, 0, 0, now(), :notes)`,
+        'pending', :total_cases, 0, 0, 0, now(), :notes, :mode)`,
     [
       strParam('run_id', runId),
       strParam('label', label),
@@ -501,10 +546,11 @@ harnessRouter.post('/runs', asyncHandler(async (req, res) => {
       jsonParam('agent_versions', agentVersions),
       nullableInt('total_cases', totalCases),
       nullableStr('notes', body.notes ?? null),
+      strParam('mode', mode),
     ],
   );
 
-  res.status(201).json({ runId });
+  res.status(201).json({ runId, mode });
 }));
 
 // ── GET /runs — recent runs ────────────────────────────────────────────────
@@ -520,7 +566,7 @@ harnessRouter.get('/runs', asyncHandler(async (req, res) => {
             status, total_cases, completed, passed, failed, pass_rate,
             started_at::text AS started_at,
             finished_at::text AS finished_at,
-            notes
+            notes, mode
        FROM observability.test_runs
       ORDER BY started_at DESC
       LIMIT :lim`,
@@ -539,7 +585,7 @@ harnessRouter.get('/runs/:id', asyncHandler(async (req, res) => {
             status, total_cases, completed, passed, failed, pass_rate,
             started_at::text AS started_at,
             finished_at::text AS finished_at,
-            notes
+            notes, mode
        FROM observability.test_runs
       WHERE run_id = CAST(:id AS uuid)`,
     [strParam('id', id)],
@@ -558,6 +604,7 @@ harnessRouter.get('/runs/:id', asyncHandler(async (req, res) => {
             r.fail_reasons::text AS fail_reasons,
             r.duration_ms,
             r.ts::text AS ts,
+            r.input_tokens, r.output_tokens, r.est_cost_usd,
             c.agent_id AS agent_id,
             c.prompt AS prompt,
             t.response_snippet AS trace_response_snippet
@@ -627,6 +674,10 @@ interface UpsertResultBody {
   responseSnippet?: string | null;
   failReasons?: string[] | null;
   durationMs?: number | null;
+  // M2 — per-case tokens + cost.
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  estCostUsd?: number | null;
 }
 
 harnessRouter.post('/runs/:runId/results', asyncHandler(async (req, res) => {
@@ -643,7 +694,9 @@ harnessRouter.post('/runs/:runId/results', asyncHandler(async (req, res) => {
     `INSERT INTO observability.test_results
        (run_id, test_id, invocation_id, passed, judge_score, judge_rationale,
         schema_valid, tag_hits, reference_similarity, response_snippet,
-        fail_reasons, duration_ms, ts)
+        fail_reasons, duration_ms,
+        input_tokens, output_tokens, est_cost_usd,
+        ts)
      VALUES
        (CAST(:run_id AS uuid), :test_id,
         ${invocationId ? 'CAST(:invocation_id AS uuid)' : 'NULL'},
@@ -652,7 +705,9 @@ harnessRouter.post('/runs/:runId/results', asyncHandler(async (req, res) => {
         CAST(:tag_hits AS jsonb),
         :reference_similarity, :response_snippet,
         CAST(:fail_reasons AS jsonb),
-        :duration_ms, now())
+        :duration_ms,
+        :input_tokens, :output_tokens, :est_cost_usd,
+        now())
      ON CONFLICT (run_id, test_id) DO UPDATE SET
         invocation_id = EXCLUDED.invocation_id,
         passed = EXCLUDED.passed,
@@ -664,6 +719,9 @@ harnessRouter.post('/runs/:runId/results', asyncHandler(async (req, res) => {
         response_snippet = EXCLUDED.response_snippet,
         fail_reasons = EXCLUDED.fail_reasons,
         duration_ms = EXCLUDED.duration_ms,
+        input_tokens = EXCLUDED.input_tokens,
+        output_tokens = EXCLUDED.output_tokens,
+        est_cost_usd = EXCLUDED.est_cost_usd,
         ts = now()`,
     [
       strParam('run_id', runId),
@@ -678,6 +736,9 @@ harnessRouter.post('/runs/:runId/results', asyncHandler(async (req, res) => {
       nullableStr('response_snippet', body.responseSnippet ?? null),
       jsonParam('fail_reasons', body.failReasons ?? null),
       nullableInt('duration_ms', body.durationMs ?? null),
+      nullableInt('input_tokens', body.inputTokens ?? null),
+      nullableInt('output_tokens', body.outputTokens ?? null),
+      nullableNumber('est_cost_usd', body.estCostUsd ?? null),
     ],
   );
   res.json({ ok: true });

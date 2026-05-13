@@ -28,8 +28,9 @@ import {
   cosineDistance,
   EMBEDDING_DIMENSIONS,
 } from './embedding.js';
-import { judgeResponse } from './judge.js';
+import { judgeResponse, NOVA_PRO_MODEL_ID } from './judge.js';
 import { validate, tryParseJson } from './schema-validator.js';
+import { estimateCost } from './pricing.js';
 import { config } from '../config.js';
 
 // ── Public input shape ─────────────────────────────────────────────────────────
@@ -48,6 +49,18 @@ export interface TraceInput {
   durationMs?: number;
   guardrailAction?: string;
   piiDetected?: boolean;
+  // M2 — token + cost. Caller-supplied because the agent's tokens are reported
+  // by whichever upstream actually invoked the model (harness runner for the
+  // 'sim' path, AgentCore for the 'live' path). When unknown, leave undefined
+  // and the trace row stores NULL.
+  inputTokens?: number;
+  outputTokens?: number;
+  // M6 — provenance. promptVersion is a short SHA from the prompt_versions
+  // registry; modelId names the inferred-against Bedrock model; image digest
+  // is optional and only relevant in live mode.
+  promptVersion?: string;
+  modelId?: string;
+  runtimeImageDigest?: string;
 }
 
 // Result of a synchronous processTrace() call. The async enqueue() path
@@ -61,6 +74,15 @@ export interface TraceResult {
   embeddingComputed: boolean;
   sampled: boolean;             // false if the sampling die rolled against us
   inserted: boolean;            // false if the Aurora INSERT failed
+  // M2 — token + cost. Echoed back so the harness runner can populate
+  // test_results without re-computing.
+  inputTokens: number | null;
+  outputTokens: number | null;
+  judgeInputTokens: number | null;
+  judgeOutputTokens: number | null;
+  estCostUsd: number | null;
+  judgeCostUsd: number | null;
+  totalCostUsd: number | null;
 }
 
 // ── Sampling config cache ─────────────────────────────────────────────────────
@@ -237,6 +259,17 @@ async function insertTrace(args: {
   piiDetected: boolean;
   guardrailAction: string | undefined;
   durationMs: number | undefined;
+  // M2 + M6 fields
+  inputTokens: number | null;
+  outputTokens: number | null;
+  judgeInputTokens: number | null;
+  judgeOutputTokens: number | null;
+  estCostUsd: number | null;
+  judgeCostUsd: number | null;
+  totalCostUsd: number | null;
+  promptVersion: string | null;
+  modelId: string | null;
+  runtimeImageDigest: string | null;
 }): Promise<void> {
   // Embed the vector literal directly into the SQL (it's an internally-
   // generated array of numbers, not user input). RDS Data API has no
@@ -250,13 +283,21 @@ async function insertTrace(args: {
       prompt_snippet, response_snippet,
       output_embedding,
       judge_score, judge_rationale,
-      schema_valid, pii_detected, guardrail_action, duration_ms
+      schema_valid, pii_detected, guardrail_action, duration_ms,
+      input_tokens, output_tokens,
+      judge_input_tokens, judge_output_tokens,
+      est_cost_usd, judge_cost_usd, total_cost_usd,
+      prompt_version, model_id, runtime_image_digest
     ) VALUES (
       :iid::uuid, :agent_id, :agent_name, :template_id,
       :prompt_snippet, :response_snippet,
       ${embeddingSql},
       :judge_score, :judge_rationale,
-      :schema_valid, :pii_detected, :guardrail_action, :duration_ms
+      :schema_valid, :pii_detected, :guardrail_action, :duration_ms,
+      :input_tokens, :output_tokens,
+      :judge_input_tokens, :judge_output_tokens,
+      :est_cost_usd, :judge_cost_usd, :total_cost_usd,
+      :prompt_version, :model_id, :runtime_image_digest
     )
     ON CONFLICT (invocation_id) DO NOTHING`;
 
@@ -273,6 +314,16 @@ async function insertTrace(args: {
     nullableBool('pii_detected', args.piiDetected),
     nullableStr('guardrail_action', args.guardrailAction ?? null),
     nullableInt('duration_ms', args.durationMs),
+    nullableInt('input_tokens', args.inputTokens),
+    nullableInt('output_tokens', args.outputTokens),
+    nullableInt('judge_input_tokens', args.judgeInputTokens),
+    nullableInt('judge_output_tokens', args.judgeOutputTokens),
+    nullableNumber('est_cost_usd', args.estCostUsd),
+    nullableNumber('judge_cost_usd', args.judgeCostUsd),
+    nullableNumber('total_cost_usd', args.totalCostUsd),
+    nullableStr('prompt_version', args.promptVersion),
+    nullableStr('model_id', args.modelId),
+    nullableStr('runtime_image_digest', args.runtimeImageDigest),
   ];
 
   await exec(sql, params);
@@ -351,6 +402,13 @@ export async function processTrace(input: TraceInput): Promise<TraceResult> {
       embeddingComputed: false,
       sampled: false,
       inserted: false,
+      inputTokens: null,
+      outputTokens: null,
+      judgeInputTokens: null,
+      judgeOutputTokens: null,
+      estCostUsd: null,
+      judgeCostUsd: null,
+      totalCostUsd: null,
     };
   }
 
@@ -373,6 +431,37 @@ export async function processTrace(input: TraceInput): Promise<TraceResult> {
     schemaValid = parsed === undefined ? false : validate(parsed, schema);
   }
 
+  // 2.5. Cost accounting.
+  //   - Agent cost: only when caller supplied tokens AND a known modelId
+  //     (defaults to nova-pro since that's the only model the sim path uses).
+  //   - Judge cost: always nova-pro v1:0. Even if the judge JSON failed to
+  //     parse (judge === null) we don't have usage; treat as zero.
+  //   - Total: sum of the two; null only if BOTH are null.
+  const agentModelId = input.modelId ?? NOVA_PRO_MODEL_ID;
+  const hasAgentTokens = typeof input.inputTokens === 'number'
+    && typeof input.outputTokens === 'number'
+    && Number.isFinite(input.inputTokens)
+    && Number.isFinite(input.outputTokens);
+  const agentInputTokens = hasAgentTokens ? (input.inputTokens as number) : null;
+  const agentOutputTokens = hasAgentTokens ? (input.outputTokens as number) : null;
+  const estCostUsd = hasAgentTokens
+    ? estimateCost(agentModelId, {
+        inputTokens: input.inputTokens as number,
+        outputTokens: input.outputTokens as number,
+      })
+    : null;
+
+  const judgeInputTokens = judge ? judge.usage.inputTokens : null;
+  const judgeOutputTokens = judge ? judge.usage.outputTokens : null;
+  const judgeCostUsd = judge
+    ? estimateCost(NOVA_PRO_MODEL_ID, judge.usage)
+    : null;
+
+  let totalCostUsd: number | null = null;
+  if (estCostUsd !== null || judgeCostUsd !== null) {
+    totalCostUsd = (estCostUsd ?? 0) + (judgeCostUsd ?? 0);
+  }
+
   // 3. Persist trace row. For sync callers, INSERT failure is the only
   // signal that bubbles up as an error — every other step swallows.
   let inserted = false;
@@ -392,6 +481,16 @@ export async function processTrace(input: TraceInput): Promise<TraceResult> {
       piiDetected: input.piiDetected ?? false,
       guardrailAction: input.guardrailAction,
       durationMs: input.durationMs,
+      inputTokens: agentInputTokens,
+      outputTokens: agentOutputTokens,
+      judgeInputTokens,
+      judgeOutputTokens,
+      estCostUsd,
+      judgeCostUsd,
+      totalCostUsd,
+      promptVersion: input.promptVersion ?? null,
+      modelId: input.modelId ?? null,
+      runtimeImageDigest: input.runtimeImageDigest ?? null,
     });
     inserted = true;
   } catch (err) {
@@ -444,6 +543,13 @@ export async function processTrace(input: TraceInput): Promise<TraceResult> {
     embeddingComputed: !!embedding,
     sampled: true,
     inserted,
+    inputTokens: agentInputTokens,
+    outputTokens: agentOutputTokens,
+    judgeInputTokens,
+    judgeOutputTokens,
+    estCostUsd,
+    judgeCostUsd,
+    totalCostUsd,
   };
 }
 

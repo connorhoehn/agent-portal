@@ -11,6 +11,7 @@ import { ingestRouter } from './routes/ingest.js';
 import { observabilityRouter } from './routes/observability.js';
 import { approvalsRouter } from './routes/approvals.js';
 import { harnessRouter } from './routes/harness.js';
+import { promptVersionsRouter } from './routes/prompt-versions.js';
 import { capabilitiesRouter } from './routes/capabilities.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { sessionRouter } from './routes/session.js';
@@ -52,6 +53,10 @@ app.use('/api/observability/approvals', approvalsRouter);
 // Harness routes — mounted ungated so the test runner (infra/scripts/harness.py)
 // can POST results without a session cookie. Same rationale as approvals.
 app.use('/api/observability/harness', harnessRouter);
+// Prompt-versions — registry that the harness runner populates at the start
+// of each run (one entry per agent system_prompt). Mounted ungated for the
+// same reason as harness/approvals: the runner has no session.
+app.use('/api/observability/prompt-versions', promptVersionsRouter);
 app.use('/api/observability', requireAction('ViewObservability'), observabilityRouter);
 app.use('/api/capabilities', capabilitiesRouter);
 app.use('/api/sessions', sessionsRouter);
