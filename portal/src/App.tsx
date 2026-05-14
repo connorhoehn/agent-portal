@@ -18,6 +18,9 @@ const NewsroomArticlesPage = lazy(() => import('./pages/newsroom/ArticlesPage'))
 const NewsroomArticleDetailPage = lazy(() => import('./pages/newsroom/ArticleDetailPage'));
 const NewsroomEntityDetailPage = lazy(() => import('./pages/newsroom/EntityDetailPage'));
 const NewsroomBeatsPage = lazy(() => import('./pages/newsroom/BeatsPage'));
+const NewsroomResearcherPage = lazy(() => import('./pages/newsroom/ResearcherPage'));
+const NewsroomBriefsPage = lazy(() => import('./pages/newsroom/BriefsPage'));
+const NewsroomHeadlinesPage = lazy(() => import('./pages/newsroom/HeadlinesPage'));
 const KnowledgeBasePage = lazy(() => import('./pages/KnowledgeBasePage'));
 const InvokePage = lazy(() => import('./pages/InvokePage'));
 const CodeInterpreterDemoPage = lazy(() => import('./pages/CodeInterpreterDemoPage'));
@@ -106,6 +109,9 @@ export function App() {
           <Route path="articles/:id" element={<Page element={<NewsroomArticleDetailPage />} />} />
           <Route path="entities/:id" element={<Page element={<NewsroomEntityDetailPage />} />} />
           <Route path="beats" element={<Page element={<NewsroomBeatsPage />} />} />
+          <Route path="researcher" element={<Page element={<NewsroomResearcherPage />} />} />
+          <Route path="briefs" element={<Page element={<NewsroomBriefsPage />} />} />
+          <Route path="headlines" element={<Page element={<NewsroomHeadlinesPage />} />} />
         </Route>
 
         <Route path="knowledge-base" element={<Page element={<KnowledgeBasePage />} />} />

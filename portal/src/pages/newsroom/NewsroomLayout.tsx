@@ -34,11 +34,13 @@ function HelpButton() {
 }
 
 const NAV_ITEMS: SubNavItem[] = [
-  { path: 'home',     label: 'Home',          hint: 'Today at a glance' },
-  { path: 'articles', label: 'Articles',      hint: 'Browse + filter',   count: 'N3' },
-  { path: 'beats',    label: 'Beat coverage', hint: 'Heatmap by topic',  count: 'N4' },
-  { path: 'briefs',   label: 'Briefs',        hint: 'Generated digests', count: 'N6' },
-  { path: 'pitches',  label: 'Pitches',       hint: 'Story backlog',     count: 'N8' },
+  { path: 'home',       label: 'Home',          hint: 'Today at a glance' },
+  { path: 'articles',   label: 'Articles',      hint: 'Browse + filter' },
+  { path: 'beats',      label: 'Beat coverage', hint: 'Heatmap by topic' },
+  { path: 'researcher', label: 'Researcher',    hint: 'Story research agent' },
+  { path: 'briefs',     label: 'Briefs',        hint: 'Generated digests' },
+  { path: 'headlines',  label: 'Headlines',     hint: 'A/B variants for any draft' },
+  { path: 'pitches',    label: 'Pitches',       hint: 'Story backlog' },
 ];
 
 function NewsroomLayout() {

@@ -24,7 +24,7 @@ if [ "$#" -gt 0 ]; then
 elif [ -n "${AGENTS:-}" ]; then
   read -ra AGENTS <<< "$AGENTS"
 else
-  AGENTS=(supervisor search scoring advisor ingestion graph-builder)
+  AGENTS=(supervisor search scoring advisor ingestion graph-builder news-researcher news-brief news-headline)
 fi
 
 echo "Logging in to ECR..."
