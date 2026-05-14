@@ -13,6 +13,7 @@ import { Link, useParams } from 'react-router';
 import {
   Card,
   Chip,
+  useToast,
 } from '@connorhoehnslalom/ui-components/shared';
 import { CostChip } from '../../components/observability/CostChip';
 import { PromptVersionChip } from '../../components/observability/PromptVersionChip';
@@ -136,7 +137,7 @@ function InvocationDetailPage() {
     };
   }, [invocationId]);
 
-  const [toast, setToast] = useState<React.ReactNode | null>(null);
+  const { toast } = useToast();
   const [replayLoading, setReplayLoading] = useState(false);
 
   async function onReplay() {
@@ -156,27 +157,19 @@ function InvocationDetailPage() {
       if (res.status === 200 && typeof (body as { invocationId?: unknown }).invocationId === 'string') {
         const newId = (body as { invocationId: string }).invocationId;
         const dur = Number((body as { durationMs?: unknown }).durationMs) || 0;
-        setToast(
-          <span>
-            Replayed in {(dur / 1000).toFixed(1)}s ·{' '}
-            <Link to={`/admin/observability/invocations/${newId}`} style={btnLink}>
-              open replay →
-            </Link>
-          </span>,
-        );
+        toast(`Replayed in ${(dur / 1000).toFixed(1)}s — open replay: /admin/observability/invocations/${newId}`, { type: 'success' });
       } else if (res.status === 501) {
-        setToast('Replay coming soon');
+        toast('Replay coming soon');
       } else {
         const msg = (body as { message?: string; error?: string }).message
           ?? (body as { error?: string }).error
           ?? `${res.status} ${res.statusText}`;
-        setToast(`Replay failed: ${msg}`);
+        toast(`Replay failed: ${msg}`, { type: 'error' });
       }
     } catch (e) {
-      setToast(`Replay failed: ${e instanceof Error ? e.message : 'unknown'}`);
+      toast(`Replay failed: ${e instanceof Error ? e.message : 'unknown'}`, { type: 'error' });
     } finally {
       setReplayLoading(false);
-      setTimeout(() => setToast(null), 6500);
     }
   }
 
@@ -261,7 +254,6 @@ function InvocationDetailPage() {
 
   return (
     <div style={pageStyle}>
-      {toast && <div style={toastStyle}>{toast}</div>}
 
       <Card padding="md">
         <div style={headerRow}>
@@ -419,14 +411,7 @@ function InvocationDetailPage() {
         isOpen={saveOpen}
         onClose={() => setSaveOpen(false)}
         onSuccess={(testId) =>
-          setToast(
-            <span>
-              Test case <strong>{testId}</strong> saved.{' '}
-              <Link to="/admin/observability/harness" style={btnLink}>
-                View in harness →
-              </Link>
-            </span>,
-          )
+          toast(`Test case ${testId} saved. View in harness: /admin/observability/harness`, { type: 'success' })
         }
       />
     </div>
@@ -879,20 +864,6 @@ const memoryPre: CSSProperties = {
   border: '1px solid var(--color-border)',
   maxHeight: 200,
   overflowY: 'auto',
-};
-
-const toastStyle: CSSProperties = {
-  position: 'fixed',
-  bottom: 24,
-  right: 24,
-  zIndex: 1100,
-  padding: '10px 14px',
-  fontSize: 12,
-  background: 'var(--color-surface)',
-  color: 'var(--color-text-primary)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 6,
-  boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
 };
 
 

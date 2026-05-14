@@ -13,7 +13,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
 import {
   Card,
   Table,
@@ -23,6 +23,7 @@ import {
   TableTh,
   TableTd,
   Chip,
+  useToast,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
   LineChart,
@@ -170,12 +171,7 @@ function DriftPage() {
 
   // Modal state for "+ Save as test case" launched from the outlier panel.
   const [saveSource, setSaveSource] = useState<DriftOutlier | null>(null);
-  const [toast, setToast] = useState<React.ReactNode | null>(null);
-  useEffect(() => {
-    if (!toast) return;
-    const t = setTimeout(() => setToast(null), 5500);
-    return () => clearTimeout(t);
-  }, [toast]);
+  const { toast } = useToast();
 
   // Reshape timeseries for Recharts: one row per bucket, columns per agent.
   const chartData = useMemo(() => {
@@ -464,8 +460,6 @@ function DriftPage() {
         )}
       </Card>
 
-      {toast && <div style={toastStyle}>{toast}</div>}
-
       <SaveAsTestCaseModal
         invocation={{
           invocationId: saveSource?.invocationId ?? '',
@@ -477,14 +471,7 @@ function DriftPage() {
         isOpen={!!saveSource}
         onClose={() => setSaveSource(null)}
         onSuccess={(testId) =>
-          setToast(
-            <span>
-              Test case <strong>{testId}</strong> saved.{' '}
-              <Link to="/admin/observability/harness" style={toastLinkStyle}>
-                View in harness →
-              </Link>
-            </span>,
-          )
+          toast(`Test case ${testId} saved. View in harness: /admin/observability/harness`, { type: 'success' })
         }
       />
     </div>
@@ -674,23 +661,6 @@ const saveBtn: CSSProperties = {
   borderRadius: 4,
   cursor: 'pointer',
   fontFamily: 'inherit',
-};
-const toastStyle: CSSProperties = {
-  position: 'fixed',
-  bottom: 24,
-  right: 24,
-  zIndex: 1100,
-  padding: '10px 14px',
-  fontSize: 12,
-  background: 'var(--color-surface)',
-  color: 'var(--color-text-primary)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 6,
-  boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
-};
-const toastLinkStyle: CSSProperties = {
-  color: 'var(--color-primary, #6366f1)',
-  textDecoration: 'none',
 };
 
 export default DriftPage;
