@@ -14,6 +14,8 @@ const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
 const ProjectDetailPage = lazy(() => import('./pages/ProjectDetailPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const NewsroomLayout = lazy(() => import('./pages/newsroom/NewsroomLayout'));
+const IqLayout = lazy(() => import('./pages/iq/IqLayout'));
+const AdminLayout = lazy(() => import('./pages/admin/AdminLayout'));
 const NewsroomHomePage = lazy(() => import('./pages/newsroom/HomePage'));
 const NewsroomArticlesPage = lazy(() => import('./pages/newsroom/ArticlesPage'));
 const NewsroomArticleDetailPage = lazy(() => import('./pages/newsroom/ArticleDetailPage'));
@@ -132,7 +134,7 @@ export function App() {
         </Route>
 
         {/* ── /iq/* — OrgIQ tenant pages ── */}
-        <Route path="iq">
+        <Route path="iq" element={<Page element={<IqLayout />} />}>
           <Route index element={<Navigate to="agents" replace />} />
           <Route path="agents" element={<Page element={<AgentFlowPage />} />} />
           <Route path="search" element={<Page element={<SearchPage />} />} />
@@ -149,7 +151,7 @@ export function App() {
         </Route>
 
         {/* ── /admin/* — Admin / operations pages ── */}
-        <Route path="admin">
+        <Route path="admin" element={<Page element={<AdminLayout />} />}>
           <Route index element={<Navigate to="observability" replace />} />
           <Route path="knowledge-base" element={<Page element={<KnowledgeBasePage />} />} />
 
