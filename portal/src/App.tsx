@@ -8,6 +8,7 @@ const ScoresPage = lazy(() => import('./pages/ScoresPage'));
 const InvokePage = lazy(() => import('./pages/InvokePage'));
 const CodeInterpreterDemoPage = lazy(() => import('./pages/CodeInterpreterDemoPage'));
 const ExplorePage = lazy(() => import('./pages/ExplorePage'));
+const SearchPage = lazy(() => import('./pages/SearchPage'));
 
 // Ingest sub-pages
 const IngestLayout = lazy(() => import('./pages/ingest/IngestLayout'));
@@ -73,7 +74,7 @@ export function App() {
         <Route index element={<Navigate to="/agents" replace />} />
         <Route path="agents" element={<Page element={<AgentFlowPage />} />} />
         <Route path="graph" element={<Navigate to="/explore" replace />} />
-        <Route path="search" element={<Navigate to="/invoke" replace />} />
+        <Route path="search" element={<Page element={<SearchPage />} />} />
         <Route path="invoke" element={<Page element={<InvokePage />} />} />
         <Route path="scores" element={<Page element={<ScoresPage />} />} />
 

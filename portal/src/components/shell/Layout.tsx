@@ -14,6 +14,7 @@ interface Health {
 type NavItem = { path: string; label: string; requireRoles?: string[] };
 
 const NAV_ITEMS: NavItem[] = [
+  { path: '/search', label: 'Search' },
   { path: '/explore', label: 'Explore' },
   { path: '/agents', label: 'Architecture' },
   { path: '/invoke', label: 'Agent Tools' },

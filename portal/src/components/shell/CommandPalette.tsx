@@ -44,6 +44,10 @@ interface Result {
 // Top-level destinations across observability and harness. Order roughly
 // matches the sub-nav order so muscle-memory keys still work.
 const PAGES: PageEntry[] = [
+  { label: 'Search',             hint: 'Ask the org-search agent',            path: '/search' },
+  { label: 'Explore',            hint: 'Force-directed org graph',            path: '/explore' },
+  { label: 'Architecture',       hint: 'A2A agent topology',                  path: '/agents' },
+  { label: 'Scores',             hint: 'Per-person influence leaderboard',    path: '/scores' },
   { label: 'On-Call',            hint: 'Live alarms + incident timeline',     path: '/observability/oncall' },
   { label: 'Summary',            hint: 'Health overview',                     path: '/observability/summary' },
   { label: 'Traffic',            hint: 'RPS + heatmap + top users',           path: '/observability/traffic' },
