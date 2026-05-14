@@ -1,0 +1,61 @@
+import { Card, Table, TableHead, TableBody, TableRow, TableTh, TableTd } from '@connorhoehnslalom/ui-components/shared';
+import { ScoreEntry } from './types';
+
+interface Props {
+  entries: ScoreEntry[];
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
+  deptColors: Record<string, string>;
+}
+
+export function Leaderboard({ entries, selectedId, onSelect, deptColors }: Props) {
+  return (
+    <Card padding="md">
+      <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
+        Leaderboard{' '}
+        <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-text-tertiary)' }}>
+          composite = 0.55 × influence (PageRank) + 0.45 × expertise (skill-weighted in-degree)
+        </span>
+      </h2>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableTh>#</TableTh>
+            <TableTh>Name</TableTh>
+            <TableTh>Department</TableTh>
+            <TableTh style={{ textAlign: 'right' }}>Influence</TableTh>
+            <TableTh style={{ textAlign: 'right' }}>Expertise</TableTh>
+            <TableTh style={{ textAlign: 'right' }}>Composite</TableTh>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {entries.map((s, i) => {
+            const selected = s.personId === selectedId;
+            return (
+              <TableRow
+                key={s.personId}
+                onClick={() => onSelect(selected ? null : s.personId)}
+                style={{ cursor: 'pointer', background: selected ? 'var(--color-surface-hover)' : undefined }}
+              >
+                <TableTd style={{ color: 'var(--color-text-tertiary)' }}>{i + 1}</TableTd>
+                <TableTd style={{ fontWeight: selected ? 600 : 500 }}>{s.name}</TableTd>
+                <TableTd>
+                  <span style={{ color: deptColors[s.department] ?? '#64748b', fontSize: 12 }}>
+                    {s.department}
+                  </span>
+                </TableTd>
+                <TableTd style={{ textAlign: 'right', fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                  {Math.round(s.influence * 100)}
+                </TableTd>
+                <TableTd style={{ textAlign: 'right', fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                  {Math.round(s.expertise)}
+                </TableTd>
+                <TableTd style={{ textAlign: 'right', fontWeight: 600 }}>{s.composite}</TableTd>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </Card>
+  );
+}
