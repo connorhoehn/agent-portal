@@ -22,6 +22,7 @@ from _shared.instrumentation import (  # noqa: E402
     reset_active_ctx,
     set_active_ctx,
     short_prompt_hash,
+    with_orgiq_root,
 )
 
 # Patch boto3's bedrock-runtime client BEFORE Strands constructs its own —
@@ -292,29 +293,35 @@ async def handle(payload: dict) -> dict:
         ctx.invocation_id, ctx.parent_invocation_id or "—", input_text[:120],
     )
 
-    t0 = time.monotonic()
-    try:
-        result = _agent(input_text)
-    finally:
-        _current_ctx.reset(token)
-        reset_active_ctx(shared_token)
-    duration_ms = int((time.monotonic() - t0) * 1000)
+    with with_orgiq_root(
+        ctx,
+        agent_id="orgiq-ingestion",
+        agent_name="Ingestion",
+        prompt_version=_SYSTEM_PROMPT_SHA,
+    ) as oi_span:
+        t0 = time.monotonic()
+        try:
+            result = _agent(input_text)
+        finally:
+            _current_ctx.reset(token)
+            reset_active_ctx(shared_token)
+        duration_ms = int((time.monotonic() - t0) * 1000)
 
-    response_text = str(result)
+        response_text = str(result)
 
-    try:
-        bundle = ctx.build_trace_bundle(
-            prompt=input_text,
-            response=response_text,
-            agent_id="orgiq-ingestion",
-            agent_name="Ingestion",
-            model_id=MODEL_ID,
-            duration_ms=duration_ms,
-            prompt_version=_SYSTEM_PROMPT_SHA,
-        )
-        post_trace(bundle)
-    except Exception as exc:  # noqa: BLE001
-        log.warning("ingestion: trace emission failed: %s", exc)
+        try:
+            bundle = ctx.build_trace_bundle(
+                prompt=input_text,
+                response=response_text,
+                agent_id="orgiq-ingestion",
+                agent_name="Ingestion",
+                model_id=MODEL_ID,
+                duration_ms=duration_ms,
+                prompt_version=_SYSTEM_PROMPT_SHA,
+            )
+            post_trace(bundle)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("ingestion: trace emission failed: %s", exc)
 
     return {
         "agent": "ingestion",
