@@ -23,6 +23,7 @@ import type {
   PersonDetail,
   Leaderboard,
   ScoreEntry,
+  SkillSummary,
 } from './types.js';
 
 import {
@@ -265,7 +266,8 @@ async function realFetchGraph(): Promise<GraphSnapshot> {
 async function realFetchPersonGraph(personId: string): Promise<PersonDetail | null> {
   const rows = await exec(
     `SELECT id, name, title, team,
-            COALESCE(pagerank_score, expertise_score, 0) AS influence
+            COALESCE(pagerank_score, expertise_score, 0) AS influence,
+            scored_at::text AS scored_at
        FROM people
       WHERE id = :pid`,
     [strParam('pid', personId)],
@@ -346,6 +348,7 @@ async function realFetchPersonGraph(personId: string): Promise<PersonDetail | nu
     department: toStr(r.team),
     skills: skillsRows.map((s) => toStr(s.skill_name)).filter(Boolean),
     influenceScore: clamp01(toNumber(r.influence, 0)),
+    scoredAt: r.scored_at ?? null,
     connections,
   };
 }
@@ -358,9 +361,10 @@ async function realGetLeaderboard(opts: { department?: string; limit?: number })
   ];
   const rows = await exec(
     `SELECT id, name, team,
-            COALESCE(pagerank_score, 0)   AS influence,
-            COALESCE(expertise_score, 0)  AS expertise,
-            COALESCE(composite_score, 0)  AS composite
+            COALESCE(pagerank_score, 0) * 100   AS influence,
+            COALESCE(expertise_score, 0)         AS expertise,
+            COALESCE(composite_score, 0)         AS composite,
+            scored_at::text                      AS scored_at
        FROM people
       WHERE (:dept::text IS NULL OR LOWER(team) LIKE LOWER('%' || :dept || '%'))
       ORDER BY composite_score DESC NULLS LAST
@@ -371,23 +375,85 @@ async function realGetLeaderboard(opts: { department?: string; limit?: number })
     personId: toStr(r.id),
     name: toStr(r.name),
     department: toStr(r.team),
-    influence: clamp01(toNumber(r.influence, 0)),
-    collaboration: 0.5,
-    expertise: clamp01(toNumber(r.expertise, 0)),
-    velocity: 0.5,
-    quality: 0.5,
+    influence: toNumber(r.influence, 0),
+    collaboration: 50,
+    expertise: toNumber(r.expertise, 0),
+    velocity: 50,
+    quality: 50,
     composite: toNumber(r.composite, 0),
     trend: [0, 0, 0, 0, 0, 0, 0],
+    scoredAt: r.scored_at ?? null,
   }));
-  return { entries, total: entries.length };
+  const nonNullDates = entries.map((e) => e.scoredAt).filter((d): d is string => d !== null);
+  const mostRecentScoredAt = nonNullDates.length > 0
+    ? nonNullDates.reduce((a, b) => (a > b ? a : b))
+    : null;
+  return { entries, total: entries.length, mostRecentScoredAt };
+}
+
+async function realGetSkillLeaderboard(opts: { skill: string; limit?: number }): Promise<Leaderboard> {
+  const limit = Math.max(1, Math.min(opts.limit ?? 25, 100));
+  const rows = await exec(
+    `SELECT p.id, p.name, p.team,
+            COALESCE(p.pagerank_score, 0) * 100 AS influence,
+            COALESCE(p.expertise_score, 0)       AS expertise,
+            COALESCE(p.composite_score, 0)       AS composite,
+            p.scored_at::text                    AS scored_at,
+            SUM(ps.weight)                       AS skill_strength
+       FROM people p
+       JOIN person_skills ps ON p.id = ps.person_id
+       JOIN skills s         ON ps.skill_id = s.id
+      WHERE LOWER(s.name) = LOWER(:skill)
+      GROUP BY p.id, p.name, p.team, p.pagerank_score, p.expertise_score, p.composite_score, p.scored_at
+      ORDER BY skill_strength DESC NULLS LAST
+      LIMIT :lim`,
+    [strParam('skill', opts.skill), intParam('lim', limit)],
+  );
+  const entries: ScoreEntry[] = rows.map((r) => ({
+    personId: toStr(r.id),
+    name: toStr(r.name),
+    department: toStr(r.team),
+    influence: toNumber(r.influence, 0),
+    collaboration: 50,
+    expertise: toNumber(r.expertise, 0),
+    velocity: 50,
+    quality: 50,
+    composite: toNumber(r.composite, 0),
+    trend: [0, 0, 0, 0, 0, 0, 0],
+    scoredAt: r.scored_at ?? null,
+  }));
+  const nonNullDates = entries.map((e) => e.scoredAt).filter((d): d is string => d !== null);
+  const mostRecentScoredAt = nonNullDates.length > 0
+    ? nonNullDates.reduce((a, b) => (a > b ? a : b))
+    : null;
+  return { entries, total: entries.length, mostRecentScoredAt };
+}
+
+async function realGetTopSkills(limit = 30): Promise<SkillSummary[]> {
+  const lim = Math.max(1, Math.min(limit, 100));
+  const rows = await exec(
+    `SELECT s.id, s.name, COUNT(*) AS mention_count
+       FROM skills s
+       JOIN person_skills ps ON ps.skill_id = s.id
+      GROUP BY s.id, s.name
+      ORDER BY mention_count DESC
+      LIMIT :lim`,
+    [intParam('lim', lim)],
+  );
+  return rows.map((r) => ({
+    id: toStr(r.id),
+    name: toStr(r.name),
+    mentionCount: toNumber(r.mention_count, 0),
+  }));
 }
 
 async function realGetScore(personId: string): Promise<ScoreEntry | null> {
   const rows = await exec(
     `SELECT id, name, team,
-            COALESCE(pagerank_score, 0)  AS influence,
-            COALESCE(expertise_score, 0) AS expertise,
-            COALESCE(composite_score, 0) AS composite
+            COALESCE(pagerank_score, 0) * 100   AS influence,
+            COALESCE(expertise_score, 0)         AS expertise,
+            COALESCE(composite_score, 0)         AS composite,
+            scored_at::text                      AS scored_at
        FROM people
       WHERE id = :pid`,
     [strParam('pid', personId)],
@@ -398,13 +464,14 @@ async function realGetScore(personId: string): Promise<ScoreEntry | null> {
     personId: toStr(r.id),
     name: toStr(r.name),
     department: toStr(r.team),
-    influence: clamp01(toNumber(r.influence, 0)),
-    collaboration: 0.5,
-    expertise: clamp01(toNumber(r.expertise, 0)),
-    velocity: 0.5,
-    quality: 0.5,
+    influence: toNumber(r.influence, 0),
+    collaboration: 50,
+    expertise: toNumber(r.expertise, 0),
+    velocity: 50,
+    quality: 50,
     composite: toNumber(r.composite, 0),
     trend: [0, 0, 0, 0, 0, 0, 0],
+    scoredAt: r.scored_at ?? null,
   };
 }
 
@@ -413,6 +480,8 @@ export const realAurora: AuroraProvider = {
   fetchPersonGraph: realFetchPersonGraph,
   getLeaderboard: realGetLeaderboard,
   getScore: realGetScore,
+  getSkillLeaderboard: realGetSkillLeaderboard,
+  getTopSkills: realGetTopSkills,
 };
 
 // ─── Mock provider — wraps the existing mock arrays in the AuroraProvider shape.
@@ -442,7 +511,7 @@ async function mockFetchPersonGraph(personId: string): Promise<PersonDetail | nu
         otherPerson: other ? { id: other.id, name: other.name, title: other.title } : null,
       };
     });
-  return { ...p, connections };
+  return { ...p, scoredAt: null, connections };
 }
 
 async function mockGetLeaderboard(opts: { department?: string; limit?: number }): Promise<Leaderboard> {
@@ -453,11 +522,19 @@ async function mockGetLeaderboard(opts: { department?: string; limit?: number })
     entries = entries.filter((e) => e.department.toLowerCase().includes(needle));
   }
   entries.sort((a, b) => b.composite - a.composite);
-  return { entries: entries.slice(0, limit), total: entries.length };
+  return { entries: entries.slice(0, limit), total: entries.length, mostRecentScoredAt: null };
 }
 
 async function mockGetScore(personId: string): Promise<ScoreEntry | null> {
   return mockScores.find((s) => s.personId === personId) ?? null;
+}
+
+async function mockGetSkillLeaderboard(_opts: { skill: string; limit?: number }): Promise<Leaderboard> {
+  return { entries: [], total: 0, mostRecentScoredAt: null };
+}
+
+async function mockGetTopSkills(_limit?: number): Promise<SkillSummary[]> {
+  return [];
 }
 
 export const mockAurora: AuroraProvider = {
@@ -465,4 +542,6 @@ export const mockAurora: AuroraProvider = {
   fetchPersonGraph: mockFetchPersonGraph,
   getLeaderboard: mockGetLeaderboard,
   getScore: mockGetScore,
+  getSkillLeaderboard: mockGetSkillLeaderboard,
+  getTopSkills: mockGetTopSkills,
 };

@@ -9,9 +9,10 @@ export interface ScoreEntry {
   quality: number;
   composite: number;
   trend: number[];
+  scoredAt: string | null;
 }
 
-function composite(s: Omit<ScoreEntry, 'composite' | 'trend' | 'personId' | 'name' | 'department'>): number {
+function composite(s: Omit<ScoreEntry, 'composite' | 'trend' | 'personId' | 'name' | 'department' | 'scoredAt'>): number {
   return Math.round(((s.influence + s.collaboration + s.expertise + s.velocity + s.quality) / 5) * 100);
 }
 
@@ -33,4 +34,4 @@ export const mockScores: ScoreEntry[] = [
   { personId: 'p-002', name: 'Maria Santos', department: 'Platform Engineering', influence: 0.72, collaboration: 0.75, expertise: 0.80, velocity: 0.78, quality: 0.82, composite: 0, trend: [] },
   { personId: 'p-016', name: 'Olivia Park', department: 'Design Systems', influence: 0.71, collaboration: 0.82, expertise: 0.77, velocity: 0.68, quality: 0.86, composite: 0, trend: [] },
   { personId: 'p-004', name: 'Priya Patel', department: 'Platform Engineering', influence: 0.68, collaboration: 0.72, expertise: 0.84, velocity: 0.73, quality: 0.79, composite: 0, trend: [] },
-].map(s => ({ ...s, composite: composite(s), trend: trend() }));
+].map(s => ({ ...s, composite: composite(s), trend: trend(), scoredAt: null }));

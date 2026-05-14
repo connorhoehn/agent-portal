@@ -1,5 +1,5 @@
 import { Card } from '@connorhoehnslalom/ui-components/shared';
-import { PersonDetail } from './types';
+import { PersonDetail, formatRelativeTime } from './types';
 
 interface Props {
   detail: PersonDetail;
@@ -62,7 +62,11 @@ export function PersonDetailCard({ detail, deptColors, onClose, onSelectConnecti
           ))}
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--color-border)', fontSize: 13 }}>
+      <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 12 }}>
+        Scored {formatRelativeTime(detail.scoredAt)}
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--color-border)', fontSize: 13 }}>
         <span style={{ color: 'var(--color-text-secondary)' }}>Influence (PageRank)</span>
         <span style={{ fontWeight: 600 }}>{Math.round(detail.influenceScore * 100)}</span>
       </div>

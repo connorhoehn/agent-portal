@@ -12,6 +12,23 @@ scoresRouter.get('/leaderboard', asyncHandler(async (req, res) => {
   res.json(result);
 }));
 
+scoresRouter.get('/skills', asyncHandler(async (req, res) => {
+  const limit = req.query['limit'] ? parseInt(req.query['limit'] as string, 10) : 30;
+  const result = await aurora.getTopSkills(limit);
+  res.json(result);
+}));
+
+scoresRouter.get('/by-skill', asyncHandler(async (req, res) => {
+  const skill = req.query['skill'] as string | undefined;
+  if (!skill) {
+    res.status(400).json({ error: '`skill` query param is required' });
+    return;
+  }
+  const limit = req.query['limit'] ? parseInt(req.query['limit'] as string, 10) : 25;
+  const result = await aurora.getSkillLeaderboard({ skill, limit });
+  res.json(result);
+}));
+
 scoresRouter.get('/:personId', asyncHandler(async (req, res) => {
   const score = await aurora.getScore(req.params['personId'] as string);
   if (!score) { res.status(404).json({ error: 'Score not found' }); return; }

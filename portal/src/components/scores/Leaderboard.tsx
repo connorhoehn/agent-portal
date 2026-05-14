@@ -6,17 +6,33 @@ interface Props {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   deptColors: Record<string, string>;
+  rankedBy?: string | null;
 }
 
-export function Leaderboard({ entries, selectedId, onSelect, deptColors }: Props) {
+export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedBy }: Props) {
   return (
     <Card padding="md">
-      <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
-        Leaderboard{' '}
-        <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-text-tertiary)' }}>
-          composite = 0.55 × influence (PageRank) + 0.45 × expertise (skill-weighted in-degree)
-        </span>
-      </h2>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>
+          Leaderboard
+        </h2>
+        {rankedBy ? (
+          <span style={{
+            fontSize: 11,
+            padding: '2px 8px',
+            borderRadius: 999,
+            background: 'var(--color-primary-soft, #eef2ff)',
+            color: 'var(--color-primary, #6366f1)',
+            fontWeight: 500,
+          }}>
+            Ranked by: {rankedBy}
+          </span>
+        ) : (
+          <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-text-tertiary)' }}>
+            composite = 0.55 × influence (PageRank) + 0.45 × expertise (skill-weighted in-degree)
+          </span>
+        )}
+      </div>
       <Table>
         <TableHead>
           <TableRow>
@@ -45,7 +61,7 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors }: Props
                   </span>
                 </TableTd>
                 <TableTd style={{ textAlign: 'right', fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                  {Math.round(s.influence * 100)}
+                  {Math.round(s.influence)}
                 </TableTd>
                 <TableTd style={{ textAlign: 'right', fontSize: 12, color: 'var(--color-text-secondary)' }}>
                   {Math.round(s.expertise)}

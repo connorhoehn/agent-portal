@@ -6,9 +6,14 @@ import { StatCards } from '../components/scores/StatCards';
 import { DepartmentFilter } from '../components/scores/DepartmentFilter';
 import { Leaderboard } from '../components/scores/Leaderboard';
 import { PersonDetailCard } from '../components/scores/PersonDetailCard';
+import { SkillFilter } from '../components/scores/SkillFilter';
 
 function ScoresPage() {
-  const { data } = useFetch<{ entries: ScoreEntry[]; total: number }>('/api/scores/leaderboard?limit=100');
+  const [skillFilter, setSkillFilter] = useState<string>('');
+  const leaderboardUrl = skillFilter
+    ? `/api/scores/by-skill?skill=${encodeURIComponent(skillFilter)}&limit=100`
+    : '/api/scores/leaderboard?limit=100';
+  const { data } = useFetch<{ entries: ScoreEntry[]; total: number; mostRecentScoredAt: string | null }>(leaderboardUrl);
   const [deptFilter, setDeptFilter] = useState<string>('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -50,7 +55,10 @@ function ScoresPage() {
         avgComposite={avg}
         topScore={top}
         departmentCount={departments.length}
+        mostRecentScoredAt={data.mostRecentScoredAt ?? null}
       />
+
+      <SkillFilter selectedSkill={skillFilter} onChange={setSkillFilter} />
 
       <DepartmentFilter
         departments={departments}
@@ -65,6 +73,7 @@ function ScoresPage() {
           selectedId={selectedId}
           onSelect={setSelectedId}
           deptColors={DEPT_COLORS}
+          rankedBy={skillFilter || null}
         />
 
         {detail && (

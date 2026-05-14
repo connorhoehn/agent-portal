@@ -36,6 +36,7 @@ export interface GraphSnapshot {
 }
 
 export interface PersonDetail extends Person {
+  scoredAt: string | null;
   connections: Array<Relationship & {
     otherPerson: { id: string; name: string; title: string } | null;
   }>;
@@ -52,11 +53,19 @@ export interface ScoreEntry {
   quality: number;
   composite: number;
   trend: number[];
+  scoredAt: string | null;
 }
 
 export interface Leaderboard {
   entries: ScoreEntry[];
   total: number;
+  mostRecentScoredAt: string | null;
+}
+
+export interface SkillSummary {
+  id: string;
+  name: string;
+  mentionCount: number;
 }
 
 export interface AuroraProvider {
@@ -64,6 +73,8 @@ export interface AuroraProvider {
   fetchPersonGraph(personId: string): Promise<PersonDetail | null>;
   getLeaderboard(opts: { department?: string; limit?: number }): Promise<Leaderboard>;
   getScore(personId: string): Promise<ScoreEntry | null>;
+  getSkillLeaderboard(opts: { skill: string; limit?: number }): Promise<Leaderboard>;
+  getTopSkills(limit?: number): Promise<SkillSummary[]>;
 }
 
 // ── AgentCore (runtimes, memory, gateway, capabilities sessions) ───────────────

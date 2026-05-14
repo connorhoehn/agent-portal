@@ -1,10 +1,12 @@
 import { Card } from '@connorhoehnslalom/ui-components/shared';
+import { formatRelativeTime } from './types';
 
 interface Props {
   peopleScored: number;
   avgComposite: number;
   topScore: number;
   departmentCount: number;
+  mostRecentScoredAt: string | null;
 }
 
 function StatCard({ label, value }: { label: string; value: string }) {
@@ -16,13 +18,22 @@ function StatCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function StatCards({ peopleScored, avgComposite, topScore, departmentCount }: Props) {
+export function StatCards({ peopleScored, avgComposite, topScore, departmentCount, mostRecentScoredAt }: Props) {
+  const freshnessLabel = mostRecentScoredAt === null
+    ? 'Scores updated never — run the scoring agent'
+    : `Scores updated ${formatRelativeTime(mostRecentScoredAt)}`;
+
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 16 }}>
-      <StatCard label="People Scored" value={String(peopleScored)} />
-      <StatCard label="Avg Composite" value={String(avgComposite)} />
-      <StatCard label="Top Score" value={String(topScore)} />
-      <StatCard label="Departments" value={String(departmentCount)} />
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 8, textAlign: 'right' }}>
+        {freshnessLabel}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+        <StatCard label="People Scored" value={String(peopleScored)} />
+        <StatCard label="Avg Composite" value={String(avgComposite)} />
+        <StatCard label="Top Score" value={String(topScore)} />
+        <StatCard label="Departments" value={String(departmentCount)} />
+      </div>
     </div>
   );
 }
