@@ -60,13 +60,28 @@ log = logging.getLogger(__name__)
 _oi_logger = logging.getLogger(__name__)
 
 
+_OI_BOOTSTRAP_STATE: dict[str, object] = {
+    "done": False,
+    "attempts": 0,
+    "max_attempts": 5,
+}
+
+
 def _bootstrap_openinference() -> None:
     """Wire OpenInference instrumentation onto the active TracerProvider.
 
-    Idempotent: safe to call multiple times. Silently no-ops if the OI
-    packages aren't installed (so the legacy TraceBundle pipeline still
-    works on agent images that haven't been rebuilt yet).
+    Called lazily from `with_orgiq_root()` because at module-import time
+    the global TracerProvider may still be a ProxyTracerProvider (which
+    doesn't expose add_span_processor). Retries up to max_attempts times;
+    each retry is cheap (idempotent imports + idempotent instrument calls).
     """
+    if _OI_BOOTSTRAP_STATE["done"]:
+        return
+    attempts = int(_OI_BOOTSTRAP_STATE["attempts"])
+    if attempts >= int(_OI_BOOTSTRAP_STATE["max_attempts"]):
+        return  # gave up — log already emitted on the last attempt
+    _OI_BOOTSTRAP_STATE["attempts"] = attempts + 1
+
     try:
         from opentelemetry import trace
         from openinference.instrumentation.bedrock import BedrockInstrumentor
@@ -74,40 +89,45 @@ def _bootstrap_openinference() -> None:
             StrandsAgentsToOpenInferenceProcessor,
         )
     except ImportError as e:
+        # OI packages not installed at all — give up permanently
         _oi_logger.info(
             "OpenInference packages not available — skipping OI bootstrap. "
             "Legacy TraceBundle pipeline remains active. Reason: %s",
             e,
         )
+        _OI_BOOTSTRAP_STATE["done"] = True
         return
 
-    # Auto-instrument boto3 Bedrock calls (Converse / ConverseStream /
-    # invoke_model / invoke_agent / apply_guardrail / retrieve_and_generate).
-    # The instrument() call is idempotent in BedrockInstrumentor.
+    # BedrockInstrumentor: idempotent at the OI library level.
     try:
         BedrockInstrumentor().instrument()
     except Exception as e:
         _oi_logger.warning("BedrockInstrumentor.instrument() failed: %s", e)
 
-    # Add the Strands → OI span processor to the active TracerProvider so
-    # Strands' native gen_ai.* spans get translated to OI format before export.
-    try:
-        provider = trace.get_tracer_provider()
-        if hasattr(provider, "add_span_processor"):
+    # Strands processor: only succeeds if global provider is a real SDK
+    # TracerProvider (not the proxy that `opentelemetry-instrument` installs
+    # at import time).
+    provider = trace.get_tracer_provider()
+    if hasattr(provider, "add_span_processor"):
+        try:
             provider.add_span_processor(StrandsAgentsToOpenInferenceProcessor())
-        else:
+            _OI_BOOTSTRAP_STATE["done"] = True
+            _oi_logger.info(
+                "OpenInference bootstrap complete (attempt %d).",
+                attempts + 1,
+            )
+        except Exception as e:
+            _oi_logger.warning("Strands OI processor wiring failed: %s", e)
+    else:
+        # Still a proxy — will retry next call to with_orgiq_root.
+        # Suppress the per-call warning except on the final attempt.
+        if attempts + 1 >= int(_OI_BOOTSTRAP_STATE["max_attempts"]):
             _oi_logger.warning(
                 "Active TracerProvider %s does not support add_span_processor "
-                "— Strands OI translation will not run.",
+                "after %d attempts — Strands OI translation will not run.",
                 type(provider).__name__,
+                attempts + 1,
             )
-    except Exception as e:
-        _oi_logger.warning("Strands OI processor wiring failed: %s", e)
-
-
-# Run once at module import. agents/<name>/main.py imports from this module
-# at startup, so this fires before any Bedrock/Strands call.
-_bootstrap_openinference()
 
 # Middleware URL — defaults to the docker-compose service name so the agents
 # can reach the middleware over the compose network. Override with
@@ -701,6 +721,8 @@ def with_orgiq_root(
 
     Defensive: if any OI/OTel package is missing, yields None and the body runs without instrumentation.
     """
+    _bootstrap_openinference()
+
     try:
         from opentelemetry import trace
         from openinference.instrumentation import using_session, using_user
