@@ -22,6 +22,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/decisions', label: 'Decisions' },
   { path: '/projects', label: 'Projects' },
   { path: '/newsroom', label: 'Newsroom' },
+  { path: '/knowledge-base', label: 'Knowledge Base', requireRoles: ['hr-admin'] },
   { path: '/ingest', label: 'Ingest', requireRoles: ['hr-admin'] },
   { path: '/observability', label: 'Observability', requireRoles: ['org-leader', 'hr-admin'] },
   { path: '/capabilities', label: 'Platform Services' },

@@ -9,6 +9,9 @@ import { graphRouter } from './routes/graph.js';
 import { scoresRouter } from './routes/scores.js';
 import { decisionsRouter } from './routes/decisions.js';
 import { projectsRouter } from './routes/projects.js';
+import { knowledgeBaseRouter } from './routes/knowledge-base.js';
+import { newsroomArticlesRouter } from './routes/newsroom-articles.js';
+import { newsroomBeatsRouter } from './routes/newsroom-beats.js';
 import { ingestRouter } from './routes/ingest.js';
 import { observabilityRouter } from './routes/observability.js';
 import { approvalsRouter } from './routes/approvals.js';
@@ -61,6 +64,10 @@ app.use('/api/graph/decisions', decisionsRouter);
 app.use('/api/graph/projects', projectsRouter);
 app.use('/api/graph', graphRouter);
 app.use('/api/scores', scoresRouter);
+app.use('/api/knowledge-base', knowledgeBaseRouter);
+// Newsroom — beats mounted BEFORE articles so /beats doesn't get swallowed.
+app.use('/api/newsroom/beats', newsroomBeatsRouter);
+app.use('/api/newsroom', newsroomArticlesRouter);
 app.use('/api/ingest', requireAction('ManageIngest'), ingestRouter);
 // Approvals are mounted BEFORE the gated observability router so that the
 // agent-facing POST /approvals/request endpoint doesn't require ViewObservability

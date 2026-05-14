@@ -14,6 +14,11 @@ const ProjectDetailPage = lazy(() => import('./pages/ProjectDetailPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const NewsroomLayout = lazy(() => import('./pages/newsroom/NewsroomLayout'));
 const NewsroomHomePage = lazy(() => import('./pages/newsroom/HomePage'));
+const NewsroomArticlesPage = lazy(() => import('./pages/newsroom/ArticlesPage'));
+const NewsroomArticleDetailPage = lazy(() => import('./pages/newsroom/ArticleDetailPage'));
+const NewsroomEntityDetailPage = lazy(() => import('./pages/newsroom/EntityDetailPage'));
+const NewsroomBeatsPage = lazy(() => import('./pages/newsroom/BeatsPage'));
+const KnowledgeBasePage = lazy(() => import('./pages/KnowledgeBasePage'));
 const InvokePage = lazy(() => import('./pages/InvokePage'));
 const CodeInterpreterDemoPage = lazy(() => import('./pages/CodeInterpreterDemoPage'));
 const ExplorePage = lazy(() => import('./pages/ExplorePage'));
@@ -97,7 +102,13 @@ export function App() {
         <Route path="newsroom" element={<Page element={<NewsroomLayout />} />}>
           <Route index element={<Navigate to="home" replace />} />
           <Route path="home" element={<Page element={<NewsroomHomePage />} />} />
+          <Route path="articles" element={<Page element={<NewsroomArticlesPage />} />} />
+          <Route path="articles/:id" element={<Page element={<NewsroomArticleDetailPage />} />} />
+          <Route path="entities/:id" element={<Page element={<NewsroomEntityDetailPage />} />} />
+          <Route path="beats" element={<Page element={<NewsroomBeatsPage />} />} />
         </Route>
+
+        <Route path="knowledge-base" element={<Page element={<KnowledgeBasePage />} />} />
 
         <Route path="ingest" element={
           <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
