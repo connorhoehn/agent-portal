@@ -7,6 +7,8 @@ import { sessionMiddleware } from './lib/session.js';
 import { agentsRouter } from './routes/agents.js';
 import { graphRouter } from './routes/graph.js';
 import { scoresRouter } from './routes/scores.js';
+import { decisionsRouter } from './routes/decisions.js';
+import { projectsRouter } from './routes/projects.js';
 import { ingestRouter } from './routes/ingest.js';
 import { observabilityRouter } from './routes/observability.js';
 import { approvalsRouter } from './routes/approvals.js';
@@ -53,6 +55,10 @@ app.get('/api/health', healthHandler);
 app.use('/api/session', sessionRouter);
 app.use('/api/identity', identityRouter);
 app.use('/api/agents', agentsRouter);
+// Decisions + Projects mounted BEFORE graphRouter so their specific paths
+// resolve without going through the gated graph router.
+app.use('/api/graph/decisions', decisionsRouter);
+app.use('/api/graph/projects', projectsRouter);
 app.use('/api/graph', graphRouter);
 app.use('/api/scores', scoresRouter);
 app.use('/api/ingest', requireAction('ManageIngest'), ingestRouter);

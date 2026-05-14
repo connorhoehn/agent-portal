@@ -7,6 +7,13 @@ const AgentFlowPage = lazy(() => import('./pages/AgentFlowPage'));
 const ScoresPage = lazy(() => import('./pages/ScoresPage'));
 const ScoresCohortPage = lazy(() => import('./pages/ScoresCohortPage'));
 const ScoresComparePage = lazy(() => import('./pages/ScoresComparePage'));
+const DecisionsPage = lazy(() => import('./pages/DecisionsPage'));
+const DecisionDetailPage = lazy(() => import('./pages/DecisionDetailPage'));
+const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
+const ProjectDetailPage = lazy(() => import('./pages/ProjectDetailPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const NewsroomLayout = lazy(() => import('./pages/newsroom/NewsroomLayout'));
+const NewsroomHomePage = lazy(() => import('./pages/newsroom/HomePage'));
 const InvokePage = lazy(() => import('./pages/InvokePage'));
 const CodeInterpreterDemoPage = lazy(() => import('./pages/CodeInterpreterDemoPage'));
 const ExplorePage = lazy(() => import('./pages/ExplorePage'));
@@ -81,6 +88,16 @@ export function App() {
         <Route path="scores" element={<Page element={<ScoresPage />} />} />
         <Route path="scores/cohorts" element={<Page element={<ScoresCohortPage />} />} />
         <Route path="scores/compare" element={<Page element={<ScoresComparePage />} />} />
+        <Route path="decisions" element={<Page element={<DecisionsPage />} />} />
+        <Route path="decisions/:id" element={<Page element={<DecisionDetailPage />} />} />
+        <Route path="projects" element={<Page element={<ProjectsPage />} />} />
+        <Route path="projects/:id" element={<Page element={<ProjectDetailPage />} />} />
+        <Route path="settings" element={<Page element={<SettingsPage />} />} />
+
+        <Route path="newsroom" element={<Page element={<NewsroomLayout />} />}>
+          <Route index element={<Navigate to="home" replace />} />
+          <Route path="home" element={<Page element={<NewsroomHomePage />} />} />
+        </Route>
 
         <Route path="ingest" element={
           <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
