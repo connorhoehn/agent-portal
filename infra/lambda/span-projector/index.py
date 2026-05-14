@@ -138,10 +138,11 @@ def discover_log_groups() -> list[str]:
 # ---------------------------------------------------------------------------
 
 _CW_QUERY = (
-    "filter @message like 'openinference.span.kind' "
-    "| parse @message '*' as span_json "
+    "filter @message like 'ORGIQ_OI_SPAN:' "
+    "| display @message "
     "| limit 10000"
 )
+_OI_PREFIX = "ORGIQ_OI_SPAN:"
 
 
 def query_logs(log_group: str, start_time_ms: int, end_time_ms: int) -> list[dict]:
@@ -193,7 +194,13 @@ def query_logs(log_group: str, start_time_ms: int, end_time_ms: int) -> list[dic
     for row in result.get("results", []):
         # Each row is a list of {"field": str, "value": str} dicts
         field_map: dict[str, str] = {item["field"]: item["value"] for item in row}
-        raw_json = field_map.get("span_json", "")
+        raw_message = field_map.get("@message", "")
+        # Strip the ORGIQ_OI_SPAN: prefix that the agent's ConsoleSpanExporter
+        # formatter prepends. Trim trailing whitespace + newline.
+        idx = raw_message.find(_OI_PREFIX)
+        if idx < 0:
+            continue
+        raw_json = raw_message[idx + len(_OI_PREFIX):].strip()
         try:
             span = json.loads(raw_json)
             if isinstance(span, dict):

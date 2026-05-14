@@ -106,18 +106,46 @@ def _bootstrap_openinference() -> None:
 
     # Strands processor: only succeeds if global provider is a real SDK
     # TracerProvider (not the proxy that `opentelemetry-instrument` installs
-    # at import time).
+    # at import time). Also attach a ConsoleSpanExporter so spans land in
+    # stdout → CW Logs (where the projector Lambda reads them). AgentCore's
+    # AWS OTel distro routes spans to X-Ray by default; we want a parallel
+    # stdout path for the projector.
     provider = trace.get_tracer_provider()
     if hasattr(provider, "add_span_processor"):
         try:
             provider.add_span_processor(StrandsAgentsToOpenInferenceProcessor())
-            _OI_BOOTSTRAP_STATE["done"] = True
-            _oi_logger.info(
-                "OpenInference bootstrap complete (attempt %d).",
-                attempts + 1,
-            )
         except Exception as e:
             _oi_logger.warning("Strands OI processor wiring failed: %s", e)
+
+        # Explicit ConsoleSpanExporter — emits each span as a single-line
+        # JSON object on stdout. Prefixed with `ORGIQ_OI_SPAN:` so the
+        # projector Lambda can filter cheaply against `@message like`.
+        try:
+            from opentelemetry.sdk.trace.export import (
+                BatchSpanProcessor,
+                ConsoleSpanExporter,
+            )
+            import sys
+
+            def _formatter(span) -> str:
+                try:
+                    return "ORGIQ_OI_SPAN:" + span.to_json(indent=None) + "\n"
+                except Exception:
+                    return "ORGIQ_OI_SPAN:" + str(span) + "\n"
+
+            provider.add_span_processor(
+                BatchSpanProcessor(
+                    ConsoleSpanExporter(out=sys.stdout, formatter=_formatter)
+                )
+            )
+        except Exception as e:
+            _oi_logger.warning("Console span exporter wiring failed: %s", e)
+
+        _OI_BOOTSTRAP_STATE["done"] = True
+        _oi_logger.info(
+            "OpenInference bootstrap complete (attempt %d).",
+            attempts + 1,
+        )
     else:
         # Still a proxy — will retry next call to with_orgiq_root.
         # Suppress the per-call warning except on the final attempt.
