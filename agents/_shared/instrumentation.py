@@ -50,7 +50,8 @@ from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import wraps
-from typing import Any, Callable
+import contextlib
+from typing import Any, Callable, Iterator, Optional
 
 import urllib.error
 import urllib.request
@@ -670,3 +671,154 @@ def post_trace(bundle: dict[str, Any], *, middleware_url: str | None = None) -> 
     except Exception as exc:  # noqa: BLE001
         log.warning("instrumentation: POST %s unexpected error: %s", url, exc)
     return False
+
+
+# ── OpenInference span helpers ────────────────────────────────────────────────
+
+
+@contextlib.contextmanager
+def with_orgiq_root(
+    ctx: "TraceContext",
+    agent_id: str,
+    agent_name: str,
+    prompt_version: Optional[str] = None,
+    template_id: Optional[str] = None,
+    runtime_image_digest: Optional[str] = None,
+) -> Iterator[object]:
+    """Wrap an agent invocation in an OpenInference-compliant root AGENT span.
+
+    The span:
+      - Sets ``openinference.span.kind = "AGENT"``
+      - Sets ``agent.name``, ``orgiq.agent_id``, ``orgiq.agent_name``, ``orgiq.invocation_id``
+      - Sets ``orgiq.parent_invocation_id``, ``orgiq.user_id``, ``orgiq.session_id`` when non-empty on ctx
+      - Sets ``orgiq.prompt_version``, ``orgiq.template_id``, ``orgiq.runtime_image_digest`` when supplied
+      - Wraps the body in OI ``using_session(...)`` and ``using_user(...)`` so all child spans inherit
+        these via OTel context propagation
+      - Sets ``input.value`` to ctx.user_prompt if the field exists on ctx; otherwise omits
+
+    Yields the span object (or None if OI/OTel not available). Caller can call
+    ``span.set_attribute(...)`` for additional attrs.
+
+    Defensive: if any OI/OTel package is missing, yields None and the body runs without instrumentation.
+    """
+    try:
+        from opentelemetry import trace
+        from openinference.instrumentation import using_session, using_user
+    except ImportError:
+        yield None
+        return
+
+    tracer = trace.get_tracer("orgiq.agent")
+    attrs: dict[str, object] = {
+        "openinference.span.kind": "AGENT",
+        "agent.name": agent_name,
+        "orgiq.agent_id": agent_id,
+        "orgiq.agent_name": agent_name,
+        "orgiq.invocation_id": ctx.invocation_id,
+    }
+    if ctx.parent_invocation_id:
+        attrs["orgiq.parent_invocation_id"] = ctx.parent_invocation_id
+    if ctx.user_id:
+        attrs["orgiq.user_id"] = ctx.user_id
+    if ctx.session_id:
+        attrs["orgiq.session_id"] = ctx.session_id
+    if prompt_version:
+        attrs["orgiq.prompt_version"] = prompt_version
+    if template_id:
+        attrs["orgiq.template_id"] = template_id
+    if runtime_image_digest:
+        attrs["orgiq.runtime_image_digest"] = runtime_image_digest
+
+    # Stack the OI session + user context managers if values are present.
+    session_cm = using_session(session_id=ctx.session_id) if ctx.session_id else contextlib.nullcontext()
+    user_cm = using_user(user_id=ctx.user_id) if ctx.user_id else contextlib.nullcontext()
+
+    try:
+        with session_cm, user_cm, tracer.start_as_current_span("orgiq.agent.invoke", attributes=attrs) as span:
+            yield span
+    except Exception:
+        # Don't suppress the caller's exception — but make sure we don't fail in our own cleanup.
+        raise
+
+
+@contextlib.contextmanager
+def retriever_span(name: str, query: str) -> Iterator[object]:
+    """Open an OI RETRIEVER span. The caller MUST call ``record_retrieval_documents(span, docs)``
+    after the retrieve returns to attach the result list.
+
+    Defensive: yields None when OTel is absent.
+    """
+    try:
+        from opentelemetry import trace
+    except ImportError:
+        yield None
+        return
+
+    tracer = trace.get_tracer("orgiq.retriever")
+    attrs = {
+        "openinference.span.kind": "RETRIEVER",
+        "input.value": query[:2000] if query else "",
+        "input.mime_type": "text/plain",
+    }
+    with tracer.start_as_current_span(name, attributes=attrs) as span:
+        yield span
+
+
+def record_retrieval_documents(span: object, documents: list[dict]) -> None:
+    """Attach retrieval results to a RETRIEVER span using the OI flattened-list convention.
+
+    Each document gets these flattened attrs (zero-indexed):
+        retrieval.documents.{i}.document.id
+        retrieval.documents.{i}.document.score
+        retrieval.documents.{i}.document.content
+        retrieval.documents.{i}.document.metadata    (JSON-stringified if present)
+
+    Defensive: no-ops on missing span or unexpected document shape.
+    """
+    if span is None or not documents:
+        return
+    try:
+        for i, doc in enumerate(documents):
+            if not isinstance(doc, dict):
+                continue
+            doc_id = doc.get("id") or doc.get("source") or f"doc-{i}"
+            span.set_attribute(f"retrieval.documents.{i}.document.id", str(doc_id))
+            if "score" in doc:
+                try:
+                    span.set_attribute(f"retrieval.documents.{i}.document.score", float(doc["score"]))
+                except Exception:
+                    pass
+            content = doc.get("content") or doc.get("text") or ""
+            if content:
+                # Truncate content to avoid blowing span size limits
+                span.set_attribute(f"retrieval.documents.{i}.document.content", str(content)[:2000])
+            meta = doc.get("metadata")
+            if meta:
+                try:
+                    span.set_attribute(f"retrieval.documents.{i}.document.metadata", json.dumps(meta)[:2000])
+                except Exception:
+                    pass
+    except Exception:
+        # Never crash the retrieval over instrumentation
+        pass
+
+
+def record_guardrail_action(
+    span: object,
+    action: Optional[str] = None,
+    pii_detected: Optional[bool] = None,
+) -> None:
+    """Stamp guardrail outcome on the current orgiq root span.
+
+    Use values from Bedrock's guardrail trace. ``action`` examples: 'NONE', 'GUARDRAIL_INTERVENED'.
+    Defensive: no-ops on missing span.
+    """
+    if span is None:
+        return
+    try:
+        if action:
+            span.set_attribute("orgiq.guardrail_action", action)
+        if pii_detected is not None:
+            span.set_attribute("orgiq.pii_detected", bool(pii_detected))
+    except Exception:
+        pass
