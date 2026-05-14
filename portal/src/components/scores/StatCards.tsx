@@ -7,6 +7,7 @@ interface Props {
   topScore: number;
   departmentCount: number;
   mostRecentScoredAt: string | null;
+  weight?: number;
 }
 
 function StatCard({ label, value }: { label: string; value: string }) {
@@ -18,7 +19,7 @@ function StatCard({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function StatCards({ peopleScored, avgComposite, topScore, departmentCount, mostRecentScoredAt }: Props) {
+export function StatCards({ peopleScored, avgComposite, topScore, departmentCount, mostRecentScoredAt, weight: _weight = 0.55 }: Props) {
   const freshnessLabel = mostRecentScoredAt === null
     ? 'Scores updated never — run the scoring agent'
     : `Scores updated ${formatRelativeTime(mostRecentScoredAt)}`;

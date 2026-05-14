@@ -7,9 +7,10 @@ interface Props {
   onSelect: (id: string | null) => void;
   deptColors: Record<string, string>;
   rankedBy?: string | null;
+  weight?: number;
 }
 
-export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedBy }: Props) {
+export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedBy, weight = 0.55 }: Props) {
   return (
     <Card padding="md">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
@@ -29,7 +30,7 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
           </span>
         ) : (
           <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-text-tertiary)' }}>
-            composite = 0.55 × influence (PageRank) + 0.45 × expertise (skill-weighted in-degree)
+            composite = {Math.round(weight * 100)}% × influence + {Math.round((1 - weight) * 100)}% × expertise
           </span>
         )}
       </div>
@@ -49,9 +50,10 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
             const selected = s.personId === selectedId;
             const inf01 = Math.min(1, Math.max(0, s.influence > 1 ? s.influence / 100 : s.influence));
             const exp01 = Math.min(1, Math.max(0, s.expertise > 1 ? s.expertise / 100 : s.expertise));
-            const infW = 60 * 0.55 * inf01;
-            const expW = 60 * 0.45 * exp01;
-            const tooltip = `55% influence (${Math.round(0.55 * inf01 * 100)}) + 45% expertise (${Math.round(0.45 * exp01 * 100)})`;
+            const compositeFromWeight = Math.round(weight * inf01 * 100 + (1 - weight) * exp01 * 100);
+            const infW = 60 * weight * inf01;
+            const expW = 60 * (1 - weight) * exp01;
+            const tooltip = `${Math.round(weight * 100)}% influence (${Math.round(weight * inf01 * 100)}) + ${Math.round((1 - weight) * 100)}% expertise (${Math.round((1 - weight) * exp01 * 100)})`;
             return (
               <TableRow
                 key={s.personId}
@@ -72,7 +74,7 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
                   {Math.round(s.expertise)}
                 </TableTd>
                 <TableTd style={{ textAlign: 'right', fontWeight: 600 }}>
-                  {s.composite}
+                  {compositeFromWeight}
                   <div title={tooltip} style={{ marginTop: 4 }}>
                     <svg width={60} height={6} style={{ display: 'block', marginLeft: 'auto' }}>
                       <rect x={0}    y={0} width={infW} height={6} rx={2} fill="var(--color-primary, #6366f1)" />

@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import { PageSection } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { ScoreEntry, PersonDetail, DEPT_COLORS } from '../components/scores/types';
@@ -7,8 +8,10 @@ import { DepartmentFilter } from '../components/scores/DepartmentFilter';
 import { Leaderboard } from '../components/scores/Leaderboard';
 import { PersonDetailCard } from '../components/scores/PersonDetailCard';
 import { SkillFilter } from '../components/scores/SkillFilter';
+import { WeightSlider } from '../components/scores/WeightSlider';
 
 function ScoresPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [skillFilter, setSkillFilter] = useState<string>('');
   const leaderboardUrl = skillFilter
     ? `/api/scores/by-skill?skill=${encodeURIComponent(skillFilter)}&limit=100`
@@ -17,14 +20,36 @@ function ScoresPage() {
   const [deptFilter, setDeptFilter] = useState<string>('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  const rawW = parseFloat(searchParams.get('w') ?? '');
+  const initWeight = isNaN(rawW) || rawW < 0 || rawW > 1 ? 0.55 : rawW;
+  const [weight, setWeight] = useState<number>(initWeight);
+
+  useEffect(() => {
+    if (weight === 0.55) {
+      setSearchParams((prev: URLSearchParams) => { prev.delete('w'); return prev; }, { replace: true });
+    } else {
+      setSearchParams({ w: weight.toString() }, { replace: true });
+    }
+  }, [weight]);
+
   const { data: detail } = useFetch<PersonDetail>(
     selectedId ? `/api/graph/people/${encodeURIComponent(selectedId)}` : '',
   );
 
-  const filtered = useMemo(() => {
+  const reweighted = useMemo(() => {
     if (!data) return [];
-    return deptFilter ? data.entries.filter(e => e.department === deptFilter) : data.entries;
-  }, [data, deptFilter]);
+    const list = data.entries.map(e => ({
+      ...e,
+      composite: Math.round(weight * e.influence + (1 - weight) * e.expertise),
+    }));
+    list.sort((a, b) => b.composite - a.composite);
+    return list;
+  }, [data, weight]);
+
+  const filtered = useMemo(() => {
+    if (!reweighted.length) return [];
+    return deptFilter ? reweighted.filter(e => e.department === deptFilter) : reweighted;
+  }, [reweighted, deptFilter]);
 
   const departments = useMemo(() => {
     if (!data) return [];
@@ -56,9 +81,12 @@ function ScoresPage() {
         topScore={top}
         departmentCount={departments.length}
         mostRecentScoredAt={data.mostRecentScoredAt ?? null}
+        weight={weight}
       />
 
       <SkillFilter selectedSkill={skillFilter} onChange={setSkillFilter} />
+
+      <WeightSlider value={weight} onChange={setWeight} />
 
       <DepartmentFilter
         departments={departments}
@@ -74,6 +102,7 @@ function ScoresPage() {
           onSelect={setSelectedId}
           deptColors={DEPT_COLORS}
           rankedBy={skillFilter || null}
+          weight={weight}
         />
 
         {detail && (
