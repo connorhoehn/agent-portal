@@ -24,6 +24,8 @@ import type {
   Leaderboard,
   ScoreEntry,
   SkillSummary,
+  CohortStats,
+  BrokerSummary,
 } from './types.js';
 
 import {
@@ -475,6 +477,122 @@ async function realGetScore(personId: string): Promise<ScoreEntry | null> {
   };
 }
 
+async function realGetCohorts(): Promise<CohortStats[]> {
+  // ── 1. Per-department aggregates ────────────────────────────────────────────
+  const aggRows = await exec(
+    `SELECT team,
+            COUNT(*) AS cnt,
+            AVG(COALESCE(composite_score, 0)) AS mean_composite,
+            PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY COALESCE(composite_score, 0)) AS median_composite,
+            SUM(CASE WHEN COALESCE(composite_score, 0) < 20  THEN 1 ELSE 0 END) AS b0,
+            SUM(CASE WHEN COALESCE(composite_score, 0) >= 20
+                      AND COALESCE(composite_score, 0) < 40  THEN 1 ELSE 0 END) AS b1,
+            SUM(CASE WHEN COALESCE(composite_score, 0) >= 40
+                      AND COALESCE(composite_score, 0) < 60  THEN 1 ELSE 0 END) AS b2,
+            SUM(CASE WHEN COALESCE(composite_score, 0) >= 60
+                      AND COALESCE(composite_score, 0) < 80  THEN 1 ELSE 0 END) AS b3,
+            SUM(CASE WHEN COALESCE(composite_score, 0) >= 80  THEN 1 ELSE 0 END) AS b4
+       FROM people
+      WHERE team IS NOT NULL AND team <> ''
+      GROUP BY team
+      ORDER BY team`,
+  );
+
+  // ── 2. Gini coefficients per department ─────────────────────────────────────
+  const giniRows = await exec(
+    `WITH ranked AS (
+       SELECT team, expertise_score,
+              ROW_NUMBER() OVER (PARTITION BY team ORDER BY expertise_score) AS rn,
+              COUNT(*) OVER (PARTITION BY team) AS n,
+              SUM(expertise_score) OVER (PARTITION BY team) AS total
+         FROM people
+        WHERE expertise_score IS NOT NULL AND team IS NOT NULL AND team <> ''
+     )
+     SELECT team,
+            MAX(n) AS n,
+            MAX(total) AS total,
+            (2.0 * SUM(rn * expertise_score)) / NULLIF(MAX(n) * MAX(total), 0)
+              - (MAX(n) + 1.0) / NULLIF(MAX(n), 0) AS gini
+       FROM ranked
+      GROUP BY team`,
+  );
+  const giniByDept = new Map<string, number>();
+  for (const r of giniRows) {
+    const dept = toStr(r.team);
+    const n = toNumber(r.n, 0);
+    const total = toNumber(r.total, 0);
+    const gini = n < 2 || total === 0 ? 0 : Math.max(0, Math.min(1, toNumber(r.gini, 0)));
+    giniByDept.set(dept, gini);
+  }
+
+  // ── 3. Broker detection ─────────────────────────────────────────────────────
+  // Top-3 collaborators per person (by weight DESC); broker = top-3 from ≥3 distinct depts.
+  const brokerRows = await exec(
+    `WITH top3 AS (
+       SELECT c.person_a_id AS person_id,
+              p2.team AS collab_team,
+              ROW_NUMBER() OVER (
+                PARTITION BY c.person_a_id
+                ORDER BY c.weight DESC NULLS LAST
+              ) AS rn
+         FROM collaborations c
+         JOIN people p2 ON p2.id = c.person_b_id
+        WHERE p2.team IS NOT NULL AND p2.team <> ''
+       UNION ALL
+       SELECT c.person_b_id AS person_id,
+              p2.team AS collab_team,
+              ROW_NUMBER() OVER (
+                PARTITION BY c.person_b_id
+                ORDER BY c.weight DESC NULLS LAST
+              ) AS rn
+         FROM collaborations c
+         JOIN people p2 ON p2.id = c.person_a_id
+        WHERE p2.team IS NOT NULL AND p2.team <> ''
+     ),
+     filtered AS (
+       SELECT person_id, collab_team FROM top3 WHERE rn <= 3
+     ),
+     broker_check AS (
+       SELECT person_id, COUNT(DISTINCT collab_team) AS dept_count
+         FROM filtered
+        GROUP BY person_id
+       HAVING COUNT(DISTINCT collab_team) >= 3
+     )
+     SELECT p.id, p.name, p.team, bc.dept_count
+       FROM broker_check bc
+       JOIN people p ON p.id = bc.person_id
+      WHERE p.team IS NOT NULL AND p.team <> ''
+      ORDER BY p.team, bc.dept_count DESC`,
+  );
+  const brokersByDept = new Map<string, BrokerSummary[]>();
+  for (const r of brokerRows) {
+    const dept = toStr(r.team);
+    const list = brokersByDept.get(dept) ?? [];
+    list.push({ id: toStr(r.id), name: toStr(r.name), departmentsTouched: toNumber(r.dept_count, 3) });
+    brokersByDept.set(dept, list);
+  }
+
+  // ── 4. Assemble ─────────────────────────────────────────────────────────────
+  return aggRows.map<CohortStats>((r) => {
+    const dept = toStr(r.team);
+    return {
+      department: dept,
+      count: toNumber(r.cnt, 0),
+      medianComposite: toNumber(r.median_composite, 0),
+      meanComposite: toNumber(r.mean_composite, 0),
+      compositeBuckets: [
+        toNumber(r.b0, 0),
+        toNumber(r.b1, 0),
+        toNumber(r.b2, 0),
+        toNumber(r.b3, 0),
+        toNumber(r.b4, 0),
+      ],
+      expertiseGini: giniByDept.get(dept) ?? 0,
+      brokers: brokersByDept.get(dept) ?? [],
+    };
+  });
+}
+
 export const realAurora: AuroraProvider = {
   fetchGraph: realFetchGraph,
   fetchPersonGraph: realFetchPersonGraph,
@@ -482,6 +600,7 @@ export const realAurora: AuroraProvider = {
   getScore: realGetScore,
   getSkillLeaderboard: realGetSkillLeaderboard,
   getTopSkills: realGetTopSkills,
+  getCohorts: realGetCohorts,
 };
 
 // ─── Mock provider — wraps the existing mock arrays in the AuroraProvider shape.
@@ -537,6 +656,69 @@ async function mockGetTopSkills(_limit?: number): Promise<SkillSummary[]> {
   return [];
 }
 
+async function mockGetCohorts(): Promise<CohortStats[]> {
+  // Build cohort stats from the in-memory mock data.
+  const deptMap = new Map<string, typeof mockScores>();
+  for (const s of mockScores) {
+    const list = deptMap.get(s.department) ?? [];
+    list.push(s);
+    deptMap.set(s.department, list);
+  }
+
+  const results: CohortStats[] = [];
+  for (const [dept, entries] of deptMap) {
+    const sorted = [...entries].sort((a, b) => a.composite - b.composite);
+    const n = sorted.length;
+    const mean = entries.reduce((sum, e) => sum + e.composite, 0) / n;
+    const median =
+      n % 2 === 0
+        ? ((sorted[n / 2 - 1]?.composite ?? 0) + (sorted[n / 2]?.composite ?? 0)) / 2
+        : (sorted[Math.floor(n / 2)]?.composite ?? 0);
+
+    const bucket = (v: number): number => {
+      if (v < 20) return 0;
+      if (v < 40) return 1;
+      if (v < 60) return 2;
+      if (v < 80) return 3;
+      return 4;
+    };
+    const compositeBuckets: [number, number, number, number, number] = [0, 0, 0, 0, 0];
+    for (const e of entries) compositeBuckets[bucket(e.composite)]++;
+
+    // Gini on expertise_score within dept.
+    const expertiseVals = [...entries].map((e) => e.expertise).sort((a, b) => a - b);
+    const total = expertiseVals.reduce((s, v) => s + v, 0);
+    let gini = 0;
+    if (expertiseVals.length >= 2 && total > 0) {
+      const weightedSum = expertiseVals.reduce((s, v, i) => s + (i + 1) * v, 0);
+      gini = Math.max(0, (2 * weightedSum) / (n * total) - (n + 1) / n);
+    }
+
+    // Mock brokers: people in this dept that collaborate outside it.
+    // Use mockRelationships to find cross-dept connections.
+    const mockPeopleById = new Map((mockPeople as Person[]).map((p) => [p.id, p]));
+    const deptPeople = (mockPeople as Person[]).filter((p) => p.department === dept);
+    const brokers: BrokerSummary[] = [];
+    for (const person of deptPeople) {
+      const connected = (mockRelationships as Array<{ source: string; target: string }>)
+        .filter((r) => r.source === person.id || r.target === person.id)
+        .map((r) => (r.source === person.id ? r.target : r.source));
+      const connectedDepts = new Set(
+        connected
+          .map((id) => mockPeopleById.get(id)?.department)
+          .filter((d): d is string => !!d && d !== dept),
+      );
+      if (connectedDepts.size >= 3) {
+        brokers.push({ id: person.id, name: person.name, departmentsTouched: connectedDepts.size });
+      }
+    }
+
+    results.push({ department: dept, count: n, medianComposite: median, meanComposite: mean, compositeBuckets, expertiseGini: gini, brokers });
+  }
+
+  return results.sort((a, b) => a.department.localeCompare(b.department));
+}
+
 export const mockAurora: AuroraProvider = {
   fetchGraph: mockFetchGraph,
   fetchPersonGraph: mockFetchPersonGraph,
@@ -544,4 +726,5 @@ export const mockAurora: AuroraProvider = {
   getScore: mockGetScore,
   getSkillLeaderboard: mockGetSkillLeaderboard,
   getTopSkills: mockGetTopSkills,
+  getCohorts: mockGetCohorts,
 };

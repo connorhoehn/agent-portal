@@ -68,6 +68,25 @@ export interface SkillSummary {
   mentionCount: number;
 }
 
+export interface BrokerSummary {
+  id: string;
+  name: string;
+  departmentsTouched: number;
+}
+
+export interface CohortStats {
+  department: string;
+  count: number;
+  medianComposite: number;
+  meanComposite: number;
+  /** Histogram counts for buckets 0-20, 20-40, 40-60, 60-80, 80-100 */
+  compositeBuckets: [number, number, number, number, number];
+  /** Gini coefficient of expertise_score within the department (0..1) */
+  expertiseGini: number;
+  /** People in this dept whose top-3 collaborators span ≥3 distinct depts */
+  brokers: BrokerSummary[];
+}
+
 export interface AuroraProvider {
   fetchGraph(): Promise<GraphSnapshot>;
   fetchPersonGraph(personId: string): Promise<PersonDetail | null>;
@@ -75,6 +94,7 @@ export interface AuroraProvider {
   getScore(personId: string): Promise<ScoreEntry | null>;
   getSkillLeaderboard(opts: { skill: string; limit?: number }): Promise<Leaderboard>;
   getTopSkills(limit?: number): Promise<SkillSummary[]>;
+  getCohorts(): Promise<CohortStats[]>;
 }
 
 // ── AgentCore (runtimes, memory, gateway, capabilities sessions) ───────────────

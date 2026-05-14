@@ -29,6 +29,11 @@ scoresRouter.get('/by-skill', asyncHandler(async (req, res) => {
   res.json(result);
 }));
 
+scoresRouter.get('/cohorts', asyncHandler(async (_req, res) => {
+  const cohorts = await aurora.getCohorts();
+  res.json(cohorts);
+}));
+
 scoresRouter.get('/:personId', asyncHandler(async (req, res) => {
   const score = await aurora.getScore(req.params['personId'] as string);
   if (!score) { res.status(404).json({ error: 'Score not found' }); return; }
