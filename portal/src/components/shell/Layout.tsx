@@ -3,6 +3,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { MasqueradeMenu } from './MasqueradeMenu';
 import { CommandPalette, CommandPaletteHint } from './CommandPalette';
+import { TenantSwitcher } from './TenantSwitcher';
 
 interface Health {
   status: string;
@@ -97,15 +98,17 @@ export function Layout() {
       <main style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
         <header style={{
           display: 'flex',
-          justifyContent: 'flex-end',
+          justifyContent: 'space-between',
           alignItems: 'center',
-          gap: 12,
           padding: '10px 24px',
           borderBottom: '1px solid var(--color-border)',
           background: 'var(--color-surface)',
         }}>
-          <CommandPaletteHint />
-          <MasqueradeMenu />
+          <TenantSwitcher />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <CommandPaletteHint />
+            <MasqueradeMenu />
+          </div>
         </header>
         <div style={{ flex: 1, overflow: 'auto', padding: 24 }}>
           <Outlet />
