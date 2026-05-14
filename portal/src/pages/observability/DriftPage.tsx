@@ -38,6 +38,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { CostChip } from '../../components/observability/CostChip';
 import { PromptVersionChip } from '../../components/observability/PromptVersionChip';
 import { SaveAsTestCaseModal } from '../../components/observability/SaveAsTestCaseModal';
+import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 
 interface DriftSummary {
   agentId: string;
@@ -205,7 +206,17 @@ function DriftPage() {
           <WindowPicker value={windowIdx} onChange={setWindowIdx} />
         </div>
         {rows.length === 0 ? (
-          <EmptyState text="No invocations sampled yet. Drift detection activates after the first sampled invocation." />
+          <SmartEmptyState
+            title="No invocations sampled yet"
+            detail="Drift detection activates after the first sampled invocation. Live-mode harness produces ~10 sampled traces with embeddings."
+            actions={[
+              {
+                label: 'Run the test harness',
+                detail: 'Generates ~10 traces in ~30s.',
+                code: 'python3 infra/scripts/harness.py run --mode live --label "drift-seed@$(git rev-parse --short HEAD)"',
+              },
+            ]}
+          />
         ) : (
           <Table>
             <TableHead>

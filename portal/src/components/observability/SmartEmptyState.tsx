@@ -1,0 +1,200 @@
+// Researcher-friendly empty state. Renders a centered card with a title,
+// optional detail, and 0-3 actions the user can take to make data appear.
+// Each action can be a copy-paste shell command (`code`) and/or an in-app
+// link (`href`).
+//
+// Visually consistent across observability pages: same max width, same
+// padding, same spacing. Use this in place of generic "no data yet" copy.
+
+import { useState } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
+import { Link } from 'react-router';
+
+export interface SmartEmptyAction {
+  label: string;
+  detail?: string;
+  code?: string;
+  href?: string;
+}
+
+export interface SmartEmptyStateProps {
+  title: string;
+  detail?: string;
+  actions?: SmartEmptyAction[];
+  // Optional override slot — researchers sometimes need extra context (e.g. a
+  // chart that already explains the empty state).
+  children?: ReactNode;
+}
+
+export function SmartEmptyState({
+  title,
+  detail,
+  actions = [],
+  children,
+}: SmartEmptyStateProps) {
+  return (
+    <div style={wrapperStyle}>
+      <div style={cardStyle}>
+        <div style={titleStyle}>{title}</div>
+        {detail && <div style={detailStyle}>{detail}</div>}
+        {actions.length > 0 && (
+          <div style={actionsListStyle}>
+            {actions.map((a, i) => (
+              <ActionRow key={i} action={a} />
+            ))}
+          </div>
+        )}
+        {children && <div style={childrenStyle}>{children}</div>}
+      </div>
+    </div>
+  );
+}
+
+function ActionRow({ action }: { action: SmartEmptyAction }) {
+  const [copied, setCopied] = useState(false);
+
+  function onCopy() {
+    if (!action.code) return;
+    try {
+      void navigator.clipboard.writeText(action.code);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard unavailable — silent failure is fine here
+    }
+  }
+
+  const labelNode = action.href ? (
+    action.href.startsWith('/') ? (
+      <Link to={action.href} style={linkStyle}>
+        {action.label}
+      </Link>
+    ) : (
+      <a href={action.href} target="_blank" rel="noreferrer" style={linkStyle}>
+        {action.label}
+      </a>
+    )
+  ) : (
+    <span style={labelStyle}>{action.label}</span>
+  );
+
+  return (
+    <div style={actionRowStyle}>
+      <div style={actionHeadStyle}>
+        <span style={bulletStyle}>›</span>
+        {labelNode}
+      </div>
+      {action.detail && <div style={actionDetailStyle}>{action.detail}</div>}
+      {action.code && (
+        <div style={codeWrapStyle}>
+          <pre style={codeStyle}>{action.code}</pre>
+          <button
+            type="button"
+            onClick={onCopy}
+            style={copyBtnStyle}
+            title="Copy command"
+          >
+            {copied ? '✓ copied' : 'Copy'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const wrapperStyle: CSSProperties = {
+  display: 'flex',
+  justifyContent: 'center',
+  padding: '24px 16px',
+};
+const cardStyle: CSSProperties = {
+  maxWidth: 560,
+  width: '100%',
+  padding: '20px 22px',
+  border: '1px dashed var(--color-border)',
+  borderRadius: 'var(--radius-md, 6px)',
+  background: 'var(--color-surface)',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 10,
+};
+const titleStyle: CSSProperties = {
+  fontSize: 14,
+  fontWeight: 600,
+  color: 'var(--color-text-primary)',
+};
+const detailStyle: CSSProperties = {
+  fontSize: 12,
+  color: 'var(--color-text-secondary)',
+  lineHeight: 1.5,
+};
+const actionsListStyle: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 10,
+  marginTop: 4,
+};
+const actionRowStyle: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 4,
+};
+const actionHeadStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'baseline',
+  gap: 6,
+  fontSize: 12.5,
+};
+const bulletStyle: CSSProperties = {
+  color: 'var(--color-text-tertiary)',
+  fontFamily: 'ui-monospace, monospace',
+};
+const labelStyle: CSSProperties = {
+  color: 'var(--color-text-primary)',
+  fontWeight: 500,
+};
+const linkStyle: CSSProperties = {
+  color: 'var(--color-primary, #6366f1)',
+  fontWeight: 500,
+  textDecoration: 'none',
+};
+const actionDetailStyle: CSSProperties = {
+  fontSize: 11.5,
+  color: 'var(--color-text-tertiary)',
+  paddingLeft: 14,
+};
+const codeWrapStyle: CSSProperties = {
+  position: 'relative',
+  marginLeft: 14,
+};
+const codeStyle: CSSProperties = {
+  margin: 0,
+  padding: '8px 64px 8px 10px',
+  fontFamily: '"Fira Code", "Cascadia Code", ui-monospace, monospace',
+  fontSize: 11.5,
+  lineHeight: 1.5,
+  background: 'var(--color-bg)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-sm, 4px)',
+  color: 'var(--color-text-primary)',
+  whiteSpace: 'pre-wrap',
+  wordBreak: 'break-all',
+};
+const copyBtnStyle: CSSProperties = {
+  position: 'absolute',
+  top: 6,
+  right: 6,
+  padding: '2px 8px',
+  fontSize: 10.5,
+  fontFamily: 'inherit',
+  background: 'var(--color-surface)',
+  color: 'var(--color-text-secondary)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-sm, 4px)',
+  cursor: 'pointer',
+};
+const childrenStyle: CSSProperties = {
+  marginTop: 6,
+};
+
+export default SmartEmptyState;

@@ -24,6 +24,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { GuardrailRuleBadge } from '../../components/observability/GuardrailRuleBadge';
+import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 
 // ── Types (mirrored from middleware/src/routes/guardrails-detail.ts) ───────
 
@@ -109,7 +110,17 @@ function GuardrailRulesPage() {
           <WindowPicker value={windowIdx} onChange={(i) => { setWindowIdx(i); setSelectedRule(null); }} />
         </div>
         {rules.length === 0 ? (
-          <EmptyState text="No guardrail interventions in this window. Rules surface here as soon as Bedrock Guardrails fires." />
+          <SmartEmptyState
+            title="No interventions yet"
+            detail="Rules surface here as soon as Bedrock Guardrails fires a block or anonymize action."
+            actions={[
+              {
+                label: 'Seed synthetic guardrail interventions',
+                detail: 'Inserts a representative spread of PII / topic / content interventions.',
+                code: 'python3 infra/scripts/seed_memory_guardrail_events.py',
+              },
+            ]}
+          />
         ) : (
           <Table>
             <TableHead>

@@ -43,6 +43,7 @@ import {
 } from 'recharts';
 import { useFetch } from '../../hooks/useFetch';
 import { CostChip } from '../../components/observability/CostChip';
+import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -415,7 +416,17 @@ function CostPage() {
           </h2>
         </div>
         {chartData.length === 0 ? (
-          <EmptyState text="No cost samples in this window yet." />
+          <SmartEmptyState
+            title="No cost data"
+            detail="Cost rows arrive on the trace bundle, alongside input/output token counts."
+            actions={[
+              {
+                label: 'Run the test harness',
+                detail: 'Generates ~10 sampled traces with token + cost data in ~30s.',
+                code: 'python3 infra/scripts/harness.py run --mode live --label "drift-seed@$(git rev-parse --short HEAD)"',
+              },
+            ]}
+          />
         ) : (
           <div style={{ width: '100%', height: 300 }}>
             <ResponsiveContainer>

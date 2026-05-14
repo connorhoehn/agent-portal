@@ -23,6 +23,7 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { CostChip } from '../../components/observability/CostChip';
 import { PromptVersionChip } from '../../components/observability/PromptVersionChip';
+import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 
 interface InvocationSearchResult {
   invocationId: string;
@@ -357,13 +358,14 @@ function InvocationSearchPage() {
           />
         )}
         {applied && !error && rows.length === 0 && (
-          <EmptyState
-            text={
-              isLoading
-                ? 'Searching…'
-                : 'No invocations match. Try widening the time range or removing filters.'
-            }
-          />
+          isLoading ? (
+            <EmptyState text="Searching…" />
+          ) : (
+            <SmartEmptyState
+              title="No invocations match"
+              detail="Try widening the time range or removing filters."
+            />
+          )
         )}
         {applied && !error && rows.length > 0 && (
           <>

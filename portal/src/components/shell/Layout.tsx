@@ -2,6 +2,7 @@ import { NavLink, Outlet } from 'react-router';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { MasqueradeMenu } from './MasqueradeMenu';
+import { CommandPalette, CommandPaletteHint } from './CommandPalette';
 
 interface Health {
   status: string;
@@ -92,16 +93,19 @@ export function Layout() {
           display: 'flex',
           justifyContent: 'flex-end',
           alignItems: 'center',
+          gap: 12,
           padding: '10px 24px',
           borderBottom: '1px solid var(--color-border)',
           background: 'var(--color-surface)',
         }}>
+          <CommandPaletteHint />
           <MasqueradeMenu />
         </header>
         <div style={{ flex: 1, overflow: 'auto', padding: 24 }}>
           <Outlet />
         </div>
       </main>
+      <CommandPalette />
     </div>
   );
 }
