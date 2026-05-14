@@ -13,7 +13,6 @@ import { AgentCoreGatewayStack } from '../lib/agentcore-gateway-stack';
 import { AgentCoreTelemetryStack } from '../lib/agentcore-telemetry-stack';
 import { AgentCoreCapabilitiesStack } from '../lib/agentcore-capabilities-stack';
 import { AuthorizationStack } from '../lib/authorization-stack';
-import { OtelCollectorStack } from '../lib/otel-collector-stack';
 import { SpanProjectorStack } from '../lib/span-projector-stack';
 
 const app = new cdk.App();
@@ -231,21 +230,7 @@ agentCoreTelemetry.addDependency(agentCoreGateway);
 void authorization;
 
 // -------------------------------------------------------------------
-// Stack 13: OTel Collector (ADOT on ECS Fargate — OI phase 2)
-// Receives OTLP gRPC + HTTP from agent runtimes, exports to CloudWatch
-// Logs (/orgiq/otel/spans) and X-Ray. Phase 3 span projector will
-// subscribe to the log group exported by this stack.
-// -------------------------------------------------------------------
-new OtelCollectorStack(app, 'OrgIQ-OTelCollector', {
-  env,
-  // FoundationStack does not export a VPC; the collector falls back to the
-  // account's default VPC. Pass a vpc prop here once a shared VPC is available.
-  stage: 'dev',
-  description: 'OrgIQ OTel Collector: ADOT Fargate service exporting OTLP spans to CloudWatch + X-Ray',
-});
-
-// -------------------------------------------------------------------
-// Stack 14: Span Projector (OI Phase 3)
+// Stack 13: Span Projector (OI Phase 3)
 // Polls CloudWatch Logs Insights for OI-attributed OTel spans and projects
 // each trace into observability.invocation_traces + observability.tool_calls.
 // Runs on a 1-minute EventBridge schedule. Idempotent.
