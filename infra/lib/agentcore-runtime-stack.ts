@@ -63,6 +63,16 @@ const AGENT_NAMES = [
   'graph-builder',
 ] as const;
 
+// News agents — ECR repos exist externally (created via `aws ecr create-repository`
+// before the stack knew about these names). Imported rather than created here.
+const EXTERNAL_AGENT_NAMES = [
+  'news-researcher',
+  'news-brief',
+  'news-headline',
+] as const;
+
+const ALL_AGENT_NAMES = [...AGENT_NAMES, ...EXTERNAL_AGENT_NAMES] as const;
+
 /**
  * OrgIQ-AgentCoreRuntime: ECR repos, execution roles, and CfnRuntime resources.
  *
@@ -75,7 +85,7 @@ const AGENT_NAMES = [
  */
 export class AgentCoreRuntimeStack extends cdk.Stack {
   public readonly runtimeIds: Record<string, string> = {};
-  public readonly ecrRepos: Record<string, ecr.Repository> = {};
+  public readonly ecrRepos: Record<string, ecr.IRepository> = {};
 
   constructor(scope: Construct, id: string, props: AgentCoreRuntimeStackProps) {
     super(scope, id, props);
@@ -112,22 +122,33 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
       exportName: `${prefix}-agent-base-ecr-uri`,
     });
 
-    for (const agentName of AGENT_NAMES) {
+    for (const agentName of ALL_AGENT_NAMES) {
       const agentRole = props.agentRoles[agentName];
-      if (!agentRole) continue;
+      // External agents (news-*) are not registered in AgentsStack, so they won't
+      // have an entry in props.agentRoles. Allow them through — the runtime stack
+      // creates its own execution role for every agent regardless.
+      const isExternal = (EXTERNAL_AGENT_NAMES as readonly string[]).includes(agentName);
+      if (!agentRole && !isExternal) continue;
 
       const pascal = this.pascal(agentName);
       const runtimeName = `${prefix}-${agentName}`;
       // agentRuntimeName and endpoint name must match [a-zA-Z][a-zA-Z0-9_]{0,47} — no hyphens
       const safeRuntimeName = `${prefix}_${agentName.replace(/-/g, '_')}`;
 
-      // ECR repo for agent container image (built by `docker buildx --platform linux/arm64`)
-      const repo = new ecr.Repository(this, `${pascal}Repo`, {
-        repositoryName: runtimeName,
-        removalPolicy: cdk.RemovalPolicy.DESTROY,
-        emptyOnDelete: true,
-        lifecycleRules: [{ maxImageCount: 5 }],
-      });
+      // ECR repo — created for internally-managed agents, imported for externally-managed.
+      // News agent repos were created manually before the stack covered them; importing
+      // avoids "repository already exists" errors while still wiring up the runtime.
+      let repo: ecr.IRepository;
+      if (isExternal) {
+        repo = ecr.Repository.fromRepositoryName(this, `${pascal}Repo`, runtimeName);
+      } else {
+        repo = new ecr.Repository(this, `${pascal}Repo`, {
+          repositoryName: runtimeName,
+          removalPolicy: cdk.RemovalPolicy.DESTROY,
+          emptyOnDelete: true,
+          lifecycleRules: [{ maxImageCount: 5 }],
+        });
+      }
       this.ecrRepos[agentName] = repo;
 
       // Runtime execution role — trusted by bedrock-agentcore service
