@@ -249,12 +249,11 @@ export async function getArticle(id: string): Promise<ArticleDetail | null> {
     let sourceRows: Record<string, unknown>[] = [];
     try {
       sourceRows = await exec(
-        `SELECT
-           s.id, s.entity_name, s.source_type,
-           s.attribution, s.quote_snippet
+        `SELECT s.id, s.source_type, s.attribution, s.quote_snippet, s.entity_id, e.name AS entity_name
          FROM sources s
-         WHERE s.document_id = :id
-         ORDER BY s.id`,
+         LEFT JOIN entities e ON e.id = s.entity_id
+         WHERE s.article_id = :id
+         ORDER BY s.created_at ASC`,
         [strParam('id', id)],
       );
     } catch {

@@ -356,7 +356,7 @@ function RunDetailPage() {
               onPick={(baselineId) => {
                 if (!baselineId) return;
                 navigate(
-                  `/observability/harness/compare/${encodeURIComponent(baselineId)}/${encodeURIComponent(runId)}`,
+                  `/admin/observability/harness/compare/${encodeURIComponent(baselineId)}/${encodeURIComponent(runId)}`,
                 );
               }}
             />
@@ -487,7 +487,7 @@ function RunDetailPage() {
                           {r.testId}
                           {r.invocationId && (
                             <Link
-                              to={`/observability/invocations/${r.invocationId}`}
+                              to={`/admin/observability/invocations/${r.invocationId}`}
                               onClick={(e) => e.stopPropagation()}
                               title="Open invocation detail"
                               style={inlineOpenLink}
@@ -664,7 +664,7 @@ function ResultDetail({ result }: { result: TestResult }) {
               <span style={dot}>·</span>
               invocation:{' '}
               <Link
-                to={`/observability/invocations/${result.invocationId}`}
+                to={`/admin/observability/invocations/${result.invocationId}`}
                 style={{ ...monoInline, color: 'var(--color-primary, #6366f1)' }}
                 title="Open invocation detail"
               >

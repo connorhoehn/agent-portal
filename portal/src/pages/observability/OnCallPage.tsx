@@ -366,7 +366,7 @@ function OnCallPage() {
             <span style={hint}>approval-queue health · window {win.label}</span>
           </h3>
           {hitl ? (
-            <HitlSlaBody hitl={hitl} onViewQueue={() => navigate('/observability/approvals')} />
+            <HitlSlaBody hitl={hitl} onViewQueue={() => navigate('/admin/observability/approvals')} />
           ) : (
             <EmptyState text="Loading approval-queue stats…" />
           )}
@@ -389,7 +389,7 @@ function OnCallPage() {
                   event={e}
                   onClick={() => {
                     if (e.relatedInvocationId) {
-                      navigate(`/observability/invocations/${e.relatedInvocationId}`);
+                      navigate(`/admin/observability/invocations/${e.relatedInvocationId}`);
                     }
                   }}
                 />

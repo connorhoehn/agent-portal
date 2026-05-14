@@ -325,7 +325,7 @@ function HarnessHomePage() {
           <ActiveRunBanner
             runId={activeRunId}
             status={activeStatus}
-            onView={() => navigate(`/observability/harness/runs/${activeRunId}`)}
+            onView={() => navigate(`/admin/observability/harness/runs/${activeRunId}`)}
             onDismiss={() => setActiveDismissed(true)}
           />
         )}
@@ -456,7 +456,7 @@ function HarnessHomePage() {
                     <TableTd>
                       <button
                         style={btnLink}
-                        onClick={() => navigate(`/observability/harness/runs/${r.runId}`)}
+                        onClick={() => navigate(`/admin/observability/harness/runs/${r.runId}`)}
                       >
                         view
                       </button>

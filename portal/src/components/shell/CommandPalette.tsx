@@ -51,6 +51,7 @@ const PAGES: PageEntry[] = [
   { label: 'Search',             hint: 'Ask the org-search agent',            path: '/iq/search',                                  tenant: 'orgiq' },
   { label: 'Explore',            hint: 'Force-directed org graph',            path: '/iq/explore',                                 tenant: 'orgiq' },
   { label: 'Architecture',       hint: 'A2A agent topology',                  path: '/iq/agents',                                  tenant: 'orgiq' },
+  { label: 'Agent Tools',        hint: 'Multi-agent debug surface',           path: '/iq/invoke',                                  tenant: 'orgiq' },
   { label: 'Scores',             hint: 'Per-person influence leaderboard',    path: '/iq/scores',                                  tenant: 'orgiq' },
   { label: 'Decisions',          hint: 'Editorial / org-level decisions',     path: '/iq/decisions',                               tenant: 'orgiq' },
   { label: 'Projects',           hint: 'Project contributions + status',      path: '/iq/projects',                                tenant: 'orgiq' },

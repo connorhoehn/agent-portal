@@ -390,7 +390,7 @@ function InvocationSearchPage() {
                   <TableRow
                     key={r.invocationId}
                     onClick={() =>
-                      navigate(`/observability/invocations/${r.invocationId}`)
+                      navigate(`/admin/observability/invocations/${r.invocationId}`)
                     }
                     style={{ cursor: 'pointer' }}
                   >

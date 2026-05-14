@@ -213,7 +213,7 @@ function DecisionsPage() {
   );
 
   const handleOpen = (id: string) => {
-    void navigate(`/decisions/${encodeURIComponent(id)}`);
+    void navigate(`/iq/decisions/${encodeURIComponent(id)}`);
   };
 
   if (isLoading) {

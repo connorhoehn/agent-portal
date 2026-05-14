@@ -266,7 +266,7 @@ function ProjectsPage() {
                   </td>
                   <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                     <button
-                      onClick={() => navigate(`/projects/${project.id}`)}
+                      onClick={() => navigate(`/iq/projects/${project.id}`)}
                       style={{
                         padding: '4px 12px',
                         borderRadius: 6,

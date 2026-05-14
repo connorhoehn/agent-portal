@@ -459,7 +459,7 @@ function TrafficPage() {
                   </TableTd>
                   <TableTd style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <Link
-                      to={`/observability/invocations/search?userId=${encodeURIComponent(u.userId)}`}
+                      to={`/admin/observability/invocations/search?userId=${encodeURIComponent(u.userId)}`}
                       style={openLinkBtn}
                     >
                       →

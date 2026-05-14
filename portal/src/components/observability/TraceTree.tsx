@@ -62,7 +62,7 @@ export function TraceTree({ parent, current, children, currentInvocationId }: Pr
           ancestorIsLast={[]}
           isParent
           isCurrent={parent.invocationId === currentInvocationId}
-          onNavigate={(id) => navigate(`/observability/invocations/${id}`)}
+          onNavigate={(id) => navigate(`/admin/observability/invocations/${id}`)}
         />
       )}
       <Row
@@ -71,7 +71,7 @@ export function TraceTree({ parent, current, children, currentInvocationId }: Pr
         isLastSibling={kids.length === 0}
         ancestorIsLast={parent ? [true] : []}
         isCurrent={true}
-        onNavigate={(id) => navigate(`/observability/invocations/${id}`)}
+        onNavigate={(id) => navigate(`/admin/observability/invocations/${id}`)}
       />
       {kids.map((c, i) => (
         <SubTree
@@ -81,7 +81,7 @@ export function TraceTree({ parent, current, children, currentInvocationId }: Pr
           isLastSibling={i === kids.length - 1}
           ancestorIsLast={parent ? [true, kids.length === 0] : [kids.length === 0]}
           currentInvocationId={currentInvocationId}
-          onNavigate={(id) => navigate(`/observability/invocations/${id}`)}
+          onNavigate={(id) => navigate(`/admin/observability/invocations/${id}`)}
         />
       ))}
     </div>

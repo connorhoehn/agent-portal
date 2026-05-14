@@ -439,7 +439,7 @@ function DriftPage() {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              navigate(`/observability/invocations/${o.invocationId}`);
+                              navigate(`/admin/observability/invocations/${o.invocationId}`);
                             }}
                             title="Open invocation detail"
                             style={openLinkBtn}

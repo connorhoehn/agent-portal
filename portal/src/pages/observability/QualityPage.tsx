@@ -329,7 +329,7 @@ function QualityPage() {
                       }
                       onClick={() => {
                         if (r.invocationId) {
-                          navigate(`/observability/invocations/${r.invocationId}`);
+                          navigate(`/admin/observability/invocations/${r.invocationId}`);
                         }
                       }}
                     >

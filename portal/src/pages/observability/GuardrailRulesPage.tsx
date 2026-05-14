@@ -224,7 +224,7 @@ function GuardrailRulesPage() {
                     <TableTd style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                       {i.invocationId ? (
                         <Link
-                          to={`/observability/invocations/${i.invocationId}`}
+                          to={`/admin/observability/invocations/${i.invocationId}`}
                           style={btnLink}
                           title="Open invocation detail"
                         >

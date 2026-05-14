@@ -159,7 +159,7 @@ function InvocationDetailPage() {
         setToast(
           <span>
             Replayed in {(dur / 1000).toFixed(1)}s ·{' '}
-            <Link to={`/observability/invocations/${newId}`} style={btnLink}>
+            <Link to={`/admin/observability/invocations/${newId}`} style={btnLink}>
               open replay →
             </Link>
           </span>,

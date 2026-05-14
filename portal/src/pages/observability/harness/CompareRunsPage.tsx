@@ -290,10 +290,10 @@ function CompareRunsPage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <Link to={`/observability/harness/runs/${encodeURIComponent(runIdA)}`} style={btnLink}>
+            <Link to={`/admin/observability/harness/runs/${encodeURIComponent(runIdA)}`} style={btnLink}>
               ← Run A
             </Link>
-            <Link to={`/observability/harness/runs/${encodeURIComponent(runIdB)}`} style={btnLink}>
+            <Link to={`/admin/observability/harness/runs/${encodeURIComponent(runIdB)}`} style={btnLink}>
               Run B →
             </Link>
           </div>
@@ -536,7 +536,7 @@ function ResultsTable({
                 </TableTd>
                 <TableTd style={{ whiteSpace: 'nowrap' }}>
                   <Link
-                    to={`/observability/harness/runs/${encodeURIComponent(runIdA)}`}
+                    to={`/admin/observability/harness/runs/${encodeURIComponent(runIdA)}`}
                     onClick={(e) => e.stopPropagation()}
                     style={smallLink}
                     title="Open run A"
@@ -545,7 +545,7 @@ function ResultsTable({
                   </Link>
                   <span style={{ ...dot, margin: '0 4px' }}>·</span>
                   <Link
-                    to={`/observability/harness/runs/${encodeURIComponent(runIdB)}`}
+                    to={`/admin/observability/harness/runs/${encodeURIComponent(runIdB)}`}
                     onClick={(e) => e.stopPropagation()}
                     style={smallLink}
                     title="Open run B"

@@ -77,7 +77,7 @@ function ScoresPage() {
     const ids = Array.from(comparisonIds).join(',');
     const wParam = searchParams.get('w');
     const query = wParam ? `?ids=${ids}&w=${wParam}` : `?ids=${ids}`;
-    navigate(`/scores/compare${query}`);
+    navigate(`/iq/scores/compare${query}`);
   }, [comparisonIds, searchParams, navigate]);
 
   if (!data) return <div style={{ padding: 24, color: 'var(--color-text-tertiary)' }}>Loading scores...</div>;

@@ -261,3 +261,5 @@ const resetButtonStyle: React.CSSProperties = {
   cursor: 'pointer',
   padding: 0,
 };
+
+export default SettingsPage;

@@ -435,7 +435,7 @@ function ModelComparePage() {
                 Want a deeper view? Open the full Sprint 3 compare page:{' '}
               </span>
               <Link
-                to={`/observability/harness/compare/${encodeURIComponent(runIdA)}/${encodeURIComponent(runIdB)}`}
+                to={`/admin/observability/harness/compare/${encodeURIComponent(runIdA)}/${encodeURIComponent(runIdB)}`}
                 style={inlineLink}
               >
                 detailed compare →
