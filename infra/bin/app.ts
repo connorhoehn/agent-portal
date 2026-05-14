@@ -14,6 +14,7 @@ import { AgentCoreTelemetryStack } from '../lib/agentcore-telemetry-stack';
 import { AgentCoreCapabilitiesStack } from '../lib/agentcore-capabilities-stack';
 import { AuthorizationStack } from '../lib/authorization-stack';
 import { OtelCollectorStack } from '../lib/otel-collector-stack';
+import { SpanProjectorStack } from '../lib/span-projector-stack';
 
 const app = new cdk.App();
 
@@ -242,5 +243,21 @@ new OtelCollectorStack(app, 'OrgIQ-OTelCollector', {
   stage: 'dev',
   description: 'OrgIQ OTel Collector: ADOT Fargate service exporting OTLP spans to CloudWatch + X-Ray',
 });
+
+// -------------------------------------------------------------------
+// Stack 14: Span Projector (OI Phase 3)
+// Polls CloudWatch Logs Insights for OI-attributed OTel spans and projects
+// each trace into observability.invocation_traces + observability.tool_calls.
+// Runs on a 1-minute EventBridge schedule. Idempotent.
+// -------------------------------------------------------------------
+const spanProjector = new SpanProjectorStack(app, 'OrgIQ-SpanProjector', {
+  env,
+  auroraClusterArn: cdk.Fn.importValue(`${prefix}-aurora-cluster-arn`),
+  auroraSecretArn: cdk.Fn.importValue(`${prefix}-aurora-secret-arn`),
+  auroraDatabase: 'orgiq',
+  description: 'OrgIQ Span Projector: Lambda that projects OI OTel spans into Aurora observability tables',
+});
+spanProjector.addDependency(aurora);
+void spanProjector;
 
 app.synth();

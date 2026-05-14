@@ -1,0 +1,1 @@
+# No external dependencies — only boto3 (Lambda built-in) and stdlib are used.
