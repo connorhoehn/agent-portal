@@ -47,6 +47,11 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
         <TableBody>
           {entries.map((s, i) => {
             const selected = s.personId === selectedId;
+            const inf01 = Math.min(1, Math.max(0, s.influence > 1 ? s.influence / 100 : s.influence));
+            const exp01 = Math.min(1, Math.max(0, s.expertise > 1 ? s.expertise / 100 : s.expertise));
+            const infW = 60 * 0.55 * inf01;
+            const expW = 60 * 0.45 * exp01;
+            const tooltip = `55% influence (${Math.round(0.55 * inf01 * 100)}) + 45% expertise (${Math.round(0.45 * exp01 * 100)})`;
             return (
               <TableRow
                 key={s.personId}
@@ -66,7 +71,15 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
                 <TableTd style={{ textAlign: 'right', fontSize: 12, color: 'var(--color-text-secondary)' }}>
                   {Math.round(s.expertise)}
                 </TableTd>
-                <TableTd style={{ textAlign: 'right', fontWeight: 600 }}>{s.composite}</TableTd>
+                <TableTd style={{ textAlign: 'right', fontWeight: 600 }}>
+                  {s.composite}
+                  <div title={tooltip} style={{ marginTop: 4 }}>
+                    <svg width={60} height={6} style={{ display: 'block', marginLeft: 'auto' }}>
+                      <rect x={0}    y={0} width={infW} height={6} rx={2} fill="var(--color-primary, #6366f1)" />
+                      <rect x={infW} y={0} width={expW} height={6} rx={2} fill="#16a34a" />
+                    </svg>
+                  </div>
+                </TableTd>
               </TableRow>
             );
           })}
