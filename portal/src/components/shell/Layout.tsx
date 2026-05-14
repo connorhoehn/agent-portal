@@ -1,6 +1,6 @@
 import { NavLink, Outlet } from 'react-router';
 import { useFetch } from '../../hooks/useFetch';
-import { useSession } from '../../lib/auth';
+import { useSession, type SessionRole } from '../../lib/auth';
 import { MasqueradeMenu } from './MasqueradeMenu';
 import { CommandPalette, CommandPaletteHint } from './CommandPalette';
 import { TenantSwitcher } from './TenantSwitcher';
@@ -12,31 +12,45 @@ interface Health {
   region: string;
 }
 
-type NavItem = { path: string; label: string; requireRoles?: string[] };
+type Tenant = 'orgiq' | 'newsroom' | 'admin';
+type NavItem = { path: string; label: string; requireRoles?: string[]; tenant: Tenant | 'universal' };
 
 const NAV_ITEMS: NavItem[] = [
-  { path: '/iq/search', label: 'Search' },
-  { path: '/iq/explore', label: 'Explore' },
-  { path: '/iq/agents', label: 'Architecture' },
-  { path: '/iq/invoke', label: 'Agent Tools' },
-  { path: '/iq/scores', label: 'Scores' },
-  { path: '/iq/decisions', label: 'Decisions' },
-  { path: '/iq/projects', label: 'Projects' },
-  { path: '/newsroom', label: 'Newsroom' },
-  { path: '/admin/knowledge-base', label: 'Knowledge Base', requireRoles: ['hr-admin'] },
-  { path: '/admin/ingest', label: 'Ingest', requireRoles: ['hr-admin'] },
-  { path: '/admin/observability', label: 'Observability', requireRoles: ['org-leader', 'hr-admin'] },
-  { path: '/admin/capabilities', label: 'Platform Services' },
-  { path: '/admin/identity', label: 'Identity', requireRoles: ['hr-admin'] },
-  { path: '/settings', label: 'Settings' },
+  { path: '/iq/search',            label: 'Search',           tenant: 'orgiq' },
+  { path: '/iq/explore',           label: 'Explore',          tenant: 'orgiq' },
+  { path: '/iq/agents',            label: 'Architecture',     tenant: 'orgiq' },
+  { path: '/iq/invoke',            label: 'Agent Tools',      tenant: 'orgiq' },
+  { path: '/iq/scores',            label: 'Scores',           tenant: 'orgiq' },
+  { path: '/iq/decisions',         label: 'Decisions',        tenant: 'orgiq' },
+  { path: '/iq/projects',          label: 'Projects',         tenant: 'orgiq' },
+  { path: '/newsroom',             label: 'Newsroom',         tenant: 'newsroom' },
+  { path: '/admin/knowledge-base', label: 'Knowledge Base',   tenant: 'admin', requireRoles: ['hr-admin'] },
+  { path: '/admin/ingest',         label: 'Ingest',           tenant: 'admin', requireRoles: ['hr-admin'] },
+  { path: '/admin/observability',  label: 'Observability',    tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'] },
+  { path: '/admin/capabilities',   label: 'Platform Services', tenant: 'admin' },
+  { path: '/admin/identity',       label: 'Identity',         tenant: 'admin', requireRoles: ['hr-admin'] },
+  { path: '/settings',             label: 'Settings',         tenant: 'universal' },
 ];
 
 export function Layout() {
   const { data: health } = useFetch<Health>('/api/health', 30_000);
   const { session } = useSession();
-  const navItems = NAV_ITEMS.filter(item =>
-    !item.requireRoles || (session && item.requireRoles.includes(session.role)),
-  );
+  const navItems = NAV_ITEMS.filter(item => {
+    // Role check
+    if (item.requireRoles && !(session && item.requireRoles.includes(session.role))) {
+      return false;
+    }
+    // Tenant check
+    if (item.tenant === 'universal') return true;
+    // admin role sees everything
+    if ((session?.role as SessionRole) === 'admin') return true;
+    // admin tenant items: visible if user has any admin role
+    if (item.tenant === 'admin') {
+      return (session?.role as SessionRole) === 'admin' || session?.role === 'hr-admin' || session?.role === 'org-leader';
+    }
+    // tenant-specific items: only when matching active tenant
+    return item.tenant === session?.tenant;
+  });
   const mockedSubsystems = health
     ? Object.entries(health.mocks).filter(([, v]) => v).map(([k]) => k)
     : [];
@@ -52,7 +66,7 @@ export function Layout() {
       : 'var(--color-warning, #f59e0b)';
 
   return (
-    <div style={{ display: 'flex', height: '100vh' }}>
+    <div data-tenant={session?.tenant ?? 'orgiq'} style={{ display: 'flex', height: '100vh' }}>
       <aside style={{
         width: 200,
         borderRight: '1px solid var(--color-border)',

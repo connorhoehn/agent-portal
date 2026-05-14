@@ -49,3 +49,14 @@ body {
   color: var(--color-text-primary);
   margin: 0;
 }
+
+/* Tenant accent overrides. Subtle — change only the primary accent. */
+[data-tenant="orgiq"] {
+  --color-primary: #6366f1; /* indigo */
+  --color-primary-soft: #eef2ff;
+}
+
+[data-tenant="newsroom"] {
+  --color-primary: #d97706; /* amber */
+  --color-primary-soft: #fef3c7;
+}
