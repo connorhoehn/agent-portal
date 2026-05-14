@@ -34,6 +34,12 @@ scoresRouter.get('/cohorts', asyncHandler(async (_req, res) => {
   res.json(cohorts);
 }));
 
+scoresRouter.get('/:personId/radar', asyncHandler(async (req, res) => {
+  const radar = await aurora.getPersonRadar(req.params['personId'] as string);
+  if (!radar) { res.status(404).json({ error: 'Person not found or not scored' }); return; }
+  res.json(radar);
+}));
+
 scoresRouter.get('/:personId', asyncHandler(async (req, res) => {
   const score = await aurora.getScore(req.params['personId'] as string);
   if (!score) { res.status(404).json({ error: 'Score not found' }); return; }

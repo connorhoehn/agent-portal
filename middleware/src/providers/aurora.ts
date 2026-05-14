@@ -26,6 +26,8 @@ import type {
   SkillSummary,
   CohortStats,
   BrokerSummary,
+  RadarResponse,
+  RadarAxes,
 } from './types.js';
 
 import {
@@ -593,6 +595,78 @@ async function realGetCohorts(): Promise<CohortStats[]> {
   });
 }
 
+async function realGetPersonRadar(personId: string): Promise<RadarResponse | null> {
+  // Single round-trip: compute per-person aggregates for everyone, then select
+  // the requested person's row and the population max in one query.
+  const rows = await exec(
+    `WITH stats AS (
+       SELECT
+         p.id                                                         AS person_id,
+         COALESCE(p.pagerank_score, 0) * 100                          AS influence,
+         COALESCE(p.expertise_score, 0)                               AS expertise,
+         COUNT(DISTINCT CASE
+           WHEN c.person_a_id = p.id THEN c.person_b_id
+           WHEN c.person_b_id = p.id THEN c.person_a_id
+         END)                                                         AS collaboration_breadth,
+         COUNT(DISTINCT dp.decision_id)                               AS decision_impact,
+         COUNT(DISTINCT o.team)                                       AS cross_team_reach,
+         COUNT(DISTINCT CASE
+           WHEN c2.last_seen > NOW() - INTERVAL '30 days'
+             AND (c2.person_a_id = p.id OR c2.person_b_id = p.id)
+           THEN CASE
+             WHEN c2.person_a_id = p.id THEN c2.person_b_id
+             ELSE c2.person_a_id
+           END
+         END)                                                         AS recency
+       FROM people p
+       LEFT JOIN collaborations c
+         ON c.person_a_id = p.id OR c.person_b_id = p.id
+       LEFT JOIN decision_participants dp
+         ON dp.person_id = p.id
+       LEFT JOIN collaborations c2
+         ON c2.person_a_id = p.id OR c2.person_b_id = p.id
+       LEFT JOIN people o
+         ON o.id = CASE
+           WHEN c.person_a_id = p.id THEN c.person_b_id
+           WHEN c.person_b_id = p.id THEN c.person_a_id
+           ELSE NULL
+         END
+       WHERE p.composite_score IS NOT NULL
+       GROUP BY p.id
+     )
+     SELECT 'person' AS kind, person_id, influence, expertise,
+            collaboration_breadth, decision_impact, cross_team_reach, recency
+       FROM stats
+      WHERE person_id = :pid
+     UNION ALL
+     SELECT 'max' AS kind, NULL AS person_id,
+            MAX(influence), MAX(expertise),
+            MAX(collaboration_breadth), MAX(decision_impact),
+            MAX(cross_team_reach), MAX(recency)
+       FROM stats`,
+    [strParam('pid', personId)],
+  );
+
+  const personRow = rows.find((r) => r['kind'] === 'person');
+  const maxRow = rows.find((r) => r['kind'] === 'max');
+  if (!personRow) return null;
+
+  const toAxes = (r: Record<string, unknown>): RadarAxes => ({
+    influence: toNumber(r['influence'], 0),
+    expertise: toNumber(r['expertise'], 0),
+    collaborationBreadth: toNumber(r['collaboration_breadth'], 0),
+    decisionImpact: toNumber(r['decision_impact'], 0),
+    crossTeamReach: toNumber(r['cross_team_reach'], 0),
+    recency: toNumber(r['recency'], 0),
+  });
+
+  return {
+    personId,
+    person: toAxes(personRow),
+    peerMax: maxRow ? toAxes(maxRow) : toAxes(personRow),
+  };
+}
+
 export const realAurora: AuroraProvider = {
   fetchGraph: realFetchGraph,
   fetchPersonGraph: realFetchPersonGraph,
@@ -601,6 +675,7 @@ export const realAurora: AuroraProvider = {
   getSkillLeaderboard: realGetSkillLeaderboard,
   getTopSkills: realGetTopSkills,
   getCohorts: realGetCohorts,
+  getPersonRadar: realGetPersonRadar,
 };
 
 // ─── Mock provider — wraps the existing mock arrays in the AuroraProvider shape.
@@ -719,6 +794,10 @@ async function mockGetCohorts(): Promise<CohortStats[]> {
   return results.sort((a, b) => a.department.localeCompare(b.department));
 }
 
+async function mockGetPersonRadar(_personId: string): Promise<RadarResponse | null> {
+  return null;
+}
+
 export const mockAurora: AuroraProvider = {
   fetchGraph: mockFetchGraph,
   fetchPersonGraph: mockFetchPersonGraph,
@@ -727,4 +806,5 @@ export const mockAurora: AuroraProvider = {
   getSkillLeaderboard: mockGetSkillLeaderboard,
   getTopSkills: mockGetTopSkills,
   getCohorts: mockGetCohorts,
+  getPersonRadar: mockGetPersonRadar,
 };

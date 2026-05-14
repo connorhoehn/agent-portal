@@ -95,6 +95,22 @@ export interface AuroraProvider {
   getSkillLeaderboard(opts: { skill: string; limit?: number }): Promise<Leaderboard>;
   getTopSkills(limit?: number): Promise<SkillSummary[]>;
   getCohorts(): Promise<CohortStats[]>;
+  getPersonRadar(personId: string): Promise<RadarResponse | null>;
+}
+
+export interface RadarAxes {
+  influence: number;
+  expertise: number;
+  collaborationBreadth: number;
+  decisionImpact: number;
+  crossTeamReach: number;
+  recency: number;
+}
+
+export interface RadarResponse {
+  personId: string;
+  person: RadarAxes;
+  peerMax: RadarAxes;
 }
 
 // ── AgentCore (runtimes, memory, gateway, capabilities sessions) ───────────────

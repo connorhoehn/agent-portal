@@ -1,5 +1,13 @@
 import { Card } from '@connorhoehnslalom/ui-components/shared';
 import { PersonDetail, formatRelativeTime } from './types';
+import { RadarChart, type RadarAxes } from './RadarChart';
+import { useFetch } from '../../hooks/useFetch';
+
+interface RadarResponse {
+  personId: string;
+  person: RadarAxes;
+  peerMax: RadarAxes;
+}
 
 interface Props {
   detail: PersonDetail;
@@ -9,6 +17,9 @@ interface Props {
 }
 
 export function PersonDetailCard({ detail, deptColors, onClose, onSelectConnection }: Props) {
+  const { data: radar } = useFetch<RadarResponse>(
+    detail.id ? `/api/scores/${encodeURIComponent(detail.id)}/radar` : '',
+  );
   return (
     <Card padding="md">
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -39,6 +50,11 @@ export function PersonDetailCard({ detail, deptColors, onClose, onSelectConnecti
           ))
         )}
       </div>
+
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 16, marginBottom: 6 }}>
+        Radar
+      </div>
+      <RadarChart radar={radar} />
 
       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 16, marginBottom: 6 }}>
         Top Connections ({detail.connections.length} total)
