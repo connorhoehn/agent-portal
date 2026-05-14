@@ -21,6 +21,118 @@ import { S3Client, ListObjectsV2Command, PutObjectCommand } from '@aws-sdk/clien
 import { extname, basename } from 'node:path';
 import { config } from '../config.js';
 import type { StorageBreakdown } from '../lib/crawler-types.js';
+import { exec } from './aurora.js';
+
+// ─── Knowledge-Base Management Surface types ──────────────────────────────────
+// Used by the /knowledge-base route and the KnowledgeBasePage portal surface.
+
+export interface IngestedDoc {
+  id: string;
+  source: string | null;
+  sourceUri: string | null;
+  title: string | null;
+  ingestedAt: string | null;
+}
+
+export interface DataSource {
+  id: string;
+  name: string;
+  status: string;
+  lastSyncedAt: string | null;
+  lastJobStatus: string | null;
+}
+
+// List documents from Aurora `documents` table, newest first.
+// Defensive: returns [] if the table doesn't exist yet.
+export async function listIngestedDocs(opts: { limit?: number; since?: string } = {}): Promise<IngestedDoc[]> {
+  const limit = Math.min(opts.limit ?? 50, 500);
+  const sincePart = opts.since ? 'AND ingested_at > :since' : '';
+  const sql = `
+    SELECT id::text, source, source_uri, title, ingested_at::text
+      FROM documents
+     WHERE 1=1 ${sincePart}
+     ORDER BY ingested_at DESC NULLS LAST
+     LIMIT :lim`;
+  const params: import('@aws-sdk/client-rds-data').SqlParameter[] = [
+    { name: 'lim', value: { longValue: limit } },
+  ];
+  if (opts.since) params.push({ name: 'since', value: { stringValue: opts.since } });
+  try {
+    const rows = await exec(sql, params);
+    return rows.map(r => ({
+      id: String(r['id'] ?? ''),
+      source: r['source'] == null ? null : String(r['source']),
+      sourceUri: r['source_uri'] == null ? null : String(r['source_uri']),
+      title: r['title'] == null ? null : String(r['title']),
+      ingestedAt: r['ingested_at'] == null ? null : String(r['ingested_at']),
+    }));
+  } catch (err) {
+    console.warn('[kb] listIngestedDocs failed:', (err as Error).message);
+    return [];
+  }
+}
+
+// List data sources with their latest ingestion job status.
+// Returns [] when kbId is empty.
+export async function listDataSourcesWithStatus(kbId: string): Promise<DataSource[]> {
+  if (!kbId) return [];
+  try {
+    const client = new BedrockAgentClient({ region: config.region });
+    const listResp = await client.send(new ListDataSourcesCommand({ knowledgeBaseId: kbId, maxResults: 50 }));
+    const summaries = listResp.dataSourceSummaries ?? [];
+    const results: DataSource[] = [];
+    for (const s of summaries) {
+      const dsId = s.dataSourceId;
+      if (!dsId) continue;
+      let lastSyncedAt: string | null = null;
+      let lastJobStatus: string | null = null;
+      try {
+        const jobResp = await client.send(
+          new ListIngestionJobsCommand({
+            knowledgeBaseId: kbId,
+            dataSourceId: dsId,
+            maxResults: 1,
+            sortBy: { attribute: 'STARTED_AT', order: 'DESCENDING' },
+          }),
+        );
+        const latestJob = (jobResp.ingestionJobSummaries ?? [])[0];
+        if (latestJob) {
+          lastJobStatus = String(latestJob.status ?? '');
+          lastSyncedAt = latestJob.updatedAt instanceof Date ? latestJob.updatedAt.toISOString() : null;
+        }
+      } catch {
+        // best-effort
+      }
+      results.push({
+        id: dsId,
+        name: s.name ?? dsId,
+        status: String(s.status ?? 'UNKNOWN'),
+        lastSyncedAt,
+        lastJobStatus,
+      });
+    }
+    return results;
+  } catch (err) {
+    console.warn('[kb] listDataSourcesWithStatus failed:', (err as Error).message);
+    return [];
+  }
+}
+
+// Trigger an ingestion job. Throws on error so the route can return 500.
+export async function startSync(kbId: string, dataSourceId: string): Promise<{ jobId: string }> {
+  if (!kbId) throw new Error('KNOWLEDGE_BASE_ID not configured');
+  const client = new BedrockAgentClient({ region: config.region });
+  const resp = await client.send(
+    new StartIngestionJobCommand({
+      knowledgeBaseId: kbId,
+      dataSourceId,
+      description: `Manual sync from portal at ${new Date().toISOString()}`,
+    }),
+  );
+  const jobId = resp.ingestionJob?.ingestionJobId;
+  if (!jobId) throw new Error('StartIngestionJob returned no jobId');
+  return { jobId };
+}
 
 export interface KbSummary {
   id: string;
