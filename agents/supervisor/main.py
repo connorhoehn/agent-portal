@@ -20,9 +20,11 @@ from _shared.instrumentation import (  # noqa: E402
     install_bedrock_usage_capture,
     instrumented_tool,
     post_trace,
+    record_guardrail_action,
     reset_active_ctx,
     set_active_ctx,
     short_prompt_hash,
+    with_orgiq_root,
 )
 
 # Patch boto3's bedrock-runtime client BEFORE Strands constructs its own —
@@ -430,32 +432,47 @@ async def handle(payload: dict) -> dict:
         role, ctx.invocation_id, ctx.parent_invocation_id or "—", input_text[:120],
     )
 
-    t0 = time.monotonic()
-    try:
-        result = _invoke_with_retry(agent, input_text)
-    finally:
-        _current_ctx.reset(token)
-        reset_active_ctx(shared_token)
-    duration_ms = int((time.monotonic() - t0) * 1000)
+    with with_orgiq_root(
+        ctx,
+        agent_id="orgiq-supervisor",
+        agent_name="Supervisor",
+        prompt_version=_SYSTEM_PROMPT_SHA,
+    ) as oi_span:
+        t0 = time.monotonic()
+        try:
+            result = _invoke_with_retry(agent, input_text)
+        finally:
+            _current_ctx.reset(token)
+            reset_active_ctx(shared_token)
+        duration_ms = int((time.monotonic() - t0) * 1000)
 
-    response_text = str(result)
+        response_text = str(result)
 
-    try:
-        bundle = ctx.build_trace_bundle(
-            prompt=input_text,
-            response=response_text,
-            agent_id="orgiq-supervisor",
-            agent_name="Supervisor",
-            model_id=MODEL_ID,
-            duration_ms=duration_ms,
-            prompt_version=_SYSTEM_PROMPT_SHA,
-            # Strands' AgentResult doesn't currently expose usage in a stable
-            # shape; leave tokens unset and let the middleware compute zero
-            # cost. Agent A's harness will warn on the missing field.
-        )
-        post_trace(bundle)
-    except Exception as exc:  # noqa: BLE001 — observability MUST NOT crash the agent
-        log.warning("supervisor: trace emission failed: %s", exc)
+        # TODO(P1-W2c): extract guardrail_action + pii_detected from Strands AgentResult once we
+        # determine the canonical field name. Strands' AgentResult does not currently surface
+        # guardrail trace metadata in a stable public attribute (checked agent_result fields: the
+        # return value of Agent.__call__ is an AgentResult whose string representation is the
+        # final text; guardrail trace lives inside the BedrockModel response stream and is not
+        # forwarded onto AgentResult). When Strands exposes it, wire it as:
+        #   record_guardrail_action(oi_span, action=..., pii_detected=...)
+        record_guardrail_action(oi_span, action=None, pii_detected=None)
+
+        try:
+            bundle = ctx.build_trace_bundle(
+                prompt=input_text,
+                response=response_text,
+                agent_id="orgiq-supervisor",
+                agent_name="Supervisor",
+                model_id=MODEL_ID,
+                duration_ms=duration_ms,
+                prompt_version=_SYSTEM_PROMPT_SHA,
+                # Strands' AgentResult doesn't currently expose usage in a stable
+                # shape; leave tokens unset and let the middleware compute zero
+                # cost. Agent A's harness will warn on the missing field.
+            )
+            post_trace(bundle)
+        except Exception as exc:  # noqa: BLE001 — observability MUST NOT crash the agent
+            log.warning("supervisor: trace emission failed: %s", exc)
 
     return {
         "agent": "supervisor",
