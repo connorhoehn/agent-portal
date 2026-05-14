@@ -83,13 +83,17 @@ def _bootstrap_openinference() -> None:
     _OI_BOOTSTRAP_STATE["attempts"] = attempts + 1
 
     try:
-        from opentelemetry import trace
+        from strands.telemetry import StrandsTelemetry
         from openinference.instrumentation.bedrock import BedrockInstrumentor
         from openinference.instrumentation.strands_agents import (
             StrandsAgentsToOpenInferenceProcessor,
         )
+        from opentelemetry.sdk.trace.export import (
+            BatchSpanProcessor,
+            ConsoleSpanExporter,
+        )
+        import sys
     except ImportError as e:
-        # OI packages not installed at all — give up permanently
         _oi_logger.info(
             "OpenInference packages not available — skipping OI bootstrap. "
             "Legacy TraceBundle pipeline remains active. Reason: %s",
@@ -98,70 +102,35 @@ def _bootstrap_openinference() -> None:
         _OI_BOOTSTRAP_STATE["done"] = True
         return
 
-    # BedrockInstrumentor: idempotent at the OI library level.
+    # Canonical pattern per Arize-ai/openinference docs:
+    # https://github.com/Arize-ai/openinference/tree/main/python/instrumentation/openinference-instrumentation-strands-agents
+    #
+    # StrandsTelemetry() creates and owns its own TracerProvider. The
+    # global OTel proxy is irrelevant — Strands' Agent uses this one.
+    # We attach (1) the Strands→OI in-place mutator first, (2) a
+    # ConsoleSpanExporter that prefixes each span with ORGIQ_OI_SPAN: so
+    # the projector Lambda can filter cheaply against `@message like`.
     try:
-        BedrockInstrumentor().instrument()
+        telemetry = StrandsTelemetry()
     except Exception as e:
-        _oi_logger.warning("BedrockInstrumentor.instrument() failed: %s", e)
+        _oi_logger.warning("StrandsTelemetry() init failed: %s", e)
+        return
 
-    # The AWS OTel distro instruments boto3 but never calls
-    # trace.set_tracer_provider() — so trace.get_tracer_provider() keeps
-    # returning a ProxyTracerProvider that doesn't support add_span_processor.
-    # If we see the proxy, install our own SDK TracerProvider so we can
-    # attach both Strands→OI and the ConsoleSpanExporter that the projector
-    # Lambda reads.
-    current = trace.get_tracer_provider()
-    if hasattr(current, "add_span_processor"):
-        provider = current
-        _oi_logger.info(
-            "Using existing SDK TracerProvider (%s).", type(provider).__name__
-        )
-    else:
-        try:
-            from opentelemetry.sdk.trace import TracerProvider as SdkTracerProvider
-            from opentelemetry.sdk.resources import Resource
-
-            resource = Resource.create(
-                {
-                    "service.name": os.environ.get("OTEL_SERVICE_NAME", "orgiq-agent"),
-                    "service.namespace": "orgiq",
-                    "deployment.environment": os.environ.get(
-                        "DEPLOYMENT_ENVIRONMENT", "dev"
-                    ),
-                }
-            )
-            provider = SdkTracerProvider(resource=resource)
-            trace.set_tracer_provider(provider)
-            _oi_logger.info(
-                "Replaced %s with SDK TracerProvider for OI export.",
-                type(current).__name__,
-            )
-        except Exception as e:
-            _oi_logger.warning("SDK TracerProvider install failed: %s", e)
-            return
-
-    # Strands processor: translates gen_ai.* spans → OI in-place.
     try:
-        provider.add_span_processor(StrandsAgentsToOpenInferenceProcessor())
+        telemetry.tracer_provider.add_span_processor(
+            StrandsAgentsToOpenInferenceProcessor()
+        )
     except Exception as e:
         _oi_logger.warning("Strands OI processor wiring failed: %s", e)
 
-    # ConsoleSpanExporter — single-line JSON to stdout, prefixed with
-    # ORGIQ_OI_SPAN: so the projector Lambda can `filter @message like`.
+    def _formatter(span) -> str:
+        try:
+            return "ORGIQ_OI_SPAN:" + span.to_json(indent=None) + "\n"
+        except Exception:
+            return "ORGIQ_OI_SPAN:" + str(span) + "\n"
+
     try:
-        from opentelemetry.sdk.trace.export import (
-            BatchSpanProcessor,
-            ConsoleSpanExporter,
-        )
-        import sys
-
-        def _formatter(span) -> str:
-            try:
-                return "ORGIQ_OI_SPAN:" + span.to_json(indent=None) + "\n"
-            except Exception:
-                return "ORGIQ_OI_SPAN:" + str(span) + "\n"
-
-        provider.add_span_processor(
+        telemetry.tracer_provider.add_span_processor(
             BatchSpanProcessor(
                 ConsoleSpanExporter(out=sys.stdout, formatter=_formatter)
             )
@@ -169,16 +138,19 @@ def _bootstrap_openinference() -> None:
     except Exception as e:
         _oi_logger.warning("Console span exporter wiring failed: %s", e)
 
-    # Re-bind BedrockInstrumentor to our provider so its spans flow through
-    # the same processors. The OI library handles idempotent re-instrument.
+    # Bedrock instrumentor — bind to Strands' TracerProvider so boto3
+    # Bedrock spans land in the same export pipeline.
     try:
-        BedrockInstrumentor().instrument(tracer_provider=provider, skip_dep_check=True)
+        BedrockInstrumentor().instrument(
+            tracer_provider=telemetry.tracer_provider,
+            skip_dep_check=True,
+        )
     except Exception as e:
-        _oi_logger.warning("BedrockInstrumentor rebind failed: %s", e)
+        _oi_logger.warning("BedrockInstrumentor.instrument() failed: %s", e)
 
     _OI_BOOTSTRAP_STATE["done"] = True
     _oi_logger.info(
-        "OpenInference bootstrap complete (attempt %d).",
+        "OpenInference bootstrap complete via StrandsTelemetry (attempt %d).",
         attempts + 1,
     )
 
