@@ -75,14 +75,12 @@ export class SpanProjectorStack extends cdk.Stack {
     // IAM
     // -----------------------------------------------------------------------
 
-    // CloudWatch Logs — discover log groups and run Insights queries
+    // CloudWatch Logs — discover log groups and filter events
     fn.addToRolePolicy(new iam.PolicyStatement({
-      sid: 'CwLogsInsights',
+      sid: 'CwLogs',
       actions: [
         'logs:DescribeLogGroups',
-        'logs:StartQuery',
-        'logs:GetQueryResults',
-        'logs:StopQuery',
+        'logs:FilterLogEvents',
       ],
       resources: ['*'],
     }));

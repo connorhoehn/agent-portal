@@ -1,5 +1,3 @@
-// TODO(W5-I): wire this into App.tsx as <Route path="/scores/cohorts" element={<Page element={<ScoresCohortPage />} />} />.
-// Optionally surface a "Cohorts" tab on the existing /scores page.
 
 import { PageSection } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';

@@ -52,8 +52,9 @@ OPTIONAL_OTEL_LOG_GROUP = os.environ.get("OTEL_LOG_GROUP", "")
 # Sliding-window fallback (seconds) when no cursor is saved yet
 DEFAULT_LOOKBACK_SECONDS = 300  # 5 minutes
 
-# CloudWatch Insights query timeout (seconds)
-CW_QUERY_TIMEOUT_SECONDS = 55  # stay well within Lambda 5-min limit
+# Overlap buffer to handle CW Insights indexing lag (~10-30s).
+# Re-scans the last 2 minutes on every tick; ON CONFLICT skips duplicates.
+LOOKBACK_BUFFER_MS = 2 * 60 * 1000  # 2 minutes
 
 # ---------------------------------------------------------------------------
 # Cursor helpers (SSM Parameter Store)
@@ -134,102 +135,133 @@ def discover_log_groups() -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# CloudWatch Logs Insights query
+# CloudWatch filter-log-events query
+#
+# Using filter-log-events (not CW Logs Insights) because Insights has a
+# 10-15+ minute indexing lag, causing fresh spans to be missed. filter-log-events
+# reads directly from the log stream with near-zero lag.
 # ---------------------------------------------------------------------------
 
-_CW_QUERY = (
-    "filter @message like 'ORGIQ_OI_SPAN:' "
-    "| display @message "
-    "| limit 10000"
-)
 _OI_PREFIX = "ORGIQ_OI_SPAN:"
+_MAX_EVENTS_PER_GROUP = 10000
 
 
 def query_logs(log_group: str, start_time_ms: int, end_time_ms: int) -> list[dict]:
     """
-    Run a CW Logs Insights query on *log_group* for the given time window.
+    Fetch ORGIQ_OI_SPAN lines from *log_group* for the given time window using
+    filter-log-events (zero indexing lag vs CW Insights 10-15+ min lag).
+
     Returns a list of parsed span dicts. Bad/unparseable results are skipped.
     """
-    try:
-        resp = logs_client.start_query(
-            logGroupName=log_group,
-            startTime=start_time_ms // 1000,
-            endTime=end_time_ms // 1000,
-            queryString=_CW_QUERY,
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("start_query failed for %s: %s", log_group, exc)
-        return []
+    spans: list[dict] = []
+    next_token: str | None = None
+    count = 0
 
-    query_id = resp["queryId"]
-    deadline = time.time() + CW_QUERY_TIMEOUT_SECONDS
-
-    while True:
-        if time.time() >= deadline:
-            logger.warning("CW Insights query %s timed out — stopping query", query_id)
-            try:
-                logs_client.stop_query(queryId=query_id)
-            except Exception:  # noqa: BLE001
-                pass
-            return []
+    while count < _MAX_EVENTS_PER_GROUP:
+        kwargs: dict = {
+            "logGroupName": log_group,
+            "filterPattern": '"ORGIQ_OI_SPAN:"',
+            "startTime": start_time_ms,
+            "endTime": end_time_ms,
+            "limit": 10000,
+        }
+        if next_token:
+            kwargs["nextToken"] = next_token
 
         try:
-            result = logs_client.get_query_results(queryId=query_id)
+            resp = logs_client.filter_log_events(**kwargs)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("get_query_results error for query %s: %s", query_id, exc)
-            return []
-
-        status = result.get("status", "")
-        if status in ("Complete", "Failed", "Cancelled", "Timeout"):
-            if status != "Complete":
-                logger.warning(
-                    "CW Insights query %s ended with status %s", query_id, status
-                )
-                return []
+            logger.warning("filter_log_events failed for %s: %s", log_group, exc)
             break
 
-        time.sleep(2)
+        for event in resp.get("events", []):
+            raw_message = event.get("message", "")
+            idx = raw_message.find(_OI_PREFIX)
+            if idx < 0:
+                continue
+            raw_json = raw_message[idx + len(_OI_PREFIX):].strip()
+            try:
+                span = json.loads(raw_json)
+                if isinstance(span, dict):
+                    spans.append(span)
+                    count += 1
+            except Exception:  # noqa: BLE001
+                pass
 
-    spans: list[dict] = []
-    for row in result.get("results", []):
-        # Each row is a list of {"field": str, "value": str} dicts
-        field_map: dict[str, str] = {item["field"]: item["value"] for item in row}
-        raw_message = field_map.get("@message", "")
-        # Strip the ORGIQ_OI_SPAN: prefix that the agent's ConsoleSpanExporter
-        # formatter prepends. Trim trailing whitespace + newline.
-        idx = raw_message.find(_OI_PREFIX)
-        if idx < 0:
-            continue
-        raw_json = raw_message[idx + len(_OI_PREFIX):].strip()
-        try:
-            span = json.loads(raw_json)
-            if isinstance(span, dict):
-                spans.append(span)
-        except Exception:  # noqa: BLE001
-            pass
+        next_token = resp.get("nextToken")
+        if not next_token:
+            break
 
     logger.info("log group %s: found %d OI spans", log_group, len(spans))
     return spans
 
 
 # ---------------------------------------------------------------------------
-# Span helpers
+# Span field helpers
+#
+# OTel ConsoleSpanExporter (Python SDK) serialises spans like:
+#   {
+#     "name": "...",
+#     "context": {"trace_id": "0x...", "span_id": "0x..."},
+#     "parent_id": "0x..." | null,
+#     "start_time": "2026-..Z",
+#     "end_time":   "2026-..Z",
+#     "attributes": { "openinference.span.kind": "AGENT", ... }
+#   }
+#
+# Some orgiq.* metadata fields are encoded as a JSON string inside
+# attributes["metadata"] rather than as top-level attribute keys.
 # ---------------------------------------------------------------------------
 
 
+def _get_trace_id(span: dict) -> str:
+    return span.get("context", {}).get("trace_id", "")
+
+
+def _get_span_id(span: dict) -> str:
+    return span.get("context", {}).get("span_id", "")
+
+
+def _get_parent_id(span: dict) -> str | None:
+    return span.get("parent_id")  # None means root
+
+
+def _parse_metadata(span: dict) -> dict:
+    """Return the decoded metadata dict from attributes["metadata"], or {}."""
+    try:
+        raw = span.get("attributes", {}).get("metadata", "")
+        if raw and isinstance(raw, str):
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                return parsed
+    except Exception:  # noqa: BLE001
+        pass
+    return {}
+
+
 def _attr(span: dict, key: str, default: Any = None) -> Any:
-    """Safely retrieve a span attribute by key."""
+    """
+    Look up an attribute by key.
+
+    Search order:
+      1. Top-level attributes dict (direct key).
+      2. attributes["metadata"] JSON (orgiq.* and gen_ai.* live here).
+    """
     try:
         attrs = span.get("attributes", {})
         if isinstance(attrs, dict):
-            return attrs.get(key, default)
+            if key in attrs:
+                return attrs[key]
+            # Try inside metadata JSON
+            meta = _parse_metadata(span)
+            if key in meta:
+                return meta[key]
         # Some exporters encode attributes as a list of {key, value} dicts
         if isinstance(attrs, list):
             for item in attrs:
                 if isinstance(item, dict) and item.get("key") == key:
                     v = item.get("value", {})
                     if isinstance(v, dict):
-                        # OTel OTLP JSON: {"stringValue": "..."} etc.
                         for vk in ("stringValue", "intValue", "doubleValue", "boolValue"):
                             if vk in v:
                                 return v[vk]
@@ -242,10 +274,14 @@ def _attr(span: dict, key: str, default: Any = None) -> Any:
 def _span_duration_ms(span: dict) -> int:
     """Return span wall-clock duration in milliseconds."""
     try:
-        start = int(span.get("start_time_unix_nano", 0))
-        end = int(span.get("end_time_unix_nano", 0))
-        if start and end and end >= start:
-            return (end - start) // 1_000_000
+        start_str = span.get("start_time", "")
+        end_str = span.get("end_time", "")
+        if start_str and end_str:
+            start = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+            end = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+            delta = (end - start).total_seconds()
+            if delta >= 0:
+                return int(delta * 1000)
     except Exception:  # noqa: BLE001
         pass
     return 0
@@ -253,13 +289,9 @@ def _span_duration_ms(span: dict) -> int:
 
 def _span_start_iso(span: dict) -> str:
     """Return span start as ISO 8601 UTC string."""
-    try:
-        nanos = int(span.get("start_time_unix_nano", 0))
-        if nanos:
-            secs = nanos / 1e9
-            return datetime.fromtimestamp(secs, tz=timezone.utc).isoformat()
-    except Exception:  # noqa: BLE001
-        pass
+    raw = span.get("start_time", "")
+    if raw:
+        return raw
     return datetime.now(tz=timezone.utc).isoformat()
 
 
@@ -279,7 +311,7 @@ def group_into_traces(spans: list[dict]) -> dict[str, list[dict]]:
         try:
             if not _is_oi_span(span):
                 continue
-            tid = span.get("trace_id", "")
+            tid = _get_trace_id(span)
             if not tid:
                 continue
             traces.setdefault(tid, []).append(span)
@@ -300,24 +332,24 @@ def build_invocation_payload(trace_spans: list[dict]) -> dict | None:
 
     Returns None if the trace has no valid root AGENT span.
     """
-    # --- Find root span ---
+    # --- Find root span: AGENT kind with no parent ---
     root: dict | None = None
     for span in trace_spans:
         try:
             kind = _attr(span, "openinference.span.kind", "")
-            parent_id = span.get("parent_span_id", "")
-            if kind == "AGENT" and (not parent_id or parent_id == "0000000000000000"):
+            parent_id = _get_parent_id(span)
+            if kind == "AGENT" and (parent_id is None or parent_id == "0x0000000000000000"):
                 root = span
                 break
         except Exception:  # noqa: BLE001
             pass
 
-    # Fall back: first span without a parent
+    # Fall back: any span with no parent
     if root is None:
         for span in trace_spans:
             try:
-                parent_id = span.get("parent_span_id", "")
-                if not parent_id or parent_id == "0000000000000000":
+                parent_id = _get_parent_id(span)
+                if parent_id is None or parent_id == "0x0000000000000000":
                     root = span
                     break
             except Exception:  # noqa: BLE001
@@ -327,7 +359,8 @@ def build_invocation_payload(trace_spans: list[dict]) -> dict | None:
         logger.debug("No root span found in trace with %d spans", len(trace_spans))
         return None
 
-    invocation_id = _attr(root, "orgiq.invocation_id") or root.get("span_id", "")
+    # orgiq.invocation_id lives inside attributes["metadata"]
+    invocation_id = _attr(root, "orgiq.invocation_id") or _get_span_id(root)
     if not invocation_id:
         return None
 
@@ -353,16 +386,13 @@ def build_invocation_payload(trace_spans: list[dict]) -> dict | None:
                 tool_name = _attr(span, "tool.name") or span.get("name", "unknown_tool")
                 input_val = str(_attr(span, "input.value", "") or "")
                 output_val = str(_attr(span, "output.value", "") or "")
-                errored = span.get("status", {}).get("code", "") == "ERROR" if isinstance(
-                    span.get("status"), dict
-                ) else False
+                errored = False
                 error_msg: str | None = None
-                if errored:
-                    error_msg = (
-                        span.get("status", {}).get("message")
-                        if isinstance(span.get("status"), dict)
-                        else None
-                    )
+                status = span.get("status", {})
+                if isinstance(status, dict):
+                    errored = status.get("status_code", "") == "ERROR"
+                    if errored:
+                        error_msg = status.get("message")
 
                 tool_calls.append(
                     {
@@ -382,12 +412,12 @@ def build_invocation_payload(trace_spans: list[dict]) -> dict | None:
 
     payload: dict = {
         "invocationId": invocation_id,
-        "agentId": _attr(root, "orgiq.agent_id") or "",
-        "agentName": _attr(root, "orgiq.agent_name") or root.get("name", ""),
+        "agentId": _attr(root, "orgiq.agent_id") or _attr(root, "agent.id") or "",
+        "agentName": _attr(root, "orgiq.agent_name") or _attr(root, "agent.name") or root.get("name", ""),
         "templateId": _attr(root, "orgiq.template_id"),
         "prompt": _attr(root, "input.value") or "",
         "response": _attr(root, "output.value") or "",
-        "modelId": first_model,
+        "modelId": first_model or _attr(root, "llm.model_name"),
         "promptVersion": _attr(root, "orgiq.prompt_version"),
         "inputTokens": prompt_tokens,
         "outputTokens": completion_tokens,
@@ -409,18 +439,16 @@ def build_invocation_payload(trace_spans: list[dict]) -> dict | None:
 _INSERT_INVOCATION_SQL = """
 INSERT INTO observability.invocation_traces (
   invocation_id, agent_id, agent_name, template_id,
-  prompt, response, model_id, prompt_version,
+  prompt_snippet, response_snippet, model_id, prompt_version,
   input_tokens, output_tokens, duration_ms,
   parent_invocation_id, user_id, session_id,
-  guardrail_action, pii_detected,
-  created_at
+  guardrail_action, pii_detected
 ) VALUES (
-  :invocation_id, :agent_id, :agent_name, :template_id,
-  :prompt, :response, :model_id, :prompt_version,
+  :invocation_id::uuid, :agent_id, :agent_name, :template_id,
+  :prompt_snippet, :response_snippet, :model_id, :prompt_version,
   :input_tokens, :output_tokens, :duration_ms,
-  :parent_invocation_id, :user_id, :session_id,
-  :guardrail_action, :pii_detected,
-  NOW()
+  NULLIF(:parent_invocation_id, '')::uuid, :user_id, :session_id,
+  :guardrail_action, :pii_detected
 )
 ON CONFLICT (invocation_id) DO NOTHING
 """
@@ -431,7 +459,7 @@ INSERT INTO observability.tool_calls (
   input_size, output_size, errored, error_message,
   input_sample, output_sample
 ) VALUES (
-  :invocation_id, :tool_name, :started_at::timestamptz, :duration_ms,
+  :invocation_id::uuid, :tool_name, :started_at::timestamptz, :duration_ms,
   :input_size, :output_size, :errored, :error_message,
   :input_sample, :output_sample
 )
@@ -466,8 +494,8 @@ def insert_aurora(payload: dict) -> None:
         _str_param("agent_id", payload.get("agentId")),
         _str_param("agent_name", payload.get("agentName")),
         _str_param("template_id", payload.get("templateId")),
-        _str_param("prompt", payload.get("prompt")),
-        _str_param("response", payload.get("response")),
+        _str_param("prompt_snippet", payload.get("prompt")),
+        _str_param("response_snippet", payload.get("response")),
         _str_param("model_id", payload.get("modelId")),
         _str_param("prompt_version", payload.get("promptVersion")),
         _int_param("input_tokens", payload.get("inputTokens")),
@@ -538,12 +566,16 @@ def lambda_handler(event: dict, context: Any) -> dict:  # noqa: ARG001
     4. Group spans into traces and project each trace to Aurora.
     5. Advance the cursor to end_time_ms.
     """
-    start_time_ms = get_cursor()
+    cursor_ms = get_cursor()
     end_time_ms = int(time.time() * 1000)
 
-    if end_time_ms <= start_time_ms:
+    if end_time_ms <= cursor_ms:
         logger.info("No new time window to process (cursor is up to date).")
         return {"status": "ok", "traces_projected": 0}
+
+    # Apply a lookback buffer so spans delayed by CW indexing are re-scanned.
+    # ON CONFLICT DO NOTHING makes this idempotent.
+    start_time_ms = max(0, cursor_ms - LOOKBACK_BUFFER_MS)
 
     log_groups = discover_log_groups()
     if not log_groups:
