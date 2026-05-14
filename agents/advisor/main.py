@@ -19,9 +19,12 @@ from _shared.instrumentation import (  # noqa: E402
     install_bedrock_usage_capture,
     instrumented_tool,
     post_trace,
+    record_retrieval_documents,
     reset_active_ctx,
+    retriever_span,
     set_active_ctx,
     short_prompt_hash,
+    with_orgiq_root,
 )
 
 # Patch boto3's bedrock-runtime client BEFORE Strands constructs its own —
@@ -127,22 +130,24 @@ def retrieve_context(query: str, max_results: int = 5) -> str:
         query: Topic or question to find supporting documentation for
         max_results: Number of documents to retrieve (default 5)
     """
-    response = _bedrock.retrieve(
-        knowledgeBaseId=KB_ID,
-        retrievalQuery={"text": query},
-        retrievalConfiguration={
-            "vectorSearchConfiguration": {"numberOfResults": min(max_results, 10)}
-        },
-    )
-    results = [
-        {
-            "content": r["content"]["text"],
-            "score": round(r.get("score", 0.0), 4),
-            "source": r.get("location", {}).get("s3Location", {}).get("uri", "unknown"),
-        }
-        for r in response.get("retrievalResults", [])
-    ]
-    return json.dumps(results, ensure_ascii=False)
+    with retriever_span("kb.retrieve", query) as r_span:
+        response = _bedrock.retrieve(
+            knowledgeBaseId=KB_ID,
+            retrievalQuery={"text": query},
+            retrievalConfiguration={
+                "vectorSearchConfiguration": {"numberOfResults": min(max_results, 10)}
+            },
+        )
+        results = [
+            {
+                "content": r["content"]["text"],
+                "score": round(r.get("score", 0.0), 4),
+                "source": r.get("location", {}).get("s3Location", {}).get("uri", "unknown"),
+            }
+            for r in response.get("retrievalResults", [])
+        ]
+        record_retrieval_documents(r_span, results)
+        return json.dumps(results, ensure_ascii=False)
 
 
 def _model_kwargs() -> dict:
@@ -209,7 +214,13 @@ async def handle(payload: dict) -> dict:
 
     t0 = time.monotonic()
     try:
-        result = _agent(input_text)
+        with with_orgiq_root(
+            ctx,
+            agent_id="orgiq-advisor",
+            agent_name="Advisor",
+            prompt_version=_SYSTEM_PROMPT_SHA,
+        ):
+            result = _agent(input_text)
     finally:
         _current_ctx.reset(token)
         reset_active_ctx(shared_token)
