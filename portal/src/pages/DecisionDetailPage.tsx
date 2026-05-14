@@ -109,7 +109,7 @@ function DecisionDetailPage() {
       {/* Back link */}
       <div style={{ marginBottom: 20 }}>
         <Link
-          to="/decisions"
+          to="/iq/decisions"
           style={{
             fontSize: 13,
             color: 'var(--color-accent, #2563eb)',

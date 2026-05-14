@@ -405,7 +405,7 @@ function ModelComparePage() {
                   ) : (
                     <span style={hint}>
                       Run a calibration to anchor this judge.{' '}
-                      <Link to="/observability/calibration" style={inlineLink}>open →</Link>
+                      <Link to="/admin/observability/calibration" style={inlineLink}>open →</Link>
                     </span>
                   )
                 }

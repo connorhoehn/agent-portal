@@ -21,10 +21,10 @@ function ScoresComparePage() {
   const { data, isLoading, error } = useFetch<RadarBatchEntry[]>(fetchUrl);
 
   if (!isValid) {
-    return <Navigate to="/scores" replace />;
+    return <Navigate to="/iq/scores" replace />;
   }
 
-  const backUrl = searchParams.get('w') ? `/scores?w=${searchParams.get('w')}` : '/scores';
+  const backUrl = searchParams.get('w') ? `/iq/scores?w=${searchParams.get('w')}` : '/iq/scores';
 
   return (
     <div style={{ padding: '24px 32px', maxWidth: 900 }}>

@@ -271,7 +271,7 @@ function EdgeDetail({ edge }: { edge: TopologyEdge }) {
       </div>
       <div style={drawerActionsStyle}>
         <Link
-          to={`/observability/invocations/search?agentId=${encodeURIComponent(edge.target)}`}
+          to={`/admin/observability/invocations/search?agentId=${encodeURIComponent(edge.target)}`}
           style={drawerLinkStyle}
         >
           View {edge.targetName || edge.target} invocations →
@@ -298,12 +298,12 @@ function NodeDetail({ agent }: { agent: AgentSummary }) {
       </div>
       <div style={drawerActionsStyle}>
         <Link
-          to={`/observability/invocations/search?agentId=${encodeURIComponent(agent.id)}`}
+          to={`/admin/observability/invocations/search?agentId=${encodeURIComponent(agent.id)}`}
           style={drawerLinkStyle}
         >
           View invocations →
         </Link>
-        <Link to="/observability/agents" style={drawerLinkStyle}>
+        <Link to="/admin/observability/agents" style={drawerLinkStyle}>
           Per-agent metrics →
         </Link>
       </div>

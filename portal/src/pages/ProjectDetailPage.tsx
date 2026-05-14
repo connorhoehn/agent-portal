@@ -56,7 +56,7 @@ function ProjectDetailPage() {
 
   const backLink = (
     <Link
-      to="/projects"
+      to="/iq/projects"
       style={{
         display: 'inline-flex',
         alignItems: 'center',

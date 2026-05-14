@@ -51,7 +51,7 @@ function MemoryPage() {
                 : '—'}
             </div>
             <Link
-              to="/invoke"
+              to="/iq/invoke"
               style={{
                 display: 'inline-block',
                 marginTop: 6,
@@ -83,7 +83,7 @@ function MemoryPage() {
           ) : recent.length === 0 ? (
             <EmptyState>
               No memory-backed sessions yet. Start a conversation from{' '}
-              <Link to="/invoke" style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>Invoke</Link>{' '}
+              <Link to="/iq/invoke" style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>Invoke</Link>{' '}
               to populate this store.
             </EmptyState>
           ) : (

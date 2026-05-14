@@ -480,7 +480,7 @@ function DriftPage() {
           setToast(
             <span>
               Test case <strong>{testId}</strong> saved.{' '}
-              <Link to="/observability/harness" style={toastLinkStyle}>
+              <Link to="/admin/observability/harness" style={toastLinkStyle}>
                 View in harness →
               </Link>
             </span>,

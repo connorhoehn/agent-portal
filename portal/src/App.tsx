@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router';
 import { Layout } from './components/shell/Layout';
 import { RequireRole } from './lib/auth';
+import { useSession } from './lib/auth';
 
 const AgentFlowPage = lazy(() => import('./pages/AgentFlowPage'));
 const ScoresPage = lazy(() => import('./pages/ScoresPage'));
@@ -84,24 +85,40 @@ function Page({ element }: { element: React.ReactNode }) {
   return <Suspense fallback={<Loading />}>{element}</Suspense>;
 }
 
+function RootRedirect() {
+  const { session } = useSession();
+  if (!session) return <Navigate to="/iq/agents" replace />;
+  return <Navigate to={session.tenant === 'newsroom' ? '/newsroom/home' : '/iq/agents'} replace />;
+}
+
 export function App() {
   return (
     <Routes>
+      {/* ── Backwards-compat redirects (outside Layout so they catch bare paths) ── */}
+      <Route path="agents" element={<Navigate to="/iq/agents" replace />} />
+      <Route path="search" element={<Navigate to="/iq/search" replace />} />
+      <Route path="invoke" element={<Navigate to="/iq/invoke" replace />} />
+      <Route path="scores" element={<Navigate to="/iq/scores" replace />} />
+      <Route path="scores/cohorts" element={<Navigate to="/iq/scores/cohorts" replace />} />
+      <Route path="scores/compare" element={<Navigate to="/iq/scores/compare" replace />} />
+      <Route path="decisions" element={<Navigate to="/iq/decisions" replace />} />
+      <Route path="decisions/:id" element={<Navigate to="/iq/decisions" replace />} />
+      <Route path="projects" element={<Navigate to="/iq/projects" replace />} />
+      <Route path="projects/:id" element={<Navigate to="/iq/projects" replace />} />
+      <Route path="explore" element={<Navigate to="/iq/explore" replace />} />
+      <Route path="graph" element={<Navigate to="/iq/explore" replace />} />
+      <Route path="code-interpreter" element={<Navigate to="/iq/code-interpreter" replace />} />
+      <Route path="knowledge-base" element={<Navigate to="/admin/knowledge-base" replace />} />
+      <Route path="observability/*" element={<Navigate to="/admin/observability" replace />} />
+      <Route path="ingest/*" element={<Navigate to="/admin/ingest" replace />} />
+      <Route path="capabilities/*" element={<Navigate to="/admin/capabilities" replace />} />
+      <Route path="identity/*" element={<Navigate to="/admin/identity" replace />} />
+
       <Route element={<Layout />}>
-        <Route index element={<Navigate to="/agents" replace />} />
-        <Route path="agents" element={<Page element={<AgentFlowPage />} />} />
-        <Route path="graph" element={<Navigate to="/explore" replace />} />
-        <Route path="search" element={<Page element={<SearchPage />} />} />
-        <Route path="invoke" element={<Page element={<InvokePage />} />} />
-        <Route path="scores" element={<Page element={<ScoresPage />} />} />
-        <Route path="scores/cohorts" element={<Page element={<ScoresCohortPage />} />} />
-        <Route path="scores/compare" element={<Page element={<ScoresComparePage />} />} />
-        <Route path="decisions" element={<Page element={<DecisionsPage />} />} />
-        <Route path="decisions/:id" element={<Page element={<DecisionDetailPage />} />} />
-        <Route path="projects" element={<Page element={<ProjectsPage />} />} />
-        <Route path="projects/:id" element={<Page element={<ProjectDetailPage />} />} />
+        <Route index element={<RootRedirect />} />
         <Route path="settings" element={<Page element={<SettingsPage />} />} />
 
+        {/* ── /newsroom/* — Newsroom tenant (unchanged) ── */}
         <Route path="newsroom" element={<Page element={<NewsroomLayout />} />}>
           <Route index element={<Navigate to="home" replace />} />
           <Route path="home" element={<Page element={<NewsroomHomePage />} />} />
@@ -114,76 +131,94 @@ export function App() {
           <Route path="headlines" element={<Page element={<NewsroomHeadlinesPage />} />} />
         </Route>
 
-        <Route path="knowledge-base" element={<Page element={<KnowledgeBasePage />} />} />
-
-        <Route path="ingest" element={
-          <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
-            <Page element={<IngestLayout />} />
-          </RequireRole>
-        }>
-          <Route index element={<Navigate to="summary" replace />} />
-          <Route path="summary" element={<Page element={<IngestSummaryPage />} />} />
-          <Route path="crawl" element={<Page element={<IngestCrawlPage />} />} />
-          <Route path="history" element={<Page element={<IngestHistoryPage />} />} />
-          <Route path="sources" element={<Page element={<IngestSourcesPage />} />} />
-          <Route path="storage" element={<Page element={<IngestStoragePage />} />} />
-          <Route path="schedules" element={<Page element={<IngestSchedulesPage />} />} />
+        {/* ── /iq/* — OrgIQ tenant pages ── */}
+        <Route path="iq">
+          <Route index element={<Navigate to="agents" replace />} />
+          <Route path="agents" element={<Page element={<AgentFlowPage />} />} />
+          <Route path="search" element={<Page element={<SearchPage />} />} />
+          <Route path="invoke" element={<Page element={<InvokePage />} />} />
+          <Route path="scores" element={<Page element={<ScoresPage />} />} />
+          <Route path="scores/cohorts" element={<Page element={<ScoresCohortPage />} />} />
+          <Route path="scores/compare" element={<Page element={<ScoresComparePage />} />} />
+          <Route path="decisions" element={<Page element={<DecisionsPage />} />} />
+          <Route path="decisions/:id" element={<Page element={<DecisionDetailPage />} />} />
+          <Route path="projects" element={<Page element={<ProjectsPage />} />} />
+          <Route path="projects/:id" element={<Page element={<ProjectDetailPage />} />} />
+          <Route path="explore" element={<Page element={<ExplorePage />} />} />
+          <Route path="code-interpreter" element={<Page element={<CodeInterpreterDemoPage />} />} />
         </Route>
 
-        <Route path="observability" element={
-          <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/" replace />}>
-            <Page element={<ObservabilityLayout />} />
-          </RequireRole>
-        }>
-          <Route index element={<Navigate to="summary" replace />} />
-          <Route path="oncall" element={<Page element={<ObservabilityOnCallPage />} />} />
-          <Route path="summary" element={<Page element={<ObservabilitySummaryPage />} />} />
-          <Route path="invocations" element={<Page element={<ObservabilityInvocationsPage />} />} />
-          <Route path="invocations/search" element={<Page element={<ObservabilityInvocationSearchPage />} />} />
-          <Route path="invocations/:invocationId" element={<Page element={<ObservabilityInvocationDetailPage />} />} />
-          <Route path="capability-events" element={<Page element={<ObservabilityCapabilityEventsPage />} />} />
-          <Route path="agents" element={<Page element={<ObservabilityAgentMetricsPage />} />} />
-          <Route path="sessions" element={<Page element={<ObservabilitySessionsPage />} />} />
-          <Route path="authz" element={<Page element={<ObservabilityAuthzPage />} />} />
-          <Route path="drift" element={<Page element={<ObservabilityDriftPage />} />} />
-          <Route path="quality" element={<Page element={<ObservabilityQualityPage />} />} />
-          <Route path="cost" element={<Page element={<ObservabilityCostPage />} />} />
-          <Route path="calibration" element={<Page element={<ObservabilityCalibrationPage />} />} />
-          <Route path="model-compare" element={<Page element={<ObservabilityModelComparePage />} />} />
-          <Route path="memory" element={<Page element={<ObservabilityMemoryPage />} />} />
-          <Route path="guardrail-rules" element={<Page element={<ObservabilityGuardrailRulesPage />} />} />
-          <Route path="traffic" element={<Page element={<ObservabilityTrafficPage />} />} />
-          <Route path="approvals" element={<Page element={<ObservabilityApprovalsPage />} />} />
-          <Route path="harness" element={<Page element={<ObservabilityHarnessLayout />} />}>
-            <Route index element={<Page element={<ObservabilityHarnessHomePage />} />} />
-            <Route path="runs/:runId" element={<Page element={<ObservabilityHarnessRunDetailPage />} />} />
-            <Route path="compare/:runIdA/:runIdB" element={<Page element={<ObservabilityHarnessCompareRunsPage />} />} />
+        {/* ── /admin/* — Admin / operations pages ── */}
+        <Route path="admin">
+          <Route index element={<Navigate to="observability" replace />} />
+          <Route path="knowledge-base" element={<Page element={<KnowledgeBasePage />} />} />
+
+          <Route path="ingest" element={
+            <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
+              <Page element={<IngestLayout />} />
+            </RequireRole>
+          }>
+            <Route index element={<Navigate to="summary" replace />} />
+            <Route path="summary" element={<Page element={<IngestSummaryPage />} />} />
+            <Route path="crawl" element={<Page element={<IngestCrawlPage />} />} />
+            <Route path="history" element={<Page element={<IngestHistoryPage />} />} />
+            <Route path="sources" element={<Page element={<IngestSourcesPage />} />} />
+            <Route path="storage" element={<Page element={<IngestStoragePage />} />} />
+            <Route path="schedules" element={<Page element={<IngestSchedulesPage />} />} />
+          </Route>
+
+          <Route path="observability" element={
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/" replace />}>
+              <Page element={<ObservabilityLayout />} />
+            </RequireRole>
+          }>
+            <Route index element={<Navigate to="summary" replace />} />
+            <Route path="oncall" element={<Page element={<ObservabilityOnCallPage />} />} />
+            <Route path="summary" element={<Page element={<ObservabilitySummaryPage />} />} />
+            <Route path="invocations" element={<Page element={<ObservabilityInvocationsPage />} />} />
+            <Route path="invocations/search" element={<Page element={<ObservabilityInvocationSearchPage />} />} />
+            <Route path="invocations/:invocationId" element={<Page element={<ObservabilityInvocationDetailPage />} />} />
+            <Route path="capability-events" element={<Page element={<ObservabilityCapabilityEventsPage />} />} />
+            <Route path="agents" element={<Page element={<ObservabilityAgentMetricsPage />} />} />
+            <Route path="sessions" element={<Page element={<ObservabilitySessionsPage />} />} />
+            <Route path="authz" element={<Page element={<ObservabilityAuthzPage />} />} />
+            <Route path="drift" element={<Page element={<ObservabilityDriftPage />} />} />
+            <Route path="quality" element={<Page element={<ObservabilityQualityPage />} />} />
+            <Route path="cost" element={<Page element={<ObservabilityCostPage />} />} />
+            <Route path="calibration" element={<Page element={<ObservabilityCalibrationPage />} />} />
+            <Route path="model-compare" element={<Page element={<ObservabilityModelComparePage />} />} />
+            <Route path="memory" element={<Page element={<ObservabilityMemoryPage />} />} />
+            <Route path="guardrail-rules" element={<Page element={<ObservabilityGuardrailRulesPage />} />} />
+            <Route path="traffic" element={<Page element={<ObservabilityTrafficPage />} />} />
+            <Route path="approvals" element={<Page element={<ObservabilityApprovalsPage />} />} />
+            <Route path="harness" element={<Page element={<ObservabilityHarnessLayout />} />}>
+              <Route index element={<Page element={<ObservabilityHarnessHomePage />} />} />
+              <Route path="runs/:runId" element={<Page element={<ObservabilityHarnessRunDetailPage />} />} />
+              <Route path="compare/:runIdA/:runIdB" element={<Page element={<ObservabilityHarnessCompareRunsPage />} />} />
+            </Route>
+          </Route>
+
+          <Route path="capabilities" element={<Page element={<CapabilitiesLayout />} />}>
+            <Route index element={<Navigate to="summary" replace />} />
+            <Route path="summary" element={<Page element={<CapabilitiesSummaryPage />} />} />
+            <Route path="guardrails" element={<Page element={<CapabilitiesGuardrailsPage />} />} />
+            <Route path="code-interpreter" element={<Page element={<CapabilitiesCodeInterpreterPage />} />} />
+            <Route path="browser" element={<Page element={<CapabilitiesBrowserPage />} />} />
+            <Route path="memory" element={<Page element={<CapabilitiesMemoryPage />} />} />
+          </Route>
+
+          <Route path="identity" element={
+            <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
+              <Page element={<IdentityLayout />} />
+            </RequireRole>
+          }>
+            <Route index element={<Navigate to="roles" replace />} />
+            <Route path="roles" element={<Page element={<IdentityRolesPage />} />} />
+            <Route path="policies" element={<Page element={<IdentityPoliciesPage />} />} />
+            <Route path="schema" element={<Page element={<IdentitySchemaPage />} />} />
+            <Route path="test" element={<Page element={<IdentityTestPage />} />} />
           </Route>
         </Route>
-
-        <Route path="capabilities" element={<Page element={<CapabilitiesLayout />} />}>
-          <Route index element={<Navigate to="summary" replace />} />
-          <Route path="summary" element={<Page element={<CapabilitiesSummaryPage />} />} />
-          <Route path="guardrails" element={<Page element={<CapabilitiesGuardrailsPage />} />} />
-          <Route path="code-interpreter" element={<Page element={<CapabilitiesCodeInterpreterPage />} />} />
-          <Route path="browser" element={<Page element={<CapabilitiesBrowserPage />} />} />
-          <Route path="memory" element={<Page element={<CapabilitiesMemoryPage />} />} />
-        </Route>
-
-        <Route path="identity" element={
-          <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
-            <Page element={<IdentityLayout />} />
-          </RequireRole>
-        }>
-          <Route index element={<Navigate to="roles" replace />} />
-          <Route path="roles" element={<Page element={<IdentityRolesPage />} />} />
-          <Route path="policies" element={<Page element={<IdentityPoliciesPage />} />} />
-          <Route path="schema" element={<Page element={<IdentitySchemaPage />} />} />
-          <Route path="test" element={<Page element={<IdentityTestPage />} />} />
-        </Route>
-
-        <Route path="code-interpreter" element={<Page element={<CodeInterpreterDemoPage />} />} />
-        <Route path="explore" element={<Page element={<ExplorePage />} />} />
       </Route>
     </Routes>
   );

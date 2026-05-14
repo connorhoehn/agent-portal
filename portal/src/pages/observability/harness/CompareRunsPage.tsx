@@ -718,7 +718,7 @@ function ErrorBlock({
             )}
             <div style={{ ...subline, color: 'var(--color-text-secondary)' }}>{detail}</div>
           </div>
-          <Link to="/observability/harness" style={btnLink}>
+          <Link to="/admin/observability/harness" style={btnLink}>
             ← Back to harness
           </Link>
         </div>

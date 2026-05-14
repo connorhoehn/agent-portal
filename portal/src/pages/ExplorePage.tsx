@@ -105,7 +105,7 @@ function ExplorePage() {
   function askInSearch() {
     if (selectedIds.size === 0) return;
     const ids = Array.from(selectedIds).join(',');
-    navigate(`/search?peopleIds=${encodeURIComponent(ids)}`);
+    navigate(`/iq/search?peopleIds=${encodeURIComponent(ids)}`);
   }
 
   if (!data) {
@@ -151,7 +151,7 @@ function ExplorePage() {
             <button onClick={askInSearch} style={primaryBtn()}>Ask in Search →</button>
           </>
         )}
-        <Link to="/search" style={ghostBtnLink()}>Open Search</Link>
+        <Link to="/iq/search" style={ghostBtnLink()}>Open Search</Link>
       </div>
 
       <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>

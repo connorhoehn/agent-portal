@@ -44,35 +44,35 @@ interface Result {
 // Top-level destinations across observability and harness. Order roughly
 // matches the sub-nav order so muscle-memory keys still work.
 const PAGES: PageEntry[] = [
-  { label: 'Search',             hint: 'Ask the org-search agent',            path: '/search' },
-  { label: 'Explore',            hint: 'Force-directed org graph',            path: '/explore' },
-  { label: 'Architecture',       hint: 'A2A agent topology',                  path: '/agents' },
-  { label: 'Scores',             hint: 'Per-person influence leaderboard',    path: '/scores' },
-  { label: 'Decisions',          hint: 'Editorial / org-level decisions',     path: '/decisions' },
-  { label: 'Projects',           hint: 'Project contributions + status',      path: '/projects' },
+  { label: 'Search',             hint: 'Ask the org-search agent',            path: '/iq/search' },
+  { label: 'Explore',            hint: 'Force-directed org graph',            path: '/iq/explore' },
+  { label: 'Architecture',       hint: 'A2A agent topology',                  path: '/iq/agents' },
+  { label: 'Scores',             hint: 'Per-person influence leaderboard',    path: '/iq/scores' },
+  { label: 'Decisions',          hint: 'Editorial / org-level decisions',     path: '/iq/decisions' },
+  { label: 'Projects',           hint: 'Project contributions + status',      path: '/iq/projects' },
   { label: 'Newsroom',           hint: 'Articles, beats, briefs, pitches',    path: '/newsroom' },
   { label: 'Newsroom — Articles',hint: 'Browse articles + filters',           path: '/newsroom/articles' },
   { label: 'Newsroom — Beats',   hint: 'Coverage heatmap by topic',           path: '/newsroom/beats' },
-  { label: 'Knowledge Base',     hint: 'Documents + data sources',            path: '/knowledge-base' },
+  { label: 'Knowledge Base',     hint: 'Documents + data sources',            path: '/admin/knowledge-base' },
   { label: 'Settings',           hint: 'User preferences',                    path: '/settings' },
-  { label: 'On-Call',            hint: 'Live alarms + incident timeline',     path: '/observability/oncall' },
-  { label: 'Summary',            hint: 'Health overview',                     path: '/observability/summary' },
-  { label: 'Traffic',            hint: 'RPS + heatmap + top users',           path: '/observability/traffic' },
-  { label: 'Recent',             hint: 'Last 50 agent calls',                 path: '/observability/invocations' },
-  { label: 'Invocations Search', hint: 'Triage by prompt / agent / score',    path: '/observability/invocations/search' },
-  { label: 'Capability Events',  hint: 'Browser & code-interpreter events',   path: '/observability/capability-events' },
-  { label: 'Agent Metrics',      hint: 'Per-agent stats',                     path: '/observability/agents' },
-  { label: 'Sessions',           hint: 'Chat threads',                        path: '/observability/sessions' },
-  { label: 'Authz Log',          hint: 'Live AVP / Cedar decisions',          path: '/observability/authz' },
-  { label: 'Memory',             hint: 'Memory ops + cold sessions',          path: '/observability/memory' },
-  { label: 'Guardrail Rules',    hint: 'Per-rule intervention details',       path: '/observability/guardrail-rules' },
-  { label: 'Drift',              hint: 'Schema + judge + embedding drift',    path: '/observability/drift' },
-  { label: 'Quality',            hint: 'Judge scores + feedback',             path: '/observability/quality' },
-  { label: 'Cost',               hint: 'Spend by agent + deploy markers',     path: '/observability/cost' },
-  { label: 'Approvals',          hint: 'Pending HITL decisions',              path: '/observability/approvals' },
-  { label: 'Harness',            hint: 'Replay test set + view runs',         path: '/observability/harness' },
-  { label: 'Calibration',        hint: 'Judge vs human MAE drift',            path: '/observability/calibration' },
-  { label: 'Model Compare',      hint: 'Side-by-side run delta',              path: '/observability/model-compare' },
+  { label: 'On-Call',            hint: 'Live alarms + incident timeline',     path: '/admin/observability/oncall' },
+  { label: 'Summary',            hint: 'Health overview',                     path: '/admin/observability/summary' },
+  { label: 'Traffic',            hint: 'RPS + heatmap + top users',           path: '/admin/observability/traffic' },
+  { label: 'Recent',             hint: 'Last 50 agent calls',                 path: '/admin/observability/invocations' },
+  { label: 'Invocations Search', hint: 'Triage by prompt / agent / score',    path: '/admin/observability/invocations/search' },
+  { label: 'Capability Events',  hint: 'Browser & code-interpreter events',   path: '/admin/observability/capability-events' },
+  { label: 'Agent Metrics',      hint: 'Per-agent stats',                     path: '/admin/observability/agents' },
+  { label: 'Sessions',           hint: 'Chat threads',                        path: '/admin/observability/sessions' },
+  { label: 'Authz Log',          hint: 'Live AVP / Cedar decisions',          path: '/admin/observability/authz' },
+  { label: 'Memory',             hint: 'Memory ops + cold sessions',          path: '/admin/observability/memory' },
+  { label: 'Guardrail Rules',    hint: 'Per-rule intervention details',       path: '/admin/observability/guardrail-rules' },
+  { label: 'Drift',              hint: 'Schema + judge + embedding drift',    path: '/admin/observability/drift' },
+  { label: 'Quality',            hint: 'Judge scores + feedback',             path: '/admin/observability/quality' },
+  { label: 'Cost',               hint: 'Spend by agent + deploy markers',     path: '/admin/observability/cost' },
+  { label: 'Approvals',          hint: 'Pending HITL decisions',              path: '/admin/observability/approvals' },
+  { label: 'Harness',            hint: 'Replay test set + view runs',         path: '/admin/observability/harness' },
+  { label: 'Calibration',        hint: 'Judge vs human MAE drift',            path: '/admin/observability/calibration' },
+  { label: 'Model Compare',      hint: 'Side-by-side run delta',              path: '/admin/observability/model-compare' },
 ];
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
@@ -169,7 +169,7 @@ export function CommandPalette() {
         kind: 'uuid',
         label: `Open invocation ${prefix} →`,
         hint: q,
-        path: `/observability/invocations/${q}`,
+        path: `/admin/observability/invocations/${q}`,
       });
       return out;
     }
@@ -201,7 +201,7 @@ export function CommandPalette() {
           kind: 'run',
           label: `Run · ${label}`,
           hint: `${r.status ?? 'run'} · ${r.runId.slice(0, 8)}`,
-          path: `/observability/harness/runs/${r.runId}`,
+          path: `/admin/observability/harness/runs/${r.runId}`,
         });
       }
     }

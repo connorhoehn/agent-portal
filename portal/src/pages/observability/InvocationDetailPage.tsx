@@ -307,7 +307,7 @@ function InvocationDetailPage() {
             </div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
-            <Link to="/observability/invocations/search" style={btnLink}>
+            <Link to="/admin/observability/invocations/search" style={btnLink}>
               ← Back to search
             </Link>
             <div style={btnGroup}>
@@ -422,7 +422,7 @@ function InvocationDetailPage() {
           setToast(
             <span>
               Test case <strong>{testId}</strong> saved.{' '}
-              <Link to="/observability/harness" style={btnLink}>
+              <Link to="/admin/observability/harness" style={btnLink}>
                 View in harness →
               </Link>
             </span>,
@@ -671,7 +671,7 @@ function ErrorBlock({
             )}
             <div style={{ ...subdued, marginTop: 4 }}>{detail}</div>
           </div>
-          <Link to="/observability/invocations/search" style={btnLink}>
+          <Link to="/admin/observability/invocations/search" style={btnLink}>
             ← Back to search
           </Link>
         </div>

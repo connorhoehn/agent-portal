@@ -14,19 +14,19 @@ interface Health {
 type NavItem = { path: string; label: string; requireRoles?: string[] };
 
 const NAV_ITEMS: NavItem[] = [
-  { path: '/search', label: 'Search' },
-  { path: '/explore', label: 'Explore' },
-  { path: '/agents', label: 'Architecture' },
-  { path: '/invoke', label: 'Agent Tools' },
-  { path: '/scores', label: 'Scores' },
-  { path: '/decisions', label: 'Decisions' },
-  { path: '/projects', label: 'Projects' },
+  { path: '/iq/search', label: 'Search' },
+  { path: '/iq/explore', label: 'Explore' },
+  { path: '/iq/agents', label: 'Architecture' },
+  { path: '/iq/invoke', label: 'Agent Tools' },
+  { path: '/iq/scores', label: 'Scores' },
+  { path: '/iq/decisions', label: 'Decisions' },
+  { path: '/iq/projects', label: 'Projects' },
   { path: '/newsroom', label: 'Newsroom' },
-  { path: '/knowledge-base', label: 'Knowledge Base', requireRoles: ['hr-admin'] },
-  { path: '/ingest', label: 'Ingest', requireRoles: ['hr-admin'] },
-  { path: '/observability', label: 'Observability', requireRoles: ['org-leader', 'hr-admin'] },
-  { path: '/capabilities', label: 'Platform Services' },
-  { path: '/identity', label: 'Identity', requireRoles: ['hr-admin'] },
+  { path: '/admin/knowledge-base', label: 'Knowledge Base', requireRoles: ['hr-admin'] },
+  { path: '/admin/ingest', label: 'Ingest', requireRoles: ['hr-admin'] },
+  { path: '/admin/observability', label: 'Observability', requireRoles: ['org-leader', 'hr-admin'] },
+  { path: '/admin/capabilities', label: 'Platform Services' },
+  { path: '/admin/identity', label: 'Identity', requireRoles: ['hr-admin'] },
   { path: '/settings', label: 'Settings' },
 ];
 

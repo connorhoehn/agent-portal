@@ -370,7 +370,7 @@ function RunDetailPage() {
                 Promote prompt versions
               </button>
             )}
-            <Link to="/observability/harness" style={btnLink}>
+            <Link to="/admin/observability/harness" style={btnLink}>
               ← Back to harness
             </Link>
           </div>
@@ -698,7 +698,7 @@ function ErrorBlock({
             {runId && <div style={subline}>run id: <span style={monoInline}>{runId}</span></div>}
             <div style={{ ...subline, color: 'var(--color-text-secondary)' }}>{detail}</div>
           </div>
-          <Link to="/observability/harness" style={btnLink}>
+          <Link to="/admin/observability/harness" style={btnLink}>
             ← Back to harness
           </Link>
         </div>

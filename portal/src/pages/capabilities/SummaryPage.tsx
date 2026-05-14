@@ -68,17 +68,17 @@ function SummaryPage() {
           <StatTile
             label="Active Browser Sessions"
             value={String(activeBrowser)}
-            to="/capabilities/browser"
+            to="/admin/capabilities/browser"
             accent={activeBrowser > 0}
           />
           <StatTile
             label="Active Code Sessions"
             value={String(activeCode)}
-            to="/capabilities/code-interpreter"
+            to="/admin/capabilities/code-interpreter"
             accent={activeCode > 0}
           />
           <Card padding="md">
-            <Link to="/capabilities/guardrails" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
+            <Link to="/admin/capabilities/guardrails" style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
               <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>Guardrail</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
                 <Chip tone={guardrailReady ? 'success' : 'warning'} size="xs">{guardrailStatus}</Chip>
@@ -94,7 +94,7 @@ function SummaryPage() {
           <StatTile
             label="Recent Capability Events"
             value={String(recentEventCount)}
-            to="/observability"
+            to="/admin/observability"
             hint="last 50 events in the ring buffer"
           />
         </div>
