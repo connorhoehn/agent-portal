@@ -24,6 +24,21 @@
 // profile is used. For production middleware deployment, ensure the
 // middleware execution role has those permissions attached.
 
+// ──────────────────────────────────────────────────────────────────────────
+// MIGRATION NOTE (OI Phase 4):
+//
+// This poller reads legacy `ORGIQ_TRACE:<json>` lines from CW Logs. It's
+// being phased out in favor of `OrgIQ-SpanProjector` Lambda which reads
+// OpenInference-attributed OTel spans and projects them to the same Aurora
+// tables.
+//
+// To retire this poller in production:
+//   1. Deploy OrgIQ-SpanProjector (`cdk deploy OrgIQ-SpanProjector`).
+//   2. Verify it's writing invocation_traces rows for live agent invocations.
+//   3. Set OBS_USE_LEGACY_POLLER=false on the middleware service.
+//   4. Once stable for ~1 week, delete this file + its startTracePoller import.
+// ──────────────────────────────────────────────────────────────────────────
+
 import {
   CloudWatchLogsClient,
   DescribeLogGroupsCommand,
@@ -335,6 +350,17 @@ export function startTracePoller(): void {
   if (_intervalHandle) return;
   if (process.env['OBS_TRACE_POLLER_DISABLED'] === '1') {
     console.log('[cw-ingest] OBS_TRACE_POLLER_DISABLED=1 — skipping start');
+    return;
+  }
+  // Feature flag: when the OI Span Projector is verified in production, flip
+  // OBS_USE_LEGACY_POLLER=false to retire this legacy ingestion path without
+  // a redeploy. Default = true (poller runs as before).
+  //
+  // See: docs.ag-ui.com + OpenInference Phase 4 plan.
+  const LEGACY_POLLER_DISABLE_VALUES = new Set(['false', '0', 'no', 'off', 'disabled']);
+  const flag = (process.env['OBS_USE_LEGACY_POLLER'] ?? 'true').trim().toLowerCase();
+  if (LEGACY_POLLER_DISABLE_VALUES.has(flag)) {
+    console.log('[cw-trace-ingest] OBS_USE_LEGACY_POLLER=false — legacy poller disabled. OI Span Projector should be producing rows instead.');
     return;
   }
   if (!config.region) {
