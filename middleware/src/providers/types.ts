@@ -106,6 +106,17 @@ export interface AuroraProvider {
   getRadarBatch(personIds: string[]): Promise<RadarBatchEntry[]>;
 }
 
+export interface HistorySample {
+  ts: string;
+  score: number;
+}
+
+export interface HistoryResponse {
+  personId: string;
+  samples: HistorySample[];
+  deltaVs7d: number | null;
+}
+
 export interface RadarAxes {
   influence: number;
   expertise: number;

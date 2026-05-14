@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { aurora } from '../providers/index.js';
+import { getPersonHistory } from '../providers/scores-history.js';
 import { asyncHandler } from '../lib/async-handler.js';
 
 export const scoresRouter = Router();
@@ -54,6 +55,19 @@ scoresRouter.get('/:personId/radar', asyncHandler(async (req, res) => {
   const radar = await aurora.getPersonRadar(req.params['personId'] as string);
   if (!radar) { res.status(404).json({ error: 'Person not found or not scored' }); return; }
   res.json(radar);
+}));
+
+scoresRouter.get('/:personId/history', asyncHandler(async (req, res) => {
+  const personId = req.params['personId'] as string;
+  const rawDays = parseInt(req.query['days'] as string ?? '30', 10);
+  const days = Number.isNaN(rawDays) ? 30 : Math.min(Math.max(rawDays, 1), 90);
+  try {
+    const history = await getPersonHistory(personId, days);
+    res.json(history);
+  } catch {
+    // Missing table, no creds — return empty so the UI handles it gracefully.
+    res.json({ personId, samples: [], deltaVs7d: null });
+  }
 }));
 
 scoresRouter.get('/:personId', asyncHandler(async (req, res) => {

@@ -1,12 +1,19 @@
 import { Card } from '@connorhoehnslalom/ui-components/shared';
 import { PersonDetail, formatRelativeTime } from './types';
 import { RadarChart, type RadarAxes } from './RadarChart';
+import { TrendLine } from './TrendLine';
 import { useFetch } from '../../hooks/useFetch';
 
 interface RadarResponse {
   personId: string;
   person: RadarAxes;
   peerMax: RadarAxes;
+}
+
+interface HistoryResponse {
+  personId: string;
+  samples: Array<{ ts: string; score: number }>;
+  deltaVs7d: number | null;
 }
 
 interface Props {
@@ -19,6 +26,9 @@ interface Props {
 export function PersonDetailCard({ detail, deptColors, onClose, onSelectConnection }: Props) {
   const { data: radar } = useFetch<RadarResponse>(
     detail.id ? `/api/scores/${encodeURIComponent(detail.id)}/radar` : '',
+  );
+  const { data: history } = useFetch<HistoryResponse>(
+    detail.id ? `/api/scores/${encodeURIComponent(detail.id)}/history?days=30` : '',
   );
   return (
     <Card padding="md">
@@ -55,6 +65,11 @@ export function PersonDetailCard({ detail, deptColors, onClose, onSelectConnecti
         Radar
       </div>
       <RadarChart radar={radar} />
+
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 16, marginBottom: 6 }}>
+        Trend
+      </div>
+      <TrendLine history={history} />
 
       <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 16, marginBottom: 6 }}>
         Top Connections ({detail.connections.length} total)
