@@ -34,6 +34,7 @@ import {
 import { useFetch } from '../../../hooks/useFetch';
 import { CostChip } from '../../../components/observability/CostChip';
 import { ModeChip } from '../../../components/observability/ModeChip';
+import { SmartEmptyState } from '../../../components/observability/SmartEmptyState';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -386,7 +387,17 @@ function HarnessHomePage() {
           </h2>
         </div>
         {runs.length === 0 ? (
-          <EmptyState text="No runs yet." />
+          <SmartEmptyState
+            title="No runs yet"
+            detail="A run replays the active test set against agents and scores the responses with the LLM-as-judge."
+            actions={[
+              {
+                label: 'Run the test harness',
+                detail: 'Or click Run now in the header above for a labelled run.',
+                code: 'python3 infra/scripts/harness.py run --mode live --label "drift-seed@$(git rev-parse --short HEAD)"',
+              },
+            ]}
+          />
         ) : (
           <Table>
             <TableHead>

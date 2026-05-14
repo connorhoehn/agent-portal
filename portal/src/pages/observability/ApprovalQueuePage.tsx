@@ -19,6 +19,7 @@ import {
   TableTd,
   Chip,
 } from '@connorhoehnslalom/ui-components/shared';
+import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 
 interface Approval {
   approvalId: string;
@@ -198,16 +199,16 @@ function ApprovalQueuePage() {
 
       <Card padding="md">
         {sorted.length === 0 ? (
-          <div
-            style={{
-              padding: 24,
-              textAlign: 'center',
-              fontSize: 12,
-              color: 'var(--color-text-tertiary)',
-            }}
-          >
-            No pending approvals.
-          </div>
+          <SmartEmptyState
+            title="No pending approvals"
+            detail="Approvals arrive when an agent calls its request_approval tool. You can also seed one over HTTP for a smoke test."
+            actions={[
+              {
+                label: 'Seed a pending approval via HTTP',
+                code: 'python3 -c \'import requests; requests.post("http://localhost:3001/api/observability/approvals/request", json={"txId":"tx-001","agentId":"orgiq-ingestion","payload":{"amount":15000},"reason":"smoke test"})\'',
+              },
+            ]}
+          />
         ) : (
           <Table>
             <TableHead>

@@ -48,6 +48,7 @@ import {
   YAxis,
 } from 'recharts';
 import { useFetch } from '../../hooks/useFetch';
+import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -287,7 +288,17 @@ function CalibrationPage() {
           </h2>
         </div>
         {maeTrend.length === 0 ? (
-          <EmptyState text="No calibration runs yet. Run one with the button above." />
+          <SmartEmptyState
+            title="No calibration runs"
+            detail="A calibration run scores the active test cases with the LLM-as-judge and compares them against human-labelled ground truth."
+            actions={[
+              {
+                label: 'Seed cases + kick off a calibration run',
+                detail: 'Loads ~10 ground-truth cases and triggers a first run end-to-end.',
+                code: 'python3 infra/scripts/seed_calibration_cases.py && curl -X POST localhost:3001/api/observability/calibration/runs -d \'{"label":"first"}\'',
+              },
+            ]}
+          />
         ) : (
           <div style={{ width: '100%', height: 220 }}>
             <ResponsiveContainer>

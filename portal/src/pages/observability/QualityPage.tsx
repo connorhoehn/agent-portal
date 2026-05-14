@@ -31,6 +31,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { CostChip } from '../../components/observability/CostChip';
+import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 
 interface QualityScore {
   invocationId: string;
@@ -198,7 +199,21 @@ function QualityPage() {
         </div>
 
         {chartData.length === 0 ? (
-          <EmptyState text="No judge scores yet. Quality charts populate once invocations are sampled and scored." />
+          <SmartEmptyState
+            title="No judge scores yet"
+            detail="Quality charts populate once invocations are sampled and scored by the LLM-as-judge."
+            actions={[
+              {
+                label: 'Run the test harness',
+                detail: 'Generates ~10 sampled traces with judge scores in ~30s.',
+                code: 'python3 infra/scripts/harness.py run --mode live --label "drift-seed@$(git rev-parse --short HEAD)"',
+              },
+              {
+                label: 'Or invoke an agent directly to generate one trace',
+                code: "agentcore invoke --agent orgiq-search --prompt 'Who knows K8s?'",
+              },
+            ]}
+          />
         ) : (
           <div style={chartGrid}>
             <div style={chartBox}>

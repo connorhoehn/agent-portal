@@ -24,6 +24,7 @@ import {
   Chip,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 
 // ── Types (mirrored from middleware/src/routes/memory.ts) ──────────────────
 
@@ -161,7 +162,17 @@ function MemoryPage() {
           <WindowPicker value={windowIdx} onChange={setWindowIdx} />
         </div>
         {stats.length === 0 ? (
-          <EmptyState text="No memory operations recorded yet. Memory events surface once an agent emits them in its trace bundle." />
+          <SmartEmptyState
+            title="No memory operations recorded"
+            detail="Memory events surface once an agent emits retrieve/write spans inside its trace bundle."
+            actions={[
+              {
+                label: 'Seed synthetic memory events',
+                detail: 'Inserts ~50 retrieve/write rows so charts populate immediately.',
+                code: 'python3 infra/scripts/seed_memory_guardrail_events.py',
+              },
+            ]}
+          />
         ) : (
           <Table>
             <TableHead>

@@ -37,6 +37,7 @@ import {
   Legend,
 } from 'recharts';
 import { useFetch } from '../../hooks/useFetch';
+import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -312,7 +313,20 @@ function TrafficPage() {
           </h2>
         </div>
         {chartData.length === 0 ? (
-          <EmptyState text="No invocations in this window yet." />
+          <SmartEmptyState
+            title="No traffic"
+            detail="RPS, heatmap, and top-user panels populate once traces land. Backfill user_id columns afterward so the top-user table is non-empty."
+            actions={[
+              {
+                label: 'Run the test harness',
+                code: 'python3 infra/scripts/harness.py run --mode live --label "drift-seed@$(git rev-parse --short HEAD)"',
+              },
+              {
+                label: 'Backfill user_id on traces',
+                code: 'python3 infra/scripts/seed_user_ids_on_traces.py',
+              },
+            ]}
+          />
         ) : (
           <div style={{ width: '100%', height: 280 }}>
             <ResponsiveContainer>
