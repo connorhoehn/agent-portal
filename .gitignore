@@ -16,3 +16,4 @@ resource_tracker.json
 .DS_Store
 .playwright-mcp/
 .env.aws
+.claude/scheduled_tasks.lock
