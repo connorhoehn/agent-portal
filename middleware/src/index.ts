@@ -19,6 +19,7 @@ import { memoryRouter } from './routes/memory.js';
 import { guardrailsDetailRouter } from './routes/guardrails-detail.js';
 import { trafficRouter } from './routes/traffic.js';
 import { invocationsRouter } from './routes/invocations.js';
+import { topologyRouter } from './routes/topology.js';
 import { toolCallsRouter } from './routes/tool-calls.js';
 import { testFixturesRouter } from './routes/test-fixtures.js';
 import { capabilitiesRouter } from './routes/capabilities.js';
@@ -89,6 +90,9 @@ app.use('/api/observability/test-fixtures', testFixturesRouter);
 // Sprint 2 — invocation search + per-invocation drill-down (M3/M5 triage).
 // Mounted ungated so the portal triage page can hit it directly, same as cost.
 app.use('/api/observability/invocations', invocationsRouter);
+// A2A topology — derived from parent_invocation_id linkage in invocation_traces.
+// Ungated: same surface as the agents list (/api/agents).
+app.use('/api/topology', topologyRouter);
 // Sprint 2 — per-tool latency aggregates + error tail (M4).
 app.use('/api/observability/tools', toolCallsRouter);
 app.use('/api/observability', requireAction('ViewObservability'), observabilityRouter);
