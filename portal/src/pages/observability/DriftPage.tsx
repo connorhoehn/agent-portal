@@ -277,7 +277,7 @@ function DriftPage() {
                 />
                 <Tooltip
                   contentStyle={{ fontSize: 12, border: '1px solid var(--color-border)' }}
-                  formatter={(v: number) => v.toFixed(3)}
+                  formatter={(v: any) => typeof v === 'number' ? v.toFixed(3) : `${v ?? ''}`}
                 />
                 <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} iconType="circle" />
                 {agentList.map((a, i) => (

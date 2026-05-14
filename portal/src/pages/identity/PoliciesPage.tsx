@@ -348,7 +348,7 @@ function BuilderForm({
       <FormRow label="Actions">
         <TagEditor
           value={parsed.actions}
-          onChange={(actions) => onChange({ actions })}
+          onChange={(actions: string[]) => onChange({ actions })}
           suggestions={allActions}
           placeholder={allActions.length ? 'add action…' : 'loading schema…'}
           lowercase={false}
