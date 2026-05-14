@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
 import { PageSection } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { ScoreEntry, PersonDetail, DEPT_COLORS } from '../components/scores/types';
@@ -12,6 +12,7 @@ import { WeightSlider } from '../components/scores/WeightSlider';
 
 function ScoresPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [skillFilter, setSkillFilter] = useState<string>('');
   const leaderboardUrl = skillFilter
     ? `/api/scores/by-skill?skill=${encodeURIComponent(skillFilter)}&limit=100`
@@ -19,6 +20,7 @@ function ScoresPage() {
   const { data } = useFetch<{ entries: ScoreEntry[]; total: number; mostRecentScoredAt: string | null }>(leaderboardUrl);
   const [deptFilter, setDeptFilter] = useState<string>('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [comparisonIds, setComparisonIds] = useState<Set<string>>(new Set());
 
   const rawW = parseFloat(searchParams.get('w') ?? '');
   const initWeight = isNaN(rawW) || rawW < 0 || rawW > 1 ? 0.55 : rawW;
@@ -55,6 +57,28 @@ function ScoresPage() {
     if (!data) return [];
     return Array.from(new Set(data.entries.map(e => e.department))).sort();
   }, [data]);
+
+  const handleToggleCompare = useCallback((id: string) => {
+    setComparisonIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else if (next.size < 4) {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const compareDisabled = comparisonIds.size >= 4;
+
+  const handleCompare = useCallback(() => {
+    if (comparisonIds.size < 2) return;
+    const ids = Array.from(comparisonIds).join(',');
+    const wParam = searchParams.get('w');
+    const query = wParam ? `?ids=${ids}&w=${wParam}` : `?ids=${ids}`;
+    navigate(`/scores/compare${query}`);
+  }, [comparisonIds, searchParams, navigate]);
 
   if (!data) return <div style={{ padding: 24, color: 'var(--color-text-tertiary)' }}>Loading scores...</div>;
   if (data.entries.length === 0) {
@@ -103,6 +127,9 @@ function ScoresPage() {
           deptColors={DEPT_COLORS}
           rankedBy={skillFilter || null}
           weight={weight}
+          comparisonIds={comparisonIds}
+          onToggleCompare={handleToggleCompare}
+          compareDisabled={compareDisabled}
         />
 
         {detail && (
@@ -114,6 +141,29 @@ function ScoresPage() {
           />
         )}
       </div>
+
+      {comparisonIds.size >= 2 && comparisonIds.size <= 4 && (
+        <button
+          onClick={handleCompare}
+          style={{
+            position: 'fixed',
+            bottom: 32,
+            right: 32,
+            zIndex: 100,
+            padding: '10px 20px',
+            borderRadius: 8,
+            border: 'none',
+            background: 'var(--color-primary, #6366f1)',
+            color: '#fff',
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: 'pointer',
+            boxShadow: '0 4px 16px rgba(99,102,241,0.35)',
+          }}
+        >
+          Compare {comparisonIds.size} &#8594;
+        </button>
+      )}
     </PageSection>
   );
 }

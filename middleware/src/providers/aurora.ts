@@ -28,6 +28,7 @@ import type {
   BrokerSummary,
   RadarResponse,
   RadarAxes,
+  RadarBatchEntry,
 } from './types.js';
 
 import {
@@ -667,6 +668,95 @@ async function realGetPersonRadar(personId: string): Promise<RadarResponse | nul
   };
 }
 
+async function realGetRadarBatch(personIds: string[]): Promise<RadarBatchEntry[]> {
+  if (personIds.length === 0) return [];
+
+  // Build parameterized IN-list for the requested person IDs.
+  const placeholders = personIds.map((_, i) => `:p${i}`).join(', ');
+  const idParams = personIds.map((id, i) => strParam(`p${i}`, id));
+
+  const rows = await exec(
+    `WITH stats AS (
+       SELECT
+         p.id                                                         AS person_id,
+         p.name                                                       AS person_name,
+         COALESCE(p.pagerank_score, 0) * 100                          AS influence,
+         COALESCE(p.expertise_score, 0)                               AS expertise,
+         COUNT(DISTINCT CASE
+           WHEN c.person_a_id = p.id THEN c.person_b_id
+           WHEN c.person_b_id = p.id THEN c.person_a_id
+         END)                                                         AS collaboration_breadth,
+         COUNT(DISTINCT dp.decision_id)                               AS decision_impact,
+         COUNT(DISTINCT o.team)                                       AS cross_team_reach,
+         COUNT(DISTINCT CASE
+           WHEN c2.last_seen > NOW() - INTERVAL '30 days'
+             AND (c2.person_a_id = p.id OR c2.person_b_id = p.id)
+           THEN CASE
+             WHEN c2.person_a_id = p.id THEN c2.person_b_id
+             ELSE c2.person_a_id
+           END
+         END)                                                         AS recency
+       FROM people p
+       LEFT JOIN collaborations c
+         ON c.person_a_id = p.id OR c.person_b_id = p.id
+       LEFT JOIN decision_participants dp
+         ON dp.person_id = p.id
+       LEFT JOIN collaborations c2
+         ON c2.person_a_id = p.id OR c2.person_b_id = p.id
+       LEFT JOIN people o
+         ON o.id = CASE
+           WHEN c.person_a_id = p.id THEN c.person_b_id
+           WHEN c.person_b_id = p.id THEN c.person_a_id
+           ELSE NULL
+         END
+       WHERE p.composite_score IS NOT NULL
+       GROUP BY p.id, p.name
+     ),
+     pop_max AS (
+       SELECT
+         MAX(influence)             AS max_influence,
+         MAX(expertise)             AS max_expertise,
+         MAX(collaboration_breadth) AS max_collaboration_breadth,
+         MAX(decision_impact)       AS max_decision_impact,
+         MAX(cross_team_reach)      AS max_cross_team_reach,
+         MAX(recency)               AS max_recency
+       FROM stats
+     )
+     SELECT s.person_id, s.person_name,
+            s.influence, s.expertise,
+            s.collaboration_breadth, s.decision_impact,
+            s.cross_team_reach, s.recency,
+            pm.max_influence, pm.max_expertise,
+            pm.max_collaboration_breadth, pm.max_decision_impact,
+            pm.max_cross_team_reach, pm.max_recency
+       FROM stats s
+       CROSS JOIN pop_max pm
+      WHERE s.person_id IN (${placeholders})`,
+    idParams,
+  );
+
+  return rows.map<RadarBatchEntry>((r) => ({
+    personId: toStr(r['person_id']),
+    name: toStr(r['person_name']),
+    person: {
+      influence: toNumber(r['influence'], 0),
+      expertise: toNumber(r['expertise'], 0),
+      collaborationBreadth: toNumber(r['collaboration_breadth'], 0),
+      decisionImpact: toNumber(r['decision_impact'], 0),
+      crossTeamReach: toNumber(r['cross_team_reach'], 0),
+      recency: toNumber(r['recency'], 0),
+    },
+    peerMax: {
+      influence: toNumber(r['max_influence'], 0),
+      expertise: toNumber(r['max_expertise'], 0),
+      collaborationBreadth: toNumber(r['max_collaboration_breadth'], 0),
+      decisionImpact: toNumber(r['max_decision_impact'], 0),
+      crossTeamReach: toNumber(r['max_cross_team_reach'], 0),
+      recency: toNumber(r['max_recency'], 0),
+    },
+  }));
+}
+
 export const realAurora: AuroraProvider = {
   fetchGraph: realFetchGraph,
   fetchPersonGraph: realFetchPersonGraph,
@@ -676,6 +766,7 @@ export const realAurora: AuroraProvider = {
   getTopSkills: realGetTopSkills,
   getCohorts: realGetCohorts,
   getPersonRadar: realGetPersonRadar,
+  getRadarBatch: realGetRadarBatch,
 };
 
 // ─── Mock provider — wraps the existing mock arrays in the AuroraProvider shape.
@@ -798,6 +889,10 @@ async function mockGetPersonRadar(_personId: string): Promise<RadarResponse | nu
   return null;
 }
 
+async function mockGetRadarBatch(_personIds: string[]): Promise<RadarBatchEntry[]> {
+  return [];
+}
+
 export const mockAurora: AuroraProvider = {
   fetchGraph: mockFetchGraph,
   fetchPersonGraph: mockFetchPersonGraph,
@@ -807,4 +902,5 @@ export const mockAurora: AuroraProvider = {
   getTopSkills: mockGetTopSkills,
   getCohorts: mockGetCohorts,
   getPersonRadar: mockGetPersonRadar,
+  getRadarBatch: mockGetRadarBatch,
 };

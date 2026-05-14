@@ -87,6 +87,13 @@ export interface CohortStats {
   brokers: BrokerSummary[];
 }
 
+export interface RadarBatchEntry {
+  personId: string;
+  name: string;
+  person: RadarAxes;
+  peerMax: RadarAxes;
+}
+
 export interface AuroraProvider {
   fetchGraph(): Promise<GraphSnapshot>;
   fetchPersonGraph(personId: string): Promise<PersonDetail | null>;
@@ -96,6 +103,7 @@ export interface AuroraProvider {
   getTopSkills(limit?: number): Promise<SkillSummary[]>;
   getCohorts(): Promise<CohortStats[]>;
   getPersonRadar(personId: string): Promise<RadarResponse | null>;
+  getRadarBatch(personIds: string[]): Promise<RadarBatchEntry[]>;
 }
 
 export interface RadarAxes {

@@ -34,6 +34,22 @@ scoresRouter.get('/cohorts', asyncHandler(async (_req, res) => {
   res.json(cohorts);
 }));
 
+// Batch radar endpoint — must be mounted BEFORE /:personId routes to avoid path ambiguity.
+scoresRouter.get('/radar', asyncHandler(async (req, res) => {
+  const idsParam = req.query['ids'] as string | undefined;
+  if (!idsParam || idsParam.trim() === '') {
+    res.status(400).json({ error: '`ids` query param is required (CSV, 2-4 person IDs)' });
+    return;
+  }
+  const ids = idsParam.split(',').map((s) => s.trim()).filter(Boolean);
+  if (ids.length < 1 || ids.length > 4) {
+    res.status(400).json({ error: '`ids` must contain between 1 and 4 person IDs' });
+    return;
+  }
+  const results = await aurora.getRadarBatch(ids);
+  res.json(results);
+}));
+
 scoresRouter.get('/:personId/radar', asyncHandler(async (req, res) => {
   const radar = await aurora.getPersonRadar(req.params['personId'] as string);
   if (!radar) { res.status(404).json({ error: 'Person not found or not scored' }); return; }

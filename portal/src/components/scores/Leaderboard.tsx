@@ -8,9 +8,12 @@ interface Props {
   deptColors: Record<string, string>;
   rankedBy?: string | null;
   weight?: number;
+  comparisonIds: Set<string>;
+  onToggleCompare: (id: string) => void;
+  compareDisabled: boolean;
 }
 
-export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedBy, weight = 0.55 }: Props) {
+export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedBy, weight = 0.55, comparisonIds, onToggleCompare, compareDisabled }: Props) {
   return (
     <Card padding="md">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
@@ -37,6 +40,7 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
       <Table>
         <TableHead>
           <TableRow>
+            <TableTh style={{ width: 32 }} />
             <TableTh>#</TableTh>
             <TableTh>Name</TableTh>
             <TableTh>Department</TableTh>
@@ -48,6 +52,8 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
         <TableBody>
           {entries.map((s, i) => {
             const selected = s.personId === selectedId;
+            const inComparison = comparisonIds.has(s.personId);
+            const checkboxDisabled = compareDisabled && !inComparison;
             const inf01 = Math.min(1, Math.max(0, s.influence > 1 ? s.influence / 100 : s.influence));
             const exp01 = Math.min(1, Math.max(0, s.expertise > 1 ? s.expertise / 100 : s.expertise));
             const compositeFromWeight = Math.round(weight * inf01 * 100 + (1 - weight) * exp01 * 100);
@@ -60,6 +66,21 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
                 onClick={() => onSelect(selected ? null : s.personId)}
                 style={{ cursor: 'pointer', background: selected ? 'var(--color-surface-hover)' : undefined }}
               >
+                <TableTd
+                  style={{ width: 32, paddingRight: 0 }}
+                  onClick={(e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    if (!checkboxDisabled) onToggleCompare(s.personId);
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={inComparison}
+                    disabled={checkboxDisabled}
+                    onChange={() => {/* controlled via onClick above */}}
+                    style={{ cursor: checkboxDisabled ? 'not-allowed' : 'pointer', accentColor: 'var(--color-primary, #6366f1)' }}
+                  />
+                </TableTd>
                 <TableTd style={{ color: 'var(--color-text-tertiary)' }}>{i + 1}</TableTd>
                 <TableTd style={{ fontWeight: selected ? 600 : 500 }}>{s.name}</TableTd>
                 <TableTd>

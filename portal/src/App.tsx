@@ -6,6 +6,7 @@ import { RequireRole } from './lib/auth';
 const AgentFlowPage = lazy(() => import('./pages/AgentFlowPage'));
 const ScoresPage = lazy(() => import('./pages/ScoresPage'));
 const ScoresCohortPage = lazy(() => import('./pages/ScoresCohortPage'));
+const ScoresComparePage = lazy(() => import('./pages/ScoresComparePage'));
 const InvokePage = lazy(() => import('./pages/InvokePage'));
 const CodeInterpreterDemoPage = lazy(() => import('./pages/CodeInterpreterDemoPage'));
 const ExplorePage = lazy(() => import('./pages/ExplorePage'));
@@ -79,6 +80,7 @@ export function App() {
         <Route path="invoke" element={<Page element={<InvokePage />} />} />
         <Route path="scores" element={<Page element={<ScoresPage />} />} />
         <Route path="scores/cohorts" element={<Page element={<ScoresCohortPage />} />} />
+        <Route path="scores/compare" element={<Page element={<ScoresComparePage />} />} />
 
         <Route path="ingest" element={
           <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
