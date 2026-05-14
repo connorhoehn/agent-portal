@@ -6,7 +6,7 @@ export type Tenant = 'orgiq' | 'newsroom';
 
 export interface Session {
   sub: string;
-  role: Role;
+  role: SessionRole;
   tenant: Tenant;
   availableRoles: Role[];
 }

@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
-import { useSession, type Role } from '../../lib/auth';
+import { useSession, type Role, type SessionRole } from '../../lib/auth';
 
-const ROLE_LABELS: Record<Role, string> = {
+const ROLE_LABELS: Record<SessionRole, string> = {
   member: 'Member',
   'org-leader': 'Org Leader',
   'hr-admin': 'HR Admin',
+  admin: 'Admin',
 };
 
 const ROLE_HINTS: Record<Role, string> = {
@@ -127,10 +128,11 @@ export function MasqueradeMenu() {
   );
 }
 
-function roleColor(role: Role): string {
+function roleColor(role: SessionRole): string {
   switch (role) {
     case 'member': return '#64748b';
     case 'org-leader': return '#3b82f6';
     case 'hr-admin': return '#f59e0b';
+    case 'admin': return '#ef4444';
   }
 }

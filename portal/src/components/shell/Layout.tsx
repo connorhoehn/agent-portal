@@ -1,6 +1,6 @@
 import { NavLink, Outlet } from 'react-router';
 import { useFetch } from '../../hooks/useFetch';
-import { useSession, type SessionRole } from '../../lib/auth';
+import { useSession } from '../../lib/auth';
 import { MasqueradeMenu } from './MasqueradeMenu';
 import { CommandPalette, CommandPaletteHint } from './CommandPalette';
 import { TenantSwitcher } from './TenantSwitcher';
@@ -36,19 +36,26 @@ export function Layout() {
   const { data: health } = useFetch<Health>('/api/health', 30_000);
   const { session } = useSession();
   const navItems = NAV_ITEMS.filter(item => {
-    // Role check
+    // Universal: everyone sees it
+    if (item.tenant === 'universal') return true;
+
+    // Admin role: see admin items + own tenant's items, but NOT the other tenant's
+    if (session?.role === 'admin') {
+      if (item.tenant === 'admin') return true;
+      return item.tenant === session?.tenant;
+    }
+
+    // Non-admin: requireRoles gate (checked before tenant so it can narrow admin items too)
     if (item.requireRoles && !(session && item.requireRoles.includes(session.role))) {
       return false;
     }
-    // Tenant check
-    if (item.tenant === 'universal') return true;
-    // admin role sees everything
-    if ((session?.role as SessionRole) === 'admin') return true;
-    // admin tenant items: visible if user has any admin role
+
+    // Admin-tenant items: visible to admin-adjacent roles
     if (item.tenant === 'admin') {
-      return (session?.role as SessionRole) === 'admin' || session?.role === 'hr-admin' || session?.role === 'org-leader';
+      return session?.role === 'hr-admin' || session?.role === 'org-leader';
     }
-    // tenant-specific items: only when matching active tenant
+
+    // Tenant-specific items: only own tenant
     return item.tenant === session?.tenant;
   });
   const mockedSubsystems = health

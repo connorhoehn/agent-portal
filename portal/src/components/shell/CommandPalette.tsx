@@ -191,12 +191,29 @@ export function CommandPalette() {
     const userRole = session?.role ?? 'member';
     const hasAdminAccess = ADMIN_ROLES.has(userRole);
 
+    // Paths that require hr-admin (or admin) role — mirrors requireRoles in NAV_ITEMS.
+    const HR_ADMIN_PATHS = ['/admin/identity', '/admin/ingest', '/admin/knowledge-base'];
+    const isHrAdminGated = (path: string) =>
+      HR_ADMIN_PATHS.some(prefix => path === prefix || path.startsWith(prefix + '/'));
+
     const isVisible = (p: PageEntry): boolean => {
       if (crossTenant) return true;
       if (p.tenant === 'universal') return true;
-      if (p.tenant === 'admin' && hasAdminAccess) return true;
-      if (p.tenant === userTenant) return true;
-      return false;
+
+      // Admin role: see admin items + own tenant's items, but NOT the other tenant's
+      if (userRole === 'admin') {
+        if (p.tenant === 'admin') return true;
+        return p.tenant === userTenant;
+      }
+
+      // Non-admin: check hr-admin path gate first
+      if (isHrAdminGated(p.path) && userRole !== 'hr-admin') return false;
+
+      // Admin-tenant items: visible to admin-adjacent roles
+      if (p.tenant === 'admin') return hasAdminAccess;
+
+      // Tenant-specific items: only own tenant
+      return p.tenant === userTenant;
     };
 
     const ql = q.toLowerCase();

@@ -88,9 +88,9 @@ function Page({ element }: { element: React.ReactNode }) {
 }
 
 function RootRedirect() {
-  const { session } = useSession();
-  if (!session) return <Navigate to="/iq/agents" replace />;
-  return <Navigate to={session.tenant === 'newsroom' ? '/newsroom/home' : '/iq/agents'} replace />;
+  const { session, isLoading } = useSession();
+  if (isLoading) return null;
+  return <Navigate to={session?.tenant === 'newsroom' ? '/newsroom/home' : '/iq/agents'} replace />;
 }
 
 export function App() {
