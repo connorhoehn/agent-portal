@@ -551,6 +551,8 @@ export const realAgentCore: AgentCoreProvider = {
       message: payload.message,
       prompt: payload.message,
       input_text: payload.message,
+      ...(payload.sessionId ? { sessionId: payload.sessionId } : {}),
+      ...(payload.userId ? { userId: payload.userId } : {}),
       ...(payload.auth ? { auth: payload.auth } : {}),
     });
 

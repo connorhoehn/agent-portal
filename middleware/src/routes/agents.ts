@@ -82,7 +82,7 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), asyncHandler(asyn
     result = await agentcore.invokeAgent(agentId, {
       message: userMessage,
       sessionId,
-      ...(req.session ? { auth: { sub: req.session.sub, role: req.session.role } } : {}),
+      ...(req.session ? { userId: req.session.sub, auth: { sub: req.session.sub, role: req.session.role } } : {}),
     });
   } catch (err) {
     const errMsg = (err as Error).message || 'invoke failed';

@@ -253,6 +253,7 @@ export interface AgentCoreProvider {
   invokeAgent(agentId: string, payload: {
     message: string;
     sessionId?: string;
+    userId?: string;
     auth?: { sub: string; role: string };
   }): Promise<AgentInvokeResult>;
   listCodeSessions(): Promise<CodeSession[]>;
