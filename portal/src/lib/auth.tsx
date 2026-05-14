@@ -1,10 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 
 export type Role = 'member' | 'org-leader' | 'hr-admin';
+export type SessionRole = Role | 'admin';
+export type Tenant = 'orgiq' | 'newsroom';
 
 export interface Session {
   sub: string;
   role: Role;
+  tenant: Tenant;
   availableRoles: Role[];
 }
 
@@ -12,6 +15,7 @@ interface SessionContextValue {
   session: Session | null;
   isLoading: boolean;
   setRole: (role: Role) => Promise<void>;
+  setTenant: (tenant: Tenant) => Promise<void>;
   refresh: () => Promise<void>;
 }
 
@@ -25,12 +29,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     try {
       const res = await fetch('/api/session/me', { credentials: 'include' });
       if (!res.ok) throw new Error(`${res.status}`);
-      const json = (await res.json()) as Session;
-      setSession(json);
+      const raw = (await res.json()) as Omit<Session, 'tenant'> & { tenant?: Tenant };
+      // Backward-compatible: old /me responses without 'tenant' default to 'orgiq'.
+      setSession({ ...raw, tenant: raw.tenant ?? 'orgiq' });
     } catch {
       // If session lookup fails (middleware down, etc.) treat as the default
       // member identity so the UI degrades gracefully instead of going blank.
-      setSession({ sub: 'demo-user', role: 'member', availableRoles: ['member', 'org-leader', 'hr-admin'] });
+      setSession({ sub: 'demo-user', role: 'member', tenant: 'orgiq', availableRoles: ['member', 'org-leader', 'hr-admin'] });
     } finally {
       setIsLoading(false);
     }
@@ -51,8 +56,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     await refresh();
   }, [refresh]);
 
+  const setTenant = useCallback(async (tenant: Tenant) => {
+    const res = await fetch('/api/session/tenant', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenant }),
+    });
+    if (!res.ok) throw new Error(`Failed to set tenant: ${res.status}`);
+    await refresh();
+  }, [refresh]);
+
   return (
-    <SessionContext.Provider value={{ session, isLoading, setRole, refresh }}>
+    <SessionContext.Provider value={{ session, isLoading, setRole, setTenant, refresh }}>
       {children}
     </SessionContext.Provider>
   );
@@ -65,12 +81,13 @@ export function useSession(): SessionContextValue {
 }
 
 export function RequireRole({ roles, children, fallback = null }: {
-  roles: Role[];
+  roles: SessionRole[];
   children: ReactNode;
   fallback?: ReactNode;
 }) {
   const { session, isLoading } = useSession();
   if (isLoading) return null;
-  if (!session || !roles.includes(session.role)) return <>{fallback}</>;
+  // 'admin' in the allowed-roles list always passes (future admin bypass).
+  if (!session || (!roles.includes('admin') && !roles.includes(session.role))) return <>{fallback}</>;
   return <>{children}</>;
 }

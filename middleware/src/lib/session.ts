@@ -12,15 +12,20 @@ import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-sec
 import { config } from '../config.js';
 
 export const ROLES = ['member', 'org-leader', 'hr-admin'] as const;
-export type Role = typeof ROLES[number];
+export type Role = typeof ROLES[number] | 'admin';
+
+export const TENANTS = ['orgiq', 'newsroom'] as const;
+export type Tenant = typeof TENANTS[number];
 
 export const DEFAULT_ROLE: Role = 'member';
+export const DEFAULT_TENANT: Tenant = 'orgiq';
 export const COOKIE_NAME = 'orgiq.session';
 const COOKIE_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
 
 export interface Session {
   sub: string;
   role: Role;
+  tenant: Tenant;
   iat: number;
 }
 
@@ -67,9 +72,15 @@ export async function verifySession(cookieValue: string): Promise<Session | null
   const provided = fromB64url(macStr);
   if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) return null;
   try {
-    const obj = JSON.parse(fromB64url(payload).toString('utf8')) as Session;
-    if (typeof obj.sub !== 'string' || !ROLES.includes(obj.role as Role)) return null;
-    return obj;
+    const raw = JSON.parse(fromB64url(payload).toString('utf8')) as Record<string, unknown>;
+    if (typeof raw['sub'] !== 'string') return null;
+    const role = raw['role'] as Role;
+    if (!ROLES.includes(role as typeof ROLES[number]) && role !== 'admin') return null;
+    // Backward-compatible default: old cookies without 'tenant' default to 'orgiq'.
+    const tenant: Tenant = TENANTS.includes(raw['tenant'] as Tenant)
+      ? (raw['tenant'] as Tenant)
+      : DEFAULT_TENANT;
+    return { sub: raw['sub'] as string, role, tenant, iat: (raw['iat'] as number) ?? 0 };
   } catch {
     return null;
   }
@@ -111,7 +122,7 @@ export function sessionMiddleware() {
         return;
       }
     }
-    req.session = { sub: 'demo-user', role: DEFAULT_ROLE, iat: Math.floor(Date.now() / 1000) };
+    req.session = { sub: 'demo-user', role: DEFAULT_ROLE, tenant: DEFAULT_TENANT, iat: Math.floor(Date.now() / 1000) };
     next();
   };
 }

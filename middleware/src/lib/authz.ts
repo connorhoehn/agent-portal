@@ -11,7 +11,7 @@ import {
 } from '@aws-sdk/client-verifiedpermissions';
 import { config } from '../config.js';
 import { eventFromSession, logAuthz } from './audit.js';
-import { DEFAULT_ROLE, type Role } from './session.js';
+import { DEFAULT_ROLE, DEFAULT_TENANT, type Role } from './session.js';
 
 const NAMESPACE = 'OrgIQ';
 const RESOURCE_ID = 'app';
@@ -89,7 +89,7 @@ async function evaluate(role: Role, action: string, resourceAttrs?: ResourceAttr
  */
 export function requireAction(action: string) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const session = req.session ?? { sub: 'anon', role: DEFAULT_ROLE, iat: 0 };
+    const session = req.session ?? { sub: 'anon', role: DEFAULT_ROLE, tenant: DEFAULT_TENANT, iat: 0 };
     try {
       const decision = await evaluate(session.role as Role, action);
       logAuthz(eventFromSession(session, action, decision, { path: req.path }));
