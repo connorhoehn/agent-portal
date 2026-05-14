@@ -17,11 +17,15 @@ import {
 } from 'react';
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
+import { useSession } from '../../lib/auth';
+
+type PageTenant = 'orgiq' | 'newsroom' | 'admin' | 'universal';
 
 interface PageEntry {
   label: string;
   hint: string;
   path: string;
+  tenant: PageTenant;
 }
 
 interface RecentRun {
@@ -44,43 +48,46 @@ interface Result {
 // Top-level destinations across observability and harness. Order roughly
 // matches the sub-nav order so muscle-memory keys still work.
 const PAGES: PageEntry[] = [
-  { label: 'Search',             hint: 'Ask the org-search agent',            path: '/iq/search' },
-  { label: 'Explore',            hint: 'Force-directed org graph',            path: '/iq/explore' },
-  { label: 'Architecture',       hint: 'A2A agent topology',                  path: '/iq/agents' },
-  { label: 'Scores',             hint: 'Per-person influence leaderboard',    path: '/iq/scores' },
-  { label: 'Decisions',          hint: 'Editorial / org-level decisions',     path: '/iq/decisions' },
-  { label: 'Projects',           hint: 'Project contributions + status',      path: '/iq/projects' },
-  { label: 'Newsroom',           hint: 'Articles, beats, briefs, pitches',    path: '/newsroom' },
-  { label: 'Newsroom — Articles',hint: 'Browse articles + filters',           path: '/newsroom/articles' },
-  { label: 'Newsroom — Beats',   hint: 'Coverage heatmap by topic',           path: '/newsroom/beats' },
-  { label: 'Knowledge Base',     hint: 'Documents + data sources',            path: '/admin/knowledge-base' },
-  { label: 'Settings',           hint: 'User preferences',                    path: '/settings' },
-  { label: 'On-Call',            hint: 'Live alarms + incident timeline',     path: '/admin/observability/oncall' },
-  { label: 'Summary',            hint: 'Health overview',                     path: '/admin/observability/summary' },
-  { label: 'Traffic',            hint: 'RPS + heatmap + top users',           path: '/admin/observability/traffic' },
-  { label: 'Recent',             hint: 'Last 50 agent calls',                 path: '/admin/observability/invocations' },
-  { label: 'Invocations Search', hint: 'Triage by prompt / agent / score',    path: '/admin/observability/invocations/search' },
-  { label: 'Capability Events',  hint: 'Browser & code-interpreter events',   path: '/admin/observability/capability-events' },
-  { label: 'Agent Metrics',      hint: 'Per-agent stats',                     path: '/admin/observability/agents' },
-  { label: 'Sessions',           hint: 'Chat threads',                        path: '/admin/observability/sessions' },
-  { label: 'Authz Log',          hint: 'Live AVP / Cedar decisions',          path: '/admin/observability/authz' },
-  { label: 'Memory',             hint: 'Memory ops + cold sessions',          path: '/admin/observability/memory' },
-  { label: 'Guardrail Rules',    hint: 'Per-rule intervention details',       path: '/admin/observability/guardrail-rules' },
-  { label: 'Drift',              hint: 'Schema + judge + embedding drift',    path: '/admin/observability/drift' },
-  { label: 'Quality',            hint: 'Judge scores + feedback',             path: '/admin/observability/quality' },
-  { label: 'Cost',               hint: 'Spend by agent + deploy markers',     path: '/admin/observability/cost' },
-  { label: 'Approvals',          hint: 'Pending HITL decisions',              path: '/admin/observability/approvals' },
-  { label: 'Harness',            hint: 'Replay test set + view runs',         path: '/admin/observability/harness' },
-  { label: 'Calibration',        hint: 'Judge vs human MAE drift',            path: '/admin/observability/calibration' },
-  { label: 'Model Compare',      hint: 'Side-by-side run delta',              path: '/admin/observability/model-compare' },
+  { label: 'Search',             hint: 'Ask the org-search agent',            path: '/iq/search',                                  tenant: 'orgiq' },
+  { label: 'Explore',            hint: 'Force-directed org graph',            path: '/iq/explore',                                 tenant: 'orgiq' },
+  { label: 'Architecture',       hint: 'A2A agent topology',                  path: '/iq/agents',                                  tenant: 'orgiq' },
+  { label: 'Scores',             hint: 'Per-person influence leaderboard',    path: '/iq/scores',                                  tenant: 'orgiq' },
+  { label: 'Decisions',          hint: 'Editorial / org-level decisions',     path: '/iq/decisions',                               tenant: 'orgiq' },
+  { label: 'Projects',           hint: 'Project contributions + status',      path: '/iq/projects',                                tenant: 'orgiq' },
+  { label: 'Newsroom',           hint: 'Articles, beats, briefs, pitches',    path: '/newsroom',                                   tenant: 'newsroom' },
+  { label: 'Newsroom — Articles',hint: 'Browse articles + filters',           path: '/newsroom/articles',                          tenant: 'newsroom' },
+  { label: 'Newsroom — Beats',   hint: 'Coverage heatmap by topic',           path: '/newsroom/beats',                             tenant: 'newsroom' },
+  { label: 'Knowledge Base',     hint: 'Documents + data sources',            path: '/admin/knowledge-base',                       tenant: 'admin' },
+  { label: 'Settings',           hint: 'User preferences',                    path: '/settings',                                   tenant: 'universal' },
+  { label: 'On-Call',            hint: 'Live alarms + incident timeline',     path: '/admin/observability/oncall',                 tenant: 'admin' },
+  { label: 'Summary',            hint: 'Health overview',                     path: '/admin/observability/summary',                tenant: 'admin' },
+  { label: 'Traffic',            hint: 'RPS + heatmap + top users',           path: '/admin/observability/traffic',                tenant: 'admin' },
+  { label: 'Recent',             hint: 'Last 50 agent calls',                 path: '/admin/observability/invocations',            tenant: 'admin' },
+  { label: 'Invocations Search', hint: 'Triage by prompt / agent / score',    path: '/admin/observability/invocations/search',     tenant: 'admin' },
+  { label: 'Capability Events',  hint: 'Browser & code-interpreter events',   path: '/admin/observability/capability-events',      tenant: 'admin' },
+  { label: 'Agent Metrics',      hint: 'Per-agent stats',                     path: '/admin/observability/agents',                 tenant: 'admin' },
+  { label: 'Sessions',           hint: 'Chat threads',                        path: '/admin/observability/sessions',               tenant: 'admin' },
+  { label: 'Authz Log',          hint: 'Live AVP / Cedar decisions',          path: '/admin/observability/authz',                  tenant: 'admin' },
+  { label: 'Memory',             hint: 'Memory ops + cold sessions',          path: '/admin/observability/memory',                 tenant: 'admin' },
+  { label: 'Guardrail Rules',    hint: 'Per-rule intervention details',       path: '/admin/observability/guardrail-rules',        tenant: 'admin' },
+  { label: 'Drift',              hint: 'Schema + judge + embedding drift',    path: '/admin/observability/drift',                  tenant: 'admin' },
+  { label: 'Quality',            hint: 'Judge scores + feedback',             path: '/admin/observability/quality',                tenant: 'admin' },
+  { label: 'Cost',               hint: 'Spend by agent + deploy markers',     path: '/admin/observability/cost',                   tenant: 'admin' },
+  { label: 'Approvals',          hint: 'Pending HITL decisions',              path: '/admin/observability/approvals',              tenant: 'admin' },
+  { label: 'Harness',            hint: 'Replay test set + view runs',         path: '/admin/observability/harness',                tenant: 'admin' },
+  { label: 'Calibration',        hint: 'Judge vs human MAE drift',            path: '/admin/observability/calibration',            tenant: 'admin' },
+  { label: 'Model Compare',      hint: 'Side-by-side run delta',              path: '/admin/observability/model-compare',          tenant: 'admin' },
 ];
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 const MAX_RESULTS = 8;
 
+const ADMIN_ROLES = new Set(['hr-admin', 'org-leader', 'admin']);
+
 export function CommandPalette() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { session } = useSession();
 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -156,8 +163,13 @@ export function CommandPalette() {
 
   // ── result computation ────────────────────────────────────────────────────
   const results = useMemo<Result[]>(() => {
-    const q = query.trim();
+    const raw = query.trim();
     const out: Result[] = [];
+
+    // `>` prefix — cross-tenant escape hatch. Strip the `>` and search all
+    // tenants. Results are annotated with their tenant tag.
+    const crossTenant = raw.startsWith('>');
+    const q = crossTenant ? raw.slice(1).trim() : raw;
 
     // UUID short-circuit: when input matches the uuid shape, offer a single
     // jump to /observability/invocations/<id>. Researchers paste ids from
@@ -174,6 +186,18 @@ export function CommandPalette() {
       return out;
     }
 
+    const userTenant = session?.tenant ?? 'orgiq';
+    const userRole = session?.role ?? 'member';
+    const hasAdminAccess = ADMIN_ROLES.has(userRole);
+
+    const isVisible = (p: PageEntry): boolean => {
+      if (crossTenant) return true;
+      if (p.tenant === 'universal') return true;
+      if (p.tenant === 'admin' && hasAdminAccess) return true;
+      if (p.tenant === userTenant) return true;
+      return false;
+    };
+
     const ql = q.toLowerCase();
     const matchesPage = (p: PageEntry) =>
       !ql ||
@@ -181,11 +205,14 @@ export function CommandPalette() {
       p.hint.toLowerCase().includes(ql);
 
     for (const p of PAGES) {
-      if (matchesPage(p)) {
+      if (isVisible(p) && matchesPage(p)) {
+        const label = crossTenant && p.tenant !== userTenant && p.tenant !== 'universal'
+          ? `${p.label} [${p.tenant}]`
+          : p.label;
         out.push({
           key: `page:${p.path}`,
           kind: 'page',
-          label: p.label,
+          label,
           hint: p.hint,
           path: p.path,
         });
@@ -207,7 +234,7 @@ export function CommandPalette() {
     }
 
     return out.slice(0, MAX_RESULTS);
-  }, [query, recentRuns]);
+  }, [query, recentRuns, session]);
 
   // Clamp selectedIndex into range whenever the result list changes.
   useEffect(() => {
@@ -273,7 +300,7 @@ export function CommandPalette() {
         />
         <div ref={listRef} style={listStyle}>
           {results.length === 0 ? (
-            <div style={emptyRowStyle}>No matches. Try a different keyword.</div>
+            <div style={emptyRowStyle}>No matches. Try a different keyword. Type <code>&gt;</code> to search across tenants.</div>
           ) : (
             results.map((r, i) => (
               <div

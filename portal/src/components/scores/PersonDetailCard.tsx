@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { Link } from 'react-router';
 import { Card } from '@connorhoehnslalom/ui-components/shared';
 import { PersonDetail, formatRelativeTime } from './types';
 import { RadarChart, type RadarAxes } from './RadarChart';
 import { TrendLine } from './TrendLine';
 import { WhyDrawer, type ContributionsResponse } from './WhyDrawer';
 import { useFetch } from '../../hooks/useFetch';
+import { useSession } from '../../lib/auth';
 
 interface RadarResponse {
   personId: string;
@@ -26,6 +28,7 @@ interface Props {
 }
 
 export function PersonDetailCard({ detail, deptColors, onClose, onSelectConnection }: Props) {
+  const { session } = useSession();
   const { data: radar } = useFetch<RadarResponse>(
     detail.id ? `/api/scores/${encodeURIComponent(detail.id)}/radar` : '',
   );
@@ -110,6 +113,14 @@ export function PersonDetailCard({ detail, deptColors, onClose, onSelectConnecti
         Why this score? {whyOpen ? '▴' : '▾'}
       </button>
       <WhyDrawer open={whyOpen} onClose={() => setWhyOpen(false)} contributions={contributions} />
+      {session?.tenant === 'orgiq' && (
+        <Link
+          to={`/newsroom/articles?byline=${encodeURIComponent(detail.id)}`}
+          style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none', marginTop: 8, display: 'inline-block' }}
+        >
+          Articles by this person → Newsroom
+        </Link>
+      )}
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--color-border)', fontSize: 13 }}>
         <span style={{ color: 'var(--color-text-secondary)' }}>Influence (PageRank)</span>

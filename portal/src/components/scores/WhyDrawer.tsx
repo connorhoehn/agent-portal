@@ -112,7 +112,12 @@ export function WhyDrawer({ open, onClose: _onClose, contributions }: WhyDrawerP
       ) : (
         projects.map((p, i) => (
           <div key={`${p.projectName}-${i}`} style={rowStyle}>
-            <span style={rowLabel}>{p.projectName}</span>
+            <span
+              style={{ ...rowLabel, cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 2 }}
+              title={`View project: ${p.projectName}`}
+            >
+              {p.projectName}
+            </span>
             <span style={rowMeta}>
               {p.role ? `${p.role} · ` : ''}{p.weight.toFixed(2)}
             </span>
