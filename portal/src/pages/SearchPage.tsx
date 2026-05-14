@@ -12,7 +12,7 @@
 // pattern as ExplorePage).
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { useAgUiStream } from '../hooks/useAgUiStream';
 import type { LiveToolCall } from '../hooks/useAgUiStream';
 import { useFetch } from '../hooks/useFetch';
@@ -130,6 +130,28 @@ function SearchPage() {
 
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // ?peopleIds=<csv> arrives from /explore "Ask in Search". Hold them as
+  // pinned context that's attached to the next outgoing message.
+  const [pinnedPeopleIds, setPinnedPeopleIds] = useState<string[]>(() => {
+    const csv = new URLSearchParams(window.location.search).get('peopleIds');
+    return csv ? csv.split(',').filter(Boolean) : [];
+  });
+
+  // Strip the param once we've captured it so a reload doesn't re-pin.
+  useEffect(() => {
+    if (!searchParams.get('peopleIds')) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('peopleIds');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  const pinnedPeople = useMemo<GraphPerson[]>(() => {
+    if (!graph?.nodes || pinnedPeopleIds.length === 0) return [];
+    const byId = new Map(graph.nodes.map(p => [p.id, p]));
+    return pinnedPeopleIds.map(id => byId.get(id)).filter((p): p is GraphPerson => Boolean(p));
+  }, [graph, pinnedPeopleIds]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -162,8 +184,14 @@ function SearchPage() {
 
   function handleSend() {
     if (!input.trim() || isStreaming) return;
-    sendMessage(input.trim());
+    const opts = pinnedPeopleIds.length > 0
+      ? { selection: { peopleIds: pinnedPeopleIds } }
+      : undefined;
+    sendMessage(input.trim(), opts);
     setInput('');
+    // The pin is one-shot context for this turn; clear so subsequent turns
+    // don't keep re-applying a stale selection.
+    if (pinnedPeopleIds.length > 0) setPinnedPeopleIds([]);
   }
 
   const hasAnyMessages = messages.length > 0 || isStreaming;
@@ -222,6 +250,27 @@ function SearchPage() {
           {error && <div style={errorStyle}>Error: {error}</div>}
           <div ref={bottomRef} />
         </div>
+
+        {pinnedPeople.length > 0 && (
+          <div style={pinnedStripStyle}>
+            <span style={pinnedLabelStyle}>Asking about</span>
+            {pinnedPeople.map(p => (
+              <span key={p.id} style={pinnedChipStyle}>
+                {p.name}
+                <button
+                  onClick={() => setPinnedPeopleIds(ids => ids.filter(id => id !== p.id))}
+                  style={pinnedChipCloseStyle}
+                  aria-label={`Remove ${p.name}`}
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+            <button onClick={() => setPinnedPeopleIds([])} style={pinnedClearStyle}>
+              Clear all
+            </button>
+          </div>
+        )}
 
         <div style={composerStyle}>
           <input
@@ -504,6 +553,53 @@ const errorStyle: React.CSSProperties = {
   color: 'var(--color-danger)',
   fontSize: 13,
   padding: '8px 0',
+};
+const pinnedStripStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  flexWrap: 'wrap',
+  gap: 6,
+  padding: '8px 24px',
+  borderTop: '1px solid var(--color-border)',
+  background: 'var(--color-surface)',
+};
+const pinnedLabelStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: 'var(--color-text-tertiary)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+  fontWeight: 600,
+};
+const pinnedChipStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  fontSize: 12,
+  padding: '3px 4px 3px 10px',
+  background: 'var(--color-surface-hover, #eef2ff)',
+  color: 'var(--color-primary, #6366f1)',
+  border: '1px solid var(--color-primary, #6366f1)',
+  borderRadius: 999,
+  fontWeight: 500,
+};
+const pinnedChipCloseStyle: React.CSSProperties = {
+  background: 'transparent',
+  border: 'none',
+  color: 'inherit',
+  cursor: 'pointer',
+  padding: '0 4px',
+  fontSize: 11,
+  fontFamily: 'inherit',
+};
+const pinnedClearStyle: React.CSSProperties = {
+  fontSize: 11,
+  padding: '3px 8px',
+  background: 'transparent',
+  color: 'var(--color-text-tertiary)',
+  border: 'none',
+  cursor: 'pointer',
+  marginLeft: 'auto',
+  fontFamily: 'inherit',
 };
 const composerStyle: React.CSSProperties = {
   display: 'flex',

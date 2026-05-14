@@ -1,8 +1,13 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
-import { Card } from '@connorhoehnslalom/ui-components/shared';
+// Pure org-graph exploration. The previous version of this page bundled the
+// canvas with a chat panel against orgiq-search; that chat lives at /search
+// now. This page stays focused on visual exploration: click to multi-select,
+// dial top-K / min-strength to thin the canvas, jump into Search to ask about
+// the current selection.
+
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { OrgGraph } from '../components/org-graph';
 import type { GraphPerson, GraphRelationship, GraphDepartment } from '../components/org-graph';
-import { useAgUiStream } from '../hooks/useAgUiStream';
 import { useFetch } from '../hooks/useFetch';
 
 interface GraphData {
@@ -11,7 +16,8 @@ interface GraphData {
   departments: GraphDepartment[];
 }
 
-// Filter edges down to the strongest-K per node so the canvas stays readable.
+// Cap edges to the strongest-K per node so the canvas stays readable. Edges
+// failing minStrength drop out first; then we trim per-node.
 function filterEdges(edges: GraphRelationship[], topK: number, minStrength: number): GraphRelationship[] {
   const filtered = edges.filter(e => e.strength >= minStrength);
   const sorted = [...filtered].sort((a, b) => b.strength - a.strength);
@@ -28,152 +34,59 @@ function filterEdges(edges: GraphRelationship[], topK: number, minStrength: numb
   return kept;
 }
 
-// Parse references from streaming assistant text. We support two patterns:
-//   1. Explicit [[id|Display Name]] markers — emitted by agents that play along
-//   2. Bare names matching anyone in the people list — name-based fallback
-//
-// The Bedrock guardrail's PROMPT_ATTACK filter blocks middleware-side prompts
-// that instruct the agent to emit markers, so the fallback is the main path.
-type Seg = { kind: 'text'; body: string } | { kind: 'ref'; id: string; name: string };
-const REF_RE = /\[\[([a-zA-Z0-9_-]+)\|([^\]]+)\]\]/g;
-
-// Escape a name so it can be safely embedded in a regex.
-function escapeRe(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-// Replace bare full names in text with placeholder marker tokens, then parse.
-// This catches "Sienna Cole" in "1. **Sienna Cole** — Email: …" and turns it
-// into a clickable pill that highlights the node on the graph.
-function parseSegments(text: string, people: GraphPerson[]): Seg[] {
-  // First, normalize any explicit [[id|name]] markers into a placeholder form
-  // we'll re-detect at the end. Then strip simple Markdown bold around names so
-  // matching is easier.
-  let working = text;
-
-  // Capture explicit markers and replace with a sentinel pattern that survives
-  // markdown stripping.
-  const explicit: Array<{ id: string; name: string }> = [];
-  working = working.replace(REF_RE, (_m, id, name) => {
-    const i = explicit.length;
-    explicit.push({ id, name });
-    return `\x01REF${i}\x01`;
-  });
-
-  // Strip markdown bold so the matcher sees "Sienna Cole" not "**Sienna Cole**".
-  working = working.replace(/\*\*([^*]+)\*\*/g, '$1');
-
-  // For every distinct name in the people list, replace occurrences with a
-  // sentinel. Sort longest-first so "Sarah Ahmed" wins over "Sarah".
-  const sorted = [...people].sort((a, b) => b.name.length - a.name.length);
-  for (const p of sorted) {
-    // Word boundaries so "Carlos" doesn't match inside "Carlos Lee" twice.
-    const re = new RegExp(`(?<![\\w])${escapeRe(p.name)}(?![\\w])`, 'gi');
-    working = working.replace(re, () => {
-      const i = explicit.length;
-      explicit.push({ id: p.id, name: p.name });
-      return `\x01REF${i}\x01`;
-    });
-  }
-
-  // Split by the sentinel.
-  const out: Seg[] = [];
-  const parts = working.split(/\x01REF(\d+)\x01/);
-  for (let i = 0; i < parts.length; i++) {
-    if (i % 2 === 0) {
-      if (parts[i]) out.push({ kind: 'text', body: parts[i]! });
-    } else {
-      const ref = explicit[parseInt(parts[i]!, 10)];
-      if (ref) out.push({ kind: 'ref', id: ref.id, name: ref.name });
-    }
-  }
-  return out;
-}
-
-function extractRefIds(text: string, people: GraphPerson[]): string[] {
-  const segments = parseSegments(text, people);
-  const ids = new Set<string>();
-  for (const s of segments) {
-    if (s.kind === 'ref') ids.add(s.id);
-  }
-  return Array.from(ids);
-}
-
 function ExplorePage() {
   const { data } = useFetch<GraphData>('/api/graph/entities');
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [hoveredRef, setHoveredRef] = useState<string | null>(null);
   const [topK, setTopK] = useState(4);
   const [minStrength, setMinStrength] = useState(0.6);
-  const [input, setInput] = useState('');
-  // When the agent's last response cited people, we narrow the graph to just
-  // those + their direct connections. The user can hit "Show full graph" to
-  // restore. We track an explicit "user wants full graph" flag so the filter
-  // doesn't re-apply after they reset.
-  const [filterToReplies, setFilterToReplies] = useState(true);
-  const bottomRef = useRef<HTMLDivElement>(null);
 
-  const {
-    messages,
-    isStreaming,
-    error,
-    sendMessage,
-    reset,
-  } = useAgUiStream('/api/agents/orgiq-search/invoke');
-
+  // ?focus=<id> arrives from /search "related people" cards. Seed the
+  // selection with that id and strip the param so a manual reload doesn't
+  // keep re-applying it.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages, isStreaming]);
+    const focus = searchParams.get('focus');
+    if (!focus) return;
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.add(focus);
+      return next;
+    });
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('focus');
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams]);
 
-  // IDs the agent cited in its last assistant turn → drives the spotlight.
-  const citedIds = useMemo(() => {
-    const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
-    if (!lastAssistant || !data) return new Set<string>();
-    return new Set(extractRefIds(lastAssistant.content, data.nodes));
-  }, [messages, data]);
+  // When a selection is active, narrow the canvas to the selected nodes + their
+  // direct neighbors so the spatial context stays readable. The full-graph
+  // toggle restores everything.
+  const [filterToSelection, setFilterToSelection] = useState(true);
 
-  // Reset the filter flag whenever a new assistant message arrives so each
-  // fresh response gets to narrow the graph.
-  useEffect(() => {
-    if (citedIds.size > 0) setFilterToReplies(true);
-  }, [citedIds]);
-
-  // When filtering, the visible node set is `cited + selected + their direct
-  // neighbors via the unfiltered edge list`. Edges are then filtered separately
-  // by top-K/min-strength against the visible subset.
   const { visibleNodes, baseEdges } = useMemo(() => {
     if (!data) return { visibleNodes: [] as GraphPerson[], baseEdges: [] as GraphRelationship[] };
-    const filterActive = filterToReplies && citedIds.size > 0;
+    const filterActive = filterToSelection && selectedIds.size > 0;
     if (!filterActive) {
       return { visibleNodes: data.nodes, baseEdges: data.edges };
     }
-    // Anchor set = cited + currently selected (so user can keep building a
-    // selection across responses).
-    const anchors = new Set<string>([...citedIds, ...selectedIds]);
     const neighbors = new Set<string>();
     for (const e of data.edges) {
-      if (anchors.has(e.source)) neighbors.add(e.target);
-      if (anchors.has(e.target)) neighbors.add(e.source);
+      if (selectedIds.has(e.source)) neighbors.add(e.target);
+      if (selectedIds.has(e.target)) neighbors.add(e.source);
     }
-    const keep = new Set<string>([...anchors, ...neighbors]);
+    const keep = new Set<string>([...selectedIds, ...neighbors]);
     const nodes = data.nodes.filter(n => keep.has(n.id));
     const edges = data.edges.filter(e => keep.has(e.source) && keep.has(e.target));
     return { visibleNodes: nodes, baseEdges: edges };
-  }, [data, filterToReplies, citedIds, selectedIds]);
+  }, [data, filterToSelection, selectedIds]);
 
   const filteredEdges = useMemo(
     () => filterEdges(baseEdges, topK, minStrength),
     [baseEdges, topK, minStrength],
   );
 
-  // Combine cited + hovered ref into a spotlight set.
-  const spotlight = useMemo(() => {
-    const s = new Set(citedIds);
-    if (hoveredRef) s.add(hoveredRef);
-    return s;
-  }, [citedIds, hoveredRef]);
-
-  const isFiltered = filterToReplies && citedIds.size > 0 && data && visibleNodes.length < data.nodes.length;
+  const isFiltered = filterToSelection && selectedIds.size > 0 && data && visibleNodes.length < data.nodes.length;
 
   function toggleSelect(id: string) {
     setSelectedIds(prev => {
@@ -186,242 +99,139 @@ function ExplorePage() {
 
   function clearSelection() {
     setSelectedIds(new Set());
+    setFilterToSelection(true); // reset for the next selection
   }
 
-  function askAboutSelection() {
+  function askInSearch() {
     if (selectedIds.size === 0) return;
-    const ids = Array.from(selectedIds);
-    sendMessage(`What do these people have in common, and what's a good question to ask them as a group?`, {
-      selection: { peopleIds: ids },
-    });
-  }
-
-  function handleSend() {
-    if (!input.trim() || isStreaming) return;
-    const ids = Array.from(selectedIds);
-    sendMessage(input.trim(), ids.length > 0 ? { selection: { peopleIds: ids } } : undefined);
-    setInput('');
+    const ids = Array.from(selectedIds).join(',');
+    navigate(`/search?peopleIds=${encodeURIComponent(ids)}`);
   }
 
   if (!data) {
-    return <div style={{ padding: 24, color: 'var(--color-text-tertiary)' }}>Loading graph...</div>;
+    return <div style={{ padding: 24, color: 'var(--color-text-tertiary)' }}>Loading graph…</div>;
   }
 
   return (
     <div style={{ display: 'flex', height: '100%', flexDirection: 'column' }}>
-      {/* Top controls */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '8px 16px', borderBottom: '1px solid var(--color-border)', fontSize: 12 }}>
+      <div style={toolbarStyle}>
         <span style={{ fontWeight: 600 }}>Explore</span>
         <span style={{ color: 'var(--color-text-tertiary)' }}>
-          <b>{visibleNodes.length}</b>{isFiltered ? ` / ${data.nodes.length}` : ''} people · <b>{filteredEdges.length}</b> edges shown
+          <b>{visibleNodes.length}</b>{isFiltered ? ` / ${data.nodes.length}` : ''} people · <b>{filteredEdges.length}</b> edges
         </span>
         {isFiltered && (
-          <button
-            onClick={() => setFilterToReplies(false)}
-            style={{
-              fontSize: 11,
-              padding: '3px 10px',
-              background: 'var(--color-primary, #6366f1)',
-              color: '#fff',
-              border: 'none',
-              borderRadius: 4,
-              cursor: 'pointer',
-              fontWeight: 500,
-            }}
-          >
+          <button onClick={() => setFilterToSelection(false)} style={primaryBtn()}>
             ✕ Show full graph
           </button>
         )}
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-text-secondary)' }}>
+        <span style={controlStyle}>
           Top-K
           <input type="range" min={1} max={10} value={topK} onChange={e => setTopK(parseInt(e.target.value, 10))} style={{ width: 80 }} />
           <span style={{ width: 16, textAlign: 'right' }}>{topK}</span>
         </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-text-secondary)' }}>
+        <span style={controlStyle}>
           Min strength
-          <input type="range" min={0} max={100} value={Math.round(minStrength * 100)} onChange={e => setMinStrength(parseInt(e.target.value, 10) / 100)} style={{ width: 80 }} />
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={Math.round(minStrength * 100)}
+            onChange={e => setMinStrength(parseInt(e.target.value, 10) / 100)}
+            style={{ width: 80 }}
+          />
           <span style={{ width: 28, textAlign: 'right' }}>{minStrength.toFixed(2)}</span>
         </span>
         <span style={{ flex: 1 }} />
         {selectedIds.size > 0 && (
           <>
-            <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>{selectedIds.size} selected</span>
-            <button onClick={clearSelection} style={btn()}>Clear</button>
-            <button onClick={askAboutSelection} style={btn(true)}>Ask about selection</button>
+            <span style={{ color: 'var(--color-primary)', fontWeight: 600, fontSize: 12 }}>
+              {selectedIds.size} selected
+            </span>
+            <button onClick={clearSelection} style={ghostBtn()}>Clear</button>
+            <button onClick={askInSearch} style={primaryBtn()}>Ask in Search →</button>
           </>
         )}
+        <Link to="/search" style={ghostBtnLink()}>Open Search</Link>
       </div>
 
-      {/* Body */}
-      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        {/* Graph */}
-        <div style={{ flex: 1, position: 'relative' }}>
-          <OrgGraph
-            people={visibleNodes}
-            relationships={filteredEdges}
-            departments={data.departments}
-            multiSelectIds={selectedIds}
-            onToggleMultiSelect={toggleSelect}
-            spotlightIds={spotlight}
-          />
-        </div>
-
-        {/* Chat */}
-        <div style={{ width: 460, borderLeft: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', background: 'var(--color-surface)' }}>
-          <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Search Agent
-            </span>
-            <button onClick={reset} style={btn()}>+ New</button>
+      <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+        <OrgGraph
+          people={visibleNodes}
+          relationships={filteredEdges}
+          departments={data.departments}
+          multiSelectIds={selectedIds}
+          onToggleMultiSelect={toggleSelect}
+          spotlightIds={selectedIds}
+        />
+        {selectedIds.size === 0 && (
+          <div style={hintStyle}>
+            Click people to build a selection, then jump into <b>Search</b> to ask about them.
           </div>
-
-          <div style={{ flex: 1, overflowY: 'auto', padding: 14 }}>
-            {messages.length === 0 && !isStreaming && (
-              <div style={{ padding: 16, fontSize: 12, color: 'var(--color-text-tertiary)', lineHeight: 1.6 }}>
-                <div style={{ fontWeight: 600, marginBottom: 6, color: 'var(--color-text-secondary)' }}>Two ways to interrogate the graph:</div>
-                <ol style={{ paddingLeft: 18, marginTop: 0 }}>
-                  <li><b>Click nodes</b> to build a selection, then "Ask about selection".</li>
-                  <li><b>Free-form ask</b> below — the agent's people references will highlight on the graph.</li>
-                </ol>
-                <div style={{ marginTop: 12, padding: 8, background: 'var(--color-surface-hover)', borderRadius: 4 }}>
-                  <div style={{ fontWeight: 500, color: 'var(--color-text-primary)' }}>Try:</div>
-                  <button onClick={() => sendMessage('Who are the top 5 Kubernetes experts? Use query_graph.')} style={{ ...exampleBtn(), marginTop: 4 }}>
-                    Top 5 Kubernetes experts
-                  </button>
-                  <button onClick={() => sendMessage('Find a strong cross-team pairing between Platform Engineering and Data Platform.')} style={exampleBtn()}>
-                    Strong cross-team pairing
-                  </button>
-                  <button onClick={() => sendMessage('List the 3 most influential people overall by composite_score.')} style={exampleBtn()}>
-                    Most influential overall
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {messages.map((m, i) => (
-              <div key={m.id} style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>
-                  {m.role === 'user' ? 'You' : 'Search'}
-                </div>
-                {m.role === 'user' ? (
-                  <div style={{ fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{m.content}</div>
-                ) : (
-                  <AssistantMessage
-                    text={m.content}
-                    people={data?.nodes ?? []}
-                    onHoverRef={setHoveredRef}
-                    onClickRef={toggleSelect}
-                    isLast={i === messages.length - 1}
-                  />
-                )}
-                {m.toolCalls && m.toolCalls.length > 0 && (
-                  <div style={{ marginTop: 4 }}>
-                    {m.toolCalls.map(tc => (
-                      <div key={tc.id} style={{ fontSize: 10, padding: '2px 6px', background: 'var(--color-info-bg, #eff6ff)', borderRadius: 3, fontFamily: 'monospace', display: 'inline-block', marginRight: 4 }}>
-                        {tc.name}{tc.result && ' ✓'}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-
-            {isStreaming && <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>Thinking…</div>}
-            {error && <div style={{ fontSize: 12, color: 'var(--color-danger)' }}>Error: {error}</div>}
-            <div ref={bottomRef} />
-          </div>
-
-          <div style={{ display: 'flex', gap: 6, padding: 12, borderTop: '1px solid var(--color-border)' }}>
-            <input
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSend()}
-              placeholder={selectedIds.size > 0 ? `Ask about ${selectedIds.size} selected…` : 'Ask about the org…'}
-              disabled={isStreaming}
-              style={{ flex: 1, padding: '8px 10px', fontSize: 13, border: '1px solid var(--color-border)', borderRadius: 4, outline: 'none' }}
-            />
-            <button onClick={handleSend} disabled={isStreaming || !input.trim()} style={btn(true)}>
-              Send
-            </button>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
 }
 
-function AssistantMessage({
-  text,
-  people,
-  onHoverRef,
-  onClickRef,
-  isLast,
-}: {
-  text: string;
-  people: GraphPerson[];
-  onHoverRef: (id: string | null) => void;
-  onClickRef: (id: string) => void;
-  isLast: boolean;
-}) {
-  const segments = parseSegments(text, people);
-  return (
-    <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-      {segments.map((s, i) =>
-        s.kind === 'text' ? (
-          <span key={i} style={{ whiteSpace: 'pre-wrap' }}>{s.body}</span>
-        ) : (
-          <span
-            key={i}
-            onMouseEnter={() => onHoverRef(s.id)}
-            onMouseLeave={() => onHoverRef(null)}
-            onClick={() => onClickRef(s.id)}
-            style={{
-              display: 'inline-block',
-              padding: '0 6px',
-              margin: '0 2px',
-              borderRadius: 10,
-              background: isLast ? 'var(--color-primary, #6366f1)' : 'var(--color-surface-hover, #eef2ff)',
-              color: isLast ? '#fff' : 'var(--color-primary, #6366f1)',
-              fontSize: 12,
-              fontWeight: 500,
-              cursor: 'pointer',
-              border: isLast ? 'none' : '1px solid var(--color-primary, #6366f1)',
-            }}
-            title={`${s.id} — click to select on graph`}
-          >
-            {s.name}
-          </span>
-        ),
-      )}
-    </div>
-  );
-}
+// ── Styles ──────────────────────────────────────────────────────────────────
 
-function btn(primary = false): React.CSSProperties {
+const toolbarStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 16,
+  padding: '8px 16px',
+  borderBottom: '1px solid var(--color-border)',
+  fontSize: 12,
+  background: 'var(--color-surface)',
+};
+const controlStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  color: 'var(--color-text-secondary)',
+};
+const hintStyle: React.CSSProperties = {
+  position: 'absolute',
+  bottom: 12,
+  left: 12,
+  padding: '6px 10px',
+  background: 'var(--color-surface)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 4,
+  fontSize: 11,
+  color: 'var(--color-text-tertiary)',
+};
+
+function primaryBtn(): React.CSSProperties {
   return {
     fontSize: 11,
     padding: '4px 10px',
-    background: primary ? 'var(--color-primary, #6366f1)' : 'var(--color-surface)',
-    color: primary ? '#fff' : 'var(--color-text-primary)',
-    border: primary ? 'none' : '1px solid var(--color-border)',
+    background: 'var(--color-primary, #6366f1)',
+    color: '#fff',
+    border: 'none',
     borderRadius: 4,
     cursor: 'pointer',
+    fontFamily: 'inherit',
+    fontWeight: 500,
   };
 }
-
-function exampleBtn(): React.CSSProperties {
+function ghostBtn(): React.CSSProperties {
   return {
-    display: 'block',
-    width: '100%',
-    textAlign: 'left',
     fontSize: 11,
-    padding: '4px 8px',
+    padding: '4px 10px',
     background: 'var(--color-surface)',
-    color: 'var(--color-primary, #6366f1)',
+    color: 'var(--color-text-primary)',
     border: '1px solid var(--color-border)',
     borderRadius: 4,
     cursor: 'pointer',
-    marginTop: 4,
+    fontFamily: 'inherit',
+  };
+}
+function ghostBtnLink(): React.CSSProperties {
+  return {
+    ...ghostBtn(),
+    textDecoration: 'none',
+    display: 'inline-block',
   };
 }
 
