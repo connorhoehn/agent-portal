@@ -310,6 +310,11 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
         networkConfiguration: { networkMode: 'PUBLIC' },
         protocolConfiguration: 'HTTP',
         environmentVariables: {
+          OTEL_TRACES_EXPORTER: 'console',
+          OTEL_SERVICE_NAME: `orgiq-${agentName}`,
+          OTEL_PYTHON_LOG_CORRELATION: 'true',
+          OTEL_RESOURCE_ATTRIBUTES: `deployment.environment=dev,service.namespace=orgiq,agent.id=orgiq-${agentName}`,
+          OTEL_PYTHON_DISABLED_INSTRUMENTATIONS: '',
           AGENT_NAME: agentName,
           MEMORY_ID: props.memoryId,
           // Sub-agents run without a guardrail — the supervisor enforces at the
