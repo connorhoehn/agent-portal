@@ -57,6 +57,12 @@ scoresRouter.get('/:personId/radar', asyncHandler(async (req, res) => {
   res.json(radar);
 }));
 
+scoresRouter.get('/:personId/contributions', asyncHandler(async (req, res) => {
+  const result = await aurora.getContributions(req.params['personId'] as string);
+  if (!result) { res.status(404).json({ error: 'Person not found or no contribution data' }); return; }
+  res.json(result);
+}));
+
 scoresRouter.get('/:personId/history', asyncHandler(async (req, res) => {
   const personId = req.params['personId'] as string;
   const rawDays = parseInt(req.query['days'] as string ?? '30', 10);

@@ -29,6 +29,10 @@ import type {
   RadarResponse,
   RadarAxes,
   RadarBatchEntry,
+  ContributionsResponse,
+  CollaboratorContribution,
+  ProjectContribution,
+  DecisionContribution,
 } from './types.js';
 
 import {
@@ -767,7 +771,66 @@ export const realAurora: AuroraProvider = {
   getCohorts: realGetCohorts,
   getPersonRadar: realGetPersonRadar,
   getRadarBatch: realGetRadarBatch,
+  getContributions: realGetContributions,
 };
+
+async function realGetContributions(personId: string): Promise<ContributionsResponse | null> {
+  const check = await exec(
+    `SELECT id FROM people WHERE id = :pid`,
+    [strParam('pid', personId)],
+  );
+  if (check.length === 0) return null;
+
+  const [collabRows, projectRows, decisionRows] = await Promise.all([
+    exec(
+      `SELECT CASE WHEN c.person_a_id = :pid THEN c.person_b_id ELSE c.person_a_id END AS other_id,
+              o.name AS other_name,
+              COALESCE(c.weight, 1.0) AS weight
+         FROM collaborations c
+         JOIN people o ON o.id = CASE WHEN c.person_a_id = :pid THEN c.person_b_id ELSE c.person_a_id END
+        WHERE c.person_a_id = :pid OR c.person_b_id = :pid
+        ORDER BY c.weight DESC
+        LIMIT 3`,
+      [strParam('pid', personId)],
+    ),
+    exec(
+      `SELECT pc.role, COALESCE(pc.weight, 1.0) AS weight, p.name
+         FROM project_contributions pc
+         JOIN projects p ON p.id = pc.project_id
+        WHERE pc.person_id = :pid
+        ORDER BY pc.weight DESC
+        LIMIT 3`,
+      [strParam('pid', personId)],
+    ),
+    exec(
+      `SELECT dp.role, COALESCE(dp.weight, 1.0) AS weight, d.topic
+         FROM decision_participants dp
+         JOIN decisions d ON d.id = dp.decision_id
+        WHERE dp.person_id = :pid
+        ORDER BY dp.weight DESC
+        LIMIT 3`,
+      [strParam('pid', personId)],
+    ),
+  ]);
+
+  const collaborators: CollaboratorContribution[] = collabRows.map((r) => ({
+    otherId: toStr(r['other_id']),
+    otherName: toStr(r['other_name']),
+    weight: toNumber(r['weight'], 1),
+  }));
+  const projects: ProjectContribution[] = projectRows.map((r) => ({
+    projectName: toStr(r['name']),
+    role: r['role'] !== null && r['role'] !== undefined ? toStr(r['role']) : null,
+    weight: toNumber(r['weight'], 1),
+  }));
+  const decisions: DecisionContribution[] = decisionRows.map((r) => ({
+    topic: toStr(r['topic']),
+    role: r['role'] !== null && r['role'] !== undefined ? toStr(r['role']) : null,
+    weight: toNumber(r['weight'], 1),
+  }));
+
+  return { personId, collaborators, projects, decisions };
+}
 
 // ─── Mock provider — wraps the existing mock arrays in the AuroraProvider shape.
 
@@ -903,4 +966,9 @@ export const mockAurora: AuroraProvider = {
   getCohorts: mockGetCohorts,
   getPersonRadar: mockGetPersonRadar,
   getRadarBatch: mockGetRadarBatch,
+  getContributions: mockGetContributions,
 };
+
+async function mockGetContributions(_personId: string): Promise<ContributionsResponse | null> {
+  return null;
+}

@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { Card } from '@connorhoehnslalom/ui-components/shared';
 import { PersonDetail, formatRelativeTime } from './types';
 import { RadarChart, type RadarAxes } from './RadarChart';
 import { TrendLine } from './TrendLine';
+import { WhyDrawer, type ContributionsResponse } from './WhyDrawer';
 import { useFetch } from '../../hooks/useFetch';
 
 interface RadarResponse {
@@ -29,6 +31,10 @@ export function PersonDetailCard({ detail, deptColors, onClose, onSelectConnecti
   );
   const { data: history } = useFetch<HistoryResponse>(
     detail.id ? `/api/scores/${encodeURIComponent(detail.id)}/history?days=30` : '',
+  );
+  const [whyOpen, setWhyOpen] = useState(false);
+  const { data: contributions } = useFetch<ContributionsResponse>(
+    whyOpen && detail.id ? `/api/scores/${encodeURIComponent(detail.id)}/contributions` : '',
   );
   return (
     <Card padding="md">
@@ -96,6 +102,14 @@ export function PersonDetailCard({ detail, deptColors, onClose, onSelectConnecti
       <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 12 }}>
         Scored {formatRelativeTime(detail.scoredAt)}
       </div>
+
+      <button
+        onClick={() => setWhyOpen(o => !o)}
+        style={{ marginTop: 8, fontSize: 11, padding: '4px 10px', background: 'none', border: '1px solid var(--color-border)', borderRadius: 4, cursor: 'pointer', color: 'var(--color-text-secondary)' }}
+      >
+        Why this score? {whyOpen ? '▴' : '▾'}
+      </button>
+      <WhyDrawer open={whyOpen} onClose={() => setWhyOpen(false)} contributions={contributions} />
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--color-border)', fontSize: 13 }}>
         <span style={{ color: 'var(--color-text-secondary)' }}>Influence (PageRank)</span>

@@ -103,7 +103,33 @@ export interface AuroraProvider {
   getTopSkills(limit?: number): Promise<SkillSummary[]>;
   getCohorts(): Promise<CohortStats[]>;
   getPersonRadar(personId: string): Promise<RadarResponse | null>;
+  getContributions(personId: string): Promise<ContributionsResponse | null>;
   getRadarBatch(personIds: string[]): Promise<RadarBatchEntry[]>;
+}
+
+export interface CollaboratorContribution {
+  otherId: string;
+  otherName: string;
+  weight: number;
+}
+
+export interface ProjectContribution {
+  projectName: string;
+  role: string | null;
+  weight: number;
+}
+
+export interface DecisionContribution {
+  topic: string;
+  role: string | null;
+  weight: number;
+}
+
+export interface ContributionsResponse {
+  personId: string;
+  collaborators: CollaboratorContribution[];
+  projects: ProjectContribution[];
+  decisions: DecisionContribution[];
 }
 
 export interface HistorySample {
