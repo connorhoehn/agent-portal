@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Chip, Table, TableHead, TableBody, TableRow, TableTh, TableTd } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Chip, Modal, Table, TableHead, TableBody, TableRow, TableTh, TableTd } from '@connorhoehnslalom/ui-components/shared';
 import { PAGE_STATUS_TONE, formatBytes, formatDuration } from './types';
 import type { CrawlPage } from './types';
-import { ModalBackdrop, secondaryBtnStyle, smallBtnStyle } from './ui';
+import { secondaryBtnStyle, smallBtnStyle } from './ui';
 import { Markdown } from '../Markdown';
 
 type Tab = 'screenshot' | 'markdown' | 'analysis' | 'links';
@@ -41,7 +41,7 @@ export function PageDetailModal({
   const page = detail?.page ?? fallback;
 
   return (
-    <ModalBackdrop onClose={onClose}>
+    <Modal open={true} onClose={onClose} maxWidth={960}>
       <Card
         padding="md"
         style={{
@@ -123,7 +123,7 @@ export function PageDetailModal({
           <S3KeysList page={page} />
         </div>
       </Card>
-    </ModalBackdrop>
+    </Modal>
   );
 }
 

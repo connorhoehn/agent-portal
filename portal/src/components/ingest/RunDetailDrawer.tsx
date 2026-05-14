@@ -19,6 +19,9 @@ import { primaryBtnStyle, secondaryBtnStyle, smallBtnStyle } from './ui';
  *
  * For running sessions we attach to the SSE stream so the timeline updates as
  * pages stream in. For completed sessions we fetch the snapshot once.
+ *
+ * TODO(T1B): Replace hand-rolled backdrop + aside with an upstream Drawer
+ * component from @connorhoehnslalom/ui-components/shared once one is published.
  */
 export function RunDetailDrawer({
   crawlId,

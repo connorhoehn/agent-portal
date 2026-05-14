@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { Card } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Modal } from '@connorhoehnslalom/ui-components/shared';
 import type { CrawlMode, CrawlTarget } from './types';
 import {
-  ModalBackdrop,
   inputStyle,
   labelStyle,
   primaryBtnStyle,
@@ -102,7 +101,7 @@ export function NewTargetModal({
   }
 
   return (
-    <ModalBackdrop onClose={onCancel}>
+    <Modal open={true} onClose={onCancel} maxWidth={560}>
       <Card padding="md" style={{ width: 'min(560px, 92vw)' }}>
         <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>
           {isEdit ? 'Edit Crawl Target' : 'New Crawl Target'}
@@ -236,6 +235,6 @@ export function NewTargetModal({
           </div>
         </div>
       </Card>
-    </ModalBackdrop>
+    </Modal>
   );
 }

@@ -1,21 +1,8 @@
 import React from 'react';
+// Re-export upstream EmptyState so callers importing from './ui' keep working.
+export { EmptyState } from '@connorhoehnslalom/ui-components/shared';
 
 // ── Small reusable bits shared across ingest sub-components ─────────────────
-
-export function EmptyState({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      style={{
-        padding: 24,
-        textAlign: 'center',
-        color: 'var(--color-text-tertiary)',
-        fontSize: 13,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
 
 export function PulseDot({ active, color }: { active: boolean; color: string }) {
   return (
@@ -70,35 +57,6 @@ export function Toggle({
         }}
       />
     </button>
-  );
-}
-
-// ── Modal scaffolding ───────────────────────────────────────────────────────
-
-export function ModalBackdrop({
-  onClose,
-  children,
-}: {
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(15, 23, 42, 0.4)',
-        zIndex: 100,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <div onClick={e => e.stopPropagation()} style={{ maxHeight: '90vh', overflow: 'hidden' }}>
-        {children}
-      </div>
-    </div>
   );
 }
 

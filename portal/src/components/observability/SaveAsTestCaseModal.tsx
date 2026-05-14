@@ -20,8 +20,9 @@
 // On success the parent gets onSuccess(testId) called so it can show its own
 // toast and a link to /observability/harness — keeps the modal context-free.
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, useEffect } from 'react';
 import type { CSSProperties } from 'react';
+import { Modal } from '@connorhoehnslalom/ui-components/shared';
 
 export interface SaveAsTestCaseSource {
   invocationId: string;
@@ -89,17 +90,6 @@ export function SaveAsTestCaseModal({
     setError(null);
   }, [isOpen, invocation.invocationId, invocation.agentId, invocation.prompt, invocation.templateId]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape' && !submitting) onClose();
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [isOpen, onClose, submitting]);
-
-  if (!isOpen) return null;
-
   function addTag() {
     const t = tagInput.trim();
     if (!t) return;
@@ -160,145 +150,12 @@ export function SaveAsTestCaseModal({
   }
 
   return (
-    <div role="dialog" aria-modal="true" onClick={onClose} style={overlayStyle}>
-      <div onClick={(e) => e.stopPropagation()} style={modalStyle}>
-        <div style={modalHeader}>
-          <h3 style={modalTitle}>Save as test case</h3>
-          <button
-            onClick={onClose}
-            style={closeBtn}
-            aria-label="Close"
-            disabled={submitting}
-          >
-            ×
-          </button>
-        </div>
-        <div style={modalBody}>
-          <p style={modalHint}>
-            Captures this invocation as a regression test case in the harness suite.
-            Subsequent harness runs will replay it and judge the response.
-          </p>
-
-          <label style={modalFieldLabel}>TEST ID</label>
-          <input
-            type="text"
-            value={testId}
-            onChange={(e) => setTestId(e.target.value)}
-            style={modalInput}
-            disabled={submitting}
-            spellCheck={false}
-          />
-
-          <div style={twoCol}>
-            <div>
-              <label style={modalFieldLabel}>AGENT (locked)</label>
-              <input
-                type="text"
-                value={invocation.agentId}
-                readOnly
-                disabled
-                style={{ ...modalInput, opacity: 0.6 }}
-              />
-            </div>
-            <div>
-              <label style={modalFieldLabel}>TEMPLATE ID</label>
-              <input
-                type="text"
-                value={templateId}
-                onChange={(e) => setTemplateId(e.target.value)}
-                style={modalInput}
-                disabled={submitting}
-                placeholder="(optional)"
-                spellCheck={false}
-              />
-            </div>
-          </div>
-
-          <label style={modalFieldLabel}>PROMPT</label>
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            style={modalTextarea}
-            rows={6}
-            disabled={submitting}
-          />
-
-          <label style={modalFieldLabel}>REFERENCE OUTPUT (optional)</label>
-          <textarea
-            value={referenceOutput}
-            onChange={(e) => setReferenceOutput(e.target.value)}
-            style={modalTextarea}
-            rows={5}
-            disabled={submitting}
-            placeholder="What does a known-good answer look like?"
-          />
-
-          <label style={modalFieldLabel}>EXPECTED TAGS</label>
-          <div style={tagRow}>
-            {tags.map((t) => (
-              <span key={t} style={tagPill}>
-                {t}
-                <button
-                  onClick={() => removeTag(t)}
-                  style={tagPillRemove}
-                  aria-label={`remove ${t}`}
-                  disabled={submitting}
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-            <input
-              type="text"
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ',') {
-                  e.preventDefault();
-                  addTag();
-                }
-              }}
-              onBlur={addTag}
-              style={tagInputStyle}
-              disabled={submitting}
-              placeholder="type tag + enter"
-              spellCheck={false}
-            />
-          </div>
-
-          <div style={twoCol}>
-            <div>
-              <label style={modalFieldLabel}>PASS THRESHOLD</label>
-              <input
-                type="number"
-                min={0}
-                max={1}
-                step={0.05}
-                value={passThreshold}
-                onChange={(e) => {
-                  const v = Number(e.target.value);
-                  if (Number.isFinite(v)) {
-                    setPassThreshold(Math.max(0, Math.min(1, v)));
-                  }
-                }}
-                style={modalInput}
-                disabled={submitting}
-              />
-            </div>
-            <div>
-              <label style={modalFieldLabel}>NOTES (auto)</label>
-              <input
-                type="text"
-                value={notes}
-                readOnly
-                disabled
-                style={{ ...modalInput, opacity: 0.6, fontSize: 10.5 }}
-              />
-            </div>
-          </div>
-
-          {error && <div style={errorBox}>{error}</div>}
-        </div>
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      title="Save as test case"
+      maxWidth={560}
+      footer={
         <div style={modalFooter}>
           <button
             type="button"
@@ -317,54 +174,137 @@ export function SaveAsTestCaseModal({
             {submitting ? 'Saving…' : 'Save test case'}
           </button>
         </div>
+      }
+    >
+      <div style={modalBody}>
+        <p style={modalHint}>
+          Captures this invocation as a regression test case in the harness suite.
+          Subsequent harness runs will replay it and judge the response.
+        </p>
+
+        <label style={modalFieldLabel}>TEST ID</label>
+        <input
+          type="text"
+          value={testId}
+          onChange={(e) => setTestId(e.target.value)}
+          style={modalInput}
+          disabled={submitting}
+          spellCheck={false}
+        />
+
+        <div style={twoCol}>
+          <div>
+            <label style={modalFieldLabel}>AGENT (locked)</label>
+            <input
+              type="text"
+              value={invocation.agentId}
+              readOnly
+              disabled
+              style={{ ...modalInput, opacity: 0.6 }}
+            />
+          </div>
+          <div>
+            <label style={modalFieldLabel}>TEMPLATE ID</label>
+            <input
+              type="text"
+              value={templateId}
+              onChange={(e) => setTemplateId(e.target.value)}
+              style={modalInput}
+              disabled={submitting}
+              placeholder="(optional)"
+              spellCheck={false}
+            />
+          </div>
+        </div>
+
+        <label style={modalFieldLabel}>PROMPT</label>
+        <textarea
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          style={modalTextarea}
+          rows={6}
+          disabled={submitting}
+        />
+
+        <label style={modalFieldLabel}>REFERENCE OUTPUT (optional)</label>
+        <textarea
+          value={referenceOutput}
+          onChange={(e) => setReferenceOutput(e.target.value)}
+          style={modalTextarea}
+          rows={5}
+          disabled={submitting}
+          placeholder="What does a known-good answer look like?"
+        />
+
+        <label style={modalFieldLabel}>EXPECTED TAGS</label>
+        <div style={tagRow}>
+          {tags.map((t) => (
+            <span key={t} style={tagPill}>
+              {t}
+              <button
+                onClick={() => removeTag(t)}
+                style={tagPillRemove}
+                aria-label={`remove ${t}`}
+                disabled={submitting}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          <input
+            type="text"
+            value={tagInput}
+            onChange={(e) => setTagInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ',') {
+                e.preventDefault();
+                addTag();
+              }
+            }}
+            onBlur={addTag}
+            style={tagInputStyle}
+            disabled={submitting}
+            placeholder="type tag + enter"
+            spellCheck={false}
+          />
+        </div>
+
+        <div style={twoCol}>
+          <div>
+            <label style={modalFieldLabel}>PASS THRESHOLD</label>
+            <input
+              type="number"
+              min={0}
+              max={1}
+              step={0.05}
+              value={passThreshold}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                if (Number.isFinite(v)) {
+                  setPassThreshold(Math.max(0, Math.min(1, v)));
+                }
+              }}
+              style={modalInput}
+              disabled={submitting}
+            />
+          </div>
+          <div>
+            <label style={modalFieldLabel}>NOTES (auto)</label>
+            <input
+              type="text"
+              value={notes}
+              readOnly
+              disabled
+              style={{ ...modalInput, opacity: 0.6, fontSize: 10.5 }}
+            />
+          </div>
+        </div>
+
+        {error && <div style={errorBox}>{error}</div>}
       </div>
-    </div>
+    </Modal>
   );
 }
-
-const overlayStyle: CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(0,0,0,0.45)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: 1000,
-  padding: 24,
-};
-
-const modalStyle: CSSProperties = {
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 6,
-  minWidth: 520,
-  maxWidth: 780,
-  width: '100%',
-  maxHeight: '90vh',
-  display: 'flex',
-  flexDirection: 'column',
-  boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
-};
-
-const modalHeader: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: '12px 16px',
-  borderBottom: '1px solid var(--color-border)',
-};
-
-const modalTitle: CSSProperties = { margin: 0, fontSize: 14, fontWeight: 600 };
-
-const closeBtn: CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  fontSize: 20,
-  lineHeight: 1,
-  color: 'var(--color-text-tertiary)',
-  cursor: 'pointer',
-  padding: '0 4px',
-};
 
 const modalBody: CSSProperties = {
   padding: 16,
