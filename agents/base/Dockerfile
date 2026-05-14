@@ -26,6 +26,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
       "opentelemetry-distro" \
       "opentelemetry-instrumentation" \
       "opentelemetry-exporter-otlp" \
+      # OpenInference instrumentation — translates Strands/Bedrock spans to OI format
+      "openinference-instrumentation-bedrock>=0.1.37" \
+      "openinference-instrumentation-strands-agents>=0.1.2" \
+      "openinference-semantic-conventions>=0.1.29" \
+      "openinference-instrumentation>=0.1.50" \
       "websocket-client>=1.8"
 
 # ── Runtime image ─────────────────────────────────────────────────────────────

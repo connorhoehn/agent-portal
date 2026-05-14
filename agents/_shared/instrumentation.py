@@ -56,6 +56,57 @@ import urllib.error
 import urllib.request
 
 log = logging.getLogger(__name__)
+_oi_logger = logging.getLogger(__name__)
+
+
+def _bootstrap_openinference() -> None:
+    """Wire OpenInference instrumentation onto the active TracerProvider.
+
+    Idempotent: safe to call multiple times. Silently no-ops if the OI
+    packages aren't installed (so the legacy TraceBundle pipeline still
+    works on agent images that haven't been rebuilt yet).
+    """
+    try:
+        from opentelemetry import trace
+        from openinference.instrumentation.bedrock import BedrockInstrumentor
+        from openinference.instrumentation.strands_agents import (
+            StrandsAgentsToOpenInferenceProcessor,
+        )
+    except ImportError as e:
+        _oi_logger.info(
+            "OpenInference packages not available — skipping OI bootstrap. "
+            "Legacy TraceBundle pipeline remains active. Reason: %s",
+            e,
+        )
+        return
+
+    # Auto-instrument boto3 Bedrock calls (Converse / ConverseStream /
+    # invoke_model / invoke_agent / apply_guardrail / retrieve_and_generate).
+    # The instrument() call is idempotent in BedrockInstrumentor.
+    try:
+        BedrockInstrumentor().instrument()
+    except Exception as e:
+        _oi_logger.warning("BedrockInstrumentor.instrument() failed: %s", e)
+
+    # Add the Strands → OI span processor to the active TracerProvider so
+    # Strands' native gen_ai.* spans get translated to OI format before export.
+    try:
+        provider = trace.get_tracer_provider()
+        if hasattr(provider, "add_span_processor"):
+            provider.add_span_processor(StrandsAgentsToOpenInferenceProcessor())
+        else:
+            _oi_logger.warning(
+                "Active TracerProvider %s does not support add_span_processor "
+                "— Strands OI translation will not run.",
+                type(provider).__name__,
+            )
+    except Exception as e:
+        _oi_logger.warning("Strands OI processor wiring failed: %s", e)
+
+
+# Run once at module import. agents/<name>/main.py imports from this module
+# at startup, so this fires before any Bedrock/Strands call.
+_bootstrap_openinference()
 
 # Middleware URL — defaults to the docker-compose service name so the agents
 # can reach the middleware over the compose network. Override with
