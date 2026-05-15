@@ -1,0 +1,6 @@
+cache/
+staged/
+personas.json
+clusters.json
+pitches.json
+seed-graph.json

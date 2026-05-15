@@ -138,7 +138,23 @@ agentcore invoke --agent orgiq-supervisor --prompt "Who knows auth best?"
 
 # Test agent locally
 cd agents/search && agentcore dev "Find Kubernetes experts"
+
+# Generate the synthetic demo corpus (personas, ADRs, postmortems, perf reviews,
+# Slack threads, all-hands recaps, ~50 news articles, NER, clusters, pitches).
+# Requires Aurora + KB deployed and schema/seed.py applied first.
+python3.11 -m venv .venv-synth && .venv-synth/bin/pip install -r schema/synth/requirements.txt
+.venv-synth/bin/python -m schema.synth all                # full pipeline
+.venv-synth/bin/python -m schema.synth all --skip-load    # generate only, no Aurora/S3/KB writes
+.venv-synth/bin/python -m schema.synth stats              # corpus + cache snapshot
 ```
+
+## Synthetic corpus pipeline (`schema/synth/`)
+
+Generates a complete demo corpus from the seed graph using AWS-native models.
+Reads people/teams/skills/projects/decisions from Aurora, writes documents +
+mentions + newsroom (entities, clusters, pitches) + node_embeddings back. Per-doc
+disk cache makes reruns free. `verify_*.py` scripts spend real Bedrock $ — don't
+run them casually. Cost ballpark: ~$0.50 per full demo-grade run (213 docs).
 
 ## Gotchas
 
