@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 FROM node:20-slim AS deps
 WORKDIR /app
 COPY package*.json ./

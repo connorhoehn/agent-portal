@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-
 # ── Stage 1: install deps ──────────────────────────────────────────────────────
 # ui-components is injected from the sibling repo via additional_contexts so npm
 # never needs SSH or a GitHub token at build time.
