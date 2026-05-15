@@ -305,6 +305,7 @@ function HeadlinesPage() {
   const canGenerate = headline.trim().length > 0 && !isStreaming;
 
   return (
+    <div style={{ padding: '24px 32px' }}>
     <PageSection title="Headline Optimizer">
       <p style={subtitleStyle}>
         Enter a draft headline and first paragraph to get 5 scored alternatives.
@@ -392,6 +393,7 @@ function HeadlinesPage() {
       {/* Spin keyframe injected once */}
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </PageSection>
+    </div>
   );
 }
 

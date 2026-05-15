@@ -53,6 +53,7 @@ function BriefsPage() {
   const hasOutput = isStreaming || streamingText.length > 0;
 
   return (
+    <div style={{ padding: '24px 32px' }}>
     <PageSection title="Brief Synthesizer">
       {/* Controls */}
       <Card padding="md">
@@ -153,6 +154,7 @@ function BriefsPage() {
         </div>
       </Card>
     </PageSection>
+    </div>
   );
 }
 

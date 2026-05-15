@@ -208,14 +208,16 @@ function PitchesCard() {
 
 function HomePage() {
   return (
-    <PageSection title="Newsroom">
-      <div style={gridStyle}>
-        <TodayCard />
-        <BeatsCard />
-        <ClustersCard />
-        <PitchesCard />
-      </div>
-    </PageSection>
+    <div style={{ padding: '24px 32px' }}>
+      <PageSection title="Newsroom">
+        <div style={gridStyle}>
+          <TodayCard />
+          <BeatsCard />
+          <ClustersCard />
+          <PitchesCard />
+        </div>
+      </PageSection>
+    </div>
   );
 }
 

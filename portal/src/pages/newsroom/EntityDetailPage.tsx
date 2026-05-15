@@ -153,6 +153,7 @@ function EntityDetailPage() {
   }
 
   return (
+    <div style={{ padding: '24px 32px' }}>
     <PageSection title={data.name}>
       {backLink}
 
@@ -264,6 +265,7 @@ function EntityDetailPage() {
         </div>
       </div>
     </PageSection>
+    </div>
   );
 }
 

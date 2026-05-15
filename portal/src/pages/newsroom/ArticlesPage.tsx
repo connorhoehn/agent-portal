@@ -126,6 +126,7 @@ function ArticlesPage() {
   );
 
   return (
+    <div style={{ padding: '24px 32px' }}>
     <PageSection title="Articles">
       {/* Filter row */}
       <div style={filterRowStyle}>
@@ -265,6 +266,7 @@ function ArticlesPage() {
         </div>
       )}
     </PageSection>
+    </div>
   );
 }
 

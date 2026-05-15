@@ -170,6 +170,7 @@ function ArticleDetailPage() {
   }
 
   return (
+    <div style={{ padding: '24px 32px' }}>
     <PageSection title={data.headline ?? 'Article'}>
       {backLink}
 
@@ -262,6 +263,7 @@ function ArticleDetailPage() {
         </div>
       </div>
     </PageSection>
+    </div>
   );
 }
 
