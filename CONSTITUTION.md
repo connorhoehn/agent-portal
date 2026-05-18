@@ -12,10 +12,10 @@ This domain naturally exercises **every** AgentCore service and Bedrock feature:
 
 | Feature | How OrgIQ Uses It |
 |---------|-------------------|
-| **AgentCore Runtime** | All 6 agents deployed as microVM-isolated sessions |
+| **AgentCore Runtime** | All 9 agents (6 OrgIQ + 3 newsroom) deployed as microVM-isolated sessions |
 | **A2A Protocol** | Supervisor → specialist routing (Search, Advisor, Scoring) |
 | **AG-UI Protocol** | Streaming events (text, tool calls, state) to React portal |
-| **MCP Gateway** | Tools for Jira, Confluence, Slack, Calendar, Neptune queries |
+| **MCP Gateway** | Tools for Jira, Confluence, Slack, Calendar, Aurora SQL queries |
 | **AgentCore Policy** | Cedar: managers see team scores, ICs see collaboration only |
 | **AgentCore Memory** | Short-term: multi-turn search. Long-term: user preferences |
 | **AgentCore Identity** | OAuth2 with corporate SSO, token vault for third-party APIs |
@@ -25,7 +25,7 @@ This domain naturally exercises **every** AgentCore service and Bedrock feature:
 | **Agent Registry** | Semantic discovery of available agents |
 | **Observability** | OpenTelemetry traces for full pipeline, cost tracking |
 | **Knowledge Base** | Vector search over ingested documents (OpenSearch Serverless) |
-| **Neptune GraphRAG** | Organizational graph — people, teams, skills, decisions |
+| **Aurora GraphRAG** | Relational org graph in Aurora PostgreSQL — people, teams, skills, projects, decisions — with `pgvector` embeddings alongside |
 | **Bedrock Guardrails** | PII filtering on employee data, bias prevention in scoring |
 | **Bedrock Flows** | Orchestrate ingestion → enrichment → scoring pipeline |
 | **Managed Prompts** | Versioned templates for each agent's system prompt |
@@ -39,7 +39,7 @@ This domain naturally exercises **every** AgentCore service and Bedrock feature:
 │                    LOCAL DEVELOPMENT (docker-compose)                          │
 │                                                                              │
 │  ┌───────────────────────────────────────────────────────────────────────┐   │
-│  │  portal (React 19 + Vite 7)          http://localhost:5173            │   │
+│  │  portal (React 19 + Vite 7)          http://localhost:5183            │   │
 │  │                                                                       │   │
 │  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────────────────────┐  │   │
 │  │  │ Agent Flow   │ │ Org Graph    │ │ Conversational Search        │  │   │
@@ -57,7 +57,7 @@ This domain naturally exercises **every** AgentCore service and Bedrock feature:
 │  │  middleware (Express + distributed-core)   http://localhost:3001       │   │
 │  │                                                                       │   │
 │  │  • AG-UI proxy (SSE passthrough from AgentCore Runtime)               │   │
-│  │  • Neptune query routes (/graph/*)                                    │   │
+│  │  • Aurora query routes (/graph/*, /scores/*) via RDS Data API         │   │
 │  │  • Score routes (/scores/*)                                           │   │
 │  │  • WebSocket bridge (trace events, graph updates → portal)            │   │
 │  │  • Auth bypass (local dev) or Cognito JWT (deployed)                  │   │
@@ -79,7 +79,7 @@ This domain naturally exercises **every** AgentCore service and Bedrock feature:
 │  │                                                                         │ │
 │  │  ┌───────────┐ ┌──────────┐ ┌─────────┐ ┌─────────┐ ┌──────────────┐  │ │
 │  │  │ Runtime   │ │ Gateway  │ │ Policy  │ │ Memory  │ │ Identity     │  │ │
-│  │  │ (6 agents │ │ (MCP     │ │ (Cedar  │ │ (short+ │ │ (OAuth2,     │  │ │
+│  │  │ (9 agents │ │ (MCP     │ │ (Cedar  │ │ (short+ │ │ (OAuth2,     │  │ │
 │  │  │  in       │ │  tools,  │ │  rules) │ │  long   │ │  token vault)│  │ │
 │  │  │  microVMs)│ │  search) │ │         │ │  term)  │ │              │  │ │
 │  │  └───────────┘ └──────────┘ └─────────┘ └─────────┘ └──────────────┘  │ │
@@ -100,9 +100,9 @@ This domain naturally exercises **every** AgentCore service and Bedrock feature:
 │  └─────────────────────────────────────────────────────────────────────────┘ │
 │                                                                              │
 │  ┌───────────────────┐ ┌──────────────────┐ ┌─────────────────────────────┐ │
-│  │ Neptune Analytics │ │ OpenSearch       │ │ S3 (documents)              │ │
-│  │ (128 NCU, 1024d   │ │ Serverless       │ │ DynamoDB (state, scores)    │ │
-│  │  vector search)   │ │ (embeddings)     │ │                             │ │
+│  │ Aurora Serverless │ │ OpenSearch       │ │ S3 (documents)              │ │
+│  │ v2 (PostgreSQL 16 │ │ Serverless       │ │ DynamoDB (sessions, scores) │ │
+│  │  + pgvector 1024d)│ │ (KB embeddings)  │ │                             │ │
 │  └───────────────────┘ └──────────────────┘ └─────────────────────────────┘ │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -122,7 +122,7 @@ from strands.models import BedrockModel
 from bedrock_agentcore import BedrockAgentCoreApp
 
 app = BedrockAgentCoreApp()
-model = BedrockModel(model_id="us.anthropic.claude-sonnet-4-6-20250929-v1:0")
+model = BedrockModel(model_id=os.environ.get("MODEL_ID", "amazon.nova-pro-v1:0"))
 
 @tool
 def my_tool(query: str) -> str:
@@ -139,108 +139,138 @@ async def invoke(payload, context):
 
 ### 1. Supervisor Agent (Orchestrator)
 - **Protocol**: AG-UI (SSE at `/invocations`, WebSocket at `/ws`)
-- **Role**: Routes user queries to appropriate specialist via A2A
-- **Tools**: `route_to_search`, `route_to_advisor`, `route_to_scoring` (each wraps A2A invocation)
+- **Role**: Routes user queries to appropriate specialist via A2A; runs ad-hoc Python in Code Interpreter
+- **Tools**: `search_organization`, `get_expertise_scores`, `get_strategic_advice`, `ingest_documents`, `build_graph`, `run_in_sandbox` (each routes to a specialist runtime via A2A invocation, except `run_in_sandbox` which uses AgentCore Code Interpreter)
 - **Memory**: Short-term session + long-term user preferences
-- **Policy**: Cedar rules enforce role-based data access
+- **Policy**: Cedar (Verified Permissions) enforces role-based data access; guardrail is attached per role at model-build time
 - **AG-UI Events**: `RunStarted` → `StepStarted("routing")` → `TextMessageContent` → `ToolCallStart` → `StepFinished` → `RunFinished`
 
 ### 2. Ingestion Agent
-- **Protocol**: HTTP (called by Bedrock Flows, not directly by users)
-- **Role**: Fetch and normalize documents from multiple sources
+- **Protocol**: HTTP / A2A (called by Supervisor or Bedrock Flows, not directly by users)
+- **Role**: Fetch and normalize documents from multiple sources; trigger KB ingestion
 - **MCP Tools** (via Gateway): `jira_search`, `confluence_fetch`, `s3_list_documents`, `slack_search`
 - **Output**: Normalized document chunks → S3 → KB ingestion trigger
 
 ### 3. Graph Builder Agent
-- **Protocol**: HTTP
-- **Role**: Extract entities and relationships from documents, populate Neptune
-- **Tools**: `neptune_create_node`, `neptune_create_edge`, `neptune_query` (custom @tool functions)
+- **Protocol**: HTTP / A2A
+- **Role**: Extract entities and relationships from documents, upsert into Aurora relational tables
+- **Tools**: `merge_person`, `merge_skill`, `merge_team`, `merge_project`, `merge_decision`, `link_person_to_skill`, `link_person_to_team`, `link_person_to_project` (each issues parameterized `INSERT … ON CONFLICT DO UPDATE` via the RDS Data API)
 - **Uses Code Interpreter**: Entity extraction prompts, relationship classification
 
 ### 4. Scoring Agent
 - **Protocol**: A2A (callable by Supervisor)
 - **Role**: Compute influence, expertise, and velocity scores
-- **Tools**: `neptune_pagerank`, `neptune_centrality`, `dynamodb_write_scores`
+- **Tools**: SQL aggregates over `person_skills`, `project_contributions`, `collaborations` → `dynamodb_write_scores`; PageRank/centrality run inside Code Interpreter against the relational graph
 - **Uses Code Interpreter**: Custom scoring formulas, normalization
 - **Algorithms**: PageRank, betweenness centrality, contribution frequency
 
 ### 5. Search Agent
 - **Protocol**: A2A (callable by Supervisor)
-- **Role**: Conversational search over docs + graph
-- **Tools**: `knowledge_base_retrieve`, `neptune_traverse`, `memory_search`
+- **Role**: Conversational search over docs + Aurora graph + the open web
+- **Tools**: `query_knowledge_base` (Bedrock KB retrieve), `query_graph` (read-only `SELECT`/`WITH` SQL against Aurora), `fetch_web_page` (AgentCore Browser via CDP)
 - **Memory**: Session context for multi-turn refinement
 - **Guardrails**: PII filter on outputs, grounding check on citations
 
 ### 6. Advisor Agent
 - **Protocol**: A2A (callable by Supervisor)
 - **Role**: Proactive recommendations from org patterns
-- **Tools**: `neptune_query`, `dynamodb_get_scores`, `knowledge_base_retrieve`
+- **Tools**: `query_graph`, `dynamodb_get_scores`, `query_knowledge_base`
 - **Examples**: "Team X has bus factor of 1 on service Y", "Consider pairing A with B"
+
+### 7. News Researcher Agent (`news-researcher`)
+- **Protocol**: A2A
+- **Role**: Fetch and triage external news for the Newsroom demo surface
+- **Tools**: web fetch, KB-grounded summarization, entity extraction against Aurora
+
+### 8. News Brief Agent (`news-brief`)
+- **Protocol**: A2A
+- **Role**: Synthesize researched items into per-entity briefs
+- **Tools**: KB retrieve, Aurora entity lookup, summarization
+
+### 9. News Headline Agent (`news-headline`)
+- **Protocol**: A2A
+- **Role**: Lightweight headline + lede generator (smallest of the news family)
+- **Tools**: Nova Pro completion only (no external IO)
+
+> **Shared utilities** live in `agents/_shared/` (`approval_tool.py`, `instrumentation.py`).
+> The common runtime image is built from `agents/base/Dockerfile` and pinned via `agents/Dockerfile.agent`.
 
 ---
 
-## Neptune Graph Schema (openCypher)
+## Aurora Org-Graph Schema (PostgreSQL + pgvector)
 
-### Node Labels
+Aurora does not support Apache AGE, so the org-graph is modeled as plain
+relational tables: one table per "node label" and one edge table per
+relationship type. `pgvector` lives alongside in `node_embeddings` for
+semantic similarity. Canonical DDL: `schema/orgiq_schema.sql`. Access is
+via the RDS Data API; read tools enforce `SELECT`/`WITH` only.
 
-| Label | Key Properties | Embedding |
-|-------|---------------|-----------|
-| `Person` | id, name, email, title, department, hire_date, influence_score, collaboration_score | Profile summary |
-| `Team` | id, name, org_path, charter, size | Charter text |
-| `Project` | id, name, status, priority, start_date, target_end | Description |
-| `Skill` | id, name, category, subcategory | Definition |
-| `Document` | id, title, type (ADR/RFC/wiki), url, created_date | Content summary |
-| `Decision` | id, title, status, date, impact, outcome | Context + outcome |
-| `Meeting` | id, title, type, date, summary, action_items_count | Summary |
+### Node tables
 
-### Edge Types
+| Table | Key Columns | Embedding |
+|-------|-------------|-----------|
+| `people` | id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at | via `node_embeddings` (kind='person') |
+| `teams` | id, name, parent_id | via `node_embeddings` (kind='team') |
+| `projects` | id, name, status | via `node_embeddings` (kind='project') |
+| `skills` | id, name, domain | via `node_embeddings` (kind='skill') |
+| `decisions` | id, topic, summary, decided_at | via `node_embeddings` (kind='decision') |
+| `documents` | id, source, source_uri, title, ingested_at | via `node_embeddings` (kind='document') |
+| `node_embeddings` | node_id, kind, embedding `vector(1024)` (Titan V2) | — |
 
-| Edge | From → To | Key Properties |
-|------|-----------|---------------|
-| `MEMBER_OF` | Person → Team | role, start_date, end_date, is_current |
-| `WORKS_ON` | Person → Project | role, allocation_pct, contributions_count |
-| `EXPERT_IN` | Person → Skill | level, since, endorsed_by_count, last_demonstrated |
-| `COLLABORATES_WITH` | Person ↔ Person | strength (0-1), interaction_count, channels[] |
-| `REPORTS_TO` | Person → Person | start_date, is_current |
-| `AUTHORED` | Person → Document | role (primary/contributor/reviewer), date |
-| `ATTENDED` | Person → Meeting | role, spoke, action_items_assigned |
-| `DECIDED` | Person → Decision | role (decision_maker/advisor/dissenter) |
-| `OWNS` | Team → Project | since |
-| `REQUIRES` | Project → Skill | importance, min_level |
-| `DEPENDS_ON` | Project → Project | type (blocks/informs/enables) |
+Newsroom adds its own tables (`schema/newsroom_schema.sql`): articles,
+entities, clusters, pitches. Observability adds `schema/observability_*.sql`
+(spans, approvals, calibration, memory).
 
-### Key Queries
+### Edge tables (one per relationship type)
 
-```cypher
--- Find experts for a skill
-MATCH (p:Person)-[e:EXPERT_IN]->(s:Skill {name: $skill})
-WHERE e.level IN ['expert', 'advanced']
-RETURN p.name, p.title, e.endorsed_by_count
-ORDER BY e.endorsed_by_count DESC LIMIT 10
+| Table | From → To | Key Columns |
+|-------|-----------|-------------|
+| `person_skills` | person → skill | weight, source |
+| `team_memberships` | person → team | role, started_at |
+| `project_contributions` | person → project | role, contribution_count |
+| `collaborations` | person ↔ person | strength, interaction_count |
+| `mentions` | document → entity | offset, span, confidence |
 
--- Multi-hop: who collaborates with people who know X?
-MATCH (expert:Person)-[:EXPERT_IN {level: 'expert'}]->(:Skill {name: $skill}),
-      (expert)-[:COLLABORATES_WITH]-(candidate:Person)
-WHERE NOT (candidate)-[:EXPERT_IN]->(:Skill {name: $skill})
-RETURN DISTINCT candidate.name, collect(expert.name) AS connected_experts
+### Key queries (parameterized SQL, run via RDS Data API)
 
--- PageRank (built-in Neptune Analytics algorithm)
-CALL neptune.algo.pageRank({edgeLabels: ['COLLABORATES_WITH']})
-YIELD node, score WHERE node:Person
-RETURN node.name, score ORDER BY score DESC LIMIT 20
+```sql
+-- Find experts for a skill (joins replace the old MATCH … -[EXPERT_IN]-> …)
+SELECT p.id, p.name, p.title, ps.weight
+FROM   people p
+JOIN   person_skills ps ON ps.person_id = p.id
+JOIN   skills s         ON s.id = ps.skill_id
+WHERE  s.name = :skill
+ORDER  BY ps.weight DESC
+LIMIT  10;
 
--- Betweenness centrality (bridge connectors)
-CALL neptune.algo.betweennessCentrality({edgeLabels: ['COLLABORATES_WITH']})
-YIELD node, score WHERE node:Person
-RETURN node.name, node.department, score ORDER BY score DESC
+-- Two-hop: who collaborates with people who know X but doesn't know X themselves?
+SELECT DISTINCT c.target_id AS candidate_id, array_agg(DISTINCT e.id) AS connected_experts
+FROM   person_skills ps
+JOIN   people        e  ON e.id = ps.person_id
+JOIN   skills        s  ON s.id = ps.skill_id AND s.name = :skill
+JOIN   collaborations c ON c.source_id = e.id
+WHERE  NOT EXISTS (
+         SELECT 1 FROM person_skills ps2
+         JOIN   skills s2 ON s2.id = ps2.skill_id
+         WHERE  ps2.person_id = c.target_id AND s2.name = :skill)
+GROUP  BY c.target_id;
 
--- Vector + graph hybrid: similar people then expand
--- Vector similarity (1024d Titan V2 embeddings stored on nodes)
-CALL neptune.algo.vectors.topKByEmbedding({embedding: $queryVec, k: 5, nodeLabels: ['Person']})
-YIELD node, score
-MATCH (node)-[:EXPERT_IN]->(skill:Skill)
-RETURN node.name, score, collect(skill.name) AS skills
+-- Hybrid: vector similarity (Titan V2 1024d) then expand to skills
+SELECT p.id, p.name, ne.embedding <=> :query_vec AS distance,
+       array_agg(DISTINCT s.name)               AS skills
+FROM   node_embeddings ne
+JOIN   people          p  ON p.id = ne.node_id AND ne.kind = 'person'
+LEFT   JOIN person_skills ps ON ps.person_id = p.id
+LEFT   JOIN skills        s  ON s.id = ps.skill_id
+GROUP  BY p.id, p.name, ne.embedding
+ORDER  BY distance
+LIMIT  5;
 ```
+
+PageRank and betweenness centrality are computed inside AgentCore Code
+Interpreter (Python + `networkx`), reading the edge tables and writing
+scores back to `people.pagerank_score` / `people.composite_score`. There
+is no in-database graph algorithm runtime.
 
 ---
 
@@ -310,12 +340,16 @@ services:
     build:
       context: ./portal
       target: development
-    ports: ["5173:5173"]
+      additional_contexts:
+        ui_components: ../ui-components
+    ports: ["5183:5183"]
     volumes:
-      - ./portal/src:/app/src
+      - ./portal:/app
+      - /app/node_modules
     environment:
       - VITE_API_URL=http://localhost:3001
       - VITE_WS_URL=ws://localhost:3001
+      - API_PROXY_TARGET=http://middleware:3001
 ```
 
 ### Agent Dockerfile (Multistage, AWS-deployable)
@@ -372,7 +406,7 @@ Phase 1b (Portal scaffold) ─────┘                                   
 
 - **1a + 1b run in parallel**: notebooks validate AWS APIs while portal scaffolding uses mock data
 - **Phase 2 requires 1a**: you need to know the APIs work before codifying in CDK
-- **Phase 3a requires 2**: agents need Neptune/KB/Guardrails deployed
+- **Phase 3a requires 2**: agents need Aurora/KB/Guardrails deployed
 - **Phase 3b requires 3a**: middleware needs agent endpoints to proxy
 - **Phase 4 (integration)**: wire portal to real middleware (replacing mocks)
 - **Portal mock UI starts in Phase 1b**: so you can visualize while services are being built
@@ -385,25 +419,23 @@ Phase 1b (Portal scaffold) ─────┘                                   
 notebooks/
 ├── 00-index.ipynb                     # Workshop overview + setup guide
 ├── 01-setup-credentials.ipynb         # AWS config, model access, bedrock-agentcore install
-├── 02-strands-agent-local.ipynb       # Define agent with @tool, invoke locally
-├── 03-agentcore-runtime-deploy.ipynb  # agentcore create → deploy → invoke
-├── 04-agentcore-gateway-mcp.ipynb     # Create MCP tools from OpenAPI, semantic search
-├── 05-agentcore-memory.ipynb          # Short-term events, long-term extraction, retrieval
-├── 06-agentcore-identity.ipynb        # OAuth setup, token vault, credential flow
-├── 07-agentcore-policy-cedar.ipynb    # Cedar policies, natural language → Cedar
-├── 08-knowledge-base-setup.ipynb      # OpenSearch Serverless KB + document ingestion
-├── 09-neptune-graph.ipynb             # Create graph, write nodes/edges, openCypher
-├── 10-neptune-algorithms.ipynb        # PageRank, centrality, vector search
-├── 11-guardrails.ipynb                # Content filters, PII, topic denial, grounding
-├── 12-bedrock-flows.ipynb             # Multi-node flow: ingest → enrich → store
-├── 13-multi-agent-a2a.ipynb           # Supervisor + specialist A2A collaboration
-├── 14-ag-ui-protocol.ipynb            # serve_ag_ui(), stream events, test frontend contract
-├── 15-evaluations.ipynb               # Built-in evaluators, custom LLM-as-judge
-├── 16-observability.ipynb             # OpenTelemetry traces, CloudWatch integration
-├── 17-agent-registry.ipynb            # Register agents, semantic discovery
-├── 18-full-pipeline.ipynb             # End-to-end: ingest → graph → score → search
-├── 19-simulation-testing.ipynb        # bedrock-agentcore[simulation] for CI
-└── 99-cleanup.ipynb                   # Resource teardown with tracker
+├── 02-aurora-graph.ipynb              # Create Aurora cluster, apply schema, write nodes/edges
+├── 03-embeddings.ipynb                # Titan Embeddings V2 (1024d) into pgvector
+├── 04-knowledge-base.ipynb            # OpenSearch Serverless KB + document ingestion
+├── 05-guardrails.ipynb                # Content filters, PII, topic denial, grounding
+├── 06-strands-agent.ipynb             # Define agent with @tool, invoke locally
+├── 07-agentcore-memory.ipynb          # Short-term events, long-term extraction, retrieval
+├── 08-agentcore-gateway.ipynb         # Create MCP tools from OpenAPI, semantic search
+├── 09-agentcore-policy.ipynb          # Cedar policies, natural language → Cedar
+├── 10-agentcore-identity.ipynb        # OAuth setup, token vault, credential flow
+├── 11-code-execution.ipynb            # AgentCore Code Interpreter (sandboxed Python)
+├── 12-ag-ui-streaming.ipynb           # serve_ag_ui(), stream events, test frontend contract
+├── 13-a2a-protocol.ipynb              # Supervisor + specialist A2A collaboration
+├── 14-scoring.ipynb                   # PageRank / centrality in Code Interpreter → DynamoDB
+├── 15-deploy-runtime.ipynb            # agentcore deploy → ECR → Runtime
+├── 16-evaluations.ipynb               # Built-in evaluators, custom LLM-as-judge
+├── 17-telemetry.ipynb                 # OpenInference spans → ADOT → CloudWatch → Aurora
+└── 18-cleanup.ipynb                   # Resource teardown with tracker (cleanup_utils.py)
 ```
 
 ### Phase 1b: Portal Scaffold with Mock Data (Weeks 1-2, parallel with 1a)
@@ -411,7 +443,7 @@ notebooks/
 **Goal**: Build UI components against mock data so visualization is ready when backends come online
 
 - Scaffold Vite + React app with ui-components dependency
-- Build AgentFlowPage with static node graph (hardcoded 6 agents + tools)
+- Build AgentFlowPage with static node graph (hardcoded 9 agents + tools)
 - Build OrgGraphPage with synthetic graph data (20 people, 4 teams)
 - Build SearchPage with mock AG-UI event stream (simulated SSE)
 - Build ScoresPage with hardcoded radar/leaderboard data
@@ -421,49 +453,57 @@ notebooks/
 
 ### Phase 2: CDK Infrastructure (Week 3)
 
-**Goal**: Codify data stores and Bedrock resources. Agent deployment uses AgentCore CLI separately.
+**Goal**: Codify data stores, Bedrock resources, and AgentCore feature stacks. Agent container deployment uses CDK with `--context deployRuntimes=true` (phase 2 of the same stack), not the standalone AgentCore CLI.
 
-CDK handles (stateful resources):
-- S3 buckets (documents, artifacts)
-- DynamoDB tables (scores, session state, leaderboards)
-- OpenSearch Serverless collection + Bedrock Knowledge Base
-- Neptune Analytics graph (128 NCU, vector dim 1024)
-- Bedrock Guardrails (PII filter, content policy, grounding)
-- Bedrock Managed Prompts (versioned agent system prompts)
-- IAM roles for all cross-service access
-- CloudWatch dashboards and budget alarms
+CDK manages **everything**, including AgentCore primitives (Memory, Policy, Gateway, Runtime, Telemetry). The breakdown is:
 
-AgentCore CLI handles (agent deployment):
-- `agentcore create` → scaffold agent project structure
-- `agentcore add memory` → configure memory resources
-- `agentcore add gateway` → configure MCP gateway
-- `agentcore add policy-engine` → configure Cedar policies
-- `agentcore deploy` → CodeBuild → ECR → Runtime
+| Stack | Resources |
+|-------|-----------|
+| `OrgIQ-Foundation` | S3 buckets (documents, artifacts), DynamoDB tables (sessions, scores), base IAM roles, KMS keys |
+| `OrgIQ-Aurora` | Aurora Serverless v2 (PostgreSQL 16 + `pgvector`), Secrets Manager credentials, RDS Data API enablement |
+| `OrgIQ-KnowledgeBase` | OpenSearch Serverless collection + Bedrock Knowledge Base + S3 data source |
+| `OrgIQ-Guardrails` | Bedrock Guardrails (PII filter, content policy, grounding) per role |
+| `OrgIQ-Authorization` | Verified Permissions policy store, Cedar policies, session-signing secret, tenant config |
+| `OrgIQ-Agents` | ECR repos + execution roles for the original 6 agents (phase 1 — no `CfnRuntime`) |
+| `OrgIQ-Observability` | CloudWatch dashboards, budget alarm, log groups, OpenInference exporters |
+| `OrgIQ-AgentCoreMemory` | `CfnMemory` resources for the supervisor session store |
+| `OrgIQ-AgentCorePolicy` | `CfnPolicyEngine` wiring Cedar → AgentCore at request time |
+| `OrgIQ-AgentCoreCapabilities` | Code Interpreter, Browser, Workload Identity (`CfnCodeInterpreter`, `CfnBrowser`, `CfnWorkloadIdentity`) |
+| `OrgIQ-AgentCoreRuntime` | `CfnRuntime` + `CfnRuntimeEndpoint` for the 6 originals + 3 newsroom agents (phase 2, gated on `--context deployRuntimes=true`) |
+| `OrgIQ-AgentCoreGateway` | `CfnGateway` + targets (Jira/Confluence/Slack OpenAPI specs) + Cedar gateway policies |
+| `OrgIQ-AgentCoreTelemetry` | Custom evaluators + online evaluation config (gated on `--context enableEval=true`) |
+| `OrgIQ-SpanProjector` | Lambda that consumes CloudWatch Logs Insights, projects OpenInference spans into Aurora observability tables |
+
+Stack ordering and cross-stack refs live in `infra/bin/app.ts`. Both phase-2 flags (`deployRuntimes`, `enableEval`) are documented in `CLAUDE.md` under "Common workflows".
 
 ```
 infra/
-├── bin/app.ts
+├── bin/app.ts                                # 14-stack composition + context flags
 ├── lib/
-│   ├── foundation-stack.ts            # S3, DynamoDB, IAM base roles
-│   ├── knowledge-base-stack.ts        # OpenSearch Serverless + Bedrock KB + data source
-│   ├── neptune-stack.ts               # Neptune Analytics (CfnGraph, vector search)
-│   ├── guardrails-stack.ts            # Bedrock Guardrails (PII, content, grounding)
-│   ├── prompts-stack.ts               # Bedrock Managed Prompts (CfnPrompt)
-│   ├── flows-stack.ts                 # Bedrock Flows (ingestion pipeline)
-│   ├── observability-stack.ts         # CloudWatch dashboards, budget alarm
-│   └── outputs-stack.ts              # Cross-stack output aggregation
-├── schemas/
-│   ├── openapi/                       # OpenAPI specs for MCP Gateway tools
-│   │   ├── jira-tools.yaml
-│   │   ├── confluence-tools.yaml
-│   │   └── neptune-tools.yaml
-│   └── cedar/                         # Cedar policy templates
-│       ├── manager-access.cedar
-│       └── ic-access.cedar
+│   ├── foundation-stack.ts                   # S3, DynamoDB, base IAM
+│   ├── aurora-stack.ts                       # Aurora Serverless v2 + pgvector
+│   ├── knowledge-base-stack.ts               # OpenSearch Serverless + Bedrock KB
+│   ├── guardrails-stack.ts                   # Bedrock Guardrails (per-role)
+│   ├── authorization-stack.ts                # Verified Permissions + Cedar + session signing
+│   ├── agents-stack.ts                       # ECR + execution roles for the 6 originals
+│   ├── observability-stack.ts                # Dashboards, budget alarm, log groups
+│   ├── agentcore-memory-stack.ts             # CfnMemory
+│   ├── agentcore-policy-stack.ts             # CfnPolicyEngine
+│   ├── agentcore-capabilities-stack.ts       # Code Interpreter, Browser, Workload Identity
+│   ├── agentcore-runtime-stack.ts            # CfnRuntime + CfnRuntimeEndpoint (gated)
+│   ├── agentcore-gateway-stack.ts            # CfnGateway + targets + Cedar policies
+│   ├── agentcore-telemetry-stack.ts          # Custom evaluators + online eval (gated)
+│   └── span-projector-stack.ts               # OpenInference span → Aurora Lambda
+├── scripts/
+│   ├── deploy.sh                             # Sequenced deploy with orphan cleanup
+│   └── destroy.sh                            # Pre-drains KB + Aurora before teardown
 ├── cdk.json
 ├── package.json
 └── tsconfig.json
 ```
+
+> Schemas (OpenAPI for MCP Gateway, Cedar policy text) live under the relevant stack
+> as inline TypeScript or `assets/` subfolders — there is no top-level `infra/schemas/`.
 
 ### Phase 3a: Agent Implementation (Week 4)
 
@@ -471,41 +511,30 @@ infra/
 
 ```
 agents/
-├── supervisor/
-│   ├── main.py                        # BedrockAgentCoreApp + AG-UI protocol
-│   ├── tools.py                       # route_to_search, route_to_advisor, etc.
-│   ├── pyproject.toml
-│   └── Dockerfile
-├── ingestion/
-│   ├── main.py                        # MCP tool consumer (Jira, Confluence, S3)
-│   ├── tools.py                       # normalize_document, chunk_text
-│   ├── pyproject.toml
-│   └── Dockerfile
-├── graph-builder/
-│   ├── main.py                        # Entity extraction + Neptune writes
-│   ├── tools.py                       # neptune_create_node, neptune_create_edge
-│   ├── pyproject.toml
-│   └── Dockerfile
-├── scoring/
-│   ├── main.py                        # A2A protocol, scoring algorithms
-│   ├── tools.py                       # neptune_pagerank, compute_scores
-│   ├── pyproject.toml
-│   └── Dockerfile
-├── search/
-│   ├── main.py                        # A2A protocol, KB + Neptune hybrid search
-│   ├── tools.py                       # knowledge_base_retrieve, neptune_traverse
-│   ├── pyproject.toml
-│   └── Dockerfile
-└── advisor/
-    ├── main.py                        # A2A protocol, recommendations
-    ├── tools.py                       # pattern detection queries
-    ├── pyproject.toml
-    └── Dockerfile
+├── base/                              # Shared multistage Dockerfile (uv builder → python:3.12-slim)
+│   ├── Dockerfile                     # ARM64, non-root bedrock_agentcore, OTel-instrumented
+│   └── build.sh
+├── _shared/                           # Cross-agent Python helpers
+│   ├── approval_tool.py               # Human-in-the-loop approval gating
+│   └── instrumentation.py             # OpenInference root spans, RETRIEVER, guardrail capture
+├── Dockerfile.agent                   # Per-agent thin layer over base/Dockerfile
+├── build-all.sh                       # Build + push all 9 ECR images
+│
+├── supervisor/main.py                 # AG-UI entrypoint, A2A routing, Cedar role resolution
+├── ingestion/main.py                  # MCP tool consumer (Jira, Confluence, S3, Slack)
+├── graph-builder/main.py              # Aurora upserts (merge_person, merge_skill, …)
+├── scoring/main.py                    # PageRank/centrality in Code Interpreter → DynamoDB
+├── search/main.py                     # query_knowledge_base, query_graph, fetch_web_page
+├── advisor/main.py                    # Pattern-detection queries against Aurora + scores
+│
+├── news-researcher/main.py            # Newsroom: external fetch + triage
+├── news-brief/main.py                 # Newsroom: per-entity brief synthesis
+└── news-headline/main.py              # Newsroom: headline + lede (Nova Pro only)
 ```
 
 ### Phase 3b: Middleware (Week 5)
 
-**Goal**: Bridge deployed agents + Neptune to portal via AG-UI proxy + WebSocket
+**Goal**: Bridge deployed agents + Aurora to portal via AG-UI proxy + WebSocket
 
 Standalone Express service (imports distributed-core for WS, does NOT modify platform-api):
 
@@ -515,14 +544,17 @@ middleware/
 │   ├── index.ts                       # Express app setup
 │   ├── routes/
 │   │   ├── agents.ts                  # AG-UI proxy (SSE passthrough)
-│   │   ├── graph.ts                   # Neptune queries (entities, relationships, search)
+│   │   ├── graph.ts                   # Aurora SQL queries (entities, relationships, search)
 │   │   ├── scores.ts                  # Leaderboards, breakdowns, trends
 │   │   ├── ingest.ts                  # Trigger ingestion, monitor progress
 │   │   └── traces.ts                  # Fetch OpenTelemetry traces
 │   ├── lib/
-│   │   ├── neptune.ts                 # Neptune Analytics query client (Sig4 + openCypher)
-│   │   ├── agentcore.ts              # AgentCore SDK operations
-│   │   └── bedrock.ts                # Bedrock KB retrieve, guardrail apply
+│   │   ├── invocations.ts             # Agent invocations + SSE streaming
+│   │   ├── trace-sink.ts              # OI trace ingest from CloudWatch
+│   │   ├── crawler.ts                 # Document crawler + ingest scheduling
+│   │   ├── authz.ts                   # Cedar / Verified Permissions calls
+│   │   ├── embedding.ts               # Titan V2 embedding helper
+│   │   └── …                          # Aurora access is via the RDS Data API directly in routes
 │   └── ws/
 │       ├── bridge.ts                  # WebSocket server (distributed-core transport)
 │       └── handlers.ts               # Graph update + trace event handlers
@@ -568,7 +600,7 @@ portal/
 │   │       └── TrendLine.tsx          # Score over time
 │   ├── hooks/
 │   │   ├── useAgUiStream.ts           # Parse AG-UI SSE events into typed state
-│   │   ├── useGraphData.ts            # Fetch Neptune data, transform to @xyflow nodes
+│   │   ├── useGraphData.ts            # Fetch Aurora graph data, transform to @xyflow nodes
 │   │   ├── useScores.ts              # Score API hooks
 │   │   └── useTraceStream.ts         # WebSocket subscription for live traces
 │   └── providers/
@@ -589,14 +621,13 @@ portal/
 | Agent framework | **Strands Agents** (`strands-agents` 1.39+) | Native AgentCore integration, `@tool` decorator, `stream_async()` |
 | Agent-to-UI protocol | **AG-UI** (`ag-ui-protocol`) | Standard event schema, SSE transport, maps to React state |
 | Agent-to-Agent | **A2A** via `bedrock-agentcore[a2a]` | `serve_a2a(executor)` for specialist agents |
-| Agent deployment | **AgentCore CLI** (`@aws/agentcore`) | `create/dev/deploy` workflow, handles ECR + Runtime |
-| Graph store | **Neptune Analytics** (128 NCU, 1024d vectors) | Built-in PageRank/centrality, vector search, openCypher |
-| Vector store | **OpenSearch Serverless** | KB quick-create, hybrid search + reranking |
-| Embedding model | **Titan Embeddings V2** (1024d) | Cost-effective, Neptune vector dim set to match |
-| LLM | **Claude Sonnet 4** via Bedrock | Best price/performance for agent orchestration |
-| IaC (data stores) | **CDK TypeScript** | L1 constructs for all Bedrock/Neptune resources |
-| IaC (agents) | **AgentCore CLI** | Manages Runtime, Gateway, Memory, Policy lifecycle |
-| Middleware | **Express + distributed-core** | AG-UI SSE proxy, WebSocket bridge, Neptune client |
+| Agent deployment | **CDK `CfnRuntime`** (gated `--context deployRuntimes=true`) | Single source of truth; AgentCore CLI used only for local `agentcore dev` |
+| Graph store | **Aurora Serverless v2** (PostgreSQL 16 + `pgvector`) | Relational tables + pgvector; Aurora has no AGE, so graph is modeled as edge tables. PageRank/centrality run in Code Interpreter |
+| Vector store (KB) | **OpenSearch Serverless** | KB quick-create, hybrid search + reranking |
+| Embedding model | **Titan Embeddings V2** (1024d) | Cost-effective; `vector(1024)` columns in Aurora match exactly |
+| LLM | **Amazon Nova Pro** (`amazon.nova-pro-v1:0`) | AWS-native default; overridable per agent via `MODEL_ID` env |
+| IaC (everything) | **CDK TypeScript** | L1 constructs for all Bedrock + Aurora + AgentCore resources |
+| Middleware | **Express + distributed-core** | AG-UI SSE proxy, WebSocket bridge, RDS Data API client |
 | Frontend | **React 19 + Vite 7** | Matches ui-components, uses @xyflow/react for graphs |
 | Component library | **@connorhoehnslalom/ui-components** | Node editor, observability, ingest, social, hooks |
 | Local dev | **docker-compose** | jupyter + middleware + portal, hot-reload volumes |
@@ -612,10 +643,10 @@ portal/
 - **Sandbox notebook patterns**: Docker setup, resource tracker, config.json sharing, cleanup utilities
 
 ### Built New
-- **Strands agent code** (6 agents with tools, prompts, memory integration)
-- **CDK stacks** (Neptune, KB, Guardrails, Prompts, Flows)
-- **AgentCore configuration** (agentcore.json, gateway targets, policies)
-- **Middleware** (AG-UI proxy, Neptune query layer, WebSocket bridge)
+- **Strands agent code** (9 agents — 6 OrgIQ + 3 newsroom — with tools, prompts, memory)
+- **CDK stacks** (Aurora, KB, Guardrails, AgentCore Memory/Policy/Capabilities/Runtime/Gateway/Telemetry, SpanProjector, Authorization)
+- **Schema + synth pipeline** (`schema/orgiq_schema.sql`, `schema/synth/` LLM-driven corpus generator)
+- **Middleware** (AG-UI proxy, RDS Data API layer, WebSocket bridge, trace sink)
 - **Portal pages** (OrgGraph, Search with AG-UI, Scoring dashboards)
 - **Custom node types** (AgentNode, ToolNode, GuardrailGate for flow visualizer)
 - **AG-UI stream hooks** (useAgUiStream parsing SSE into typed React state)
@@ -629,48 +660,58 @@ portal/
 aws-agentcore/
 ├── CONSTITUTION.md
 ├── CLAUDE.md
-├── docker-compose.yml                  # Full local stack (jupyter + middleware + portal)
-├── .env.example                        # Template for AWS config
+├── README.md
+├── docker-compose.yml                  # Local stack (jupyter + middleware + portal)
+├── .env.example
 │
-├── notebooks/                          # Phase 1: Jupyter exploration
+├── notebooks/                          # Phase 1: Jupyter exploration (00–18)
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   ├── config.json                     # Shared state across notebooks
-│   ├── cleanup_utils.py               # Resource tracking + teardown
-│   ├── 00-index.ipynb ... 99-cleanup.ipynb
-│   ├── data/                           # Synthetic org data
-│   │   ├── transcripts/
-│   │   ├── documents/
-│   │   ├── jira/
-│   │   ├── confluence/
-│   │   └── org/
-│   └── scripts/
-│       ├── start.sh
-│       ├── stop.sh
-│       └── check-aws.sh
+│   ├── jupyter_lab_config.py
+│   ├── cleanup_utils.py                # Resource tracker + teardown
+│   ├── 00-index.ipynb ... 18-cleanup.ipynb
+│   ├── data/                           # Synthetic org data (transcripts, docs, jira, confluence)
+│   └── scripts/                        # start.sh / stop.sh / check-aws.sh
 │
-├── agents/                             # Phase 3: Strands agent implementations
-│   ├── supervisor/
-│   ├── ingestion/
-│   ├── graph-builder/
-│   ├── scoring/
-│   ├── search/
-│   └── advisor/
+├── schema/                             # Aurora SQL + LLM-driven synth pipeline
+│   ├── orgiq_schema.sql                # Canonical org-graph relational schema
+│   ├── newsroom_schema.sql             # Articles, entities, clusters, pitches
+│   ├── observability_*.sql             # Sprint-versioned OI projections + approvals
+│   ├── seed.py / seed.sql              # Idempotent seed loader
+│   ├── apply-schema.sh                 # Apply via RDS Data API
+│   ├── README.md
+│   └── synth/                          # LLM-driven synthetic corpus pipeline
 │
-├── infra/                              # Phase 2: CDK stacks
+├── agents/                             # Phase 3: 9 Strands agents + shared layer
+│   ├── base/                           # Shared multistage Dockerfile
+│   ├── _shared/                        # approval_tool, instrumentation (OI helpers)
+│   ├── Dockerfile.agent
+│   ├── build-all.sh
+│   ├── supervisor/  ingestion/  graph-builder/
+│   ├── scoring/  search/  advisor/
+│   └── news-researcher/  news-brief/  news-headline/
+│
+├── infra/                              # Phase 2: 14 CDK stacks
 │   ├── bin/app.ts
-│   ├── lib/
-│   ├── schemas/
+│   ├── lib/                            # *-stack.ts (see Phase 2 table)
+│   ├── scripts/                        # deploy.sh / destroy.sh
 │   ├── cdk.json
 │   └── package.json
 │
-├── middleware/                          # Phase 3: Express + WS bridge
+├── middleware/                         # Express + AG-UI SSE proxy + WS bridge
 │   ├── src/
+│   │   ├── routes/  lib/  providers/  ws/  mock/  types/
+│   │   ├── config.ts
+│   │   └── index.ts
 │   ├── Dockerfile
 │   └── package.json
 │
-└── portal/                             # Phase 4: React UI
+└── portal/                             # React 19 + Vite 7 (~25 pages)
     ├── src/
+    │   ├── pages/                      # iq, admin, newsroom, capabilities, identity, observability, ingest …
+    │   ├── components/
+    │   ├── hooks/
+    │   └── providers/
     ├── Dockerfile
     ├── package.json
     └── vite.config.ts
@@ -681,9 +722,8 @@ aws-agentcore/
 ## Running Locally
 
 ```bash
-# Prerequisites
-aws sso login --profile bedrock
-export AWS_PROFILE=bedrock
+# Prerequisites — only the `default` AWS profile is configured locally
+aws sso login            # uses the default profile (account 264161986065)
 
 # Start the app stack (middleware + portal + jupyter)
 docker-compose up --build
@@ -691,7 +731,7 @@ docker-compose up --build
 # Services:
 #   Jupyter    → http://localhost:8888
 #   Middleware → http://localhost:3001
-#   Portal    → http://localhost:5173
+#   Portal     → http://localhost:5183
 
 # Or run individually:
 docker-compose up jupyter              # Just notebooks
@@ -717,7 +757,7 @@ separately and deployed to AgentCore Runtime via `agentcore deploy`.
 Portal needs access to `@connorhoehnslalom/ui-components` from GitHub Packages:
 ```bash
 # portal/.npmrc
-@connorhoehn:registry=https://npm.pkg.github.com
+@connorhoehnslalom:registry=https://npm.pkg.github.com
 //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
 ```
 
@@ -731,20 +771,23 @@ Middleware imports distributed-core from GitHub:
 ## Deployment (AWS)
 
 ```bash
-# 1. Deploy data infrastructure (CDK)
-cd infra && npx cdk deploy --all
+# 1. Deploy data + foundation infra (13 of 14 stacks; runtimes are gated)
+cd infra && ./scripts/deploy.sh
 
-# 2. Deploy agents (AgentCore CLI)
-cd agents/supervisor && agentcore deploy
-cd agents/search && agentcore deploy
-cd agents/scoring && agentcore deploy
-cd agents/advisor && agentcore deploy
-cd agents/ingestion && agentcore deploy
-cd agents/graph-builder && agentcore deploy
+# 2. Build + push the 9 agent container images to ECR
+cd agents && ./build-all.sh
 
-# 3. Verify
-agentcore status
-agentcore invoke --agent supervisor --prompt "Who are our Kubernetes experts?"
+# 3. Deploy the AgentCore runtimes (CfnRuntime + CfnRuntimeEndpoint)
+cd infra && ./scripts/deploy.sh OrgIQ-AgentCoreRuntime --context deployRuntimes=true
+
+# 4. (Optional) enable online evaluation now that runtimes are live
+cd infra && ./scripts/deploy.sh OrgIQ-AgentCoreTelemetry --context enableEval=true
+
+# 5. Verify
+agentcore invoke --agent orgiq-supervisor --prompt "Who are our Kubernetes experts?"
+
+# Teardown (drains KB + Aurora first to avoid DELETE_FAILED stacks)
+cd infra && ./scripts/destroy.sh
 ```
 
 ---
@@ -753,7 +796,7 @@ agentcore invoke --agent supervisor --prompt "Who are our Kubernetes experts?"
 
 1. `docker-compose up` → All 3 services healthy, hot-reload working
 2. Run any notebook → Live AWS responses (no mocks, no numpy fakes)
-3. Portal agent flow → See 6 agents as nodes with tool/memory/guardrail connections
+3. Portal agent flow → See 9 agents as nodes with tool/memory/guardrail connections
 4. Type search query → AG-UI stream renders incrementally in chat, tool calls animate nodes
 5. Org graph → People/teams/skills with PageRank-sized nodes, click for drill-down
 6. Trigger ingestion → Watch document flow through agents (trace overlay on node editor)
@@ -769,15 +812,14 @@ agentcore invoke --agent supervisor --prompt "Who are our Kubernetes experts?"
 
 | Service | Monthly (dev use) |
 |---------|-------------------|
-| AgentCore Runtime (6 agents, light) | ~$10-25 |
-| AgentCore Gateway + Registry | ~$2-5 |
-| AgentCore Memory | ~$2-5 |
-| Bedrock Models (Claude Sonnet 4) | ~$15-40 |
-| Neptune Analytics (128 NCU) | ~$20-50 |
+| AgentCore Runtime (9 agents, light) | ~$15-30 |
+| AgentCore Gateway + Memory + Policy | ~$5-10 |
+| Bedrock Models (Nova Pro + Titan V2) | ~$10-25 |
+| Aurora Serverless v2 (0.5 ACU min) | ~$30-60 |
 | OpenSearch Serverless (2 OCU min) | ~$20-50 |
 | S3 + DynamoDB | ~$1-5 |
-| CloudWatch (traces + logs) | ~$5-10 |
-| **Total** | **~$75-190/month** |
+| CloudWatch (traces + logs + span projector Lambda) | ~$5-15 |
+| **Total** | **~$85-195/month** |
 
 Budget alarm at $200/month in CDK observability stack. Cleanup notebook + `cdk destroy` for teardown.
 
@@ -790,7 +832,7 @@ Budget alarm at $200/month in CDK observability stack. Cleanup notebook + `cdk d
 | Notebooks | Manual execution against live AWS (the point is validation) |
 | Agents (unit) | `bedrock-agentcore[simulation]` — mock LLM responses, test tool routing |
 | Agents (integration) | `agentcore dev` locally → invoke with test prompts |
-| Middleware | Vitest — mock Neptune/AgentCore clients, test route handlers |
+| Middleware | Vitest — mock Aurora/AgentCore clients, test route handlers |
 | Portal | Playwright e2e — mock middleware responses, test AG-UI event rendering |
 | CDK | `cdk synth` → snapshot tests for CloudFormation templates |
 | Full stack | Docker-compose + real AWS — manual E2E validation |

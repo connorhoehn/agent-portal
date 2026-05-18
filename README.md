@@ -16,21 +16,32 @@ This starts three services:
 | Middleware | http://localhost:3001 | Express API + AG-UI SSE proxy |
 | Portal | http://localhost:5183 | React frontend |
 
-Requires AWS credentials via SSO — run `aws sso login --profile bedrock` first.
+Requires AWS credentials via SSO — run `aws sso login` first. Only the `default` profile is configured (account `264161986065`).
 
 ## Demo Portal
 
-The portal (http://localhost:5183) provides the following pages:
+The portal (http://localhost:5183) is organized into two tenants — the IQ
+workspace (analyst-facing) and Admin (operator-facing) — plus a Newsroom demo
+surface. Headline pages:
 
-| Page | Path | Description |
+| Area | Path | Description |
 |------|------|-------------|
-| Agent Flow | `/agents` | Visualize multi-agent orchestration |
-| Org Graph | `/graph` | Interactive knowledge graph explorer |
-| Search | `/search` | Conversational expertise search |
+| Agent Flow | `/agents` | Multi-agent orchestration visualizer |
+| Org Graph | `/graph` (Explore) | Interactive Aurora graph explorer |
+| Search | `/search` | Conversational expertise search (AG-UI streaming) |
+| Scores | `/scores`, `/scores/cohort`, `/scores/compare` | Expertise leaderboards + cohort/compare views |
+| Projects | `/projects`, `/projects/:id` | Project portfolio + drill-down |
+| Decisions | `/decisions`, `/decisions/:id` | ADR/decision log |
+| Knowledge Base | `/knowledge-base` | KB sources, sync status, retrieval test |
 | Invoke | `/invoke` | Direct agent invocation |
-| Scores | `/scores` | Expertise scoring leaderboards |
-| Ingest | `/ingest` | Document upload and processing |
-| Observability | `/observability` | Agent traces and metrics |
+| Code Interpreter | `/code-interpreter` | Sandboxed Python demo |
+| Capabilities | `/capabilities/*` | AgentCore primitives: Browser, Code Interpreter, Guardrails, Memory |
+| Identity | `/identity/*` | Cedar policies, role assignment, schema, policy testing |
+| Ingest | `/ingest/*` | Sources, schedules, crawl targets, run history, storage |
+| Newsroom | `/newsroom/*` | News researcher/brief/headline demo: articles, briefs, beats, entities |
+| Observability | `/observability/*` | Invocations, traces, sessions, cost, drift, calibration, on-call, traffic, quality, model compare, approval queue, harness |
+| Admin | `/admin/*` | Tenant + role configuration |
+| Settings | `/settings` | Local dev settings |
 
 ## Notebooks
 
@@ -40,7 +51,7 @@ Progressive walkthrough of every AgentCore capability:
 |---|----------|-------|
 | 00 | `00-index` | Index and overview |
 | 01 | `01-setup-credentials` | AWS credentials and SDK setup |
-| 02 | `02-neptune-graph` | Neptune Analytics graph (openCypher) |
+| 02 | `02-aurora-graph` | Aurora PostgreSQL org-graph (relational + pgvector) |
 | 03 | `03-embeddings` | Titan Embeddings V2 (1024d) |
 | 04 | `04-knowledge-base` | Bedrock Knowledge Base + OpenSearch |
 | 05 | `05-guardrails` | Bedrock Guardrails |
@@ -49,22 +60,26 @@ Progressive walkthrough of every AgentCore capability:
 | 08 | `08-agentcore-gateway` | MCP Gateway + tool routing |
 | 09 | `09-agentcore-policy` | Policy Engine (Cedar) |
 | 10 | `10-agentcore-identity` | Identity and credentials |
-| 11 | `11-ag-ui-streaming` | AG-UI protocol streaming |
-| 12 | `12-a2a-protocol` | Agent-to-Agent communication |
-| 13 | `13-scoring` | Expertise scoring algorithms |
-| 14 | `14-deploy-runtime` | Deploy agents to AgentCore Runtime |
-| 15 | `15-evaluations` | Agent evaluation framework |
-| 16 | `16-cleanup` | Resource teardown |
+| 11 | `11-code-execution` | AgentCore Code Interpreter (sandboxed Python) |
+| 12 | `12-ag-ui-streaming` | AG-UI protocol streaming |
+| 13 | `13-a2a-protocol` | Agent-to-Agent communication |
+| 14 | `14-scoring` | Expertise scoring algorithms |
+| 15 | `15-deploy-runtime` | Deploy agents to AgentCore Runtime |
+| 16 | `16-evaluations` | Agent evaluation framework |
+| 17 | `17-telemetry` | OpenInference spans → ADOT → CloudWatch → Aurora |
+| 18 | `18-cleanup` | Resource teardown |
 
 ## AWS Services Used
 
-- **Amazon Bedrock AgentCore** — Agent runtime (microVM), MCP Gateway, Memory, Policy Engine, Identity
-- **Amazon Bedrock** — Foundation models (Claude), Guardrails, Knowledge Bases, Managed Prompts, Flows
-- **Amazon Neptune Analytics** — Graph database for organizational knowledge (openCypher)
+- **Amazon Bedrock AgentCore** — Runtime (microVM), MCP Gateway, Memory, Policy Engine, Identity, Code Interpreter, Browser
+- **Amazon Bedrock** — Foundation models (Nova Pro), Guardrails, Knowledge Bases, Managed Prompts
+- **Amazon Aurora Serverless v2** — PostgreSQL 16 + `pgvector` for the org-graph (relational tables + 1024d embeddings)
 - **Amazon OpenSearch Serverless** — Vector search backing Bedrock Knowledge Bases
+- **Amazon Verified Permissions** — Cedar policy evaluation for tenant + role authorization
 - **Amazon S3** — Document storage and artifact persistence
 - **Amazon DynamoDB** — Scores, sessions, and leaderboard tables
-- **AWS CDK** — Infrastructure as code (TypeScript stacks)
-- **Amazon CloudWatch** — Dashboards, metrics, and budget alarms
+- **AWS CDK** — Infrastructure as code (14 TypeScript stacks)
+- **AWS Lambda** — Span projector (OpenInference → Aurora)
+- **Amazon CloudWatch + ADOT** — Dashboards, OpenInference traces, budget alarms
 - **Amazon Titan Embeddings V2** — 1024-dimension vector embeddings
 - **AWS IAM** — Fine-grained roles for agents and services
