@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import { asyncHandler } from '../lib/async-handler.js';
-import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
+import { agentStreamMiddleware } from '@connorhoehn/realtime-modules/agent-streaming';
 import { agentcore, aurora } from '../providers/index.js';
 import { detectIntervention, recordInvocation, snippet } from '../lib/invocations.js';
 import { recordTurn } from '../providers/memory.js';
@@ -22,7 +22,15 @@ agentsRouter.get('/:agentId/metrics', asyncHandler(async (req, res) => {
   res.json(metrics);
 }));
 
-agentsRouter.post('/:agentId/invoke', requireAction('Search'), asyncHandler(async (req, res) => {
+// AG-UI streaming route — adopts @connorhoehn/realtime-modules/agent-streaming
+// for SSE framing, heartbeat (~25s), RUN_STARTED / RUN_FINISHED / RUN_ERROR
+// lifecycle, and dev-mode AG-UI taxonomy validation. OrgIQ business logic
+// (selection enrichment, AgentCore invoke, intervention detection, Memory
+// recording, session-title generation) stays in this handler. The library
+// auto-emits RUN_STARTED before the handler runs and RUN_FINISHED / RUN_ERROR
+// when it resolves / throws — we emit the OrgIQ-specific sessionId via a
+// CUSTOM event right after RUN_STARTED so the FE can capture it.
+agentsRouter.post('/:agentId/invoke', requireAction('Search'), agentStreamMiddleware(async (req, stream, signal) => {
   const agentId = String(req.params['agentId'] ?? '');
   const { message, sessionId: rawSessionId, actorId, selection } = req.body as {
     message?: string;
@@ -68,15 +76,13 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), asyncHandler(asyn
   const sessionId =
     rawSessionId && rawSessionId.length >= 33 ? rawSessionId : randomUUID() + randomUUID().slice(0, 4);
 
-  initSSE(res);
+  // Echo the canonical sessionId via CUSTOM so the FE can persist it. The
+  // library's RUN_STARTED carries only runId/threadId per AG-UI spec.
+  stream.custom('session', { sessionId });
 
-  const threadId = randomUUID();
-  const runId = randomUUID();
   const messageId = randomUUID();
-
-  writeSSE(res, { type: 'RUN_STARTED', threadId, runId, sessionId });
-
   const startedAt = new Date();
+
   let result;
   try {
     result = await agentcore.invokeAgent(agentId, {
@@ -88,7 +94,7 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), asyncHandler(asyn
     const errMsg = (err as Error).message || 'invoke failed';
     // Record the failure so the Observability feed reflects it.
     recordInvocation({
-      id: runId,
+      id: stream.runId,
       agentId,
       agentName: agentId,
       startedAt: startedAt.toISOString(),
@@ -98,16 +104,14 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), asyncHandler(asyn
       guardrailIntervened: false,
       error: errMsg,
     });
-    writeSSE(res, { type: 'RUN_ERROR', error: errMsg });
-    writeSSE(res, { type: 'RUN_FINISHED', threadId, runId });
-    endSSE(res);
-    return;
+    // Re-throw so the middleware emits RUN_ERROR + closes the stream.
+    throw new Error(errMsg);
   }
 
   // Record successful invocation with intervention detection.
   const intervened = await detectIntervention(result.text);
   recordInvocation({
-    id: runId,
+    id: stream.runId,
     agentId,
     agentName: agentId,
     startedAt: startedAt.toISOString(),
@@ -135,32 +139,39 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), asyncHandler(asyn
 
   // Tool calls (mock provider emits these; real supervisor doesn't yet because
   // the entrypoint returns a single dict instead of streaming tool events).
+  // Library emits canonical `toolCallName` (not `name`) on TOOL_CALL_START.
   for (const toolCall of result.toolCalls ?? []) {
+    if (signal.aborted) return;
     const toolCallId = randomUUID();
-    writeSSE(res, { type: 'TOOL_CALL_START', toolCallId, name: toolCall.name });
+    stream.toolCallStart(toolCallId, toolCall.name);
     await delay(150);
-    writeSSE(res, { type: 'TOOL_CALL_ARGS', toolCallId, delta: toolCall.args });
+    // AG-UI args delta is a string (JSON fragment per spec); the provider
+    // type allows `unknown`, so stringify objects/arrays here. Strings pass
+    // through unchanged to preserve prior wire-shape behavior.
+    const argsDelta = typeof toolCall.args === 'string' ? toolCall.args : JSON.stringify(toolCall.args ?? '');
+    stream.toolCallArgs(toolCallId, argsDelta);
     await delay(75);
-    writeSSE(res, { type: 'TOOL_CALL_END', toolCallId, result: toolCall.result });
+    stream.toolCallEnd(toolCallId);
+    // Preserve OrgIQ behavior: emit the tool result so the FE can render it.
+    // The library doesn't have a single-event tool-result that maps cleanly
+    // to OrgIQ's prior TOOL_CALL_END payload — encode it as a CUSTOM event.
+    stream.custom('tool_call_result', { toolCallId, result: toolCall.result });
   }
 
-  writeSSE(res, { type: 'TEXT_MESSAGE_START', messageId, role: 'assistant' });
+  stream.textMessageStart(messageId, 'assistant');
 
   const tokens = tokenize(result.text);
   for (const token of tokens) {
-    if (res.writableEnded) return;
-    writeSSE(res, { type: 'TEXT_MESSAGE_CONTENT', messageId, delta: token });
+    if (signal.aborted || stream.closed) return;
+    stream.textMessageContent(messageId, token);
     await delay(15);
   }
 
-  writeSSE(res, { type: 'TEXT_MESSAGE_END', messageId });
-  writeSSE(res, {
-    type: 'RUN_FINISHED',
-    threadId,
-    runId,
-    ...(result.runtimeSessionId ? { runtimeSessionId: result.runtimeSessionId } : {}),
-  });
-  endSSE(res);
+  stream.textMessageEnd(messageId);
+
+  // Pass runtimeSessionId via RUN_FINISHED.result (preserves prior payload
+  // shape under a different field key — FE currently doesn't read it).
+  stream.runFinished(result.runtimeSessionId ? { result: { runtimeSessionId: result.runtimeSessionId } } : undefined);
 }));
 
 function tokenize(text: string): string[] {

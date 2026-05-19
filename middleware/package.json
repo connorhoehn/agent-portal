@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@aws-crypto/sha256-js": "^5.2.0",
+    "@connorhoehn/realtime-modules": "file:../../websocket-gateway/realtime-modules",
     "@aws-sdk/client-bedrock": "^3.700.0",
     "@aws-sdk/client-bedrock-agent": "^3.700.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.700.0",
@@ -22,6 +23,7 @@
     "@aws-sdk/client-rds-data": "^3.700.0",
     "@aws-sdk/client-s3": "^3.700.0",
     "@aws-sdk/client-secrets-manager": "^3.1045.0",
+    "@aws-sdk/client-ssm": "^3.700.0",
     "@aws-sdk/client-verifiedpermissions": "^3.1045.0",
     "@aws-sdk/client-xray": "^3.700.0",
     "@aws-sdk/lib-dynamodb": "^3.700.0",

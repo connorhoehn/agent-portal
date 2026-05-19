@@ -121,12 +121,36 @@ export function useAgUiStream(endpoint: string): UseAgUiStreamReturn {
   function handleEvent(event: Record<string, unknown>) {
     switch (event.type) {
       case 'RUN_STARTED':
-        // Middleware echoes back the canonical sessionId on every run; capture
-        // it so subsequent sendMessage calls continue the same Memory thread.
+        // Legacy in-tree emission path put sessionId on RUN_STARTED. Keep this
+        // for transition compat; the canonical path (@connorhoehn/realtime-modules
+        // agentStreamMiddleware) emits it via a separate CUSTOM `session` event
+        // because AG-UI spec RUN_STARTED carries only runId/threadId.
         if (typeof event.sessionId === 'string' && event.sessionId) {
           setSessionId(event.sessionId);
         }
         break;
+      case 'CUSTOM': {
+        // Library emits OrgIQ-specific payloads via CUSTOM. The AG-UI spec
+        // TOOL_CALL_END / RUN_STARTED don't carry these fields, so OrgIQ side-
+        // channels them: `session` for the sessionId echo, `tool_call_result`
+        // for tool-call result text after TOOL_CALL_END.
+        if (event.name === 'session') {
+          const v = event.value as { sessionId?: string } | undefined;
+          if (v && typeof v.sessionId === 'string' && v.sessionId) {
+            setSessionId(v.sessionId);
+          }
+        } else if (event.name === 'tool_call_result') {
+          const v = event.value as { toolCallId?: string; result?: unknown } | undefined;
+          if (v && typeof v.toolCallId === 'string') {
+            const tcRef = currentMsg.current.toolCalls?.find(t => t.id === v.toolCallId);
+            if (tcRef) tcRef.result = String(v.result ?? '');
+            setActiveToolCalls(prev => prev.map(t =>
+              t.id === v.toolCallId ? { ...t, result: String(v.result ?? ''), done: true } : t,
+            ));
+          }
+        }
+        break;
+      }
       case 'RUN_ERROR':
         setError(typeof event.error === 'string' ? event.error : 'Agent run failed');
         break;
@@ -140,7 +164,11 @@ export function useAgUiStream(endpoint: string): UseAgUiStreamReturn {
         break;
       }
       case 'TOOL_CALL_START': {
-        const tc = { id: event.toolCallId as string, name: event.name as string, args: '', result: undefined };
+        // Canonical AG-UI field is `toolCallName` (per @connorhoehn/realtime-modules
+        // middleware). Keep `event.name` as a transition fallback for any path
+        // still emitting the legacy field.
+        const toolName = (event.toolCallName as string) ?? (event.name as string);
+        const tc = { id: event.toolCallId as string, name: toolName, args: '', result: undefined };
         currentMsg.current.toolCalls = [...(currentMsg.current.toolCalls ?? []), tc];
         setActiveToolCalls(prev => [...prev, { ...tc, done: false }]);
         break;
