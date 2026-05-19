@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { useAgUiStream } from '../hooks/useAgUiStream';
-import type { LiveToolCall } from '../hooks/useAgUiStream';
+import { useAgentStream } from '@connorhoehn/realtime-modules/client';
+import type { ToolCall as LiveToolCall, Message as AgentMessage } from '@connorhoehn/realtime-modules/client';
 import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
 
@@ -42,7 +42,26 @@ function InvokePage() {
     sendMessage,
     reset,
     loadHistory,
-  } = useAgUiStream(`/api/agents/${selectedId}/invoke`);
+  } = useAgentStream({
+    url: `/api/agents/${selectedId}/invoke`,
+    // Library hook's loadHistory(sid) calls this fetcher. The old hand-rolled
+    // loadHistory(sid, msgs) accepted pre-fetched messages; we lift that
+    // /api/sessions/<sid>/events fetch + USER/ASSISTANT filter + mapping into
+    // here so the page-side loadSession is a 1-line loadHistory(sid) call.
+    historyFetch: async (sid: string): Promise<AgentMessage[]> => {
+      const r = await fetch(`/api/sessions/${encodeURIComponent(sid)}/events`);
+      if (!r.ok) return [];
+      const body = (await r.json()) as { events: MemoryEvent[] };
+      return body.events
+        .filter(e => e.role === 'USER' || e.role === 'ASSISTANT')
+        .map<AgentMessage>(e => ({
+          id: e.eventId + ':' + e.role,
+          role: e.role === 'USER' ? 'user' : 'assistant',
+          content: e.text,
+          toolCalls: [],
+        }));
+    },
+  });
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const { data: sessionList, refresh: refreshSessions } = useFetch<{ sessions: SessionSummary[] }>(
@@ -82,23 +101,14 @@ function InvokePage() {
 
   const handleSend = () => {
     if (!input.trim() || isStreaming) return;
-    sendMessage(input.trim());
+    void sendMessage(input.trim());
     setInput('');
   };
 
+  // Library hook's loadHistory(sid) handles the fetch via the historyFetch
+  // option above (configured at the useAgentStream() call site).
   async function loadSession(sid: string) {
-    const r = await fetch(`/api/sessions/${encodeURIComponent(sid)}/events`);
-    if (!r.ok) return;
-    const body = (await r.json()) as { events: MemoryEvent[] };
-    const msgs = body.events
-      .filter(e => e.role === 'USER' || e.role === 'ASSISTANT')
-      .map(e => ({
-        id: e.eventId + ':' + e.role,
-        role: e.role === 'USER' ? ('user' as const) : ('assistant' as const),
-        content: e.text,
-        toolCalls: [],
-      }));
-    loadHistory(sid, msgs);
+    await loadHistory(sid);
   }
 
   const sessions = sessionList?.sessions ?? [];

@@ -8,7 +8,7 @@ import type { CSSProperties, ChangeEvent, KeyboardEvent } from 'react';
 import { useState, useCallback } from 'react';
 import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
 import { Markdown } from '../../components/Markdown';
-import { useAgUiStream } from '../../hooks/useAgUiStream';
+import { useAgentStream } from '@connorhoehn/realtime-modules/client';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -34,7 +34,17 @@ function BriefsPage() {
   const [beat, setBeat]           = useState<string>('');
 
   const { isStreaming, streamingText, activeToolCalls, error, sendMessage, reset } =
-    useAgUiStream('/api/agents/news-brief/invoke');
+    useAgentStream({
+      url: '/api/agents/news-brief/invoke',
+      // Preserve the old hook's wire shape: always include an (empty)
+      // selection envelope so backend handlers that branch on the field's
+      // presence don't see a regression.
+      buildBody: (text, { sessionId }) => ({
+        message: text,
+        ...(sessionId ? { sessionId } : {}),
+        selection: { peopleIds: [] },
+      }),
+    });
 
   const handleGenerate = useCallback(() => {
     if (isStreaming) return;
@@ -44,10 +54,7 @@ function BriefsPage() {
         ? startDate
         : `${startDate} to ${endDate}`;
     const beatClause = beat.trim() ? ` on beat "${beat.trim()}"` : '';
-    sendMessage(
-      `Generate brief for ${dateRange}${beatClause}`,
-      { selection: { peopleIds: [] } },
-    );
+    void sendMessage(`Generate brief for ${dateRange}${beatClause}`);
   }, [isStreaming, startDate, endDate, beat, sendMessage, reset]);
 
   const hasOutput = isStreaming || streamingText.length > 0;

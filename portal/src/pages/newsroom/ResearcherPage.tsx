@@ -16,8 +16,8 @@
 // SearchPage) per the file-collision rules — each page is self-contained.
 
 import { useMemo, useRef, useState } from 'react';
-import { useAgUiStream } from '../../hooks/useAgUiStream';
-import type { LiveToolCall } from '../../hooks/useAgUiStream';
+import { useAgentStream } from '@connorhoehn/realtime-modules/client';
+import type { ToolCall as LiveToolCall } from '@connorhoehn/realtime-modules/client';
 import { Markdown } from '../../components/Markdown';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -153,7 +153,9 @@ function ResearcherPage() {
     error,
     sendMessage,
     reset,
-  } = useAgUiStream(`/api/agents/${RESEARCHER_AGENT_ID}/invoke`);
+  } = useAgentStream({
+    url: `/api/agents/${RESEARCHER_AGENT_ID}/invoke`,
+  });
 
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -175,7 +177,7 @@ function ResearcherPage() {
 
   function handleSend() {
     if (!input.trim() || isStreaming) return;
-    sendMessage(input.trim());
+    void sendMessage(input.trim());
     setInput('');
   }
 

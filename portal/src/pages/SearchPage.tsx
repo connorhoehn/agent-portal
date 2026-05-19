@@ -13,8 +13,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { useAgUiStream } from '../hooks/useAgUiStream';
-import type { LiveToolCall } from '../hooks/useAgUiStream';
+import { useAgentStream } from '@connorhoehn/realtime-modules/client';
+import type { ToolCall as LiveToolCall } from '@connorhoehn/realtime-modules/client';
 import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
 import type { GraphPerson } from '../components/org-graph';
@@ -118,6 +118,11 @@ const SEARCH_AGENT_ID = 'orgiq-search';
 
 function SearchPage() {
   const { data: graph } = useFetch<GraphEntities>('/api/graph/entities');
+  // Holds the one-shot selection for the next outgoing message. Set inside
+  // handleSend just before sendMessage(), read by buildBody when the hook
+  // assembles the POST body. Lives in a ref (not the hook deps) so the
+  // memoized sendMessage closure always sees the latest value.
+  const pendingSelectionRef = useRef<{ peopleIds: string[] } | null>(null);
   const {
     messages,
     isStreaming,
@@ -126,7 +131,18 @@ function SearchPage() {
     error,
     sendMessage,
     reset,
-  } = useAgUiStream(`/api/agents/${SEARCH_AGENT_ID}/invoke`);
+  } = useAgentStream({
+    url: `/api/agents/${SEARCH_AGENT_ID}/invoke`,
+    buildBody: (text, { sessionId }) => {
+      const sel = pendingSelectionRef.current;
+      pendingSelectionRef.current = null;
+      return {
+        message: text,
+        ...(sessionId ? { sessionId } : {}),
+        ...(sel ? { selection: sel } : {}),
+      };
+    },
+  });
 
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -184,10 +200,10 @@ function SearchPage() {
 
   function handleSend() {
     if (!input.trim() || isStreaming) return;
-    const opts = pinnedPeopleIds.length > 0
-      ? { selection: { peopleIds: pinnedPeopleIds } }
-      : undefined;
-    sendMessage(input.trim(), opts);
+    if (pinnedPeopleIds.length > 0) {
+      pendingSelectionRef.current = { peopleIds: pinnedPeopleIds };
+    }
+    void sendMessage(input.trim());
     setInput('');
     // The pin is one-shot context for this turn; clear so subsequent turns
     // don't keep re-applying a stale selection.
