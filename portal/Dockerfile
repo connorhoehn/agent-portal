@@ -1,17 +1,20 @@
 # ── Stage 1: install deps ──────────────────────────────────────────────────────
-# ui-components is injected from the sibling repo via additional_contexts so npm
-# never needs SSH or a GitHub token at build time.
+# ui-components and realtime-modules are injected from sibling repos via
+# additional_contexts so npm never needs SSH, a GitHub token, or a path that
+# escapes the Docker build context at install time.
 FROM node:20-slim AS deps
 
 WORKDIR /app
 
 COPY package.json ./
-# Drop the github: dep before installing — we inject it from the sibling repo
-# context below so npm never needs SSH auth or a GitHub token.
+# Drop sibling-repo deps before installing — we inject them from the
+# additional_contexts below so npm never needs SSH auth, a GitHub token, or
+# a file: path that escapes the build context.
 RUN node -e " \
   const fs = require('fs'); \
   const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); \
   delete pkg.dependencies['@connorhoehnslalom/ui-components']; \
+  delete pkg.dependencies['@connorhoehn/realtime-modules']; \
   fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2)); \
 "
 
@@ -19,10 +22,13 @@ RUN npm config set strict-ssl false
 RUN --mount=type=cache,target=/root/.npm \
     npm install --legacy-peer-deps
 
-# Inject pre-built dist + package.json from the sibling ui-components repo.
-# Pass the repo as additional_contexts.ui_components in docker-compose.yml.
+# Inject pre-built dist + package.json from the sibling repos. The contexts
+# are passed as additional_contexts.{ui_components,realtime_modules} in
+# docker-compose.yml.
 COPY --from=ui_components package.json ./node_modules/@connorhoehnslalom/ui-components/package.json
 COPY --from=ui_components dist/ ./node_modules/@connorhoehnslalom/ui-components/dist/
+COPY --from=realtime_modules package.json ./node_modules/@connorhoehn/realtime-modules/package.json
+COPY --from=realtime_modules dist/ ./node_modules/@connorhoehn/realtime-modules/dist/
 
 # ── Stage 2: dev server ────────────────────────────────────────────────────────
 FROM node:20-slim AS development
