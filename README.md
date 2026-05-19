@@ -68,6 +68,7 @@ Progressive walkthrough of every AgentCore capability:
 | 16 | `16-evaluations` | Agent evaluation framework |
 | 17 | `17-telemetry` | OpenInference spans → ADOT → CloudWatch → Aurora |
 | 18 | `18-cleanup` | Resource teardown |
+| 19 | `19-fairness` | Statistical fairness (DI ratio, SPD), LLM-as-judge bias check, Bedrock Model Evaluation (BOLD) |
 
 ## AWS Services Used
 
