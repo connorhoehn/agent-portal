@@ -435,8 +435,8 @@ notebooks/
 ├── 15-deploy-runtime.ipynb            # agentcore deploy → ECR → Runtime
 ├── 16-evaluations.ipynb               # Built-in evaluators, custom LLM-as-judge
 ├── 17-telemetry.ipynb                 # OpenInference spans → ADOT → CloudWatch → Aurora
-├── 18-cleanup.ipynb                   # Resource teardown with tracker (cleanup_utils.py)
-└── 19-fairness.ipynb                  # DI ratio, SPD, LLM-as-judge bias, Bedrock Model Evaluation
+├── 18-fairness.ipynb                  # DI ratio, SPD, LLM-as-judge bias, Bedrock Model Evaluation
+└── 19-cleanup.ipynb                   # Resource teardown with tracker (cleanup_utils.py)
 ```
 
 ### Phase 1b: Portal Scaffold with Mock Data (Weeks 1-2, parallel with 1a)
