@@ -10,6 +10,7 @@ import { SettingRow } from '../components/settings';
 import { loadPreferences, savePreferences, DEFAULTS } from '../lib/preferences';
 import type { Theme, Preferences } from '../lib/preferences';
 import { useFetch } from '../hooks/useFetch';
+import { useGatewayInfo } from '../hooks/useGatewayInfo';
 
 const MASQUERADE_HISTORY_KEY = 'orgiq:masquerade:history';
 
@@ -42,6 +43,7 @@ export function SettingsPage() {
   const [prefs, setPrefs] = useState<Preferences>(() => loadPreferences());
   const [masqHistory, setMasqHistory] = useState<string[]>([]);
   const { data: health } = useFetch<Health>('/api/health');
+  const gateway = useGatewayInfo();
 
   useEffect(() => {
     setMasqHistory(loadMasqueradeHistory());
@@ -224,9 +226,109 @@ export function SettingsPage() {
           />
         </Card>
 
+        {/* 6. Gateway (websocket-gateway via @connorhoehn/realtime-modules) */}
+        <Card padding="md">
+          <div style={sectionHeaderStyle}>Gateway</div>
+          <div style={dividerStyle} />
+          <SettingRow
+            title="Endpoint"
+            control={
+              <span style={readOnlyValueStyle}>{gateway.gatewayUrl}</span>
+            }
+          />
+          <div style={intraCardDivider} />
+          <SettingRow
+            title="Cluster nodes"
+            control={
+              <span style={readOnlyValueStyle}>
+                {gateway.error
+                  ? '—'
+                  : gateway.cluster
+                    ? String(gateway.cluster.totalNodes)
+                    : '…'}
+              </span>
+            }
+          />
+          <div style={intraCardDivider} />
+          <SettingRow
+            title="Active connections"
+            control={
+              <span style={readOnlyValueStyle}>
+                {gateway.error
+                  ? '—'
+                  : gateway.cluster
+                    ? String(gateway.cluster.totalConnections)
+                    : '…'}
+              </span>
+            }
+          />
+          <div style={intraCardDivider} />
+          <SettingRow
+            title="Uptime"
+            control={
+              <span style={readOnlyValueStyle}>
+                {gateway.error
+                  ? '—'
+                  : gateway.metrics
+                    ? formatUptime(gateway.metrics.uptime)
+                    : '…'}
+              </span>
+            }
+          />
+          <div style={intraCardDivider} />
+          <SettingRow
+            title="Redis"
+            control={
+              <span
+                style={{
+                  ...readOnlyValueStyle,
+                  color: gateway.metrics
+                    ? gateway.metrics.redis.status === 'connected'
+                      ? 'var(--color-success, #10b981)'
+                      : 'var(--color-warning, #f59e0b)'
+                    : 'var(--color-text-tertiary)',
+                }}
+              >
+                {gateway.error
+                  ? '—'
+                  : gateway.metrics
+                    ? gateway.metrics.redis.status
+                    : '…'}
+              </span>
+            }
+          />
+          {gateway.error && (
+            <div
+              style={{
+                fontSize: 11,
+                color: 'var(--color-text-tertiary)',
+                paddingTop: 6,
+              }}
+            >
+              {gateway.error}
+            </div>
+          )}
+        </Card>
+
       </div>
     </PageSection>
   );
+}
+
+/**
+ * Render an uptime in seconds as a compact `1d 4h 22m` string. The gateway's
+ * `/metrics` response reports uptime as a fractional number of seconds; we
+ * round down at the smallest displayed unit (minutes) so the readout is
+ * stable across the 30s poll cadence.
+ */
+function formatUptime(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  const d = Math.floor(s / 86_400);
+  const h = Math.floor((s % 86_400) / 3_600);
+  const m = Math.floor((s % 3_600) / 60);
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
 }
 
 const sectionHeaderStyle: React.CSSProperties = {
