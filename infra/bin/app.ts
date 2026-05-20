@@ -14,6 +14,7 @@ import { AgentCoreTelemetryStack } from '../lib/agentcore-telemetry-stack';
 import { AgentCoreCapabilitiesStack } from '../lib/agentcore-capabilities-stack';
 import { AuthorizationStack } from '../lib/authorization-stack';
 import { SpanProjectorStack } from '../lib/span-projector-stack';
+import { PromptCanaryStack } from '../lib/prompt-canary-stack';
 
 const app = new cdk.App();
 
@@ -244,5 +245,17 @@ const spanProjector = new SpanProjectorStack(app, 'OrgIQ-SpanProjector', {
 });
 spanProjector.addDependency(aurora);
 void spanProjector;
+
+// -------------------------------------------------------------------
+// Stack 14: Prompt Canary (opt-in)
+// Two Managed Prompt variants (A vs B) + judge prompt, EventBridge
+// scheduler that fires an Express SFN every minute to promote/rollback
+// the B-traffic weight in SSM. Disabled by default.
+//   cdk deploy OrgIQ-PromptCanary --context deployCanary=true
+// -------------------------------------------------------------------
+const deployCanary = app.node.tryGetContext('deployCanary') === 'true' || app.node.tryGetContext('deployCanary') === true;
+if (deployCanary) {
+  new PromptCanaryStack(app, 'OrgIQ-PromptCanary', { env, prefix });
+}
 
 app.synth();

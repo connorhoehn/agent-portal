@@ -31,7 +31,8 @@
       "ManageIngest":       { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
       "EditSchema":         { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
       "LabelFeedback":      { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
-      "ApproveTransaction": { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } }
+      "ApproveTransaction": { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
+      "ManageCanary":       { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } }
     }
   }
 }

@@ -29,6 +29,7 @@ const InvokePage = lazy(() => import('./pages/InvokePage'));
 const CodeInterpreterDemoPage = lazy(() => import('./pages/CodeInterpreterDemoPage'));
 const ExplorePage = lazy(() => import('./pages/ExplorePage'));
 const SearchPage = lazy(() => import('./pages/SearchPage'));
+const CanaryPage = lazy(() => import('./pages/CanaryPage'));
 
 // Ingest sub-pages
 const IngestLayout = lazy(() => import('./pages/ingest/IngestLayout'));
@@ -148,6 +149,7 @@ export function App() {
           <Route path="projects/:id" element={<Page element={<ProjectDetailPage />} />} />
           <Route path="explore" element={<Page element={<ExplorePage />} />} />
           <Route path="code-interpreter" element={<Page element={<CodeInterpreterDemoPage />} />} />
+          <Route path="canary" element={<Page element={<CanaryPage />} />} />
         </Route>
 
         {/* ── /admin/* — Admin / operations pages ── */}

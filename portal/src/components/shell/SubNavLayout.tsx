@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import { NavLink, Outlet } from 'react-router';
+import { Link, Outlet, useLocation, useResolvedPath } from 'react-router';
 
 // Shared "section with left-rail" layout. Pattern mirrors the InvokePage
 // session sidebar — slim rail, section title at top, NavLink items with
@@ -13,7 +13,9 @@ import { NavLink, Outlet } from 'react-router';
 // Capabilities, and Identity uses).
 
 export interface SubNavItem {
-  /** Path relative to the section root, e.g. "summary" or "crawl". */
+  /** Path relative to the section root, e.g. "summary" or "crawl". For action
+   *  items (onClick set), this is just used as a React key — provide something
+   *  unique like "halt" or "manual". */
   path: string;
   label: string;
   /** Optional small badge (e.g. live count) shown right-aligned. */
@@ -24,6 +26,11 @@ export interface SubNavItem {
    *  collapsible sections by group. Items without a group go into an
    *  un-headered first section. */
   group?: string;
+  /** If set, the item renders as a button that calls onClick instead of a
+   *  NavLink that navigates. Use for in-page actions like Halt or toggle. */
+  onClick?: () => void;
+  /** Optional left-side accent color (action items often want danger/warning). */
+  accent?: 'default' | 'danger' | 'warning' | 'success';
 }
 
 interface SubNavLayoutProps {
@@ -166,20 +173,51 @@ function GroupSection({
 }
 
 function ItemLink({ item }: { item: SubNavItem }) {
-  return (
-    <NavLink
-      to={item.path}
-      end={item.path === ''}
-      style={({ isActive }) => navItemStyle(isActive)}
-    >
+  // Hooks first (must run on every render in the same order regardless of
+  // whether the item resolves to a button or a link).
+  const location = useLocation();
+  const resolved = useResolvedPath(item.path);
+
+  const accentColor =
+    item.accent === 'danger' ? '#dc2626'
+    : item.accent === 'warning' ? '#d97706'
+    : item.accent === 'success' ? '#16a34a'
+    : undefined;
+  const body = (
+    <>
       <div style={navLabelRow}>
-        <span style={navLabel}>{item.label}</span>
+        <span style={{ ...navLabel, color: accentColor ?? navLabel.color }}>{item.label}</span>
         {item.count !== undefined && (
           <span style={navCount}>{item.count}</span>
         )}
       </div>
       {item.hint && <div style={navHint}>{item.hint}</div>}
-    </NavLink>
+    </>
+  );
+
+  if (item.onClick) {
+    return (
+      <button type="button" onClick={item.onClick} style={navItemButtonStyle()}>
+        {body}
+      </button>
+    );
+  }
+
+  // Default NavLink isActive only matches pathname. Many items in the
+  // contextual catalog differ only by query string (?window=24h vs ?window=7d),
+  // so all of them would resolve to the same pathname and read as "active".
+  // Compare both pathname AND search.
+  const samePath =
+    item.path === ''
+      ? location.pathname === resolved.pathname
+      : location.pathname === resolved.pathname || location.pathname.startsWith(resolved.pathname + '/');
+  const sameSearch = (resolved.search || '') === (location.search || '');
+  const isActive = samePath && sameSearch;
+
+  return (
+    <Link to={item.path} style={navItemStyle(isActive)}>
+      {body}
+    </Link>
   );
 }
 
@@ -277,6 +315,21 @@ function navItemStyle(isActive: boolean): CSSProperties {
     color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
     textDecoration: 'none',
     cursor: 'pointer',
+  };
+}
+
+function navItemButtonStyle(): CSSProperties {
+  return {
+    display: 'block',
+    width: '100%',
+    padding: '8px 14px',
+    borderLeft: '3px solid transparent',
+    border: 'none',
+    background: 'transparent',
+    color: 'var(--color-text-secondary)',
+    textAlign: 'left',
+    cursor: 'pointer',
+    font: 'inherit',
   };
 }
 

@@ -30,6 +30,7 @@ function seedsDir(): string {
   throw new Error('Cannot locate middleware/seeds/ directory');
 }
 
+// ManageCanary: gates PUT /weight and POST /halt on the canary surface
 const SEED_ROLES = ['member', 'org-leader', 'hr-admin'] as const;
 
 function seedPolicyDescription(role: string): string {

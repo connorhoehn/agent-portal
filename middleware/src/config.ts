@@ -93,4 +93,12 @@ export const config = {
     ingestion: env('INGESTION_ECR_URI'),
     graphBuilder: env('GRAPH_BUILDER_ECR_URI'),
   },
+
+  canary: {
+    subjectAArn: process.env.CANARY_SUBJECT_A_ARN ?? '',
+    subjectBArn: process.env.CANARY_SUBJECT_B_ARN ?? '',
+    judgeArn: process.env.CANARY_JUDGE_PROMPT_ARN ?? '',
+    name: process.env.CANARY_NAME ?? 'orgiq-expert-explainer',
+    scoresLogGroup: process.env.CANARY_SCORES_LOG_GROUP ?? '/orgiq/canary/scores',
+  },
 } as const;

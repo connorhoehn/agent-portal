@@ -31,11 +31,13 @@ import { capabilitiesRouter } from './routes/capabilities.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { sessionRouter } from './routes/session.js';
 import { identityRouter } from './routes/identity.js';
+import { canaryRouter } from './routes/canary.js';
 import { requireAction } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
 import { initCrawlTargets } from './lib/crawl-targets.js';
 import { ensureSchema, seedPoliciesIfMissing } from './lib/policy-seeds.js';
 import { startTracePoller } from './lib/cw-trace-ingest.js';
+import { startCanaryDecisionsPoller } from './lib/canary-decisions-poller.js';
 
 const app = express();
 
@@ -108,6 +110,12 @@ app.use('/api/observability/invocations', invocationsRouter);
 app.use('/api/topology', topologyRouter);
 // Sprint 2 — per-tool latency aggregates + error tail (M4).
 app.use('/api/observability/tools', toolCallsRouter);
+// Canary — A/B prompt experiment surface. Mounted BEFORE the gated
+// observability router so the portal landing page (GET /prompts, /events,
+// /weight) works without a session, matching cost/approvals/harness.
+// Mutation endpoints (PUT /weight, POST /halt) are individually Cedar-gated
+// via `ManageCanary` inside the router.
+app.use('/api/observability/canary', canaryRouter);
 app.use('/api/observability', requireAction('ViewObservability'), observabilityRouter);
 app.use('/api/capabilities', capabilitiesRouter);
 app.use('/api/sessions', sessionsRouter);
@@ -126,6 +134,11 @@ initCrawlTargets();
 // the DB layer (ON CONFLICT DO NOTHING on invocation_id). Set
 // OBS_TRACE_POLLER_DISABLED=1 to skip in offline/test environments.
 startTracePoller();
+
+// Tails observability.canary_decisions and bridges new rows into canaryBroker
+// so the portal's Decision History panel updates when the SFN controller
+// writes audit rows. No-ops in mock mode or without Aurora.
+startCanaryDecisionsPoller();
 
 // Seed AVP if it's empty. Idempotent — safe on every boot.
 ensureSchema().catch(err => console.error('[seed] schema seed failed:', err));

@@ -1,9 +1,14 @@
 import { NavLink, Outlet } from 'react-router';
+import {
+  CommandPalette,
+  CommandPaletteHint,
+  CommandPaletteProvider,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { MasqueradeMenu } from './MasqueradeMenu';
-import { CommandPalette, CommandPaletteHint } from './CommandPalette';
 import { GatewayStatusBadge } from './GatewayStatusBadge';
+import { usePortalCommands, usePortalDynamicCommands } from './portalCommands';
 import { TenantSwitcher } from './TenantSwitcher';
 
 interface Health {
@@ -21,6 +26,7 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/iq/explore',           label: 'Explore',          tenant: 'orgiq' },
   { path: '/iq/agents',            label: 'Architecture',     tenant: 'orgiq' },
   { path: '/iq/invoke',            label: 'Agent Tools',      tenant: 'orgiq' },
+  { path: '/iq/canary',            label: 'Canary',           tenant: 'orgiq' },
   { path: '/iq/scores',            label: 'Scores',           tenant: 'orgiq' },
   { path: '/iq/decisions',         label: 'Decisions',        tenant: 'orgiq' },
   { path: '/iq/projects',          label: 'Projects',         tenant: 'orgiq' },
@@ -36,6 +42,8 @@ const NAV_ITEMS: NavItem[] = [
 export function Layout() {
   const { data: health } = useFetch<Health>('/api/health', 30_000);
   const { session } = useSession();
+  const commands = usePortalCommands();
+  const getDynamicCommands = usePortalDynamicCommands();
   const navItems = NAV_ITEMS.filter(item => {
     // Universal: everyone sees it
     if (item.tenant === 'universal') return true;
@@ -74,6 +82,7 @@ export function Layout() {
       : 'var(--color-warning, #f59e0b)';
 
   return (
+    <CommandPaletteProvider commands={commands} getDynamicCommands={getDynamicCommands}>
     <div data-tenant={session?.tenant ?? 'orgiq'} style={{ display: 'flex', height: '100vh' }}>
       <aside style={{
         width: 200,
@@ -140,7 +149,8 @@ export function Layout() {
           <Outlet />
         </div>
       </main>
-      <CommandPalette />
+      <CommandPalette placeholder="Jump to a page, paste an invocation id, search runs…" />
     </div>
+    </CommandPaletteProvider>
   );
 }

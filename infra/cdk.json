@@ -7,6 +7,7 @@
   "context": {
     "projectPrefix": "orgiq",
     "deployRuntimes": "true",
-    "enableEval": "true"
+    "enableEval": "true",
+    "deployCanary": "true"
   }
 }
