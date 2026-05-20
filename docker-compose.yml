@@ -27,7 +27,11 @@ services:
       - "${JUPYTER_GCP_PORT:-8889}:8888"
     volumes:
       - ./notebooks:/workspace
-      - ~/.config/gcloud:/root/.config/gcloud:ro
+      # Read-write so `gcloud` subcommands can update their log + cache files
+      # (logs/, credentials.db are written even by read-only commands like
+      # `gcloud auth list`). The host's `gcloud auth login` state is what we
+      # actually want surfaced into the container.
+      - ~/.config/gcloud:/root/.config/gcloud
     environment:
       - GCP_PROJECT_ID=${GCP_PROJECT_ID:-}
       - GCP_REGION=${GCP_REGION:-us-central1}
