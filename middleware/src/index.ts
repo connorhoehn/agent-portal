@@ -32,6 +32,7 @@ import { sessionsRouter } from './routes/sessions.js';
 import { sessionRouter } from './routes/session.js';
 import { identityRouter } from './routes/identity.js';
 import { canaryRouter } from './routes/canary.js';
+import { gatewayProxyRouter } from './routes/gateway-proxy.js';
 import { requireAction } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
 import { initCrawlTargets } from './lib/crawl-targets.js';
@@ -119,6 +120,12 @@ app.use('/api/observability/canary', canaryRouter);
 app.use('/api/observability', requireAction('ViewObservability'), observabilityRouter);
 app.use('/api/capabilities', capabilitiesRouter);
 app.use('/api/sessions', sessionsRouter);
+// Gateway proxy — signs + forwards Wave 6 service-auth-gated endpoints so
+// the browser doesn't need to hold the HMAC secret. Reads GATEWAY_URL +
+// GATEWAY_SERVICE_AUTH_SECRET from env. No session required: the signing
+// is the auth mechanism; individual portal routes can add requireAction()
+// guards if per-user authz is needed in future.
+app.use('/api/gateway', gatewayProxyRouter);
 
 app.use(errorHandler);
 
