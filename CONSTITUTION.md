@@ -416,7 +416,7 @@ Phase 1b (Portal scaffold) ─────┘                                   
 **Goal**: Validate all AWS services, build running config
 
 ```
-notebooks/
+notebooks/aws/
 ├── 00-index.ipynb                     # Workshop overview + setup guide
 ├── 01-setup-credentials.ipynb         # AWS config, model access, bedrock-agentcore install
 ├── 02-aurora-graph.ipynb              # Create Aurora cluster, apply schema, write nodes/edges
@@ -665,14 +665,23 @@ aws-agentcore/
 ├── docker-compose.yml                  # Local stack (jupyter + middleware + portal)
 ├── .env.example
 │
-├── notebooks/                          # Phase 1: Jupyter exploration (00–18)
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   ├── jupyter_lab_config.py
-│   ├── cleanup_utils.py                # Resource tracker + teardown
-│   ├── 00-index.ipynb ... 18-cleanup.ipynb
-│   ├── data/                           # Synthetic org data (transcripts, docs, jira, confluence)
-│   └── scripts/                        # start.sh / stop.sh / check-aws.sh
+├── notebooks/                          # Phase 1: Jupyter exploration (00–19), split per cloud
+│   ├── aws/                            # AWS flavor — boto3, bedrock-agentcore SDK, AgentCore
+│   │   ├── Dockerfile
+│   │   ├── requirements.txt
+│   │   ├── jupyter_lab_config.py
+│   │   ├── cleanup_utils.py            # Resource tracker + teardown
+│   │   ├── 00-index.ipynb ... 19-cleanup.ipynb
+│   │   ├── data/                       # Synthetic org data
+│   │   └── scripts/                    # start.sh / stop.sh / check-aws.sh
+│   └── gcp/                            # GCP flavor — vertexai, google-genai, Agent Engine
+│       ├── Dockerfile
+│       ├── requirements.txt
+│       ├── jupyter_lab_config.py
+│       ├── cleanup_utils.py            # Resource tracker + teardown (GCP-aware)
+│       ├── 00-index.ipynb ... 19-cleanup.ipynb
+│       ├── data/                       # Same synthetic org data as aws/
+│       └── README.md                   # AWS → GCP service mapping
 │
 ├── schema/                             # Aurora SQL + LLM-driven synth pipeline
 │   ├── orgiq_schema.sql                # Canonical org-graph relational schema

@@ -1,6 +1,6 @@
 services:
   jupyter:
-    build: ./notebooks
+    build: ./notebooks/aws
     container_name: orgiq-jupyter
     ports:
       - "${JUPYTER_PORT:-8888}:8888"
@@ -11,6 +11,27 @@ services:
       - AWS_REGION=${AWS_REGION:-us-east-1}
       - AWS_DEFAULT_REGION=${AWS_REGION:-us-east-1}
       - AWS_PROFILE=${AWS_PROFILE:-default}
+    working_dir: /workspace
+    restart: unless-stopped
+    networks:
+      - orgiq-network
+
+  # GCP-flavor Jupyter — mirror of the aws/ notebooks using Vertex AI, Agent
+  # Engine, AlloyDB, Model Armor, etc. Volume mounts the same notebooks/ root
+  # so the file browser sees both clouds; working_dir lands inside gcp/ so
+  # relative paths (config.json, cleanup_utils, data/) resolve correctly.
+  jupyter-gcp:
+    build: ./notebooks/gcp
+    container_name: orgiq-jupyter-gcp
+    ports:
+      - "${JUPYTER_GCP_PORT:-8889}:8888"
+    volumes:
+      - ./notebooks:/workspace
+      - ~/.config/gcloud:/root/.config/gcloud:ro
+    environment:
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-}
+      - GCP_REGION=${GCP_REGION:-us-central1}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-}
     working_dir: /workspace
     restart: unless-stopped
     networks:

@@ -1,0 +1,58 @@
+{
+  "categories": [
+    {
+      "name": "Backend",
+      "skills": [
+        {"id": "s-be-01", "name": "Distributed Systems", "subcategory": "Architecture"},
+        {"id": "s-be-02", "name": "API Design", "subcategory": "Architecture"},
+        {"id": "s-be-03", "name": "Python", "subcategory": "Languages"},
+        {"id": "s-be-04", "name": "TypeScript", "subcategory": "Languages"},
+        {"id": "s-be-05", "name": "Go", "subcategory": "Languages"},
+        {"id": "s-be-06", "name": "PostgreSQL", "subcategory": "Databases"},
+        {"id": "s-be-07", "name": "DynamoDB", "subcategory": "Databases"}
+      ]
+    },
+    {
+      "name": "Frontend",
+      "skills": [
+        {"id": "s-fe-01", "name": "React", "subcategory": "Frameworks"},
+        {"id": "s-fe-02", "name": "CSS/Tailwind", "subcategory": "Styling"},
+        {"id": "s-fe-03", "name": "Accessibility", "subcategory": "Standards"},
+        {"id": "s-fe-04", "name": "WebSocket/Real-time", "subcategory": "Protocols"},
+        {"id": "s-fe-05", "name": "Data Visualization", "subcategory": "Libraries"}
+      ]
+    },
+    {
+      "name": "Data",
+      "skills": [
+        {"id": "s-da-01", "name": "Apache Spark", "subcategory": "Processing"},
+        {"id": "s-da-02", "name": "Machine Learning", "subcategory": "ML/AI"},
+        {"id": "s-da-03", "name": "LLM/Prompt Engineering", "subcategory": "ML/AI"},
+        {"id": "s-da-04", "name": "Data Modeling", "subcategory": "Architecture"},
+        {"id": "s-da-05", "name": "Graph Databases", "subcategory": "Databases"},
+        {"id": "s-da-06", "name": "Streaming (Kafka/Kinesis)", "subcategory": "Processing"}
+      ]
+    },
+    {
+      "name": "DevOps",
+      "skills": [
+        {"id": "s-do-01", "name": "Kubernetes", "subcategory": "Orchestration"},
+        {"id": "s-do-02", "name": "AWS CDK/CloudFormation", "subcategory": "IaC"},
+        {"id": "s-do-03", "name": "CI/CD Pipelines", "subcategory": "Automation"},
+        {"id": "s-do-04", "name": "Observability (OTel)", "subcategory": "Monitoring"},
+        {"id": "s-do-05", "name": "Docker/Containers", "subcategory": "Containerization"},
+        {"id": "s-do-06", "name": "Security/IAM", "subcategory": "Security"}
+      ]
+    },
+    {
+      "name": "Product",
+      "skills": [
+        {"id": "s-pr-01", "name": "User Research", "subcategory": "Research"},
+        {"id": "s-pr-02", "name": "Roadmap Planning", "subcategory": "Strategy"},
+        {"id": "s-pr-03", "name": "Technical Writing", "subcategory": "Communication"},
+        {"id": "s-pr-04", "name": "Stakeholder Management", "subcategory": "Leadership"},
+        {"id": "s-pr-05", "name": "A/B Testing", "subcategory": "Analytics"}
+      ]
+    }
+  ]
+}

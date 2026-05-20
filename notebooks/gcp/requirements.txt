@@ -1,0 +1,41 @@
+# JupyterLab + IPython
+jupyterlab==4.4.9
+ipywidgets==8.1.7
+
+# GCP SDKs
+google-cloud-aiplatform>=1.110.0
+vertexai>=1.71.1
+google-genai>=1.50.0
+google-cloud-discoveryengine>=0.13.10
+google-cloud-storage>=2.19.0
+google-cloud-bigquery>=3.30.0
+google-cloud-secret-manager>=2.23.0
+google-cloud-resource-manager>=1.14.0
+google-cloud-trace>=1.16.0
+google-cloud-logging>=3.12.0
+google-auth>=2.41.0
+
+# Postgres (AlloyDB / Cloud SQL PG)
+psycopg[binary]>=3.2.4
+pgvector>=0.4.0
+sqlalchemy>=2.0.36
+
+# Agent frameworks
+google-adk>=1.7.0
+ag-ui-protocol>=0.1.18
+
+# Observability
+opentelemetry-api>=1.32.0
+opentelemetry-sdk>=1.32.0
+opentelemetry-exporter-gcp-trace>=1.9.0
+openinference-instrumentation>=0.1.40
+
+# Notebook utilities
+pandas>=2.3.0
+numpy>=2.2.6
+matplotlib>=3.10.7
+seaborn>=0.13.2
+networkx>=3.5
+rich>=14.1.0
+tqdm>=4.67.1
+pyyaml>=6.0.2

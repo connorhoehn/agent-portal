@@ -6,7 +6,7 @@ expertise → serves conversational search. See CONSTITUTION.md for full spec.
 
 ## Architecture
 
-- **notebooks/** — JupyterLab exploration (Python 3.12, boto3, bedrock-agentcore SDK)
+- **notebooks/** — JupyterLab exploration. Split by cloud: `notebooks/aws/` (Python 3.12, boto3, bedrock-agentcore SDK) and `notebooks/gcp/` (Python 3.12, google-cloud-aiplatform, vertexai, google-genai). Both mount under `/workspace` so the file browser sees both flavors.
 - **agents/** — 9 Strands Agents (6 OrgIQ + 3 newsroom), Python 3.12, deployed to AgentCore Runtime via multistage Docker. Shared helpers in `agents/_shared/`; common base image in `agents/base/`
 - **infra/** — CDK TypeScript stacks (Aurora, OpenSearch, Guardrails, KB, AgentCore Memory/Policy/Capabilities/Runtime/Gateway/Telemetry, Authorization, SpanProjector)
 - **middleware/** — Express + distributed-core (AG-UI SSE proxy, RDS Data API queries against Aurora, WebSocket bridge, OI trace sink)
@@ -17,7 +17,8 @@ expertise → serves conversational search. See CONSTITUTION.md for full spec.
 
 ```bash
 docker-compose up --build            # jupyter + middleware + portal
-docker-compose up jupyter            # Just notebooks at :8888
+docker-compose up jupyter            # AWS notebooks at :8888 (cd /workspace/aws)
+docker-compose up jupyter-gcp        # GCP notebooks at :8889 (cd /workspace/gcp)
 docker-compose up middleware portal  # App stack at :3001 + :5183
 ```
 
