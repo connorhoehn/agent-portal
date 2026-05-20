@@ -10,8 +10,8 @@
 // SearchPage) per the file-collision rules — each page is self-contained.
 
 import { useMemo, useRef, useState } from 'react';
-import { useAgentStream } from '@connorhoehn/realtime-modules/client';
-import type { ToolCall as LiveToolCall } from '@connorhoehn/realtime-modules/client';
+import { useAgentStream } from '@connorhoehn/realtime-modules/agent-streaming/client';
+import type { ToolCall as LiveToolCall } from '@connorhoehn/realtime-modules/agent-streaming/client';
 import { Markdown } from '../../components/Markdown';
 import { useSessionPresence } from '../../hooks/useSessionPresence';
 import { PresenceAvatarGroup } from '../../components/shell/PresenceAvatarGroup';

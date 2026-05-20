@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { GatewayProxyClient } from '@connorhoehn/realtime-modules/proxy-client';
-import type { ConnectionState } from '@connorhoehn/realtime-modules/client';
+import type { ConnectionState } from '@connorhoehn/realtime-modules/client/ws';
 import { useGatewaySocket } from '../../hooks/useGatewaySocket';
 
 // VITE_GATEWAY_URL is exposed to the browser bundle by Vite at build time.

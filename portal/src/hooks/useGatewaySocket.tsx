@@ -1,11 +1,11 @@
 import { createContext, useContext, useMemo, useRef, useCallback } from 'react';
-import { useWebSocket } from '@connorhoehn/realtime-modules/client';
+import { useWebSocket } from '@connorhoehn/realtime-modules/client/ws';
 import { useSession } from '../lib/auth';
 import type {
   ConnectionState,
   GatewayMessage,
   UseWebSocketHookReturn,
-} from '@connorhoehn/realtime-modules/client';
+} from '@connorhoehn/realtime-modules/client/ws';
 
 // ---------------------------------------------------------------------------
 // URL derivation

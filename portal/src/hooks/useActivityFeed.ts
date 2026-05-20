@@ -8,7 +8,7 @@
 //   const { entries, isLoading } = useActivityFeed('newsroom-researcher');
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import type { GatewayMessage } from '@connorhoehn/realtime-modules/client';
+import type { GatewayMessage } from '@connorhoehn/realtime-modules/client/ws';
 import { useGatewaySocket } from './useGatewaySocket';
 import { fetchActivityHistory } from '../lib/gatewayProxyFetch';
 import type { ActivityEntry } from '../lib/gatewayProxyFetch';

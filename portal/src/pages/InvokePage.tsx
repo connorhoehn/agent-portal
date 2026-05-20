@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { useAgentStream } from '@connorhoehn/realtime-modules/client';
-import type { ToolCall as LiveToolCall, Message as AgentMessage } from '@connorhoehn/realtime-modules/client';
+import { useAgentStream } from '@connorhoehn/realtime-modules/agent-streaming/client';
+import type { ToolCall as LiveToolCall, Message as AgentMessage } from '@connorhoehn/realtime-modules/agent-streaming/client';
 import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
 import { useSessionPresence } from '../hooks/useSessionPresence';

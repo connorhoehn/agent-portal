@@ -14,7 +14,7 @@
 //   inbound    → { type: 'presence', action: 'update'|'offline', channel, data: { clientId, ... } }
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import type { GatewayMessage } from '@connorhoehn/realtime-modules/client';
+import type { GatewayMessage } from '@connorhoehn/realtime-modules/client/ws';
 import { useGatewaySocket } from './useGatewaySocket';
 import { fetchPresence } from '../lib/gatewayProxyFetch';
 import type { PresenceEntry } from '../lib/gatewayProxyFetch';

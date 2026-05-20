@@ -13,8 +13,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { useAgentStream } from '@connorhoehn/realtime-modules/client';
-import type { ToolCall as LiveToolCall } from '@connorhoehn/realtime-modules/client';
+import { useAgentStream } from '@connorhoehn/realtime-modules/agent-streaming/client';
+import type { ToolCall as LiveToolCall } from '@connorhoehn/realtime-modules/agent-streaming/client';
 import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
 import type { GraphPerson } from '../components/org-graph';

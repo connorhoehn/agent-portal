@@ -2,7 +2,7 @@ import type { CSSProperties, ChangeEvent, KeyboardEvent } from 'react';
 import { useState, useCallback } from 'react';
 import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
 import { Markdown } from '../../components/Markdown';
-import { useAgentStream } from '@connorhoehn/realtime-modules/client';
+import { useAgentStream } from '@connorhoehn/realtime-modules/agent-streaming/client';
 import { useSessionPresence } from '../../hooks/useSessionPresence';
 import { PresenceAvatarGroup } from '../../components/shell/PresenceAvatarGroup';
 
