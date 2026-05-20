@@ -15,6 +15,8 @@ import type { ToolCall as LiveToolCall } from '@connorhoehn/realtime-modules/cli
 import { Markdown } from '../../components/Markdown';
 import { useSessionPresence } from '../../hooks/useSessionPresence';
 import { PresenceAvatarGroup } from '../../components/shell/PresenceAvatarGroup';
+import { useActivityFeed } from '../../hooks/useActivityFeed';
+import { ActivityFeedPanel } from '../../components/shell/ActivityFeedPanel';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -154,6 +156,7 @@ function ResearcherPage() {
   });
 
   const { peers } = useSessionPresence('newsroom-researcher');
+  const { entries: activityEntries, isLoading: activityLoading } = useActivityFeed('newsroom-researcher');
 
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -286,6 +289,8 @@ function ResearcherPage() {
             <EntityCard key={e.entityId} entity={e} />
           ))}
         </RailSection>
+
+        <ActivityFeedPanel entries={activityEntries} isLoading={activityLoading} />
       </aside>
     </div>
   );
