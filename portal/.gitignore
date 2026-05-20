@@ -1,6 +1,8 @@
 node_modules/
 dist/
 .vite/
+.env.local
+.env.*.local
 
 # Playwright artifacts (built by the e2e test runs)
 test-results/
