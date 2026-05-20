@@ -44,7 +44,7 @@ function RunHistoryPage() {
           </h2>
         </div>
         {historyCrawls.length === 0 ? (
-          <EmptyState>No crawl runs yet. Trigger one from a target above.</EmptyState>
+          <EmptyState title="No crawl runs yet" body="Trigger one from a target above." />
         ) : (
           <RunHistoryTable
             sessions={historyCrawls}

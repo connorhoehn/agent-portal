@@ -32,7 +32,7 @@ function StoragePage() {
       <Card padding="md" style={{ marginBottom: 16 }}>
         <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Knowledge Base</h3>
         {!storage ? (
-          <EmptyState>Loading storage breakdown…</EmptyState>
+          <EmptyState title="Loading storage breakdown…" />
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
             <KVStat
@@ -51,7 +51,7 @@ function StoragePage() {
       <Card padding="md" style={{ marginBottom: 16 }}>
         <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>By File Type</h3>
         {!storage || storage.byType.length === 0 ? (
-          <EmptyState>No S3 objects yet.</EmptyState>
+          <EmptyState title="No S3 objects yet." />
         ) : (
           <Table>
             <TableHead>
@@ -90,7 +90,7 @@ function StoragePage() {
       <Card padding="md" style={{ marginBottom: 16 }}>
         <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>By Prefix</h3>
         {!storage || storage.byPrefix.length === 0 ? (
-          <EmptyState>No S3 objects yet.</EmptyState>
+          <EmptyState title="No S3 objects yet." />
         ) : (
           <Table>
             <TableHead>

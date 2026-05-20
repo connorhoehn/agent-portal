@@ -143,9 +143,7 @@ function CrawlTargetsPage() {
           </button>
         </div>
         {targets.length === 0 ? (
-          <EmptyState>
-            No crawl targets yet. Define a target to start ingesting public web content with vision-LLM extraction.
-          </EmptyState>
+          <EmptyState title="No crawl targets yet" body="Define a target to start ingesting public web content with vision-LLM extraction." />
         ) : (
           <TargetsTable
             targets={targets}

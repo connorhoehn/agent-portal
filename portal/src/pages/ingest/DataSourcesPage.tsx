@@ -131,7 +131,7 @@ function DataSourcesPage() {
       <Card padding="md" style={{ marginBottom: 16 }}>
         <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Data Sources</h3>
         {sources.length === 0 ? (
-          <EmptyState>No data sources attached to this Knowledge Base.</EmptyState>
+          <EmptyState title="No data sources" body="No data sources attached to this Knowledge Base." />
         ) : (
           <Table>
             <TableHead>
@@ -184,7 +184,7 @@ function DataSourcesPage() {
           )}
         </div>
         {jobs.length === 0 ? (
-          <EmptyState>No ingestion jobs yet.</EmptyState>
+          <EmptyState title="No ingestion jobs yet" />
         ) : (
           <JobHistoryTable jobs={jobs} />
         )}

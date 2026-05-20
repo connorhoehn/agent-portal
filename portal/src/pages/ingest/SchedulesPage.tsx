@@ -78,9 +78,7 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
       )}
 
       {schedules.length === 0 && !showForm ? (
-        <EmptyState>
-          No schedules configured. Ingestion runs only on manual "Sync now" trigger.
-        </EmptyState>
+        <EmptyState title="No schedules configured" body={'Ingestion runs only on manual "Sync now" trigger.'} />
       ) : schedules.length > 0 ? (
         <Table>
           <TableHead>
