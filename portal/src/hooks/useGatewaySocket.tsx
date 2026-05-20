@@ -1,7 +1,8 @@
-import { createContext, useContext, useMemo } from 'react';
+import { createContext, useContext, useMemo, useRef, useCallback } from 'react';
 import { useWebSocket } from '@connorhoehn/realtime-modules/client';
 import type {
   ConnectionState,
+  GatewayMessage,
   UseWebSocketHookReturn,
 } from '@connorhoehn/realtime-modules/client';
 
@@ -33,10 +34,17 @@ const WS_URL = deriveWsUrl(RAW_GATEWAY_URL);
 // Context shape
 // ---------------------------------------------------------------------------
 
+/** Listener registered via `addMessageListener`. */
+export type GatewayMessageListener = (message: GatewayMessage) => void;
+
 /**
  * Subset of UseWebSocketHookReturn exposed via context.
  * Consumers can call send/subscribe/unsubscribe directly; presence
  * subscriptions are wired by individual feature hooks.
+ *
+ * `addMessageListener` / `removeMessageListener` provide a lightweight
+ * pub-sub surface so multiple feature hooks can react to inbound WS frames
+ * without each needing their own `onMessage` prop.
  */
 export interface GatewaySocketContextValue {
   connectionState: ConnectionState;
@@ -45,6 +53,8 @@ export interface GatewaySocketContextValue {
   send: UseWebSocketHookReturn['send'];
   subscribe: UseWebSocketHookReturn['subscribe'];
   unsubscribe: UseWebSocketHookReturn['unsubscribe'];
+  addMessageListener: (listener: GatewayMessageListener) => void;
+  removeMessageListener: (listener: GatewayMessageListener) => void;
 }
 
 const GatewaySocketContext = createContext<GatewaySocketContextValue | null>(null);
@@ -70,11 +80,33 @@ interface GatewaySocketProviderProps {
  * reconnect with exponential backoff automatically.
  */
 export function GatewaySocketProvider({ children }: GatewaySocketProviderProps) {
+  // Stable set of message listeners — mutated without re-render.
+  const listenersRef = useRef<Set<GatewayMessageListener>>(new Set());
+
+  const handleMessage = useCallback((message: GatewayMessage) => {
+    for (const listener of listenersRef.current) {
+      try {
+        listener(message);
+      } catch {
+        // User listener errors must not break the fan-out loop.
+      }
+    }
+  }, []);
+
   const ws = useWebSocket({
     url: WS_URL,
     persist: { storage: window.sessionStorage },
     autoResubscribe: true,
+    onMessage: handleMessage,
   });
+
+  const addMessageListener = useCallback((listener: GatewayMessageListener) => {
+    listenersRef.current.add(listener);
+  }, []);
+
+  const removeMessageListener = useCallback((listener: GatewayMessageListener) => {
+    listenersRef.current.delete(listener);
+  }, []);
 
   const value = useMemo<GatewaySocketContextValue>(
     () => ({
@@ -84,9 +116,11 @@ export function GatewaySocketProvider({ children }: GatewaySocketProviderProps) 
       send: ws.send,
       subscribe: ws.subscribe,
       unsubscribe: ws.unsubscribe,
+      addMessageListener,
+      removeMessageListener,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ws.connectionState, ws.sessionToken, ws.clientId, ws.send, ws.subscribe, ws.unsubscribe],
+    [ws.connectionState, ws.sessionToken, ws.clientId, ws.send, ws.subscribe, ws.unsubscribe, addMessageListener, removeMessageListener],
   );
 
   return (

@@ -13,6 +13,7 @@ import { useMemo, useRef, useState } from 'react';
 import { useAgentStream } from '@connorhoehn/realtime-modules/client';
 import type { ToolCall as LiveToolCall } from '@connorhoehn/realtime-modules/client';
 import { Markdown } from '../../components/Markdown';
+import { useSessionPresence } from '../../hooks/useSessionPresence';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -151,6 +152,8 @@ function ResearcherPage() {
     url: `/api/agents/${RESEARCHER_AGENT_ID}/invoke`,
   });
 
+  const { peers } = useSessionPresence('newsroom-researcher');
+
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -188,6 +191,12 @@ function ResearcherPage() {
               Research any topic — the agent searches the archive, surfaces key entities,
               and suggests reporting angles based on co-mention patterns.
             </div>
+            {peers.length > 0 && (
+              <div style={peerIndicatorStyle}>
+                <span style={peerDotStyle} />
+                {peers.length === 1 ? '1 other here' : `${peers.length} others here`}
+              </div>
+            )}
           </div>
           {hasAnyMessages && (
             <button onClick={reset} style={resetBtnStyle} title="Start a new research session">
@@ -681,6 +690,22 @@ const entitySalienceStyle: React.CSSProperties = {
   fontSize: 10,
   color: 'var(--color-text-tertiary)',
   fontFamily: 'monospace',
+};
+const peerIndicatorStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 5,
+  fontSize: 11,
+  color: 'var(--color-text-tertiary)',
+  marginTop: 4,
+};
+const peerDotStyle: React.CSSProperties = {
+  width: 6,
+  height: 6,
+  borderRadius: '50%',
+  background: 'var(--color-success, #10b981)',
+  display: 'inline-block',
+  flexShrink: 0,
 };
 
 export default ResearcherPage;
