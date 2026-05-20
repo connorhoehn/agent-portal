@@ -3,8 +3,11 @@ jupyterlab==4.4.9
 ipywidgets==8.1.7
 
 # GCP SDKs
+# Note: the standalone `vertexai` PyPI package was frozen at 1.71.1 and pins
+# google-cloud-aiplatform==1.71.1. The `vertexai.*` namespace now lives inside
+# google-cloud-aiplatform itself, so we install only the umbrella package and
+# `from vertexai import ...` still resolves.
 google-cloud-aiplatform>=1.110.0
-vertexai>=1.71.1
 google-genai>=1.50.0
 google-cloud-discoveryengine>=0.13.10
 google-cloud-storage>=2.19.0
