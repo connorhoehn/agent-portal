@@ -66,6 +66,7 @@ const PAGES: PageEntry[] = [
   { label: 'Approvals',          hint: 'Pending HITL decisions',              path: '/admin/observability/approvals',              tenant: 'admin' },
   { label: 'Harness',            hint: 'Replay test set + view runs',         path: '/admin/observability/harness',                tenant: 'admin' },
   { label: 'Calibration',        hint: 'Judge vs human MAE drift',            path: '/admin/observability/calibration',            tenant: 'admin' },
+  { label: 'Prompts',            hint: 'Managed prompt registry',             path: '/admin/capabilities/prompts',                 tenant: 'admin' },
   { label: 'Model Compare',      hint: 'Side-by-side run delta',              path: '/admin/observability/model-compare',          tenant: 'admin' },
 ];
 

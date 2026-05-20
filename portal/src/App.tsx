@@ -44,6 +44,7 @@ const IngestSchedulesPage = lazy(() => import('./pages/ingest/SchedulesPage'));
 const CapabilitiesLayout = lazy(() => import('./pages/capabilities/CapabilitiesLayout'));
 const CapabilitiesSummaryPage = lazy(() => import('./pages/capabilities/SummaryPage'));
 const CapabilitiesGuardrailsPage = lazy(() => import('./pages/capabilities/GuardrailsPage'));
+const CapabilitiesPromptsPage = lazy(() => import('./pages/capabilities/PromptsPage'));
 const CapabilitiesCodeInterpreterPage = lazy(() => import('./pages/capabilities/CodeInterpreterPage'));
 const CapabilitiesBrowserPage = lazy(() => import('./pages/capabilities/BrowserPage'));
 const CapabilitiesMemoryPage = lazy(() => import('./pages/capabilities/MemoryPage'));
@@ -206,6 +207,7 @@ export function App() {
             <Route index element={<Navigate to="summary" replace />} />
             <Route path="summary" element={<Page element={<CapabilitiesSummaryPage />} />} />
             <Route path="guardrails" element={<Page element={<CapabilitiesGuardrailsPage />} />} />
+            <Route path="prompts" element={<Page element={<CapabilitiesPromptsPage />} />} />
             <Route path="code-interpreter" element={<Page element={<CapabilitiesCodeInterpreterPage />} />} />
             <Route path="browser" element={<Page element={<CapabilitiesBrowserPage />} />} />
             <Route path="memory" element={<Page element={<CapabilitiesMemoryPage />} />} />

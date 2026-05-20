@@ -11,7 +11,7 @@
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@connorhoehn/realtime-modules": "file:../../websocket-gateway/realtime-modules",
-    "@connorhoehnslalom/ui-components": "github:connorhoehnslalom/ui-components#829e8815235036331c02fad5b95611fa4c12db5e",
+    "@connorhoehnslalom/ui-components": "github:connorhoehnslalom/ui-components#f6f6f4d77c784720769daa79a3df46b9db135f33",
     "@xyflow/react": "^12.10.0",
     "amazon-cognito-identity-js": "^6.3.16",
     "d3-force": "^3.0.0",
