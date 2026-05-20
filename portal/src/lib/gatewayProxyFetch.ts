@@ -46,3 +46,22 @@ export async function publishToChannel(
     body: JSON.stringify(payload),
   });
 }
+
+export interface ActivityEntry {
+  eventId: string;
+  channel: string;
+  actorId: string;
+  action: string;
+  data: Record<string, unknown>;
+  timestamp: string;
+}
+
+export async function fetchActivityHistory(channel: string, limit = 20): Promise<ActivityEntry[]> {
+  const res = await fetch(
+    `${BASE}/activity/${encodeURIComponent(channel)}/history?limit=${limit}`,
+  );
+  if (!res.ok) throw new Error(`fetchActivityHistory failed: ${res.status}`);
+  const body = await res.json() as { events?: ActivityEntry[] } | ActivityEntry[];
+  if (Array.isArray(body)) return body;
+  return body.events ?? [];
+}
