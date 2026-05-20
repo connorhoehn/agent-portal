@@ -11,7 +11,7 @@ gcloud config get-value compute/region 2>/dev/null || echo "(no default region s
 
 echo ""
 echo "Checking required APIs are enabled:"
-for svc in aiplatform.googleapis.com discoveryengine.googleapis.com alloydb.googleapis.com cloudtrace.googleapis.com modelarmor.googleapis.com; do
+for svc in aiplatform.googleapis.com discoveryengine.googleapis.com bigquery.googleapis.com bigquerystorage.googleapis.com cloudtrace.googleapis.com modelarmor.googleapis.com; do
   enabled=$(gcloud services list --enabled --filter="name:${svc}" --format="value(name)" 2>/dev/null)
   if [ -n "$enabled" ]; then
     echo "  ✓ ${svc}"

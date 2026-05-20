@@ -12,19 +12,14 @@ google-genai>=1.50.0
 google-cloud-discoveryengine>=0.13.10
 google-cloud-storage>=2.19.0
 google-cloud-bigquery>=3.30.0
-google-cloud-secret-manager>=2.23.0
+google-cloud-bigquery-storage>=2.30.0
 google-cloud-resource-manager>=1.14.0
 google-cloud-trace>=1.16.0
 google-cloud-logging>=3.12.0
 google-cloud-modelarmor>=0.2.0
 google-auth>=2.41.0
 firebase-admin>=6.6.0
-
-# Postgres (AlloyDB / Cloud SQL PG)
-google-cloud-alloydb-connector[psycopg]>=1.4.0
-psycopg[binary]>=3.2.4
-pgvector>=0.4.0
-sqlalchemy>=2.0.36
+db-dtypes>=1.4.0
 
 # Agent frameworks
 google-adk>=1.7.0

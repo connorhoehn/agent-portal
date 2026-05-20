@@ -1,15 +1,16 @@
 """Resource tracking and cleanup utilities for OrgIQ GCP notebooks.
 
 Mirrors the AWS-side `cleanup_utils.py` but targets GCP resource types
-(Vertex AI deployments, Discovery Engine apps, AlloyDB clusters, GCS
-buckets, etc). Tracked resources are recorded in `config.json` under
-`gcp.tracked_resources` so 19-cleanup can drain them in dependency order.
+(Vertex AI deployments, Discovery Engine apps, BigQuery datasets, GCS
+buckets, RAG corpora, etc). Tracked resources are recorded in `config.json`
+under `gcp.tracked_resources` so 19-cleanup can drain them in dependency
+order.
 
 Usage in a notebook:
 
     from cleanup_utils import ResourceTracker
     tracker = ResourceTracker()
-    tracker.track('alloydb_cluster', 'orgiq-alloydb', region='us-central1')
+    tracker.track('bigquery_dataset', 'orgiq', project='my-project')
     tracker.flush()           # persist to config.json
     # ... later, in 19-cleanup ...
     tracker.teardown_all()    # walks the list in reverse insertion order
@@ -31,10 +32,9 @@ TRACKED_KEY_PATH = ("gcp", "tracked_resources")
 # Resource-kind → delete handler (gcloud command builder). Each handler returns
 # a list of args appended to `gcloud`. Add new kinds here as notebooks need them.
 DELETERS: dict[str, callable] = {
-    "alloydb_cluster": lambda r: [
-        "alloydb", "clusters", "delete", r["name"],
-        "--region", r.get("region", "us-central1"),
-        "--force", "--quiet",
+    "bigquery_dataset": lambda r: [
+        "bq", "rm", "-r", "-f", "-d",
+        f"{r.get('project', '')}:{r['name']}" if r.get("project") else r["name"],
     ],
     "vertex_endpoint": lambda r: [
         "ai", "endpoints", "delete", r["name"],
@@ -73,6 +73,23 @@ DELETERS: dict[str, callable] = {
         "identity-platform", "tenants", "delete", r["name"],
         "--quiet",
     ],
+}
+
+
+# Python deleters — for resources whose canonical delete path is not
+# `gcloud` (e.g. Vertex AI RAG corpora, which the gcloud surface for is
+# behind-current). The teardown loop calls these as `func(record)` and
+# expects them to return on success or raise on failure.
+def _delete_rag_corpus(r: dict[str, Any]) -> None:
+    """Delete a Vertex AI RAG Engine corpus by full resource name."""
+    import vertexai
+    from vertexai import rag
+    vertexai.init(project=r["project"], location=r.get("location", "us-central1"))
+    rag.delete_corpus(name=r["name"])
+
+
+PYTHON_DELETERS: dict[str, callable] = {
+    "rag_corpus": _delete_rag_corpus,
 }
 
 
@@ -154,20 +171,31 @@ class ResourceTracker:
         skipped: list[dict[str, Any]] = []
         for r in reversed(self._items):
             kind = r.get("kind")
-            handler = DELETERS.get(kind)
-            if not handler:
+            py_handler = PYTHON_DELETERS.get(kind)
+            cli_handler = DELETERS.get(kind)
+            if py_handler is None and cli_handler is None:
                 skipped.append({**r, "reason": f"no deleter for kind={kind!r}"})
                 continue
-            args = ["gcloud", *handler(r)]
             if dry_run:
-                log.info("DRY: %s", " ".join(args))
+                if py_handler is not None:
+                    log.info("DRY [python]: %s(%r)", py_handler.__name__, r)
+                else:
+                    log.info("DRY: %s", " ".join(["gcloud", *cli_handler(r)]))
                 ok += 1
                 continue
             try:
-                subprocess.run(args, check=True, capture_output=True, text=True)
+                if py_handler is not None:
+                    py_handler(r)
+                else:
+                    subprocess.run(
+                        ["gcloud", *cli_handler(r)],
+                        check=True, capture_output=True, text=True,
+                    )
                 self.untrack(kind, r["name"])
                 ok += 1
             except subprocess.CalledProcessError as exc:
                 failed.append({**r, "stderr": exc.stderr.strip()[:500]})
+            except Exception as exc:  # noqa: BLE001 — surface python deleter errors
+                failed.append({**r, "error": f"{type(exc).__name__}: {exc}"[:500]})
         self.flush()
         return {"ok": ok, "failed": failed, "skipped": skipped}
