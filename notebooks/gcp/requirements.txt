@@ -13,9 +13,12 @@ google-cloud-secret-manager>=2.23.0
 google-cloud-resource-manager>=1.14.0
 google-cloud-trace>=1.16.0
 google-cloud-logging>=3.12.0
+google-cloud-modelarmor>=0.2.0
 google-auth>=2.41.0
+firebase-admin>=6.6.0
 
 # Postgres (AlloyDB / Cloud SQL PG)
+google-cloud-alloydb-connector[psycopg]>=1.4.0
 psycopg[binary]>=3.2.4
 pgvector>=0.4.0
 sqlalchemy>=2.0.36
@@ -23,6 +26,11 @@ sqlalchemy>=2.0.36
 # Agent frameworks
 google-adk>=1.7.0
 ag-ui-protocol>=0.1.18
+
+# AG-UI streaming server (notebook 12)
+fastapi>=0.118.0
+uvicorn>=0.34.0
+httpx>=0.28.0
 
 # Observability
 opentelemetry-api>=1.32.0

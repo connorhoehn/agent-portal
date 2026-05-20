@@ -41,9 +41,19 @@ DELETERS: dict[str, callable] = {
         "--region", r.get("region", "us-central1"),
         "--quiet",
     ],
-    "discovery_engine_app": lambda r: [
-        "alpha", "discovery-engine", "apps", "delete", r["name"],
+    # Discovery Engine surface moved out of `alpha` — engines and data stores
+    # are separate resources and must be deleted independently (engine first,
+    # then data store). The portal notebook 04-vertex-search creates both.
+    "discovery_engine_engine": lambda r: [
+        "beta", "discovery-engine", "engines", "delete", r["name"],
         "--location", r.get("location", "global"),
+        "--collection", r.get("collection", "default_collection"),
+        "--quiet",
+    ],
+    "discovery_engine_data_store": lambda r: [
+        "beta", "discovery-engine", "data-stores", "delete", r["name"],
+        "--location", r.get("location", "global"),
+        "--collection", r.get("collection", "default_collection"),
         "--quiet",
     ],
     "gcs_bucket": lambda r: [
@@ -57,6 +67,10 @@ DELETERS: dict[str, callable] = {
     "model_armor_template": lambda r: [
         "model-armor", "templates", "delete", r["name"],
         "--location", r.get("location", "us-central1"),
+        "--quiet",
+    ],
+    "identity_platform_tenant": lambda r: [
+        "identity-platform", "tenants", "delete", r["name"],
         "--quiet",
     ],
 }

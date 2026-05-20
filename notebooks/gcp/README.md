@@ -12,7 +12,7 @@ service.
 | 00 | `00-index` | — | — |
 | 01 | `01-setup-credentials` | AWS SSO + boto3 | `gcloud auth application-default login` + google-cloud SDK |
 | 02 | `02-alloydb-graph` | Aurora Serverless v2 + pgvector | AlloyDB for PostgreSQL + pgvector (or Cloud SQL PG 16) |
-| 03 | `03-embeddings` | Titan Embeddings V2 (1024d) | Vertex AI `text-embedding-005` / `gemini-embedding-001` |
+| 03 | `03-embeddings` | Titan Embeddings V2 (1024d) | Vertex AI `gemini-embedding-001` (default, 1536d configurable up to 3072) — fallback `text-embedding-005` (768d) |
 | 04 | `04-vertex-search` | Bedrock Knowledge Base (OpenSearch backing) | Vertex AI Search (Discovery Engine) |
 | 05 | `05-model-armor` | Bedrock Guardrails | Model Armor / Vertex AI Safety Settings |
 | 06 | `06-adk-agent` | Strands Agents | Google Agent Development Kit (ADK) |
@@ -52,8 +52,22 @@ gcloud services enable \
   discoveryengine.googleapis.com \
   alloydb.googleapis.com \
   cloudtrace.googleapis.com \
-  modelarmor.googleapis.com
+  modelarmor.googleapis.com \
+  secretmanager.googleapis.com \
+  storage.googleapis.com \
+  identitytoolkit.googleapis.com
 ```
+
+## Default models (as of 2026-05)
+
+| Slot | Model ID | Notes |
+|---|---|---|
+| Reasoning | `gemini-2.5-pro` | Used by 06 (ADK), 11 (code-execution), 13 (A2A), 15 (deploy), 18b (text-to-SQL) |
+| Fast / judge | `gemini-2.5-flash` | Used by 16 (eval), 17 (telemetry), 18 (fairness) |
+| Lite | `gemini-2.5-flash-lite` | Cheap classifier / extractor jobs |
+| Embeddings | `gemini-embedding-001` | 1536d default (configurable via `output_dimensionality`); `text-embedding-005` (768d) for legacy parity with Vertex AI Search |
+
+01-setup-credentials seeds these into `config.json` as `gcp.model_id`, `gcp.model_id_pro`, `gcp.embedding_model`, `gcp.embedding_dim` so downstream notebooks share a single source.
 
 ## Resource naming
 
