@@ -7,8 +7,7 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { MasqueradeMenu } from './MasqueradeMenu';
-// TODO: GatewayStatusBadge temporarily disabled - realtime-modules/proxy-client needs dist build fix
-// import { GatewayStatusBadge } from './GatewayStatusBadge';
+import { GatewayStatusBadge } from './GatewayStatusBadge';
 import { usePortalCommands, usePortalDynamicCommands } from './portalCommands';
 import { TenantSwitcher } from './TenantSwitcher';
 
@@ -125,11 +124,10 @@ export function Layout() {
         <div style={{ padding: '12px 16px', borderTop: '1px solid var(--color-border)', fontSize: 10, color: 'var(--color-text-tertiary)', display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: statusColor, display: 'inline-block' }} />
           <span>{statusLabel}</span>
-          {/* TODO: Re-enable when realtime-modules build is fixed */}
-          {/* <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
             <GatewayStatusBadge />
             <span>gw</span>
-          </span> */}
+          </span>
         </div>
       </aside>
       <main style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>

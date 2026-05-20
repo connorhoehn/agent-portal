@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router';
 import { Layout } from './components/shell/Layout';
 import { RequireRole } from './lib/auth';
 import { useSession } from './lib/auth';
+import { GatewaySocketProvider } from './hooks/useGatewaySocket';
 
 const AgentFlowPage = lazy(() => import('./pages/AgentFlowPage'));
 const ScoresPage = lazy(() => import('./pages/ScoresPage'));
@@ -97,6 +98,7 @@ function RootRedirect() {
 
 export function App() {
   return (
+    <GatewaySocketProvider>
     <Routes>
       {/* ── Backwards-compat redirects (outside Layout so they catch bare paths) ── */}
       <Route path="agents" element={<Navigate to="/iq/agents" replace />} />
@@ -227,5 +229,6 @@ export function App() {
         </Route>
       </Route>
     </Routes>
+    </GatewaySocketProvider>
   );
 }
