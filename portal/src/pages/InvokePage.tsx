@@ -4,6 +4,8 @@ import { useAgentStream } from '@connorhoehn/realtime-modules/client';
 import type { ToolCall as LiveToolCall, Message as AgentMessage } from '@connorhoehn/realtime-modules/client';
 import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
+import { useSessionPresence } from '../hooks/useSessionPresence';
+import { PresenceAvatarGroup } from '../components/shell/PresenceAvatarGroup';
 
 interface AgentDef {
   id: string;
@@ -30,6 +32,7 @@ interface MemoryEvent {
 }
 
 function InvokePage() {
+  const { peers } = useSessionPresence('invoke');
   const { data: agents } = useFetch<AgentDef[]>('/api/agents');
   const [selectedId, setSelectedId] = useState('orgiq-supervisor');
   const {
@@ -127,13 +130,16 @@ function InvokePage() {
       <div style={{ width: 220, borderRight: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sessions</span>
-          <button
-            onClick={reset}
-            title="New session"
-            style={{ fontSize: 11, padding: '2px 8px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)', cursor: 'pointer' }}
-          >
-            + New
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button
+              onClick={reset}
+              title="New session"
+              style={{ fontSize: 11, padding: '2px 8px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)', cursor: 'pointer' }}
+            >
+              + New
+            </button>
+            <PresenceAvatarGroup peers={peers} />
+          </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
           {sessions.length === 0 && (

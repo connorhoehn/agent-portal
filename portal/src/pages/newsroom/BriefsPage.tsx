@@ -4,6 +4,7 @@ import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
 import { Markdown } from '../../components/Markdown';
 import { useAgentStream } from '@connorhoehn/realtime-modules/client';
 import { useSessionPresence } from '../../hooks/useSessionPresence';
+import { PresenceAvatarGroup } from '../../components/shell/PresenceAvatarGroup';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -59,12 +60,7 @@ function BriefsPage() {
   return (
     <div style={{ padding: '24px 32px' }}>
     <PageSection title="Brief Synthesizer">
-      {peers.length > 0 && (
-        <div style={peerIndicatorStyle}>
-          <span style={peerDotStyle} />
-          {peers.length === 1 ? '1 other here' : `${peers.length} others here`}
-        </div>
-      )}
+      <PresenceAvatarGroup peers={peers} />
       {/* Controls */}
       <Card padding="md">
         <div style={controlsRowStyle}>
@@ -285,20 +281,3 @@ const sectionHeadStyle: CSSProperties = {
   letterSpacing: '0.05em',
 };
 
-const peerIndicatorStyle: CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 5,
-  fontSize: 11,
-  color: 'var(--color-text-tertiary, #9ca3af)',
-  marginBottom: 8,
-};
-
-const peerDotStyle: CSSProperties = {
-  width: 6,
-  height: 6,
-  borderRadius: '50%',
-  background: 'var(--color-success, #10b981)',
-  display: 'inline-block',
-  flexShrink: 0,
-};

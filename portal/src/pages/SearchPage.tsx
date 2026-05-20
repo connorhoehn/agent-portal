@@ -18,6 +18,8 @@ import type { ToolCall as LiveToolCall } from '@connorhoehn/realtime-modules/cli
 import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
 import type { GraphPerson } from '../components/org-graph';
+import { useSessionPresence } from '../hooks/useSessionPresence';
+import { PresenceAvatarGroup } from '../components/shell/PresenceAvatarGroup';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -117,6 +119,7 @@ const QUICK_PROMPTS: QuickPrompt[] = [
 const SEARCH_AGENT_ID = 'orgiq-search';
 
 function SearchPage() {
+  const { peers } = useSessionPresence('search');
   const { data: graph } = useFetch<GraphEntities>('/api/graph/entities');
   // Holds the one-shot selection for the next outgoing message. Set inside
   // handleSend just before sendMessage(), read by buildBody when the hook
@@ -221,11 +224,14 @@ function SearchPage() {
             <div style={titleStyle}>Search</div>
             <div style={subtitleStyle}>Ask the org-search agent — it reads the knowledge base and the people graph.</div>
           </div>
-          {hasAnyMessages && (
-            <button onClick={reset} style={resetBtnStyle} title="Start a new search session">
-              + New search
-            </button>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <PresenceAvatarGroup peers={peers} />
+            {hasAnyMessages && (
+              <button onClick={reset} style={resetBtnStyle} title="Start a new search session">
+                + New search
+              </button>
+            )}
+          </div>
         </header>
 
         <div style={chatScrollStyle}>

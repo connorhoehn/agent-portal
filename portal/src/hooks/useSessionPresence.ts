@@ -37,7 +37,7 @@ export interface UseSessionPresenceReturn {
  * `clientId !== ctx.clientId`.
  */
 export function useSessionPresence(channel: string): UseSessionPresenceReturn {
-  const { connectionState, clientId, send, subscribe, unsubscribe, addMessageListener, removeMessageListener } =
+  const { connectionState, clientId, userSub, send, subscribe, unsubscribe, addMessageListener, removeMessageListener } =
     useGatewaySocket();
 
   const [peers, setPeers] = useState<PresenceEntry[]>([]);
@@ -77,10 +77,10 @@ export function useSessionPresence(channel: string): UseSessionPresenceReturn {
       service: 'presence',
       action: 'set',
       channel,
-      data: { displayName: 'User' },
+      data: { displayName: userSub ?? 'anonymous' },
     });
     void fetchRoster();
-  }, [connectionState, channel, subscribe, send, fetchRoster]);
+  }, [connectionState, channel, userSub, subscribe, send, fetchRoster]);
 
   // Reset subscription flag when disconnected so we re-subscribe on reconnect.
   useEffect(() => {

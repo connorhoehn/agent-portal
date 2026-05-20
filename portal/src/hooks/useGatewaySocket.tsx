@@ -1,5 +1,6 @@
 import { createContext, useContext, useMemo, useRef, useCallback } from 'react';
 import { useWebSocket } from '@connorhoehn/realtime-modules/client';
+import { useSession } from '../lib/auth';
 import type {
   ConnectionState,
   GatewayMessage,
@@ -50,6 +51,7 @@ export interface GatewaySocketContextValue {
   connectionState: ConnectionState;
   sessionToken: string | null;
   clientId: string | null;
+  userSub: string | null;
   send: UseWebSocketHookReturn['send'];
   subscribe: UseWebSocketHookReturn['subscribe'];
   unsubscribe: UseWebSocketHookReturn['unsubscribe'];
@@ -80,6 +82,8 @@ interface GatewaySocketProviderProps {
  * reconnect with exponential backoff automatically.
  */
 export function GatewaySocketProvider({ children }: GatewaySocketProviderProps) {
+  const { session } = useSession();
+
   // Stable set of message listeners — mutated without re-render.
   const listenersRef = useRef<Set<GatewayMessageListener>>(new Set());
 
@@ -113,6 +117,7 @@ export function GatewaySocketProvider({ children }: GatewaySocketProviderProps) 
       connectionState: ws.connectionState,
       sessionToken: ws.sessionToken,
       clientId: ws.clientId,
+      userSub: session?.sub ?? null,
       send: ws.send,
       subscribe: ws.subscribe,
       unsubscribe: ws.unsubscribe,
@@ -120,7 +125,7 @@ export function GatewaySocketProvider({ children }: GatewaySocketProviderProps) 
       removeMessageListener,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ws.connectionState, ws.sessionToken, ws.clientId, ws.send, ws.subscribe, ws.unsubscribe, addMessageListener, removeMessageListener],
+    [ws.connectionState, ws.sessionToken, ws.clientId, session?.sub, ws.send, ws.subscribe, ws.unsubscribe, addMessageListener, removeMessageListener],
   );
 
   return (
