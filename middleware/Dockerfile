@@ -8,6 +8,11 @@ RUN node -e " \
   const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); \
   delete pkg.dependencies['@connorhoehn/realtime-modules']; \
   fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2)); \
+  const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8')); \
+  delete lock.packages['node_modules/@connorhoehn/realtime-modules']; \
+  delete lock.packages['../../websocket-gateway/realtime-modules']; \
+  if (lock.dependencies) delete lock.dependencies['@connorhoehn/realtime-modules']; \
+  fs.writeFileSync('package-lock.json', JSON.stringify(lock)); \
 "
 RUN npm config set strict-ssl false
 RUN --mount=type=cache,target=/root/.npm \

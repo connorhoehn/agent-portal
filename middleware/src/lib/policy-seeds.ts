@@ -58,18 +58,54 @@ export async function seedPoliciesIfMissing(): Promise<void> {
       .filter(Boolean),
   );
 
+  // Split a Cedar file into individual policy statements. AVP's CreatePolicy
+  // only accepts one statement (permit/forbid) per call.
+  function splitStatements(cedar: string): string[] {
+    // Strip // line comments, then split on top-level permit/forbid keywords
+    // (i.e. not inside a string literal — Cedar doesn't have nested permits).
+    const noComments = cedar.replace(/\/\/[^\n]*/g, '');
+    const statements: string[] = [];
+    let remaining = noComments;
+    while (remaining.length > 0) {
+      // Find the next permit or forbid keyword at word boundary
+      const m = remaining.match(/\b(permit|forbid)\s*\(/);
+      if (!m || m.index === undefined) break;
+      remaining = remaining.slice(m.index);
+      // Find the matching closing ')' + ';' — balance parens
+      let depth = 0;
+      let i = 0;
+      for (; i < remaining.length; i++) {
+        if (remaining[i] === '(') depth++;
+        else if (remaining[i] === ')') { depth--; if (depth === 0) break; }
+      }
+      // Advance past optional trailing 'when { ... };'
+      const withWhen = remaining.slice(0, i + 1);
+      const afterParen = remaining.slice(i + 1);
+      const whenMatch = afterParen.match(/^\s*when\s*\{[^}]*\}\s*;?/);
+      const stmt = whenMatch ? withWhen + whenMatch[0] : withWhen;
+      const trimmed = stmt.trim().replace(/;?\s*$/, ';');
+      if (trimmed) statements.push(trimmed);
+      remaining = afterParen.slice(whenMatch ? whenMatch[0].length : 0);
+    }
+    return statements.filter(s => s.length > 0);
+  }
+
   let created = 0;
   for (const role of SEED_ROLES) {
-    const description = seedPolicyDescription(role);
-    if (existingDescriptions.has(description)) continue;
-
+    const baseDescription = seedPolicyDescription(role);
     const cedar = readFileSync(join(dir, `${role}.cedar`), 'utf8');
-    await client.send(new CreatePolicyCommand({
-      policyStoreId,
-      definition: { static: { description, statement: cedar } },
-    }));
-    console.log(`[seed] created baseline policy for role=${role}`);
-    created++;
+    const statements = splitStatements(cedar);
+
+    for (let i = 0; i < statements.length; i++) {
+      const description = statements.length === 1 ? baseDescription : `${baseDescription} (${i + 1})`;
+      if (existingDescriptions.has(description)) continue;
+      await client.send(new CreatePolicyCommand({
+        policyStoreId,
+        definition: { static: { description, statement: statements[i] } },
+      }));
+      console.log(`[seed] created policy for role=${role} stmt=${i + 1}/${statements.length}`);
+      created++;
+    }
   }
   if (created === 0) {
     console.log('[seed] all baseline policies already present');

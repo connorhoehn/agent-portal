@@ -12,6 +12,10 @@
 
 set -euo pipefail
 
+# Always run from the infra/ directory so CDK can find cdk.json
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${SCRIPT_DIR}/.."
+
 PREFIX="${PREFIX:-orgiq}"
 REGION="${AWS_DEFAULT_REGION:-us-east-1}"
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
@@ -28,9 +32,14 @@ echo ""
 
 s3_empty() {
   local bucket="$1"
-  local count
-  count=$(aws s3api list-objects-v2 --bucket "$bucket" --query 'length(Contents)' --output text 2>/dev/null || echo "0")
-  [[ "$count" == "0" || "$count" == "None" ]]
+  local err count
+  err=$(mktemp)
+  count=$(aws s3api list-objects-v2 --bucket "$bucket" --query 'length(Contents)' --output text 2>"$err" || echo "ERROR")
+  if grep -q "NoSuchBucket" "$err" 2>/dev/null; then
+    rm -f "$err"; return 1  # bucket already gone — skip deletion
+  fi
+  rm -f "$err"
+  [[ "$count" == "0" || "$count" == "None" || "$count" == "ERROR" ]]
 }
 
 dynamo_empty() {

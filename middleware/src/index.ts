@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import { WebSocketServer } from 'ws';
 import { config } from './config.js';
 import { errorHandler } from './lib/async-handler.js';
 import { sessionMiddleware } from './lib/session.js';
@@ -148,11 +149,21 @@ startTracePoller();
 startCanaryDecisionsPoller();
 
 // Seed AVP if it's empty. Idempotent — safe on every boot.
-ensureSchema().catch(err => console.error('[seed] schema seed failed:', err));
-seedPoliciesIfMissing().catch(err => console.error('[seed] policy seed failed:', err));
+// ensureSchema must complete before seeding policies (schema gates validation).
+ensureSchema()
+  .then(() => seedPoliciesIfMissing())
+  .catch(err => console.error('[seed] failed:', err));
 
-app.listen(config.port, '0.0.0.0', () => {
+const server = app.listen(config.port, '0.0.0.0', () => {
   const mockedDomains = Object.entries(config.mock).filter(([, v]) => v).map(([k]) => k);
   const mockSuffix = mockedDomains.length > 0 ? `mock=${mockedDomains.join(',')}` : 'mocks=off';
   console.log(`orgiq-middleware listening on :${config.port} (${mockSuffix})`);
+});
+
+// Minimal WebSocket server at /ws — accepts portal connections from
+// useGatewaySocket so the browser doesn't log a connection error.
+// Full gateway functionality lives in the websocket-gateway service.
+const wss = new WebSocketServer({ server, path: '/ws' });
+wss.on('connection', (ws) => {
+  ws.on('error', () => { /* swallow client disconnects */ });
 });
