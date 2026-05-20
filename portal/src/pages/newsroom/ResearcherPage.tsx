@@ -1,9 +1,3 @@
-// TODO(N5): wire post-merge —
-//   1. portal/src/App.tsx: under <Route path="newsroom">, add <Route path="researcher" element={<Page element={<ResearcherPage />} />} />.
-//   2. portal/src/pages/newsroom/NewsroomLayout.tsx: add { path: 'researcher', label: 'Researcher', hint: 'Story research agent' } after 'beats'.
-//   3. agents/build-all.sh: add 'news-researcher' to the AGENTS=(supervisor search ...) default list.
-//   4. CDK redeploy with --context deployRuntimes=true to expose the agent runtime (NOT in scope here).
-
 // ResearcherPage — story-research assistant for the OrgIQ newsroom.
 //
 // Streams an AG-UI session against orgiq-news-researcher. The right rail

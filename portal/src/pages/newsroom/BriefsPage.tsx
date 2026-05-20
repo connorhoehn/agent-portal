@@ -1,9 +1,3 @@
-// TODO(N6): wire post-merge —
-//   1. portal/src/App.tsx: under <Route path="newsroom">, add <Route path="briefs" element={<Page element={<BriefsPage />} />} />.
-//      (The N2 NewsroomLayout already has 'briefs' in its sub-nav.)
-//   2. agents/build-all.sh: add 'news-brief' to the AGENTS=(...) default list.
-//   3. CDK redeploy with --context deployRuntimes=true to expose the runtime.
-
 import type { CSSProperties, ChangeEvent, KeyboardEvent } from 'react';
 import { useState, useCallback } from 'react';
 import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
