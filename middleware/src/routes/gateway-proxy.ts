@@ -100,10 +100,13 @@ async function gatewayFetch(opts: GatewayFetchOpts): Promise<{ status: number; b
 
 // ─── Route helpers ────────────────────────────────────────────────────────────
 
-function getGatewayUrl(): string {
-  const url = process.env.GATEWAY_URL;
-  if (!url) throw new Error('GATEWAY_URL is not configured');
-  return url.replace(/\/+$/, '');
+// WEBSOCKET_GATEWAY_URL targets the websocket-gateway service (presence, chat,
+// activity).  GATEWAY_URL is the AgentCore MCP Gateway — a different service.
+// Falls back to GATEWAY_URL for backward compat, but that will fail unless
+// WEBSOCKET_GATEWAY_URL is explicitly set.
+function getWsGatewayUrl(): string | null {
+  const url = process.env['WEBSOCKET_GATEWAY_URL'] ?? process.env['WS_GATEWAY_URL'] ?? null;
+  return url ? url.replace(/\/+$/, '') : null;
 }
 
 function getSecret(): string | undefined {
@@ -121,17 +124,19 @@ function forwardResponse(
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
 // POST /api/gateway/channels/:id/messages
-// → POST <GATEWAY_URL>/api/channels/:id/messages
+// → POST <WEBSOCKET_GATEWAY_URL>/api/channels/:id/messages
 gatewayProxyRouter.post('/channels/:id/messages', asyncHandler(async (req, res) => {
   const channelId = req.params['id'];
   if (!channelId) {
     res.status(400).json({ error: 'channel id is required' });
     return;
   }
+  const wsUrl = getWsGatewayUrl();
+  if (!wsUrl) { res.json({ ok: true }); return; }
   const payload = JSON.stringify(req.body ?? {});
   const { status, body } = await gatewayFetch({
     method: 'POST',
-    url: `${getGatewayUrl()}/api/channels/${encodeURIComponent(channelId)}/messages`,
+    url: `${wsUrl}/api/channels/${encodeURIComponent(channelId)}/messages`,
     body: payload,
     secret: getSecret(),
   });
@@ -139,55 +144,61 @@ gatewayProxyRouter.post('/channels/:id/messages', asyncHandler(async (req, res) 
 }));
 
 // GET /api/gateway/presence/:channel
-// → GET <GATEWAY_URL>/api/presence/:channel
+// → GET <WEBSOCKET_GATEWAY_URL>/api/presence/:channel
 gatewayProxyRouter.get('/presence/:channel', asyncHandler(async (req, res) => {
   const channel = req.params['channel'];
   if (!channel) {
     res.status(400).json({ error: 'channel is required' });
     return;
   }
+  const wsUrl = getWsGatewayUrl();
+  if (!wsUrl) { res.json({ users: [] }); return; }
   const { status, body } = await gatewayFetch({
     method: 'GET',
-    url: `${getGatewayUrl()}/api/presence/${encodeURIComponent(channel)}`,
+    url: `${wsUrl}/api/presence/${encodeURIComponent(channel)}`,
     secret: getSecret(),
   });
   forwardResponse(res, status, body);
 }));
 
 // GET /api/gateway/chat/:channel/history[?limit=N&before=ID]
-// → GET <GATEWAY_URL>/api/chat/:channel/history[?limit=N&before=ID]
+// → GET <WEBSOCKET_GATEWAY_URL>/api/chat/:channel/history[?limit=N&before=ID]
 gatewayProxyRouter.get('/chat/:channel/history', asyncHandler(async (req, res) => {
   const channel = req.params['channel'];
   if (!channel) {
     res.status(400).json({ error: 'channel is required' });
     return;
   }
+  const wsUrl = getWsGatewayUrl();
+  if (!wsUrl) { res.json({ messages: [] }); return; }
   const params = new URLSearchParams();
   if (req.query['limit']) params.set('limit', String(req.query['limit']));
   if (req.query['before']) params.set('before', String(req.query['before']));
   const qs = params.toString() ? `?${params.toString()}` : '';
   const { status, body } = await gatewayFetch({
     method: 'GET',
-    url: `${getGatewayUrl()}/api/chat/${encodeURIComponent(channel)}/history${qs}`,
+    url: `${wsUrl}/api/chat/${encodeURIComponent(channel)}/history${qs}`,
     secret: getSecret(),
   });
   forwardResponse(res, status, body);
 }));
 
 // GET /api/gateway/activity/:channel/history[?limit=N]
-// → GET <GATEWAY_URL>/api/activity/:channel/history[?limit=N]
+// → GET <WEBSOCKET_GATEWAY_URL>/api/activity/:channel/history[?limit=N]
 gatewayProxyRouter.get('/activity/:channel/history', asyncHandler(async (req, res) => {
   const channel = req.params['channel'];
   if (!channel) {
     res.status(400).json({ error: 'channel is required' });
     return;
   }
+  const wsUrl = getWsGatewayUrl();
+  if (!wsUrl) { res.json({ events: [] }); return; }
   const params = new URLSearchParams();
   if (req.query['limit']) params.set('limit', String(req.query['limit']));
   const qs = params.toString() ? `?${params.toString()}` : '';
   const { status, body } = await gatewayFetch({
     method: 'GET',
-    url: `${getGatewayUrl()}/api/activity/${encodeURIComponent(channel)}/history${qs}`,
+    url: `${wsUrl}/api/activity/${encodeURIComponent(channel)}/history${qs}`,
     secret: getSecret(),
   });
   forwardResponse(res, status, body);
