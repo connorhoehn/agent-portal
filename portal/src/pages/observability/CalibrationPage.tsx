@@ -33,6 +33,11 @@ import {
   TableTh,
   TableTd,
   Chip,
+  Modal as UIModal,
+  CodeEditor,
+  FormField,
+  Button,
+  useToast,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
   CartesianGrid,
@@ -126,6 +131,7 @@ function defaultLabel(): string {
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 function CalibrationPage() {
+  const { toast } = useToast();
   const { data: casesData, refresh: refreshCases } = useFetch<CasesResp>(
     '/api/observability/calibration/cases',
     30_000,
@@ -662,13 +668,16 @@ function CalibrationPage() {
               }
               setCaseDialog({ open: false, busy: false, err: null, editing: null });
               refreshCases();
+              toast('Case saved', { type: 'success' });
             } catch (e) {
+              const msg = e instanceof Error ? e.message : 'Save failed';
               setCaseDialog({
                 open: true,
                 busy: false,
-                err: e instanceof Error ? e.message : 'Save failed',
+                err: msg,
                 editing: caseDialog.editing,
               });
+              toast(`Save failed: ${msg}`, { type: 'error' });
             }
           }}
         />
@@ -718,8 +727,7 @@ function CaseEditor({
     setNotes(editing?.notes ?? '');
   }, [editing]);
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
+  function submit() {
     onSubmit({
       agentId: agentId.trim(),
       prompt,
@@ -732,9 +740,36 @@ function CaseEditor({
 
   const canSubmit = !!agentId.trim() && !!prompt.trim() && Number.isFinite(humanScore);
 
+  const footer = (
+    <div style={modalActions} data-testid="case-editor-footer">
+      <Button
+        variant="secondary"
+        onClick={onClose}
+        disabled={busy}
+        data-testid="case-editor-cancel"
+      >
+        Cancel
+      </Button>
+      <Button
+        variant="primary"
+        onClick={submit}
+        disabled={busy || !canSubmit}
+        data-testid="case-editor-save"
+      >
+        {busy ? 'Saving…' : editing ? 'Save' : 'Add'}
+      </Button>
+    </div>
+  );
+
   return (
-    <Modal title={editing ? 'Edit calibration case' : 'Add calibration case'} onClose={onClose}>
-      <form onSubmit={submit} style={modalForm}>
+    <UIModal
+      open
+      onClose={() => { if (!busy) onClose(); }}
+      title={editing ? 'Edit calibration case' : 'Add calibration case'}
+      maxWidth={720}
+      footer={footer}
+    >
+      <div style={modalForm} data-testid="case-editor">
         <label style={formLabel}>
           Agent
           <select
@@ -742,62 +777,76 @@ function CaseEditor({
             onChange={(e) => setAgentId(e.target.value)}
             disabled={busy}
             style={textInput}
+            data-testid="case-editor-agent"
           >
             {AGENT_OPTIONS.map((a) => (
               <option key={a} value={a}>{a}</option>
             ))}
           </select>
         </label>
-        <label style={formLabel}>
-          Prompt
-          <textarea
+        <div style={formLabel} data-testid="case-editor-prompt-wrap">
+          <span>Prompt</span>
+          <CodeEditor
+            language="template"
             value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            rows={3}
-            disabled={busy}
-            style={textArea}
+            onChange={setPrompt}
             placeholder="What the user asked the agent…"
+            minLines={3}
+            maxLines={10}
+            readOnly={busy}
+            aria-label="Prompt"
           />
-        </label>
-        <label style={formLabel}>
-          Response
-          <textarea
+        </div>
+        <div style={formLabel} data-testid="case-editor-response-wrap">
+          <span>Response</span>
+          <CodeEditor
+            language="plain"
             value={response}
-            onChange={(e) => setResponse(e.target.value)}
-            rows={5}
-            disabled={busy}
-            style={textArea}
+            onChange={setResponse}
             placeholder="What the agent answered (or might answer)…"
+            minLines={5}
+            maxLines={15}
+            readOnly={busy}
+            aria-label="Response"
           />
-        </label>
-        <label style={formLabel}>
-          Human score · <strong>{humanScore.toFixed(2)}</strong>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.05}
-              value={humanScore}
-              onChange={(e) => setHumanScore(Number(e.target.value))}
-              disabled={busy}
-              style={{ flex: 1 }}
-            />
-            <input
-              type="number"
-              min={0}
-              max={1}
-              step={0.01}
-              value={humanScore}
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                if (Number.isFinite(v)) setHumanScore(Math.max(0, Math.min(1, v)));
-              }}
-              disabled={busy}
-              style={{ ...textInput, width: 80 }}
-            />
-          </div>
-        </label>
+        </div>
+        <FormField label="Human score" hint="0.0 - 1.0">
+          {(wiring) => (
+            <div
+              style={{ display: 'flex', gap: 8, alignItems: 'center' }}
+              data-testid="case-editor-score"
+            >
+              <input
+                {...wiring}
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={humanScore}
+                onChange={(e) => setHumanScore(Number(e.target.value))}
+                disabled={busy}
+                style={{ flex: 1 }}
+              />
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                value={humanScore}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  if (Number.isFinite(v)) setHumanScore(Math.max(0, Math.min(1, v)));
+                }}
+                disabled={busy}
+                style={{ ...textInput, width: 80 }}
+                aria-label="Human score numeric"
+              />
+              <strong style={{ fontVariantNumeric: 'tabular-nums', minWidth: 36 }}>
+                {humanScore.toFixed(2)}
+              </strong>
+            </div>
+          )}
+        </FormField>
         <label style={formLabel}>
           Human rationale (optional)
           <textarea
@@ -819,17 +868,9 @@ function CaseEditor({
             style={textInput}
           />
         </label>
-        {err && <div style={errBlock}>Error: {err}</div>}
-        <div style={modalActions}>
-          <button type="button" onClick={onClose} style={secondaryBtn} disabled={busy}>
-            Cancel
-          </button>
-          <button type="submit" style={primaryBtn} disabled={busy || !canSubmit}>
-            {busy ? 'Saving…' : editing ? 'Save' : 'Add'}
-          </button>
-        </div>
-      </form>
-    </Modal>
+        {err && <div style={errBlock} data-testid="case-editor-error">Error: {err}</div>}
+      </div>
+    </UIModal>
   );
 }
 

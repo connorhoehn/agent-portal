@@ -1,12 +1,32 @@
 import { useState } from 'react';
-import { Card, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Banner,
+  Button,
+  Card,
+  Chip,
+  ConfirmDialog,
+  FormField,
+  IconButton,
+  Modal,
+  PageSection,
+  Switch,
+  Table,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableTd,
+  TableTh,
+  useToast,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+type PiiAction = 'ANONYMIZE' | 'BLOCK' | 'NONE';
+
 interface PiiFilter {
   type: string;
-  action: 'ANONYMIZE' | 'BLOCK';
+  action: PiiAction;
   enabled: boolean;
 }
 
@@ -36,72 +56,152 @@ interface GuardrailMetrics {
   series: Array<{ timestamp: string; invocations: number; interventions: number }>;
 }
 
+const PII_ACTIONS: PiiAction[] = ['BLOCK', 'ANONYMIZE', 'NONE'];
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 function GuardrailsPage() {
   const { data: guardrail, refresh } = useFetch<Guardrail>('/api/capabilities/guardrail', 30000);
   const { data: metrics } = useFetch<GuardrailMetrics>('/api/capabilities/guardrail/metrics?hours=6', 60000);
+
+  const { toast } = useToast();
+
   const [newTopic, setNewTopic] = useState({ name: '', definition: '' });
-  const [addingTopic, setAddingTopic] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<DeniedTopic | null>(null);
+  const [editingDef, setEditingDef] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<DeniedTopic | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
-  async function togglePii(type: string, enabled: boolean) {
-    await fetch(`/api/capabilities/guardrail/pii`, {
-      method: 'PATCH',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, enabled }),
-    });
-    refresh();
+  async function patchPii(type: string, patch: { action?: PiiAction; enabled?: boolean }) {
+    try {
+      const res = await fetch(`/api/capabilities/guardrail/pii`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, ...patch }),
+      });
+      if (!res.ok) throw new Error(`PATCH /pii failed: ${res.status}`);
+      toast(`PII filter ${type} updated`, { type: 'success' });
+      refresh();
+    } catch (err) {
+      console.error(err);
+      toast(`Failed to update PII filter ${type}`, { type: 'error' });
+      refresh(); // restore prior value by re-reading
+    }
   }
 
-  async function toggleTopic(name: string, enabled: boolean) {
-    await fetch(`/api/capabilities/guardrail/topics/${encodeURIComponent(name)}`, {
-      method: 'PATCH',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled }),
-    });
-    refresh();
-  }
-
-  async function removeTopic(name: string) {
-    if (!confirm(`Delete denied topic "${name}"? This persists to AWS immediately.`)) return;
-    await fetch(`/api/capabilities/guardrail/topics/${encodeURIComponent(name)}`, {
-      method: 'DELETE',
-      credentials: 'include',
-    });
-    refresh();
+  async function patchTopicEnabled(name: string, enabled: boolean) {
+    try {
+      const res = await fetch(
+        `/api/capabilities/guardrail/topics/${encodeURIComponent(name)}`,
+        {
+          method: 'PATCH',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled }),
+        },
+      );
+      if (!res.ok) throw new Error(`PATCH /topics/${name} failed: ${res.status}`);
+      toast(`Topic ${name} ${enabled ? 'enabled' : 'disabled'}`, { type: 'success' });
+      refresh();
+    } catch (err) {
+      console.error(err);
+      toast(`Failed to update topic ${name}`, { type: 'error' });
+      refresh();
+    }
   }
 
   async function addTopic() {
-    if (!newTopic.name || !newTopic.definition) return;
-    setSaving(true);
-    await fetch('/api/capabilities/guardrail/topics', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newTopic),
-    });
-    setNewTopic({ name: '', definition: '' });
-    setAddingTopic(false);
-    setSaving(false);
-    refresh();
+    if (!newTopic.name.trim() || !newTopic.definition.trim()) return;
+    setAdding(true);
+    try {
+      const res = await fetch('/api/capabilities/guardrail/topics', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTopic),
+      });
+      if (!res.ok) throw new Error(`POST /topics failed: ${res.status}`);
+      toast(`Topic "${newTopic.name}" added`, { type: 'success' });
+      setNewTopic({ name: '', definition: '' });
+      refresh();
+    } catch (err) {
+      console.error(err);
+      toast('Failed to add topic', { type: 'error' });
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  function openEdit(topic: DeniedTopic) {
+    setEditing(topic);
+    setEditingDef(topic.definition);
+  }
+
+  async function saveEdit() {
+    if (!editing) return;
+    setSavingEdit(true);
+    try {
+      const res = await fetch(
+        `/api/capabilities/guardrail/topics/${encodeURIComponent(editing.name)}`,
+        {
+          method: 'PATCH',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ definition: editingDef }),
+        },
+      );
+      if (!res.ok) throw new Error(`PATCH /topics/${editing.name} failed: ${res.status}`);
+      toast(`Topic "${editing.name}" updated`, { type: 'success' });
+      setEditing(null);
+      refresh();
+    } catch (err) {
+      console.error(err);
+      toast('Failed to update topic', { type: 'error' });
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function doDelete() {
+    if (!confirmDelete) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(
+        `/api/capabilities/guardrail/topics/${encodeURIComponent(confirmDelete.name)}`,
+        { method: 'DELETE', credentials: 'include' },
+      );
+      if (!res.ok) throw new Error(`DELETE /topics/${confirmDelete.name} failed: ${res.status}`);
+      toast(`Topic "${confirmDelete.name}" removed`, { type: 'success' });
+      setConfirmDelete(null);
+      refresh();
+    } catch (err) {
+      console.error(err);
+      toast('Failed to remove topic', { type: 'error' });
+    } finally {
+      setDeleting(false);
+    }
   }
 
   if (!guardrail) {
     return (
-      <div style={{ padding: 24 }}>
+      <div style={{ padding: 24 }} data-testid="guardrails-page-loading">
         <div style={{ color: 'var(--color-text-secondary)' }}>Loading guardrail...</div>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: 24 }}>
+    <div style={{ padding: 24 }} data-testid="guardrails-page">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-        {/* Status bar */}
-        <Card padding="md">
+        <Banner variant="warning" data-testid="guardrails-live-banner">
+          Changes apply to the live guardrail DRAFT immediately.
+        </Banner>
+
+        {/* Status + metrics — wrapped in a single Card per spec */}
+        <Card padding="md" data-testid="guardrails-status-card">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <span style={{ fontWeight: 600 }}>{guardrail.name}</span>
@@ -121,164 +221,300 @@ function GuardrailsPage() {
               <div style={{ fontSize: 16, fontWeight: 600 }}>{(guardrail.relevanceThreshold * 100).toFixed(0)}%</div>
             </div>
           </div>
-        </Card>
 
-        {/* Metrics — last 24h */}
-        <Card padding="md">
-          <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
-            Activity (last 6h){' '}
-            <span style={{ fontWeight: 400, fontSize: 12, color: 'var(--color-text-tertiary)' }}>
-              from AWS/Bedrock metrics
-            </span>
-          </h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 16 }}>
-            <div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>INVOCATIONS</div>
-              <div style={{ fontSize: 20, fontWeight: 600 }}>{metrics?.totalInvocations ?? 0}</div>
+          <div style={{ marginTop: 20 }}>
+            <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
+              Activity (last 6h){' '}
+              <span style={{ fontWeight: 400, fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+                from AWS/Bedrock metrics
+              </span>
+            </h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 16 }}>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>INVOCATIONS</div>
+                <div style={{ fontSize: 20, fontWeight: 600 }}>{metrics?.totalInvocations ?? 0}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>INTERVENTIONS</div>
+                <div style={{ fontSize: 20, fontWeight: 600 }}>{metrics?.totalInterventions ?? 0}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>RATE</div>
+                <div style={{ fontSize: 20, fontWeight: 600 }}>{metrics?.interventionRate ?? '0.0'}%</div>
+              </div>
             </div>
-            <div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>INTERVENTIONS</div>
-              <div style={{ fontSize: 20, fontWeight: 600 }}>{metrics?.totalInterventions ?? 0}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>RATE</div>
-              <div style={{ fontSize: 20, fontWeight: 600 }}>{metrics?.interventionRate ?? '0.0'}%</div>
-            </div>
+            {/* NOTE: lib Sparkline is single-series; we need 2 overlaid series so we keep this SVG renderer. */}
+            <MetricsSparkline series={metrics?.series ?? []} />
           </div>
-          <MetricsSparkline series={metrics?.series ?? []} />
         </Card>
 
         {/* PII Filters */}
-        <Card padding="md">
-          <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>PII Filters</h2>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableTh>Type</TableTh>
-                <TableTh>Action</TableTh>
-                <TableTh>Enabled</TableTh>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {guardrail.piiFilters.map(filter => (
-                <TableRow key={filter.type}>
-                  <TableTd style={{ fontWeight: 500 }}>{filter.type}</TableTd>
-                  <TableTd>
-                    <Chip tone={filter.action === 'BLOCK' ? 'danger' : 'warning'} size="xs">{filter.action}</Chip>
-                  </TableTd>
-                  <TableTd>
-                    <Toggle value={filter.enabled} onChange={v => togglePii(filter.type, v)} />
-                  </TableTd>
+        <PageSection title="PII Filters" description="Per-entity action (BLOCK | ANONYMIZE | NONE) and on/off toggle.">
+          <Card padding="md" data-testid="pii-filters-card">
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableTh>Type</TableTh>
+                  <TableTh>Status</TableTh>
+                  <TableTh>Action</TableTh>
+                  <TableTh>Enabled</TableTh>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
+              </TableHead>
+              <TableBody>
+                {guardrail.piiFilters.map(filter => (
+                  <TableRow key={filter.type}>
+                    <TableTd style={{ fontWeight: 500 }}>{filter.type}</TableTd>
+                    <TableTd>
+                      <Chip
+                        tone={filter.enabled ? 'success' : 'neutral'}
+                        size="xs"
+                      >
+                        {filter.enabled ? 'on' : 'off'}
+                      </Chip>
+                    </TableTd>
+                    <TableTd>
+                      <select
+                        aria-label={`Action for ${filter.type}`}
+                        data-testid={`pii-action-${filter.type}`}
+                        value={filter.action}
+                        onChange={e => patchPii(filter.type, { action: e.target.value as PiiAction })}
+                        style={{
+                          fontSize: 12,
+                          padding: '4px 8px',
+                          border: '1px solid var(--color-border)',
+                          borderRadius: 'var(--radius-sm)',
+                          background: 'var(--color-surface)',
+                        }}
+                      >
+                        {PII_ACTIONS.map(a => (
+                          <option key={a} value={a}>{a}</option>
+                        ))}
+                      </select>
+                    </TableTd>
+                    <TableTd>
+                      <Switch
+                        checked={filter.enabled}
+                        onChange={v => patchPii(filter.type, { enabled: v })}
+                        aria-label={`Toggle PII filter ${filter.type}`}
+                        data-testid={`pii-switch-${filter.type}`}
+                      />
+                    </TableTd>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        </PageSection>
 
-        {/* Content Policy */}
-        <Card padding="md">
-          <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Content Policy</h2>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {Object.entries(guardrail.contentPolicy).map(([key, enabled]) => (
-              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'var(--color-surface-hover)', borderRadius: 'var(--radius-md)' }}>
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: enabled ? 'var(--color-success)' : 'var(--color-text-tertiary)', flexShrink: 0 }} />
-                <span style={{ fontSize: 12 }}>{key.replace('Enabled', '')}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
+        {/* Content Policy — view-only.
+            TODO(backend): no PATCH route exists for content-policy categories
+            yet (middleware/src/providers/guardrails.ts only ships getGuardrail
+            here). When a mutation is added, replace this chip strip with a
+            Switch column mirroring the PII filter table. */}
+        <PageSection title="Content Policy" description="View-only. Mutation API not yet available.">
+          <Card padding="md" data-testid="content-policy-card">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {Object.entries(guardrail.contentPolicy).map(([key, enabled]) => (
+                <Chip
+                  key={key}
+                  tone={enabled ? 'success' : 'neutral'}
+                  size="xs"
+                >
+                  {key.replace('Enabled', '')}
+                </Chip>
+              ))}
+            </div>
+          </Card>
+        </PageSection>
 
         {/* Denied Topics */}
-        <Card padding="md">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <h2 style={{ fontSize: 14, fontWeight: 600 }}>Denied Topics</h2>
-            <button
-              onClick={() => setAddingTopic(v => !v)}
-              style={{ fontSize: 12, padding: '4px 10px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
+        <PageSection title="Denied Topics" description="Topics the guardrail will refuse to discuss.">
+          <Card padding="md" data-testid="denied-topics-card">
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '200px 1fr auto',
+                gap: 12,
+                alignItems: 'end',
+                marginBottom: 16,
+                padding: 12,
+                background: 'var(--color-surface-hover)',
+                borderRadius: 'var(--radius-md)',
+              }}
+              data-testid="topic-add-form"
             >
-              + Add Topic
-            </button>
-          </div>
-
-          {addingTopic && (
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12, padding: 12, background: 'var(--color-surface-hover)', borderRadius: 'var(--radius-md)' }}>
-              <input
-                placeholder="Topic name"
-                value={newTopic.name}
-                onChange={e => setNewTopic(p => ({ ...p, name: e.target.value }))}
-                style={{ flex: '0 0 160px', padding: '6px 10px', fontSize: 12, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', background: 'var(--color-surface)' }}
-              />
-              <input
-                placeholder="Definition / description"
-                value={newTopic.definition}
-                onChange={e => setNewTopic(p => ({ ...p, definition: e.target.value }))}
-                style={{ flex: 1, padding: '6px 10px', fontSize: 12, border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', background: 'var(--color-surface)' }}
-              />
-              <button
+              <FormField label="Topic name">
+                {p => (
+                  <input
+                    {...p}
+                    type="text"
+                    value={newTopic.name}
+                    onChange={e => setNewTopic(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="e.g. competitor-strategy"
+                    data-testid="topic-add-name"
+                    style={{
+                      width: '100%',
+                      padding: '6px 10px',
+                      fontSize: 12,
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 'var(--radius-sm)',
+                      background: 'var(--color-surface)',
+                    }}
+                  />
+                )}
+              </FormField>
+              <FormField label="Definition" hint="What does this topic cover?">
+                {p => (
+                  <textarea
+                    {...p}
+                    value={newTopic.definition}
+                    onChange={e => setNewTopic(prev => ({ ...prev, definition: e.target.value }))}
+                    placeholder="A short natural-language description the model will match against."
+                    rows={2}
+                    data-testid="topic-add-definition"
+                    style={{
+                      width: '100%',
+                      padding: '6px 10px',
+                      fontSize: 12,
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 'var(--radius-sm)',
+                      background: 'var(--color-surface)',
+                      resize: 'vertical',
+                      fontFamily: 'inherit',
+                    }}
+                  />
+                )}
+              </FormField>
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={addTopic}
-                disabled={saving}
-                style={{ padding: '6px 12px', fontSize: 12, background: 'var(--color-success)', color: '#fff', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
+                disabled={adding || !newTopic.name.trim() || !newTopic.definition.trim()}
+                data-testid="topic-add-submit"
               >
-                Save
-              </button>
+                {adding ? 'Adding…' : 'Add'}
+              </Button>
             </div>
-          )}
 
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableTh>Topic</TableTh>
-                <TableTh>Definition</TableTh>
-                <TableTh>Enabled</TableTh>
-                <TableTh></TableTh>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {guardrail.deniedTopics.map(topic => (
-                <TableRow key={topic.name}>
-                  <TableTd style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{topic.name}</TableTd>
-                  <TableTd style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{topic.definition}</TableTd>
-                  <TableTd>
-                    <Toggle value={topic.enabled} onChange={v => toggleTopic(topic.name, v)} />
-                  </TableTd>
-                  <TableTd>
-                    <button
-                      onClick={() => removeTopic(topic.name)}
-                      aria-label={`Remove ${topic.name}`}
-                      style={{ fontSize: 11, padding: '2px 8px', background: 'none', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
-                    >
-                      Remove
-                    </button>
-                  </TableTd>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableTh>Topic</TableTh>
+                  <TableTh>Definition</TableTh>
+                  <TableTh>Enabled</TableTh>
+                  <TableTh aria-label="Actions"></TableTh>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
+              </TableHead>
+              <TableBody>
+                {guardrail.deniedTopics.map(topic => (
+                  <TableRow key={topic.name} data-testid={`topic-row-${topic.name}`}>
+                    <TableTd style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{topic.name}</TableTd>
+                    <TableTd style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{topic.definition}</TableTd>
+                    <TableTd>
+                      <Switch
+                        checked={topic.enabled}
+                        onChange={v => patchTopicEnabled(topic.name, v)}
+                        aria-label={`Toggle denied topic ${topic.name}`}
+                        data-testid={`topic-switch-${topic.name}`}
+                      />
+                    </TableTd>
+                    <TableTd>
+                      <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                        <IconButton
+                          aria-label={`Edit definition for ${topic.name}`}
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openEdit(topic)}
+                          data-testid={`topic-edit-${topic.name}`}
+                        >
+                          Edit
+                        </IconButton>
+                        <IconButton
+                          aria-label={`Remove ${topic.name}`}
+                          variant="danger"
+                          size="sm"
+                          onClick={() => setConfirmDelete(topic)}
+                          data-testid={`topic-delete-${topic.name}`}
+                        >
+                          Remove
+                        </IconButton>
+                      </div>
+                    </TableTd>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        </PageSection>
       </div>
+
+      {/* Edit topic definition modal */}
+      <Modal
+        open={editing !== null}
+        onClose={() => (savingEdit ? undefined : setEditing(null))}
+        title={editing ? `Edit definition — ${editing.name}` : 'Edit topic'}
+        maxWidth={520}
+        footer={
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <Button variant="ghost" size="sm" onClick={() => setEditing(null)} disabled={savingEdit}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={saveEdit}
+              disabled={savingEdit || !editingDef.trim()}
+              data-testid="topic-edit-save"
+            >
+              {savingEdit ? 'Saving…' : 'Save'}
+            </Button>
+          </div>
+        }
+      >
+        <FormField label="Definition" hint="Natural-language description used by the model.">
+          {p => (
+            <textarea
+              {...p}
+              value={editingDef}
+              onChange={e => setEditingDef(e.target.value)}
+              rows={5}
+              data-testid="topic-edit-definition"
+              style={{
+                width: '100%',
+                padding: '8px 10px',
+                fontSize: 13,
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--color-surface)',
+                resize: 'vertical',
+                fontFamily: 'inherit',
+              }}
+            />
+          )}
+        </FormField>
+      </Modal>
+
+      {/* Delete confirmation */}
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        onConfirm={doDelete}
+        onCancel={() => (deleting ? undefined : setConfirmDelete(null))}
+        title="Remove denied topic?"
+        body={
+          confirmDelete
+            ? `"${confirmDelete.name}" will be removed from the live guardrail DRAFT immediately.`
+            : ''
+        }
+        confirmLabel={deleting ? 'Removing…' : 'Remove'}
+        cancelLabel="Cancel"
+        confirmDisabled={deleting}
+        tone="destructive"
+      />
     </div>
   );
 }
 
 // ─── Local helpers ────────────────────────────────────────────────────────────
-
-function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!value)}
-      style={{
-        width: 36, height: 20, borderRadius: 10, border: 'none', cursor: 'pointer', padding: 0, position: 'relative',
-        background: value ? 'var(--color-success, #16a34a)' : 'var(--color-border, #e2e8f0)',
-        transition: 'background 0.15s',
-      }}
-    >
-      <span style={{
-        position: 'absolute', top: 3, left: value ? 19 : 3, width: 14, height: 14,
-        borderRadius: '50%', background: '#fff', transition: 'left 0.15s',
-      }} />
-    </button>
-  );
-}
 
 function MetricsSparkline({ series }: { series: Array<{ timestamp: string; invocations: number; interventions: number }> }) {
   const width = 600;
