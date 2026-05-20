@@ -291,6 +291,27 @@ class TraceContext:
         if ot > 0:
             self.bedrock_output_tokens += ot
 
+    # ── Wire projection for AG-UI tool timeline ──
+
+    def project_tool_calls(self) -> list[dict[str, Any]]:
+        """Project the buffered tool calls into the wire shape the middleware
+        emits as AG-UI TOOL_CALL_START / _END events: {name, args, result}.
+
+        Errored tool calls surface their error message under ``result`` so the
+        UI timeline still renders them as terminal (matches the mock provider's
+        behavior on failed tools).
+        """
+        out: list[dict[str, Any]] = []
+        for tc in self.tool_calls:
+            name = tc.get("toolName") or "unknown"
+            args = tc.get("inputSample")
+            if tc.get("errored"):
+                result: Any = {"error": tc.get("errorMessage") or "tool failed"}
+            else:
+                result = tc.get("outputSample")
+            out.append({"name": name, "args": args, "result": result})
+        return out
+
     # ── Bundle assembly ──
 
     def build_trace_bundle(

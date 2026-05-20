@@ -372,6 +372,7 @@ async def handle(payload: dict) -> dict:
         "agent": "search",
         "response": response_text,
         "invocationId": ctx.invocation_id,
+        "toolCalls": ctx.project_tool_calls(),
     }
 
 

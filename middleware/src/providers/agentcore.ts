@@ -437,6 +437,26 @@ function extractText(raw: unknown): string {
   return String(raw);
 }
 
+// Extract the agent's surfaced tool-call list. Agents project their
+// TraceContext.tool_calls onto `toolCalls: [{name, args, result}, ...]` in the
+// response dict; we accept anything with a `name` and pass `args` / `result`
+// through unchanged. Malformed entries are dropped so a noisy agent response
+// can't crash the route.
+function extractToolCalls(raw: unknown): import('./types.js').AgentInvokeToolCall[] {
+  if (!raw || typeof raw !== 'object') return [];
+  const list = (raw as Record<string, unknown>)['toolCalls'];
+  if (!Array.isArray(list)) return [];
+  const out: import('./types.js').AgentInvokeToolCall[] = [];
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    const rec = item as Record<string, unknown>;
+    const name = rec['name'];
+    if (typeof name !== 'string' || name.length === 0) continue;
+    out.push({ name, args: rec['args'] ?? '', result: rec['result'] ?? '' });
+  }
+  return out;
+}
+
 // ─── Real provider ────────────────────────────────────────────────────────────
 
 export const realAgentCore: AgentCoreProvider = {
@@ -583,11 +603,17 @@ export const realAgentCore: AgentCoreProvider = {
       }
     }
 
+    // Tool calls the agent surfaces via _project_tool_calls — same wire shape
+    // as the mock provider so the route emits identical TOOL_CALL_START/END
+    // events whether we're against mock or live runtimes.
+    const toolCalls = extractToolCalls(raw);
+
     return {
       text: extractText(raw),
       raw,
       runtimeSessionId: resp.runtimeSessionId,
       ...(sandboxExecutions ? { sandboxExecutions } : {}),
+      ...(toolCalls.length > 0 ? { toolCalls } : {}),
     };
   },
 
