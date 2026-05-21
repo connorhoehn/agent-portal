@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { useAgentStream } from '@connorhoehn/realtime-modules/agent-streaming/client';
 import type { Message as AgentMessage } from '@connorhoehn/realtime-modules/agent-streaming/client';
@@ -7,11 +7,58 @@ import {
   MessageBubble,
   QuickPromptGrid,
   FollowUpChips,
+  ThinkingBlock,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
 import { useSessionPresence } from '../hooks/useSessionPresence';
 import { PresenceAvatarGroup } from '../components/shell/PresenceAvatarGroup';
+
+// ─── <thinking> block renderer ───────────────────────────────────────────────
+//
+// Splits assistant content on <thinking>…</thinking> tags and renders each
+// segment appropriately: completed thinking blocks as collapsible ThinkingBlock
+// components, any open (streaming) block as an active ThinkingBlock, and all
+// plain text through the Markdown renderer.
+
+const THINKING_RE = /(<thinking>[\s\S]*?<\/thinking>)/g;
+const THINKING_OPEN = '<thinking>';
+const THINKING_CLOSE = '</thinking>';
+
+function renderMessageContent(content: string, streaming: boolean): ReactNode {
+  // While streaming: detect an unclosed <thinking> tag at the end.
+  if (streaming) {
+    const lastOpen = content.lastIndexOf(THINKING_OPEN);
+    const lastClose = content.lastIndexOf(THINKING_CLOSE);
+    if (lastOpen !== -1 && lastOpen > lastClose) {
+      const before = content.slice(0, lastOpen);
+      const partial = content.slice(lastOpen + THINKING_OPEN.length);
+      return (
+        <>
+          {before.trim() && <Markdown>{before}</Markdown>}
+          <ThinkingBlock content={partial} streaming defaultOpen />
+        </>
+      );
+    }
+  }
+
+  // Normal path: split completed <thinking> blocks out of the content.
+  const parts = content.split(THINKING_RE);
+  return (
+    <>
+      {parts.map((part, i) => {
+        const m = part.match(/^<thinking>([\s\S]*?)<\/thinking>$/);
+        if (m) {
+          return <ThinkingBlock key={i} content={m[1].trim()} />;
+        }
+        if (part.trim()) {
+          return <Markdown key={i}>{part}</Markdown>;
+        }
+        return null;
+      })}
+    </>
+  );
+}
 
 interface AgentDef {
   id: string;
@@ -209,7 +256,7 @@ function InvokePage() {
                 done: Boolean(tc.result),
               }))}
               agentName={selectedAgent?.name ?? 'Agent'}
-              renderMarkdown={(content) => <Markdown>{content}</Markdown>}
+              renderMarkdown={(content) => renderMessageContent(content, false)}
             />
           ))}
           {isStreaming && (
@@ -224,7 +271,7 @@ function InvokePage() {
               }))}
               streaming
               agentName={selectedAgent?.name ?? 'Agent'}
-              renderMarkdown={(content) => <Markdown>{content}</Markdown>}
+              renderMarkdown={(content) => renderMessageContent(content, true)}
             />
           )}
           {error && <div style={{ color: 'var(--color-danger)', fontSize: 13 }}>Error: {error}</div>}

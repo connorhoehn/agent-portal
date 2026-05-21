@@ -69,12 +69,14 @@ function SummaryPage() {
             label="Active Browser Sessions"
             value={String(activeBrowser)}
             to="/admin/capabilities/browser"
+            as={Link}
             accent={activeBrowser > 0}
           />
           <StatCard
             label="Active Code Sessions"
             value={String(activeCode)}
             to="/admin/capabilities/code-interpreter"
+            as={Link}
             accent={activeCode > 0}
           />
           <Card padding="md">
@@ -95,6 +97,7 @@ function SummaryPage() {
             label="Recent Capability Events"
             value={String(recentEventCount)}
             to="/admin/observability"
+            as={Link}
             hint="last 50 events in the ring buffer"
           />
         </div>
