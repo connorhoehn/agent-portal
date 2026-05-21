@@ -116,19 +116,7 @@ export function OrgGraphNode({ node, departments, isSelected, isHighlighted, onS
         </g>
       )}
 
-      {/* Away icon (vacation/pto/sick/travel) — tiny badge above circle */}
-      {awayIcon && (
-        <text
-          x={radius * 0.6}
-          y={-radius * 0.6}
-          fontSize={dotR * 1.8}
-          textAnchor="middle"
-          dominantBaseline="central"
-          style={{ pointerEvents: 'none', userSelect: 'none' }}
-        >
-          {awayIcon}
-        </text>
-      )}
+      {/* Away icon intentionally omitted — shown in hover card only */}
     </g>
   );
 }
