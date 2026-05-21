@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import {
   forceSimulation,
   forceLink,
@@ -8,10 +8,11 @@ import {
   forceX,
   forceY,
   type Simulation,
-  type SimulationNodeDatum,
   type SimulationLinkDatum,
 } from 'd3-force';
 import type { GraphNode, GraphLink, GraphPerson, GraphRelationship, GraphDepartment } from './types';
+
+export type LayoutMode = 'force' | 'hierarchy' | 'radial';
 
 interface UseForceLayoutProps {
   people: GraphPerson[];
@@ -19,6 +20,7 @@ interface UseForceLayoutProps {
   departments: GraphDepartment[];
   width: number;
   height: number;
+  layout?: LayoutMode;
 }
 
 interface UseForceLayoutReturn {
@@ -27,7 +29,89 @@ interface UseForceLayoutReturn {
   isDone: boolean;
 }
 
-export function useForceLayout({ people, relationships, departments, width, height }: UseForceLayoutProps): UseForceLayoutReturn {
+// ── Static layout helpers ────────────────────────────────────────────────────
+
+function buildLinks(
+  people: GraphPerson[],
+  relationships: GraphRelationship[],
+  nodeMap: Map<string, GraphNode>,
+): Array<{ source: GraphNode; target: GraphNode; type: string; strength: number }> {
+  const result: Array<{ source: GraphNode; target: GraphNode; type: string; strength: number }> = [];
+  for (const r of relationships) {
+    const s = nodeMap.get(r.source);
+    const t = nodeMap.get(r.target);
+    if (s && t) result.push({ source: s, target: t, type: r.type, strength: r.strength });
+  }
+  return result;
+}
+
+const NODE_SLOT = 80;  // minimum px per node (diameter ≈ 60 + label clearance)
+const PAD_H = 48;      // horizontal canvas padding
+const PAD_V = 44;      // vertical canvas padding
+
+function hierarchyNodes(people: GraphPerson[], departments: GraphDepartment[], width: number, height: number): GraphNode[] {
+  const deptOrder = departments.map(d => d.name);
+  const byDept = new Map<string, GraphPerson[]>();
+  for (const d of deptOrder) byDept.set(d, []);
+  for (const p of people) {
+    const list = byDept.get(p.department);
+    if (list) list.push(p); else byDept.set(p.department, [p]);
+  }
+
+  // Split large departments into sub-rows so nodes are never < NODE_SLOT px wide.
+  const usableWidth = Math.max(width - PAD_H * 2, NODE_SLOT);
+  const maxPerRow = Math.max(1, Math.floor(usableWidth / NODE_SLOT));
+  const rows: Array<{ dept: string; members: GraphPerson[] }> = [];
+  for (const [dept, members] of [...byDept.entries()].filter(([, v]) => v.length > 0)) {
+    for (let i = 0; i < members.length; i += maxPerRow) {
+      rows.push({ dept, members: members.slice(i, i + maxPerRow) });
+    }
+  }
+
+  const usableHeight = Math.max(height - PAD_V * 2, NODE_SLOT);
+  const rowHeight = usableHeight / Math.max(rows.length, 1);
+  const nodes: GraphNode[] = [];
+  rows.forEach(({ members }, row) => {
+    const y = PAD_V + (row + 0.5) * rowHeight;
+    const slotWidth = usableWidth / members.length;
+    members.forEach((p, col) => nodes.push({ ...p, x: PAD_H + (col + 0.5) * slotWidth, y }));
+  });
+  return nodes;
+}
+
+function radialNodes(people: GraphPerson[], width: number, height: number): GraphNode[] {
+  if (people.length === 0) return [];
+  const sorted = [...people].sort((a, b) => b.influenceScore - a.influenceScore);
+  const cx = width / 2, cy = height / 2;
+  const ringCapacity = [1, 8, 16, 24, 32, 40];
+  const ringRadius = [0, 90, 170, 240, 310, 380];
+  const nodes: GraphNode[] = [];
+  let idx = 0;
+  for (let r = 0; r < ringCapacity.length && idx < sorted.length; r++) {
+    const cap = ringCapacity[r];
+    const radius = ringRadius[r];
+    const count = Math.min(cap, sorted.length - idx);
+    for (let i = 0; i < count; i++, idx++) {
+      const angle = count === 1 ? 0 : (i / count) * 2 * Math.PI - Math.PI / 2;
+      nodes.push({ ...sorted[idx], x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
+    }
+  }
+  // Overflow into extra rings
+  while (idx < sorted.length) {
+    const ring = nodes.length / 40 + ringCapacity.length;
+    const radius = ringRadius[ringCapacity.length - 1] + (ring - ringCapacity.length + 1) * 70;
+    const cap = 40;
+    const i = nodes.length % cap;
+    const angle = (i / cap) * 2 * Math.PI - Math.PI / 2;
+    nodes.push({ ...sorted[idx], x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
+    idx++;
+  }
+  return nodes;
+}
+
+// ── Hook ─────────────────────────────────────────────────────────────────────
+
+export function useForceLayout({ people, relationships, departments, width, height, layout = 'force' }: UseForceLayoutProps): UseForceLayoutReturn {
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [links, setLinks] = useState<Array<{ source: GraphNode; target: GraphNode; type: string; strength: number }>>([]);
   const [isDone, setIsDone] = useState(false);
@@ -36,6 +120,30 @@ export function useForceLayout({ people, relationships, departments, width, heig
   useEffect(() => {
     if (!people.length || !width || !height) return;
 
+    // Stop any running force simulation before switching layouts.
+    simRef.current?.stop();
+    simRef.current = null;
+
+    if (layout === 'hierarchy') {
+      const staticNodes = hierarchyNodes(people, departments, width, height);
+      const nodeMap = new Map(staticNodes.map(n => [n.id, n]));
+      setNodes(staticNodes);
+      setLinks(buildLinks(people, relationships, nodeMap));
+      setIsDone(true);
+      return;
+    }
+
+    if (layout === 'radial') {
+      const staticNodes = radialNodes(people, width, height);
+      const nodeMap = new Map(staticNodes.map(n => [n.id, n]));
+      setNodes(staticNodes);
+      setLinks(buildLinks(people, relationships, nodeMap));
+      setIsDone(true);
+      return;
+    }
+
+    // Force layout (default)
+    setIsDone(false);
     const deptCenters = new Map<string, { x: number; y: number }>();
     const cols = Math.ceil(Math.sqrt(departments.length));
     departments.forEach((dept, i) => {
@@ -83,16 +191,11 @@ export function useForceLayout({ people, relationships, departments, width, heig
       })));
     });
 
-    sim.on('end', () => {
-      setIsDone(true);
-    });
+    sim.on('end', () => setIsDone(true));
 
     simRef.current = sim;
-
-    return () => {
-      sim.stop();
-    };
-  }, [people, relationships, departments, width, height]);
+    return () => { sim.stop(); };
+  }, [people, relationships, departments, width, height, layout]);
 
   return { nodes, links, isDone };
 }

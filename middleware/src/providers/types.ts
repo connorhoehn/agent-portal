@@ -94,8 +94,57 @@ export interface RadarBatchEntry {
   peerMax: RadarAxes;
 }
 
+// ── Multi-entity graph snapshots ─────────────────────────────────────────────
+
+export interface SkillNode {
+  id: string;       // "skill:<uuid>"
+  name: string;
+  domain: string;   // parent taxonomy category (maps to SkillDomain.name)
+  personCount: number;
+}
+
+export interface SkillDomain {
+  id: string;       // "domain:<name>"
+  name: string;
+  skillCount: number;
+}
+
+export interface PersonSkillEdge {
+  personId: string;
+  skillId: string;  // "skill:<uuid>"
+  weight: number;
+}
+
+export interface SkillsGraphSnapshot {
+  domains: SkillDomain[];
+  skills: SkillNode[];
+  people: Person[];
+  personSkillEdges: PersonSkillEdge[];
+}
+
+export interface ProjectNode {
+  id: string;       // "proj:<uuid>"
+  name: string;
+  status: string;   // 'active' | 'planning' | 'archived'
+  contributorCount: number;
+}
+
+export interface ProjectPersonEdge {
+  personId: string;
+  projectId: string; // "proj:<uuid>"
+  weight: number;
+}
+
+export interface ProjectsGraphSnapshot {
+  projects: ProjectNode[];
+  people: Person[];
+  personProjectEdges: ProjectPersonEdge[];
+}
+
 export interface AuroraProvider {
   fetchGraph(): Promise<GraphSnapshot>;
+  fetchSkillsGraph(): Promise<SkillsGraphSnapshot>;
+  fetchProjectsGraph(): Promise<ProjectsGraphSnapshot>;
   fetchPersonGraph(personId: string): Promise<PersonDetail | null>;
   getLeaderboard(opts: { department?: string; limit?: number }): Promise<Leaderboard>;
   getScore(personId: string): Promise<ScoreEntry | null>;

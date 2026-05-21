@@ -100,6 +100,53 @@ function findMentionedPeople(text: string, people: GraphPerson[]): GraphPerson[]
   return Array.from(matched.values());
 }
 
+// ── Follow-up suggestion generation ─────────────────────────────────────────
+
+const KNOWN_PROJECTS = [
+  'Auth Migration', 'Observability Platform', 'RAG Knowledge Search',
+  'LLM Application Platform', 'ML Feature Store', 'Mobile App Redesign',
+  'Design System v3', 'Zero Trust Network', 'SOC2 Compliance',
+  'Cost Optimization', 'Real-time Analytics Pipeline', 'Data Lake Migration',
+  'Inference Platform', 'Design System API',
+];
+
+function generateFollowUps(content: string, mentionedPeople: GraphPerson[]): string[] {
+  const suggestions: string[] = [];
+
+  if (mentionedPeople.length >= 2) {
+    const first = mentionedPeople[0].name;
+    suggestions.push(`What departments do these ${mentionedPeople.length} people work in?`);
+    suggestions.push(`Who among them has the highest expertise score?`);
+    suggestions.push(`Who collaborates most closely with ${first}?`);
+    suggestions.push(`Which of these people are still active at the company?`);
+  } else if (mentionedPeople.length === 1) {
+    const name = mentionedPeople[0].name;
+    suggestions.push(`What projects is ${name} currently working on?`);
+    suggestions.push(`Who does ${name} collaborate with most closely?`);
+    suggestions.push(`What decisions has ${name} participated in?`);
+    suggestions.push(`What skills does ${name} have?`);
+  }
+
+  const mentionedProject = KNOWN_PROJECTS.find(p => content.includes(p));
+  if (mentionedProject && suggestions.length < 4) {
+    suggestions.push(`Who led the ${mentionedProject}?`);
+    suggestions.push(`What decisions did the ${mentionedProject} team make?`);
+  }
+
+  const generics = [
+    'Who in the org has the most cross-team connections?',
+    'Which team has the highest average expertise score?',
+    'What were the most recent architectural decisions?',
+    'Who are the top experts in ML and AI?',
+  ];
+  for (const g of generics) {
+    if (suggestions.length >= 4) break;
+    suggestions.push(g);
+  }
+
+  return suggestions.slice(0, 4);
+}
+
 // ── Quick prompts ────────────────────────────────────────────────────────────
 
 interface QuickPrompt {
@@ -215,6 +262,21 @@ function SearchPage() {
 
   const hasAnyMessages = messages.length > 0 || isStreaming;
 
+  // Follow-up suggestions: derived from the last complete assistant message.
+  // Cleared when the user sends a new message.
+  const lastAssistantMessage = useMemo(() => {
+    return [...messages].reverse().find(m => m.role === 'assistant');
+  }, [messages]);
+
+  const followUps = useMemo<string[]>(() => {
+    if (!lastAssistantMessage || isStreaming) return [];
+    return generateFollowUps(lastAssistantMessage.content, mentionedPeople);
+  }, [lastAssistantMessage, isStreaming, mentionedPeople]);
+
+  function handleSendFollowUp(prompt: string) {
+    void sendMessage(prompt);
+  }
+
   return (
     <div style={containerStyle}>
       {/* ─── Chat column ─────────────────────────────────────────────────── */}
@@ -272,6 +334,24 @@ function SearchPage() {
           {error && <div style={errorStyle}>Error: {error}</div>}
           <div ref={bottomRef} />
         </div>
+
+        {followUps.length > 0 && (
+          <div style={followUpStripStyle}>
+            <span style={followUpLabelStyle}>Follow up</span>
+            <div style={followUpChipsStyle}>
+              {followUps.map(prompt => (
+                <button
+                  key={prompt}
+                  onClick={() => handleSendFollowUp(prompt)}
+                  style={followUpChipStyle}
+                  disabled={isStreaming}
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {pinnedPeople.length > 0 && (
           <div style={pinnedStripStyle}>
@@ -343,6 +423,33 @@ interface MessageToolCall {
   done?: boolean;
 }
 
+function ThinkingDots() {
+  return (
+    <span style={{ display: 'inline-flex', gap: 3, verticalAlign: 'middle' }}>
+      {[0, 1, 2].map(i => (
+        <span
+          key={i}
+          style={{
+            display: 'inline-block',
+            width: 5,
+            height: 5,
+            borderRadius: '50%',
+            background: 'var(--color-text-tertiary, #94a3b8)',
+            opacity: 0.4,
+            animation: `searchDot 1.2s ${i * 0.2}s infinite ease-in-out`,
+          }}
+        />
+      ))}
+      <style>{`
+        @keyframes searchDot {
+          0%, 80%, 100% { opacity: 0.4; transform: scale(1); }
+          40% { opacity: 1; transform: scale(1.3); }
+        }
+      `}</style>
+    </span>
+  );
+}
+
 function Message({
   role,
   content,
@@ -356,7 +463,14 @@ function Message({
 }) {
   return (
     <div style={messageStyle}>
-      <div style={messageRoleStyle}>{role === 'user' ? 'You' : 'Search agent'}</div>
+      <div style={messageRoleStyle}>
+        {role === 'user' ? 'You' : (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            Search agent
+            {streaming && <ThinkingDots />}
+          </span>
+        )}
+      </div>
       {toolCalls.length > 0 && (
         <div style={toolCallsStripStyle}>
           {toolCalls.map(tc => (
@@ -367,7 +481,7 @@ function Message({
         </div>
       )}
       {role === 'assistant' ? (
-        <Markdown>{content || (streaming ? '…' : '')}</Markdown>
+        (streaming && !content) ? null : <Markdown>{content}</Markdown>
       ) : (
         <div style={userTextStyle}>{content}</div>
       )}
@@ -575,6 +689,37 @@ const errorStyle: React.CSSProperties = {
   color: 'var(--color-danger)',
   fontSize: 13,
   padding: '8px 0',
+};
+const followUpStripStyle: React.CSSProperties = {
+  padding: '8px 24px 10px',
+  borderTop: '1px solid var(--color-border)',
+  background: 'var(--color-surface)',
+};
+const followUpLabelStyle: React.CSSProperties = {
+  display: 'block',
+  fontSize: 10,
+  fontWeight: 600,
+  color: 'var(--color-text-tertiary)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+  marginBottom: 6,
+};
+const followUpChipsStyle: React.CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: 6,
+};
+const followUpChipStyle: React.CSSProperties = {
+  fontSize: 12,
+  padding: '5px 12px',
+  border: '1px solid var(--color-border)',
+  borderRadius: 999,
+  background: 'var(--color-bg)',
+  color: 'var(--color-text-secondary)',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  lineHeight: 1.4,
+  transition: 'border-color 0.1s, color 0.1s',
 };
 const pinnedStripStyle: React.CSSProperties = {
   display: 'flex',

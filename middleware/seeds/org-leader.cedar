@@ -7,7 +7,8 @@ permit (
     OrgIQ::Action::"ViewOrgChart",
     OrgIQ::Action::"ViewLeaderboard",
     OrgIQ::Action::"ViewObservability",
-    OrgIQ::Action::"LabelFeedback"
+    OrgIQ::Action::"LabelFeedback",
+    OrgIQ::Action::"ManageCanary"
   ],
   resource
 )

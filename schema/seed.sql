@@ -791,3 +791,79 @@ INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-010'
 INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-049', 'd-vectordb', 'contributor');
 INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-045', 'd-vectordb', 'contributor');
 INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-043', 'd-vectordb', 'contributor');
+
+-- ── Cross-functional projects ──────────────────────────────────────────────
+-- Bridges Platform ↔ ML/AI (fixes Theo Chang ↔ Aisha Thompson search gap)
+INSERT INTO projects (id, name, status) VALUES ('p-inference-platform', 'Inference Platform', 'in_progress');
+-- Bridges Design ↔ Platform (fixes Theo Chang ↔ Isabel Vasquez search gap)
+INSERT INTO projects (id, name, status) VALUES ('p-design-system-api', 'Design System API', 'in_progress');
+
+-- ── Skills enrichment for thin profiles ───────────────────────────────────
+-- p-009 Marcus Shah (SRE, Platform Engineering)
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-009', 'sk-kubernetes', 0.74, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-009', 'sk-observability', 0.61, 'seed');
+-- p-014 Sarah Singh (Senior Engineer, Platform Engineering)
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-014', 'sk-kubernetes', 0.83, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-014', 'sk-service-mesh', 0.65, 'seed');
+-- p-023 Hiro Green (Data Analyst, Data Platform)
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-023', 'sk-sql', 0.92, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-023', 'sk-analytics', 0.75, 'seed');
+-- p-025 Aisha Mehta (Principal Engineer, Data Platform)
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-025', 'sk-spark', 0.88, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-025', 'sk-sql', 0.93, 'seed');
+-- p-044 Aisha Thompson (Staff Engineer, ML / AI)
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-044', 'sk-mlops', 0.91, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-044', 'sk-llms', 0.87, 'seed');
+INSERT INTO person_skills (person_id, skill_id, weight, source) VALUES ('p-044', 'sk-embeddings', 0.76, 'seed');
+
+-- ── Inference Platform contributions (Platform + ML/AI) ───────────────────
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-001', 'p-inference-platform', 'lead', 0.89);
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-044', 'p-inference-platform', 'contributor', 0.78);
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-007', 'p-inference-platform', 'contributor', 0.65);
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-041', 'p-inference-platform', 'contributor', 0.71);
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-043', 'p-inference-platform', 'reviewer', 0.58);
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-013', 'p-inference-platform', 'reviewer', 0.45);
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-020', 'p-inference-platform', 'contributor', 0.52);
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-045', 'p-inference-platform', 'contributor', 0.60);
+
+-- ── Design System API contributions (Design + Platform) ───────────────────
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-038', 'p-design-system-api', 'lead', 0.92);
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-001', 'p-design-system-api', 'contributor', 0.68);
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-035', 'p-design-system-api', 'contributor', 0.74);
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-011', 'p-design-system-api', 'contributor', 0.61);
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-036', 'p-design-system-api', 'reviewer', 0.45);
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-002', 'p-design-system-api', 'contributor', 0.55);
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-017', 'p-design-system-api', 'contributor', 0.49);
+
+-- ── Fill thin project profiles across existing projects ────────────────────
+-- Aisha Thompson: second project (Theo leads llm-platform)
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-044', 'p-llm-platform', 'contributor', 0.61);
+-- Maria Johnson: second + third projects (Platform Principal Engineer)
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-006', 'p-llm-platform', 'contributor', 0.73);
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-006', 'p-zero-trust', 'reviewer', 0.52);
+-- Kevin Garcia (Security): bridges to Data via real-time analytics security review
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-054', 'p-realtime-analytics', 'reviewer', 0.44);
+-- Hugo DaSilva (Security): bridges to Product via mobile security review
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-052', 'p-mobile-redesign', 'reviewer', 0.48);
+-- Theo Chang: add to observability (many Platform colleagues there)
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-001', 'p-observability', 'contributor', 0.61);
+-- Bria Petrov (ML/AI): add to rag-search
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-043', 'p-rag-search', 'contributor', 0.67);
+-- Vera Petrov (ML/AI): add to llm-platform
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-042', 'p-llm-platform', 'contributor', 0.58);
+-- Ezra Park (Product): add to mobile-redesign
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-029', 'p-mobile-redesign', 'contributor', 0.55);
+-- Iris Patel (Product): add to realtime-analytics
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-033', 'p-realtime-analytics', 'contributor', 0.49);
+-- Mateo Green (Product): add to llm-platform (UX for AI features)
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-026', 'p-llm-platform', 'reviewer', 0.41);
+-- Sasha Kim (Product): add to rag-search
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-027', 'p-rag-search', 'contributor', 0.46);
+-- Theo Williams (Data): add to llm-platform
+INSERT INTO project_contributions (person_id, project_id, role, weight) VALUES ('p-024', 'p-llm-platform', 'reviewer', 0.52);
+
+-- ── Decision participants enrichment ──────────────────────────────────────
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-006', 'd-k8s', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-044', 'd-nova', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-001', 'd-vectordb', 'contributor');
+INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-044', 'd-vectordb', 'contributor');

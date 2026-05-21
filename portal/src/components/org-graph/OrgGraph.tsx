@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { useForceLayout } from './useForceLayout';
+import { useForceLayout, type LayoutMode } from './useForceLayout';
 import { OrgGraphNode } from './OrgGraphNode';
 import { OrgGraphEdge } from './OrgGraphEdge';
 import { OrgGraphTooltip } from './OrgGraphTooltip';
@@ -16,6 +16,8 @@ interface OrgGraphProps {
   onToggleMultiSelect?: (id: string) => void;
   /** Optional ID set to apply a "spotlight" visual highlight (e.g. agent-cited nodes). */
   spotlightIds?: Set<string>;
+  /** Layout algorithm to use. Defaults to 'force'. */
+  layout?: LayoutMode;
 }
 
 export function OrgGraph({
@@ -26,6 +28,7 @@ export function OrgGraph({
   multiSelectIds,
   onToggleMultiSelect,
   spotlightIds,
+  layout,
 }: OrgGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
@@ -61,6 +64,7 @@ export function OrgGraph({
     departments,
     width: dimensions.width,
     height: dimensions.height,
+    layout,
   });
 
   const connectedIds = useCallback((id: string | null): Set<string> => {
@@ -132,6 +136,11 @@ export function OrgGraph({
         onMouseLeave={handleMouseUp}
         style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
       >
+        <defs>
+          <marker id="org-arrow-reports" markerWidth="14" markerHeight="10" refX="13" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+            <path d="M0,0 L14,5 L0,10 Z" fill="#64748b" />
+          </marker>
+        </defs>
         <g transform={`translate(${transform.x}, ${transform.y}) scale(${transform.scale})`}>
           {links.map((link, i) => (
             <OrgGraphEdge

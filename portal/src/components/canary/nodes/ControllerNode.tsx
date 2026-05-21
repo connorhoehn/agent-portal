@@ -24,6 +24,17 @@ const STATE_TONE: Record<
   evaluating: 'info',
   promoting: 'success',
   halted: 'danger',
+  promoted: 'success',
+  rolled_back: 'danger',
+};
+
+const STATE_LABEL: Record<ControllerNodeData['state'], string> = {
+  idle: 'idle',
+  evaluating: 'evaluating',
+  promoting: 'promoting',
+  halted: 'halted',
+  promoted: '✓ promoted',
+  rolled_back: '✕ rolled back',
 };
 
 const ACTION_COLOR: Record<ControllerAction, string> = {
@@ -118,7 +129,7 @@ function ControllerNodeImpl({ data }: NodeProps<ControllerNodeType>) {
         <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-primary, #0f172a)' }}>
           Controller
         </span>
-        <Chip tone={STATE_TONE[data.state]} size="xs">{data.state}</Chip>
+        <Chip tone={STATE_TONE[data.state]} size="xs">{STATE_LABEL[data.state]}</Chip>
       </div>
 
       {data.executionArn && (
@@ -138,17 +149,22 @@ function ControllerNodeImpl({ data }: NodeProps<ControllerNodeType>) {
         </div>
       )}
 
+      {data.state === 'promoted' && (
+        <div style={{ background: '#dcfce7', border: '1px solid #bbf7d0', borderRadius: 4, padding: '6px 8px', marginBottom: 6, fontSize: 11, color: '#166534', lineHeight: 1.4 }}>
+          Version B is now serving 100% of traffic. The experiment is complete — B has been fully promoted.
+        </div>
+      )}
+      {data.state === 'rolled_back' && (
+        <div style={{ background: '#fee2e2', border: '1px solid #fecaca', borderRadius: 4, padding: '6px 8px', marginBottom: 6, fontSize: 11, color: '#991b1b', lineHeight: 1.4 }}>
+          Rolled back to 100% A. B underperformed and has been fully removed from traffic.
+        </div>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         {recent.length === 0 ? (
-          <div
-            style={{
-              fontSize: 11,
-              color: 'var(--color-text-tertiary, #94a3b8)',
-              fontStyle: 'italic',
-              paddingTop: 4,
-            }}
-          >
-            No decisions yet
+          <div style={{ fontSize: 11, color: 'var(--color-text-tertiary, #94a3b8)', paddingTop: 4, lineHeight: 1.5 }}>
+            Watches A/B judge scores and fires PROMOTE / ROLLBACK / HOLD once enough samples arrive.
+            Run <b style={{ color: 'var(--color-text-secondary, #475569)' }}>Scenarios</b> to generate traffic.
           </div>
         ) : (
           recent.map((d, i) => <DecisionRow key={`${d.ts}-${i}`} d={d} />)

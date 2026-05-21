@@ -14,7 +14,9 @@ import {
 
 export function HaltButton(): React.ReactElement {
   const halted = useCanaryStore((s) => s.halted);
+  const controllerState = useCanaryStore((s) => s.controllerState);
   const confirming = useCanaryStore((s) => s.confirmHaltOpen);
+  const isTerminal = controllerState === 'promoted' || controllerState === 'rolled_back';
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
 
@@ -54,11 +56,17 @@ export function HaltButton(): React.ReactElement {
       <button
         type="button"
         onClick={openHaltConfirm}
-        disabled={halted}
-        style={halted ? haltedBtnStyle : haltBtnStyle}
-        title={halted ? 'Already halted' : 'Halt canary — pin all traffic to A'}
+        disabled={halted || isTerminal}
+        style={halted || isTerminal ? haltedBtnStyle : haltBtnStyle}
+        title={
+          isTerminal
+            ? `Experiment complete (${controllerState === 'promoted' ? 'promoted' : 'rolled back'})`
+            : halted
+            ? 'Already halted'
+            : 'Halt canary — pin all traffic to A'
+        }
       >
-        {halted ? 'Halted' : 'Halt canary'}
+        {isTerminal ? (controllerState === 'promoted' ? 'Promoted' : 'Rolled back') : halted ? 'Halted' : 'Halt canary'}
       </button>
 
       {confirming && (
@@ -118,9 +126,6 @@ const modalBodyStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 12,
-  background: 'var(--color-surface, #fff)',
-  borderRadius: 8,
-  width: 'min(420px, 92vw)',
 };
 
 const modalTitleStyle: CSSProperties = {

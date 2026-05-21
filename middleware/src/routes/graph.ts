@@ -9,6 +9,16 @@ graphRouter.get('/entities', asyncHandler(async (_req, res) => {
   res.json(snapshot);
 }));
 
+graphRouter.get('/skills-graph', asyncHandler(async (_req, res) => {
+  const snapshot = await aurora.fetchSkillsGraph();
+  res.json(snapshot);
+}));
+
+graphRouter.get('/projects-graph', asyncHandler(async (_req, res) => {
+  const snapshot = await aurora.fetchProjectsGraph();
+  res.json(snapshot);
+}));
+
 graphRouter.get('/people/:personId', asyncHandler(async (req, res) => {
   const personId = req.params['personId'];
   const detail = typeof personId === 'string' ? await aurora.fetchPersonGraph(personId) : null;

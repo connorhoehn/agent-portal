@@ -15,6 +15,7 @@ import {
   PutParameterCommand,
 } from '@aws-sdk/client-ssm';
 import type { CanaryControlState } from './canary-types.js';
+import { config } from '../config.js';
 
 const TTL_MS = 20_000;
 const WEIGHT_PARAM = '/orgiq/canary/weight_b';
@@ -133,4 +134,63 @@ export async function setControl(
 
 export function invalidate(): void {
   entry = null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Subject ARN helpers — SSM-backed, in-memory cache (no TTL needed).
+// Falls back to env-var config on ParameterNotFound so existing deployments
+// that haven't run /start yet still work.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SUBJECT_A_PARAM = '/orgiq/canary/subject_a_arn';
+const SUBJECT_B_PARAM = '/orgiq/canary/subject_b_arn';
+
+let cachedSubjectA = '';
+let cachedSubjectB = '';
+
+export async function getSubjectAArn(): Promise<string> {
+  if (cachedSubjectA) return cachedSubjectA;
+  try {
+    const res = await client.send(new GetParameterCommand({ Name: SUBJECT_A_PARAM }));
+    cachedSubjectA = res.Parameter?.Value ?? '';
+    return cachedSubjectA || config.canary.subjectAArn;
+  } catch (err) {
+    const e = err as { name?: string };
+    if (e?.name === 'ParameterNotFound') return config.canary.subjectAArn;
+    console.warn('[weight-cache] getSubjectAArn failed', e?.name);
+    return config.canary.subjectAArn;
+  }
+}
+
+export async function getSubjectBArn(): Promise<string> {
+  if (cachedSubjectB) return cachedSubjectB;
+  try {
+    const res = await client.send(new GetParameterCommand({ Name: SUBJECT_B_PARAM }));
+    cachedSubjectB = res.Parameter?.Value ?? '';
+    return cachedSubjectB || config.canary.subjectBArn;
+  } catch (err) {
+    const e = err as { name?: string };
+    if (e?.name === 'ParameterNotFound') return config.canary.subjectBArn;
+    console.warn('[weight-cache] getSubjectBArn failed', e?.name);
+    return config.canary.subjectBArn;
+  }
+}
+
+export async function setSubjectArns(aArn: string, bArn: string): Promise<void> {
+  await Promise.all([
+    client.send(new PutParameterCommand({
+      Name: SUBJECT_A_PARAM,
+      Value: aArn,
+      Type: 'String',
+      Overwrite: true,
+    })),
+    client.send(new PutParameterCommand({
+      Name: SUBJECT_B_PARAM,
+      Value: bArn,
+      Type: 'String',
+      Overwrite: true,
+    })),
+  ]);
+  cachedSubjectA = aArn;
+  cachedSubjectB = bArn;
 }

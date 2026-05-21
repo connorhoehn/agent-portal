@@ -33,6 +33,8 @@ import type {
   CollaboratorContribution,
   ProjectContribution,
   DecisionContribution,
+  SkillsGraphSnapshot,
+  ProjectsGraphSnapshot,
 } from './types.js';
 
 import {
@@ -266,10 +268,132 @@ async function fetchAllEdges(): Promise<Relationship[]> {
   }));
 }
 
+// Derive org-hierarchy edges from title seniority within each team.
+// No schema changes needed — uses the existing `people.title` and `people.team` columns.
+function titleRank(title: string): number {
+  const t = (title ?? '').toLowerCase();
+  if (t.includes('principal') || t.includes('director') || t.includes('vp') || t.includes('head')) return 1;
+  if (t.includes('staff') || t.includes('lead') || t.includes('manager') || t.includes('architect')) return 2;
+  if (t.includes('senior') || t.includes('sr ') || t.includes('sr.')) return 3;
+  return 4;
+}
+
+function deriveHierarchyEdges(people: Person[]): Relationship[] {
+  const byTeam = new Map<string, Person[]>();
+  for (const p of people) {
+    const team = p.department ?? '_unknown';
+    const arr = byTeam.get(team) ?? [];
+    arr.push(p);
+    byTeam.set(team, arr);
+  }
+
+  const edges: Relationship[] = [];
+  for (const members of byTeam.values()) {
+    if (members.length < 2) continue;
+    const sorted = [...members].sort((a, b) => titleRank(a.title ?? '') - titleRank(b.title ?? ''));
+    const lead = sorted[0];
+    const leadRank = titleRank(lead.title ?? '');
+
+    // reports_to: everyone below lead rank reports to lead
+    for (let i = 1; i < sorted.length; i++) {
+      if (titleRank(sorted[i].title ?? '') > leadRank) {
+        edges.push({ source: sorted[i].id, target: lead.id, type: 'reports_to', strength: 0.75 });
+      }
+    }
+
+    // mentors: each rank-1/2 person mentors up to 2 of the most-junior members (rank 4)
+    const seniors = sorted.filter((p) => titleRank(p.title ?? '') <= 2);
+    const juniors = sorted.filter((p) => titleRank(p.title ?? '') === 4);
+    seniors.forEach((s, si) => {
+      // Round-robin assign 1-2 juniors per senior
+      const start = (si * 2) % Math.max(juniors.length, 1);
+      const picks = juniors.slice(start, start + 2);
+      for (const j of picks) {
+        edges.push({ source: s.id, target: j.id, type: 'mentors', strength: 0.55 });
+      }
+    });
+  }
+
+  return edges;
+}
+
 async function realFetchGraph(): Promise<GraphSnapshot> {
   const [nodes, edges] = await Promise.all([fetchAllPeople(), fetchAllEdges()]);
   const departments = departmentsFromTeams(nodes.map((n) => n.department));
-  return { nodes, edges, departments };
+  return { nodes, edges: [...edges, ...deriveHierarchyEdges(nodes)], departments };
+}
+
+async function realFetchSkillsGraph(): Promise<SkillsGraphSnapshot> {
+  const [people, skillRows, edgeRows] = await Promise.all([
+    fetchAllPeople(),
+    exec(
+      `SELECT s.id, s.name, COALESCE(s.domain, 'General') AS domain,
+              COUNT(ps.person_id) AS person_count
+         FROM skills s
+         LEFT JOIN person_skills ps ON ps.skill_id = s.id
+        GROUP BY s.id, s.name, s.domain`,
+    ),
+    exec(
+      `SELECT ps.person_id, ps.skill_id, COALESCE(ps.weight, 0.5) AS weight
+         FROM person_skills ps
+         JOIN skills s ON s.id = ps.skill_id`,
+    ),
+  ]);
+
+  const skills: SkillsGraphSnapshot['skills'] = skillRows.map((r) => ({
+    id: `skill:${toStr(r.id)}`,
+    name: toStr(r.name),
+    domain: toStr(r.domain) || 'General',
+    personCount: toNumber(r.person_count, 0),
+  }));
+
+  const domainMap = new Map<string, number>();
+  for (const s of skills) domainMap.set(s.domain, (domainMap.get(s.domain) ?? 0) + 1);
+  const domains: SkillsGraphSnapshot['domains'] = Array.from(domainMap.entries()).map(([name, skillCount]) => ({
+    id: `domain:${name}`,
+    name,
+    skillCount,
+  }));
+
+  const personSkillEdges: SkillsGraphSnapshot['personSkillEdges'] = edgeRows.map((r) => ({
+    personId: toStr(r.person_id),
+    skillId: `skill:${toStr(r.skill_id)}`,
+    weight: clamp01(toNumber(r.weight, 0.5)),
+  }));
+
+  return { domains, skills, people, personSkillEdges };
+}
+
+async function realFetchProjectsGraph(): Promise<ProjectsGraphSnapshot> {
+  const [people, projectRows, edgeRows] = await Promise.all([
+    fetchAllPeople(),
+    exec(
+      `SELECT p.id, p.name, COALESCE(p.status, 'active') AS status,
+              COUNT(pc.person_id) AS contributor_count
+         FROM projects p
+         LEFT JOIN project_contributions pc ON pc.project_id = p.id
+        GROUP BY p.id, p.name, p.status`,
+    ),
+    exec(
+      `SELECT pc.person_id, pc.project_id, COALESCE(pc.weight, 0.5) AS weight
+         FROM project_contributions pc`,
+    ),
+  ]);
+
+  const projects: ProjectsGraphSnapshot['projects'] = projectRows.map((r) => ({
+    id: `proj:${toStr(r.id)}`,
+    name: toStr(r.name),
+    status: toStr(r.status) || 'active',
+    contributorCount: toNumber(r.contributor_count, 0),
+  }));
+
+  const personProjectEdges: ProjectsGraphSnapshot['personProjectEdges'] = edgeRows.map((r) => ({
+    personId: toStr(r.person_id),
+    projectId: `proj:${toStr(r.project_id)}`,
+    weight: clamp01(toNumber(r.weight, 0.5)),
+  }));
+
+  return { projects, people, personProjectEdges };
 }
 
 async function realFetchPersonGraph(personId: string): Promise<PersonDetail | null> {
@@ -763,6 +887,8 @@ async function realGetRadarBatch(personIds: string[]): Promise<RadarBatchEntry[]
 
 export const realAurora: AuroraProvider = {
   fetchGraph: realFetchGraph,
+  fetchSkillsGraph: realFetchSkillsGraph,
+  fetchProjectsGraph: realFetchProjectsGraph,
   fetchPersonGraph: realFetchPersonGraph,
   getLeaderboard: realGetLeaderboard,
   getScore: realGetScore,
@@ -958,6 +1084,8 @@ async function mockGetRadarBatch(_personIds: string[]): Promise<RadarBatchEntry[
 
 export const mockAurora: AuroraProvider = {
   fetchGraph: mockFetchGraph,
+  fetchSkillsGraph: async () => ({ domains: [], skills: [], people: [], personSkillEdges: [] }),
+  fetchProjectsGraph: async () => ({ projects: [], people: [], personProjectEdges: [] }),
   fetchPersonGraph: mockFetchPersonGraph,
   getLeaderboard: mockGetLeaderboard,
   getScore: mockGetScore,

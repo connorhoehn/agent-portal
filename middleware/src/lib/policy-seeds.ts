@@ -11,6 +11,8 @@ import {
   VerifiedPermissionsClient,
   ListPoliciesCommand,
   CreatePolicyCommand,
+  GetPolicyCommand,
+  UpdatePolicyCommand,
   GetSchemaCommand,
   PutSchemaCommand,
 } from '@aws-sdk/client-verifiedpermissions';
@@ -49,36 +51,31 @@ export async function seedPoliciesIfMissing(): Promise<void> {
   const dir = seedsDir();
   const policyStoreId = config.auth.policyStoreId;
 
-  // Snapshot existing policies. Lightweight — we don't paginate because there
-  // will never be more than a few dozen even after admin edits.
+  // Snapshot existing policies (description → policyId).
   const existing = await client.send(new ListPoliciesCommand({ policyStoreId }));
-  const existingDescriptions = new Set(
-    (existing.policies ?? [])
-      .map(p => p.definition?.static?.description ?? '')
-      .filter(Boolean),
-  );
+  const existingById = new Map<string, string>(); // description → policyId
+  for (const p of existing.policies ?? []) {
+    const desc = p.definition?.static?.description ?? '';
+    const id = p.policyId ?? '';
+    if (desc && id) existingById.set(desc, id);
+  }
 
   // Split a Cedar file into individual policy statements. AVP's CreatePolicy
   // only accepts one statement (permit/forbid) per call.
   function splitStatements(cedar: string): string[] {
-    // Strip // line comments, then split on top-level permit/forbid keywords
-    // (i.e. not inside a string literal — Cedar doesn't have nested permits).
     const noComments = cedar.replace(/\/\/[^\n]*/g, '');
     const statements: string[] = [];
     let remaining = noComments;
     while (remaining.length > 0) {
-      // Find the next permit or forbid keyword at word boundary
       const m = remaining.match(/\b(permit|forbid)\s*\(/);
       if (!m || m.index === undefined) break;
       remaining = remaining.slice(m.index);
-      // Find the matching closing ')' + ';' — balance parens
       let depth = 0;
       let i = 0;
       for (; i < remaining.length; i++) {
         if (remaining[i] === '(') depth++;
         else if (remaining[i] === ')') { depth--; if (depth === 0) break; }
       }
-      // Advance past optional trailing 'when { ... };'
       const withWhen = remaining.slice(0, i + 1);
       const afterParen = remaining.slice(i + 1);
       const whenMatch = afterParen.match(/^\s*when\s*\{[^}]*\}\s*;?/);
@@ -90,7 +87,12 @@ export async function seedPoliciesIfMissing(): Promise<void> {
     return statements.filter(s => s.length > 0);
   }
 
+  function normalizeStmt(s: string): string {
+    return s.replace(/\s+/g, ' ').trim();
+  }
+
   let created = 0;
+  let updated = 0;
   for (const role of SEED_ROLES) {
     const baseDescription = seedPolicyDescription(role);
     const cedar = readFileSync(join(dir, `${role}.cedar`), 'utf8');
@@ -98,17 +100,34 @@ export async function seedPoliciesIfMissing(): Promise<void> {
 
     for (let i = 0; i < statements.length; i++) {
       const description = statements.length === 1 ? baseDescription : `${baseDescription} (${i + 1})`;
-      if (existingDescriptions.has(description)) continue;
-      await client.send(new CreatePolicyCommand({
-        policyStoreId,
-        definition: { static: { description, statement: statements[i] } },
-      }));
-      console.log(`[seed] created policy for role=${role} stmt=${i + 1}/${statements.length}`);
-      created++;
+      const statement = statements[i];
+
+      if (existingById.has(description)) {
+        // Policy exists — check if statement content changed and update if so.
+        const policyId = existingById.get(description)!;
+        const got = await client.send(new GetPolicyCommand({ policyStoreId, policyId }));
+        const existingStmt = got.definition?.static?.statement ?? '';
+        if (normalizeStmt(existingStmt) !== normalizeStmt(statement)) {
+          await client.send(new UpdatePolicyCommand({
+            policyStoreId,
+            policyId,
+            definition: { static: { statement } },
+          }));
+          console.log(`[seed] updated policy for role=${role} stmt=${i + 1}/${statements.length}`);
+          updated++;
+        }
+      } else {
+        await client.send(new CreatePolicyCommand({
+          policyStoreId,
+          definition: { static: { description, statement } },
+        }));
+        console.log(`[seed] created policy for role=${role} stmt=${i + 1}/${statements.length}`);
+        created++;
+      }
     }
   }
-  if (created === 0) {
-    console.log('[seed] all baseline policies already present');
+  if (created === 0 && updated === 0) {
+    console.log('[seed] all baseline policies already present and up to date');
   }
 }
 

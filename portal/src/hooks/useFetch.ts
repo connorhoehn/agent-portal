@@ -7,12 +7,14 @@ interface UseFetchReturn<T> {
   refresh: () => void;
 }
 
-export function useFetch<T>(url: string, pollIntervalMs?: number): UseFetchReturn<T> {
+export function useFetch<T>(url: string | null, pollIntervalMs?: number): UseFetchReturn<T> {
   const [data, setData] = useState<T | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(url !== null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
+    if (!url) return;
+    setIsLoading(true);
     try {
       const res = await fetch(url, { credentials: 'include' });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -27,12 +29,13 @@ export function useFetch<T>(url: string, pollIntervalMs?: number): UseFetchRetur
   }, [url]);
 
   useEffect(() => {
-    fetchData();
+    if (!url) { setIsLoading(false); setData(null); return; }
+    void fetchData();
     if (pollIntervalMs && pollIntervalMs > 0) {
       const id = setInterval(fetchData, pollIntervalMs);
       return () => clearInterval(id);
     }
-  }, [fetchData, pollIntervalMs]);
+  }, [fetchData, url, pollIntervalMs]);
 
   return { data, isLoading, error, refresh: fetchData };
 }

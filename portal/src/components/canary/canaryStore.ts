@@ -44,6 +44,12 @@ export interface CanaryState {
   promptBTemplate?: string;
   promptAVersionLabel: string;
   promptBVersionLabel: string;
+  /** requestId → composite score, capped at RECENT_REQUESTS_CAP entries. */
+  recentJudgeScores: Record<string, number>;
+  /** Experiment lifecycle phase. */
+  experimentState: 'setup' | 'running' | 'terminal';
+  subjectAArn: string;
+  subjectBArn: string;
   /** UI flags for cross-component coordination from the contextual SubNav. */
   confirmHaltOpen: boolean;
   manualSliderOpen: boolean;
@@ -90,6 +96,10 @@ function initialState(): CanaryState {
     recentDecisions: [],
     promptAVersionLabel: 'A',
     promptBVersionLabel: 'B',
+    recentJudgeScores: {},
+    experimentState: 'setup',
+    subjectAArn: '',
+    subjectBArn: '',
     confirmHaltOpen: false,
     manualSliderOpen: false,
     version: 0,
@@ -216,6 +226,17 @@ export function dispatch(e: CanaryEvent): void {
           side === 'A' ? pushSparkline(s.sparklineA, e.ts, e.composite) : s.sparklineA;
         const sparklineB =
           side === 'B' ? pushSparkline(s.sparklineB, e.ts, e.composite) : s.sparklineB;
+        // Maintain a capped map of requestId → composite so UI panels can look up
+        // per-request scores without polling.
+        const existingEntries = Object.entries(s.recentJudgeScores);
+        const cappedEntries =
+          existingEntries.length >= RECENT_REQUESTS_CAP
+            ? existingEntries.slice(existingEntries.length - RECENT_REQUESTS_CAP + 1)
+            : existingEntries;
+        const recentJudgeScores = Object.fromEntries([
+          ...cappedEntries,
+          [e.request_id, e.composite],
+        ]);
         return {
           ...s,
           lastJudgeScores: e.scores,
@@ -224,6 +245,7 @@ export function dispatch(e: CanaryEvent): void {
           rollingMeanB: mean(recentCompositesB),
           sparklineA,
           sparklineB,
+          recentJudgeScores,
         };
       });
       break;
@@ -254,13 +276,17 @@ export function dispatch(e: CanaryEvent): void {
         reason: e.reason,
       };
       let nextState: ControllerNodeData['state'];
-      if (e.action === 'PROMOTE') nextState = 'promoting';
+      if (e.weight_b_after >= 100) nextState = 'promoted';
+      else if (e.weight_b_after <= 0) nextState = 'rolled_back';
+      else if (e.action === 'PROMOTE') nextState = 'promoting';
       else if (e.action === 'ROLLBACK') nextState = 'halted';
       else nextState = 'evaluating';
 
+      const isTerminal = nextState === 'promoted' || nextState === 'rolled_back';
       update((s) => ({
         ...s,
         controllerState: nextState,
+        experimentState: isTerminal ? 'terminal' : s.experimentState,
         recentDecisions: pushCapped(s.recentDecisions, dec, DECISIONS_CAP),
         // A decision usually carries the new authoritative weight too.
         weightA: 100 - e.weight_b_after,
@@ -323,6 +349,40 @@ export function setPromptTemplates(args: {
   }));
 }
 
+export function startExperiment(subjectAArn: string, subjectBArn: string, initialWeightB: number): void {
+  update((s) => ({
+    ...s,
+    experimentState: 'running',
+    subjectAArn,
+    subjectBArn,
+    weightA: 100 - initialWeightB,
+    weightB: initialWeightB,
+    controllerState: 'idle',
+    recentDecisions: [],
+    sparklineA: [],
+    sparklineB: [],
+    rollingMeanA: 0,
+    rollingMeanB: 0,
+    halted: false,
+  }));
+}
+
+export function resetExperiment(): void {
+  update((s) => ({
+    ...s,
+    experimentState: 'setup',
+    subjectAArn: '',
+    subjectBArn: '',
+    weightA: 100,
+    weightB: 0,
+    controllerState: 'idle',
+    halted: false,
+    recentDecisions: [],
+    sparklineA: [],
+    sparklineB: [],
+  }));
+}
+
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
 export function useCanaryStore<T>(selector: (s: CanaryState) => T): T {
@@ -374,12 +434,14 @@ function deriveNodes(s: CanaryState): Node[] {
     versionLabel: s.promptAVersionLabel,
     templateText: s.promptATemplate,
     rollingScore: s.rollingMeanA,
+    versionArn: s.subjectAArn || undefined,
   };
   const promptBData: PromptVersionNodeData = {
     side: 'B',
     versionLabel: s.promptBVersionLabel,
     templateText: s.promptBTemplate,
     rollingScore: s.rollingMeanB,
+    versionArn: s.subjectBArn || undefined,
   };
   const modelData: ModelNodeData = { name: 'amazon.nova-pro-v1:0' };
   const judgeData: JudgeNodeData = {
@@ -437,6 +499,7 @@ function deriveEdges(s: CanaryState): Edge[] {
     {
       id: 'e-router-promptA',
       source: 'router',
+      sourceHandle: 'a',
       target: 'promptA',
       type: 'weighted',
       animated: s.weightA > 0,
@@ -448,6 +511,7 @@ function deriveEdges(s: CanaryState): Edge[] {
     {
       id: 'e-router-promptB',
       source: 'router',
+      sourceHandle: 'b',
       target: 'promptB',
       type: 'weighted',
       animated: s.weightB > 0,
@@ -531,7 +595,7 @@ export function useCanaryEdges(): Edge[] {
 
 // Exposed for tests / debugging.
 export function __resetCanaryStore(): void {
-  state = initialState();
+  state = initialState(); // recentJudgeScores, experimentState, subjectArns reset via initialState
   recentCompositesA.length = 0;
   recentCompositesB.length = 0;
   recentRequestStartsMs.length = 0;

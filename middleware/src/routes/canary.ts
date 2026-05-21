@@ -27,7 +27,16 @@ import { requireAction } from '../lib/authz.js';
 import { config } from '../config.js';
 import { canaryBroker } from '../lib/canary-broker.js';
 import { pickVersion } from '../lib/canary-router.js';
-import { getWeightB, setWeightB, getControl, setControl } from '../lib/weight-cache.js';
+import {
+  getWeightB,
+  setWeightB,
+  getControl,
+  setControl,
+  getSubjectAArn,
+  getSubjectBArn,
+  setSubjectArns,
+} from '../lib/weight-cache.js';
+import { resetLocalController } from '../lib/canary-local-controller.js';
 import { fireJudge } from '../lib/canary-judge.js';
 import type { CanaryEvent, CanaryVersionLabel } from '../lib/canary-types.js';
 
@@ -68,10 +77,14 @@ canaryRouter.post('/ask', asyncHandler(async (req, res) => {
   if (!topic) throw new ValidationError('topic is required');
   if (!summary) throw new ValidationError('summary is required');
 
-  const weightB = await getWeightB();
-  const control = await getControl();
+  const [weightB, control, aArn, bArn] = await Promise.all([
+    getWeightB(),
+    getControl(),
+    getSubjectAArn(),
+    getSubjectBArn(),
+  ]);
   const version: CanaryVersionLabel = control.halted ? 'A' : pickVersion(weightB);
-  const promptArn = version === 'A' ? config.canary.subjectAArn : config.canary.subjectBArn;
+  const promptArn = version === 'A' ? aArn : bArn;
 
   if (!promptArn) {
     res.status(500).json({ error: `Canary subject ${version} ARN not configured` });
@@ -219,9 +232,9 @@ async function fetchTemplate(arn: string): Promise<string | undefined> {
 }
 
 canaryRouter.get('/prompts', asyncHandler(async (_req, res) => {
-  const aArn = config.canary.subjectAArn;
-  const bArn = config.canary.subjectBArn;
   const judgeArn = config.canary.judgeArn;
+
+  const [aArn, bArn] = await Promise.all([getSubjectAArn(), getSubjectBArn()]);
 
   const [aTemplate, bTemplate] = await Promise.all([
     fetchTemplate(aArn),
@@ -294,6 +307,68 @@ canaryRouter.put('/weight', requireAction('ManageCanary'), asyncHandler(async (r
 canaryRouter.post('/halt', requireAction('ManageCanary'), asyncHandler(async (_req, res) => {
   await setWeightB(0, 'halt');
   await setControl({ halted: true });
+
+  const ev: CanaryEvent = {
+    type: 'weight_changed',
+    weight_b: 0,
+    source: 'halt',
+    ts: new Date().toISOString(),
+  };
+  canaryBroker.publish(ev);
+
+  res.json({ ok: true });
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /start — Start a new canary experiment. Stores subject ARNs in SSM,
+// sets initial weight, and resets the local controller. Cedar-gated.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface StartBody {
+  subject_a_arn?: unknown;
+  subject_b_arn?: unknown;
+  initial_weight_b?: unknown;
+}
+
+canaryRouter.post('/start', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
+  const body = (req.body ?? {}) as StartBody;
+  const aArn = typeof body.subject_a_arn === 'string' ? body.subject_a_arn.trim() : '';
+  const bArn = typeof body.subject_b_arn === 'string' ? body.subject_b_arn.trim() : '';
+  if (!aArn) throw new ValidationError('subject_a_arn is required');
+  if (!bArn) throw new ValidationError('subject_b_arn is required');
+
+  const rawWeight = body.initial_weight_b;
+  const parsedWeight = typeof rawWeight === 'number'
+    ? rawWeight
+    : (typeof rawWeight === 'string' ? Number(rawWeight) : NaN);
+  const initialWeight = Number.isFinite(parsedWeight)
+    ? Math.max(1, Math.min(50, Math.trunc(parsedWeight)))
+    : 10;
+
+  await setSubjectArns(aArn, bArn);
+  await setWeightB(initialWeight, 'controller');
+  await setControl({ halted: false, manual_override_until: '', cooldown_until: '' });
+  resetLocalController(initialWeight);
+
+  const ev: CanaryEvent = {
+    type: 'weight_changed',
+    weight_b: initialWeight,
+    source: 'controller',
+    ts: new Date().toISOString(),
+  };
+  canaryBroker.publish(ev);
+
+  res.json({ ok: true, subject_a_arn: aArn, subject_b_arn: bArn, weight_b: initialWeight });
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /reset — Reset experiment back to A-only. Cedar-gated.
+// ─────────────────────────────────────────────────────────────────────────────
+
+canaryRouter.post('/reset', requireAction('ManageCanary'), asyncHandler(async (_req, res) => {
+  await setWeightB(0, 'halt');
+  await setControl({ halted: false });
+  resetLocalController(0);
 
   const ev: CanaryEvent = {
     type: 'weight_changed',

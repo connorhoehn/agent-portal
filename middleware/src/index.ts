@@ -33,6 +33,7 @@ import { sessionsRouter } from './routes/sessions.js';
 import { sessionRouter } from './routes/session.js';
 import { identityRouter } from './routes/identity.js';
 import { canaryRouter } from './routes/canary.js';
+import { canaryLibraryRouter } from './routes/canary-library.js';
 import { gatewayProxyRouter } from './routes/gateway-proxy.js';
 import { requireAction } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
@@ -40,6 +41,7 @@ import { initCrawlTargets } from './lib/crawl-targets.js';
 import { ensureSchema, seedPoliciesIfMissing } from './lib/policy-seeds.js';
 import { startTracePoller } from './lib/cw-trace-ingest.js';
 import { startCanaryDecisionsPoller } from './lib/canary-decisions-poller.js';
+import { startLocalController } from './lib/canary-local-controller.js';
 
 const app = express();
 
@@ -118,6 +120,7 @@ app.use('/api/observability/tools', toolCallsRouter);
 // Mutation endpoints (PUT /weight, POST /halt) are individually Cedar-gated
 // via `ManageCanary` inside the router.
 app.use('/api/observability/canary', canaryRouter);
+app.use('/api/observability/canary', canaryLibraryRouter);
 app.use('/api/observability', requireAction('ViewObservability'), observabilityRouter);
 app.use('/api/capabilities', capabilitiesRouter);
 app.use('/api/sessions', sessionsRouter);
@@ -147,6 +150,8 @@ startTracePoller();
 // so the portal's Decision History panel updates when the SFN controller
 // writes audit rows. No-ops in mock mode or without Aurora.
 startCanaryDecisionsPoller();
+// Local mock controller fills the Controller node in dev when SFN isn't deployed.
+startLocalController();
 
 // Seed AVP if it's empty. Idempotent — safe on every boot.
 // ensureSchema must complete before seeding policies (schema gates validation).

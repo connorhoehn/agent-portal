@@ -126,7 +126,7 @@ function forwardResponse(
 // POST /api/gateway/channels/:id/messages
 // → POST <WEBSOCKET_GATEWAY_URL>/api/channels/:id/messages
 gatewayProxyRouter.post('/channels/:id/messages', asyncHandler(async (req, res) => {
-  const channelId = req.params['id'];
+  const channelId = req.params['id'] as string;
   if (!channelId) {
     res.status(400).json({ error: 'channel id is required' });
     return;
@@ -146,7 +146,7 @@ gatewayProxyRouter.post('/channels/:id/messages', asyncHandler(async (req, res) 
 // GET /api/gateway/presence/:channel
 // → GET <WEBSOCKET_GATEWAY_URL>/api/presence/:channel
 gatewayProxyRouter.get('/presence/:channel', asyncHandler(async (req, res) => {
-  const channel = req.params['channel'];
+  const channel = req.params['channel'] as string;
   if (!channel) {
     res.status(400).json({ error: 'channel is required' });
     return;
@@ -164,7 +164,7 @@ gatewayProxyRouter.get('/presence/:channel', asyncHandler(async (req, res) => {
 // GET /api/gateway/chat/:channel/history[?limit=N&before=ID]
 // → GET <WEBSOCKET_GATEWAY_URL>/api/chat/:channel/history[?limit=N&before=ID]
 gatewayProxyRouter.get('/chat/:channel/history', asyncHandler(async (req, res) => {
-  const channel = req.params['channel'];
+  const channel = req.params['channel'] as string;
   if (!channel) {
     res.status(400).json({ error: 'channel is required' });
     return;
@@ -186,7 +186,7 @@ gatewayProxyRouter.get('/chat/:channel/history', asyncHandler(async (req, res) =
 // GET /api/gateway/activity/:channel/history[?limit=N]
 // → GET <WEBSOCKET_GATEWAY_URL>/api/activity/:channel/history[?limit=N]
 gatewayProxyRouter.get('/activity/:channel/history', asyncHandler(async (req, res) => {
-  const channel = req.params['channel'];
+  const channel = req.params['channel'] as string;
   if (!channel) {
     res.status(400).json({ error: 'channel is required' });
     return;

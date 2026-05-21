@@ -104,6 +104,20 @@ function PromptVersionNodeImpl({ data }: NodeProps<PromptVersionNodeType>) {
         </pre>
       )}
 
+      {data.versionArn && (
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, marginTop: 6 }}>
+          <span style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', color: 'var(--color-text-tertiary, #94a3b8)', letterSpacing: '0.04em', flexShrink: 0 }}>
+            ARN
+          </span>
+          <span
+            style={{ fontSize: 9, fontFamily: 'monospace', color: 'var(--color-text-secondary, #475569)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
+            title={data.versionArn}
+          >
+            {data.versionArn.length > 35 ? `…${data.versionArn.slice(-35)}` : data.versionArn}
+          </span>
+        </div>
+      )}
+
       <Handle type="target" position={Position.Top} id="in" />
       <Handle type="source" position={Position.Bottom} id="out" />
     </Card>

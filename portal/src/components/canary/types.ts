@@ -79,6 +79,7 @@ export interface PromptVersionNodeData {
   versionLabel: string;
   templateText?: string;
   rollingScore?: number;
+  versionArn?: string;
 }
 
 export interface ModelNodeData {
@@ -113,8 +114,39 @@ export interface Decision {
 
 export interface ControllerNodeData {
   executionArn?: string;
-  state: 'idle' | 'evaluating' | 'promoting' | 'halted';
+  state: 'idle' | 'evaluating' | 'promoting' | 'halted' | 'promoted' | 'rolled_back';
   lastDecisions: Decision[];
+}
+
+// ── Prompt Library types ─────────────────────────────────────────────────────
+
+export interface PromptLibraryEntry {
+  id: string;
+  arn: string;
+  name: string;
+  description?: string;
+  version: string;      // 'DRAFT' or '1', '2', etc.
+  updatedAt: string;
+  isDraft?: boolean;
+}
+
+export interface PromptVersionDetail {
+  id: string;
+  arn: string;
+  name: string;
+  version: string;
+  variant?: {
+    name: string;
+    modelId?: string;
+    templateType?: string;
+    templateText?: string;
+    inputVariables?: string[];
+    inferenceConfig?: {
+      maxTokens?: number;
+      temperature?: number;
+      topP?: number;
+    };
+  };
 }
 
 // ── Edge data ────────────────────────────────────────────────────────────────

@@ -114,10 +114,10 @@ function JudgeNodeImpl({ data }: NodeProps<JudgeNodeType>) {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <Bar label="helpfulness" value={s?.helpfulness ?? 0} color="#6366f1" />
-        <Bar label="factuality"  value={s?.factuality  ?? 0} color="#16a34a" />
-        <Bar label="tone"        value={s?.tone        ?? 0} color="#0891b2" />
-        <Bar label="conciseness" value={s?.conciseness ?? 0} color="#f59e0b" />
+        <Bar label="helpfulness" value={(s?.helpfulness ?? 0) * 100} color="#6366f1" />
+        <Bar label="factuality"  value={(s?.factuality  ?? 0) * 100} color="#16a34a" />
+        <Bar label="tone"        value={(s?.tone        ?? 0) * 100} color="#0891b2" />
+        <Bar label="conciseness" value={(s?.conciseness ?? 0) * 100} color="#f59e0b" />
       </div>
 
       <Handle type="target" position={Position.Top} id="in" />

@@ -1,7 +1,7 @@
 // DecisionHistoryPanel — right-side rail listing controller decisions newest
-// first. Styled after the AgentFlowPage drawer.
+// first. Collapsible when empty (or manually toggled).
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import type { CSSProperties } from 'react';
 import { useCanaryStore } from './canaryStore.js';
 import type { ControllerAction, Decision } from './types.js';
@@ -25,44 +25,73 @@ export function DecisionHistoryPanel(): React.ReactElement {
   const decisions = useCanaryStore((s) => s.recentDecisions);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastLenRef = useRef(0);
+  // Start expanded so users can see what the panel does.
+  const [collapsed, setCollapsed] = useState(false);
 
-  // Auto-scroll to top whenever a new decision arrives — the newest row is
-  // at index 0 in our display list (we reverse before rendering).
   useEffect(() => {
-    if (decisions.length > lastLenRef.current && scrollRef.current) {
-      scrollRef.current.scrollTop = 0;
+    if (decisions.length > lastLenRef.current) {
+      if (scrollRef.current) scrollRef.current.scrollTop = 0;
+      // Auto-expand when the first decision arrives.
+      if (lastLenRef.current === 0) setCollapsed(false);
     }
     lastLenRef.current = decisions.length;
   }, [decisions.length]);
 
-  // Newest first.
   const ordered: Decision[] = decisions.slice().reverse();
 
   return (
-    <div style={panelStyle}>
-      <div style={headerStyle}>
-        <span style={titleStyle}>Decision history</span>
-        <span style={countStyle}>{ordered.length}</span>
-      </div>
-      <div ref={scrollRef} style={listStyle}>
-        {ordered.length === 0 ? (
-          <div style={emptyStyle}>No decisions yet. Waiting for controller…</div>
+    <div style={{ ...panelStyle, width: collapsed ? 44 : 320, transition: 'width 0.2s ease' }}>
+      <div
+        style={{ ...headerStyle, cursor: 'pointer', justifyContent: collapsed ? 'center' : 'space-between' }}
+        onClick={() => setCollapsed((v) => !v)}
+        title={collapsed ? 'Expand decision history' : 'Collapse'}
+      >
+        {collapsed ? (
+          <span style={{ fontSize: 13, color: 'var(--color-text-tertiary, #94a3b8)' }} title="Decision history">⟩</span>
         ) : (
-          ordered.map((d, i) => <DecisionRow key={`${d.ts}-${i}`} d={d} />)
+          <>
+            <span style={titleStyle}>Decision history</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={countStyle}>{ordered.length}</span>
+              <span style={{ fontSize: 11, color: 'var(--color-text-tertiary, #94a3b8)' }}>⟨</span>
+            </div>
+          </>
         )}
       </div>
+      {!collapsed && (
+        <div ref={scrollRef} style={listStyle}>
+          {ordered.length === 0 ? (
+            <div style={emptyStyle}>
+              <p style={{ margin: '0 0 8px', lineHeight: 1.5 }}>
+                The controller compares rolling A/B judge scores and automatically adjusts traffic — PROMOTE shifts more to B, ROLLBACK pins back to A, HOLD waits for more data.
+              </p>
+              <p style={{ margin: 0, lineHeight: 1.5 }}>
+                Click <b>▶ Scenarios</b> in the toolbar, generate a set of people, then hit <b>Run all</b> to generate traffic and trigger decisions.
+              </p>
+            </div>
+          ) : (
+            ordered.map((d, i) => <DecisionRow key={`${d.ts}-${i}`} d={d} index={i} />)
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-function DecisionRow({ d }: { d: Decision }): React.ReactElement {
+function DecisionRow({ d, index }: { d: Decision; index: number }): React.ReactElement {
+  const [expanded, setExpanded] = useState(index === 0); // newest starts expanded
   const palette = ACTION_COLORS[d.action];
+  const toggle = useCallback(() => setExpanded(v => !v), []);
+
   return (
-    <div style={rowStyle}>
+    <div style={{ ...rowStyle, cursor: 'pointer' }} onClick={toggle}>
       <div style={rowHeaderStyle}>
         <span style={timeStyle}>{fmtTime(d.ts)}</span>
         <span style={{ ...chipStyle, background: palette.bg, color: palette.fg }}>
           {d.action}
+        </span>
+        <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--color-text-tertiary, #94a3b8)' }}>
+          {expanded ? '▲' : '▼'}
         </span>
       </div>
       <div style={transitionStyle}>
@@ -76,7 +105,21 @@ function DecisionRow({ d }: { d: Decision }): React.ReactElement {
           </span>
         )}
       </div>
-      <div style={reasonStyle}>{d.reason}</div>
+      {expanded && (
+        <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ ...reasonStyle, WebkitLineClamp: undefined, display: 'block', overflow: 'visible', fontSize: 11.5, color: 'var(--color-text-secondary, #475569)', fontStyle: 'italic' }}>
+            {d.reason}
+          </div>
+          {d.deltaScore !== undefined && (
+            <div style={{ fontSize: 10.5, color: 'var(--color-text-tertiary, #94a3b8)' }}>
+              Score delta (composite_b − composite_a): <b style={{ fontVariantNumeric: 'tabular-nums' }}>{d.deltaScore >= 0 ? '+' : ''}{d.deltaScore.toFixed(4)}</b>
+            </div>
+          )}
+          <div style={{ fontSize: 10, color: 'var(--color-text-tertiary, #94a3b8)', fontVariantNumeric: 'tabular-nums' }}>
+            {new Date(d.ts).toLocaleString()}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

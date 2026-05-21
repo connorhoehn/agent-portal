@@ -365,4 +365,5 @@ const content: CSSProperties = {
   flex: 1,
   minWidth: 0,
   overflow: 'auto',
+  padding: 24,
 };
