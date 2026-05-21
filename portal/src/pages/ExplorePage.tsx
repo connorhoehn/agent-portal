@@ -179,7 +179,21 @@ function ExplorePage() {
   const [chatOpen, setChatOpen] = useState(false);
   const [filterToSelection, setFilterToSelection] = useState(true);
   const [activeStatuses, setActiveStatuses] = useState<Set<string> | null>(null);
-  const [presenceFilter, setPresenceFilter] = useState<'all' | 'office' | 'remote' | 'away'>('all');
+  const [presenceFilter, setPresenceFilter] = useState<'office' | 'remote' | 'away' | null>(null);
+  const [presenceOpen, setPresenceOpen] = useState(false);
+  const presenceRef = useRef<HTMLDivElement>(null);
+
+  // Close presence dropdown on outside click
+  useEffect(() => {
+    if (!presenceOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (presenceRef.current && !presenceRef.current.contains(e.target as Node)) {
+        setPresenceOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [presenceOpen]);
 
   // ?layout= and ?entities= params driven by the sub-nav catalog
   const rawLayout = searchParams.get('layout');
@@ -458,51 +472,77 @@ function ExplorePage() {
           </span>
         )}
 
-        {/* Presence filter — only relevant for person-based views */}
-        {(entityFilter === 'all' || entityFilter === 'people' || entityFilter === 'decisions') && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <span style={{ color: 'var(--color-text-tertiary)', fontSize: 11, marginRight: 2 }}>Today</span>
-            {([
-              { key: 'all',    label: 'All',       dot: undefined },
-              { key: 'office', label: 'In Office',  dot: '#16a34a' },
-              { key: 'remote', label: 'Remote',     dot: '#3b82f6' },
-              { key: 'away',   label: 'Away',       dot: '#f97316' },
-            ] as const).map(({ key, label, dot }) => {
-              // Count people matching this filter
-              const count = key === 'all'
-                ? data?.nodes.length ?? 0
-                : data?.nodes.filter(n => {
-                    const p = n.presence ?? 'unknown';
-                    if (key === 'office') return p === 'office';
-                    if (key === 'remote') return p === 'wfh' || p === 'travel';
-                    if (key === 'away') return p === 'pto' || p === 'vacation' || p === 'sick';
-                    return false;
-                  }).length ?? 0;
-              const active = presenceFilter === key;
-              return (
-                <button
-                  key={key}
-                  onClick={() => setPresenceFilter(active ? 'all' : key)}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 4,
-                    padding: '3px 9px', borderRadius: 9999,
-                    border: active ? '1.5px solid var(--color-primary, #6366f1)' : '1.5px solid var(--color-border)',
-                    background: active ? 'var(--color-surface-hover)' : 'transparent',
-                    color: active ? 'var(--color-primary, #6366f1)' : 'var(--color-text-secondary)',
-                    fontSize: 11, fontWeight: active ? 600 : 400,
-                    cursor: 'pointer', fontFamily: 'inherit',
-                    transition: 'all 0.12s',
-                  }}
-                  title={`${label}: ${count} people`}
-                >
-                  {dot && <span style={{ width: 6, height: 6, borderRadius: '50%', background: dot, flexShrink: 0 }} />}
-                  {label}
-                  <span style={{ fontSize: 10, opacity: 0.6 }}>{count}</span>
-                </button>
-              );
-            })}
-          </span>
-        )}
+        {/* Presence dropdown — only relevant for person-based views */}
+        {(entityFilter === 'all' || entityFilter === 'people' || entityFilter === 'decisions') && (() => {
+          const FACETS = [
+            { key: 'office' as const, label: 'In Office', dot: '#16a34a' },
+            { key: 'remote' as const, label: 'Remote',    dot: '#3b82f6' },
+            { key: 'away'   as const, label: 'Away',      dot: '#f97316' },
+          ];
+          const activeFacet = FACETS.find(f => f.key === presenceFilter);
+          return (
+            <div ref={presenceRef} style={{ position: 'relative' }}>
+              <button
+                onClick={() => setPresenceOpen(o => !o)}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  padding: '3px 9px', borderRadius: 9999,
+                  border: presenceFilter
+                    ? '1.5px solid var(--color-primary, #6366f1)'
+                    : '1.5px solid var(--color-border)',
+                  background: presenceFilter ? 'var(--color-primary-subtle, #eef2ff)' : 'transparent',
+                  color: presenceFilter ? 'var(--color-primary, #6366f1)' : 'var(--color-text-secondary)',
+                  fontSize: 11, fontWeight: presenceFilter ? 600 : 400,
+                  cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+                }}
+              >
+                {activeFacet
+                  ? <><span style={{ width: 6, height: 6, borderRadius: '50%', background: activeFacet.dot, flexShrink: 0 }} />{activeFacet.label}</>
+                  : 'Today'
+                }
+                <span style={{ fontSize: 9, opacity: 0.5, marginLeft: 1 }}>▾</span>
+              </button>
+
+              {presenceOpen && (
+                <div style={{
+                  position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 100,
+                  background: 'var(--color-surface, #fff)',
+                  border: '1px solid var(--color-border, #e2e8f0)',
+                  borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+                  padding: '6px 0', minWidth: 160,
+                }}>
+                  {FACETS.map(({ key, label, dot }) => {
+                    const count = data?.nodes.filter(n => {
+                      const p = n.presence ?? 'unknown';
+                      if (key === 'office') return p === 'office';
+                      if (key === 'remote') return p === 'wfh' || p === 'travel';
+                      return p === 'pto' || p === 'vacation' || p === 'sick';
+                    }).length ?? 0;
+                    const active = presenceFilter === key;
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => { setPresenceFilter(active ? null : key); setPresenceOpen(false); }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                          padding: '7px 14px', border: 'none', background: active ? 'var(--color-primary-subtle, #eef2ff)' : 'transparent',
+                          color: active ? 'var(--color-primary, #6366f1)' : 'var(--color-text-primary, #0f172a)',
+                          fontSize: 12, fontWeight: active ? 600 : 400,
+                          cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+                        }}
+                      >
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: dot, flexShrink: 0 }} />
+                        <span style={{ flex: 1 }}>{label}</span>
+                        <span style={{ fontSize: 11, color: 'var(--color-text-tertiary, #94a3b8)' }}>{count}</span>
+                        {active && <span style={{ fontSize: 11, color: 'var(--color-primary, #6366f1)', marginLeft: 2 }}>✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         <span style={{ flex: 1 }} />
         {selectedIds.size > 0 && (
@@ -596,7 +636,7 @@ function ExplorePage() {
                   onToggleMultiSelect={toggleSelect}
                   spotlightIds={selectedIds}
                   layout={layoutMode}
-                  presenceFilter={presenceFilter !== 'all' ? presenceFilter : undefined}
+                  presenceFilter={presenceFilter ?? undefined}
                 />
                 {selectedIds.size === 0 && !chatOpen && (
                   <div style={hintStyle}>
