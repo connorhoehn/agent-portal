@@ -47,7 +47,7 @@ export function OrgGraphNode({ node, departments, isSelected, isHighlighted, onS
   const opacity = passesFilter ? baseOpacity : 0.15;
 
   // Presence dot size and position (bottom-right of the circle)
-  const dotR = Math.max(4, radius * 0.28);
+  const dotR = Math.max(2, radius * 0.14);
   const dotAngle = Math.PI * 0.25; // 45° from bottom-right
   const dotX = (radius - dotR * 0.4) * Math.cos(dotAngle);
   const dotY = (radius - dotR * 0.4) * Math.sin(dotAngle);
