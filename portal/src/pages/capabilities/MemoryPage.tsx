@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { Card, Table, TableHead, TableBody, TableRow, TableTh, TableTd } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Table, TableHead, TableBody, TableRow, TableTh, TableTd, StatCard } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -34,15 +34,11 @@ function MemoryPage() {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
-          <Card padding="md">
-            <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>Total Sessions</div>
-            <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>
-              {data ? sessions.length : '—'}
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 4 }}>
-              for actor <code style={{ fontSize: 11 }}>portal-default</code>
-            </div>
-          </Card>
+          <StatCard
+            label="Total Sessions"
+            value={data ? sessions.length : '—'}
+            hint={<>for actor <code style={{ fontSize: 11 }}>portal-default</code></>}
+          />
           <Card padding="md">
             <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>Most Recent</div>
             <div style={{ fontSize: 14, fontWeight: 600, marginTop: 6 }}>

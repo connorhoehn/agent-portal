@@ -1,6 +1,6 @@
 import type { CSSProperties, ChangeEvent, KeyboardEvent } from 'react';
 import { useState, useCallback } from 'react';
-import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
+import { PageSection, Card, ToolCallPill } from '@connorhoehnslalom/ui-components/shared';
 import { Markdown } from '../../components/Markdown';
 import { useAgentStream } from '@connorhoehn/realtime-modules/agent-streaming/client';
 import { useSessionPresence } from '../../hooks/useSessionPresence';
@@ -10,16 +10,6 @@ import { PresenceAvatarGroup } from '../../components/shell/PresenceAvatarGroup'
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function ToolCallBadge({ name, done }: { name: string; done: boolean }) {
-  return (
-    <span style={toolBadgeStyle(done)}>
-      {done ? '✓' : '…'} {name}
-    </span>
-  );
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -118,9 +108,7 @@ function BriefsPage() {
       {activeToolCalls.length > 0 && (
         <div style={toolCallRowStyle}>
           {activeToolCalls.map((tc) => (
-            <span key={tc.id}>
-              <ToolCallBadge name={tc.name} done={tc.done} />
-            </span>
+            <ToolCallPill key={tc.id} name={tc.name} done={tc.done} />
           ))}
         </div>
       )}
@@ -225,25 +213,6 @@ const toolCallRowStyle: CSSProperties = {
   gap: 8,
   padding: '4px 0',
 };
-
-function toolBadgeStyle(done: boolean): CSSProperties {
-  return {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 4,
-    padding: '3px 10px',
-    borderRadius: 9999,
-    fontSize: 11,
-    fontWeight: 500,
-    background: done
-      ? 'var(--color-success-subtle, #dcfce7)'
-      : 'var(--color-accent-subtle, #eff6ff)',
-    color: done
-      ? 'var(--color-success, #166534)'
-      : 'var(--color-accent, #2563eb)',
-    border: `1px solid ${done ? 'var(--color-success-border, #bbf7d0)' : 'var(--color-accent-border, #bfdbfe)'}`,
-  };
-}
 
 const briefOutputStyle: CSSProperties = {
   position: 'relative',

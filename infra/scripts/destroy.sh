@@ -6,7 +6,9 @@
 #   - Orphan gateways (not CFN-managed)
 #   - Secrets scheduled for deletion (block re-deploy after quick redeploy)
 #   - Bedrock KB data sources (can't delete if vector store unreachable)
-#   - Aurora cluster/instances (AuroraFastDeleter custom resource is fragile)
+#   - Aurora cluster/instances (AuroraFastDeleter custom resource is fragile —
+#     proactively force-deletes the OrgIQ-Aurora CFN stack after pre-drain to
+#     avoid the physical-ID-change DELETE_FAILED on every destroy)
 #
 # After cdk destroy, any stacks still in DELETE_FAILED are force-deleted by
 # retaining their failed resources (orphaned AWS resources that are already gone).
@@ -20,6 +22,10 @@ set -euo pipefail
 PREFIX="${PREFIX:-orgiq}"
 REGION="${AWS_DEFAULT_REGION:-us-east-1}"
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+
+# CDK stack names use title-case "OrgIQ-" regardless of the resource PREFIX.
+# Use this for all CloudFormation stack-name queries.
+STACK_PREFIX="OrgIQ-"
 
 echo "╔══════════════════════════════════════════════════════════╗"
 echo "║  OrgIQ Destroy — ${REGION} / ${ACCOUNT}"
@@ -267,6 +273,28 @@ else
     --region "$REGION" 2>/dev/null || true
 
   echo "  Aurora cluster deleted"
+
+  # Proactively force-delete the OrgIQ-Aurora CFN stack now that the cluster
+  # is gone. The AuroraFastDeleter custom resource has a known physical-ID-change
+  # bug that causes DELETE_FAILED on every destroy when CDK manages the deletion.
+  # Retaining AuroraFastDeleter is safe — the cluster is already deleted above.
+  AURORA_STACK_STATUS=$(aws cloudformation describe-stacks \
+    --stack-name "OrgIQ-Aurora" --region "$REGION" \
+    --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "not-found")
+
+  if [[ "$AURORA_STACK_STATUS" != "not-found" && "$AURORA_STACK_STATUS" != "None" ]]; then
+    echo "  Pre-deleting OrgIQ-Aurora CFN stack (retaining AuroraFastDeleter)..."
+    aws cloudformation delete-stack \
+      --stack-name "OrgIQ-Aurora" \
+      --retain-resources AuroraFastDeleter \
+      --region "$REGION" 2>/dev/null || true
+
+    aws cloudformation wait stack-delete-complete \
+      --stack-name "OrgIQ-Aurora" \
+      --region "$REGION" 2>/dev/null || true
+
+    echo "  OrgIQ-Aurora CFN stack deleted"
+  fi
 fi
 echo ""
 
@@ -288,7 +316,7 @@ echo "── Checking for DELETE_FAILED stacks ──"
 FAILED_STACKS=$(aws cloudformation list-stacks \
   --region "$REGION" \
   --stack-status-filter DELETE_FAILED \
-  --query "StackSummaries[?starts_with(StackName, '${PREFIX}')].StackName" \
+  --query "StackSummaries[?starts_with(StackName, '${STACK_PREFIX}')].StackName" \
   --output text 2>/dev/null || true)
 
 if [[ -z "$FAILED_STACKS" ]]; then

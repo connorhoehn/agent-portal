@@ -9,7 +9,7 @@
 import type { CSSProperties } from 'react';
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
+import { PageSection, Card, FilterChip } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -72,38 +72,6 @@ function StatusChip({ status }: { status: string | null }) {
   );
 }
 
-// ─── Filter chip ──────────────────────────────────────────────────────────────
-
-function FilterChip({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        padding: '4px 14px',
-        borderRadius: 9999,
-        border: `1px solid ${active ? 'var(--color-primary, #6366f1)' : 'var(--color-border, #e5e7eb)'}`,
-        background: active ? 'var(--color-primary, #6366f1)' : 'var(--color-surface, #fff)',
-        color: active ? '#fff' : 'var(--color-text-secondary, #6b7280)',
-        fontSize: 12,
-        fontWeight: 500,
-        cursor: 'pointer',
-        transition: 'background 0.15s, color 0.15s',
-      }}
-    >
-      {label}
-    </button>
-  );
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const SECTION_OPTIONS = ['All', 'Tech', 'Business', 'Science', 'Politics', 'Culture'];
@@ -135,10 +103,11 @@ function ArticlesPage() {
           {SECTION_OPTIONS.map((s) => (
             <FilterChip
               key={s}
-              label={s}
               active={sectionFilter === s}
               onClick={() => setSectionFilter(s)}
-            />
+            >
+              {s}
+            </FilterChip>
           ))}
         </div>
         <div style={filterGroupStyle}>
@@ -146,10 +115,11 @@ function ArticlesPage() {
           {STATUS_OPTIONS.map((s) => (
             <FilterChip
               key={s}
-              label={s}
               active={statusFilter === s}
               onClick={() => setStatusFilter(s)}
-            />
+            >
+              {s}
+            </FilterChip>
           ))}
         </div>
       </div>

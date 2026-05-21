@@ -1,4 +1,4 @@
-import { Card } from '@connorhoehnslalom/ui-components/shared';
+import { Card, StatCard } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 interface ObsSummary {
@@ -84,34 +84,6 @@ function SummaryPage() {
         <GuardrailSparkline series={guardrail?.series ?? []} />
       </Card>
     </div>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  accent,
-  danger,
-}: {
-  label: string;
-  value: string;
-  accent?: boolean;
-  danger?: boolean;
-}) {
-  return (
-    <Card padding="md">
-      <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>{label}</div>
-      <div
-        style={{
-          fontSize: 24,
-          fontWeight: 700,
-          marginTop: 4,
-          color: danger ? 'var(--color-danger)' : accent ? 'var(--color-success)' : undefined,
-        }}
-      >
-        {value}
-      </div>
-    </Card>
   );
 }
 

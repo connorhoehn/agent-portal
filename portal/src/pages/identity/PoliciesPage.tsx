@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CodeEditor, TagEditor } from '@connorhoehnslalom/ui-components/shared';
+import { CodeEditor, TagEditor, ConfirmDialog } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { parsePolicy, buildPolicy, type Effect, type ParsedPolicy } from '../../lib/cedarPolicy';
 
@@ -65,6 +65,7 @@ function PoliciesPage() {
   const [createDraft, setCreateDraft] = useState<Draft>(() => makeDraft('', buildPolicy(NEW_TEMPLATE)));
   const [busy, setBusy] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   if (isLoading) return <div style={{ padding: 24, color: 'var(--color-text-tertiary)' }}>Loading policies…</div>;
   if (error) return <div style={{ padding: 24, color: 'var(--color-error, #ef4444)' }}>Error: {error}</div>;
@@ -106,7 +107,6 @@ function PoliciesPage() {
   }
 
   async function deletePolicy(policyId: string) {
-    if (!confirm('Delete this policy? This is immediate; AVP enforcement updates within ~60 s.')) return;
     setBusy(true); setErrMsg(null);
     try {
       const res = await fetch(`/api/identity/policies/${policyId}`, {
@@ -190,7 +190,7 @@ function PoliciesPage() {
                 {!isEditing && (
                   <>
                     <button onClick={() => startEdit(p)} disabled={busy} style={btnSecondary}>Edit</button>
-                    <button onClick={() => deletePolicy(p.policyId)} disabled={busy} style={btnDanger}>Delete</button>
+                    <button onClick={() => setDeleteTarget(p.policyId)} disabled={busy} style={btnDanger}>Delete</button>
                   </>
                 )}
                 {isEditing && (
@@ -210,6 +210,21 @@ function PoliciesPage() {
           </article>
         );
       })}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onConfirm={() => {
+          if (deleteTarget) {
+            const id = deleteTarget;
+            setDeleteTarget(null);
+            void deletePolicy(id);
+          }
+        }}
+        onCancel={() => setDeleteTarget(null)}
+        tone="destructive"
+        title="Delete policy?"
+        body="This is immediate; AVP enforcement updates within ~60s. This cannot be undone."
+      />
     </div>
   );
 }

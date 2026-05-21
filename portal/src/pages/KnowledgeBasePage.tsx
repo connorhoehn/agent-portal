@@ -17,6 +17,7 @@ import {
   TableTh,
   TableTd,
   Chip,
+  Spinner,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 
@@ -330,17 +331,7 @@ function DataSourcesTab() {
                     >
                       {isSyncing ? (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                          <span
-                            style={{
-                              display: 'inline-block',
-                              width: 10,
-                              height: 10,
-                              border: '2px solid rgba(255,255,255,0.4)',
-                              borderTopColor: '#fff',
-                              borderRadius: '50%',
-                              animation: 'spin 0.7s linear infinite',
-                            }}
-                          />
+                          <Spinner size="sm" color="#fff" />
                           Syncing…
                         </span>
                       ) : 'Sync now'}
@@ -353,7 +344,6 @@ function DataSourcesTab() {
         </Table>
       )}
 
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </Card>
   );
 }

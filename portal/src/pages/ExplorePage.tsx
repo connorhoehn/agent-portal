@@ -11,6 +11,10 @@ import type { GraphPerson, GraphRelationship, GraphDepartment } from '../compone
 import type { LayoutMode } from '../components/org-graph/useForceLayout';
 import { MultiEntityGraph } from '../components/multi-entity-graph/MultiEntityGraph';
 import type { MENode, MEEdge } from '../components/multi-entity-graph/types';
+import {
+  ChatComposer,
+  MessageBubble,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
 
@@ -82,22 +86,9 @@ function filterEdges(edges: GraphRelationship[], topK: number, minStrength: numb
   return kept;
 }
 
-function ThinkingDots() {
-  return (
-    <span style={{ display: 'inline-flex', gap: 3, verticalAlign: 'middle' }}>
-      {[0, 1, 2].map(i => (
-        <span key={i} style={{
-          display: 'inline-block', width: 5, height: 5, borderRadius: '50%',
-          background: 'var(--color-text-tertiary, #94a3b8)', opacity: 0.4,
-          animation: `exploreDot 1.2s ${i * 0.2}s infinite ease-in-out`,
-        }} />
-      ))}
-      <style>{`
-        @keyframes exploreDot { 0%,80%,100%{opacity:.4;transform:scale(1)} 40%{opacity:1;transform:scale(1.3)} }
-        @keyframes meGraphSpin { to{transform:rotate(360deg)} }
-      `}</style>
-    </span>
-  );
+function MeGraphKeyframes() {
+  // meGraphSpin keyframe is still used by the spinner card below.
+  return <style>{`@keyframes meGraphSpin { to{transform:rotate(360deg)} }`}</style>;
 }
 
 function buildSkillsMEGraph(d: SkillsGraphData): { nodes: MENode[]; edges: MEEdge[] } {
@@ -397,10 +388,6 @@ function ExplorePage() {
     setInput('');
   }
 
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
-  }
-
   function handleClose() {
     setChatOpen(false);
     reset();
@@ -675,12 +662,13 @@ function ExplorePage() {
                   ? findMentionedPeople(resolvedContent, data.nodes)
                   : [];
                 return (
-                  <div key={msg.id} style={msgWrapStyle}>
-                    <div style={msgRoleStyle}>{msg.role === 'user' ? 'You' : 'Search agent'}</div>
-                    {msg.role === 'assistant'
-                      ? <div style={msgBodyStyle}><Markdown>{resolvedContent}</Markdown></div>
-                      : <div style={{ ...msgBodyStyle, color: 'var(--color-text-primary)' }}>{msg.content}</div>
-                    }
+                  <div key={msg.id}>
+                    <MessageBubble
+                      role={msg.role}
+                      content={resolvedContent}
+                      agentName="Search agent"
+                      renderMarkdown={(content) => <Markdown>{content}</Markdown>}
+                    />
                     {mentioned.length > 0 && (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
                         {mentioned.map(p => (
@@ -699,25 +687,20 @@ function ExplorePage() {
                 );
               })}
               {isStreaming && (
-                <div style={msgWrapStyle}>
-                  <div style={msgRoleStyle}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      Search agent <ThinkingDots />
-                    </span>
-                  </div>
-                  {activeToolCalls.length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
-                      {activeToolCalls.map(tc => (
-                        <span key={tc.id} style={toolPillStyle(tc.done === true)}>
-                          {tc.name}{tc.done ? ' ✓' : '…'}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {streamingText
-                    ? <div style={msgBodyStyle}><Markdown>{data ? resolvePersonIds(streamingText, data.nodes) : streamingText}</Markdown></div>
-                    : null
-                  }
+                <div>
+                  <MessageBubble
+                    role="assistant"
+                    content={streamingText ? (data ? resolvePersonIds(streamingText, data.nodes) : streamingText) : ''}
+                    toolCalls={activeToolCalls.map(tc => ({
+                      id: tc.id,
+                      name: tc.name,
+                      done: tc.done,
+                      args: tc.args,
+                    }))}
+                    streaming
+                    agentName="Search agent"
+                    renderMarkdown={(content) => <Markdown>{content}</Markdown>}
+                  />
                   {streamingText && data && (() => {
                     const live = findMentionedPeople(resolvePersonIds(streamingText, data.nodes), data.nodes);
                     return live.length > 0 ? (
@@ -739,23 +722,20 @@ function ExplorePage() {
             </div>
 
             {/* Composer */}
-            <div style={composerStyle}>
-              <textarea
+            <div style={composerWrapStyle}>
+              <ChatComposer
                 value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask about people, skills, connections…"
-                rows={2}
+                onChange={setInput}
+                onSubmit={handleSend}
                 disabled={isStreaming}
-                style={textareaStyle}
+                multiline
+                placeholder="Ask about people, skills, connections…"
               />
-              <button onClick={handleSend} disabled={isStreaming || !input.trim()} style={sendBtnStyle}>
-                {isStreaming ? <ThinkingDots /> : '→'}
-              </button>
             </div>
           </div>
         )}
       </div>
+      <MeGraphKeyframes />
     </div>
   );
 }
@@ -802,27 +782,8 @@ const chatMessagesStyle: React.CSSProperties = {
 const chatEmptyStyle: React.CSSProperties = {
   color: 'var(--color-text-tertiary)', fontSize: 12, lineHeight: 1.6, padding: '8px 0',
 };
-const msgWrapStyle: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4 };
-const msgRoleStyle: React.CSSProperties = {
-  fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
-  textTransform: 'uppercase', color: 'var(--color-text-tertiary)',
-};
-const msgBodyStyle: React.CSSProperties = { fontSize: 13, lineHeight: 1.6 };
-const composerStyle: React.CSSProperties = {
-  display: 'flex', gap: 6, padding: 12,
-  borderTop: '1px solid var(--color-border)', flexShrink: 0,
-};
-const textareaStyle: React.CSSProperties = {
-  flex: 1, resize: 'none', fontSize: 12, padding: '6px 8px',
-  border: '1px solid var(--color-border)', borderRadius: 4,
-  background: 'var(--color-bg)', color: 'var(--color-text-primary)',
-  fontFamily: 'inherit', lineHeight: 1.5,
-};
-const sendBtnStyle: React.CSSProperties = {
-  width: 36, height: 36, alignSelf: 'flex-end', flexShrink: 0,
-  background: 'var(--color-primary, #6366f1)', color: '#fff',
-  border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 16,
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
+const composerWrapStyle: React.CSSProperties = {
+  padding: 12, borderTop: '1px solid var(--color-border)', flexShrink: 0,
 };
 const errorStyle: React.CSSProperties = {
   fontSize: 12, color: 'var(--color-error, #ef4444)', padding: '4px 0',
@@ -847,15 +808,6 @@ function personChipStyle(selected: boolean): React.CSSProperties {
     color: selected ? '#fff' : 'var(--color-text-secondary)',
     border: `1px solid ${selected ? 'var(--color-primary, #6366f1)' : 'var(--color-border)'}`,
     transition: 'all 0.1s',
-  };
-}
-
-function toolPillStyle(done: boolean): React.CSSProperties {
-  return {
-    fontSize: 10, padding: '2px 6px', borderRadius: 3,
-    background: done ? 'var(--color-success-bg, #dcfce7)' : 'var(--color-warning-bg, #fef9c3)',
-    color: done ? 'var(--color-success, #16a34a)' : 'var(--color-warning, #ca8a04)',
-    border: `1px solid ${done ? 'var(--color-success-border, #bbf7d0)' : 'var(--color-warning-border, #fde68a)'}`,
   };
 }
 

@@ -9,6 +9,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useAgentStream } from '@connorhoehn/realtime-modules/agent-streaming/client';
 import type { Message as AgentMessage } from '@connorhoehn/realtime-modules/agent-streaming/client';
+import {
+  ChatComposer,
+  MessageBubble,
+  QuickPromptGrid,
+  FollowUpChips,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
 import type { GraphPerson } from '../components/org-graph';
@@ -266,31 +272,44 @@ function SearchPage() {
               <div style={emptyDetailStyle}>
                 The agent has access to ingested documents and the people graph. Try one of these:
               </div>
-              <div style={quickPromptsGridStyle}>
-                {QUICK_PROMPTS.map(p => (
-                  <button
-                    key={p.label}
-                    onClick={() => sendMessage(p.prompt)}
-                    style={quickPromptBtnStyle}
-                  >
-                    <div style={quickPromptLabelStyle}>{p.label}</div>
-                    <div style={quickPromptHintStyle}>{p.prompt}</div>
-                  </button>
-                ))}
-              </div>
+              <QuickPromptGrid
+                prompts={QUICK_PROMPTS.map(p => ({ label: p.label, hint: p.prompt }))}
+                onSelect={(label) => {
+                  const found = QUICK_PROMPTS.find(p => p.label === label);
+                  if (found) sendMessage(found.prompt);
+                }}
+              />
             </div>
           )}
 
           {messages.map(msg => (
-            <Message key={msg.id} role={msg.role} content={msg.content} toolCalls={msg.toolCalls ?? []} />
+            <MessageBubble
+              key={msg.id}
+              role={msg.role}
+              content={msg.content}
+              toolCalls={(msg.toolCalls ?? []).map(tc => ({
+                id: tc.id,
+                name: tc.name,
+                done: Boolean((tc as { done?: boolean; result?: unknown }).done ?? (tc as { result?: unknown }).result),
+              }))}
+              agentName="Search agent"
+              renderMarkdown={(content) => <Markdown>{content}</Markdown>}
+            />
           ))}
 
           {isStreaming && (
-            <Message
+            <MessageBubble
               role="assistant"
               content={streamingText}
-              toolCalls={activeToolCalls}
+              toolCalls={activeToolCalls.map(tc => ({
+                id: tc.id,
+                name: tc.name,
+                done: tc.done,
+                args: tc.args,
+              }))}
               streaming
+              agentName="Search agent"
+              renderMarkdown={(content) => <Markdown>{content}</Markdown>}
             />
           )}
 
@@ -300,19 +319,11 @@ function SearchPage() {
 
         {followUps.length > 0 && (
           <div style={followUpStripStyle}>
-            <span style={followUpLabelStyle}>Follow up</span>
-            <div style={followUpChipsStyle}>
-              {followUps.map(prompt => (
-                <button
-                  key={prompt}
-                  onClick={() => handleSendFollowUp(prompt)}
-                  style={followUpChipStyle}
-                  disabled={isStreaming}
-                >
-                  {prompt}
-                </button>
-              ))}
-            </div>
+            <FollowUpChips
+              suggestions={followUps}
+              onSelect={handleSendFollowUp}
+              label="Follow up"
+            />
           </div>
         )}
 
@@ -337,95 +348,17 @@ function SearchPage() {
           </div>
         )}
 
-        <div style={composerStyle}>
-          <input
+        <div style={composerWrapStyle}>
+          <ChatComposer
             value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSend()}
-            placeholder="Ask about people, projects, decisions…"
+            onChange={setInput}
+            onSubmit={handleSend}
             disabled={isStreaming}
-            style={composerInputStyle}
+            placeholder="Ask about people, projects, decisions…"
           />
-          <button onClick={handleSend} disabled={isStreaming || !input.trim()} style={composerBtnStyle}>
-            Send
-          </button>
         </div>
       </div>
 
-    </div>
-  );
-}
-
-// ── Subcomponents ────────────────────────────────────────────────────────────
-
-interface MessageToolCall {
-  id: string;
-  name: string;
-  done?: boolean;
-}
-
-function ThinkingDots() {
-  return (
-    <span style={{ display: 'inline-flex', gap: 3, verticalAlign: 'middle' }}>
-      {[0, 1, 2].map(i => (
-        <span
-          key={i}
-          style={{
-            display: 'inline-block',
-            width: 5,
-            height: 5,
-            borderRadius: '50%',
-            background: 'var(--color-text-tertiary, #94a3b8)',
-            opacity: 0.4,
-            animation: `searchDot 1.2s ${i * 0.2}s infinite ease-in-out`,
-          }}
-        />
-      ))}
-      <style>{`
-        @keyframes searchDot {
-          0%, 80%, 100% { opacity: 0.4; transform: scale(1); }
-          40% { opacity: 1; transform: scale(1.3); }
-        }
-      `}</style>
-    </span>
-  );
-}
-
-function Message({
-  role,
-  content,
-  toolCalls,
-  streaming = false,
-}: {
-  role: 'user' | 'assistant';
-  content: string;
-  toolCalls: ReadonlyArray<MessageToolCall>;
-  streaming?: boolean;
-}) {
-  return (
-    <div style={messageStyle}>
-      <div style={messageRoleStyle}>
-        {role === 'user' ? 'You' : (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            Search agent
-            {streaming && <ThinkingDots />}
-          </span>
-        )}
-      </div>
-      {toolCalls.length > 0 && (
-        <div style={toolCallsStripStyle}>
-          {toolCalls.map(tc => (
-            <span key={tc.id} style={toolCallPillStyle(tc.done === true)}>
-              {tc.name}{tc.done ? ' ✓' : '…'}
-            </span>
-          ))}
-        </div>
-      )}
-      {role === 'assistant' ? (
-        (streaming && !content) ? null : <Markdown>{content}</Markdown>
-      ) : (
-        <div style={userTextStyle}>{content}</div>
-      )}
     </div>
   );
 }
@@ -492,64 +425,6 @@ const emptyDetailStyle: React.CSSProperties = {
   color: 'var(--color-text-secondary)',
   marginBottom: 16,
 };
-const quickPromptsGridStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-  gap: 8,
-};
-const quickPromptBtnStyle: React.CSSProperties = {
-  textAlign: 'left',
-  padding: 12,
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 6,
-  cursor: 'pointer',
-  color: 'var(--color-text-primary)',
-  fontFamily: 'inherit',
-};
-const quickPromptLabelStyle: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 600,
-  marginBottom: 4,
-};
-const quickPromptHintStyle: React.CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  lineHeight: 1.4,
-};
-const messageStyle: React.CSSProperties = {
-  marginBottom: 20,
-};
-const messageRoleStyle: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 500,
-  color: 'var(--color-text-tertiary)',
-  marginBottom: 6,
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-};
-const userTextStyle: React.CSSProperties = {
-  fontSize: 14,
-  lineHeight: 1.6,
-  whiteSpace: 'pre-wrap',
-  color: 'var(--color-text-primary)',
-};
-const toolCallsStripStyle: React.CSSProperties = {
-  display: 'flex',
-  flexWrap: 'wrap',
-  gap: 4,
-  marginBottom: 6,
-};
-function toolCallPillStyle(done: boolean): React.CSSProperties {
-  return {
-    fontSize: 10.5,
-    padding: '2px 8px',
-    borderRadius: 999,
-    background: done ? 'var(--color-success-bg, #ecfdf5)' : 'var(--color-info-bg, #eff6ff)',
-    color: done ? 'var(--color-success, #047857)' : 'var(--color-info, #1d4ed8)',
-    fontFamily: 'monospace',
-  };
-}
 const errorStyle: React.CSSProperties = {
   color: 'var(--color-danger)',
   fontSize: 13,
@@ -559,32 +434,6 @@ const followUpStripStyle: React.CSSProperties = {
   padding: '8px 24px 10px',
   borderTop: '1px solid var(--color-border)',
   background: 'var(--color-surface)',
-};
-const followUpLabelStyle: React.CSSProperties = {
-  display: 'block',
-  fontSize: 10,
-  fontWeight: 600,
-  color: 'var(--color-text-tertiary)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
-  marginBottom: 6,
-};
-const followUpChipsStyle: React.CSSProperties = {
-  display: 'flex',
-  flexWrap: 'wrap',
-  gap: 6,
-};
-const followUpChipStyle: React.CSSProperties = {
-  fontSize: 12,
-  padding: '5px 12px',
-  border: '1px solid var(--color-border)',
-  borderRadius: 999,
-  background: 'var(--color-bg)',
-  color: 'var(--color-text-secondary)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  lineHeight: 1.4,
-  transition: 'border-color 0.1s, color 0.1s',
 };
 const pinnedStripStyle: React.CSSProperties = {
   display: 'flex',
@@ -633,30 +482,9 @@ const pinnedClearStyle: React.CSSProperties = {
   marginLeft: 'auto',
   fontFamily: 'inherit',
 };
-const composerStyle: React.CSSProperties = {
-  display: 'flex',
-  gap: 8,
+const composerWrapStyle: React.CSSProperties = {
   padding: '14px 24px',
   borderTop: '1px solid var(--color-border)',
   background: 'var(--color-surface)',
-};
-const composerInputStyle: React.CSSProperties = {
-  flex: 1,
-  padding: '10px 14px',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-md)',
-  fontSize: 14,
-  outline: 'none',
-  fontFamily: 'inherit',
-};
-const composerBtnStyle: React.CSSProperties = {
-  padding: '10px 20px',
-  background: 'var(--color-primary)',
-  color: 'white',
-  border: 'none',
-  borderRadius: 'var(--radius-md)',
-  cursor: 'pointer',
-  fontWeight: 500,
-  fontFamily: 'inherit',
 };
 export default SearchPage;

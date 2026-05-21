@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { Card, Chip } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Chip, StatCard } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -65,13 +65,13 @@ function SummaryPage() {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
-          <StatTile
+          <StatCard
             label="Active Browser Sessions"
             value={String(activeBrowser)}
             to="/admin/capabilities/browser"
             accent={activeBrowser > 0}
           />
-          <StatTile
+          <StatCard
             label="Active Code Sessions"
             value={String(activeCode)}
             to="/admin/capabilities/code-interpreter"
@@ -91,7 +91,7 @@ function SummaryPage() {
               </div>
             </Link>
           </Card>
-          <StatTile
+          <StatCard
             label="Recent Capability Events"
             value={String(recentEventCount)}
             to="/admin/observability"
@@ -110,24 +110,6 @@ function SummaryPage() {
         </Card>
       </div>
     </div>
-  );
-}
-
-// ─── Local helpers ────────────────────────────────────────────────────────────
-
-function StatTile({ label, value, to, accent, hint }: { label: string; value: string; to: string; accent?: boolean; hint?: string }) {
-  return (
-    <Card padding="md">
-      <Link to={to} style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}>
-        <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>{label}</div>
-        <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4, color: accent ? 'var(--color-success)' : undefined }}>
-          {value}
-        </div>
-        {hint && (
-          <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginTop: 4 }}>{hint}</div>
-        )}
-      </Link>
-    </Card>
   );
 }
 

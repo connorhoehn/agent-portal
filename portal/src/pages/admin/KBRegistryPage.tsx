@@ -12,6 +12,7 @@ import {
   TableTh,
   TableTd,
   Chip,
+  ConfirmDialog,
 } from '@connorhoehnslalom/ui-components/shared';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -445,9 +446,10 @@ export function DeleteButton({
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
-  async function handleDelete() {
-    if (!confirm(`Delete "${kbName}"?\n\nThis will:\n• Remove the DB registry row\n• Delete the Bedrock KB (if provisioned)\n• Drop the Aurora vector table\n\nThis cannot be undone.`)) return;
+  async function performDelete() {
+    setConfirmOpen(false);
     setLoading(true);
     setError(null);
     try {
@@ -469,7 +471,7 @@ export function DeleteButton({
     <div>
       <button
         disabled={loading}
-        onClick={handleDelete}
+        onClick={() => setConfirmOpen(true)}
         title={`Delete "${kbName}" and all associated resources`}
         style={{
           fontSize: variant === 'full' ? 13 : 11,
@@ -486,6 +488,14 @@ export function DeleteButton({
         {loading ? 'Deleting…' : variant === 'full' ? 'Delete KB' : '✕ Delete'}
       </button>
       {error && <div style={{ fontSize: 10, color: '#dc2626', marginTop: 2 }} title={error}>Error</div>}
+      <ConfirmDialog
+        open={confirmOpen}
+        onConfirm={() => void performDelete()}
+        onCancel={() => setConfirmOpen(false)}
+        tone="destructive"
+        title={`Delete "${kbName}"?`}
+        body="This will remove the DB registry row, delete the Bedrock KB (if provisioned), and drop the Aurora vector table. This cannot be undone."
+      />
     </div>
   );
 }

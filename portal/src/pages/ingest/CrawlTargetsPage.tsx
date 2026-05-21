@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Card } from '@connorhoehnslalom/ui-components/shared';
+import { Card, ConfirmDialog } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import type { CrawlSession, CrawlTarget } from '../../components/ingest/types';
 import { TargetsTable } from '../../components/ingest/TargetsTable';
@@ -30,6 +30,7 @@ function CrawlTargetsPage() {
 
   const [showNewTarget, setShowNewTarget] = useState(false);
   const [editTarget, setEditTarget] = useState<CrawlTarget | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CrawlTarget | null>(null);
 
   const activeCrawls = useMemo(() => crawls.filter(c => c.status === 'running'), [crawls]);
 
@@ -79,8 +80,7 @@ function CrawlTargetsPage() {
     }
   }
 
-  async function deleteTarget(t: CrawlTarget) {
-    if (!confirm(`Delete crawl target "${t.label}"? Run history is preserved.`)) return;
+  async function runDeleteTarget(t: CrawlTarget) {
     const r = await fetch(`/api/ingest/crawl-targets/${encodeURIComponent(t.id)}`, { method: 'DELETE' });
     if (!r.ok) {
       const body = await r.json().catch(() => ({})) as { error?: string };
@@ -150,7 +150,7 @@ function CrawlTargetsPage() {
             busyId={targetBusy}
             onRun={runTarget}
             onEdit={(t) => setEditTarget(t)}
-            onDelete={deleteTarget}
+            onDelete={(t) => setDeleteTarget(t)}
             onToggle={toggleTarget}
           />
         )}
@@ -191,6 +191,21 @@ function CrawlTargetsPage() {
           onCancel={() => { setShowNewTarget(false); setEditTarget(null); }}
         />
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onConfirm={() => {
+          if (deleteTarget) {
+            const t = deleteTarget;
+            setDeleteTarget(null);
+            void runDeleteTarget(t);
+          }
+        }}
+        onCancel={() => setDeleteTarget(null)}
+        tone="destructive"
+        title={deleteTarget ? `Delete "${deleteTarget.label}"?` : 'Delete target?'}
+        body="Run history is preserved. This cannot be undone."
+      />
     </div>
   );
 }

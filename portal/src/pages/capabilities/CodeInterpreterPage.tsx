@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip, StatCard } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -430,17 +430,6 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
 }
 
 // ─── Local helpers ────────────────────────────────────────────────────────────
-
-function StatCard({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <Card padding="md">
-      <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4, color: accent ? 'var(--color-success)' : undefined }}>
-        {value}
-      </div>
-    </Card>
-  );
-}
 
 function formatAge(iso: string): string {
   const diffMs = Date.now() - new Date(iso).getTime();

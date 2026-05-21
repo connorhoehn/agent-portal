@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router';
 import { useAgentStream } from '@connorhoehn/realtime-modules/agent-streaming/client';
-import type { ToolCall as LiveToolCall, Message as AgentMessage } from '@connorhoehn/realtime-modules/agent-streaming/client';
+import type { Message as AgentMessage } from '@connorhoehn/realtime-modules/agent-streaming/client';
+import {
+  ChatComposer,
+  MessageBubble,
+  QuickPromptGrid,
+  FollowUpChips,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
 import { useSessionPresence } from '../hooks/useSessionPresence';
@@ -182,52 +188,43 @@ function InvokePage() {
             <div style={{ padding: 40, color: 'var(--color-text-tertiary)' }}>
               <div style={{ fontSize: 18, marginBottom: 4, textAlign: 'center' }}>Invoke {selectedAgent?.name ?? 'Agent'}</div>
               <div style={{ fontSize: 13, marginBottom: 24, textAlign: 'center' }}>Send a message or try a quick prompt below</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 8, maxWidth: 760, margin: '0 auto' }}>
-                {quickPromptsFor(selectedId).map(p => (
-                  <button
-                    key={p.label}
-                    onClick={() => { sendMessage(p.prompt); }}
-                    style={{
-                      textAlign: 'left',
-                      padding: 12,
-                      background: 'var(--color-surface)',
-                      border: '1px solid var(--color-border)',
-                      borderRadius: 6,
-                      cursor: 'pointer',
-                      color: 'var(--color-text-primary)',
-                    }}
-                  >
-                    <div style={{ fontSize: 12, fontWeight: 600, color: p.badgeColor ?? 'var(--color-text-primary)', marginBottom: 4 }}>
-                      {p.badge ? <span style={{ marginRight: 6 }}>{p.badge}</span> : null}{p.label}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', lineHeight: 1.4 }}>{p.prompt}</div>
-                  </button>
-                ))}
-              </div>
+              <QuickPromptGrid
+                prompts={quickPromptsFor(selectedId).map(p => ({ label: p.label, hint: p.prompt }))}
+                onSelect={(label) => {
+                  const found = quickPromptsFor(selectedId).find(p => p.label === label);
+                  if (found) sendMessage(found.prompt);
+                }}
+                title="Try asking:"
+              />
             </div>
           )}
           {messages.map(msg => (
-            <div key={msg.id} style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>
-                {msg.role === 'user' ? 'You' : selectedAgent?.name ?? 'Agent'}
-              </div>
-              {msg.toolCalls && msg.toolCalls.length > 0 && (
-                <div style={{ marginBottom: 6 }}>
-                  {msg.toolCalls.map(tc => (
-                    <div key={tc.id} style={{ fontSize: 11, padding: '3px 8px', background: 'var(--color-info-bg, #eff6ff)', borderRadius: 4, marginBottom: 3, fontFamily: 'monospace' }}>
-                      {tc.name} {tc.result && <span style={{ color: 'var(--color-success)' }}>✓</span>}
-                    </div>
-                  ))}
-                </div>
-              )}
-              <MessageContent content={msg.content} role={msg.role} />
-            </div>
+            <MessageBubble
+              key={msg.id}
+              role={msg.role}
+              content={msg.content}
+              toolCalls={(msg.toolCalls ?? []).map(tc => ({
+                id: tc.id,
+                name: tc.name,
+                done: Boolean(tc.result),
+              }))}
+              agentName={selectedAgent?.name ?? 'Agent'}
+              renderMarkdown={(content) => <Markdown>{content}</Markdown>}
+            />
           ))}
           {isStreaming && (
-            <StreamingMessage
+            <MessageBubble
+              role="assistant"
+              content={streamingText}
+              toolCalls={activeToolCalls.map(tc => ({
+                id: tc.id,
+                name: tc.name,
+                done: tc.done,
+                args: tc.args,
+              }))}
+              streaming
               agentName={selectedAgent?.name ?? 'Agent'}
-              activeToolCalls={activeToolCalls}
-              text={streamingText}
+              renderMarkdown={(content) => <Markdown>{content}</Markdown>}
             />
           )}
           {error && <div style={{ color: 'var(--color-danger)', fontSize: 13 }}>Error: {error}</div>}
@@ -236,252 +233,24 @@ function InvokePage() {
 
         {/* Suggested search bubbles — shown when conversation has messages */}
         {messages.length > 0 && !isStreaming && suggestions.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
-            {suggestions.map((s) => (
-              <button
-                key={s}
-                onClick={() => handleSuggestion(s)}
-                style={{
-                  padding: '5px 12px',
-                  borderRadius: 9999,
-                  border: '1px solid var(--color-border, #e5e7eb)',
-                  background: 'var(--color-surface, #fff)',
-                  color: 'var(--color-text-secondary, #4b5563)',
-                  fontSize: 12, fontWeight: 500, cursor: 'pointer',
-                  transition: 'all 0.12s',
-                  whiteSpace: 'nowrap',
-                  maxWidth: 260,
-                  overflow: 'hidden', textOverflow: 'ellipsis',
-                }}
-                onMouseEnter={e => {
-                  (e.currentTarget as HTMLElement).style.background = 'var(--color-surface-hover, #f3f4f6)';
-                  (e.currentTarget as HTMLElement).style.borderColor = '#6366f1';
-                  (e.currentTarget as HTMLElement).style.color = '#6366f1';
-                }}
-                onMouseLeave={e => {
-                  (e.currentTarget as HTMLElement).style.background = 'var(--color-surface, #fff)';
-                  (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-border, #e5e7eb)';
-                  (e.currentTarget as HTMLElement).style.color = 'var(--color-text-secondary, #4b5563)';
-                }}
-              >
-                {s}
-              </button>
-            ))}
-            {/* Refresh button */}
-            <button
-              onClick={() => setSuggestionSeed(k => k + 1)}
-              title="Refresh suggestions"
-              style={{
-                width: 28, height: 28,
-                borderRadius: '50%',
-                border: '1px solid var(--color-border, #e5e7eb)',
-                background: 'var(--color-surface, #fff)',
-                color: 'var(--color-text-tertiary, #9ca3af)',
-                fontSize: 14, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0,
-                transition: 'all 0.12s',
-              }}
-              onMouseEnter={e => {
-                (e.currentTarget as HTMLElement).style.borderColor = '#6366f1';
-                (e.currentTarget as HTMLElement).style.color = '#6366f1';
-              }}
-              onMouseLeave={e => {
-                (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-border, #e5e7eb)';
-                (e.currentTarget as HTMLElement).style.color = 'var(--color-text-tertiary, #9ca3af)';
-              }}
-            >
-              ↻
-            </button>
+          <div style={{ marginBottom: 8 }}>
+            <FollowUpChips
+              suggestions={suggestions}
+              onSelect={handleSuggestion}
+              onRefresh={() => setSuggestionSeed(k => k + 1)}
+            />
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSend()}
-            placeholder={`Ask ${selectedAgent?.name ?? 'agent'}...`}
-            disabled={isStreaming}
-            style={{ flex: 1, padding: '10px 14px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', fontSize: 14, outline: 'none' }}
-          />
-          <button onClick={handleSend} disabled={isStreaming || !input.trim()} style={{
-            padding: '10px 20px', background: 'var(--color-primary)', color: 'white',
-            border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 500,
-            opacity: isStreaming || !input.trim() ? 0.6 : 1,
-          }}>Send</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Split assistant content on <thinking>…</thinking> so the chain-of-thought
-// renders as a collapsed detail block instead of cluttering the response.
-type Segment = { kind: 'text' | 'thinking'; body: string };
-
-function parseSegments(content: string): Segment[] {
-  const out: Segment[] = [];
-  const re = /<thinking>([\s\S]*?)<\/thinking>/gi;
-  let cursor = 0;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(content)) !== null) {
-    if (m.index > cursor) {
-      out.push({ kind: 'text', body: content.slice(cursor, m.index) });
-    }
-    out.push({ kind: 'thinking', body: m[1] ?? '' });
-    cursor = m.index + m[0].length;
-  }
-  if (cursor < content.length) {
-    out.push({ kind: 'text', body: content.slice(cursor) });
-  }
-  // Handle an unclosed <thinking> tag during streaming
-  const openIdx = content.lastIndexOf('<thinking>');
-  const closeIdx = content.lastIndexOf('</thinking>');
-  if (openIdx > closeIdx) {
-    const partial = content.slice(openIdx + '<thinking>'.length);
-    const before = content.slice(0, openIdx);
-    return [
-      ...(before ? [{ kind: 'text' as const, body: before }] : []),
-      { kind: 'thinking', body: partial },
-    ];
-  }
-  return out;
-}
-
-function MessageContent({ content, role }: { content: string; role: 'user' | 'assistant' }) {
-  // User messages: render verbatim (no markdown interpretation — user typed
-  // it, they expect it back as-is). Assistant messages: render markdown for
-  // headings, lists, tables, code blocks — common in Nova Pro output.
-  if (role === 'user') {
-    return <div style={{ fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{content}</div>;
-  }
-
-  const segments = parseSegments(content);
-  if (segments.length === 0) {
-    return <Markdown>{content}</Markdown>;
-  }
-  return (
-    <div style={{ fontSize: 14, lineHeight: 1.6 }}>
-      {segments.map((seg, i) =>
-        seg.kind === 'thinking' ? (
-          <details
-            key={i}
-            style={{
-              margin: '6px 0',
-              padding: '6px 10px',
-              background: 'var(--color-surface-hover, #f3f4f6)',
-              borderLeft: '3px solid var(--color-text-tertiary, #94a3b8)',
-              borderRadius: 4,
-              fontSize: 12,
-              color: 'var(--color-text-tertiary, #64748b)',
-            }}
-          >
-            <summary style={{ cursor: 'pointer', userSelect: 'none', fontWeight: 500 }}>
-              thinking
-            </summary>
-            <div style={{ whiteSpace: 'pre-wrap', marginTop: 6, fontStyle: 'italic' }}>
-              {seg.body.trim()}
-            </div>
-          </details>
-        ) : (
-          <Markdown key={i}>{seg.body}</Markdown>
-        ),
-      )}
-    </div>
-  );
-}
-
-function StreamingMessage({ agentName, activeToolCalls, text }: {
-  agentName: string;
-  activeToolCalls: LiveToolCall[];
-  text: string;
-}) {
-  return (
-    <div style={{ marginBottom: 16 }}>
-      <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>
-        {agentName}
-      </div>
-      {activeToolCalls.length > 0 && (
-        <div style={{ marginBottom: 6 }}>
-          {activeToolCalls.map(tc => (
-            <div
-              key={tc.id}
-              style={{
-                fontSize: 11,
-                padding: '5px 10px',
-                background: tc.done ? 'var(--color-info-bg, #eff6ff)' : '#fef9c3',
-                border: `1px solid ${tc.done ? '#bfdbfe' : '#fde68a'}`,
-                borderRadius: 4,
-                marginBottom: 4,
-                fontFamily: 'monospace',
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: 8,
-              }}
-            >
-              <span style={{
-                display: 'inline-block',
-                width: 8,
-                height: 8,
-                borderRadius: '50%',
-                background: tc.done ? '#22c55e' : '#f59e0b',
-                flexShrink: 0,
-                marginTop: 2,
-              }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontWeight: 600 }}>{tc.name}</span>
-                  {tc.done
-                    ? <span style={{ color: '#16a34a', fontSize: 10 }}>done</span>
-                    : <span style={{ color: '#92400e', fontSize: 10 }}>running…</span>}
-                </div>
-                {tc.args && (
-                  <div style={{ color: 'var(--color-text-secondary)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
-                    {tc.args.length > 120 ? tc.args.slice(0, 120) + '…' : tc.args}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-      {text ? (
-        <MessageContent content={text} role="assistant" />
-      ) : (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-text-tertiary)', fontSize: 13 }}>
-          <ThinkingDots />
-          <span>Thinking…</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ThinkingDots() {
-  return (
-    <span style={{ display: 'inline-flex', gap: 3 }}>
-      {[0, 1, 2].map(i => (
-        <span
-          key={i}
-          style={{
-            display: 'inline-block',
-            width: 5,
-            height: 5,
-            borderRadius: '50%',
-            background: 'var(--color-text-tertiary)',
-            opacity: 0.4,
-            animation: `thinkingDot 1.2s ${i * 0.2}s infinite ease-in-out`,
-          }}
+        <ChatComposer
+          value={input}
+          onChange={setInput}
+          onSubmit={handleSend}
+          disabled={isStreaming}
+          placeholder={`Ask ${selectedAgent?.name ?? 'agent'}...`}
         />
-      ))}
-      <style>{`
-        @keyframes thinkingDot {
-          0%, 80%, 100% { opacity: 0.4; transform: scale(1); }
-          40% { opacity: 1; transform: scale(1.3); }
-        }
-      `}</style>
-    </span>
+      </div>
+    </div>
   );
 }
 

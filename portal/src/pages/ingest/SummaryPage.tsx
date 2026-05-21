@@ -1,4 +1,4 @@
-import { Card, Chip } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Chip, StatCard } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import type {
   CrawlSession,
@@ -91,15 +91,6 @@ function KVStat({ label, value, mono }: { label: string; value: string; mono?: b
         {value}
       </div>
     </div>
-  );
-}
-
-function StatCard({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <Card padding="md">
-      <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4, color: accent ? 'var(--color-success)' : undefined }}>{value}</div>
-    </Card>
   );
 }
 

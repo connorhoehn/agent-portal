@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { FilterChip } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 interface SkillSummary {
@@ -10,23 +11,6 @@ interface SkillSummary {
 interface Props {
   selectedSkill: string;
   onChange: (skill: string) => void;
-}
-
-const PRIMARY_COLOR = 'var(--color-primary, #6366f1)';
-const PRIMARY_SOFT  = 'var(--color-primary-soft, #eef2ff)';
-
-function chipStyle(active: boolean): React.CSSProperties {
-  return {
-    padding: '4px 10px',
-    fontSize: 11,
-    fontWeight: active ? 600 : 400,
-    border: `1px solid ${active ? PRIMARY_COLOR : 'var(--color-border)'}`,
-    background: active ? PRIMARY_SOFT : 'var(--color-surface)',
-    color: active ? PRIMARY_COLOR : 'var(--color-text-secondary)',
-    borderRadius: 'var(--radius-sm)',
-    cursor: 'pointer',
-    whiteSpace: 'nowrap' as const,
-  };
 }
 
 export function SkillFilter({ selectedSkill, onChange }: Props) {
@@ -58,21 +42,21 @@ export function SkillFilter({ selectedSkill, onChange }: Props) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <button
+        <FilterChip
+          active={selectedSkill === ''}
           onClick={() => handleSelect('')}
-          style={chipStyle(selectedSkill === '')}
         >
           All skills
-        </button>
+        </FilterChip>
 
         {topSkills.map(skill => (
-          <button
+          <FilterChip
             key={skill.id}
+            active={selectedSkill === skill.name}
             onClick={() => handleSelect(skill.name)}
-            style={chipStyle(selectedSkill === skill.name)}
           >
             {skill.name}
-          </button>
+          </FilterChip>
         ))}
 
         {/* Free-text autocomplete */}

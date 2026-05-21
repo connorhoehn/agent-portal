@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { Avatar, AvatarGroup } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 
-// TODO(ui-components): ContributorAvatars, ActivityFeed, ProjectCard are candidates
+// TODO(ui-components): ActivityFeed, ProjectCard are candidates
 // for @connorhoehnslalom/ui-components/shared project-management domain.
 
 interface ProjectSummary {
@@ -256,16 +257,8 @@ function ActivityRow({ item, opacity }: { item: ActivityItem; opacity: number })
       }} />
 
       {/* Mini avatar */}
-      <div style={{
-        width: 17, height: 17, borderRadius: '50%',
-        background: avatarColor(item.actor),
-        color: '#fff', fontSize: 8, fontWeight: 700,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        flexShrink: 0, userSelect: 'none',
-        letterSpacing: '-0.01em',
-      }}>
-        {nameInitials(item.actor).toUpperCase()}
-      </div>
+      <Avatar name={item.actor} size={17} />
+
 
       {/* "Alex C. merged" */}
       <span style={{ fontSize: 11, color: '#374151', fontWeight: 500, flexShrink: 0 }}>
@@ -361,56 +354,6 @@ function presenceColor(isoDate: string | null | undefined): string {
   return '#d1d5db';
 }
 
-const AVATAR_PALETTE = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#ef4444','#06b6d4'];
-
-function nameInitials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  return (parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '');
-}
-
-function avatarColor(name: string): string {
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
-  return AVATAR_PALETTE[h % AVATAR_PALETTE.length]!;
-}
-
-// ─── ContributorAvatars ───────────────────────────────────────────────────────
-
-function ContributorAvatars({ names, total, size = 24 }: { names: string[]; total: number; size?: number }) {
-  const shown = names.slice(0, 4);
-  const overflow = total - shown.length;
-  return (
-    <div style={{ display: 'flex', alignItems: 'center' }}>
-      {shown.map((name, i) => (
-        <div key={name} title={name} style={{
-          width: size, height: size, borderRadius: '50%',
-          background: avatarColor(name), color: '#fff',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: size * 0.36, fontWeight: 700,
-          border: '2px solid #fff',
-          marginLeft: i === 0 ? 0 : -(size * 0.3),
-          zIndex: shown.length - i, position: 'relative',
-          flexShrink: 0, userSelect: 'none',
-        }}>
-          {nameInitials(name).toUpperCase()}
-        </div>
-      ))}
-      {overflow > 0 && (
-        <div style={{
-          width: size, height: size, borderRadius: '50%',
-          background: '#e5e7eb', color: '#6b7280',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: size * 0.32, fontWeight: 700,
-          border: '2px solid #fff',
-          marginLeft: -(size * 0.3), flexShrink: 0,
-        }}>
-          +{overflow}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── StatusChip ───────────────────────────────────────────────────────────────
 
 function StatusChip({ status }: { status: string | null }) {
@@ -501,7 +444,7 @@ function ProjectCard({ project, cardIndex, onClick }: {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
           {topNames.length > 0 ? (
-            <ContributorAvatars names={topNames} total={project.contributorCount} />
+            <AvatarGroup names={topNames} maxVisible={5} size={24} />
           ) : (
             <span style={{ fontSize: 12, color: '#9ca3af' }}>
               <strong style={{ color: '#374151' }}>{project.contributorCount}</strong> contributors
@@ -572,7 +515,7 @@ function ProjectListRow({ project, onClick }: { project: ProjectSummary; onClick
       {/* Team avatars — fixed column */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {topNames.length > 0 ? (
-          <ContributorAvatars names={topNames.slice(0, 3)} total={project.contributorCount} size={22} />
+          <AvatarGroup names={topNames.slice(0, 3)} maxVisible={4} size={22} />
         ) : (
           <span style={{ fontSize: 11, color: '#9ca3af' }}>{project.contributorCount} people</span>
         )}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Chip } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, Drawer } from '@connorhoehnslalom/ui-components/shared';
 import {
   CRAWL_STATUS_TONE,
   PAGE_STATUS_TONE,
@@ -12,16 +12,13 @@ import type { CrawlPage, CrawlSession } from './types';
 import { useCrawlStream } from './useCrawlStream';
 import { Thumbnail } from './Thumbnail';
 import { PageDetailModal } from './PageDetailModal';
-import { primaryBtnStyle, secondaryBtnStyle, smallBtnStyle } from './ui';
+import { primaryBtnStyle, smallBtnStyle } from './ui';
 
 /**
  * Right-side slide-in drawer showing a single CrawlSession in detail.
  *
  * For running sessions we attach to the SSE stream so the timeline updates as
  * pages stream in. For completed sessions we fetch the snapshot once.
- *
- * TODO(T1B): Replace hand-rolled backdrop + aside with an upstream Drawer
- * component from @connorhoehnslalom/ui-components/shared once one is published.
  */
 export function RunDetailDrawer({
   crawlId,
@@ -60,14 +57,6 @@ export function RunDetailDrawer({
     return () => { cancelled = true; };
   }, [open, crawlId, initialSession]);
 
-  // Esc closes the drawer.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
-
   const session = streamed ?? snapshot ?? initialSession ?? null;
 
   async function triggerKbSync() {
@@ -94,69 +83,24 @@ export function RunDetailDrawer({
 
   return (
     <>
-      {/* Backdrop */}
-      <div
-        onClick={onClose}
-        style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(15, 23, 42, 0.35)',
-          opacity: open ? 1 : 0,
-          pointerEvents: open ? 'auto' : 'none',
-          transition: 'opacity 0.2s ease',
-          zIndex: 90,
-        }}
-      />
-
-      {/* Drawer */}
-      <aside
-        style={{
-          position: 'fixed',
-          top: 0,
-          right: 0,
-          height: '100vh',
-          width: 'min(720px, 92vw)',
-          background: 'var(--color-surface)',
-          borderLeft: '1px solid var(--color-border)',
-          boxShadow: '-8px 0 24px rgba(0,0,0,0.12)',
-          transform: open ? 'translateX(0)' : 'translateX(100%)',
-          transition: 'transform 0.25s cubic-bezier(.4,0,.2,1)',
-          zIndex: 95,
-          display: 'flex',
-          flexDirection: 'column',
-        }}
+      <Drawer
+        open={open}
+        onClose={onClose}
+        title="Crawl run"
+        subtitle={session?.startUrl}
+        width={720}
       >
         {!session ? (
           <div style={{ padding: 24, color: 'var(--color-text-tertiary)', fontSize: 13 }}>
             Loading…
-            <button onClick={onClose} style={{ ...secondaryBtnStyle, marginLeft: 12 }}>Close</button>
           </div>
         ) : (
-          <>
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             {/* Header */}
             <div style={{ padding: 16, borderBottom: '1px solid var(--color-border)' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 8 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <h2 style={{ fontSize: 15, fontWeight: 600 }}>Crawl run</h2>
-                    <Chip tone={CRAWL_STATUS_TONE[session.status]} size="xs">{session.status}</Chip>
-                    <Chip tone="neutral" size="xs">{session.mode}</Chip>
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      fontFamily: 'monospace',
-                      color: 'var(--color-text-tertiary)',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                    title={session.startUrl}
-                  >
-                    {session.startUrl}
-                  </div>
-                </div>
-                <button onClick={onClose} style={secondaryBtnStyle}>Close</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <Chip tone={CRAWL_STATUS_TONE[session.status]} size="xs">{session.status}</Chip>
+                <Chip tone="neutral" size="xs">{session.mode}</Chip>
               </div>
 
               <div
@@ -242,9 +186,9 @@ export function RunDetailDrawer({
                 </div>
               )}
             </div>
-          </>
+          </div>
         )}
-      </aside>
+      </Drawer>
 
       {/* Page detail modal nested above the drawer */}
       {open && session && activePageIdx != null && session.pages[activePageIdx] && (
