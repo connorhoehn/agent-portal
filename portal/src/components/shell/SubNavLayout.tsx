@@ -31,6 +31,9 @@ export interface SubNavItem {
   onClick?: () => void;
   /** Optional left-side accent color (action items often want danger/warning). */
   accent?: 'default' | 'danger' | 'warning' | 'success';
+  /** If set on any item in a group, the group's item list scrolls after this
+   *  many visible items (approximate — based on standard item height). */
+  groupScrollAfter?: number;
 }
 
 interface SubNavLayoutProps {
@@ -45,6 +48,62 @@ interface SubNavLayoutProps {
   railWidth?: number;
   /** Storage key prefix for collapsed-section persistence (default 'subnav'). */
   storageKey?: string;
+  /** Secondary rail — rendered between the primary rail and main content.
+   *  Keeps section-specific items separate from the top-level nav. */
+  secondaryTitle?: string;
+  secondaryItems?: SubNavItem[];
+  secondaryStorageKey?: string;
+  secondaryRailWidth?: number;
+}
+
+// Shared group-bucketing logic used by both primary and secondary rails.
+function buildGroups(items: SubNavItem[]) {
+  const out: Array<{ name: string | null; items: SubNavItem[] }> = [];
+  const byName = new Map<string, number>();
+  for (const item of items) {
+    const g = item.group ?? null;
+    if (g === null) {
+      if (out.length === 0 || out[0].name !== null) {
+        out.unshift({ name: null, items: [] });
+        byName.forEach((v, k) => byName.set(k, v + 1));
+      }
+      out[0].items.push(item);
+      continue;
+    }
+    let idx = byName.get(g);
+    if (idx === undefined) {
+      idx = out.length;
+      byName.set(g, idx);
+      out.push({ name: g, items: [] });
+    }
+    out[idx].items.push(item);
+  }
+  return out;
+}
+
+function RailNav({ items, storageKey, title }: { items: SubNavItem[]; storageKey: string; title: string }) {
+  const groups = useMemo(() => buildGroups(items), [items]);
+  const isGrouped = groups.some((g) => g.name !== null);
+  return (
+    <nav style={navList}>
+      {isGrouped ? (
+        groups.map((g) =>
+          g.name === null ? (
+            <FlatItems key="__ungrouped" items={g.items} />
+          ) : (
+            <GroupSection
+              key={g.name}
+              name={g.name}
+              items={g.items}
+              storageKey={`${storageKey}.${title}.${g.name}`}
+            />
+          ),
+        )
+      ) : (
+        <FlatItems items={items} />
+      )}
+    </nav>
+  );
 }
 
 export function SubNavLayout({
@@ -54,63 +113,39 @@ export function SubNavLayout({
   railHeader,
   railWidth = 220,
   storageKey = 'subnav',
+  secondaryTitle,
+  secondaryItems,
+  secondaryStorageKey,
+  secondaryRailWidth = 200,
 }: SubNavLayoutProps) {
-  // Bucket items by group while preserving original order. Items with no
-  // `group` go into the leading anonymous bucket.
-  const groups = useMemo(() => {
-    const out: Array<{ name: string | null; items: SubNavItem[] }> = [];
-    const byName = new Map<string, number>();
-    for (const item of items) {
-      const g = item.group ?? null;
-      if (g === null) {
-        if (out.length === 0 || out[0].name !== null) {
-          out.unshift({ name: null, items: [] });
-          // reindex byName since we shifted
-          byName.forEach((v, k) => byName.set(k, v + 1));
-        }
-        out[0].items.push(item);
-        continue;
-      }
-      let idx = byName.get(g);
-      if (idx === undefined) {
-        idx = out.length;
-        byName.set(g, idx);
-        out.push({ name: g, items: [] });
-      }
-      out[idx].items.push(item);
-    }
-    return out;
-  }, [items]);
-
-  const isGrouped = groups.some((g) => g.name !== null);
+  const hasSecondary = secondaryItems && secondaryItems.length > 0;
 
   return (
     <div style={layout}>
+      {/* Primary rail */}
       <aside style={{ ...rail, width: railWidth }}>
         <div style={railHead}>
           <span style={railTitle}>{title}</span>
           {titleAction}
         </div>
         {railHeader && <div style={railHeaderSlot}>{railHeader}</div>}
-        <nav style={navList}>
-          {isGrouped ? (
-            groups.map((g) =>
-              g.name === null ? (
-                <FlatItems key="__ungrouped" items={g.items} />
-              ) : (
-                <GroupSection
-                  key={g.name}
-                  name={g.name}
-                  items={g.items}
-                  storageKey={`${storageKey}.${title}.${g.name}`}
-                />
-              ),
-            )
-          ) : (
-            <FlatItems items={items} />
-          )}
-        </nav>
+        <RailNav items={items} storageKey={storageKey} title={title} />
       </aside>
+
+      {/* Secondary rail (section-specific items) */}
+      {hasSecondary && (
+        <aside style={{ ...rail, width: secondaryRailWidth }}>
+          <div style={railHead}>
+            <span style={railTitle}>{secondaryTitle ?? ''}</span>
+          </div>
+          <RailNav
+            items={secondaryItems}
+            storageKey={secondaryStorageKey ?? `${storageKey}.secondary`}
+            title={secondaryTitle ?? 'secondary'}
+          />
+        </aside>
+      )}
+
       <main style={content}>
         <Outlet />
       </main>
@@ -128,17 +163,7 @@ function FlatItems({ items }: { items: SubNavItem[] }) {
   );
 }
 
-function GroupSection({
-  name,
-  items,
-  storageKey,
-}: {
-  name: string;
-  items: SubNavItem[];
-  storageKey: string;
-}) {
-  // Persist collapsed state per (title, group) — researcher's choice survives
-  // page navigation. Default: open.
+function GroupSection({ name, items, storageKey }: { name: string; items: SubNavItem[]; storageKey: string }) {
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return window.localStorage?.getItem(storageKey) === '1';
@@ -148,6 +173,13 @@ function GroupSection({
     if (collapsed) window.localStorage?.setItem(storageKey, '1');
     else window.localStorage?.removeItem(storageKey);
   }, [collapsed, storageKey]);
+
+  // If any item in this group specifies groupScrollAfter, cap the visible
+  // height at that many items and make the rest scrollable.
+  const scrollAfter = items.find((i) => i.groupScrollAfter)?.groupScrollAfter;
+  const listStyle: React.CSSProperties | undefined = scrollAfter
+    ? { maxHeight: scrollAfter * 38, overflowY: 'auto' }
+    : undefined;
 
   return (
     <section style={groupSection}>
@@ -162,7 +194,7 @@ function GroupSection({
         <span style={groupCount}>{items.length}</span>
       </button>
       {!collapsed && (
-        <div>
+        <div style={listStyle}>
           {items.map((item) => (
             <ItemLink key={item.path} item={item} />
           ))}

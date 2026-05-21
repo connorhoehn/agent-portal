@@ -34,6 +34,7 @@ import { sessionRouter } from './routes/session.js';
 import { identityRouter } from './routes/identity.js';
 import { canaryRouter } from './routes/canary.js';
 import { canaryLibraryRouter } from './routes/canary-library.js';
+import { promptHistoryRouter } from './routes/prompt-history.js';
 import { gatewayProxyRouter } from './routes/gateway-proxy.js';
 import { requireAction } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
@@ -121,6 +122,8 @@ app.use('/api/observability/tools', toolCallsRouter);
 // via `ManageCanary` inside the router.
 app.use('/api/observability/canary', canaryRouter);
 app.use('/api/observability/canary', canaryLibraryRouter);
+// Prompt history + experiment log — version timeline + outcome cards for /iq/history.
+app.use('/api/iq/prompts', promptHistoryRouter);
 app.use('/api/observability', requireAction('ViewObservability'), observabilityRouter);
 app.use('/api/capabilities', capabilitiesRouter);
 app.use('/api/sessions', sessionsRouter);

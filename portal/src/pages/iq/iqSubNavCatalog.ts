@@ -7,13 +7,20 @@
 // any of those params yet still show the menu for navigation flavor; the
 // params become live once the page reads them.
 
+import { useMemo } from 'react';
 import type { SubNavItem } from '../../components/shell/SubNavLayout';
 import { useCanaryNavItems } from '../../components/canary/canaryNavItems';
+import { useCanaryStore } from '../../components/canary/canaryStore';
+import { useFetch } from '../../hooks/useFetch';
 
 export interface IqSubNavSpec {
   title: string;
   items: SubNavItem[];
   storageKey: string;
+  /** Optional secondary rail rendered between the primary rail and content. */
+  secondaryTitle?: string;
+  secondaryItems?: SubNavItem[];
+  secondaryStorageKey?: string;
 }
 
 // ── Static catalogs ─────────────────────────────────────────────────────────
@@ -25,17 +32,18 @@ const ARCHITECTURE_ITEMS: SubNavItem[] = [
   { path: 'agents?filter=all',     label: 'All agents',  group: 'Filter' },
   { path: 'agents?filter=active',  label: 'Active only', hint: 'Recent traffic > 0', group: 'Filter' },
   { path: 'agents?filter=errors',  label: 'With errors', hint: 'p95 over budget',  group: 'Filter' },
+  { path: 'agents?cluster=all',     label: 'All clusters', group: 'Cluster' },
+  { path: 'agents?cluster=orgiq',   label: 'OrgIQ',        hint: '6 core agents',   group: 'Cluster' },
+  { path: 'agents?cluster=newsroom',label: 'Newsroom',     hint: '3 newsroom agents', group: 'Cluster' },
   { path: 'agents?focus=legend',   label: 'Edge colors', hint: 'green/amber/red',  group: 'Reference' },
 ];
 
-const SEARCH_ITEMS: SubNavItem[] = [
-  { path: 'search?prompt=who-knows',     label: 'Who knows X?',         hint: 'Deepest expertise',     group: 'Suggested' },
-  { path: 'search?prompt=decisions',     label: 'Decisions about X',    hint: 'Recent platform calls', group: 'Suggested' },
-  { path: 'search?prompt=who-works-on',  label: 'Who works on Y',       hint: 'Contributors + roles',  group: 'Suggested' },
-  { path: 'search?prompt=compare',       label: 'Compare two people',   hint: 'Side-by-side profiles', group: 'Suggested' },
-  { path: 'search?focus=sources',        label: 'Sources',  hint: 'Retrieved documents',     group: 'Inspect' },
-  { path: 'search?focus=people',         label: 'Related people', hint: 'Mentioned in answers',    group: 'Inspect' },
-  { path: 'search?session=new',          label: 'New session', group: 'History' },
+// Static items without History — History group is built dynamically from sessions.
+const SEARCH_STATIC_ITEMS: SubNavItem[] = [
+  { path: '/iq/search?prompt=who-knows',     label: 'Who knows X?',         hint: 'Deepest expertise',     group: 'Suggested' },
+  { path: '/iq/search?prompt=decisions',     label: 'Decisions about X',    hint: 'Recent platform calls', group: 'Suggested' },
+  { path: '/iq/search?prompt=who-works-on',  label: 'Who works on Y',       hint: 'Contributors + roles',  group: 'Suggested' },
+  { path: '/iq/search?prompt=compare',       label: 'Compare two people',   hint: 'Side-by-side profiles', group: 'Suggested' },
 ];
 
 const INVOKE_ITEMS: SubNavItem[] = [
@@ -80,9 +88,8 @@ const EXPLORE_ITEMS: SubNavItem[] = [
   { path: 'explore?entities=projects',  label: 'Projects', group: 'Show' },
   { path: 'explore?entities=decisions', label: 'Decisions', group: 'Show' },
   { path: 'explore?entities=all',       label: 'All',      group: 'Show' },
-  { path: 'explore?layout=force',     label: 'Force',     hint: 'Default',     group: 'Layout' },
-  { path: 'explore?layout=hierarchy', label: 'Hierarchy', hint: 'By team',     group: 'Layout' },
-  { path: 'explore?layout=radial',    label: 'Radial',    hint: 'By centrality', group: 'Layout' },
+  { path: 'explore?layout=force',  label: 'Force',  hint: 'Default',       group: 'Layout' },
+  { path: 'explore?layout=radial', label: 'Radial', hint: 'By centrality', group: 'Layout' },
 ];
 
 const CODE_INTERPRETER_ITEMS: SubNavItem[] = [
@@ -94,19 +101,72 @@ const CODE_INTERPRETER_ITEMS: SubNavItem[] = [
 
 // ── Hook ───────────────────────────────────────────────────────────────────
 
+// Prompt Management sub-nav — shared across /iq/prompts and /iq/canary
+const PROMPT_MGMT_ITEMS: SubNavItem[] = [
+  { path: '/iq/prompts',              label: 'Prompt Studio',   hint: 'Bedrock library browser + editor',  group: 'Prompts' },
+  { path: '/iq/canary',               label: 'Deployment',      hint: 'Canary A/B rollout',                group: 'Prompts' },
+  { path: '/iq/canary?focus=decisions', label: 'Experiments',   hint: 'Live canary decisions',             group: 'Prompts' },
+  { path: '/iq/history',              label: 'History',         hint: 'Version log + past experiments',    group: 'Audit' },
+  { path: '/iq/diff',                 label: 'Diff',            hint: 'Compare two prompt versions RO',    group: 'Audit' },
+  { path: '/iq/evaluations',          label: 'Evaluations',     hint: 'LLM-as-judge configuration',        group: 'Audit' },
+];
+
+interface SessionSummary {
+  sessionId: string;
+  createdAt: string;
+  title?: string;
+}
+
 export function useIqSubNav(pathname: string): IqSubNavSpec | null {
-  // Canary is reactive — call its hook unconditionally and discard if the
-  // route doesn't match. Rules-of-hooks compliant.
+  // All hooks must be called unconditionally (rules of hooks).
   const canaryItems = useCanaryNavItems();
+  const experimentState = useCanaryStore((s) => s.experimentState);
+  const { data: sessionData } = useFetch<{ sessions: SessionSummary[] }>(
+    pathname.startsWith('/iq/search') ? '/api/sessions' : null,
+    8000,
+  );
+
+  const searchItems = useMemo<SubNavItem[]>(() => {
+    const sessions = sessionData?.sessions ?? [];
+    const historyItems: SubNavItem[] = [
+      { path: '/iq/search?session=new', label: 'New session', group: 'History', groupScrollAfter: 7 },
+      ...sessions.slice(0, 20).map<SubNavItem>((s) => ({
+        path: `/iq/search?session=${encodeURIComponent(s.sessionId)}`,
+        label: s.title || 'Untitled session',
+        hint: new Date(s.createdAt).toLocaleString(),
+        group: 'History',
+        groupScrollAfter: 7,
+      })),
+    ];
+    return [...SEARCH_STATIC_ITEMS, ...historyItems];
+  }, [sessionData]);
+
+  if (pathname.startsWith('/iq/prompts') || pathname.startsWith('/iq/history') || pathname.startsWith('/iq/diff') || pathname.startsWith('/iq/evaluations')) {
+    return {
+      title: 'Prompt Management',
+      items: PROMPT_MGMT_ITEMS,
+      storageKey: 'iq-prompts-subnav',
+    };
+  }
 
   if (pathname.startsWith('/iq/canary')) {
-    return { title: 'Canary', items: canaryItems, storageKey: 'iq-canary-subnav' };
+    const isLive = experimentState === 'running' || experimentState === 'terminal';
+    return {
+      title: 'Prompt Management',
+      items: PROMPT_MGMT_ITEMS,
+      storageKey: 'iq-canary-subnav',
+      ...(isLive ? {
+        secondaryTitle: 'Live Experiment',
+        secondaryItems: canaryItems,
+        secondaryStorageKey: 'iq-canary-secondary',
+      } : {}),
+    };
   }
   if (pathname.startsWith('/iq/agents')) {
     return { title: 'Architecture', items: ARCHITECTURE_ITEMS, storageKey: 'iq-agents-subnav' };
   }
   if (pathname.startsWith('/iq/search')) {
-    return { title: 'Search', items: SEARCH_ITEMS, storageKey: 'iq-search-subnav' };
+    return { title: 'Search', items: searchItems, storageKey: 'iq-search-subnav' };
   }
   if (pathname.startsWith('/iq/invoke')) {
     return { title: 'Agent Tools', items: INVOKE_ITEMS, storageKey: 'iq-invoke-subnav' };

@@ -31,6 +31,10 @@ const CodeInterpreterDemoPage = lazy(() => import('./pages/CodeInterpreterDemoPa
 const ExplorePage = lazy(() => import('./pages/ExplorePage'));
 const SearchPage = lazy(() => import('./pages/SearchPage'));
 const CanaryPage = lazy(() => import('./pages/CanaryPage'));
+const PromptStudioPage = lazy(() => import('./pages/capabilities/PromptsPage'));
+const PromptHistoryPage = lazy(() => import('./pages/iq/PromptHistoryPage'));
+const DiffPage = lazy(() => import('./pages/iq/DiffPage'));
+const EvaluationsPage = lazy(() => import('./pages/iq/EvaluationsPage'));
 
 // Ingest sub-pages
 const IngestLayout = lazy(() => import('./pages/ingest/IngestLayout'));
@@ -153,6 +157,10 @@ export function App() {
           <Route path="explore" element={<Page element={<ExplorePage />} />} />
           <Route path="code-interpreter" element={<Page element={<CodeInterpreterDemoPage />} />} />
           <Route path="canary" element={<Page element={<CanaryPage />} />} />
+          <Route path="prompts" element={<Page element={<PromptStudioPage />} />} />
+          <Route path="history" element={<Page element={<PromptHistoryPage />} />} />
+          <Route path="diff" element={<Page element={<DiffPage />} />} />
+          <Route path="evaluations" element={<Page element={<EvaluationsPage />} />} />
         </Route>
 
         {/* ── /admin/* — Admin / operations pages ── */}

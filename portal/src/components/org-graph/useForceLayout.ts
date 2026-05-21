@@ -12,7 +12,7 @@ import {
 } from 'd3-force';
 import type { GraphNode, GraphLink, GraphPerson, GraphRelationship, GraphDepartment } from './types';
 
-export type LayoutMode = 'force' | 'hierarchy' | 'radial';
+export type LayoutMode = 'force' | 'radial';
 
 interface UseForceLayoutProps {
   people: GraphPerson[];
@@ -45,46 +45,13 @@ function buildLinks(
   return result;
 }
 
-const NODE_SLOT = 80;  // minimum px per node (diameter ≈ 60 + label clearance)
-const PAD_H = 48;      // horizontal canvas padding
-const PAD_V = 44;      // vertical canvas padding
-
-function hierarchyNodes(people: GraphPerson[], departments: GraphDepartment[], width: number, height: number): GraphNode[] {
-  const deptOrder = departments.map(d => d.name);
-  const byDept = new Map<string, GraphPerson[]>();
-  for (const d of deptOrder) byDept.set(d, []);
-  for (const p of people) {
-    const list = byDept.get(p.department);
-    if (list) list.push(p); else byDept.set(p.department, [p]);
-  }
-
-  // Split large departments into sub-rows so nodes are never < NODE_SLOT px wide.
-  const usableWidth = Math.max(width - PAD_H * 2, NODE_SLOT);
-  const maxPerRow = Math.max(1, Math.floor(usableWidth / NODE_SLOT));
-  const rows: Array<{ dept: string; members: GraphPerson[] }> = [];
-  for (const [dept, members] of [...byDept.entries()].filter(([, v]) => v.length > 0)) {
-    for (let i = 0; i < members.length; i += maxPerRow) {
-      rows.push({ dept, members: members.slice(i, i + maxPerRow) });
-    }
-  }
-
-  const usableHeight = Math.max(height - PAD_V * 2, NODE_SLOT);
-  const rowHeight = usableHeight / Math.max(rows.length, 1);
-  const nodes: GraphNode[] = [];
-  rows.forEach(({ members }, row) => {
-    const y = PAD_V + (row + 0.5) * rowHeight;
-    const slotWidth = usableWidth / members.length;
-    members.forEach((p, col) => nodes.push({ ...p, x: PAD_H + (col + 0.5) * slotWidth, y }));
-  });
-  return nodes;
-}
-
 function radialNodes(people: GraphPerson[], width: number, height: number): GraphNode[] {
   if (people.length === 0) return [];
   const sorted = [...people].sort((a, b) => b.influenceScore - a.influenceScore);
   const cx = width / 2, cy = height / 2;
-  const ringCapacity = [1, 8, 16, 24, 32, 40];
-  const ringRadius = [0, 90, 170, 240, 310, 380];
+  // Capacity and radius sized so arc-per-node stays > ~80px (avoids label collisions).
+  const ringCapacity = [1, 7, 12, 17, 22, 27, 32];
+  const ringRadius  = [0, 130, 240, 350, 460, 570, 680];
   const nodes: GraphNode[] = [];
   let idx = 0;
   for (let r = 0; r < ringCapacity.length && idx < sorted.length; r++) {
@@ -92,19 +59,21 @@ function radialNodes(people: GraphPerson[], width: number, height: number): Grap
     const radius = ringRadius[r];
     const count = Math.min(cap, sorted.length - idx);
     for (let i = 0; i < count; i++, idx++) {
-      const angle = count === 1 ? 0 : (i / count) * 2 * Math.PI - Math.PI / 2;
+      const angle = count === 1 ? -Math.PI / 2 : (i / count) * 2 * Math.PI - Math.PI / 2;
       nodes.push({ ...sorted[idx], x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
     }
   }
-  // Overflow into extra rings
+  // Overflow: keep adding rings at +80px each
+  let overflowRing = 0;
   while (idx < sorted.length) {
-    const ring = nodes.length / 40 + ringCapacity.length;
-    const radius = ringRadius[ringCapacity.length - 1] + (ring - ringCapacity.length + 1) * 70;
-    const cap = 40;
-    const i = nodes.length % cap;
-    const angle = (i / cap) * 2 * Math.PI - Math.PI / 2;
-    nodes.push({ ...sorted[idx], x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
-    idx++;
+    const radius = ringRadius[ringRadius.length - 1] + (overflowRing + 1) * 80;
+    const cap = Math.floor((2 * Math.PI * radius) / 90);
+    const count = Math.min(cap, sorted.length - idx);
+    for (let i = 0; i < count && idx < sorted.length; i++, idx++) {
+      const angle = (i / cap) * 2 * Math.PI - Math.PI / 2;
+      nodes.push({ ...sorted[idx], x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
+    }
+    overflowRing++;
   }
   return nodes;
 }
@@ -123,15 +92,6 @@ export function useForceLayout({ people, relationships, departments, width, heig
     // Stop any running force simulation before switching layouts.
     simRef.current?.stop();
     simRef.current = null;
-
-    if (layout === 'hierarchy') {
-      const staticNodes = hierarchyNodes(people, departments, width, height);
-      const nodeMap = new Map(staticNodes.map(n => [n.id, n]));
-      setNodes(staticNodes);
-      setLinks(buildLinks(people, relationships, nodeMap));
-      setIsDone(true);
-      return;
-    }
 
     if (layout === 'radial') {
       const staticNodes = radialNodes(people, width, height);

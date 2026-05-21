@@ -14,9 +14,18 @@ import {
   ListPromptsCommand,
   GetPromptCommand,
   UpdatePromptCommand,
+  CreatePromptCommand,
   CreatePromptVersionCommand,
   type PromptInferenceConfiguration,
 } from '@aws-sdk/client-bedrock-agent';
+import {
+  BedrockRuntimeClient,
+  ConverseStreamCommand,
+} from '@aws-sdk/client-bedrock-runtime';
+import {
+  BedrockAgentRuntimeClient,
+  OptimizePromptCommand,
+} from '@aws-sdk/client-bedrock-agent-runtime';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { requireAction } from '../lib/authz.js';
 import { config } from '../config.js';
@@ -27,6 +36,18 @@ let _bedrockAgent: BedrockAgentClient | null = null;
 function bedrockAgent(): BedrockAgentClient {
   if (!_bedrockAgent) _bedrockAgent = new BedrockAgentClient({ region: config.region });
   return _bedrockAgent;
+}
+
+let _bedrockRuntime: BedrockRuntimeClient | null = null;
+function bedrockRuntime(): BedrockRuntimeClient {
+  if (!_bedrockRuntime) _bedrockRuntime = new BedrockRuntimeClient({ region: config.region });
+  return _bedrockRuntime;
+}
+
+let _bedrockAgentRuntime: BedrockAgentRuntimeClient | null = null;
+function bedrockAgentRuntime(): BedrockAgentRuntimeClient {
+  if (!_bedrockAgentRuntime) _bedrockAgentRuntime = new BedrockAgentRuntimeClient({ region: config.region });
+  return _bedrockAgentRuntime;
 }
 
 // Express ParamsDictionary types values as `string | string[]`. These
@@ -166,6 +187,7 @@ canaryLibraryRouter.get('/library/:promptId/version/:version', asyncHandler(asyn
       arn: out.arn ?? '',
       name: out.name ?? '',
       version: out.version ?? version,
+      updatedAt: out.updatedAt?.toISOString() ?? '',
       variant: {
         name: v?.name ?? '',
         modelId: v?.modelId ?? '',
@@ -180,6 +202,94 @@ canaryLibraryRouter.get('/library/:promptId/version/:version', asyncHandler(asyn
     res.status(503).json({ error: 'Bedrock unavailable', detail: (err as Error).message });
   }
 }));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /library — Create a brand-new prompt in Bedrock Prompt Library. Cedar-gated.
+// Body: { name, template_text, model_id?, inference_config?, description? }
+// Returns: { ok, id, arn, name, version: 'DRAFT' }
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface CreateBody {
+  name?: unknown;
+  template_text?: unknown;
+  model_id?: unknown;
+  inference_config?: unknown;
+  description?: unknown;
+}
+
+canaryLibraryRouter.post(
+  '/library',
+  requireAction('ManageCanary'),
+  asyncHandler(async (req, res) => {
+    const body = (req.body ?? {}) as CreateBody;
+
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    const templateText = typeof body.template_text === 'string' ? body.template_text.trim() : '';
+    if (!name) throw new ValidationError('name is required');
+    if (!templateText) throw new ValidationError('template_text is required');
+
+    const modelId =
+      typeof body.model_id === 'string' && body.model_id.trim()
+        ? body.model_id.trim()
+        : 'amazon.nova-pro-v1:0';
+
+    const description =
+      typeof body.description === 'string' && body.description.trim()
+        ? body.description.trim()
+        : undefined;
+
+    const inferenceConfigOverride =
+      body.inference_config != null && typeof body.inference_config === 'object'
+        ? (body.inference_config as Record<string, unknown>)
+        : undefined;
+
+    // Auto-extract {{variable}} names from the template to populate inputVariables.
+    const varMatches = [...templateText.matchAll(/{{([^}]+)}}/g)];
+    const inputVariables = [...new Set(varMatches.map((m) => m[1]?.trim() ?? ''))
+      .values()]
+      .filter(Boolean)
+      .map((n) => ({ name: n }));
+
+    const inferenceConfiguration: PromptInferenceConfiguration = {
+      text: {
+        temperature:
+          typeof inferenceConfigOverride?.['temperature'] === 'number'
+            ? inferenceConfigOverride['temperature']
+            : 0.7,
+        maxTokens:
+          typeof inferenceConfigOverride?.['maxTokens'] === 'number'
+            ? inferenceConfigOverride['maxTokens']
+            : 2048,
+      },
+    };
+
+    try {
+      const out = await bedrockAgent().send(
+        new CreatePromptCommand({
+          name,
+          ...(description ? { description } : {}),
+          defaultVariant: 'default',
+          variants: [
+            {
+              name: 'default',
+              modelId,
+              templateType: 'TEXT',
+              templateConfiguration: {
+                text: { text: templateText, inputVariables },
+              },
+              inferenceConfiguration,
+            },
+          ],
+        }),
+      );
+
+      res.json({ ok: true, id: out.id ?? '', arn: out.arn ?? '', name: out.name ?? name, version: 'DRAFT' });
+    } catch (err) {
+      console.warn('[canary-library] CreatePrompt failed:', (err as Error).message);
+      res.status(503).json({ error: 'Bedrock unavailable', detail: (err as Error).message });
+    }
+  }),
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUT /library/:promptId/draft — Save edits to the DRAFT variant. Cedar-gated.
@@ -318,6 +428,143 @@ canaryLibraryRouter.post(
       res.json({ ok: true, version: out.version ?? '', arn: out.arn ?? '' });
     } catch (err) {
       console.warn('[canary-library] CreatePromptVersion failed:', (err as Error).message);
+      res.status(503).json({ error: 'Bedrock unavailable', detail: (err as Error).message });
+    }
+  }),
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /library/:promptId/invoke — Run prompt via ConverseStream.
+// Body: { version?, variables?, guardrailId?, guardrailVersion? }
+// Streams newline-delimited JSON: { text } | { guardrail } | { done: true }
+// NOTE: ConverseStream with a prompt ARN rejects messages/system/inferenceConfig.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface InvokeBody {
+  version?: unknown;
+  variables?: unknown;
+  guardrailId?: unknown;
+  guardrailVersion?: unknown;
+}
+
+canaryLibraryRouter.post(
+  '/library/:promptId/invoke',
+  requireAction('ManageCanary'),
+  asyncHandler(async (req, res) => {
+    const promptId = paramStr(req.params['promptId'] ?? '');
+    const body = (req.body ?? {}) as InvokeBody;
+    const version = typeof body.version === 'string' ? body.version : undefined;
+    const guardrailId = typeof body.guardrailId === 'string' ? body.guardrailId : undefined;
+    const guardrailVersion = typeof body.guardrailVersion === 'string' ? body.guardrailVersion : '1';
+
+    const variables: Record<string, string> =
+      body.variables != null && typeof body.variables === 'object' && !Array.isArray(body.variables)
+        ? Object.fromEntries(
+            Object.entries(body.variables as Record<string, unknown>)
+              .filter(([, v]) => typeof v === 'string')
+              .map(([k, v]) => [k, v as string]),
+          )
+        : {};
+
+    // Fetch the prompt ARN (the ARN is the modelId for ConverseStream).
+    let modelId: string;
+    try {
+      const detail = await bedrockAgent().send(
+        new GetPromptCommand({
+          promptIdentifier: promptId,
+          ...(version && version !== 'DRAFT' ? { promptVersion: version } : {}),
+        }),
+      );
+      modelId = detail.arn ?? promptId;
+    } catch (err) {
+      console.warn('[canary-library] GetPrompt (for invoke) failed:', (err as Error).message);
+      res.status(503).json({ error: 'Bedrock unavailable', detail: (err as Error).message });
+      return;
+    }
+
+    const promptVariables = Object.fromEntries(
+      Object.entries(variables).map(([k, v]) => [k, { text: v }]),
+    );
+
+    try {
+      const cmd = new ConverseStreamCommand({
+        modelId,
+        ...(Object.keys(promptVariables).length > 0 ? { promptVariables } : {}),
+        ...(guardrailId
+          ? { guardrailConfig: { guardrailIdentifier: guardrailId, guardrailVersion, trace: 'enabled' } }
+          : {}),
+      });
+
+      const out = await bedrockRuntime().send(cmd);
+
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.setHeader('Transfer-Encoding', 'chunked');
+      res.setHeader('Cache-Control', 'no-cache');
+
+      if (out.stream) {
+        for await (const event of out.stream) {
+          if (event.contentBlockDelta?.delta?.text) {
+            res.write(JSON.stringify({ text: event.contentBlockDelta.delta.text }) + '\n');
+          }
+          if (event.metadata?.trace?.guardrail) {
+            res.write(JSON.stringify({ guardrail: event.metadata.trace.guardrail }) + '\n');
+          }
+        }
+      }
+
+      res.write(JSON.stringify({ done: true }) + '\n');
+      res.end();
+    } catch (err) {
+      console.warn('[canary-library] ConverseStream failed:', (err as Error).message);
+      if (!res.headersSent) {
+        res.status(503).json({ error: 'Bedrock unavailable', detail: (err as Error).message });
+      } else {
+        res.write(JSON.stringify({ error: (err as Error).message }) + '\n');
+        res.end();
+      }
+    }
+  }),
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /library/:promptId/optimize — AI rewrite via OptimizePrompt.
+// Body: { templateText: string; targetMetric?: string }
+// Returns: { optimizedText: string }
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface OptimizeBody {
+  templateText?: unknown;
+  targetMetric?: unknown;
+}
+
+canaryLibraryRouter.post(
+  '/library/:promptId/optimize',
+  requireAction('ManageCanary'),
+  asyncHandler(async (req, res) => {
+    const body = (req.body ?? {}) as OptimizeBody;
+    const templateText = typeof body.templateText === 'string' ? body.templateText.trim() : '';
+    if (!templateText) throw new ValidationError('templateText is required');
+
+    try {
+      const out = await bedrockAgentRuntime().send(
+        new OptimizePromptCommand({
+          input: { textPrompt: { text: templateText } },
+          targetModelId: 'amazon.nova-pro-v1:0',
+        }),
+      );
+
+      let optimizedText = '';
+      if (out.optimizedPrompt) {
+        for await (const event of out.optimizedPrompt) {
+          if (event.optimizedPromptEvent?.optimizedPrompt?.textPrompt?.text) {
+            optimizedText += event.optimizedPromptEvent.optimizedPrompt.textPrompt.text;
+          }
+        }
+      }
+
+      res.json({ ok: true, optimizedText, targetMetric: body.targetMetric ?? 'clarity' });
+    } catch (err) {
+      console.warn('[canary-library] OptimizePrompt failed:', (err as Error).message);
       res.status(503).json({ error: 'Bedrock unavailable', detail: (err as Error).message });
     }
   }),

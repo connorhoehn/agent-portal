@@ -20,6 +20,9 @@ function IqLayout() {
       title={spec.title}
       items={spec.items}
       storageKey={spec.storageKey}
+      secondaryTitle={spec.secondaryTitle}
+      secondaryItems={spec.secondaryItems}
+      secondaryStorageKey={spec.secondaryStorageKey}
     />
   );
 }

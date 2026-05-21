@@ -135,6 +135,7 @@ export interface PromptVersionDetail {
   arn: string;
   name: string;
   version: string;
+  updatedAt?: string;
   variant?: {
     name: string;
     modelId?: string;

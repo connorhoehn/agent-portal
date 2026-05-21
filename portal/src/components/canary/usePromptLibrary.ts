@@ -34,11 +34,11 @@ export function usePromptList(): {
           const msg = await res.text().catch(() => res.statusText);
           throw new Error(msg || `HTTP ${res.status}`);
         }
-        return res.json() as Promise<PromptLibraryEntry[]>;
+        return res.json() as Promise<PromptLibraryEntry[] | { prompts: PromptLibraryEntry[] }>;
       })
       .then((data) => {
         if (!cancelled) {
-          setPrompts(data);
+          setPrompts(Array.isArray(data) ? data : (data as { prompts: PromptLibraryEntry[] }).prompts ?? []);
           setLoading(false);
         }
       })
@@ -86,11 +86,11 @@ export function usePromptVersions(promptId: string | null): {
           const msg = await res.text().catch(() => res.statusText);
           throw new Error(msg || `HTTP ${res.status}`);
         }
-        return res.json() as Promise<PromptLibraryEntry[]>;
+        return res.json() as Promise<PromptLibraryEntry[] | { versions: PromptLibraryEntry[] }>;
       })
       .then((data) => {
         if (!cancelled) {
-          setVersions(data);
+          setVersions(Array.isArray(data) ? data : (data as { versions: PromptLibraryEntry[] }).versions ?? []);
           setLoading(false);
         }
       })
@@ -167,6 +167,31 @@ export function usePromptVersionDetail(
 
 // ── Async helpers ─────────────────────────────────────────────────────────────
 
+export async function createPrompt(opts: {
+  name: string;
+  templateText: string;
+  modelId?: string;
+  inferenceConfig?: { temperature?: number; maxTokens?: number };
+  description?: string;
+}): Promise<{ id: string; arn: string; name: string }> {
+  const res = await fetch('/api/observability/canary/library', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: opts.name,
+      template_text: opts.templateText,
+      model_id: opts.modelId,
+      inference_config: opts.inferenceConfig,
+      description: opts.description,
+    }),
+  });
+  if (!res.ok) {
+    const msg = await res.text().catch(() => res.statusText);
+    throw new Error(msg || `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<{ id: string; arn: string; name: string }>;
+}
+
 export async function saveDraft(
   promptId: string,
   name: string,
@@ -179,7 +204,12 @@ export async function saveDraft(
     {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, templateText, modelId, inferenceConfig }),
+      body: JSON.stringify({
+        name,
+        template_text: templateText,
+        model_id: modelId,
+        inference_config: inferenceConfig,
+      }),
     },
   );
   if (!res.ok) {
@@ -238,4 +268,85 @@ export async function resetCanaryExperiment(): Promise<void> {
     throw new Error(msg || `HTTP ${res.status}`);
   }
   resetExperiment();
+}
+
+// ── Prompt invoke (streaming) ─────────────────────────────────────────────────
+
+export async function invokePrompt(
+  promptId: string,
+  opts: {
+    version?: string;
+    variables?: Record<string, string>;
+    guardrailId?: string;
+    guardrailVersion?: string;
+    onChunk: (text: string) => void;
+    onGuardrail?: (trace: unknown) => void;
+  },
+): Promise<void> {
+  const res = await fetch(
+    `/api/observability/canary/library/${encodeURIComponent(promptId)}/invoke`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        version: opts.version,
+        variables: opts.variables,
+        guardrailId: opts.guardrailId,
+        guardrailVersion: opts.guardrailVersion,
+      }),
+    },
+  );
+  if (!res.ok) {
+    const msg = await res.text().catch(() => res.statusText);
+    throw new Error(msg || `HTTP ${res.status}`);
+  }
+
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error('No response body');
+  const decoder = new TextDecoder();
+  let buf = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const lines = buf.split('\n');
+    buf = lines.pop() ?? '';
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const evt = JSON.parse(line) as { text?: string; guardrail?: unknown; done?: boolean; error?: string };
+        if (evt.error) throw new Error(evt.error);
+        if (evt.text) opts.onChunk(evt.text);
+        if (evt.guardrail) opts.onGuardrail?.(evt.guardrail);
+      } catch {
+        // non-JSON line, skip
+      }
+    }
+  }
+}
+
+// ── Prompt optimize (AI Assist) ───────────────────────────────────────────────
+
+export type OptimizeMetric = 'clarity' | 'brevity' | 'safety' | 'groundedness';
+
+export async function optimizePrompt(
+  promptId: string,
+  templateText: string,
+  targetMetric: OptimizeMetric = 'clarity',
+): Promise<string> {
+  const res = await fetch(
+    `/api/observability/canary/library/${encodeURIComponent(promptId)}/optimize`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ templateText, targetMetric }),
+    },
+  );
+  if (!res.ok) {
+    const msg = await res.text().catch(() => res.statusText);
+    throw new Error(msg || `HTTP ${res.status}`);
+  }
+  const data = (await res.json()) as { optimizedText: string };
+  return data.optimizedText;
 }

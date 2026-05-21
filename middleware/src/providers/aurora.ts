@@ -185,7 +185,7 @@ async function fetchSkillsByPerson(): Promise<Map<string, string[]>> {
 async function fetchAllPeople(): Promise<Person[]> {
   const rows = await exec(
     `SELECT id, name, title, team,
-            COALESCE(pagerank_score, expertise_score, 0) AS influence
+            COALESCE(pagerank_score, expertise_score / 100.0, 0) AS influence
        FROM people`,
   );
   const skills = await fetchSkillsByPerson();

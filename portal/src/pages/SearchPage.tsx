@@ -1,20 +1,14 @@
 // Focused conversational org-search experience.
 //
 // Differs from /invoke (multi-agent debug surface) and /explore (graph-first):
-// here the chat is centered and a right-side rail surfaces the things you'd
-// want when *reading* an answer — source documents the agent retrieved and
-// people it mentioned. Pinned to the orgiq-search agent so the KB and graph
-// tool surfaces are predictable.
-//
-// Citations come from query_knowledge_base tool calls (each call returns a
-// JSON array of {content, score, source}). Related people come from name-
-// matching the latest assistant message against /api/graph/entities (same
-// pattern as ExplorePage).
+// here the chat is full-width, pinned to the orgiq-search agent so the KB
+// and graph tool surfaces are predictable. Sessions are accessible via the
+// subnav History section; follow-up suggestions are generated from responses.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { useSearchParams } from 'react-router';
 import { useAgentStream } from '@connorhoehn/realtime-modules/agent-streaming/client';
-import type { ToolCall as LiveToolCall } from '@connorhoehn/realtime-modules/agent-streaming/client';
+import type { Message as AgentMessage } from '@connorhoehn/realtime-modules/agent-streaming/client';
 import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
 import type { GraphPerson } from '../components/org-graph';
@@ -27,61 +21,15 @@ interface GraphEntities {
   nodes: GraphPerson[];
 }
 
-interface KbCitation {
-  /** Stable id for React keys — derived from source + a slice of content. */
-  key: string;
-  source: string;
-  content: string;
-  score: number;
-  /** Which tool call surfaced this citation. */
-  fromToolCallId: string;
+interface MemoryEvent {
+  eventId: string;
+  sessionId: string;
+  timestamp: string;
+  role: 'USER' | 'ASSISTANT' | 'OTHER';
+  text: string;
 }
 
-// ── Citation extraction ──────────────────────────────────────────────────────
-
-function parseCitations(toolCalls: ReadonlyArray<LiveToolCall>): KbCitation[] {
-  const out: KbCitation[] = [];
-  for (const tc of toolCalls) {
-    if (tc.name !== 'query_knowledge_base' || !tc.result) continue;
-    try {
-      const parsed = JSON.parse(tc.result);
-      if (!Array.isArray(parsed)) continue;
-      for (const row of parsed) {
-        if (!row || typeof row !== 'object') continue;
-        const source = String(row['source'] ?? 'unknown');
-        const content = String(row['content'] ?? '');
-        if (!content) continue;
-        out.push({
-          key: `${tc.id}:${source}:${content.slice(0, 40)}`,
-          source,
-          content,
-          score: typeof row['score'] === 'number' ? row['score'] : 0,
-          fromToolCallId: tc.id,
-        });
-      }
-    } catch {
-      // Result wasn't JSON — agent might have emitted a string. Skip silently.
-    }
-  }
-  // Dedupe by source+content prefix; KB sometimes returns near-identical
-  // chunks across queries within one turn.
-  const seen = new Set<string>();
-  return out.filter(c => {
-    if (seen.has(c.key)) return false;
-    seen.add(c.key);
-    return true;
-  });
-}
-
-// Friendly label for an S3 URI like
-// `s3://orgiq-documents-264.../decisions/auth-rollout.md` → `auth-rollout.md`.
-function citationLabel(source: string): string {
-  if (source === 'unknown') return 'Unknown source';
-  const tail = source.split('/').pop();
-  return tail || source;
-}
-
-// ── Related-people extraction (lifted pattern from ExplorePage) ──────────────
+// ── Related-people extraction ────────────────────────────────────────────────
 
 function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -179,16 +127,31 @@ function SearchPage() {
     streamingText,
     activeToolCalls,
     error,
+    sessionId,
     sendMessage,
     reset,
+    loadHistory,
   } = useAgentStream({
     url: `/api/agents/${SEARCH_AGENT_ID}/invoke`,
-    buildBody: (text, { sessionId }) => {
+    historyFetch: async (sid: string): Promise<AgentMessage[]> => {
+      const r = await fetch(`/api/sessions/${encodeURIComponent(sid)}/events`);
+      if (!r.ok) return [];
+      const body = (await r.json()) as { events: MemoryEvent[] };
+      return body.events
+        .filter(e => e.role === 'USER' || e.role === 'ASSISTANT')
+        .map<AgentMessage>(e => ({
+          id: e.eventId + ':' + e.role,
+          role: e.role === 'USER' ? 'user' : 'assistant',
+          content: e.text,
+          toolCalls: [],
+        }));
+    },
+    buildBody: (text, { sessionId: sid }) => {
       const sel = pendingSelectionRef.current;
       pendingSelectionRef.current = null;
       return {
         message: text,
-        ...(sessionId ? { sessionId } : {}),
+        ...(sid ? { sessionId: sid } : {}),
         ...(sel ? { selection: sel } : {}),
       };
     },
@@ -197,6 +160,22 @@ function SearchPage() {
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // Honor deep-links like /search?session=<id> from the subnav History section.
+  // ?session=new resets to a fresh conversation; a UUID loads that session.
+  useEffect(() => {
+    const sid = searchParams.get('session');
+    if (!sid) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('session');
+    setSearchParams(next, { replace: true });
+    if (sid === 'new') {
+      reset();
+    } else {
+      void loadHistory(sid);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.get('session')]);
 
   // ?peopleIds=<csv> arrives from /explore "Ask in Search". Hold them as
   // pinned context that's attached to the next outgoing message.
@@ -222,22 +201,6 @@ function SearchPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages, streamingText]);
-
-  // Build citation + people sets across the whole conversation. We accumulate
-  // tool calls from finalized messages plus the live ones. (Each completed
-  // message stores its toolCalls.)
-  const allToolCalls = useMemo<ReadonlyArray<LiveToolCall>>(() => {
-    const fromMessages: LiveToolCall[] = [];
-    for (const m of messages) {
-      if (!m.toolCalls) continue;
-      for (const tc of m.toolCalls) {
-        fromMessages.push({ ...tc, done: true });
-      }
-    }
-    return [...fromMessages, ...activeToolCalls];
-  }, [messages, activeToolCalls]);
-
-  const citations = useMemo(() => parseCitations(allToolCalls), [allToolCalls]);
 
   const mentionedPeople = useMemo<GraphPerson[]>(() => {
     if (!graph?.nodes) return [];
@@ -389,28 +352,6 @@ function SearchPage() {
         </div>
       </div>
 
-      {/* ─── Right rail: Sources + Related people ────────────────────────── */}
-      <aside style={railStyle}>
-        <RailSection
-          title="Sources"
-          count={citations.length}
-          emptyHint="No documents retrieved yet. The agent surfaces sources as it answers."
-        >
-          {citations.map(c => (
-            <CitationCard key={c.key} citation={c} />
-          ))}
-        </RailSection>
-
-        <RailSection
-          title="Related people"
-          count={mentionedPeople.length}
-          emptyHint="People mentioned in the response will appear here."
-        >
-          {mentionedPeople.map(p => (
-            <PersonCard key={p.id} person={p} />
-          ))}
-        </RailSection>
-      </aside>
     </div>
   );
 }
@@ -487,82 +428,6 @@ function Message({
       )}
     </div>
   );
-}
-
-function RailSection({
-  title,
-  count,
-  emptyHint,
-  children,
-}: {
-  title: string;
-  count: number;
-  emptyHint: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section style={railSectionStyle}>
-      <div style={railSectionHeaderStyle}>
-        <span>{title}</span>
-        <span style={railSectionCountStyle}>{count}</span>
-      </div>
-      {count === 0 ? (
-        <div style={railEmptyStyle}>{emptyHint}</div>
-      ) : (
-        <div style={railListStyle}>{children}</div>
-      )}
-    </section>
-  );
-}
-
-function CitationCard({ citation }: { citation: KbCitation }) {
-  const [open, setOpen] = useState(false);
-  const label = citationLabel(citation.source);
-  const isHttp = /^https?:/.test(citation.source);
-
-  return (
-    <div style={citationCardStyle}>
-      <div style={citationHeadStyle}>
-        {isHttp ? (
-          <a href={citation.source} target="_blank" rel="noreferrer" style={citationTitleStyle}>{label}</a>
-        ) : (
-          <span style={citationTitleStyle}>{label}</span>
-        )}
-        <span style={citationScoreStyle}>{citation.score.toFixed(2)}</span>
-      </div>
-      <div style={citationSnippetStyle}>
-        {open ? citation.content : truncate(citation.content, 180)}
-      </div>
-      {citation.content.length > 180 && (
-        <button
-          onClick={() => setOpen(o => !o)}
-          style={citationToggleStyle}
-        >
-          {open ? 'Show less' : 'Show more'}
-        </button>
-      )}
-    </div>
-  );
-}
-
-function PersonCard({ person }: { person: GraphPerson }) {
-  return (
-    <Link
-      to={`/explore?focus=${encodeURIComponent(person.id)}`}
-      style={personCardStyle}
-    >
-      <div style={personNameStyle}>{person.name}</div>
-      {(person.title || person.department) && (
-        <div style={personMetaStyle}>
-          {person.title}{person.title && person.department ? ' · ' : ''}{person.department}
-        </div>
-      )}
-    </Link>
-  );
-}
-
-function truncate(s: string, n: number): string {
-  return s.length <= n ? s : s.slice(0, n - 1) + '…';
 }
 
 // ── Styles ───────────────────────────────────────────────────────────────────
@@ -794,104 +659,4 @@ const composerBtnStyle: React.CSSProperties = {
   fontWeight: 500,
   fontFamily: 'inherit',
 };
-const railStyle: React.CSSProperties = {
-  width: 320,
-  borderLeft: '1px solid var(--color-border)',
-  background: 'var(--color-surface)',
-  overflowY: 'auto',
-  display: 'flex',
-  flexDirection: 'column',
-};
-const railSectionStyle: React.CSSProperties = {
-  borderBottom: '1px solid var(--color-border)',
-  padding: '14px 16px',
-};
-const railSectionHeaderStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  fontSize: 11,
-  fontWeight: 600,
-  color: 'var(--color-text-tertiary)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-  marginBottom: 8,
-};
-const railSectionCountStyle: React.CSSProperties = {
-  fontSize: 10,
-  padding: '1px 6px',
-  background: 'var(--color-bg)',
-  borderRadius: 999,
-  color: 'var(--color-text-secondary)',
-};
-const railEmptyStyle: React.CSSProperties = {
-  fontSize: 11.5,
-  color: 'var(--color-text-tertiary)',
-  lineHeight: 1.5,
-};
-const railListStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 8,
-};
-const citationCardStyle: React.CSSProperties = {
-  border: '1px solid var(--color-border)',
-  borderRadius: 4,
-  padding: '8px 10px',
-  background: 'var(--color-bg)',
-};
-const citationHeadStyle: React.CSSProperties = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'baseline',
-  gap: 6,
-  marginBottom: 4,
-};
-const citationTitleStyle: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 500,
-  color: 'var(--color-text-primary)',
-  textDecoration: 'none',
-  wordBreak: 'break-word',
-};
-const citationScoreStyle: React.CSSProperties = {
-  fontSize: 10,
-  color: 'var(--color-text-tertiary)',
-  fontFamily: 'monospace',
-};
-const citationSnippetStyle: React.CSSProperties = {
-  fontSize: 11.5,
-  color: 'var(--color-text-secondary)',
-  lineHeight: 1.45,
-};
-const citationToggleStyle: React.CSSProperties = {
-  marginTop: 4,
-  background: 'transparent',
-  border: 'none',
-  padding: 0,
-  fontSize: 10.5,
-  color: 'var(--color-primary, #6366f1)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-};
-const personCardStyle: React.CSSProperties = {
-  display: 'block',
-  border: '1px solid var(--color-border)',
-  borderRadius: 4,
-  padding: '8px 10px',
-  background: 'var(--color-bg)',
-  textDecoration: 'none',
-  color: 'inherit',
-};
-const personNameStyle: React.CSSProperties = {
-  fontSize: 12,
-  fontWeight: 500,
-  color: 'var(--color-text-primary)',
-};
-const personMetaStyle: React.CSSProperties = {
-  fontSize: 10.5,
-  color: 'var(--color-text-tertiary)',
-  marginTop: 2,
-};
-
 export default SearchPage;

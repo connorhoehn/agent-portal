@@ -118,26 +118,31 @@ function projectStatusLabel(s: string): string {
   return STATUS_LABEL_MAP[s] ?? (s.charAt(0).toUpperCase() + s.slice(1));
 }
 
-function buildProjectsMEGraph(d: ProjectsGraphData): { nodes: MENode[]; edges: MEEdge[] } {
+function buildProjectsMEGraph(
+  d: ProjectsGraphData,
+  activeStatuses?: Set<string>,
+): { nodes: MENode[]; edges: MEEdge[]; allStatuses: string[] } {
   const nodes: MENode[] = [];
   const edges: MEEdge[] = [];
 
-  // Exclude completed projects — they're done and add clutter
-  const activeProjects = d.projects.filter(p => p.status !== 'completed' && p.status !== 'archived');
+  // All non-archived statuses for toolbar chips
+  const allProjects = d.projects.filter(p => p.status !== 'completed' && p.status !== 'archived');
+  const allStatuses = [...new Set(allProjects.map(p => p.status))].sort();
+
+  // Apply optional status filter
+  const activeProjects = activeStatuses
+    ? allProjects.filter(p => activeStatuses.has(p.status))
+    : allProjects;
   const activeProjectIds = new Set(activeProjects.map(p => p.id));
 
-  const statusSet = new Set(activeProjects.map(p => p.status));
-  for (const status of statusSet) {
-    nodes.push({ id: `status:${status}`, kind: 'status_group', label: projectStatusLabel(status), group: status, weight: 1, x: 0, y: 0 });
-  }
   const maxContrib = Math.max(...activeProjects.map(p => p.contributorCount), 1);
   for (const proj of activeProjects) {
     nodes.push({ id: proj.id, kind: 'project', label: proj.name, group: proj.status, weight: proj.contributorCount / maxContrib, personCount: proj.contributorCount, x: 0, y: 0 });
-    edges.push({ source: proj.id, target: `status:${proj.status}`, type: 'in_status', strength: 1 });
   }
+
   const activeEdges = d.personProjectEdges.filter(e => activeProjectIds.has(e.projectId));
   const personIds = new Set(activeEdges.map(e => e.personId));
-  const maxInfluence = Math.max(...d.people.map(p => p.influenceScore), 0.01);
+  const maxInfluence = Math.max(...d.people.map(p => p.influenceScore), 0.001);
   for (const p of d.people) {
     if (!personIds.has(p.id)) continue;
     nodes.push({ id: p.id, kind: 'person', label: p.name, department: p.department, weight: p.influenceScore / maxInfluence, x: 0, y: 0 });
@@ -145,7 +150,7 @@ function buildProjectsMEGraph(d: ProjectsGraphData): { nodes: MENode[]; edges: M
   for (const e of activeEdges) {
     edges.push({ source: e.personId, target: e.projectId, type: 'contributes_to', strength: e.weight });
   }
-  return { nodes, edges };
+  return { nodes, edges, allStatuses };
 }
 
 function ExplorePage() {
@@ -157,13 +162,11 @@ function ExplorePage() {
   const [minStrength, setMinStrength] = useState(0.6);
   const [chatOpen, setChatOpen] = useState(false);
   const [filterToSelection, setFilterToSelection] = useState(true);
+  const [activeStatuses, setActiveStatuses] = useState<Set<string> | null>(null);
 
   // ?layout= and ?entities= params driven by the sub-nav catalog
   const rawLayout = searchParams.get('layout');
-  const layoutMode: LayoutMode =
-    rawLayout === 'hierarchy' ? 'hierarchy'
-    : rawLayout === 'radial' ? 'radial'
-    : 'force';
+  const layoutMode: LayoutMode = rawLayout === 'radial' ? 'radial' : 'force';
 
   // entityFilter: 'all' | 'people' | 'skills' | 'projects' | 'decisions'
   const entityFilter = searchParams.get('entities') ?? 'all';
@@ -176,15 +179,16 @@ function ExplorePage() {
     entityFilter === 'projects' ? '/api/graph/projects-graph' : null,
   );
 
-  const meGraph = useMemo<{ nodes: MENode[]; edges: MEEdge[] } | null>(() => {
+  const meGraph = useMemo<{ nodes: MENode[]; edges: MEEdge[]; allStatuses?: string[] } | null>(() => {
     if (entityFilter === 'skills' && skillsData) return buildSkillsMEGraph(skillsData);
-    if (entityFilter === 'projects' && projectsData) return buildProjectsMEGraph(projectsData);
+    if (entityFilter === 'projects' && projectsData) return buildProjectsMEGraph(projectsData, activeStatuses ?? undefined);
     return null;
-  }, [entityFilter, skillsData, projectsData]);
+  }, [entityFilter, skillsData, projectsData, activeStatuses]);
 
-  // Clear selection when switching entity filter (decisions ↔ skills ↔ etc.)
+  // Clear selection and status filter when switching entity filter.
   useEffect(() => {
     setSelectedIds(new Set());
+    setActiveStatuses(null);
   }, [entityFilter]);
 
   // ?focus=<id> arrives from related-people cards on /search.
@@ -268,24 +272,57 @@ function ExplorePage() {
     setChatOpen(true);
     if (!ids || ids.length === 0 || isStreaming) return;
 
-    // Build a contextual question based on the selection so the user gets an
-    // instant answer about the people they just picked rather than an empty box.
-    const names = ids
-      .map(id => data?.nodes.find(n => n.id === id)?.name)
-      .filter(Boolean) as string[];
+    // Resolve display labels for each selected ID. For person nodes use data.nodes
+    // (which has real names); for skill/domain/project nodes fall back to meGraph.nodes.
+    const resolveLabel = (id: string): string | undefined => {
+      const person = data?.nodes.find(n => n.id === id);
+      if (person) return person.name;
+      return meGraph?.nodes.find(n => n.id === id)?.label;
+    };
+
+    const allLabels = ids.map(resolveLabel).filter(Boolean) as string[];
+    const personIds = ids.filter(id => data?.nodes.some(n => n.id === id));
+    const nonPersonNodes = ids
+      .filter(id => !data?.nodes.some(n => n.id === id))
+      .map(id => meGraph?.nodes.find(n => n.id === id))
+      .filter(Boolean)
+      .filter(n => n!.kind !== 'skill_domain') as NonNullable<typeof meGraph>['nodes'];
+    const nonPersonLabels = nonPersonNodes.map(n => n.label);
+
+    // Bail gracefully if we couldn't resolve any labels.
+    if (allLabels.length === 0) return;
 
     let question: string;
-    if (names.length === 1) {
-      question = `Tell me about ${names[0]} — their skills, key projects, and who they collaborate with most.`;
-    } else if (names.length === 2) {
-      question = `What is the connection between ${names[0]} and ${names[1]}? Do they collaborate, share skills, or work on the same projects?`;
+    if (nonPersonLabels.length > 0 && personIds.length === 0) {
+      // Pure non-person selection (skills, projects)
+      if (nonPersonLabels.length === 1) {
+        const node = nonPersonNodes[0];
+        if (node.kind === 'project') {
+          question = `Who is contributing to the "${nonPersonLabels[0]}" project? List the team members and describe what each person is working on.`;
+        } else {
+          question = `Who in the org has expertise in ${nonPersonLabels[0]}? List the top people with this skill and describe how they use it.`;
+        }
+      } else {
+        const allProjects = nonPersonNodes.every(n => n.kind === 'project');
+        const last = nonPersonLabels[nonPersonLabels.length - 1];
+        const rest = nonPersonLabels.slice(0, -1).join(', ');
+        if (allProjects) {
+          question = `Who contributes to both ${rest} and ${last}? Find people working across these projects and describe their roles.`;
+        } else {
+          question = `Who works across ${rest} and ${last}? Find people with expertise spanning these areas and describe the overlap.`;
+        }
+      }
+    } else if (allLabels.length === 1) {
+      question = `Tell me about ${allLabels[0]} — their skills, key projects, and who they collaborate with most.`;
+    } else if (allLabels.length === 2) {
+      question = `What is the connection between ${allLabels[0]} and ${allLabels[1]}? Do they collaborate, share skills, or work on the same projects?`;
     } else {
-      const last = names[names.length - 1];
-      const rest = names.slice(0, -1).join(', ');
+      const last = allLabels[allLabels.length - 1];
+      const rest = allLabels.slice(0, -1).join(', ');
       question = `What connects ${rest} and ${last}? Describe their shared skills, collaborations, and any overlapping projects.`;
     }
 
-    pendingSelectionRef.current = { peopleIds: ids };
+    pendingSelectionRef.current = { peopleIds: personIds.length > 0 ? personIds : ids };
     void sendMessage(question);
   }
 
@@ -318,7 +355,7 @@ function ExplorePage() {
         <span style={{ fontWeight: 600 }}>Explore</span>
         <span style={{ color: 'var(--color-text-tertiary)' }}>
           {meGraph
-            ? <><b>{meGraph.nodes.filter(n => n.kind !== 'skill_domain' && n.kind !== 'status_group').length}</b> nodes · <b>{meGraph.edges.filter(e => e.type !== 'belongs_to' && e.type !== 'in_status').length}</b> {entityFilter} edges</>
+            ? <><b>{meGraph.nodes.filter(n => n.kind !== 'skill_domain').length}</b> nodes · <b>{meGraph.edges.filter(e => e.type !== 'belongs_to').length}</b> {entityFilter} edges</>
             : <><b>{visibleNodes.length}</b>{isFiltered ? ` / ${data?.nodes.length ?? 0}` : ''} people · <b>{filteredEdges.length}</b>{isEntityFiltered ? ` ${entityFilter}` : ''} edges</>
           }
         </span>
@@ -337,6 +374,37 @@ function ExplorePage() {
             disabled={isSpecificFilter} />
           <span style={{ width: 28, textAlign: 'right' }}>{minStrength.toFixed(2)}</span>
         </span>
+        {entityFilter === 'projects' && meGraph?.allStatuses && meGraph.allStatuses.length > 0 && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ color: 'var(--color-text-secondary)' }}>Status</span>
+            {meGraph.allStatuses.map(s => {
+              const isActive = activeStatuses === null || activeStatuses.has(s);
+              return (
+                <button
+                  key={s}
+                  onClick={() => setActiveStatuses(prev => {
+                    const all = new Set(meGraph.allStatuses!);
+                    if (prev === null) {
+                      const next = new Set(all);
+                      next.delete(s);
+                      return next;
+                    }
+                    const next = new Set(prev);
+                    if (next.has(s)) {
+                      next.delete(s);
+                      return next.size === 0 ? new Set(all) : next;
+                    }
+                    next.add(s);
+                    return next.size === all.size ? null : next;
+                  })}
+                  style={statusChipStyle(isActive)}
+                >
+                  {projectStatusLabel(s)}
+                </button>
+              );
+            })}
+          </span>
+        )}
         <span style={{ flex: 1 }} />
         {selectedIds.size > 0 && (
           <>
@@ -615,6 +683,17 @@ const sendBtnStyle: React.CSSProperties = {
 const errorStyle: React.CSSProperties = {
   fontSize: 12, color: 'var(--color-error, #ef4444)', padding: '4px 0',
 };
+
+function statusChipStyle(active: boolean): React.CSSProperties {
+  return {
+    fontSize: 11, padding: '2px 8px', borderRadius: 10, cursor: 'pointer',
+    fontFamily: 'inherit', fontWeight: active ? 600 : 400,
+    background: active ? 'var(--color-primary-subtle, #eef2ff)' : 'var(--color-surface)',
+    color: active ? 'var(--color-primary, #6366f1)' : 'var(--color-text-tertiary)',
+    border: `1px solid ${active ? 'var(--color-primary-border, #c7d2fe)' : 'var(--color-border)'}`,
+    transition: 'all 0.1s',
+  };
+}
 
 function personChipStyle(selected: boolean): React.CSSProperties {
   return {
