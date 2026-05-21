@@ -30,7 +30,6 @@ const NAV_ITEMS: NavItem[] = [
   // agent invocation surface.
   { path: '/iq/invoke',    label: 'Search',            tenant: 'orgiq' },
   { path: '/iq/explore',   label: 'Explore',           tenant: 'orgiq' },
-  { path: '/iq/agents',    label: 'Architecture',      tenant: 'orgiq' },
   { path: '/iq/prompts',   label: 'Prompt Management', tenant: 'orgiq' },
   { path: '/iq/scores',    label: 'Reports',           tenant: 'orgiq' },
   { path: '/iq/projects',  label: 'Projects',          tenant: 'orgiq' },
@@ -40,7 +39,8 @@ const NAV_ITEMS: NavItem[] = [
 
 // Admin sub-items rendered inside the collapsible Platform group.
 const PLATFORM_ITEMS: NavItem[] = [
-  { path: '/admin/knowledge-base', label: 'Knowledge Base', tenant: 'admin', requireRoles: ['hr-admin'] },
+  { path: '/iq/agents',            label: 'Architecture',    tenant: 'admin' },
+  { path: '/admin/knowledge-bases', label: 'Knowledge Bases', tenant: 'admin', requireRoles: ['hr-admin'] },
   { path: '/admin/ingest',         label: 'Ingest',         tenant: 'admin', requireRoles: ['hr-admin'] },
   { path: '/admin/observability',  label: 'Observability',  tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'] },
   { path: '/admin/capabilities',   label: 'Capabilities',   tenant: 'admin' },
