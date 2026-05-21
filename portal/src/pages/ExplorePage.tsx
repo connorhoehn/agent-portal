@@ -824,6 +824,7 @@ function primaryBtn(): React.CSSProperties {
     fontSize: 11, padding: '4px 10px',
     background: 'var(--color-primary, #6366f1)', color: '#fff',
     border: 'none', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500,
+    whiteSpace: 'nowrap',
   };
 }
 function ghostBtn(): React.CSSProperties {
@@ -831,6 +832,7 @@ function ghostBtn(): React.CSSProperties {
     fontSize: 11, padding: '4px 10px',
     background: 'var(--color-surface)', color: 'var(--color-text-primary)',
     border: '1px solid var(--color-border)', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit',
+    whiteSpace: 'nowrap',
   };
 }
 function iconBtn(): React.CSSProperties {
