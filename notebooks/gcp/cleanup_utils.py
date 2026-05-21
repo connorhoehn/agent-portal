@@ -32,10 +32,6 @@ TRACKED_KEY_PATH = ("gcp", "tracked_resources")
 # Resource-kind → delete handler (gcloud command builder). Each handler returns
 # a list of args appended to `gcloud`. Add new kinds here as notebooks need them.
 DELETERS: dict[str, callable] = {
-    "bigquery_dataset": lambda r: [
-        "bq", "rm", "-r", "-f", "-d",
-        f"{r.get('project', '')}:{r['name']}" if r.get("project") else r["name"],
-    ],
     "vertex_endpoint": lambda r: [
         "ai", "endpoints", "delete", r["name"],
         "--region", r.get("region", "us-central1"),
@@ -59,27 +55,102 @@ DELETERS: dict[str, callable] = {
     "gcs_bucket": lambda r: [
         "storage", "rm", "--recursive", f"gs://{r['name']}",
     ],
-    "agent_engine": lambda r: [
-        "ai", "reasoning-engines", "delete", r["name"],
-        "--region", r.get("region", "us-central1"),
-        "--quiet",
-    ],
     "model_armor_template": lambda r: [
         "model-armor", "templates", "delete", r["name"],
         "--location", r.get("location", "us-central1"),
         "--quiet",
     ],
-    "identity_platform_tenant": lambda r: [
-        "identity-platform", "tenants", "delete", r["name"],
-        "--quiet",
-    ],
 }
+# Note: identity_platform_tenant and identityplatform.tenant are handled by
+# PYTHON_DELETERS below — gcloud identity-platform is not available in all
+# gcloud versions.
 
 
 # Python deleters — for resources whose canonical delete path is not
-# `gcloud` (e.g. Vertex AI RAG corpora, which the gcloud surface for is
-# behind-current). The teardown loop calls these as `func(record)` and
-# expects them to return on success or raise on failure.
+# `gcloud` (e.g. Vertex AI Agent Engines, RAG corpora). The teardown loop
+# calls these as `func(record)` and expects them to return on success or
+# raise on failure. Python deleters take priority over gcloud DELETERS.
+def _delete_bigquery_dataset(r: dict[str, Any]) -> None:
+    """Delete a BigQuery dataset and all its contents via the Python client.
+
+    Uses delete_contents=True so tables/views inside are dropped first.
+    The bq CLI is a separate tool, not a gcloud subcommand, so it cannot go
+    through the gcloud DELETERS path.
+    """
+    from google.cloud import bigquery as _bq
+    project = r.get("project")
+    client = _bq.Client(project=project)
+    dataset_id = f'{project}.{r["name"]}' if project else r["name"]
+    client.delete_dataset(dataset_id, delete_contents=True, not_found_ok=True)
+
+
+def _delete_agent_engine(r: dict[str, Any]) -> None:
+    """Delete a Vertex AI Agent Engine (Reasoning Engine) via the Python SDK.
+
+    `gcloud ai reasoning-engines` is not present in all gcloud versions; the
+    Python SDK (`vertexai.Client.agent_engines`) is the stable surface.
+    """
+    import vertexai
+    project = r.get("project")
+    region = r.get("region", "us-central1")
+    if not project:
+        cfg = _load_config()
+        project = cfg.get("gcp", {}).get("project_id")
+    full_name = r.get("full_name")
+    if not full_name and project:
+        full_name = f"projects/{project}/locations/{region}/reasoningEngines/{r['name']}"
+    if not full_name:
+        raise ValueError(f"cannot resolve full resource name for agent_engine {r!r}")
+    # Use raw REST with force=true — the Python SDK delete() doesn't expose
+    # the force flag, and engines with child sessions fail with FAILED_PRECONDITION
+    # without it.
+    import google.auth
+    import google.auth.transport.requests
+    import urllib.request as _urllib
+
+    creds, _ = google.auth.default()
+    creds.refresh(google.auth.transport.requests.Request())
+
+    url = f'https://{region}-aiplatform.googleapis.com/v1beta1/{full_name}?force=true'
+    req = _urllib.Request(url, method='DELETE')
+    req.add_header('Authorization', f'Bearer {creds.token}')
+    with _urllib.urlopen(req) as resp:
+        if resp.status not in (200, 202):
+            body = resp.read().decode()
+            raise RuntimeError(f'DELETE {full_name} returned {resp.status}: {body[:300]}')
+
+
+def _delete_identity_platform_tenant(r: dict[str, Any]) -> None:
+    """Delete an Identity Platform tenant via the Identity Toolkit REST API.
+
+    gcloud identity-platform is not in all gcloud versions. The REST surface
+    DELETE identitytoolkit.googleapis.com/v2/projects/{project}/tenants/{id}
+    is always available with Application Default Credentials.
+    Tracker entries may store the tenant id under 'id' instead of 'name'.
+    """
+    import google.auth
+    import google.auth.transport.requests
+    import urllib.request as _urllib
+
+    project = r.get("project")
+    if not project:
+        cfg = _load_config()
+        project = cfg.get("gcp", {}).get("project_id")
+    tenant_id = r.get("id") or r.get("name")
+    if not tenant_id:
+        raise ValueError(f"cannot resolve tenant id from record {r!r}")
+
+    creds, _ = google.auth.default()
+    creds.refresh(google.auth.transport.requests.Request())
+    url = f"https://identitytoolkit.googleapis.com/v2/projects/{project}/tenants/{tenant_id}"
+    req = _urllib.Request(url, method="DELETE")
+    req.add_header("Authorization", f"Bearer {creds.token}")
+    with _urllib.urlopen(req) as resp:
+        if resp.status not in (200, 204):
+            body = resp.read().decode()
+            raise RuntimeError(f"DELETE tenant {tenant_id} returned {resp.status}: {body[:300]}")
+
+
 def _delete_rag_corpus(r: dict[str, Any]) -> None:
     """Delete a Vertex AI RAG Engine corpus by full resource name."""
     import vertexai
@@ -89,6 +160,10 @@ def _delete_rag_corpus(r: dict[str, Any]) -> None:
 
 
 PYTHON_DELETERS: dict[str, callable] = {
+    "bigquery_dataset": _delete_bigquery_dataset,
+    "agent_engine": _delete_agent_engine,
+    "identity_platform_tenant": _delete_identity_platform_tenant,
+    "identityplatform.tenant": _delete_identity_platform_tenant,
     "rag_corpus": _delete_rag_corpus,
 }
 
@@ -152,7 +227,7 @@ class ResourceTracker:
             if not (r.get("kind") == kind and r.get("name") == name)
         ]
 
-    def list(self) -> list[dict[str, Any]]:
+    def list(self) -> list[dict[str, Any]] :
         return list(self._items)
 
     def flush(self) -> None:
@@ -191,7 +266,7 @@ class ResourceTracker:
                         ["gcloud", *cli_handler(r)],
                         check=True, capture_output=True, text=True,
                     )
-                self.untrack(kind, r["name"])
+                self.untrack(kind, r.get("name"))
                 ok += 1
             except subprocess.CalledProcessError as exc:
                 failed.append({**r, "stderr": exc.stderr.strip()[:500]})
