@@ -275,10 +275,10 @@ const MAX_TOKEN_OPTIONS = [
 
 // ── Template highlighter ──────────────────────────────────────────────────────
 
-function TemplateHighlighted({ text }: { text: string }): React.ReactElement {
-  const parts = text.split(/({{[^}]+}})/g);
+function HighlightedLine({ line }: { line: string }): React.ReactElement {
+  const parts = line.split(/({{[^}]+}})/g);
   return (
-    <pre style={preStyle}>
+    <>
       {parts.map((part, i) =>
         /^{{[^}]+}}$/.test(part) ? (
           <span key={i} style={{ color: '#7c3aed', fontWeight: 600 }}>{part}</span>
@@ -286,7 +286,78 @@ function TemplateHighlighted({ text }: { text: string }): React.ReactElement {
           <span key={i}>{part}</span>
         ),
       )}
-    </pre>
+    </>
+  );
+}
+
+function TemplateHighlighted({ text }: { text: string }): React.ReactElement {
+  const lines = text.split('\n');
+  const gutterWidth = String(lines.length).length;
+  return (
+    <div style={lineNumberWrapStyle}>
+      {/* gutter */}
+      <div style={gutterStyle} aria-hidden>
+        {lines.map((_, i) => (
+          <div key={i} style={gutterLineStyle}>
+            {String(i + 1).padStart(gutterWidth, ' ')}
+          </div>
+        ))}
+      </div>
+      {/* code */}
+      <pre style={preStyle}>
+        {lines.map((line, i) => (
+          <div key={i} style={codeLineStyle}>
+            <HighlightedLine line={line} />
+          </div>
+        ))}
+      </pre>
+    </div>
+  );
+}
+
+// ── Line-numbered editable textarea ───────────────────────────────────────────
+
+function LineNumberedTextarea({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}): React.ReactElement {
+  const gutterRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const lines = value.split('\n');
+  const lineCount = Math.max(lines.length, 1);
+  const gutterWidth = String(lineCount).length;
+
+  const syncScroll = () => {
+    if (gutterRef.current && textareaRef.current) {
+      gutterRef.current.scrollTop = textareaRef.current.scrollTop;
+    }
+  };
+
+  return (
+    <div style={lnWrapStyle}>
+      <div ref={gutterRef} style={lnGutterStyle} aria-hidden>
+        {Array.from({ length: lineCount }, (_, i) => (
+          <div key={i} style={gutterLineStyle}>
+            {String(i + 1).padStart(gutterWidth, ' ')}
+          </div>
+        ))}
+      </div>
+      <textarea
+        ref={textareaRef}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onScroll={syncScroll}
+        placeholder={placeholder}
+        spellCheck={false}
+        style={lnTextareaStyle}
+      />
+    </div>
   );
 }
 
@@ -551,12 +622,10 @@ function EditPanel({
         </div>
         <div style={paneStyle}>
           <div style={paneHeaderStyle}>New version</div>
-          <textarea
+          <LineNumberedTextarea
             value={challengerText}
-            onChange={(e) => setChallengerText(e.target.value)}
-            style={textareaStyle}
+            onChange={setChallengerText}
             placeholder="Edit the prompt template here…"
-            spellCheck={false}
           />
         </div>
       </div>
@@ -1391,6 +1460,7 @@ const sidebarStyle: CSSProperties = {
   borderRight: '1px solid var(--color-border, #e2e8f0)',
   display: 'flex',
   flexDirection: 'column',
+  overflow: 'hidden',
   background: 'var(--color-surface, #fff)',
 };
 
@@ -1427,15 +1497,19 @@ const listMsgStyle: CSSProperties = {
 const promptRowStyle: CSSProperties = {
   display: 'block',
   width: '100%',
-  padding: '11px 14px',
+  paddingTop: 11,
+  paddingRight: 14,
+  paddingBottom: 11,
+  paddingLeft: 14,
   background: 'transparent',
-  border: 'none',
+  borderTop: 'none',
+  borderRight: 'none',
   borderBottom: '1px solid var(--color-border, #e2e8f0)',
+  borderLeft: 'none',
   cursor: 'pointer',
   textAlign: 'left',
   fontFamily: 'inherit',
-  boxSizing: 'border-box',  // prevents borderLeft on active item from expanding width beyond 100%
-  overflow: 'hidden',
+  boxSizing: 'border-box',
 };
 
 const promptRowActiveStyle: CSSProperties = {
@@ -1606,6 +1680,35 @@ const templateScrollStyle: CSSProperties = {
   borderBottom: '1px solid var(--color-border, #e2e8f0)',
 };
 
+const lineNumberWrapStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'stretch',
+  minHeight: '100%',
+};
+
+const gutterStyle: CSSProperties = {
+  flexShrink: 0,
+  padding: '20px 12px 20px 20px',
+  fontFamily: 'monospace',
+  fontSize: 13,
+  lineHeight: 1.7,
+  color: 'var(--color-text-tertiary, #94a3b8)',
+  userSelect: 'none',
+  textAlign: 'right',
+  borderRight: '1px solid var(--color-border, #e2e8f0)',
+  background: 'var(--color-bg, #f8fafc)',
+};
+
+const gutterLineStyle: CSSProperties = {
+  display: 'block',
+  whiteSpace: 'pre',
+};
+
+const codeLineStyle: CSSProperties = {
+  display: 'block',
+  minHeight: '1.7em',
+};
+
 const preStyle: CSSProperties = {
   fontFamily: 'monospace',
   fontSize: 13,
@@ -1615,6 +1718,8 @@ const preStyle: CSSProperties = {
   whiteSpace: 'pre-wrap',
   wordBreak: 'break-word',
   color: 'var(--color-text-primary, #0f172a)',
+  flex: 1,
+  minWidth: 0,
 };
 
 const emptyTemplateMsgStyle: CSSProperties = {
@@ -1785,6 +1890,56 @@ const textareaStyle: CSSProperties = {
   background: '#fff',
   boxSizing: 'border-box',
   minHeight: 200,
+  fontWeight: 400,
+  color: 'var(--color-text-primary, #0f172a)',
+  outline: 'none',
+};
+
+// Line-numbered textarea styles — font metrics must match exactly so numbers align
+const LN_FONT_SIZE = 12;
+const LN_LINE_HEIGHT = 1.6;
+const LN_PADDING = 12;
+
+const lnWrapStyle: CSSProperties = {
+  display: 'flex',
+  flex: 1,
+  border: '1px solid var(--color-border, #e2e8f0)',
+  borderRadius: 4,
+  overflow: 'hidden',
+  minHeight: 200,
+  background: '#fff',
+};
+
+const lnGutterStyle: CSSProperties = {
+  flexShrink: 0,
+  overflow: 'hidden',           // hidden scrollbar; scrollTop synced via JS
+  paddingTop: LN_PADDING,
+  paddingRight: 10,
+  paddingBottom: LN_PADDING,
+  paddingLeft: LN_PADDING,
+  fontFamily: 'monospace',
+  fontSize: LN_FONT_SIZE,
+  lineHeight: LN_LINE_HEIGHT,
+  color: 'var(--color-text-tertiary, #94a3b8)',
+  userSelect: 'none',
+  textAlign: 'right',
+  borderRight: '1px solid var(--color-border, #e2e8f0)',
+  background: 'var(--color-bg, #f8fafc)',
+};
+
+const lnTextareaStyle: CSSProperties = {
+  fontFamily: 'monospace',
+  fontSize: LN_FONT_SIZE,
+  lineHeight: LN_LINE_HEIGHT,
+  paddingTop: LN_PADDING,
+  paddingRight: LN_PADDING,
+  paddingBottom: LN_PADDING,
+  paddingLeft: LN_PADDING,
+  border: 'none',
+  resize: 'none',
+  flex: 1,
+  minWidth: 0,
+  background: '#fff',
   fontWeight: 400,
   color: 'var(--color-text-primary, #0f172a)',
   outline: 'none',
