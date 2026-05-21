@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router';
 import { useFetch } from '../../hooks/useFetch.js';
 import { ProvisioningProgress } from '../../components/kb/ProvisioningProgress.js';
 import type { KbRegistryEntry } from './KBRegistryPage.js';
-import { StatusChip } from './KBRegistryPage.js';
+import { StatusChip, DeleteButton } from './KBRegistryPage.js';
 import {
   PageSection,
   Card,
@@ -679,6 +679,15 @@ export function KBDetailPage() {
             >
               {kb.status === 'FAILED' ? 'Re-provision' : 'Provision'}
             </button>
+          )}
+          {/* Delete for non-ACTIVE KBs */}
+          {kb.status !== 'ACTIVE' && (
+            <DeleteButton
+              kbId={kb.id}
+              kbName={kb.name}
+              variant="full"
+              onDone={() => navigate('/admin/knowledge-bases')}
+            />
           )}
           {canSync && (
             <div>

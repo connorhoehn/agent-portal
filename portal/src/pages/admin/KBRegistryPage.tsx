@@ -265,15 +265,21 @@ export function KBRegistryPage() {
 
                 {/* Actions */}
                 <TableTd onClick={e => e.stopPropagation()}>
-                  {kb.status === 'ACTIVE' ? (
-                    <SyncButton kbId={kb.id} dataSourceId={kb.dataSourceId} onDone={refresh} />
-                  ) : ['PENDING', 'FAILED'].includes(kb.status) ? (
-                    <ProvisionButton kbId={kb.id} onDone={() => navigate(`/admin/knowledge-bases/${kb.id}`)} />
-                  ) : (
-                    <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-                      {kb.status === 'CREATING' ? 'Provisioning…' : '—'}
-                    </span>
-                  )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {kb.status === 'ACTIVE' ? (
+                      <SyncButton kbId={kb.id} dataSourceId={kb.dataSourceId} onDone={refresh} />
+                    ) : ['PENDING', 'FAILED'].includes(kb.status) ? (
+                      <ProvisionButton kbId={kb.id} onDone={() => navigate(`/admin/knowledge-bases/${kb.id}`)} />
+                    ) : (
+                      <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                        {kb.status === 'CREATING' ? 'Provisioning…' : '—'}
+                      </span>
+                    )}
+                    {/* Delete available for FAILED / PENDING (orphaned rows) */}
+                    {['FAILED', 'PENDING'].includes(kb.status) && (
+                      <DeleteButton kbId={kb.id} kbName={kb.name} onDone={refresh} />
+                    )}
+                  </div>
                 </TableTd>
               </TableRow>
             ))}
@@ -420,6 +426,66 @@ function ProvisionButton({
         {loading ? 'Starting…' : 'Provision'}
       </button>
       {error && <div style={{ fontSize: 10, color: '#dc2626', marginTop: 2 }} title={error}>Failed</div>}
+    </div>
+  );
+}
+
+// ─── DeleteButton ─────────────────────────────────────────────────────────────
+
+export function DeleteButton({
+  kbId,
+  kbName,
+  onDone,
+  variant = 'compact',
+}: {
+  kbId: string;
+  kbName: string;
+  onDone: () => void;
+  variant?: 'compact' | 'full';
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleDelete() {
+    if (!confirm(`Delete "${kbName}"?\n\nThis will:\n• Remove the DB registry row\n• Delete the Bedrock KB (if provisioned)\n• Drop the Aurora vector table\n\nThis cannot be undone.`)) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/kb-registry/${kbId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        setError(body.error ?? `HTTP ${res.status}`);
+        setLoading(false);
+      } else {
+        onDone();
+      }
+    } catch {
+      setError('Network error');
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div>
+      <button
+        disabled={loading}
+        onClick={handleDelete}
+        title={`Delete "${kbName}" and all associated resources`}
+        style={{
+          fontSize: variant === 'full' ? 13 : 11,
+          padding: variant === 'full' ? '7px 16px' : '4px 10px',
+          fontWeight: variant === 'full' ? 600 : 400,
+          background: loading ? '#9ca3af' : '#fee2e2',
+          color: loading ? '#fff' : '#dc2626',
+          border: '1px solid #fca5a5',
+          borderRadius: 'var(--radius-sm)',
+          cursor: loading ? 'not-allowed' : 'pointer',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {loading ? 'Deleting…' : variant === 'full' ? 'Delete KB' : '✕ Delete'}
+      </button>
+      {error && <div style={{ fontSize: 10, color: '#dc2626', marginTop: 2 }} title={error}>Error</div>}
     </div>
   );
 }

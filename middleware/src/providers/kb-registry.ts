@@ -14,6 +14,7 @@ import {
   CreateKnowledgeBaseCommand,
   GetKnowledgeBaseCommand,
   DeleteKnowledgeBaseCommand,
+  ListKnowledgeBasesCommand,
   CreateDataSourceCommand,
   type VectorIngestionConfiguration,
 } from '@aws-sdk/client-bedrock-agent';
@@ -286,8 +287,12 @@ export async function provisionKb(id: string): Promise<void> {
 
   console.log(`[kb-registry] Starting provisioning for entry ${id} (slug=${entry.slug}, table=${tbl})`);
 
+  // Track the active step so the catch block always labels the right one.
+  let currentStep = 'create_aurora_table';
+
   try {
     // ── Step 1: Create Aurora vector table ───────────────────────────────────
+    currentStep = 'create_aurora_table';
     emit('create_aurora_table', 'running');
     await exec(
       `CREATE TABLE IF NOT EXISTS ${tbl} (
@@ -300,6 +305,7 @@ export async function provisionKb(id: string): Promise<void> {
     emit('create_aurora_table', 'done');
 
     // ── Step 2: HNSW index ───────────────────────────────────────────────────
+    currentStep = 'create_vector_index';
     emit('create_vector_index', 'running');
     await exec(
       `CREATE INDEX IF NOT EXISTS ${tbl}_embedding_idx
@@ -312,6 +318,7 @@ export async function provisionKb(id: string): Promise<void> {
     //   to_tsvector('english', chunks)   — no COALESCE or other wrapper.
     // Always DROP + recreate so re-provisioning a FAILED row picks up the correct
     // definition even if a bad index was left behind by an earlier attempt.
+    currentStep = 'create_text_index';
     emit('create_text_index', 'running');
     await exec(`DROP INDEX IF EXISTS ${tbl}_chunks_idx`);
     await exec(
@@ -320,45 +327,58 @@ export async function provisionKb(id: string): Promise<void> {
     );
     emit('create_text_index', 'done');
 
-    // ── Step 4: Create Bedrock KB ────────────────────────────────────────────
-    emit('create_bedrock_kb', 'running');
-    // Bedrock name must match ([0-9a-zA-Z][_-]?){1,100} — no spaces.
-    // Use slug (already URL-safe alphanumeric + hyphens) prefixed by tenant.
-    const bedrockName = `${entry.tenant}-${entry.slug}`;
-    const createResp = await client.send(
-      new CreateKnowledgeBaseCommand({
-        name: bedrockName,
-        description: entry.description ?? entry.name,
-        roleArn: serviceRoleArn,
-        knowledgeBaseConfiguration: {
-          type: 'VECTOR',
-          vectorKnowledgeBaseConfiguration: {
-            embeddingModelArn: `arn:aws:bedrock:${config.region}::foundation-model/${entry.embeddingModel}`,
-          },
-        },
-        storageConfiguration: {
-          type: 'RDS',
-          rdsConfiguration: {
-            resourceArn: config.aurora.clusterArn,
-            credentialsSecretArn: config.aurora.secretArn,
-            databaseName: config.aurora.database,
-            tableName: tbl,
-            fieldMapping: {
-              vectorField: 'embedding',
-              textField: 'chunks',
-              metadataField: 'metadata',
-              primaryKeyField: 'id',
+    // ── Step 4: Create Bedrock KB (skip if already created) ──────────────────
+    // Re-provisioning a FAILED row after steps 1-3: if bedrockKbId is already
+    // persisted, the KB exists in Bedrock — skip creation to avoid duplicate error.
+    currentStep = 'create_bedrock_kb';
+    let bedrockKbId = entry.bedrockKbId ?? '';
+    if (bedrockKbId) {
+      emit('create_bedrock_kb', 'done', bedrockKbId);
+      console.log(`[kb-registry] Bedrock KB already exists (${bedrockKbId}), skipping create`);
+    } else {
+      emit('create_bedrock_kb', 'running');
+      // Bedrock name must match ([0-9a-zA-Z][_-]?){1,100} — no spaces.
+      // Use slug (already URL-safe alphanumeric + hyphens) prefixed by tenant.
+      const bedrockName = `${entry.tenant}-${entry.slug}`;
+      const createResp = await client.send(
+        new CreateKnowledgeBaseCommand({
+          name: bedrockName,
+          description: entry.description ?? entry.name,
+          roleArn: serviceRoleArn,
+          knowledgeBaseConfiguration: {
+            type: 'VECTOR',
+            vectorKnowledgeBaseConfiguration: {
+              embeddingModelArn: `arn:aws:bedrock:${config.region}::foundation-model/${entry.embeddingModel}`,
             },
           },
-        },
-      }),
-    );
+          storageConfiguration: {
+            type: 'RDS',
+            rdsConfiguration: {
+              resourceArn: config.aurora.clusterArn,
+              credentialsSecretArn: config.aurora.secretArn,
+              databaseName: config.aurora.database,
+              tableName: tbl,
+              fieldMapping: {
+                vectorField: 'embedding',
+                textField: 'chunks',
+                metadataField: 'metadata',
+                primaryKeyField: 'id',
+              },
+            },
+          },
+        }),
+      );
 
-    const bedrockKbId = createResp.knowledgeBase?.knowledgeBaseId;
-    if (!bedrockKbId) throw new Error('CreateKnowledgeBase returned no knowledgeBaseId');
-    emit('create_bedrock_kb', 'done', bedrockKbId);
+      const newKbId = createResp.knowledgeBase?.knowledgeBaseId;
+      if (!newKbId) throw new Error('CreateKnowledgeBase returned no knowledgeBaseId');
+      bedrockKbId = newKbId;
+      // Persist immediately so re-provisioning can skip this step on retry
+      await patchKbStatus(id, 'CREATING', { bedrockKbId });
+      emit('create_bedrock_kb', 'done', bedrockKbId);
+    }
 
     // ── Step 5: Wait for KB to become ACTIVE ─────────────────────────────────
+    currentStep = 'wait_kb_active';
     emit('wait_kb_active', 'running');
     const POLL_MS = 8_000;
     const LIMIT_MS = 5 * 60 * 1000;
@@ -374,32 +394,53 @@ export async function provisionKb(id: string): Promise<void> {
     if (kbStatus !== 'ACTIVE') throw new Error(`Bedrock KB did not become ACTIVE within 5 minutes (last status: ${kbStatus})`);
     emit('wait_kb_active', 'done');
 
-    // ── Step 6: Create S3 data source ────────────────────────────────────────
-    emit('create_data_source', 'running');
-    const chunkingConfig = buildChunkingConfig(entry.chunkingStrategy, entry.maxTokens);
-    const dsResp = await client.send(
-      new CreateDataSourceCommand({
-        knowledgeBaseId: bedrockKbId,
-        name: `${entry.slug}-s3-source`,
-        description: `S3 data source for KB ${entry.slug}`,
-        dataSourceConfiguration: {
-          type: 'S3',
-          s3Configuration: {
-            bucketArn: `arn:aws:s3:::${bucket}`,
-            inclusionPrefixes: [entry.s3Prefix],
+    // ── Step 6: Create S3 data source (skip if already created) ──────────────
+    currentStep = 'create_data_source';
+    let dataSourceId = entry.dataSourceId ?? '';
+    if (dataSourceId) {
+      emit('create_data_source', 'done', dataSourceId);
+      console.log(`[kb-registry] Data source already exists (${dataSourceId}), skipping create`);
+    } else {
+      emit('create_data_source', 'running');
+      const chunkingConfig = buildChunkingConfig(entry.chunkingStrategy, entry.maxTokens);
+      const dsResp = await client.send(
+        new CreateDataSourceCommand({
+          knowledgeBaseId: bedrockKbId,
+          name: `${entry.slug}-s3-source`,
+          description: `S3 data source for KB ${entry.slug}`,
+          dataSourceConfiguration: {
+            type: 'S3',
+            s3Configuration: {
+              bucketArn: `arn:aws:s3:::${bucket}`,
+              inclusionPrefixes: [entry.s3Prefix],
+            },
           },
-        },
-        vectorIngestionConfiguration: chunkingConfig,
-      }),
-    );
-    const dataSourceId = dsResp.dataSource?.dataSourceId;
-    if (!dataSourceId) throw new Error('CreateDataSource returned no dataSourceId');
-    emit('create_data_source', 'done', dataSourceId);
+          vectorIngestionConfiguration: chunkingConfig,
+        }),
+      );
+      const newDsId = dsResp.dataSource?.dataSourceId;
+      if (!newDsId) throw new Error('CreateDataSource returned no dataSourceId');
+      dataSourceId = newDsId;
+      // Persist immediately so re-provisioning skips on retry
+      await patchKbStatus(id, 'CREATING', { bedrockKbId, dataSourceId });
+      emit('create_data_source', 'done', dataSourceId);
+    }
 
-    // ── Step 7: Init S3 landing zone ─────────────────────────────────────────
+    // ── Step 7: Init S3 landing zone (non-fatal) ─────────────────────────────
+    // The KB is fully provisioned after step 6. Step 7 just places a .keep marker
+    // in S3 so the prefix is visible. If the bucket doesn't exist yet (or there's
+    // a transient S3 error), we log a warning but still mark the KB as ACTIVE.
+    currentStep = 'init_landing_zone';
     emit('init_landing_zone', 'running');
-    await initLandingZone(entry.s3Prefix);
-    emit('init_landing_zone', 'done');
+    try {
+      await initLandingZone(entry.s3Prefix);
+      emit('init_landing_zone', 'done');
+    } catch (lzErr) {
+      const lzMsg = (lzErr as Error).message ?? String(lzErr);
+      console.warn(`[kb-registry] initLandingZone warning for ${id}: ${lzMsg} (non-fatal)`);
+      emit('init_landing_zone', 'error', lzMsg);
+      // Fall through — KB is provisioned regardless of landing-zone marker
+    }
 
     // ── Mark ACTIVE in Aurora ─────────────────────────────────────────────────
     await patchKbStatus(id, 'ACTIVE', { bedrockKbId, dataSourceId, errorMessage: null });
@@ -408,14 +449,19 @@ export async function provisionKb(id: string): Promise<void> {
 
   } catch (err) {
     const msg = (err as Error).message ?? String(err);
-    // Figure out which step was running when it threw
-    await fail('create_bedrock_kb', msg); // best-effort label; patchKbStatus may already have been called
+    await fail(currentStep, msg);
   }
 }
 
 /**
  * Deprovisions (deletes) a Bedrock Knowledge Base and removes the registry row.
  * Callers fire-and-forget; the DELETE /:id route returns 200 immediately.
+ *
+ * Cleanup sequence:
+ *  1. Mark DB row DELETING
+ *  2. Delete Bedrock KB (by bedrockKbId if known; otherwise search by derived name)
+ *  3. Drop Aurora vector table (+ its indexes)
+ *  4. Delete DB row
  */
 export async function deprovisionKb(id: string): Promise<void> {
   const entry = await getKb(id);
@@ -426,21 +472,59 @@ export async function deprovisionKb(id: string): Promise<void> {
 
   await patchKbStatus(id, 'DELETING');
 
-  if (entry.bedrockKbId) {
+  const client = new BedrockAgentClient({ region: config.region });
+
+  // ── Find + delete Bedrock KB ──────────────────────────────────────────────
+  let kbIdToDelete = entry.bedrockKbId;
+
+  if (!kbIdToDelete) {
+    // bedrockKbId wasn't saved before failure — try to find by the derived name
+    // pattern `${tenant}-${slug}` so we can clean up orphaned Bedrock resources.
+    const derivedName = `${entry.tenant}-${entry.slug}`;
     try {
-      const client = new BedrockAgentClient({ region: config.region });
-      await client.send(
-        new DeleteKnowledgeBaseCommand({ knowledgeBaseId: entry.bedrockKbId }),
-      );
-      console.log(`[kb-registry] Deleted Bedrock KB ${entry.bedrockKbId}`);
+      let nextToken: string | undefined;
+      outer: do {
+        const resp = await client.send(
+          new ListKnowledgeBasesCommand({ maxResults: 100, nextToken }),
+        );
+        for (const kb of resp.knowledgeBaseSummaries ?? []) {
+          if (kb.name === derivedName) {
+            kbIdToDelete = kb.knowledgeBaseId ?? null;
+            break outer;
+          }
+        }
+        nextToken = resp.nextToken;
+      } while (nextToken);
+
+      if (kbIdToDelete) {
+        console.log(`[kb-registry] Found orphaned Bedrock KB by name "${derivedName}" → ${kbIdToDelete}`);
+      }
+    } catch (err) {
+      console.warn(`[kb-registry] ListKnowledgeBases failed during cleanup:`, (err as Error).message);
+    }
+  }
+
+  if (kbIdToDelete) {
+    try {
+      await client.send(new DeleteKnowledgeBaseCommand({ knowledgeBaseId: kbIdToDelete }));
+      console.log(`[kb-registry] Deleted Bedrock KB ${kbIdToDelete}`);
     } catch (err) {
       // Log and continue — remove from registry even if Bedrock delete fails
       // (may already be gone, or might be in a terminal error state).
       console.warn(
-        `[kb-registry] DeleteKnowledgeBase failed for ${entry.bedrockKbId}:`,
+        `[kb-registry] DeleteKnowledgeBase failed for ${kbIdToDelete}:`,
         (err as Error).message,
       );
     }
+  }
+
+  // ── Drop Aurora vector table ──────────────────────────────────────────────
+  // Always attempt — table may not exist if provisioning failed at step 1.
+  try {
+    await exec(`DROP TABLE IF EXISTS ${entry.auroraTable} CASCADE`);
+    console.log(`[kb-registry] Dropped Aurora table ${entry.auroraTable}`);
+  } catch (err) {
+    console.warn(`[kb-registry] DROP TABLE failed for ${entry.auroraTable}:`, (err as Error).message);
   }
 
   await deleteKbEntry(id);
