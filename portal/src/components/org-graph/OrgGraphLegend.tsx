@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { GraphDepartment } from './types';
 
 const PRESENCE_LEGEND = [
@@ -13,28 +14,43 @@ interface OrgGraphLegendProps {
   departments: GraphDepartment[];
   filter: string | null;
   onFilter: (dept: string | null) => void;
+  presenceFilter?: 'office' | 'remote' | 'away' | null;
 }
 
 const EDGE_TYPES = [
-  { type: 'collaborates', color: '#94a3b8', label: 'Collaborates' },
-  { type: 'mentors', color: '#6366f1', label: 'Mentors', dash: true },
-  { type: 'reports_to', color: '#d1d5db', label: 'Reports To', dash: true },
-  { type: 'expert_in_common', color: '#f59e0b', label: 'Shared Expertise' },
+  { type: 'collaborates',    color: '#94a3b8', label: 'Collaborates' },
+  { type: 'mentors',         color: '#6366f1', label: 'Mentors',          dash: true },
+  { type: 'reports_to',      color: '#d1d5db', label: 'Reports To',       dash: true },
+  { type: 'expert_in_common',color: '#f59e0b', label: 'Shared Expertise' },
 ];
 
-export function OrgGraphLegend({ departments, filter, onFilter }: OrgGraphLegendProps) {
+// Collapsed height shows roughly the Departments section only (~50% of full content)
+const COLLAPSED_MAX_HEIGHT = 160;
+
+export function OrgGraphLegend({ departments, filter, onFilter, presenceFilter }: OrgGraphLegendProps) {
+  const [hovered, setHovered] = useState(false);
+
   return (
-    <div style={{
-      position: 'absolute',
-      top: 12,
-      left: 12,
-      background: 'white',
-      border: '1px solid var(--color-border, #e2e8f0)',
-      borderRadius: 8,
-      padding: '12px 16px',
-      fontSize: 11,
-      boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-    }}>
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        position: 'absolute',
+        top: 12,
+        left: 12,
+        background: 'white',
+        border: '1px solid var(--color-border, #e2e8f0)',
+        borderRadius: 8,
+        padding: '12px 16px',
+        fontSize: 11,
+        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+        // Fade + clip animation
+        opacity: hovered ? 1 : 0.2,
+        overflow: 'hidden',
+        maxHeight: hovered ? 800 : COLLAPSED_MAX_HEIGHT,
+        transition: 'opacity 0.2s ease, max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+      }}
+    >
       <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 8, color: 'var(--color-text-primary, #1a1a2e)' }}>
         Departments
       </div>
@@ -61,6 +77,7 @@ export function OrgGraphLegend({ departments, filter, onFilter }: OrgGraphLegend
           <span>{dept.name}</span>
         </div>
       ))}
+
       <div style={{ borderTop: '1px solid var(--color-border, #e2e8f0)', marginTop: 8, paddingTop: 8 }}>
         <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6 }}>Relationships</div>
         {EDGE_TYPES.map(et => (
@@ -77,6 +94,7 @@ export function OrgGraphLegend({ departments, filter, onFilter }: OrgGraphLegend
           </div>
         ))}
       </div>
+
       {filter && (
         <button
           onClick={() => onFilter(null)}
@@ -95,20 +113,22 @@ export function OrgGraphLegend({ departments, filter, onFilter }: OrgGraphLegend
         </button>
       )}
 
-      {/* Presence dot legend */}
-      <div style={{ borderTop: '1px solid var(--color-border, #e2e8f0)', marginTop: 8, paddingTop: 8 }}>
-        <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 5 }}>Presence today</div>
-        {PRESENCE_LEGEND.map(({ color, label }) => (
-          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
-            <span>{label}</span>
+      {/* Presence dot legend — only shown when a presence filter is active */}
+      {presenceFilter && (
+        <div style={{ borderTop: '1px solid var(--color-border, #e2e8f0)', marginTop: 8, paddingTop: 8 }}>
+          <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 5 }}>Presence today</div>
+          {PRESENCE_LEGEND.map(({ color, label }) => (
+            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+              <span>{label}</span>
+            </div>
+          ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#3b82f6', flexShrink: 0, boxSizing: 'border-box', outline: '2px dashed #3b82f6', outlineOffset: 3 }} />
+            <span style={{ color: 'var(--color-text-tertiary)' }}>WFH ring</span>
           </div>
-        ))}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#3b82f6', flexShrink: 0, boxSizing: 'border-box', outline: '2px dashed #3b82f6', outlineOffset: 3 }} />
-          <span style={{ color: 'var(--color-text-tertiary)' }}>WFH ring</span>
         </div>
-      </div>
+      )}
     </div>
   );
 }

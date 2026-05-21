@@ -23,8 +23,8 @@ interface OrgGraphNodeProps {
   isHighlighted: boolean;
   onSelect: (id: string) => void;
   onHover: (id: string | null) => void;
-  /** When set, dim nodes that don't match the given presence filter */
-  presenceFilter?: 'all' | 'office' | 'remote' | 'away';
+  /** When set, dim nodes that don't match the given presence filter. null/undefined = no filter. */
+  presenceFilter?: 'office' | 'remote' | 'away' | null;
 }
 
 export function OrgGraphNode({ node, departments, isSelected, isHighlighted, onSelect, onHover, presenceFilter }: OrgGraphNodeProps) {
@@ -37,12 +37,11 @@ export function OrgGraphNode({ node, departments, isSelected, isHighlighted, onS
   const presInfo = PRESENCE_DOT[pres];
 
   // Does this node pass the active presence filter?
-  const passesFilter = !presenceFilter || presenceFilter === 'all'
+  const passesFilter = !presenceFilter
     ? true
-    : presenceFilter === 'office'  ? pres === 'office'
-    : presenceFilter === 'remote'  ? (pres === 'wfh' || pres === 'travel')
-    : presenceFilter === 'away'    ? AWAY_STATUSES.includes(pres)
-    : true;
+    : presenceFilter === 'office' ? pres === 'office'
+    : presenceFilter === 'remote' ? (pres === 'wfh' || pres === 'travel')
+    : AWAY_STATUSES.includes(pres);
 
   const baseOpacity = isHighlighted || isSelected ? 1 : isHighlighted === false ? 0.3 : 0.8;
   const opacity = passesFilter ? baseOpacity : 0.15;

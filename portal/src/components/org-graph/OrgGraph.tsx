@@ -18,8 +18,8 @@ interface OrgGraphProps {
   spotlightIds?: Set<string>;
   /** Layout algorithm to use. Defaults to 'force'. */
   layout?: LayoutMode;
-  /** Presence filter — dims nodes that don't match. */
-  presenceFilter?: 'all' | 'office' | 'remote' | 'away';
+  /** Presence filter — dims nodes that don't match. null/undefined = no filter. */
+  presenceFilter?: 'office' | 'remote' | 'away' | null;
 }
 
 export function OrgGraph({
@@ -178,7 +178,7 @@ export function OrgGraph({
         </g>
       </svg>
 
-      <OrgGraphLegend departments={departments} filter={deptFilter} onFilter={setDeptFilter} />
+      <OrgGraphLegend departments={departments} filter={deptFilter} onFilter={setDeptFilter} presenceFilter={presenceFilter} />
 
       {hoveredNode && (
         <OrgGraphTooltip
