@@ -100,6 +100,10 @@ function readField(cell: Field | undefined): unknown {
   if (cell.longValue !== undefined) return cell.longValue;
   if (cell.doubleValue !== undefined) return cell.doubleValue;
   if (cell.booleanValue !== undefined) return cell.booleanValue;
+  if (cell.arrayValue !== undefined) {
+    // TEXT[] → string[]
+    return cell.arrayValue.stringValues ?? [];
+  }
   return null;
 }
 
