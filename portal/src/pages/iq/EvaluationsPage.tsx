@@ -1,16 +1,21 @@
-// Evaluations — LLM-as-judge configuration.
+// Evaluations — LLM-as-judge configuration + live score feed.
 //
-// Lets users:
-//   1. Pick a judge model (Amazon Bedrock — nova-pro, nova-lite, titan-text)
-//   2. Pick a judge prompt from the Bedrock Prompt Library (or leave blank for
-//      the built-in default rubric)
-//   3. Tune rubric dimension weights (helpfulness, factuality, tone, conciseness)
-//   4. Enable / disable automatic evaluation on canary invocations
-//   5. View recent evaluation scores inline
+// Judge config (model, rubric weights, sample rate) is stored in localStorage
+// and mirrored to the middleware via a best-effort PUT.
+//
+// Recent evaluation scores come directly from the canary store, which is
+// fed by the SSE stream — no separate REST table required.
+// Clicking the JudgeNode in the canary diagram navigates here.
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import type { CSSProperties } from 'react';
+import { useNavigate } from 'react-router';
 import { usePromptList } from '../../components/canary/usePromptLibrary.js';
+import {
+  useCanaryStore,
+  parsePromptIdFromArn,
+  type JudgeHistoryEntry,
+} from '../../components/canary/canaryStore.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -24,21 +29,11 @@ interface RubricDimension {
 interface JudgeConfig {
   enabled: boolean;
   modelId: string;
-  promptId: string | null; // Bedrock prompt ID (null = built-in)
-  promptVersion: string | null; // version or 'DRAFT'
+  promptId: string | null;
+  promptVersion: string | null;
   dimensions: RubricDimension[];
-  minSampleRate: number; // 0–100 %
-  failThreshold: number; // 0–10 score below which flags canary for review
-}
-
-interface RecentScore {
-  id: string;
-  agentId: string;
-  sessionId: string;
-  evaluatedAt: string;
-  overallScore: number; // 0–10
-  dimensions: Record<string, number>;
-  reasoning: string;
+  minSampleRate: number;
+  failThreshold: number; // 0–10
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -50,10 +45,10 @@ const JUDGE_MODELS = [
 ];
 
 const DEFAULT_DIMENSIONS: RubricDimension[] = [
-  { key: 'helpfulness',   label: 'Helpfulness',   description: 'Does the response address what was asked?',            weight: 30 },
-  { key: 'factuality',    label: 'Factuality',     description: 'Is the information accurate and verifiable?',          weight: 30 },
-  { key: 'tone',          label: 'Tone',           description: 'Is the response professional and appropriately worded?', weight: 20 },
-  { key: 'conciseness',   label: 'Conciseness',    description: 'Is the response free of unnecessary padding?',          weight: 20 },
+  { key: 'helpfulness', label: 'Helpfulness', description: 'Does the response address what was asked?',             weight: 30 },
+  { key: 'factuality',  label: 'Factuality',  description: 'Is the information accurate and verifiable?',           weight: 30 },
+  { key: 'tone',        label: 'Tone',        description: 'Is the response professional and appropriately worded?', weight: 20 },
+  { key: 'conciseness', label: 'Conciseness', description: 'Is the response free of unnecessary padding?',           weight: 20 },
 ];
 
 const SAMPLE_RATES = [
@@ -70,6 +65,13 @@ const FAIL_THRESHOLDS = [
 ];
 
 const STORAGE_KEY = 'iq-judge-config';
+
+const DIM_COLORS: Record<string, string> = {
+  helpfulness: '#6366f1',
+  factuality:  '#16a34a',
+  tone:        '#0891b2',
+  conciseness: '#f59e0b',
+};
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -101,113 +103,104 @@ function totalWeight(dims: RubricDimension[]) {
   return dims.reduce((s, d) => s + d.weight, 0);
 }
 
-function scoreColor(score: number): string {
-  if (score >= 7) return '#10b981';
-  if (score >= 5) return '#f59e0b';
+function scoreColor(score01: number): string {
+  // score01 is 0–1 from the judge
+  if (score01 >= 0.7) return '#10b981';
+  if (score01 >= 0.5) return '#f59e0b';
   return '#ef4444';
 }
 
-// ── Hooks ──────────────────────────────────────────────────────────────────────
-
-function useRecentScores(): { scores: RecentScore[]; loading: boolean } {
-  const [scores, setScores] = useState<RecentScore[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    setLoading(true);
-    fetch('/api/observability/evaluations/recent?limit=10')
-      .then(r => r.ok ? r.json() as Promise<{ scores: RecentScore[] }> : Promise.resolve({ scores: [] }))
-      .then(d => { setScores(d.scores ?? []); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, []);
-
-  return { scores, loading };
+function fmt01(v: number): string {
+  return (v * 100).toFixed(0);
 }
 
-function usePromptVersionList(promptId: string | null) {
-  const [versions, setVersions] = useState<{ version: string; isDraft: boolean; description?: string }[]>([]);
-
-  useEffect(() => {
-    if (!promptId) { setVersions([]); return; }
-    fetch(`/api/observability/canary/library/${encodeURIComponent(promptId)}/versions`)
-      .then(r => r.ok ? r.json() as Promise<{ versions: typeof versions }> : Promise.resolve({ versions: [] }))
-      .then(d => setVersions(d.versions ?? []))
-      .catch(() => setVersions([]));
-  }, [promptId]);
-
-  return versions;
+function fmtTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString();
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
+// Custom weight stepper — avoids all browser range-input rendering quirks.
+// Uses ±5 step buttons + a CSS-controlled progress bar.
 function WeightSlider({
-  dim,
-  onChange,
-  totalOther,
+  dim, onChange, totalOther,
 }: {
   dim: RubricDimension;
   onChange: (key: string, w: number) => void;
   totalOther: number;
 }) {
-  const maxAllowed = Math.min(100, 100 - totalOther);
+  const color = DIM_COLORS[dim.key] ?? '#6366f1';
+  const maxAllowed = 100 - totalOther; // how much headroom is left
+  const canIncrease = dim.weight + 5 <= dim.weight + maxAllowed;
+  const canDecrease = dim.weight >= 5;
+
+  function step(delta: number) {
+    const next = Math.max(0, Math.min(dim.weight + maxAllowed, dim.weight + delta));
+    onChange(dim.key, next);
+  }
+
   return (
     <div style={dimRowStyle}>
       <div style={dimLabelBlockStyle}>
-        <span style={dimNameStyle}>{dim.label}</span>
+        <span style={{ ...dimNameStyle, color }}>{dim.label}</span>
         <span style={dimDescStyle}>{dim.description}</span>
       </div>
       <div style={sliderWrapStyle}>
-        <input
-          type="range"
-          min={0}
-          max={maxAllowed + dim.weight}
-          value={dim.weight}
-          onChange={e => onChange(dim.key, Math.min(Number(e.target.value), 100 - totalOther))}
-          style={{ flex: 1, accentColor: '#6366f1' }}
-        />
+        {/* Visual progress bar — fully CSS-controlled, no browser quirks */}
+        <div style={trackStyle}>
+          <div style={{ ...trackFillStyle, width: `${dim.weight}%`, background: color }} />
+        </div>
+        <button
+          type="button"
+          style={stepBtnStyle}
+          onClick={() => step(-5)}
+          disabled={!canDecrease}
+          title="−5%"
+        >−</button>
         <span style={dimWeightStyle}>{dim.weight}%</span>
+        <button
+          type="button"
+          style={stepBtnStyle}
+          onClick={() => step(+5)}
+          disabled={!canIncrease}
+          title="+5%"
+        >+</button>
       </div>
     </div>
   );
 }
 
-function ScoreBar({ score }: { score: number }) {
-  return (
-    <div style={scoreBarWrapStyle}>
-      <div style={{ ...scoreBarFillStyle, width: `${score * 10}%`, background: scoreColor(score) }} />
-    </div>
-  );
-}
-
-function RecentScoreRow({ s }: { s: RecentScore }) {
+function ScoreRow({ entry, i }: { entry: JudgeHistoryEntry; i: number }) {
   const [open, setOpen] = useState(false);
+  const composite01 = entry.composite; // already 0–1
   return (
     <div style={scoreRowStyle}>
       <div style={scoreRowTopStyle} onClick={() => setOpen(o => !o)}>
-        <span style={scoreAgentStyle}>{s.agentId}</span>
-        <span style={scoreSessionStyle}>{s.sessionId.slice(0, 8)}…</span>
-        <div style={{ flex: 1 }} />
-        <ScoreBar score={s.overallScore} />
-        <span style={{ ...scoreNumStyle, color: scoreColor(s.overallScore) }}>{s.overallScore.toFixed(1)}</span>
-        <span style={scoreTimeStyle}>{new Date(s.evaluatedAt).toLocaleTimeString()}</span>
+        <span style={scoreIndexStyle}>#{i + 1}</span>
+        <span style={{ ...scoreSideStyle, background: entry.side === 'A' ? '#e0e7ff' : '#dcfce7', color: entry.side === 'A' ? '#4338ca' : '#166534' }}>
+          {entry.side}
+        </span>
+        <div style={{ flex: 1 }}>
+          <div style={scoreBarTrackStyle}>
+            <div style={{ ...scoreBarFillStyle, width: `${composite01 * 100}%`, background: scoreColor(composite01) }} />
+          </div>
+        </div>
+        <span style={{ ...scoreNumStyle, color: scoreColor(composite01) }}>
+          {(composite01 * 10).toFixed(1)}
+        </span>
+        <span style={scoreTimeStyle}>{fmtTime(entry.ts)}</span>
         <span style={chevronStyle}>{open ? '▲' : '▼'}</span>
       </div>
       {open && (
         <div style={scoreDetailStyle}>
           <div style={dimGridStyle}>
-            {Object.entries(s.dimensions).map(([k, v]) => (
+            {Object.entries(entry.scores).map(([k, v]) => (
               <div key={k} style={dimScoreItemStyle}>
-                <span style={dimScoreLabelStyle}>{k}</span>
-                <span style={{ ...dimScoreValStyle, color: scoreColor(v) }}>{v.toFixed(1)}</span>
+                <span style={{ ...dimScoreLabelStyle, color: DIM_COLORS[k] ?? '#94a3b8' }}>{k}</span>
+                <span style={{ ...dimScoreValStyle, color: scoreColor(v) }}>{fmt01(v)}</span>
               </div>
             ))}
           </div>
-          {s.reasoning && (
-            <div style={reasoningStyle}>
-              <span style={reasoningLabelStyle}>Reasoning</span>
-              <p style={reasoningTextStyle}>{s.reasoning}</p>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -217,14 +210,25 @@ function RecentScoreRow({ s }: { s: RecentScore }) {
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function EvaluationsPage(): React.ReactElement {
+  const navigate = useNavigate();
   const [cfg, setCfg] = useState<JudgeConfig>(loadConfig);
   const [saved, setSaved] = useState(false);
 
   const { prompts } = usePromptList();
-  const versions = usePromptVersionList(cfg.promptId);
-  const { scores, loading: scoresLoading } = useRecentScores();
 
-  // Judge prompts are those with "judge" or "eval" in the name.
+  // Live data from the canary SSE stream via the store.
+  const judgeVersionLabel = useCanaryStore(s => s.judgeVersionLabel);
+  const judgeArn = useCanaryStore(s => s.judgeArn);
+  const lastJudgeScores = useCanaryStore(s => s.lastJudgeScores);
+  const lastJudgedAt = useCanaryStore(s => s.lastJudgedAt);
+  const judgeHistory = useCanaryStore(s => s.judgeHistory);
+  const rollingMeanA = useCanaryStore(s => s.rollingMeanA);
+  const rollingMeanB = useCanaryStore(s => s.rollingMeanB);
+
+  // The prompt ID embedded in the judge ARN (for the Prompt Studio link).
+  const judgePromptId = useMemo(() => parsePromptIdFromArn(judgeArn), [judgeArn]);
+
+  // Judge prompts: those with "judge" or "eval" in the name.
   const judgePrompts = useMemo(
     () => prompts.filter(p => /judge|eval/i.test(p.name)),
     [prompts],
@@ -234,7 +238,6 @@ export default function EvaluationsPage(): React.ReactElement {
     saveConfig(cfg);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-    // POST to middleware so it re-reads config on next invocation.
     fetch('/api/observability/evaluations/config', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -249,10 +252,39 @@ export default function EvaluationsPage(): React.ReactElement {
   const total = totalWeight(cfg.dimensions);
   const weightOk = total === 100;
 
+  // Reverse so newest is at top.
+  const historyDesc = useMemo(() => [...judgeHistory].reverse(), [judgeHistory]);
+
   return (
     <div style={pageStyle}>
       {/* ── Left column: Config ── */}
       <div style={configColStyle}>
+
+        {/* Judge identity banner */}
+        {judgeArn && (
+          <div style={judgeArnBannerStyle}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span style={judgeVersionBadgeStyle}>{judgeVersionLabel}</span>
+              <span style={judgeArnTextStyle} title={judgeArn}>{judgeArn}</span>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+              <a
+                href={judgePromptId ? `/iq/prompts` : undefined}
+                onClick={e => { e.preventDefault(); navigate('/iq/prompts'); }}
+                style={smallLinkStyle}
+              >
+                Edit in Prompt Studio ↗
+              </a>
+              <a
+                href="/iq/diff"
+                onClick={e => { e.preventDefault(); navigate('/iq/diff'); }}
+                style={smallLinkStyle}
+              >
+                Compare versions ↗
+              </a>
+            </div>
+          </div>
+        )}
 
         {/* Enable toggle */}
         <section style={sectionStyle}>
@@ -271,9 +303,8 @@ export default function EvaluationsPage(): React.ReactElement {
             </label>
           </div>
           <p style={sectionDescStyle}>
-            When enabled, a sample of canary invocations is automatically evaluated by a second
-            model acting as an impartial judge. Scores appear in the Recent Scores panel and can
-            trigger experiment hold/rollback if they fall below the fail threshold.
+            When enabled, a sample of canary invocations is automatically evaluated by the
+            judge model. Scores flow live into this page via SSE.
           </p>
         </section>
 
@@ -296,61 +327,6 @@ export default function EvaluationsPage(): React.ReactElement {
           <p style={fieldHintStyle}>Model ID: <code style={codeStyle}>{cfg.modelId}</code></p>
         </section>
 
-        {/* Judge prompt */}
-        <section style={sectionStyle}>
-          <h3 style={fieldLabelStyle}>Judge prompt</h3>
-          <p style={fieldHintStyle}>
-            Pick a prompt from the Prompt Library to use as the judge rubric template. Leave blank
-            to use the built-in default rubric derived from the dimension weights below.
-          </p>
-          <select
-            value={cfg.promptId ?? ''}
-            onChange={e => setCfg(c => ({ ...c, promptId: e.target.value || null, promptVersion: null }))}
-            style={selectStyle}
-          >
-            <option value="">(built-in default rubric)</option>
-            {judgePrompts.length > 0 && (
-              <optgroup label="Judge / eval prompts">
-                {judgePrompts.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </optgroup>
-            )}
-            {prompts.filter(p => !/judge|eval/i.test(p.name)).length > 0 && (
-              <optgroup label="Other prompts">
-                {prompts.filter(p => !/judge|eval/i.test(p.name)).map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </optgroup>
-            )}
-          </select>
-
-          {cfg.promptId && (
-            <select
-              value={cfg.promptVersion ?? ''}
-              onChange={e => setCfg(c => ({ ...c, promptVersion: e.target.value || null }))}
-              style={{ ...selectStyle, marginTop: 6 }}
-            >
-              <option value="">Select version…</option>
-              {versions.map(v => (
-                <option key={v.version} value={v.isDraft ? 'DRAFT' : v.version}>
-                  {v.isDraft || v.version === 'DRAFT' ? 'DRAFT' : `v${v.version}`}
-                  {v.description ? ` — ${v.description.slice(0, 40)}` : ''}
-                </option>
-              ))}
-            </select>
-          )}
-
-          {cfg.promptId && (
-            <a
-              href={`/iq/prompts`}
-              style={promptLinkStyle}
-            >
-              Open in Prompt Studio ↗
-            </a>
-          )}
-        </section>
-
         {/* Rubric weights */}
         <section style={sectionStyle}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -360,8 +336,8 @@ export default function EvaluationsPage(): React.ReactElement {
             </span>
           </div>
           <p style={fieldHintStyle}>
-            Weights determine how each dimension contributes to the overall 0–10 score.
-            {cfg.promptId && ' These are ignored when a custom judge prompt is selected.'}
+            How each dimension contributes to the overall 0–10 score.
+            {judgeArn && ' Overridden by the active judge prompt when one is configured.'}
           </p>
           <div style={dimsListStyle}>
             {cfg.dimensions.map(dim => (
@@ -373,9 +349,7 @@ export default function EvaluationsPage(): React.ReactElement {
               />
             ))}
           </div>
-          {!weightOk && (
-            <div style={weightWarnStyle}>Weights must sum to exactly 100%.</div>
-          )}
+          {!weightOk && <div style={weightWarnStyle}>Weights must sum to exactly 100%.</div>}
           <button
             type="button"
             style={resetBtnStyle}
@@ -395,9 +369,7 @@ export default function EvaluationsPage(): React.ReactElement {
               onChange={e => setCfg(c => ({ ...c, minSampleRate: Number(e.target.value) }))}
               style={selectStyle}
             >
-              {SAMPLE_RATES.map(r => (
-                <option key={r.value} value={r.value}>{r.label}</option>
-              ))}
+              {SAMPLE_RATES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
           </div>
           <div style={{ ...rowFieldStyle, marginTop: 8 }}>
@@ -407,15 +379,9 @@ export default function EvaluationsPage(): React.ReactElement {
               onChange={e => setCfg(c => ({ ...c, failThreshold: Number(e.target.value) }))}
               style={selectStyle}
             >
-              {FAIL_THRESHOLDS.map(t => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
+              {FAIL_THRESHOLDS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </div>
-          <p style={fieldHintStyle}>
-            Invocations scoring below the fail threshold are flagged; if ≥30% of evaluated
-            invocations fail, the canary is automatically put on hold.
-          </p>
         </section>
 
         {/* Save */}
@@ -431,40 +397,85 @@ export default function EvaluationsPage(): React.ReactElement {
         </div>
       </div>
 
-      {/* ── Right column: Recent scores ── */}
+      {/* ── Right column: Live scores ── */}
       <div style={scoresColStyle}>
-        <div style={scoresPanelHeaderStyle}>
-          <h2 style={sectionTitleStyle}>Recent evaluations</h2>
-          <span style={scoresBadgeStyle}>{scores.length}</span>
+
+        {/* Stat cards */}
+        <div style={statRowStyle}>
+          <div style={statCardStyle}>
+            <div style={statNumStyle}>{lastJudgeScores ? (lastJudgeScores.helpfulness * 100).toFixed(0) : '—'}</div>
+            <div style={{ ...statLabelStyle, color: DIM_COLORS.helpfulness }}>Helpfulness</div>
+          </div>
+          <div style={statCardStyle}>
+            <div style={statNumStyle}>{lastJudgeScores ? (lastJudgeScores.factuality * 100).toFixed(0) : '—'}</div>
+            <div style={{ ...statLabelStyle, color: DIM_COLORS.factuality }}>Factuality</div>
+          </div>
+          <div style={statCardStyle}>
+            <div style={statNumStyle}>{lastJudgeScores ? (lastJudgeScores.tone * 100).toFixed(0) : '—'}</div>
+            <div style={{ ...statLabelStyle, color: DIM_COLORS.tone }}>Tone</div>
+          </div>
+          <div style={statCardStyle}>
+            <div style={statNumStyle}>{lastJudgeScores ? (lastJudgeScores.conciseness * 100).toFixed(0) : '—'}</div>
+            <div style={{ ...statLabelStyle, color: DIM_COLORS.conciseness }}>Conciseness</div>
+          </div>
         </div>
 
-        {scoresLoading && (
-          <div style={placeholderStyle}>Loading scores…</div>
-        )}
+        {/* Rolling means */}
+        <div style={meansRowStyle}>
+          <div style={meanCardStyle}>
+            <span style={meanLabelStyle}>Rolling mean A</span>
+            <span style={{ ...meanValStyle, color: scoreColor(rollingMeanA) }}>{(rollingMeanA * 10).toFixed(2)}</span>
+          </div>
+          <div style={meanCardStyle}>
+            <span style={meanLabelStyle}>Rolling mean B</span>
+            <span style={{ ...meanValStyle, color: scoreColor(rollingMeanB) }}>{(rollingMeanB * 10).toFixed(2)}</span>
+          </div>
+          {lastJudgedAt && (
+            <div style={{ ...meanCardStyle, flex: '0 0 auto', minWidth: 120 }}>
+              <span style={meanLabelStyle}>Last judged</span>
+              <span style={meanValStyle}>{fmtTime(lastJudgedAt)}</span>
+            </div>
+          )}
+        </div>
 
-        {!scoresLoading && scores.length === 0 && (
+        {/* Score history */}
+        <div style={scoresPanelHeaderStyle}>
+          <h2 style={sectionTitleStyle}>Score history</h2>
+          <span style={scoresBadgeStyle}>{historyDesc.length}</span>
+          <span style={scoresSourceStyle}>live · SSE feed</span>
+        </div>
+
+        {historyDesc.length === 0 ? (
           <div style={emptyScoresStyle}>
             <div style={emptyIconStyle}>📊</div>
             <p style={emptyTextStyle}>
-              No evaluation scores yet.
+              No scores yet.{' '}
               {cfg.enabled
-                ? ' Scores will appear here after the next canary invocations are evaluated.'
-                : ' Enable LLM-as-Judge above to start collecting scores.'}
+                ? 'Scores appear here in real-time as the canary evaluates responses.'
+                : 'Enable LLM-as-Judge above to start collecting scores.'}
             </p>
+            <button
+              type="button"
+              style={openCanaryBtnStyle}
+              onClick={() => navigate('/iq/canary')}
+            >
+              Open canary dashboard →
+            </button>
           </div>
-        )}
-
-        {!scoresLoading && scores.length > 0 && (
+        ) : (
           <div style={scoresListStyle}>
-            {scores.map(s => <RecentScoreRow key={s.id} s={s} />)}
+            {historyDesc.map((entry, i) => (
+              <ScoreRow key={`${entry.ts}-${i}`} entry={entry} i={historyDesc.length - 1 - i} />
+            ))}
           </div>
         )}
 
         {/* Legend */}
         <div style={legendStyle}>
-          <span style={legendItemStyle}><span style={{ color: '#10b981' }}>●</span> ≥7 Pass</span>
-          <span style={legendItemStyle}><span style={{ color: '#f59e0b' }}>●</span> 5–6 Review</span>
-          <span style={legendItemStyle}><span style={{ color: '#ef4444' }}>●</span> &lt;5 Fail</span>
+          <span style={legendItemStyle}><span style={{ color: '#10b981' }}>●</span> ≥70 Pass</span>
+          <span style={legendItemStyle}><span style={{ color: '#f59e0b' }}>●</span> 50–69 Review</span>
+          <span style={legendItemStyle}><span style={{ color: '#ef4444' }}>●</span> &lt;50 Fail</span>
+          <span style={{ ...legendItemStyle, marginLeft: 'auto', color: '#94a3b8', fontSize: 10 }}>scores are 0–100 (judge outputs 0–1)</span>
         </div>
       </div>
     </div>
@@ -476,54 +487,89 @@ export default function EvaluationsPage(): React.ReactElement {
 const pageStyle: CSSProperties = {
   display: 'flex',
   gap: 24,
-  height: '100%',
-  minHeight: 0,
   margin: -24,
   padding: 24,
-  overflow: 'auto',
+  overflow: 'auto',         // page itself scrolls if needed
   alignItems: 'flex-start',
   boxSizing: 'border-box',
+  minHeight: '100%',
 };
 
 const configColStyle: CSSProperties = {
-  flex: '0 0 520px',
+  flex: '0 0 480px',
   minWidth: 0,
   display: 'flex',
   flexDirection: 'column',
-  gap: 16,
+  gap: 14,
 };
 
 const scoresColStyle: CSSProperties = {
   flex: 1,
-  minWidth: 280,
+  minWidth: 300,
   display: 'flex',
   flexDirection: 'column',
   gap: 12,
+};
+
+const judgeArnBannerStyle: CSSProperties = {
+  background: '#eef2ff',
+  border: '1px solid #c7d2fe',
+  borderRadius: 8,
+  padding: '10px 14px',
+};
+
+const judgeVersionBadgeStyle: CSSProperties = {
+  display: 'inline-block',
+  fontSize: 11,
+  fontWeight: 700,
+  fontFamily: 'monospace',
+  background: '#6366f1',
+  color: '#fff',
+  padding: '2px 8px',
+  borderRadius: 4,
+  flexShrink: 0,
+};
+
+const judgeArnTextStyle: CSSProperties = {
+  fontSize: 10,
+  fontFamily: 'monospace',
+  color: '#4338ca',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  flex: 1,
+};
+
+const smallLinkStyle: CSSProperties = {
+  fontSize: 11,
+  color: '#6366f1',
+  textDecoration: 'none',
+  cursor: 'pointer',
 };
 
 const sectionStyle: CSSProperties = {
   background: '#fff',
   border: '1px solid #e2e8f0',
   borderRadius: 8,
-  padding: '16px 20px',
+  padding: '14px 18px',
 };
 
 const sectionHeaderStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'space-between',
-  marginBottom: 8,
+  marginBottom: 6,
 };
 
 const sectionTitleStyle: CSSProperties = {
-  fontSize: 14,
+  fontSize: 13,
   fontWeight: 700,
   color: '#0f172a',
   margin: 0,
 };
 
 const sectionDescStyle: CSSProperties = {
-  fontSize: 12,
+  fontSize: 11,
   color: '#64748b',
   margin: 0,
   lineHeight: 1.6,
@@ -557,7 +603,7 @@ const toggleThumbStyle: CSSProperties = {
 };
 
 const fieldLabelStyle: CSSProperties = {
-  fontSize: 11,
+  fontSize: 10,
   fontWeight: 700,
   textTransform: 'uppercase',
   letterSpacing: '0.06em',
@@ -568,8 +614,8 @@ const fieldLabelStyle: CSSProperties = {
 const fieldHintStyle: CSSProperties = {
   fontSize: 11,
   color: '#94a3b8',
-  margin: '4px 0 10px',
-  lineHeight: 1.6,
+  margin: '4px 0 8px',
+  lineHeight: 1.5,
 };
 
 const modelGridStyle: CSSProperties = {
@@ -580,350 +626,165 @@ const modelGridStyle: CSSProperties = {
 
 const modelCardBase: CSSProperties = {
   flex: 1,
-  minWidth: 120,
+  minWidth: 110,
   display: 'flex',
   flexDirection: 'column',
   gap: 2,
-  padding: '10px 12px',
+  padding: '8px 10px',
   border: '1px solid #e2e8f0',
   borderRadius: 6,
   cursor: 'pointer',
   textAlign: 'left',
   background: '#f8fafc',
   fontFamily: 'inherit',
-  transition: 'border-color 0.15s',
 };
 
 const modelCardStyle: CSSProperties = { ...modelCardBase };
-const modelCardActiveStyle: CSSProperties = {
-  ...modelCardBase,
-  border: '2px solid #6366f1',
-  background: '#eef2ff',
-};
+const modelCardActiveStyle: CSSProperties = { ...modelCardBase, border: '2px solid #6366f1', background: '#eef2ff' };
 
-const modelNameStyle: CSSProperties = {
-  fontSize: 12,
-  fontWeight: 600,
-  color: '#0f172a',
-};
-
-const modelHintStyle: CSSProperties = {
-  fontSize: 10,
-  color: '#94a3b8',
-};
+const modelNameStyle: CSSProperties = { fontSize: 11, fontWeight: 600, color: '#0f172a' };
+const modelHintStyle: CSSProperties = { fontSize: 10, color: '#94a3b8' };
 
 const codeStyle: CSSProperties = {
-  fontFamily: 'monospace',
-  fontSize: 11,
-  background: '#f1f5f9',
-  padding: '1px 4px',
-  borderRadius: 3,
-  color: '#475569',
+  fontFamily: 'monospace', fontSize: 10, background: '#f1f5f9',
+  padding: '1px 4px', borderRadius: 3, color: '#475569',
 };
 
 const selectStyle: CSSProperties = {
-  width: '100%',
-  padding: '7px 10px',
-  fontSize: 12,
-  border: '1px solid #e2e8f0',
-  borderRadius: 4,
-  background: '#f8fafc',
-  color: '#0f172a',
-  outline: 'none',
-  fontFamily: 'inherit',
-  boxSizing: 'border-box',
+  flex: 1, padding: '6px 8px', fontSize: 12,
+  border: '1px solid #e2e8f0', borderRadius: 4, background: '#f8fafc',
+  color: '#0f172a', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
 };
 
-const promptLinkStyle: CSSProperties = {
-  display: 'inline-block',
-  marginTop: 6,
-  fontSize: 11,
-  color: '#6366f1',
-  textDecoration: 'none',
+const dimsListStyle: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 8 };
+
+const dimRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 10 };
+const dimLabelBlockStyle: CSSProperties = { flex: '0 0 130px' };
+const dimNameStyle: CSSProperties = { display: 'block', fontSize: 11, fontWeight: 600 };
+const dimDescStyle: CSSProperties = { display: 'block', fontSize: 10, color: '#94a3b8', lineHeight: 1.4 };
+const sliderWrapStyle: CSSProperties = { flex: 1, display: 'flex', alignItems: 'center', gap: 6 };
+const dimWeightStyle: CSSProperties = { fontSize: 11, fontWeight: 700, color: '#0f172a', width: 30, textAlign: 'center', flexShrink: 0 };
+
+const trackStyle: CSSProperties = {
+  flex: 1, height: 8, background: '#e2e8f0', borderRadius: 4, overflow: 'hidden',
+};
+const trackFillStyle: CSSProperties = {
+  height: '100%', borderRadius: 4, transition: 'width 0.15s ease',
+};
+const stepBtnStyle: CSSProperties = {
+  width: 24, height: 24, border: '1px solid #e2e8f0', borderRadius: 4,
+  background: '#f8fafc', color: '#475569', fontSize: 14, fontWeight: 700,
+  cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+  flexShrink: 0, fontFamily: 'inherit', lineHeight: 1, padding: 0,
 };
 
-const dimsListStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 10,
-};
-
-const dimRowStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 12,
-};
-
-const dimLabelBlockStyle: CSSProperties = {
-  flex: '0 0 140px',
-};
-
-const dimNameStyle: CSSProperties = {
-  display: 'block',
-  fontSize: 12,
-  fontWeight: 600,
-  color: '#0f172a',
-};
-
-const dimDescStyle: CSSProperties = {
-  display: 'block',
-  fontSize: 10,
-  color: '#94a3b8',
-  lineHeight: 1.4,
-};
-
-const sliderWrapStyle: CSSProperties = {
-  flex: 1,
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-};
-
-const dimWeightStyle: CSSProperties = {
-  fontSize: 12,
-  fontWeight: 600,
-  color: '#475569',
-  width: 34,
-  textAlign: 'right',
-  flexShrink: 0,
-};
-
-const weightWarnStyle: CSSProperties = {
-  marginTop: 8,
-  fontSize: 11,
-  color: '#ef4444',
-  fontWeight: 500,
-};
+const weightWarnStyle: CSSProperties = { marginTop: 6, fontSize: 11, color: '#ef4444', fontWeight: 500 };
 
 const resetBtnStyle: CSSProperties = {
-  marginTop: 10,
-  padding: '5px 12px',
-  fontSize: 11,
-  border: '1px solid #e2e8f0',
-  borderRadius: 4,
-  background: '#f8fafc',
-  color: '#64748b',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
+  marginTop: 8, padding: '4px 10px', fontSize: 11,
+  border: '1px solid #e2e8f0', borderRadius: 4, background: '#f8fafc',
+  color: '#64748b', cursor: 'pointer', fontFamily: 'inherit',
 };
 
-const rowFieldStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 12,
-};
+const rowFieldStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 10 };
+const inlineFieldLabelStyle: CSSProperties = { fontSize: 11, fontWeight: 600, color: '#475569', flex: '0 0 90px' };
 
-const inlineFieldLabelStyle: CSSProperties = {
-  fontSize: 12,
-  fontWeight: 600,
-  color: '#475569',
-  flex: '0 0 100px',
-};
-
-const saveRowStyle: CSSProperties = {
-  display: 'flex',
-  justifyContent: 'flex-end',
-};
+const saveRowStyle: CSSProperties = { display: 'flex', justifyContent: 'flex-end' };
 
 const saveBtnStyle: CSSProperties = {
-  padding: '9px 20px',
-  fontSize: 13,
-  fontWeight: 600,
-  border: 'none',
-  borderRadius: 6,
-  background: '#6366f1',
-  color: '#fff',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
+  padding: '8px 18px', fontSize: 12, fontWeight: 600,
+  border: 'none', borderRadius: 6, background: '#6366f1', color: '#fff',
+  cursor: 'pointer', fontFamily: 'inherit',
+};
+const saveBtnDisabledStyle: CSSProperties = { ...saveBtnStyle, background: '#e2e8f0', color: '#94a3b8', cursor: 'not-allowed' };
+
+// ── Scores panel ──────────────────────────────────────────────────────────────
+
+const statRowStyle: CSSProperties = { display: 'flex', gap: 8 };
+
+const statCardStyle: CSSProperties = {
+  flex: 1, background: '#fff', border: '1px solid #e2e8f0',
+  borderRadius: 8, padding: '10px 12px', textAlign: 'center',
 };
 
-const saveBtnDisabledStyle: CSSProperties = {
-  ...saveBtnStyle,
-  background: '#e2e8f0',
-  color: '#94a3b8',
-  cursor: 'not-allowed',
+const statNumStyle: CSSProperties = { fontSize: 22, fontWeight: 700, color: '#0f172a' };
+const statLabelStyle: CSSProperties = { fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 2 };
+
+const meansRowStyle: CSSProperties = { display: 'flex', gap: 8 };
+
+const meanCardStyle: CSSProperties = {
+  flex: 1, background: '#fff', border: '1px solid #e2e8f0',
+  borderRadius: 8, padding: '8px 12px',
+  display: 'flex', flexDirection: 'column', gap: 2,
 };
+const meanLabelStyle: CSSProperties = { fontSize: 10, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' };
+const meanValStyle: CSSProperties = { fontSize: 18, fontWeight: 700, color: '#0f172a' };
 
-// ── Scores panel styles ────────────────────────────────────────────────────────
-
-const scoresPanelHeaderStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-};
-
+const scoresPanelHeaderStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 8 };
 const scoresBadgeStyle: CSSProperties = {
-  fontSize: 11,
-  fontWeight: 700,
-  background: '#e2e8f0',
-  color: '#475569',
-  borderRadius: 10,
-  padding: '1px 7px',
+  fontSize: 11, fontWeight: 700, background: '#e2e8f0',
+  color: '#475569', borderRadius: 10, padding: '1px 7px',
 };
-
-const placeholderStyle: CSSProperties = {
-  fontSize: 12,
-  color: '#94a3b8',
-  padding: 16,
-};
+const scoresSourceStyle: CSSProperties = { fontSize: 10, color: '#94a3b8', marginLeft: 4 };
 
 const emptyScoresStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  gap: 12,
-  padding: '40px 20px',
-  background: '#fff',
-  border: '1px solid #e2e8f0',
-  borderRadius: 8,
+  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
+  padding: '32px 20px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8,
 };
+const emptyIconStyle: CSSProperties = { fontSize: 32 };
+const emptyTextStyle: CSSProperties = { fontSize: 12, color: '#94a3b8', textAlign: 'center', maxWidth: 280, margin: 0, lineHeight: 1.6 };
 
-const emptyIconStyle: CSSProperties = {
-  fontSize: 32,
-};
-
-const emptyTextStyle: CSSProperties = {
-  fontSize: 12,
-  color: '#94a3b8',
-  textAlign: 'center',
-  maxWidth: 280,
-  margin: 0,
-  lineHeight: 1.6,
+const openCanaryBtnStyle: CSSProperties = {
+  padding: '7px 14px', fontSize: 12, fontWeight: 600,
+  border: '1px solid #e2e8f0', borderRadius: 6, background: '#f8fafc',
+  color: '#475569', cursor: 'pointer', fontFamily: 'inherit',
 };
 
 const scoresListStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
-  gap: 6,
+  gap: 4,
+  // Cap height so the list never expands the page vertically beyond the viewport.
+  // 420px accounts for stat cards + means + header above the list.
+  maxHeight: 'calc(100vh - 420px)',
+  overflowY: 'auto',
 };
 
 const scoreRowStyle: CSSProperties = {
-  background: '#fff',
-  border: '1px solid #e2e8f0',
-  borderRadius: 6,
-  overflow: 'hidden',
+  background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden',
 };
 
 const scoreRowTopStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  padding: '10px 14px',
-  cursor: 'pointer',
+  display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer',
 };
 
-const scoreAgentStyle: CSSProperties = {
-  fontSize: 11,
-  fontWeight: 600,
-  color: '#475569',
-  maxWidth: 100,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
+const scoreIndexStyle: CSSProperties = { fontSize: 10, color: '#94a3b8', flexShrink: 0, width: 24 };
+
+const scoreSideStyle: CSSProperties = {
+  fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 3, flexShrink: 0,
 };
 
-const scoreSessionStyle: CSSProperties = {
-  fontSize: 10,
-  color: '#94a3b8',
-  fontFamily: 'monospace',
+const scoreBarTrackStyle: CSSProperties = {
+  height: 6, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden',
 };
 
-const scoreBarWrapStyle: CSSProperties = {
-  width: 60,
-  height: 6,
-  background: '#f1f5f9',
-  borderRadius: 3,
-  overflow: 'hidden',
-  flexShrink: 0,
-};
+const scoreBarFillStyle: CSSProperties = { height: '100%', borderRadius: 3, transition: 'width 0.3s' };
 
-const scoreBarFillStyle: CSSProperties = {
-  height: '100%',
-  borderRadius: 3,
-  transition: 'width 0.3s',
-};
-
-const scoreNumStyle: CSSProperties = {
-  fontSize: 12,
-  fontWeight: 700,
-  flexShrink: 0,
-};
-
-const scoreTimeStyle: CSSProperties = {
-  fontSize: 10,
-  color: '#94a3b8',
-  flexShrink: 0,
-};
-
-const chevronStyle: CSSProperties = {
-  fontSize: 9,
-  color: '#94a3b8',
-  flexShrink: 0,
-};
+const scoreNumStyle: CSSProperties = { fontSize: 12, fontWeight: 700, flexShrink: 0, width: 28, textAlign: 'right' };
+const scoreTimeStyle: CSSProperties = { fontSize: 10, color: '#94a3b8', flexShrink: 0 };
+const chevronStyle: CSSProperties = { fontSize: 9, color: '#94a3b8', flexShrink: 0 };
 
 const scoreDetailStyle: CSSProperties = {
-  borderTop: '1px solid #f1f5f9',
-  padding: '10px 14px',
-  background: '#f8fafc',
+  borderTop: '1px solid #f1f5f9', padding: '8px 12px', background: '#f8fafc',
 };
 
 const dimGridStyle: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
-  gap: 6,
-  marginBottom: 8,
+  display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8,
 };
 
-const dimScoreItemStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 1,
-};
+const dimScoreItemStyle: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 1 };
+const dimScoreLabelStyle: CSSProperties = { fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' };
+const dimScoreValStyle: CSSProperties = { fontSize: 16, fontWeight: 700 };
 
-const dimScoreLabelStyle: CSSProperties = {
-  fontSize: 9,
-  fontWeight: 700,
-  textTransform: 'uppercase',
-  letterSpacing: '0.04em',
-  color: '#94a3b8',
-};
-
-const dimScoreValStyle: CSSProperties = {
-  fontSize: 14,
-  fontWeight: 700,
-};
-
-const reasoningStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 4,
-};
-
-const reasoningLabelStyle: CSSProperties = {
-  fontSize: 9,
-  fontWeight: 700,
-  textTransform: 'uppercase',
-  letterSpacing: '0.04em',
-  color: '#94a3b8',
-};
-
-const reasoningTextStyle: CSSProperties = {
-  fontSize: 11,
-  color: '#475569',
-  margin: 0,
-  lineHeight: 1.6,
-};
-
-const legendStyle: CSSProperties = {
-  display: 'flex',
-  gap: 12,
-  padding: '6px 0',
-};
-
-const legendItemStyle: CSSProperties = {
-  fontSize: 11,
-  color: '#64748b',
-  display: 'flex',
-  alignItems: 'center',
-  gap: 4,
-};
+const legendStyle: CSSProperties = { display: 'flex', gap: 10, padding: '4px 0', flexWrap: 'wrap', alignItems: 'center' };
+const legendItemStyle: CSSProperties = { fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 };

@@ -1,8 +1,9 @@
 // Canary JudgeNode — the LLM-as-judge scoring each variant's outputs across
 // four axes. Each axis renders as a mini horizontal bar (0–100 scale).
 
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useState, useCallback } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
+import { useNavigate } from 'react-router';
 import { Card, Chip } from '@connorhoehnslalom/ui-components/shared';
 import type { JudgeNodeData } from '../types.js';
 
@@ -80,9 +81,19 @@ function JudgeNodeImpl({ data }: NodeProps<JudgeNodeType>) {
     return () => window.clearInterval(id);
   }, []);
 
+  const navigate = useNavigate();
+  const handleClick = useCallback(() => {
+    navigate('/iq/evaluations');
+  }, [navigate]);
+
   const s = data.lastScores;
   return (
-    <Card padding="sm" style={{ width: 240, fontSize: 12 }}>
+    <Card
+      padding="sm"
+      style={{ width: 240, fontSize: 12, cursor: 'pointer' }}
+      onClick={handleClick}
+      title="Open Evaluations — configure judge + view scores"
+    >
       <div
         style={{
           display: 'flex',

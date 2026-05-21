@@ -172,7 +172,14 @@ function ControllerNodeImpl({ data }: NodeProps<ControllerNodeType>) {
       </div>
 
       <Handle type="target" position={Position.Top} id="in" />
-      <Handle type="source" position={Position.Left} id="feedback" />
+      {/* feedback handle is invisible — it exists only as an edge anchor for the
+          ReactFlow feedback loop edge back to the Router. Do not render a visible dot. */}
+      <Handle
+        type="source"
+        position={Position.Left}
+        id="feedback"
+        style={{ opacity: 0, width: 4, height: 4, minWidth: 0, minHeight: 0 }}
+      />
     </Card>
   );
 }

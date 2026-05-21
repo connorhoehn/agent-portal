@@ -25,13 +25,14 @@ type NavItem = { path: string; label: string; requireRoles?: string[]; tenant: T
 
 // Top-level nav — orgiq + universal items only. Admin items live in PLATFORM_ITEMS.
 const NAV_ITEMS: NavItem[] = [
-  { path: '/iq/search',    label: 'Search',            tenant: 'orgiq' },
+  // "Search" = former Agent Tools (/iq/invoke). The legacy /iq/search route is
+  // now a redirect to /iq/invoke — all conversational search goes through the
+  // agent invocation surface.
+  { path: '/iq/invoke',    label: 'Search',            tenant: 'orgiq' },
   { path: '/iq/explore',   label: 'Explore',           tenant: 'orgiq' },
   { path: '/iq/agents',    label: 'Architecture',      tenant: 'orgiq' },
-  { path: '/iq/invoke',    label: 'Agent Tools',       tenant: 'orgiq' },
   { path: '/iq/prompts',   label: 'Prompt Management', tenant: 'orgiq' },
-  { path: '/iq/scores',    label: 'Scores',            tenant: 'orgiq' },
-  { path: '/iq/decisions', label: 'Decisions',         tenant: 'orgiq' },
+  { path: '/iq/scores',    label: 'Reports',           tenant: 'orgiq' },
   { path: '/iq/projects',  label: 'Projects',          tenant: 'orgiq' },
   { path: '/newsroom',     label: 'Newsroom',          tenant: 'newsroom' },
   { path: '/settings',     label: 'Settings',          tenant: 'universal' },

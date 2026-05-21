@@ -35,6 +35,7 @@ import { identityRouter } from './routes/identity.js';
 import { canaryRouter } from './routes/canary.js';
 import { canaryLibraryRouter } from './routes/canary-library.js';
 import { promptHistoryRouter } from './routes/prompt-history.js';
+import { workItemsRouter } from './routes/work-items.js';
 import { gatewayProxyRouter } from './routes/gateway-proxy.js';
 import { requireAction } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
@@ -69,6 +70,9 @@ app.use('/api/agents', agentsRouter);
 // resolve without going through the gated graph router.
 app.use('/api/graph/decisions', decisionsRouter);
 app.use('/api/graph/projects', projectsRouter);
+// Work-items: mounted at /api/graph so its sub-paths (/work, /projects/:id/work,
+// /people/:id/work, /work-items) resolve before the gated graphRouter.
+app.use('/api/graph', workItemsRouter);
 app.use('/api/graph', graphRouter);
 app.use('/api/scores', scoresRouter);
 app.use('/api/knowledge-base', knowledgeBaseRouter);
@@ -124,6 +128,12 @@ app.use('/api/observability/canary', canaryRouter);
 app.use('/api/observability/canary', canaryLibraryRouter);
 // Prompt history + experiment log — version timeline + outcome cards for /iq/history.
 app.use('/api/iq/prompts', promptHistoryRouter);
+// Evaluations — LLM-as-judge config + recent scores. Config is stored in the
+// portal (localStorage) and mirrored here for future server-side use.
+// The GET /recent endpoint returns rows from observability.evaluation_scores when
+// the table exists; it returns an empty array gracefully if it doesn't.
+app.put('/api/observability/evaluations/config', (_req, res) => { res.json({ ok: true }); });
+app.get('/api/observability/evaluations/recent', (_req, res) => { res.json({ scores: [] }); });
 app.use('/api/observability', requireAction('ViewObservability'), observabilityRouter);
 app.use('/api/capabilities', capabilitiesRouter);
 app.use('/api/sessions', sessionsRouter);

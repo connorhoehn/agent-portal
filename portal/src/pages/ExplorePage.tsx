@@ -268,6 +268,40 @@ function ExplorePage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages, streamingText]);
 
+  // ── Auto-select graph nodes from agent responses ───────────────────────────
+  // When streaming ends, extract every person mentioned in the assistant message
+  // and automatically highlight them in the graph.
+  //
+  // Behaviour:
+  //   • First response in a conversation → REPLACES any existing graph selection
+  //   • Follow-up responses in the same conversation → COMPOUNDS (union)
+  //   • Reset (new conversation / ↺) → resets the "first response" flag
+  const prevStreamingRef = useRef(false);
+  const isFirstAutoSelectRef = useRef(true);
+
+  useEffect(() => {
+    const justFinished = prevStreamingRef.current && !isStreaming;
+    prevStreamingRef.current = isStreaming;
+    if (!justFinished || !data) return;
+
+    const lastMsg = messages[messages.length - 1];
+    if (!lastMsg || lastMsg.role !== 'assistant') return;
+
+    const mentioned = findMentionedPeople(lastMsg.content, data.nodes);
+    if (mentioned.length === 0) return;
+
+    const mentionedIds = new Set(mentioned.map(p => p.id));
+    if (isFirstAutoSelectRef.current) {
+      // First response: replace whatever was selected before.
+      setSelectedIds(mentionedIds);
+      setFilterToSelection(true);
+      isFirstAutoSelectRef.current = false;
+    } else {
+      // Follow-up responses: add to existing selection (compound).
+      setSelectedIds(prev => new Set([...prev, ...mentionedIds]));
+    }
+  }, [isStreaming, messages, data]);
+
   function openAndAsk(ids?: string[]) {
     setChatOpen(true);
     if (!ids || ids.length === 0 || isStreaming) return;
@@ -340,6 +374,7 @@ function ExplorePage() {
     setChatOpen(false);
     reset();
     setInput('');
+    isFirstAutoSelectRef.current = true;
   }
 
   if (!data) {

@@ -106,13 +106,13 @@ export function App() {
     <Routes>
       {/* ── Backwards-compat redirects (outside Layout so they catch bare paths) ── */}
       <Route path="agents" element={<Navigate to="/iq/agents" replace />} />
-      <Route path="search" element={<Navigate to="/iq/search" replace />} />
+      <Route path="search" element={<Navigate to="/iq/invoke" replace />} />
       <Route path="invoke" element={<Navigate to="/iq/invoke" replace />} />
       <Route path="scores" element={<Navigate to="/iq/scores" replace />} />
       <Route path="scores/cohorts" element={<Navigate to="/iq/scores/cohorts" replace />} />
       <Route path="scores/compare" element={<Navigate to="/iq/scores/compare" replace />} />
-      <Route path="decisions" element={<Navigate to="/iq/decisions" replace />} />
-      <Route path="decisions/:id" element={<Navigate to="/iq/decisions" replace />} />
+      <Route path="decisions" element={<Navigate to="/iq/projects" replace />} />
+      <Route path="decisions/:id" element={<Navigate to="/iq/projects" replace />} />
       <Route path="projects" element={<Navigate to="/iq/projects" replace />} />
       <Route path="projects/:id" element={<Navigate to="/iq/projects" replace />} />
       <Route path="explore" element={<Navigate to="/iq/explore" replace />} />
@@ -145,13 +145,13 @@ export function App() {
         <Route path="iq" element={<Page element={<IqLayout />} />}>
           <Route index element={<Navigate to="agents" replace />} />
           <Route path="agents" element={<Page element={<AgentFlowPage />} />} />
-          <Route path="search" element={<Page element={<SearchPage />} />} />
+          <Route path="search" element={<Navigate to="/iq/invoke" replace />} />
           <Route path="invoke" element={<Page element={<InvokePage />} />} />
           <Route path="scores" element={<Page element={<ScoresPage />} />} />
           <Route path="scores/cohorts" element={<Page element={<ScoresCohortPage />} />} />
           <Route path="scores/compare" element={<Page element={<ScoresComparePage />} />} />
-          <Route path="decisions" element={<Page element={<DecisionsPage />} />} />
-          <Route path="decisions/:id" element={<Page element={<DecisionDetailPage />} />} />
+          <Route path="decisions" element={<Navigate to="/iq/projects" replace />} />
+          <Route path="decisions/:id" element={<Navigate to="/iq/projects" replace />} />
           <Route path="projects" element={<Page element={<ProjectsPage />} />} />
           <Route path="projects/:id" element={<Page element={<ProjectDetailPage />} />} />
           <Route path="explore" element={<Page element={<ExplorePage />} />} />

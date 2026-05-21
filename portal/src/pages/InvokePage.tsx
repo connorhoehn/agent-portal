@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router';
 import { useAgentStream } from '@connorhoehn/realtime-modules/agent-streaming/client';
 import type { ToolCall as LiveToolCall, Message as AgentMessage } from '@connorhoehn/realtime-modules/agent-streaming/client';
@@ -66,6 +66,7 @@ function InvokePage() {
     },
   });
   const [input, setInput] = useState('');
+  const [suggestionSeed, setSuggestionSeed] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { data: sessionList, refresh: refreshSessions } = useFetch<{ sessions: SessionSummary[] }>(
     '/api/sessions',
@@ -115,6 +116,16 @@ function InvokePage() {
   }
 
   const sessions = sessionList?.sessions ?? [];
+
+  // Contextual follow-up suggestions derived from conversation + refreshed on demand
+  const suggestions = useMemo(
+    () => buildSuggestions(messages, selectedId, suggestionSeed),
+    [messages, selectedId, suggestionSeed],
+  );
+
+  const handleSuggestion = useCallback((s: string) => {
+    setInput(s);
+  }, []);
 
   return (
     <div style={{ display: 'flex', height: '100%' }}>
@@ -222,6 +233,68 @@ function InvokePage() {
           {error && <div style={{ color: 'var(--color-danger)', fontSize: 13 }}>Error: {error}</div>}
           <div ref={bottomRef} />
         </div>
+
+        {/* Suggested search bubbles — shown when conversation has messages */}
+        {messages.length > 0 && !isStreaming && suggestions.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+            {suggestions.map((s) => (
+              <button
+                key={s}
+                onClick={() => handleSuggestion(s)}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: 9999,
+                  border: '1px solid var(--color-border, #e5e7eb)',
+                  background: 'var(--color-surface, #fff)',
+                  color: 'var(--color-text-secondary, #4b5563)',
+                  fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                  transition: 'all 0.12s',
+                  whiteSpace: 'nowrap',
+                  maxWidth: 260,
+                  overflow: 'hidden', textOverflow: 'ellipsis',
+                }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLElement).style.background = 'var(--color-surface-hover, #f3f4f6)';
+                  (e.currentTarget as HTMLElement).style.borderColor = '#6366f1';
+                  (e.currentTarget as HTMLElement).style.color = '#6366f1';
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLElement).style.background = 'var(--color-surface, #fff)';
+                  (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-border, #e5e7eb)';
+                  (e.currentTarget as HTMLElement).style.color = 'var(--color-text-secondary, #4b5563)';
+                }}
+              >
+                {s}
+              </button>
+            ))}
+            {/* Refresh button */}
+            <button
+              onClick={() => setSuggestionSeed(k => k + 1)}
+              title="Refresh suggestions"
+              style={{
+                width: 28, height: 28,
+                borderRadius: '50%',
+                border: '1px solid var(--color-border, #e5e7eb)',
+                background: 'var(--color-surface, #fff)',
+                color: 'var(--color-text-tertiary, #9ca3af)',
+                fontSize: 14, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+                transition: 'all 0.12s',
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.borderColor = '#6366f1';
+                (e.currentTarget as HTMLElement).style.color = '#6366f1';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-border, #e5e7eb)';
+                (e.currentTarget as HTMLElement).style.color = 'var(--color-text-tertiary, #9ca3af)';
+              }}
+            >
+              ↻
+            </button>
+          </div>
+        )}
 
         <div style={{ display: 'flex', gap: 8 }}>
           <input
@@ -453,6 +526,100 @@ function quickPromptsFor(agentId: string): QuickPrompt[] {
   return [
     { label: 'Capabilities check', prompt: 'What can you help me with?' },
   ];
+}
+
+// ─── Contextual suggestion engine ────────────────────────────────────────────
+//
+// Derives short follow-up bubbles from the last assistant message. On refresh
+// the seed rotates through a pool of agent-specific + org-graph queries.
+// No LLM call — purely client-side so it's instant and free.
+
+// Minimal shape needed for suggestion building (compatible with realtime-modules Message)
+type SuggestionMessage = { role: 'user' | 'assistant'; content: string };
+
+const SUPERVISOR_POOL = [
+  'Who are the top Kubernetes experts?',
+  'Which teams have the most cross-team collaboration?',
+  'What skill gaps exist in Platform Engineering?',
+  'Who should I pair with for a security audit?',
+  'Show all escalated decisions this week',
+  'Who owns the most critical in-progress work items?',
+  'Find people with both Rust and distributed-systems skills',
+  'Which projects are at risk of missing their deadline?',
+  'Summarize what the Data Platform team shipped this month',
+  'Who is the best person to review my Kafka PR?',
+];
+
+const SEARCH_POOL = [
+  'Who has the deepest expertise in Kubernetes?',
+  'List all people with Python AND AWS skills',
+  'Find the top 5 engineers in the Data Platform team',
+  'Which team has the most ML expertise?',
+  'Who worked on the last observability incident?',
+  'Who are the go-to people for React performance?',
+  'Find engineers with both Terraform and Go experience',
+  'Who has the highest PageRank in the org graph?',
+  'Which department has the most senior engineers?',
+];
+
+const SCORING_POOL = [
+  'Show top 10 by composite score',
+  'Who has risen the most in expertise score this quarter?',
+  'List the most influential engineers by PageRank',
+  'Which team has the highest average expertise score?',
+  'Show engineers with high influence but low formal seniority',
+  'Find people with expertise score > 80 in Kubernetes',
+];
+
+const ADVISOR_POOL = [
+  'Recommend two cross-team pairings that build org resilience',
+  'What are the biggest skill gaps in the organization?',
+  'Who is at risk of becoming a single-point-of-failure expert?',
+  'Which teams should collaborate more based on project overlap?',
+  'What hiring priorities would most strengthen the org graph?',
+  'Who could mentor junior engineers in distributed systems?',
+];
+
+function poolFor(agentId: string): string[] {
+  if (agentId.endsWith('search'))   return SEARCH_POOL;
+  if (agentId.endsWith('scoring'))  return SCORING_POOL;
+  if (agentId.endsWith('advisor'))  return ADVISOR_POOL;
+  return SUPERVISOR_POOL;
+}
+
+function buildSuggestions(messages: SuggestionMessage[], agentId: string, seed: number): string[] {
+  const pool = poolFor(agentId);
+
+  // Extract people names from the last assistant message to generate contextual follow-ups
+  const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
+  const content = lastAssistant?.content ?? '';
+
+  // Simple proper-noun extraction: two-word capitalized sequences
+  const nameMatches = content.match(/\b([A-Z][a-z]{1,14} [A-Z][a-z]{1,14})\b/g) ?? [];
+  // Deduplicate and filter out common sentence-starters
+  const SKIP = new Set(['The Agent', 'Source Organization', 'Knowledge Base', 'Platform Engineering']);
+  const uniqueNames = [...new Set(nameMatches)].filter(n => !SKIP.has(n)).slice(0, 2);
+
+  const contextual: string[] = uniqueNames.flatMap(name => [
+    `What projects is ${name.split(' ')[0]} working on?`,
+    `Show ${name.split(' ')[0]}'s skill profile and expertise score`,
+  ]).slice(0, 3);
+
+  // Build final list: contextual first, then rotate through pool
+  const offset = seed % Math.max(pool.length - 4, 1);
+  const fromPool = [
+    ...pool.slice(offset, offset + 4),
+    ...pool.slice(0, Math.max(0, 4 - (pool.length - offset))),
+  ].slice(0, 4);
+
+  const combined = [...contextual, ...fromPool];
+  // Deduplicate and limit to 5
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const s of combined) {
+    if (!seen.has(s) && out.length < 5) { seen.add(s); out.push(s); }
+  }
+  return out;
 }
 
 export default InvokePage;

@@ -6,7 +6,7 @@
 // Mirrors the EventSource pattern in components/ingest/useCrawlStream.ts.
 
 import { useEffect } from 'react';
-import { dispatch, setPromptTemplates } from './canaryStore.js';
+import { dispatch, setPromptTemplates, setJudgeArn } from './canaryStore.js';
 import type { CanaryEvent } from './types.js';
 
 interface PromptInfo {
@@ -42,6 +42,7 @@ export function useCanaryStream(): void {
           promptAVersionLabel: body.subject_a?.label,
           promptBVersionLabel: body.subject_b?.label,
         });
+        if (body.judge?.arn) setJudgeArn(body.judge.arn);
       })
       .catch(() => {
         // Endpoint may not exist yet — silently fall back to defaults.

@@ -169,7 +169,7 @@ export function useIqSubNav(pathname: string): IqSubNavSpec | null {
     return { title: 'Search', items: searchItems, storageKey: 'iq-search-subnav' };
   }
   if (pathname.startsWith('/iq/invoke')) {
-    return { title: 'Agent Tools', items: INVOKE_ITEMS, storageKey: 'iq-invoke-subnav' };
+    return { title: 'Search', items: INVOKE_ITEMS, storageKey: 'iq-invoke-subnav' };
   }
   if (pathname.startsWith('/iq/scores')) {
     return { title: 'Scores', items: SCORES_ITEMS, storageKey: 'iq-scores-subnav' };
@@ -177,8 +177,12 @@ export function useIqSubNav(pathname: string): IqSubNavSpec | null {
   if (pathname.startsWith('/iq/decisions')) {
     return { title: 'Decisions', items: DECISIONS_ITEMS, storageKey: 'iq-decisions-subnav' };
   }
-  if (pathname.startsWith('/iq/projects')) {
+  // Project list → show filter rail; detail pages (/iq/projects/:id) → full-width, no rail.
+  if (pathname === '/iq/projects' || pathname.startsWith('/iq/projects?')) {
     return { title: 'Projects', items: PROJECTS_ITEMS, storageKey: 'iq-projects-subnav' };
+  }
+  if (pathname.startsWith('/iq/projects/')) {
+    return null; // detail page is full-width
   }
   if (pathname.startsWith('/iq/explore')) {
     return { title: 'Explore', items: EXPLORE_ITEMS, storageKey: 'iq-explore-subnav' };

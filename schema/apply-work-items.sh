@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Apply work-items schema + full seed to Aurora via RDS Data API.
+# Run AFTER the main schema and seed have been applied.
+# Safe to re-run — all inserts use ON CONFLICT (id) DO NOTHING.
+set -euo pipefail
+
+REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+
+AURORA_CLUSTER_ARN=$(aws cloudformation describe-stacks \
+  --stack-name OrgIQ-Aurora --region "$REGION" \
+  --query "Stacks[0].Outputs[?OutputKey=='ClusterArn'].OutputValue" \
+  --output text)
+AURORA_SECRET_ARN=$(aws cloudformation describe-stacks \
+  --stack-name OrgIQ-Aurora --region "$REGION" \
+  --query "Stacks[0].Outputs[?OutputKey=='CredentialsSecretArn'].OutputValue" \
+  --output text)
+
+SCHEMA_FILE="$(dirname "$0")/orgiq_work_items_schema.sql"
+SEED_FILE="$(dirname "$0")/seed_work_items_full.sql"
+
+echo "Aurora cluster : $AURORA_CLUSTER_ARN"
+echo "Secret         : $AURORA_SECRET_ARN"
+echo ""
+
+run_file() {
+  local file="$1"
+  local label="$2"
+  echo "Applying $label ($file)..."
+  local count=0
+
+  # Split on ; at paren-depth 0, strip line comments, skip blanks.
+  python3 - "$file" <<'PYEOF' | while IFS= read -r stmt; do
+import sys, re
+src = open(sys.argv[1]).read()
+# strip -- comments but preserve $$ strings (PL/pgSQL not used here)
+src = re.sub(r'--[^\n]*', '', src)
+out, depth, buf = [], 0, []
+for ch in src:
+    if ch == '(':   depth += 1
+    elif ch == ')': depth -= 1
+    if ch == ';' and depth == 0:
+        s = ''.join(buf).strip()
+        if s:
+            print(s.replace('\n', ' '))
+        buf = []
+    else:
+        buf.append(ch)
+PYEOF
+    [ -z "$stmt" ] && continue
+    count=$((count + 1))
+    preview="$(echo "$stmt" | head -c 80)"
+    echo "  [$count] ${preview}..."
+    aws rds-data execute-statement \
+      --resource-arn "$AURORA_CLUSTER_ARN" \
+      --secret-arn   "$AURORA_SECRET_ARN" \
+      --database orgiq \
+      --region "$REGION" \
+      --sql "$stmt" \
+      --output json > /dev/null
+  done
+
+  echo "  Done: $count statements."
+}
+
+run_file "$SCHEMA_FILE" "work-items schema"
+run_file "$SEED_FILE"   "work-items full seed"
+
+echo ""
+echo "Verifying row counts..."
+for tbl in work_items; do
+  cnt=$(aws rds-data execute-statement \
+    --resource-arn "$AURORA_CLUSTER_ARN" \
+    --secret-arn   "$AURORA_SECRET_ARN" \
+    --database orgiq \
+    --region "$REGION" \
+    --sql "SELECT COUNT(*) FROM $tbl" \
+    --query "records[0][0].longValue" --output text)
+  printf "  %-20s %s rows\n" "$tbl" "$cnt"
+done
+echo ""
+echo "Done."

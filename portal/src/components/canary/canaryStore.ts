@@ -25,6 +25,13 @@ import type {
 
 // ── State shape ──────────────────────────────────────────────────────────────
 
+export interface JudgeHistoryEntry {
+  ts: string;
+  side: 'A' | 'B' | 'unknown';
+  composite: number;
+  scores: { helpfulness: number; factuality: number; tone: number; conciseness: number };
+}
+
 export interface CanaryState {
   weightA: number;
   weightB: number;
@@ -34,6 +41,12 @@ export interface CanaryState {
   rps: number;
   lastJudgeScores?: JudgeNodeData['lastScores'];
   lastJudgedAt?: string;
+  /** Capped ring-buffer of judge score records for the Evaluations page. */
+  judgeHistory: JudgeHistoryEntry[];
+  /** Display label derived from the judge prompt ARN (e.g. "judge-v3"). */
+  judgeVersionLabel: string;
+  /** Full Bedrock prompt ARN for the judge — used to link to Prompt Studio. */
+  judgeArn: string;
   sparklineA: { t: string; v: number }[];
   sparklineB: { t: string; v: number }[];
   rollingMeanA: number;
@@ -80,6 +93,24 @@ const recentRequestStartsMs: number[] = [];
 // Lookup of request_id → side, so judge_score events can be attributed.
 const requestSide = new Map<string, RequestRecord>();
 
+// Parse a readable version label from a Bedrock Prompt ARN.
+// ARN format: arn:aws:bedrock:region:account:prompt/PROMPTID:VERSION
+// Returns "judge-vN" for numeric versions, "judge-DRAFT" for drafts, "judge" fallback.
+export function parseJudgeVersionLabel(arn: string): string {
+  if (!arn) return 'judge';
+  const parts = arn.split(':');
+  const suffix = parts[parts.length - 1] ?? '';
+  if (/^\d+$/.test(suffix)) return `judge-v${suffix}`;
+  if (suffix.toUpperCase() === 'DRAFT') return 'judge-DRAFT';
+  return 'judge';
+}
+
+// Extract the Bedrock prompt ID from an ARN (the segment after "prompt/").
+export function parsePromptIdFromArn(arn: string): string {
+  const match = arn.match(/prompt\/([^:]+)/);
+  return match?.[1] ?? '';
+}
+
 function initialState(): CanaryState {
   return {
     weightA: 100,
@@ -88,6 +119,9 @@ function initialState(): CanaryState {
     halted: false,
     recentRequests: [],
     rps: 0,
+    judgeHistory: [],
+    judgeVersionLabel: 'judge',
+    judgeArn: '',
     sparklineA: [],
     sparklineB: [],
     rollingMeanA: 0,
@@ -237,10 +271,19 @@ export function dispatch(e: CanaryEvent): void {
           ...cappedEntries,
           [e.request_id, e.composite],
         ]);
+        // Append to the judge history ring-buffer (capped at 50 entries).
+        const historyEntry: JudgeHistoryEntry = {
+          ts: e.ts,
+          side: (side as 'A' | 'B') ?? 'unknown',
+          composite: e.composite,
+          scores: e.scores as { helpfulness: number; factuality: number; tone: number; conciseness: number },
+        };
+        const judgeHistory = pushCapped(s.judgeHistory, historyEntry, 50);
         return {
           ...s,
           lastJudgeScores: e.scores,
           lastJudgedAt: e.ts,
+          judgeHistory,
           rollingMeanA: mean(recentCompositesA),
           rollingMeanB: mean(recentCompositesB),
           sparklineA,
@@ -349,6 +392,12 @@ export function setPromptTemplates(args: {
   }));
 }
 
+export function setJudgeArn(arn: string): void {
+  if (!arn) return;
+  const label = parseJudgeVersionLabel(arn);
+  update((s) => ({ ...s, judgeArn: arn, judgeVersionLabel: label }));
+}
+
 export function startExperiment(subjectAArn: string, subjectBArn: string, initialWeightB: number): void {
   update((s) => ({
     ...s,
@@ -445,7 +494,7 @@ function deriveNodes(s: CanaryState): Node[] {
   };
   const modelData: ModelNodeData = { name: 'amazon.nova-pro-v1:0' };
   const judgeData: JudgeNodeData = {
-    judgeVersion: 'judge-v1',
+    judgeVersion: s.judgeVersionLabel || 'judge',
     lastScores: s.lastJudgeScores,
     lastJudgedAt: s.lastJudgedAt,
   };

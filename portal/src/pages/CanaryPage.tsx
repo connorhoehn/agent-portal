@@ -286,7 +286,7 @@ function ScenarioPanel({ open }: { open: boolean }): React.ReactElement | null {
                 <th style={{ ...thStyle, width: 160 }}>Topic</th>
                 <th style={{ ...thStyle, width: 52, textAlign: 'center' }}>Ver</th>
                 <th style={{ ...thStyle, width: 60, textAlign: 'center' }}>Score</th>
-                <th style={{ ...thStyle, width: 72, textAlign: 'center' }}>Status</th>
+                <th style={{ ...thStyle, width: 220, textAlign: 'left' }}>Status</th>
                 <th style={{ ...thStyle }}>Run</th>
               </tr>
             </thead>
@@ -377,7 +377,7 @@ function ScenarioTableRow({
         )}
       </td>
       {/* Status */}
-      <td style={{ ...tdStyle, textAlign: 'center' }}>
+      <td style={{ ...tdStyle, verticalAlign: 'top' }}>
         <StatusPip phase={row.phase} hasScore={score !== undefined} errorMsg={row.errorMsg} />
       </td>
       {/* Run button */}
@@ -400,7 +400,25 @@ function ScenarioTableRow({
 
 function StatusPip({ phase, hasScore, errorMsg }: { phase: RowPhase; hasScore: boolean; errorMsg: string }): React.ReactElement {
   if (phase === 'idle') return <span style={{ fontSize: 10, color: 'var(--color-text-tertiary, #94a3b8)' }}>idle</span>;
-  if (phase === 'error') return <span style={{ fontSize: 10, color: '#dc2626' }} title={errorMsg}>error</span>;
+  if (phase === 'error') return (
+    <div style={{ textAlign: 'left' }}>
+      <span style={{ fontSize: 10, fontWeight: 600, color: '#dc2626' }}>● error</span>
+      {errorMsg && (
+        <div style={{
+          fontSize: 10,
+          color: '#dc2626',
+          opacity: 0.8,
+          marginTop: 2,
+          maxWidth: 200,
+          whiteSpace: 'normal',
+          lineHeight: 1.4,
+          wordBreak: 'break-word',
+        }}>
+          {errorMsg}
+        </div>
+      )}
+    </div>
+  );
   if (phase === 'running') return <span style={{ fontSize: 10, color: '#6366f1' }}>streaming</span>;
   // done
   if (!hasScore) return <span style={{ fontSize: 10, color: '#d97706' }}>judging…</span>;
