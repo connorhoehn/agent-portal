@@ -22,23 +22,41 @@ agentsRouter.get('/:agentId/metrics', asyncHandler(async (req, res) => {
   res.json(metrics);
 }));
 
+/**
+ * Normalise the OrgIQ sessionId from the request body:
+ *   - AgentCore Runtime requires ≥33 chars.
+ *   - Auto-allocate a UUID if the caller sends nothing or a short ID.
+ * Stored on the request object so the handler can read the same value.
+ */
+function deriveSessionId(req: { body?: Record<string, unknown> }): string {
+  const raw = (req.body as { sessionId?: string } | undefined)?.sessionId;
+  return raw && raw.length >= 33 ? raw : randomUUID() + randomUUID().slice(0, 4);
+}
+
 // AG-UI streaming route — adopts @connorhoehn/realtime-modules/agent-streaming
 // for SSE framing, heartbeat (~25s), RUN_STARTED / RUN_FINISHED / RUN_ERROR
 // lifecycle, and dev-mode AG-UI taxonomy validation. OrgIQ business logic
 // (selection enrichment, AgentCore invoke, intervention detection, Memory
-// recording, session-title generation) stays in this handler. The library
-// auto-emits RUN_STARTED before the handler runs and RUN_FINISHED / RUN_ERROR
-// when it resolves / throws — we emit the OrgIQ-specific sessionId via a
-// CUSTOM event right after RUN_STARTED so the FE can capture it.
+// recording, session-title generation) stays in this handler.
+//
+// sessionId is now emitted on RUN_STARTED directly via the library's
+// deriveSessionId option — no more CUSTOM `session` workaround.
+// Tool results are emitted via standard TOOL_CALL_RESULT events — no more
+// CUSTOM `tool_call_result` workaround.
 agentsRouter.post('/:agentId/invoke', requireAction('Search'), agentStreamMiddleware(async (req, stream, signal) => {
   const agentId = String(req.params['agentId'] ?? '');
-  const { message, sessionId: rawSessionId, actorId, selection } = req.body as {
+  const { message, sessionId, actorId, selection } = req.body as {
     message?: string;
     sessionId?: string;
     actorId?: string;
     selection?: { peopleIds?: string[] };
   };
   const rawUserMessage = message ?? '';
+
+  // The sessionId on stream.runId/threadId was emitted by the middleware via
+  // deriveSessionId before this handler ran. Re-derive it from the request
+  // body using the same logic so we have the canonical value for AgentCore.
+  const canonicalSessionId = deriveSessionId(req);
 
   // If the explore page sent a selection, look up the people details and
   // prepend a context block. The instruction format must be emphatic — the
@@ -70,15 +88,6 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), agentStreamMiddle
       console.warn('[agents] selection enrichment failed:', (err as Error).message);
     }
   }
-  // AgentCore Runtime requires the session ID to be at least 33 characters
-  // long. Auto-allocate a UUID if the caller sends nothing or a short ID, and
-  // echo it back so the UI can persist the canonical value.
-  const sessionId =
-    rawSessionId && rawSessionId.length >= 33 ? rawSessionId : randomUUID() + randomUUID().slice(0, 4);
-
-  // Echo the canonical sessionId via CUSTOM so the FE can persist it. The
-  // library's RUN_STARTED carries only runId/threadId per AG-UI spec.
-  stream.custom('session', { sessionId });
 
   const messageId = randomUUID();
   const startedAt = new Date();
@@ -87,7 +96,7 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), agentStreamMiddle
   try {
     result = await agentcore.invokeAgent(agentId, {
       message: userMessage,
-      sessionId,
+      sessionId: canonicalSessionId,
       ...(req.session ? { userId: req.session.sub, auth: { sub: req.session.sub, role: req.session.role } } : {}),
     });
   } catch (err) {
@@ -124,10 +133,10 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), agentStreamMiddle
   });
 
   // Persist turn to AgentCore Memory so the session shows up in the sidebar
-  // and can be replayed later. Use the caller-provided sessionId so a single
-  // chat thread accumulates events under one Memory session.
+  // and can be replayed later. Use the canonical sessionId so a single chat
+  // thread accumulates events under one Memory session.
   void recordTurn({
-    sessionId,
+    sessionId: canonicalSessionId,
     ...(actorId ? { actorId } : {}),
     userMessage,
     assistantMessage: result.text,
@@ -135,11 +144,12 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), agentStreamMiddle
 
   // Fire-and-forget: generate a friendly title from the user's first message
   // so the sidebar can show something better than the raw UUID.
-  maybeGenerateTitle(sessionId, rawUserMessage);
+  maybeGenerateTitle(canonicalSessionId, rawUserMessage);
 
   // Tool calls (mock provider emits these; real supervisor doesn't yet because
   // the entrypoint returns a single dict instead of streaming tool events).
   // Library emits canonical `toolCallName` (not `name`) on TOOL_CALL_START.
+  // Standard TOOL_CALL_RESULT events are used — no more CUSTOM workaround.
   for (const toolCall of result.toolCalls ?? []) {
     if (signal.aborted) return;
     const toolCallId = randomUUID();
@@ -152,10 +162,10 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), agentStreamMiddle
     stream.toolCallArgs(toolCallId, argsDelta);
     await delay(75);
     stream.toolCallEnd(toolCallId);
-    // Preserve OrgIQ behavior: emit the tool result so the FE can render it.
-    // The library doesn't have a single-event tool-result that maps cleanly
-    // to OrgIQ's prior TOOL_CALL_END payload — encode it as a CUSTOM event.
-    stream.custom('tool_call_result', { toolCallId, result: toolCall.result });
+    // Emit the tool result as a standard TOOL_CALL_RESULT event.
+    // The spec requires a messageId — use the assistant messageId for this run.
+    const resultContent = toolCall.result !== undefined ? toolCall.result : null;
+    stream.toolCallResult(messageId, toolCallId, resultContent);
   }
 
   stream.textMessageStart(messageId, 'assistant');
@@ -167,6 +177,11 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), agentStreamMiddle
   // Pass runtimeSessionId via RUN_FINISHED.result (preserves prior payload
   // shape under a different field key — FE currently doesn't read it).
   stream.runFinished(result.runtimeSessionId ? { result: { runtimeSessionId: result.runtimeSessionId } } : undefined);
+}, {
+  // Derive and normalise the sessionId before RUN_STARTED is emitted so the
+  // client receives it as a first-class field — no separate CUSTOM `session`
+  // event needed.
+  deriveSessionId: (req) => deriveSessionId(req),
 }));
 
 function delay(ms: number): Promise<void> {
