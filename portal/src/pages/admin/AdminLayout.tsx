@@ -1,4 +1,5 @@
 import { SubNavLayout, type SubNavItem } from '../../components/shell/SubNavLayout';
+import { KBHealthBadge } from '../../components/kb/KBHealthBadge.js';
 
 // TODO(T5): wire post-merge —
 //   1. portal/src/App.tsx: wrap the /admin/* routes with <Route path="admin" element={<Page element={<AdminLayout />} />}>
@@ -22,6 +23,7 @@ function AdminLayout() {
       title="Admin"
       items={NAV_ITEMS}
       storageKey="admin-subnav"
+      railHeader={<KBHealthBadge />}
     />
   );
 }

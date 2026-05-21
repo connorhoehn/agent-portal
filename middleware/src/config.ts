@@ -49,7 +49,12 @@ export const config = {
   },
 
   knowledgeBase: {
+    // @deprecated — prefer /api/admin/kb-registry for multi-KB routing.
+    // Kept for backward-compat with existing ingest routes and agents.
     id: env('KNOWLEDGE_BASE_ID'),
+    // IAM role ARN that Bedrock assumes when accessing Aurora + S3 for new KBs.
+    // Must be passed as iam:PassRole when calling CreateKnowledgeBase.
+    serviceRoleArn: env('KB_SERVICE_ROLE_ARN'),
   },
 
   guardrail: {

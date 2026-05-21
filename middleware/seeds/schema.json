@@ -32,7 +32,8 @@
       "EditSchema":         { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
       "LabelFeedback":      { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
       "ApproveTransaction": { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
-      "ManageCanary":       { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } }
+      "ManageCanary":       { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
+      "ManageKB":           { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } }
     }
   }
 }

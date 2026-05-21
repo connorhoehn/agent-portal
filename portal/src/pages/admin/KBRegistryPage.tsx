@@ -1,8 +1,7 @@
-// TODO(Wave 3-C): replace MOCK_KBS with a real useFetch('/api/admin/knowledge-bases', 30_000)
-//   call and wire the "Sync Now" action to POST /api/admin/knowledge-bases/:id/sync.
-
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
+import { KBCreateWizard } from '../../components/kb/KBCreateWizard.js';
+import { useFetch } from '../../hooks/useFetch.js';
 import {
   PageSection,
   Card,
@@ -41,55 +40,6 @@ export interface KbRegistryEntry {
   lastSyncStatus?: string | null;
 }
 
-// ─── Mock data ────────────────────────────────────────────────────────────────
-
-export const MOCK_KBS: KbRegistryEntry[] = [
-  {
-    id: 'kb-default-001',
-    bedrockKbId: 'EJYAXQAMHQ',
-    dataSourceId: null,
-    name: 'OrgIQ Documents',
-    slug: 'default',
-    tenant: 'orgiq',
-    purpose: 'default',
-    description: 'General org docs — ADRs, postmortems, wiki, Slack',
-    s3Prefix: 'orgiq/uploads/',
-    auroraTable: 'bedrock_kb',
-    embeddingModel: 'amazon.titan-embed-text-v2:0',
-    chunkingStrategy: 'SEMANTIC',
-    maxTokens: 512,
-    status: 'ACTIVE',
-    errorMessage: null,
-    createdAt: '2025-01-15T10:00:00Z',
-    updatedAt: '2026-05-21T08:00:00Z',
-    docCount: 213,
-    lastSyncAt: '2026-05-21T06:00:00Z',
-    lastSyncStatus: 'COMPLETE',
-  },
-  {
-    id: 'kb-newsroom-001',
-    bedrockKbId: null,
-    dataSourceId: null,
-    name: 'Newsroom Articles',
-    slug: 'newsroom',
-    tenant: 'newsroom',
-    purpose: 'articles',
-    description: 'News articles and editorial research',
-    s3Prefix: 'newsroom/',
-    auroraTable: 'bedrock_kb_newsroom',
-    embeddingModel: 'amazon.titan-embed-text-v2:0',
-    chunkingStrategy: 'SEMANTIC',
-    maxTokens: 512,
-    status: 'PENDING',
-    errorMessage: null,
-    createdAt: '2026-05-21T00:00:00Z',
-    updatedAt: '2026-05-21T00:00:00Z',
-    docCount: undefined,
-    lastSyncAt: null,
-    lastSyncStatus: null,
-  },
-];
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatDate(iso: string | null | undefined): string {
@@ -121,7 +71,7 @@ const STATUS_CONFIG: Record<
   FAILED:    { dotColor: '#dc2626', label: 'FAILED',    chipTone: 'danger'  },
 };
 
-function StatusChip({ status }: { status: KbRegistryEntry['status'] }) {
+export function StatusChip({ status }: { status: KbRegistryEntry['status'] }) {
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.PENDING;
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
@@ -162,10 +112,17 @@ function filterBtnStyle(active: boolean): React.CSSProperties {
 export function KBRegistryPage() {
   const navigate = useNavigate();
   const [tenantFilter, setTenantFilter] = useState<TenantFilter>('all');
+  const [wizardOpen, setWizardOpen] = useState(false);
 
+  const { data, isLoading, error, refresh } = useFetch<{ kbs: KbRegistryEntry[] }>(
+    '/api/admin/kb-registry',
+    30_000,
+  );
+
+  const allKbs = data?.kbs ?? [];
   const visible = tenantFilter === 'all'
-    ? MOCK_KBS
-    : MOCK_KBS.filter(kb => kb.tenant === tenantFilter);
+    ? allKbs
+    : allKbs.filter(kb => kb.tenant === tenantFilter);
 
   return (
     <PageSection title="Knowledge Bases">
@@ -178,9 +135,7 @@ export function KBRegistryPage() {
           </p>
         </div>
         <button
-          disabled
-          title="Coming in Wave 2-B"
-          onClick={() => console.log('+ New Knowledge Base — not yet implemented')}
+          onClick={() => setWizardOpen(true)}
           style={{
             fontSize: 13,
             fontWeight: 600,
@@ -189,13 +144,29 @@ export function KBRegistryPage() {
             color: '#fff',
             border: 'none',
             borderRadius: 'var(--radius-sm)',
-            cursor: 'not-allowed',
-            opacity: 0.5,
+            cursor: 'pointer',
           }}
         >
           + New Knowledge Base
         </button>
       </div>
+
+      {/* Error banner */}
+      {error && (
+        <div
+          style={{
+            marginBottom: 12,
+            padding: '8px 14px',
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
+            borderRadius: 6,
+            fontSize: 12,
+            color: '#dc2626',
+          }}
+        >
+          Failed to load knowledge bases: {error}
+        </div>
+      )}
 
       {/* Tenant filter chips */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
@@ -209,7 +180,7 @@ export function KBRegistryPage() {
           </button>
         ))}
         <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginLeft: 4 }}>
-          {visible.length} {visible.length === 1 ? 'entry' : 'entries'}
+          {isLoading && !data ? 'Loading…' : `${visible.length} ${visible.length === 1 ? 'entry' : 'entries'}`}
         </span>
       </div>
 
@@ -238,7 +209,7 @@ export function KBRegistryPage() {
                 <TableTd>
                   <div style={{ fontWeight: 600, fontSize: 13 }}>{kb.name}</div>
                   <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--color-text-tertiary)', marginTop: 1 }}>
-                    {kb.id}
+                    {kb.slug}
                   </div>
                 </TableTd>
 
@@ -259,7 +230,17 @@ export function KBRegistryPage() {
 
                 {/* Status */}
                 <TableTd>
-                  <StatusChip status={kb.status} />
+                  <div>
+                    <StatusChip status={kb.status} />
+                    {kb.errorMessage && (
+                      <div
+                        style={{ fontSize: 10, color: '#dc2626', marginTop: 2, maxWidth: 200, wordBreak: 'break-word' }}
+                        title={kb.errorMessage}
+                      >
+                        {kb.errorMessage.length > 60 ? `${kb.errorMessage.slice(0, 60)}…` : kb.errorMessage}
+                      </div>
+                    )}
+                  </div>
                 </TableTd>
 
                 {/* Document count */}
@@ -284,41 +265,162 @@ export function KBRegistryPage() {
 
                 {/* Actions */}
                 <TableTd onClick={e => e.stopPropagation()}>
-                  <button
-                    disabled
-                    title="Coming in Wave 3-C"
-                    onClick={() => console.log('Sync Now — not yet implemented', kb.id)}
-                    style={{
-                      fontSize: 11,
-                      padding: '4px 12px',
-                      background: 'var(--color-primary)',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: 'var(--radius-sm)',
-                      cursor: 'not-allowed',
-                      opacity: 0.5,
-                    }}
-                  >
-                    Sync Now
-                  </button>
+                  {kb.status === 'ACTIVE' ? (
+                    <SyncButton kbId={kb.id} dataSourceId={kb.dataSourceId} onDone={refresh} />
+                  ) : ['PENDING', 'FAILED'].includes(kb.status) ? (
+                    <ProvisionButton kbId={kb.id} onDone={() => navigate(`/admin/knowledge-bases/${kb.id}`)} />
+                  ) : (
+                    <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                      {kb.status === 'CREATING' ? 'Provisioning…' : '—'}
+                    </span>
+                  )}
                 </TableTd>
               </TableRow>
             ))}
 
-            {visible.length === 0 && (
+            {!isLoading && visible.length === 0 && (
               <TableRow>
                 <TableTd
                   colSpan={7}
                   style={{ textAlign: 'center', color: 'var(--color-text-tertiary)', fontSize: 13, padding: '32px 0' }}
                 >
-                  No knowledge bases match this filter.
+                  {data ? 'No knowledge bases match this filter.' : 'No knowledge bases found.'}
+                </TableTd>
+              </TableRow>
+            )}
+
+            {isLoading && !data && (
+              <TableRow>
+                <TableTd
+                  colSpan={7}
+                  style={{ textAlign: 'center', color: 'var(--color-text-tertiary)', fontSize: 13, padding: '32px 0' }}
+                >
+                  Loading…
                 </TableTd>
               </TableRow>
             )}
           </TableBody>
         </Table>
       </Card>
+
+      <KBCreateWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        onCreated={(kb) => {
+          setWizardOpen(false);
+          refresh();
+          navigate(`/admin/knowledge-bases/${kb.id}`);
+        }}
+      />
     </PageSection>
+  );
+}
+
+// ─── Action buttons ───────────────────────────────────────────────────────────
+
+function SyncButton({
+  kbId,
+  dataSourceId,
+  onDone,
+}: {
+  kbId: string;
+  dataSourceId: string | null;
+  onDone: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!dataSourceId) return <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>—</span>;
+
+  async function handleSync() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/kb-registry/${kbId}/sync`, { method: 'POST' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        setError(body.error ?? `HTTP ${res.status}`);
+      } else {
+        onDone();
+      }
+    } catch {
+      setError('Network error');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div>
+      <button
+        disabled={loading}
+        onClick={handleSync}
+        style={{
+          fontSize: 11,
+          padding: '4px 10px',
+          background: loading ? '#93c5fd' : 'var(--color-primary)',
+          color: '#fff',
+          border: 'none',
+          borderRadius: 'var(--radius-sm)',
+          cursor: loading ? 'not-allowed' : 'pointer',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {loading ? 'Starting…' : 'Sync Now'}
+      </button>
+      {error && <div style={{ fontSize: 10, color: '#dc2626', marginTop: 2 }} title={error}>Error</div>}
+    </div>
+  );
+}
+
+function ProvisionButton({
+  kbId,
+  onDone,
+}: {
+  kbId: string;
+  onDone: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleProvision() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/kb-registry/${kbId}/provision`, { method: 'POST' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        setError(body.error ?? `HTTP ${res.status}`);
+        setLoading(false);
+      } else {
+        onDone(); // navigate to detail page — SSE stream is there
+      }
+    } catch {
+      setError('Network error');
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div>
+      <button
+        disabled={loading}
+        onClick={handleProvision}
+        style={{
+          fontSize: 11,
+          padding: '4px 10px',
+          background: loading ? '#9ca3af' : '#475569',
+          color: '#fff',
+          border: 'none',
+          borderRadius: 'var(--radius-sm)',
+          cursor: loading ? 'not-allowed' : 'pointer',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {loading ? 'Starting…' : 'Provision'}
+      </button>
+      {error && <div style={{ fontSize: 10, color: '#dc2626', marginTop: 2 }} title={error}>Failed</div>}
+    </div>
   );
 }
 

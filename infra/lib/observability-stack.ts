@@ -11,8 +11,10 @@ export interface ObservabilityStackProps extends cdk.StackProps {
   readonly alertEmail?: string;
   /** Aurora cluster identifier for metrics */
   readonly auroraClusterIdentifier: string;
-  /** Knowledge Base ID for metrics */
-  readonly knowledgeBaseId: string;
+  /** Knowledge Base ID for metrics (singular, kept for backwards compatibility) */
+  readonly knowledgeBaseId?: string;
+  /** Per-KB metrics: slug → Bedrock KB ID (e.g. { default: 'EJYAXQAMHQ', newsroom: 'XYZ123' }) */
+  readonly knowledgeBaseIds?: Record<string, string>;
 }
 
 /**
@@ -184,34 +186,49 @@ export class ObservabilityStack extends cdk.Stack {
     });
 
     // --- Knowledge Base Metrics ---
-    const kbWidget = new cloudwatch.GraphWidget({
-      title: 'Bedrock KB — Retrieve Operations (pgvector)',
-      left: [
-        new cloudwatch.Metric({
-          namespace: 'AWS/Bedrock',
-          metricName: 'RetrieveLatency',
-          dimensionsMap: { KnowledgeBaseId: props.knowledgeBaseId },
-          statistic: 'p99',
-          period: cdk.Duration.minutes(5),
+    // Build a map from all available KB IDs, preferring the new plural prop
+    // and falling back to the legacy singular prop when knowledgeBaseIds is absent.
+    const kbIds: Record<string, string> =
+      props.knowledgeBaseIds ??
+      (props.knowledgeBaseId ? { default: props.knowledgeBaseId } : {});
+
+    const kbWidgets: cloudwatch.GraphWidget[] = Object.entries(kbIds).map(
+      ([slug, kbId]) =>
+        new cloudwatch.GraphWidget({
+          title: `Bedrock KB — Retrieve Operations (${slug})`,
+          left: [
+            new cloudwatch.Metric({
+              namespace: 'AWS/Bedrock',
+              metricName: 'KnowledgeBaseRetrieveLatency',
+              dimensionsMap: { KnowledgeBaseId: kbId },
+              statistic: 'p99',
+              label: `${slug} Retrieve p99`,
+              period: cdk.Duration.minutes(5),
+            }),
+          ],
+          right: [
+            new cloudwatch.Metric({
+              namespace: 'AWS/Bedrock',
+              metricName: 'KnowledgeBaseRetrieveDocumentCount',
+              dimensionsMap: { KnowledgeBaseId: kbId },
+              statistic: 'Sum',
+              label: `${slug} Retrieve Count`,
+              period: cdk.Duration.minutes(5),
+            }),
+          ],
+          width: 12,
+          height: 6,
         }),
-      ],
-      right: [
-        new cloudwatch.Metric({
-          namespace: 'AWS/Bedrock',
-          metricName: 'RetrieveCount',
-          dimensionsMap: { KnowledgeBaseId: props.knowledgeBaseId },
-          statistic: 'Sum',
-          period: cdk.Duration.minutes(5),
-        }),
-      ],
-      width: 12,
-      height: 6,
-    });
+    );
 
     // Assemble dashboard rows
     dashboard.addWidgets(auroraAcuWidget, auroraConnectionsWidget);
     dashboard.addWidgets(bedrockInvocationsWidget, bedrockThrottlesWidget);
-    dashboard.addWidgets(dynamoWidget, kbWidget);
+    dashboard.addWidgets(dynamoWidget);
+    // Knowledge Bases row — one widget per KB (pairs of two fill a row naturally)
+    if (kbWidgets.length > 0) {
+      dashboard.addWidgets(...kbWidgets);
+    }
 
     // -------------------------------------------------------------------
     // CloudWatch Alarms

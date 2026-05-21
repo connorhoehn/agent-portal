@@ -1,0 +1,482 @@
+// KB Registry admin routes — /api/admin/kb-registry
+//
+// Mounted in index.ts:
+//   import { kbAdminRouter } from './routes/kb-admin.js';
+//   app.use('/api/admin/kb-registry', kbAdminRouter);
+//
+// Endpoints:
+//   GET    /                  — list all KBs (optional ?tenant=)
+//   POST   /                  — create + kick off async provisioning
+//   GET    /:id               — single KB (merged with live Bedrock status)
+//   PATCH  /:id               — update name / description
+//   DELETE /:id               — kick off async deprovisioning
+//   POST   /:id/provision     — (re)provision a PENDING or FAILED KB
+//   GET    /:id/status        — SSE: poll provisioning status until ACTIVE/FAILED
+//   POST   /:id/sync          — trigger ingestion job
+//   GET    /:id/jobs          — list ingestion jobs
+//   GET    /:id/docs          — list ingested documents for this KB
+
+import { Router } from 'express';
+import {
+  BedrockAgentClient,
+  GetKnowledgeBaseCommand,
+  StartIngestionJobCommand,
+  ListIngestionJobsCommand,
+} from '@aws-sdk/client-bedrock-agent';
+import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
+import {
+  listKbs,
+  getKb,
+  getKbBySlug,
+  createKbEntry,
+  updateKbEntry,
+  deleteKbEntry,
+  provisionKb,
+  deprovisionKb,
+  type CreateKbInput,
+} from '../providers/kb-registry.js';
+import { provisioningBroker, type ProvisioningBrokerEvent } from '../lib/provisioning-broker.js';
+import { exec } from '../providers/aurora.js';
+import { config } from '../config.js';
+import type { SqlParameter } from '@aws-sdk/client-rds-data';
+
+export const kbAdminRouter = Router();
+
+// Lazy singleton Bedrock Agent client
+let _agent: BedrockAgentClient | null = null;
+function agentClient(): BedrockAgentClient {
+  if (!_agent) _agent = new BedrockAgentClient({ region: config.region });
+  return _agent;
+}
+
+function intParam(name: string, value: number): SqlParameter {
+  return { name, value: { longValue: value } };
+}
+
+function strParam(name: string, value: string): SqlParameter {
+  return { name, value: { stringValue: value } };
+}
+
+// ─── GET /check ───────────────────────────────────────────────────────────────
+// Slug + name availability check for the wizard Step 1 "Next" button.
+// Returns { slugAvailable, nameAvailable } without creating anything.
+// Must be before GET /:id.
+
+kbAdminRouter.get('/check', asyncHandler(async (req, res) => {
+  const slug = typeof req.query['slug'] === 'string' ? req.query['slug'] : '';
+  const name = typeof req.query['name'] === 'string' ? req.query['name'] : '';
+
+  const [bySlug, all] = await Promise.all([
+    slug ? getKbBySlug(slug) : Promise.resolve(null),
+    name ? listKbs() : Promise.resolve([]),
+  ]);
+
+  const nameConflict = name
+    ? all.find(kb => kb.name.toLowerCase() === name.toLowerCase()) ?? null
+    : null;
+
+  res.json({
+    slugAvailable: !bySlug,
+    nameAvailable: !nameConflict,
+    slugConflict: bySlug ? bySlug.name : null,
+    nameConflict: nameConflict ? nameConflict.slug : null,
+  });
+}));
+
+// ─── GET /health ──────────────────────────────────────────────────────────────
+// Summary of all KB statuses for the portal dashboard widget.
+// Must be registered before GET /:id so it isn't swallowed by the param route.
+
+kbAdminRouter.get('/health', asyncHandler(async (_req, res) => {
+  const kbs = await listKbs();
+  const summary = kbs.map(kb => ({
+    id: kb.id,
+    slug: kb.slug,
+    tenant: kb.tenant,
+    status: kb.status,
+    lastSyncStatus: null as string | null,  // enriched below if bedrockKbId set
+  }));
+
+  // Best-effort: enrich with last ingestion job status for ACTIVE KBs
+  const client = new BedrockAgentClient({ region: config.region });
+  await Promise.allSettled(
+    summary.map(async (s, i) => {
+      const kb = kbs[i]!;
+      if (!kb.bedrockKbId || !kb.dataSourceId) return;
+      try {
+        const jobs = await client.send(new ListIngestionJobsCommand({
+          knowledgeBaseId: kb.bedrockKbId,
+          dataSourceId: kb.dataSourceId,
+          maxResults: 1,
+          sortBy: { attribute: 'STARTED_AT', order: 'DESCENDING' },
+        }));
+        s.lastSyncStatus = String(jobs.ingestionJobSummaries?.[0]?.status ?? '') || null;
+      } catch { /* best-effort */ }
+    }),
+  );
+
+  const healthy  = summary.filter(s => s.status === 'ACTIVE').length;
+  const degraded = summary.filter(s => ['CREATING', 'UPDATING'].includes(s.status)).length;
+  const failed   = summary.filter(s => s.status === 'FAILED').length;
+  const pending  = summary.filter(s => s.status === 'PENDING').length;
+
+  res.json({ healthy, degraded, failed, pending, kbs: summary });
+}));
+
+// ─── GET / ────────────────────────────────────────────────────────────────────
+
+kbAdminRouter.get('/', asyncHandler(async (req, res) => {
+  const tenant = typeof req.query['tenant'] === 'string' ? req.query['tenant'] : undefined;
+  const kbs = await listKbs(tenant);
+  res.json({ kbs });
+}));
+
+// ─── POST / ───────────────────────────────────────────────────────────────────
+
+kbAdminRouter.post('/', asyncHandler(async (req, res) => {
+  const body = req.body as Partial<CreateKbInput>;
+
+  // Validation
+  if (typeof body.name !== 'string' || !body.name.trim()) {
+    throw new ValidationError('name must be a non-empty string');
+  }
+  if (typeof body.slug !== 'string' || !/^[a-z0-9-]+$/.test(body.slug)) {
+    throw new ValidationError('slug must match /^[a-z0-9-]+$/');
+  }
+  if (typeof body.tenant !== 'string' || !body.tenant.trim()) {
+    throw new ValidationError('tenant must be a non-empty string');
+  }
+  if (typeof body.purpose !== 'string' || !body.purpose.trim()) {
+    throw new ValidationError('purpose must be a non-empty string');
+  }
+  if (typeof body.s3Prefix !== 'string' || !body.s3Prefix.trim()) {
+    throw new ValidationError('s3Prefix must be a non-empty string');
+  }
+
+  const input: CreateKbInput = {
+    name: body.name.trim(),
+    slug: body.slug,
+    tenant: body.tenant.trim(),
+    purpose: body.purpose.trim(),
+    description: typeof body.description === 'string' ? body.description : undefined,
+    s3Prefix: body.s3Prefix.trim(),
+    chunkingStrategy: typeof body.chunkingStrategy === 'string' ? body.chunkingStrategy : undefined,
+    maxTokens: typeof body.maxTokens === 'number' ? body.maxTokens : undefined,
+  };
+
+  // Slug / name uniqueness pre-check — returns 409 with a readable message
+  // instead of letting the DB unique constraint surface as a generic 500.
+  const [slugConflict, nameConflict] = await Promise.all([
+    getKbBySlug(input.slug),
+    listKbs().then(all => all.find(kb => kb.name.toLowerCase() === input.name.toLowerCase())),
+  ]);
+  if (slugConflict) {
+    res.status(409).json({ error: `Slug "${input.slug}" is already used by knowledge base "${slugConflict.name}". Choose a different slug.` });
+    return;
+  }
+  if (nameConflict) {
+    res.status(409).json({ error: `Name "${input.name}" is already taken. Choose a different name.` });
+    return;
+  }
+
+  const entry = await createKbEntry(input);
+
+  // Fire-and-forget provisioning — do NOT await
+  provisionKb(entry.id).catch((err: unknown) => {
+    console.error(`[kb-admin] background provisionKb failed for ${entry.id}:`, (err as Error).message);
+  });
+
+  res.status(201).json({ kb: entry });
+}));
+
+// ─── GET /:id ─────────────────────────────────────────────────────────────────
+
+kbAdminRouter.get('/:id', asyncHandler(async (req, res) => {
+  const entry = await getKb(String(req.params['id'] ?? ''));
+  if (!entry) throw new NotFoundError('Knowledge base not found');
+
+  // If we have a Bedrock KB ID and the DB says ACTIVE/UPDATING, merge live status
+  if (entry.bedrockKbId && (entry.status === 'ACTIVE' || entry.status === 'UPDATING')) {
+    try {
+      const resp = await agentClient().send(
+        new GetKnowledgeBaseCommand({ knowledgeBaseId: entry.bedrockKbId }),
+      );
+      const liveStatus = resp.knowledgeBase?.status;
+      if (liveStatus) {
+        res.json({ kb: { ...entry, status: String(liveStatus) } });
+        return;
+      }
+    } catch (err) {
+      // Graceful: Bedrock call failed — return DB row as-is
+      console.warn(`[kb-admin] GetKnowledgeBase failed for ${entry.bedrockKbId}:`, (err as Error).message);
+    }
+  }
+
+  res.json({ kb: entry });
+}));
+
+// ─── PATCH /:id ───────────────────────────────────────────────────────────────
+
+kbAdminRouter.patch('/:id', asyncHandler(async (req, res) => {
+  const entry = await getKb(String(req.params['id'] ?? ''));
+  if (!entry) throw new NotFoundError('Knowledge base not found');
+
+  const body = req.body as { name?: unknown; description?: unknown };
+  const patch: { name?: string; description?: string } = {};
+
+  if (body.name !== undefined) {
+    if (typeof body.name !== 'string' || !body.name.trim()) {
+      throw new ValidationError('name must be a non-empty string');
+    }
+    patch.name = body.name.trim();
+  }
+  if (body.description !== undefined) {
+    if (body.description !== null && typeof body.description !== 'string') {
+      throw new ValidationError('description must be a string or null');
+    }
+    patch.description = typeof body.description === 'string' ? body.description : undefined;
+  }
+
+  await updateKbEntry(entry.id, patch);
+  res.json({ ok: true });
+}));
+
+// ─── DELETE /:id ──────────────────────────────────────────────────────────────
+
+kbAdminRouter.delete('/:id', asyncHandler(async (req, res) => {
+  const entry = await getKb(String(req.params['id'] ?? ''));
+  if (!entry) throw new NotFoundError('Knowledge base not found');
+
+  // Fire-and-forget deprovisioning — do NOT await
+  deprovisionKb(entry.id).catch((err: unknown) => {
+    console.error(`[kb-admin] background deprovisionKb failed for ${entry.id}:`, (err as Error).message);
+  });
+
+  res.json({ ok: true, message: 'deprovisioning started' });
+}));
+
+// ─── POST /:id/provision ─────────────────────────────────────────────────────
+// (Re)provision a KB that is in PENDING or FAILED status.
+// The normal POST / creates a new row AND provisions it. This endpoint is for:
+//   - Seeded rows (newsroom KB) whose provisioning was deferred
+//   - Failed rows that need to be retried after a bug fix
+
+kbAdminRouter.post('/:id/provision', asyncHandler(async (req, res) => {
+  const entry = await getKb(String(req.params['id'] ?? ''));
+  if (!entry) throw new NotFoundError('Knowledge base not found');
+
+  if (!['PENDING', 'FAILED'].includes(entry.status)) {
+    res.status(409).json({
+      error: `Cannot provision a KB in status "${entry.status}". Only PENDING and FAILED KBs can be (re)provisioned.`,
+    });
+    return;
+  }
+
+  // Fire-and-forget — client should open the SSE /status stream for live updates
+  provisionKb(entry.id).catch((err: unknown) => {
+    console.error(`[kb-admin] background provisionKb failed for ${entry.id}:`, (err as Error).message);
+  });
+
+  res.status(202).json({ ok: true, message: 'provisioning started', id: entry.id });
+}));
+
+// ─── GET /:id/status  [SSE] ───────────────────────────────────────────────────
+
+kbAdminRouter.get('/:id/status', async (req, res) => {
+  const id = String(req.params['id'] ?? '');
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const POLL_INTERVAL_MS = 4_000;
+  const TIMEOUT_MS = 360_000; // 6 minutes
+
+  let finished = false;
+  let intervalId: ReturnType<typeof setInterval> | null = null;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  const send = (payload: Record<string, unknown>) => {
+    if (!finished) res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  };
+
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    provisioningBroker.off(`kb:${id}`, onBrokerEvent);
+    if (intervalId !== null) clearInterval(intervalId);
+    if (timeoutId !== null) clearTimeout(timeoutId);
+    res.end();
+  };
+
+  req.on('close', finish);
+
+  // ── Live step events from provisionKb (same process) ─────────────────────
+  const onBrokerEvent = (ev: ProvisioningBrokerEvent) => {
+    send(ev as unknown as Record<string, unknown>);
+    if (ev.type === 'complete' || ev.type === 'failed') finish();
+  };
+  provisioningBroker.on(`kb:${id}`, onBrokerEvent);
+
+  // ── DB-poll heartbeat: handles reconnects + cross-process deploys ─────────
+  const poll = async () => {
+    if (finished) return;
+    try {
+      const entry = await getKb(id);
+      if (!entry) {
+        send({ type: 'error', message: 'KB registry entry not found' });
+        finish();
+        return;
+      }
+      // Emit a lightweight heartbeat so the client knows we're alive
+      send({ type: 'poll', status: entry.status, kbId: entry.bedrockKbId ?? undefined });
+
+      if (entry.status === 'ACTIVE') {
+        send({ type: 'complete', kbId: entry.bedrockKbId ?? '' });
+        finish();
+      } else if (entry.status === 'FAILED') {
+        send({ type: 'failed', message: entry.errorMessage ?? 'Provisioning failed' });
+        finish();
+      }
+    } catch (err) {
+      send({ type: 'error', message: (err as Error).message });
+      finish();
+    }
+  };
+
+  // Initial poll immediately, then heartbeat on interval
+  await poll();
+  if (!finished) {
+    intervalId = setInterval(poll, POLL_INTERVAL_MS);
+    timeoutId = setTimeout(() => {
+      send({ type: 'error', message: 'Provisioning timed out after 6 minutes' });
+      finish();
+    }, TIMEOUT_MS);
+  }
+});
+
+// ─── POST /:id/sync ───────────────────────────────────────────────────────────
+
+kbAdminRouter.post('/:id/sync', asyncHandler(async (req, res) => {
+  const entry = await getKb(String(req.params['id'] ?? ''));
+  if (!entry) throw new NotFoundError('Knowledge base not found');
+
+  if (!entry.bedrockKbId || !entry.dataSourceId) {
+    res.status(400).json({
+      ok: false,
+      error: 'KB is not yet provisioned — bedrockKbId and dataSourceId are required for sync',
+    });
+    return;
+  }
+
+  const body = req.body as { description?: unknown };
+  const description = typeof body.description === 'string'
+    ? body.description
+    : `Manual sync from portal at ${new Date().toISOString()}`;
+
+  const resp = await agentClient().send(
+    new StartIngestionJobCommand({
+      knowledgeBaseId: entry.bedrockKbId,
+      dataSourceId: entry.dataSourceId,
+      description,
+    }),
+  );
+
+  const jobId = resp.ingestionJob?.ingestionJobId;
+  if (!jobId) {
+    res.status(500).json({ ok: false, error: 'StartIngestionJob returned no jobId' });
+    return;
+  }
+
+  res.json({ ok: true, jobId });
+}));
+
+// ─── GET /:id/jobs ────────────────────────────────────────────────────────────
+
+kbAdminRouter.get('/:id/jobs', asyncHandler(async (req, res) => {
+  const entry = await getKb(String(req.params['id'] ?? ''));
+  if (!entry) throw new NotFoundError('Knowledge base not found');
+
+  if (!entry.bedrockKbId || !entry.dataSourceId) {
+    res.json({ jobs: [] });
+    return;
+  }
+
+  const limitRaw = req.query['limit'];
+  const limit = limitRaw ? Math.min(Math.max(1, parseInt(String(limitRaw), 10) || 20), 100) : 20;
+
+  try {
+    const resp = await agentClient().send(
+      new ListIngestionJobsCommand({
+        knowledgeBaseId: entry.bedrockKbId,
+        dataSourceId: entry.dataSourceId,
+        maxResults: limit,
+        sortBy: { attribute: 'STARTED_AT', order: 'DESCENDING' },
+      }),
+    );
+
+    const jobs = (resp.ingestionJobSummaries ?? []).map((j) => {
+      const stats = (j.statistics ?? {}) as Record<string, unknown>;
+      const startMs = j.startedAt instanceof Date ? j.startedAt.getTime() : 0;
+      const endMs = j.updatedAt instanceof Date ? j.updatedAt.getTime() : Date.now();
+      return {
+        jobId: j.ingestionJobId ?? '',
+        dataSourceId: entry.dataSourceId,
+        status: String(j.status ?? ''),
+        startedAt: j.startedAt instanceof Date ? j.startedAt.toISOString() : new Date().toISOString(),
+        updatedAt: j.updatedAt instanceof Date ? j.updatedAt.toISOString() : new Date().toISOString(),
+        description: j.description ?? '',
+        durationMs: startMs > 0 ? Math.max(0, endMs - startMs) : 0,
+        documentsScanned: Number(stats['numberOfDocumentsScanned'] ?? 0),
+        documentsIndexed:
+          Number(stats['numberOfNewDocumentsIndexed'] ?? 0) +
+          Number(stats['numberOfModifiedDocumentsIndexed'] ?? 0),
+        documentsFailed: Number(stats['numberOfDocumentsFailed'] ?? 0),
+        documentsDeleted: Number(stats['numberOfDocumentsDeleted'] ?? 0),
+      };
+    });
+
+    res.json({ jobs });
+  } catch (err) {
+    console.warn(`[kb-admin] GET /:id/jobs failed:`, (err as Error).message);
+    res.json({ jobs: [] });
+  }
+}));
+
+// ─── GET /:id/docs ────────────────────────────────────────────────────────────
+
+kbAdminRouter.get('/:id/docs', asyncHandler(async (req, res) => {
+  const entry = await getKb(String(req.params['id'] ?? ''));
+  if (!entry) throw new NotFoundError('Knowledge base not found');
+
+  const limitRaw = req.query['limit'];
+  const lim = limitRaw ? Math.min(Math.max(1, parseInt(String(limitRaw), 10) || 50), 500) : 50;
+
+  try {
+    const rows = await exec(
+      `SELECT id::text, source, source_uri, title, ingested_at::text
+         FROM documents
+        WHERE kb_registry_slug = :slug
+        ORDER BY ingested_at DESC NULLS LAST
+        LIMIT :lim`,
+      [
+        strParam('slug', entry.slug),
+        intParam('lim', lim),
+      ],
+    );
+
+    const documents = rows.map((r) => ({
+      id: String(r['id'] ?? ''),
+      source: r['source'] == null ? null : String(r['source']),
+      sourceUri: r['source_uri'] == null ? null : String(r['source_uri']),
+      title: r['title'] == null ? null : String(r['title']),
+      ingestedAt: r['ingested_at'] == null ? null : String(r['ingested_at']),
+    }));
+
+    res.json({ documents, total: documents.length });
+  } catch (err) {
+    console.warn(`[kb-admin] GET /:id/docs failed:`, (err as Error).message);
+    res.json({ documents: [], total: 0 });
+  }
+}));

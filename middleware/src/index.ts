@@ -36,6 +36,7 @@ import { canaryRouter } from './routes/canary.js';
 import { canaryLibraryRouter } from './routes/canary-library.js';
 import { promptHistoryRouter } from './routes/prompt-history.js';
 import { workItemsRouter } from './routes/work-items.js';
+import { kbAdminRouter } from './routes/kb-admin.js';
 import { gatewayProxyRouter } from './routes/gateway-proxy.js';
 import { requireAction } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
@@ -76,6 +77,10 @@ app.use('/api/graph', workItemsRouter);
 app.use('/api/graph', graphRouter);
 app.use('/api/scores', scoresRouter);
 app.use('/api/knowledge-base', knowledgeBaseRouter);
+// KB Registry admin — CRUD + async provisioning for multi-KB support.
+// ManageKB action required (hr-admin role). Mounted before the gated
+// observability router so the portal wizard can reach it.
+app.use('/api/admin/kb-registry', requireAction('ManageKB'), kbAdminRouter);
 // Newsroom — beats mounted BEFORE articles so /beats doesn't get swallowed.
 app.use('/api/newsroom/beats', newsroomBeatsRouter);
 app.use('/api/newsroom', newsroomArticlesRouter);

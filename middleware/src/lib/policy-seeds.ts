@@ -135,24 +135,47 @@ export async function ensureSchema(): Promise<void> {
   if (!config.auth.policyStoreId) return;
   const policyStoreId = config.auth.policyStoreId;
 
-  // If the store already has a schema with actions, leave it alone — admins may
-  // have customized it via the UI. Only push the seed schema when the store is
-  // empty (first-deploy case where CDK didn't initialize it).
-  const current = await client.send(new GetSchemaCommand({ policyStoreId }));
-  const currentJson = current.schema ?? '';
-  let isEmpty = true;
-  try {
-    const parsed = JSON.parse(currentJson) as Record<string, { actions?: Record<string, unknown> }>;
-    isEmpty = Object.values(parsed).every(ns => !ns.actions || Object.keys(ns.actions).length === 0);
-  } catch {
-    isEmpty = true;
-  }
-  if (!isEmpty) return;
+  // Load the seed schema so we can compare against what AVP currently holds.
+  const seedText = readFileSync(join(seedsDir(), 'schema.json'), 'utf8');
+  type NsShape = { actions?: Record<string, unknown>; entityTypes?: Record<string, unknown> };
+  const seedJson = JSON.parse(seedText) as Record<string, NsShape>;
 
-  const seed = readFileSync(join(seedsDir(), 'schema.json'), 'utf8');
+  // Fetch current schema from AVP. If none exists yet we'll push the seed in full.
+  let currentJson: Record<string, NsShape> = {};
+  try {
+    const current = await client.send(new GetSchemaCommand({ policyStoreId }));
+    currentJson = JSON.parse(current.schema ?? '{}');
+  } catch {
+    // No schema yet — fall through and push the full seed below.
+  }
+
+  // Additive merge: for each namespace/action/entityType in the seed, add any
+  // entries that are missing from the current AVP schema. Existing entries are
+  // never removed or overwritten — admin UI customisations are preserved.
+  let changed = false;
+  const merged: Record<string, NsShape> = JSON.parse(JSON.stringify(currentJson));
+  for (const [ns, seedNs] of Object.entries(seedJson)) {
+    if (!merged[ns]) { merged[ns] = {}; changed = true; }
+    const target = merged[ns]!;
+
+    for (const [action, def] of Object.entries(seedNs.actions ?? {})) {
+      if (!target.actions) target.actions = {};
+      if (!target.actions[action]) { target.actions[action] = def; changed = true; }
+    }
+    for (const [et, def] of Object.entries(seedNs.entityTypes ?? {})) {
+      if (!target.entityTypes) target.entityTypes = {};
+      if (!target.entityTypes[et]) { target.entityTypes[et] = def; changed = true; }
+    }
+  }
+
+  if (!changed) {
+    console.log('[seed] AVP schema already up to date');
+    return;
+  }
+
   await client.send(new PutSchemaCommand({
     policyStoreId,
-    definition: { cedarJson: seed },
+    definition: { cedarJson: JSON.stringify(merged) },
   }));
-  console.log('[seed] pushed baseline schema');
+  console.log('[seed] pushed schema update (additive merge)');
 }

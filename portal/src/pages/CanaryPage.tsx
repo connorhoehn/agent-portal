@@ -31,6 +31,7 @@ import { HaltButton } from '../components/canary/HaltButton.js';
 import { ManualWeightSlider } from '../components/canary/ManualWeightSlider.js';
 import { DecisionHistoryPanel } from '../components/canary/DecisionHistoryPanel.js';
 import { ExperimentCompleteBanner } from '../components/canary/ExperimentCompleteBanner.js';
+import { CanaryDeploymentsView } from '../components/canary/CanaryDeploymentsView.js';
 
 const CanarySetupFlow = React.lazy(() =>
   import('../components/canary/setup/CanarySetupFlow.js').then((m) => ({ default: m.CanarySetupFlow })),
@@ -514,6 +515,17 @@ function CanaryPage(): React.ReactElement {
   const [scenariosOpen, setScenariosOpen] = useState(false);
   const [searchParams] = useSearchParams();
   const focusId = searchParams.get('focus');
+
+  // ── Deployments / history view ───────────────────────────────────────────────
+  // ?focus=decisions bypasses the wizard and the live graph entirely. It shows
+  // a full-page table of past controller decisions (from Aurora via SSE replay).
+  if (focusId === 'decisions') {
+    return (
+      <div style={pageStyle}>
+        <CanaryDeploymentsView />
+      </div>
+    );
+  }
 
   // ── Setup phase ─────────────────────────────────────────────────────────────
   if (experimentState === 'setup') {

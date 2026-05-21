@@ -184,10 +184,13 @@ export class MiddlewareServiceStack extends cdk.Stack {
       ],
     }));
 
-    // S3 — documents read + artifacts read/write
+    // S3 — documents read/write (landing-zone uploads + deletes) + artifacts read/write
     taskRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'S3DocumentsRead',
-      actions: ['s3:GetObject', 's3:ListBucket', 's3:GetBucketLocation'],
+      sid: 'S3DocumentsReadWrite',
+      actions: [
+        's3:GetObject', 's3:ListBucket', 's3:GetBucketLocation',
+        's3:PutObject', 's3:DeleteObject',   // required for landing-zone upload + delete
+      ],
       resources: [props.documentsBucketArn, `${props.documentsBucketArn}/*`],
     }));
     taskRole.addToPolicy(new iam.PolicyStatement({
@@ -278,6 +281,35 @@ export class MiddlewareServiceStack extends cdk.Stack {
       sid: 'CloudWatchMetrics',
       actions: ['cloudwatch:PutMetricData', 'cloudwatch:GetMetricStatistics', 'cloudwatch:ListMetrics'],
       resources: ['*'],
+    }));
+
+    // Bedrock KB provisioning — allows middleware to create/delete KBs and data
+    // sources on behalf of the portal wizard. The iam:PassRole grant lets
+    // Bedrock assume the existing orgiq-kb-service-role when creating new KBs.
+    taskRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'BedrockKBProvisioning',
+      actions: [
+        'bedrock:CreateKnowledgeBase',
+        'bedrock:DeleteKnowledgeBase',
+        'bedrock:GetKnowledgeBase',
+        'bedrock:ListKnowledgeBases',
+        'bedrock:UpdateKnowledgeBase',
+        'bedrock:CreateDataSource',
+        'bedrock:DeleteDataSource',
+        'bedrock:GetDataSource',
+        'bedrock:UpdateDataSource',
+        'bedrock:ListDataSources',
+      ],
+      resources: ['*'],
+    }));
+    taskRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'BedrockKBPassRole',
+      actions: ['iam:PassRole'],
+      // Allow passing only the KB service role to Bedrock — not arbitrary roles.
+      resources: [`arn:aws:iam::${this.account}:role/${props.prefix ?? 'orgiq'}-kb-service-role`],
+      conditions: {
+        StringEquals: { 'iam:PassedToService': 'bedrock.amazonaws.com' },
+      },
     }));
 
     // Step Functions — canary state machine describe + send task token

@@ -52,6 +52,7 @@ services:
       - "3001:3001"
     volumes:
       - ./middleware/src:/app/src
+      - ./middleware/seeds:/app/seeds
       - ./middleware/.env.aws:/app/.env.aws:ro
       - ~/.aws:/root/.aws:ro
     environment:

@@ -404,9 +404,12 @@ Consider: was a faster/simpler tool available? Was the tool capable of answering
     //   - JudgeScore            (0..1)  dim: AgentId
     //   - EmbeddingDriftP95     (0..2)  dims: AgentId, TemplateId
     //
-    // We materialize per-agent alarms for the user-facing agents. Each alarm
-    // uses `treatMissingData: NOT_BREACHING` so an idle agent doesn't trigger.
+    // These alarms only fire when online evaluation is active (enableEval=true).
+    // Without the eval pipeline, these metrics are never published, so the
+    // alarms would live permanently in INSUFFICIENT_DATA and count against the
+    // CloudWatch free-tier (10 standard alarms/month) for no operational value.
 
+    if (enableOnlineEval) {
     const userFacingAgents = AGENT_NAMES.filter(n => n !== 'graph-builder');
 
     for (const agentName of userFacingAgents) {
@@ -500,6 +503,7 @@ Consider: was a faster/simpler tool available? Was the tool capable of answering
         treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
       });
     }
+    } // end if (enableOnlineEval) — quality alarms
 
     // -------------------------------------------------------------------
     // Outputs

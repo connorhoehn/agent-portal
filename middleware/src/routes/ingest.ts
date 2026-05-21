@@ -17,6 +17,7 @@ import {
   triggerKbSyncForCrawl,
   getStorageBreakdown,
 } from '../providers/knowledge-base.js';
+import { getKbBySlug } from '../providers/kb-registry.js';
 import {
   listSchedules,
   addSchedule,
@@ -124,9 +125,15 @@ ingestRouter.get('/stream', (req, res) => {
   tick();
 });
 
-ingestRouter.get('/queue', asyncHandler(async (_req, res) => {
+ingestRouter.get('/queue', asyncHandler(async (req, res) => {
+  const kbSlug = (req.query['kbSlug'] as string | undefined)?.trim() || undefined;
   const jobs = await listIngestionJobs(undefined, 5);
   const lastComplete = jobs.find(j => j.status === 'COMPLETE');
+  if (kbSlug) {
+    // Resolve the KB's s3_prefix from the registry for a per-KB queue count.
+    const _entry = await getKbBySlug(kbSlug); // eslint-disable-line @typescript-eslint/no-unused-vars
+    // TODO Wave 2: pass prefix once countS3Documents accepts it
+  }
   const queue = await countS3Documents(lastComplete?.updatedAt);
   res.json(queue);
 }));
@@ -187,7 +194,32 @@ ingestRouter.patch('/schedules/:id/toggle', asyncHandler(async (req, res) => {
 }));
 
 ingestRouter.post('/start', asyncHandler(async (req, res) => {
-  const { dataSourceId, description } = req.body as { dataSourceId?: string; description?: string };
+  const { dataSourceId, kbSlug, description } = req.body as {
+    dataSourceId?: string;
+    kbSlug?: string;
+    description?: string;
+  };
+
+  // Per-KB path: resolve bedrockKbId + dataSourceId from the registry.
+  if (kbSlug) {
+    const entry = await getKbBySlug(kbSlug);
+    if (entry && entry.bedrockKbId && entry.dataSourceId) {
+      // NOTE: startIngestionJob currently reads kbId from config; it does not
+      // accept a per-call kbId override. Passing entry.dataSourceId here works
+      // only when entry.bedrockKbId matches the configured KB. A proper
+      // per-KB implementation requires startIngestionJob to accept a kbId param
+      // — that change is deferred to Wave 2 so it doesn't break existing callers.
+      const job = await startIngestionJob(entry.dataSourceId, description);
+      if (!job) {
+        res.status(500).json({ error: 'StartIngestionJob failed — check middleware logs' });
+        return;
+      }
+      res.json({ ok: true, job });
+      return;
+    }
+    // Entry not found or missing IDs — fall through to the single-KB path below.
+  }
+
   if (!dataSourceId) {
     res.status(400).json({ error: 'dataSourceId required' });
     return;
@@ -503,7 +535,13 @@ ingestRouter.post('/crawl-targets/:id/run', asyncHandler(async (req, res) => {
 
 // ─── Storage breakdown ────────────────────────────────────────────────────────
 
-ingestRouter.get('/storage', asyncHandler(async (_req, res) => {
+ingestRouter.get('/storage', asyncHandler(async (req, res) => {
+  const kbSlug = (req.query['kbSlug'] as string | undefined)?.trim() || undefined;
+  if (kbSlug) {
+    // Resolve the KB's s3_prefix from the registry for a per-KB storage breakdown.
+    const _entry = await getKbBySlug(kbSlug); // eslint-disable-line @typescript-eslint/no-unused-vars
+    // TODO Wave 2: pass prefix once getStorageBreakdown accepts it
+  }
   const breakdown = await getStorageBreakdown();
   res.json(breakdown);
 }));

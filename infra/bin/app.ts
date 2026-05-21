@@ -111,7 +111,10 @@ const observability = new ObservabilityStack(app, 'OrgIQ-Observability', {
   env,
   prefix,
   auroraClusterIdentifier: `${prefix}-aurora`,
-  knowledgeBaseId: knowledgeBase.knowledgeBaseId,
+  knowledgeBaseIds: {
+    default: knowledgeBase.knowledgeBaseId,
+    // newsroom: added once Wave 3-A provisions it and the ID is available
+  },
   monthlyBudgetUsd,
   alertEmail,
   description: 'OrgIQ Observability: CloudWatch dashboard (Aurora ACU + Bedrock) + budget alarm',

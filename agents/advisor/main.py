@@ -42,7 +42,8 @@ _current_ctx: ContextVar[TraceContext | None] = ContextVar(
 app = BedrockAgentCoreApp()
 
 REGION = os.environ.get("AWS_REGION", "us-east-1")
-KB_ID = os.environ.get("KB_ID", "")
+from _shared.kb_resolver import resolve_kb_id as _resolve_kb_id
+KB_ID: str = _resolve_kb_id("orgiq", "default") or ""
 AURORA_CLUSTER_ARN = os.environ.get("AURORA_CLUSTER_ARN", "")
 AURORA_SECRET_ARN = os.environ.get("AURORA_SECRET_ARN", "")
 DB_NAME = os.environ.get("PROJECT_PREFIX", "orgiq")

@@ -17,7 +17,8 @@ permit (
     OrgIQ::Action::"ViewObservability",
     OrgIQ::Action::"LabelFeedback",
     OrgIQ::Action::"ManageIngest",
-    OrgIQ::Action::"ManageCanary"
+    OrgIQ::Action::"ManageCanary",
+    OrgIQ::Action::"ManageKB"
   ],
   resource
 )

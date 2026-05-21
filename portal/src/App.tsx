@@ -26,6 +26,8 @@ const NewsroomResearcherPage = lazy(() => import('./pages/newsroom/ResearcherPag
 const NewsroomBriefsPage = lazy(() => import('./pages/newsroom/BriefsPage'));
 const NewsroomHeadlinesPage = lazy(() => import('./pages/newsroom/HeadlinesPage'));
 const KnowledgeBasePage = lazy(() => import('./pages/KnowledgeBasePage'));
+const KBRegistryPage = lazy(() => import('./pages/admin/KBRegistryPage.js'));
+const KBDetailPage = lazy(() => import('./pages/admin/KBDetailPage.js'));
 const InvokePage = lazy(() => import('./pages/InvokePage'));
 const CodeInterpreterDemoPage = lazy(() => import('./pages/CodeInterpreterDemoPage'));
 const ExplorePage = lazy(() => import('./pages/ExplorePage'));
@@ -118,7 +120,7 @@ export function App() {
       <Route path="explore" element={<Navigate to="/iq/explore" replace />} />
       <Route path="graph" element={<Navigate to="/iq/explore" replace />} />
       <Route path="code-interpreter" element={<Navigate to="/iq/code-interpreter" replace />} />
-      <Route path="knowledge-base" element={<Navigate to="/admin/knowledge-base" replace />} />
+      <Route path="knowledge-base" element={<Navigate to="/admin/knowledge-bases" replace />} />
       <Route path="observability/*" element={<Navigate to="/admin/observability" replace />} />
       <Route path="ingest/*" element={<Navigate to="/admin/ingest" replace />} />
       <Route path="capabilities/*" element={<Navigate to="/admin/capabilities" replace />} />
@@ -166,7 +168,9 @@ export function App() {
         {/* ── /admin/* — Admin / operations pages ── */}
         <Route path="admin" element={<Page element={<AdminLayout />} />}>
           <Route index element={<Navigate to="observability" replace />} />
-          <Route path="knowledge-base" element={<Page element={<KnowledgeBasePage />} />} />
+          <Route path="knowledge-bases" element={<Page element={<KBRegistryPage />} />} />
+          <Route path="knowledge-bases/:id" element={<Page element={<KBDetailPage />} />} />
+          <Route path="knowledge-base" element={<Navigate to="/admin/knowledge-bases" replace />} />
 
           <Route path="ingest" element={
             <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>

@@ -1,3 +1,4 @@
+import datetime as _dt
 import json
 import logging
 import os
@@ -13,6 +14,7 @@ from strands.models.bedrock import BedrockModel
 
 # Shared instrumentation — pull TraceContext + decorator from agents/_shared.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from _shared.kb_resolver import resolve_kb_id as _resolve_kb_id  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
     TraceContext,
     install_bedrock_usage_capture,
@@ -38,7 +40,7 @@ _current_ctx: ContextVar[TraceContext | None] = ContextVar(
 app = BedrockAgentCoreApp()
 
 REGION = os.environ.get("AWS_REGION", "us-east-1")
-KB_ID = os.environ.get("KB_ID", "")
+KB_ID: str = _resolve_kb_id("newsroom", "articles") or ""
 AURORA_CLUSTER_ARN = os.environ.get("AURORA_CLUSTER_ARN", "")
 AURORA_SECRET_ARN = os.environ.get("AURORA_SECRET_ARN", "")
 AURORA_DATABASE = os.environ.get("AURORA_DATABASE", "orgiq")
@@ -46,6 +48,44 @@ MODEL_ID = os.environ.get("MODEL_ID", "amazon.nova-pro-v1:0")
 
 _bedrock = boto3.client("bedrock-agent-runtime", region_name=REGION)
 _rds = boto3.client("rds-data", region_name=REGION)
+
+_DOCUMENTS_BUCKET = os.environ.get("DOCUMENTS_BUCKET", "")
+_s3_client = boto3.client("s3", region_name=REGION) if _DOCUMENTS_BUCKET else None
+
+def _archive_article_to_s3(url: str, content: str, metadata: dict | None = None) -> None:
+    """Push a fetched article to the newsroom/ S3 landing zone for KB ingestion.
+
+    Only runs when DOCUMENTS_BUCKET env var is set. Safe to call even in
+    environments without S3 access — failures are logged but not raised.
+    """
+    if not _s3_client or not _DOCUMENTS_BUCKET:
+        return
+    try:
+        # Sanitize URL for use as S3 key segment
+        safe_url = "".join(c if c.isalnum() or c in "-_." else "_" for c in url.replace("://", "_").replace("/", "_"))[:80]
+        date_str = _dt.datetime.utcnow().strftime("%Y-%m-%d")
+        key = f"newsroom/{date_str}/{safe_url}.txt"
+
+        meta: dict[str, str] = {
+            "source-url": url[:512],
+            "archived-at": _dt.datetime.utcnow().isoformat(),
+        }
+        if metadata:
+            # Merge extra metadata, truncating values to 256 chars (S3 metadata limit)
+            for k, v in metadata.items():
+                if isinstance(v, str):
+                    meta[str(k)[:128]] = v[:256]
+
+        _s3_client.put_object(
+            Bucket=_DOCUMENTS_BUCKET,
+            Key=key,
+            Body=content.encode("utf-8"),
+            ContentType="text/plain",
+            Metadata=meta,
+        )
+        log.info("[news-researcher] Archived article to s3://%s/%s", _DOCUMENTS_BUCKET, key)
+    except Exception as e:
+        log.warning("[news-researcher] S3 archive failed for %s: %s", url, e)
 
 
 def _records_to_dicts(resp: dict) -> list:
@@ -60,6 +100,9 @@ def _records_to_dicts(resp: dict) -> list:
     return out
 
 
+# TODO: call _archive_article_to_s3(url, content) from any future fetch_article or
+# research_topic tool that fetches live article content. search_archive is a
+# retrieval-only tool so archiving is intentionally skipped here.
 @tool
 @instrumented_tool(_current_ctx.get)
 def search_archive(query: str, max_results: int = 5) -> str:

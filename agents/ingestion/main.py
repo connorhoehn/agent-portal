@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.approval_tool import request_approval  # noqa: E402
+from _shared.kb_resolver import resolve_kb_id_by_slug as _resolve_kb_id_by_slug  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
     TraceContext,
     install_bedrock_usage_capture,
@@ -126,18 +127,36 @@ def read_document(key: str) -> str:
 
 @tool
 @instrumented_tool(_current_ctx.get)
-def sync_knowledge_base() -> str:
-    """Trigger an ingestion job to sync the S3 documents bucket into the Bedrock Knowledge Base.
+def sync_knowledge_base(kb_slug: str = "default") -> str:
+    """Trigger a Bedrock Knowledge Base ingestion job.
 
-    This re-indexes all new or changed documents. Runs asynchronously — check status
-    with check_ingestion_status using the returned job_id.
+    Args:
+        kb_slug: Registry slug of the KB to sync (default: "default" = main OrgIQ KB).
+                 Use "newsroom" to sync the newsroom articles KB.
 
     Returns:
         JSON with {job_id, status, knowledge_base_id, data_source_id}
     """
-    data_source_id = _get_data_source_id()
+    # Resolve KB ID and data source ID from registry when a non-default slug is requested.
+    resolved_kb_id = KB_ID  # module-level default
+    resolved_ds_id = None  # will be looked up below
+    if kb_slug != "default":
+        resolved_kb_id = _resolve_kb_id_by_slug(kb_slug) or KB_ID
+    # Re-resolve data source for whichever KB we landed on.
+    if resolved_kb_id != KB_ID or resolved_ds_id is None:
+        def _get_ds_for(kb_id: str) -> str:
+            response = _bedrock_agent.list_data_sources(knowledgeBaseId=kb_id)
+            sources = response.get("dataSourceSummaries", [])
+            if not sources:
+                raise RuntimeError(f"No data sources found for knowledge base {kb_id}")
+            return sources[0]["dataSourceId"]
+        resolved_ds_id = _get_ds_for(resolved_kb_id)
+    else:
+        resolved_ds_id = _get_data_source_id()
+
+    data_source_id = resolved_ds_id
     response = _bedrock_agent.start_ingestion_job(
-        knowledgeBaseId=KB_ID,
+        knowledgeBaseId=resolved_kb_id,
         dataSourceId=data_source_id,
         description="Triggered by OrgIQ Ingestion Agent",
     )
@@ -145,7 +164,7 @@ def sync_knowledge_base() -> str:
     return json.dumps({
         "job_id": job["ingestionJobId"],
         "status": job["status"],
-        "knowledge_base_id": KB_ID,
+        "knowledge_base_id": resolved_kb_id,
         "data_source_id": data_source_id,
         "started_at": job.get("startedAt", "").isoformat() if hasattr(job.get("startedAt", ""), "isoformat") else str(job.get("startedAt", "")),
     })

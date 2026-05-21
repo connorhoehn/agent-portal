@@ -46,6 +46,10 @@ export interface AgentCoreRuntimeStackProps extends cdk.StackProps {
   readonly auroraClusterArn: string;
   readonly auroraCredentialsSecretArn: string;
   readonly knowledgeBaseId: string;
+  /** Newsroom KB ID — injected into news-researcher agent only. Provisioned via portal after Wave 3. */
+  readonly newsroomKbId?: string;
+  /** Documents S3 bucket name — injected into news-researcher so it can push articles to S3. */
+  readonly documentsBucketName?: string;
   readonly modelId?: string;
   readonly codeInterpreterId?: string;
   readonly codeInterpreterArn?: string;
@@ -249,13 +253,16 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
         actions: ['secretsmanager:GetSecretValue'],
         resources: [props.auroraCredentialsSecretArn],
       }));
+      // Wildcard over all KBs in this account — covers the default orgiq KB and
+      // any new KBs provisioned via the portal registry wizard (Wave 1+).
+      // Scoped to account/region; no cross-account access is possible.
       executionRole.addToPolicy(new iam.PolicyStatement({
         sid: 'KnowledgeBaseRetrieve',
         actions: [
           'bedrock:Retrieve',
           'bedrock:RetrieveAndGenerate',
         ],
-        resources: [`arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/${props.knowledgeBaseId}`],
+        resources: [`arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/*`],
       }));
       executionRole.addToPolicy(new iam.PolicyStatement({
         sid: 'S3DocsRead',
@@ -348,6 +355,10 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
           AURORA_CLUSTER_ARN: props.auroraClusterArn,
           AURORA_SECRET_ARN: props.auroraCredentialsSecretArn,
           KB_ID: props.knowledgeBaseId,
+          // Newsroom KB — only injected for the news-researcher agent so it
+          // resolves the correct vector space for newsroom article retrieval.
+          ...(agentName === 'news-researcher' && props.newsroomKbId && { NEWSROOM_KB_ID: props.newsroomKbId }),
+          ...(agentName === 'news-researcher' && props.documentsBucketName && { DOCUMENTS_BUCKET: props.documentsBucketName }),
           PROJECT_PREFIX: prefix,
           ...(props.codeInterpreterId && { CODE_INTERPRETER_ID: props.codeInterpreterId }),
           ...(props.browserId && { BROWSER_ID: props.browserId }),
