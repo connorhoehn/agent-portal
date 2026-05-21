@@ -159,25 +159,15 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), agentStreamMiddle
   }
 
   stream.textMessageStart(messageId, 'assistant');
-
-  const tokens = tokenize(result.text);
-  for (const token of tokens) {
-    if (signal.aborted || stream.closed) return;
-    stream.textMessageContent(messageId, token);
-    await delay(15);
+  if (!signal.aborted && !stream.closed) {
+    stream.textMessageContent(messageId, result.text);
   }
-
   stream.textMessageEnd(messageId);
 
   // Pass runtimeSessionId via RUN_FINISHED.result (preserves prior payload
   // shape under a different field key — FE currently doesn't read it).
   stream.runFinished(result.runtimeSessionId ? { result: { runtimeSessionId: result.runtimeSessionId } } : undefined);
 }));
-
-function tokenize(text: string): string[] {
-  // Preserve whitespace as delimiters so the client reconstructs the text exactly.
-  return text.split(/(\s+)/).filter(Boolean);
-}
 
 function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
