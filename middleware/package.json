@@ -28,7 +28,7 @@
     "@aws-sdk/client-xray": "^3.700.0",
     "@aws-sdk/lib-dynamodb": "^3.700.0",
     "@aws-sdk/signature-v4": "^3.370.0",
-    "@connorhoehn/realtime-modules": "github:connorhoehn/realtime-modules#v0.4.0",
+    "@connorhoehn/realtime-modules": "github:connorhoehn/realtime-modules#v0.4.3",
     "@smithy/protocol-http": "^5.3.14",
     "@types/ws": "^8.18.1",
     "ajv": "^8.20.0",
