@@ -37,6 +37,22 @@ interface ProjectsGraphData {
 
 function escapeRe(s: string) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
+/** Replace raw person IDs in agent text with actual names.
+ *  Handles patterns like:
+ *   - "Person with ID p-007" → "Alex Chen"
+ *   - "person_id p-007" → "Alex Chen"
+ *   - standalone "p-007" → "Alex Chen"  (word-boundary only)
+ */
+function resolvePersonIds(text: string, people: GraphPerson[]): string {
+  if (!text || people.length === 0) return text;
+  const idMap = new Map(people.map(p => [p.id, p.name]));
+  // "Person with ID p-NNN" or "person with id p-NNN"
+  let out = text.replace(/[Pp]erson(?:\s+with)?\s+(?:ID|id|Id)\s+(p-\d{3,})/g, (_, id: string) => idMap.get(id) ?? id);
+  // Standalone IDs with word boundaries
+  out = out.replace(/\b(p-\d{3,})\b/g, (id: string) => idMap.get(id) ?? id);
+  return out;
+}
+
 function findMentionedPeople(text: string, people: GraphPerson[]): GraphPerson[] {
   if (!text || people.length === 0) return [];
   const sorted = [...people].sort((a, b) => b.name.length - a.name.length);
@@ -163,6 +179,7 @@ function ExplorePage() {
   const [chatOpen, setChatOpen] = useState(false);
   const [filterToSelection, setFilterToSelection] = useState(true);
   const [activeStatuses, setActiveStatuses] = useState<Set<string> | null>(null);
+  const [presenceFilter, setPresenceFilter] = useState<'all' | 'office' | 'remote' | 'away'>('all');
 
   // ?layout= and ?entities= params driven by the sub-nav catalog
   const rawLayout = searchParams.get('layout');
@@ -440,6 +457,53 @@ function ExplorePage() {
             })}
           </span>
         )}
+
+        {/* Presence filter — only relevant for person-based views */}
+        {(entityFilter === 'all' || entityFilter === 'people' || entityFilter === 'decisions') && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ color: 'var(--color-text-tertiary)', fontSize: 11, marginRight: 2 }}>Today</span>
+            {([
+              { key: 'all',    label: 'All',       dot: undefined },
+              { key: 'office', label: 'In Office',  dot: '#16a34a' },
+              { key: 'remote', label: 'Remote',     dot: '#3b82f6' },
+              { key: 'away',   label: 'Away',       dot: '#f97316' },
+            ] as const).map(({ key, label, dot }) => {
+              // Count people matching this filter
+              const count = key === 'all'
+                ? data?.nodes.length ?? 0
+                : data?.nodes.filter(n => {
+                    const p = n.presence ?? 'unknown';
+                    if (key === 'office') return p === 'office';
+                    if (key === 'remote') return p === 'wfh' || p === 'travel';
+                    if (key === 'away') return p === 'pto' || p === 'vacation' || p === 'sick';
+                    return false;
+                  }).length ?? 0;
+              const active = presenceFilter === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setPresenceFilter(active ? 'all' : key)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    padding: '3px 9px', borderRadius: 9999,
+                    border: active ? '1.5px solid var(--color-primary, #6366f1)' : '1.5px solid var(--color-border)',
+                    background: active ? 'var(--color-surface-hover)' : 'transparent',
+                    color: active ? 'var(--color-primary, #6366f1)' : 'var(--color-text-secondary)',
+                    fontSize: 11, fontWeight: active ? 600 : 400,
+                    cursor: 'pointer', fontFamily: 'inherit',
+                    transition: 'all 0.12s',
+                  }}
+                  title={`${label}: ${count} people`}
+                >
+                  {dot && <span style={{ width: 6, height: 6, borderRadius: '50%', background: dot, flexShrink: 0 }} />}
+                  {label}
+                  <span style={{ fontSize: 10, opacity: 0.6 }}>{count}</span>
+                </button>
+              );
+            })}
+          </span>
+        )}
+
         <span style={{ flex: 1 }} />
         {selectedIds.size > 0 && (
           <>
@@ -532,6 +596,7 @@ function ExplorePage() {
                   onToggleMultiSelect={toggleSelect}
                   spotlightIds={selectedIds}
                   layout={layoutMode}
+                  presenceFilter={presenceFilter !== 'all' ? presenceFilter : undefined}
                 />
                 {selectedIds.size === 0 && !chatOpen && (
                   <div style={hintStyle}>
@@ -562,14 +627,18 @@ function ExplorePage() {
                 </div>
               )}
               {messages.map(msg => {
+                // Resolve raw person IDs (e.g. "Person with ID p-007") to names
+                const resolvedContent = msg.role === 'assistant' && data
+                  ? resolvePersonIds(msg.content, data.nodes)
+                  : msg.content;
                 const mentioned = msg.role === 'assistant' && data
-                  ? findMentionedPeople(msg.content, data.nodes)
+                  ? findMentionedPeople(resolvedContent, data.nodes)
                   : [];
                 return (
                   <div key={msg.id} style={msgWrapStyle}>
                     <div style={msgRoleStyle}>{msg.role === 'user' ? 'You' : 'Search agent'}</div>
                     {msg.role === 'assistant'
-                      ? <div style={msgBodyStyle}><Markdown>{msg.content}</Markdown></div>
+                      ? <div style={msgBodyStyle}><Markdown>{resolvedContent}</Markdown></div>
                       : <div style={{ ...msgBodyStyle, color: 'var(--color-text-primary)' }}>{msg.content}</div>
                     }
                     {mentioned.length > 0 && (
@@ -606,11 +675,11 @@ function ExplorePage() {
                     </div>
                   )}
                   {streamingText
-                    ? <div style={msgBodyStyle}><Markdown>{streamingText}</Markdown></div>
+                    ? <div style={msgBodyStyle}><Markdown>{data ? resolvePersonIds(streamingText, data.nodes) : streamingText}</Markdown></div>
                     : null
                   }
                   {streamingText && data && (() => {
-                    const live = findMentionedPeople(streamingText, data.nodes);
+                    const live = findMentionedPeople(resolvePersonIds(streamingText, data.nodes), data.nodes);
                     return live.length > 0 ? (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
                         {live.map(p => (

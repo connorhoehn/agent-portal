@@ -1,3 +1,12 @@
+export type PresenceStatus =
+  | 'office'    // physically in the building
+  | 'wfh'       // remote / work from home
+  | 'travel'    // on-site at customer / conference
+  | 'pto'       // paid time off (short)
+  | 'vacation'  // extended away
+  | 'sick'      // out sick
+  | 'unknown';  // no check-in today
+
 export interface GraphPerson {
   id: string;
   name: string;
@@ -5,6 +14,8 @@ export interface GraphPerson {
   department: string;
   skills: string[];
   influenceScore: number;
+  /** Today's presence status. Absent means the API did not return one (treat as unknown). */
+  presence?: PresenceStatus;
 }
 
 export interface GraphRelationship {

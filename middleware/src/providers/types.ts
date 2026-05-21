@@ -6,6 +6,9 @@
 
 // ── Aurora (graph + scores) ───────────────────────────────────────────────────
 
+export type PresenceStatus =
+  | 'office' | 'wfh' | 'travel' | 'pto' | 'vacation' | 'sick' | 'unknown';
+
 export interface Person {
   id: string;
   name: string;
@@ -14,6 +17,8 @@ export interface Person {
   skills: string[];
   influenceScore: number;
   imageUrl?: string;
+  /** Today's presence status — stable within a calendar day, changes nightly. */
+  presence?: PresenceStatus;
 }
 
 export interface Relationship {

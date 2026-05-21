@@ -100,10 +100,34 @@ SELECT
   a.department        AS assignee_dept,
   -- child counts
   (SELECT COUNT(*) FROM work_items c WHERE c.parent_id = wi.id)               AS child_count,
-  (SELECT COUNT(*) FROM work_items c WHERE c.parent_id = wi.id AND c.status = 'done') AS child_done_count
+  (SELECT COUNT(*) FROM work_items c WHERE c.parent_id = wi.id AND c.status = 'done') AS child_done_count,
+  -- comment count
+  (SELECT COUNT(*) FROM work_item_comments wic WHERE wic.work_item_id = wi.id AND NOT wic.is_system) AS comment_count
 FROM work_items wi
 JOIN projects p ON p.id = wi.project_id
 LEFT JOIN people a ON a.id = wi.assignee_id;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- work_item_comments
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS work_item_comments (
+  id           TEXT PRIMARY KEY DEFAULT ('wic-' || gen_random_uuid()::TEXT),
+  work_item_id TEXT NOT NULL REFERENCES work_items(id) ON DELETE CASCADE,
+  author_id    TEXT REFERENCES people(id) ON DELETE SET NULL,
+  body         TEXT NOT NULL,
+  is_system    BOOLEAN NOT NULL DEFAULT FALSE,  -- true = status-change event
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON TABLE work_item_comments IS
+  'Threaded comments on work items. is_system=true rows are auto-generated '
+  'audit events (status changes, assignments) shown differently in the UI.';
+
+CREATE INDEX IF NOT EXISTS wic_work_item_id_idx ON work_item_comments (work_item_id);
+CREATE INDEX IF NOT EXISTS wic_author_id_idx    ON work_item_comments (author_id);
+CREATE INDEX IF NOT EXISTS wic_created_at_idx   ON work_item_comments (created_at DESC);
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- View: v_decision_queue — decisions that need resolution, newest first

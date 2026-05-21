@@ -556,8 +556,8 @@ function ProjectListRow({ project, onClick }: { project: ProjectSummary; onClick
       {/* Accent bar */}
       <div style={{ width: 3, height: 36, borderRadius: 2, background: colors.accent }} />
 
-      {/* Name + slug — padded right so it doesn't crowd Status */}
-      <div style={{ minWidth: 0, paddingRight: 24 }}>
+      {/* Name + slug — left gap from accent bar, right gap from Status */}
+      <div style={{ minWidth: 0, paddingLeft: 10, paddingRight: 24 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {project.name}
         </div>
@@ -742,7 +742,7 @@ function ProjectsPage() {
               minHeight: 34,
             }}>
               <div />
-              <span style={{ fontSize: 10.5, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Project</span>
+              <span style={{ fontSize: 10.5, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', paddingLeft: 10 }}>Project</span>
               <span style={{ fontSize: 10.5, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Status</span>
               <span style={{ fontSize: 10.5, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Team</span>
               <span style={{ fontSize: 10.5, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'right' }}>Updated</span>

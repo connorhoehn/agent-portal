@@ -18,6 +18,8 @@ interface OrgGraphProps {
   spotlightIds?: Set<string>;
   /** Layout algorithm to use. Defaults to 'force'. */
   layout?: LayoutMode;
+  /** Presence filter — dims nodes that don't match. */
+  presenceFilter?: 'all' | 'office' | 'remote' | 'away';
 }
 
 export function OrgGraph({
@@ -29,6 +31,7 @@ export function OrgGraph({
   onToggleMultiSelect,
   spotlightIds,
   layout,
+  presenceFilter,
 }: OrgGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
@@ -168,6 +171,7 @@ export function OrgGraph({
                 isHighlighted={isHighlighted}
                 onSelect={handleSelect}
                 onHover={setHoveredId}
+                presenceFilter={presenceFilter}
               />
             );
           })}

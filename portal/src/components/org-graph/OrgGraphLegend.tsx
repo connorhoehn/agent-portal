@@ -1,5 +1,14 @@
 import type { GraphDepartment } from './types';
 
+const PRESENCE_LEGEND = [
+  { color: '#16a34a', label: 'In office' },
+  { color: '#3b82f6', label: 'Remote' },
+  { color: '#f59e0b', label: 'Traveling' },
+  { color: '#f97316', label: 'PTO' },
+  { color: '#8b5cf6', label: 'Vacation' },
+  { color: '#ef4444', label: 'Sick' },
+];
+
 interface OrgGraphLegendProps {
   departments: GraphDepartment[];
   filter: string | null;
@@ -85,6 +94,21 @@ export function OrgGraphLegend({ departments, filter, onFilter }: OrgGraphLegend
           Clear Filter
         </button>
       )}
+
+      {/* Presence dot legend */}
+      <div style={{ borderTop: '1px solid var(--color-border, #e2e8f0)', marginTop: 8, paddingTop: 8 }}>
+        <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 5 }}>Presence today</div>
+        {PRESENCE_LEGEND.map(({ color, label }) => (
+          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+            <span>{label}</span>
+          </div>
+        ))}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#3b82f6', flexShrink: 0, boxSizing: 'border-box', outline: '2px dashed #3b82f6', outlineOffset: 3 }} />
+          <span style={{ color: 'var(--color-text-tertiary)' }}>WFH ring</span>
+        </div>
+      </div>
     </div>
   );
 }

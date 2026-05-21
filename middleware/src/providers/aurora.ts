@@ -162,6 +162,36 @@ function clamp01(n: number): number {
   return n;
 }
 
+// ─── Presence generator ─────────────────────────────────────────────────────
+// Deterministic per (personId, date) — stable within a calendar day, changes
+// nightly. Weekends everyone is 'vacation'. Weekdays: ~40% office, ~30% wfh,
+// ~15% pto/vacation, ~10% travel, ~5% sick.
+
+import type { PresenceStatus } from './types.js';
+
+function djb2Presence(s: string): number {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = (((h * 33) ^ s.charCodeAt(i)) >>> 0);
+  return h;
+}
+
+function generatePresence(personId: string): PresenceStatus {
+  const now = new Date();
+  const dow = now.getDay(); // 0=Sun 6=Sat
+  if (dow === 0 || dow === 6) return 'vacation'; // everyone off on weekends
+
+  const dateKey = `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+  const h = djb2Presence(`${personId}:${dateKey}`);
+  const bucket = h % 100;
+  if (bucket < 40) return 'office';    // 40%
+  if (bucket < 70) return 'wfh';       // 30%
+  if (bucket < 80) return 'pto';       // 10%
+  if (bucket < 88) return 'travel';    // 8%
+  if (bucket < 94) return 'vacation';  //  6%
+  if (bucket < 98) return 'sick';      //  4%
+  return 'unknown';                    //  2%
+}
+
 // ─── Real provider ──────────────────────────────────────────────────────────
 
 async function fetchSkillsByPerson(): Promise<Map<string, string[]>> {
@@ -189,14 +219,18 @@ async function fetchAllPeople(): Promise<Person[]> {
        FROM people`,
   );
   const skills = await fetchSkillsByPerson();
-  return rows.map<Person>((r) => ({
-    id: toStr(r.id),
-    name: toStr(r.name),
-    title: toStr(r.title),
-    department: toStr(r.team),
-    skills: skills.get(toStr(r.id)) ?? [],
-    influenceScore: clamp01(toNumber(r.influence, 0)),
-  }));
+  return rows.map<Person>((r) => {
+    const id = toStr(r.id);
+    return {
+      id,
+      name: toStr(r.name),
+      title: toStr(r.title),
+      department: toStr(r.team),
+      skills: skills.get(id) ?? [],
+      influenceScore: clamp01(toNumber(r.influence, 0)),
+      presence: generatePresence(id),
+    };
+  });
 }
 
 async function fetchAllEdges(): Promise<Relationship[]> {
@@ -964,8 +998,12 @@ const mockPeopleByDept = (): Department[] =>
   mockDepartments.map((d) => ({ id: d.id, name: d.name, color: d.color }));
 
 async function mockFetchGraph(): Promise<GraphSnapshot> {
+  const nodes = (mockPeople as Person[]).map(p => ({
+    ...p,
+    presence: generatePresence(p.id),
+  }));
   return {
-    nodes: mockPeople as Person[],
+    nodes,
     edges: mockRelationships as Relationship[],
     departments: mockPeopleByDept(),
   };
