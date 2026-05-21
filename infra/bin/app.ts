@@ -15,6 +15,7 @@ import { AgentCoreCapabilitiesStack } from '../lib/agentcore-capabilities-stack'
 import { AuthorizationStack } from '../lib/authorization-stack';
 import { SpanProjectorStack } from '../lib/span-projector-stack';
 import { PromptCanaryStack } from '../lib/prompt-canary-stack';
+import { MiddlewareServiceStack } from '../lib/middleware-service-stack';
 
 const app = new cdk.App();
 
@@ -257,5 +258,68 @@ const deployCanary = app.node.tryGetContext('deployCanary') === 'true' || app.no
 if (deployCanary) {
   new PromptCanaryStack(app, 'OrgIQ-PromptCanary', { env, prefix });
 }
+
+// -------------------------------------------------------------------
+// Stack 15: Middleware Service (ECS Fargate + ALB)
+// Deploys the Express middleware as a production Fargate service.
+//
+// First-time setup:
+//   1. cdk deploy OrgIQ-MiddlewareService
+//   2. Push image: docker build + push to the ECR repo in stack outputs
+//   3. Force a new ECS deployment to pick up the image
+//
+// HTTPS (with ACM certificate):
+//   cdk deploy OrgIQ-MiddlewareService --context certificateArn=arn:aws:acm:...
+//
+// Pass the WebSocket gateway URL so the middleware can proxy realtime calls:
+//   cdk deploy OrgIQ-MiddlewareService --context websocketGatewayUrl=https://ws.example.com
+// -------------------------------------------------------------------
+const middlewareCertArn = app.node.tryGetContext('certificateArn') as string | undefined;
+const websocketGatewayUrl = app.node.tryGetContext('websocketGatewayUrl') as string | undefined;
+
+const middlewareService = new MiddlewareServiceStack(app, 'OrgIQ-MiddlewareService', {
+  env,
+  prefix,
+  certificateArn: middlewareCertArn,
+  websocketGatewayUrl,
+
+  // Foundation DynamoDB table names + ARNs
+  scoresTableName: cdk.Fn.importValue(`${prefix}-scores-table-name`),
+  sessionsTableName: cdk.Fn.importValue(`${prefix}-sessions-table-name`),
+  scoresTableArn: cdk.Fn.importValue(`${prefix}-scores-table-arn`),
+  // Sessions table ARN is not exported by FoundationStack today; construct it
+  // from the stable table name pattern.  This avoids adding a new export to
+  // FoundationStack (which is an existing deployed stack).
+  sessionsTableArn: `arn:aws:dynamodb:${env.region ?? 'us-east-1'}:${env.account ?? '*'}:table/${prefix}-sessions`,
+
+  // S3 bucket ARNs
+  documentsBucketArn: cdk.Fn.importValue(`${prefix}-documents-bucket-arn`),
+  artifactsBucketArn: cdk.Fn.importValue(`${prefix}-artifacts-bucket-arn`),
+
+  // Authorization
+  sessionSigningSecretArn: cdk.Fn.importValue(`${prefix}-session-signing-secret-arn`),
+  policyStoreId: cdk.Fn.importValue(`${prefix}-policy-store-id`),
+
+  // Aurora (from AuroraStack exports)
+  auroraClusterArn: cdk.Fn.importValue(`${prefix}-aurora-cluster-arn`),
+  auroraCredentialsSecretArn: cdk.Fn.importValue(`${prefix}-aurora-secret-arn`),
+
+  // AgentCore identifiers (from AgentCoreMemoryStack + KnowledgeBaseStack)
+  memoryId: cdk.Fn.importValue(`${prefix}-memory-id`),
+  knowledgeBaseId: cdk.Fn.importValue(`${prefix}-knowledge-base-id`),
+
+  // Guardrail IDs (from GuardrailsStack)
+  guardrailIdMember: cdk.Fn.importValue(`${prefix}-guardrail-id-member`),
+  guardrailIdOrgLeader: cdk.Fn.importValue(`${prefix}-guardrail-id-org-leader`),
+  guardrailIdHrAdmin: cdk.Fn.importValue(`${prefix}-guardrail-id-hr-admin`),
+
+  description: 'OrgIQ Middleware Service: ECS Fargate + ALB for the Express middleware API',
+});
+middlewareService.addDependency(foundation);
+middlewareService.addDependency(aurora);
+middlewareService.addDependency(authorization);
+middlewareService.addDependency(agentCoreMemory);
+middlewareService.addDependency(knowledgeBase);
+middlewareService.addDependency(guardrails);
 
 app.synth();
