@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Card, Chip, Modal, Table, TableHead, TableBody, TableRow, TableTh, TableTd } from '@connorhoehnslalom/ui-components/shared';
 import { PAGE_STATUS_TONE, formatBytes, formatDuration } from './types';
 import type { CrawlPage } from './types';
-import { secondaryBtnStyle, smallBtnStyle } from './ui';
+import { Button } from './ui';
 import { Markdown } from '../Markdown';
 
 type Tab = 'screenshot' | 'markdown' | 'analysis' | 'links';
@@ -74,7 +74,7 @@ export function PageDetailModal({
               {page.url}
             </div>
           </div>
-          <button onClick={onClose} style={secondaryBtnStyle}>Close</button>
+          <Button variant="secondary" onClick={onClose}>Close</Button>
         </div>
 
         {/* Tab bar */}
@@ -373,8 +373,8 @@ function CopyButton({ text }: { text: string }) {
     }
   }
   return (
-    <button onClick={copy} style={{ ...smallBtnStyle(false), padding: '1px 6px', fontSize: 10 }}>
+    <Button variant="secondary" size="sm" onClick={copy} style={{ padding: '1px 6px', fontSize: 10 }}>
       {copied ? 'copied' : 'copy'}
-    </button>
+    </Button>
   );
 }

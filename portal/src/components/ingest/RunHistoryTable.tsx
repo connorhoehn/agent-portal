@@ -3,7 +3,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { CRAWL_STATUS_TONE, durationOf, formatCost, formatDuration } from './types';
 import type { CrawlSession, CrawlStatus, CrawlTarget } from './types';
-import { smallBtnStyle } from './ui';
+import { Button } from './ui';
 
 type Filter = 'all' | CrawlStatus;
 
@@ -138,9 +138,9 @@ export function RunHistoryTable({
                   {formatCost(s.estimatedCostUsd)}
                 </TableTd>
                 <TableTd style={{ textAlign: 'right' }}>
-                  <button onClick={() => onOpen(s.id)} style={smallBtnStyle(false)}>
+                  <Button variant="secondary" size="sm" onClick={() => onOpen(s.id)}>
                     Open
-                  </button>
+                  </Button>
                 </TableTd>
               </TableRow>
             );

@@ -7,7 +7,7 @@ import { ActiveRunsStrip } from '../../components/ingest/ActiveRunsStrip';
 import { RunDetailDrawer } from '../../components/ingest/RunDetailDrawer';
 import { NewTargetModal } from '../../components/ingest/NewTargetModal';
 import type { TargetDraft } from '../../components/ingest/NewTargetModal';
-import { EmptyState, PulseDot, primaryBtnStyle } from '../../components/ingest/ui';
+import { Button, EmptyState, PulseDot } from '../../components/ingest/ui';
 
 function CrawlTargetsPage() {
   const { data: targetsData, refresh: refreshTargets } = useFetch<{ targets: CrawlTarget[] }>(
@@ -138,9 +138,9 @@ function CrawlTargetsPage() {
       <Card padding="md" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <h2 style={{ fontSize: 14, fontWeight: 600 }}>Crawl Targets</h2>
-          <button onClick={() => setShowNewTarget(true)} style={primaryBtnStyle(false)}>
+          <Button variant="primary" onClick={() => setShowNewTarget(true)}>
             + New Target
-          </button>
+          </Button>
         </div>
         {targets.length === 0 ? (
           <EmptyState title="No crawl targets yet" body="Define a target to start ingesting public web content with vision-LLM extraction." />

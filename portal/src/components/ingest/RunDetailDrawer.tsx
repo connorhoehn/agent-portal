@@ -12,7 +12,7 @@ import type { CrawlPage, CrawlSession } from './types';
 import { useCrawlStream } from './useCrawlStream';
 import { Thumbnail } from './Thumbnail';
 import { PageDetailModal } from './PageDetailModal';
-import { primaryBtnStyle, smallBtnStyle } from './ui';
+import { Button } from './ui';
 
 /**
  * Right-side slide-in drawer showing a single CrawlSession in detail.
@@ -133,14 +133,14 @@ export function RunDetailDrawer({
               )}
 
               <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 }}>
-                <button
+                <Button
+                  variant="primary"
                   onClick={triggerKbSync}
                   disabled={syncing || session.status !== 'completed'}
-                  style={primaryBtnStyle(syncing || session.status !== 'completed')}
                   title={session.status !== 'completed' ? 'Available after the crawl completes' : ''}
                 >
                   {syncing ? 'Syncing…' : 'Trigger KB Sync'}
-                </button>
+                </Button>
                 {syncMsg && (
                   <span
                     style={{
@@ -288,7 +288,7 @@ function TimelineRow({
           </div>
         )}
         <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
-          <button onClick={onOpen} style={smallBtnStyle(false)}>Details</button>
+          <Button variant="secondary" size="sm" onClick={onOpen}>Details</Button>
         </div>
       </div>
     </div>

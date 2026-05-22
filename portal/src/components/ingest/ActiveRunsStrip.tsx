@@ -3,7 +3,7 @@ import { CRAWL_STATUS_TONE, durationOf, formatDuration } from './types';
 import type { CrawlSession } from './types';
 import { useCrawlStream } from './useCrawlStream';
 import { Thumbnail } from './Thumbnail';
-import { PulseDot, dangerBtnStyle } from './ui';
+import { Button, PulseDot } from './ui';
 
 export function ActiveRunsStrip({
   sessions,
@@ -168,9 +168,9 @@ function ActiveRunCard({
             Open
           </button>
           {isRunning && (
-            <button onClick={() => onCancel(session.id)} style={dangerBtnStyle(false)}>
+            <Button variant="danger" onClick={() => onCancel(session.id)}>
               Cancel
-            </button>
+            </Button>
           )}
         </div>
       </div>
