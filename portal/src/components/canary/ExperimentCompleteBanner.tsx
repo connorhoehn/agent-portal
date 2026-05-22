@@ -3,6 +3,7 @@
 
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
+import { Spinner } from '@connorhoehnslalom/ui-components/shared';
 import { useCanaryStore } from './canaryStore.js';
 import { resetCanaryExperiment } from './usePromptLibrary.js';
 
@@ -103,18 +104,6 @@ export function ExperimentCompleteBanner({ onReset }: ExperimentCompleteBannerPr
     fontFamily: 'inherit',
   };
 
-  const spinnerStyle: CSSProperties = {
-    display: 'inline-block',
-    width: 12,
-    height: 12,
-    border: '2px solid rgba(255,255,255,0.4)',
-    borderTopColor: '#fff',
-    borderRadius: '50%',
-    animation: 'bannerSpin 0.7s linear infinite',
-    marginRight: 6,
-    verticalAlign: 'middle',
-  };
-
   return (
     <div style={bannerStyle}>
       <div style={leftTextStyle}>
@@ -134,7 +123,11 @@ export function ExperimentCompleteBanner({ onReset }: ExperimentCompleteBannerPr
             onClick={() => { void handlePinAsBaseline(); }}
             disabled={pinning}
           >
-            {pinning && <span style={spinnerStyle} />}
+            {pinning && (
+              <span style={{ marginRight: 6, verticalAlign: 'middle', display: 'inline-block' }}>
+                <Spinner size="sm" color="#fff" />
+              </span>
+            )}
             {pinning ? 'Pinning…' : 'Pin as new baseline A'}
           </button>
         )}
@@ -146,7 +139,6 @@ export function ExperimentCompleteBanner({ onReset }: ExperimentCompleteBannerPr
           Start new experiment
         </button>
       </div>
-      <style>{`@keyframes bannerSpin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

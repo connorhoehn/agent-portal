@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Spinner } from '@connorhoehnslalom/ui-components/shared';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -187,17 +188,7 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
         >
           {uploading ? (
             <>
-              <span
-                style={{
-                  width: 12,
-                  height: 12,
-                  borderRadius: '50%',
-                  border: '2px solid #fff',
-                  borderTopColor: 'transparent',
-                  animation: 'kb-spin 0.7s linear infinite',
-                  display: 'inline-block',
-                }}
-              />
+              <Spinner size="sm" color="#fff" />
               Uploading…
             </>
           ) : (
@@ -213,9 +204,6 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
           onChange={handleFileSelected}
         />
       </div>
-
-      {/* Inline keyframe (same name as ProvisioningProgress — deduped by browser) */}
-      <style>{`@keyframes kb-spin { to { transform: rotate(360deg); } }`}</style>
 
       {/* Error banner */}
       {error && (

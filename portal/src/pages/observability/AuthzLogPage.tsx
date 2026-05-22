@@ -3,6 +3,7 @@
 // buffered + streamed events.
 
 import { useEffect, useMemo, useState } from 'react';
+import { Chip } from '@connorhoehnslalom/ui-components/shared';
 
 interface AuthzEvent {
   decision: 'ALLOW' | 'DENY';
@@ -132,11 +133,9 @@ function AuthzLogPage() {
                   {new Date(e.ts).toLocaleTimeString()}
                 </td>
                 <td style={td}>
-                  <span style={{
-                    ...badge,
-                    background: e.decision === 'ALLOW' ? '#d1fae5' : '#fee2e2',
-                    color: e.decision === 'ALLOW' ? '#065f46' : '#991b1b',
-                  }}>{e.decision}</span>
+                  <Chip tone={e.decision === 'ALLOW' ? 'success' : 'danger'} size="xs">
+                    {e.decision}
+                  </Chip>
                 </td>
                 <td style={{ ...td, fontFamily: 'ui-monospace, monospace' }}>{e.role}</td>
                 <td style={{ ...td, fontWeight: 500 }}>{e.action}</td>
@@ -201,15 +200,6 @@ const th: React.CSSProperties = {
 const td: React.CSSProperties = {
   padding: '6px 12px',
   verticalAlign: 'top',
-};
-
-const badge: React.CSSProperties = {
-  display: 'inline-block',
-  padding: '2px 8px',
-  fontSize: 10,
-  fontWeight: 700,
-  letterSpacing: 0.5,
-  borderRadius: 'var(--radius-sm, 4px)',
 };
 
 export default AuthzLogPage;

@@ -2,7 +2,7 @@
 // against AVP. Shows the decision and the determining policy IDs.
 
 import { useMemo, useState } from 'react';
-import { TagEditor } from '@connorhoehnslalom/ui-components/shared';
+import { TagEditor, Chip } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 interface SchemaResponse {
@@ -160,12 +160,12 @@ function PolicyTestPage() {
 }
 
 function DecisionBadge({ value, hasError }: { value?: string; hasError: boolean }) {
-  if (hasError) return <span style={{ ...badge, background: '#fee2e2', color: '#991b1b' }}>ERROR</span>;
+  if (hasError) return <Chip tone="danger" size="sm" style={{ minWidth: 60, textAlign: 'center' }}>ERROR</Chip>;
   const allow = value === 'ALLOW';
   return (
-    <span style={{ ...badge, background: allow ? '#d1fae5' : '#fee2e2', color: allow ? '#065f46' : '#991b1b' }}>
+    <Chip tone={allow ? 'success' : 'danger'} size="sm" style={{ minWidth: 60, textAlign: 'center' }}>
       {value ?? '—'}
-    </span>
+    </Chip>
   );
 }
 
@@ -195,17 +195,6 @@ const resultRow: React.CSSProperties = {
   background: 'var(--color-surface)',
   border: '1px solid var(--color-border)',
   borderRadius: 'var(--radius-md)',
-};
-
-const badge: React.CSSProperties = {
-  display: 'inline-block',
-  padding: '4px 10px',
-  fontSize: 11,
-  fontWeight: 700,
-  letterSpacing: 0.5,
-  borderRadius: 'var(--radius-sm, 4px)',
-  minWidth: 60,
-  textAlign: 'center',
 };
 
 const policyChip: React.CSSProperties = {

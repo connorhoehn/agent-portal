@@ -4,7 +4,7 @@
 // the rejection text surfaces inline.
 
 import { useEffect, useMemo, useState } from 'react';
-import { TagEditor } from '@connorhoehnslalom/ui-components/shared';
+import { TagEditor, CollapsibleSection } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 interface SchemaResponse {
@@ -143,10 +143,9 @@ function SchemaPage() {
         </div>
       </article>
 
-      <details>
-        <summary style={{ fontSize: 11, color: 'var(--color-text-tertiary)', cursor: 'pointer' }}>Raw schema (JSON)</summary>
+      <CollapsibleSection title="Raw schema (JSON)" defaultOpen={false}>
         <pre style={preBlock}>{JSON.stringify(data.schema, null, 2)}</pre>
-      </details>
+      </CollapsibleSection>
     </div>
   );
 }

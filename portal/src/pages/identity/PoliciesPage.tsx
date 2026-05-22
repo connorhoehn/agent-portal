@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CodeEditor, TagEditor, ConfirmDialog } from '@connorhoehnslalom/ui-components/shared';
+import { CodeEditor, TagEditor, ConfirmDialog, CollapsibleSection } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { parsePolicy, buildPolicy, type Effect, type ParsedPolicy } from '../../lib/cedarPolicy';
 
@@ -303,14 +303,11 @@ function PolicyEditor({
       ) : null}
 
       {draft.mode === 'builder' && draft.parsed && (
-        <details style={{ marginTop: 4 }}>
-          <summary style={{ fontSize: 11, color: 'var(--color-text-tertiary)', cursor: 'pointer' }}>
-            Cedar preview
-          </summary>
-          <div style={{ marginTop: 6 }}>
+        <div style={{ marginTop: 4 }}>
+          <CollapsibleSection title="Cedar preview" defaultOpen={false}>
             <CodeEditor value={draft.statement} onChange={() => undefined} readOnly minLines={4} maxLines={12} />
-          </div>
-        </details>
+          </CollapsibleSection>
+        </div>
       )}
 
       {draft.mode === 'raw' && (
@@ -415,12 +412,11 @@ function ModeButton({ active, onClick, disabled, children }: { active: boolean; 
 function PolicySummary({ parsed, statement }: { parsed: ParsedPolicy | null; statement: string }) {
   if (!parsed) {
     return (
-      <details>
-        <summary style={{ fontSize: 11, color: 'var(--color-text-tertiary)', cursor: 'pointer', marginTop: 8 }}>
-          Cedar source (advanced — no builder representation)
-        </summary>
-        <pre style={preBlock}>{statement || '(empty)'}</pre>
-      </details>
+      <div style={{ marginTop: 8 }}>
+        <CollapsibleSection title="Cedar source (advanced — no builder representation)" defaultOpen={false}>
+          <pre style={preBlock}>{statement || '(empty)'}</pre>
+        </CollapsibleSection>
+      </div>
     );
   }
   return (
@@ -435,12 +431,9 @@ function PolicySummary({ parsed, statement }: { parsed: ParsedPolicy | null; sta
           <span key={a} style={actionChip}>{a}</span>
         ))}
       </div>
-      <details>
-        <summary style={{ fontSize: 11, color: 'var(--color-text-tertiary)', cursor: 'pointer' }}>
-          Cedar source
-        </summary>
+      <CollapsibleSection title="Cedar source" defaultOpen={false}>
         <pre style={preBlock}>{statement}</pre>
-      </details>
+      </CollapsibleSection>
     </div>
   );
 }

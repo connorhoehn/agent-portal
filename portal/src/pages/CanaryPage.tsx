@@ -19,6 +19,7 @@ import {
 } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { ThinkingDots } from '@connorhoehnslalom/ui-components/shared';
 import { nodeTypes, edgeTypes } from '../components/canary/index.js';
 import { useCanaryStream } from '../components/canary/useCanaryStream.js';
 import {
@@ -372,7 +373,7 @@ function ScenarioTableRow({
             {score.toFixed(2)}
           </span>
         ) : row.phase === 'running' ? (
-          <MiniDots />
+          <ThinkingDots size="sm" color="var(--color-primary, #6366f1)" />
         ) : (
           <span style={{ color: 'var(--color-text-tertiary, #94a3b8)' }}>—</span>
         )}
@@ -424,23 +425,6 @@ function StatusPip({ phase, hasScore, errorMsg }: { phase: RowPhase; hasScore: b
   // done
   if (!hasScore) return <span style={{ fontSize: 10, color: '#d97706' }}>judging…</span>;
   return <span style={{ fontSize: 10, color: '#16a34a', fontWeight: 600 }}>✓ scored</span>;
-}
-
-function MiniDots(): React.ReactElement {
-  return (
-    <span style={{ display: 'inline-flex', gap: 2, alignItems: 'center' }}>
-      {[0, 1, 2].map((i) => (
-        <span key={i} style={{
-          width: 4, height: 4, borderRadius: '50%',
-          background: 'var(--color-primary, #6366f1)',
-          display: 'inline-block',
-          animation: 'canaryDot 1.2s ease-in-out infinite',
-          animationDelay: `${i * 0.2}s`,
-        }} />
-      ))}
-      <style>{`@keyframes canaryDot { 0%,80%,100%{opacity:.2;transform:scale(.8)} 40%{opacity:1;transform:scale(1)} }`}</style>
-    </span>
-  );
 }
 
 // ── Focus map ─────────────────────────────────────────────────────────────────
