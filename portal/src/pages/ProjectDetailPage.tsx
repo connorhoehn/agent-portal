@@ -87,7 +87,7 @@ const PRIORITY_STYLES: Record<WorkItemPriority, { color: string; label: string }
 // `merged` purple identity is intentional — distinguishes merged PRs from open
 // (success) and closed (danger); no purple token exists in app.css yet.
 const PR_STYLES: Record<PrStatus, { bg: string; text: string; icon: string }> = {
-  merged: { bg: '#f5f3ff',                  text: '#7c3aed',                     icon: '⬡' },
+  merged: { bg: '#f5f3ff',                  text: 'var(--color-optimize)',        icon: '⬡' },
   open:   { bg: 'var(--color-success-bg)',  text: 'var(--color-success)',        icon: '⊙' },
   draft:  { bg: 'var(--color-bg)',          text: 'var(--color-text-secondary)', icon: '⊘' },
   closed: { bg: 'var(--color-danger-bg)',   text: 'var(--color-danger)',         icon: '✕' },
@@ -632,8 +632,7 @@ function DecisionQueue({ decisions }: { decisions: ProjectDecision[] }) {
               {d.requiredRole && (
                 <span style={{
                   padding: '2px 10px', borderRadius: 9999, fontSize: 11, fontWeight: 600,
-                  // purple "needs role" badge — distinct from status colors (kept as raw hex by design)
-                  background: '#f5f3ff', color: '#5b21b6', flexShrink: 0,
+                  background: '#f5f3ff', color: 'var(--color-optimize-hover)', flexShrink: 0,
                 }}>
                   needs {d.requiredRole}
                 </span>

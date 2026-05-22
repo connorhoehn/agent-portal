@@ -41,7 +41,7 @@ const ACTION_COLOR: Record<ControllerAction, string> = {
   PROMOTE: '#16a34a',
   ROLLBACK: '#dc2626',
   HOLD: '#64748b',
-  SKIPPED_OVERRIDE: '#7c3aed',
+  SKIPPED_OVERRIDE: 'var(--color-optimize)',
   SKIPPED_COOLDOWN: '#94a3b8',
   SKIPPED_NO_SAMPLES: '#94a3b8',
 };

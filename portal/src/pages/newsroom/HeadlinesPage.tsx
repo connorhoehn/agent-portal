@@ -62,7 +62,7 @@ const ANGLE_COLORS: Record<string, { bg: string; text: string }> = {
   QUESTION:     { bg: '#fef9c3', text: '#854d0e' },
   SURPRISE:     { bg: '#fce7f3', text: '#9d174d' },
   'LIST-FORMAT':{ bg: '#dcfce7', text: '#166534' },
-  'QUOTE-STYLE':{ bg: '#ede9fe', text: '#5b21b6' },
+  'QUOTE-STYLE':{ bg: '#ede9fe', text: 'var(--color-optimize-hover)' },
 };
 
 function AngleBadge({ angle }: { angle: string }) {

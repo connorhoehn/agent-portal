@@ -106,7 +106,7 @@ const comboboxItemStyle: CSSProperties = {
 };
 const comboboxItemHighStyle: CSSProperties = {
   padding: '7px 10px', fontSize: 12, cursor: 'pointer',
-  background: 'var(--color-primary-subtle, #ede9fe)', color: '#7c3aed', userSelect: 'none',
+  background: 'var(--color-primary-subtle, #ede9fe)', color: 'var(--color-optimize)', userSelect: 'none',
 };
 const testVarTextareaStyle: CSSProperties = {
   padding: '7px 10px', fontSize: 12, border: '1px solid var(--color-border, #e2e8f0)',
@@ -282,7 +282,7 @@ function HighlightedLine({ line }: { line: string }): React.ReactElement {
     <>
       {parts.map((part, i) =>
         /^{{[^}]+}}$/.test(part) ? (
-          <span key={i} style={{ color: '#7c3aed', fontWeight: 600 }}>{part}</span>
+          <span key={i} style={{ color: 'var(--color-optimize)', fontWeight: 600 }}>{part}</span>
         ) : (
           <span key={i}>{part}</span>
         ),
@@ -645,7 +645,7 @@ function EditPanel({
               type="range" min={0} max={1} step={0.01}
               value={temperature !== '' ? temperature : (baselineInf?.temperature ?? 0.7)}
               onChange={(e) => setTemperature(e.target.value)}
-              style={{ width: '100%', marginTop: 6, accentColor: '#7c3aed' }}
+              style={{ width: '100%', marginTop: 6, accentColor: 'var(--color-optimize)' }}
             />
           </label>
           <label style={fieldLabelStyle}>
@@ -950,12 +950,11 @@ function TestPanel({
                 </select>
               </label>
 
-              {/* TODO: replace with --color-optimize token when design adds it */}
               <Button
                 variant="primary"
                 onClick={() => { void handleOptimize(); }}
                 disabled={optimizing || !templateText}
-                style={{ background: '#7c3aed', borderColor: '#7c3aed', color: '#fff' }}
+                style={{ background: 'var(--color-optimize)', borderColor: 'var(--color-optimize)', color: '#fff' }}
               >
                 {optimizing ? 'Optimizing…' : 'Optimize template'}
               </Button>
@@ -971,14 +970,13 @@ function TestPanel({
                     {optimizedText}
                   </pre>
                   {!copied ? (
-                    // TODO: replace with --color-optimize token when design adds it
                     <Button
                       variant="secondary"
                       onClick={() => {
                         navigator.clipboard.writeText(optimizedText).catch(() => undefined);
                         setCopied(true);
                       }}
-                      style={{ borderColor: '#7c3aed', color: '#7c3aed' }}
+                      style={{ borderColor: 'var(--color-optimize)', color: 'var(--color-optimize)' }}
                     >
                       Copy to clipboard
                     </Button>
@@ -1076,9 +1074,9 @@ function starterChipStyle(active: boolean): CSSProperties {
   return {
     fontSize: 10, padding: '2px 8px', borderRadius: 10, cursor: 'pointer',
     fontFamily: 'inherit', fontWeight: active ? 600 : 400, border: '1px solid',
-    borderColor: active ? '#7c3aed' : 'var(--color-border, #e2e8f0)',
+    borderColor: active ? 'var(--color-optimize)' : 'var(--color-border, #e2e8f0)',
     background: active ? '#ede9fe' : 'var(--color-surface, #fff)',
-    color: active ? '#7c3aed' : 'var(--color-text-secondary)',
+    color: active ? 'var(--color-optimize)' : 'var(--color-text-secondary)',
     transition: 'all 0.1s',
   };
 }
@@ -1237,7 +1235,7 @@ function CreatePanel({
                 type="range" min={0} max={1} step={0.01}
                 value={temperature !== '' ? temperature : '0.7'}
                 onChange={e => setTemperature(e.target.value)}
-                style={{ width: '100%', marginTop: 6, accentColor: '#7c3aed' }}
+                style={{ width: '100%', marginTop: 6, accentColor: 'var(--color-optimize)' }}
                 disabled={saving}
               />
             </label>
@@ -1717,7 +1715,7 @@ const varChipStyle: CSSProperties = {
   fontSize: 11,
   padding: '2px 8px',
   background: '#ede9fe',
-  color: '#7c3aed',
+  color: 'var(--color-optimize)',
   borderRadius: 3,
   fontFamily: 'monospace',
   fontWeight: 600,
@@ -2045,7 +2043,7 @@ const testVarNameStyle: CSSProperties = {
   fontSize: 11,
   fontWeight: 600,
   fontFamily: 'monospace',
-  color: '#7c3aed',
+  color: 'var(--color-optimize)',
 };
 
 const testVarInputStyle: CSSProperties = {

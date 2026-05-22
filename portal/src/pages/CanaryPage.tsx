@@ -355,7 +355,7 @@ function ScenarioTableRow({
             padding: '1px 7px',
             borderRadius: 999,
             background: row.version === 'B' ? '#f3e8ff' : '#eff6ff',
-            color: row.version === 'B' ? '#7c3aed' : '#1d4ed8',
+            color: row.version === 'B' ? 'var(--color-optimize)' : '#1d4ed8',
             border: `1px solid ${row.version === 'B' ? '#d8b4fe' : '#bfdbfe'}`,
           }}>
             {row.version}
@@ -368,7 +368,7 @@ function ScenarioTableRow({
           <span style={{
             fontWeight: 600,
             fontSize: 12,
-            color: score >= 0.7 ? '#16a34a' : score >= 0.4 ? '#d97706' : '#dc2626',
+            color: score >= 0.7 ? 'var(--color-success)' : score >= 0.4 ? 'var(--color-warning)' : 'var(--color-danger)',
           }}>
             {score.toFixed(2)}
           </span>
@@ -404,11 +404,11 @@ function StatusPip({ phase, hasScore, errorMsg }: { phase: RowPhase; hasScore: b
   if (phase === 'idle') return <span style={{ fontSize: 10, color: 'var(--color-text-tertiary, #94a3b8)' }}>idle</span>;
   if (phase === 'error') return (
     <div style={{ textAlign: 'left' }}>
-      <span style={{ fontSize: 10, fontWeight: 600, color: '#dc2626' }}>● error</span>
+      <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-danger)' }}>● error</span>
       {errorMsg && (
         <div style={{
           fontSize: 10,
-          color: '#dc2626',
+          color: 'var(--color-danger)',
           opacity: 0.8,
           marginTop: 2,
           maxWidth: 200,

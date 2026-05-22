@@ -76,7 +76,7 @@ const ACTION_COLOR: Record<string, { bg: string; text: string }> = {
   PROMOTE:     { bg: 'var(--color-success-bg)', text: 'var(--color-success)' },
   ROLLBACK:    { bg: 'var(--color-danger-bg)', text: 'var(--color-danger)' },
   HALTED:      { bg: 'var(--color-warning-bg)', text: 'var(--color-warning)' },
-  IN_PROGRESS: { bg: '#ede9fe', text: '#5b21b6' },
+  IN_PROGRESS: { bg: '#ede9fe', text: 'var(--color-optimize-hover)' },
 };
 
 function fmtDate(iso: string): string {
@@ -414,7 +414,7 @@ export default function PromptHistoryPage(): React.ReactElement {
                 Compare two versions
               </label>
               {compareMode && selectedVersions.length === 2 && (
-                <span style={{ fontSize: 10, color: '#7c3aed' }}>
+                <span style={{ fontSize: 10, color: 'var(--color-optimize)' }}>
                   {selectedVersions[0]} ↔ {selectedVersions[1]}
                 </span>
               )}

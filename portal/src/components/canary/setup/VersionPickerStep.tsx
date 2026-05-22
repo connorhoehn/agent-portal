@@ -251,7 +251,7 @@ const rowDateStyle: CSSProperties = {
 
 const editableTagStyle: CSSProperties = {
   fontSize: 10,
-  color: '#7c3aed',
+  color: 'var(--color-optimize)',
   background: '#ede9fe',
   padding: '1px 5px',
   borderRadius: 3,

@@ -46,7 +46,7 @@ function formatDate(iso: string | null): string {
 // ─── Entity type chip ─────────────────────────────────────────────────────────
 
 const TYPE_COLORS: Record<string, { bg: string; text: string }> = {
-  person:       { bg: '#ede9fe', text: '#5b21b6' },
+  person:       { bg: '#ede9fe', text: 'var(--color-optimize-hover)' },
   organization: { bg: '#dbeafe', text: '#1e40af' },
   location:     { bg: '#dcfce7', text: '#166534' },
   product:      { bg: '#fef9c3', text: '#854d0e' },

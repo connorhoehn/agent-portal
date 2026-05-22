@@ -56,6 +56,10 @@
   --color-danger-border:  #f87171;
   --color-info-border:    #60a5fa;
   --color-border-field:   var(--color-border, #e2e8f0);
+
+  /* Feature identity colors */
+  --color-optimize: #7c3aed;         /* canary / optimize feature identity */
+  --color-optimize-hover: #5b21b6;   /* darker hover/pressed state */
 }
 
 body {

@@ -23,7 +23,7 @@ function TemplateHighlighted({ text }: { text: string }): React.ReactElement {
       {parts.map((part, i) => {
         if (/^{{[^}]+}}$/.test(part)) {
           return (
-            <span key={i} style={{ color: '#7c3aed' }}>
+            <span key={i} style={{ color: 'var(--color-optimize)' }}>
               {part}
             </span>
           );

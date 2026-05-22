@@ -89,7 +89,7 @@ const ObservabilityHarnessRunDetailPage = lazy(() => import('./pages/observabili
 const ObservabilityHarnessCompareRunsPage = lazy(() => import('./pages/observability/harness/CompareRunsPage'));
 
 function Loading() {
-  return <div style={{ padding: 24, color: '#94a3b8' }}>Loading...</div>;
+  return <div style={{ padding: 24, color: 'var(--color-text-tertiary)' }}>Loading...</div>;
 }
 
 function Page({ element }: { element: React.ReactNode }) {
