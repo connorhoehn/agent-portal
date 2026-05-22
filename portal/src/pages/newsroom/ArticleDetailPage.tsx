@@ -130,18 +130,16 @@ function SidebarSection({ title, children }: { title: string; children: React.Re
   );
 }
 
-// ─── Article reactions (Gap 4 — Phase 1.4) ───────────────────────────────────
+// ─── Article reactions (Phase 2.3) ───────────────────────────────────────────
 //
-// Wires useReactions('newsroom-articles') so editors can react to articles
-// with emoji. targetId = articleId filters the shared channel stream per article.
+// useReactions('newsroom-articles', { targetId: articleId }) filters the shared
+// channel stream to reactions for this specific article only (v0.7.6+).
+// react(emoji) inherits the hook-level targetId automatically.
 
 const REACTION_EMOJIS = ['👍', '❤️', '🎉', '🔥', '💡'] as const;
 
-function ArticleReactions({ articleId: _articleId }: { articleId: string }) {
-  // Channel: 'newsroom-articles' — shared across all articles.
-  // The current useReactions API returns channel-wide reactions; per-article
-  // scoping (via article-specific channels) is a Phase 2 enhancement.
-  const { reactions, react } = useReactions('newsroom-articles');
+function ArticleReactions({ articleId }: { articleId: string }) {
+  const { reactions, react } = useReactions('newsroom-articles', { targetId: articleId });
 
   return (
     <div style={reactionsRowStyle}>

@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
-    "@connorhoehn/realtime-modules": "github:connorhoehn/realtime-modules#f0435cdb1956b84868d3c0b2eaf37d7d137fe088",
+    "@connorhoehn/realtime-modules": "github:connorhoehn/realtime-modules#5f417f273f88c0272b84f1984108dc341a12f594",
     "@connorhoehnslalom/ui-components": "github:connorhoehnslalom/ui-components#540f453d3ee45d838100bdc4a243e62e32c9e2e8",
     "@xyflow/react": "^12.10.0",
     "amazon-cognito-identity-js": "^6.3.16",
