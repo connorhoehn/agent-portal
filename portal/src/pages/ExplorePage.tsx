@@ -14,6 +14,7 @@ import type { MENode, MEEdge } from '../components/multi-entity-graph/types';
 import {
   ChatComposer,
   MessageBubble,
+  Spinner,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
@@ -84,11 +85,6 @@ function filterEdges(edges: GraphRelationship[], topK: number, minStrength: numb
     perNodeCount.set(e.target, tCount + 1);
   }
   return kept;
-}
-
-function MeGraphKeyframes() {
-  // meGraphSpin keyframe is still used by the spinner card below.
-  return <style>{`@keyframes meGraphSpin { to{transform:rotate(360deg)} }`}</style>;
 }
 
 function buildSkillsMEGraph(d: SkillsGraphData): { nodes: MENode[]; edges: MEEdge[] } {
@@ -471,6 +467,8 @@ function ExplorePage() {
             <div ref={presenceRef} style={{ position: 'relative' }}>
               <button
                 onClick={() => setPresenceOpen(o => !o)}
+                aria-expanded={presenceOpen}
+                aria-haspopup="listbox"
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: 5,
                   padding: '3px 9px', borderRadius: 9999,
@@ -484,14 +482,14 @@ function ExplorePage() {
                 }}
               >
                 {activeFacet
-                  ? <><span style={{ width: 6, height: 6, borderRadius: '50%', background: activeFacet.dot, flexShrink: 0 }} />{activeFacet.label}</>
+                  ? <><span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: activeFacet.dot, flexShrink: 0 }} />{activeFacet.label}</>
                   : 'Today'
                 }
-                <span style={{ fontSize: 9, opacity: 0.5, marginLeft: 1 }}>▾</span>
+                <span aria-hidden="true" style={{ fontSize: 9, opacity: 0.5, marginLeft: 1 }}>▾</span>
               </button>
 
               {presenceOpen && (
-                <div style={{
+                <div role="listbox" style={{
                   position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 100,
                   background: 'var(--color-surface, #fff)',
                   border: '1px solid var(--color-border, #e2e8f0)',
@@ -509,6 +507,8 @@ function ExplorePage() {
                     return (
                       <button
                         key={key}
+                        role="option"
+                        aria-selected={active}
                         onClick={() => { setPresenceFilter(active ? null : key); setPresenceOpen(false); }}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 8, width: '100%',
@@ -518,10 +518,10 @@ function ExplorePage() {
                           cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
                         }}
                       >
-                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: dot, flexShrink: 0 }} />
+                        <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: dot, flexShrink: 0 }} />
                         <span style={{ flex: 1 }}>{label}</span>
                         <span style={{ fontSize: 11, color: 'var(--color-text-tertiary, #94a3b8)' }}>{count}</span>
-                        {active && <span style={{ fontSize: 11, color: 'var(--color-primary, #6366f1)', marginLeft: 2 }}>✓</span>}
+                        {active && <span aria-hidden="true" style={{ fontSize: 11, color: 'var(--color-primary, #6366f1)', marginLeft: 2 }}>✓</span>}
                       </button>
                     );
                   })}
@@ -573,7 +573,7 @@ function ExplorePage() {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                   {meLoading ? (
                     <div style={meStateCardStyle}>
-                      <div style={meStateSpinnerStyle} />
+                      <Spinner size="sm" />
                       <span>Loading {entityFilter} graph…</span>
                     </div>
                   ) : meError ? (
@@ -735,7 +735,6 @@ function ExplorePage() {
           </div>
         )}
       </div>
-      <MeGraphKeyframes />
     </div>
   );
 }
@@ -760,12 +759,6 @@ const meStateCardStyle: React.CSSProperties = {
   padding: '20px 28px', background: 'var(--color-surface)',
   border: '1px solid var(--color-border)', borderRadius: 8,
   fontSize: 13, color: 'var(--color-text-secondary)',
-};
-const meStateSpinnerStyle: React.CSSProperties = {
-  width: 20, height: 20, borderRadius: '50%',
-  border: '2px solid var(--color-border)',
-  borderTopColor: 'var(--color-primary, #6366f1)',
-  animation: 'meGraphSpin 0.8s linear infinite',
 };
 const chatPanelStyle: React.CSSProperties = {
   width: 380, flexShrink: 0, display: 'flex', flexDirection: 'column',

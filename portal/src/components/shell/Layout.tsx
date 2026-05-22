@@ -71,13 +71,15 @@ function PlatformGroup({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls="platform-nav-group"
         style={groupHeaderStyle(isOnAdmin)}
       >
         <span style={{ flex: 1, textAlign: 'left' }}>Platform</span>
-        <span style={{ fontSize: 9, opacity: 0.5 }}>{open ? '▾' : '▸'}</span>
+        <span aria-hidden="true" style={{ fontSize: 9, opacity: 0.5 }}>{open ? '▾' : '▸'}</span>
       </button>
       {open && (
-        <div style={{ paddingLeft: 8 }}>
+        <div id="platform-nav-group" style={{ paddingLeft: 8 }}>
           {visible.map((item) => (
             <NavLink
               key={item.path}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Avatar, AvatarGroup } from '@connorhoehnslalom/ui-components/shared';
+import { Avatar, AvatarGroup, SkeletonCard } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 
 // TODO(ui-components): ActivityFeed, ProjectCard are candidates
@@ -209,9 +209,16 @@ function useActivityRotation(allItems: ActivityItem[], staggerMs: number): Activ
     let interval: ReturnType<typeof setInterval>;
     const start = setTimeout(() => {
       interval = setInterval(() => {
-        const nextItem = allItems[poolIdxRef.current % allItems.length]!;
+        if (!allItems.length) return;
+        const nextItem = allItems[poolIdxRef.current % allItems.length];
+        if (!nextItem) return;
         poolIdxRef.current = (poolIdxRef.current + 1) % allItems.length;
-        setVisible(prev => [nextItem, prev[0]!, prev[1]!]);
+        setVisible(prev => {
+          const next: ActivityItem[] = [nextItem];
+          if (prev[0]) next.push(prev[0]);
+          if (prev[1]) next.push(prev[1]);
+          return next.slice(0, 3);
+        });
       }, ROTATE_MS);
     }, staggerMs);
     return () => {
@@ -392,7 +399,8 @@ function ProjectCard({ project, cardIndex, onClick }: {
   const staggerMs = (cardIndex % 8) * 525;
 
   return (
-    <div
+    <button
+      type="button"
       onClick={onClick}
       style={{
         background: '#fff',
@@ -404,6 +412,10 @@ function ProjectCard({ project, cardIndex, onClick }: {
         display: 'flex', flexDirection: 'column', gap: 10,
         transition: 'box-shadow 0.15s, transform 0.1s',
         minHeight: 190,
+        width: '100%',
+        textAlign: 'left',
+        font: 'inherit',
+        color: 'inherit',
       }}
       onMouseEnter={(e) => {
         (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)';
@@ -459,7 +471,7 @@ function ProjectCard({ project, cardIndex, onClick }: {
           <span style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap' }}>{activityLabel}</span>
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -479,7 +491,8 @@ function ProjectListRow({ project, onClick }: { project: ProjectSummary; onClick
   const overflow = project.contributorCount - topNames.length;
   const key = deriveProjectKey(project.id, project.name);
   return (
-    <div
+    <button
+      type="button"
       onClick={onClick}
       style={{
         display: 'grid',
@@ -488,10 +501,17 @@ function ProjectListRow({ project, onClick }: { project: ProjectSummary; onClick
         gap: 0,
         padding: '0 16px',
         background: '#fff',
+        borderTop: 'none',
+        borderLeft: 'none',
+        borderRight: 'none',
         borderBottom: '1px solid #f3f4f6',
         cursor: 'pointer',
         transition: 'background 0.1s',
         minHeight: 52,
+        width: '100%',
+        textAlign: 'left',
+        font: 'inherit',
+        color: 'inherit',
       }}
       onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#f9fafb'}
       onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = '#fff'}
@@ -529,7 +549,7 @@ function ProjectListRow({ project, onClick }: { project: ProjectSummary; onClick
         <span style={{ width: 6, height: 6, borderRadius: '50%', background: activityDot, flexShrink: 0 }} />
         <span style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap' }}>{activityLabel}</span>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -590,7 +610,7 @@ function ProjectsPage() {
     return (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14, padding: '0 0 40px' }}>
         {[1,2,3,4,5,6].map(i => (
-          <div key={i} style={{ height: 190, borderRadius: 10, background: '#f3f4f6', animation: 'pulse 1.4s ease-in-out infinite' }} />
+          <SkeletonCard key={i} height={190} />
         ))}
       </div>
     );
@@ -617,7 +637,6 @@ function ProjectsPage() {
         .proj-activity-row {
           animation: projActivityIn 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards;
         }
-        @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
       `}</style>
 
       <div style={{ padding: '0 0 40px' }}>

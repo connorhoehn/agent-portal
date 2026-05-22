@@ -47,6 +47,8 @@ export function MasqueradeMenu() {
       <button
         onClick={() => setOpen(o => !o)}
         disabled={busy}
+        aria-haspopup="menu"
+        aria-expanded={open}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -60,16 +62,18 @@ export function MasqueradeMenu() {
           fontSize: 13,
         }}
       >
-        <span style={{
+        <span aria-hidden="true" style={{
           width: 8, height: 8, borderRadius: '50%',
           background: roleColor(session.role),
         }} />
         <span style={{ fontWeight: 500 }}>{ROLE_LABELS[session.role]}</span>
-        <span style={{ color: 'var(--color-text-tertiary)', fontSize: 11 }}>masquerade ▾</span>
+        <span style={{ color: 'var(--color-text-tertiary)', fontSize: 11 }}>
+          masquerade <span aria-hidden="true">▾</span>
+        </span>
       </button>
 
       {open && (
-        <div style={{
+        <div role="menu" style={{
           position: 'absolute',
           top: 'calc(100% + 6px)',
           right: 0,
@@ -97,6 +101,7 @@ export function MasqueradeMenu() {
                 key={role}
                 onClick={() => void switchTo(role)}
                 disabled={busy}
+                role="menuitem"
                 style={{
                   width: '100%',
                   textAlign: 'left',
@@ -112,7 +117,7 @@ export function MasqueradeMenu() {
                 }}
               >
                 <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: active ? 600 : 400 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: roleColor(role) }} />
+                  <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: roleColor(role) }} />
                   {ROLE_LABELS[role]}
                   {active && <span style={{ marginLeft: 'auto', color: 'var(--color-text-tertiary)', fontSize: 10 }}>active</span>}
                 </span>
