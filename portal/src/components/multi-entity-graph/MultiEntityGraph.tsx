@@ -414,12 +414,14 @@ export function MultiEntityGraph({ nodes, edges, selectedIds, onToggleSelect, ma
           </marker>
         </defs>
         <g transform={`translate(${transform.x},${transform.y}) scale(${transform.scale})`}>
-          {simLinks.map((link, i) => {
+          {simLinks.map((link) => {
             const dimLink = highlighted && !highlighted.has(link.source.id) && !highlighted.has(link.target.id);
             const isTaxonomy = link.type === 'belongs_to' || link.type === 'in_status';
+            const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+            const targetId = typeof link.target === 'object' ? link.target.id : link.target;
             return (
               <line
-                key={i}
+                key={`${sourceId}-${targetId}`}
                 x1={link.source.x} y1={link.source.y}
                 x2={link.target.x} y2={link.target.y}
                 stroke="#94a3b8"

@@ -124,8 +124,10 @@ export function useForceLayout({ people, relationships, departments, width, heig
       };
     });
 
+    const peopleIds = new Set(people.map(p => p.id));
+
     const simLinks: GraphLink[] = relationships
-      .filter(r => people.some(p => p.id === r.source) && people.some(p => p.id === r.target))
+      .filter(r => peopleIds.has(r.source) && peopleIds.has(r.target))
       .map(r => ({ source: r.source, target: r.target, type: r.type, strength: r.strength }));
 
     const sim = forceSimulation<GraphNode>(simNodes)

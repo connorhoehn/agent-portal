@@ -41,15 +41,17 @@ function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function findMentionedPeople(text: string, people: GraphPerson[]): GraphPerson[] {
-  if (!text || people.length === 0) return [];
-  // Sort longest-name first so "Sarah Ahmed" wins over "Sarah".
-  const sorted = [...people].sort((a, b) => b.name.length - a.name.length);
+function findMentionedPeople(
+  text: string,
+  sortedPeople: GraphPerson[],
+  regexes: Map<string, RegExp>,
+): GraphPerson[] {
+  if (!text || sortedPeople.length === 0) return [];
   const stripped = text.replace(/\*\*([^*]+)\*\*/g, '$1');
   const matched = new Map<string, GraphPerson>();
-  for (const p of sorted) {
-    const re = new RegExp(`(?<![\\w])${escapeRe(p.name)}(?![\\w])`, 'i');
-    if (re.test(stripped)) matched.set(p.id, p);
+  for (const p of sortedPeople) {
+    const re = regexes.get(p.id);
+    if (re && re.test(stripped)) matched.set(p.id, p);
   }
   return Array.from(matched.values());
 }
@@ -208,14 +210,32 @@ function SearchPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages, streamingText]);
 
+  // Pre-compile one RegExp per person, sorted longest-name first so "Sarah Ahmed"
+  // wins over "Sarah". Recomputed only when the people list itself changes —
+  // not on every streaming token tick.
+  const sortedPeople = useMemo<GraphPerson[]>(() => {
+    if (!graph?.nodes) return [];
+    return [...graph.nodes].sort((a, b) => b.name.length - a.name.length);
+  }, [graph?.nodes]);
+
+  const mentionRegexes = useMemo<Map<string, RegExp>>(
+    () => new Map(
+      sortedPeople.map(p => [
+        p.id,
+        new RegExp(`(?<![\\w])${escapeRe(p.name)}(?![\\w])`, 'i'),
+      ]),
+    ),
+    [sortedPeople],
+  );
+
   const mentionedPeople = useMemo<GraphPerson[]>(() => {
     if (!graph?.nodes) return [];
     // Combine the last assistant message + the currently-streaming text so
     // people light up as they're typed.
     const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
     const combined = [lastAssistant?.content ?? '', streamingText].join(' ');
-    return findMentionedPeople(combined, graph.nodes);
-  }, [graph, messages, streamingText]);
+    return findMentionedPeople(combined, sortedPeople, mentionRegexes);
+  }, [graph, messages, streamingText, sortedPeople, mentionRegexes]);
 
   function handleSend() {
     if (!input.trim() || isStreaming) return;

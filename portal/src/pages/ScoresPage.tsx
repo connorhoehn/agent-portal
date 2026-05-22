@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { PageSection } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
@@ -25,14 +25,23 @@ function ScoresPage() {
   const rawW = parseFloat(searchParams.get('w') ?? '');
   const initWeight = isNaN(rawW) || rawW < 0 || rawW > 1 ? 0.55 : rawW;
   const [weight, setWeight] = useState<number>(initWeight);
+  const urlSyncTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
-    if (weight === 0.55) {
-      setSearchParams((prev: URLSearchParams) => { prev.delete('w'); return prev; }, { replace: true });
-    } else {
-      setSearchParams({ w: weight.toString() }, { replace: true });
-    }
-  }, [weight]);
+    return () => { if (urlSyncTimerRef.current) clearTimeout(urlSyncTimerRef.current); };
+  }, []);
+
+  const handleWeightChange = useCallback((newWeight: number) => {
+    setWeight(newWeight);
+    if (urlSyncTimerRef.current) clearTimeout(urlSyncTimerRef.current);
+    urlSyncTimerRef.current = setTimeout(() => {
+      if (newWeight === 0.55) {
+        setSearchParams((prev: URLSearchParams) => { prev.delete('w'); return prev; }, { replace: true });
+      } else {
+        setSearchParams({ w: newWeight.toString() }, { replace: true });
+      }
+    }, 300);
+  }, [setSearchParams]);
 
   const { data: detail } = useFetch<PersonDetail>(
     selectedId ? `/api/graph/people/${encodeURIComponent(selectedId)}` : '',
@@ -110,7 +119,7 @@ function ScoresPage() {
 
       <SkillFilter selectedSkill={skillFilter} onChange={setSkillFilter} />
 
-      <WeightSlider value={weight} onChange={setWeight} />
+      <WeightSlider value={weight} onChange={handleWeightChange} />
 
       <DepartmentFilter
         departments={departments}

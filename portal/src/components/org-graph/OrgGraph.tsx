@@ -145,16 +145,20 @@ export function OrgGraph({
           </marker>
         </defs>
         <g transform={`translate(${transform.x}, ${transform.y}) scale(${transform.scale})`}>
-          {links.map((link, i) => (
-            <OrgGraphEdge
-              key={i}
-              source={link.source}
-              target={link.target}
-              type={link.type}
-              strength={link.strength}
-              isHighlighted={!activeId || highlighted.has(link.source.id) && highlighted.has(link.target.id)}
-            />
-          ))}
+          {links.map((link) => {
+            const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+            const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+            return (
+              <OrgGraphEdge
+                key={`${sourceId}-${targetId}`}
+                source={link.source}
+                target={link.target}
+                type={link.type}
+                strength={link.strength}
+                isHighlighted={!activeId || highlighted.has(link.source.id) && highlighted.has(link.target.id)}
+              />
+            );
+          })}
           {nodes.map(node => {
             const isSelected = multiSelectIds
               ? multiSelectIds.has(node.id)
