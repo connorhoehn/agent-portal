@@ -46,7 +46,7 @@ services:
       context: ./middleware
       target: development
       additional_contexts:
-        realtime_modules: ../websocket-gateway/realtime-modules
+        realtime_modules: ../realtime-modules
     container_name: orgiq-middleware
     ports:
       - "3001:3001"
@@ -70,7 +70,7 @@ services:
       target: development
       additional_contexts:
         ui_components: ../ui-components
-        realtime_modules: ../websocket-gateway/realtime-modules
+        realtime_modules: ../realtime-modules
     container_name: orgiq-portal
     ports:
       - "5183:5183"

@@ -36,7 +36,7 @@ Deploys OrgIQ portal + middleware to a Kubernetes cluster using the
 ## Step 1 — Build + push images
 
 Use `scripts/build.sh` from the project root. Sibling repos
-(`../ui-components`, `../websocket-gateway/realtime-modules`) must be
+(`../ui-components`, `../realtime-modules`) must be
 checked out; they are injected as Docker build contexts at build time.
 
 ```bash

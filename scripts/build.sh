@@ -22,7 +22,7 @@
 #
 # Sibling repos required at build time:
 #   ../ui-components          — injected into portal build via --build-context ui_components
-#   ../websocket-gateway/realtime-modules — injected into both builds via --build-context realtime_modules
+#   ../realtime-modules       — injected into both builds via --build-context realtime_modules
 #
 # Run this from the project root (aws-agentcore/).
 
@@ -50,19 +50,26 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-REALTIME_MODULES_DIR="${PROJECT_ROOT}/../websocket-gateway/realtime-modules"
+REALTIME_MODULES_DIR="${PROJECT_ROOT}/../realtime-modules"
 UI_COMPONENTS_DIR="${PROJECT_ROOT}/../ui-components"
+
+verify_sibling() {
+  local name=$1
+  local path="${PROJECT_ROOT}/../${name}"
+  if [ ! -d "$path" ]; then
+    echo "ERROR: Sibling repo not found at $path" >&2
+    echo "  Clone https://github.com/connorhoehn/$name beside aws-agentcore" >&2
+    exit 1
+  fi
+}
+
+verify_sibling realtime-modules
+verify_sibling ui-components
 
 build_middleware() {
   local image="${REGISTRY}/orgiq-middleware:${TAG}"
   echo
   echo "=== Building ${image} ==="
-
-  if [[ ! -d "${REALTIME_MODULES_DIR}" ]]; then
-    echo "ERROR: realtime-modules not found at ${REALTIME_MODULES_DIR}" >&2
-    echo "  Clone websocket-gateway as a sibling of this repo." >&2
-    exit 1
-  fi
 
   docker build \
     --target production \
@@ -81,18 +88,6 @@ build_portal() {
   local image="${REGISTRY}/orgiq-portal:${TAG}"
   echo
   echo "=== Building ${image} ==="
-
-  if [[ ! -d "${REALTIME_MODULES_DIR}" ]]; then
-    echo "ERROR: realtime-modules not found at ${REALTIME_MODULES_DIR}" >&2
-    echo "  Clone websocket-gateway as a sibling of this repo." >&2
-    exit 1
-  fi
-
-  if [[ ! -d "${UI_COMPONENTS_DIR}" ]]; then
-    echo "ERROR: ui-components not found at ${UI_COMPONENTS_DIR}" >&2
-    echo "  Clone ui-components as a sibling of this repo." >&2
-    exit 1
-  fi
 
   docker build \
     --target production \
