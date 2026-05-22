@@ -1,4 +1,5 @@
-import { SubNavLayout, type SubNavItem } from '../../components/shell/SubNavLayout';
+import { NavLink, Outlet } from 'react-router';
+import { SubNavLayout, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import type { CrawlSession, CrawlTarget } from '../../components/ingest/types';
 
@@ -26,7 +27,26 @@ function IngestLayout() {
     { path: 'schedules', label: 'Schedules',     hint: 'KB sync cron' },
   ];
 
-  return <SubNavLayout title="Ingest" items={items} />;
+  return (
+    <SubNavLayout
+      title="Ingest"
+      items={items}
+      renderNavItem={(item, children, baseStyle) => (
+        <NavLink
+          to={item.path}
+          style={({ isActive }) =>
+            isActive
+              ? { ...baseStyle, borderLeft: '3px solid var(--color-primary)', background: 'var(--color-surface-hover)', color: 'var(--color-text-primary)' }
+              : baseStyle
+          }
+        >
+          {children}
+        </NavLink>
+      )}
+    >
+      <Outlet />
+    </SubNavLayout>
+  );
 }
 
 export default IngestLayout;

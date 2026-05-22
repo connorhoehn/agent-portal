@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Avatar, AvatarGroup, SkeletonCard } from '@connorhoehnslalom/ui-components/shared';
+import {
+  AvatarGroup,
+  SkeletonCard,
+  ProjectCard,
+} from '@connorhoehnslalom/ui-components/shared';
+import type { ActivityFeedItem } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
-
-// TODO(ui-components): ActivityFeed, ProjectCard are candidates
-// for @connorhoehnslalom/ui-components/shared project-management domain.
 
 interface ProjectSummary {
   id: string;
@@ -19,6 +21,14 @@ interface ProjectSummary {
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
+const STATUS_OPTIONS = ['all', 'active', 'in_progress', 'planning', 'completed', 'archived'];
+const STATUS_LABELS: Record<string, string> = {
+  all: 'All', active: 'Active', in_progress: 'In Progress',
+  planning: 'Planning', completed: 'Completed', archived: 'Archived',
+};
+
+// ─── Status color helpers (for list-view and StatusChip) ─────────────────────
+
 const STATUS_COLORS: Record<string, { bg: string; border: string; text: string; accent: string }> = {
   active:       { bg: '#f0fdf4', border: '#86efac', text: '#166534', accent: '#16a34a' },
   in_progress:  { bg: '#eff6ff', border: '#93c5fd', text: '#1e40af', accent: '#3b82f6' },
@@ -26,34 +36,6 @@ const STATUS_COLORS: Record<string, { bg: string; border: string; text: string; 
   archived:     { bg: '#f9fafb', border: '#d1d5db', text: '#6b7280', accent: '#9ca3af' },
   planning:     { bg: '#fefce8', border: '#fde047', text: '#713f12', accent: '#eab308' },
   paused:       { bg: '#fff7ed', border: '#fdba74', text: '#9a3412', accent: '#f97316' },
-};
-
-const STATUS_OPTIONS = ['all', 'active', 'in_progress', 'planning', 'completed', 'archived'];
-const STATUS_LABELS: Record<string, string> = {
-  all: 'All', active: 'Active', in_progress: 'In Progress',
-  planning: 'Planning', completed: 'Completed', archived: 'Archived',
-};
-
-// ─── Activity feed types ──────────────────────────────────────────────────────
-
-type ActivityType = 'task' | 'pr' | 'decision' | 'comment' | 'status';
-
-interface ActivityItem {
-  id: string;
-  actor: string;     // full name, e.g. "Alex Chen"
-  action: string;    // verb phrase, e.g. "completed"
-  ticketId: string;  // Jira-style ID, e.g. "K8S-182"
-  subject: string;   // short title, e.g. "Node pool autoscaler config"
-  timeLabel: string;
-  type: ActivityType;
-}
-
-const TYPE_DOT: Record<ActivityType, string> = {
-  task:     '#10b981',
-  pr:       '#6366f1',
-  decision: '#f59e0b',
-  comment:  '#94a3b8',
-  status:   '#3b82f6',
 };
 
 // ─── Project key derivation ───────────────────────────────────────────────────
@@ -82,67 +64,67 @@ function deriveProjectKey(projectId: string, projectName: string): string {
 // ─── Mock activity feeds ──────────────────────────────────────────────────────
 // ticketId: "KEY-NNN", subject: clean task title (no # prefix)
 
-const MOCK_FEED: Record<string, ActivityItem[]> = {
+const MOCK_FEED: Record<string, ActivityFeedItem[]> = {
   'proj-k8s': [
-    { id: 'k1', actor: 'Alex Chen',    action: 'completed',         ticketId: 'K8S-182', subject: 'Node pool autoscaler config',     timeLabel: '2m ago',  type: 'task' },
-    { id: 'k2', actor: 'Maria Santos', action: 'merged',            ticketId: 'K8S-179', subject: 'etcd backup script',              timeLabel: '8m ago',  type: 'pr' },
-    { id: 'k3', actor: 'Priya Patel',  action: 'created',           ticketId: 'K8S-183', subject: 'Upgrade CoreDNS to 1.11',         timeLabel: '23m ago', type: 'task' },
-    { id: 'k4', actor: 'Ahmed Hassan', action: 'commented on',      ticketId: 'K8S-176', subject: 'cluster version pinning',         timeLabel: '45m ago', type: 'comment' },
-    { id: 'k5', actor: 'Alex Chen',    action: 'closed',            ticketId: 'K8S-171', subject: 'kube-proxy DaemonSet rollout',    timeLabel: '1h ago',  type: 'status' },
-    { id: 'k6', actor: 'Maria Santos', action: 'merged',            ticketId: 'K8S-168', subject: 'node-local DNS cache',            timeLabel: '2h ago',  type: 'pr' },
-    { id: 'k7', actor: "Ryan O'Brien", action: 'updated',           ticketId: 'K8S-162', subject: 'cluster upgrade runbook',         timeLabel: '3h ago',  type: 'task' },
-    { id: 'k8', actor: 'Priya Patel',  action: 'created',           ticketId: 'K8S-184', subject: 'pod security admission controls', timeLabel: '4h ago',  type: 'task' },
+    { id: 'k1', actor: 'Alex Chen',    action: 'completed',         ticketId: 'K8S-182', subject: 'Node pool autoscaler config',     timeLabel: '2m ago',  kind: 'task' },
+    { id: 'k2', actor: 'Maria Santos', action: 'merged',            ticketId: 'K8S-179', subject: 'etcd backup script',              timeLabel: '8m ago',  kind: 'pr' },
+    { id: 'k3', actor: 'Priya Patel',  action: 'created',           ticketId: 'K8S-183', subject: 'Upgrade CoreDNS to 1.11',         timeLabel: '23m ago', kind: 'task' },
+    { id: 'k4', actor: 'Ahmed Hassan', action: 'commented on',      ticketId: 'K8S-176', subject: 'cluster version pinning',         timeLabel: '45m ago', kind: 'comment' },
+    { id: 'k5', actor: 'Alex Chen',    action: 'closed',            ticketId: 'K8S-171', subject: 'kube-proxy DaemonSet rollout',    timeLabel: '1h ago',  kind: 'status' },
+    { id: 'k6', actor: 'Maria Santos', action: 'merged',            ticketId: 'K8S-168', subject: 'node-local DNS cache',            timeLabel: '2h ago',  kind: 'pr' },
+    { id: 'k7', actor: "Ryan O'Brien", action: 'updated',           ticketId: 'K8S-162', subject: 'cluster upgrade runbook',         timeLabel: '3h ago',  kind: 'task' },
+    { id: 'k8', actor: 'Priya Patel',  action: 'created',           ticketId: 'K8S-184', subject: 'pod security admission controls', timeLabel: '4h ago',  kind: 'task' },
   ],
   'proj-istio': [
-    { id: 'i1', actor: 'Alex Chen',    action: 'merged',            ticketId: 'IST-91',  subject: 'mTLS policy for payments svc',    timeLabel: '5m ago',  type: 'pr' },
-    { id: 'i2', actor: 'Sophie Turner',action: 'decided',           ticketId: 'IST-88',  subject: 'Adopt Ambient mesh mode',         timeLabel: '30m ago', type: 'decision' },
-    { id: 'i3', actor: 'Priya Patel',  action: 'created',           ticketId: 'IST-92',  subject: 'Canary rollout for v1.20',        timeLabel: '1h ago',  type: 'task' },
-    { id: 'i4', actor: "Ryan O'Brien", action: 'updated',           ticketId: 'IST-79',  subject: 'traffic routing docs',            timeLabel: '2h ago',  type: 'task' },
-    { id: 'i5', actor: 'Alex Chen',    action: 'completed',         ticketId: 'IST-85',  subject: 'Envoy filter for JWT validation', timeLabel: '3h ago',  type: 'task' },
-    { id: 'i6', actor: 'Sophie Turner',action: 'commented on',      ticketId: 'IST-83',  subject: 'sidecar injection defaults',      timeLabel: '4h ago',  type: 'comment' },
+    { id: 'i1', actor: 'Alex Chen',    action: 'merged',            ticketId: 'IST-91',  subject: 'mTLS policy for payments svc',    timeLabel: '5m ago',  kind: 'pr' },
+    { id: 'i2', actor: 'Sophie Turner',action: 'decided',           ticketId: 'IST-88',  subject: 'Adopt Ambient mesh mode',         timeLabel: '30m ago', kind: 'decision' },
+    { id: 'i3', actor: 'Priya Patel',  action: 'created',           ticketId: 'IST-92',  subject: 'Canary rollout for v1.20',        timeLabel: '1h ago',  kind: 'task' },
+    { id: 'i4', actor: "Ryan O'Brien", action: 'updated',           ticketId: 'IST-79',  subject: 'traffic routing docs',            timeLabel: '2h ago',  kind: 'task' },
+    { id: 'i5', actor: 'Alex Chen',    action: 'completed',         ticketId: 'IST-85',  subject: 'Envoy filter for JWT validation', timeLabel: '3h ago',  kind: 'task' },
+    { id: 'i6', actor: 'Sophie Turner',action: 'commented on',      ticketId: 'IST-83',  subject: 'sidecar injection defaults',      timeLabel: '4h ago',  kind: 'comment' },
   ],
   'proj-cicd': [
-    { id: 'c1', actor: 'Maria Santos', action: 'merged',            ticketId: 'CICD-247',subject: 'parallel test runner',            timeLabel: '12m ago', type: 'pr' },
-    { id: 'c2', actor: 'Sophie Turner',action: 'created',           ticketId: 'CICD-251',subject: 'OIDC token caching for runners',  timeLabel: '35m ago', type: 'task' },
-    { id: 'c3', actor: 'James Wright', action: 'completed',         ticketId: 'CICD-239',subject: 'Migrate repo to GitHub Actions',  timeLabel: '2h ago',  type: 'task' },
-    { id: 'c4', actor: 'David Kim',    action: 'decided',           ticketId: 'CICD-232',subject: 'single pipeline template',        timeLabel: '3h ago',  type: 'decision' },
-    { id: 'c5', actor: 'Maria Santos', action: 'opened PR',         ticketId: 'CICD-244',subject: 'artifact retention policy',       timeLabel: '5h ago',  type: 'pr' },
-    { id: 'c6', actor: 'James Wright', action: 'commented on',      ticketId: 'CICD-228',subject: 'cache invalidation strategy',     timeLabel: '6h ago',  type: 'comment' },
+    { id: 'c1', actor: 'Maria Santos', action: 'merged',            ticketId: 'CICD-247',subject: 'parallel test runner',            timeLabel: '12m ago', kind: 'pr' },
+    { id: 'c2', actor: 'Sophie Turner',action: 'created',           ticketId: 'CICD-251',subject: 'OIDC token caching for runners',  timeLabel: '35m ago', kind: 'task' },
+    { id: 'c3', actor: 'James Wright', action: 'completed',         ticketId: 'CICD-239',subject: 'Migrate repo to GitHub Actions',  timeLabel: '2h ago',  kind: 'task' },
+    { id: 'c4', actor: 'David Kim',    action: 'decided',           ticketId: 'CICD-232',subject: 'single pipeline template',        timeLabel: '3h ago',  kind: 'decision' },
+    { id: 'c5', actor: 'Maria Santos', action: 'opened PR',         ticketId: 'CICD-244',subject: 'artifact retention policy',       timeLabel: '5h ago',  kind: 'pr' },
+    { id: 'c6', actor: 'James Wright', action: 'commented on',      ticketId: 'CICD-228',subject: 'cache invalidation strategy',     timeLabel: '6h ago',  kind: 'comment' },
   ],
   'proj-otel': [
-    { id: 'o1', actor: 'Ben Foster',   action: 'completed',         ticketId: 'OTEL-64', subject: 'Collector gateway HA setup',      timeLabel: '18m ago', type: 'task' },
-    { id: 'o2', actor: 'Alex Chen',    action: 'merged',            ticketId: 'OTEL-61', subject: 'span exporter for Aurora',        timeLabel: '1h ago',  type: 'pr' },
-    { id: 'o3', actor: 'David Kim',    action: 'decided',           ticketId: 'OTEL-58', subject: 'Grafana Alloy as collector',      timeLabel: '2h ago',  type: 'decision' },
-    { id: 'o4', actor: 'Ben Foster',   action: 'created',           ticketId: 'OTEL-65', subject: 'SLO dashboards for API latency',  timeLabel: '3h ago',  type: 'task' },
-    { id: 'o5', actor: 'Alex Chen',    action: 'completed',         ticketId: 'OTEL-57', subject: 'instrument search agent OTEL',    timeLabel: '4h ago',  type: 'task' },
+    { id: 'o1', actor: 'Ben Foster',   action: 'completed',         ticketId: 'OTEL-64', subject: 'Collector gateway HA setup',      timeLabel: '18m ago', kind: 'task' },
+    { id: 'o2', actor: 'Alex Chen',    action: 'merged',            ticketId: 'OTEL-61', subject: 'span exporter for Aurora',        timeLabel: '1h ago',  kind: 'pr' },
+    { id: 'o3', actor: 'David Kim',    action: 'decided',           ticketId: 'OTEL-58', subject: 'Grafana Alloy as collector',      timeLabel: '2h ago',  kind: 'decision' },
+    { id: 'o4', actor: 'Ben Foster',   action: 'created',           ticketId: 'OTEL-65', subject: 'SLO dashboards for API latency',  timeLabel: '3h ago',  kind: 'task' },
+    { id: 'o5', actor: 'Alex Chen',    action: 'completed',         ticketId: 'OTEL-57', subject: 'instrument search agent OTEL',    timeLabel: '4h ago',  kind: 'task' },
   ],
   'proj-cedar': [
-    { id: 'ce1', actor: 'Sophie Turner',action: 'merged',           ticketId: 'CDR-48',  subject: 'Cedar policy for HR-admin',       timeLabel: '7m ago',  type: 'pr' },
-    { id: 'ce2', actor: 'James Wright', action: 'completed',        ticketId: 'CDR-45',  subject: 'policy simulator test suite',     timeLabel: '40m ago', type: 'task' },
-    { id: 'ce3', actor: 'David Kim',    action: 'decided',          ticketId: 'CDR-42',  subject: 'enforce deny-all baseline',       timeLabel: '1h ago',  type: 'decision' },
-    { id: 'ce4', actor: 'Sophie Turner',action: 'created',          ticketId: 'CDR-49',  subject: 'Cedar policy for Bedrock KB',     timeLabel: '2h ago',  type: 'task' },
-    { id: 'ce5', actor: 'James Wright', action: 'commented on',     ticketId: 'CDR-40',  subject: 'role hierarchy design',           timeLabel: '3h ago',  type: 'comment' },
+    { id: 'ce1', actor: 'Sophie Turner',action: 'merged',           ticketId: 'CDR-48',  subject: 'Cedar policy for HR-admin',       timeLabel: '7m ago',  kind: 'pr' },
+    { id: 'ce2', actor: 'James Wright', action: 'completed',        ticketId: 'CDR-45',  subject: 'policy simulator test suite',     timeLabel: '40m ago', kind: 'task' },
+    { id: 'ce3', actor: 'David Kim',    action: 'decided',          ticketId: 'CDR-42',  subject: 'enforce deny-all baseline',       timeLabel: '1h ago',  kind: 'decision' },
+    { id: 'ce4', actor: 'Sophie Turner',action: 'created',          ticketId: 'CDR-49',  subject: 'Cedar policy for Bedrock KB',     timeLabel: '2h ago',  kind: 'task' },
+    { id: 'ce5', actor: 'James Wright', action: 'commented on',     ticketId: 'CDR-40',  subject: 'role hierarchy design',           timeLabel: '3h ago',  kind: 'comment' },
   ],
   'proj-onboard': [
-    { id: 'ob1', actor: 'David Kim',    action: 'created',          ticketId: 'OBD-12',  subject: 'Week 1 onboarding checklist',     timeLabel: '1h ago',  type: 'task' },
-    { id: 'ob2', actor: 'James Wright', action: 'created',          ticketId: 'OBD-11',  subject: 'dev environment setup guide',     timeLabel: '3h ago',  type: 'task' },
-    { id: 'ob3', actor: "Ryan O'Brien", action: 'updated',          ticketId: 'OBD-9',   subject: 'glossary of internal tools',      timeLabel: '5h ago',  type: 'task' },
-    { id: 'ob4', actor: 'David Kim',    action: 'decided',          ticketId: 'OBD-7',   subject: 'buddy system for first 30 days',  timeLabel: '1d ago',  type: 'decision' },
-    { id: 'ob5', actor: 'James Wright', action: 'commented on',     ticketId: 'OBD-5',   subject: 'knowledge base access policy',    timeLabel: '1d ago',  type: 'comment' },
+    { id: 'ob1', actor: 'David Kim',    action: 'created',          ticketId: 'OBD-12',  subject: 'Week 1 onboarding checklist',     timeLabel: '1h ago',  kind: 'task' },
+    { id: 'ob2', actor: 'James Wright', action: 'created',          ticketId: 'OBD-11',  subject: 'dev environment setup guide',     timeLabel: '3h ago',  kind: 'task' },
+    { id: 'ob3', actor: "Ryan O'Brien", action: 'updated',          ticketId: 'OBD-9',   subject: 'glossary of internal tools',      timeLabel: '5h ago',  kind: 'task' },
+    { id: 'ob4', actor: 'David Kim',    action: 'decided',          ticketId: 'OBD-7',   subject: 'buddy system for first 30 days',  timeLabel: '1d ago',  kind: 'decision' },
+    { id: 'ob5', actor: 'James Wright', action: 'commented on',     ticketId: 'OBD-5',   subject: 'knowledge base access policy',    timeLabel: '1d ago',  kind: 'comment' },
   ],
 };
 
 // ─── Activity generator for real Aurora projects ──────────────────────────────
 
-const GEN_ACTIONS: Array<{ action: string; type: ActivityType }> = [
-  { action: 'completed',   type: 'task' },
-  { action: 'merged',      type: 'pr' },
-  { action: 'created',     type: 'task' },
-  { action: 'opened PR',   type: 'pr' },
-  { action: 'commented on',type: 'comment' },
-  { action: 'decided',     type: 'decision' },
-  { action: 'closed',      type: 'status' },
-  { action: 'updated',     type: 'task' },
+const GEN_ACTIONS: Array<{ action: string; kind: string }> = [
+  { action: 'completed',   kind: 'task' },
+  { action: 'merged',      kind: 'pr' },
+  { action: 'created',     kind: 'task' },
+  { action: 'opened PR',   kind: 'pr' },
+  { action: 'commented on',kind: 'comment' },
+  { action: 'decided',     kind: 'decision' },
+  { action: 'closed',      kind: 'status' },
+  { action: 'updated',     kind: 'task' },
 ];
 
 const GEN_SUBJECTS = [
@@ -160,7 +142,7 @@ function djb2(s: string): number {
   return h;
 }
 
-function generateActivities(project: ProjectSummary): ActivityItem[] {
+function generateActivities(project: ProjectSummary): ActivityFeedItem[] {
   const names = project.topContributorNames ?? [];
   if (names.length === 0) return [];
   const key = deriveProjectKey(project.id, project.name);
@@ -181,161 +163,13 @@ function generateActivities(project: ProjectSummary): ActivityItem[] {
       ticketId: `${key}-${ticketNum}`,
       subject: subj,
       timeLabel: GEN_TIMES[i % GEN_TIMES.length]!,
-      type: a.type,
+      kind: a.kind,
     };
   });
 }
 
-function getActivityItems(project: ProjectSummary): ActivityItem[] {
+function getActivityItems(project: ProjectSummary): ActivityFeedItem[] {
   return MOCK_FEED[project.id] ?? generateActivities(project);
-}
-
-// ─── Activity rotation hook ───────────────────────────────────────────────────
-
-const SHOW = 3;
-const ROTATE_MS = 4200;
-
-function useActivityRotation(allItems: ActivityItem[], staggerMs: number): ActivityItem[] {
-  const [visible, setVisible] = useState<ActivityItem[]>(() => allItems.slice(0, SHOW));
-  const poolIdxRef = useRef(SHOW);
-
-  useEffect(() => {
-    setVisible(allItems.slice(0, SHOW));
-    poolIdxRef.current = SHOW;
-  }, [allItems]);
-
-  useEffect(() => {
-    if (allItems.length <= SHOW) return;
-    let interval: ReturnType<typeof setInterval>;
-    const start = setTimeout(() => {
-      interval = setInterval(() => {
-        if (!allItems.length) return;
-        const nextItem = allItems[poolIdxRef.current % allItems.length];
-        if (!nextItem) return;
-        poolIdxRef.current = (poolIdxRef.current + 1) % allItems.length;
-        setVisible(prev => {
-          const next: ActivityItem[] = [nextItem];
-          if (prev[0]) next.push(prev[0]);
-          if (prev[1]) next.push(prev[1]);
-          return next.slice(0, 3);
-        });
-      }, ROTATE_MS);
-    }, staggerMs);
-    return () => {
-      clearTimeout(start);
-      clearInterval(interval);
-    };
-  }, [allItems, staggerMs]);
-
-  return visible;
-}
-
-// ─── ActivityRow ──────────────────────────────────────────────────────────────
-
-const ROW_OPACITIES = [1, 0.5, 0.18] as const;
-
-// "Alex Chen" → "Alex C."
-function shortName(fullName: string): string {
-  const parts = fullName.trim().split(/\s+/);
-  const first = parts[0] ?? '';
-  const lastInit = parts[1]?.[0] ?? '';
-  return lastInit ? `${first} ${lastInit}.` : first;
-}
-
-function ActivityRow({ item, opacity }: { item: ActivityItem; opacity: number }) {
-  const truncSubject = item.subject.length > 30 ? item.subject.slice(0, 28) + '…' : item.subject;
-  return (
-    <div
-      className="proj-activity-row"
-      style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        padding: '3.5px 0',
-        opacity,
-        transition: 'opacity 0.38s ease',
-        overflow: 'hidden',
-        minWidth: 0,
-      }}
-    >
-      {/* Type dot */}
-      <span style={{
-        width: 5, height: 5, borderRadius: '50%',
-        background: TYPE_DOT[item.type],
-        flexShrink: 0,
-      }} />
-
-      {/* Mini avatar */}
-      <Avatar name={item.actor} size={17} />
-
-
-      {/* "Alex C. merged" */}
-      <span style={{ fontSize: 11, color: '#374151', fontWeight: 500, flexShrink: 0 }}>
-        {shortName(item.actor)}
-      </span>
-      <span style={{ fontSize: 11, color: '#9ca3af', flexShrink: 0 }}>
-        {item.action}
-      </span>
-
-      {/* Ticket ID badge — Jira-style */}
-      <span style={{
-        fontSize: 10, fontWeight: 700,
-        fontFamily: 'ui-monospace, "SFMono-Regular", Menlo, monospace',
-        color: '#4f46e5',
-        background: '#eef2ff',
-        border: '1px solid #c7d2fe',
-        borderRadius: 3,
-        padding: '1px 5px',
-        flexShrink: 0,
-        letterSpacing: '0.01em',
-        whiteSpace: 'nowrap',
-      }}>
-        {item.ticketId}
-      </span>
-
-      {/* Subject */}
-      <span style={{
-        fontSize: 11, color: '#6b7280',
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        flex: 1, minWidth: 0,
-      }} title={item.subject}>
-        {truncSubject}
-      </span>
-
-      {/* Timestamp */}
-      <span style={{
-        fontSize: 10, color: '#d1d5db',
-        flexShrink: 0, whiteSpace: 'nowrap',
-      }}>
-        {item.timeLabel}
-      </span>
-    </div>
-  );
-}
-
-// ─── ActivityFeed ─────────────────────────────────────────────────────────────
-
-function ActivityFeed({ project, staggerMs }: { project: ProjectSummary; staggerMs: number }) {
-  const allItems = useMemo(() => getActivityItems(project), [project]);
-  const visible = useActivityRotation(allItems, staggerMs);
-
-  if (visible.length === 0) {
-    return (
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center' }}>
-        <span style={{ fontSize: 11, color: '#e5e7eb' }}>No recent activity</span>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0, overflow: 'hidden' }}>
-      {visible.map((item, i) => (
-        <ActivityRow
-          key={item.id}
-          item={item}
-          opacity={ROW_OPACITIES[i] ?? 0.1}
-        />
-      ))}
-    </div>
-  );
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -361,7 +195,7 @@ function presenceColor(isoDate: string | null | undefined): string {
   return '#d1d5db';
 }
 
-// ─── StatusChip ───────────────────────────────────────────────────────────────
+// ─── StatusChip (list-view only) ─────────────────────────────────────────────
 
 function StatusChip({ status }: { status: string | null }) {
   const label = status ?? 'unknown';
@@ -381,101 +215,6 @@ function StatusChip({ status }: { status: string | null }) {
     </span>
   );
 }
-
-// ─── ProjectCard ──────────────────────────────────────────────────────────────
-
-function ProjectCard({ project, cardIndex, onClick }: {
-  project: ProjectSummary;
-  cardIndex: number;
-  onClick: () => void;
-}) {
-  const rawStatus = (project.status ?? 'unknown').toLowerCase().replace(/ /g, '_');
-  const colors = STATUS_COLORS[rawStatus] ?? STATUS_COLORS['planning']!;
-  const topNames = project.topContributorNames ?? [];
-  const activityDot = presenceColor(project.lastActivityAt);
-  const activityLabel = relativeTime(project.lastActivityAt ?? project.createdAt);
-  const overflow = project.contributorCount - topNames.length;
-  // Stagger: 8 offsets × 525ms spread rotations across one ROTATE_MS cycle.
-  const staggerMs = (cardIndex % 8) * 525;
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        background: '#fff',
-        border: '1.5px solid #e5e7eb',
-        borderTop: `3px solid ${colors.accent}`,
-        borderRadius: 10,
-        padding: '14px 16px 12px',
-        cursor: 'pointer',
-        display: 'flex', flexDirection: 'column', gap: 10,
-        transition: 'box-shadow 0.15s, transform 0.1s',
-        minHeight: 190,
-        width: '100%',
-        textAlign: 'left',
-        font: 'inherit',
-        color: 'inherit',
-      }}
-      onMouseEnter={(e) => {
-        (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)';
-        (e.currentTarget as HTMLElement).style.transform = 'translateY(-1px)';
-        (e.currentTarget as HTMLElement).style.borderColor = colors.border;
-      }}
-      onMouseLeave={(e) => {
-        (e.currentTarget as HTMLElement).style.boxShadow = 'none';
-        (e.currentTarget as HTMLElement).style.transform = 'none';
-        (e.currentTarget as HTMLElement).style.borderColor = '#e5e7eb';
-      }}
-    >
-      {/* Title + status */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h3 style={{ margin: '0 0 3px', fontSize: 13.5, fontWeight: 700, color: '#111827', lineHeight: 1.35 }}>
-            {project.name}
-          </h3>
-          <span style={{
-            fontSize: 10,
-            fontFamily: 'ui-monospace, "SFMono-Regular", Menlo, monospace',
-            color: '#9ca3af',
-            letterSpacing: '0.02em',
-          }}>
-            {project.id}
-          </span>
-        </div>
-        <StatusChip status={project.status} />
-      </div>
-
-      {/* Live activity ticker */}
-      <ActivityFeed project={project} staggerMs={staggerMs} />
-
-      {/* Footer: avatars + presence */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        paddingTop: 8, borderTop: '1px solid #f3f4f6', gap: 8,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-          {topNames.length > 0 ? (
-            <AvatarGroup names={topNames} maxVisible={5} size={24} />
-          ) : (
-            <span style={{ fontSize: 12, color: '#9ca3af' }}>
-              <strong style={{ color: '#374151' }}>{project.contributorCount}</strong> contributors
-            </span>
-          )}
-          {topNames.length > 0 && overflow > 0 && (
-            <span style={{ fontSize: 11, color: '#9ca3af' }}>+{overflow} more</span>
-          )}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: activityDot, flexShrink: 0 }} />
-          <span style={{ fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap' }}>{activityLabel}</span>
-        </div>
-      </div>
-    </button>
-  );
-}
-
-// ─── Main page ────────────────────────────────────────────────────────────────
 
 // ─── List-view row ────────────────────────────────────────────────────────────
 
@@ -634,7 +373,7 @@ function ProjectsPage() {
           from { opacity: 0; transform: translateY(-7px); }
           to   { transform: translateY(0); }
         }
-        .proj-activity-row {
+        .uc-activity-row {
           animation: projActivityIn 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards;
         }
       `}</style>
@@ -723,7 +462,14 @@ function ProjectsPage() {
             {filtered.map((project, idx) => (
               <ProjectCard
                 key={project.id}
-                project={project}
+                name={project.name}
+                id={project.id}
+                status={project.status ?? undefined}
+                contributorNames={project.topContributorNames ?? []}
+                contributorCount={project.contributorCount}
+                activityItems={getActivityItems(project)}
+                presenceDotColor={presenceColor(project.lastActivityAt)}
+                activityLabel={relativeTime(project.lastActivityAt ?? project.createdAt)}
                 cardIndex={idx}
                 onClick={() => navigate(`/iq/projects/${project.id}`)}
               />

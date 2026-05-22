@@ -1,5 +1,5 @@
-import { Outlet, useLocation } from 'react-router';
-import { SubNavLayout } from '../../components/shell/SubNavLayout';
+import { NavLink, Outlet, useLocation } from 'react-router';
+import { SubNavLayout } from '@connorhoehnslalom/ui-components/shared';
 import { useIqSubNav } from './iqSubNavCatalog';
 
 // IqLayout is route-aware: it renders page-contextual SubNav items pulled
@@ -23,7 +23,21 @@ function IqLayout() {
       secondaryTitle={spec.secondaryTitle}
       secondaryItems={spec.secondaryItems}
       secondaryStorageKey={spec.secondaryStorageKey}
-    />
+      renderNavItem={(item, children, baseStyle) => (
+        <NavLink
+          to={item.path}
+          style={({ isActive }) =>
+            isActive
+              ? { ...baseStyle, borderLeft: '3px solid var(--color-primary)', background: 'var(--color-surface-hover)', color: 'var(--color-text-primary)' }
+              : baseStyle
+          }
+        >
+          {children}
+        </NavLink>
+      )}
+    >
+      <Outlet />
+    </SubNavLayout>
   );
 }
 

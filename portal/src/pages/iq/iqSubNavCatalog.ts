@@ -8,7 +8,7 @@
 // params become live once the page reads them.
 
 import { useMemo } from 'react';
-import type { SubNavItem } from '../../components/shell/SubNavLayout';
+import type { SubNavItem } from '@connorhoehnslalom/ui-components/shared';
 import { useCanaryNavItems } from '../../components/canary/canaryNavItems';
 import { useCanaryStore } from '../../components/canary/canaryStore';
 import { useFetch } from '../../hooks/useFetch';

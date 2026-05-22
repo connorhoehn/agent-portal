@@ -1,4 +1,5 @@
-import { SubNavLayout, type SubNavItem } from '../../components/shell/SubNavLayout';
+import { NavLink, Outlet } from 'react-router';
+import { SubNavLayout, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
 
 // Placeholder badge rendered on nav items that are not yet built.
 // The '?' button titleAction is a no-op until the Newsroom help modal
@@ -49,7 +50,21 @@ function NewsroomLayout() {
       title="Newsroom"
       items={NAV_ITEMS}
       titleAction={<HelpButton />}
-    />
+      renderNavItem={(item, children, baseStyle) => (
+        <NavLink
+          to={item.path}
+          style={({ isActive }) =>
+            isActive
+              ? { ...baseStyle, borderLeft: '3px solid var(--color-primary)', background: 'var(--color-surface-hover)', color: 'var(--color-text-primary)' }
+              : baseStyle
+          }
+        >
+          {children}
+        </NavLink>
+      )}
+    >
+      <Outlet />
+    </SubNavLayout>
   );
 }
 

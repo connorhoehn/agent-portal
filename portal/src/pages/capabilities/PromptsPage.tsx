@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
+import { Button } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch.js';
 import {
   usePromptList,
@@ -442,12 +443,12 @@ function ViewPanel({
             value={selection.version}
             onChange={onVersionChange}
           />
-          <button type="button" onClick={onTest} style={testBtnStyle}>
+          <Button variant="ghost" onClick={onTest}>
             Test ▶
-          </button>
-          <button type="button" onClick={onEdit} style={editBtnStyle}>
+          </Button>
+          <Button variant="primary" onClick={onEdit}>
             Edit / new version
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -595,9 +596,9 @@ function EditPanel({
           <div style={promptTitleStyle}>{selection.promptName}</div>
           <div style={editSubtitleStyle}>Creating new version from {versionLabel}</div>
         </div>
-        <button type="button" onClick={onCancel} style={cancelBtnStyle} disabled={saving}>
+        <Button variant="secondary" onClick={onCancel} disabled={saving}>
           Cancel
-        </button>
+        </Button>
       </div>
 
       <div style={panesStyle}>
@@ -688,25 +689,21 @@ function EditPanel({
         {saveError && <div style={errorMsgStyle}>{saveError}</div>}
         <div style={actionBarStyle}>
           <div style={{ flex: 1 }} />
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             onClick={() => { void handleSaveDraft(); }}
-            style={secondaryBtnStyle}
             disabled={saving || !challengerText.trim()}
             title="Overwrite DRAFT without creating a numbered version"
           >
             Save draft
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="primary"
             onClick={() => { void handlePublish(); }}
-            style={saving || !challengerText.trim()
-              ? { ...primaryBtnStyle, opacity: 0.55, cursor: 'not-allowed' }
-              : primaryBtnStyle}
             disabled={saving || !challengerText.trim()}
           >
             {saving ? 'Publishing…' : 'Publish new version →'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -860,7 +857,7 @@ function TestPanel({
             Testing {versionLabel}
           </div>
         </div>
-        <button type="button" onClick={onClose} style={cancelBtnStyle}>Close</button>
+        <Button variant="secondary" onClick={onClose}>Close</Button>
       </div>
 
       <div style={testBodyStyle}>
@@ -894,14 +891,13 @@ function TestPanel({
             </>
           )}
 
-          <button
-            type="button"
+          <Button
+            variant="primary"
             onClick={() => { void handleRun(); }}
             disabled={running || detailLoading}
-            style={running ? { ...runBtnStyle, opacity: 0.6, cursor: 'not-allowed' } : runBtnStyle}
           >
             {running ? 'Running…' : 'Run prompt ▶'}
-          </button>
+          </Button>
 
           <GuardrailBanner interventions={guardrailEvents} />
 
@@ -954,14 +950,15 @@ function TestPanel({
                 </select>
               </label>
 
-              <button
-                type="button"
+              {/* TODO: replace with --color-optimize token when design adds it */}
+              <Button
+                variant="primary"
                 onClick={() => { void handleOptimize(); }}
                 disabled={optimizing || !templateText}
-                style={optimizing ? { ...optimizeBtnStyle, opacity: 0.6, cursor: 'not-allowed' } : optimizeBtnStyle}
+                style={{ background: '#7c3aed', borderColor: '#7c3aed', color: '#fff' }}
               >
                 {optimizing ? 'Optimizing…' : 'Optimize template'}
-              </button>
+              </Button>
 
               {optimizeError && (
                 <div style={errorBoxStyle}>{optimizeError}</div>
@@ -974,16 +971,17 @@ function TestPanel({
                     {optimizedText}
                   </pre>
                   {!copied ? (
-                    <button
-                      type="button"
+                    // TODO: replace with --color-optimize token when design adds it
+                    <Button
+                      variant="secondary"
                       onClick={() => {
                         navigator.clipboard.writeText(optimizedText).catch(() => undefined);
                         setCopied(true);
                       }}
-                      style={copyBtnStyle}
+                      style={{ borderColor: '#7c3aed', color: '#7c3aed' }}
                     >
                       Copy to clipboard
-                    </button>
+                    </Button>
                   ) : (
                     <span style={{ fontSize: 11, color: '#059669' }}>Copied ✓</span>
                   )}
@@ -1137,9 +1135,9 @@ function CreatePanel({
           <div style={promptTitleStyle}>New prompt</div>
           <div style={editSubtitleStyle}>Creates a DRAFT in Bedrock Prompt Library</div>
         </div>
-        <button type="button" onClick={onCancel} style={cancelBtnStyle} disabled={saving}>
+        <Button variant="secondary" onClick={onCancel} disabled={saving}>
           Cancel
-        </button>
+        </Button>
       </div>
 
       <div style={createFieldsStyle}>
@@ -1275,16 +1273,13 @@ function CreatePanel({
         {saveError && <div style={errorMsgStyle}>{saveError}</div>}
         <div style={actionBarStyle}>
           <div style={{ flex: 1 }} />
-          <button
-            type="button"
+          <Button
+            variant="primary"
             onClick={() => { void handleCreate(); }}
-            style={canCreate && !saving
-              ? primaryBtnStyle
-              : { ...primaryBtnStyle, opacity: 0.55, cursor: 'not-allowed' }}
             disabled={!canCreate || saving}
           >
             {saving ? 'Creating…' : 'Create prompt →'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -1346,13 +1341,14 @@ function PromptsPage(): React.ReactElement {
     <div style={pageStyle}>
       <div style={sidebarStyle}>
         <div style={sidebarTopStyle}>
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            fullWidth
             onClick={() => { setSelection(null); setMode('create'); }}
-            style={newPromptBtnStyle}
+            style={{ marginBottom: 8 }}
           >
             + New prompt
-          </button>
+          </Button>
           <input
             type="text"
             value={search}
@@ -1386,9 +1382,11 @@ function PromptsPage(): React.ReactElement {
           })}
         </div>
 
-        <button type="button" onClick={refresh} style={refreshBtnStyle}>
-          Refresh library
-        </button>
+        <div style={{ margin: 12 }}>
+          <Button variant="secondary" fullWidth onClick={refresh}>
+            Refresh library
+          </Button>
+        </div>
       </div>
 
       <div style={workspaceStyle}>
@@ -1539,21 +1537,6 @@ const promptDescStyle: CSSProperties = {
   whiteSpace: 'nowrap',
 };
 
-const refreshBtnStyle: CSSProperties = {
-  margin: 12,
-  padding: '7px 0',
-  fontSize: 11,
-  fontWeight: 500,
-  border: '1px solid var(--color-border, #e2e8f0)',
-  borderRadius: 4,
-  background: 'transparent',
-  color: 'var(--color-text-secondary, #475569)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  flexShrink: 0,
-  width: 'calc(100% - 24px)',
-};
-
 const workspaceStyle: CSSProperties = {
   flex: 1,
   minWidth: 0,
@@ -1646,32 +1629,6 @@ const versionSelectStyle: CSSProperties = {
   fontFamily: 'monospace',
   outline: 'none',
   minWidth: 90,
-};
-
-const testBtnStyle: CSSProperties = {
-  padding: '7px 14px',
-  fontSize: 12,
-  fontWeight: 600,
-  border: '1px solid var(--color-primary, #6366f1)',
-  borderRadius: 4,
-  background: 'transparent',
-  color: 'var(--color-primary, #6366f1)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  whiteSpace: 'nowrap',
-};
-
-const editBtnStyle: CSSProperties = {
-  padding: '7px 14px',
-  fontSize: 12,
-  fontWeight: 600,
-  border: 'none',
-  borderRadius: 4,
-  background: 'var(--color-primary, #6366f1)',
-  color: '#fff',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  whiteSpace: 'nowrap',
 };
 
 const templateScrollStyle: CSSProperties = {
@@ -1824,19 +1781,6 @@ const editSubtitleStyle: CSSProperties = {
   fontSize: 12,
   color: 'var(--color-text-tertiary, #94a3b8)',
   marginTop: 4,
-};
-
-const cancelBtnStyle: CSSProperties = {
-  padding: '7px 14px',
-  fontSize: 12,
-  fontWeight: 500,
-  border: '1px solid var(--color-border, #e2e8f0)',
-  borderRadius: 4,
-  background: 'transparent',
-  color: 'var(--color-text-secondary, #475569)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  flexShrink: 0,
 };
 
 const panesStyle: CSSProperties = {
@@ -2013,34 +1957,6 @@ const actionBarStyle: CSSProperties = {
   alignItems: 'center',
 };
 
-const secondaryBtnStyle: CSSProperties = {
-  padding: '8px 16px',
-  fontSize: 13,
-  fontWeight: 500,
-  border: '1px solid var(--color-border, #e2e8f0)',
-  borderRadius: 4,
-  background: 'transparent',
-  color: 'var(--color-text-secondary, #475569)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  flexShrink: 0,
-  whiteSpace: 'nowrap',
-};
-
-const primaryBtnStyle: CSSProperties = {
-  padding: '8px 16px',
-  fontSize: 13,
-  fontWeight: 600,
-  border: 'none',
-  borderRadius: 4,
-  background: 'var(--color-primary, #6366f1)',
-  color: '#fff',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  flexShrink: 0,
-  whiteSpace: 'nowrap',
-};
-
 const successMsgStyle: CSSProperties = {
   padding: '8px 12px',
   background: '#dcfce7',
@@ -2143,19 +2059,6 @@ const testVarInputStyle: CSSProperties = {
   fontFamily: 'inherit',
 };
 
-const runBtnStyle: CSSProperties = {
-  padding: '9px 18px',
-  fontSize: 13,
-  fontWeight: 600,
-  border: 'none',
-  borderRadius: 4,
-  background: 'var(--color-primary, #6366f1)',
-  color: '#fff',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  alignSelf: 'flex-start',
-};
-
 const outputBoxStyle: CSSProperties = {
   fontFamily: 'monospace',
   fontSize: 13,
@@ -2229,56 +2132,13 @@ const assistHintStyle: CSSProperties = {
   margin: 0,
 };
 
-const optimizeBtnStyle: CSSProperties = {
-  padding: '8px 14px',
-  fontSize: 12,
-  fontWeight: 600,
-  border: 'none',
-  borderRadius: 4,
-  background: '#7c3aed',
-  color: '#fff',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  alignSelf: 'flex-start',
-};
-
 const optimizedBlockStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 8,
 };
 
-const copyBtnStyle: CSSProperties = {
-  padding: '6px 12px',
-  fontSize: 11,
-  fontWeight: 500,
-  border: '1px solid #7c3aed',
-  borderRadius: 4,
-  background: 'transparent',
-  color: '#7c3aed',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  alignSelf: 'flex-start',
-};
-
-
 // Create panel
-const newPromptBtnStyle: CSSProperties = {
-  display: 'block',
-  width: '100%',
-  padding: '8px 12px',
-  marginBottom: 8,
-  fontSize: 12,
-  fontWeight: 600,
-  border: 'none',
-  borderRadius: 4,
-  background: 'var(--color-primary, #6366f1)',
-  color: '#fff',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  textAlign: 'center',
-  boxSizing: 'border-box',
-};
 
 const createPanelStyle: CSSProperties = {
   flex: 1,

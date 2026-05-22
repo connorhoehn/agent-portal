@@ -1,4 +1,5 @@
-import { SubNavLayout, type SubNavItem } from '../../components/shell/SubNavLayout';
+import { NavLink, Outlet } from 'react-router';
+import { SubNavLayout, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
 
 const ITEMS: SubNavItem[] = [
   { path: 'summary',          label: 'Summary',          hint: 'Health overview' },
@@ -10,7 +11,26 @@ const ITEMS: SubNavItem[] = [
 ];
 
 function CapabilitiesLayout() {
-  return <SubNavLayout title="Capabilities" items={ITEMS} />;
+  return (
+    <SubNavLayout
+      title="Capabilities"
+      items={ITEMS}
+      renderNavItem={(item, children, baseStyle) => (
+        <NavLink
+          to={item.path}
+          style={({ isActive }) =>
+            isActive
+              ? { ...baseStyle, borderLeft: '3px solid var(--color-primary)', background: 'var(--color-surface-hover)', color: 'var(--color-text-primary)' }
+              : baseStyle
+          }
+        >
+          {children}
+        </NavLink>
+      )}
+    >
+      <Outlet />
+    </SubNavLayout>
+  );
 }
 
 export default CapabilitiesLayout;
