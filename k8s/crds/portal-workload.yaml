@@ -1,0 +1,21 @@
+apiVersion: distributed-core.dev/v1alpha1
+kind: Workload
+metadata:
+  name: orgiq-portal
+  namespace: orgiq
+spec:
+  kind: Deployment
+  image: connorhoehnslalom/orgiq-portal:dev  # placeholder; manual push needed (see docs/deploy-via-operator.md)
+  replicas: 1
+  ports:
+    - containerPort: 5173
+      name: http
+  env:
+    - name: VITE_GATEWAY_URL
+      value: 'ws://gateway.platform.svc.cluster.local/ws'
+    - name: VITE_API_URL
+      value: 'http://orgiq-middleware.orgiq.svc.cluster.local:3001'
+    - name: VITE_ORGIQ_CHAT_ENABLED
+      value: 'true'
+    - name: VITE_ORGIQ_UPLOAD_ENABLED
+      value: 'true'

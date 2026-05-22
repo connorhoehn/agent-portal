@@ -28,3 +28,17 @@ COPY src ./src
 COPY seeds ./seeds
 COPY tsconfig.json ./
 CMD ["npx", "tsx", "watch", "src/index.ts"]
+
+# ── Stage 3: production build ─────────────────────────────────────────────────
+FROM node:20-slim AS production
+
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY src ./src
+COPY seeds ./seeds
+COPY tsconfig.json ./
+
+RUN npm run build
+
+EXPOSE 3001
+CMD ["node", "dist/index.js"]

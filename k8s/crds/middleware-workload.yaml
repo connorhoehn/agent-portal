@@ -1,0 +1,28 @@
+apiVersion: distributed-core.dev/v1alpha1
+kind: Workload
+metadata:
+  name: orgiq-middleware
+  namespace: orgiq
+spec:
+  kind: Deployment
+  image: connorhoehnslalom/orgiq-middleware:dev  # placeholder; manual push needed (see docs/deploy-via-operator.md)
+  replicas: 2
+  ports:
+    - containerPort: 3001
+      name: http
+  env:
+    - name: PORT
+      value: '3001'
+    - name: NODE_ENV
+      value: 'production'
+    - name: WEBSOCKET_GATEWAY_URL
+      value: 'http://gateway.platform.svc.cluster.local'
+    - name: GATEWAY_SERVICE_AUTH_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: orgiq-service-auth
+          key: secret
+    - name: GATEWAY_SERVICE_AUTH_CLIENT_ID
+      value: 'orgiq-middleware'
+    - name: AWS_REGION
+      value: 'us-east-1'

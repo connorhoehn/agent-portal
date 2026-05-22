@@ -1,0 +1,10 @@
+apiVersion: distributed-core.dev/v1alpha1
+kind: Application
+metadata:
+  name: orgiq
+  namespace: orgiq
+spec:
+  description: 'OrgIQ — agentic news research platform'
+  workloads:
+    - name: orgiq-portal
+    - name: orgiq-middleware
