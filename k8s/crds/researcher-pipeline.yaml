@@ -1,0 +1,50 @@
+apiVersion: platform.connorhoehn.dev/v1alpha1
+kind: AgenticPipeline
+metadata:
+  name: orgiq-researcher
+  namespace: orgiq
+spec:
+  name: researcher-workflow
+  eventBundle: agentic-pipeline-signal@1.0.0
+  definition:
+    steps:
+      - id: search
+        type: tool-call
+        config:
+          tool: web-search
+          query: '{{ trigger.payload.query }}'
+        onFailure: retry
+        maxAttempts: 3
+      - id: summarize
+        type: llm
+        config:
+          model: claude-opus-4-7
+          prompt: 'Summarize: {{ steps.search.result }}'
+      - id: approval
+        type: approval
+        config:
+          requiredRoles: [role:editor]
+          timeoutMs: 86400000  # 24 hours
+      - id: publish
+        type: webhook
+        config:
+          url: 'https://orgiq.example/api/publish'
+          method: POST
+          body: '{{ steps.summarize.result }}'
+    edges:
+      - { from: search, to: summarize }
+      - { from: summarize, to: approval }
+      - { from: approval, to: publish, condition: 'approved' }
+  triggers:
+    - type: manual
+      config: {}
+    - type: webhook
+      config:
+        path: /api/orgiq/researcher/trigger
+  approvalPolicy:
+    enabled: true
+    requiredRoles: [role:editor]
+    timeoutMs: 86400000
+  audit:
+    destination: ddb
+    tableName: orgiq-research-audit
