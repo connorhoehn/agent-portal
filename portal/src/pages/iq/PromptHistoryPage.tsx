@@ -55,12 +55,12 @@ interface ExperimentSummary {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const STATUS_COLOR: Record<string, string> = {
-  promoted:     '#10b981',
-  deployed:     '#6366f1',
-  published:    '#64748b',
-  rolled_back:  '#ef4444',
-  superseded:   '#94a3b8',
-  draft:        '#f59e0b',
+  promoted:     'var(--color-success)',
+  deployed:     'var(--color-primary)',
+  published:    'var(--color-text-secondary)',
+  rolled_back:  'var(--color-danger)',
+  superseded:   'var(--color-text-tertiary)',
+  draft:        'var(--color-warning)',
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -73,9 +73,9 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const ACTION_COLOR: Record<string, { bg: string; text: string }> = {
-  PROMOTE:     { bg: '#dcfce7', text: '#166534' },
-  ROLLBACK:    { bg: '#fee2e2', text: '#991b1b' },
-  HALTED:      { bg: '#fef3c7', text: '#92400e' },
+  PROMOTE:     { bg: 'var(--color-success-bg)', text: 'var(--color-success)' },
+  ROLLBACK:    { bg: 'var(--color-danger-bg)', text: 'var(--color-danger)' },
+  HALTED:      { bg: 'var(--color-warning-bg)', text: 'var(--color-warning)' },
   IN_PROGRESS: { bg: '#ede9fe', text: '#5b21b6' },
 };
 
@@ -132,7 +132,7 @@ function lineDiff(a: string, b: string): DiffLine[] {
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function StatusChip({ status }: { status: string }): React.ReactElement {
-  const color = STATUS_COLOR[status] ?? '#94a3b8';
+  const color = STATUS_COLOR[status] ?? 'var(--color-text-tertiary)';
   return (
     <span style={{
       fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em',
@@ -145,7 +145,7 @@ function StatusChip({ status }: { status: string }): React.ReactElement {
 }
 
 function ActionBadge({ action }: { action: string }): React.ReactElement {
-  const c = ACTION_COLOR[action] ?? { bg: '#f1f5f9', text: '#475569' };
+  const c = ACTION_COLOR[action] ?? { bg: 'var(--color-surface-hover)', text: 'var(--color-text-secondary)' };
   return (
     <span style={{
       fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 3,
@@ -162,10 +162,10 @@ function ExperimentCard({ exp, role }: { exp: ExperimentRef; role: 'a' | 'b' }):
     <div style={expCardStyle}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <ActionBadge action={exp.finalAction || 'IN_PROGRESS'} />
-        <span style={{ fontSize: 11, color: '#64748b' }}>
+        <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>
           v{exp.versionA} vs v{exp.versionB} · used as {role.toUpperCase()}
         </span>
-        <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 'auto' }}>
+        <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginLeft: 'auto' }}>
           {fmtDate(exp.startedAt)}
         </span>
       </div>
@@ -180,7 +180,7 @@ function ExperimentCard({ exp, role }: { exp: ExperimentRef; role: 'a' | 'b' }):
         </div>
         <div style={scoreBoxStyle}>
           <div style={scoreLabelStyle}>Δ</div>
-          <div style={{ ...scoreValStyle, color: deltaPositive ? '#10b981' : '#ef4444', fontWeight: 700 }}>
+          <div style={{ ...scoreValStyle, color: deltaPositive ? 'var(--color-success)' : 'var(--color-danger)', fontWeight: 700 }}>
             {fmtDelta(exp.scoreDelta)}
           </div>
         </div>
@@ -201,11 +201,11 @@ function DiffView({ textA, textB, labelA, labelB }: { textA: string; textB: stri
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>{labelA} → {labelB}</span>
-        <span style={{ fontSize: 11, color: '#10b981' }}>+{added}</span>
-        <span style={{ fontSize: 11, color: '#ef4444' }}>−{removed}</span>
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)' }}>{labelA} → {labelB}</span>
+        <span style={{ fontSize: 11, color: 'var(--color-success)' }}>+{added}</span>
+        <span style={{ fontSize: 11, color: 'var(--color-danger)' }}>−{removed}</span>
       </div>
-      <div style={{ fontFamily: 'monospace', fontSize: 12, lineHeight: 1.6, border: '1px solid #e2e8f0', borderRadius: 4, overflow: 'auto', flex: 1 }}>
+      <div style={{ fontFamily: 'monospace', fontSize: 12, lineHeight: 1.6, border: '1px solid var(--color-border)', borderRadius: 4, overflow: 'auto', flex: 1 }}>
         {lines.map((line, i) => (
           <div
             key={i}
@@ -213,8 +213,8 @@ function DiffView({ textA, textB, labelA, labelB }: { textA: string; textB: stri
               display: 'flex',
               gap: 8,
               padding: '1px 12px',
-              background: line.kind === 'add' ? '#dcfce7' : line.kind === 'remove' ? '#fee2e2' : 'transparent',
-              color: line.kind === 'same' ? '#0f172a' : line.kind === 'add' ? '#166534' : '#991b1b',
+              background: line.kind === 'add' ? 'var(--color-success-bg)' : line.kind === 'remove' ? 'var(--color-danger-bg)' : 'transparent',
+              color: line.kind === 'same' ? 'var(--color-text-primary)' : line.kind === 'add' ? 'var(--color-success)' : 'var(--color-danger)',
             }}
           >
             <span style={{ width: 12, flexShrink: 0, userSelect: 'none', opacity: 0.6 }}>
@@ -405,7 +405,7 @@ export default function PromptHistoryPage(): React.ReactElement {
           <>
             {/* Compare toggle */}
             <div style={compareToggleBarStyle}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#64748b', cursor: 'pointer' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--color-text-secondary)', cursor: 'pointer' }}>
                 <input
                   type="checkbox"
                   checked={compareMode}
@@ -421,13 +421,13 @@ export default function PromptHistoryPage(): React.ReactElement {
             </div>
 
             {versionsLoading && <div style={listMsgStyle}>Loading…</div>}
-            {versionsError && <div style={{ ...listMsgStyle, color: '#991b1b' }}>{versionsError}</div>}
+            {versionsError && <div style={{ ...listMsgStyle, color: 'var(--color-danger)' }}>{versionsError}</div>}
             {!versionsLoading && !versionsError && versions.length === 0 && (
               <div style={listMsgStyle}>No version history yet.</div>
             )}
 
             {versions.map(v => {
-              const color = STATUS_COLOR[v.lifecycleStatus] ?? '#94a3b8';
+              const color = STATUS_COLOR[v.lifecycleStatus] ?? 'var(--color-text-tertiary)';
               const isSelected = selectedVersions.includes(v.version);
               return (
                 <button
@@ -442,17 +442,17 @@ export default function PromptHistoryPage(): React.ReactElement {
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                    <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'monospace', color: '#0f172a' }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'monospace', color: 'var(--color-text-primary)' }}>
                       {v.version === 'DRAFT' ? 'DRAFT' : `v${v.version}`}
                     </span>
                     <StatusChip status={v.lifecycleStatus} />
                   </div>
                   {v.description && (
-                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, paddingLeft: 16, lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 4, paddingLeft: 16, lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {v.description}
                     </div>
                   )}
-                  <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 2, paddingLeft: 16 }}>
+                  <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginTop: 2, paddingLeft: 16 }}>
                     {v.publishedAt ? fmtDate(v.publishedAt) : '—'}
                     {v.experiments.length > 0 && ` · ${v.experiments.length} exp`}
                   </div>
@@ -465,7 +465,7 @@ export default function PromptHistoryPage(): React.ReactElement {
         {tab === 'experiments' && (
           <>
             {expLoading && <div style={listMsgStyle}>Loading…</div>}
-            {expError && <div style={{ ...listMsgStyle, color: '#991b1b' }}>{expError}</div>}
+            {expError && <div style={{ ...listMsgStyle, color: 'var(--color-danger)' }}>{expError}</div>}
             {!expLoading && !expError && experiments.length === 0 && (
               <div style={listMsgStyle}>No experiments recorded yet.</div>
             )}
@@ -473,17 +473,17 @@ export default function PromptHistoryPage(): React.ReactElement {
               <div key={exp.experimentId} style={expListRowStyle}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <ActionBadge action={exp.finalAction || 'IN_PROGRESS'} />
-                  <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#475569' }}>
+                  <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--color-text-secondary)' }}>
                     v{exp.versionA}→v{exp.versionB}
                   </span>
                 </div>
                 {exp.descriptionB && (
-                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 3, lineHeight: 1.4 }}>{exp.descriptionB}</div>
+                  <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 3, lineHeight: 1.4 }}>{exp.descriptionB}</div>
                 )}
-                <div style={{ display: 'flex', gap: 10, marginTop: 4, fontSize: 11, color: '#94a3b8' }}>
+                <div style={{ display: 'flex', gap: 10, marginTop: 4, fontSize: 11, color: 'var(--color-text-tertiary)' }}>
                   <span>{fmtDate(exp.startedAt)}</span>
                   {exp.scoreDelta !== null && (
-                    <span style={{ color: (exp.scoreDelta ?? 0) >= 0 ? '#10b981' : '#ef4444', fontWeight: 600 }}>
+                    <span style={{ color: (exp.scoreDelta ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)', fontWeight: 600 }}>
                       {fmtDelta(exp.scoreDelta)}
                     </span>
                   )}
@@ -524,11 +524,11 @@ export default function PromptHistoryPage(): React.ReactElement {
                 <StatusChip status={versionDetail.lifecycleStatus} />
               </div>
               {versionDetail.description && (
-                <p style={{ fontSize: 13, color: '#475569', margin: '8px 0 0', lineHeight: 1.5 }}>
+                <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '8px 0 0', lineHeight: 1.5 }}>
                   {versionDetail.description}
                 </p>
               )}
-              <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 11, color: '#94a3b8', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 11, color: 'var(--color-text-tertiary)', flexWrap: 'wrap' }}>
                 {versionDetail.publishedAt && <span>Published {fmtDate(versionDetail.publishedAt)}</span>}
                 {versionDetail.deployedAt && <span>Deployed {fmtDate(versionDetail.deployedAt)}</span>}
                 {versionDetail.supersededAt && <span>Superseded {fmtDate(versionDetail.supersededAt)}</span>}
@@ -547,7 +547,7 @@ export default function PromptHistoryPage(): React.ReactElement {
                   label={versionDetail.lifecycleStatus === 'rolled_back' ? 'Rolled Back' : 'Promoted'}
                   date={versionDetail.lifecycleStatus === 'promoted' ? versionDetail.supersededAt : ''}
                   active={versionDetail.lifecycleStatus === 'promoted' || versionDetail.lifecycleStatus === 'rolled_back'}
-                  color={versionDetail.lifecycleStatus === 'rolled_back' ? '#ef4444' : '#10b981'}
+                  color={versionDetail.lifecycleStatus === 'rolled_back' ? 'var(--color-danger)' : 'var(--color-success)'}
                 />
               </div>
             )}
@@ -558,7 +558,7 @@ export default function PromptHistoryPage(): React.ReactElement {
               {text0 ? (
                 <pre style={templatePreStyle}>{text0}</pre>
               ) : (
-                <p style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic', margin: 0 }}>Template not available.</p>
+                <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)', fontStyle: 'italic', margin: 0 }}>Template not available.</p>
               )}
             </div>
 
@@ -579,7 +579,7 @@ export default function PromptHistoryPage(): React.ReactElement {
             {versionDetail.experiments.length === 0 && (
               <div style={expSectionStyle}>
                 <div style={sectionTitleStyle}>Experiments</div>
-                <p style={{ fontSize: 12, color: '#94a3b8', margin: 0 }}>
+                <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)', margin: 0 }}>
                   This version hasn't been used in a canary experiment yet.
                 </p>
               </div>
@@ -591,10 +591,10 @@ export default function PromptHistoryPage(): React.ReactElement {
         {inDiffMode && (
           <div style={detailScrollStyle}>
             <div style={detailHeaderStyle}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)' }}>
                 Comparing v{selectedVersions[0]} → v{selectedVersions[1]}
               </div>
-              <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 0' }}>
+              <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', margin: '4px 0 0' }}>
                 Lines added in green, removed in red.
               </p>
             </div>
@@ -616,19 +616,19 @@ export default function PromptHistoryPage(): React.ReactElement {
 // ── Lifecycle milestone ───────────────────────────────────────────────────────
 
 function LifecycleMilestone({ label, date, active, color }: { label: string; date: string; active: boolean; color?: string }): React.ReactElement {
-  const c = color ?? (active ? '#6366f1' : '#e2e8f0');
+  const c = color ?? (active ? 'var(--color-primary)' : 'var(--color-border)');
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-      <div style={{ width: 12, height: 12, borderRadius: '50%', background: active ? c : '#e2e8f0', border: `2px solid ${active ? c : '#cbd5e1'}` }} />
-      <span style={{ fontSize: 10, fontWeight: 600, color: active ? c : '#94a3b8', whiteSpace: 'nowrap' }}>{label}</span>
-      {date && <span style={{ fontSize: 9, color: '#94a3b8', whiteSpace: 'nowrap' }}>{fmtDate(date)}</span>}
+      <div style={{ width: 12, height: 12, borderRadius: '50%', background: active ? c : 'var(--color-border)', border: `2px solid ${active ? c : 'var(--color-border-emphasis)'}` }} />
+      <span style={{ fontSize: 10, fontWeight: 600, color: active ? c : 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }}>{label}</span>
+      {date && <span style={{ fontSize: 9, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }}>{fmtDate(date)}</span>}
     </div>
   );
 }
 
 function LifecycleConnector({ active }: { active: boolean }): React.ReactElement {
   return (
-    <div style={{ flex: 1, height: 2, background: active ? '#6366f1' : '#e2e8f0', marginBottom: 24, minWidth: 20 }} />
+    <div style={{ flex: 1, height: 2, background: active ? 'var(--color-primary)' : 'var(--color-border)', marginBottom: 24, minWidth: 20 }} />
   );
 }
 
@@ -644,16 +644,16 @@ const pageStyle: CSSProperties = {
 const leftRailStyle: CSSProperties = {
   width: 260,
   flexShrink: 0,
-  borderRight: '1px solid #e2e8f0',
+  borderRight: '1px solid var(--color-border)',
   display: 'flex',
   flexDirection: 'column',
-  background: '#fff',
+  background: 'var(--color-surface)',
   overflowY: 'auto',
 };
 
 const promptPickerStyle: CSSProperties = {
   padding: '14px 12px 10px',
-  borderBottom: '1px solid #e2e8f0',
+  borderBottom: '1px solid var(--color-border)',
   flexShrink: 0,
 };
 
@@ -661,10 +661,10 @@ const promptSelectStyle: CSSProperties = {
   width: '100%',
   padding: '7px 10px',
   fontSize: 12,
-  border: '1px solid #e2e8f0',
+  border: '1px solid var(--color-border)',
   borderRadius: 5,
-  background: '#f8fafc',
-  color: '#0f172a',
+  background: 'var(--color-surface-panel)',
+  color: 'var(--color-text-primary)',
   outline: 'none',
   fontFamily: 'inherit',
   boxSizing: 'border-box',
@@ -672,7 +672,7 @@ const promptSelectStyle: CSSProperties = {
 
 const tabBarStyle: CSSProperties = {
   display: 'flex',
-  borderBottom: '1px solid #e2e8f0',
+  borderBottom: '1px solid var(--color-border)',
   flexShrink: 0,
 };
 
@@ -682,9 +682,9 @@ const activeTabStyle: CSSProperties = {
   fontSize: 11,
   fontWeight: 700,
   border: 'none',
-  borderBottom: '2px solid #6366f1',
+  borderBottom: '2px solid var(--color-primary)',
   background: 'transparent',
-  color: '#6366f1',
+  color: 'var(--color-primary)',
   cursor: 'pointer',
   fontFamily: 'inherit',
 };
@@ -697,7 +697,7 @@ const inactiveTabStyle: CSSProperties = {
   border: 'none',
   borderBottom: '2px solid transparent',
   background: 'transparent',
-  color: '#94a3b8',
+  color: 'var(--color-text-tertiary)',
   cursor: 'pointer',
   fontFamily: 'inherit',
 };
@@ -707,15 +707,15 @@ const compareToggleBarStyle: CSSProperties = {
   alignItems: 'center',
   justifyContent: 'space-between',
   padding: '8px 12px',
-  borderBottom: '1px solid #e2e8f0',
-  background: '#f8fafc',
+  borderBottom: '1px solid var(--color-border)',
+  background: 'var(--color-surface-panel)',
   flexShrink: 0,
 };
 
 const listMsgStyle: CSSProperties = {
   padding: '12px 14px',
   fontSize: 12,
-  color: '#94a3b8',
+  color: 'var(--color-text-tertiary)',
 };
 
 const versionRowStyle: CSSProperties = {
@@ -724,7 +724,7 @@ const versionRowStyle: CSSProperties = {
   padding: '10px 12px',
   background: 'transparent',
   border: 'none',
-  borderBottom: '1px solid #e2e8f0',
+  borderBottom: '1px solid var(--color-border)',
   cursor: 'pointer',
   textAlign: 'left',
   fontFamily: 'inherit',
@@ -733,7 +733,7 @@ const versionRowStyle: CSSProperties = {
 
 const expListRowStyle: CSSProperties = {
   padding: '10px 14px',
-  borderBottom: '1px solid #e2e8f0',
+  borderBottom: '1px solid var(--color-border)',
 };
 
 const detailPaneStyle: CSSProperties = {
@@ -741,7 +741,7 @@ const detailPaneStyle: CSSProperties = {
   minWidth: 0,
   display: 'flex',
   flexDirection: 'column',
-  background: '#fff',
+  background: 'var(--color-surface)',
   overflow: 'hidden',
 };
 
@@ -755,7 +755,7 @@ const emptyDetailStyle: CSSProperties = {
 
 const emptyMsgStyle: CSSProperties = {
   fontSize: 13,
-  color: '#94a3b8',
+  color: 'var(--color-text-tertiary)',
   margin: 0,
   textAlign: 'center',
 };
@@ -769,7 +769,7 @@ const detailScrollStyle: CSSProperties = {
 
 const detailHeaderStyle: CSSProperties = {
   padding: '20px 24px 16px',
-  borderBottom: '1px solid #e2e8f0',
+  borderBottom: '1px solid var(--color-border)',
   flexShrink: 0,
 };
 
@@ -778,13 +778,13 @@ const lifecycleBarStyle: CSSProperties = {
   alignItems: 'center',
   gap: 0,
   padding: '16px 24px 12px',
-  borderBottom: '1px solid #e2e8f0',
+  borderBottom: '1px solid var(--color-border)',
   flexShrink: 0,
 };
 
 const templateSectionStyle: CSSProperties = {
   padding: '16px 24px',
-  borderBottom: '1px solid #e2e8f0',
+  borderBottom: '1px solid var(--color-border)',
   flexShrink: 0,
 };
 
@@ -800,7 +800,7 @@ const sectionTitleStyle: CSSProperties = {
   fontWeight: 700,
   textTransform: 'uppercase',
   letterSpacing: '0.06em',
-  color: '#94a3b8',
+  color: 'var(--color-text-tertiary)',
   marginBottom: 10,
 };
 
@@ -810,18 +810,18 @@ const templatePreStyle: CSSProperties = {
   lineHeight: 1.7,
   padding: '14px 16px',
   margin: 0,
-  background: '#f8fafc',
-  border: '1px solid #e2e8f0',
+  background: 'var(--color-surface-panel)',
+  border: '1px solid var(--color-border)',
   borderRadius: 4,
   whiteSpace: 'pre-wrap',
   wordBreak: 'break-word',
-  color: '#0f172a',
+  color: 'var(--color-text-primary)',
 };
 
 const expCardStyle: CSSProperties = {
   padding: '12px 14px',
-  background: '#f8fafc',
-  border: '1px solid #e2e8f0',
+  background: 'var(--color-surface-panel)',
+  border: '1px solid var(--color-border)',
   borderRadius: 6,
 };
 
@@ -838,12 +838,12 @@ const scoreLabelStyle: CSSProperties = {
   fontWeight: 700,
   textTransform: 'uppercase',
   letterSpacing: '0.06em',
-  color: '#94a3b8',
+  color: 'var(--color-text-tertiary)',
 };
 
 const scoreValStyle: CSSProperties = {
   fontSize: 14,
   fontWeight: 600,
   fontFamily: 'monospace',
-  color: '#0f172a',
+  color: 'var(--color-text-primary)',
 };

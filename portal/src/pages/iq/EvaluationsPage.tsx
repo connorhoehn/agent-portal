@@ -7,9 +7,9 @@
 // fed by the SSE stream — no separate REST table required.
 // Clicking the JudgeNode in the canary diagram navigates here.
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import type { CSSProperties } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { usePromptList } from '../../components/canary/usePromptLibrary.js';
 import {
   useCanaryStore,
@@ -67,10 +67,10 @@ const FAIL_THRESHOLDS = [
 const STORAGE_KEY = 'iq-judge-config';
 
 const DIM_COLORS: Record<string, string> = {
-  helpfulness: '#6366f1',
-  factuality:  '#16a34a',
+  helpfulness: 'var(--color-primary)',
+  factuality:  'var(--color-success)',
   tone:        '#0891b2',
-  conciseness: '#f59e0b',
+  conciseness: 'var(--color-warning)',
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -105,9 +105,9 @@ function totalWeight(dims: RubricDimension[]) {
 
 function scoreColor(score01: number): string {
   // score01 is 0–1 from the judge
-  if (score01 >= 0.7) return '#10b981';
-  if (score01 >= 0.5) return '#f59e0b';
-  return '#ef4444';
+  if (score01 >= 0.7) return 'var(--color-success)';
+  if (score01 >= 0.5) return 'var(--color-warning)';
+  return 'var(--color-danger)';
 }
 
 function fmt01(v: number): string {
@@ -129,7 +129,7 @@ function WeightSlider({
   onChange: (key: string, w: number) => void;
   totalOther: number;
 }) {
-  const color = DIM_COLORS[dim.key] ?? '#6366f1';
+  const color = DIM_COLORS[dim.key] ?? 'var(--color-primary)';
   const maxAllowed = 100 - totalOther; // how much headroom is left
   const canIncrease = dim.weight + 5 <= dim.weight + maxAllowed;
   const canDecrease = dim.weight >= 5;
@@ -177,7 +177,7 @@ function ScoreRow({ entry, i }: { entry: JudgeHistoryEntry; i: number }) {
     <div style={scoreRowStyle}>
       <div style={scoreRowTopStyle} onClick={() => setOpen(o => !o)}>
         <span style={scoreIndexStyle}>#{i + 1}</span>
-        <span style={{ ...scoreSideStyle, background: entry.side === 'A' ? '#e0e7ff' : '#dcfce7', color: entry.side === 'A' ? '#4338ca' : '#166534' }}>
+        <span style={{ ...scoreSideStyle, background: entry.side === 'A' ? 'var(--color-primary-soft)' : 'var(--color-success-bg)', color: entry.side === 'A' ? 'var(--color-primary)' : 'var(--color-success)' }}>
           {entry.side}
         </span>
         <div style={{ flex: 1 }}>
@@ -196,7 +196,7 @@ function ScoreRow({ entry, i }: { entry: JudgeHistoryEntry; i: number }) {
           <div style={dimGridStyle}>
             {Object.entries(entry.scores).map(([k, v]) => (
               <div key={k} style={dimScoreItemStyle}>
-                <span style={{ ...dimScoreLabelStyle, color: DIM_COLORS[k] ?? '#94a3b8' }}>{k}</span>
+                <span style={{ ...dimScoreLabelStyle, color: DIM_COLORS[k] ?? 'var(--color-text-tertiary)' }}>{k}</span>
                 <span style={{ ...dimScoreValStyle, color: scoreColor(v) }}>{fmt01(v)}</span>
               </div>
             ))}
@@ -213,6 +213,12 @@ export default function EvaluationsPage(): React.ReactElement {
   const navigate = useNavigate();
   const [cfg, setCfg] = useState<JudgeConfig>(loadConfig);
   const [saved, setSaved] = useState(false);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // Clear any pending "Saved" reset timer on unmount to avoid setState after unmount.
+  useEffect(() => () => {
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+  }, []);
 
   const { prompts } = usePromptList();
 
@@ -237,7 +243,8 @@ export default function EvaluationsPage(): React.ReactElement {
   const handleSave = useCallback(() => {
     saveConfig(cfg);
     setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+    savedTimerRef.current = setTimeout(() => setSaved(false), 2000);
     fetch('/api/observability/evaluations/config', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -268,20 +275,10 @@ export default function EvaluationsPage(): React.ReactElement {
               <span style={judgeArnTextStyle} title={judgeArn}>{judgeArn}</span>
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-              <a
-                href={judgePromptId ? `/iq/prompts` : undefined}
-                onClick={e => { e.preventDefault(); navigate('/iq/prompts'); }}
-                style={smallLinkStyle}
-              >
-                Edit in Prompt Studio ↗
-              </a>
-              <a
-                href="/iq/diff"
-                onClick={e => { e.preventDefault(); navigate('/iq/diff'); }}
-                style={smallLinkStyle}
-              >
-                Compare versions ↗
-              </a>
+              {judgePromptId
+                ? <Link to="/iq/prompts" style={smallLinkStyle}>Edit in Prompt Studio ↗</Link>
+                : <span style={smallLinkStyle}>Edit in Prompt Studio ↗</span>}
+              <Link to="/iq/diff" style={smallLinkStyle}>Compare versions ↗</Link>
             </div>
           </div>
         )}
@@ -291,11 +288,11 @@ export default function EvaluationsPage(): React.ReactElement {
           <div style={sectionHeaderStyle}>
             <h2 style={sectionTitleStyle}>LLM-as-Judge</h2>
             <label style={toggleLabelStyle}>
-              <span style={{ color: cfg.enabled ? '#10b981' : '#94a3b8', fontWeight: 600, fontSize: 12 }}>
+              <span style={{ color: cfg.enabled ? 'var(--color-success)' : 'var(--color-text-tertiary)', fontWeight: 600, fontSize: 12 }}>
                 {cfg.enabled ? 'Enabled' : 'Disabled'}
               </span>
               <div
-                style={{ ...toggleTrackStyle, background: cfg.enabled ? '#6366f1' : '#e2e8f0' }}
+                style={{ ...toggleTrackStyle, background: cfg.enabled ? 'var(--color-primary)' : 'var(--color-border)' }}
                 onClick={() => setCfg(c => ({ ...c, enabled: !c.enabled }))}
               >
                 <div style={{ ...toggleThumbStyle, transform: cfg.enabled ? 'translateX(18px)' : 'translateX(2px)' }} />
@@ -331,7 +328,7 @@ export default function EvaluationsPage(): React.ReactElement {
         <section style={sectionStyle}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <h3 style={{ ...fieldLabelStyle, margin: 0 }}>Rubric weights</h3>
-            <span style={{ fontSize: 11, color: weightOk ? '#10b981' : '#ef4444', fontWeight: 600 }}>
+            <span style={{ fontSize: 11, color: weightOk ? 'var(--color-success)' : 'var(--color-danger)', fontWeight: 600 }}>
               {total}% / 100%
             </span>
           </div>
@@ -472,10 +469,10 @@ export default function EvaluationsPage(): React.ReactElement {
 
         {/* Legend */}
         <div style={legendStyle}>
-          <span style={legendItemStyle}><span style={{ color: '#10b981' }}>●</span> ≥70 Pass</span>
-          <span style={legendItemStyle}><span style={{ color: '#f59e0b' }}>●</span> 50–69 Review</span>
-          <span style={legendItemStyle}><span style={{ color: '#ef4444' }}>●</span> &lt;50 Fail</span>
-          <span style={{ ...legendItemStyle, marginLeft: 'auto', color: '#94a3b8', fontSize: 10 }}>scores are 0–100 (judge outputs 0–1)</span>
+          <span style={legendItemStyle}><span style={{ color: 'var(--color-success)' }}>●</span> ≥70 Pass</span>
+          <span style={legendItemStyle}><span style={{ color: 'var(--color-warning)' }}>●</span> 50–69 Review</span>
+          <span style={legendItemStyle}><span style={{ color: 'var(--color-danger)' }}>●</span> &lt;50 Fail</span>
+          <span style={{ ...legendItemStyle, marginLeft: 'auto', color: 'var(--color-text-tertiary)', fontSize: 10 }}>scores are 0–100 (judge outputs 0–1)</span>
         </div>
       </div>
     </div>
@@ -512,8 +509,8 @@ const scoresColStyle: CSSProperties = {
 };
 
 const judgeArnBannerStyle: CSSProperties = {
-  background: '#eef2ff',
-  border: '1px solid #c7d2fe',
+  background: 'var(--color-primary-soft)',
+  border: '1px solid var(--color-border-emphasis)',
   borderRadius: 8,
   padding: '10px 14px',
 };
@@ -523,8 +520,8 @@ const judgeVersionBadgeStyle: CSSProperties = {
   fontSize: 11,
   fontWeight: 700,
   fontFamily: 'monospace',
-  background: '#6366f1',
-  color: '#fff',
+  background: 'var(--color-primary)',
+  color: 'var(--color-surface)',
   padding: '2px 8px',
   borderRadius: 4,
   flexShrink: 0,
@@ -533,7 +530,7 @@ const judgeVersionBadgeStyle: CSSProperties = {
 const judgeArnTextStyle: CSSProperties = {
   fontSize: 10,
   fontFamily: 'monospace',
-  color: '#4338ca',
+  color: 'var(--color-primary)',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
@@ -542,14 +539,14 @@ const judgeArnTextStyle: CSSProperties = {
 
 const smallLinkStyle: CSSProperties = {
   fontSize: 11,
-  color: '#6366f1',
+  color: 'var(--color-primary)',
   textDecoration: 'none',
   cursor: 'pointer',
 };
 
 const sectionStyle: CSSProperties = {
-  background: '#fff',
-  border: '1px solid #e2e8f0',
+  background: 'var(--color-surface)',
+  border: '1px solid var(--color-border)',
   borderRadius: 8,
   padding: '14px 18px',
 };
@@ -564,13 +561,13 @@ const sectionHeaderStyle: CSSProperties = {
 const sectionTitleStyle: CSSProperties = {
   fontSize: 13,
   fontWeight: 700,
-  color: '#0f172a',
+  color: 'var(--color-text-primary)',
   margin: 0,
 };
 
 const sectionDescStyle: CSSProperties = {
   fontSize: 11,
-  color: '#64748b',
+  color: 'var(--color-text-secondary)',
   margin: 0,
   lineHeight: 1.6,
 };
@@ -597,7 +594,7 @@ const toggleThumbStyle: CSSProperties = {
   width: 18,
   height: 18,
   borderRadius: 9,
-  background: '#fff',
+  background: 'var(--color-surface)',
   boxShadow: '0 1px 3px rgba(0,0,0,.25)',
   transition: 'transform 0.2s',
 };
@@ -607,13 +604,13 @@ const fieldLabelStyle: CSSProperties = {
   fontWeight: 700,
   textTransform: 'uppercase',
   letterSpacing: '0.06em',
-  color: '#475569',
+  color: 'var(--color-text-secondary)',
   margin: '0 0 6px',
 };
 
 const fieldHintStyle: CSSProperties = {
   fontSize: 11,
-  color: '#94a3b8',
+  color: 'var(--color-text-tertiary)',
   margin: '4px 0 8px',
   lineHeight: 1.5,
 };
@@ -631,29 +628,29 @@ const modelCardBase: CSSProperties = {
   flexDirection: 'column',
   gap: 2,
   padding: '8px 10px',
-  border: '1px solid #e2e8f0',
+  border: '1px solid var(--color-border)',
   borderRadius: 6,
   cursor: 'pointer',
   textAlign: 'left',
-  background: '#f8fafc',
+  background: 'var(--color-surface-panel)',
   fontFamily: 'inherit',
 };
 
 const modelCardStyle: CSSProperties = { ...modelCardBase };
-const modelCardActiveStyle: CSSProperties = { ...modelCardBase, border: '2px solid #6366f1', background: '#eef2ff' };
+const modelCardActiveStyle: CSSProperties = { ...modelCardBase, border: '2px solid var(--color-primary)', background: 'var(--color-primary-soft)' };
 
-const modelNameStyle: CSSProperties = { fontSize: 11, fontWeight: 600, color: '#0f172a' };
-const modelHintStyle: CSSProperties = { fontSize: 10, color: '#94a3b8' };
+const modelNameStyle: CSSProperties = { fontSize: 11, fontWeight: 600, color: 'var(--color-text-primary)' };
+const modelHintStyle: CSSProperties = { fontSize: 10, color: 'var(--color-text-tertiary)' };
 
 const codeStyle: CSSProperties = {
-  fontFamily: 'monospace', fontSize: 10, background: '#f1f5f9',
-  padding: '1px 4px', borderRadius: 3, color: '#475569',
+  fontFamily: 'monospace', fontSize: 10, background: 'var(--color-surface-hover)',
+  padding: '1px 4px', borderRadius: 3, color: 'var(--color-text-secondary)',
 };
 
 const selectStyle: CSSProperties = {
   flex: 1, padding: '6px 8px', fontSize: 12,
-  border: '1px solid #e2e8f0', borderRadius: 4, background: '#f8fafc',
-  color: '#0f172a', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
+  border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface-panel)',
+  color: 'var(--color-text-primary)', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
 };
 
 const dimsListStyle: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 8 };
@@ -661,83 +658,83 @@ const dimsListStyle: CSSProperties = { display: 'flex', flexDirection: 'column',
 const dimRowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 10 };
 const dimLabelBlockStyle: CSSProperties = { flex: '0 0 130px' };
 const dimNameStyle: CSSProperties = { display: 'block', fontSize: 11, fontWeight: 600 };
-const dimDescStyle: CSSProperties = { display: 'block', fontSize: 10, color: '#94a3b8', lineHeight: 1.4 };
+const dimDescStyle: CSSProperties = { display: 'block', fontSize: 10, color: 'var(--color-text-tertiary)', lineHeight: 1.4 };
 const sliderWrapStyle: CSSProperties = { flex: 1, display: 'flex', alignItems: 'center', gap: 6 };
-const dimWeightStyle: CSSProperties = { fontSize: 11, fontWeight: 700, color: '#0f172a', width: 30, textAlign: 'center', flexShrink: 0 };
+const dimWeightStyle: CSSProperties = { fontSize: 11, fontWeight: 700, color: 'var(--color-text-primary)', width: 30, textAlign: 'center', flexShrink: 0 };
 
 const trackStyle: CSSProperties = {
-  flex: 1, height: 8, background: '#e2e8f0', borderRadius: 4, overflow: 'hidden',
+  flex: 1, height: 8, background: 'var(--color-border)', borderRadius: 4, overflow: 'hidden',
 };
 const trackFillStyle: CSSProperties = {
   height: '100%', borderRadius: 4, transition: 'width 0.15s ease',
 };
 const stepBtnStyle: CSSProperties = {
-  width: 24, height: 24, border: '1px solid #e2e8f0', borderRadius: 4,
-  background: '#f8fafc', color: '#475569', fontSize: 14, fontWeight: 700,
+  width: 24, height: 24, border: '1px solid var(--color-border)', borderRadius: 4,
+  background: 'var(--color-surface-panel)', color: 'var(--color-text-secondary)', fontSize: 14, fontWeight: 700,
   cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
   flexShrink: 0, fontFamily: 'inherit', lineHeight: 1, padding: 0,
 };
 
-const weightWarnStyle: CSSProperties = { marginTop: 6, fontSize: 11, color: '#ef4444', fontWeight: 500 };
+const weightWarnStyle: CSSProperties = { marginTop: 6, fontSize: 11, color: 'var(--color-danger)', fontWeight: 500 };
 
 const resetBtnStyle: CSSProperties = {
   marginTop: 8, padding: '4px 10px', fontSize: 11,
-  border: '1px solid #e2e8f0', borderRadius: 4, background: '#f8fafc',
-  color: '#64748b', cursor: 'pointer', fontFamily: 'inherit',
+  border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface-panel)',
+  color: 'var(--color-text-secondary)', cursor: 'pointer', fontFamily: 'inherit',
 };
 
 const rowFieldStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 10 };
-const inlineFieldLabelStyle: CSSProperties = { fontSize: 11, fontWeight: 600, color: '#475569', flex: '0 0 90px' };
+const inlineFieldLabelStyle: CSSProperties = { fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)', flex: '0 0 90px' };
 
 const saveRowStyle: CSSProperties = { display: 'flex', justifyContent: 'flex-end' };
 
 const saveBtnStyle: CSSProperties = {
   padding: '8px 18px', fontSize: 12, fontWeight: 600,
-  border: 'none', borderRadius: 6, background: '#6366f1', color: '#fff',
+  border: 'none', borderRadius: 6, background: 'var(--color-primary)', color: 'var(--color-surface)',
   cursor: 'pointer', fontFamily: 'inherit',
 };
-const saveBtnDisabledStyle: CSSProperties = { ...saveBtnStyle, background: '#e2e8f0', color: '#94a3b8', cursor: 'not-allowed' };
+const saveBtnDisabledStyle: CSSProperties = { ...saveBtnStyle, background: 'var(--color-border)', color: 'var(--color-text-tertiary)', cursor: 'not-allowed' };
 
 // ── Scores panel ──────────────────────────────────────────────────────────────
 
 const statRowStyle: CSSProperties = { display: 'flex', gap: 8 };
 
 const statCardStyle: CSSProperties = {
-  flex: 1, background: '#fff', border: '1px solid #e2e8f0',
+  flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)',
   borderRadius: 8, padding: '10px 12px', textAlign: 'center',
 };
 
-const statNumStyle: CSSProperties = { fontSize: 22, fontWeight: 700, color: '#0f172a' };
+const statNumStyle: CSSProperties = { fontSize: 22, fontWeight: 700, color: 'var(--color-text-primary)' };
 const statLabelStyle: CSSProperties = { fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 2 };
 
 const meansRowStyle: CSSProperties = { display: 'flex', gap: 8 };
 
 const meanCardStyle: CSSProperties = {
-  flex: 1, background: '#fff', border: '1px solid #e2e8f0',
+  flex: 1, background: 'var(--color-surface)', border: '1px solid var(--color-border)',
   borderRadius: 8, padding: '8px 12px',
   display: 'flex', flexDirection: 'column', gap: 2,
 };
-const meanLabelStyle: CSSProperties = { fontSize: 10, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' };
-const meanValStyle: CSSProperties = { fontSize: 18, fontWeight: 700, color: '#0f172a' };
+const meanLabelStyle: CSSProperties = { fontSize: 10, color: 'var(--color-text-tertiary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' };
+const meanValStyle: CSSProperties = { fontSize: 18, fontWeight: 700, color: 'var(--color-text-primary)' };
 
 const scoresPanelHeaderStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 8 };
 const scoresBadgeStyle: CSSProperties = {
-  fontSize: 11, fontWeight: 700, background: '#e2e8f0',
-  color: '#475569', borderRadius: 10, padding: '1px 7px',
+  fontSize: 11, fontWeight: 700, background: 'var(--color-border)',
+  color: 'var(--color-text-secondary)', borderRadius: 10, padding: '1px 7px',
 };
-const scoresSourceStyle: CSSProperties = { fontSize: 10, color: '#94a3b8', marginLeft: 4 };
+const scoresSourceStyle: CSSProperties = { fontSize: 10, color: 'var(--color-text-tertiary)', marginLeft: 4 };
 
 const emptyScoresStyle: CSSProperties = {
   display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
-  padding: '32px 20px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8,
+  padding: '32px 20px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8,
 };
 const emptyIconStyle: CSSProperties = { fontSize: 32 };
-const emptyTextStyle: CSSProperties = { fontSize: 12, color: '#94a3b8', textAlign: 'center', maxWidth: 280, margin: 0, lineHeight: 1.6 };
+const emptyTextStyle: CSSProperties = { fontSize: 12, color: 'var(--color-text-tertiary)', textAlign: 'center', maxWidth: 280, margin: 0, lineHeight: 1.6 };
 
 const openCanaryBtnStyle: CSSProperties = {
   padding: '7px 14px', fontSize: 12, fontWeight: 600,
-  border: '1px solid #e2e8f0', borderRadius: 6, background: '#f8fafc',
-  color: '#475569', cursor: 'pointer', fontFamily: 'inherit',
+  border: '1px solid var(--color-border)', borderRadius: 6, background: 'var(--color-surface-panel)',
+  color: 'var(--color-text-secondary)', cursor: 'pointer', fontFamily: 'inherit',
 };
 
 const scoresListStyle: CSSProperties = {
@@ -751,31 +748,31 @@ const scoresListStyle: CSSProperties = {
 };
 
 const scoreRowStyle: CSSProperties = {
-  background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden',
+  background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 6, overflow: 'hidden',
 };
 
 const scoreRowTopStyle: CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer',
 };
 
-const scoreIndexStyle: CSSProperties = { fontSize: 10, color: '#94a3b8', flexShrink: 0, width: 24 };
+const scoreIndexStyle: CSSProperties = { fontSize: 10, color: 'var(--color-text-tertiary)', flexShrink: 0, width: 24 };
 
 const scoreSideStyle: CSSProperties = {
   fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 3, flexShrink: 0,
 };
 
 const scoreBarTrackStyle: CSSProperties = {
-  height: 6, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden',
+  height: 6, background: 'var(--color-surface-hover)', borderRadius: 3, overflow: 'hidden',
 };
 
 const scoreBarFillStyle: CSSProperties = { height: '100%', borderRadius: 3, transition: 'width 0.3s' };
 
 const scoreNumStyle: CSSProperties = { fontSize: 12, fontWeight: 700, flexShrink: 0, width: 28, textAlign: 'right' };
-const scoreTimeStyle: CSSProperties = { fontSize: 10, color: '#94a3b8', flexShrink: 0 };
-const chevronStyle: CSSProperties = { fontSize: 9, color: '#94a3b8', flexShrink: 0 };
+const scoreTimeStyle: CSSProperties = { fontSize: 10, color: 'var(--color-text-tertiary)', flexShrink: 0 };
+const chevronStyle: CSSProperties = { fontSize: 9, color: 'var(--color-text-tertiary)', flexShrink: 0 };
 
 const scoreDetailStyle: CSSProperties = {
-  borderTop: '1px solid #f1f5f9', padding: '8px 12px', background: '#f8fafc',
+  borderTop: '1px solid var(--color-surface-hover)', padding: '8px 12px', background: 'var(--color-surface-panel)',
 };
 
 const dimGridStyle: CSSProperties = {
@@ -787,4 +784,4 @@ const dimScoreLabelStyle: CSSProperties = { fontSize: 9, fontWeight: 700, textTr
 const dimScoreValStyle: CSSProperties = { fontSize: 16, fontWeight: 700 };
 
 const legendStyle: CSSProperties = { display: 'flex', gap: 10, padding: '4px 0', flexWrap: 'wrap', alignItems: 'center' };
-const legendItemStyle: CSSProperties = { fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 };
+const legendItemStyle: CSSProperties = { fontSize: 11, color: 'var(--color-text-secondary)', display: 'flex', alignItems: 'center', gap: 4 };
