@@ -1,7 +1,7 @@
 // PromptLibraryStep — Step 1 of the canary setup wizard.
 // Lets the user pick which Bedrock prompt they want to experiment with.
 
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import type { CSSProperties } from 'react';
 import { usePromptList } from '../usePromptLibrary.js';
 import type { PromptLibraryEntry } from '../types.js';
@@ -35,6 +35,7 @@ export function PromptLibraryStep({ onSelect, selected }: PromptLibraryStepProps
   const { prompts, loading, error, refresh } = usePromptList();
   const [search, setSearch] = useState('');
   const [manualArn, setManualArn] = useState('');
+  const manualArnId = useId();
 
   const filtered = prompts.filter((p) =>
     p.name.toLowerCase().includes(search.toLowerCase()),
@@ -55,6 +56,7 @@ export function PromptLibraryStep({ onSelect, selected }: PromptLibraryStepProps
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         style={searchInputStyle}
+        aria-label="Search prompts"
       />
 
       {/* Loading state */}
@@ -85,8 +87,9 @@ export function PromptLibraryStep({ onSelect, selected }: PromptLibraryStepProps
           <p style={{ margin: '0 0 10px', fontSize: 12, color: '#92400e', lineHeight: 1.5 }}>
             Cannot reach the Bedrock API. You can enter a prompt ARN directly to continue.
           </p>
-          <label style={labelStyle}>Enter ARN directly</label>
+          <label htmlFor={manualArnId} style={labelStyle}>Enter ARN directly</label>
           <input
+            id={manualArnId}
             type="text"
             placeholder="arn:aws:bedrock:us-east-1:123456789012:prompt/ABCDEFGHIJ"
             value={manualArn}

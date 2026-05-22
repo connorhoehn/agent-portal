@@ -413,12 +413,12 @@ function ExplorePage() {
         )}
         <span style={controlStyle}>
           Top-K
-          <input type="range" min={1} max={10} value={topK} onChange={e => setTopK(parseInt(e.target.value, 10))} style={{ width: 80 }} />
+          <input type="range" aria-label="Top K results" min={1} max={10} value={topK} onChange={e => setTopK(parseInt(e.target.value, 10))} style={{ width: 80 }} />
           <span style={{ width: 16, textAlign: 'right' }}>{topK}</span>
         </span>
         <span style={{ ...controlStyle, opacity: isSpecificFilter ? 0.35 : 1 }} title={isSpecificFilter ? 'Min strength ignored when a specific view is active' : undefined}>
           Min strength
-          <input type="range" min={0} max={100} value={Math.round(minStrength * 100)}
+          <input type="range" aria-label="Minimum relationship strength" min={0} max={100} value={Math.round(minStrength * 100)}
             onChange={e => setMinStrength(parseInt(e.target.value, 10) / 100)} style={{ width: 80 }}
             disabled={isSpecificFilter} />
           <span style={{ width: 28, textAlign: 'right' }}>{minStrength.toFixed(2)}</span>

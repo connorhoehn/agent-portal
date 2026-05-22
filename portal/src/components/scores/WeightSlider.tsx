@@ -1,9 +1,10 @@
 interface WeightSliderProps {
   value: number;
   onChange: (v: number) => void;
+  label?: string;
 }
 
-export function WeightSlider({ value, onChange }: WeightSliderProps) {
+export function WeightSlider({ value, onChange, label = 'Composite weighting: influence vs expertise' }: WeightSliderProps) {
   const infPct = Math.round(value * 100);
   const expPct = Math.round((1 - value) * 100);
 
@@ -40,6 +41,7 @@ export function WeightSlider({ value, onChange }: WeightSliderProps) {
       </div>
       <input
         type="range"
+        aria-label={label}
         min={0}
         max={100}
         value={infPct}

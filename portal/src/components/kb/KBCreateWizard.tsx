@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useId } from 'react';
 import type { KbRegistryEntry } from '../../pages/admin/KBRegistryPage.js';
 import { ProvisioningProgress } from './ProvisioningProgress.js';
 
@@ -123,6 +123,12 @@ function Step1({
 }) {
   const errors = validateStep1(state);
 
+  const nameId = useId();
+  const slugId = useId();
+  const tenantId = useId();
+  const purposeId = useId();
+  const descriptionId = useId();
+
   function handleNameChange(e: React.ChangeEvent<HTMLInputElement>) {
     const name = e.target.value;
     onChange(state.slugTouched ? { name } : { name, slug: toSlug(name) });
@@ -139,10 +145,11 @@ function Step1({
     <div>
       {/* Name */}
       <div style={fieldStyle()}>
-        <label style={labelStyle()}>
+        <label htmlFor={nameId} style={labelStyle()}>
           Name<RequiredStar />
         </label>
         <input
+          id={nameId}
           style={inputStyle({ error: !!nameErr })}
           value={state.name}
           onChange={handleNameChange}
@@ -161,10 +168,11 @@ function Step1({
 
       {/* Slug */}
       <div style={fieldStyle()}>
-        <label style={labelStyle()}>
+        <label htmlFor={slugId} style={labelStyle()}>
           Slug<RequiredStar />
         </label>
         <input
+          id={slugId}
           style={inputStyle({ error: !!slugErr })}
           value={state.slug}
           onChange={handleSlugChange}
@@ -184,8 +192,9 @@ function Step1({
 
       {/* Tenant */}
       <div style={fieldStyle()}>
-        <label style={labelStyle()}>Tenant</label>
+        <label htmlFor={tenantId} style={labelStyle()}>Tenant</label>
         <select
+          id={tenantId}
           style={inputStyle()}
           value={state.tenant}
           onChange={e => onChange({ tenant: e.target.value as Step1State['tenant'] })}
@@ -197,8 +206,9 @@ function Step1({
 
       {/* Purpose */}
       <div style={fieldStyle()}>
-        <label style={labelStyle()}>Purpose</label>
+        <label htmlFor={purposeId} style={labelStyle()}>Purpose</label>
         <select
+          id={purposeId}
           style={inputStyle()}
           value={state.purpose}
           onChange={e => onChange({ purpose: e.target.value as Step1State['purpose'] })}
@@ -213,8 +223,9 @@ function Step1({
 
       {/* Description */}
       <div style={fieldStyle()}>
-        <label style={labelStyle()}>Description</label>
+        <label htmlFor={descriptionId} style={labelStyle()}>Description</label>
         <textarea
+          id={descriptionId}
           style={{ ...inputStyle(), resize: 'vertical', minHeight: 64 }}
           value={state.description}
           onChange={e => onChange({ description: e.target.value })}
@@ -277,6 +288,10 @@ function Step2({
   const s3PrefixErr = touched.has('s3Prefix') ? errors.s3Prefix : undefined;
   const maxTokensErr = touched.has('maxTokens') ? errors.maxTokens : undefined;
 
+  const s3PrefixId = useId();
+  const chunkingId = useId();
+  const maxTokensId = useId();
+
   // Derived info for the preview panel
   const bedrockName = step1.tenant && step1.slug ? `${step1.tenant}-${step1.slug}` : '—';
   const auroraTable = step1.slug ? `bedrock_kb_${step1.slug.replace(/-/g, '_')}` : '—';
@@ -309,10 +324,11 @@ function Step2({
 
       {/* S3 Prefix */}
       <div style={fieldStyle()}>
-        <label style={labelStyle()}>
+        <label htmlFor={s3PrefixId} style={labelStyle()}>
           S3 Prefix<RequiredStar />
         </label>
         <input
+          id={s3PrefixId}
           style={inputStyle({ error: !!s3PrefixErr })}
           value={state.s3Prefix}
           onChange={e => onChange({ s3Prefix: e.target.value, s3PrefixTouched: true })}
@@ -328,8 +344,9 @@ function Step2({
 
       {/* Chunking strategy */}
       <div style={fieldStyle()}>
-        <label style={labelStyle()}>Chunking Strategy</label>
+        <label htmlFor={chunkingId} style={labelStyle()}>Chunking Strategy</label>
         <select
+          id={chunkingId}
           style={inputStyle()}
           value={state.chunkingStrategy}
           onChange={e =>
@@ -346,8 +363,9 @@ function Step2({
       {/* Max tokens — only relevant for non-NONE strategies */}
       {state.chunkingStrategy !== 'NONE' && (
         <div style={fieldStyle()}>
-          <label style={labelStyle()}>Max Tokens per Chunk</label>
+          <label htmlFor={maxTokensId} style={labelStyle()}>Max Tokens per Chunk</label>
           <input
+            id={maxTokensId}
             type="number"
             style={inputStyle({ error: !!maxTokensErr })}
             value={state.maxTokens}

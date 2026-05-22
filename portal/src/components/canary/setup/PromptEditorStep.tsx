@@ -166,6 +166,7 @@ export function PromptEditorStep({
             style={textareaStyle}
             placeholder="Edit the prompt template here…"
             spellCheck={false}
+            aria-label="Challenger prompt template"
           />
         </div>
       </div>
@@ -222,6 +223,7 @@ export function PromptEditorStep({
             placeholder="What changed? e.g. 'More concise instructions'"
             style={{ ...smallInputStyle, width: '100%', boxSizing: 'border-box' }}
             disabled={saving}
+            aria-label="Version description (what changed)"
           />
         </div>
 

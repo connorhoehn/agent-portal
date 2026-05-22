@@ -65,6 +65,7 @@ export function SkillFilter({ selectedSkill, onChange }: Props) {
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Search skill…"
+            aria-label="Search skills"
             style={{
               padding: '4px 8px',
               fontSize: 11,

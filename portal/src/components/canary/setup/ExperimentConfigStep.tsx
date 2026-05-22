@@ -1,7 +1,7 @@
 // ExperimentConfigStep — Step 3 of the canary setup wizard.
 // Summary of both versions and the launch control.
 
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import type { CSSProperties } from 'react';
 import { startCanaryExperiment } from '../usePromptLibrary.js';
 
@@ -36,6 +36,7 @@ export function ExperimentConfigStep({
   const [initialWeight, setInitialWeight] = useState(10);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const trafficSliderId = useId();
 
   async function handleStart(): Promise<void> {
     setStarting(true);
@@ -87,14 +88,16 @@ export function ExperimentConfigStep({
       <div>
         <div style={sectionHeaderStyle}>Initial traffic split</div>
         <div style={sliderRowStyle}>
-          <label style={sliderLabelStyle}>Initial B traffic</label>
+          <label htmlFor={trafficSliderId} style={sliderLabelStyle}>Initial B traffic</label>
           <input
+            id={trafficSliderId}
             type="range"
             min={1}
             max={50}
             value={initialWeight}
             onChange={(e) => setInitialWeight(Number(e.target.value))}
             style={{ flex: 1, accentColor: 'var(--color-primary, #6366f1)', cursor: 'pointer' }}
+            aria-label="Initial challenger (B) traffic percentage"
           />
           <span style={sliderValueStyle}>{initialWeight}%</span>
         </div>
