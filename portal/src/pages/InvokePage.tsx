@@ -184,9 +184,35 @@ function InvokePage() {
     <div style={{ display: 'flex', height: '100%' }}>
       {/* Session sidebar */}
       <div style={{ width: 220, borderRight: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sessions</span>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>Sessions</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {/* Agent selector — only shown when multiple agents are available */}
+            {agents && agents.length > 1 && (
+              <select
+                value={selectedId}
+                onChange={e => {
+                  setSelectedId(e.target.value);
+                  reset();  // clear current conversation when switching agents
+                }}
+                aria-label="Select agent"
+                style={{
+                  fontSize: 11,
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 4,
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text-primary)',
+                  padding: '2px 6px',
+                  cursor: 'pointer',
+                  maxWidth: 140,
+                  flexShrink: 0,
+                }}
+              >
+                {agents.map(a => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+            )}
             <button
               onClick={reset}
               title="New session"

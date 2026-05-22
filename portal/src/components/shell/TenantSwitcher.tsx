@@ -34,6 +34,8 @@ export function TenantSwitcher() {
 
   return (
     <div
+      role="group"
+      aria-label="Tenant"
       style={{
         display: 'inline-flex',
         border: '1px solid var(--color-border)',
@@ -47,8 +49,10 @@ export function TenantSwitcher() {
         return (
           <button
             key={t}
+            type="button"
             disabled={busy}
             onClick={() => void handleSelect(t)}
+            aria-pressed={isActive}
             style={{
               height: '100%',
               padding: '0 12px',
