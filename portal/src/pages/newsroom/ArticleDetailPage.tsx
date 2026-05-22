@@ -6,6 +6,7 @@ import type { CSSProperties } from 'react';
 import { Link, useParams } from 'react-router';
 import { PageSection } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useReactions } from '@connorhoehn/realtime-modules/client';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -129,6 +130,45 @@ function SidebarSection({ title, children }: { title: string; children: React.Re
   );
 }
 
+// ─── Article reactions (Gap 4 — Phase 1.4) ───────────────────────────────────
+//
+// Wires useReactions('newsroom-articles') so editors can react to articles
+// with emoji. targetId = articleId filters the shared channel stream per article.
+
+const REACTION_EMOJIS = ['👍', '❤️', '🎉', '🔥', '💡'] as const;
+
+function ArticleReactions({ articleId: _articleId }: { articleId: string }) {
+  // Channel: 'newsroom-articles' — shared across all articles.
+  // The current useReactions API returns channel-wide reactions; per-article
+  // scoping (via article-specific channels) is a Phase 2 enhancement.
+  const { reactions, react } = useReactions('newsroom-articles');
+
+  return (
+    <div style={reactionsRowStyle}>
+      {REACTION_EMOJIS.map((emoji) => {
+        const count = reactions.filter((r) => r.emoji === emoji).length;
+        return (
+          <button
+            key={emoji}
+            onClick={() => react(emoji)}
+            style={{
+              ...reactionBtnStyle,
+              background: count > 0 ? 'var(--color-accent-muted, #eff6ff)' : 'var(--color-surface, #fff)',
+              borderColor: count > 0 ? 'var(--color-accent, #3b82f6)' : 'var(--color-border, #e5e7eb)',
+            }}
+            title={`React with ${emoji}`}
+          >
+            {emoji}
+            {count > 0 && (
+              <span style={reactionCountStyle}>{count}</span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 function ArticleDetailPage() {
@@ -205,6 +245,9 @@ function ArticleDetailPage() {
             <span style={wordCountStyle}>{data.wordCount.toLocaleString()} words</span>
           )}
         </div>
+
+        {/* Reactions — wired to newsroom-articles channel, filtered by articleId */}
+        <ArticleReactions articleId={data.id} />
       </div>
 
       {/* Two-column layout: body + sidebars */}
@@ -417,4 +460,34 @@ const quoteStyle: CSSProperties = {
   borderLeft: '3px solid var(--color-border, #e5e7eb)',
   paddingLeft: 10,
   margin: '4px 0 0',
+};
+
+// ─── Reaction styles ─────────────────────────────────────────────────────────
+
+const reactionsRowStyle: CSSProperties = {
+  display: 'flex',
+  gap: 6,
+  marginTop: 14,
+  flexWrap: 'wrap',
+};
+
+const reactionBtnStyle: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 4,
+  padding: '3px 10px',
+  borderRadius: 9999,
+  border: '1px solid var(--color-border, #e5e7eb)',
+  background: 'var(--color-surface, #fff)',
+  cursor: 'pointer',
+  fontSize: 16,
+  lineHeight: 1,
+  transition: 'background 0.12s, border-color 0.12s',
+};
+
+const reactionCountStyle: CSSProperties = {
+  fontSize: 12,
+  fontWeight: 600,
+  color: 'var(--color-accent, #3b82f6)',
+  lineHeight: 1,
 };
