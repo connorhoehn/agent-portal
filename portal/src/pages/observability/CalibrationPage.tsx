@@ -594,51 +594,50 @@ function CalibrationPage() {
       </Card>
 
       {/* Run calibration dialog */}
-      {runDialog.open && (
-        <Modal
-          title="Run calibration"
-          onClose={() => !runDialog.busy && setRunDialog({ open: false, busy: false, err: null })}
-        >
-          <div style={modalForm}>
-            <label style={formLabel}>
-              Label
-              <input
-                type="text"
-                value={runLabel}
-                onChange={(e) => setRunLabel(e.target.value)}
-                disabled={runDialog.busy}
-                style={textInput}
-              />
-            </label>
-            <div style={hint}>
-              The judge will be re-run over all {cases.length} active case
-              {cases.length === 1 ? '' : 's'}. ~1 second per case. Cost is one
-              Nova-Pro call per case (≈ $0.001 / 20 cases).
-            </div>
-            {runDialog.err && (
-              <div style={errBlock}>Error: {runDialog.err}</div>
-            )}
-            <div style={modalActions}>
-              <button
-                type="button"
-                onClick={() => setRunDialog({ open: false, busy: false, err: null })}
-                style={secondaryBtn}
-                disabled={runDialog.busy}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleRunCalibration}
-                style={primaryBtn}
-                disabled={runDialog.busy}
-              >
-                {runDialog.busy ? 'Running…' : 'Run'}
-              </button>
-            </div>
+      <UIModal
+        open={runDialog.open}
+        onClose={() => { if (!runDialog.busy) setRunDialog({ open: false, busy: false, err: null }); }}
+        title="Run calibration"
+      >
+        <div style={modalForm}>
+          <label style={formLabel}>
+            Label
+            <input
+              type="text"
+              value={runLabel}
+              onChange={(e) => setRunLabel(e.target.value)}
+              disabled={runDialog.busy}
+              style={textInput}
+            />
+          </label>
+          <div style={hint}>
+            The judge will be re-run over all {cases.length} active case
+            {cases.length === 1 ? '' : 's'}. ~1 second per case. Cost is one
+            Nova-Pro call per case (≈ $0.001 / 20 cases).
           </div>
-        </Modal>
-      )}
+          {runDialog.err && (
+            <div style={errBlock}>Error: {runDialog.err}</div>
+          )}
+          <div style={modalActions}>
+            <button
+              type="button"
+              onClick={() => setRunDialog({ open: false, busy: false, err: null })}
+              style={secondaryBtn}
+              disabled={runDialog.busy}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleRunCalibration}
+              style={primaryBtn}
+              disabled={runDialog.busy}
+            >
+              {runDialog.busy ? 'Running…' : 'Run'}
+            </button>
+          </div>
+        </div>
+      </UIModal>
 
       {/* Add / edit case dialog */}
       {caseDialog.open && (
@@ -874,35 +873,6 @@ function CaseEditor({
   );
 }
 
-function Modal({
-  title,
-  onClose,
-  children,
-}: {
-  title: string;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-  return (
-    <div role="dialog" aria-modal="true" aria-label={title} onClick={onClose} style={overlayStyle}>
-      <div onClick={(e) => e.stopPropagation()} style={modalStyle}>
-        <div style={modalHeader}>
-          <h3 style={modalTitle}>{title}</h3>
-          <button onClick={onClose} style={closeBtn} aria-label="Close" type="button">×</button>
-        </div>
-        <div style={modalBody}>{children}</div>
-      </div>
-    </div>
-  );
-}
-
 function EmptyState({ text }: { text: string }) {
   return (
     <div
@@ -1052,54 +1022,6 @@ const inlineBtnDanger: CSSProperties = {
   border: 'none',
   padding: 0,
   cursor: 'pointer',
-};
-const overlayStyle: CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(0,0,0,0.45)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: 1000,
-  padding: 24,
-};
-const modalStyle: CSSProperties = {
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 6,
-  minWidth: 520,
-  maxWidth: 720,
-  width: '70vw',
-  maxHeight: '90vh',
-  display: 'flex',
-  flexDirection: 'column',
-  boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
-};
-const modalHeader: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: '12px 16px',
-  borderBottom: '1px solid var(--color-border)',
-};
-const modalTitle: CSSProperties = {
-  margin: 0,
-  fontSize: 14,
-  fontWeight: 600,
-};
-const closeBtn: CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  fontSize: 20,
-  lineHeight: 1,
-  color: 'var(--color-text-tertiary)',
-  cursor: 'pointer',
-  padding: '0 4px',
-};
-const modalBody: CSSProperties = {
-  padding: 16,
-  overflowY: 'auto',
-  fontSize: 12,
 };
 const modalForm: CSSProperties = {
   display: 'flex',

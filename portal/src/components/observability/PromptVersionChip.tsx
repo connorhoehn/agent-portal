@@ -11,7 +11,7 @@
 
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { Chip } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, Modal } from '@connorhoehnslalom/ui-components/shared';
 
 interface PromptVersionDetail {
   promptVersion: string;
@@ -56,23 +56,19 @@ export function PromptVersionChip({ promptVersion, size = 'xs' }: Props) {
           <span style={monoStyle}>{label}</span>
         </Chip>
       </button>
-      {open && (
-        <PromptVersionModal
-          promptVersion={promptVersion}
-          onClose={() => setOpen(false)}
-        />
-      )}
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Prompt version"
+        maxWidth={520}
+      >
+        <PromptVersionBody promptVersion={promptVersion} />
+      </Modal>
     </>
   );
 }
 
-function PromptVersionModal({
-  promptVersion,
-  onClose,
-}: {
-  promptVersion: string;
-  onClose: () => void;
-}) {
+function PromptVersionBody({ promptVersion }: { promptVersion: string }) {
   const [detail, setDetail] = useState<PromptVersionDetail | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -112,69 +108,48 @@ function PromptVersionModal({
     };
   }, [promptVersion]);
 
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Prompt version detail"
-      onClick={onClose}
-      style={overlayStyle}
-    >
-      <div onClick={(e) => e.stopPropagation()} style={modalStyle}>
-        <div style={modalHeader}>
-          <h3 style={modalTitle}>
-            Prompt version <span style={monoStyle}>p:{promptVersion.slice(0, 12)}</span>
-          </h3>
-          <button onClick={onClose} style={closeBtn} aria-label="Close">
-            ×
-          </button>
-        </div>
-
-        {loading && <div style={modalBody}>Loading…</div>}
-
-        {err && (
-          <div style={{ ...modalBody, color: 'var(--color-danger, #ef4444)' }}>
-            Could not load prompt version: {err}
-          </div>
-        )}
-
-        {detail && (
-          <div style={modalBody}>
-            <div style={metaGrid}>
-              <div style={metaLabel}>AGENT</div>
-              <div style={metaValue}>
-                <span style={monoStyle}>{detail.agentId}</span>
-              </div>
-              <div style={metaLabel}>REGISTERED</div>
-              <div style={metaValue}>
-                {new Date(detail.registeredAt).toLocaleString()}
-              </div>
-              <div style={metaLabel}>SHA-256</div>
-              <div style={metaValue}>
-                <span style={monoStyle}>{detail.contentSha256}</span>
-              </div>
-              {detail.notes && (
-                <>
-                  <div style={metaLabel}>NOTES</div>
-                  <div style={metaValue}>{detail.notes}</div>
-                </>
-              )}
-            </div>
-
-            <div style={contentLabel}>SYSTEM PROMPT</div>
-            <pre style={contentPre}>{detail.content}</pre>
-          </div>
-        )}
+    <>
+      <div style={versionSubtitle}>
+        <span style={monoStyle}>p:{promptVersion.slice(0, 12)}</span>
       </div>
-    </div>
+
+      {loading && <div>Loading…</div>}
+
+      {err && (
+        <div style={{ color: 'var(--color-danger, #ef4444)' }}>
+          Could not load prompt version: {err}
+        </div>
+      )}
+
+      {detail && (
+        <div>
+          <div style={metaGrid}>
+            <div style={metaLabel}>AGENT</div>
+            <div style={metaValue}>
+              <span style={monoStyle}>{detail.agentId}</span>
+            </div>
+            <div style={metaLabel}>REGISTERED</div>
+            <div style={metaValue}>
+              {new Date(detail.registeredAt).toLocaleString()}
+            </div>
+            <div style={metaLabel}>SHA-256</div>
+            <div style={metaValue}>
+              <span style={monoStyle}>{detail.contentSha256}</span>
+            </div>
+            {detail.notes && (
+              <>
+                <div style={metaLabel}>NOTES</div>
+                <div style={metaValue}>{detail.notes}</div>
+              </>
+            )}
+          </div>
+
+          <div style={contentLabel}>SYSTEM PROMPT</div>
+          <pre style={contentPre}>{detail.content}</pre>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -193,57 +168,10 @@ const monoStyle: CSSProperties = {
   fontFamily: 'ui-monospace, monospace',
 };
 
-const overlayStyle: CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(0,0,0,0.45)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: 1000,
-  padding: 24,
-};
-
-const modalStyle: CSSProperties = {
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 6,
-  minWidth: 480,
-  maxWidth: 760,
-  maxHeight: '85vh',
-  display: 'flex',
-  flexDirection: 'column',
-  boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
-};
-
-const modalHeader: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: '12px 16px',
-  borderBottom: '1px solid var(--color-border)',
-};
-
-const modalTitle: CSSProperties = {
-  margin: 0,
-  fontSize: 14,
-  fontWeight: 600,
-};
-
-const closeBtn: CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  fontSize: 20,
-  lineHeight: 1,
-  color: 'var(--color-text-tertiary)',
-  cursor: 'pointer',
-  padding: '0 4px',
-};
-
-const modalBody: CSSProperties = {
-  padding: 16,
-  overflowY: 'auto',
+const versionSubtitle: CSSProperties = {
   fontSize: 12,
+  color: 'var(--color-text-tertiary)',
+  marginBottom: 12,
 };
 
 const metaGrid: CSSProperties = {

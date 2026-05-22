@@ -3,8 +3,9 @@
 // it doesn't eat vertical space in the left rail. Each entry: WHEN to open
 // it + WHAT to look at. Short form — this is a refresher, not docs.
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { CSSProperties } from 'react';
+import { Modal } from '@connorhoehnslalom/ui-components/shared';
 
 interface HelpEntry {
   group: 'Operate' | 'Triage' | 'Quality' | 'Eval' | 'Governance';
@@ -91,16 +92,6 @@ const GROUP_BLURB: Record<HelpEntry['group'], string> = {
 export function ObservabilityHelpButton() {
   const [open, setOpen] = useState(false);
 
-  // Close on Escape
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open]);
-
   return (
     <>
       <button
@@ -112,34 +103,15 @@ export function ObservabilityHelpButton() {
       >
         ?
       </button>
-      {open && <Modal onClose={() => setOpen(false)} />}
-    </>
-  );
-}
-
-/**
- * Legacy default export — keeps the old import shape working for anything
- * that still imports `ObservabilityHelp`. Renders the button only.
- */
-export function ObservabilityHelp() {
-  return <ObservabilityHelpButton />;
-}
-
-function Modal({ onClose }: { onClose: () => void }) {
-  return (
-    <div role="dialog" aria-modal="true" style={backdrop} onClick={onClose}>
-      <div style={panel} onClick={(e) => e.stopPropagation()}>
-        <header style={modalHead}>
-          <div>
-            <h2 style={modalTitle}>What are these tabs?</h2>
-            <p style={modalSub}>
-              Eighteen observability surfaces, grouped by what you're trying to do.
-            </p>
-          </div>
-          <button onClick={onClose} style={closeBtn} aria-label="Close">
-            ✕
-          </button>
-        </header>
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Observability guide"
+        maxWidth={960}
+      >
+        <p style={modalSub}>
+          Eighteen observability surfaces, grouped by what you're trying to do.
+        </p>
         <div style={modalBody}>
           {GROUP_ORDER.map((g) => {
             const entries = ENTRIES.filter((e) => e.group === g);
@@ -166,9 +138,17 @@ function Modal({ onClose }: { onClose: () => void }) {
             );
           })}
         </div>
-      </div>
-    </div>
+      </Modal>
+    </>
   );
+}
+
+/**
+ * Legacy default export — keeps the old import shape working for anything
+ * that still imports `ObservabilityHelp`. Renders the button only.
+ */
+export function ObservabilityHelp() {
+  return <ObservabilityHelpButton />;
 }
 
 const triggerBtn: CSSProperties = {
@@ -187,61 +167,13 @@ const triggerBtn: CSSProperties = {
   justifyContent: 'center',
 };
 
-const backdrop: CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(0,0,0,0.45)',
-  zIndex: 1000,
-  display: 'flex',
-  alignItems: 'flex-start',
-  justifyContent: 'center',
-  padding: '6vh 24px 24px',
-  overflowY: 'auto',
-};
-
-const panel: CSSProperties = {
-  width: 'min(960px, 100%)',
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-md, 8px)',
-  boxShadow: '0 10px 40px rgba(0,0,0,0.25)',
-  display: 'flex',
-  flexDirection: 'column',
-  maxHeight: '88vh',
-};
-
-const modalHead: CSSProperties = {
-  padding: '16px 20px',
-  borderBottom: '1px solid var(--color-border)',
-  display: 'flex',
-  alignItems: 'flex-start',
-  justifyContent: 'space-between',
-  gap: 16,
-};
-
-const modalTitle: CSSProperties = {
-  fontSize: 16,
-  fontWeight: 600,
-  margin: 0,
-};
-
 const modalSub: CSSProperties = {
   fontSize: 12,
   color: 'var(--color-text-tertiary)',
-  margin: '4px 0 0 0',
-};
-
-const closeBtn: CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  fontSize: 14,
-  color: 'var(--color-text-secondary)',
-  cursor: 'pointer',
-  padding: 4,
+  margin: '0 0 12px 0',
 };
 
 const modalBody: CSSProperties = {
-  padding: '12px 20px 20px',
   overflowY: 'auto',
 };
 
