@@ -505,7 +505,7 @@ function MemoryOperationsCard({ invocationId }: { invocationId: string }) {
                 <pre style={memoryPre}>{e.retrievedSummary}</pre>
               )}
               {e.errored && e.errorMessage && (
-                <pre style={{ ...memoryPre, color: 'var(--color-danger, #ef4444)' }}>
+                <pre style={{ ...memoryPre, color: 'var(--color-danger)' }}>
                   {e.errorMessage}
                 </pre>
               )}
@@ -760,7 +760,7 @@ const judgePara: CSSProperties = {
 const btnLink: CSSProperties = {
   padding: '2px 8px',
   fontSize: 12,
-  color: 'var(--color-primary, #6366f1)',
+  color: 'var(--color-primary)',
   textDecoration: 'none',
 };
 
@@ -773,9 +773,9 @@ const btnPrimary: CSSProperties = {
   padding: '6px 12px',
   fontSize: 12,
   fontWeight: 500,
-  background: 'var(--color-primary, #6366f1)',
-  color: '#fff',
-  border: '1px solid var(--color-primary, #6366f1)',
+  background: 'var(--color-primary)',
+  color: 'var(--color-surface)',
+  border: '1px solid var(--color-primary)',
   borderRadius: 'var(--radius-sm, 4px)',
   cursor: 'pointer',
 };

@@ -66,39 +66,44 @@ interface ProjectDetail {
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
+// Status indicator colors use semantic tokens from app.css.
+// `in_review` and `merged` keep their purple identity (not in token palette
+// for purple-tinted "review" state) — kept as inline hex by design.
 const STATUS_STYLES: Record<WorkItemStatus, { bg: string; text: string; dot: string }> = {
-  open:        { bg: '#f9fafb', text: '#6b7280', dot: '#9ca3af' },
-  in_progress: { bg: '#eff6ff', text: '#1e40af', dot: '#3b82f6' },
-  in_review:   { bg: '#fdf4ff', text: '#7e22ce', dot: '#a855f7' },
-  done:        { bg: '#f0fdf4', text: '#166534', dot: '#16a34a' },
-  cancelled:   { bg: '#fef2f2', text: '#991b1b', dot: '#ef4444' },
+  open:        { bg: 'var(--color-bg)',         text: 'var(--color-text-secondary)', dot: 'var(--color-text-tertiary)' },
+  in_progress: { bg: 'var(--color-info-bg)',    text: 'var(--color-primary)',        dot: 'var(--color-info)' },
+  in_review:   { bg: '#fdf4ff',                 text: '#7e22ce',                     dot: '#a855f7' },
+  done:        { bg: 'var(--color-success-bg)', text: 'var(--color-success)',        dot: 'var(--color-success)' },
+  cancelled:   { bg: 'var(--color-danger-bg)',  text: 'var(--color-danger)',         dot: 'var(--color-danger)' },
 };
 
 const PRIORITY_STYLES: Record<WorkItemPriority, { color: string; label: string }> = {
-  critical: { color: '#dc2626', label: '🔴 Critical' },
-  high:     { color: '#ea580c', label: '🟠 High' },
-  medium:   { color: '#ca8a04', label: '🟡 Medium' },
-  low:      { color: '#6b7280', label: '⚪ Low' },
+  critical: { color: 'var(--color-danger)',         label: '🔴 Critical' },
+  high:     { color: 'var(--color-warning)',        label: '🟠 High' },
+  medium:   { color: 'var(--color-warning)',        label: '🟡 Medium' },
+  low:      { color: 'var(--color-text-secondary)', label: '⚪ Low' },
 };
 
+// `merged` purple identity is intentional — distinguishes merged PRs from open
+// (success) and closed (danger); no purple token exists in app.css yet.
 const PR_STYLES: Record<PrStatus, { bg: string; text: string; icon: string }> = {
-  merged: { bg: '#f5f3ff', text: '#7c3aed', icon: '⬡' },
-  open:   { bg: '#f0fdf4', text: '#166534', icon: '⊙' },
-  draft:  { bg: '#f9fafb', text: '#6b7280', icon: '⊘' },
-  closed: { bg: '#fef2f2', text: '#991b1b', icon: '✕' },
+  merged: { bg: '#f5f3ff',                  text: '#7c3aed',                     icon: '⬡' },
+  open:   { bg: 'var(--color-success-bg)',  text: 'var(--color-success)',        icon: '⊙' },
+  draft:  { bg: 'var(--color-bg)',          text: 'var(--color-text-secondary)', icon: '⊘' },
+  closed: { bg: 'var(--color-danger-bg)',   text: 'var(--color-danger)',         icon: '✕' },
 };
 
 const DECISION_STATUS: Record<string, { bg: string; text: string }> = {
-  escalated: { bg: '#fef2f2', text: '#991b1b' },
-  open:      { bg: '#fff7ed', text: '#9a3412' },
-  resolved:  { bg: '#f0fdf4', text: '#166534' },
-  rejected:  { bg: '#f9fafb', text: '#6b7280' },
+  escalated: { bg: 'var(--color-danger-bg)',  text: 'var(--color-danger)' },
+  open:      { bg: 'var(--color-warning-bg)', text: 'var(--color-warning)' },
+  resolved:  { bg: 'var(--color-success-bg)', text: 'var(--color-success)' },
+  rejected:  { bg: 'var(--color-bg)',         text: 'var(--color-text-secondary)' },
 };
 
 const PROJECT_STATUS_COLORS: Record<string, { accent: string; bg: string; text: string }> = {
-  active:   { accent: '#16a34a', bg: '#f0fdf4', text: '#166534' },
-  planning: { accent: '#3b82f6', bg: '#eff6ff', text: '#1e40af' },
-  archived: { accent: '#9ca3af', bg: '#f9fafb', text: '#6b7280' },
+  active:   { accent: 'var(--color-success)',        bg: 'var(--color-success-bg)', text: 'var(--color-success)' },
+  planning: { accent: 'var(--color-info)',           bg: 'var(--color-info-bg)',    text: 'var(--color-primary)' },
+  archived: { accent: 'var(--color-text-tertiary)',  bg: 'var(--color-bg)',         text: 'var(--color-text-secondary)' },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -108,12 +113,14 @@ function initials(name: string): string {
 }
 
 function Avatar({ name, size = 24 }: { name: string; size?: number }) {
+  // Categorical palette hashed by first-letter — kept as raw hex by design
+  // (data-viz identity, not UI chrome).
   const colors = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6'];
   const idx = name.charCodeAt(0) % colors.length;
   return (
     <div style={{
       width: size, height: size, borderRadius: '50%',
-      background: colors[idx], color: '#fff',
+      background: colors[idx], color: 'var(--color-surface)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontSize: size * 0.38, fontWeight: 700, flexShrink: 0,
     }}>
@@ -208,7 +215,7 @@ function NewItemForm({ projectId: _projectId, parentId: _parentId, defaultType, 
 
   return (
     <div style={{
-      background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: 8,
+      background: 'var(--color-surface-panel)', border: '1.5px solid var(--color-border)', borderRadius: 8,
       padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10,
     }}>
       <input
@@ -221,31 +228,31 @@ function NewItemForm({ projectId: _projectId, parentId: _parentId, defaultType, 
           if (e.key === 'Escape') onCancel();
         }}
         style={{
-          padding: '6px 10px', borderRadius: 6, border: '1px solid #cbd5e1',
-          fontSize: 14, outline: 'none', background: '#fff',
+          padding: '6px 10px', borderRadius: 6, border: '1px solid var(--color-border-emphasis)',
+          fontSize: 14, outline: 'none', background: 'var(--color-surface)',
         }}
       />
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <select value={type} onChange={(e) => setType(e.target.value as WorkItemType)}
-          style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 12, background: '#fff' }}>
+          style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--color-border-emphasis)', fontSize: 12, background: 'var(--color-surface)' }}>
           {TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
         <select value={priority} onChange={(e) => setPriority(e.target.value as WorkItemPriority)}
-          style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 12, background: '#fff' }}>
+          style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--color-border-emphasis)', fontSize: 12, background: 'var(--color-surface)' }}>
           {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
           <button onClick={onCancel} style={{
-            padding: '4px 12px', borderRadius: 6, border: '1px solid #e2e8f0',
-            background: '#fff', color: '#6b7280', fontSize: 12, cursor: 'pointer',
+            padding: '4px 12px', borderRadius: 6, border: '1px solid var(--color-border)',
+            background: 'var(--color-surface)', color: 'var(--color-text-secondary)', fontSize: 12, cursor: 'pointer',
           }}>Cancel</button>
           <button
             disabled={!title.trim()}
             onClick={() => title.trim() && onSave({ title: title.trim(), type, priority })}
             style={{
               padding: '4px 12px', borderRadius: 6, border: 'none',
-              background: title.trim() ? '#6366f1' : '#e2e8f0',
-              color: title.trim() ? '#fff' : '#9ca3af', fontSize: 12, cursor: 'pointer',
+              background: title.trim() ? 'var(--color-primary)' : 'var(--color-border)',
+              color: title.trim() ? 'var(--color-surface)' : 'var(--color-text-tertiary)', fontSize: 12, cursor: 'pointer',
             }}>
             Create
           </button>
@@ -264,16 +271,16 @@ function TaskRow({ item, onStatusToggle }: { item: WorkItemTree; onStatusToggle:
       display: 'flex', alignItems: 'center', gap: 10,
       padding: '6px 12px',
       borderRadius: 6,
-      background: isDone ? '#f9fafb' : '#fff',
+      background: isDone ? 'var(--color-bg)' : 'var(--color-surface)',
       opacity: isDone ? 0.7 : 1,
     }}>
       <input
         type="checkbox"
         checked={isDone}
         onChange={() => onStatusToggle(item.id, item.status)}
-        style={{ cursor: 'pointer', accentColor: '#6366f1', width: 15, height: 15, flexShrink: 0 }}
+        style={{ cursor: 'pointer', accentColor: 'var(--color-primary)', width: 15, height: 15, flexShrink: 0 }}
       />
-      <span style={{ flex: 1, fontSize: 13, color: isDone ? '#9ca3af' : '#374151',
+      <span style={{ flex: 1, fontSize: 13, color: isDone ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)',
         textDecoration: isDone ? 'line-through' : 'none' }}>
         {item.title}
       </span>
@@ -312,25 +319,25 @@ function StoryRow({
           padding: `7px ${14 + depth * 12}px`,
           borderRadius: 6,
           cursor: hasTasks ? 'pointer' : 'default',
-          background: item.status === 'done' ? '#f9fafb' : '#fff',
+          background: item.status === 'done' ? 'var(--color-bg)' : 'var(--color-surface)',
           transition: 'background 0.1s',
           border: 'none',
         }}
-        onMouseEnter={(e) => { if (item.status !== 'done') (e.currentTarget as HTMLElement).style.background = '#f8fafc'; }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = item.status === 'done' ? '#f9fafb' : '#fff'; }}
+        onMouseEnter={(e) => { if (item.status !== 'done') (e.currentTarget as HTMLElement).style.background = 'var(--color-surface-panel)'; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = item.status === 'done' ? 'var(--color-bg)' : 'var(--color-surface)'; }}
       >
         {/* Expand chevron for tasks */}
-        <span aria-hidden="true" style={{ width: 14, flexShrink: 0, color: '#9ca3af', fontSize: 10 }}>
+        <span aria-hidden="true" style={{ width: 14, flexShrink: 0, color: 'var(--color-text-tertiary)', fontSize: 10 }}>
           {hasTasks ? (expanded ? '▾' : '▸') : ''}
         </span>
 
-        {/* Story number / icon */}
+        {/* Story number / icon — soft indigo identity for story rows (data-viz, leave) */}
         <span aria-hidden="true" style={{ fontSize: 12, color: '#a5b4fc', fontFamily: 'monospace', flexShrink: 0 }}>■</span>
 
         {/* Title */}
         <span style={{
           flex: 1, fontSize: 13, fontWeight: 500,
-          color: item.status === 'done' ? '#9ca3af' : '#111827',
+          color: item.status === 'done' ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)',
           textDecoration: item.status === 'done' ? 'line-through' : 'none',
         }}>
           {item.title}
@@ -339,7 +346,7 @@ function StoryRow({
         {/* Labels */}
         {item.labels.slice(0, 2).map((l) => (
           <span key={l} style={{ fontSize: 10, padding: '1px 5px', borderRadius: 3,
-            background: '#f1f5f9', color: '#64748b' }}>{l}</span>
+            background: 'var(--color-surface-hover)', color: 'var(--color-text-secondary)' }}>{l}</span>
         ))}
 
         {/* PR badge */}
@@ -347,8 +354,8 @@ function StoryRow({
 
         {/* Story points */}
         {item.storyPoints != null && (
-          <span style={{ fontSize: 11, fontWeight: 600, color: '#9ca3af',
-            background: '#f1f5f9', padding: '1px 6px', borderRadius: 9999, minWidth: 24, textAlign: 'center' }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)',
+            background: 'var(--color-surface-hover)', padding: '1px 6px', borderRadius: 9999, minWidth: 24, textAlign: 'center' }}>
             {item.storyPoints}
           </span>
         )}
@@ -362,7 +369,7 @@ function StoryRow({
 
       {/* Tasks */}
       {expanded && hasTasks && (
-        <div id={`detail-${item.id}`} style={{ marginLeft: 28, borderLeft: '2px solid #e2e8f0', paddingLeft: 8, marginTop: 2, marginBottom: 4 }}>
+        <div id={`detail-${item.id}`} style={{ marginLeft: 28, borderLeft: '2px solid var(--color-border)', paddingLeft: 8, marginTop: 2, marginBottom: 4 }}>
           {item.children.map((task) => (
             <TaskRow key={task.id} item={task} onStatusToggle={onStatusToggle} />
           ))}
@@ -402,15 +409,16 @@ function FeatureSection({
           display: 'flex', alignItems: 'center', gap: 8,
           width: '100%', textAlign: 'left',
           padding: '8px 10px', borderRadius: 8,
-          background: '#f8fafc', cursor: 'pointer',
-          border: '1px solid #e2e8f0',
+          background: 'var(--color-surface-panel)', cursor: 'pointer',
+          border: '1px solid var(--color-border)',
         }}
       >
-        <span aria-hidden="true" style={{ fontSize: 10, color: '#94a3b8', width: 14 }}>{expanded ? '▾' : '▸'}</span>
+        <span aria-hidden="true" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', width: 14 }}>{expanded ? '▾' : '▸'}</span>
+        {/* Feature glyph — soft indigo identity (data-viz, leave) */}
         <span aria-hidden="true" style={{ fontSize: 12, color: '#818cf8', fontFamily: 'monospace', flexShrink: 0 }}>◈</span>
-        <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#374151' }}>{item.title}</span>
+        <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>{item.title}</span>
         {storyStats.total > 0 && (
-          <span style={{ fontSize: 11, color: '#9ca3af' }}>
+          <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
             {storyStats.done}/{storyStats.total} stories
           </span>
         )}
@@ -425,7 +433,7 @@ function FeatureSection({
             <StoryRow key={story.id} item={story} onStatusToggle={onStatusToggle} />
           ))}
           {stories.length === 0 && (
-            <div style={{ padding: '6px 14px', fontSize: 12, color: '#9ca3af', fontStyle: 'italic' }}>
+            <div style={{ padding: '6px 14px', fontSize: 12, color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>
               No stories yet
             </div>
           )}
@@ -444,8 +452,8 @@ function FeatureSection({
             <button
               onClick={(e) => { e.stopPropagation(); setAddingStory(true); }}
               style={{
-                padding: '4px 10px', borderRadius: 5, border: '1px dashed #cbd5e1',
-                background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: 'pointer',
+                padding: '4px 10px', borderRadius: 5, border: '1px dashed var(--color-border-emphasis)',
+                background: 'transparent', color: 'var(--color-text-tertiary)', fontSize: 12, cursor: 'pointer',
                 textAlign: 'left', marginTop: 2,
               }}>
               + Add story
@@ -479,7 +487,7 @@ function EpicCard({
 
   return (
     <div style={{
-      border: '1.5px solid #e2e8f0',
+      border: '1.5px solid var(--color-border)',
       borderRadius: 10,
       overflow: 'hidden',
       marginBottom: 16,
@@ -494,17 +502,17 @@ function EpicCard({
           display: 'flex', alignItems: 'center', gap: 10,
           width: '100%', textAlign: 'left',
           padding: '12px 16px',
-          background: item.status === 'done' ? '#f9fafb' : '#fff',
+          background: item.status === 'done' ? 'var(--color-bg)' : 'var(--color-surface)',
           cursor: 'pointer',
           border: 'none',
-          borderBottom: expanded ? '1px solid #e2e8f0' : 'none',
+          borderBottom: expanded ? '1px solid var(--color-border)' : 'none',
         }}
       >
-        <span aria-hidden="true" style={{ fontSize: 11, color: '#94a3b8', width: 14, flexShrink: 0 }}>
+        <span aria-hidden="true" style={{ fontSize: 11, color: 'var(--color-text-tertiary)', width: 14, flexShrink: 0 }}>
           {expanded ? '▾' : '▸'}
         </span>
         <span aria-hidden="true" style={{ fontSize: 14, flexShrink: 0 }}>⚡</span>
-        <span style={{ flex: 1, fontSize: 15, fontWeight: 700, color: item.status === 'done' ? '#9ca3af' : '#111827' }}>
+        <span style={{ flex: 1, fontSize: 15, fontWeight: 700, color: item.status === 'done' ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)' }}>
           {item.title}
         </span>
 
@@ -515,7 +523,7 @@ function EpicCard({
 
         {/* Story progress */}
         {stories.total > 0 && (
-          <span style={{ fontSize: 12, color: '#6b7280', flexShrink: 0 }}>
+          <span style={{ fontSize: 12, color: 'var(--color-text-secondary)', flexShrink: 0 }}>
             {stories.done}/{stories.total} stories
           </span>
         )}
@@ -523,14 +531,14 @@ function EpicCard({
         {/* Point progress bar */}
         {pts.total > 0 && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-            <div style={{ width: 60, height: 5, borderRadius: 9999, background: '#e5e7eb', overflow: 'hidden' }}>
+            <div style={{ width: 60, height: 5, borderRadius: 9999, background: 'var(--color-border)', overflow: 'hidden' }}>
               <div style={{
                 height: '100%', borderRadius: 9999,
-                background: pct >= 80 ? '#16a34a' : pct >= 40 ? '#6366f1' : '#f59e0b',
+                background: pct >= 80 ? 'var(--color-success)' : pct >= 40 ? 'var(--color-primary)' : 'var(--color-warning)',
                 width: `${pct}%`,
               }} />
             </div>
-            <span style={{ fontSize: 11, color: '#6b7280', minWidth: 28 }}>{pct}%</span>
+            <span style={{ fontSize: 11, color: 'var(--color-text-secondary)', minWidth: 28 }}>{pct}%</span>
           </div>
         )}
 
@@ -543,9 +551,9 @@ function EpicCard({
 
       {/* Epic body */}
       {expanded && (
-        <div id={`detail-${item.id}`} style={{ padding: '12px 16px', background: '#fafafa' }}>
+        <div id={`detail-${item.id}`} style={{ padding: '12px 16px', background: 'var(--color-surface-inset)' }}>
           {item.description && (
-            <p style={{ margin: '0 0 12px', fontSize: 13, color: '#6b7280', lineHeight: 1.5 }}>
+            <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
               {item.description}
             </p>
           )}
@@ -582,8 +590,8 @@ function EpicCard({
               onClick={(e) => { e.stopPropagation(); setAddingFeature(true); }}
               style={{
                 marginTop: 10, padding: '5px 12px', borderRadius: 6,
-                border: '1px dashed #cbd5e1', background: 'transparent',
-                color: '#94a3b8', fontSize: 12, cursor: 'pointer',
+                border: '1px dashed var(--color-border-emphasis)', background: 'transparent',
+                color: 'var(--color-text-tertiary)', fontSize: 12, cursor: 'pointer',
               }}>
               + Add feature
             </button>
@@ -599,7 +607,7 @@ function EpicCard({
 function DecisionQueue({ decisions }: { decisions: ProjectDecision[] }) {
   if (decisions.length === 0) {
     return (
-      <div style={{ padding: '32px 0', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
+      <div style={{ padding: '32px 0', textAlign: 'center', color: 'var(--color-text-tertiary)', fontSize: 13 }}>
         No decisions linked to this project yet.
       </div>
     );
@@ -610,7 +618,7 @@ function DecisionQueue({ decisions }: { decisions: ProjectDecision[] }) {
         const ds = DECISION_STATUS[d.status] ?? DECISION_STATUS.open;
         return (
           <div key={d.id} style={{
-            background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: 8,
+            background: 'var(--color-surface)', border: '1.5px solid var(--color-border)', borderRadius: 8,
             padding: '14px 16px',
           }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 6 }}>
@@ -620,10 +628,11 @@ function DecisionQueue({ decisions }: { decisions: ProjectDecision[] }) {
               }}>
                 {d.status}
               </span>
-              <span style={{ fontSize: 14, fontWeight: 600, color: '#111827', flex: 1 }}>{d.topic}</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)', flex: 1 }}>{d.topic}</span>
               {d.requiredRole && (
                 <span style={{
                   padding: '2px 10px', borderRadius: 9999, fontSize: 11, fontWeight: 600,
+                  // purple "needs role" badge — distinct from status colors (kept as raw hex by design)
                   background: '#f5f3ff', color: '#5b21b6', flexShrink: 0,
                 }}>
                   needs {d.requiredRole}
@@ -631,11 +640,11 @@ function DecisionQueue({ decisions }: { decisions: ProjectDecision[] }) {
               )}
             </div>
             {d.summary && (
-              <p style={{ margin: '0 0 8px', fontSize: 13, color: '#6b7280', lineHeight: 1.5 }}>
+              <p style={{ margin: '0 0 8px', fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
                 {d.summary}
               </p>
             )}
-            <div style={{ display: 'flex', gap: 12, fontSize: 11, color: '#9ca3af' }}>
+            <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--color-text-tertiary)' }}>
               {d.workItemTitle && (
                 <span>🔗 {d.workItemTitle}</span>
               )}
@@ -670,12 +679,15 @@ function flattenByType(nodes: WorkItemTree[], types: WorkItemType[]): WorkItemTr
 
 function BoardCard({ item }: { item: WorkItemTree }) {
   const priColor: Record<WorkItemPriority, string> = {
-    critical: '#dc2626', high: '#ea580c', medium: '#ca8a04', low: '#9ca3af',
+    critical: 'var(--color-danger)',
+    high:     'var(--color-warning)',
+    medium:   'var(--color-warning)',
+    low:      'var(--color-text-tertiary)',
   };
   return (
     <div style={{
-      background: '#fff',
-      border: '1px solid #e5e7eb',
+      background: 'var(--color-surface)',
+      border: '1px solid var(--color-border)',
       borderLeft: `3px solid ${priColor[item.priority]}`,
       borderRadius: 6,
       padding: '8px 10px',
@@ -686,14 +698,14 @@ function BoardCard({ item }: { item: WorkItemTree }) {
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 6 }}>
         <span style={{
           fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
-          background: item.type === 'story' ? '#eff6ff' : '#f0fdf4',
-          color: item.type === 'story' ? '#1d4ed8' : '#15803d',
+          background: item.type === 'story' ? 'var(--color-info-bg)' : 'var(--color-success-bg)',
+          color: item.type === 'story' ? 'var(--color-primary)' : 'var(--color-success)',
           textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0, marginTop: 1,
         }}>
           {item.type}
         </span>
         <span style={{
-          fontSize: 12, fontWeight: 500, color: '#111827', lineHeight: 1.35,
+          fontSize: 12, fontWeight: 500, color: 'var(--color-text-primary)', lineHeight: 1.35,
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
           overflow: 'hidden',
         }}>
@@ -709,7 +721,7 @@ function BoardCard({ item }: { item: WorkItemTree }) {
           {item.storyPoints && (
             <span style={{
               fontSize: 9.5, fontWeight: 600, padding: '1px 5px', borderRadius: 3,
-              background: '#f1f5f9', color: '#64748b',
+              background: 'var(--color-surface-hover)', color: 'var(--color-text-secondary)',
             }}>
               {item.storyPoints}pt
             </span>
@@ -718,8 +730,8 @@ function BoardCard({ item }: { item: WorkItemTree }) {
         {item.prStatus && (
           <span style={{
             fontSize: 9.5, fontWeight: 600, padding: '1px 5px', borderRadius: 3,
-            background: item.prStatus === 'merged' ? '#f0fdf4' : item.prStatus === 'open' ? '#eff6ff' : '#f9fafb',
-            color: item.prStatus === 'merged' ? '#16a34a' : item.prStatus === 'open' ? '#1d4ed8' : '#6b7280',
+            background: item.prStatus === 'merged' ? 'var(--color-success-bg)' : item.prStatus === 'open' ? 'var(--color-info-bg)' : 'var(--color-bg)',
+            color: item.prStatus === 'merged' ? 'var(--color-success)' : item.prStatus === 'open' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
           }}>
             {item.prStatus === 'merged' ? '⎇ merged' : item.prStatus === 'open' ? '⎇ open' : item.prStatus}
           </span>
@@ -742,18 +754,18 @@ function EpicSwimlane({ epic }: { epic: WorkItemTree }) {
   return (
     <div style={{
       display: 'grid', gridTemplateColumns: '160px repeat(4, 1fr)',
-      borderBottom: '1px solid #e5e7eb',
+      borderBottom: '1px solid var(--color-border)',
     }}>
       {/* Epic label */}
       <div style={{
-        padding: '12px 12px', borderRight: '1px solid #e5e7eb',
-        background: '#f9fafb', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start',
+        padding: '12px 12px', borderRight: '1px solid var(--color-border)',
+        background: 'var(--color-bg)', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start',
       }}>
         <span style={{
-          fontSize: 9, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase',
+          fontSize: 9, fontWeight: 700, color: 'var(--color-text-tertiary)', textTransform: 'uppercase',
           letterSpacing: '0.05em', marginBottom: 4,
         }}>Epic</span>
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#111827', lineHeight: 1.35 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-primary)', lineHeight: 1.35 }}>
           {epic.title}
         </span>
         {epic.assigneeName && (
@@ -767,17 +779,18 @@ function EpicSwimlane({ epic }: { epic: WorkItemTree }) {
         return (
           <div key={status} style={{
             padding: '10px 8px',
-            borderRight: ci < 3 ? '1px solid #f3f4f6' : 'none',
+            borderRight: ci < 3 ? '1px solid var(--color-border)' : 'none',
             minHeight: hasAny ? undefined : 52,
-            background: status === 'done' ? '#fafffe' : '#fff',
+            // `done` column gets a faint cool-white tint to subtly distinguish completed swim cells
+            background: status === 'done' ? '#fafffe' : 'var(--color-surface)',
           }}>
             {items.map(item => <BoardCard key={item.id} item={item} />)}
             {items.length === 0 && (
               <div style={{
-                height: 36, border: '1.5px dashed #f0f0f0', borderRadius: 6,
+                height: 36, border: '1.5px dashed var(--color-border)', borderRadius: 6,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <span style={{ fontSize: 10, color: '#e5e7eb' }}>—</span>
+                <span style={{ fontSize: 10, color: 'var(--color-border)' }}>—</span>
               </div>
             )}
           </div>
@@ -790,21 +803,21 @@ function EpicSwimlane({ epic }: { epic: WorkItemTree }) {
 function BoardView({ epics }: { epics: WorkItemTree[] }) {
   if (epics.length === 0) {
     return (
-      <div style={{ padding: '40px 0', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
+      <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--color-text-tertiary)', fontSize: 13 }}>
         No epics yet — create one to see the board.
       </div>
     );
   }
   return (
-    <div style={{ overflowX: 'auto', borderRadius: 10, border: '1.5px solid #e5e7eb', background: '#fff' }}>
+    <div style={{ overflowX: 'auto', borderRadius: 10, border: '1.5px solid var(--color-border)', background: 'var(--color-surface)' }}>
       {/* Column headers */}
       <div style={{
         display: 'grid', gridTemplateColumns: '160px repeat(4, 1fr)',
-        background: '#f9fafb', borderBottom: '1.5px solid #e5e7eb',
+        background: 'var(--color-bg)', borderBottom: '1.5px solid var(--color-border)',
         position: 'sticky', top: 0, zIndex: 2,
       }}>
-        <div style={{ padding: '8px 12px', borderRight: '1px solid #e5e7eb' }}>
-          <span style={{ fontSize: 10, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+        <div style={{ padding: '8px 12px', borderRight: '1px solid var(--color-border)' }}>
+          <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
             Swimlane
           </span>
         </div>
@@ -813,17 +826,17 @@ function BoardView({ epics }: { epics: WorkItemTree[] }) {
             n + flattenByType([epic], ['story', 'task']).filter(it => it.status === s).length, 0);
           return (
             <div key={s} style={{
-              padding: '8px 10px', borderRight: i < 3 ? '1px solid #e5e7eb' : 'none',
+              padding: '8px 10px', borderRight: i < 3 ? '1px solid var(--color-border)' : 'none',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             }}>
-              <span style={{ fontSize: 11, fontWeight: 600, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-primary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 {BOARD_STATUS_LABELS[s]}
               </span>
               {count > 0 && (
                 <span style={{
                   fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 9999,
-                  background: s === 'done' ? '#f0fdf4' : '#f1f5f9',
-                  color: s === 'done' ? '#16a34a' : '#64748b',
+                  background: s === 'done' ? 'var(--color-success-bg)' : 'var(--color-surface-hover)',
+                  color: s === 'done' ? 'var(--color-success)' : 'var(--color-text-secondary)',
                 }}>
                   {count}
                 </span>
@@ -843,17 +856,17 @@ function BoardView({ epics }: { epics: WorkItemTree[] }) {
 function ContributorsTable({ contributors }: { contributors: ProjectDetail['contributors'] }) {
   const navigate = useNavigate();
   if (contributors.length === 0) {
-    return <div style={{ padding: 24, color: '#9ca3af' }}>No contributors recorded.</div>;
+    return <div style={{ padding: 24, color: 'var(--color-text-tertiary)' }}>No contributors recorded.</div>;
   }
   return (
-    <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
+    <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 10, overflow: 'hidden' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
-          <tr style={{ background: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+          <tr style={{ background: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)' }}>
             {['Name', 'Title', 'Role', 'Weight'].map((col) => (
               <th key={col} style={{
                 padding: '10px 16px', textAlign: col === 'Weight' ? 'right' : 'left',
-                fontSize: 11, fontWeight: 600, color: '#9ca3af',
+                fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)',
                 textTransform: 'uppercase', letterSpacing: '0.05em',
               }}>{col}</th>
             ))}
@@ -862,30 +875,30 @@ function ContributorsTable({ contributors }: { contributors: ProjectDetail['cont
         <tbody>
           {contributors.map((c, idx) => (
             <tr key={c.personId} style={{
-              borderBottom: idx < contributors.length - 1 ? '1px solid #f3f4f6' : 'none',
+              borderBottom: idx < contributors.length - 1 ? '1px solid var(--color-border)' : 'none',
               cursor: 'pointer',
             }}
               onClick={() => navigate(`/iq/explore?person=${encodeURIComponent(c.name)}`)}
-              onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.background = '#fafafa'}
-              onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.background = '#fff'}
+              onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.background = 'var(--color-surface-inset)'}
+              onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.background = 'var(--color-surface)'}
             >
               <td style={{ padding: '11px 16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Avatar name={c.name} size={28} />
-                  <span style={{ fontSize: 14, fontWeight: 500, color: '#111827' }}>{c.name}</span>
+                  <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text-primary)' }}>{c.name}</span>
                 </div>
               </td>
-              <td style={{ padding: '11px 16px', fontSize: 13, color: '#6b7280' }}>{c.title ?? '—'}</td>
-              <td style={{ padding: '11px 16px', fontSize: 13, color: '#6b7280' }}>{c.role ?? '—'}</td>
+              <td style={{ padding: '11px 16px', fontSize: 13, color: 'var(--color-text-secondary)' }}>{c.title ?? '—'}</td>
+              <td style={{ padding: '11px 16px', fontSize: 13, color: 'var(--color-text-secondary)' }}>{c.role ?? '—'}</td>
               <td style={{ padding: '11px 16px', textAlign: 'right' }}>
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 60, height: 5, borderRadius: 3, background: '#e5e7eb', overflow: 'hidden' }}>
+                  <div style={{ width: 60, height: 5, borderRadius: 3, background: 'var(--color-border)', overflow: 'hidden' }}>
                     <div style={{
                       width: `${Math.min(c.weight * 100, 100)}%`, height: '100%',
-                      background: '#6366f1', borderRadius: 3,
+                      background: 'var(--color-primary)', borderRadius: 3,
                     }} />
                   </div>
-                  <span style={{ fontSize: 13, fontWeight: 500, color: '#6b7280', minWidth: 36, textAlign: 'right' }}>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-text-secondary)', minWidth: 36, textAlign: 'right' }}>
                     {(c.weight * 100).toFixed(0)}%
                   </span>
                 </div>
@@ -1015,23 +1028,23 @@ function ProjectDetailPage() {
   }, [id, project, localItems, rawTree]);
 
   if (projLoading) {
-    return <div style={{ padding: 24, color: '#9ca3af' }}>Loading project…</div>;
+    return <div style={{ padding: 24, color: 'var(--color-text-tertiary)' }}>Loading project…</div>;
   }
   if (projError) {
     return (
       <div style={{ padding: 24 }}>
-        <Link to="/iq/projects" style={{ fontSize: 13, color: '#6b7280', textDecoration: 'none' }}>
+        <Link to="/iq/projects" style={{ fontSize: 13, color: 'var(--color-text-secondary)', textDecoration: 'none' }}>
           ← Back to Projects
         </Link>
-        <div style={{ marginTop: 12, color: '#dc2626' }}>Failed to load: {projError}</div>
+        <div style={{ marginTop: 12, color: 'var(--color-danger)' }}>Failed to load: {projError}</div>
       </div>
     );
   }
   if (!project) {
     return (
       <div style={{ padding: 24 }}>
-        <Link to="/iq/projects" style={{ fontSize: 13, color: '#6b7280', textDecoration: 'none' }}>← Back to Projects</Link>
-        <div style={{ marginTop: 12, color: '#9ca3af' }}>Project not found.</div>
+        <Link to="/iq/projects" style={{ fontSize: 13, color: 'var(--color-text-secondary)', textDecoration: 'none' }}>← Back to Projects</Link>
+        <div style={{ marginTop: 12, color: 'var(--color-text-tertiary)' }}>Project not found.</div>
       </div>
     );
   }
@@ -1058,15 +1071,15 @@ function ProjectDetailPage() {
       {/* Back link */}
       <Link to="/iq/projects" style={{
         display: 'inline-flex', alignItems: 'center', gap: 4,
-        fontSize: 13, color: '#6b7280', textDecoration: 'none', marginBottom: 20,
+        fontSize: 13, color: 'var(--color-text-secondary)', textDecoration: 'none', marginBottom: 20,
       }}>
         ← Projects
       </Link>
 
       {/* Header card */}
       <div style={{
-        background: '#fff',
-        border: `1.5px solid #e2e8f0`,
+        background: 'var(--color-surface)',
+        border: `1.5px solid var(--color-border)`,
         borderTop: `4px solid ${projColors.accent}`,
         borderRadius: 10,
         padding: '20px 24px',
@@ -1075,7 +1088,7 @@ function ProjectDetailPage() {
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 200 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-              <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, color: '#111827' }}>{project.name}</h1>
+              <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0, color: 'var(--color-text-primary)' }}>{project.name}</h1>
               <span style={{
                 padding: '2px 10px', borderRadius: 9999, fontSize: 11, fontWeight: 700,
                 background: projColors.bg, color: projColors.text,
@@ -1085,7 +1098,7 @@ function ProjectDetailPage() {
               </span>
             </div>
             {project.description && (
-              <p style={{ margin: 0, fontSize: 14, color: '#6b7280', lineHeight: 1.6 }}>
+              <p style={{ margin: 0, fontSize: 14, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
                 {project.description}
               </p>
             )}
@@ -1096,23 +1109,23 @@ function ProjectDetailPage() {
             {totalPts > 0 && (
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 22, fontWeight: 800, color: projColors.accent }}>{overallPct}%</div>
-                <div style={{ fontSize: 11, color: '#9ca3af' }}>{totalDone}/{totalPts} pts</div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{totalDone}/{totalPts} pts</div>
               </div>
             )}
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 22, fontWeight: 800, color: '#374151' }}>{project.contributors.length}</div>
-              <div style={{ fontSize: 11, color: '#9ca3af' }}>contributors</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--color-text-primary)' }}>{project.contributors.length}</div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>contributors</div>
             </div>
             {escalatedCount > 0 && (
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 22, fontWeight: 800, color: '#dc2626' }}>{escalatedCount}</div>
-                <div style={{ fontSize: 11, color: '#9ca3af' }}>escalated</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--color-danger)' }}>{escalatedCount}</div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>escalated</div>
               </div>
             )}
             {project.githubUrl && (
               <a href={project.githubUrl} target="_blank" rel="noreferrer"
                 style={{ display: 'flex', alignItems: 'center', gap: 4,
-                  fontSize: 12, color: '#6366f1', textDecoration: 'none', alignSelf: 'center' }}>
+                  fontSize: 12, color: 'var(--color-primary)', textDecoration: 'none', alignSelf: 'center' }}>
                 ↗ GitHub
               </a>
             )}
@@ -1122,10 +1135,10 @@ function ProjectDetailPage() {
         {/* Overall progress bar */}
         {totalPts > 0 && (
           <div style={{ marginTop: 16 }}>
-            <div style={{ height: 6, borderRadius: 9999, background: '#e5e7eb', overflow: 'hidden' }}>
+            <div style={{ height: 6, borderRadius: 9999, background: 'var(--color-border)', overflow: 'hidden' }}>
               <div style={{
                 height: '100%', borderRadius: 9999,
-                background: overallPct >= 80 ? '#16a34a' : overallPct >= 40 ? '#6366f1' : '#f59e0b',
+                background: overallPct >= 80 ? 'var(--color-success)' : overallPct >= 40 ? 'var(--color-primary)' : 'var(--color-warning)',
                 width: `${overallPct}%`, transition: 'width 0.4s',
               }} />
             </div>
@@ -1134,7 +1147,7 @@ function ProjectDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1.5px solid #e5e7eb' }}>
+      <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1.5px solid var(--color-border)' }}>
         {([
           { key: 'work',         label: 'Work Items', badge: workTree.length > 0 ? `${workTree.length} epics` : undefined },
           { key: 'decisions',    label: 'Decisions',  badge: escalatedCount > 0 ? `${escalatedCount} escalated` : undefined },
@@ -1146,16 +1159,16 @@ function ProjectDetailPage() {
             style={{
               padding: '8px 18px', border: 'none', background: 'transparent', cursor: 'pointer',
               fontSize: 14, fontWeight: tab === t.key ? 700 : 500,
-              color: tab === t.key ? '#6366f1' : '#6b7280',
-              borderBottom: tab === t.key ? '2.5px solid #6366f1' : '2.5px solid transparent',
+              color: tab === t.key ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+              borderBottom: tab === t.key ? '2.5px solid var(--color-primary)' : '2.5px solid transparent',
               display: 'flex', alignItems: 'center', gap: 6,
             }}>
             {t.label}
             {t.badge && (
               <span style={{
                 padding: '1px 7px', borderRadius: 9999, fontSize: 10, fontWeight: 700,
-                background: t.key === 'decisions' ? '#fef2f2' : '#eff6ff',
-                color: t.key === 'decisions' ? '#dc2626' : '#1d4ed8',
+                background: t.key === 'decisions' ? 'var(--color-danger-bg)' : 'var(--color-info-bg)',
+                color: t.key === 'decisions' ? 'var(--color-danger)' : 'var(--color-primary)',
               }}>
                 {t.badge}
               </span>
@@ -1169,19 +1182,19 @@ function ProjectDetailPage() {
         <div>
           {/* Tree / Board toggle */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <div style={{ fontSize: 13, color: '#6b7280' }}>
+            <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
               {workTree.length > 0 ? `${workTree.length} epic${workTree.length !== 1 ? 's' : ''}` : ''}
             </div>
-            <div style={{ display: 'flex', border: '1.5px solid #e5e7eb', borderRadius: 7, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', border: '1.5px solid var(--color-border)', borderRadius: 7, overflow: 'hidden' }}>
               {([['tree', '≡ List'], ['board', '⊞ Board']] as [WorkView, string][]).map(([mode, label]) => (
                 <button
                   key={mode}
                   onClick={() => setWorkView(mode)}
                   style={{
                     padding: '5px 14px', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 500,
-                    background: workView === mode ? '#f5f3ff' : '#fff',
-                    color: workView === mode ? '#6366f1' : '#6b7280',
-                    borderRight: mode === 'tree' ? '1.5px solid #e5e7eb' : 'none',
+                    background: workView === mode ? 'var(--color-primary-soft)' : 'var(--color-surface)',
+                    color: workView === mode ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+                    borderRight: mode === 'tree' ? '1.5px solid var(--color-border)' : 'none',
                     fontFamily: 'inherit',
                   }}
                 >
@@ -1192,7 +1205,7 @@ function ProjectDetailPage() {
           </div>
 
           {workLoading && (
-            <div style={{ color: '#9ca3af', fontSize: 13, marginBottom: 16 }}>Loading work items…</div>
+            <div style={{ color: 'var(--color-text-tertiary)', fontSize: 13, marginBottom: 16 }}>Loading work items…</div>
           )}
 
           {workView === 'board' ? (
@@ -1200,7 +1213,7 @@ function ProjectDetailPage() {
           ) : (
             <>
               {!workLoading && workTree.length === 0 && !addingEpic && (
-                <div style={{ padding: '40px 0', textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
+                <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--color-text-tertiary)', fontSize: 13 }}>
                   No epics yet. Create the first epic to start tracking work.
                 </div>
               )}
@@ -1226,8 +1239,8 @@ function ProjectDetailPage() {
                   onClick={() => setAddingEpic(true)}
                   style={{
                     marginTop: 8, padding: '8px 18px', borderRadius: 8,
-                    border: '1.5px dashed #cbd5e1', background: 'transparent',
-                    color: '#94a3b8', fontSize: 13, cursor: 'pointer',
+                    border: '1.5px dashed var(--color-border-emphasis)', background: 'transparent',
+                    color: 'var(--color-text-tertiary)', fontSize: 13, cursor: 'pointer',
                     display: 'flex', alignItems: 'center', gap: 6,
                   }}>
                   ⚡ New epic
