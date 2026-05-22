@@ -18,7 +18,10 @@ export function MasqueradeMenu() {
   const { session, setRole, isLoading } = useSession();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [focusIndex, setFocusIndex] = useState(-1);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -27,6 +30,11 @@ export function MasqueradeMenu() {
     }
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
+  }, [open]);
+
+  // Reset focus index when menu closes
+  useEffect(() => {
+    if (!open) setFocusIndex(-1);
   }, [open]);
 
   if (isLoading || !session) return null;
@@ -42,9 +50,48 @@ export function MasqueradeMenu() {
     }
   };
 
+  function handleMenuKeyDown(e: React.KeyboardEvent) {
+    const items = itemRefs.current.filter((el): el is HTMLButtonElement => el !== null);
+    if (!items.length) return;
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        setFocusIndex(i => {
+          const next = Math.min(i + 1, items.length - 1);
+          items[next]?.focus();
+          return next;
+        });
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setFocusIndex(i => {
+          const prev = Math.max(i - 1, 0);
+          items[prev]?.focus();
+          return prev;
+        });
+        break;
+      case 'Home':
+        e.preventDefault();
+        items[0]?.focus();
+        setFocusIndex(0);
+        break;
+      case 'End':
+        e.preventDefault();
+        items[items.length - 1]?.focus();
+        setFocusIndex(items.length - 1);
+        break;
+      case 'Escape':
+        e.preventDefault();
+        setOpen(false);
+        triggerRef.current?.focus();
+        break;
+    }
+  }
+
   return (
     <div ref={menuRef} style={{ position: 'relative' }}>
       <button
+        ref={triggerRef}
         onClick={() => setOpen(o => !o)}
         disabled={busy}
         aria-haspopup="menu"
@@ -94,12 +141,14 @@ export function MasqueradeMenu() {
           }}>
             Switch role · {session.sub}
           </div>
-          {session.availableRoles.map(role => {
+          {session.availableRoles.map((role, i) => {
             const active = role === session.role;
             return (
               <button
                 key={role}
+                ref={el => { itemRefs.current[i] = el; }}
                 onClick={() => void switchTo(role)}
+                onKeyDown={handleMenuKeyDown}
                 disabled={busy}
                 role="menuitem"
                 style={{
