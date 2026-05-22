@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Spinner } from '@connorhoehnslalom/ui-components/shared';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -42,7 +43,7 @@ function PendingIcon() {
         width: 18,
         height: 18,
         borderRadius: '50%',
-        border: '2px solid #d1d5db',
+        border: '2px solid var(--color-border)',
         flexShrink: 0,
       }}
     />
@@ -50,20 +51,7 @@ function PendingIcon() {
 }
 
 function RunningIcon() {
-  return (
-    <span
-      style={{
-        display: 'inline-block',
-        width: 18,
-        height: 18,
-        borderRadius: '50%',
-        border: '2px solid #2563eb',
-        borderTopColor: 'transparent',
-        flexShrink: 0,
-        animation: 'kb-spin 0.7s linear infinite',
-      }}
-    />
-  );
+  return <Spinner size="sm" />;
 }
 
 function DoneIcon() {
@@ -76,10 +64,10 @@ function DoneIcon() {
         width: 18,
         height: 18,
         borderRadius: '50%',
-        background: '#16a34a',
+        background: 'var(--color-success)',
         flexShrink: 0,
         fontSize: 11,
-        color: '#fff',
+        color: 'var(--color-surface)',
         fontWeight: 700,
       }}
     >
@@ -98,10 +86,10 @@ function ErrorIcon() {
         width: 18,
         height: 18,
         borderRadius: '50%',
-        background: '#dc2626',
+        background: 'var(--color-danger)',
         flexShrink: 0,
         fontSize: 11,
-        color: '#fff',
+        color: 'var(--color-surface)',
         fontWeight: 700,
       }}
     >
@@ -214,10 +202,33 @@ export function ProvisioningProgress({
     };
   }, [registryId]);
 
+  const doneCount    = STEPS.filter(s => stepStates[s.id] === 'done').length;
+  const totalCount   = STEPS.length;
+  const currentStep  = STEPS.find(s => stepStates[s.id] === 'running');
+  const currentLabel = currentStep?.label ?? 'idle';
+
+  const srOnlyStyle: React.CSSProperties = {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    overflow: 'hidden',
+    clip: 'rect(0,0,0,0)',
+    whiteSpace: 'nowrap',
+    border: 0,
+    padding: 0,
+    margin: -1,
+  };
+
   return (
-    <>
-      {/* Inject keyframe once via a style tag */}
-      <style>{`@keyframes kb-spin { to { transform: rotate(360deg); } }`}</style>
+    <div role="region" aria-label="KB provisioning progress">
+      <div
+        role="progressbar"
+        aria-valuenow={doneCount}
+        aria-valuemin={0}
+        aria-valuemax={totalCount}
+        aria-valuetext={`Step ${doneCount + 1} of ${totalCount}: ${currentLabel}`}
+        style={srOnlyStyle}
+      />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {STEPS.map(step => {
@@ -238,25 +249,25 @@ export function ProvisioningProgress({
                     fontWeight: status === 'running' ? 600 : 400,
                     color:
                       status === 'done'
-                        ? '#16a34a'
+                        ? 'var(--color-success)'
                         : status === 'error'
-                        ? '#dc2626'
+                        ? 'var(--color-danger)'
                         : status === 'running'
-                        ? '#1e40af'
-                        : '#6b7280',
+                        ? 'var(--color-primary)'
+                        : 'var(--color-text-secondary)',
                   }}
                 >
                   {step.label}
                 </span>
                 {msg && (
-                  <span style={{ fontSize: 11, color: '#9ca3af' }}>{msg}</span>
+                  <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{msg}</span>
                 )}
               </div>
             </div>
           );
         })}
       </div>
-    </>
+    </div>
   );
 }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { KbRegistryEntry } from '../../pages/admin/KBRegistryPage.js';
 import { ProvisioningProgress } from './ProvisioningProgress.js';
 
@@ -38,12 +38,12 @@ function inputStyle(opts?: { disabled?: boolean; error?: boolean }): React.CSSPr
     boxSizing: 'border-box',
     padding: '7px 10px',
     fontSize: 13,
-    border: `1px solid ${opts?.error ? '#f87171' : '#d1d5db'}`,
+    border: `1px solid ${opts?.error ? 'var(--color-danger)' : 'var(--color-border)'}`,
     borderRadius: 6,
-    background: opts?.disabled ? '#f3f4f6' : '#fff',
-    color: opts?.disabled ? '#6b7280' : '#111827',
+    background: opts?.disabled ? 'var(--color-surface-panel)' : 'var(--color-surface)',
+    color: opts?.disabled ? 'var(--color-text-secondary)' : 'var(--color-text-primary)',
     outline: 'none',
-    boxShadow: opts?.error ? '0 0 0 2px #fee2e2' : undefined,
+    boxShadow: opts?.error ? '0 0 0 2px var(--color-danger-bg)' : undefined,
   };
 }
 
@@ -52,7 +52,7 @@ function labelStyle(): React.CSSProperties {
     display: 'block',
     fontSize: 12,
     fontWeight: 600,
-    color: '#374151',
+    color: 'var(--color-text-primary)',
     marginBottom: 4,
   };
 }
@@ -64,14 +64,14 @@ function fieldStyle(): React.CSSProperties {
 function hintStyle(isError?: boolean): React.CSSProperties {
   return {
     fontSize: 11,
-    color: isError ? '#dc2626' : '#9ca3af',
+    color: isError ? 'var(--color-danger)' : 'var(--color-text-tertiary)',
     marginTop: 3,
     lineHeight: 1.4,
   };
 }
 
 function RequiredStar() {
-  return <span style={{ color: '#ef4444', marginLeft: 2 }}>*</span>;
+  return <span style={{ color: 'var(--color-danger)', marginLeft: 2 }}>*</span>;
 }
 
 // ─── Step 1 — Identity ────────────────────────────────────────────────────────
@@ -288,22 +288,22 @@ function Step2({
         style={{
           marginBottom: 18,
           padding: '10px 14px',
-          background: '#f8fafc',
-          border: '1px solid #e2e8f0',
+          background: 'var(--color-surface-panel)',
+          border: '1px solid var(--color-border)',
           borderRadius: 7,
           fontSize: 12,
         }}
       >
-        <div style={{ fontWeight: 600, color: '#475569', marginBottom: 6, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <div style={{ fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 6, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
           Resources that will be created
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', rowGap: 4, columnGap: 10 }}>
-          <span style={{ color: '#64748b' }}>Bedrock KB name</span>
-          <code style={{ fontFamily: 'monospace', color: '#0f172a', fontSize: 12 }}>{bedrockName}</code>
-          <span style={{ color: '#64748b' }}>Aurora table</span>
-          <code style={{ fontFamily: 'monospace', color: '#0f172a', fontSize: 12 }}>{auroraTable}</code>
-          <span style={{ color: '#64748b' }}>S3 prefix</span>
-          <code style={{ fontFamily: 'monospace', color: '#0f172a', fontSize: 12 }}>{state.s3Prefix || '—'}</code>
+          <span style={{ color: 'var(--color-text-secondary)' }}>Bedrock KB name</span>
+          <code style={{ fontFamily: 'monospace', color: 'var(--color-text-primary)', fontSize: 12 }}>{bedrockName}</code>
+          <span style={{ color: 'var(--color-text-secondary)' }}>Aurora table</span>
+          <code style={{ fontFamily: 'monospace', color: 'var(--color-text-primary)', fontSize: 12 }}>{auroraTable}</code>
+          <span style={{ color: 'var(--color-text-secondary)' }}>S3 prefix</span>
+          <code style={{ fontFamily: 'monospace', color: 'var(--color-text-primary)', fontSize: 12 }}>{state.s3Prefix || '—'}</code>
         </div>
       </div>
 
@@ -371,11 +371,11 @@ function Step2({
         style={{
           marginTop: 4,
           padding: '8px 12px',
-          background: '#f0f9ff',
-          border: '1px solid #bae6fd',
+          background: 'var(--color-primary-soft)',
+          border: '1px solid var(--color-info-border)',
           borderRadius: 6,
           fontSize: 12,
-          color: '#0369a1',
+          color: 'var(--color-primary)',
         }}
       >
         Embedding model: <strong>amazon.titan-embed-text-v2:0 (1024d)</strong> — fixed
@@ -400,15 +400,15 @@ function Step3({
       <div
         style={{
           padding: '10px 14px',
-          background: '#f9fafb',
-          border: '1px solid #e5e7eb',
+          background: 'var(--color-surface-panel)',
+          border: '1px solid var(--color-border)',
           borderRadius: 6,
           marginBottom: 20,
         }}
       >
-        <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 2 }}>Creating</div>
-        <div style={{ fontWeight: 600, fontSize: 14, color: '#111827' }}>{kb.name}</div>
-        <div style={{ fontSize: 11, color: '#9ca3af', fontFamily: 'monospace', marginTop: 2 }}>
+        <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 2 }}>Creating</div>
+        <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--color-text-primary)' }}>{kb.name}</div>
+        <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontFamily: 'monospace', marginTop: 2 }}>
           {kb.slug} · {kb.tenant}
         </div>
       </div>
@@ -451,6 +451,12 @@ export function KBCreateWizard({ open, onClose, onCreated }: KBCreateWizardProps
   const [createdKb, setCreatedKb] = useState<KbRegistryEntry | null>(null);
   const [step1Checking, setStep1Checking] = useState(false);
 
+  // Tracks the pending reset timer so we can clear it on unmount / re-open.
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => {
+    if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+  }, []);
+
   // Auto-update s3Prefix when tenant/slug changes (unless user already touched it)
   useEffect(() => {
     if (!step2.s3PrefixTouched) {
@@ -464,7 +470,8 @@ export function KBCreateWizard({ open, onClose, onCreated }: KBCreateWizardProps
   // Reset wizard state when closed
   useEffect(() => {
     if (!open) {
-      setTimeout(() => {
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = setTimeout(() => {
         setStep(1);
         setStep1({ name: '', slug: '', slugTouched: false, tenant: 'orgiq', purpose: 'default', description: '' });
         setStep2({ s3Prefix: '', s3PrefixTouched: false, chunkingStrategy: 'SEMANTIC', maxTokens: 512 });
@@ -627,7 +634,7 @@ export function KBCreateWizard({ open, onClose, onCreated }: KBCreateWizardProps
       <div
         style={{
           width: 500,
-          background: '#fff',
+          background: 'var(--color-surface)',
           borderRadius: 10,
           boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
           display: 'flex',
@@ -644,14 +651,14 @@ export function KBCreateWizard({ open, onClose, onCreated }: KBCreateWizardProps
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '16px 20px',
-            borderBottom: '1px solid #e5e7eb',
+            borderBottom: '1px solid var(--color-border)',
           }}
         >
           <div>
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#111827' }}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--color-text-primary)' }}>
               New Knowledge Base
             </div>
-            <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>
+            <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
               Step {step} of 3
               {step === 1 && ' — Identity'}
               {step === 2 && ' — Data Configuration'}
@@ -664,7 +671,7 @@ export function KBCreateWizard({ open, onClose, onCreated }: KBCreateWizardProps
               background: 'none',
               border: 'none',
               fontSize: 18,
-              color: '#6b7280',
+              color: 'var(--color-text-secondary)',
               cursor: 'pointer',
               lineHeight: 1,
               padding: '2px 6px',
@@ -681,7 +688,7 @@ export function KBCreateWizard({ open, onClose, onCreated }: KBCreateWizardProps
               key={n}
               style={{
                 flex: 1,
-                background: n <= step ? '#2563eb' : '#e5e7eb',
+                background: n <= step ? 'var(--color-primary)' : 'var(--color-border)',
                 transition: 'background 0.3s',
               }}
             />
@@ -726,11 +733,11 @@ export function KBCreateWizard({ open, onClose, onCreated }: KBCreateWizardProps
               style={{
                 margin: '10px 0',
                 padding: '8px 12px',
-                background: '#fef2f2',
-                border: '1px solid #fecaca',
+                background: 'var(--color-danger-bg)',
+                border: '1px solid var(--color-danger-border)',
                 borderRadius: 6,
                 fontSize: 12,
-                color: '#dc2626',
+                color: 'var(--color-danger)',
               }}
             >
               {submitError}
@@ -745,7 +752,7 @@ export function KBCreateWizard({ open, onClose, onCreated }: KBCreateWizardProps
             justifyContent: 'flex-end',
             gap: 10,
             padding: '16px 20px',
-            borderTop: '1px solid #e5e7eb',
+            borderTop: '1px solid var(--color-border)',
           }}
         >
           {/* Back — only on step 2 */}
@@ -755,11 +762,11 @@ export function KBCreateWizard({ open, onClose, onCreated }: KBCreateWizardProps
               style={{
                 padding: '7px 18px',
                 fontSize: 13,
-                background: '#fff',
-                border: '1px solid #d1d5db',
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
                 borderRadius: 6,
                 cursor: 'pointer',
-                color: '#374151',
+                color: 'var(--color-text-primary)',
               }}
             >
               Back
@@ -773,11 +780,11 @@ export function KBCreateWizard({ open, onClose, onCreated }: KBCreateWizardProps
               style={{
                 padding: '7px 18px',
                 fontSize: 13,
-                background: '#fff',
-                border: '1px solid #d1d5db',
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
                 borderRadius: 6,
                 cursor: 'pointer',
-                color: '#374151',
+                color: 'var(--color-text-primary)',
               }}
             >
               Cancel
@@ -793,8 +800,8 @@ export function KBCreateWizard({ open, onClose, onCreated }: KBCreateWizardProps
                 padding: '7px 18px',
                 fontSize: 13,
                 fontWeight: 600,
-                background: step1Checking ? '#93c5fd' : '#2563eb',
-                color: '#fff',
+                background: step1Checking ? 'var(--color-state-pending)' : 'var(--color-primary)',
+                color: 'var(--color-surface)',
                 border: 'none',
                 borderRadius: 6,
                 cursor: step1Checking ? 'not-allowed' : 'pointer',
@@ -814,8 +821,8 @@ export function KBCreateWizard({ open, onClose, onCreated }: KBCreateWizardProps
                 padding: '7px 18px',
                 fontSize: 13,
                 fontWeight: 600,
-                background: submitting ? '#93c5fd' : '#2563eb',
-                color: '#fff',
+                background: submitting ? 'var(--color-state-pending)' : 'var(--color-primary)',
+                color: 'var(--color-surface)',
                 border: 'none',
                 borderRadius: 6,
                 cursor: submitting ? 'not-allowed' : 'pointer',

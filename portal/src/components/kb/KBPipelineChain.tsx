@@ -18,7 +18,7 @@ function StatusDot({ active }: { active: boolean }) {
         width: 7,
         height: 7,
         borderRadius: '50%',
-        background: active ? '#16a34a' : '#ca8a04',
+        background: active ? 'var(--color-success)' : 'var(--color-warning)',
         marginLeft: 5,
         flexShrink: 0,
       }}
@@ -42,9 +42,9 @@ function PipelineBox({
       style={{
         minWidth: 120,
         padding: 12,
-        border: '1px solid #e5e7eb',
+        border: '1px solid var(--color-border)',
         borderRadius: 6,
-        background: '#fff',
+        background: 'var(--color-surface)',
         display: 'flex',
         flexDirection: 'column',
         gap: 4,
@@ -53,7 +53,7 @@ function PipelineBox({
       <div
         style={{
           fontSize: 11,
-          color: '#9ca3af',
+          color: 'var(--color-text-tertiary)',
           fontWeight: 500,
           textTransform: 'uppercase',
           letterSpacing: '0.03em',
@@ -74,7 +74,7 @@ function PipelineBox({
           style={{
             fontSize: 13,
             fontWeight: 500,
-            color: '#111827',
+            color: 'var(--color-text-primary)',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
@@ -96,7 +96,7 @@ function Arrow() {
       style={{
         fontSize: 20,
         margin: '0 8px',
-        color: '#9ca3af',
+        color: 'var(--color-text-tertiary)',
         alignSelf: 'center',
         userSelect: 'none',
         flexShrink: 0,
