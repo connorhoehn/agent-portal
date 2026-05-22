@@ -9,10 +9,18 @@ import {
   FollowUpChips,
   ThinkingBlock,
 } from '@connorhoehnslalom/ui-components/shared';
+import { ChatPanel } from '@connorhoehnslalom/ui-components/social';
 import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
-import { usePresence } from '@connorhoehn/realtime-modules/client';
+import { usePresence, useChat } from '@connorhoehn/realtime-modules/client';
 import { PresenceAvatarGroup } from '../components/shell/PresenceAvatarGroup';
+
+// Feature flag: set VITE_ORGIQ_CHAT_ENABLED=true to show the session chat sidebar.
+// We avoid import.meta.env typing concerns (no vite-env.d.ts in this repo) by
+// using the same cast pattern as GatewayStatusBadge.tsx.
+const CHAT_ENABLED =
+  (import.meta as unknown as { env?: Record<string, string | undefined> }).env
+    ?.VITE_ORGIQ_CHAT_ENABLED === 'true';
 
 // ─── <thinking> block renderer ───────────────────────────────────────────────
 //
@@ -87,6 +95,7 @@ interface MemoryEvent {
 function InvokePage() {
   const { roster: peers } = usePresence('invoke');
   const { data: agents } = useFetch<AgentDef[]>('/api/agents');
+
   const [selectedId, setSelectedId] = useState('orgiq-supervisor');
   const {
     messages,
@@ -126,6 +135,14 @@ function InvokePage() {
     15000,
   );
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // Session-scoped chat sidebar (feature-flagged via VITE_ORGIQ_CHAT_ENABLED).
+  // Channel is `orgiq:session:<sessionId>` when a session is active, otherwise
+  // falls back to a generic invoke channel so the hook is never called with an
+  // empty string. When CHAT_ENABLED is false the hook still runs (hooks can't
+  // be conditional) but the sidebar is not rendered.
+  const chatChannel = sessionId ? `orgiq:session:${sessionId}` : 'orgiq:invoke';
+  const chat = useChat(chatChannel);
 
   const selectedAgent = agents?.find(a => a.id === selectedId);
 
@@ -335,6 +352,41 @@ function InvokePage() {
           placeholder={`Ask ${selectedAgent?.name ?? 'agent'}...`}
         />
       </div>
+
+      {/* Session chat sidebar — shown when VITE_ORGIQ_CHAT_ENABLED=true and a session is active */}
+      {CHAT_ENABLED && sessionId && (
+        <aside style={{
+          width: 300,
+          borderLeft: '1px solid var(--color-border)',
+          display: 'flex',
+          flexDirection: 'column',
+          flexShrink: 0,
+        }}>
+          <div style={{
+            padding: '10px 14px',
+            borderBottom: '1px solid var(--color-border)',
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--color-text-tertiary)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+          }}>
+            Session Chat
+          </div>
+          <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <ChatPanel
+              messages={chat.messages.map(m => ({
+                id: m.id,
+                clientId: m.clientId,
+                content: m.message,
+                timestamp: m.timestamp,
+                displayName: (m.metadata?.displayName as string | undefined) ?? m.clientId,
+              }))}
+              onSend={chat.sendMessage}
+            />
+          </div>
+        </aside>
+      )}
     </div>
   );
 }
