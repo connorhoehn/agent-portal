@@ -123,8 +123,8 @@ export function RunDetailDrawer({
                     marginTop: 10,
                     padding: 8,
                     borderRadius: 4,
-                    background: '#fef2f2',
-                    color: '#991b1b',
+                    background: 'var(--color-danger-bg)',
+                    color: 'var(--color-danger)',
                     fontSize: 11,
                   }}
                 >

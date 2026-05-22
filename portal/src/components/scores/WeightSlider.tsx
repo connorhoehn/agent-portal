@@ -52,7 +52,7 @@ export function WeightSlider({ value, onChange, label = 'Composite weighting: in
         <span style={{ fontSize: 11, color: 'var(--color-primary, #6366f1)', fontWeight: 500 }}>
           Influence {infPct}%
         </span>
-        <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 500 }}>
+        <span style={{ fontSize: 11, color: 'var(--color-success)', fontWeight: 500 }}>
           Expertise {expPct}%
         </span>
       </div>

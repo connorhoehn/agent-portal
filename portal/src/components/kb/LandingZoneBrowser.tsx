@@ -123,20 +123,20 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
     padding: '8px 12px',
     fontSize: 11,
     fontWeight: 600,
-    color: '#6b7280',
+    color: 'var(--color-text-tertiary)',
     textAlign: 'left',
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
-    borderBottom: '1px solid #e5e7eb',
-    background: '#f9fafb',
+    borderBottom: '1px solid var(--color-border)',
+    background: 'var(--color-surface-panel)',
     whiteSpace: 'nowrap',
   };
 
   const tdStyle: React.CSSProperties = {
     padding: '8px 12px',
     fontSize: 12,
-    color: '#374151',
-    borderBottom: '1px solid #f3f4f6',
+    color: 'var(--color-text-secondary)',
+    borderBottom: '1px solid var(--color-surface-hover)',
     verticalAlign: 'middle',
   };
 
@@ -157,11 +157,11 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
         <code
           style={{
             fontSize: 12,
-            background: '#f3f4f6',
-            border: '1px solid #e5e7eb',
+            background: 'var(--color-surface-hover)',
+            border: '1px solid var(--color-border)',
             borderRadius: 4,
             padding: '4px 8px',
-            color: '#374151',
+            color: 'var(--color-text-secondary)',
             wordBreak: 'break-all',
           }}
         >
@@ -178,8 +178,8 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
             padding: '6px 14px',
             fontSize: 12,
             fontWeight: 600,
-            background: uploading ? '#93c5fd' : '#2563eb',
-            color: '#fff',
+            background: uploading ? 'var(--color-state-pending)' : 'var(--color-info)',
+            color: 'var(--color-surface)',
             border: 'none',
             borderRadius: 6,
             cursor: uploading ? 'not-allowed' : 'pointer',
@@ -188,7 +188,7 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
         >
           {uploading ? (
             <>
-              <Spinner size="sm" color="#fff" />
+              <Spinner size="sm" color="var(--color-surface)" />
               Uploading…
             </>
           ) : (
@@ -210,11 +210,11 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
         <div
           style={{
             padding: '8px 12px',
-            background: '#fef2f2',
-            border: '1px solid #fecaca',
+            background: 'var(--color-danger-bg)',
+            border: '1px solid var(--color-danger-border)',
             borderRadius: 6,
             fontSize: 12,
-            color: '#dc2626',
+            color: 'var(--color-danger)',
           }}
         >
           {error}
@@ -224,7 +224,7 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
       {/* Table */}
       <div
         style={{
-          border: '1px solid #e5e7eb',
+          border: '1px solid var(--color-border)',
           borderRadius: 8,
           overflow: 'hidden',
         }}
@@ -245,7 +245,7 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
                   style={{
                     ...tdStyle,
                     textAlign: 'center',
-                    color: '#9ca3af',
+                    color: 'var(--color-text-tertiary)',
                     padding: '32px 0',
                   }}
                 >
@@ -259,7 +259,7 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
                   style={{
                     ...tdStyle,
                     textAlign: 'center',
-                    color: '#9ca3af',
+                    color: 'var(--color-text-tertiary)',
                     padding: '32px 16px',
                     lineHeight: 1.5,
                   }}
@@ -275,7 +275,7 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
               files.map((f, i) => (
                 <tr
                   key={`${f.key}-${i}`}
-                  style={{ background: i % 2 === 0 ? '#fff' : '#fafafa' }}
+                  style={{ background: i % 2 === 0 ? 'var(--color-surface)' : 'var(--color-surface-inset)' }}
                 >
                   <td style={tdStyle}>
                     <span
@@ -289,11 +289,11 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
                         style={{
                           marginLeft: 6,
                           padding: '1px 5px',
-                          background: '#f3f4f6',
-                          border: '1px solid #e5e7eb',
+                          background: 'var(--color-surface-hover)',
+                          border: '1px solid var(--color-border)',
                           borderRadius: 3,
                           fontSize: 10,
-                          color: '#6b7280',
+                          color: 'var(--color-text-tertiary)',
                           textTransform: 'uppercase',
                         }}
                       >
@@ -306,7 +306,7 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
                       ...tdStyle,
                       textAlign: 'right',
                       fontFamily: 'monospace',
-                      color: '#6b7280',
+                      color: 'var(--color-text-tertiary)',
                     }}
                   >
                     {humanSize(f.size)}
@@ -315,7 +315,7 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
                     style={{
                       ...tdStyle,
                       textAlign: 'right',
-                      color: '#9ca3af',
+                      color: 'var(--color-text-tertiary)',
                       whiteSpace: 'nowrap',
                     }}
                   >
@@ -337,11 +337,11 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
             alignSelf: 'flex-start',
             padding: '6px 14px',
             fontSize: 12,
-            background: '#fff',
-            border: '1px solid #d1d5db',
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border-emphasis)',
             borderRadius: 6,
             cursor: loading ? 'not-allowed' : 'pointer',
-            color: '#374151',
+            color: 'var(--color-text-secondary)',
           }}
         >
           {loading ? 'Loading…' : 'Load More'}

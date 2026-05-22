@@ -184,9 +184,9 @@ export function MasqueradeMenu() {
 
 function roleColor(role: SessionRole): string {
   switch (role) {
-    case 'member': return '#64748b';
-    case 'org-leader': return '#3b82f6';
-    case 'hr-admin': return '#f59e0b';
-    case 'admin': return '#ef4444';
+    case 'member': return 'var(--color-text-secondary)';
+    case 'org-leader': return 'var(--color-info)';
+    case 'hr-admin': return 'var(--color-warning)';
+    case 'admin': return 'var(--color-danger)';
   }
 }

@@ -106,18 +106,18 @@ const haltBtnStyle: CSSProperties = {
   padding: '6px 12px',
   fontSize: 12,
   fontWeight: 600,
-  border: '1px solid #dc2626',
+  border: '1px solid var(--color-danger)',
   borderRadius: 4,
-  background: '#dc2626',
-  color: '#fff',
+  background: 'var(--color-danger)',
+  color: 'var(--color-surface)',
   cursor: 'pointer',
   fontFamily: 'inherit',
 };
 
 const haltedBtnStyle: CSSProperties = {
   ...haltBtnStyle,
-  background: '#94a3b8',
-  borderColor: '#94a3b8',
+  background: 'var(--color-text-tertiary)',
+  borderColor: 'var(--color-text-tertiary)',
   cursor: 'not-allowed',
 };
 
@@ -163,10 +163,10 @@ const confirmBtnStyle: CSSProperties = {
   padding: '6px 12px',
   fontSize: 12,
   fontWeight: 600,
-  border: '1px solid #dc2626',
+  border: '1px solid var(--color-danger)',
   borderRadius: 4,
-  background: '#dc2626',
-  color: '#fff',
+  background: 'var(--color-danger)',
+  color: 'var(--color-surface)',
   cursor: 'pointer',
   fontFamily: 'inherit',
 };

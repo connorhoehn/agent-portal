@@ -124,9 +124,9 @@ function DiffViewer({ textA, textB, labelA, labelB }: {
       <div style={diffHeaderStyle}>
         <span style={diffLabelStyle}>{labelA} → {labelB}</span>
         <div style={diffStatsStyle}>
-          <span style={{ color: '#10b981', fontWeight: 600 }}>+{added}</span>
-          <span style={{ color: '#ef4444', fontWeight: 600 }}>−{removed}</span>
-          <span style={{ color: '#94a3b8' }}>{unchanged} unchanged</span>
+          <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>+{added}</span>
+          <span style={{ color: 'var(--color-danger)', fontWeight: 600 }}>−{removed}</span>
+          <span style={{ color: 'var(--color-text-tertiary)' }}>{unchanged} unchanged</span>
         </div>
       </div>
       {lines.length === 0 ? (
@@ -142,8 +142,8 @@ function DiffViewer({ textA, textB, labelA, labelB }: {
                 display: 'flex',
                 gap: 8,
                 padding: '1px 16px',
-                background: line.kind === 'add' ? '#dcfce7' : line.kind === 'remove' ? '#fee2e2' : 'transparent',
-                color: line.kind === 'add' ? '#166534' : line.kind === 'remove' ? '#991b1b' : '#0f172a',
+                background: line.kind === 'add' ? 'var(--color-success-bg)' : line.kind === 'remove' ? 'var(--color-danger-bg)' : 'transparent',
+                color: line.kind === 'add' ? 'var(--color-success)' : line.kind === 'remove' ? 'var(--color-danger)' : 'var(--color-text-primary)',
               }}
             >
               <span style={{ width: 14, flexShrink: 0, userSelect: 'none', opacity: 0.5, fontFamily: 'monospace', fontSize: 12 }}>
@@ -292,9 +292,9 @@ const toolbarStyle: CSSProperties = {
   alignItems: 'flex-end',
   gap: 12,
   padding: '16px 20px',
-  borderBottom: '1px solid #e2e8f0',
+  borderBottom: '1px solid var(--color-border)',
   flexShrink: 0,
-  background: '#fff',
+  background: 'var(--color-surface)',
   flexWrap: 'wrap',
 };
 
@@ -311,16 +311,16 @@ const pickerLabelStyle: CSSProperties = {
   fontWeight: 700,
   textTransform: 'uppercase',
   letterSpacing: '0.06em',
-  color: '#94a3b8',
+  color: 'var(--color-text-tertiary)',
 };
 
 const selectStyle: CSSProperties = {
   padding: '7px 10px',
   fontSize: 12,
-  border: '1px solid #e2e8f0',
+  border: '1px solid var(--color-border)',
   borderRadius: 4,
-  background: '#f8fafc',
-  color: '#0f172a',
+  background: 'var(--color-bg)',
+  color: 'var(--color-text-primary)',
   outline: 'none',
   fontFamily: 'inherit',
   width: '100%',
@@ -329,14 +329,14 @@ const selectStyle: CSSProperties = {
 
 const vsChipStyle: CSSProperties = {
   fontSize: 18,
-  color: '#94a3b8',
+  color: 'var(--color-text-tertiary)',
   paddingBottom: 6,
   flexShrink: 0,
 };
 
 const viewToggleStyle: CSSProperties = {
   display: 'flex',
-  border: '1px solid #e2e8f0',
+  border: '1px solid var(--color-border)',
   borderRadius: 4,
   overflow: 'hidden',
   flexShrink: 0,
@@ -348,8 +348,8 @@ const activeToggleStyle: CSSProperties = {
   fontSize: 11,
   fontWeight: 600,
   border: 'none',
-  background: '#6366f1',
-  color: '#fff',
+  background: 'var(--color-primary)',
+  color: 'var(--color-surface)',
   cursor: 'pointer',
   fontFamily: 'inherit',
 };
@@ -360,7 +360,7 @@ const inactiveToggleStyle: CSSProperties = {
   fontWeight: 500,
   border: 'none',
   background: 'transparent',
-  color: '#64748b',
+  color: 'var(--color-text-secondary)',
   cursor: 'pointer',
   fontFamily: 'inherit',
 };
@@ -385,12 +385,12 @@ const placeholderStyle: CSSProperties = {
 
 const placeholderIconStyle: CSSProperties = {
   fontSize: 40,
-  color: '#e2e8f0',
+  color: 'var(--color-border)',
 };
 
 const placeholderMsgStyle: CSSProperties = {
   fontSize: 13,
-  color: '#94a3b8',
+  color: 'var(--color-text-tertiary)',
   margin: 0,
   textAlign: 'center',
   maxWidth: 360,
@@ -407,8 +407,8 @@ const diffHeaderStyle: CSSProperties = {
   alignItems: 'center',
   justifyContent: 'space-between',
   padding: '12px 16px',
-  borderBottom: '1px solid #e2e8f0',
-  background: '#f8fafc',
+  borderBottom: '1px solid var(--color-border)',
+  background: 'var(--color-bg)',
   flexShrink: 0,
   flexWrap: 'wrap',
   gap: 8,
@@ -417,7 +417,7 @@ const diffHeaderStyle: CSSProperties = {
 const diffLabelStyle: CSSProperties = {
   fontSize: 12,
   fontWeight: 600,
-  color: '#475569',
+  color: 'var(--color-text-secondary)',
   fontFamily: 'monospace',
 };
 
@@ -435,7 +435,7 @@ const diffBodyStyle: CSSProperties = {
 const emptyDiffStyle: CSSProperties = {
   padding: 32,
   fontSize: 13,
-  color: '#94a3b8',
+  color: 'var(--color-text-tertiary)',
   textAlign: 'center',
 };
 
@@ -460,14 +460,14 @@ const sideLabelStyle: CSSProperties = {
   fontWeight: 700,
   textTransform: 'uppercase',
   letterSpacing: '0.06em',
-  color: '#94a3b8',
+  color: 'var(--color-text-tertiary)',
   marginBottom: 8,
   flexShrink: 0,
 };
 
 const dividerStyle: CSSProperties = {
   width: 1,
-  background: '#e2e8f0',
+  background: 'var(--color-border)',
   flexShrink: 0,
 };
 
@@ -479,5 +479,5 @@ const templatePreStyle: CSSProperties = {
   padding: 0,
   whiteSpace: 'pre-wrap',
   wordBreak: 'break-word',
-  color: '#0f172a',
+  color: 'var(--color-text-primary)',
 };

@@ -540,7 +540,7 @@ function MetricsSparkline({ series }: { series: Array<{ timestamp: string; invoc
     <div>
       <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ width: '100%', height: 80, display: 'block' }}>
         <polyline fill="none" stroke="var(--color-primary, #6366f1)" strokeWidth="1.5" points={points('invocations')} />
-        <polyline fill="none" stroke="#dc2626" strokeWidth="1.5" points={points('interventions')} />
+        <polyline fill="none" stroke="var(--color-danger)" strokeWidth="1.5" points={points('interventions')} />
       </svg>
       <div style={{ display: 'flex', gap: 16, fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 4 }}>
         <span><span style={{ display: 'inline-block', width: 8, height: 2, background: 'var(--color-primary, #6366f1)', marginRight: 4, verticalAlign: 'middle' }} />invocations</span>

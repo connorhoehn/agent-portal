@@ -44,7 +44,7 @@ function giniChipStyle(gini: number): React.CSSProperties {
 }
 
 export function CohortCard({ cohort }: CohortCardProps) {
-  const deptColor = DEPT_COLORS[cohort.department] ?? '#6b7280';
+  const deptColor = DEPT_COLORS[cohort.department] ?? 'var(--color-text-tertiary)';
   const chipStyle = giniChipStyle(cohort.expertiseGini);
 
   return (

@@ -84,7 +84,7 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
                 <TableTd style={{ color: 'var(--color-text-tertiary)' }}>{i + 1}</TableTd>
                 <TableTd style={{ fontWeight: selected ? 600 : 500 }}>{s.name}</TableTd>
                 <TableTd>
-                  <span style={{ color: deptColors[s.department] ?? '#64748b', fontSize: 12 }}>
+                  <span style={{ color: deptColors[s.department] ?? 'var(--color-text-secondary)', fontSize: 12 }}>
                     {s.department}
                   </span>
                 </TableTd>
@@ -99,7 +99,7 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
                   <div title={tooltip} style={{ marginTop: 4 }}>
                     <svg width={60} height={6} style={{ display: 'block', marginLeft: 'auto' }}>
                       <rect x={0}    y={0} width={infW} height={6} rx={2} fill="var(--color-primary, #6366f1)" />
-                      <rect x={infW} y={0} width={expW} height={6} rx={2} fill="#16a34a" />
+                      <rect x={infW} y={0} width={expW} height={6} rx={2} fill="var(--color-success)" />
                     </svg>
                   </div>
                 </TableTd>

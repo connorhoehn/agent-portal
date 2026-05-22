@@ -115,7 +115,7 @@ export function PromptEditorStep({
   if (loadError) {
     return (
       <div style={errorBoxStyle}>
-        <p style={{ margin: 0, fontSize: 12, color: '#991b1b' }}>
+        <p style={{ margin: 0, fontSize: 12, color: 'var(--color-danger)' }}>
           Failed to load baseline template: {loadError}
         </p>
         <button type="button" onClick={onBack} style={secondaryBtnStyle}>
@@ -350,7 +350,7 @@ const smallInputStyle: CSSProperties = {
   fontSize: 12,
   border: '1px solid var(--color-border, #e2e8f0)',
   borderRadius: 4,
-  background: '#fff',
+  background: 'var(--color-surface)',
   fontFamily: 'inherit',
   outline: 'none',
 };
@@ -399,7 +399,7 @@ const primaryBtnStyle: CSSProperties = {
   border: 'none',
   borderRadius: 4,
   background: 'var(--color-primary, #6366f1)',
-  color: '#fff',
+  color: 'var(--color-surface)',
   cursor: 'pointer',
   fontFamily: 'inherit',
   flexShrink: 0,
@@ -415,8 +415,8 @@ const skeletonStyle: CSSProperties = {
 
 const errorBoxStyle: CSSProperties = {
   padding: '12px 14px',
-  background: '#fee2e2',
-  border: '1px solid #fca5a5',
+  background: 'var(--color-danger-bg)',
+  border: '1px solid var(--color-danger-border)',
   borderRadius: 4,
   display: 'flex',
   flexDirection: 'column',
@@ -425,9 +425,9 @@ const errorBoxStyle: CSSProperties = {
 
 const saveErrorStyle: CSSProperties = {
   padding: '8px 12px',
-  background: '#fee2e2',
-  border: '1px solid #fca5a5',
+  background: 'var(--color-danger-bg)',
+  border: '1px solid var(--color-danger-border)',
   borderRadius: 4,
   fontSize: 12,
-  color: '#991b1b',
+  color: 'var(--color-danger)',
 };

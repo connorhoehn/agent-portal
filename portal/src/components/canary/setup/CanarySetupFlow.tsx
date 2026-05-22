@@ -39,7 +39,7 @@ const STEP_LABELS = ['Choose prompt', 'Pick versions', 'Configure'];
 function CheckIcon(): React.ReactElement {
   return (
     <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
-      <polyline points="1.5,5.5 4,8 8.5,2" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <polyline points="1.5,5.5 4,8 8.5,2" stroke="var(--color-surface)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -288,7 +288,7 @@ const outerStyle: CSSProperties = {
 const cardStyle: CSSProperties = {
   width: '100%',
   maxWidth: 860,
-  background: '#fff',
+  background: 'var(--color-surface)',
   border: '1px solid var(--color-border, #e2e8f0)',
   borderRadius: 8,
   overflow: 'hidden',
@@ -358,7 +358,7 @@ const primaryBtnStyle: CSSProperties = {
   border: 'none',
   borderRadius: 4,
   background: 'var(--color-primary, #6366f1)',
-  color: '#fff',
+  color: 'var(--color-surface)',
   cursor: 'pointer',
   fontFamily: 'inherit',
 };

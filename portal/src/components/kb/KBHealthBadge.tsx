@@ -19,9 +19,9 @@ function derive(data: KBHealthResponse): { severity: Severity; count: number } {
 }
 
 const PALETTE: Record<Severity, { bg: string; border: string; text: string; dot: string }> = {
-  healthy:  { bg: '#f0fdf4', border: '#bbf7d0', text: '#15803d', dot: '#22c55e' },
-  degraded: { bg: '#fffbeb', border: '#fde68a', text: '#b45309', dot: '#f59e0b' },
-  failed:   { bg: '#fef2f2', border: '#fecaca', text: '#b91c1c', dot: '#ef4444' },
+  healthy:  { bg: 'var(--color-success-bg)', border: 'var(--color-success-border)', text: 'var(--color-success)', dot: 'var(--color-success)' },
+  degraded: { bg: 'var(--color-warning-bg)', border: 'var(--color-warning-border)', text: 'var(--color-warning)', dot: 'var(--color-warning)' },
+  failed:   { bg: 'var(--color-danger-bg)',  border: 'var(--color-danger-border)',  text: 'var(--color-danger)',  dot: 'var(--color-danger)'  },
 };
 
 const SYMBOL: Record<Severity, string> = {

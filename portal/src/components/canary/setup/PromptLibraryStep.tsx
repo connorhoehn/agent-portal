@@ -71,7 +71,7 @@ export function PromptLibraryStep({ onSelect, selected }: PromptLibraryStepProps
       {/* Error state */}
       {!loading && error && !bedrock503 && (
         <div style={errorBoxStyle}>
-          <span style={{ fontSize: 12, color: '#991b1b' }}>{error}</span>
+          <span style={{ fontSize: 12, color: 'var(--color-danger)' }}>{error}</span>
           <button type="button" onClick={refresh} style={retryBtnStyle}>
             Retry
           </button>
@@ -84,7 +84,7 @@ export function PromptLibraryStep({ onSelect, selected }: PromptLibraryStepProps
           <p style={warningTitleStyle}>
             Bedrock Prompt Library unavailable — check AWS credentials
           </p>
-          <p style={{ margin: '0 0 10px', fontSize: 12, color: '#92400e', lineHeight: 1.5 }}>
+          <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--color-warning)', lineHeight: 1.5 }}>
             Cannot reach the Bedrock API. You can enter a prompt ARN directly to continue.
           </p>
           <label htmlFor={manualArnId} style={labelStyle}>Enter ARN directly</label>
@@ -138,7 +138,7 @@ export function PromptLibraryStep({ onSelect, selected }: PromptLibraryStepProps
                   border: isSelected
                     ? '2px solid var(--color-primary, #6366f1)'
                     : '1px solid var(--color-border, #e2e8f0)',
-                  background: isSelected ? '#f5f3ff' : '#fff',
+                  background: isSelected ? '#f5f3ff' : 'var(--color-surface)',
                   cursor: 'pointer',
                 }}
                 onClick={() => onSelect(entry)}
@@ -196,8 +196,8 @@ const skeletonRowStyle: CSSProperties = {
 const errorBoxStyle: CSSProperties = {
   marginTop: 12,
   padding: '10px 12px',
-  background: '#fee2e2',
-  border: '1px solid #fca5a5',
+  background: 'var(--color-danger-bg)',
+  border: '1px solid var(--color-danger-border)',
   borderRadius: 4,
   display: 'flex',
   alignItems: 'center',
@@ -208,8 +208,8 @@ const errorBoxStyle: CSSProperties = {
 const warningBoxStyle: CSSProperties = {
   marginTop: 12,
   padding: '12px 14px',
-  background: '#fef3c7',
-  border: '1px solid #fcd34d',
+  background: 'var(--color-warning-bg)',
+  border: '1px solid var(--color-warning-border)',
   borderRadius: 4,
 };
 
@@ -217,16 +217,16 @@ const warningTitleStyle: CSSProperties = {
   margin: '0 0 6px',
   fontSize: 12,
   fontWeight: 600,
-  color: '#92400e',
+  color: 'var(--color-warning)',
 };
 
 const retryBtnStyle: CSSProperties = {
   padding: '4px 10px',
   fontSize: 12,
-  border: '1px solid #dc2626',
+  border: '1px solid var(--color-danger)',
   borderRadius: 4,
   background: 'transparent',
-  color: '#dc2626',
+  color: 'var(--color-danger)',
   cursor: 'pointer',
   flexShrink: 0,
   fontFamily: 'inherit',
@@ -279,7 +279,7 @@ const cardMetaStyle: CSSProperties = {
 const labelStyle: CSSProperties = {
   fontSize: 11,
   fontWeight: 600,
-  color: '#92400e',
+  color: 'var(--color-warning)',
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
   display: 'block',
@@ -292,7 +292,7 @@ const primaryBtnStyle: CSSProperties = {
   border: 'none',
   borderRadius: 4,
   background: 'var(--color-primary, #6366f1)',
-  color: '#fff',
+  color: 'var(--color-surface)',
   cursor: 'pointer',
   fontFamily: 'inherit',
 };

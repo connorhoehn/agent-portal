@@ -18,12 +18,12 @@ import type { ControllerAction, Decision } from './types.js';
 // ── Action metadata ───────────────────────────────────────────────────────────
 
 const ACTION_META: Record<ControllerAction, { label: string; bg: string; fg: string }> = {
-  PROMOTE:            { label: 'Promote',           bg: '#dcfce7', fg: '#166534' },
-  ROLLBACK:           { label: 'Rollback',           bg: '#fee2e2', fg: '#991b1b' },
-  HOLD:               { label: 'Hold',               bg: '#fef3c7', fg: '#92400e' },
-  SKIPPED_OVERRIDE:   { label: 'Skip — override',    bg: '#e0e7ff', fg: '#3730a3' },
-  SKIPPED_COOLDOWN:   { label: 'Skip — cooldown',    bg: '#e2e8f0', fg: '#475569' },
-  SKIPPED_NO_SAMPLES: { label: 'Skip — no data',     bg: '#e2e8f0', fg: '#475569' },
+  PROMOTE:            { label: 'Promote',           bg: 'var(--color-success-bg)',  fg: 'var(--color-success)' },
+  ROLLBACK:           { label: 'Rollback',           bg: 'var(--color-danger-bg)',   fg: 'var(--color-danger)' },
+  HOLD:               { label: 'Hold',               bg: 'var(--color-warning-bg)',  fg: 'var(--color-warning)' },
+  SKIPPED_OVERRIDE:   { label: 'Skip — override',    bg: '#e0e7ff',                  fg: '#3730a3' },
+  SKIPPED_COOLDOWN:   { label: 'Skip — cooldown',    bg: 'var(--color-border)',       fg: 'var(--color-text-secondary)' },
+  SKIPPED_NO_SAMPLES: { label: 'Skip — no data',     bg: 'var(--color-border)',       fg: 'var(--color-text-secondary)' },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -43,8 +43,8 @@ function DeltaCell({ delta }: { delta: number | undefined }): React.ReactElement
     return <span style={{ color: 'var(--color-text-tertiary, #94a3b8)' }}>—</span>;
   }
   const color =
-    delta > 0.005 ? '#16a34a' :
-    delta < -0.005 ? '#dc2626' :
+    delta > 0.005 ? 'var(--color-success)' :
+    delta < -0.005 ? 'var(--color-danger)' :
     'var(--color-text-secondary, #475569)';
   return (
     <span style={{ fontWeight: 600, color, fontVariantNumeric: 'tabular-nums' }}>
@@ -61,8 +61,8 @@ function DecisionRow({ decision, index }: { decision: Decision; index: number })
   const hasReason = !!decision.reason;
 
   const trafficColor =
-    decision.to > decision.from ? '#16a34a' :
-    decision.to < decision.from ? '#dc2626' :
+    decision.to > decision.from ? 'var(--color-success)' :
+    decision.to < decision.from ? 'var(--color-danger)' :
     'var(--color-text-secondary, #475569)';
 
   return (
@@ -305,9 +305,9 @@ const liveBtnStyle: CSSProperties = {
   fontSize: 12,
   fontWeight: 600,
   borderRadius: 6,
-  border: '1px solid #bbf7d0',
-  background: '#f0fdf4',
-  color: '#166534',
+  border: '1px solid var(--color-success-border)',
+  background: 'var(--color-success-bg)',
+  color: 'var(--color-success)',
   textDecoration: 'none',
   whiteSpace: 'nowrap',
 };
@@ -414,7 +414,7 @@ const emptyBtnStyle: CSSProperties = {
   fontWeight: 600,
   borderRadius: 7,
   background: 'var(--color-primary, #6366f1)',
-  color: '#fff',
+  color: 'var(--color-surface)',
   textDecoration: 'none',
   cursor: 'pointer',
 };

@@ -7,12 +7,12 @@ import { useCanaryStore } from './canaryStore.js';
 import type { ControllerAction, Decision } from './types.js';
 
 const ACTION_COLORS: Record<ControllerAction, { bg: string; fg: string }> = {
-  PROMOTE:               { bg: '#dcfce7', fg: '#166534' },
-  ROLLBACK:              { bg: '#fee2e2', fg: '#991b1b' },
-  HOLD:                  { bg: '#fef3c7', fg: '#92400e' },
+  PROMOTE:               { bg: 'var(--color-success-bg)',  fg: 'var(--color-success)' },
+  ROLLBACK:              { bg: 'var(--color-danger-bg)',   fg: 'var(--color-danger)' },
+  HOLD:                  { bg: 'var(--color-warning-bg)',  fg: 'var(--color-warning)' },
   SKIPPED_OVERRIDE:      { bg: '#e0e7ff', fg: '#3730a3' },
-  SKIPPED_COOLDOWN:      { bg: '#e2e8f0', fg: '#475569' },
-  SKIPPED_NO_SAMPLES:    { bg: '#e2e8f0', fg: '#475569' },
+  SKIPPED_COOLDOWN:      { bg: 'var(--color-border)',      fg: 'var(--color-text-secondary)' },
+  SKIPPED_NO_SAMPLES:    { bg: 'var(--color-border)',      fg: 'var(--color-text-secondary)' },
 };
 
 function fmtTime(ts: string): string {

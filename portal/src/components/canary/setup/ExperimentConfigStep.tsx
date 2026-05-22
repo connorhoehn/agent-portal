@@ -200,7 +200,7 @@ const vsDividerStyle: CSSProperties = {
 
 const vsTextStyle: CSSProperties = {
   position: 'absolute',
-  background: '#fff',
+  background: 'var(--color-surface)',
   padding: '4px 6px',
   fontSize: 11,
   fontWeight: 700,
@@ -244,7 +244,7 @@ const startBtnStyle: CSSProperties = {
   border: 'none',
   borderRadius: 6,
   background: 'var(--color-primary, #6366f1)',
-  color: '#fff',
+  color: 'var(--color-surface)',
   cursor: 'pointer',
   fontFamily: 'inherit',
   letterSpacing: '0.02em',
@@ -265,9 +265,9 @@ const backBtnStyle: CSSProperties = {
 
 const errorBoxStyle: CSSProperties = {
   padding: '8px 12px',
-  background: '#fee2e2',
-  border: '1px solid #fca5a5',
+  background: 'var(--color-danger-bg)',
+  border: '1px solid var(--color-danger-border)',
   borderRadius: 4,
   fontSize: 12,
-  color: '#991b1b',
+  color: 'var(--color-danger)',
 };

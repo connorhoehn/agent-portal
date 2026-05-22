@@ -45,7 +45,7 @@ function ScoresComparePage() {
       )}
 
       {error && (
-        <div style={{ color: '#dc2626', fontSize: 13 }}>Failed to load: {error}</div>
+        <div style={{ color: 'var(--color-danger)', fontSize: 13 }}>Failed to load: {error}</div>
       )}
 
       {data && data.length > 0 && (

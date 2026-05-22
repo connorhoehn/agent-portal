@@ -421,10 +421,10 @@ function StatusPip({ phase, hasScore, errorMsg }: { phase: RowPhase; hasScore: b
       )}
     </div>
   );
-  if (phase === 'running') return <span style={{ fontSize: 10, color: '#6366f1' }}>streaming</span>;
+  if (phase === 'running') return <span style={{ fontSize: 10, color: 'var(--color-primary)' }}>streaming</span>;
   // done
-  if (!hasScore) return <span style={{ fontSize: 10, color: '#d97706' }}>judging…</span>;
-  return <span style={{ fontSize: 10, color: '#16a34a', fontWeight: 600 }}>✓ scored</span>;
+  if (!hasScore) return <span style={{ fontSize: 10, color: 'var(--color-warning)' }}>judging…</span>;
+  return <span style={{ fontSize: 10, color: 'var(--color-success)', fontWeight: 600 }}>✓ scored</span>;
 }
 
 // ── Focus map ─────────────────────────────────────────────────────────────────
@@ -591,7 +591,7 @@ function Toolbar({
   return (
     <div style={toolbarStyle}>
       <div style={leftGroupStyle}>
-        <span style={{ ...statusPillStyle, background: halted ? '#fee2e2' : '#dcfce7', color: halted ? '#991b1b' : '#166534' }}>
+        <span style={{ ...statusPillStyle, background: halted ? 'var(--color-danger-bg)' : 'var(--color-success-bg)', color: halted ? 'var(--color-danger)' : 'var(--color-success)' }}>
           {halted ? '● Halted' : '● Active'}
         </span>
         <span style={refreshTextStyle}>

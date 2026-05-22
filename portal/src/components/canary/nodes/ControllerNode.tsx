@@ -38,12 +38,12 @@ const STATE_LABEL: Record<ControllerNodeData['state'], string> = {
 };
 
 const ACTION_COLOR: Record<ControllerAction, string> = {
-  PROMOTE: '#16a34a',
-  ROLLBACK: '#dc2626',
-  HOLD: '#64748b',
+  PROMOTE: 'var(--color-success)',
+  ROLLBACK: 'var(--color-danger)',
+  HOLD: 'var(--color-text-secondary)',
   SKIPPED_OVERRIDE: 'var(--color-optimize)',
-  SKIPPED_COOLDOWN: '#94a3b8',
-  SKIPPED_NO_SAMPLES: '#94a3b8',
+  SKIPPED_COOLDOWN: 'var(--color-text-tertiary)',
+  SKIPPED_NO_SAMPLES: 'var(--color-text-tertiary)',
 };
 
 function formatTs(iso: string): string {
@@ -86,9 +86,9 @@ function DecisionRow({ d }: { d: Decision }) {
             style={{
               color:
                 d.deltaScore > 0
-                  ? '#16a34a'
+                  ? 'var(--color-success)'
                   : d.deltaScore < 0
-                  ? '#dc2626'
+                  ? 'var(--color-danger)'
                   : 'var(--color-text-tertiary, #94a3b8)',
               fontVariantNumeric: 'tabular-nums',
             }}
@@ -150,12 +150,12 @@ function ControllerNodeImpl({ data }: NodeProps<ControllerNodeType>) {
       )}
 
       {data.state === 'promoted' && (
-        <div style={{ background: '#dcfce7', border: '1px solid #bbf7d0', borderRadius: 4, padding: '6px 8px', marginBottom: 6, fontSize: 11, color: '#166534', lineHeight: 1.4 }}>
+        <div style={{ background: 'var(--color-success-bg)', border: '1px solid var(--color-success-border)', borderRadius: 4, padding: '6px 8px', marginBottom: 6, fontSize: 11, color: 'var(--color-success)', lineHeight: 1.4 }}>
           Version B is now serving 100% of traffic. The experiment is complete — B has been fully promoted.
         </div>
       )}
       {data.state === 'rolled_back' && (
-        <div style={{ background: '#fee2e2', border: '1px solid #fecaca', borderRadius: 4, padding: '6px 8px', marginBottom: 6, fontSize: 11, color: '#991b1b', lineHeight: 1.4 }}>
+        <div style={{ background: 'var(--color-danger-bg)', border: '1px solid var(--color-danger-border)', borderRadius: 4, padding: '6px 8px', marginBottom: 6, fontSize: 11, color: 'var(--color-danger)', lineHeight: 1.4 }}>
           Rolled back to 100% A. B underperformed and has been fully removed from traffic.
         </div>
       )}

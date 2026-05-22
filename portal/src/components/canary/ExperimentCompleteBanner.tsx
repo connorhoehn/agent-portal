@@ -61,13 +61,13 @@ export function ExperimentCompleteBanner({ onReset }: ExperimentCompleteBannerPr
     padding: '10px 20px',
     fontSize: 13,
     flexShrink: 0,
-    background: isPromoted ? '#dcfce7' : '#fee2e2',
-    borderBottom: isPromoted ? '1px solid #bbf7d0' : '1px solid #fecaca',
+    background: isPromoted ? 'var(--color-success-bg)' : 'var(--color-danger-bg)',
+    borderBottom: isPromoted ? '1px solid var(--color-success-border)' : '1px solid var(--color-danger-border)',
   };
 
   const leftTextStyle: CSSProperties = {
     fontWeight: 600,
-    color: isPromoted ? '#166534' : '#991b1b',
+    color: isPromoted ? 'var(--color-success)' : 'var(--color-danger)',
     display: 'flex',
     alignItems: 'center',
     gap: 6,
@@ -85,8 +85,8 @@ export function ExperimentCompleteBanner({ onReset }: ExperimentCompleteBannerPr
     padding: '5px 14px',
     borderRadius: 5,
     border: 'none',
-    background: '#16a34a',
-    color: '#fff',
+    background: 'var(--color-success)',
+    color: 'var(--color-surface)',
     cursor: pinning ? 'not-allowed' : 'pointer',
     opacity: pinning ? 0.7 : 1,
     fontFamily: 'inherit',
@@ -113,7 +113,7 @@ export function ExperimentCompleteBanner({ onReset }: ExperimentCompleteBannerPr
       </div>
       <div style={actionsStyle}>
         {pinError && (
-          <span style={{ fontSize: 11, color: '#991b1b' }} title={pinError}>
+          <span style={{ fontSize: 11, color: 'var(--color-danger)' }} title={pinError}>
             Error — see console
           </span>
         )}
@@ -125,7 +125,7 @@ export function ExperimentCompleteBanner({ onReset }: ExperimentCompleteBannerPr
           >
             {pinning && (
               <span style={{ marginRight: 6, verticalAlign: 'middle', display: 'inline-block' }}>
-                <Spinner size="sm" color="#fff" />
+                <Spinner size="sm" color="var(--color-surface)" />
               </span>
             )}
             {pinning ? 'Pinning…' : 'Pin as new baseline A'}

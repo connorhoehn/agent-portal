@@ -100,7 +100,7 @@ export function VersionPickerStep({
   if (error) {
     return (
       <div style={errorBoxStyle}>
-        <span style={{ fontSize: 12, color: '#991b1b' }}>{error}</span>
+        <span style={{ fontSize: 12, color: 'var(--color-danger)' }}>{error}</span>
       </div>
     );
   }
@@ -267,8 +267,8 @@ const skeletonRowStyle: CSSProperties = {
 
 const errorBoxStyle: CSSProperties = {
   padding: '10px 12px',
-  background: '#fee2e2',
-  border: '1px solid #fca5a5',
+  background: 'var(--color-danger-bg)',
+  border: '1px solid var(--color-danger-border)',
   borderRadius: 4,
 };
 

@@ -46,7 +46,7 @@ function RouterNodeImpl({ data }: NodeProps<RouterNodeType>) {
             width: 10,
             height: 10,
             borderRadius: '50%',
-            background: isShifting ? '#f59e0b' : '#16a34a',
+            background: isShifting ? 'var(--color-warning)' : 'var(--color-success)',
             animation: isShifting ? 'canary-router-pulse 1.4s ease-out infinite' : undefined,
           }}
         />

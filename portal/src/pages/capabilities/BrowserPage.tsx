@@ -462,7 +462,7 @@ function Timeline({ steps, onJump }: { steps: JourneyStep[]; onJump: (i: number)
             background: 'var(--color-surface)',
           }}
         >
-          <div style={{ flex: '0 0 120px', height: 76, overflow: 'hidden', borderRadius: 3, background: '#fafafa' }}>
+          <div style={{ flex: '0 0 120px', height: 76, overflow: 'hidden', borderRadius: 3, background: 'var(--color-surface-inset)' }}>
             {step.imageDataUrl ? (
               <img src={step.imageDataUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
@@ -784,18 +784,18 @@ function buildSiteMap(pages: CrawlPage[]): { nodes: Node[]; edges: Edge[] } {
             <div style={{ fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {p.title || new URL(p.url).pathname || p.url}
             </div>
-            <div style={{ fontSize: 9, fontFamily: 'monospace', color: '#6b7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div style={{ fontSize: 9, fontFamily: 'monospace', color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {p.url.replace(/^https?:\/\//, '')}
             </div>
-            <div style={{ fontSize: 9, marginTop: 2, color: p.error ? '#dc2626' : '#6b7280' }}>
+            <div style={{ fontSize: 9, marginTop: 2, color: p.error ? 'var(--color-danger)' : 'var(--color-text-tertiary)' }}>
               {p.error ? `error: ${p.error.slice(0, 40)}` : p.s3Key ? `↑ S3 · ${p.contentLength} chars` : `${p.contentLength} chars`}
             </div>
           </div>
         ),
       },
       style: {
-        border: '1px solid ' + (p.error ? '#dc2626' : '#cbd5e1'),
-        background: p.error ? '#fef2f2' : '#fff',
+        border: '1px solid ' + (p.error ? 'var(--color-danger)' : 'var(--color-border-emphasis)'),
+        background: p.error ? 'var(--color-danger-bg)' : 'var(--color-surface)',
         padding: 0,
         borderRadius: 4,
         fontSize: 11,
@@ -1001,7 +1001,7 @@ function primaryBtnStyle(disabled: boolean): React.CSSProperties {
     padding: '7px 16px',
     fontSize: 12,
     background: 'var(--color-primary)',
-    color: '#fff',
+    color: 'var(--color-surface)',
     border: 'none',
     borderRadius: 'var(--radius-sm)',
     cursor: disabled ? 'not-allowed' : 'pointer',
@@ -1013,8 +1013,8 @@ function primaryBtnStyle(disabled: boolean): React.CSSProperties {
 function errBoxStyle(): React.CSSProperties {
   return {
     padding: 8,
-    background: '#fef2f2',
-    color: '#991b1b',
+    background: 'var(--color-danger-bg)',
+    color: 'var(--color-danger)',
     fontSize: 12,
     borderRadius: 4,
     marginBottom: 12,
@@ -1061,7 +1061,7 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
     >
       <span style={{
         position: 'absolute', top: 3, left: value ? 19 : 3, width: 14, height: 14,
-        borderRadius: '50%', background: '#fff', transition: 'left 0.15s',
+        borderRadius: '50%', background: 'var(--color-surface)', transition: 'left 0.15s',
       }} />
     </button>
   );
