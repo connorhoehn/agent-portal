@@ -1,11 +1,3 @@
-// TODO(N3): wire post-merge —
-//   1. middleware/src/index.ts: import + mount newsroomArticlesRouter at /api/newsroom (ungated).
-//   2. portal/src/App.tsx: under <Route path="newsroom">, add child routes:
-//      <Route path="articles" element={<Page element={<ArticlesPage />} />} />
-//      <Route path="articles/:id" element={<Page element={<ArticleDetailPage />} />} />
-//      <Route path="entities/:id" element={<Page element={<EntityDetailPage />} />} />
-//   3. Also wire N4's beats route and N6/N8's briefs/pitches when those land.
-
 import type { CSSProperties } from 'react';
 import { useState } from 'react';
 import { Link } from 'react-router';

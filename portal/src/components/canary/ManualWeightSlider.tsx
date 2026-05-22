@@ -62,7 +62,7 @@ export function ManualWeightSlider(): React.ReactElement {
       }
     } catch (e) {
       setWeight(previous);
-      toast(`Weight update failed: ${(e as Error).message}`, { type: 'error' });
+      toast(`Weight update failed: ${e instanceof Error ? e.message : String(e)}`, { type: 'error' });
     }
   }
 

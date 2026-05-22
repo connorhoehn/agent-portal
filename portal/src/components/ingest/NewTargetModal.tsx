@@ -94,7 +94,7 @@ export function NewTargetModal({
     try {
       await onSave({ ...draft, cronExpr });
     } catch (e) {
-      setError((e as Error).message);
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }

@@ -1,12 +1,6 @@
-// TODO(N7): wire post-merge —
-//   1. portal/src/App.tsx: under <Route path="newsroom">, add <Route path="headlines" element={<Page element={<HeadlinesPage />} />} />.
-//   2. portal/src/pages/newsroom/NewsroomLayout.tsx: add { path: 'headlines', label: 'Headlines', hint: 'A/B variants for any draft' } at end of nav items.
-//   3. agents/build-all.sh: add 'news-headline' to the AGENTS=(...) default list.
-//   4. CDK redeploy with --context deployRuntimes=true.
-
 import type { CSSProperties } from 'react';
 import { useState, useRef, useCallback } from 'react';
-import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
+import { PageSection, Card, Spinner } from '@connorhoehnslalom/ui-components/shared';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -17,26 +11,6 @@ interface HeadlineVariant {
   engagement: number;
   seo: number;
   rationale: string;
-}
-
-// ─── Spinner ──────────────────────────────────────────────────────────────────
-
-function Spinner() {
-  return (
-    <span
-      role="status"
-      aria-label="Generating..."
-      style={{
-        display: 'inline-block',
-        width: 18,
-        height: 18,
-        border: '2px solid var(--color-border, #e5e7eb)',
-        borderTopColor: 'var(--color-primary, #6366f1)',
-        borderRadius: '50%',
-        animation: 'spin 0.7s linear infinite',
-      }}
-    />
-  );
 }
 
 // ─── Score bar ────────────────────────────────────────────────────────────────
@@ -353,7 +327,7 @@ function HeadlinesPage() {
             >
               Generate variants
             </button>
-            {isStreaming && <Spinner />}
+            {isStreaming && <Spinner size="md" />}
             {isStreaming && (
               <span style={{ fontSize: 13, color: 'var(--color-text-secondary, #6b7280)' }}>
                 Generating…
@@ -390,8 +364,6 @@ function HeadlinesPage() {
         </>
       )}
 
-      {/* Spin keyframe injected once */}
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </PageSection>
     </div>
   );

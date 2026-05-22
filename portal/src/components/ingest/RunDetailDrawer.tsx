@@ -75,7 +75,7 @@ export function RunDetailDrawer({
         setSyncMsg({ tone: 'ok', text: `KB sync started${body.jobId ? ` (${body.jobId.slice(0, 12)}…)` : ''}` });
       }
     } catch (e) {
-      setSyncMsg({ tone: 'err', text: (e as Error).message });
+      setSyncMsg({ tone: 'err', text: e instanceof Error ? e.message : String(e) });
     } finally {
       setSyncing(false);
     }

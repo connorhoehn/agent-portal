@@ -94,7 +94,7 @@ function DataSourcesPage() {
       if (!r.ok || !body.ok) {
         setActionMessage({ tone: 'err', text: body.error ?? 'Sync failed' });
       } else {
-        setActionMessage({ tone: 'ok', text: `Job ${body.job!.jobId.slice(0, 12)}… started` });
+        setActionMessage({ tone: 'ok', text: `Job ${body.job?.jobId.slice(0, 12) ?? 'unknown'}… started` });
         refreshJobs();
       }
     } catch (e) {

@@ -609,10 +609,12 @@ export function KBDetailPage() {
   const canSync = kb.status === 'ACTIVE' && !!kb.bedrockKbId && !!kb.dataSourceId;
 
   async function handleSync() {
+    const kbId = kb?.id;
+    if (!kbId) return;
     setSyncLoading(true);
     setSyncError(null);
     try {
-      const res = await fetch(`/api/admin/kb-registry/${kb!.id}/sync`, { method: 'POST' });
+      const res = await fetch(`/api/admin/kb-registry/${kbId}/sync`, { method: 'POST' });
       if (!res.ok) {
         const body = await res.json().catch(() => ({})) as { error?: string };
         setSyncError(body.error ?? `HTTP ${res.status}`);

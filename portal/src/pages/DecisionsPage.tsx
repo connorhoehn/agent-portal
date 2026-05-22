@@ -1,8 +1,3 @@
-// TODO(D1): wire post-merge —
-//   1. middleware/src/index.ts: import + mount decisionsRouter at /api/graph/decisions BEFORE the gated graph router.
-//   2. portal/src/App.tsx: lazy import DecisionsPage + DecisionDetailPage; add /decisions and /decisions/:id routes.
-//   3. portal/src/components/shell/Layout.tsx: NAV_ITEMS insert { path: '/decisions', label: 'Decisions' } after Scores.
-
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { PageSection } from '@connorhoehnslalom/ui-components/shared';

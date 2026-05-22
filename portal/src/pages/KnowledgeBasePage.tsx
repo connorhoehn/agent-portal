@@ -1,11 +1,3 @@
-// TODO(D3): wire post-merge —
-//   1. middleware/src/index.ts: import + mount knowledgeBaseRouter at /api/knowledge-base.
-//      It can mount ungated (same as cost/harness) or gated; default to ungated.
-//   2. portal/src/App.tsx: lazy import KnowledgeBasePage; add <Route path="knowledge-base">.
-//   3. portal/src/components/shell/Layout.tsx: NAV_ITEMS — append { path: '/knowledge-base', label: 'Knowledge Base' }
-//      between Newsroom and Ingest, with requireRoles: ['hr-admin'] (or open if you prefer).
-//   4. portal/src/components/shell/CommandPalette.tsx: add { label: 'Knowledge Base', hint: 'Documents + data sources', path: '/knowledge-base' } to PAGES.
-
 import { useState } from 'react';
 import {
   PageSection,

@@ -1,9 +1,3 @@
-// TODO(D4): wire post-merge —
-//   1. portal/src/App.tsx: lazy SettingsPage; <Route path="settings"> route.
-//   2. portal/src/components/shell/Layout.tsx: NAV_ITEMS append { path: '/settings', label: 'Settings' }.
-//   3. portal/src/components/shell/CommandPalette.tsx: add { label: 'Settings', hint: 'User preferences', path: '/settings' } to PAGES.
-//   4. portal/src/pages/ScoresPage.tsx: read preferences.defaultCompositeWeight as slider initial when no ?w= present (out of scope here).
-
 import { useState, useEffect } from 'react';
 import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
 import { SettingRow } from '../components/settings';

@@ -19,6 +19,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Link, useSearchParams } from 'react-router';
+import { Drawer } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -398,13 +399,19 @@ function AgentFlowPage() {
           </ReactFlow>
         </ReactFlowProvider>
 
-        {selectedId && selectedMeta && (
-          <AgentDrawer
-            agentId={selectedId}
-            meta={selectedMeta}
-            summary={selectedSummary}
+        {selectedMeta && (
+          <Drawer
+            open={selectedId != null}
             onClose={() => setSelectedId(null)}
-          />
+            title={selectedMeta.display}
+            width={520}
+          >
+            <AgentDrawerBody
+              agentId={selectedId ?? ''}
+              meta={selectedMeta}
+              summary={selectedSummary}
+            />
+          </Drawer>
         )}
       </div>
     </div>
@@ -423,76 +430,68 @@ function SummaryKV({ label, value, accent }: { label: string; value: string; acc
   );
 }
 
-// ── Drawer ────────────────────────────────────────────────────────────────────
+// ── Drawer body ───────────────────────────────────────────────────────────────
 
-function AgentDrawer({
+function AgentDrawerBody({
   agentId,
   meta,
   summary,
-  onClose,
 }: {
   agentId: string;
   meta: AgentMeta;
   summary: AgentSummary | null;
-  onClose: () => void;
 }) {
   const statusColor = STATUS_COLORS[summary?.status ?? 'offline'] ?? '#94a3b8';
   const clusterColor = CLUSTER_COLORS[meta.cluster];
 
   return (
-    <div style={drawerStyle}>
-      <div style={drawerHeaderStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ width: 10, height: 10, borderRadius: '50%', background: statusColor }} />
-          <span style={{ fontWeight: 700, fontSize: 14 }}>{meta.display}</span>
-          <span style={{ fontSize: 9, fontWeight: 700, color: clusterColor, background: `${clusterColor}18`, border: `1px solid ${clusterColor}40`, borderRadius: 4, padding: '1px 5px', textTransform: 'uppercase' }}>
-            {meta.cluster === 'orgiq' ? 'OrgIQ' : 'Newsroom'}
-          </span>
-        </div>
-        <button onClick={onClose} style={closeBtnStyle} aria-label="Close">✕</button>
+    <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ width: 10, height: 10, borderRadius: '50%', background: statusColor }} />
+        <span style={{ fontSize: 9, fontWeight: 700, color: clusterColor, background: `${clusterColor}18`, border: `1px solid ${clusterColor}40`, borderRadius: 4, padding: '1px 5px', textTransform: 'uppercase' }}>
+          {meta.cluster === 'orgiq' ? 'OrgIQ' : 'Newsroom'}
+        </span>
       </div>
 
-      <div style={drawerBodyStyle}>
-        <div style={{ fontSize: 11.5, color: 'var(--color-text-secondary, #64748b)', lineHeight: 1.45 }}>
-          {meta.description}
-        </div>
+      <div style={{ fontSize: 11.5, color: 'var(--color-text-secondary, #64748b)', lineHeight: 1.45 }}>
+        {meta.description}
+      </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <DrawerKv label="Status" value={summary?.status ?? 'unknown'} />
-          {summary?.protocol && <DrawerKv label="Protocol" value={summary.protocol.toUpperCase()} />}
-          {summary?.model && <DrawerKv label="Model" value={summary.model} />}
-          <DrawerKv label="Agent ID" value={agentId} mono />
-        </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <DrawerKv label="Status" value={summary?.status ?? 'unknown'} />
+        {summary?.protocol && <DrawerKv label="Protocol" value={summary.protocol.toUpperCase()} />}
+        {summary?.model && <DrawerKv label="Model" value={summary.model} />}
+        <DrawerKv label="Agent ID" value={agentId} mono />
+      </div>
 
+      <div>
+        <SectionLabel>Metrics</SectionLabel>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <BigMetric label="Calls"   value={fmtCount(summary?.invocationCount ?? 0)} />
+          <BigMetric label="Errors"  value={String(summary?.errorCount ?? 0)} />
+          <BigMetric label="p50"     value={fmtMs(summary?.p50Ms ?? null)} />
+          <BigMetric label="p95"     value={fmtMs(summary?.p95Ms ?? null)} />
+        </div>
+      </div>
+
+      {summary?.tools && summary.tools.length > 0 && (
         <div>
-          <SectionLabel>Metrics</SectionLabel>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <BigMetric label="Calls"   value={fmtCount(summary?.invocationCount ?? 0)} />
-            <BigMetric label="Errors"  value={String(summary?.errorCount ?? 0)} />
-            <BigMetric label="p50"     value={fmtMs(summary?.p50Ms ?? null)} />
-            <BigMetric label="p95"     value={fmtMs(summary?.p95Ms ?? null)} />
+          <SectionLabel>Tools</SectionLabel>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {summary.tools.map(t => (
+              <span key={t} style={toolPillStyle}>{t}</span>
+            ))}
           </div>
         </div>
+      )}
 
-        {summary?.tools && summary.tools.length > 0 && (
-          <div>
-            <SectionLabel>Tools</SectionLabel>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {summary.tools.map(t => (
-                <span key={t} style={toolPillStyle}>{t}</span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div style={{ borderTop: '1px solid var(--color-border, #e2e8f0)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <Link to={`/iq/invoke?agentId=${encodeURIComponent(agentId)}`} style={drawerLinkStyle}>
-            Invoke this agent →
-          </Link>
-          <Link to="/iq/invoke?focus=sessions" style={drawerLinkStyle}>
-            View invocation history →
-          </Link>
-        </div>
+      <div style={{ borderTop: '1px solid var(--color-border, #e2e8f0)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <Link to={`/iq/invoke?agentId=${encodeURIComponent(agentId)}`} style={drawerLinkStyle}>
+          Invoke this agent →
+        </Link>
+        <Link to="/iq/invoke?focus=sessions" style={drawerLinkStyle}>
+          View invocation history →
+        </Link>
       </div>
     </div>
   );
@@ -578,48 +577,6 @@ const windowBtnActive: React.CSSProperties = {
   background: 'var(--color-primary, #6366f1)',
   color: '#fff',
   borderColor: 'var(--color-primary, #6366f1)',
-};
-
-const drawerStyle: React.CSSProperties = {
-  position: 'absolute',
-  top: 12,
-  right: 12,
-  bottom: 12,
-  width: 300,
-  background: 'var(--color-surface, #fff)',
-  border: '1px solid var(--color-border, #e2e8f0)',
-  borderRadius: 8,
-  boxShadow: '0 4px 20px rgba(15,23,42,0.10)',
-  display: 'flex',
-  flexDirection: 'column',
-  zIndex: 10,
-};
-
-const drawerHeaderStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: '10px 14px',
-  borderBottom: '1px solid var(--color-border, #e2e8f0)',
-  flexShrink: 0,
-};
-
-const closeBtnStyle: React.CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  color: 'var(--color-text-tertiary, #94a3b8)',
-  cursor: 'pointer',
-  fontSize: 14,
-  padding: 4,
-};
-
-const drawerBodyStyle: React.CSSProperties = {
-  padding: '12px 14px',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 12,
-  overflowY: 'auto',
-  flex: 1,
 };
 
 const toolPillStyle: React.CSSProperties = {
