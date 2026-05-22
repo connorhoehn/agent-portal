@@ -35,31 +35,28 @@ Deploys OrgIQ portal + middleware to a Kubernetes cluster using the
 
 ## Step 1 — Build + push images
 
-No CI/CD is configured; push manually from the project root.
+Use `scripts/build.sh` from the project root. Sibling repos
+(`../ui-components`, `../websocket-gateway/realtime-modules`) must be
+checked out; they are injected as Docker build contexts at build time.
 
 ```bash
-# portal (production stage)
-docker build \
-  --target production \
-  --build-context ui_components=../ui-components \
-  --build-context realtime_modules=../websocket-gateway/realtime-modules \
-  -t connorhoehnslalom/orgiq-portal:dev \
-  portal/
+# Build both images locally (no push)
+./scripts/build.sh
 
-docker push connorhoehnslalom/orgiq-portal:dev
+# Build + push to your registry with a release tag
+REGISTRY=connorhoehnslalom ./scripts/build.sh --push --tag v0.1.0
 
-# middleware (production stage)
-docker build \
-  --target production \
-  --build-context realtime_modules=../websocket-gateway/realtime-modules \
-  -t connorhoehnslalom/orgiq-middleware:dev \
-  middleware/
-
-docker push connorhoehnslalom/orgiq-middleware:dev
+# Build portal or middleware only
+./scripts/build.sh portal
+./scripts/build.sh middleware
 ```
 
-Replace `:dev` with a versioned tag (e.g. `:v1.0.0`) for stable rollouts.
-Update the `image:` field in the Workload YAMLs accordingly.
+The script defaults to `REGISTRY=connorhoehnslalom` and `TAG=dev`.
+Pass `--push` to push immediately after building. Run `./scripts/build.sh --help`
+for the full option list.
+
+After pushing, update the `image:` field in the Workload YAMLs to match
+the tag you pushed (e.g. replace `:dev` with `:v0.1.0` for stable rollouts).
 
 ---
 
@@ -145,5 +142,5 @@ See `docs/researcher-pipeline-crd.md` for the full trigger + observe flow.
 | Sub-phase | Status | Notes |
 |---|---|---|
 | Phase 3.1 — CRDs declared | DONE | `portal-workload.yaml`, `middleware-workload.yaml`, `orgiq-application.yaml` |
-| Phase 3.2 — Build + push images | PENDING | Manual; no CI/CD. Run Step 1 above. |
+| Phase 3.2 — Build + push images | PARTIAL DONE | `scripts/build.sh` ships one-command build; `--push` requires registry credentials (human action). |
 | Phase 3.3 — Apply + verify Ready in real cluster | PENDING | Blocked on Phase 3.2 + cluster access. |
