@@ -15,8 +15,17 @@ import type { ToolCall as LiveToolCall } from '@connorhoehn/realtime-modules/age
 import { Markdown } from '../../components/Markdown';
 import { usePresence } from '@connorhoehn/realtime-modules/client';
 import { useActivity } from '@connorhoehn/realtime-modules/client';
+import { useFileUpload } from '@connorhoehn/realtime-modules/client';
+import type { FileUploadState } from '@connorhoehn/realtime-modules/client';
+import { FileUploadDrop } from '@connorhoehnslalom/ui-components/shared';
 import { PresenceAvatarGroup } from '../../components/shell/PresenceAvatarGroup';
 import { ActivityFeedPanel } from '../../components/shell/ActivityFeedPanel';
+
+// Feature flag: set VITE_ORGIQ_UPLOAD_ENABLED=true to show the document upload panel.
+// Disabled by default — requires gateway-side FileUploadEndpoint CRD applied + S3 bucket provisioned.
+const UPLOAD_ENABLED =
+  (import.meta as unknown as { env?: Record<string, string | undefined> }).env
+    ?.VITE_ORGIQ_UPLOAD_ENABLED === 'true';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -291,6 +300,8 @@ function ResearcherPage() {
         </RailSection>
 
         <ActivityFeedPanel events={activityEvents} />
+
+        {UPLOAD_ENABLED && <ResearcherUploadPanel channel="newsroom-researcher" />}
       </aside>
     </div>
   );
@@ -423,6 +434,98 @@ function entityTypeColor(type: string): { bg: string; fg: string } {
       return { bg: '#fef9c3', fg: '#92400e' };
     default:
       return { bg: 'var(--color-bg)', fg: 'var(--color-text-secondary)' };
+  }
+}
+
+// ── ResearcherUploadPanel ────────────────────────────────────────────────────
+
+function ResearcherUploadPanel({ channel }: { channel: string }) {
+  const { uploads, upload, cancel, removeCompleted } = useFileUpload(channel);
+
+  const hasCompleted = uploads.some(u => u.status === 'completed');
+
+  return (
+    <section style={railSectionStyle}>
+      <div style={railSectionHeaderStyle}>
+        <span>Document Upload</span>
+        <span style={railSectionCountStyle}>{uploads.length}</span>
+      </div>
+      <div style={{ marginBottom: 10 }}>
+        <FileUploadDrop
+          accept="application/pdf,image/*"
+          maxSize={50 * 1024 * 1024}
+          multiple
+          onFiles={files => files.forEach(f => upload(f, { metadata: { source: 'researcher' } }))}
+          label="Drop PDFs or images here, or click to browse"
+        />
+      </div>
+      {uploads.length > 0 && (
+        <div style={uploadListStyle}>
+          {uploads.map(u => (
+            <UploadRow key={u.id} upload={u} onCancel={cancel} />
+          ))}
+        </div>
+      )}
+      {hasCompleted && (
+        <button onClick={removeCompleted} style={clearCompletedBtnStyle}>
+          Clear completed
+        </button>
+      )}
+    </section>
+  );
+}
+
+function UploadRow({
+  upload: u,
+  onCancel,
+}: {
+  upload: FileUploadState;
+  onCancel: (id: string) => void;
+}) {
+  const isActive = u.status === 'uploading' || u.status === 'pending' || u.status === 'scanning';
+  const statusColor = uploadStatusColor(u.status);
+
+  return (
+    <div style={uploadRowStyle}>
+      <div style={uploadRowTopStyle}>
+        <span style={uploadFilenameStyle} title={u.filename}>
+          {u.filename.length > 28 ? u.filename.slice(0, 26) + '…' : u.filename}
+        </span>
+        <span style={{ ...uploadStatusBadgeStyle, color: statusColor }}>
+          {u.status}
+        </span>
+        {isActive && (
+          <button
+            onClick={() => onCancel(u.id)}
+            style={uploadCancelBtnStyle}
+            title="Cancel upload"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+      {u.status === 'uploading' && typeof u.progress === 'number' && (
+        <div style={uploadProgressTrackStyle}>
+          <div style={{ ...uploadProgressFillStyle, width: `${u.progress}%` }} />
+        </div>
+      )}
+      {u.error && <div style={uploadErrorStyle}>{u.error}</div>}
+    </div>
+  );
+}
+
+function uploadStatusColor(status: FileUploadState['status']): string {
+  switch (status) {
+    case 'completed':
+    case 'clean':
+      return 'var(--color-success, #047857)';
+    case 'failed':
+    case 'infected':
+      return 'var(--color-danger, #dc2626)';
+    case 'scanning':
+      return 'var(--color-info, #1d4ed8)';
+    default:
+      return 'var(--color-text-secondary)';
   }
 }
 
@@ -691,6 +794,78 @@ const entitySalienceStyle: React.CSSProperties = {
   fontSize: 10,
   color: 'var(--color-text-tertiary)',
   fontFamily: 'monospace',
+};
+
+// Upload panel styles
+const uploadListStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+  marginBottom: 8,
+};
+const uploadRowStyle: React.CSSProperties = {
+  border: '1px solid var(--color-border)',
+  borderRadius: 4,
+  padding: '6px 8px',
+  background: 'var(--color-bg)',
+};
+const uploadRowTopStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+};
+const uploadFilenameStyle: React.CSSProperties = {
+  flex: 1,
+  fontSize: 11.5,
+  color: 'var(--color-text-primary)',
+  fontFamily: 'monospace',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+};
+const uploadStatusBadgeStyle: React.CSSProperties = {
+  fontSize: 10,
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: '0.03em',
+  whiteSpace: 'nowrap',
+};
+const uploadCancelBtnStyle: React.CSSProperties = {
+  background: 'transparent',
+  border: 'none',
+  padding: '0 2px',
+  fontSize: 11,
+  cursor: 'pointer',
+  color: 'var(--color-text-tertiary)',
+  lineHeight: 1,
+};
+const uploadProgressTrackStyle: React.CSSProperties = {
+  marginTop: 4,
+  height: 3,
+  borderRadius: 2,
+  background: 'var(--color-border)',
+  overflow: 'hidden',
+};
+const uploadProgressFillStyle: React.CSSProperties = {
+  height: '100%',
+  borderRadius: 2,
+  background: 'var(--color-primary, #6366f1)',
+  transition: 'width 0.2s ease',
+};
+const uploadErrorStyle: React.CSSProperties = {
+  marginTop: 3,
+  fontSize: 10.5,
+  color: 'var(--color-danger, #dc2626)',
+};
+const clearCompletedBtnStyle: React.CSSProperties = {
+  fontSize: 11,
+  padding: '3px 8px',
+  background: 'transparent',
+  border: '1px solid var(--color-border)',
+  borderRadius: 4,
+  cursor: 'pointer',
+  color: 'var(--color-text-secondary)',
+  fontFamily: 'inherit',
 };
 
 export default ResearcherPage;
