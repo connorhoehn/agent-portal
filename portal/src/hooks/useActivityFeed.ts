@@ -9,7 +9,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import type { GatewayMessage } from '@connorhoehn/realtime-modules/client/ws';
-import { useGatewaySocket } from './useGatewaySocket';
+import { useGateway } from '@connorhoehn/realtime-modules/client/ws';
 import { fetchActivityHistory } from '../lib/gatewayProxyFetch';
 import type { ActivityEntry } from '../lib/gatewayProxyFetch';
 
@@ -21,8 +21,7 @@ export interface UseActivityFeedReturn {
 }
 
 export function useActivityFeed(channel: string, limit = 20): UseActivityFeedReturn {
-  const { connectionState, subscribe, unsubscribe, addMessageListener, removeMessageListener } =
-    useGatewaySocket();
+  const { connectionState, subscribe, unsubscribe, onMessage } = useGateway();
 
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -77,9 +76,8 @@ export function useActivityFeed(channel: string, limit = 20): UseActivityFeedRet
       };
       setEntries(prev => [entry, ...prev].slice(0, 100)); // cap at 100
     };
-    addMessageListener(listener);
-    return () => removeMessageListener(listener);
-  }, [addMessageListener, removeMessageListener]);
+    return onMessage(listener);
+  }, [onMessage]);
 
   // Cleanup: unsubscribe on unmount.
   useEffect(() => {

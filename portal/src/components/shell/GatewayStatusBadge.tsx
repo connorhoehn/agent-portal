@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { GatewayProxyClient } from '@connorhoehn/realtime-modules/proxy-client';
 import type { ConnectionState } from '@connorhoehn/realtime-modules/client/ws';
-import { useGatewaySocket } from '../../hooks/useGatewaySocket';
+import { useGateway } from '@connorhoehn/realtime-modules/client/ws';
 
 // VITE_GATEWAY_URL is exposed to the browser bundle by Vite at build time.
 // We avoid `import.meta.env` typing concerns (no vite-env.d.ts in this repo)
@@ -46,7 +46,7 @@ const POLL_MS = 30_000;
  */
 export function GatewayStatusBadge() {
   const [httpStatus, setHttpStatus] = useState<HttpStatus>('unknown');
-  const { connectionState } = useGatewaySocket();
+  const { connectionState } = useGateway();
 
   useEffect(() => {
     let cancelled = false;

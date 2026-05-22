@@ -3,7 +3,7 @@ import { Routes, Route, Navigate } from 'react-router';
 import { Layout } from './components/shell/Layout';
 import { RequireRole } from './lib/auth';
 import { useSession } from './lib/auth';
-import { GatewaySocketProvider } from './hooks/useGatewaySocket';
+import { GatewaySocketProvider } from '@connorhoehn/realtime-modules/client/ws';
 
 const AgentFlowPage = lazy(() => import('./pages/AgentFlowPage'));
 const ScoresPage = lazy(() => import('./pages/ScoresPage'));
@@ -88,6 +88,21 @@ const ObservabilityHarnessHomePage = lazy(() => import('./pages/observability/ha
 const ObservabilityHarnessRunDetailPage = lazy(() => import('./pages/observability/harness/RunDetailPage'));
 const ObservabilityHarnessCompareRunsPage = lazy(() => import('./pages/observability/harness/CompareRunsPage'));
 
+// ---------------------------------------------------------------------------
+// Gateway WS URL — http(s)://host → ws(s)://host/ws
+// ---------------------------------------------------------------------------
+
+const _RAW_GATEWAY_URL: string =
+  (import.meta as unknown as { env?: Record<string, string | undefined> })
+    .env?.VITE_GATEWAY_URL ?? 'http://localhost:8080';
+
+const GATEWAY_WS_URL = _RAW_GATEWAY_URL
+  .replace(/^https:\/\//i, 'wss://')
+  .replace(/^http:\/\//i, 'ws://')
+  .replace(/\/$/, '') + '/ws';
+
+// ---------------------------------------------------------------------------
+
 function Loading() {
   return <div style={{ padding: 24, color: 'var(--color-text-tertiary)' }}>Loading...</div>;
 }
@@ -104,7 +119,7 @@ function RootRedirect() {
 
 export function App() {
   return (
-    <GatewaySocketProvider>
+    <GatewaySocketProvider url={GATEWAY_WS_URL}>
     <Routes>
       {/* ── Backwards-compat redirects (outside Layout so they catch bare paths) ── */}
       <Route path="agents" element={<Navigate to="/iq/agents" replace />} />

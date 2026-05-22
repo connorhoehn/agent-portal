@@ -15,7 +15,8 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import type { GatewayMessage } from '@connorhoehn/realtime-modules/client/ws';
-import { useGatewaySocket } from './useGatewaySocket';
+import { useGateway } from '@connorhoehn/realtime-modules/client/ws';
+import { useSession } from '../lib/auth';
 import { fetchPresence } from '../lib/gatewayProxyFetch';
 import type { PresenceEntry } from '../lib/gatewayProxyFetch';
 
@@ -37,8 +38,9 @@ export interface UseSessionPresenceReturn {
  * `clientId !== ctx.clientId`.
  */
 export function useSessionPresence(channel: string): UseSessionPresenceReturn {
-  const { connectionState, clientId, userSub, send, subscribe, unsubscribe, addMessageListener, removeMessageListener } =
-    useGatewaySocket();
+  const { connectionState, clientId, send, subscribe, unsubscribe, onMessage } = useGateway();
+  const { session } = useSession();
+  const userSub = session?.sub ?? null;
 
   const [peers, setPeers] = useState<PresenceEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -130,11 +132,8 @@ export function useSessionPresence(channel: string): UseSessionPresenceReturn {
       }
     };
 
-    addMessageListener(listener);
-    return () => {
-      removeMessageListener(listener);
-    };
-  }, [addMessageListener, removeMessageListener]);
+    return onMessage(listener);
+  }, [onMessage]);
 
   // Cleanup: unsubscribe + clear presence on unmount.
   useEffect(() => {
