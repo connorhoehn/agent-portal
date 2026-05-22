@@ -1,31 +1,37 @@
 // src/routes/gateway-proxy.ts
 //
 // Signed proxy routes for the gateway's Wave 6 service-auth-gated endpoints.
-// The browser cannot sign requests itself, so this middleware adds the
-// X-Service-Auth HMAC envelope and forwards the call to the gateway.
+// The browser cannot sign requests itself, so this middleware signs every
+// outbound request via GatewayProxyClient (from @connorhoehn/realtime-modules)
+// and forwards the call to the websocket-gateway.
 //
 // Mounted at /api/gateway/* in index.ts.
 //
 // Proxied gateway endpoints:
-//   POST /api/channels/:id/messages   → POST <GATEWAY_URL>/api/channels/:id/messages
-//   GET  /api/presence/:channel       → GET  <GATEWAY_URL>/api/presence/:channel
-//   GET  /api/chat/:channel/history   → GET  <GATEWAY_URL>/api/chat/:channel/history
-//   GET  /api/activity/:channel/history → GET <GATEWAY_URL>/api/activity/:channel/history
+//   POST /api/channels/:id/messages   → POST <WEBSOCKET_GATEWAY_URL>/api/channels/:id/messages
+//   GET  /api/presence/:channel       → GET  <WEBSOCKET_GATEWAY_URL>/api/presence/:channel
+//   GET  /api/chat/:channel/history   → GET  <WEBSOCKET_GATEWAY_URL>/api/chat/:channel/history
+//   GET  /api/activity/:channel/history → GET <WEBSOCKET_GATEWAY_URL>/api/activity/:channel/history
 //
 // Auth posture:
-//   - When GATEWAY_SERVICE_AUTH_SECRET is set: signs every outbound request with
-//     X-Service-Auth: v1.orgiq-middleware.<ts>.<mac>
+//   - When GATEWAY_SERVICE_AUTH_SECRET is set: GatewayProxyClient computes
+//     X-Service-Auth: v1.orgiq-middleware.<ts>.<mac> automatically.
 //   - When GATEWAY_SERVICE_AUTH_SECRET is unset in non-production: passes through
 //     unsigned — the gateway logs a warning and allows it (dev posture).
 //   - When GATEWAY_SERVICE_AUTH_SECRET is unset in production: the gateway will
-//     503; we do not block the call here so the gateway's own error propagates.
+//     reject; the error propagates verbatim to the caller.
 //
-// Gateway URL: GATEWAY_URL env var (already consumed by agentcore config).
-// Service identity: 'orgiq-middleware' (add to gateway's
+// Gateway URL: WEBSOCKET_GATEWAY_URL env var (falls back to WS_GATEWAY_URL).
+// Service identity: 'orgiq-middleware' (must be in gateway's
 //   SERVICE_AUTH_ALLOWED_SERVICES env var).
 
 import { Router } from 'express';
-import { createHmac } from 'crypto';
+import {
+  GatewayProxyClient,
+  ProxyClientHttpError,
+  ProxyClientNetworkError,
+  ProxyClientTimeoutError,
+} from '@connorhoehn/realtime-modules/proxy-client';
 import { asyncHandler } from '../lib/async-handler.js';
 
 export const gatewayProxyRouter = Router();
@@ -33,92 +39,54 @@ export const gatewayProxyRouter = Router();
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const SERVICE_ID = 'orgiq-middleware';
-const SERVICE_AUTH_HEADER = 'X-Service-Auth';
 const GATEWAY_TIMEOUT_MS = 10_000;
 
-// ─── HMAC envelope builder ────────────────────────────────────────────────────
+// ─── Client factory ───────────────────────────────────────────────────────────
 //
-// Wire format: v1.<serviceId>.<unixTsSec>.<base64url(HMAC-SHA256)>
-// Matches @connorhoehn/service-runtime signEnvelope() byte-for-byte.
+// Reads env vars at call-time so tests can set them via withEnv(). Returns null
+// when WEBSOCKET_GATEWAY_URL / WS_GATEWAY_URL is not set.
+
+function makeClient(overrideFetch?: typeof fetch): GatewayProxyClient | null {
+  const rawUrl =
+    process.env['WEBSOCKET_GATEWAY_URL'] ?? process.env['WS_GATEWAY_URL'] ?? null;
+  if (!rawUrl) return null;
+
+  const secret = process.env['GATEWAY_SERVICE_AUTH_SECRET'] ?? undefined;
+  return new GatewayProxyClient({
+    gatewayUrl: rawUrl,
+    ...(secret ? { serviceAuthSecret: secret, serviceAuthClientId: SERVICE_ID } : {}),
+    timeout: GATEWAY_TIMEOUT_MS,
+    ...(overrideFetch ? { fetch: overrideFetch } : {}),
+  });
+}
+
+// Exported for tests that need to inject a mock fetch into the client.
+export let _fetchOverride: typeof fetch | undefined = undefined;
+
+// ─── Error → Express response ─────────────────────────────────────────────────
 //
-// The MAC input is: "<serviceId>.<unixTsSec>.<canonicalPayload>"
-// For GET requests (no body) the payload is the empty string.
-// For POST requests the payload is the JSON body string.
+// GatewayProxyClient throws ProxyClientHttpError for non-2xx responses.
+// Re-forward the status + body verbatim so callers see the same error as the
+// underlying gateway returned.
 
-function base64url(buf: Buffer): string {
-  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function buildAuthHeader(secret: string, payload: string): string {
-  const tsSec = Math.floor(Date.now() / 1000);
-  const h = createHmac('sha256', secret);
-  h.update(`${SERVICE_ID}.${tsSec}.${payload}`);
-  const mac = h.digest();
-  return `v1.${SERVICE_ID}.${tsSec}.${base64url(mac)}`;
-}
-
-// ─── Gateway fetch helper ─────────────────────────────────────────────────────
-
-interface GatewayFetchOpts {
-  method: 'GET' | 'POST';
-  url: string;
-  body?: string;
-  secret?: string;
-}
-
-async function gatewayFetch(opts: GatewayFetchOpts): Promise<{ status: number; body: string }> {
-  const { method, url, body, secret } = opts;
-  const payload = body ?? '';
-
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-  };
-  if (method === 'POST' && body !== undefined) {
-    headers['Content-Type'] = 'application/json';
+function handleClientError(err: unknown, res: import('express').Response): boolean {
+  if (err instanceof ProxyClientHttpError) {
+    const httpErr = err as ProxyClientHttpError;
+    const body = httpErr.body ?? JSON.stringify({ error: httpErr.message });
+    res.status(httpErr.status).set('Content-Type', 'application/json').send(body);
+    return true;
   }
-  if (secret) {
-    headers[SERVICE_AUTH_HEADER] = buildAuthHeader(secret, payload);
+  if (err instanceof ProxyClientTimeoutError) {
+    const timeoutErr = err as ProxyClientTimeoutError;
+    res.status(504).json({ error: 'gateway timeout', details: timeoutErr.message });
+    return true;
   }
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), GATEWAY_TIMEOUT_MS);
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      method,
-      headers,
-      body: method === 'POST' ? payload : undefined,
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timer);
+  if (err instanceof ProxyClientNetworkError) {
+    const netErr = err as ProxyClientNetworkError;
+    res.status(502).json({ error: 'gateway unreachable', details: netErr.message });
+    return true;
   }
-
-  const text = await response.text();
-  return { status: response.status, body: text };
-}
-
-// ─── Route helpers ────────────────────────────────────────────────────────────
-
-// WEBSOCKET_GATEWAY_URL targets the websocket-gateway service (presence, chat,
-// activity).  GATEWAY_URL is the AgentCore MCP Gateway — a different service.
-// Falls back to GATEWAY_URL for backward compat, but that will fail unless
-// WEBSOCKET_GATEWAY_URL is explicitly set.
-function getWsGatewayUrl(): string | null {
-  const url = process.env['WEBSOCKET_GATEWAY_URL'] ?? process.env['WS_GATEWAY_URL'] ?? null;
-  return url ? url.replace(/\/+$/, '') : null;
-}
-
-function getSecret(): string | undefined {
-  return process.env.GATEWAY_SERVICE_AUTH_SECRET || undefined;
-}
-
-function forwardResponse(
-  res: import('express').Response,
-  status: number,
-  body: string,
-): void {
-  res.status(status).set('Content-Type', 'application/json').send(body);
+  return false;
 }
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
@@ -131,16 +99,15 @@ gatewayProxyRouter.post('/channels/:id/messages', asyncHandler(async (req, res) 
     res.status(400).json({ error: 'channel id is required' });
     return;
   }
-  const wsUrl = getWsGatewayUrl();
-  if (!wsUrl) { res.json({ ok: true }); return; }
-  const payload = JSON.stringify(req.body ?? {});
-  const { status, body } = await gatewayFetch({
-    method: 'POST',
-    url: `${wsUrl}/api/channels/${encodeURIComponent(channelId)}/messages`,
-    body: payload,
-    secret: getSecret(),
-  });
-  forwardResponse(res, status, body);
+  const client = makeClient(_fetchOverride);
+  if (!client) { res.json({ ok: true }); return; }
+
+  try {
+    const result = await client.publishToChannel(channelId, req.body ?? {});
+    res.json(result);
+  } catch (err) {
+    if (!handleClientError(err, res)) throw err;
+  }
 }));
 
 // GET /api/gateway/presence/:channel
@@ -151,14 +118,15 @@ gatewayProxyRouter.get('/presence/:channel', asyncHandler(async (req, res) => {
     res.status(400).json({ error: 'channel is required' });
     return;
   }
-  const wsUrl = getWsGatewayUrl();
-  if (!wsUrl) { res.json({ users: [] }); return; }
-  const { status, body } = await gatewayFetch({
-    method: 'GET',
-    url: `${wsUrl}/api/presence/${encodeURIComponent(channel)}`,
-    secret: getSecret(),
-  });
-  forwardResponse(res, status, body);
+  const client = makeClient(_fetchOverride);
+  if (!client) { res.json({ users: [] }); return; }
+
+  try {
+    const result = await client.getPresence(channel);
+    res.json(result);
+  } catch (err) {
+    if (!handleClientError(err, res)) throw err;
+  }
 }));
 
 // GET /api/gateway/chat/:channel/history[?limit=N&before=ID]
@@ -169,18 +137,18 @@ gatewayProxyRouter.get('/chat/:channel/history', asyncHandler(async (req, res) =
     res.status(400).json({ error: 'channel is required' });
     return;
   }
-  const wsUrl = getWsGatewayUrl();
-  if (!wsUrl) { res.json({ messages: [] }); return; }
-  const params = new URLSearchParams();
-  if (req.query['limit']) params.set('limit', String(req.query['limit']));
-  if (req.query['before']) params.set('before', String(req.query['before']));
-  const qs = params.toString() ? `?${params.toString()}` : '';
-  const { status, body } = await gatewayFetch({
-    method: 'GET',
-    url: `${wsUrl}/api/chat/${encodeURIComponent(channel)}/history${qs}`,
-    secret: getSecret(),
-  });
-  forwardResponse(res, status, body);
+  const client = makeClient(_fetchOverride);
+  if (!client) { res.json({ messages: [] }); return; }
+
+  const limit = req.query['limit'] ? Number(req.query['limit']) : undefined;
+  const before = req.query['before'] ? String(req.query['before']) : undefined;
+
+  try {
+    const result = await client.getChatHistory(channel, { limit, before });
+    res.json(result);
+  } catch (err) {
+    if (!handleClientError(err, res)) throw err;
+  }
 }));
 
 // GET /api/gateway/activity/:channel/history[?limit=N]
@@ -191,23 +159,22 @@ gatewayProxyRouter.get('/activity/:channel/history', asyncHandler(async (req, re
     res.status(400).json({ error: 'channel is required' });
     return;
   }
-  const wsUrl = getWsGatewayUrl();
-  if (!wsUrl) { res.json({ events: [] }); return; }
-  const params = new URLSearchParams();
-  if (req.query['limit']) params.set('limit', String(req.query['limit']));
-  const qs = params.toString() ? `?${params.toString()}` : '';
-  const { status, body } = await gatewayFetch({
-    method: 'GET',
-    url: `${wsUrl}/api/activity/${encodeURIComponent(channel)}/history${qs}`,
-    secret: getSecret(),
-  });
-  forwardResponse(res, status, body);
+  const client = makeClient(_fetchOverride);
+  if (!client) { res.json({ events: [] }); return; }
+
+  const limit = req.query['limit'] ? Number(req.query['limit']) : undefined;
+
+  try {
+    const result = await client.getActivityHistory(channel, { limit });
+    res.json(result);
+  } catch (err) {
+    if (!handleClientError(err, res)) throw err;
+  }
 }));
 
 // ─── Exports for testing ──────────────────────────────────────────────────────
 
 export const _internal = {
-  buildAuthHeader,
   SERVICE_ID,
-  SERVICE_AUTH_HEADER,
+  makeClient,
 };
