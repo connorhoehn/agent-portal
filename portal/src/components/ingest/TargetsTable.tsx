@@ -3,7 +3,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { CRAWL_STATUS_TONE } from './types';
 import type { CrawlTarget } from './types';
-import { Toggle, smallBtnStyle, dangerBtnStyle } from './ui';
+import { Button, Toggle } from './ui';
 
 export function TargetsTable({
   targets,
@@ -74,15 +74,19 @@ export function TargetsTable({
               </TableTd>
               <TableTd style={{ textAlign: 'right', fontSize: 12, fontWeight: 600 }}>{t.maxPages}</TableTd>
               <TableTd>
-                <Toggle enabled={t.enabled} onChange={v => onToggle(t, v)} />
+                <Toggle
+                  checked={t.enabled}
+                  onChange={v => onToggle(t, v)}
+                  aria-label={`Enable target ${t.label}`}
+                />
               </TableTd>
               <TableTd>
                 <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                  <button onClick={() => onRun(t)} disabled={isBusy} style={smallBtnStyle(isBusy)}>
+                  <Button variant="secondary" size="sm" onClick={() => onRun(t)} disabled={isBusy}>
                     {isBusy ? 'Starting…' : 'Run now'}
-                  </button>
-                  <button onClick={() => onEdit(t)} style={smallBtnStyle(false)}>Edit</button>
-                  <button onClick={() => onDelete(t)} style={dangerBtnStyle(false)}>Delete</button>
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={() => onEdit(t)}>Edit</Button>
+                  <Button variant="danger" size="sm" onClick={() => onDelete(t)}>Delete</Button>
                 </div>
               </TableTd>
             </TableRow>

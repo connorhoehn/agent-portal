@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import {
   Card, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import {
-  EmptyState, Toggle, labelStyle, primaryBtnStyle, secondaryBtnStyle,
+  Button, EmptyState, Toggle, labelStyle,
 } from '../../components/ingest/ui';
 
 interface DataSource {
@@ -65,9 +65,9 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
     <Card padding="md">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <h3 style={{ fontSize: 13, fontWeight: 600 }}>KB Sync Schedules</h3>
-        <button onClick={() => setShowForm(v => !v)} style={secondaryBtnStyle}>
+        <Button variant="secondary" onClick={() => setShowForm(v => !v)}>
           {showForm ? 'Cancel' : '+ New Schedule'}
-        </button>
+        </Button>
       </div>
 
       {showForm && (
@@ -103,15 +103,16 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
                     : <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>—</span>}
                 </TableTd>
                 <TableTd>
-                  <Toggle enabled={s.enabled} onChange={v => onToggle(s.id, v)} />
+                  <Toggle
+                    checked={s.enabled}
+                    onChange={v => onToggle(s.id, v)}
+                    aria-label={`Enable schedule ${s.label}`}
+                  />
                 </TableTd>
                 <TableTd>
-                  <button
-                    onClick={() => onDelete(s.id)}
-                    style={{ fontSize: 11, color: 'var(--color-danger)', background: 'none', border: 'none', cursor: 'pointer' }}
-                  >
+                  <Button variant="danger" size="sm" onClick={() => onDelete(s.id)}>
                     Remove
-                  </button>
+                  </Button>
                 </TableTd>
               </TableRow>
             ))}
@@ -129,6 +130,11 @@ function ScheduleForm({ sources, onCreated }: { sources: DataSource[]; onCreated
   const [label, setLabel] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const dsId_id = useId();
+  const preset_id = useId();
+  const label_id = useId();
+  const custom_id = useId();
 
   const cronExpr = preset === '__custom__' ? custom : preset;
 
@@ -162,27 +168,28 @@ function ScheduleForm({ sources, onCreated }: { sources: DataSource[]; onCreated
     <div style={{ background: 'var(--color-surface-raised)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 16 }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
         <div>
-          <label style={labelStyle}>Data Source</label>
-          <select value={dsId} onChange={e => setDsId(e.target.value)} style={inputStyle}>
+          <label htmlFor={dsId_id} style={labelStyle}>Data Source</label>
+          <select id={dsId_id} value={dsId} onChange={e => setDsId(e.target.value)} style={inputStyle}>
             {sources.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
         <div>
-          <label style={labelStyle}>Schedule</label>
-          <select value={preset} onChange={e => setPreset(e.target.value)} style={inputStyle}>
+          <label htmlFor={preset_id} style={labelStyle}>Schedule</label>
+          <select id={preset_id} value={preset} onChange={e => setPreset(e.target.value)} style={inputStyle}>
             {CRON_PRESETS.map(p => <option key={p.expr} value={p.expr}>{p.label}</option>)}
           </select>
         </div>
         <div>
-          <label style={labelStyle}>Label (optional)</label>
-          <input value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. Nightly sync" style={inputStyle} />
+          <label htmlFor={label_id} style={labelStyle}>Label (optional)</label>
+          <input id={label_id} value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. Nightly sync" style={inputStyle} />
         </div>
       </div>
 
       {preset === '__custom__' && (
         <div style={{ marginBottom: 12 }}>
-          <label style={labelStyle}>Cron Expression (UTC)</label>
+          <label htmlFor={custom_id} style={labelStyle}>Cron Expression (UTC)</label>
           <input
+            id={custom_id}
             value={custom} onChange={e => setCustom(e.target.value)}
             placeholder="e.g. 0 */4 * * *"
             style={{ ...inputStyle, fontFamily: 'monospace' }}
@@ -197,9 +204,9 @@ function ScheduleForm({ sources, onCreated }: { sources: DataSource[]; onCreated
         <div style={{ fontSize: 12, color: 'var(--color-danger)', marginBottom: 8 }}>{error}</div>
       )}
 
-      <button onClick={submit} disabled={saving} style={primaryBtnStyle(saving)}>
+      <Button variant="primary" onClick={submit} disabled={saving}>
         {saving ? 'Saving…' : 'Create Schedule'}
-      </button>
+      </Button>
     </div>
   );
 }

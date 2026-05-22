@@ -1,12 +1,7 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Card, Modal } from '@connorhoehnslalom/ui-components/shared';
 import type { CrawlMode, CrawlTarget } from './types';
-import {
-  inputStyle,
-  labelStyle,
-  primaryBtnStyle,
-  secondaryBtnStyle,
-} from './ui';
+import { Button, inputStyle, labelStyle } from './ui';
 
 const CRON_PRESETS = [
   { label: 'On-demand only',  expr: ''               },
@@ -65,6 +60,13 @@ export function NewTargetModal({
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
+  const labelInputId = useId();
+  const startUrlId = useId();
+  const modeId = useId();
+  const includePatternId = useId();
+  const scheduleId = useId();
+  const customCronId = useId();
+
   const isEdit = !!existing;
 
   function patch<K extends keyof TargetDraft>(key: K, value: TargetDraft[K]) {
@@ -109,8 +111,9 @@ export function NewTargetModal({
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
-            <label style={labelStyle}>Label</label>
+            <label htmlFor={labelInputId} style={labelStyle}>Label</label>
             <input
+              id={labelInputId}
               value={draft.label}
               onChange={e => patch('label', e.target.value)}
               placeholder="Engineering wiki"
@@ -119,8 +122,9 @@ export function NewTargetModal({
           </div>
 
           <div>
-            <label style={labelStyle}>Start URL</label>
+            <label htmlFor={startUrlId} style={labelStyle}>Start URL</label>
             <input
+              id={startUrlId}
               value={draft.startUrl}
               onChange={e => patch('startUrl', e.target.value)}
               placeholder="https://example.com/docs"
@@ -130,8 +134,9 @@ export function NewTargetModal({
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
-              <label style={labelStyle}>Mode</label>
+              <label htmlFor={modeId} style={labelStyle}>Mode</label>
               <select
+                id={modeId}
                 value={draft.mode}
                 onChange={e => patch('mode', e.target.value as CrawlMode)}
                 style={inputStyle}
@@ -155,6 +160,7 @@ export function NewTargetModal({
                 max={50}
                 value={draft.maxPages}
                 onChange={e => patch('maxPages', Number(e.target.value))}
+                aria-label="Maximum pages to crawl"
                 style={{ width: '100%' }}
               />
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--color-text-tertiary)' }}>
@@ -176,8 +182,9 @@ export function NewTargetModal({
           </div>
 
           <div>
-            <label style={labelStyle}>Include pattern (regex, optional)</label>
+            <label htmlFor={includePatternId} style={labelStyle}>Include pattern (regex, optional)</label>
             <input
+              id={includePatternId}
               value={draft.includePattern ?? ''}
               onChange={e => patch('includePattern', e.target.value || null)}
               placeholder="e.g. /docs/.*"
@@ -186,8 +193,9 @@ export function NewTargetModal({
           </div>
 
           <div>
-            <label style={labelStyle}>Schedule</label>
+            <label htmlFor={scheduleId} style={labelStyle}>Schedule</label>
             <select
+              id={scheduleId}
               value={preset}
               onChange={e => setPreset(e.target.value)}
               style={inputStyle}
@@ -198,9 +206,11 @@ export function NewTargetModal({
             </select>
             {preset === '__custom__' && (
               <input
+                id={customCronId}
                 value={custom}
                 onChange={e => setCustom(e.target.value)}
                 placeholder="e.g. 0 */4 * * *"
+                aria-label="Custom cron expression"
                 style={{ ...inputStyle, fontFamily: 'monospace', marginTop: 6 }}
               />
             )}
@@ -228,10 +238,10 @@ export function NewTargetModal({
           )}
 
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
-            <button onClick={onCancel} style={secondaryBtnStyle}>Cancel</button>
-            <button onClick={submit} disabled={saving} style={primaryBtnStyle(saving)}>
+            <Button variant="secondary" onClick={onCancel}>Cancel</Button>
+            <Button variant="primary" onClick={submit} disabled={saving}>
               {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Create target'}
-            </button>
+            </Button>
           </div>
         </div>
       </Card>

@@ -1,6 +1,8 @@
 import React from 'react';
-// Re-export upstream EmptyState so callers importing from './ui' keep working.
+// Re-export upstream primitives so callers importing from './ui' keep working.
 export { EmptyState } from '@connorhoehnslalom/ui-components/shared';
+export { Switch as Toggle } from '@connorhoehnslalom/ui-components/shared';
+export { Button } from '@connorhoehnslalom/ui-components/shared';
 
 // ── Small reusable bits shared across ingest sub-components ─────────────────
 
@@ -21,46 +23,7 @@ export function PulseDot({ active, color }: { active: boolean; color: string }) 
   );
 }
 
-export function Toggle({
-  enabled,
-  onChange,
-}: {
-  enabled: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <button
-      onClick={() => onChange(!enabled)}
-      style={{
-        width: 36,
-        height: 20,
-        borderRadius: 10,
-        border: 'none',
-        cursor: 'pointer',
-        padding: 0,
-        background: enabled ? 'var(--color-success)' : 'var(--color-border)',
-        position: 'relative',
-        transition: 'background 0.2s',
-      }}
-    >
-      <span
-        style={{
-          display: 'block',
-          width: 14,
-          height: 14,
-          borderRadius: '50%',
-          background: '#fff',
-          position: 'absolute',
-          top: 3,
-          left: enabled ? 19 : 3,
-          transition: 'left 0.2s',
-        }}
-      />
-    </button>
-  );
-}
-
-// ── Button styles ───────────────────────────────────────────────────────────
+// ── Form field styles (still useful for inline form layouts) ────────────────
 
 export const labelStyle: React.CSSProperties = {
   display: 'block',
@@ -79,51 +42,3 @@ export const inputStyle: React.CSSProperties = {
   boxSizing: 'border-box',
   background: 'var(--color-surface)',
 };
-
-export const secondaryBtnStyle: React.CSSProperties = {
-  fontSize: 12,
-  padding: '5px 12px',
-  background: 'transparent',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm)',
-  cursor: 'pointer',
-};
-
-export function primaryBtnStyle(disabled: boolean): React.CSSProperties {
-  return {
-    fontSize: 12,
-    padding: '6px 16px',
-    background: 'var(--color-primary)',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 'var(--radius-sm)',
-    cursor: disabled ? 'wait' : 'pointer',
-    opacity: disabled ? 0.6 : 1,
-  };
-}
-
-export function dangerBtnStyle(disabled: boolean): React.CSSProperties {
-  return {
-    fontSize: 11,
-    padding: '4px 10px',
-    background: 'transparent',
-    color: 'var(--color-danger)',
-    border: '1px solid var(--color-danger)',
-    borderRadius: 'var(--radius-sm)',
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    opacity: disabled ? 0.5 : 1,
-  };
-}
-
-export function smallBtnStyle(disabled: boolean): React.CSSProperties {
-  return {
-    fontSize: 11,
-    padding: '4px 10px',
-    background: 'var(--color-surface-raised)',
-    color: 'var(--color-text-primary)',
-    border: '1px solid var(--color-border)',
-    borderRadius: 'var(--radius-sm)',
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    opacity: disabled ? 0.5 : 1,
-  };
-}
