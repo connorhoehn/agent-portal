@@ -6,7 +6,7 @@
 // Visually consistent across observability pages: same max width, same
 // padding, same spacing. Use this in place of generic "no data yet" copy.
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Link } from 'react-router';
 
@@ -52,13 +52,22 @@ export function SmartEmptyState({
 
 function ActionRow({ action }: { action: SmartEmptyAction }) {
   const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(
+    () => () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    },
+    [],
+  );
 
   function onCopy() {
     if (!action.code) return;
     try {
       void navigator.clipboard.writeText(action.code);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 1500);
     } catch {
       // clipboard unavailable — silent failure is fine here
     }

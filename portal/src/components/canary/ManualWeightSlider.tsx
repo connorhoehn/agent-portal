@@ -22,6 +22,16 @@ export function ManualWeightSlider(): React.ReactElement {
     if (!draggingRef.current) setLocal(storeWeightB);
   }, [storeWeightB]);
 
+  // Clear any pending debounced putWeight on unmount so we don't fire a
+  // network call (and setWeight) after the component is gone.
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, []);
+
   function commit(value: number): void {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
