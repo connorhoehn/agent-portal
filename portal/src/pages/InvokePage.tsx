@@ -11,7 +11,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
-import { useSessionPresence } from '../hooks/useSessionPresence';
+import { usePresence } from '@connorhoehn/realtime-modules/client';
 import { PresenceAvatarGroup } from '../components/shell/PresenceAvatarGroup';
 
 // ─── <thinking> block renderer ───────────────────────────────────────────────
@@ -85,7 +85,7 @@ interface MemoryEvent {
 }
 
 function InvokePage() {
-  const { peers } = useSessionPresence('invoke');
+  const { roster: peers } = usePresence('invoke');
   const { data: agents } = useFetch<AgentDef[]>('/api/agents');
   const [selectedId, setSelectedId] = useState('orgiq-supervisor');
   const {

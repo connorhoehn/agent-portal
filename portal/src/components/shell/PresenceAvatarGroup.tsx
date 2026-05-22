@@ -1,5 +1,5 @@
 import { AvatarGroup } from '@connorhoehnslalom/ui-components/shared';
-import type { PresenceEntry } from '../../hooks/useSessionPresence';
+import type { PresenceEntry } from '@connorhoehn/realtime-modules/client';
 
 interface PresenceAvatarGroupProps {
   peers: PresenceEntry[];

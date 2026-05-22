@@ -13,9 +13,9 @@ import { useMemo, useRef, useState } from 'react';
 import { useAgentStream } from '@connorhoehn/realtime-modules/agent-streaming/client';
 import type { ToolCall as LiveToolCall } from '@connorhoehn/realtime-modules/agent-streaming/client';
 import { Markdown } from '../../components/Markdown';
-import { useSessionPresence } from '../../hooks/useSessionPresence';
+import { usePresence } from '@connorhoehn/realtime-modules/client';
+import { useActivity } from '@connorhoehn/realtime-modules/client';
 import { PresenceAvatarGroup } from '../../components/shell/PresenceAvatarGroup';
-import { useActivityFeed } from '../../hooks/useActivityFeed';
 import { ActivityFeedPanel } from '../../components/shell/ActivityFeedPanel';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -155,8 +155,8 @@ function ResearcherPage() {
     url: `/api/agents/${RESEARCHER_AGENT_ID}/invoke`,
   });
 
-  const { peers } = useSessionPresence('newsroom-researcher');
-  const { entries: activityEntries, isLoading: activityLoading } = useActivityFeed('newsroom-researcher');
+  const { roster: peers } = usePresence('newsroom-researcher');
+  const { events: activityEvents } = useActivity('newsroom-researcher');
 
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -290,7 +290,7 @@ function ResearcherPage() {
           ))}
         </RailSection>
 
-        <ActivityFeedPanel entries={activityEntries} isLoading={activityLoading} />
+        <ActivityFeedPanel events={activityEvents} />
       </aside>
     </div>
   );

@@ -18,7 +18,7 @@ import {
 import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
 import type { GraphPerson } from '../components/org-graph';
-import { useSessionPresence } from '../hooks/useSessionPresence';
+import { usePresence } from '@connorhoehn/realtime-modules/client';
 import { PresenceAvatarGroup } from '../components/shell/PresenceAvatarGroup';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -122,7 +122,7 @@ const QUICK_PROMPTS: QuickPrompt[] = [
 const SEARCH_AGENT_ID = 'orgiq-search';
 
 function SearchPage() {
-  const { peers } = useSessionPresence('search');
+  const { roster: peers } = usePresence('search');
   const { data: graph } = useFetch<GraphEntities>('/api/graph/entities');
   // Holds the one-shot selection for the next outgoing message. Set inside
   // handleSend just before sendMessage(), read by buildBody when the hook

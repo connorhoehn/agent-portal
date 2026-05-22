@@ -3,7 +3,7 @@ import { useState, useCallback } from 'react';
 import { PageSection, Card, ToolCallPill } from '@connorhoehnslalom/ui-components/shared';
 import { Markdown } from '../../components/Markdown';
 import { useAgentStream } from '@connorhoehn/realtime-modules/agent-streaming/client';
-import { useSessionPresence } from '../../hooks/useSessionPresence';
+import { usePresence } from '@connorhoehn/realtime-modules/client';
 import { PresenceAvatarGroup } from '../../components/shell/PresenceAvatarGroup';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -19,7 +19,7 @@ function BriefsPage() {
   const [endDate, setEndDate]     = useState<string>(todayIso());
   const [beat, setBeat]           = useState<string>('');
 
-  const { peers } = useSessionPresence('newsroom-briefs');
+  const { roster: peers } = usePresence('newsroom-briefs');
 
   const { isStreaming, streamingText, activeToolCalls, error, sendMessage, reset } =
     useAgentStream({
