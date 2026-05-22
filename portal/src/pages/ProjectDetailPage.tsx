@@ -301,26 +301,31 @@ function StoryRow({
 
   return (
     <div>
-      <div
+      <button
+        type="button"
         onClick={() => hasTasks && setExpanded((v) => !v)}
+        aria-expanded={hasTasks ? expanded : undefined}
+        aria-controls={hasTasks ? `detail-${item.id}` : undefined}
         style={{
           display: 'flex', alignItems: 'center', gap: 8,
+          width: '100%', textAlign: 'left',
           padding: `7px ${14 + depth * 12}px`,
           borderRadius: 6,
           cursor: hasTasks ? 'pointer' : 'default',
           background: item.status === 'done' ? '#f9fafb' : '#fff',
           transition: 'background 0.1s',
+          border: 'none',
         }}
         onMouseEnter={(e) => { if (item.status !== 'done') (e.currentTarget as HTMLElement).style.background = '#f8fafc'; }}
         onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = item.status === 'done' ? '#f9fafb' : '#fff'; }}
       >
         {/* Expand chevron for tasks */}
-        <span style={{ width: 14, flexShrink: 0, color: '#9ca3af', fontSize: 10 }}>
+        <span aria-hidden="true" style={{ width: 14, flexShrink: 0, color: '#9ca3af', fontSize: 10 }}>
           {hasTasks ? (expanded ? '▾' : '▸') : ''}
         </span>
 
         {/* Story number / icon */}
-        <span style={{ fontSize: 12, color: '#a5b4fc', fontFamily: 'monospace', flexShrink: 0 }}>■</span>
+        <span aria-hidden="true" style={{ fontSize: 12, color: '#a5b4fc', fontFamily: 'monospace', flexShrink: 0 }}>■</span>
 
         {/* Title */}
         <span style={{
@@ -353,11 +358,11 @@ function StoryRow({
 
         {/* Status */}
         <StatusChip status={item.status} />
-      </div>
+      </button>
 
       {/* Tasks */}
       {expanded && hasTasks && (
-        <div style={{ marginLeft: 28, borderLeft: '2px solid #e2e8f0', paddingLeft: 8, marginTop: 2, marginBottom: 4 }}>
+        <div id={`detail-${item.id}`} style={{ marginLeft: 28, borderLeft: '2px solid #e2e8f0', paddingLeft: 8, marginTop: 2, marginBottom: 4 }}>
           {item.children.map((task) => (
             <TaskRow key={task.id} item={task} onStatusToggle={onStatusToggle} />
           ))}
@@ -388,17 +393,21 @@ function FeatureSection({
   return (
     <div style={{ marginBottom: 6 }}>
       {/* Feature header */}
-      <div
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        aria-controls={`detail-${item.id}`}
         style={{
           display: 'flex', alignItems: 'center', gap: 8,
+          width: '100%', textAlign: 'left',
           padding: '8px 10px', borderRadius: 8,
           background: '#f8fafc', cursor: 'pointer',
           border: '1px solid #e2e8f0',
         }}
-        onClick={() => setExpanded((v) => !v)}
       >
-        <span style={{ fontSize: 10, color: '#94a3b8', width: 14 }}>{expanded ? '▾' : '▸'}</span>
-        <span style={{ fontSize: 12, color: '#818cf8', fontFamily: 'monospace', flexShrink: 0 }}>◈</span>
+        <span aria-hidden="true" style={{ fontSize: 10, color: '#94a3b8', width: 14 }}>{expanded ? '▾' : '▸'}</span>
+        <span aria-hidden="true" style={{ fontSize: 12, color: '#818cf8', fontFamily: 'monospace', flexShrink: 0 }}>◈</span>
         <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#374151' }}>{item.title}</span>
         {storyStats.total > 0 && (
           <span style={{ fontSize: 11, color: '#9ca3af' }}>
@@ -408,10 +417,10 @@ function FeatureSection({
         {item.prStatus && <PrBadge prStatus={item.prStatus} prUrl={item.prUrl} />}
         {item.assigneeName && <Avatar name={item.assigneeName} size={20} />}
         <StatusChip status={item.status} />
-      </div>
+      </button>
 
       {expanded && (
-        <div style={{ paddingLeft: 20, paddingTop: 4, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div id={`detail-${item.id}`} style={{ paddingLeft: 20, paddingTop: 4, display: 'flex', flexDirection: 'column', gap: 2 }}>
           {stories.map((story) => (
             <StoryRow key={story.id} item={story} onStatusToggle={onStatusToggle} />
           ))}
@@ -476,20 +485,25 @@ function EpicCard({
       marginBottom: 16,
     }}>
       {/* Epic header */}
-      <div
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        aria-controls={`detail-${item.id}`}
         style={{
           display: 'flex', alignItems: 'center', gap: 10,
+          width: '100%', textAlign: 'left',
           padding: '12px 16px',
           background: item.status === 'done' ? '#f9fafb' : '#fff',
           cursor: 'pointer',
+          border: 'none',
           borderBottom: expanded ? '1px solid #e2e8f0' : 'none',
         }}
-        onClick={() => setExpanded((v) => !v)}
       >
-        <span style={{ fontSize: 11, color: '#94a3b8', width: 14, flexShrink: 0 }}>
+        <span aria-hidden="true" style={{ fontSize: 11, color: '#94a3b8', width: 14, flexShrink: 0 }}>
           {expanded ? '▾' : '▸'}
         </span>
-        <span style={{ fontSize: 14, flexShrink: 0 }}>⚡</span>
+        <span aria-hidden="true" style={{ fontSize: 14, flexShrink: 0 }}>⚡</span>
         <span style={{ flex: 1, fontSize: 15, fontWeight: 700, color: item.status === 'done' ? '#9ca3af' : '#111827' }}>
           {item.title}
         </span>
@@ -525,11 +539,11 @@ function EpicCard({
 
         {/* Status chip */}
         <StatusChip status={item.status} />
-      </div>
+      </button>
 
       {/* Epic body */}
       {expanded && (
-        <div style={{ padding: '12px 16px', background: '#fafafa' }}>
+        <div id={`detail-${item.id}`} style={{ padding: '12px 16px', background: '#fafafa' }}>
           {item.description && (
             <p style={{ margin: '0 0 12px', fontSize: 13, color: '#6b7280', lineHeight: 1.5 }}>
               {item.description}

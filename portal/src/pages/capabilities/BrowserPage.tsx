@@ -445,13 +445,17 @@ function Timeline({ steps, onJump }: { steps: JourneyStep[]; onJump: (i: number)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 480, overflowY: 'auto' }}>
       {steps.map((step, i) => (
-        <div
+        <button
+          type="button"
           key={step.index}
           onClick={() => onJump(i)}
+          aria-label={`Jump to step ${i + 1}`}
           style={{
             display: 'flex',
             gap: 12,
             padding: 8,
+            width: '100%',
+            textAlign: 'left',
             border: '1px solid var(--color-border)',
             borderRadius: 4,
             cursor: 'pointer',
@@ -482,7 +486,7 @@ function Timeline({ steps, onJump }: { steps: JourneyStep[]; onJump: (i: number)
               </div>
             )}
           </div>
-        </div>
+        </button>
       ))}
     </div>
   );

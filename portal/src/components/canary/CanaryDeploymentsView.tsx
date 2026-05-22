@@ -68,12 +68,11 @@ function DecisionRow({ decision, index }: { decision: Decision; index: number })
   return (
     <>
       <tr
+        aria-expanded={hasReason ? expanded : undefined}
         style={{
           borderBottom: expanded ? 'none' : '1px solid var(--color-border, #e2e8f0)',
-          cursor: hasReason ? 'pointer' : 'default',
           transition: 'background 0.15s',
         }}
-        onClick={() => hasReason && setExpanded(v => !v)}
         onMouseEnter={e => { if (hasReason) (e.currentTarget as HTMLTableRowElement).style.background = 'var(--color-bg, #f8fafc)'; }}
         onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'; }}
       >
@@ -114,9 +113,20 @@ function DecisionRow({ decision, index }: { decision: Decision; index: number })
         {/* Expand caret */}
         <td style={{ ...tdStyle, width: 28, textAlign: 'center', paddingLeft: 0 }}>
           {hasReason && (
-            <span style={{ fontSize: 10, color: 'var(--color-text-tertiary, #94a3b8)' }}>
-              {expanded ? '▲' : '▼'}
-            </span>
+            <button
+              type="button"
+              onClick={() => setExpanded(v => !v)}
+              aria-expanded={expanded}
+              aria-label={expanded ? 'Collapse reason' : 'Expand reason'}
+              style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                width: '100%', background: 'transparent', border: 'none',
+                cursor: 'pointer', padding: 0,
+                fontSize: 10, color: 'var(--color-text-tertiary, #94a3b8)',
+              }}
+            >
+              <span aria-hidden="true">{expanded ? '▲' : '▼'}</span>
+            </button>
           )}
         </td>
       </tr>

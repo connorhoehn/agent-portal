@@ -206,14 +206,20 @@ function InvokePage() {
           {sessions.map(s => {
             const selected = s.sessionId === sessionId;
             return (
-              <div
+              <button
+                type="button"
                 key={s.sessionId}
                 onClick={() => loadSession(s.sessionId)}
+                aria-current={selected ? 'page' : undefined}
                 style={{
+                  display: 'block',
+                  width: '100%',
+                  textAlign: 'left',
                   padding: '8px 14px',
-                  cursor: 'pointer',
-                  background: selected ? 'var(--color-surface-hover)' : undefined,
+                  border: 'none',
+                  background: selected ? 'var(--color-surface-hover)' : 'transparent',
                   borderLeft: selected ? '3px solid var(--color-primary)' : '3px solid transparent',
+                  cursor: 'pointer',
                 }}
               >
                 <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -222,7 +228,7 @@ function InvokePage() {
                 <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
                   {new Date(s.createdAt).toLocaleString()}
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -230,7 +236,13 @@ function InvokePage() {
 
       {/* Chat area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 24 }}>
-        <div style={{ flex: 1, overflow: 'auto', marginBottom: 16 }}>
+        <div
+          role="log"
+          aria-live="polite"
+          aria-atomic="false"
+          aria-relevant="additions text"
+          style={{ flex: 1, overflow: 'auto', marginBottom: 16 }}
+        >
           {messages.length === 0 && !isStreaming && (
             <div style={{ padding: 40, color: 'var(--color-text-tertiary)' }}>
               <div style={{ fontSize: 18, marginBottom: 4, textAlign: 'center' }}>Invoke {selectedAgent?.name ?? 'Agent'}</div>

@@ -84,13 +84,25 @@ function DecisionRow({ d, index }: { d: Decision; index: number }): React.ReactE
   const toggle = useCallback(() => setExpanded(v => !v), []);
 
   return (
-    <div style={{ ...rowStyle, cursor: 'pointer' }} onClick={toggle}>
+    <button
+      type="button"
+      onClick={toggle}
+      aria-expanded={expanded}
+      style={{
+        ...rowStyle,
+        display: 'flex', flexDirection: 'column', gap: 4,
+        width: '100%', textAlign: 'left',
+        background: 'transparent', border: 'none',
+        borderBottom: '1px solid var(--color-border, #e2e8f0)',
+        cursor: 'pointer', padding: '8px 14px',
+      }}
+    >
       <div style={rowHeaderStyle}>
         <span style={timeStyle}>{fmtTime(d.ts)}</span>
         <span style={{ ...chipStyle, background: palette.bg, color: palette.fg }}>
           {d.action}
         </span>
-        <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--color-text-tertiary, #94a3b8)' }}>
+        <span aria-hidden="true" style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--color-text-tertiary, #94a3b8)' }}>
           {expanded ? '▲' : '▼'}
         </span>
       </div>
@@ -120,7 +132,7 @@ function DecisionRow({ d, index }: { d: Decision; index: number }): React.ReactE
           </div>
         </div>
       )}
-    </div>
+    </button>
   );
 }
 
