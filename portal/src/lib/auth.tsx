@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 export type Role = 'member' | 'org-leader' | 'hr-admin';
 export type SessionRole = Role | 'admin';
@@ -67,8 +67,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     await refresh();
   }, [refresh]);
 
+  const ctxValue = useMemo(
+    () => ({ session, isLoading, setRole, setTenant, refresh }),
+    [session, isLoading, setRole, setTenant, refresh],
+  );
+
   return (
-    <SessionContext.Provider value={{ session, isLoading, setRole, setTenant, refresh }}>
+    <SessionContext.Provider value={ctxValue}>
       {children}
     </SessionContext.Provider>
   );
