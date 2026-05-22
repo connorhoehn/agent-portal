@@ -16,6 +16,7 @@ import {
   TableTh,
   TableTd,
   Chip,
+  Modal,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
 import { CostChip } from '../../../components/observability/CostChip';
@@ -772,14 +773,6 @@ function PromoteModal({
     | { kind: 'error'; message: string };
   const [state, setState] = useState<Record<string, RowState>>({});
 
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   async function promote(agentId: string, promptVersion: string) {
     setState((s) => ({ ...s, [agentId]: { kind: 'pending' } }));
     try {
@@ -813,73 +806,61 @@ function PromoteModal({
   const entries = Object.entries(agentVersions).sort((a, b) => a[0].localeCompare(b[0]));
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Promote prompt versions"
-      onClick={onClose}
-      style={modalOverlay}
-    >
-      <div onClick={(e) => e.stopPropagation()} style={modalBox}>
-        <div style={modalHeader}>
-          <h3 style={modalTitle}>Promote prompt versions</h3>
-          <button onClick={onClose} style={closeBtn} aria-label="Close">×</button>
-        </div>
-        <div style={modalBody}>
-          <p style={{ margin: '0 0 8px', color: 'var(--color-text-secondary)' }}>
-            Mark these prompt versions as production-blessed. Promote per-agent so a
-            partial decision (some agents OK, others still under review) stays clean.
-          </p>
-          {entries.length === 0 ? (
-            <div style={{ color: 'var(--color-text-tertiary)' }}>
-              This run did not record any prompt versions.
-            </div>
-          ) : (
-            entries.map(([agentId, pv]) => {
-              const short = pv.length > 8 ? pv.slice(0, 8) : pv;
-              const rs = state[agentId] ?? { kind: 'idle' as const };
-              return (
-                <div key={agentId} style={promoteRow}>
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <span style={{ fontSize: 12, fontWeight: 500 }}>{agentId}</span>
-                    <span
-                      style={{
-                        ...monoInline,
-                        color: 'var(--color-text-tertiary)',
-                      }}
-                    >
-                      p:{short}
-                    </span>
-                  </div>
-                  <div>
-                    {rs.kind === 'idle' && (
-                      <button
-                        type="button"
-                        onClick={() => promote(agentId, pv)}
-                        style={promoteBtn}
-                      >
-                        Promote {agentId}
-                      </button>
-                    )}
-                    {rs.kind === 'pending' && (
-                      <Chip tone="warning" size="xs">promoting…</Chip>
-                    )}
-                    {rs.kind === 'done' && (
-                      <Chip tone="success" size="xs">
-                        ✓ promoted {new Date(rs.promotedAt).toLocaleTimeString()}
-                      </Chip>
-                    )}
-                    {rs.kind === 'error' && (
-                      <Chip tone="danger" size="xs">{rs.message}</Chip>
-                    )}
-                  </div>
+    <Modal open onClose={onClose} title="Promote prompt versions" maxWidth={520} rawChildren>
+      <div style={modalBody}>
+        <p style={{ margin: '0 0 8px', color: 'var(--color-text-secondary)' }}>
+          Mark these prompt versions as production-blessed. Promote per-agent so a
+          partial decision (some agents OK, others still under review) stays clean.
+        </p>
+        {entries.length === 0 ? (
+          <div style={{ color: 'var(--color-text-tertiary)' }}>
+            This run did not record any prompt versions.
+          </div>
+        ) : (
+          entries.map(([agentId, pv]) => {
+            const short = pv.length > 8 ? pv.slice(0, 8) : pv;
+            const rs = state[agentId] ?? { kind: 'idle' as const };
+            return (
+              <div key={agentId} style={promoteRow}>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <span style={{ fontSize: 12, fontWeight: 500 }}>{agentId}</span>
+                  <span
+                    style={{
+                      ...monoInline,
+                      color: 'var(--color-text-tertiary)',
+                    }}
+                  >
+                    p:{short}
+                  </span>
                 </div>
-              );
-            })
-          )}
-        </div>
+                <div>
+                  {rs.kind === 'idle' && (
+                    <button
+                      type="button"
+                      onClick={() => promote(agentId, pv)}
+                      style={promoteBtn}
+                    >
+                      Promote {agentId}
+                    </button>
+                  )}
+                  {rs.kind === 'pending' && (
+                    <Chip tone="warning" size="xs">promoting…</Chip>
+                  )}
+                  {rs.kind === 'done' && (
+                    <Chip tone="success" size="xs">
+                      ✓ promoted {new Date(rs.promotedAt).toLocaleTimeString()}
+                    </Chip>
+                  )}
+                  {rs.kind === 'error' && (
+                    <Chip tone="danger" size="xs">{rs.message}</Chip>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -1012,52 +993,10 @@ const pickerSelect: CSSProperties = {
   borderRadius: 4,
   cursor: 'pointer',
 };
-const modalOverlay: CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(0,0,0,0.45)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: 1000,
-  padding: 24,
-};
-const modalBox: CSSProperties = {
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 6,
-  minWidth: 480,
-  maxWidth: 640,
-  maxHeight: '85vh',
-  display: 'flex',
-  flexDirection: 'column',
-  boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
-};
-const modalHeader: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: '12px 16px',
-  borderBottom: '1px solid var(--color-border)',
-};
-const modalTitle: CSSProperties = {
-  margin: 0,
-  fontSize: 14,
-  fontWeight: 600,
-};
 const modalBody: CSSProperties = {
   padding: 16,
   overflowY: 'auto',
   fontSize: 12,
-};
-const closeBtn: CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  fontSize: 20,
-  lineHeight: 1,
-  color: 'var(--color-text-tertiary)',
-  cursor: 'pointer',
-  padding: '0 4px',
 };
 const promoteRow: CSSProperties = {
   display: 'flex',

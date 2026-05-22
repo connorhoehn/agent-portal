@@ -24,6 +24,7 @@ import {
   TableTh,
   TableTd,
   Chip,
+  Modal,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
 import { CostChip } from '../../../components/observability/CostChip';
@@ -401,10 +402,7 @@ function CompareRunsPage() {
 
       {/* Prompt-version diff modal */}
       {diffEntry && (
-        <PromptDiffModal
-          entry={diffEntry}
-          onClose={() => setDiffEntry(null)}
-        />
+        <PromptDiffModal entry={diffEntry} onClose={() => setDiffEntry(null)} />
       )}
     </div>
   );
@@ -635,60 +633,37 @@ function PromptDiffModal({
     };
   }, [entry.fromVersion, entry.toVersion]);
 
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const title = `${entry.agentId}: p:${shortPv(entry.fromVersion)} → p:${shortPv(entry.toVersion)}`;
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Prompt version diff"
-      onClick={onClose}
-      style={overlayStyle}
-    >
-      <div onClick={(e) => e.stopPropagation()} style={modalStyle}>
-        <div style={modalHeader}>
-          <h3 style={modalTitle}>
-            {entry.agentId}:{' '}
-            <span style={monoInline}>p:{shortPv(entry.fromVersion)}</span> →{' '}
-            <span style={monoInline}>p:{shortPv(entry.toVersion)}</span>
-          </h3>
-          <button onClick={onClose} style={closeBtn} aria-label="Close">×</button>
+    <Modal open onClose={onClose} title={title} maxWidth={1200} rawChildren>
+      {loading && <div style={modalBody}>Loading…</div>}
+
+      {err && (
+        <div style={{ ...modalBody, color: 'var(--color-danger, #ef4444)' }}>
+          Could not load prompt versions: {err}
         </div>
+      )}
 
-        {loading && <div style={modalBody}>Loading…</div>}
-
-        {err && (
-          <div style={{ ...modalBody, color: 'var(--color-danger, #ef4444)' }}>
-            Could not load prompt versions: {err}
-          </div>
-        )}
-
-        {!loading && !err && (
-          <div style={modalBody}>
-            <div style={modalDiffGrid}>
-              <div>
-                <div style={detailLabel}>
-                  FROM — <span style={monoInline}>p:{shortPv(entry.fromVersion)}</span>
-                </div>
-                <pre style={modalPre}>{fromDetail?.content ?? '(not registered)'}</pre>
+      {!loading && !err && (
+        <div style={modalBody}>
+          <div style={modalDiffGrid}>
+            <div>
+              <div style={detailLabel}>
+                FROM — <span style={monoInline}>p:{shortPv(entry.fromVersion)}</span>
               </div>
-              <div>
-                <div style={detailLabel}>
-                  TO — <span style={monoInline}>p:{shortPv(entry.toVersion)}</span>
-                </div>
-                <pre style={modalPre}>{toDetail?.content ?? '(not registered)'}</pre>
+              <pre style={modalPre}>{fromDetail?.content ?? '(not registered)'}</pre>
+            </div>
+            <div>
+              <div style={detailLabel}>
+                TO — <span style={monoInline}>p:{shortPv(entry.toVersion)}</span>
               </div>
+              <pre style={modalPre}>{toDetail?.content ?? '(not registered)'}</pre>
             </div>
           </div>
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+    </Modal>
   );
 }
 
@@ -871,49 +846,6 @@ const detailPre: CSSProperties = {
   border: '1px solid var(--color-border)',
   maxHeight: 320,
   overflowY: 'auto',
-};
-const overlayStyle: CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(0,0,0,0.45)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: 1000,
-  padding: 24,
-};
-const modalStyle: CSSProperties = {
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 6,
-  minWidth: 720,
-  maxWidth: 1200,
-  width: '90vw',
-  maxHeight: '90vh',
-  display: 'flex',
-  flexDirection: 'column',
-  boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
-};
-const modalHeader: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: '12px 16px',
-  borderBottom: '1px solid var(--color-border)',
-};
-const modalTitle: CSSProperties = {
-  margin: 0,
-  fontSize: 14,
-  fontWeight: 600,
-};
-const closeBtn: CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  fontSize: 20,
-  lineHeight: 1,
-  color: 'var(--color-text-tertiary)',
-  cursor: 'pointer',
-  padding: '0 4px',
 };
 const modalBody: CSSProperties = {
   padding: 16,
