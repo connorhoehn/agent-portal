@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Card, ConfirmDialog } from '@connorhoehnslalom/ui-components/shared';
+import { Card, ConfirmDialog, PageSection } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import type { CrawlSession, CrawlTarget } from '../../components/ingest/types';
 import { TargetsTable } from '../../components/ingest/TargetsTable';
@@ -123,7 +123,7 @@ function CrawlTargetsPage() {
   }
 
   return (
-    <div style={{ padding: 24 }}>
+    <PageSection title="Crawl Targets">
       {actionMessage && (
         <div style={{
           padding: 10, marginBottom: 12, borderRadius: 4, fontSize: 12,
@@ -206,7 +206,7 @@ function CrawlTargetsPage() {
         title={deleteTarget ? `Delete "${deleteTarget.label}"?` : 'Delete target?'}
         body="Run history is preserved. This cannot be undone."
       />
-    </div>
+    </PageSection>
   );
 }
 

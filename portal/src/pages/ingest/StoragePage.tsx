@@ -1,5 +1,6 @@
 import {
   Card, Table, TableHead, TableBody, TableRow, TableTh, TableTd,
+  PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { formatBytes } from '../../components/ingest/types';
@@ -10,9 +11,9 @@ function StoragePage() {
   const { data: storage } = useFetch<StorageBreakdown>('/api/ingest/storage', 60_000);
 
   return (
-    <div style={{ padding: 24 }}>
+    <PageSection title="Storage">
       {/* Totals row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 16 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
         <TotalCard
           label="S3 Bucket"
           value={storage?.bucket ?? '—'}
@@ -135,7 +136,7 @@ function StoragePage() {
           </Table>
         )}
       </Card>
-    </div>
+    </PageSection>
   );
 }
 

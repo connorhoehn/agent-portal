@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { Card, Table, TableHead, TableBody, TableRow, TableTh, TableTd, StatCard } from '@connorhoehnslalom/ui-components/shared';
+import { Card, PageSection, Table, TableHead, TableBody, TableRow, TableTh, TableTd, StatCard } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -19,20 +19,10 @@ function MemoryPage() {
   const recent = sessions.slice(0, 20);
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div>
-          <h1 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Memory</h1>
-          <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
-            AgentCore Memory session store. Each conversation in the Invoke page persists here as an event stream,
-            keyed by{' '}
-            <code style={{ fontSize: 11, padding: '1px 4px', background: 'var(--color-surface-hover)', borderRadius: 3 }}>
-              MEMORY_ID
-            </code>
-            .
-          </div>
-        </div>
-
+    <PageSection
+      title="Memory"
+      description="AgentCore Memory session store. Each conversation in the Invoke page persists here as an event stream, keyed by MEMORY_ID."
+    >
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
           <StatCard
             label="Total Sessions"
@@ -129,8 +119,7 @@ function MemoryPage() {
             </Table>
           )}
         </Card>
-      </div>
-    </div>
+    </PageSection>
   );
 }
 

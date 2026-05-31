@@ -1,6 +1,7 @@
 import React, { Fragment, useEffect, useRef, useState } from 'react';
 import {
   Card, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip,
+  PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { EmptyState, PulseDot } from '../../components/ingest/ui';
@@ -106,7 +107,7 @@ function DataSourcesPage() {
   }
 
   return (
-    <div style={{ padding: 24 }}>
+    <PageSection title="Data Sources">
       {actionMessage && (
         <div style={{
           padding: 10, marginBottom: 12, borderRadius: 4, fontSize: 12,
@@ -189,7 +190,7 @@ function DataSourcesPage() {
           <JobHistoryTable jobs={jobs} />
         )}
       </Card>
-    </div>
+    </PageSection>
   );
 }
 

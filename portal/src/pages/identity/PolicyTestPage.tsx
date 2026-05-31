@@ -2,7 +2,7 @@
 // against AVP. Shows the decision and the determining policy IDs.
 
 import { useMemo, useState } from 'react';
-import { TagEditor, Chip } from '@connorhoehnslalom/ui-components/shared';
+import { TagEditor, Chip, PageSection } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 interface SchemaResponse {
@@ -75,14 +75,10 @@ function PolicyTestPage() {
   }
 
   return (
-    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <header>
-        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Policy Sandbox</h2>
-        <p style={{ margin: '4px 0 0', color: 'var(--color-text-secondary)', fontSize: 13 }}>
-          Dry-run AVP authorization. Pick a role + one or more actions to see what each policy would decide.
-        </p>
-      </header>
-
+    <PageSection
+      title="Policy Sandbox"
+      description="Dry-run AVP authorization. Pick a role + one or more actions to see what each policy would decide."
+    >
       <article style={card}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <FormRow label="Role">
@@ -155,7 +151,7 @@ function PolicyTestPage() {
           </div>
         </section>
       )}
-    </div>
+    </PageSection>
   );
 }
 

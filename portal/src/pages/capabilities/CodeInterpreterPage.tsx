@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip, StatCard } from '@connorhoehnslalom/ui-components/shared';
+import { Card, PageSection, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip, StatCard } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -119,8 +119,10 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
   }
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <PageSection
+      title="Code Interpreter"
+      description="Run Python in isolated AgentCore sandboxes. Every execution is captured for replay."
+    >
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
           <StatCard label="Active Sessions" value={String(active.length)} accent />
           <StatCard label="Sessions (lifetime)" value={String(sessions.length)} />
@@ -424,8 +426,7 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
             </Table>
           )}
         </Card>
-      </div>
-    </div>
+    </PageSection>
   );
 }
 

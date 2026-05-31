@@ -7,6 +7,7 @@
 import type { CSSProperties } from 'react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
+import { PageSection } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 // ── API response types ────────────────────────────────────────────────────────
@@ -114,13 +115,10 @@ function BeatsPage() {
     (data == null || data.beats.length === 0);
 
   return (
-    <div style={pageStyle}>
-      {/* Header */}
-      <div style={headerStyle}>
-        <h2 style={titleStyle}>Beat Coverage</h2>
-        <RangePicker value={rangeIdx} onChange={setRangeIdx} />
-      </div>
-
+    <PageSection
+      title="Beat Coverage"
+      actions={<RangePicker value={rangeIdx} onChange={setRangeIdx} />}
+    >
       {/* Loading */}
       {isLoading && (
         <div style={feedbackStyle}>Loading coverage data…</div>
@@ -186,35 +184,13 @@ function BeatsPage() {
           </table>
         </div>
       )}
-    </div>
+    </PageSection>
   );
 }
 
 export default BeatsPage;
 
 // ── Styles ────────────────────────────────────────────────────────────────────
-
-const pageStyle: CSSProperties = {
-  padding: '24px 32px',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 20,
-};
-
-const headerStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  flexWrap: 'wrap',
-  gap: 12,
-};
-
-const titleStyle: CSSProperties = {
-  margin: 0,
-  fontSize: 18,
-  fontWeight: 600,
-  color: 'var(--color-text-primary)',
-};
 
 const feedbackStyle: CSSProperties = {
   fontSize: 13,

@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { Card, Chip, StatCard } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Chip, PageSection, StatCard } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -55,15 +55,10 @@ function SummaryPage() {
   const guardrailReady = guardrailStatus === 'READY';
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div>
-          <h1 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Capabilities Overview</h1>
-          <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
-            Live health of guardrails, the code-interpreter sandbox, headless browsers, and the agent memory store.
-          </div>
-        </div>
-
+    <PageSection
+      title="Capabilities Overview"
+      description="Live health of guardrails, the code-interpreter sandbox, headless browsers, and the agent memory store."
+    >
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
           <StatCard
             label="Active Browser Sessions"
@@ -111,8 +106,7 @@ function SummaryPage() {
             <div><b>Memory</b> — inspect AgentCore Memory sessions powering each conversation.</div>
           </div>
         </Card>
-      </div>
-    </div>
+    </PageSection>
   );
 }
 

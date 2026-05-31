@@ -4,7 +4,7 @@
 // the rejection text surfaces inline.
 
 import { useEffect, useMemo, useState } from 'react';
-import { TagEditor, CollapsibleSection } from '@connorhoehnslalom/ui-components/shared';
+import { TagEditor, CollapsibleSection, PageSection } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 interface SchemaResponse {
@@ -39,8 +39,8 @@ function SchemaPage() {
     setPendingActions(null);
   }, [data]);
 
-  if (isLoading) return <div style={{ padding: 24, color: 'var(--color-text-tertiary)' }}>Loading schema…</div>;
-  if (error) return <div style={{ padding: 24, color: 'var(--color-error, #ef4444)' }}>Error: {error}</div>;
+  if (isLoading) return <PageSection title="Schema"><div style={{ color: 'var(--color-text-tertiary)' }}>Loading schema…</div></PageSection>;
+  if (error) return <PageSection title="Schema"><div style={{ color: 'var(--color-error, #ef4444)' }}>Error: {error}</div></PageSection>;
   if (!data) return null;
 
   const namespace = data.schema?.[NS];
@@ -96,22 +96,18 @@ function SchemaPage() {
   }
 
   return (
-    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Schema</h2>
-          <p style={{ margin: '4px 0 0', color: 'var(--color-text-secondary)', fontSize: 13 }}>
-            Cedar entity types and actions enforced by AVP. Removing actions referenced by a live policy will fail validation.
-          </p>
-        </div>
-        {dirty && (
-          <div style={{ display: 'flex', gap: 8 }}>
+    <PageSection
+      title="Schema"
+      description="Cedar entity types and actions enforced by AVP. Removing actions referenced by a live policy will fail validation."
+      actions={
+        dirty ? (
+          <>
             <button onClick={discard} disabled={busy} style={btnSecondary}>Discard</button>
             <button onClick={save} disabled={busy} style={btnPrimary}>Save changes</button>
-          </div>
-        )}
-      </header>
-
+          </>
+        ) : undefined
+      }
+    >
       {errMsg && <div style={errorBanner}>{errMsg}</div>}
 
       <article style={card}>
@@ -146,7 +142,7 @@ function SchemaPage() {
       <CollapsibleSection title="Raw schema (JSON)" defaultOpen={false}>
         <pre style={preBlock}>{JSON.stringify(data.schema, null, 2)}</pre>
       </CollapsibleSection>
-    </div>
+    </PageSection>
   );
 }
 

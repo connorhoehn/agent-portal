@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { ReactFlow, Background, Controls, MiniMap, type Node, type Edge, MarkerType } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Card, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip, SegmentedControl } from '@connorhoehnslalom/ui-components/shared';
+import { Card, PageSection, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip, SegmentedControl } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -67,8 +67,10 @@ function BrowserPage() {
   const [mode, setMode] = useState<BrowserMode>('qa');
 
   return (
-    <div className="p-6">
-      <div className="flex flex-col gap-4">
+    <PageSection
+      title="Browser"
+      description="Web Q&A, recorded journeys, doc crawls, and raw browser-session admin — all on top of the AgentCore Browser capability."
+      actions={
         <SegmentedControl
           value={mode}
           onChange={(v) => setMode(v as BrowserMode)}
@@ -79,13 +81,13 @@ function BrowserPage() {
             { value: 'sessions', label: '⚙ Sessions' },
           ]}
         />
-
-        {mode === 'qa' && <WebQATab />}
-        {mode === 'journey' && <JourneyTab />}
-        {mode === 'crawl' && <CrawlTab />}
-        {mode === 'sessions' && <SessionsRawTab />}
-      </div>
-    </div>
+      }
+    >
+      {mode === 'qa' && <WebQATab />}
+      {mode === 'journey' && <JourneyTab />}
+      {mode === 'crawl' && <CrawlTab />}
+      {mode === 'sessions' && <SessionsRawTab />}
+    </PageSection>
   );
 }
 

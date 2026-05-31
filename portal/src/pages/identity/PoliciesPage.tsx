@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CodeEditor, TagEditor, ConfirmDialog, CollapsibleSection } from '@connorhoehnslalom/ui-components/shared';
+import { CodeEditor, TagEditor, ConfirmDialog, CollapsibleSection, PageSection } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { parsePolicy, buildPolicy, type Effect, type ParsedPolicy } from '../../lib/cedarPolicy';
 
@@ -67,8 +67,8 @@ function PoliciesPage() {
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
-  if (isLoading) return <div style={{ padding: 24, color: 'var(--color-text-tertiary)' }}>Loading policies…</div>;
-  if (error) return <div style={{ padding: 24, color: 'var(--color-error, #ef4444)' }}>Error: {error}</div>;
+  if (isLoading) return <PageSection title="Cedar Policies"><div style={{ color: 'var(--color-text-tertiary)' }}>Loading policies…</div></PageSection>;
+  if (error) return <PageSection title="Cedar Policies"><div style={{ color: 'var(--color-error, #ef4444)' }}>Error: {error}</div></PageSection>;
   if (!data) return null;
 
   function startEdit(p: PolicyEntry) {
@@ -145,19 +145,15 @@ function PoliciesPage() {
   }
 
   return (
-    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Cedar Policies</h2>
-          <p style={{ margin: '4px 0 0', color: 'var(--color-text-secondary)', fontSize: 13 }}>
-            Live in AVS Verified Permissions. Edits take effect within ~60s (decision cache TTL).
-          </p>
-        </div>
-        {!creating && (
+    <PageSection
+      title="Cedar Policies"
+      description="Live in AVS Verified Permissions. Edits take effect within ~60s (decision cache TTL)."
+      actions={
+        !creating ? (
           <button onClick={() => { setCreating(true); setErrMsg(null); }} style={btnPrimary}>+ New Policy</button>
-        )}
-      </header>
-
+        ) : undefined
+      }
+    >
       {data.note && <div style={notice}>{data.note}</div>}
       {errMsg && <div style={errorBanner}>{errMsg}</div>}
 
@@ -225,7 +221,7 @@ function PoliciesPage() {
         title="Delete policy?"
         body="This is immediate; AVP enforcement updates within ~60s. This cannot be undone."
       />
-    </div>
+    </PageSection>
   );
 }
 

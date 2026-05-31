@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Card } from '@connorhoehnslalom/ui-components/shared';
+import { Card, PageSection } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import type { CrawlSession, CrawlStatus, CrawlTarget } from '../../components/ingest/types';
 import { RunHistoryTable } from '../../components/ingest/RunHistoryTable';
@@ -35,14 +35,8 @@ function RunHistoryPage() {
   }
 
   return (
-    <div style={{ padding: 24 }}>
-      <Card padding="md" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <h2 style={{ fontSize: 14, fontWeight: 600 }}>
-            Crawl Run History{' '}
-            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 400 }}>· 10s refresh</span>
-          </h2>
-        </div>
+    <PageSection title="Crawl Run History" description="10s refresh">
+      <Card padding="md">
         {historyCrawls.length === 0 ? (
           <EmptyState title="No crawl runs yet" body="Trigger one from a target above." />
         ) : (
@@ -61,7 +55,7 @@ function RunHistoryPage() {
         initialSession={drawerInitial}
         onClose={() => { setDrawerCrawlId(null); setDrawerInitial(null); }}
       />
-    </div>
+    </PageSection>
   );
 }
 

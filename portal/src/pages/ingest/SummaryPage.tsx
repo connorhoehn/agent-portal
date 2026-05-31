@@ -1,4 +1,4 @@
-import { Card, Chip, StatCard } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Chip, PageSection, StatCard } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import type {
   CrawlSession,
@@ -41,16 +41,16 @@ function SummaryPage() {
   const totalIndexed = jobs.reduce((s, j) => s + j.documentsIndexed, 0);
 
   return (
-    <div style={{ padding: 24 }}>
+    <PageSection title="Ingest Summary">
       {/* KB info */}
       {!kb ? (
-        <Card padding="md" style={{ marginBottom: 16 }}>
-          <div style={{ padding: 24, textAlign: 'center', color: 'var(--color-text-tertiary)', fontSize: 13 }}>
+        <Card padding="md">
+          <div style={{ textAlign: 'center', color: 'var(--color-text-tertiary)', fontSize: 13 }}>
             No Knowledge Base configured. Set <code>KB_ID</code> in <code>middleware/.env.aws</code>.
           </div>
         </Card>
       ) : (
-        <Card padding="md" style={{ marginBottom: 16 }}>
+        <Card padding="md">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <div>
               <h2 style={{ fontSize: 16, fontWeight: 600 }}>{kb.name}</h2>
@@ -77,7 +77,7 @@ function SummaryPage() {
         <QueueCard queue={queueData ?? null} lastCompleteJob={lastCompleteJob} />
         <StorageBreakdownCard storage={storageData ?? null} />
       </div>
-    </div>
+    </PageSection>
   );
 }
 

@@ -1,6 +1,7 @@
 import React, { useId, useState } from 'react';
 import {
   Card, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip,
+  PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import {
@@ -36,9 +37,9 @@ function SchedulesPage() {
   const sources = sourcesData?.sources ?? [];
 
   return (
-    <div style={{ padding: 24 }}>
+    <PageSection title="Schedules">
       <SchedulesPanel sources={sources} />
-    </div>
+    </PageSection>
   );
 }
 
