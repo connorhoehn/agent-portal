@@ -1,4 +1,5 @@
 import React from 'react';
+import { Drawer } from '@connorhoehnslalom/ui-components/shared';
 
 export interface CollaboratorContribution {
   otherId: string;
@@ -31,113 +32,65 @@ export interface WhyDrawerProps {
   contributions: ContributionsResponse | null | undefined;
 }
 
-const sectionHeader: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 600,
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-  color: 'var(--color-text-tertiary)',
-  marginBottom: 4,
-  marginTop: 10,
-};
+const SECTION_HEADER = 'text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-1 mt-2.5';
+const ROW = 'flex justify-between items-center py-[3px]';
+const ROW_LABEL = 'text-xs text-text-primary';
+const ROW_META = 'text-[10.5px] text-text-tertiary';
+const NO_DATA = 'text-[11px] text-text-tertiary';
 
-const rowStyle: React.CSSProperties = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  padding: '3px 0',
-};
-
-const rowLabel: React.CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-primary)',
-};
-
-const rowMeta: React.CSSProperties = {
-  fontSize: 10.5,
-  color: 'var(--color-text-tertiary)',
-};
-
-const noData: React.CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-};
-
-export function WhyDrawer({ open, onClose: _onClose, contributions }: WhyDrawerProps): React.ReactElement | null {
-  if (!open) return null;
-
-  const drawerStyle: React.CSSProperties = {
-    marginTop: 8,
-    padding: 12,
-    borderTop: '1px solid var(--color-border)',
-    background: 'var(--color-surface-hover, #f8fafc)',
-    borderRadius: '0 0 6px 6px',
-  };
-
-  if (contributions === undefined) {
-    return (
-      <div style={drawerStyle}>
-        <span style={noData}>Loading contributions...</span>
-      </div>
-    );
-  }
-
-  if (contributions === null) {
-    return (
-      <div style={drawerStyle}>
-        <span style={noData}>No contributions data</span>
-      </div>
-    );
-  }
-
-  const { collaborators, projects, decisions } = contributions;
-
+export function WhyDrawer({ open, onClose, contributions }: WhyDrawerProps): React.ReactElement | null {
   return (
-    <div style={drawerStyle}>
-      <div style={sectionHeader}>Collaborators</div>
-      {collaborators.length === 0 ? (
-        <span style={noData}>No data yet</span>
-      ) : (
-        collaborators.map((c) => (
-          <div key={c.otherId} style={rowStyle}>
-            <span style={rowLabel}>{c.otherName}</span>
-            <span style={rowMeta}>{c.weight.toFixed(2)}</span>
-          </div>
-        ))
-      )}
+    <Drawer open={open} onClose={onClose} title="Why this score?" width={420}>
+      {contributions === undefined && <span className={NO_DATA}>Loading contributions...</span>}
+      {contributions === null && <span className={NO_DATA}>No contributions data</span>}
+      {contributions && (
+        <>
+          <div className={SECTION_HEADER}>Collaborators</div>
+          {contributions.collaborators.length === 0 ? (
+            <span className={NO_DATA}>No data yet</span>
+          ) : (
+            contributions.collaborators.map((c) => (
+              <div key={c.otherId} className={ROW}>
+                <span className={ROW_LABEL}>{c.otherName}</span>
+                <span className={ROW_META}>{c.weight.toFixed(2)}</span>
+              </div>
+            ))
+          )}
 
-      <div style={sectionHeader}>Projects</div>
-      {projects.length === 0 ? (
-        <span style={noData}>No data yet</span>
-      ) : (
-        projects.map((p, i) => (
-          <div key={`${p.projectName}-${i}`} style={rowStyle}>
-            <span
-              style={{ ...rowLabel, cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 2 }}
-              title={`View project: ${p.projectName}`}
-            >
-              {p.projectName}
-            </span>
-            <span style={rowMeta}>
-              {p.role ? `${p.role} · ` : ''}{p.weight.toFixed(2)}
-            </span>
-          </div>
-        ))
-      )}
+          <div className={SECTION_HEADER}>Projects</div>
+          {contributions.projects.length === 0 ? (
+            <span className={NO_DATA}>No data yet</span>
+          ) : (
+            contributions.projects.map((p, i) => (
+              <div key={`${p.projectName}-${i}`} className={ROW}>
+                <span
+                  className={`${ROW_LABEL} cursor-pointer underline decoration-dotted underline-offset-2`}
+                  title={`View project: ${p.projectName}`}
+                >
+                  {p.projectName}
+                </span>
+                <span className={ROW_META}>
+                  {p.role ? `${p.role} · ` : ''}{p.weight.toFixed(2)}
+                </span>
+              </div>
+            ))
+          )}
 
-      <div style={sectionHeader}>Decisions</div>
-      {decisions.length === 0 ? (
-        <span style={noData}>No data yet</span>
-      ) : (
-        decisions.map((d, i) => (
-          <div key={`${d.topic}-${i}`} style={rowStyle}>
-            <span style={rowLabel}>{d.topic}</span>
-            <span style={rowMeta}>
-              {d.role ? `${d.role} · ` : ''}{d.weight.toFixed(2)}
-            </span>
-          </div>
-        ))
+          <div className={SECTION_HEADER}>Decisions</div>
+          {contributions.decisions.length === 0 ? (
+            <span className={NO_DATA}>No data yet</span>
+          ) : (
+            contributions.decisions.map((d, i) => (
+              <div key={`${d.topic}-${i}`} className={ROW}>
+                <span className={ROW_LABEL}>{d.topic}</span>
+                <span className={ROW_META}>
+                  {d.role ? `${d.role} · ` : ''}{d.weight.toFixed(2)}
+                </span>
+              </div>
+            ))
+          )}
+        </>
       )}
-    </div>
+    </Drawer>
   );
 }

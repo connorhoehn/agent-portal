@@ -1,6 +1,3 @@
-// Tiny pure-CSS stacked histogram — no chart library required.
-// Renders 5 vertical bars side-by-side representing score buckets.
-
 interface HistogramBarProps {
   /** 5-element array of counts for buckets 0-20, 20-40, 40-60, 60-80, 80-100 */
   buckets: [number, number, number, number, number];
@@ -17,38 +14,18 @@ export function HistogramBar({ buckets, color, height = 48 }: HistogramBarProps)
 
   return (
     <div
-      style={{
-        display: 'flex',
-        alignItems: 'flex-end',
-        gap: 3,
-        height,
-      }}
+      className="flex items-end gap-[3px]"
+      style={{ height }}
       title={buckets.map((c, i) => `${BUCKET_LABELS[i]}: ${c}`).join(' | ')}
     >
       {buckets.map((count, i) => {
         const pct = count / max;
         const barH = Math.max(2, Math.round(pct * height));
         return (
-          <div
-            key={i}
-            style={{
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'flex-end',
-              height: '100%',
-            }}
-          >
+          <div key={i} className="flex flex-col items-center justify-end flex-1 h-full">
             <div
-              style={{
-                width: '100%',
-                height: barH,
-                backgroundColor: color,
-                opacity: 0.15 + 0.85 * pct,
-                borderRadius: '2px 2px 0 0',
-                transition: 'height 0.3s ease',
-              }}
+              className="w-full rounded-t-[2px] transition-[height] duration-300 ease-in-out"
+              style={{ height: barH, backgroundColor: color, opacity: 0.15 + 0.85 * pct }}
             />
           </div>
         );

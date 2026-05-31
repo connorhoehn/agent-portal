@@ -43,7 +43,6 @@ const AXIS_ORDER: AxisDef[] = [
 
 const PRIMARY = 'var(--color-primary, #6366f1)';
 
-// One data point per axis — recharts RadarChart pattern
 interface RadarDataPoint {
   subject: string;
   pct: number;
@@ -70,20 +69,12 @@ function CustomTooltip({
   const entry = payload[0]?.payload;
   if (!entry) return null;
   return (
-    <div
-      style={{
-        background: 'var(--color-surface, #1e1e2e)',
-        border: '1px solid var(--color-border, #3f3f5f)',
-        borderRadius: 6,
-        padding: '6px 10px',
-        fontSize: 12,
-      }}
-    >
-      <div style={{ fontWeight: 600, marginBottom: 2 }}>{entry.subject}</div>
-      <div style={{ color: 'var(--color-text-secondary, #a0a0c0)' }}>
+    <div className="bg-surface border border-border rounded-md py-1.5 px-2.5 text-xs">
+      <div className="font-semibold mb-0.5">{entry.subject}</div>
+      <div className="text-text-secondary">
         {Math.round(entry.pct)}% of peer max
       </div>
-      <div style={{ color: 'var(--color-text-tertiary, #6b6b8a)', fontSize: 10 }}>
+      <div className="text-text-tertiary text-[10px]">
         raw: {entry.raw}
       </div>
     </div>
@@ -93,16 +84,7 @@ function CustomTooltip({
 export function RadarChart({ radar }: RadarChartProps) {
   if (!radar) {
     return (
-      <div
-        style={{
-          height: 220,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'var(--color-text-tertiary)',
-          fontSize: 12,
-        }}
-      >
+      <div className="h-[220px] flex items-center justify-center text-text-tertiary text-xs">
         No radar data
       </div>
     );

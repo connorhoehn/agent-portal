@@ -16,23 +16,14 @@ interface Props {
 export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedBy, weight = 0.55, comparisonIds, onToggleCompare, compareDisabled }: Props) {
   return (
     <Card padding="md">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-        <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>
-          Leaderboard
-        </h2>
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <h2 className="text-sm font-semibold m-0">Leaderboard</h2>
         {rankedBy ? (
-          <span style={{
-            fontSize: 11,
-            padding: '2px 8px',
-            borderRadius: 999,
-            background: 'var(--color-primary-soft, #eef2ff)',
-            color: 'var(--color-primary, #6366f1)',
-            fontWeight: 500,
-          }}>
+          <span className="text-[11px] py-0.5 px-2 rounded-full bg-primary-soft text-primary font-medium">
             Ranked by: {rankedBy}
           </span>
         ) : (
-          <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-text-tertiary)' }}>
+          <span className="text-[11px] font-normal text-text-tertiary">
             composite = {Math.round(weight * 100)}% × influence + {Math.round((1 - weight) * 100)}% × expertise
           </span>
         )}
@@ -40,13 +31,13 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
       <Table>
         <TableHead>
           <TableRow>
-            <TableTh style={{ width: 32 }} />
+            <TableTh className="w-8" />
             <TableTh>#</TableTh>
             <TableTh>Name</TableTh>
             <TableTh>Department</TableTh>
-            <TableTh style={{ textAlign: 'right' }}>Influence</TableTh>
-            <TableTh style={{ textAlign: 'right' }}>Expertise</TableTh>
-            <TableTh style={{ textAlign: 'right' }}>Composite</TableTh>
+            <TableTh className="text-right">Influence</TableTh>
+            <TableTh className="text-right">Expertise</TableTh>
+            <TableTh className="text-right">Composite</TableTh>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -64,10 +55,10 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
               <TableRow
                 key={s.personId}
                 onClick={() => onSelect(selected ? null : s.personId)}
-                style={{ cursor: 'pointer', background: selected ? 'var(--color-surface-hover)' : undefined }}
+                className={`cursor-pointer ${selected ? 'bg-surface-hover' : ''}`}
               >
                 <TableTd
-                  style={{ width: 32, paddingRight: 0 }}
+                  className="w-8 pr-0"
                   onClick={(e: React.MouseEvent) => {
                     e.stopPropagation();
                     if (!checkboxDisabled) onToggleCompare(s.personId);
@@ -78,26 +69,26 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
                     checked={inComparison}
                     disabled={checkboxDisabled}
                     onChange={() => {/* controlled via onClick above */}}
-                    style={{ cursor: checkboxDisabled ? 'not-allowed' : 'pointer', accentColor: 'var(--color-primary, #6366f1)' }}
+                    className={`accent-primary ${checkboxDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                   />
                 </TableTd>
-                <TableTd style={{ color: 'var(--color-text-tertiary)' }}>{i + 1}</TableTd>
-                <TableTd style={{ fontWeight: selected ? 600 : 500 }}>{s.name}</TableTd>
+                <TableTd className="text-text-tertiary">{i + 1}</TableTd>
+                <TableTd className={selected ? 'font-semibold' : 'font-medium'}>{s.name}</TableTd>
                 <TableTd>
-                  <span style={{ color: deptColors[s.department] ?? 'var(--color-text-secondary)', fontSize: 12 }}>
+                  <span className="text-xs" style={{ color: deptColors[s.department] ?? 'var(--color-text-secondary)' }}>
                     {s.department}
                   </span>
                 </TableTd>
-                <TableTd style={{ textAlign: 'right', fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                <TableTd className="text-right text-xs text-text-secondary">
                   {Math.round(s.influence)}
                 </TableTd>
-                <TableTd style={{ textAlign: 'right', fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                <TableTd className="text-right text-xs text-text-secondary">
                   {Math.round(s.expertise)}
                 </TableTd>
-                <TableTd style={{ textAlign: 'right', fontWeight: 600 }}>
+                <TableTd className="text-right font-semibold">
                   {compositeFromWeight}
-                  <div title={tooltip} style={{ marginTop: 4 }}>
-                    <svg width={60} height={6} style={{ display: 'block', marginLeft: 'auto' }}>
+                  <div title={tooltip} className="mt-1">
+                    <svg width={60} height={6} className="block ml-auto">
                       <rect x={0}    y={0} width={infW} height={6} rx={2} fill="var(--color-primary, #6366f1)" />
                       <rect x={infW} y={0} width={expW} height={6} rx={2} fill="var(--color-success)" />
                     </svg>

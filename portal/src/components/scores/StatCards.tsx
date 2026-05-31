@@ -16,11 +16,11 @@ export function StatCards({ peopleScored, avgComposite, topScore, departmentCoun
     : `Scores updated ${formatRelativeTime(mostRecentScoredAt)}`;
 
   return (
-    <div style={{ marginBottom: 16 }}>
-      <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 8, textAlign: 'right' }}>
+    <div className="mb-4">
+      <div className="text-[11px] text-text-tertiary mb-2 text-right">
         {freshnessLabel}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+      <div className="grid grid-cols-4 gap-4">
         <StatCard label="People Scored" value={String(peopleScored)} />
         <StatCard label="Avg Composite" value={String(avgComposite)} />
         <StatCard label="Top Score" value={String(topScore)} />

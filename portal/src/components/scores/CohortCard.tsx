@@ -1,3 +1,4 @@
+import { Card } from '@connorhoehnslalom/ui-components/shared';
 import { DEPT_COLORS } from './types';
 import { HistogramBar } from './HistogramBar';
 
@@ -48,39 +49,21 @@ export function CohortCard({ cohort }: CohortCardProps) {
   const chipStyle = giniChipStyle(cohort.expertiseGini);
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        borderRadius: 8,
-        border: '1px solid var(--color-border, #e5e7eb)',
-        overflow: 'hidden',
-        backgroundColor: 'var(--color-surface, #fff)',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-      }}
-    >
+    <Card padding="none" className="flex overflow-hidden">
       {/* Left colour stripe */}
-      <div style={{ width: 5, flexShrink: 0, backgroundColor: deptColor }} />
+      <div className="w-[5px] shrink-0" style={{ backgroundColor: deptColor }} />
 
       {/* Card body */}
-      <div style={{ flex: 1, padding: '16px 18px', minWidth: 0 }}>
+      <div className="flex-1 py-4 px-[18px] min-w-0">
         {/* Header row */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
-          <div style={{ minWidth: 0 }}>
-            <div
-              style={{
-                fontSize: 15,
-                fontWeight: 600,
-                color: 'var(--color-text-primary, #111)',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="min-w-0">
+            <div className="text-[15px] font-semibold text-text-primary truncate">
               {cohort.department}
             </div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-secondary, #6b7280)', marginTop: 2 }}>
+            <div className="text-xs text-text-secondary mt-0.5">
               {cohort.count} {cohort.count === 1 ? 'person' : 'people'} &middot; median{' '}
-              <span style={{ fontWeight: 600, color: 'var(--color-text-primary, #111)' }}>
+              <span className="font-semibold text-text-primary">
                 {cohort.medianComposite.toFixed(1)}
               </span>
             </div>
@@ -88,15 +71,8 @@ export function CohortCard({ cohort }: CohortCardProps) {
 
           {/* Gini chip */}
           <span
-            style={{
-              flexShrink: 0,
-              fontSize: 11,
-              fontWeight: 600,
-              padding: '3px 8px',
-              borderRadius: 9999,
-              letterSpacing: '0.02em',
-              ...chipStyle,
-            }}
+            className="shrink-0 text-[11px] font-semibold py-[3px] px-2 rounded-full tracking-wide"
+            style={chipStyle}
           >
             Gini {cohort.expertiseGini.toFixed(2)}
           </span>
@@ -106,15 +82,7 @@ export function CohortCard({ cohort }: CohortCardProps) {
         <HistogramBar buckets={cohort.compositeBuckets} color={deptColor} height={44} />
 
         {/* Bucket axis labels */}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            marginTop: 3,
-            fontSize: 10,
-            color: 'var(--color-text-tertiary, #9ca3af)',
-          }}
-        >
+        <div className="flex justify-between mt-[3px] text-[10px] text-text-tertiary">
           <span>0</span>
           <span>20</span>
           <span>40</span>
@@ -125,27 +93,19 @@ export function CohortCard({ cohort }: CohortCardProps) {
 
         {/* Brokers */}
         {cohort.brokers.length > 0 && (
-          <div style={{ marginTop: 12, borderTop: '1px solid var(--color-border, #e5e7eb)', paddingTop: 10 }}>
-            <div
-              style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--color-text-tertiary, #9ca3af)', marginBottom: 6 }}
-            >
+          <div className="mt-3 border-t border-border pt-[10px]">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-1.5">
               Brokers
             </div>
-            <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <ul className="m-0 p-0 list-none flex flex-col gap-1">
               {cohort.brokers.map((b) => (
-                <li key={b.id} style={{ fontSize: 13, color: 'var(--color-text-primary, #111)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <li key={b.id} className="text-[13px] text-text-primary flex items-center gap-1.5">
                   <span
-                    style={{
-                      display: 'inline-block',
-                      width: 6,
-                      height: 6,
-                      borderRadius: '50%',
-                      backgroundColor: deptColor,
-                      flexShrink: 0,
-                    }}
+                    className="inline-block w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{ backgroundColor: deptColor }}
                   />
                   {b.name}
-                  <span style={{ color: 'var(--color-text-tertiary, #9ca3af)', fontSize: 12 }}>
+                  <span className="text-text-tertiary text-xs">
                     (touches {b.departmentsTouched} teams)
                   </span>
                 </li>
@@ -154,6 +114,6 @@ export function CohortCard({ cohort }: CohortCardProps) {
           </div>
         )}
       </div>
-    </div>
+    </Card>
   );
 }

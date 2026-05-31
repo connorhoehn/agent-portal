@@ -86,7 +86,7 @@ interface OverlayRadarProps {
 export function OverlayRadar({ entries, deptColors = {} }: OverlayRadarProps) {
   if (entries.length === 0) {
     return (
-      <div style={{ height: 380, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-tertiary)', fontSize: 12 }}>
+      <div className="h-[380px] flex items-center justify-center text-text-tertiary text-xs">
         No radar data
       </div>
     );

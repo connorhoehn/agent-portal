@@ -1,9 +1,4 @@
-import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  Tooltip,
-} from 'recharts';
+import { Sparkline } from '@connorhoehnslalom/ui-components/shared';
 
 export interface HistorySample {
   ts: string;
@@ -23,7 +18,7 @@ export interface TrendLineProps {
 export function TrendLine({ history }: TrendLineProps) {
   if (history === undefined) {
     return (
-      <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', padding: '8px 0' }}>
+      <div className="text-xs text-text-tertiary py-2">
         Loading trend...
       </div>
     );
@@ -31,16 +26,11 @@ export function TrendLine({ history }: TrendLineProps) {
 
   if (history === null || history.samples.length === 0) {
     return (
-      <div
-        style={{
-          padding: '12px 0',
-          borderRadius: 6,
-        }}
-      >
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 4 }}>
+      <div className="py-3 rounded-md">
+        <div className="text-[13px] font-semibold text-text-primary mb-1">
           No trend data
         </div>
-        <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+        <div className="text-xs text-text-secondary leading-relaxed">
           Run the scoring agent to start tracking scores over time.
         </div>
       </div>
@@ -48,13 +38,14 @@ export function TrendLine({ history }: TrendLineProps) {
   }
 
   const { samples, deltaVs7d } = history;
+  const series = samples.map((s) => s.score);
 
-  const deltaColor =
+  const deltaClass =
     deltaVs7d === null
-      ? 'var(--color-text-tertiary)'
+      ? 'text-text-tertiary'
       : deltaVs7d >= 0
-      ? '#16a34a'
-      : '#dc2626';
+      ? 'text-success'
+      : 'text-danger';
 
   const deltaLabel =
     deltaVs7d === null
@@ -62,38 +53,16 @@ export function TrendLine({ history }: TrendLineProps) {
       : `${deltaVs7d >= 0 ? '↑' : '↓'} ${Math.abs(Math.round(deltaVs7d))}`;
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-      <div style={{ flex: '0 0 200px', height: 60 }}>
-        <ResponsiveContainer width="100%" height={60}>
-          <LineChart data={samples} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
-            <Tooltip
-              contentStyle={{ fontSize: 11 }}
-              formatter={(value: unknown) => [(value as number).toFixed(1), 'Score']}
-              labelFormatter={(label: unknown) => String(label).slice(0, 10)}
-            />
-            <Line
-              type="monotone"
-              dataKey="score"
-              stroke="var(--color-primary, #6366f1)"
-              dot={false}
-              strokeWidth={1.5}
-            />
-          </LineChart>
-        </ResponsiveContainer>
+    <div className="flex items-center gap-3">
+      <div className="flex-[0_0_200px] h-[60px]">
+        <Sparkline data={series} width={200} height={60} color="var(--color-primary, #6366f1)" />
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
-        <span
-          style={{
-            fontSize: 14,
-            fontWeight: 700,
-            color: deltaColor,
-            lineHeight: 1,
-          }}
-        >
+      <div className="flex flex-col items-start gap-0.5">
+        <span className={`text-sm font-bold leading-none ${deltaClass}`}>
           {deltaLabel}
         </span>
-        <span style={{ fontSize: 10, color: 'var(--color-text-tertiary)' }}>vs 7d ago</span>
+        <span className="text-[10px] text-text-tertiary">vs 7d ago</span>
       </div>
     </div>
   );
