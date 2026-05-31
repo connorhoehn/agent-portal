@@ -1,10 +1,11 @@
-import { NavLink, Outlet, useLocation } from 'react-router';
-import { useState } from 'react';
-import type { CSSProperties } from 'react';
+import { NavLink, Outlet } from 'react-router';
 import {
+  ChannelHeader,
   CommandPalette,
   CommandPaletteHint,
   CommandPaletteProvider,
+  SubNavLayout,
+  type SubNavItem,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
@@ -37,99 +38,21 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/settings',     label: 'Settings',          tenant: 'universal' },
 ];
 
-// Admin sub-items rendered inside the collapsible Platform group.
+// Admin sub-items rendered inside the collapsible Platform group via SubNavItem.group.
 const PLATFORM_ITEMS: NavItem[] = [
-  { path: '/iq/agents',            label: 'Architecture',    tenant: 'admin' },
+  { path: '/iq/agents',             label: 'Architecture',    tenant: 'admin' },
   { path: '/admin/knowledge-bases', label: 'Knowledge Bases', tenant: 'admin', requireRoles: ['hr-admin'] },
-  { path: '/admin/ingest',         label: 'Ingest',         tenant: 'admin', requireRoles: ['hr-admin'] },
-  { path: '/admin/observability',  label: 'Observability',  tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'] },
-  { path: '/admin/capabilities',   label: 'Capabilities',   tenant: 'admin' },
-  { path: '/admin/identity',       label: 'Identity',       tenant: 'admin', requireRoles: ['hr-admin'] },
+  { path: '/admin/ingest',          label: 'Ingest',          tenant: 'admin', requireRoles: ['hr-admin'] },
+  { path: '/admin/observability',   label: 'Observability',   tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'] },
+  { path: '/admin/capabilities',    label: 'Capabilities',    tenant: 'admin' },
+  { path: '/admin/identity',        label: 'Identity',        tenant: 'admin', requireRoles: ['hr-admin'] },
 ];
 
-// ── Collapsible Platform group ────────────────────────────────────────────────
-
-function PlatformGroup({
-  items,
-  session,
-}: {
-  items: NavItem[];
-  session: { role?: string } | null;
-}) {
-  const { pathname } = useLocation();
-  const isOnAdmin = pathname.startsWith('/admin');
-  const [open, setOpen] = useState(isOnAdmin);
-
-  const visible = items.filter((item) => {
-    if (!item.requireRoles) return true;
-    return session && item.requireRoles.includes(session.role ?? '');
-  });
-  if (visible.length === 0) return null;
-
-  return (
-    <div style={{ marginTop: 4 }}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-controls="platform-nav-group"
-        style={groupHeaderStyle(isOnAdmin)}
-      >
-        <span style={{ flex: 1, textAlign: 'left' }}>Platform</span>
-        <span aria-hidden="true" style={{ fontSize: 9, opacity: 0.5 }}>{open ? '▾' : '▸'}</span>
-      </button>
-      {open && (
-        <div id="platform-nav-group" style={{ paddingLeft: 8 }}>
-          {visible.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              style={({ isActive }) => childItemStyle(isActive)}
-            >
-              {item.label}
-            </NavLink>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function groupHeaderStyle(active: boolean): CSSProperties {
-  return {
-    display: 'flex',
-    alignItems: 'center',
-    width: '100%',
-    padding: '7px 12px',
-    borderRadius: 'var(--radius-md)',
-    color: active ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
-    background: 'transparent',
-    border: 'none',
-    cursor: 'pointer',
-    fontSize: 11,
-    fontWeight: 600,
-    fontFamily: 'inherit',
-    textTransform: 'uppercase' as const,
-    letterSpacing: '0.06em',
-    marginBottom: 2,
-  };
-}
-
-function childItemStyle(isActive: boolean): CSSProperties {
-  return {
-    display: 'block',
-    padding: '6px 12px',
-    borderRadius: 'var(--radius-md)',
-    color: isActive ? 'var(--color-primary)' : 'var(--color-text-tertiary)',
-    background: isActive ? 'var(--color-surface-hover)' : 'transparent',
-    textDecoration: 'none',
-    fontSize: 12,
-    fontWeight: isActive ? 500 : 400,
-    marginBottom: 1,
-  };
-}
-
-// ── Layout ────────────────────────────────────────────────────────────────────
+const TENANT_LABELS: Record<Tenant, string> = {
+  orgiq: 'OrgIQ',
+  newsroom: 'Newsroom',
+  admin: 'Admin',
+};
 
 export function Layout() {
   const { data: health } = useFetch<Health>('/api/health', 30_000);
@@ -137,7 +60,7 @@ export function Layout() {
   const commands = usePortalCommands();
   const getDynamicCommands = usePortalDynamicCommands();
 
-  const navItems = NAV_ITEMS.filter(item => {
+  const navItems = NAV_ITEMS.filter((item) => {
     if (item.tenant === 'universal') return true;
     if (session?.role === 'admin') return item.tenant === session?.tenant;
     if (item.requireRoles && !(session && item.requireRoles.includes(session.role ?? ''))) return false;
@@ -149,6 +72,18 @@ export function Layout() {
     session?.role === 'org-leader' ||
     session?.role === 'admin';
 
+  const platformItems = showPlatform
+    ? PLATFORM_ITEMS.filter((item) => {
+        if (!item.requireRoles) return true;
+        return session && item.requireRoles.includes(session.role ?? '');
+      })
+    : [];
+
+  const subNavItems: SubNavItem[] = [
+    ...navItems.map((i) => ({ path: i.path, label: i.label })),
+    ...platformItems.map((i) => ({ path: i.path, label: i.label, group: 'Platform' })),
+  ];
+
   const mockedSubsystems = health
     ? Object.entries(health.mocks).filter(([, v]) => v).map(([k]) => k)
     : [];
@@ -157,86 +92,51 @@ export function Layout() {
     : mockedSubsystems.length === 0
       ? `Live · ${health.region}`
       : `Mock: ${mockedSubsystems.join(', ')}`;
-  const statusColor = !health
-    ? 'var(--color-text-tertiary)'
-    : mockedSubsystems.length === 0
-      ? 'var(--color-success, #10b981)'
-      : 'var(--color-warning, #f59e0b)';
+
+  const tenantLabel = TENANT_LABELS[session?.tenant ?? 'orgiq'];
 
   return (
     <CommandPaletteProvider commands={commands} getDynamicCommands={getDynamicCommands}>
-    <div data-tenant={session?.tenant ?? 'orgiq'} style={{ display: 'flex', height: '100vh' }}>
-      <aside style={{
-        width: 200,
-        borderRight: '1px solid var(--color-border)',
-        background: 'var(--color-surface)',
-        display: 'flex',
-        flexDirection: 'column',
-      }}>
-        <div style={{
-          padding: '16px 16px',
-          fontWeight: 700,
-          fontSize: 18,
-          borderBottom: '1px solid var(--color-border)',
-          color: 'var(--color-primary)',
-        }}>
-          OrgIQ
+      <div data-tenant={session?.tenant ?? 'orgiq'} className="flex flex-col h-screen">
+        <ChannelHeader
+          name={tenantLabel}
+          description={statusLabel}
+          online={mockedSubsystems.length === 0 && !!health}
+          actions={
+            <div className="flex items-center gap-3">
+              <TenantSwitcher />
+              <CommandPaletteHint />
+              <GatewayStatusBadge />
+              <MasqueradeMenu />
+            </div>
+          }
+        />
+        <div className="flex-1 min-h-0">
+          <SubNavLayout
+            title="OrgIQ"
+            items={subNavItems}
+            railWidth={200}
+            storageKey="orgiq-shell"
+            renderNavItem={(item, children, baseStyle) => (
+              <NavLink
+                to={item.path}
+                style={({ isActive }) =>
+                  isActive
+                    ? { ...baseStyle, borderLeft: '3px solid var(--color-primary)', background: 'var(--color-surface-hover)', color: 'var(--color-text-primary)' }
+                    : baseStyle
+                }
+              >
+                {children}
+              </NavLink>
+            )}
+          >
+            <div className="p-6 h-full overflow-auto">
+              <Outlet />
+            </div>
+          </SubNavLayout>
         </div>
-        <nav style={{ padding: '12px 8px', flex: 1, overflowY: 'auto' }}>
-          {navItems.map(item => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              style={({ isActive }) => ({
-                display: 'block',
-                padding: '8px 12px',
-                borderRadius: 'var(--radius-md)',
-                color: isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                background: isActive ? 'var(--color-surface-hover)' : 'transparent',
-                textDecoration: 'none',
-                fontSize: 13,
-                fontWeight: isActive ? 500 : 400,
-                marginBottom: 2,
-              })}
-            >
-              {item.label}
-            </NavLink>
-          ))}
-
-          {showPlatform && (
-            <PlatformGroup items={PLATFORM_ITEMS} session={session} />
-          )}
-        </nav>
-        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--color-border)', fontSize: 10, color: 'var(--color-text-tertiary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: statusColor, display: 'inline-block' }} />
-          <span>{statusLabel}</span>
-          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
-            <GatewayStatusBadge />
-            <span>gw</span>
-          </span>
-        </div>
-      </aside>
-      <main style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
-        <header style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          padding: '10px 24px',
-          borderBottom: '1px solid var(--color-border)',
-          background: 'var(--color-surface)',
-        }}>
-          <TenantSwitcher />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <CommandPaletteHint />
-            <MasqueradeMenu />
-          </div>
-        </header>
-        <div style={{ flex: 1, overflow: 'auto', padding: 24 }}>
-          <Outlet />
-        </div>
-      </main>
-      <CommandPalette placeholder="Jump to a page, paste an invocation id, search runs…" />
-    </div>
+        <CommandPalette placeholder="Jump to a page, paste an invocation id, search runs…" />
+      </div>
     </CommandPaletteProvider>
   );
 }
