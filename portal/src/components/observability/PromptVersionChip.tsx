@@ -52,8 +52,8 @@ export function PromptVersionChip({ promptVersion, size = 'xs' }: Props) {
         style={chipBtnStyle}
         title={`prompt version ${promptVersion} — click for details`}
       >
-        <Chip tone="neutral" size={size}>
-          <span style={monoStyle}>{label}</span>
+        <Chip tone="neutral" size={size} mono>
+          {label}
         </Chip>
       </button>
       <Modal
