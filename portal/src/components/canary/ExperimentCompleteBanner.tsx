@@ -2,8 +2,7 @@
 // Rendered by CanaryPage; reads controllerState from the canary store.
 
 import { useState } from 'react';
-import type { CSSProperties } from 'react';
-import { Spinner } from '@connorhoehnslalom/ui-components/shared';
+import { Banner, Button, Spinner } from '@connorhoehnslalom/ui-components/shared';
 import { useCanaryStore } from './canaryStore.js';
 import { resetCanaryExperiment } from './usePromptLibrary.js';
 
@@ -54,91 +53,45 @@ export function ExperimentCompleteBanner({ onReset }: ExperimentCompleteBannerPr
     }
   }
 
-  const bannerStyle: CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '10px 20px',
-    fontSize: 13,
-    flexShrink: 0,
-    background: isPromoted ? 'var(--color-success-bg)' : 'var(--color-danger-bg)',
-    borderBottom: isPromoted ? '1px solid var(--color-success-border)' : '1px solid var(--color-danger-border)',
-  };
-
-  const leftTextStyle: CSSProperties = {
-    fontWeight: 600,
-    color: isPromoted ? 'var(--color-success)' : 'var(--color-danger)',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-  };
-
-  const actionsStyle: CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-  };
-
-  const primaryBtnStyle: CSSProperties = {
-    fontSize: 12,
-    fontWeight: 600,
-    padding: '5px 14px',
-    borderRadius: 5,
-    border: 'none',
-    background: 'var(--color-success)',
-    color: 'var(--color-surface)',
-    cursor: pinning ? 'not-allowed' : 'pointer',
-    opacity: pinning ? 0.7 : 1,
-    fontFamily: 'inherit',
-  };
-
-  const secondaryBtnStyle: CSSProperties = {
-    fontSize: 12,
-    fontWeight: 500,
-    padding: '5px 14px',
-    borderRadius: 5,
-    border: '1px solid var(--color-border, #e2e8f0)',
-    background: 'transparent',
-    color: 'var(--color-text-secondary, #475569)',
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-  };
-
   return (
-    <div style={bannerStyle}>
-      <div style={leftTextStyle}>
-        {isPromoted
+    <Banner
+      variant={isPromoted ? 'success' : 'error'}
+      title={
+        isPromoted
           ? '✓ Experiment complete — Version B promoted to 100% traffic'
-          : '✕ Experiment ended — Version A retained, B rolled back'}
-      </div>
-      <div style={actionsStyle}>
+          : '✕ Experiment ended — Version A retained, B rolled back'
+      }
+    >
+      <div className="flex items-center gap-2">
         {pinError && (
-          <span style={{ fontSize: 11, color: 'var(--color-danger)' }} title={pinError}>
+          <span className="text-[11px] text-[var(--color-danger)]" title={pinError}>
             Error — see console
           </span>
         )}
         {isPromoted && (
-          <button
-            style={primaryBtnStyle}
+          <Button
+            variant="primary"
+            size="sm"
             onClick={() => { void handlePinAsBaseline(); }}
             disabled={pinning}
           >
             {pinning && (
-              <span style={{ marginRight: 6, verticalAlign: 'middle', display: 'inline-block' }}>
+              <span className="mr-1.5 inline-block align-middle">
                 <Spinner size="sm" color="var(--color-surface)" />
               </span>
             )}
             {pinning ? 'Pinning…' : 'Pin as new baseline A'}
-          </button>
+          </Button>
         )}
-        <button
-          style={secondaryBtnStyle}
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => { void handleStartNew(); }}
           disabled={pinning}
         >
           Start new experiment
-        </button>
+        </Button>
       </div>
-    </div>
+    </Banner>
   );
 }
