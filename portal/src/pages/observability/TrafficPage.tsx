@@ -25,6 +25,7 @@ import {
   TableTh,
   TableTd,
   Chip,
+  PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
   AreaChart,
@@ -273,16 +274,12 @@ function TrafficPage() {
     `${fmtInt(totals.uniqueUsers)} unique user${totals.uniqueUsers === 1 ? '' : 's'}`;
 
   return (
-    <div style={pageStyle}>
+    <PageSection
+      title="Traffic"
+      description={headerSubline}
+      actions={<WindowPicker value={windowIdx} onChange={setWindowIdx} />}
+    >
       <Card padding="md">
-        <div style={headerRow}>
-          <div>
-            <h2 style={h2}>Traffic</h2>
-            <div style={subline}>{headerSubline}</div>
-          </div>
-          <WindowPicker value={windowIdx} onChange={setWindowIdx} />
-        </div>
-
         <div style={headlineRow}>
           <HeadlineCard
             label="Total invocations"
@@ -523,7 +520,7 @@ function TrafficPage() {
           </Table>
         )}
       </Card>
-    </div>
+    </PageSection>
   );
 }
 
@@ -594,13 +591,6 @@ function EmptyState({ text }: { text: string }) {
 }
 
 // ── Styles ──────────────────────────────────────────────────────────────────
-
-const pageStyle: CSSProperties = {
-  padding: 24,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 24,
-};
 
 const headerRow: CSSProperties = {
   display: 'flex',

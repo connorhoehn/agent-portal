@@ -19,6 +19,7 @@ import { useNavigate } from 'react-router';
 import {
   Card,
   Chip,
+  PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
   ComposedChart,
@@ -179,36 +180,36 @@ function OnCallPage() {
   }, [chartData, deployMarkers]);
 
   return (
-    <div style={pageStyle}>
-      {/* Header */}
+    <PageSection
+      title="On-Call"
+      description={undefined}
+      actions={
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <WindowPicker value={windowIdx} onChange={setWindowIdx} />
+          <button onClick={refreshTimeline} style={refreshBtn} title="Refresh now">
+            Refresh
+          </button>
+        </div>
+      }
+    >
+      {/* Status strip */}
       <Card padding="md">
-        <div style={headerRow}>
-          <div>
-            <h2 style={h2}>On-Call</h2>
-            <div style={subline}>
-              <SeverityDot severity={criticalCount > 0 ? 'critical' : warningCount > 0 ? 'warning' : 'ok'} />
-              <span>
-                {activeAlarms.length === 0
-                  ? 'no active alarms'
-                  : `${activeAlarms.length} active alarm${activeAlarms.length === 1 ? '' : 's'}`}
-              </span>
-              <span style={dotSep}>·</span>
-              <span>
-                <strong>{hitl?.pendingCount ?? 0}</strong> pending approval
-                {hitl?.pendingCount === 1 ? '' : 's'}
-              </span>
-              <span style={dotSep}>·</span>
-              <span>
-                last incident {lastIncident ? timeAgo(lastIncident) : '—'}
-              </span>
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <WindowPicker value={windowIdx} onChange={setWindowIdx} />
-            <button onClick={refreshTimeline} style={refreshBtn} title="Refresh now">
-              Refresh
-            </button>
-          </div>
+        <div style={subline}>
+          <SeverityDot severity={criticalCount > 0 ? 'critical' : warningCount > 0 ? 'warning' : 'ok'} />
+          <span>
+            {activeAlarms.length === 0
+              ? 'no active alarms'
+              : `${activeAlarms.length} active alarm${activeAlarms.length === 1 ? '' : 's'}`}
+          </span>
+          <span style={dotSep}>·</span>
+          <span>
+            <strong>{hitl?.pendingCount ?? 0}</strong> pending approval
+            {hitl?.pendingCount === 1 ? '' : 's'}
+          </span>
+          <span style={dotSep}>·</span>
+          <span>
+            last incident {lastIncident ? timeAgo(lastIncident) : '—'}
+          </span>
         </div>
       </Card>
 
@@ -398,7 +399,7 @@ function OnCallPage() {
           )}
         </Card>
       </div>
-    </div>
+    </PageSection>
   );
 }
 
@@ -593,12 +594,10 @@ function timeAgo(iso: string): string {
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 
-const pageStyle: CSSProperties = { padding: 24, display: 'flex', flexDirection: 'column', gap: 24 };
 const headerRow: CSSProperties = {
   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
   marginBottom: 8, gap: 12, flexWrap: 'wrap',
 };
-const h2: CSSProperties = { fontSize: 18, fontWeight: 600, margin: 0 };
 const h3: CSSProperties = { fontSize: 14, fontWeight: 600, margin: 0, marginBottom: 12 };
 const subline: CSSProperties = {
   display: 'inline-flex', alignItems: 'center', gap: 8,

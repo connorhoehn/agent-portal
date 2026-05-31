@@ -13,6 +13,7 @@ import { Link, useParams } from 'react-router';
 import {
   Card,
   Chip,
+  PageSection,
   useToast,
 } from '@connorhoehnslalom/ui-components/shared';
 import { CostChip } from '../../components/observability/CostChip';
@@ -182,13 +183,13 @@ function InvocationDetailPage() {
   }
   if (loading && !detail) {
     return (
-      <div style={pageStyle}>
+      <PageSection title="Invocation">
         <Card padding="md">
-          <div style={{ padding: 24, color: 'var(--color-text-tertiary)', fontSize: 12 }}>
+          <div style={{ color: 'var(--color-text-tertiary)', fontSize: 12 }}>
             Loading invocation…
           </div>
         </Card>
-      </div>
+      </PageSection>
     );
   }
   if (error || !detail) {
@@ -253,7 +254,7 @@ function InvocationDetailPage() {
   const hasTrace = parentNode != null || childrenNodes.length > 0;
 
   return (
-    <div style={pageStyle}>
+    <PageSection title={agentName}>
 
       <Card padding="md">
         <div style={headerRow}>
@@ -266,7 +267,6 @@ function InvocationDetailPage() {
                 flexWrap: 'wrap',
               }}
             >
-              <h2 style={h2title}>{agentName}</h2>
               {ts && (
                 <span style={subdued}>
                   {new Date(ts).toLocaleString()}
@@ -414,7 +414,7 @@ function InvocationDetailPage() {
           toast(`Test case ${testId} saved. View in harness: /admin/observability/harness`, { type: 'success' })
         }
       />
-    </div>
+    </PageSection>
   );
 }
 
@@ -646,22 +646,21 @@ function ErrorBlock({
   invocationId?: string;
 }) {
   return (
-    <div style={pageStyle}>
+    <PageSection
+      title={title}
+      actions={
+        <Link to="/admin/observability/invocations/search" style={btnLink}>
+          ← Back to search
+        </Link>
+      }
+    >
       <Card padding="md">
-        <div style={headerRow}>
-          <div>
-            <h2 style={h2title}>{title}</h2>
-            {invocationId && (
-              <div style={monoLine}>id: {invocationId}</div>
-            )}
-            <div style={{ ...subdued, marginTop: 4 }}>{detail}</div>
-          </div>
-          <Link to="/admin/observability/invocations/search" style={btnLink}>
-            ← Back to search
-          </Link>
-        </div>
+        {invocationId && (
+          <div style={monoLine}>id: {invocationId}</div>
+        )}
+        <div style={{ ...subdued, marginTop: 4 }}>{detail}</div>
       </Card>
-    </div>
+    </PageSection>
   );
 }
 
@@ -682,13 +681,6 @@ function EmptyState({ text }: { text: string }) {
 
 // ── styles ────────────────────────────────────────────────────────────────────
 
-const pageStyle: CSSProperties = {
-  padding: 24,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 24,
-};
-
 const headerRow: CSSProperties = {
   display: 'flex',
   alignItems: 'flex-start',
@@ -699,7 +691,6 @@ const headerRow: CSSProperties = {
 };
 
 const h2: CSSProperties = { fontSize: 14, fontWeight: 600, margin: 0 };
-const h2title: CSSProperties = { fontSize: 18, fontWeight: 600, margin: 0 };
 const hint: CSSProperties = {
   fontSize: 11,
   color: 'var(--color-text-tertiary)',

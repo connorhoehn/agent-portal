@@ -8,6 +8,7 @@ import {
   TableTh,
   TableTd,
   Chip,
+  PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
@@ -91,27 +92,16 @@ function AgentMetricsPage() {
   }, [recent, bedrock]);
 
   return (
-    <div style={{ padding: 24 }}>
+    <PageSection
+      title="Per-Agent Metrics"
+      description="Derived from recent invocations (live) + Bedrock log (~30s lag, 60min window)"
+      actions={
+        <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+          {rows.length} agent{rows.length !== 1 ? 's' : ''}
+        </span>
+      }
+    >
       <Card padding="md">
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 12,
-          }}
-        >
-          <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>
-            Per-Agent Metrics{' '}
-            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 400 }}>
-              derived from recent invocations (live) + Bedrock log (~30s lag, 60min window)
-            </span>
-          </h2>
-          <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-            {rows.length} agent{rows.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-
         {rows.length === 0 ? (
           <div
             style={{
@@ -199,7 +189,7 @@ function AgentMetricsPage() {
           </Table>
         )}
       </Card>
-    </div>
+    </PageSection>
   );
 }
 

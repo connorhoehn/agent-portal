@@ -19,6 +19,7 @@ import {
   TableTh,
   TableTd,
   Chip,
+  PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { CostChip } from '../../components/observability/CostChip';
@@ -211,18 +212,15 @@ function InvocationSearchPage() {
   }
 
   return (
-    <div style={pageStyle}>
+    <PageSection
+      title="Search Invocations"
+      description={
+        applied
+          ? `30s refresh · ${rows.length} loaded of ${totalCount}`
+          : 'Filter to triage by prompt / agent / score'
+      }
+    >
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
-            Search Invocations{' '}
-            <span style={hint}>
-              {applied
-                ? `30s refresh · ${rows.length} loaded of ${totalCount}`
-                : 'filter to triage by prompt / agent / score'}
-            </span>
-          </h2>
-        </div>
         <form onSubmit={onSubmit} style={form}>
           <div style={filterGrid}>
             <label style={field}>
@@ -425,7 +423,7 @@ function InvocationSearchPage() {
           </>
         )}
       </Card>
-    </div>
+    </PageSection>
   );
 }
 
@@ -445,30 +443,6 @@ function EmptyState({ text }: { text: string }) {
 }
 
 // ── styles ────────────────────────────────────────────────────────────────────
-
-const pageStyle: CSSProperties = {
-  padding: 24,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 24,
-};
-
-const headerRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  marginBottom: 12,
-  gap: 12,
-  flexWrap: 'wrap',
-};
-
-const h2: CSSProperties = { fontSize: 14, fontWeight: 600, margin: 0 };
-
-const hint: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  fontWeight: 400,
-};
 
 const form: CSSProperties = {
   display: 'flex',

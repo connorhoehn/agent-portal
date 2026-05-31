@@ -24,6 +24,7 @@ import {
   TableTh,
   TableTd,
   Chip,
+  PageSection,
   Modal,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
@@ -209,13 +210,13 @@ function CompareRunsPage() {
 
   if (!data && isLoading) {
     return (
-      <div style={pageStyle}>
+      <PageSection title="Compare Runs">
         <Card padding="md">
-          <div style={{ padding: 24, color: 'var(--color-text-tertiary)', fontSize: 12 }}>
+          <div style={{ color: 'var(--color-text-tertiary)', fontSize: 12 }}>
             Loading comparison…
           </div>
         </Card>
-      </div>
+      </PageSection>
     );
   }
 
@@ -233,7 +234,7 @@ function CompareRunsPage() {
   const { runA, runB, regressions, fixes, neutral, summary } = data;
 
   return (
-    <div style={pageStyle}>
+    <PageSection title="Compare Runs">
       {/* Header */}
       <Card padding="md">
         <div style={headerRow}>
@@ -404,7 +405,7 @@ function CompareRunsPage() {
       {diffEntry && (
         <PromptDiffModal entry={diffEntry} onClose={() => setDiffEntry(null)} />
       )}
-    </div>
+    </PageSection>
   );
 }
 
@@ -679,26 +680,25 @@ function ErrorBlock({
   runIdB?: string;
 }) {
   return (
-    <div style={pageStyle}>
+    <PageSection
+      title={title}
+      actions={
+        <Link to="/admin/observability/harness" style={btnLink}>
+          ← Back to harness
+        </Link>
+      }
+    >
       <Card padding="md">
-        <div style={headerRow}>
-          <div>
-            <h2 style={h2title}>{title}</h2>
-            {(runIdA || runIdB) && (
-              <div style={subline}>
-                runIdA: <span style={monoInline}>{runIdA ?? '—'}</span>
-                <span style={dot}>·</span>
-                runIdB: <span style={monoInline}>{runIdB ?? '—'}</span>
-              </div>
-            )}
-            <div style={{ ...subline, color: 'var(--color-text-secondary)' }}>{detail}</div>
+        {(runIdA || runIdB) && (
+          <div style={subline}>
+            runIdA: <span style={monoInline}>{runIdA ?? '—'}</span>
+            <span style={dot}>·</span>
+            runIdB: <span style={monoInline}>{runIdB ?? '—'}</span>
           </div>
-          <Link to="/admin/observability/harness" style={btnLink}>
-            ← Back to harness
-          </Link>
-        </div>
+        )}
+        <div style={{ ...subline, color: 'var(--color-text-secondary)' }}>{detail}</div>
       </Card>
-    </div>
+    </PageSection>
   );
 }
 
@@ -719,12 +719,6 @@ function EmptyState({ text }: { text: string }) {
 
 // ── styles ────────────────────────────────────────────────────────────────────
 
-const pageStyle: CSSProperties = {
-  padding: 24,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 24,
-};
 const headerRow: CSSProperties = {
   display: 'flex',
   alignItems: 'flex-start',

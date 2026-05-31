@@ -28,6 +28,7 @@ import {
   TableTh,
   TableTd,
   Chip,
+  PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { CostChip } from '../../components/observability/CostChip';
@@ -174,29 +175,26 @@ function QualityPage() {
   }
 
   return (
-    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <PageSection
+      title="Judge Scores"
+      description={`Last 24h · 30s refresh · ${scores.length} sample${scores.length === 1 ? '' : 's'}`}
+      actions={
+        <select
+          value={selectedAgent}
+          onChange={(e) => setSelectedAgent(e.target.value)}
+          style={selectStyle}
+          disabled={agentOptions.length === 0}
+        >
+          {agentOptions.length === 0 && <option value="">(no agents)</option>}
+          {agentOptions.map((a) => (
+            <option key={a} value={a}>
+              {a}
+            </option>
+          ))}
+        </select>
+      }
+    >
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
-            Judge Scores{' '}
-            <span style={hint}>
-              last 24h · 30s refresh · {scores.length} sample{scores.length === 1 ? '' : 's'}
-            </span>
-          </h2>
-          <select
-            value={selectedAgent}
-            onChange={(e) => setSelectedAgent(e.target.value)}
-            style={selectStyle}
-            disabled={agentOptions.length === 0}
-          >
-            {agentOptions.length === 0 && <option value="">(no agents)</option>}
-            {agentOptions.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </select>
-        </div>
 
         {chartData.length === 0 ? (
           <SmartEmptyState
@@ -389,7 +387,7 @@ function QualityPage() {
           </Table>
         )}
       </Card>
-    </div>
+    </PageSection>
   );
 }
 

@@ -9,6 +9,7 @@ import {
   TableTh,
   TableTd,
   Chip,
+  PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
@@ -50,34 +51,22 @@ function CapabilityEventsPage() {
   }, [events, kindFilter]);
 
   return (
-    <div style={{ padding: 24 }}>
-      <Card padding="md">
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 12,
-            gap: 12,
-            flexWrap: 'wrap',
-          }}
+    <PageSection
+      title="Capability Events"
+      description="Browser + code interpreter activity · live · 5s refresh"
+      actions={
+        <select
+          value={kindFilter}
+          onChange={(e) => setKindFilter(e.target.value as KindFilter)}
+          style={selectStyle}
         >
-          <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>
-            Capability Events{' '}
-            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 400 }}>
-              browser + code interpreter activity · live · 5s refresh
-            </span>
-          </h2>
-          <select
-            value={kindFilter}
-            onChange={(e) => setKindFilter(e.target.value as KindFilter)}
-            style={selectStyle}
-          >
-            <option value="all">All kinds</option>
-            <option value="browser">Browser</option>
-            <option value="code">Code execute</option>
-          </select>
-        </div>
+          <option value="all">All kinds</option>
+          <option value="browser">Browser</option>
+          <option value="code">Code execute</option>
+        </select>
+      }
+    >
+      <Card padding="md">
         {filtered.length === 0 ? (
           <div
             style={{
@@ -164,7 +153,7 @@ function CapabilityEventsPage() {
           </Table>
         )}
       </Card>
-    </div>
+    </PageSection>
   );
 }
 

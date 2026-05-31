@@ -22,6 +22,7 @@ import {
   TableTh,
   TableTd,
   Chip,
+  PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
@@ -149,18 +150,12 @@ function MemoryPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   return (
-    <div style={pageStyle}>
+    <PageSection
+      title="Memory"
+      description={`${totalEvents} event${totalEvents === 1 ? '' : 's'} in last ${win.label} · ${totalColdSessions} cold session${totalColdSessions === 1 ? '' : 's'}`}
+      actions={<WindowPicker value={windowIdx} onChange={setWindowIdx} />}
+    >
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
-            Memory{' '}
-            <span style={hint}>
-              {totalEvents} event{totalEvents === 1 ? '' : 's'} in last {win.label} ·{' '}
-              {totalColdSessions} cold session{totalColdSessions === 1 ? '' : 's'}
-            </span>
-          </h2>
-          <WindowPicker value={windowIdx} onChange={setWindowIdx} />
-        </div>
         {stats.length === 0 ? (
           <SmartEmptyState
             title="No memory operations recorded"
@@ -311,7 +306,7 @@ function MemoryPage() {
           </Table>
         )}
       </Card>
-    </div>
+    </PageSection>
   );
 }
 
@@ -387,7 +382,6 @@ function EmptyState({ text }: { text: string }) {
 
 // ── styles ────────────────────────────────────────────────────────────────
 
-const pageStyle: CSSProperties = { padding: 24, display: 'flex', flexDirection: 'column', gap: 24 };
 const headerRow: CSSProperties = {
   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
   marginBottom: 12, gap: 12, flexWrap: 'wrap',

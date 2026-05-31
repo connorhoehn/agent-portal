@@ -18,6 +18,7 @@ import {
   TableTh,
   TableTd,
   Chip,
+  PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 
@@ -169,15 +170,10 @@ function ApprovalQueuePage() {
   );
 
   return (
-    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <header style={headerOuter}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Approval Queue</h2>
-          <p style={subhead}>
-            Pending HITL approvals. Initial list via REST; live updates over SSE. Decisions are
-            optimistic — denied requests reappear with a danger chip.
-          </p>
-        </div>
+    <PageSection
+      title="Approval Queue"
+      description="Pending HITL approvals. Initial list via REST; live updates over SSE. Decisions are optimistic — denied requests reappear with a danger chip."
+      actions={
         <div style={liveIndicator}>
           <span
             style={{
@@ -195,8 +191,8 @@ function ApprovalQueuePage() {
             <strong>{sorted.length}</strong> pending
           </span>
         </div>
-      </header>
-
+      }
+    >
       <Card padding="md">
         {sorted.length === 0 ? (
           <SmartEmptyState
@@ -291,7 +287,7 @@ function ApprovalQueuePage() {
           </Table>
         )}
       </Card>
-    </div>
+    </PageSection>
   );
 }
 
@@ -302,20 +298,6 @@ function safeJson(v: unknown): string {
     return String(v);
   }
 }
-
-const headerOuter: CSSProperties = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'flex-start',
-  gap: 16,
-  flexWrap: 'wrap',
-};
-
-const subhead: CSSProperties = {
-  margin: '4px 0 0',
-  color: 'var(--color-text-secondary)',
-  fontSize: 13,
-};
 
 const liveIndicator: CSSProperties = {
   display: 'inline-flex',

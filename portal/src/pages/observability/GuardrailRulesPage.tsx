@@ -21,6 +21,7 @@ import {
   TableTh,
   TableTd,
   Chip,
+  PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { GuardrailRuleBadge } from '../../components/observability/GuardrailRuleBadge';
@@ -98,17 +99,12 @@ function GuardrailRulesPage() {
   );
 
   return (
-    <div style={pageStyle}>
+    <PageSection
+      title="Guardrail Rules"
+      description={`${totalFires} intervention${totalFires === 1 ? '' : 's'} across ${rules.length} rule${rules.length === 1 ? '' : 's'} · last ${win.label}`}
+      actions={<WindowPicker value={windowIdx} onChange={(i) => { setWindowIdx(i); setSelectedRule(null); }} />}
+    >
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
-            Guardrail rules{' '}
-            <span style={hint}>
-              {totalFires} intervention{totalFires === 1 ? '' : 's'} across {rules.length} rule{rules.length === 1 ? '' : 's'} · last {win.label}
-            </span>
-          </h2>
-          <WindowPicker value={windowIdx} onChange={(i) => { setWindowIdx(i); setSelectedRule(null); }} />
-        </div>
         {rules.length === 0 ? (
           <SmartEmptyState
             title="No interventions yet"
@@ -239,7 +235,7 @@ function GuardrailRulesPage() {
           )}
         </Card>
       )}
-    </div>
+    </PageSection>
   );
 }
 
@@ -290,7 +286,6 @@ function EmptyState({ text }: { text: string }) {
 
 // ── styles ────────────────────────────────────────────────────────────────
 
-const pageStyle: CSSProperties = { padding: 24, display: 'flex', flexDirection: 'column', gap: 24 };
 const headerRow: CSSProperties = {
   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
   marginBottom: 12, gap: 12, flexWrap: 'wrap',

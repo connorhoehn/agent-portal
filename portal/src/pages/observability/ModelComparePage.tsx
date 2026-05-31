@@ -27,6 +27,7 @@ import {
   TableTh,
   TableTd,
   Chip,
+  PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
@@ -228,24 +229,12 @@ function ModelComparePage() {
     : null;
 
   return (
-    <div style={pageStyle}>
+    <PageSection
+      title="Model Compare"
+      description="Compare two harness runs side-by-side. Re-run the harness with --model amazon.nova-lite-v1:0 (sim mode) and amazon.nova-pro-v1:0 to populate runs."
+    >
       {/* Pickers */}
       <Card padding="md">
-        <div style={headerRow}>
-          <div>
-            <h2 style={h2title}>Model Compare</h2>
-            <div style={subline}>
-              <span style={hint}>
-                Compare two harness runs side-by-side. To compare two agent
-                models, run the harness with{' '}
-                <span style={monoInline}>--model amazon.nova-lite-v1:0</span> (sim
-                mode) once, then with{' '}
-                <span style={monoInline}>--model amazon.nova-pro-v1:0</span>, and
-                pick both here.
-              </span>
-            </div>
-          </div>
-        </div>
         <div style={pickerRow}>
           <RunPicker
             label="Run A (baseline)"
@@ -444,7 +433,7 @@ function ModelComparePage() {
           </Card>
         </>
       ) : null}
-    </div>
+    </PageSection>
   );
 }
 
@@ -607,12 +596,6 @@ void shortRunId;
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
-const pageStyle: CSSProperties = {
-  padding: 24,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 24,
-};
 const headerRow: CSSProperties = {
   display: 'flex',
   alignItems: 'flex-start',

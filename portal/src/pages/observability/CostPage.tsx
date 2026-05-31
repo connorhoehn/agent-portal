@@ -29,6 +29,7 @@ import {
   TableTh,
   TableTd,
   Chip,
+  PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
   BarChart,
@@ -347,16 +348,12 @@ function CostPage() {
   const headerSubline = `Bedrock + tool spend · ${windowLabel} · ${fmtUsd(totalCostUsd)} total across ${fmtInt(invocations)} invocation${invocations === 1 ? '' : 's'}`;
 
   return (
-    <div style={pageStyle}>
+    <PageSection
+      title="Cost"
+      description={headerSubline}
+      actions={<WindowPicker value={windowIdx} onChange={setWindowIdx} />}
+    >
       <Card padding="md">
-        <div style={headerRow}>
-          <div>
-            <h2 style={h2}>Cost</h2>
-            <div style={subline}>{headerSubline}</div>
-          </div>
-          <WindowPicker value={windowIdx} onChange={setWindowIdx} />
-        </div>
-
         {/* Headline cards row. */}
         <div style={headlineRow}>
           <HeadlineCard
@@ -642,7 +639,7 @@ function CostPage() {
           </Table>
         )}
       </Card>
-    </div>
+    </PageSection>
   );
 }
 
@@ -722,12 +719,6 @@ function EmptyState({ text }: { text: string }) {
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
-const pageStyle: CSSProperties = {
-  padding: 24,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 24,
-};
 const headerRow: CSSProperties = {
   display: 'flex',
   alignItems: 'flex-start',

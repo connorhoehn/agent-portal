@@ -9,6 +9,7 @@ import {
   TableTh,
   TableTd,
   Chip,
+  PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
@@ -42,61 +43,48 @@ function SessionsPage() {
   }, [sessions, query]);
 
   return (
-    <div style={{ padding: 24 }}>
+    <PageSection
+      title="Chat Sessions"
+      description="From AgentCore Memory · 15s refresh"
+      actions={
+        <>
+          <input
+            type="search"
+            placeholder="Filter by title, agent, session id…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            style={{
+              fontSize: 12,
+              padding: '4px 8px',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-sm)',
+              background: 'var(--color-surface)',
+              color: 'var(--color-text-primary)',
+              width: 240,
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => refresh()}
+            style={{
+              fontSize: 12,
+              padding: '4px 10px',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-sm)',
+              background: 'var(--color-surface)',
+              color: 'var(--color-text-primary)',
+              cursor: 'pointer',
+            }}
+          >
+            Refresh
+          </button>
+          <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+            {filtered.length} session{filtered.length !== 1 ? 's' : ''}
+          </span>
+        </>
+      }
+    >
       <Card padding="md">
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 12,
-            gap: 12,
-            flexWrap: 'wrap',
-          }}
-        >
-          <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>
-            Chat Sessions{' '}
-            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 400 }}>
-              from AgentCore Memory · 15s refresh
-            </span>
-          </h2>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <input
-              type="search"
-              placeholder="Filter by title, agent, session id…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              style={{
-                fontSize: 12,
-                padding: '4px 8px',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-sm)',
-                background: 'var(--color-surface)',
-                color: 'var(--color-text-primary)',
-                width: 240,
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => refresh()}
-              style={{
-                fontSize: 12,
-                padding: '4px 10px',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-sm)',
-                background: 'var(--color-surface)',
-                color: 'var(--color-text-primary)',
-                cursor: 'pointer',
-              }}
-            >
-              Refresh
-            </button>
-            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-              {filtered.length} session{filtered.length !== 1 ? 's' : ''}
-            </span>
-          </div>
-        </div>
-
         {filtered.length === 0 ? (
           <div
             style={{
@@ -210,7 +198,7 @@ function SessionsPage() {
           </Table>
         )}
       </Card>
-    </div>
+    </PageSection>
   );
 }
 

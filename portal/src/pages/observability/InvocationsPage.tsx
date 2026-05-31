@@ -9,6 +9,7 @@ import {
   TableTh,
   TableTd,
   Chip,
+  PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { CostChip } from '../../components/observability/CostChip';
@@ -95,52 +96,40 @@ function InvocationsPage() {
   const intervenedCount = filtered.filter((i) => i.guardrailIntervened).length;
 
   return (
-    <div style={{ padding: 24 }}>
-      <Card padding="md" style={{ marginBottom: 24 }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 12,
-            gap: 12,
-            flexWrap: 'wrap',
-          }}
-        >
-          <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>
-            Recent Activity{' '}
-            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 400 }}>
-              live · last 50 invocations · 5s refresh
-            </span>
-          </h2>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <select
-              value={agentFilter}
-              onChange={(e) => setAgentFilter(e.target.value)}
-              style={selectStyle}
-            >
-              <option value="all">All agents</option>
-              {agentOptions.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-              style={selectStyle}
-            >
-              <option value="all">All statuses</option>
-              <option value="ok">OK</option>
-              <option value="blocked">Blocked</option>
-              <option value="error">Error</option>
-            </select>
-            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-              {intervenedCount} intervened
-            </span>
-          </div>
-        </div>
+    <PageSection
+      title="Recent Activity"
+      description="Live · last 50 invocations · 5s refresh"
+      actions={
+        <>
+          <select
+            value={agentFilter}
+            onChange={(e) => setAgentFilter(e.target.value)}
+            style={selectStyle}
+          >
+            <option value="all">All agents</option>
+            {agentOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+            style={selectStyle}
+          >
+            <option value="all">All statuses</option>
+            <option value="ok">OK</option>
+            <option value="blocked">Blocked</option>
+            <option value="error">Error</option>
+          </select>
+          <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+            {intervenedCount} intervened
+          </span>
+        </>
+      }
+    >
+      <Card padding="md">
         {filtered.length === 0 ? (
           <div
             style={{
@@ -351,7 +340,7 @@ function InvocationsPage() {
           </Table>
         )}
       </Card>
-    </div>
+    </PageSection>
   );
 }
 

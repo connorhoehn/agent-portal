@@ -20,6 +20,7 @@ import {
   TableTh,
   TableTd,
   Chip,
+  PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
   BarChart,
@@ -296,28 +297,27 @@ function HarnessHomePage() {
   // ── render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div style={pageStyle}>
+    <PageSection
+      title="Test Harness"
+      actions={
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button style={btnPrimary} onClick={openModal} disabled={!!activeRunId && !activeDismissed}>
+            Run now
+          </button>
+          <button style={btnSecondary} onClick={refreshAll}>
+            Refresh
+          </button>
+        </div>
+      }
+    >
       {/* Header */}
       <Card padding="md">
-        <div style={headerRow}>
-          <div>
-            <h2 style={h2}>Test Harness</h2>
-            <div style={subline}>
-              <strong>{activeCount}</strong> active case{activeCount === 1 ? '' : 's'}
-              <span style={dot}>·</span>
-              last run <strong>{relTime(lastRun?.startedAt ?? null)}</strong>
-              <span style={dot}>·</span>
-              judge: <span style={monoInline}>{judgeModelId}</span>
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button style={btnPrimary} onClick={openModal} disabled={!!activeRunId && !activeDismissed}>
-              Run now
-            </button>
-            <button style={btnSecondary} onClick={refreshAll}>
-              Refresh
-            </button>
-          </div>
+        <div style={subline}>
+          <strong>{activeCount}</strong> active case{activeCount === 1 ? '' : 's'}
+          <span style={dot}>·</span>
+          last run <strong>{relTime(lastRun?.startedAt ?? null)}</strong>
+          <span style={dot}>·</span>
+          judge: <span style={monoInline}>{judgeModelId}</span>
         </div>
 
         {/* Active-run banner */}
@@ -559,7 +559,7 @@ function HarnessHomePage() {
           </div>
         </Modal>
       )}
-    </div>
+    </PageSection>
   );
 }
 
@@ -753,12 +753,6 @@ function EmptyState({ text }: { text: string }) {
 
 // ── styles ────────────────────────────────────────────────────────────────────
 
-const pageStyle: CSSProperties = {
-  padding: 24,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 24,
-};
 const headerRow: CSSProperties = {
   display: 'flex',
   alignItems: 'center',

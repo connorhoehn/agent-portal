@@ -1,4 +1,4 @@
-import { Card, StatCard } from '@connorhoehnslalom/ui-components/shared';
+import { Card, PageSection, StatCard } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 interface ObsSummary {
@@ -25,13 +25,12 @@ function SummaryPage() {
   );
 
   return (
-    <div style={{ padding: 24 }}>
+    <PageSection title="Summary" description="Health overview">
       <div
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(5, 1fr)',
           gap: 16,
-          marginBottom: 24,
         }}
       >
         <StatCard label="Invocations (24h)" value={summary?.totalInvocations24h.toLocaleString() ?? '—'} />
@@ -83,7 +82,7 @@ function SummaryPage() {
         </div>
         <GuardrailSparkline series={guardrail?.series ?? []} />
       </Card>
-    </div>
+    </PageSection>
   );
 }
 

@@ -37,6 +37,7 @@ import {
   CodeEditor,
   FormField,
   Button,
+  PageSection,
   useToast,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
@@ -239,46 +240,38 @@ function CalibrationPage() {
   }
 
   return (
-    <div style={pageStyle}>
+    <PageSection
+      title="Judge Calibration"
+      description={`Judge drift means our historical quality scores have lost their anchor. Target MAE < ${WARN_MAE.toFixed(2)}; investigate above ${DANGER_MAE.toFixed(2)}.`}
+      actions={
+        <button
+          type="button"
+          onClick={() => { setRunLabel(defaultLabel()); setRunDialog({ open: true, busy: false, err: null }); }}
+          style={primaryBtn}
+          disabled={cases.length === 0}
+          title={cases.length === 0 ? 'Add calibration cases first' : 'Run the judge over all active cases'}
+        >
+          + Run calibration
+        </button>
+      }
+    >
       {/* Header */}
       <Card padding="md">
-        <div style={headerRow}>
-          <div>
-            <h2 style={h2title}>Judge Calibration</h2>
-            <div style={subline}>
-              <strong>{cases.length}</strong> active case{cases.length === 1 ? '' : 's'}
+        <div style={subline}>
+          <strong>{cases.length}</strong> active case{cases.length === 1 ? '' : 's'}
+          <span style={dot}>·</span>
+          judge <span style={monoInline}>{judgeModelId}</span>
+          <span style={dot}>·</span>
+          last MAE&nbsp;
+          <Chip tone={maeTone(lastMae)} size="xs">{fmt(lastMae)}</Chip>
+          {runs[0]?.startedAt ? (
+            <>
               <span style={dot}>·</span>
-              judge <span style={monoInline}>{judgeModelId}</span>
-              <span style={dot}>·</span>
-              last MAE&nbsp;
-              <Chip tone={maeTone(lastMae)} size="xs">{fmt(lastMae)}</Chip>
-              {runs[0]?.startedAt ? (
-                <>
-                  <span style={dot}>·</span>
-                  <span style={hint}>
-                    {new Date(runs[0].startedAt.replace(' ', 'T')).toLocaleString()}
-                  </span>
-                </>
-              ) : null}
-            </div>
-            <div style={{ ...subline, marginTop: 4 }}>
               <span style={hint}>
-                Judge drift means our historical quality scores have lost their anchor.
-                Target MAE &lt; {WARN_MAE.toFixed(2)}; investigate above {DANGER_MAE.toFixed(2)}.
+                {new Date(runs[0].startedAt.replace(' ', 'T')).toLocaleString()}
               </span>
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              type="button"
-              onClick={() => { setRunLabel(defaultLabel()); setRunDialog({ open: true, busy: false, err: null }); }}
-              style={primaryBtn}
-              disabled={cases.length === 0}
-              title={cases.length === 0 ? 'Add calibration cases first' : 'Run the judge over all active cases'}
-            >
-              + Run calibration
-            </button>
-          </div>
+            </>
+          ) : null}
         </div>
       </Card>
 
@@ -681,7 +674,7 @@ function CalibrationPage() {
           }}
         />
       )}
-    </div>
+    </PageSection>
   );
 }
 
@@ -900,12 +893,6 @@ const AGENT_OPTIONS = [
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
-const pageStyle: CSSProperties = {
-  padding: 24,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 24,
-};
 const headerRow: CSSProperties = {
   display: 'flex',
   alignItems: 'flex-start',

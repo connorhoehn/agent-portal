@@ -17,6 +17,7 @@ import {
   TableTd,
   Chip,
   Modal,
+  PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
 import { CostChip } from '../../../components/observability/CostChip';
@@ -278,13 +279,13 @@ function RunDetailPage() {
   }
   if (!run && isLoading) {
     return (
-      <div style={pageStyle}>
+      <PageSection title="Harness Run">
         <Card padding="md">
-          <div style={{ padding: 24, color: 'var(--color-text-tertiary)', fontSize: 12 }}>
+          <div style={{ color: 'var(--color-text-tertiary)', fontSize: 12 }}>
             Loading run…
           </div>
         </Card>
-      </div>
+      </PageSection>
     );
   }
   if (!run) {
@@ -298,13 +299,12 @@ function RunDetailPage() {
   }
 
   return (
-    <div style={pageStyle}>
+    <PageSection title={run.label}>
       {/* Header */}
       <Card padding="md">
         <div style={headerRow}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <h2 style={h2title}>{run.label}</h2>
               <Chip tone={statusTone(run.status)} size="xs">
                 {run.status}
               </Chip>
@@ -572,7 +572,7 @@ function RunDetailPage() {
           </div>
         </Card>
       )}
-    </div>
+    </PageSection>
   );
 }
 
@@ -691,20 +691,19 @@ function ErrorBlock({
   runId?: string;
 }) {
   return (
-    <div style={pageStyle}>
+    <PageSection
+      title={title}
+      actions={
+        <Link to="/admin/observability/harness" style={btnLink}>
+          ← Back to harness
+        </Link>
+      }
+    >
       <Card padding="md">
-        <div style={headerRow}>
-          <div>
-            <h2 style={h2title}>{title}</h2>
-            {runId && <div style={subline}>run id: <span style={monoInline}>{runId}</span></div>}
-            <div style={{ ...subline, color: 'var(--color-text-secondary)' }}>{detail}</div>
-          </div>
-          <Link to="/admin/observability/harness" style={btnLink}>
-            ← Back to harness
-          </Link>
-        </div>
+        {runId && <div style={subline}>run id: <span style={monoInline}>{runId}</span></div>}
+        <div style={{ ...subline, color: 'var(--color-text-secondary)' }}>{detail}</div>
       </Card>
-    </div>
+    </PageSection>
   );
 }
 
@@ -881,12 +880,6 @@ function EmptyState({ text }: { text: string }) {
 
 // ── styles ────────────────────────────────────────────────────────────────────
 
-const pageStyle: CSSProperties = {
-  padding: 24,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 24,
-};
 const headerRow: CSSProperties = {
   display: 'flex',
   alignItems: 'flex-start',
@@ -896,7 +889,6 @@ const headerRow: CSSProperties = {
   flexWrap: 'wrap',
 };
 const h2: CSSProperties = { fontSize: 14, fontWeight: 600, margin: 0 };
-const h2title: CSSProperties = { fontSize: 16, fontWeight: 600, margin: 0 };
 const subline: CSSProperties = {
   fontSize: 12,
   color: 'var(--color-text-secondary)',

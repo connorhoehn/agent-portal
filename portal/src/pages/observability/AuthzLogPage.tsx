@@ -3,7 +3,7 @@
 // buffered + streamed events.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Chip } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, PageSection } from '@connorhoehnslalom/ui-components/shared';
 
 interface AuthzEvent {
   decision: 'ALLOW' | 'DENY';
@@ -60,14 +60,10 @@ function AuthzLogPage() {
   const denyCount = events.length - allowCount;
 
   return (
-    <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>Authorization Log</h2>
-          <p style={{ margin: '4px 0 0', color: 'var(--color-text-secondary)', fontSize: 13 }}>
-            Live AVP decisions. Updates over SSE. Buffer holds last {MAX_EVENTS} events; restart middleware to reset.
-          </p>
-        </div>
+    <PageSection
+      title="Authorization Log"
+      description={`Live AVP decisions. Updates over SSE. Buffer holds last ${MAX_EVENTS} events; restart middleware to reset.`}
+      actions={
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11 }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: streaming ? 'var(--color-success, #10b981)' : 'var(--color-text-tertiary)' }} />
@@ -77,8 +73,8 @@ function AuthzLogPage() {
           <span><strong style={{ color: '#10b981' }}>{allowCount}</strong> allow</span>
           <span><strong style={{ color: '#ef4444' }}>{denyCount}</strong> deny</span>
         </div>
-      </header>
-
+      }
+    >
       <div style={filterBar}>
         <FilterField label="Decision">
           <select value={decision} onChange={e => setDecision(e.target.value as typeof DECISION_FILTERS[number])} style={selectStyle}>
@@ -146,7 +142,7 @@ function AuthzLogPage() {
           </tbody>
         </table>
       </div>
-    </div>
+    </PageSection>
   );
 }
 

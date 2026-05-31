@@ -23,6 +23,7 @@ import {
   TableTh,
   TableTd,
   Chip,
+  PageSection,
   useToast,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
@@ -192,15 +193,12 @@ function DriftPage() {
   const agentList = useMemo(() => rows.map((r) => r.agentId), [rows]);
 
   return (
-    <div style={pageStyle}>
+    <PageSection
+      title="Drift"
+      description={`Per-agent · ${rows.length} agent${rows.length === 1 ? '' : 's'} · 30s refresh`}
+      actions={<WindowPicker value={windowIdx} onChange={setWindowIdx} />}
+    >
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
-            Drift Rollup{' '}
-            <span style={hint}>per-agent · {rows.length} agent{rows.length === 1 ? '' : 's'} · 30s refresh</span>
-          </h2>
-          <WindowPicker value={windowIdx} onChange={setWindowIdx} />
-        </div>
         {rows.length === 0 ? (
           <SmartEmptyState
             title="No invocations sampled yet"
@@ -474,7 +472,7 @@ function DriftPage() {
           toast(`Test case ${testId} saved. View in harness: /admin/observability/harness`, { type: 'success' })
         }
       />
-    </div>
+    </PageSection>
   );
 }
 
@@ -597,7 +595,6 @@ function EmptyState({ text }: { text: string }) {
   );
 }
 
-const pageStyle: CSSProperties = { padding: 24, display: 'flex', flexDirection: 'column', gap: 24 };
 const headerRow: CSSProperties = {
   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
   marginBottom: 12, gap: 12, flexWrap: 'wrap',
