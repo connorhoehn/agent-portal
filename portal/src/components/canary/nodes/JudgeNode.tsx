@@ -18,44 +18,17 @@ interface BarProps {
 function Bar({ label, value, color }: BarProps) {
   const pct = Math.max(0, Math.min(100, value));
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <span
-        style={{
-          width: 64,
-          fontSize: 10,
-          color: 'var(--color-text-tertiary, #94a3b8)',
-          flexShrink: 0,
-        }}
-      >
+    <div className="flex items-center gap-1.5">
+      <span className="w-16 text-[10px] text-text-tertiary flex-shrink-0">
         {label}
       </span>
-      <div
-        style={{
-          flex: 1,
-          height: 6,
-          background: 'rgba(0,0,0,.08)',
-          borderRadius: 3,
-          overflow: 'hidden',
-        }}
-      >
+      <div className="flex-1 h-1.5 bg-black/10 rounded-[3px] overflow-hidden">
         <div
-          style={{
-            height: '100%',
-            width: `${pct}%`,
-            background: color,
-            transition: 'width 0.4s ease',
-          }}
+          className="h-full transition-[width] duration-[400ms] ease"
+          style={{ width: `${pct}%`, background: color }}
         />
       </div>
-      <span
-        style={{
-          width: 26,
-          fontSize: 10,
-          fontVariantNumeric: 'tabular-nums',
-          color: 'var(--color-text-secondary, #475569)',
-          textAlign: 'right',
-        }}
-      >
+      <span className="w-[26px] text-[10px] tabular-nums text-text-secondary text-right">
         {Math.round(pct)}
       </span>
     </div>
@@ -90,41 +63,26 @@ function JudgeNodeImpl({ data }: NodeProps<JudgeNodeType>) {
   return (
     <Card
       padding="sm"
-      style={{ width: 240, fontSize: 12, cursor: 'pointer' }}
+      className="w-[240px] text-xs cursor-pointer"
       onClick={handleClick}
       title="Open Evaluations — configure judge + view scores"
     >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 8,
-          marginBottom: 8,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex items-center gap-1.5 min-w-0">
           <Chip tone="info" size="xs">LLM-as-judge</Chip>
           <span
-            style={{
-              fontSize: 10.5,
-              fontFamily: 'monospace',
-              color: 'var(--color-text-tertiary, #94a3b8)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
+            className="text-[10.5px] font-mono text-text-tertiary overflow-hidden text-ellipsis whitespace-nowrap"
             title={data.judgeVersion}
           >
             {data.judgeVersion}
           </span>
         </div>
-        <span style={{ fontSize: 10, color: 'var(--color-text-tertiary, #94a3b8)' }}>
+        <span className="text-[10px] text-text-tertiary">
           {formatRelative(data.lastJudgedAt, now)}
         </span>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div className="flex flex-col gap-1">
         <Bar label="helpfulness" value={(s?.helpfulness ?? 0) * 100} color="#6366f1" />
         <Bar label="factuality"  value={(s?.factuality  ?? 0) * 100} color="#16a34a" />
         <Bar label="tone"        value={(s?.tone        ?? 0) * 100} color="#0891b2" />

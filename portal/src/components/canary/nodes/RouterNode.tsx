@@ -26,33 +26,20 @@ if (typeof document !== 'undefined' && !document.getElementById(STYLE_ID)) {
 function RouterNodeImpl({ data }: NodeProps<RouterNodeType>) {
   const isShifting = data.status === 'shifting';
   return (
-    <Card padding="sm" style={{ width: 220, fontSize: 12 }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 8,
-          marginBottom: 6,
-        }}
-      >
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-primary, #0f172a)' }}>
+    <Card padding="sm" className="w-[220px] text-xs">
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <span className="text-xs font-semibold text-text-primary">
           Router
         </span>
         <span
           aria-label={isShifting ? 'Weights shifting' : 'Stable'}
           title={isShifting ? 'Weights shifting' : 'Stable'}
-          style={{
-            width: 10,
-            height: 10,
-            borderRadius: '50%',
-            background: isShifting ? 'var(--color-warning)' : 'var(--color-success)',
-            animation: isShifting ? 'canary-router-pulse 1.4s ease-out infinite' : undefined,
-          }}
+          className={`w-2.5 h-2.5 rounded-full ${isShifting ? 'bg-warning' : 'bg-success'}`}
+          style={isShifting ? { animation: 'canary-router-pulse 1.4s ease-out infinite' } : undefined}
         />
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div className="flex items-center justify-center">
         <Chip tone="neutral" size="xs">
           {`A: ${data.weightA}%  |  B: ${data.weightB}%`}
         </Chip>

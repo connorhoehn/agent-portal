@@ -10,16 +10,9 @@ export type ModelNodeType = Node<ModelNodeData & Record<string, unknown>, 'model
 
 function ModelNodeImpl({ data }: NodeProps<ModelNodeType>) {
   return (
-    <Card padding="sm" style={{ width: 180, fontSize: 12 }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 8,
-        }}
-      >
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-primary, #0f172a)' }}>
+    <Card padding="sm" className="w-[180px] text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold text-text-primary">
           Model
         </span>
         <Chip tone="neutral" size="xs">{data.name || 'Nova Pro'}</Chip>

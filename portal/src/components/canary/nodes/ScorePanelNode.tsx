@@ -29,36 +29,22 @@ function ScorePanelNodeImpl({ data }: NodeProps<ScorePanelNodeType>) {
   const color = SIDE_COLOR[data.side];
   const hasData = data.sparkline.length > 0;
   return (
-    <Card padding="sm" style={{ width: 200, fontSize: 12 }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 8,
-          marginBottom: 6,
-        }}
-      >
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-primary, #0f172a)' }}>
+    <Card padding="sm" className="w-[200px] text-xs">
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <span className="text-xs font-semibold text-text-primary">
           {`Score (${data.side})`}
         </span>
         <Chip tone={SIDE_TONE[data.side]} size="xs">{data.side}</Chip>
       </div>
 
       <div
-        style={{
-          fontSize: 22,
-          fontWeight: 700,
-          fontVariantNumeric: 'tabular-nums',
-          color,
-          lineHeight: 1.1,
-          marginBottom: 4,
-        }}
+        className="text-[22px] font-bold tabular-nums leading-tight mb-1"
+        style={{ color }}
       >
         {data.rollingMean.toFixed(3)}
       </div>
 
-      <div style={{ width: 140, height: 40 }}>
+      <div className="w-[140px] h-10">
         {hasData ? (
           <ResponsiveContainer width="100%" height={40}>
             <LineChart data={data.sparkline} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
@@ -73,7 +59,7 @@ function ScorePanelNodeImpl({ data }: NodeProps<ScorePanelNodeType>) {
             </LineChart>
           </ResponsiveContainer>
         ) : (
-          <div style={{ fontSize: 10, color: 'var(--color-text-tertiary, #94a3b8)', fontStyle: 'italic' }}>
+          <div className="text-[10px] text-text-tertiary italic">
             no samples yet
           </div>
         )}

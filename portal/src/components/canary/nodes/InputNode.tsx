@@ -18,17 +18,9 @@ function truncate(text: string, n: number): string {
 function InputNodeImpl({ data }: NodeProps<InputNodeType>) {
   const recent = data.recentRequests.slice(-5).reverse();
   return (
-    <Card padding="sm" style={{ width: 260, fontSize: 12 }}>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 8,
-          marginBottom: 8,
-        }}
-      >
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-primary, #0f172a)' }}>
+    <Card padding="sm" className="w-[260px] text-xs">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <span className="text-xs font-semibold text-text-primary">
           Input
         </span>
         <Chip tone="neutral" size="xs">
@@ -36,9 +28,9 @@ function InputNodeImpl({ data }: NodeProps<InputNodeType>) {
         </Chip>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div className="flex flex-col gap-1">
         {recent.length === 0 ? (
-          <div style={{ fontSize: 11, color: 'var(--color-text-tertiary, #94a3b8)', fontStyle: 'italic' }}>
+          <div className="text-[11px] text-text-tertiary italic">
             Waiting for traffic…
           </div>
         ) : (
@@ -46,14 +38,7 @@ function InputNodeImpl({ data }: NodeProps<InputNodeType>) {
             <div
               key={r.id}
               title={r.text}
-              style={{
-                fontSize: 11,
-                color: 'var(--color-text-secondary, #475569)',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                fontFamily: 'monospace',
-              }}
+              className="text-[11px] text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis font-mono"
             >
               {truncate(r.text, 60)}
             </div>
