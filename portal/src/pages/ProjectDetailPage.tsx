@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router';
-import { Chip, StatusDot, type ChipTone } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, PageSection, StatusDot, type ChipTone } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -1028,24 +1028,28 @@ function ProjectDetailPage() {
   }, [id, project, localItems, rawTree]);
 
   if (projLoading) {
-    return <div style={{ padding: 24, color: 'var(--color-text-tertiary)' }}>Loading project…</div>;
+    return (
+      <PageSection title="Project">
+        <div style={{ color: 'var(--color-text-tertiary)' }}>Loading project…</div>
+      </PageSection>
+    );
   }
   if (projError) {
     return (
-      <div style={{ padding: 24 }}>
+      <PageSection title="Project">
         <Link to="/iq/projects" style={{ fontSize: 13, color: 'var(--color-text-secondary)', textDecoration: 'none' }}>
           ← Back to Projects
         </Link>
         <div style={{ marginTop: 12, color: 'var(--color-danger)' }}>Failed to load: {projError}</div>
-      </div>
+      </PageSection>
     );
   }
   if (!project) {
     return (
-      <div style={{ padding: 24 }}>
+      <PageSection title="Project">
         <Link to="/iq/projects" style={{ fontSize: 13, color: 'var(--color-text-secondary)', textDecoration: 'none' }}>← Back to Projects</Link>
         <div style={{ marginTop: 12, color: 'var(--color-text-tertiary)' }}>Project not found.</div>
-      </div>
+      </PageSection>
     );
   }
 

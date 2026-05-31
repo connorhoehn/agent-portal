@@ -12,17 +12,18 @@
 //
 // Phase 2.5 prerequisite: operator deployed + EC bundle agentic-pipeline-signal@1.0.0 registered.
 
+import { PageSection } from '@connorhoehnslalom/ui-components/shared';
+
 export function ResearcherPipelinePage() {
   return (
-    <div className="p-8 text-center text-gray-500">
-      <h1 className="text-xl font-semibold mb-2">Researcher Pipeline</h1>
-      <p className="text-sm">
-        Phase 2.5 — full run list + live observation not yet implemented.
-      </p>
-      <p className="mt-4 text-xs text-gray-400">
+    <PageSection
+      title="Researcher Pipeline"
+      description="Phase 2.5 — full run list + live observation not yet implemented."
+    >
+      <p className="text-xs text-gray-400">
         CRD: <code>agenticpipeline/orgiq-researcher</code> (namespace: orgiq)
       </p>
-    </div>
+    </PageSection>
   );
 }
 

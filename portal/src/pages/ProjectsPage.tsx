@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
   AvatarGroup,
+  PageSection,
   SkeletonCard,
   ProjectCard,
 } from '@connorhoehnslalom/ui-components/shared';
@@ -378,16 +379,10 @@ function ProjectsPage() {
         }
       `}</style>
 
-      <div style={{ padding: '0 0 40px' }}>
-        {/* ── Page header ── */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16, gap: 12 }}>
-          <div>
-            <h1 style={{ fontSize: 20, fontWeight: 700, margin: '0 0 4px', color: '#111827' }}>Projects</h1>
-            <p style={{ fontSize: 13, color: '#6b7280', margin: 0 }}>
-              Epics, features, stories and decisions across the organization.
-            </p>
-          </div>
-          {/* Grid / List toggle */}
+      <PageSection
+        title="Projects"
+        description="Epics, features, stories and decisions across the organization."
+        actions={
           <div style={{
             display: 'flex', border: '1.5px solid #e5e7eb', borderRadius: 7,
             overflow: 'hidden', flexShrink: 0,
@@ -409,8 +404,8 @@ function ProjectsPage() {
               </button>
             ))}
           </div>
-        </div>
-
+        }
+      >
         {/* ── Filter chips ── */}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
           {visibleOptions.map(s => {
@@ -476,7 +471,7 @@ function ProjectsPage() {
             ))}
           </div>
         )}
-      </div>
+      </PageSection>
     </>
   );
 }

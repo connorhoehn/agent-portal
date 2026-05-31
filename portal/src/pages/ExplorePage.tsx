@@ -14,6 +14,7 @@ import type { MENode, MEEdge } from '../components/multi-entity-graph/types';
 import {
   ChatComposer,
   MessageBubble,
+  PageSection,
   Spinner,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
@@ -392,7 +393,11 @@ function ExplorePage() {
   }
 
   if (!data) {
-    return <div style={{ padding: 24, color: 'var(--color-text-tertiary)' }}>Loading graph…</div>;
+    return (
+      <PageSection title="Explore">
+        <div style={{ color: 'var(--color-text-tertiary)' }}>Loading graph…</div>
+      </PageSection>
+    );
   }
 
   const hasMessages = messages.length > 0 || isStreaming;
