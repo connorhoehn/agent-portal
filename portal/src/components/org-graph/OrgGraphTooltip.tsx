@@ -15,39 +15,22 @@ export function OrgGraphTooltip({ node, departments, containerRect }: OrgGraphTo
 
   return (
     <div
-      style={{
-        position: 'absolute',
-        left,
-        top,
-        background: 'white',
-        border: '1px solid var(--color-border, #e2e8f0)',
-        borderRadius: 8,
-        padding: '12px 16px',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-        zIndex: 100,
-        width: 220,
-        pointerEvents: 'none',
-      }}
+      className="absolute bg-white border border-border rounded-lg px-4 py-3 shadow-[0_4px_12px_rgba(0,0,0,0.1)] z-[100] w-[220px] pointer-events-none"
+      style={{ left, top }}
     >
-      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{node.name}</div>
-      <div style={{ fontSize: 12, color: 'var(--color-text-secondary, #64748b)' }}>{node.title}</div>
-      <div style={{ fontSize: 11, color: dept?.color, marginTop: 4, fontWeight: 500 }}>{node.department}</div>
-      <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+      <div className="font-semibold text-sm mb-0.5">{node.name}</div>
+      <div className="text-xs text-text-secondary">{node.title}</div>
+      <div className="text-[11px] mt-1 font-medium" style={{ color: dept?.color }}>{node.department}</div>
+      <div className="mt-2 flex flex-wrap gap-1">
         {node.skills.slice(0, 4).map(skill => (
-          <span key={skill} style={{
-            fontSize: 10,
-            padding: '2px 6px',
-            background: 'var(--color-surface-hover, #f1f5f9)',
-            borderRadius: 4,
-            color: 'var(--color-text-secondary, #475569)',
-          }}>
+          <span key={skill} className="text-[10px] px-1.5 py-0.5 bg-surface-hover rounded text-text-secondary">
             {skill}
           </span>
         ))}
       </div>
-      <div style={{ marginTop: 8, display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-        <span style={{ color: 'var(--color-text-tertiary, #94a3b8)' }}>Influence</span>
-        <span style={{ fontWeight: 600 }}>{Math.round(node.influenceScore * 100)}/100</span>
+      <div className="mt-2 flex justify-between text-[11px]">
+        <span className="text-text-tertiary">Influence</span>
+        <span className="font-semibold">{Math.round(node.influenceScore * 100)}/100</span>
       </div>
     </div>
   );

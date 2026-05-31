@@ -165,7 +165,7 @@ function MENodeElement({ node, isHighlighted, isSelected, onSelect, onHover }: N
       <circle r={r} fill={fill} fillOpacity={isSelected ? 0.55 : 0.25} stroke={fill} strokeWidth={isSelected ? 1.5 : 0.8} />
       {showLabel && (
         <text y={r + 10} textAnchor="middle" fontSize={9} fill={fill} fontWeight={isSelected ? 600 : 400}
-          style={{ pointerEvents: 'none' }}>{node.label}</text>
+          className="pointer-events-none">{node.label}</text>
       )}
     </g>
   );
@@ -400,13 +400,13 @@ export function MultiEntityGraph({ nodes, edges, selectedIds, onToggleSelect, ma
   const handleMouseUp = useCallback(() => setIsPanning(false), []);
 
   return (
-    <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', background: 'var(--color-surface, #fff)' }}>
+    <div ref={containerRef} className="w-full h-full relative overflow-hidden bg-surface">
       <svg
         width={dimensions.width} height={dimensions.height}
         onWheel={handleWheel} onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove} onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
+        className={isPanning ? 'cursor-grabbing' : 'cursor-grab'}
       >
         <defs>
           <marker id="me-arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
@@ -447,17 +447,15 @@ export function MultiEntityGraph({ nodes, edges, selectedIds, onToggleSelect, ma
           })}
         </g>
       </svg>
-      <div style={{ position: 'absolute', bottom: 12, right: 12, display: 'flex', gap: 4 }}>
-        <button onClick={() => setTransform(t => ({ ...t, scale: Math.min(3, t.scale * 1.2) }))} style={zoomBtn}>+</button>
-        <button onClick={() => setTransform(t => ({ ...t, scale: Math.max(0.3, t.scale * 0.8) }))} style={zoomBtn}>−</button>
-        <button onClick={() => setTransform({ x: 0, y: 0, scale: 1 })} style={zoomBtn}>⟲</button>
+      <div className="absolute bottom-3 right-3 flex gap-1">
+        <button onClick={() => setTransform(t => ({ ...t, scale: Math.min(3, t.scale * 1.2) }))} className={zoomBtnClass}>+</button>
+        <button onClick={() => setTransform(t => ({ ...t, scale: Math.max(0.3, t.scale * 0.8) }))} className={zoomBtnClass}>−</button>
+        <button onClick={() => setTransform({ x: 0, y: 0, scale: 1 })} className={zoomBtnClass}>⟲</button>
       </div>
     </div>
   );
 }
 
-const zoomBtn: React.CSSProperties = {
-  width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
-  background: 'white', border: '1px solid var(--color-border,#e2e8f0)', borderRadius: 6,
-  fontSize: 16, cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-};
+const zoomBtnClass =
+  'w-8 h-8 flex items-center justify-center bg-white border border-border rounded-md ' +
+  'text-base cursor-pointer shadow-[0_1px_3px_rgba(0,0,0,0.06)]';

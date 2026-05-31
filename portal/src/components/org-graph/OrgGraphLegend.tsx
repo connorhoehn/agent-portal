@@ -34,54 +34,34 @@ export function OrgGraphLegend({ departments, filter, onFilter, presenceFilter }
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      className="absolute top-3 left-3 bg-white border border-border rounded-lg px-4 py-3 text-[11px] shadow-[0_2px_8px_rgba(0,0,0,0.06)] overflow-hidden transition-[opacity,max-height] duration-[350ms] ease-[cubic-bezier(0.4,0,0.2,1)]"
       style={{
-        position: 'absolute',
-        top: 12,
-        left: 12,
-        background: 'white',
-        border: '1px solid var(--color-border, #e2e8f0)',
-        borderRadius: 8,
-        padding: '12px 16px',
-        fontSize: 11,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-        // Fade + clip animation
         opacity: hovered ? 1 : 0.2,
-        overflow: 'hidden',
         maxHeight: hovered ? 800 : COLLAPSED_MAX_HEIGHT,
-        transition: 'opacity 0.2s ease, max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
-      <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 8, color: 'var(--color-text-primary, #1a1a2e)' }}>
+      <div className="font-semibold text-xs mb-2 text-text-primary">
         Departments
       </div>
       {departments.map(dept => (
         <div
           key={dept.id}
           onClick={() => onFilter(filter === dept.name ? null : dept.name)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            marginBottom: 4,
-            cursor: 'pointer',
-            opacity: !filter || filter === dept.name ? 1 : 0.4,
-          }}
+          className="flex items-center gap-1.5 mb-1 cursor-pointer"
+          style={{ opacity: !filter || filter === dept.name ? 1 : 0.4 }}
         >
-          <span style={{
-            width: 10,
-            height: 10,
-            borderRadius: '50%',
-            background: dept.color,
-            flexShrink: 0,
-          }} />
+          <span
+            className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+            style={{ background: dept.color }}
+          />
           <span>{dept.name}</span>
         </div>
       ))}
 
-      <div style={{ borderTop: '1px solid var(--color-border, #e2e8f0)', marginTop: 8, paddingTop: 8 }}>
-        <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 6 }}>Relationships</div>
+      <div className="border-t border-border mt-2 pt-2">
+        <div className="font-semibold text-xs mb-1.5">Relationships</div>
         {EDGE_TYPES.map(et => (
-          <div key={et.type} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+          <div key={et.type} className="flex items-center gap-1.5 mb-[3px]">
             <svg width={20} height={8}>
               <line
                 x1={0} y1={4} x2={20} y2={4}
@@ -98,16 +78,7 @@ export function OrgGraphLegend({ departments, filter, onFilter, presenceFilter }
       {filter && (
         <button
           onClick={() => onFilter(null)}
-          style={{
-            marginTop: 8,
-            width: '100%',
-            padding: '4px 0',
-            fontSize: 11,
-            border: '1px solid var(--color-border, #e2e8f0)',
-            borderRadius: 4,
-            background: 'var(--color-surface-hover, #f8fafc)',
-            cursor: 'pointer',
-          }}
+          className="mt-2 w-full py-1 text-[11px] border border-border rounded bg-surface-hover cursor-pointer"
         >
           Clear Filter
         </button>
@@ -115,17 +86,20 @@ export function OrgGraphLegend({ departments, filter, onFilter, presenceFilter }
 
       {/* Presence dot legend — only shown when a presence filter is active */}
       {presenceFilter && (
-        <div style={{ borderTop: '1px solid var(--color-border, #e2e8f0)', marginTop: 8, paddingTop: 8 }}>
-          <div style={{ fontWeight: 600, fontSize: 12, marginBottom: 5 }}>Presence today</div>
+        <div className="border-t border-border mt-2 pt-2">
+          <div className="font-semibold text-xs mb-[5px]">Presence today</div>
           {PRESENCE_LEGEND.map(({ color, label }) => (
-            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+            <div key={label} className="flex items-center gap-1.5 mb-[3px]">
+              <span
+                className="w-2 h-2 rounded-full flex-shrink-0"
+                style={{ background: color }}
+              />
               <span>{label}</span>
             </div>
           ))}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#3b82f6', flexShrink: 0, boxSizing: 'border-box', outline: '2px dashed #3b82f6', outlineOffset: 3 }} />
-            <span style={{ color: 'var(--color-text-tertiary)' }}>WFH ring</span>
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <span className="w-2 h-2 rounded-full flex-shrink-0 box-border bg-[#3b82f6] outline-2 outline-dashed outline-[#3b82f6] outline-offset-[3px]" />
+            <span className="text-text-tertiary">WFH ring</span>
           </div>
         </div>
       )}

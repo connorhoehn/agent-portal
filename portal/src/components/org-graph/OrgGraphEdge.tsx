@@ -50,7 +50,7 @@ export function OrgGraphEdge({ source, target, type, strength, isHighlighted }: 
       strokeDasharray={dashArray}
       opacity={opacity}
       markerEnd={type === 'reports_to' ? 'url(#org-arrow-reports)' : undefined}
-      style={{ pointerEvents: 'none' }}
+      className="pointer-events-none"
     />
   );
 }

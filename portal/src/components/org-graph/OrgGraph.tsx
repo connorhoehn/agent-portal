@@ -127,7 +127,7 @@ export function OrgGraph({
   return (
     <div
       ref={containerRef}
-      style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', background: 'var(--color-surface, #fff)' }}
+      className="w-full h-full relative overflow-hidden bg-surface"
     >
       <svg
         width={dimensions.width}
@@ -137,7 +137,7 @@ export function OrgGraph({
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
+        className={isPanning ? 'cursor-grabbing' : 'cursor-grab'}
       >
         <defs>
           <marker id="org-arrow-reports" markerWidth="14" markerHeight="10" refX="13" refY="5" orient="auto" markerUnits="userSpaceOnUse">
@@ -192,40 +192,24 @@ export function OrgGraph({
         />
       )}
 
-      <div style={{
-        position: 'absolute',
-        bottom: 12,
-        right: 12,
-        display: 'flex',
-        gap: 4,
-      }}>
+      <div className="absolute bottom-3 right-3 flex gap-1">
         <button
           onClick={() => setTransform(t => ({ ...t, scale: Math.min(3, t.scale * 1.2) }))}
-          style={zoomBtnStyle}
+          className={zoomBtnClass}
         >+</button>
         <button
           onClick={() => setTransform(t => ({ ...t, scale: Math.max(0.3, t.scale * 0.8) }))}
-          style={zoomBtnStyle}
+          className={zoomBtnClass}
         >−</button>
         <button
           onClick={() => setTransform({ x: 0, y: 0, scale: 1 })}
-          style={zoomBtnStyle}
+          className={zoomBtnClass}
         >⟲</button>
       </div>
     </div>
   );
 }
 
-const zoomBtnStyle: React.CSSProperties = {
-  width: 32,
-  height: 32,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  background: 'white',
-  border: '1px solid var(--color-border, #e2e8f0)',
-  borderRadius: 6,
-  fontSize: 16,
-  cursor: 'pointer',
-  boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-};
+const zoomBtnClass =
+  'w-8 h-8 flex items-center justify-center bg-white border border-border rounded-md ' +
+  'text-base cursor-pointer shadow-[0_1px_3px_rgba(0,0,0,0.06)]';

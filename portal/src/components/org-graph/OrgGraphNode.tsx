@@ -61,7 +61,8 @@ export function OrgGraphNode({ node, departments, isSelected, isHighlighted, onS
       onClick={() => onSelect(node.id)}
       onMouseEnter={() => onHover(node.id)}
       onMouseLeave={() => onHover(null)}
-      style={{ cursor: 'pointer', opacity }}
+      className="cursor-pointer"
+      style={{ opacity }}
     >
       {/* Node ring for WFH — dashed blue stroke overlay */}
       {pres === 'wfh' && (
@@ -89,7 +90,7 @@ export function OrgGraphNode({ node, departments, isSelected, isHighlighted, onS
         textAnchor="middle"
         fontSize={10}
         fill="var(--color-text-secondary, #475569)"
-        style={{ pointerEvents: 'none', userSelect: 'none' }}
+        className="pointer-events-none select-none"
       >
         {node.name.split(' ')[0]}
       </text>
@@ -102,7 +103,7 @@ export function OrgGraphNode({ node, departments, isSelected, isHighlighted, onS
           fontSize={11}
           fontWeight={600}
           fill="var(--color-text-primary, #1a1a2e)"
-          style={{ pointerEvents: 'none' }}
+          className="pointer-events-none"
         >
           {node.name}
         </text>
