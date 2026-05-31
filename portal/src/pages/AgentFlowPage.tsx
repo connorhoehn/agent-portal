@@ -194,45 +194,33 @@ function AgentNodeComp({ id, data }: { id: string; data: unknown }) {
   return (
     <div
       onClick={() => onSelect(id)}
-      style={{
-        background: 'var(--color-surface, #fff)',
-        border: `2px solid ${statusColor}`,
-        borderRadius: 10,
-        padding: '10px 14px',
-        width: 215,
-        cursor: 'pointer',
-        boxShadow: '0 2px 8px rgba(15,23,42,0.07)',
-        userSelect: 'none',
-      }}
+      className="bg-surface rounded-[10px] py-2.5 px-3.5 w-[215px] cursor-pointer select-none shadow-[0_2px_8px_rgba(15,23,42,0.07)]"
+      style={{ border: `2px solid ${statusColor}` }}
     >
       <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
       <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
 
       {/* Header row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-        <span style={{ width: 8, height: 8, borderRadius: '50%', background: statusColor, flexShrink: 0 }} />
-        <span style={{ fontWeight: 700, fontSize: 13, flex: 1, color: 'var(--color-text-primary, #0f172a)' }}>
+      <div className="flex items-center gap-1.5 mb-[5px]">
+        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: statusColor }} />
+        <span className="font-bold text-[13px] flex-1 text-text-primary">
           {meta.display}
         </span>
-        <span style={{
-          fontSize: 9, fontWeight: 700,
-          color: clusterColor,
-          background: `${clusterColor}18`,
-          border: `1px solid ${clusterColor}40`,
-          borderRadius: 4, padding: '1px 5px',
-          textTransform: 'uppercase', letterSpacing: '0.04em',
-        }}>
+        <span
+          className="text-[9px] font-bold rounded uppercase tracking-wide px-[5px] py-px"
+          style={{ color: clusterColor, background: `${clusterColor}18`, border: `1px solid ${clusterColor}40` }}
+        >
           {meta.cluster === 'orgiq' ? 'OrgIQ' : 'Newsroom'}
         </span>
       </div>
 
       {/* Description */}
-      <div style={{ fontSize: 10, color: 'var(--color-text-tertiary, #94a3b8)', marginBottom: 9, lineHeight: 1.35 }}>
+      <div className="text-[10px] text-text-tertiary mb-[9px] leading-[1.35]">
         {meta.description}
       </div>
 
       {/* Metric chips */}
-      <div style={{ display: 'flex', gap: 4 }}>
+      <div className="flex gap-1">
         <MetricChip label="calls"  value={fmtCount(summary?.invocationCount ?? 0)} />
         <MetricChip label="err"    value={String(summary?.errorCount ?? 0)} accent={(summary?.errorCount ?? 0) > 0 ? 'warn' : undefined} />
         <MetricChip label="p95"    value={fmtMs(summary?.p95Ms ?? null)} />
@@ -242,11 +230,11 @@ function AgentNodeComp({ id, data }: { id: string; data: unknown }) {
 }
 
 function MetricChip({ label, value, accent }: { label: string; value: string; accent?: 'warn' | 'danger' }) {
-  const color = accent === 'danger' ? '#dc2626' : accent === 'warn' ? '#d97706' : 'var(--color-text-primary, #0f172a)';
+  const accentClass = accent === 'danger' ? 'text-danger' : accent === 'warn' ? 'text-warning' : 'text-text-primary';
   return (
-    <div style={{ flex: 1, background: 'var(--color-bg, #f8fafc)', border: '1px solid var(--color-border, #e2e8f0)', borderRadius: 4, padding: '3px 4px', textAlign: 'center' }}>
-      <div style={{ fontSize: 9, color: 'var(--color-text-tertiary, #94a3b8)', lineHeight: 1.2 }}>{label}</div>
-      <div style={{ fontSize: 11, fontWeight: 600, color, lineHeight: 1.3 }}>{value}</div>
+    <div className="flex-1 bg-surface-inset border border-border rounded py-[3px] px-1 text-center">
+      <div className="text-[9px] text-text-tertiary leading-tight">{label}</div>
+      <div className={`text-[11px] font-semibold leading-[1.3] ${accentClass}`}>{value}</div>
     </div>
   );
 }
@@ -352,33 +340,43 @@ function AgentFlowPage() {
   const selectedMeta    = selectedId ? AGENTS[selectedId] ?? null : null;
 
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <div className="w-full h-full flex flex-col">
       {/* ── Summary bar ── */}
-      <div style={summaryBarStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+      <div className="flex items-center justify-between py-2.5 px-4 border-b border-border bg-surface gap-4 shrink-0">
+        <div className="flex items-center gap-5">
           <SummaryKV label="Agents" value={`${onlineCount} / ${Object.keys(AGENTS).length} online`} />
           <SummaryKV label={`Calls (${windowHours < 24 ? windowHours + 'h' : windowHours === 24 ? '24h' : '7d'})`} value={fmtCount(totalCalls)} />
           <SummaryKV label="Errors" value={fmtCount(totalErrors)} accent={totalErrors > 0 ? 'warn' : undefined} />
           <SummaryKV label="Err rate" value={errRate} accent={totalErrors > 0 ? 'warn' : undefined} />
           {topology?.generatedAt && (
-            <span style={{ fontSize: 10.5, color: 'var(--color-text-tertiary, #94a3b8)' }}>
+            <span className="text-[10.5px] text-text-tertiary">
               Refreshed {new Date(topology.generatedAt).toLocaleTimeString()}
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 11, color: 'var(--color-text-secondary, #64748b)' }}>Window</span>
-          {WINDOWS.map(w => (
-            <button key={w.hours} onClick={() => setWindowHours(w.hours)}
-              style={w.hours === windowHours ? windowBtnActive : windowBtnBase}>
-              {w.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] text-text-secondary">Window</span>
+          {WINDOWS.map(w => {
+            const active = w.hours === windowHours;
+            return (
+              <button
+                key={w.hours}
+                onClick={() => setWindowHours(w.hours)}
+                className={
+                  active
+                    ? 'py-[3px] px-2.5 text-[11px] rounded border bg-primary text-white border-primary cursor-pointer font-[inherit]'
+                    : 'py-[3px] px-2.5 text-[11px] rounded border border-border bg-transparent text-text-secondary cursor-pointer font-[inherit]'
+                }
+              >
+                {w.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {/* ── Canvas ── */}
-      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+      <div className="flex-1 min-h-0 relative">
         <ReactFlowProvider>
           <ReactFlow
             nodes={rfNodes}
@@ -421,11 +419,11 @@ function AgentFlowPage() {
 // ── Summary bar helpers ───────────────────────────────────────────────────────
 
 function SummaryKV({ label, value, accent }: { label: string; value: string; accent?: 'warn' }) {
-  const valColor = accent ? '#d97706' : 'var(--color-text-primary, #0f172a)';
+  const valColor = accent ? 'text-warning' : 'text-text-primary';
   return (
     <div>
-      <div style={{ fontSize: 9.5, color: 'var(--color-text-tertiary, #94a3b8)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: valColor }}>{value}</div>
+      <div className="text-[9.5px] text-text-tertiary uppercase tracking-wider">{label}</div>
+      <div className={`text-[13px] font-semibold ${valColor}`}>{value}</div>
     </div>
   );
 }
@@ -445,19 +443,22 @@ function AgentDrawerBody({
   const clusterColor = CLUSTER_COLORS[meta.cluster];
 
   return (
-    <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ width: 10, height: 10, borderRadius: '50%', background: statusColor }} />
-        <span style={{ fontSize: 9, fontWeight: 700, color: clusterColor, background: `${clusterColor}18`, border: `1px solid ${clusterColor}40`, borderRadius: 4, padding: '1px 5px', textTransform: 'uppercase' }}>
+    <div className="py-3 px-3.5 flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <span className="w-2.5 h-2.5 rounded-full" style={{ background: statusColor }} />
+        <span
+          className="text-[9px] font-bold rounded uppercase px-[5px] py-px"
+          style={{ color: clusterColor, background: `${clusterColor}18`, border: `1px solid ${clusterColor}40` }}
+        >
           {meta.cluster === 'orgiq' ? 'OrgIQ' : 'Newsroom'}
         </span>
       </div>
 
-      <div style={{ fontSize: 11.5, color: 'var(--color-text-secondary, #64748b)', lineHeight: 1.45 }}>
+      <div className="text-[11.5px] text-text-secondary leading-[1.45]">
         {meta.description}
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <div className="flex flex-col gap-[3px]">
         <DrawerKv label="Status" value={summary?.status ?? 'unknown'} />
         {summary?.protocol && <DrawerKv label="Protocol" value={summary.protocol.toUpperCase()} />}
         {summary?.model && <DrawerKv label="Model" value={summary.model} />}
@@ -466,7 +467,7 @@ function AgentDrawerBody({
 
       <div>
         <SectionLabel>Metrics</SectionLabel>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div className="grid grid-cols-2 gap-2">
           <BigMetric label="Calls"   value={fmtCount(summary?.invocationCount ?? 0)} />
           <BigMetric label="Errors"  value={String(summary?.errorCount ?? 0)} />
           <BigMetric label="p50"     value={fmtMs(summary?.p50Ms ?? null)} />
@@ -477,19 +478,30 @@ function AgentDrawerBody({
       {summary?.tools && summary.tools.length > 0 && (
         <div>
           <SectionLabel>Tools</SectionLabel>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+          <div className="flex flex-wrap gap-1">
             {summary.tools.map(t => (
-              <span key={t} style={toolPillStyle}>{t}</span>
+              <span
+                key={t}
+                className="text-[10px] py-0.5 px-[7px] bg-surface-inset border border-border rounded-full text-text-secondary font-mono"
+              >
+                {t}
+              </span>
             ))}
           </div>
         </div>
       )}
 
-      <div style={{ borderTop: '1px solid var(--color-border, #e2e8f0)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <Link to={`/iq/invoke?agentId=${encodeURIComponent(agentId)}`} style={drawerLinkStyle}>
+      <div className="border-t border-border pt-2.5 flex flex-col gap-1.5">
+        <Link
+          to={`/iq/invoke?agentId=${encodeURIComponent(agentId)}`}
+          className="text-xs text-primary no-underline font-medium"
+        >
           Invoke this agent →
         </Link>
-        <Link to="/iq/invoke?focus=sessions" style={drawerLinkStyle}>
+        <Link
+          to="/iq/invoke?focus=sessions"
+          className="text-xs text-primary no-underline font-medium"
+        >
           View invocation history →
         </Link>
       </div>
@@ -499,25 +511,29 @@ function AgentDrawerBody({
 
 function DrawerKv({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12, padding: '2px 0' }}>
-      <span style={{ color: 'var(--color-text-tertiary, #94a3b8)', flexShrink: 0 }}>{label}</span>
-      <span style={{ color: 'var(--color-text-primary, #0f172a)', fontWeight: 500, fontFamily: mono ? 'monospace' : 'inherit', textAlign: 'right', wordBreak: 'break-all', maxWidth: 180 }}>{value}</span>
+    <div className="flex justify-between gap-2 text-xs py-0.5">
+      <span className="text-text-tertiary shrink-0">{label}</span>
+      <span
+        className={`text-text-primary font-medium text-right break-all max-w-[180px] ${mono ? 'font-mono' : ''}`}
+      >
+        {value}
+      </span>
     </div>
   );
 }
 
 function BigMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ background: 'var(--color-bg, #f8fafc)', border: '1px solid var(--color-border, #e2e8f0)', borderRadius: 6, padding: '8px 10px' }}>
-      <div style={{ fontSize: 9.5, color: 'var(--color-text-tertiary, #94a3b8)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
-      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--color-text-primary, #0f172a)', marginTop: 2 }}>{value}</div>
+    <div className="bg-surface-inset border border-border rounded-md py-2 px-2.5">
+      <div className="text-[9.5px] text-text-tertiary uppercase tracking-wider">{label}</div>
+      <div className="text-[15px] font-bold text-text-primary mt-0.5">{value}</div>
     </div>
   );
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-text-tertiary, #94a3b8)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+    <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-2">
       {children}
     </div>
   );
@@ -527,84 +543,28 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 function Legend() {
   return (
-    <div style={legendStyle}>
-      <div style={{ fontWeight: 700, fontSize: 10, color: 'var(--color-text-primary, #0f172a)', marginBottom: 5 }}>Edges</div>
+    <div className="py-[9px] px-3 bg-surface border border-border rounded-md flex flex-col gap-1 shadow-[0_2px_8px_rgba(15,23,42,0.05)]">
+      <div className="font-bold text-[10px] text-text-primary mb-[5px]">Edges</div>
       {[
         { color: '#10b981', label: '< 2% error' },
         { color: '#d97706', label: '2 – 10% error' },
         { color: '#dc2626', label: '> 10% error' },
         { color: '#cbd5e1', label: 'no traffic yet' },
       ].map(({ color, label }) => (
-        <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5 }}>
-          <span style={{ width: 16, height: 2.5, background: color, borderRadius: 2, display: 'inline-block', flexShrink: 0 }} />
-          <span style={{ color: 'var(--color-text-secondary, #475569)' }}>{label}</span>
+        <div key={label} className="flex items-center gap-1.5 text-[10.5px]">
+          <span
+            className="inline-block w-4 h-[2.5px] rounded shrink-0"
+            style={{ background: color }}
+          />
+          <span className="text-text-secondary">{label}</span>
         </div>
       ))}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, marginTop: 3 }}>
-        <span style={{ width: 16, height: 0, borderTop: '2px dashed #94a3b8', display: 'inline-block', flexShrink: 0 }} />
-        <span style={{ color: 'var(--color-text-secondary, #475569)' }}>cross-cluster</span>
+      <div className="flex items-center gap-1.5 text-[10.5px] mt-[3px]">
+        <span className="inline-block w-4 h-0 border-t-2 border-dashed border-text-tertiary shrink-0" />
+        <span className="text-text-secondary">cross-cluster</span>
       </div>
     </div>
   );
 }
-
-// ── Styles ────────────────────────────────────────────────────────────────────
-
-const summaryBarStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: '10px 16px',
-  borderBottom: '1px solid var(--color-border, #e2e8f0)',
-  background: 'var(--color-surface, #fff)',
-  gap: 16,
-  flexShrink: 0,
-};
-
-const windowBtnBase: React.CSSProperties = {
-  padding: '3px 10px',
-  fontSize: 11,
-  border: '1px solid var(--color-border, #e2e8f0)',
-  borderRadius: 4,
-  background: 'transparent',
-  color: 'var(--color-text-secondary, #475569)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-};
-
-const windowBtnActive: React.CSSProperties = {
-  ...windowBtnBase,
-  background: 'var(--color-primary, #6366f1)',
-  color: '#fff',
-  borderColor: 'var(--color-primary, #6366f1)',
-};
-
-const toolPillStyle: React.CSSProperties = {
-  fontSize: 10,
-  padding: '2px 7px',
-  background: 'var(--color-bg, #f8fafc)',
-  border: '1px solid var(--color-border, #e2e8f0)',
-  borderRadius: 999,
-  color: 'var(--color-text-secondary, #475569)',
-  fontFamily: 'monospace',
-};
-
-const drawerLinkStyle: React.CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-primary, #6366f1)',
-  textDecoration: 'none',
-  fontWeight: 500,
-};
-
-const legendStyle: React.CSSProperties = {
-  padding: '9px 12px',
-  background: 'var(--color-surface, #fff)',
-  border: '1px solid var(--color-border, #e2e8f0)',
-  borderRadius: 6,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 4,
-  boxShadow: '0 2px 8px rgba(15,23,42,0.05)',
-};
 
 export default AgentFlowPage;
