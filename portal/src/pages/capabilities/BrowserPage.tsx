@@ -371,53 +371,43 @@ function Carousel({ steps, idx, onIdx }: { steps: JourneyStep[]; idx: number; on
   if (!step) return null;
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
-        <button onClick={() => onIdx(Math.max(0, idx - 1))} disabled={idx === 0} style={carouselArrowStyle(idx === 0)}>‹</button>
-        <div style={{ flex: 1, textAlign: 'center' }}>
-          <div style={{ fontSize: 12, fontWeight: 600 }}>{step.pageTitle || step.url}</div>
-          <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--color-text-tertiary)', marginTop: 2 }}>{step.url}</div>
-          <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <button onClick={() => onIdx(Math.max(0, idx - 1))} disabled={idx === 0} className={carouselArrowClass(idx === 0)}>‹</button>
+        <div className="flex-1 text-center">
+          <div className="text-xs font-semibold">{step.pageTitle || step.url}</div>
+          <div className="text-[10px] font-mono text-text-tertiary mt-0.5">{step.url}</div>
+          <div className="text-[10px] text-text-tertiary mt-0.5">
             Step {idx + 1} of {steps.length} · {new Date(step.startedAt).toLocaleTimeString()}
           </div>
         </div>
-        <button onClick={() => onIdx(Math.min(steps.length - 1, idx + 1))} disabled={idx === steps.length - 1} style={carouselArrowStyle(idx === steps.length - 1)}>›</button>
+        <button onClick={() => onIdx(Math.min(steps.length - 1, idx + 1))} disabled={idx === steps.length - 1} className={carouselArrowClass(idx === steps.length - 1)}>›</button>
       </div>
       {step.imageDataUrl ? (
-        <div style={{ border: '1px solid var(--color-border)', borderRadius: 4, padding: 4, background: '#fafafa' }}>
-          <img src={step.imageDataUrl} alt={step.pageTitle} style={{ width: '100%', display: 'block' }} />
+        <div className="border border-border rounded p-1 bg-[#fafafa]">
+          <img src={step.imageDataUrl} alt={step.pageTitle} className="w-full block" />
         </div>
       ) : (
-        <div style={{ padding: 24, textAlign: 'center', fontSize: 12, color: 'var(--color-text-tertiary)' }}>(no screenshot)</div>
+        <div className="p-6 text-center text-xs text-text-tertiary">(no screenshot)</div>
       )}
       {step.question && (
-        <div style={{ marginTop: 10, padding: 10, background: 'var(--color-surface-hover)', borderRadius: 4 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)' }}>Q: {step.question}</div>
-          <div style={{ fontSize: 12, marginTop: 4 }}>{step.answer}</div>
+        <div className="mt-2.5 p-2.5 bg-surface-hover rounded">
+          <div className="text-[11px] font-semibold text-text-tertiary">Q: {step.question}</div>
+          <div className="text-xs mt-1">{step.answer}</div>
         </div>
       )}
       {/* Thumbnail strip */}
-      <div style={{ display: 'flex', gap: 6, marginTop: 12, overflowX: 'auto', paddingBottom: 4 }}>
+      <div className="flex gap-1.5 mt-3 overflow-x-auto pb-1">
         {steps.map((s, i) => (
           <button
             key={s.index}
             onClick={() => onIdx(i)}
-            style={{
-              flex: '0 0 auto',
-              border: i === idx ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-              padding: 0,
-              background: 'var(--color-surface)',
-              cursor: 'pointer',
-              width: 80,
-              height: 50,
-              overflow: 'hidden',
-              borderRadius: 3,
-            }}
+            className={`flex-[0_0_auto] p-0 bg-surface cursor-pointer w-20 h-[50px] overflow-hidden rounded-[3px] ${i === idx ? 'border-2 border-primary' : 'border border-border'}`}
             title={s.pageTitle || s.url}
           >
             {s.imageDataUrl ? (
-              <img src={s.imageDataUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <img src={s.imageDataUrl} alt="" className="w-full h-full object-cover" />
             ) : (
-              <span style={{ fontSize: 9, color: 'var(--color-text-tertiary)' }}>{i + 1}</span>
+              <span className="text-[9px] text-text-tertiary">{i + 1}</span>
             )}
           </button>
         ))}
@@ -428,45 +418,35 @@ function Carousel({ steps, idx, onIdx }: { steps: JourneyStep[]; idx: number; on
 
 function Timeline({ steps, onJump }: { steps: JourneyStep[]; onJump: (i: number) => void }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 480, overflowY: 'auto' }}>
+    <div className="flex flex-col gap-2 max-h-[480px] overflow-y-auto">
       {steps.map((step, i) => (
         <button
           type="button"
           key={step.index}
           onClick={() => onJump(i)}
           aria-label={`Jump to step ${i + 1}`}
-          style={{
-            display: 'flex',
-            gap: 12,
-            padding: 8,
-            width: '100%',
-            textAlign: 'left',
-            border: '1px solid var(--color-border)',
-            borderRadius: 4,
-            cursor: 'pointer',
-            background: 'var(--color-surface)',
-          }}
+          className="flex gap-3 p-2 w-full text-left border border-border rounded cursor-pointer bg-surface"
         >
-          <div style={{ flex: '0 0 120px', height: 76, overflow: 'hidden', borderRadius: 3, background: 'var(--color-surface-inset)' }}>
+          <div className="flex-[0_0_120px] h-[76px] overflow-hidden rounded-[3px] bg-surface-inset">
             {step.imageDataUrl ? (
-              <img src={step.imageDataUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <img src={step.imageDataUrl} alt="" className="w-full h-full object-cover" />
             ) : (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontSize: 10, color: 'var(--color-text-tertiary)' }}>no shot</div>
+              <div className="flex items-center justify-center h-full text-[10px] text-text-tertiary">no shot</div>
             )}
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-tertiary)' }}>#{i + 1}</span>
-              <span style={{ fontSize: 13, fontWeight: 500 }}>{step.pageTitle || step.url}</span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-semibold text-text-tertiary">#{i + 1}</span>
+              <span className="text-[13px] font-medium">{step.pageTitle || step.url}</span>
             </div>
-            <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--color-text-tertiary)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div className="text-[10px] font-mono text-text-tertiary mt-0.5 overflow-hidden text-ellipsis whitespace-nowrap">
               {step.url}
             </div>
-            <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+            <div className="text-[10px] text-text-tertiary mt-0.5">
               {new Date(step.startedAt).toLocaleTimeString()}
             </div>
             {step.question && (
-              <div style={{ marginTop: 6, fontSize: 11, color: 'var(--color-text-secondary)', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any }}>
+              <div className="mt-1.5 text-[11px] text-text-secondary overflow-hidden line-clamp-2">
                 <b>Q:</b> {step.question}
               </div>
             )}
@@ -722,7 +702,7 @@ function CrawlTab() {
 function SiteMap({ pages, onPickPage }: { pages: CrawlPage[]; onPickPage: (i: number) => void }) {
   const { nodes, edges } = useMemo(() => buildSiteMap(pages), [pages]);
   return (
-    <div style={{ height: 480, border: '1px solid var(--color-border)', borderRadius: 4 }}>
+    <div className="h-[480px] border border-border rounded">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -765,14 +745,14 @@ function buildSiteMap(pages: CrawlPage[]): { nodes: Node[]; edges: Edge[] } {
       data: {
         url: p.url,
         label: (
-          <div style={{ padding: 4, maxWidth: 200, overflow: 'hidden' }}>
-            <div style={{ fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div className="p-1 max-w-[200px] overflow-hidden">
+            <div className="text-[11px] font-semibold whitespace-nowrap overflow-hidden text-ellipsis">
               {p.title || new URL(p.url).pathname || p.url}
             </div>
-            <div style={{ fontSize: 9, fontFamily: 'monospace', color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div className="text-[9px] font-mono text-text-tertiary whitespace-nowrap overflow-hidden text-ellipsis">
               {p.url.replace(/^https?:\/\//, '')}
             </div>
-            <div style={{ fontSize: 9, marginTop: 2, color: p.error ? 'var(--color-danger)' : 'var(--color-text-tertiary)' }}>
+            <div className={`text-[9px] mt-0.5 ${p.error ? 'text-danger' : 'text-text-tertiary'}`}>
               {p.error ? `error: ${p.error.slice(0, 40)}` : p.s3Key ? `↑ S3 · ${p.contentLength} chars` : `${p.contentLength} chars`}
             </div>
           </div>
@@ -1019,19 +999,8 @@ function tabBtn(active: boolean): React.CSSProperties {
   };
 }
 
-function carouselArrowStyle(disabled: boolean): React.CSSProperties {
-  return {
-    width: 32,
-    height: 32,
-    borderRadius: '50%',
-    border: '1px solid var(--color-border)',
-    background: 'var(--color-surface)',
-    color: 'var(--color-text-primary)',
-    fontSize: 18,
-    fontWeight: 600,
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    opacity: disabled ? 0.3 : 1,
-  };
+function carouselArrowClass(disabled: boolean): string {
+  return `w-8 h-8 rounded-full border border-border bg-surface text-text-primary text-lg font-semibold ${disabled ? 'cursor-not-allowed opacity-30' : 'cursor-pointer opacity-100'}`;
 }
 
 function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
