@@ -8,6 +8,7 @@ import {
   PageSection,
   Card,
   Chip,
+  SegmentedControl,
 } from '@connorhoehnslalom/ui-components/shared';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -315,20 +316,6 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'ingestion-jobs',  label: 'Ingestion Jobs' },
   { id: 'configuration',   label: 'Configuration' },
 ];
-
-function tabBtnStyle(active: boolean): React.CSSProperties {
-  const color = '#2563eb';
-  return {
-    padding: '4px 12px',
-    fontSize: 12,
-    fontWeight: active ? 600 : 400,
-    border: `1px solid ${active ? color : 'var(--color-border)'}`,
-    background: active ? `${color}15` : 'var(--color-surface)',
-    color: active ? color : 'var(--color-text-secondary)',
-    borderRadius: 'var(--radius-sm)',
-    cursor: 'pointer',
-  };
-}
 
 // ─── Tab content ──────────────────────────────────────────────────────────────
 
@@ -752,16 +739,12 @@ export function KBDetailPage() {
       </div>
 
       {/* Tab bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-        {TABS.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            style={tabBtnStyle(activeTab === tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="mb-4">
+        <SegmentedControl
+          value={activeTab}
+          onChange={(v) => setActiveTab(v as TabId)}
+          options={TABS.map((t) => ({ value: t.id, label: t.label }))}
+        />
       </div>
 
       {/* Tab content */}

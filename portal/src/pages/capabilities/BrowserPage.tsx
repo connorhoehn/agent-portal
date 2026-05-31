@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { ReactFlow, Background, Controls, MiniMap, type Node, type Edge, MarkerType } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Card, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip, SegmentedControl } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -67,35 +67,18 @@ function BrowserPage() {
   const [mode, setMode] = useState<BrowserMode>('qa');
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--color-border)' }}>
-          {([
-            ['qa', '🔎 Web Q&A', 'Ask a question about a webpage'],
-            ['journey', '🛤  Journey Recorder', 'Record a multi-step web visit'],
-            ['crawl', '🕸 Doc Crawler', 'Autonomous crawl that feeds the KB'],
-            ['sessions', '⚙ Sessions', 'Raw AgentCore session list'],
-          ] as const).map(([id, label, hint]) => (
-            <button
-              key={id}
-              onClick={() => setMode(id)}
-              title={hint}
-              style={{
-                padding: '8px 14px',
-                fontSize: 12,
-                fontWeight: mode === id ? 600 : 400,
-                color: mode === id ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-                background: 'none',
-                border: 'none',
-                borderBottom: mode === id ? '2px solid var(--color-primary)' : '2px solid transparent',
-                cursor: 'pointer',
-                marginBottom: -1,
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+    <div className="p-6">
+      <div className="flex flex-col gap-4">
+        <SegmentedControl
+          value={mode}
+          onChange={(v) => setMode(v as BrowserMode)}
+          options={[
+            { value: 'qa',       label: '🔎 Web Q&A' },
+            { value: 'journey',  label: '🛤  Journey Recorder' },
+            { value: 'crawl',    label: '🕸 Doc Crawler' },
+            { value: 'sessions', label: '⚙ Sessions' },
+          ]}
+        />
 
         {mode === 'qa' && <WebQATab />}
         {mode === 'journey' && <JourneyTab />}
