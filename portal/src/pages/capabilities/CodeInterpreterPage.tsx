@@ -123,24 +123,24 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
       title="Code Interpreter"
       description="Run Python in isolated AgentCore sandboxes. Every execution is captured for replay."
     >
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+        <div className="grid grid-cols-3 gap-4">
           <StatCard label="Active Sessions" value={String(active.length)} accent />
           <StatCard label="Sessions (lifetime)" value={String(sessions.length)} />
           <StatCard label="Last Activity" value={lastEverActive ? formatAge(lastEverActive.lastActivityAt) : '—'} />
         </div>
 
         <Card padding="md">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <h2 style={{ fontSize: 14, fontWeight: 600 }}>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold">
               Run Python{' '}
-              <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 400 }}>
+              <span className="text-[11px] text-text-tertiary font-normal">
                 isolated AgentCore sandbox · no network · ~$0.10/hr while running
               </span>
             </h2>
             <button
               onClick={runCode}
               disabled={running || !code.trim()}
-              style={{ padding: '6px 18px', fontSize: 12, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 'var(--radius-sm)', cursor: running ? 'wait' : 'pointer', opacity: running ? 0.6 : 1 }}
+              className={`px-[18px] py-1.5 text-xs bg-primary text-white border-none rounded-sm ${running ? 'cursor-wait opacity-60' : 'cursor-pointer opacity-100'}`}
             >
               {running ? 'Running…' : 'Run'}
             </button>
@@ -149,77 +149,67 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
             value={code}
             onChange={e => setCode(e.target.value)}
             spellCheck={false}
-            style={{
-              width: '100%', minHeight: 160, padding: 12, fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-              border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)',
-              background: 'var(--color-surface)', color: 'var(--color-text-primary)', resize: 'vertical', outline: 'none',
-            }}
+            className="w-full min-h-40 p-3 text-xs font-mono border border-border rounded-sm bg-surface text-text-primary resize-y outline-none"
           />
           {result && (
-            <div style={{ marginTop: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+            <div className="mt-2.5">
+              <div className="flex items-center justify-between mb-1">
+                <div className="text-[11px] text-text-tertiary">
                   {result.error ? (
-                    <span style={{ color: 'var(--color-danger, #dc2626)' }}>Error · {result.durationMs}ms</span>
+                    <span className="text-danger">Error · {result.durationMs}ms</span>
                   ) : (
                     <>Output · {result.durationMs}ms{result.sessionId ? <> · <code>{result.sessionId}</code></> : null}</>
                   )}
                 </div>
                 <button
                   onClick={clearResult}
-                  style={{ fontSize: 11, padding: '2px 8px', background: 'none', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
+                  className="text-[11px] px-2 py-0.5 bg-transparent border border-border text-text-secondary rounded-sm cursor-pointer"
                 >
                   Clear
                 </button>
               </div>
-              <pre style={{
-                margin: 0, padding: 12, fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                background: result.error ? '#fef2f2' : 'var(--color-surface-hover)',
-                color: result.error ? '#991b1b' : 'var(--color-text-primary)',
-                border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)',
-                whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 240, overflow: 'auto',
-              }}>{result.error ?? result.output}</pre>
+              <pre className={`m-0 p-3 text-xs font-mono border border-border rounded-sm whitespace-pre-wrap break-words max-h-[240px] overflow-auto ${result.error ? 'bg-danger-bg text-[#991b1b]' : 'bg-surface-hover text-text-primary'}`}>{result.error ?? result.output}</pre>
             </div>
           )}
         </Card>
 
         {active.length > 0 && (
           <Card padding="md">
-            <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Active Sessions</h2>
+            <h2 className="text-sm font-semibold mb-3">Active Sessions</h2>
             {active.map(session => (
               <div
                 key={session.sessionId}
-                style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', marginBottom: 10, overflow: 'hidden' }}
+                className="border border-border rounded-md mb-2.5 overflow-hidden"
               >
                 <div
                   onClick={() => setExpanded(expanded === session.sessionId ? null : session.sessionId)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', cursor: 'pointer', background: 'var(--color-surface-hover)' }}
+                  className="flex items-center gap-3 px-3.5 py-2.5 cursor-pointer bg-surface-hover"
                 >
                   <Chip tone={session.status === 'ACTIVE' ? 'success' : 'neutral'} size="xs">{session.status}</Chip>
-                  <span style={{ fontWeight: 500, fontSize: 13 }}>{session.agentName}</span>
-                  <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', flex: 1, fontFamily: 'monospace' }}>
+                  <span className="font-medium text-[13px]">{session.agentName}</span>
+                  <span className="text-[11px] text-text-tertiary flex-1 font-mono">
                     {session.sessionId}
                   </span>
-                  <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                  <span className="text-[11px] text-text-tertiary">
                     Last active {formatAge(session.lastActivityAt)}
                   </span>
                   <button
                     onClick={e => { e.stopPropagation(); terminateSession(session.sessionId); }}
-                    style={{ fontSize: 11, padding: '2px 8px', background: 'none', border: '1px solid var(--color-danger)', color: 'var(--color-danger)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
+                    className="text-[11px] px-2 py-0.5 bg-transparent border border-danger text-danger rounded-sm cursor-pointer"
                   >
                     Terminate
                   </button>
                 </div>
 
                 {expanded === session.sessionId && (
-                  <div style={{ padding: '12px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div className="px-3.5 py-3 grid grid-cols-2 gap-3">
                     <div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>LAST EXECUTED CODE</div>
-                      <pre style={{ margin: 0, fontSize: 11, background: 'var(--color-surface)', padding: 10, borderRadius: 'var(--radius-sm)', overflow: 'auto', maxHeight: 120 }}>{session.lastCode || '(no recorded code)'}</pre>
+                      <div className="text-[11px] font-semibold text-text-tertiary mb-1">LAST EXECUTED CODE</div>
+                      <pre className="m-0 text-[11px] bg-surface p-2.5 rounded-sm overflow-auto max-h-[120px]">{session.lastCode || '(no recorded code)'}</pre>
                     </div>
                     <div>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>LAST OUTPUT</div>
-                      <pre style={{ margin: 0, fontSize: 11, background: 'var(--color-surface)', padding: 10, borderRadius: 'var(--radius-sm)', overflow: 'auto', maxHeight: 120 }}>{session.lastOutput || '(no recorded output)'}</pre>
+                      <div className="text-[11px] font-semibold text-text-tertiary mb-1">LAST OUTPUT</div>
+                      <pre className="m-0 text-[11px] bg-surface p-2.5 rounded-sm overflow-auto max-h-[120px]">{session.lastOutput || '(no recorded output)'}</pre>
                     </div>
                   </div>
                 )}
@@ -229,19 +219,19 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
         )}
 
         <Card padding="md">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <h2 style={{ fontSize: 14, fontWeight: 600 }}>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold">
               Code Execution Traces{' '}
-              <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-text-tertiary)' }}>
+              <span className="text-[11px] font-normal text-text-tertiary">
                 every code_execute capability event · in-memory ring (last 50)
               </span>
             </h2>
-            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+            <span className="text-[11px] text-text-tertiary">
               {codeEvents.length} event{codeEvents.length === 1 ? '' : 's'}
             </span>
           </div>
           {codeEvents.length === 0 ? (
-            <div style={{ padding: 24, textAlign: 'center', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+            <div className="p-6 text-center text-xs text-text-tertiary">
               No code executions recorded yet. Use the Run Python panel above or invoke an agent that calls the sandbox.
             </div>
           ) : (
@@ -264,33 +254,33 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
                   const language = String(ev.detail['language'] ?? 'python');
                   return (
                     <TableRow key={ev.id}>
-                      <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }}>
+                      <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
                         {formatAge(ev.startedAt)}
                       </TableTd>
-                      <TableTd style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--color-text-tertiary)' }}>
+                      <TableTd className="text-[10px] font-mono text-text-tertiary">
                         {ev.sessionId ? (ev.sessionId.length > 18 ? ev.sessionId.slice(0, 14) + '…' : ev.sessionId) : '—'}
                       </TableTd>
-                      <TableTd style={{ fontSize: 11 }}>{language}</TableTd>
-                      <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{ev.durationMs}ms</TableTd>
+                      <TableTd className="text-[11px]">{language}</TableTd>
+                      <TableTd className="text-[11px] text-text-tertiary">{ev.durationMs}ms</TableTd>
                       <TableTd>
                         <Chip tone={ev.ok ? 'success' : 'danger'} size="xs">{ev.ok ? 'ok' : 'error'}</Chip>
                       </TableTd>
                       <TableTd>
                         <button
                           onClick={() => setExpandedEvent(isOpen ? null : ev.id)}
-                          style={{ fontSize: 11, padding: '2px 8px', background: 'none', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
+                          className="text-[11px] px-2 py-0.5 bg-transparent border border-border text-text-secondary rounded-sm cursor-pointer"
                         >
                           {isOpen ? 'Hide' : 'View'}
                         </button>
                         {isOpen && (
-                          <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                          <div className="mt-2 grid grid-cols-2 gap-2">
                             <div>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>CODE</div>
-                              <pre style={{ margin: 0, fontSize: 11, background: 'var(--color-surface)', padding: 8, borderRadius: 'var(--radius-sm)', overflow: 'auto', maxHeight: 160, whiteSpace: 'pre-wrap' }}>{codeSnippet || '(no snippet)'}</pre>
+                              <div className="text-[10px] font-semibold text-text-tertiary mb-1">CODE</div>
+                              <pre className="m-0 text-[11px] bg-surface p-2 rounded-sm overflow-auto max-h-[160px] whitespace-pre-wrap">{codeSnippet || '(no snippet)'}</pre>
                             </div>
                             <div>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>OUTPUT</div>
-                              <pre style={{ margin: 0, fontSize: 11, background: ev.ok ? 'var(--color-surface)' : '#fef2f2', color: ev.ok ? 'var(--color-text-primary)' : '#991b1b', padding: 8, borderRadius: 'var(--radius-sm)', overflow: 'auto', maxHeight: 160, whiteSpace: 'pre-wrap' }}>{ev.error || outputSnippet || '(no output)'}</pre>
+                              <div className="text-[10px] font-semibold text-text-tertiary mb-1">OUTPUT</div>
+                              <pre className={`m-0 text-[11px] p-2 rounded-sm overflow-auto max-h-[160px] whitespace-pre-wrap ${ev.ok ? 'bg-surface text-text-primary' : 'bg-danger-bg text-[#991b1b]'}`}>{ev.error || outputSnippet || '(no output)'}</pre>
                             </div>
                           </div>
                         )}
@@ -304,19 +294,19 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
         </Card>
 
         <Card padding="md">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <h2 style={{ fontSize: 14, fontWeight: 600 }}>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold">
               Agent Sandbox Executions{' '}
-              <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-text-tertiary)' }}>
+              <span className="text-[11px] font-normal text-text-tertiary">
                 code the agents themselves ran during recent invocations
               </span>
             </h2>
-            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+            <span className="text-[11px] text-text-tertiary">
               {agentSandboxRows.length} execution{agentSandboxRows.length === 1 ? '' : 's'}
             </span>
           </div>
           {agentSandboxRows.length === 0 ? (
-            <div style={{ padding: 24, textAlign: 'center', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+            <div className="p-6 text-center text-xs text-text-tertiary">
               No agent-driven sandbox executions in the last 50 invocations.
             </div>
           ) : (
@@ -337,33 +327,33 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
                   const isOpen = expandedExec === key;
                   return (
                     <TableRow key={key}>
-                      <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }}>
+                      <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
                         {formatAge(exec.timestamp)}
                       </TableTd>
-                      <TableTd style={{ fontSize: 12 }}>{exec.agentName}</TableTd>
-                      <TableTd style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--color-text-tertiary)' }}>
+                      <TableTd className="text-xs">{exec.agentName}</TableTd>
+                      <TableTd className="text-[10px] font-mono text-text-tertiary">
                         {exec.sessionId ? (exec.sessionId.length > 18 ? exec.sessionId.slice(0, 14) + '…' : exec.sessionId) : '—'}
                       </TableTd>
-                      <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{exec.durationMs}ms</TableTd>
+                      <TableTd className="text-[11px] text-text-tertiary">{exec.durationMs}ms</TableTd>
                       <TableTd>
                         <Chip tone={exec.error ? 'danger' : 'success'} size="xs">{exec.error ? 'error' : 'ok'}</Chip>
                       </TableTd>
                       <TableTd>
                         <button
                           onClick={() => setExpandedExec(isOpen ? null : key)}
-                          style={{ fontSize: 11, padding: '2px 8px', background: 'none', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
+                          className="text-[11px] px-2 py-0.5 bg-transparent border border-border text-text-secondary rounded-sm cursor-pointer"
                         >
                           {isOpen ? 'Hide' : 'View'}
                         </button>
                         {isOpen && (
-                          <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                          <div className="mt-2 grid grid-cols-2 gap-2">
                             <div>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>CODE</div>
-                              <pre style={{ margin: 0, fontSize: 11, background: 'var(--color-surface)', padding: 8, borderRadius: 'var(--radius-sm)', overflow: 'auto', maxHeight: 160, whiteSpace: 'pre-wrap' }}>{exec.code || '(no code captured)'}</pre>
+                              <div className="text-[10px] font-semibold text-text-tertiary mb-1">CODE</div>
+                              <pre className="m-0 text-[11px] bg-surface p-2 rounded-sm overflow-auto max-h-[160px] whitespace-pre-wrap">{exec.code || '(no code captured)'}</pre>
                             </div>
                             <div>
-                              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>OUTPUT</div>
-                              <pre style={{ margin: 0, fontSize: 11, background: exec.error ? '#fef2f2' : 'var(--color-surface)', color: exec.error ? '#991b1b' : 'var(--color-text-primary)', padding: 8, borderRadius: 'var(--radius-sm)', overflow: 'auto', maxHeight: 160, whiteSpace: 'pre-wrap' }}>{exec.error || exec.output || '(no output)'}</pre>
+                              <div className="text-[10px] font-semibold text-text-tertiary mb-1">OUTPUT</div>
+                              <pre className={`m-0 text-[11px] p-2 rounded-sm overflow-auto max-h-[160px] whitespace-pre-wrap ${exec.error ? 'bg-danger-bg text-[#991b1b]' : 'bg-surface text-text-primary'}`}>{exec.error || exec.output || '(no output)'}</pre>
                             </div>
                           </div>
                         )}
@@ -377,19 +367,19 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
         </Card>
 
         <Card padding="md">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <h2 style={{ fontSize: 14, fontWeight: 600 }}>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold">
               Past Sessions{' '}
-              <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--color-text-tertiary)' }}>
+              <span className="text-[11px] font-normal text-text-tertiary">
                 from AgentCore Data Plane · code interpreter sessions auto-terminate after execution
               </span>
             </h2>
-            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+            <span className="text-[11px] text-text-tertiary">
               {terminated.length} terminated
             </span>
           </div>
           {terminated.length === 0 ? (
-            <div style={{ padding: 24, textAlign: 'center', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+            <div className="p-6 text-center text-xs text-text-tertiary">
               No past sessions yet. Run code above or invoke the scoring agent to trigger one.
             </div>
           ) : (
@@ -408,14 +398,14 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
                   const dur = new Date(s.lastActivityAt).getTime() - new Date(s.startedAt).getTime();
                   return (
                     <TableRow key={s.sessionId}>
-                      <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }}>
+                      <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
                         {new Date(s.startedAt).toLocaleString()}
                       </TableTd>
-                      <TableTd style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--color-text-tertiary)' }}>
+                      <TableTd className="text-[10px] font-mono text-text-tertiary">
                         {s.sessionId.length > 22 ? s.sessionId.slice(0, 16) + '…' : s.sessionId}
                       </TableTd>
-                      <TableTd style={{ fontSize: 12 }}>{s.agentName}</TableTd>
-                      <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                      <TableTd className="text-xs">{s.agentName}</TableTd>
+                      <TableTd className="text-[11px] text-text-tertiary">
                         {dur > 0 ? `${(dur / 1000).toFixed(1)}s` : '—'}
                       </TableTd>
                       <TableTd><Chip tone="neutral" size="xs">{s.status}</Chip></TableTd>

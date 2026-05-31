@@ -166,43 +166,21 @@ print(json.dumps(result, indent=2))
   },
 ];
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ─── Class helpers ────────────────────────────────────────────────────────────
 
-const editorStyle: React.CSSProperties = {
-  width: '100%',
-  minHeight: 280,
-  fontFamily: '"Fira Code", "Cascadia Code", "JetBrains Mono", monospace',
-  fontSize: 12.5,
-  lineHeight: 1.6,
-  background: 'var(--color-surface)',
-  color: 'var(--color-text)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-md)',
-  padding: '12px 14px',
-  resize: 'vertical',
-  outline: 'none',
-  boxSizing: 'border-box',
-};
+const editorClass =
+  'w-full min-h-[280px] text-[12.5px] leading-relaxed bg-surface text-text-primary ' +
+  'border border-border rounded-md px-3.5 py-3 resize-y outline-none box-border ' +
+  'font-["Fira_Code","Cascadia_Code","JetBrains_Mono",monospace]';
 
-const outputStyle: React.CSSProperties = {
-  ...editorStyle,
-  minHeight: 160,
-  resize: 'none',
-  color: 'var(--color-text-secondary)',
-  background: 'var(--color-bg)',
-  cursor: 'default',
-};
+const outputClass =
+  'w-full min-h-40 text-[12.5px] leading-relaxed text-text-secondary bg-[var(--color-bg)] ' +
+  'border border-border rounded-md px-3.5 py-3 resize-none outline-none box-border cursor-default ' +
+  'font-["Fira_Code","Cascadia_Code","JetBrains_Mono",monospace]';
 
 function statusChip(ok: boolean) {
   return (
-    <span style={{
-      padding: '2px 8px',
-      borderRadius: 99,
-      fontSize: 11,
-      fontWeight: 600,
-      background: ok ? 'var(--color-success-bg, #dcfce7)' : 'var(--color-error-bg, #fee2e2)',
-      color: ok ? 'var(--color-success, #16a34a)' : 'var(--color-error, #dc2626)',
-    }}>
+    <span className={`px-2 py-0.5 rounded-full text-[11px] font-semibold ${ok ? 'bg-success-bg text-success' : 'bg-danger-bg text-danger'}`}>
       {ok ? 'OK' : 'ERROR'}
     </span>
   );
@@ -248,22 +226,18 @@ export default function CodeInterpreterDemoPage() {
 
   return (
     <PageSection title="Code Interpreter — Live Demo">
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 20, alignItems: 'start' }}>
+      <div className="grid grid-cols-[1fr_380px] gap-5 items-start">
 
         {/* ── Left: editor + output ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="flex flex-col gap-3">
           <Card>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+            <div className="flex items-center gap-2 mb-2.5">
+              <span className="text-xs font-semibold text-text-secondary">
                 SNIPPET
               </span>
               <select
                 onChange={e => setCode(SNIPPETS[Number(e.target.value)].code)}
-                style={{
-                  flex: 1, padding: '4px 8px', fontSize: 12,
-                  background: 'var(--color-bg)', color: 'var(--color-text)',
-                  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)',
-                }}
+                className="flex-1 px-2 py-1 text-xs bg-[var(--color-bg)] text-text-primary border border-border rounded-sm"
               >
                 {SNIPPETS.map((s, i) => (
                   <option key={i} value={i}>{s.label}</option>
@@ -272,24 +246,14 @@ export default function CodeInterpreterDemoPage() {
               <button
                 onClick={run}
                 disabled={running}
-                style={{
-                  padding: '6px 18px',
-                  background: running ? 'var(--color-surface-hover)' : 'var(--color-primary)',
-                  color: running ? 'var(--color-text-secondary)' : '#fff',
-                  border: 'none',
-                  borderRadius: 'var(--radius-md)',
-                  fontWeight: 600,
-                  fontSize: 13,
-                  cursor: running ? 'not-allowed' : 'pointer',
-                  whiteSpace: 'nowrap',
-                }}
+                className={`px-[18px] py-1.5 border-none rounded-md font-semibold text-[13px] whitespace-nowrap ${running ? 'bg-surface-hover text-text-secondary cursor-not-allowed' : 'bg-primary text-white cursor-pointer'}`}
               >
                 {running ? '⏳ Running…' : '▶ Run'}
               </button>
             </div>
 
             <textarea
-              style={editorStyle}
+              className={editorClass}
               value={code}
               onChange={e => setCode(e.target.value)}
               spellCheck={false}
@@ -297,21 +261,21 @@ export default function CodeInterpreterDemoPage() {
           </Card>
 
           <Card>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-semibold text-text-secondary">
                 OUTPUT
               </span>
               {active && (
                 <>
                   {statusChip(!active.error)}
-                  <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                  <span className="text-[11px] text-text-tertiary">
                     {active.durationMs}ms · session {active.sessionId.slice(-8)}
                   </span>
                 </>
               )}
             </div>
             <textarea
-              style={outputStyle}
+              className={outputClass}
               readOnly
               value={active ? (active.error ? `ERROR: ${active.error}\n\n${active.output}` : active.output) : ''}
             />
@@ -319,44 +283,32 @@ export default function CodeInterpreterDemoPage() {
         </div>
 
         {/* ── Right: execution history ── */}
-        <Card style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--color-border)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+        <Card className="!p-0 overflow-hidden">
+          <div className="px-3.5 py-3 border-b border-border text-xs font-semibold text-text-secondary">
             EXECUTION HISTORY
           </div>
           {history.length === 0 ? (
-            <div style={{ padding: 20, textAlign: 'center', fontSize: 13, color: 'var(--color-text-tertiary)' }}>
+            <div className="p-5 text-center text-[13px] text-text-tertiary">
               No executions yet — hit Run
             </div>
           ) : (
-            <div style={{ overflowY: 'auto', maxHeight: 600 }}>
+            <div className="overflow-y-auto max-h-[600px]">
               {history.map(entry => (
                 <div
                   key={entry.id}
                   onClick={() => { setSelected(entry); setCode(entry.code); }}
-                  style={{
-                    padding: '10px 14px',
-                    borderBottom: '1px solid var(--color-border)',
-                    cursor: 'pointer',
-                    background: active?.id === entry.id ? 'var(--color-surface-hover)' : 'transparent',
-                  }}
+                  className={`px-3.5 py-2.5 border-b border-border cursor-pointer ${active?.id === entry.id ? 'bg-surface-hover' : 'bg-transparent'}`}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                  <div className="flex justify-between items-center mb-1">
                     {statusChip(!entry.error)}
-                    <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                    <span className="text-[11px] text-text-tertiary">
                       {entry.durationMs}ms
                     </span>
                   </div>
-                  <div style={{
-                    fontFamily: 'monospace',
-                    fontSize: 11,
-                    color: 'var(--color-text-secondary)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}>
+                  <div className="font-mono text-[11px] text-text-secondary overflow-hidden text-ellipsis whitespace-nowrap">
                     {entry.code.trim().split('\n').find(l => l.trim() && !l.startsWith('#')) ?? entry.code.trim().slice(0, 60)}
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                  <div className="text-[11px] text-text-tertiary mt-0.5">
                     {new Date(entry.ranAt).toLocaleTimeString()} · {entry.sessionId.slice(-8)}
                   </div>
                 </div>
@@ -367,29 +319,25 @@ export default function CodeInterpreterDemoPage() {
       </div>
 
       {/* ── How it works explainer ── */}
-      <Card style={{ marginTop: 20 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
+      <Card className="mt-5">
+        <div className="text-xs font-semibold text-text-secondary mb-2">
           HOW IT WORKS
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+        <div className="grid grid-cols-4 gap-3">
           {[
             { step: '1', label: 'Start Session', detail: 'AWS provisions an isolated Python 3 sandbox (RESTRICTED network)' },
             { step: '2', label: 'Execute Code', detail: 'Your Python runs in the sandbox — stdout/stderr captured and returned' },
             { step: '3', label: 'Stream Results', detail: 'Output streams back via InvokeCodeInterpreter event stream' },
             { step: '4', label: 'Stop Session', detail: 'Session is terminated and sandbox destroyed after execution' },
           ].map(({ step, label, detail }) => (
-            <div key={step} style={{ padding: 12, background: 'var(--color-bg)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                <span style={{
-                  width: 20, height: 20, borderRadius: '50%', background: 'var(--color-primary)',
-                  color: '#fff', fontSize: 11, fontWeight: 700,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
+            <div key={step} className="p-3 bg-[var(--color-bg)] rounded-md border border-border">
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="w-5 h-5 rounded-full bg-primary text-white text-[11px] font-bold flex items-center justify-center">
                   {step}
                 </span>
-                <span style={{ fontSize: 12, fontWeight: 600 }}>{label}</span>
+                <span className="text-xs font-semibold">{label}</span>
               </div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>{detail}</div>
+              <div className="text-[11px] text-text-secondary leading-normal">{detail}</div>
             </div>
           ))}
         </div>
