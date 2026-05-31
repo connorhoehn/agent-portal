@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useId } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { Button, FormField, Modal } from '@connorhoehnslalom/ui-components/shared';
 import type { KbRegistryEntry } from '../../pages/admin/KBRegistryPage.js';
 import { ProvisioningProgress } from './ProvisioningProgress.js';
 
@@ -28,50 +29,6 @@ function isValidSlug(slug: string): boolean {
 function isValidS3Prefix(prefix: string): boolean {
   // Must end with '/', no consecutive slashes, no leading slash
   return /^[a-zA-Z0-9_\-./]+\/$/.test(prefix) && !prefix.startsWith('/') && !/\/\//.test(prefix);
-}
-
-// ─── Shared styles ────────────────────────────────────────────────────────────
-
-function inputStyle(opts?: { disabled?: boolean; error?: boolean }): React.CSSProperties {
-  return {
-    width: '100%',
-    boxSizing: 'border-box',
-    padding: '7px 10px',
-    fontSize: 13,
-    border: `1px solid ${opts?.error ? 'var(--color-danger)' : 'var(--color-border)'}`,
-    borderRadius: 6,
-    background: opts?.disabled ? 'var(--color-surface-panel)' : 'var(--color-surface)',
-    color: opts?.disabled ? 'var(--color-text-secondary)' : 'var(--color-text-primary)',
-    outline: 'none',
-    boxShadow: opts?.error ? '0 0 0 2px var(--color-danger-bg)' : undefined,
-  };
-}
-
-function labelStyle(): React.CSSProperties {
-  return {
-    display: 'block',
-    fontSize: 12,
-    fontWeight: 600,
-    color: 'var(--color-text-primary)',
-    marginBottom: 4,
-  };
-}
-
-function fieldStyle(): React.CSSProperties {
-  return { display: 'flex', flexDirection: 'column', marginBottom: 14 };
-}
-
-function hintStyle(isError?: boolean): React.CSSProperties {
-  return {
-    fontSize: 11,
-    color: isError ? 'var(--color-danger)' : 'var(--color-text-tertiary)',
-    marginTop: 3,
-    lineHeight: 1.4,
-  };
-}
-
-function RequiredStar() {
-  return <span style={{ color: 'var(--color-danger)', marginLeft: 2 }}>*</span>;
 }
 
 // ─── Step 1 — Identity ────────────────────────────────────────────────────────
@@ -123,12 +80,6 @@ function Step1({
 }) {
   const errors = validateStep1(state);
 
-  const nameId = useId();
-  const slugId = useId();
-  const tenantId = useId();
-  const purposeId = useId();
-  const descriptionId = useId();
-
   function handleNameChange(e: React.ChangeEvent<HTMLInputElement>) {
     const name = e.target.value;
     onChange(state.slugTouched ? { name } : { name, slug: toSlug(name) });
@@ -140,102 +91,86 @@ function Step1({
 
   const nameErr = touched.has('name') ? errors.name : undefined;
   const slugErr = touched.has('slug') ? errors.slug : undefined;
+  const nameHint =
+    state.name.trim().length > 80
+      ? `${state.name.trim().length}/100 chars`
+      : undefined;
+  const slugHint = state.slugTouched
+    ? 'Manually edited — locked to this value. Only a–z, 0–9, hyphens.'
+    : 'Auto-generated from name. Only a–z, 0–9, hyphens.';
 
   return (
     <div>
-      {/* Name */}
-      <div style={fieldStyle()}>
-        <label htmlFor={nameId} style={labelStyle()}>
-          Name<RequiredStar />
-        </label>
-        <input
-          id={nameId}
-          style={inputStyle({ error: !!nameErr })}
-          value={state.name}
-          onChange={handleNameChange}
-          onBlur={() => onTouch('name')}
-          placeholder="e.g. Engineering Docs"
-          maxLength={100}
-        />
-        {nameErr ? (
-          <span style={hintStyle(true)}>{nameErr}</span>
-        ) : (
-          state.name.trim().length > 80 && (
-            <span style={hintStyle()}>{state.name.trim().length}/100 chars</span>
-          )
+      <FormField label="Name" required error={nameErr} hint={nameHint}>
+        {(p) => (
+          <input
+            {...p}
+            value={state.name}
+            onChange={handleNameChange}
+            onBlur={() => onTouch('name')}
+            placeholder="e.g. Engineering Docs"
+            maxLength={100}
+          />
         )}
-      </div>
+      </FormField>
 
-      {/* Slug */}
-      <div style={fieldStyle()}>
-        <label htmlFor={slugId} style={labelStyle()}>
-          Slug<RequiredStar />
-        </label>
-        <input
-          id={slugId}
-          style={inputStyle({ error: !!slugErr })}
-          value={state.slug}
-          onChange={handleSlugChange}
-          onBlur={() => onTouch('slug')}
-          placeholder="auto-generated from name"
-          maxLength={60}
-        />
-        {slugErr ? (
-          <span style={hintStyle(true)}>{slugErr}</span>
-        ) : (
-          <span style={hintStyle()}>
-            {state.slugTouched ? 'Manually edited — locked to this value. ' : 'Auto-generated from name. '}
-            Only a–z, 0–9, hyphens.
-          </span>
+      <FormField label="Slug" required error={slugErr} hint={slugHint}>
+        {(p) => (
+          <input
+            {...p}
+            value={state.slug}
+            onChange={handleSlugChange}
+            onBlur={() => onTouch('slug')}
+            placeholder="auto-generated from name"
+            maxLength={60}
+          />
         )}
-      </div>
+      </FormField>
 
-      {/* Tenant */}
-      <div style={fieldStyle()}>
-        <label htmlFor={tenantId} style={labelStyle()}>Tenant</label>
-        <select
-          id={tenantId}
-          style={inputStyle()}
-          value={state.tenant}
-          onChange={e => onChange({ tenant: e.target.value as Step1State['tenant'] })}
-        >
-          <option value="orgiq">orgiq</option>
-          <option value="newsroom">newsroom</option>
-        </select>
-      </div>
-
-      {/* Purpose */}
-      <div style={fieldStyle()}>
-        <label htmlFor={purposeId} style={labelStyle()}>Purpose</label>
-        <select
-          id={purposeId}
-          style={inputStyle()}
-          value={state.purpose}
-          onChange={e => onChange({ purpose: e.target.value as Step1State['purpose'] })}
-        >
-          <option value="default">default</option>
-          <option value="articles">articles</option>
-          <option value="hr">hr</option>
-          <option value="engineering">engineering</option>
-          <option value="custom">custom</option>
-        </select>
-      </div>
-
-      {/* Description */}
-      <div style={fieldStyle()}>
-        <label htmlFor={descriptionId} style={labelStyle()}>Description</label>
-        <textarea
-          id={descriptionId}
-          style={{ ...inputStyle(), resize: 'vertical', minHeight: 64 }}
-          value={state.description}
-          onChange={e => onChange({ description: e.target.value })}
-          placeholder="Optional — used as the Bedrock KB description"
-          maxLength={300}
-        />
-        {state.description.length > 240 && (
-          <span style={hintStyle()}>{state.description.length}/300 chars</span>
+      <FormField label="Tenant">
+        {(p) => (
+          <select
+            {...p}
+            value={state.tenant}
+            onChange={(e) => onChange({ tenant: e.target.value as Step1State['tenant'] })}
+          >
+            <option value="orgiq">orgiq</option>
+            <option value="newsroom">newsroom</option>
+          </select>
         )}
-      </div>
+      </FormField>
+
+      <FormField label="Purpose">
+        {(p) => (
+          <select
+            {...p}
+            value={state.purpose}
+            onChange={(e) => onChange({ purpose: e.target.value as Step1State['purpose'] })}
+          >
+            <option value="default">default</option>
+            <option value="articles">articles</option>
+            <option value="hr">hr</option>
+            <option value="engineering">engineering</option>
+            <option value="custom">custom</option>
+          </select>
+        )}
+      </FormField>
+
+      <FormField
+        label="Description"
+        hint={state.description.length > 240 ? `${state.description.length}/300 chars` : undefined}
+      >
+        {(p) => (
+          <textarea
+            {...p}
+            style={{ resize: 'vertical', minHeight: 64 }}
+            value={state.description}
+            onChange={(e) => onChange({ description: e.target.value })}
+            placeholder="Optional — used as the Bedrock KB description"
+            maxLength={300}
+          />
+        )}
+      </FormField>
     </div>
   );
 }
@@ -288,10 +223,6 @@ function Step2({
   const s3PrefixErr = touched.has('s3Prefix') ? errors.s3Prefix : undefined;
   const maxTokensErr = touched.has('maxTokens') ? errors.maxTokens : undefined;
 
-  const s3PrefixId = useId();
-  const chunkingId = useId();
-  const maxTokensId = useId();
-
   // Derived info for the preview panel
   const bedrockName = step1.tenant && step1.slug ? `${step1.tenant}-${step1.slug}` : '—';
   const auroraTable = step1.slug ? `bedrock_kb_${step1.slug.replace(/-/g, '_')}` : '—';
@@ -322,66 +253,60 @@ function Step2({
         </div>
       </div>
 
-      {/* S3 Prefix */}
-      <div style={fieldStyle()}>
-        <label htmlFor={s3PrefixId} style={labelStyle()}>
-          S3 Prefix<RequiredStar />
-        </label>
-        <input
-          id={s3PrefixId}
-          style={inputStyle({ error: !!s3PrefixErr })}
-          value={state.s3Prefix}
-          onChange={e => onChange({ s3Prefix: e.target.value, s3PrefixTouched: true })}
-          onBlur={() => onTouch('s3Prefix')}
-          placeholder="tenant/slug/"
-        />
-        {s3PrefixErr ? (
-          <span style={hintStyle(true)}>{s3PrefixErr}</span>
-        ) : (
-          <span style={hintStyle()}>Must end with "/". Documents synced here will be ingested into this KB.</span>
-        )}
-      </div>
-
-      {/* Chunking strategy */}
-      <div style={fieldStyle()}>
-        <label htmlFor={chunkingId} style={labelStyle()}>Chunking Strategy</label>
-        <select
-          id={chunkingId}
-          style={inputStyle()}
-          value={state.chunkingStrategy}
-          onChange={e =>
-            onChange({ chunkingStrategy: e.target.value as Step2State['chunkingStrategy'] })
-          }
-        >
-          <option value="SEMANTIC">SEMANTIC — context-aware variable chunks</option>
-          <option value="FIXED">FIXED — fixed-size chunks</option>
-          <option value="HIERARCHICAL">HIERARCHICAL — parent + child chunks</option>
-          <option value="NONE">NONE — no chunking (whole documents)</option>
-        </select>
-      </div>
-
-      {/* Max tokens — only relevant for non-NONE strategies */}
-      {state.chunkingStrategy !== 'NONE' && (
-        <div style={fieldStyle()}>
-          <label htmlFor={maxTokensId} style={labelStyle()}>Max Tokens per Chunk</label>
+      <FormField
+        label="S3 Prefix"
+        required
+        error={s3PrefixErr}
+        hint='Must end with "/". Documents synced here will be ingested into this KB.'
+      >
+        {(p) => (
           <input
-            id={maxTokensId}
-            type="number"
-            style={inputStyle({ error: !!maxTokensErr })}
-            value={state.maxTokens}
-            min={64}
-            max={2048}
-            onBlur={() => onTouch('maxTokens')}
-            onChange={e =>
-              onChange({ maxTokens: Math.min(2048, Math.max(1, Number(e.target.value))) })
-            }
+            {...p}
+            value={state.s3Prefix}
+            onChange={(e) => onChange({ s3Prefix: e.target.value, s3PrefixTouched: true })}
+            onBlur={() => onTouch('s3Prefix')}
+            placeholder="tenant/slug/"
           />
-          {maxTokensErr ? (
-            <span style={hintStyle(true)}>{maxTokensErr}</span>
-          ) : (
-            <span style={hintStyle()}>64–2048. SEMANTIC: target size (actual may vary). FIXED: exact size.</span>
+        )}
+      </FormField>
+
+      <FormField label="Chunking Strategy">
+        {(p) => (
+          <select
+            {...p}
+            value={state.chunkingStrategy}
+            onChange={(e) =>
+              onChange({ chunkingStrategy: e.target.value as Step2State['chunkingStrategy'] })
+            }
+          >
+            <option value="SEMANTIC">SEMANTIC — context-aware variable chunks</option>
+            <option value="FIXED">FIXED — fixed-size chunks</option>
+            <option value="HIERARCHICAL">HIERARCHICAL — parent + child chunks</option>
+            <option value="NONE">NONE — no chunking (whole documents)</option>
+          </select>
+        )}
+      </FormField>
+
+      {state.chunkingStrategy !== 'NONE' && (
+        <FormField
+          label="Max Tokens per Chunk"
+          error={maxTokensErr}
+          hint="64–2048. SEMANTIC: target size (actual may vary). FIXED: exact size."
+        >
+          {(p) => (
+            <input
+              {...p}
+              type="number"
+              value={state.maxTokens}
+              min={64}
+              max={2048}
+              onBlur={() => onTouch('maxTokens')}
+              onChange={(e) =>
+                onChange({ maxTokens: Math.min(2048, Math.max(1, Number(e.target.value))) })
+              }
+            />
           )}
-        </div>
+        </FormField>
       )}
 
       {/* Embedding model — fixed */}
@@ -503,22 +428,12 @@ export function KBCreateWizard({ open, onClose, onCreated }: KBCreateWizardProps
     }
   }, [open]);
 
-  if (!open) return null;
-
   // ── Derived validation ──────────────────────────────────────────────────────
 
   const step1Errors = validateStep1(step1);
   const step2Errors = validateStep2(step2);
   const step1Valid  = Object.keys(step1Errors).length === 0;
   const step2Valid  = Object.keys(step2Errors).length === 0;
-
-  function canAdvanceStep1(): boolean {
-    return step1Valid && !step1Checking;
-  }
-
-  function canCreate(): boolean {
-    return step2Valid && !submitting;
-  }
 
   // ── Touch all fields in current step (reveal errors on button click) ─────────
 
@@ -636,223 +551,97 @@ export function KBCreateWizard({ open, onClose, onCreated }: KBCreateWizardProps
 
   // ─── Layout ──────────────────────────────────────────────────────────────────
 
+  const stepLabel =
+    step === 1 ? 'Identity' : step === 2 ? 'Data Configuration' : 'Provisioning';
+
+  const footer = (
+    <>
+      {step === 2 && (
+        <Button variant="secondary" onClick={() => { setSubmitError(null); setStep(1); }}>
+          Back
+        </Button>
+      )}
+      {step !== 3 && (
+        <Button variant="secondary" onClick={onClose}>
+          Cancel
+        </Button>
+      )}
+      {step === 1 && (
+        <Button variant="primary" disabled={step1Checking} onClick={handleNext}>
+          {step1Checking ? 'Checking…' : 'Next →'}
+        </Button>
+      )}
+      {step === 2 && (
+        <Button variant="primary" disabled={submitting} onClick={handleCreate}>
+          {submitting ? 'Creating…' : 'Create KB'}
+        </Button>
+      )}
+    </>
+  );
+
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.45)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-      }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`New Knowledge Base — Step ${step} of 3 — ${stepLabel}`}
+      maxWidth={500}
+      footer={footer}
     >
-      <div
-        style={{
-          width: 500,
-          background: 'var(--color-surface)',
-          borderRadius: 10,
-          boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
-          display: 'flex',
-          flexDirection: 'column',
-          maxHeight: '92vh',
-          overflow: 'hidden',
-        }}
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '16px 20px',
-            borderBottom: '1px solid var(--color-border)',
-          }}
-        >
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--color-text-primary)' }}>
-              New Knowledge Base
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
-              Step {step} of 3
-              {step === 1 && ' — Identity'}
-              {step === 2 && ' — Data Configuration'}
-              {step === 3 && ' — Provisioning'}
-            </div>
-          </div>
-          <button
-            onClick={onClose}
+      {/* Step indicator bar */}
+      <div style={{ display: 'flex', height: 3, marginBottom: 16 }}>
+        {([1, 2, 3] as const).map((n) => (
+          <div
+            key={n}
             style={{
-              background: 'none',
-              border: 'none',
-              fontSize: 18,
-              color: 'var(--color-text-secondary)',
-              cursor: 'pointer',
-              lineHeight: 1,
-              padding: '2px 6px',
+              flex: 1,
+              background: n <= step ? 'var(--color-primary)' : 'var(--color-border)',
+              transition: 'background 0.3s',
             }}
-          >
-            ×
-          </button>
-        </div>
-
-        {/* Step indicator bar */}
-        <div style={{ display: 'flex', height: 3 }}>
-          {([1, 2, 3] as const).map(n => (
-            <div
-              key={n}
-              style={{
-                flex: 1,
-                background: n <= step ? 'var(--color-primary)' : 'var(--color-border)',
-                transition: 'background 0.3s',
-              }}
-            />
-          ))}
-        </div>
-
-        {/* Body */}
-        <div
-          style={{
-            padding: '20px 20px 0',
-            overflowY: 'auto',
-            flex: 1,
-          }}
-        >
-          {step === 1 && (
-            <Step1
-              state={step1}
-              onChange={handleStep1Change}
-              touched={step1Touched}
-              onTouch={touchStep1Field}
-            />
-          )}
-          {step === 2 && (
-            <Step2
-              state={step2}
-              step1={step1}
-              onChange={handleStep2Change}
-              touched={step2Touched}
-              onTouch={touchStep2Field}
-            />
-          )}
-          {step === 3 && createdKb && (
-            <Step3
-              kb={createdKb}
-              onComplete={handleProvisioningComplete}
-              onError={handleProvisioningError}
-            />
-          )}
-
-          {submitError && (
-            <div
-              style={{
-                margin: '10px 0',
-                padding: '8px 12px',
-                background: 'var(--color-danger-bg)',
-                border: '1px solid var(--color-danger-border)',
-                borderRadius: 6,
-                fontSize: 12,
-                color: 'var(--color-danger)',
-              }}
-            >
-              {submitError}
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'flex-end',
-            gap: 10,
-            padding: '16px 20px',
-            borderTop: '1px solid var(--color-border)',
-          }}
-        >
-          {/* Back — only on step 2 */}
-          {step === 2 && (
-            <button
-              onClick={() => { setSubmitError(null); setStep(1); }}
-              style={{
-                padding: '7px 18px',
-                fontSize: 13,
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 6,
-                cursor: 'pointer',
-                color: 'var(--color-text-primary)',
-              }}
-            >
-              Back
-            </button>
-          )}
-
-          {/* Cancel */}
-          {step !== 3 && (
-            <button
-              onClick={onClose}
-              style={{
-                padding: '7px 18px',
-                fontSize: 13,
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 6,
-                cursor: 'pointer',
-                color: 'var(--color-text-primary)',
-              }}
-            >
-              Cancel
-            </button>
-          )}
-
-          {/* Next (step 1) */}
-          {step === 1 && (
-            <button
-              disabled={step1Checking}
-              onClick={handleNext}
-              style={{
-                padding: '7px 18px',
-                fontSize: 13,
-                fontWeight: 600,
-                background: step1Checking ? 'var(--color-state-pending)' : 'var(--color-primary)',
-                color: 'var(--color-surface)',
-                border: 'none',
-                borderRadius: 6,
-                cursor: step1Checking ? 'not-allowed' : 'pointer',
-                minWidth: 80,
-              }}
-            >
-              {step1Checking ? 'Checking…' : 'Next →'}
-            </button>
-          )}
-
-          {/* Create (step 2) */}
-          {step === 2 && (
-            <button
-              disabled={submitting}
-              onClick={handleCreate}
-              style={{
-                padding: '7px 18px',
-                fontSize: 13,
-                fontWeight: 600,
-                background: submitting ? 'var(--color-state-pending)' : 'var(--color-primary)',
-                color: 'var(--color-surface)',
-                border: 'none',
-                borderRadius: 6,
-                cursor: submitting ? 'not-allowed' : 'pointer',
-                minWidth: 80,
-              }}
-            >
-              {submitting ? 'Creating…' : 'Create KB'}
-            </button>
-          )}
-        </div>
+          />
+        ))}
       </div>
-    </div>
+
+      {step === 1 && (
+        <Step1
+          state={step1}
+          onChange={handleStep1Change}
+          touched={step1Touched}
+          onTouch={touchStep1Field}
+        />
+      )}
+      {step === 2 && (
+        <Step2
+          state={step2}
+          step1={step1}
+          onChange={handleStep2Change}
+          touched={step2Touched}
+          onTouch={touchStep2Field}
+        />
+      )}
+      {step === 3 && createdKb && (
+        <Step3
+          kb={createdKb}
+          onComplete={handleProvisioningComplete}
+          onError={handleProvisioningError}
+        />
+      )}
+
+      {submitError && (
+        <div
+          style={{
+            margin: '10px 0',
+            padding: '8px 12px',
+            background: 'var(--color-danger-bg)',
+            border: '1px solid var(--color-danger-border)',
+            borderRadius: 6,
+            fontSize: 12,
+            color: 'var(--color-danger)',
+          }}
+        >
+          {submitError}
+        </div>
+      )}
+    </Modal>
   );
 }
 
