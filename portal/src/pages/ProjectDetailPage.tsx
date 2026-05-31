@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router';
+import { Chip, StatusDot, type ChipTone } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -66,38 +67,49 @@ interface ProjectDetail {
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
-// Status indicator colors use semantic tokens from app.css.
-// `in_review` and `merged` keep their purple identity (not in token palette
-// for purple-tinted "review" state) — kept as inline hex by design.
-const STATUS_STYLES: Record<WorkItemStatus, { bg: string; text: string; dot: string }> = {
-  open:        { bg: 'var(--color-bg)',         text: 'var(--color-text-secondary)', dot: 'var(--color-text-tertiary)' },
-  in_progress: { bg: 'var(--color-info-bg)',    text: 'var(--color-primary)',        dot: 'var(--color-info)' },
-  in_review:   { bg: '#fdf4ff',                 text: '#7e22ce',                     dot: '#a855f7' },
-  done:        { bg: 'var(--color-success-bg)', text: 'var(--color-success)',        dot: 'var(--color-success)' },
-  cancelled:   { bg: 'var(--color-danger-bg)',  text: 'var(--color-danger)',         dot: 'var(--color-danger)' },
+// Status tone lookups — Chip carries the colour, StatusDot the leading dot.
+const STATUS_TONE: Record<WorkItemStatus, ChipTone> = {
+  open:        'neutral',
+  in_progress: 'info',
+  in_review:   'purple',
+  done:        'success',
+  cancelled:   'danger',
 };
 
-const PRIORITY_STYLES: Record<WorkItemPriority, { color: string; label: string }> = {
-  critical: { color: 'var(--color-danger)',         label: '🔴 Critical' },
-  high:     { color: 'var(--color-warning)',        label: '🟠 High' },
-  medium:   { color: 'var(--color-warning)',        label: '🟡 Medium' },
-  low:      { color: 'var(--color-text-secondary)', label: '⚪ Low' },
+const STATUS_DOT_COLOR: Record<WorkItemStatus, string> = {
+  open:        'var(--color-text-tertiary)',
+  in_progress: 'var(--color-info)',
+  in_review:   '#a855f7',
+  done:        'var(--color-success)',
+  cancelled:   'var(--color-danger)',
 };
 
-// `merged` purple identity is intentional — distinguishes merged PRs from open
-// (success) and closed (danger); no purple token exists in app.css yet.
-const PR_STYLES: Record<PrStatus, { bg: string; text: string; icon: string }> = {
-  merged: { bg: '#f5f3ff',                  text: 'var(--color-optimize)',        icon: '⬡' },
-  open:   { bg: 'var(--color-success-bg)',  text: 'var(--color-success)',        icon: '⊙' },
-  draft:  { bg: 'var(--color-bg)',          text: 'var(--color-text-secondary)', icon: '⊘' },
-  closed: { bg: 'var(--color-danger-bg)',   text: 'var(--color-danger)',         icon: '✕' },
+const PRIORITY_COLOR: Record<WorkItemPriority, string> = {
+  critical: 'var(--color-danger)',
+  high:     'var(--color-warning)',
+  medium:   'var(--color-warning)',
+  low:      'var(--color-text-secondary)',
 };
 
-const DECISION_STATUS: Record<string, { bg: string; text: string }> = {
-  escalated: { bg: 'var(--color-danger-bg)',  text: 'var(--color-danger)' },
-  open:      { bg: 'var(--color-warning-bg)', text: 'var(--color-warning)' },
-  resolved:  { bg: 'var(--color-success-bg)', text: 'var(--color-success)' },
-  rejected:  { bg: 'var(--color-bg)',         text: 'var(--color-text-secondary)' },
+const PR_TONE: Record<PrStatus, ChipTone> = {
+  merged: 'purple',
+  open:   'success',
+  draft:  'neutral',
+  closed: 'danger',
+};
+
+const PR_ICONS: Record<PrStatus, string> = {
+  merged: '⬡',
+  open:   '⊙',
+  draft:  '⊘',
+  closed: '✕',
+};
+
+const DECISION_TONE: Record<string, ChipTone> = {
+  escalated: 'danger',
+  open:      'warning',
+  resolved:  'success',
+  rejected:  'neutral',
 };
 
 const PROJECT_STATUS_COLORS: Record<string, { accent: string; bg: string; text: string }> = {
@@ -130,36 +142,31 @@ function Avatar({ name, size = 24 }: { name: string; size?: number }) {
 }
 
 function StatusChip({ status }: { status: WorkItemStatus }) {
-  const s = STATUS_STYLES[status] ?? STATUS_STYLES.open;
   return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 4,
-      padding: '1px 8px', borderRadius: 9999,
-      fontSize: 11, fontWeight: 600,
-      background: s.bg, color: s.text,
-    }}>
-      <span style={{ width: 5, height: 5, borderRadius: '50%', background: s.dot }} />
-      {status.replace('_', ' ')}
+    <span className="inline-flex items-center gap-1">
+      <StatusDot color={STATUS_DOT_COLOR[status]} size="xs" />
+      <Chip tone={STATUS_TONE[status] ?? 'neutral'} size="xs">
+        {status.replace('_', ' ')}
+      </Chip>
     </span>
   );
 }
 
 function PrBadge({ prStatus, prUrl }: { prStatus: PrStatus; prUrl: string | null }) {
-  const st = PR_STYLES[prStatus];
   const el = (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 3,
-      padding: '1px 7px', borderRadius: 4,
-      fontSize: 11, fontWeight: 600,
-      background: st.bg, color: st.text,
-    }}>
-      {st.icon} PR · {prStatus}
-    </span>
+    <Chip tone={PR_TONE[prStatus]} size="xs">
+      {PR_ICONS[prStatus]} PR · {prStatus}
+    </Chip>
   );
   if (prUrl) {
     return (
-      <a href={prUrl} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}
-        onClick={(e) => e.stopPropagation()}>
+      <a
+        href={prUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="no-underline"
+        onClick={(e) => e.stopPropagation()}
+      >
         {el}
       </a>
     );
@@ -483,7 +490,7 @@ function EpicCard({
   const pts = countPoints(item);
   const stories = countStories(item);
   const pct = pts.total > 0 ? Math.round((pts.done / pts.total) * 100) : 0;
-  const pStyle = PRIORITY_STYLES[item.priority] ?? PRIORITY_STYLES.medium;
+  const priorityColor = PRIORITY_COLOR[item.priority] ?? PRIORITY_COLOR.medium;
 
   return (
     <div style={{
@@ -517,7 +524,7 @@ function EpicCard({
         </span>
 
         {/* Priority */}
-        <span style={{ fontSize: 11, color: pStyle.color, fontWeight: 600, flexShrink: 0 }}>
+        <span style={{ fontSize: 11, color: priorityColor, fontWeight: 600, flexShrink: 0 }}>
           {item.priority === 'critical' ? '🔴' : item.priority === 'high' ? '🟠' : item.priority === 'medium' ? '🟡' : '⚪'}
         </span>
 
@@ -615,27 +622,21 @@ function DecisionQueue({ decisions }: { decisions: ProjectDecision[] }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {decisions.map((d) => {
-        const ds = DECISION_STATUS[d.status] ?? DECISION_STATUS.open;
+        const decisionTone = DECISION_TONE[d.status] ?? 'warning';
         return (
           <div key={d.id} style={{
             background: 'var(--color-surface)', border: '1.5px solid var(--color-border)', borderRadius: 8,
             padding: '14px 16px',
           }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 6 }}>
-              <span style={{
-                padding: '2px 10px', borderRadius: 9999, fontSize: 11, fontWeight: 700,
-                background: ds.bg, color: ds.text, flexShrink: 0, textTransform: 'uppercase',
-              }}>
+              <Chip tone={decisionTone} size="xs" className="uppercase font-bold shrink-0">
                 {d.status}
-              </span>
+              </Chip>
               <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)', flex: 1 }}>{d.topic}</span>
               {d.requiredRole && (
-                <span style={{
-                  padding: '2px 10px', borderRadius: 9999, fontSize: 11, fontWeight: 600,
-                  background: '#f5f3ff', color: 'var(--color-optimize-hover)', flexShrink: 0,
-                }}>
+                <Chip tone="purple" size="xs" className="shrink-0">
                   needs {d.requiredRole}
-                </span>
+                </Chip>
               )}
             </div>
             {d.summary && (

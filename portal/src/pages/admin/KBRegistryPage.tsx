@@ -13,6 +13,7 @@ import {
   TableTd,
   Chip,
   ConfirmDialog,
+  StatusDot,
 } from '@connorhoehnslalom/ui-components/shared';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -75,16 +76,8 @@ const STATUS_CONFIG: Record<
 export function StatusChip({ status }: { status: KbRegistryEntry['status'] }) {
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.PENDING;
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-      <span
-        style={{
-          width: 7,
-          height: 7,
-          borderRadius: '50%',
-          background: cfg.dotColor,
-          flexShrink: 0,
-        }}
-      />
+    <span className="inline-flex items-center gap-1">
+      <StatusDot color={cfg.dotColor} size="sm" />
       <Chip tone={cfg.chipTone} size="xs">{cfg.label}</Chip>
     </span>
   );

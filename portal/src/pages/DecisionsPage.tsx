@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { PageSection } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, PageSection } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -32,24 +32,9 @@ function formatDate(iso: string | null): string {
 
 function ParticipantChip({ count }: { count: number }) {
   return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minWidth: 28,
-        height: 22,
-        borderRadius: 11,
-        fontSize: 12,
-        fontWeight: 600,
-        padding: '0 8px',
-        background: 'var(--color-accent-subtle, #eff6ff)',
-        color: 'var(--color-accent, #2563eb)',
-        border: '1px solid var(--color-accent-border, #bfdbfe)',
-      }}
-    >
+    <Chip tone="info" size="sm" mono aria-label={`${count} participants`}>
       {count}
-    </span>
+    </Chip>
   );
 }
 
