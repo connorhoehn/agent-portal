@@ -357,7 +357,11 @@ def run_in_sandbox(python_code: str) -> str:
 
 
 def _model_kwargs() -> dict:
-    kw: dict = {"model_id": MODEL_ID}
+    kw: dict = {
+        "model_id": MODEL_ID,
+        "temperature": float(os.environ.get("MODEL_TEMPERATURE", "0.1")),
+        "max_tokens": int(os.environ.get("MODEL_MAX_TOKENS", "4096")),
+    }
     gid = os.environ.get("GUARDRAIL_ID", "")
     if gid:
         kw["guardrail_id"] = gid

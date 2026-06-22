@@ -2,7 +2,7 @@
 //
 // Signed proxy routes for the gateway's Wave 6 service-auth-gated endpoints.
 // The browser cannot sign requests itself, so this middleware signs every
-// outbound request via GatewayProxyClient (from @connorhoehn/realtime-modules)
+// outbound request via GatewayProxyClient (from @connorhoehnslalom/realtime-modules)
 // and forwards the call to the websocket-gateway.
 //
 // Mounted at /api/gateway/* in index.ts.
@@ -31,7 +31,7 @@ import {
   ProxyClientHttpError,
   ProxyClientNetworkError,
   ProxyClientTimeoutError,
-} from '@connorhoehn/realtime-modules/proxy-client';
+} from '@connorhoehnslalom/realtime-modules/proxy-client';
 import { asyncHandler } from '../lib/async-handler.js';
 
 export const gatewayProxyRouter = Router();

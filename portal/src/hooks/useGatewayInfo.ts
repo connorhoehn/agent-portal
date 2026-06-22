@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { GatewayProxyClient } from '@connorhoehn/realtime-modules/proxy-client';
+import { GatewayProxyClient } from '@connorhoehnslalom/realtime-modules/proxy-client';
 import type {
   GatewayClusterInfo,
   GatewayMetricsResponse,
-} from '@connorhoehn/realtime-modules/proxy-client';
+} from '@connorhoehnslalom/realtime-modules/proxy-client';
 
 // VITE_GATEWAY_URL is exposed to the browser bundle by Vite at build time.
 // Mirror the lookup used by GatewayStatusBadge so the URL is sourced once
@@ -22,7 +22,7 @@ interface UseGatewayInfoReturn {
 }
 
 /**
- * Second adoption of `@connorhoehn/realtime-modules/proxy-client` in
+ * Second adoption of `@connorhoehnslalom/realtime-modules/proxy-client` in
  * OrgIQ portal (after GatewayStatusBadge). Polls the gateway's
  * unauthenticated `/cluster` + `/metrics` endpoints so the Settings page
  * can render an "About > Gateway" panel (node count, active connections,

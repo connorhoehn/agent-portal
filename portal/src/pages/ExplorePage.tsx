@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { useAgentStream } from '@connorhoehn/realtime-modules/agent-streaming/client';
+import { useAgentStream } from '@connorhoehnslalom/realtime-modules/agent-streaming/client';
 import { OrgGraph } from '../components/org-graph';
 import type { GraphPerson, GraphRelationship, GraphDepartment } from '../components/org-graph';
 import type { LayoutMode } from '../components/org-graph/useForceLayout';

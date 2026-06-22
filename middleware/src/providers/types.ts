@@ -309,7 +309,15 @@ export interface AgentCoreProvider {
     sessionId?: string;
     userId?: string;
     auth?: { sub: string; role: string };
+    history?: { role: string; content: string }[];
   }): Promise<AgentInvokeResult>;
+  invokeAgentStreaming(agentId: string, payload: {
+    message: string;
+    sessionId?: string;
+    userId?: string;
+    auth?: { sub: string; role: string };
+    history?: { role: string; content: string }[];
+  }): AsyncIterable<unknown>;
   listCodeSessions(): Promise<CodeSession[]>;
   terminateCodeSession(sessionId: string): Promise<boolean>;
   executeCode(code: string, language?: 'python'): Promise<CodeExecutionResult>;

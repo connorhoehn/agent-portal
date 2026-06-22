@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useMemo, useCallback, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
-import { useAgentStream } from '@connorhoehn/realtime-modules/agent-streaming/client';
-import type { Message as AgentMessage } from '@connorhoehn/realtime-modules/agent-streaming/client';
+import { useAgentStream } from '@connorhoehnslalom/realtime-modules/agent-streaming/client';
+import type { Message as AgentMessage } from '@connorhoehnslalom/realtime-modules/agent-streaming/client';
 import {
   ChatComposer,
   MessageBubble,
@@ -12,7 +12,7 @@ import {
 import { ChatPanel } from '@connorhoehnslalom/ui-components/social';
 import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
-import { usePresence, useChat } from '@connorhoehn/realtime-modules/client';
+import { usePresence, useChat } from '@connorhoehnslalom/realtime-modules/client';
 import { PresenceAvatarGroup } from '../components/shell/PresenceAvatarGroup';
 
 // Feature flag: set VITE_ORGIQ_CHAT_ENABLED=true to show the session chat sidebar.
@@ -201,8 +201,11 @@ function InvokePage() {
     <div style={{ display: 'flex', height: '100%' }}>
       {/* Session sidebar */}
       <div style={{ width: 220, borderRight: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>Sessions</span>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sessions</span>
+            <PresenceAvatarGroup peers={peers} />
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {/* Agent selector — only shown when multiple agents are available */}
             {agents && agents.length > 1 && (
@@ -221,8 +224,8 @@ function InvokePage() {
                   color: 'var(--color-text-primary)',
                   padding: '2px 6px',
                   cursor: 'pointer',
-                  maxWidth: 140,
-                  flexShrink: 0,
+                  flex: 1,
+                  minWidth: 0,
                 }}
               >
                 {agents.map(a => (
@@ -233,11 +236,10 @@ function InvokePage() {
             <button
               onClick={reset}
               title="New session"
-              style={{ fontSize: 11, padding: '2px 8px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)', cursor: 'pointer' }}
+              style={{ fontSize: 11, padding: '4px 10px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)', cursor: 'pointer', whiteSpace: 'nowrap' }}
             >
               + New
             </button>
-            <PresenceAvatarGroup peers={peers} />
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>

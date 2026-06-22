@@ -574,6 +574,7 @@ export const realAgentCore: AgentCoreProvider = {
       ...(payload.sessionId ? { sessionId: payload.sessionId } : {}),
       ...(payload.userId ? { userId: payload.userId } : {}),
       ...(payload.auth ? { auth: payload.auth } : {}),
+      ...(payload.history?.length ? { history: payload.history } : {}),
     });
 
     const resp = await dataClient().send(
@@ -593,8 +594,6 @@ export const realAgentCore: AgentCoreProvider = {
       raw = text;
     }
 
-    // Extract sandbox executions the agent appended to its response dict so
-    // the middleware can record them with the invocation without CW Logs queries.
     let sandboxExecutions: import('./types.js').SandboxExecution[] | undefined;
     if (raw && typeof raw === 'object') {
       const execs = (raw as Record<string, unknown>)['sandboxExecutions'];
@@ -603,9 +602,6 @@ export const realAgentCore: AgentCoreProvider = {
       }
     }
 
-    // Tool calls the agent surfaces via _project_tool_calls — same wire shape
-    // as the mock provider so the route emits identical TOOL_CALL_START/END
-    // events whether we're against mock or live runtimes.
     const toolCalls = extractToolCalls(raw);
 
     return {
@@ -615,6 +611,62 @@ export const realAgentCore: AgentCoreProvider = {
       ...(sandboxExecutions ? { sandboxExecutions } : {}),
       ...(toolCalls.length > 0 ? { toolCalls } : {}),
     };
+  },
+
+  async *invokeAgentStreaming(agentId, payload): AsyncGenerator<unknown> {
+    const arn = await resolveRuntimeArn(agentId);
+    if (!arn) {
+      throw new Error(`Agent runtime not found for "${agentId}"`);
+    }
+
+    const body = JSON.stringify({
+      message: payload.message,
+      prompt: payload.message,
+      input_text: payload.message,
+      stream: true,
+      ...(payload.sessionId ? { sessionId: payload.sessionId } : {}),
+      ...(payload.userId ? { userId: payload.userId } : {}),
+      ...(payload.auth ? { auth: payload.auth } : {}),
+      ...(payload.history?.length ? { history: payload.history } : {}),
+    });
+
+    const resp = await dataClient().send(
+      new InvokeAgentRuntimeCommand({
+        agentRuntimeArn: arn,
+        qualifier: 'DEFAULT',
+        accept: 'text/event-stream',
+        payload: new TextEncoder().encode(body),
+        ...(payload.sessionId ? { runtimeSessionId: payload.sessionId } : {}),
+      }),
+    );
+
+    // Parse SSE lines from the streaming response.
+    const stream = resp.response;
+    if (!stream) return;
+
+    let buffer = '';
+    for await (const chunk of stream as AsyncIterable<Uint8Array>) {
+      buffer += new TextDecoder().decode(chunk);
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const jsonStr = line.slice(6).trim();
+        if (!jsonStr) continue;
+        try {
+          yield JSON.parse(jsonStr);
+        } catch {
+          // Malformed SSE line — skip.
+        }
+      }
+    }
+    // Flush any remaining buffered line.
+    if (buffer.startsWith('data: ')) {
+      const jsonStr = buffer.slice(6).trim();
+      if (jsonStr) {
+        try { yield JSON.parse(jsonStr); } catch { /* skip */ }
+      }
+    }
   },
 
   async listCodeSessions(): Promise<CodeSession[]> {
@@ -982,6 +1034,19 @@ export const mockAgentCore: AgentCoreProvider = {
         result: tc.result,
       })),
     };
+  },
+
+  async *invokeAgentStreaming(_agentId, payload): AsyncGenerator<unknown> {
+    const m = selectMockResponse(payload.message);
+    const msgId = `mock-${Date.now()}`;
+    yield { type: 'RUN_STARTED', threadId: payload.sessionId ?? 'mock', runId: msgId };
+    yield { type: 'TEXT_MESSAGE_START', messageId: msgId, role: 'assistant' };
+    const words = m.response.split(/(\s+)/);
+    for (let i = 0; i < words.length; i += 3) {
+      yield { type: 'TEXT_MESSAGE_CONTENT', messageId: msgId, delta: words.slice(i, i + 3).join('') };
+    }
+    yield { type: 'TEXT_MESSAGE_END', messageId: msgId };
+    yield { type: 'RUN_FINISHED' };
   },
 
   async listCodeSessions(): Promise<CodeSession[]> {

@@ -220,7 +220,7 @@ export function SettingsPage() {
           />
         </Card>
 
-        {/* 6. Gateway (websocket-gateway via @connorhoehn/realtime-modules) */}
+        {/* 6. Gateway (websocket-gateway via @connorhoehnslalom/realtime-modules) */}
         <Card padding="md">
           <div style={sectionHeaderStyle}>Gateway</div>
           <div style={dividerStyle} />

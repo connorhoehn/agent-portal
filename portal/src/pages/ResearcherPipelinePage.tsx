@@ -6,7 +6,7 @@
 // When complete this page should:
 //   1. List recent pipeline runs via platform-api GET /api/pipelines/orgiq-researcher/runs
 //   2. Subscribe to live run events via a dedicated `usePipelineRun(runId)` hook
-//      in @connorhoehn/realtime-modules (does not exist yet — `useAgentStream`
+//      in @connorhoehnslalom/realtime-modules (does not exist yet — `useAgentStream`
 //      is now HTTP-chat shaped and is the wrong primitive for WS pipeline events)
 //   3. Surface the `approval` human-gate as a modal for role:editor users
 //

@@ -6,7 +6,7 @@ import type { CSSProperties } from 'react';
 import { Link, useParams } from 'react-router';
 import { PageSection } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
-import { useReactions } from '@connorhoehn/realtime-modules/client';
+import { useReactions } from '@connorhoehnslalom/realtime-modules/client';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

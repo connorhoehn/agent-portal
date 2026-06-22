@@ -3,11 +3,14 @@ import logging
 import os
 import time
 from contextvars import ContextVar
+from typing import AsyncIterator
 
 import boto3
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from strands import Agent, tool
 from strands.models.bedrock import BedrockModel
+from ag_ui_strands import StrandsAgent, StrandsAgentConfig
+from ag_ui.core import RunAgentInput, Message, UserMessage
 
 # Shared HITL approval tool. Lives in agents/_shared so any agent that needs
 # to gate a high-stakes action behind human review can reuse it.
@@ -47,7 +50,7 @@ log = logging.getLogger(__name__)
 app = BedrockAgentCoreApp()
 
 REGION = os.environ.get("AWS_REGION", "us-east-1")
-MODEL_ID = os.environ.get("MODEL_ID", "amazon.nova-pro-v1:0")
+MODEL_ID = os.environ.get("MODEL_ID", "amazon.nova-lite-v1:0")
 PREFIX = os.environ.get("PROJECT_PREFIX", "orgiq")
 MEMORY_ID = os.environ.get("MEMORY_ID", "")
 GUARDRAIL_ID = os.environ.get("GUARDRAIL_ID", "")
@@ -314,23 +317,14 @@ def run_in_sandbox(python_code: str) -> str:
 
 SUPERVISOR_TOOLS = [
     search_organization, get_expertise_scores, get_strategic_advice,
-    ingest_documents, build_graph, run_in_sandbox,
-    request_approval,
 ]
 
 SYSTEM_PROMPT = (
-    "You are the OrgIQ Supervisor agent — the primary interface for organizational intelligence queries.\n\n"
-    "Route queries to the appropriate specialist:\n"
-    "- search_organization: find people, expertise, documents, teams, decisions\n"
-    "- get_expertise_scores: PageRank, leaderboards, influence metrics\n"
-    "- get_strategic_advice: gap analysis, team composition, mentorship, collaboration\n"
-    "- ingest_documents: sync new documents into the knowledge base\n"
-    "- build_graph: update the knowledge graph from documents or manual input\n"
-    "- run_in_sandbox: execute Python in a sandbox for calculations, statistics, or data manipulation\n\n"
-    "For complex queries, route to multiple specialists and synthesize their responses.\n"
-    "When a user asks you to compute, calculate, or run code, use run_in_sandbox.\n"
-    "Always cite which specialist provided each piece of information.\n"
-    "Maintain conversation context across multi-turn interactions."
+    "You are the OrgIQ Supervisor — route queries to the right specialist and synthesize results.\n"
+    "Tools: search_organization (people, skills, teams, projects), "
+    "get_expertise_scores (rankings, influence), "
+    "get_strategic_advice (gaps, mentorship, team composition).\n"
+    "Call the most relevant tool immediately. Synthesize the response concisely."
 )
 
 # Per-role guardrail IDs, populated from env at module load. Middleware passes
@@ -351,8 +345,8 @@ def _model_kwargs(guardrail_id: str = "") -> dict:
     """
     kw: dict = {
         "model_id": MODEL_ID,
-        "temperature": float(os.environ.get("MODEL_TEMPERATURE", "0.2")),
-        "max_tokens": int(os.environ.get("MODEL_MAX_TOKENS", "2048")),
+        "temperature": float(os.environ.get("MODEL_TEMPERATURE", "0.0")),
+        "max_tokens": int(os.environ.get("MODEL_MAX_TOKENS", "4096")),
     }
     gid = guardrail_id or os.environ.get("GUARDRAIL_ID", "")
     if gid:
@@ -380,6 +374,19 @@ if not _AGENTS_BY_ROLE:
     _AGENTS_BY_ROLE[DEFAULT_ROLE] = _build_agent("")
 log.info("Supervisor initialized with roles: %s", sorted(_AGENTS_BY_ROLE.keys()))
 
+# Wrap each role agent with the AG-UI StrandsAgent adapter for SSE streaming.
+_AG_UI_AGENTS: dict[str, StrandsAgent] = {}
+for _role, _agent in _AGENTS_BY_ROLE.items():
+    _AG_UI_AGENTS[_role] = StrandsAgent(
+        agent=_agent,
+        name=f"orgiq-supervisor-{_role}",
+        config=StrandsAgentConfig(
+            emit_messages_snapshot=False,
+            replay_history_into_strands=True,
+        ),
+    )
+log.info("AG-UI StrandsAgent adapters created for roles: %s", sorted(_AG_UI_AGENTS.keys()))
+
 
 def _resolve_role(payload: dict) -> str:
     """Pick the agent for the caller. Unknown / missing roles fall back to member."""
@@ -392,12 +399,15 @@ def _resolve_role(payload: dict) -> str:
 
 _SYSTEM_PROMPT_SHA = short_prompt_hash(SYSTEM_PROMPT)
 
+# AG-UI streaming mode. When the middleware sends accept: text/event-stream
+# (or includes "stream": true in the payload), use the AG-UI adapter which
+# yields SSE events as tokens arrive. Otherwise fall back to the synchronous
+# dict-return path for A2A sub-agent calls.
+AG_UI_STREAMING = os.environ.get("AG_UI_STREAMING", "true").lower() == "true"
+
 
 @app.entrypoint
-async def handle(payload: dict) -> dict:
-    # Accept either {"input_text": "..."} (A2A convention used by sub-agent
-    # invocations from the supervisor) or {"prompt"/"message": "..."} from
-    # the CLI / middleware. Fall back to stringifying the whole payload.
+async def handle(payload: dict) -> AsyncIterator | dict:
     if isinstance(payload, dict):
         input_text = (
             payload.get("input_text")
@@ -412,24 +422,68 @@ async def handle(payload: dict) -> dict:
         return {"agent": "supervisor", "error": "missing input_text/prompt/message"}
 
     role = _resolve_role(payload if isinstance(payload, dict) else {})
+
+    # A2A sub-agent calls (from other agents) use the synchronous path.
+    # The middleware sets "stream": true for user-facing requests.
+    use_streaming = AG_UI_STREAMING and isinstance(payload, dict) and payload.get("stream", False)
+
+    if use_streaming:
+        return _handle_streaming(payload, input_text, role)
+
+    return await _handle_sync(payload, input_text, role)
+
+
+async def _handle_streaming(payload: dict, input_text: str, role: str):
+    """AG-UI streaming path — yields SSE events as the LLM generates tokens."""
+    ag_ui_agent = _AG_UI_AGENTS[role]
+
+    # Build AG-UI RunAgentInput from the middleware payload.
+    thread_id = payload.get("sessionId", "default")
+    run_id = payload.get("invocationId", f"run-{time.time_ns()}")
+
+    # Convert history to AG-UI message format.
+    messages = []
+    for turn in payload.get("history", []):
+        if isinstance(turn, dict) and turn.get("role") and turn.get("content"):
+            if turn["role"] == "user":
+                messages.append(UserMessage(role="user", content=turn["content"]))
+            else:
+                from ag_ui.core import AssistantMessage
+                messages.append(AssistantMessage(role="assistant", content=turn["content"]))
+
+    # Add the current user message.
+    messages.append(UserMessage(role="user", content=input_text))
+
+    run_input = RunAgentInput(
+        thread_id=thread_id,
+        run_id=run_id,
+        messages=messages,
+    )
+
+    log.info("Supervisor AG-UI streaming (role=%s, thread=%s, run=%s): %s",
+             role, thread_id, run_id, input_text[:120])
+
+    async for event in ag_ui_agent.run(run_input):
+        yield event
+
+
+async def _handle_sync(payload: dict, input_text: str, role: str) -> dict:
+    """Synchronous dict-return path for A2A sub-agent calls."""
     agent = _AGENTS_BY_ROLE[role]
 
-    # ── Sprint 2 instrumentation ─────────────────────────────────────────────
-    # Build a fresh TraceContext from the inbound payload (picks up
-    # parentInvocationId if this is a sub-agent invocation from another agent),
-    # stash it in the ContextVar so each instrumented_tool can record its
-    # observation, and emit a trace bundle to the middleware once the agent
-    # finishes. Failures in instrumentation must NOT change the agent's
-    # observable behaviour — every catch below swallows.
+    messages = []
+    raw_history = payload.get("history", []) if isinstance(payload, dict) else []
+    for turn in raw_history:
+        if isinstance(turn, dict) and turn.get("role") and turn.get("content"):
+            messages.append({"role": turn["role"], "content": [{"text": turn["content"]}]})
+
     ctx = TraceContext.from_request_payload(payload if isinstance(payload, dict) else {})
     token = _current_ctx.set(ctx)
-    # Mirror onto the shared ContextVar so the boto3 Converse patch can find
-    # the active TraceContext from inside the patched _make_api_call.
     shared_token = set_active_ctx(ctx)
 
     log.info(
-        "Supervisor handling (role=%s, invocation=%s, parent=%s): %s",
-        role, ctx.invocation_id, ctx.parent_invocation_id or "—", input_text[:120],
+        "Supervisor sync handling (role=%s, invocation=%s, parent=%s, history_turns=%d): %s",
+        role, ctx.invocation_id, ctx.parent_invocation_id or "—", len(messages), input_text[:120],
     )
 
     with with_orgiq_root(
@@ -440,21 +494,13 @@ async def handle(payload: dict) -> dict:
     ) as oi_span:
         t0 = time.monotonic()
         try:
-            result = _invoke_with_retry(agent, input_text)
+            result = _invoke_with_retry(agent, input_text, messages=messages if messages else None)
         finally:
             _current_ctx.reset(token)
             reset_active_ctx(shared_token)
         duration_ms = int((time.monotonic() - t0) * 1000)
 
         response_text = str(result)
-
-        # TODO(P1-W2c): extract guardrail_action + pii_detected from Strands AgentResult once we
-        # determine the canonical field name. Strands' AgentResult does not currently surface
-        # guardrail trace metadata in a stable public attribute (checked agent_result fields: the
-        # return value of Agent.__call__ is an AgentResult whose string representation is the
-        # final text; guardrail trace lives inside the BedrockModel response stream and is not
-        # forwarded onto AgentResult). When Strands exposes it, wire it as:
-        #   record_guardrail_action(oi_span, action=..., pii_detected=...)
         record_guardrail_action(oi_span, action=None, pii_detected=None)
 
         try:
@@ -466,12 +512,9 @@ async def handle(payload: dict) -> dict:
                 model_id=MODEL_ID,
                 duration_ms=duration_ms,
                 prompt_version=_SYSTEM_PROMPT_SHA,
-                # Strands' AgentResult doesn't currently expose usage in a stable
-                # shape; leave tokens unset and let the middleware compute zero
-                # cost. Agent A's harness will warn on the missing field.
             )
             post_trace(bundle)
-        except Exception as exc:  # noqa: BLE001 — observability MUST NOT crash the agent
+        except Exception as exc:
             log.warning("supervisor: trace emission failed: %s", exc)
 
     return {
@@ -483,17 +526,15 @@ async def handle(payload: dict) -> dict:
     }
 
 
-def _invoke_with_retry(agent: Agent, input_text: str):
-    """Invoke the agent, retrying on Nova's transient modelStreamErrorException.
-
-    Nova occasionally emits malformed tool-use token sequences during ConverseStream
-    when the context grows. The failure is non-deterministic, so a fresh attempt
-    usually succeeds. Other exceptions propagate unchanged.
-    """
+def _invoke_with_retry(agent: Agent, input_text: str, messages=None):
+    """Invoke the agent, retrying on Nova's transient modelStreamErrorException."""
     last_exc: Exception | None = None
     for attempt in range(1, MODEL_STREAM_RETRY_ATTEMPTS + 1):
         try:
-            return agent(input_text)
+            if messages:
+                return agent(input_text, messages=messages)
+            else:
+                return agent(input_text)
         except Exception as exc:
             msg = str(exc)
             if "modelStreamErrorException" not in msg and "invalid sequence" not in msg:

@@ -10,13 +10,13 @@
 // SearchPage) per the file-collision rules — each page is self-contained.
 
 import { useMemo, useRef, useState } from 'react';
-import { useAgentStream } from '@connorhoehn/realtime-modules/agent-streaming/client';
-import type { ToolCall as LiveToolCall } from '@connorhoehn/realtime-modules/agent-streaming/client';
+import { useAgentStream } from '@connorhoehnslalom/realtime-modules/agent-streaming/client';
+import type { ToolCall as LiveToolCall } from '@connorhoehnslalom/realtime-modules/agent-streaming/client';
 import { Markdown } from '../../components/Markdown';
-import { usePresence } from '@connorhoehn/realtime-modules/client';
-import { useActivity } from '@connorhoehn/realtime-modules/client';
-import { useFileUpload } from '@connorhoehn/realtime-modules/client';
-import type { FileUploadState } from '@connorhoehn/realtime-modules/client';
+import { usePresence } from '@connorhoehnslalom/realtime-modules/client';
+import { useActivity } from '@connorhoehnslalom/realtime-modules/client';
+import { useFileUpload } from '@connorhoehnslalom/realtime-modules/client';
+import type { FileUploadState } from '@connorhoehnslalom/realtime-modules/client';
 import { FileUploadDrop } from '@connorhoehnslalom/ui-components/shared';
 import { PresenceAvatarGroup } from '../../components/shell/PresenceAvatarGroup';
 import { ActivityFeedPanel } from '../../components/shell/ActivityFeedPanel';

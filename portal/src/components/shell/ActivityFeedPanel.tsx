@@ -1,7 +1,7 @@
 // ActivityFeedPanel — displays live activity events from a gateway channel.
 // Props: events (newest-first array from useActivity), isLoading.
 
-import type { ActivityEvent } from '@connorhoehn/realtime-modules/client';
+import type { ActivityEvent } from '@connorhoehnslalom/realtime-modules/client';
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();

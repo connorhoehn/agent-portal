@@ -280,7 +280,11 @@ def fetch_web_page(url: str) -> str:
 
 
 def _model_kwargs() -> dict:
-    kw: dict = {"model_id": MODEL_ID}
+    kw: dict = {
+        "model_id": MODEL_ID,
+        "temperature": float(os.environ.get("MODEL_TEMPERATURE", "0.1")),
+        "max_tokens": int(os.environ.get("MODEL_MAX_TOKENS", "4096")),
+    }
     gid = os.environ.get("GUARDRAIL_ID", "")
     if gid:
         kw["guardrail_id"] = gid
@@ -292,14 +296,46 @@ def _model_kwargs() -> dict:
 SYSTEM_PROMPT = (
     "You are the OrgIQ Search agent. Find people, teams, skills, documents, and "
     "decisions in the organizational knowledge base and relational graph.\n\n"
-    "Use query_knowledge_base for document/semantic search.\n"
-    "Use query_graph(sql) for relational traversal — JOINs across the edge tables "
-    "(person_skills, team_memberships, collaborations, project_contributions, "
-    "decision_participants, mentions).\n"
-    "Use fetch_web_page(url) when you need live external web content — e.g. to "
-    "look up a public profile, scrape a docs page, or check a competitor site. "
-    "Only call this for genuinely external info; for org-internal questions, "
-    "prefer the KB and graph tools.\n\n"
+    "Tools:\n"
+    "- query_knowledge_base: document/semantic search (use for 'tell me about', summaries, document content)\n"
+    "- query_graph(sql): relational traversal via SQL (use for specific lookups, counts, rankings, relationships)\n"
+    "- fetch_web_page(url): live external web content (only for genuinely external info)\n\n"
+    "Schema (Aurora PostgreSQL):\n"
+    "  people(id, name, title, department, expertise_score, pagerank_score, composite_score)\n"
+    "  skills(id, name, category)\n"
+    "  person_skills(person_id, skill_id, proficiency)\n"
+    "  teams(id, name, department)\n"
+    "  team_memberships(person_id, team_id, role)\n"
+    "  projects(id, name, status, priority, department)\n"
+    "  project_contributions(person_id, project_id, role, weight)\n"
+    "  collaborations(source_id, target_id, weight, context)\n"
+    "  decisions(id, title, status, decided_at)\n"
+    "  decision_participants(decision_id, person_id, role)\n"
+    "  documents(id, title, doc_type, author_id)\n"
+    "  mentions(document_id, person_id, context)\n\n"
+    "Example queries:\n"
+    "- Find experts: SELECT p.name, p.title, ps.proficiency FROM people p "
+    "JOIN person_skills ps ON ps.person_id = p.id "
+    "JOIN skills s ON s.id = ps.skill_id "
+    "WHERE LOWER(s.name) LIKE '%kubernetes%' ORDER BY ps.proficiency DESC\n"
+    "- Person's projects: SELECT p.name, proj.name AS project, pc.role FROM people p "
+    "JOIN project_contributions pc ON pc.person_id = p.id "
+    "JOIN projects proj ON proj.id = pc.project_id "
+    "WHERE LOWER(p.name) LIKE '%sarah%'\n"
+    "- Person's collaborators: SELECT p2.name, c.weight, c.context FROM people p1 "
+    "JOIN collaborations c ON c.source_id = p1.id "
+    "JOIN people p2 ON p2.id = c.target_id "
+    "WHERE LOWER(p1.name) LIKE '%sarah%' ORDER BY c.weight DESC\n"
+    "- Team members: SELECT p.name, tm.role FROM people p "
+    "JOIN team_memberships tm ON tm.person_id = p.id "
+    "JOIN teams t ON t.id = tm.team_id "
+    "WHERE LOWER(t.name) LIKE '%platform%'\n"
+    "- Person's skills: SELECT s.name, s.category, ps.proficiency FROM skills s "
+    "JOIN person_skills ps ON ps.skill_id = s.id "
+    "JOIN people p ON p.id = ps.person_id "
+    "WHERE LOWER(p.name) LIKE '%theo%' ORDER BY ps.proficiency DESC\n\n"
+    "IMPORTANT: Always use query_graph for relationship questions (projects, collaborators, "
+    "skills, teams). Use LOWER() and LIKE for name matching. "
     "Always return source citations. Combine tools for comprehensive answers."
 )
 

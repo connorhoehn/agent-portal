@@ -7,8 +7,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
-import { useAgentStream } from '@connorhoehn/realtime-modules/agent-streaming/client';
-import type { Message as AgentMessage } from '@connorhoehn/realtime-modules/agent-streaming/client';
+import { useAgentStream } from '@connorhoehnslalom/realtime-modules/agent-streaming/client';
+import type { Message as AgentMessage } from '@connorhoehnslalom/realtime-modules/agent-streaming/client';
 import {
   ChatComposer,
   MessageBubble,
@@ -18,7 +18,7 @@ import {
 import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
 import type { GraphPerson } from '../components/org-graph';
-import { usePresence } from '@connorhoehn/realtime-modules/client';
+import { usePresence } from '@connorhoehnslalom/realtime-modules/client';
 import { PresenceAvatarGroup } from '../components/shell/PresenceAvatarGroup';
 
 // ── Types ────────────────────────────────────────────────────────────────────

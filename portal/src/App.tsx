@@ -3,7 +3,7 @@ import { Routes, Route, Navigate } from 'react-router';
 import { Layout } from './components/shell/Layout';
 import { RequireRole } from './lib/auth';
 import { useSession } from './lib/auth';
-import { GatewaySocketProvider } from '@connorhoehn/realtime-modules/client/ws';
+import { GatewaySocketProvider } from '@connorhoehnslalom/realtime-modules/client/ws';
 
 const AgentFlowPage = lazy(() => import('./pages/AgentFlowPage'));
 const ScoresPage = lazy(() => import('./pages/ScoresPage'));

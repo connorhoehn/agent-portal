@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { GatewayProxyClient } from '@connorhoehn/realtime-modules/proxy-client';
-import type { ConnectionState } from '@connorhoehn/realtime-modules/client/ws';
-import { useGateway } from '@connorhoehn/realtime-modules/client/ws';
+import { GatewayProxyClient } from '@connorhoehnslalom/realtime-modules/proxy-client';
+import type { ConnectionState } from '@connorhoehnslalom/realtime-modules/client/ws';
+import { useGateway } from '@connorhoehnslalom/realtime-modules/client/ws';
 
 // VITE_GATEWAY_URL is exposed to the browser bundle by Vite at build time.
 // We avoid `import.meta.env` typing concerns (no vite-env.d.ts in this repo)

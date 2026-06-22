@@ -14,7 +14,7 @@ RUN node -e " \
   const fs = require('fs'); \
   const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); \
   delete pkg.dependencies['@connorhoehnslalom/ui-components']; \
-  delete pkg.dependencies['@connorhoehn/realtime-modules']; \
+  delete pkg.dependencies['@connorhoehnslalom/realtime-modules']; \
   fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2)); \
 "
 
@@ -27,8 +27,8 @@ RUN --mount=type=cache,target=/root/.npm \
 # docker-compose.yml.
 COPY --from=ui_components package.json ./node_modules/@connorhoehnslalom/ui-components/package.json
 COPY --from=ui_components dist/ ./node_modules/@connorhoehnslalom/ui-components/dist/
-COPY --from=realtime_modules package.json ./node_modules/@connorhoehn/realtime-modules/package.json
-COPY --from=realtime_modules dist/ ./node_modules/@connorhoehn/realtime-modules/dist/
+COPY --from=realtime_modules package.json ./node_modules/@connorhoehnslalom/realtime-modules/package.json
+COPY --from=realtime_modules dist/ ./node_modules/@connorhoehnslalom/realtime-modules/dist/
 
 # ── Stage 2: dev server ────────────────────────────────────────────────────────
 FROM node:20-slim AS development
