@@ -59,7 +59,10 @@ def upload_body(doc: LoadableDoc) -> str:
 
 
 def _str_or_null(v: str | None) -> dict:
-    return {"isNull": True} if v is None else {"stringValue": v}
+    # RDS Data API can't type a bare {isNull: true} inside expressions like
+    # CASE WHEN :p IS NULL … (Postgres 42P18). Send '' and let the SQL use
+    # NULLIF(:p, '') so the parameter is always an unambiguous text value.
+    return {"stringValue": v if v is not None else ""}
 
 
 def upsert_document(doc: LoadableDoc, source_uri: str) -> None:
@@ -68,9 +71,10 @@ def upsert_document(doc: LoadableDoc, source_uri: str) -> None:
         INSERT INTO documents
             (id, source, source_uri, title, doc_type, headline, published_at, section)
         VALUES
-            (:id, :source, :source_uri, :title, :doc_type, :headline,
-             CASE WHEN :published_at IS NULL THEN NULL ELSE :published_at::timestamptz END,
-             :section)
+            (:id, :source, :source_uri, :title,
+             NULLIF(:doc_type, ''), NULLIF(:headline, ''),
+             NULLIF(:published_at, '')::timestamptz,
+             NULLIF(:section, ''))
         ON CONFLICT (id) DO UPDATE
           SET source = EXCLUDED.source,
               source_uri = EXCLUDED.source_uri,

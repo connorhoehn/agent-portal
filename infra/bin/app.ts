@@ -16,6 +16,7 @@ import { AuthorizationStack } from '../lib/authorization-stack';
 import { SpanProjectorStack } from '../lib/span-projector-stack';
 import { PromptCanaryStack } from '../lib/prompt-canary-stack';
 import { MiddlewareServiceStack } from '../lib/middleware-service-stack';
+import { DevboxStack } from '../lib/devbox-stack';
 
 const app = new cdk.App();
 
@@ -261,6 +262,29 @@ const deployCanary = app.node.tryGetContext('deployCanary') === 'true' || app.no
 if (deployCanary) {
   new PromptCanaryStack(app, 'OrgIQ-PromptCanary', { env, prefix });
 }
+
+// -------------------------------------------------------------------
+// Stack 14b: Devbox (Claude Code in an AgentCore Runtime microVM)
+// Phase 1 (always): ECR repo + minimal execution role (Bedrock Claude + logs).
+// Phase 2 (after agents/devbox/build.sh pushes the image):
+//   cdk deploy OrgIQ-Devbox --context deployDevbox=true
+// Optional read-only OrgIQ data-plane access (Aurora + KB Retrieve):
+//   ... --context devboxOrgAccess=true
+// Model override (Bedrock Claude IDs only):
+//   ... --context devboxModel=anthropic.claude-opus-5
+// -------------------------------------------------------------------
+const devboxOrgAccess = app.node.tryGetContext('devboxOrgAccess') === 'true' || app.node.tryGetContext('devboxOrgAccess') === true;
+new DevboxStack(app, 'OrgIQ-Devbox', {
+  env,
+  prefix,
+  // Only referenced (and therefore only imported) when devboxOrgAccess=true.
+  ...(devboxOrgAccess && {
+    auroraClusterArn: cdk.Fn.importValue(`${prefix}-aurora-cluster-arn`),
+    auroraCredentialsSecretArn: cdk.Fn.importValue(`${prefix}-aurora-secret-arn`),
+    knowledgeBaseId: cdk.Fn.importValue(`${prefix}-knowledge-base-id`),
+  }),
+  description: 'OrgIQ Devbox: Claude Code hosted on AgentCore Runtime with persistent session workspace',
+});
 
 // -------------------------------------------------------------------
 // Stack 15: Middleware Service (ECS Fargate + ALB)

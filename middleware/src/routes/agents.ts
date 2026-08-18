@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import { asyncHandler } from '../lib/async-handler.js';
+import { normalizeRuntimeSessionId } from '../lib/runtime-session.js';
 import { agentStreamMiddleware } from '@connorhoehnslalom/realtime-modules/agent-streaming';
 import { agentcore, aurora } from '../providers/index.js';
 import { detectIntervention, recordInvocation, snippet } from '../lib/invocations.js';
@@ -26,11 +27,20 @@ agentsRouter.get('/:agentId/metrics', asyncHandler(async (req, res) => {
  * Normalise the OrgIQ sessionId from the request body:
  *   - AgentCore Runtime requires ≥33 chars.
  *   - Auto-allocate a UUID if the caller sends nothing or a short ID.
- * Stored on the request object so the handler can read the same value.
+ *
+ * MEMOIZED on the request object: this is called twice per invoke (once by
+ * agentStreamMiddleware to stamp RUN_STARTED.sessionId, once by the handler
+ * for the runtime call + Memory recording). Without memoization a client that
+ * sent no sessionId got a DIFFERENT random id in each place — it resumed the
+ * RUN_STARTED id while the transcript was recorded under the handler's id,
+ * so restoring a fresh conversation always found 0 events.
  */
 function deriveSessionId(req: { body?: Record<string, unknown> }): string {
-  const raw = (req.body as { sessionId?: string } | undefined)?.sessionId;
-  return raw && raw.length >= 33 ? raw : randomUUID() + randomUUID().slice(0, 4);
+  const r = req as { body?: { sessionId?: string }; _canonicalSessionId?: string };
+  if (!r._canonicalSessionId) {
+    r._canonicalSessionId = normalizeRuntimeSessionId(r.body?.sessionId);
+  }
+  return r._canonicalSessionId;
 }
 
 // AG-UI streaming route — adopts @connorhoehnslalom/realtime-modules/agent-streaming
@@ -96,6 +106,16 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), agentStreamMiddle
 
   // AG-UI streaming path: pipe events directly from the agent runtime.
   // The agent yields AG-UI events as SSE; we parse and forward each one.
+  // ag-ui-protocol serialization drift: older SDK builds emitted camelCase
+  // (messageId), 2026-08+ builds emit snake_case (message_id). Read both.
+  const field = (ev: Record<string, unknown>, ...keys: string[]): string | undefined => {
+    for (const k of keys) {
+      const v = ev[k];
+      if (typeof v === 'string' && v) return v;
+    }
+    return undefined;
+  };
+
   // The agentStreamMiddleware already emitted RUN_STARTED, so we skip that
   // from the agent's stream and forward everything else.
   let fullText = '';
@@ -119,47 +139,47 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), agentStreamMiddle
           throw new Error((ev as { message?: string }).message || 'Agent run error');
         case 'TEXT_MESSAGE_START':
           stream.textMessageStart(
-            (ev as { messageId?: string }).messageId ?? randomUUID(),
+            field(ev as Record<string, unknown>, 'messageId', 'message_id') ?? randomUUID(),
             ((ev as { role?: string }).role as 'assistant') ?? 'assistant',
           );
           break;
         case 'TEXT_MESSAGE_CONTENT': {
           const delta = (ev as { delta?: string }).delta ?? '';
-          const msgId = (ev as { messageId?: string }).messageId ?? '';
+          const msgId = field(ev as Record<string, unknown>, 'messageId', 'message_id') ?? '';
           fullText += delta;
           stream.textMessageContent(msgId, delta);
           break;
         }
         case 'TEXT_MESSAGE_END':
-          stream.textMessageEnd((ev as { messageId?: string }).messageId ?? '');
+          stream.textMessageEnd(field(ev as Record<string, unknown>, 'messageId', 'message_id') ?? '');
           break;
         case 'TOOL_CALL_START':
           stream.toolCallStart(
-            (ev as { toolCallId?: string }).toolCallId ?? randomUUID(),
-            (ev as { toolCallName?: string }).toolCallName ?? 'unknown',
+            field(ev as Record<string, unknown>, 'toolCallId', 'tool_call_id') ?? randomUUID(),
+            field(ev as Record<string, unknown>, 'toolCallName', 'tool_call_name') ?? 'unknown',
           );
           break;
         case 'TOOL_CALL_ARGS':
           stream.toolCallArgs(
-            (ev as { toolCallId?: string }).toolCallId ?? '',
+            field(ev as Record<string, unknown>, 'toolCallId', 'tool_call_id') ?? '',
             (ev as { delta?: string }).delta ?? '',
           );
           break;
         case 'TOOL_CALL_END':
-          stream.toolCallEnd((ev as { toolCallId?: string }).toolCallId ?? '');
+          stream.toolCallEnd(field(ev as Record<string, unknown>, 'toolCallId', 'tool_call_id') ?? '');
           break;
         case 'TOOL_CALL_RESULT':
           stream.toolCallResult(
-            (ev as { messageId?: string }).messageId ?? '',
-            (ev as { toolCallId?: string }).toolCallId ?? '',
+            field(ev as Record<string, unknown>, 'messageId', 'message_id') ?? '',
+            field(ev as Record<string, unknown>, 'toolCallId', 'tool_call_id') ?? '',
             (ev as { content?: unknown }).content,
           );
           break;
         case 'STEP_STARTED':
-          stream.stepStarted((ev as { stepName?: string }).stepName ?? 'working');
+          stream.stepStarted(field(ev as Record<string, unknown>, 'stepName', 'step_name') ?? 'working');
           break;
         case 'STEP_FINISHED':
-          stream.stepFinished((ev as { stepName?: string }).stepName ?? 'working');
+          stream.stepFinished(field(ev as Record<string, unknown>, 'stepName', 'step_name') ?? 'working');
           break;
         case 'STATE_SNAPSHOT':
           stream.stateSnapshot((ev as { snapshot?: unknown }).snapshot);
@@ -188,6 +208,17 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), agentStreamMiddle
       guardrailIntervened: false,
       error: errMsg,
     });
+    // Durability: if part of the answer already streamed, persist the turn
+    // anyway — otherwise a mid-stream error (or tab close) silently drops the
+    // whole exchange from Memory and the conversation can't be resumed.
+    if (fullText) {
+      void recordTurn({
+        sessionId: canonicalSessionId,
+        ...(actorId ? { actorId } : {}),
+        userMessage,
+        assistantMessage: fullText,
+      });
+    }
     throw new Error(errMsg);
   }
 

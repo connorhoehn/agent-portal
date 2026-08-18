@@ -59,7 +59,7 @@ export class AuroraStack extends cdk.Stack {
 
     const paramGroup = new rds.ParameterGroup(this, 'ParamGroup', {
       engine: rds.DatabaseClusterEngine.auroraPostgres({
-        version: rds.AuroraPostgresEngineVersion.VER_16_6,
+        version: rds.AuroraPostgresEngineVersion.VER_16_13,
       }),
       description: `${prefix} Aurora param group - pgvector`,
       parameters: {
@@ -94,7 +94,7 @@ export class AuroraStack extends cdk.Stack {
 
     const cluster = new rds.DatabaseCluster(this, 'AuroraCluster', {
       engine: rds.DatabaseClusterEngine.auroraPostgres({
-        version: rds.AuroraPostgresEngineVersion.VER_16_6,
+        version: rds.AuroraPostgresEngineVersion.VER_16_13,
       }),
       clusterIdentifier: `${prefix}-aurora`,
       defaultDatabaseName: this.dbName,

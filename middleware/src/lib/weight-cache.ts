@@ -47,6 +47,14 @@ export async function getWeightB(): Promise<number> {
       console.warn('[weight-cache] SSM error, serving stale', e?.name);
       return entry.value;
     }
+    // The weight parameter is created by the OrgIQ-PromptCanary stack, which
+    // is gated behind --context deployCanary=true. When it isn't deployed the
+    // canary is simply off — treat that as weight 0, not a 500.
+    if (e?.name === 'ParameterNotFound') {
+      console.warn('[weight-cache] weight param missing (PromptCanary stack not deployed) — defaulting to 0');
+      entry = { value: 0, fetchedAt: now };
+      return 0;
+    }
     throw err;
   }
 }

@@ -146,6 +146,16 @@ export interface ProjectsGraphSnapshot {
   personProjectEdges: ProjectPersonEdge[];
 }
 
+/** A document that mentions a person — the "how do we know?" behind a skill/score. */
+export interface EvidenceDoc {
+  id: string;
+  title: string;
+  source: string;
+  sourceUri: string | null;
+  ingestedAt: string | null;
+  mentionCount: number;
+}
+
 export interface AuroraProvider {
   fetchGraph(): Promise<GraphSnapshot>;
   fetchSkillsGraph(): Promise<SkillsGraphSnapshot>;
@@ -159,6 +169,7 @@ export interface AuroraProvider {
   getPersonRadar(personId: string): Promise<RadarResponse | null>;
   getContributions(personId: string): Promise<ContributionsResponse | null>;
   getRadarBatch(personIds: string[]): Promise<RadarBatchEntry[]>;
+  fetchPersonEvidence(personId: string): Promise<EvidenceDoc[]>;
 }
 
 export interface CollaboratorContribution {

@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useSession, type Tenant } from '../../lib/auth';
+import { NEWSROOM_ENABLED } from '../../lib/features';
 
 const TENANT_ROOTS: Record<Tenant, string> = {
   orgiq: '/iq/agents',
@@ -12,7 +13,7 @@ const TENANT_LABELS: Record<Tenant, string> = {
   newsroom: 'Newsroom',
 };
 
-const TENANTS: Tenant[] = ['orgiq', 'newsroom'];
+const TENANTS: Tenant[] = NEWSROOM_ENABLED ? ['orgiq', 'newsroom'] : ['orgiq'];
 
 export function TenantSwitcher() {
   const { session, setTenant } = useSession();
@@ -20,6 +21,17 @@ export function TenantSwitcher() {
   const [busy, setBusy] = useState(false);
 
   const current: Tenant = session?.tenant ?? 'orgiq';
+
+  // If newsroom is disabled but a persisted session is still parked on it,
+  // migrate back to orgiq so the nav isn't empty and the user isn't stranded.
+  useEffect(() => {
+    if (!NEWSROOM_ENABLED && session?.tenant === 'newsroom') {
+      void setTenant('orgiq').then(() => void navigate(TENANT_ROOTS.orgiq));
+    }
+  }, [session?.tenant, setTenant, navigate]);
+
+  // A one-tenant switcher is noise — hide it entirely.
+  if (TENANTS.length < 2) return null;
 
   async function handleSelect(target: Tenant) {
     if (target === current || busy) return;

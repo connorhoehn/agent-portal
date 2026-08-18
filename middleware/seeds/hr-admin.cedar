@@ -18,7 +18,8 @@ permit (
     OrgIQ::Action::"LabelFeedback",
     OrgIQ::Action::"ManageIngest",
     OrgIQ::Action::"ManageCanary",
-    OrgIQ::Action::"ManageKB"
+    OrgIQ::Action::"ManageKB",
+    OrgIQ::Action::"ManageDevbox"
   ],
   resource
 )

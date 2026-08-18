@@ -23,7 +23,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
       "bedrock-agentcore[a2a,ag-ui]>=1.9" \
       "ag-ui-protocol>=0.1.18" \
       "ag-ui-strands>=0.1.8" \
-      "opentelemetry-distro" \
+      # ADOT distro (not vanilla opentelemetry-distro): AgentCore Runtime
+      # injects OTEL_PYTHON_CONFIGURATOR=aws_configurator, which only exists
+      # in aws-opentelemetry-distro. With the vanilla distro no configurator
+      # loads at all and no spans are ever exported (aws/spans stays empty).
+      "aws-opentelemetry-distro>=0.12.1" \
       "opentelemetry-instrumentation" \
       "opentelemetry-exporter-otlp" \
       # OpenInference instrumentation — translates Strands/Bedrock spans to OI format

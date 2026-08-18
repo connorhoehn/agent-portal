@@ -6,25 +6,69 @@
 // it's traceable). This is intentional: better to skip a score than to queue
 // unbounded judge calls during a traffic spike.
 //
-// The judge prompt is configured as a Bedrock prompt management ARN supplied
-// via CANARY_JUDGE_PROMPT_ARN env var. It must accept {person_name, topic,
-// response} variables and return JSON with helpfulness/factuality/tone/
-// conciseness scores in [0, 1].
+// Behavior is governed by the operator config from judge-config.ts (the
+// /iq/evaluations page): enabled gate, sample rate, judge model, and rubric
+// weights. The judge prompt template comes from Bedrock prompt management
+// (CANARY_JUDGE_PROMPT_ARN); we render it locally and Converse against the
+// configured model so the model picker is honored even though the stored
+// prompt variant pins its own modelId. If the template can't be fetched we
+// fall back to invoking the prompt ARN directly.
 
 import {
   BedrockRuntimeClient,
   ConverseCommand,
 } from '@aws-sdk/client-bedrock-runtime';
+import {
+  BedrockAgentClient,
+  GetPromptCommand,
+} from '@aws-sdk/client-bedrock-agent';
 import { emitCanaryScore } from './emf-emitter.js';
 import { canaryBroker } from './canary-broker.js';
+import { getJudgeConfig, weightedComposite } from './judge-config.js';
 import type { CanaryVersionLabel } from './canary-types.js';
 
 const MAX_INFLIGHT = 8;
 let inflight = 0;
 
 const client = new BedrockRuntimeClient({});
+const agentClient = new BedrockAgentClient({});
 
 const JUDGE_PROMPT_ARN = process.env['CANARY_JUDGE_PROMPT_ARN'] ?? '';
+
+// Template cache — the judge prompt text changes rarely; re-fetch every 5 min.
+const TEMPLATE_TTL_MS = 5 * 60 * 1000;
+let cachedTemplate: { text: string; fetchedAt: number } | null = null;
+
+async function getJudgeTemplate(): Promise<string | null> {
+  if (!JUDGE_PROMPT_ARN) return null;
+  const now = Date.now();
+  if (cachedTemplate && now - cachedTemplate.fetchedAt < TEMPLATE_TTL_MS) {
+    return cachedTemplate.text;
+  }
+  try {
+    const out = await agentClient.send(
+      new GetPromptCommand({ promptIdentifier: JUDGE_PROMPT_ARN }),
+    );
+    const variants = out.variants ?? [];
+    const def = variants.find((v) => v.name === out.defaultVariant) ?? variants[0];
+    const cfg = def?.templateConfiguration;
+    const text = cfg && 'text' in cfg ? cfg.text?.text : undefined;
+    if (text) {
+      cachedTemplate = { text, fetchedAt: now };
+      return text;
+    }
+    return null;
+  } catch (err) {
+    console.warn('[canary-judge] GetPrompt failed:', (err as Error).message);
+    return cachedTemplate?.text ?? null;
+  }
+}
+
+function renderTemplate(template: string, vars: Record<string, string>): string {
+  return template.replace(/{{\s*([\w.-]+)\s*}}/g, (_m, name: string) =>
+    Object.prototype.hasOwnProperty.call(vars, name) ? vars[name]! : '',
+  );
+}
 
 interface JudgeParams {
   requestId: string;
@@ -51,18 +95,46 @@ export function fireJudge(params: JudgeParams): void {
   inflight++;
   setImmediate(async () => {
     try {
+      const cfg = await getJudgeConfig();
+
+      // Operator gates: judging disabled, or sampled out.
+      if (!cfg.enabled) return;
+      if (cfg.minSampleRate < 100 && Math.random() * 100 >= cfg.minSampleRate) {
+        return;
+      }
+
+      const vars = {
+        person_name: params.personName,
+        topic: params.topic,
+        response: params.response,
+      };
+
+      // Prefer local render + configured model; fall back to the prompt ARN
+      // (which pins its own model) if the template isn't available.
+      const template = await getJudgeTemplate();
       const res = await client.send(
-        new ConverseCommand({
-          modelId: JUDGE_PROMPT_ARN,
-          promptVariables: {
-            person_name: { text: params.personName },
-            topic: { text: params.topic },
-            response: { text: params.response },
-          },
-        }),
+        template
+          ? new ConverseCommand({
+              modelId: cfg.modelId,
+              messages: [
+                { role: 'user', content: [{ text: renderTemplate(template, vars) }] },
+              ],
+            })
+          : new ConverseCommand({
+              modelId: JUDGE_PROMPT_ARN,
+              promptVariables: {
+                person_name: { text: vars.person_name },
+                topic: { text: vars.topic },
+                response: { text: vars.response },
+              },
+            }),
       );
       const text = res.output?.message?.content?.[0]?.text ?? '{}';
-      const json = JSON.parse(text.replace(/```json\n?|\n?```/g, '')) as Record<
+      // Judges occasionally wrap the JSON in prose or a fence — extract the
+      // first {...} block rather than requiring a perfectly clean payload.
+      const stripped = text.replace(/```json\n?|\n?```/g, '');
+      const jsonMatch = stripped.match(/\{[\s\S]*\}/);
+      const json = JSON.parse(jsonMatch ? jsonMatch[0] : stripped) as Record<
         string,
         unknown
       >;
@@ -72,20 +144,15 @@ export function fireJudge(params: JudgeParams): void {
         tone: clamp01(json['tone']),
         conciseness: clamp01(json['conciseness']),
       };
-      const mean =
-        (scores.helpfulness +
-          scores.factuality +
-          scores.tone +
-          scores.conciseness) /
-        4;
-      // error_rate penalty is applied at aggregation time (in the controller),
-      // not per-record — keep this simple.
-      const composite = mean;
+      // Rubric-weighted composite (0–1). error_rate penalty is applied at
+      // aggregation time (in the controller), not per-record.
+      const composite = weightedComposite(scores, cfg.dimensions);
       canaryBroker.publish({
         type: 'judge_score',
         request_id: params.requestId,
         scores,
         composite,
+        pass: composite * 10 >= cfg.failThreshold,
         ts: new Date().toISOString(),
       });
       await emitCanaryScore({

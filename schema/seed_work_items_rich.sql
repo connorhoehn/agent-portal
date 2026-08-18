@@ -1005,11 +1005,11 @@ ON CONFLICT (id) DO NOTHING;
 -- proj-onboard: Developer Onboarding Improvements
 
 INSERT INTO work_items (id, project_id, parent_id, type, title, description, status, priority, assignee_id, labels, created_at, updated_at, completed_at)
-VALUES ('wi-obd-e1', 'proj-onboard', NULL, 'epic', 'Knowledge Base & Documentation Standardization', 'Establish a comprehensive, searchable knowledge base with standardized documentation formats for runbooks, architecture decisions, and common troubleshooting steps.', 'planning', 'high', 'p-005', ARRAY['documentation','knowledge-base','dxp']::TEXT[], NOW() - INTERVAL '90 days', NOW() - INTERVAL '80 days', NULL)
+VALUES ('wi-obd-e1', 'proj-onboard', NULL, 'epic', 'Knowledge Base & Documentation Standardization', 'Establish a comprehensive, searchable knowledge base with standardized documentation formats for runbooks, architecture decisions, and common troubleshooting steps.', 'open', 'high', 'p-005', ARRAY['documentation','knowledge-base','dxp']::TEXT[], NOW() - INTERVAL '90 days', NOW() - INTERVAL '80 days', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO work_items (id, project_id, parent_id, type, title, description, status, priority, assignee_id, labels, created_at, updated_at, completed_at)
-VALUES ('wi-obd-e2', 'proj-onboard', NULL, 'epic', 'Developer Environment & Onboarding Workflows', 'Automate environment setup, create interactive onboarding checklists, and establish a mentorship buddy system for new hires.', 'planning', 'high', 'p-005', ARRAY['dev-environment','automation','buddy-system']::TEXT[], NOW() - INTERVAL '85 days', NOW() - INTERVAL '75 days', NULL)
+VALUES ('wi-obd-e2', 'proj-onboard', NULL, 'epic', 'Developer Environment & Onboarding Workflows', 'Automate environment setup, create interactive onboarding checklists, and establish a mentorship buddy system for new hires.', 'open', 'high', 'p-005', ARRAY['dev-environment','automation','buddy-system']::TEXT[], NOW() - INTERVAL '85 days', NOW() - INTERVAL '75 days', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO work_items (id, project_id, parent_id, type, title, status, priority, assignee_id, labels, created_at, updated_at, completed_at)
@@ -1025,7 +1025,7 @@ VALUES ('wi-obd-f3', 'proj-onboard', 'wi-obd-e2', 'feature', 'Automated Dev Envi
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO work_items (id, project_id, parent_id, type, title, status, priority, assignee_id, labels, created_at, updated_at, completed_at)
-VALUES ('wi-obd-f4', 'proj-onboard', 'wi-obd-e2', 'feature', 'Interactive Onboarding Checklist & Buddy System', 'planning', 'high', 'p-005', ARRAY['onboarding','mentorship','workflow']::TEXT[], NOW() - INTERVAL '55 days', NOW() - INTERVAL '50 days', NULL)
+VALUES ('wi-obd-f4', 'proj-onboard', 'wi-obd-e2', 'feature', 'Interactive Onboarding Checklist & Buddy System', 'open', 'high', 'p-005', ARRAY['onboarding','mentorship','workflow']::TEXT[], NOW() - INTERVAL '55 days', NOW() - INTERVAL '50 days', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO work_items (id, project_id, parent_id, type, title, status, priority, assignee_id, labels, story_points, created_at, updated_at, completed_at)

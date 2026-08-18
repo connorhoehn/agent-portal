@@ -7,6 +7,7 @@ const NAV_ITEMS: SubNavItem[] = [
   { path: 'ingest',         label: 'Ingest',          hint: 'Crawl + sync' },
   { path: 'observability',  label: 'Observability',   hint: 'Traces, metrics, drift' },
   { path: 'capabilities',   label: 'Capabilities',    hint: 'Memory, browser, code' },
+  { path: 'devbox',         label: 'Devbox',          hint: 'Claude Code microVM' },
   { path: 'identity',       label: 'Identity',        hint: 'Roles + policies' },
 ];
 

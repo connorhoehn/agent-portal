@@ -11,7 +11,7 @@ import type { Construct } from 'constructs';
  * to `:latest` if the image doesn't yet exist — keeps first-time deploys
  * working in the documented "Runtime PENDING until image is pushed" flow.
  */
-function resolveContainerUri(repoUri: string, repoName: string, region: string): string {
+export function resolveContainerUri(repoUri: string, repoName: string, region: string): string {
   try {
     const digest = execFileSync(
       'aws',
@@ -76,6 +76,21 @@ const EXTERNAL_AGENT_NAMES = [
 ] as const;
 
 const ALL_AGENT_NAMES = [...AGENT_NAMES, ...EXTERNAL_AGENT_NAMES] as const;
+
+// Explicit session lifecycle per agent. The service defaults are 900s idle /
+// 28800s max — set explicitly so the numbers live in source rather than being
+// implicit, and tuned per agent:
+//  - supervisor: 1800s idle — it fronts multi-turn AG-UI sessions, and a
+//    warm microVM avoids the ~8s cold-start TTFT penalty between user turns.
+//  - everything else: 600s idle — sub-agents and newsroom agents are invoked
+//    per-request (A2A or direct); releasing the workload sooner is pure cost
+//    hygiene with no UX cost (they cold-start per invocation anyway).
+// None of these runtimes use session storage, so lifecycle changes carry no
+// data-loss risk (the resulting version bump wipes nothing).
+const DEFAULT_LIFECYCLE = { idleRuntimeSessionTimeout: 600, maxLifetime: 28800 } as const;
+const AGENT_LIFECYCLE: Partial<Record<(typeof ALL_AGENT_NAMES)[number], { idleRuntimeSessionTimeout: number; maxLifetime: number }>> = {
+  supervisor: { idleRuntimeSessionTimeout: 1800, maxLifetime: 28800 },
+};
 
 /**
  * OrgIQ-AgentCoreRuntime: ECR repos, execution roles, and CfnRuntime resources.
@@ -337,8 +352,17 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
         },
         networkConfiguration: { networkMode: 'PUBLIC' },
         protocolConfiguration: 'HTTP',
+        lifecycleConfiguration: AGENT_LIFECYCLE[agentName] ?? DEFAULT_LIFECYCLE,
         environmentVariables: {
-          OTEL_TRACES_EXPORTER: 'console',
+          // 'otlp' ships spans through ADOT into CloudWatch GenAI observability
+          // (aws/spans) — feeds the span projector, /recent-invocations, and
+          // online evaluation. ('console' was a debugging setting that starved
+          // the whole trace pipeline: aws/spans stayed empty.)
+          OTEL_TRACES_EXPORTER: 'otlp',
+          // ADOT switch: routes spans through the AgentCore-injected OTLP
+          // endpoint into CloudWatch GenAI observability (requires the
+          // aws-opentelemetry-distro package in the image).
+          AGENT_OBSERVABILITY_ENABLED: 'true',
           OTEL_SERVICE_NAME: `orgiq-${agentName}`,
           OTEL_PYTHON_LOG_CORRELATION: 'true',
           OTEL_RESOURCE_ATTRIBUTES: `deployment.environment=dev,service.namespace=orgiq,agent.id=orgiq-${agentName}`,

@@ -442,22 +442,32 @@ async def _handle_streaming(payload: dict, input_text: str, role: str):
     run_id = payload.get("invocationId", f"run-{time.time_ns()}")
 
     # Convert history to AG-UI message format.
+    # ag-ui-protocol >= 0.1.x requires an explicit `id` on every Message —
+    # omitting it is a pydantic ValidationError that kills the invocation
+    # (found live after the 2026-08 base-image rebuild pulled the newer SDK).
     messages = []
-    for turn in payload.get("history", []):
+    for i, turn in enumerate(payload.get("history", [])):
         if isinstance(turn, dict) and turn.get("role") and turn.get("content"):
             if turn["role"] == "user":
-                messages.append(UserMessage(role="user", content=turn["content"]))
+                messages.append(UserMessage(id=f"hist-{i}", role="user", content=turn["content"]))
             else:
                 from ag_ui.core import AssistantMessage
-                messages.append(AssistantMessage(role="assistant", content=turn["content"]))
+                messages.append(AssistantMessage(id=f"hist-{i}", role="assistant", content=turn["content"]))
 
     # Add the current user message.
-    messages.append(UserMessage(role="user", content=input_text))
+    messages.append(UserMessage(id=f"msg-{time.time_ns()}", role="user", content=input_text))
 
+    # ag-ui-protocol >= 0.1.x: state/tools/context/forwarded_props are all
+    # required fields on RunAgentInput (same 2026-08 SDK drift as the Message
+    # `id` requirement above). Empty values are valid.
     run_input = RunAgentInput(
         thread_id=thread_id,
         run_id=run_id,
         messages=messages,
+        state=None,
+        tools=[],
+        context=[],
+        forwarded_props=None,
     )
 
     log.info("Supervisor AG-UI streaming (role=%s, thread=%s, run=%s): %s",

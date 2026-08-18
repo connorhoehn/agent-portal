@@ -4,6 +4,8 @@ import {
   getArticle,
   getTodayStats,
   getEntity,
+  getClusters,
+  getPitches,
 } from '../providers/newsroom-articles.js';
 import { asyncHandler } from '../lib/async-handler.js';
 
@@ -70,5 +72,22 @@ newsroomArticlesRouter.get(
       return;
     }
     res.json(entity);
+  }),
+);
+
+// GET /api/newsroom/clusters?status=active — cluster summary for the home page
+newsroomArticlesRouter.get(
+  '/clusters',
+  asyncHandler(async (_req, res) => {
+    res.json(await getClusters());
+  }),
+);
+
+// GET /api/newsroom/pitches?status=open — pitch summary for the home page
+newsroomArticlesRouter.get(
+  '/pitches',
+  asyncHandler(async (req, res) => {
+    const status = (req.query['status'] as string) || 'open';
+    res.json(await getPitches(status));
   }),
 );

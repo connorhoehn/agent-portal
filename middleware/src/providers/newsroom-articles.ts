@@ -442,3 +442,54 @@ export async function getEntity(id: string): Promise<EntityDetail | null> {
     return null;
   }
 }
+
+// ─── Clusters + pitches (Newsroom home) ───────────────────────────────────────
+// Shapes match portal/src/pages/newsroom/HomePage.tsx (ClustersResponse /
+// PitchesResponse). "active" = updated in the last 14 days.
+
+export interface ClustersSummary {
+  total: number;
+  active: Array<{ id: string; headline: string; size: number }>;
+}
+
+export interface PitchesSummary {
+  total: number;
+  open: Array<{ id: string; headline: string; createdAt: string }>;
+}
+
+export async function getClusters(): Promise<ClustersSummary> {
+  const totalRows = await exec('SELECT count(*)::int AS n FROM story_clusters');
+  const rows = await exec(`
+    SELECT sc.id, sc.title, count(ca.article_id)::int AS size
+    FROM story_clusters sc
+    LEFT JOIN cluster_articles ca ON ca.cluster_id = sc.id
+    WHERE sc.last_updated > NOW() - INTERVAL '14 days'
+    GROUP BY sc.id, sc.title
+    ORDER BY size DESC, sc.last_updated DESC
+    LIMIT 20
+  `);
+  return {
+    total: Number(totalRows[0]?.['n'] ?? 0),
+    active: rows.map((r) => ({
+      id: String(r['id']),
+      headline: String(r['title'] ?? ''),
+      size: Number(r['size'] ?? 0),
+    })),
+  };
+}
+
+export async function getPitches(status = 'open'): Promise<PitchesSummary> {
+  const totalRows = await exec('SELECT count(*)::int AS n FROM pitches');
+  const rows = await exec(
+    'SELECT id, title, created_at FROM pitches WHERE status = :status ORDER BY created_at DESC LIMIT 20',
+    [{ name: 'status', value: { stringValue: status } }],
+  );
+  return {
+    total: Number(totalRows[0]?.['n'] ?? 0),
+    open: rows.map((r) => ({
+      id: String(r['id']),
+      headline: String(r['title'] ?? ''),
+      createdAt: String(r['created_at'] ?? ''),
+    })),
+  };
+}

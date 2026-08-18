@@ -246,6 +246,19 @@ export class MiddlewareServiceStack extends cdk.Stack {
       resources: ['*'],
     }));
 
+    // Devbox routes (/api/devbox) — command-mode shell + session stop, scoped
+    // to the devbox runtime only. InvokeAgentRuntime for devbox task mode is
+    // already covered by AgentCoreInvoke above; these two are the additional
+    // devbox-only operations and stay off every other runtime.
+    taskRole.addToPolicy(new iam.PolicyStatement({
+      sid: 'DevboxCommandAndStop',
+      actions: [
+        'bedrock-agentcore:InvokeAgentRuntimeCommand',
+        'bedrock-agentcore:StopRuntimeSession',
+      ],
+      resources: [`arn:aws:bedrock-agentcore:${this.region}:${this.account}:runtime/${prefix}_devbox*`],
+    }));
+
     // AWS Verified Permissions — IsAuthorized calls for RBAC
     taskRole.addToPolicy(new iam.PolicyStatement({
       sid: 'AvpIsAuthorized',

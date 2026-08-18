@@ -5,7 +5,10 @@
         "shape": {
           "type": "Record",
           "attributes": {
-            "role": { "type": "String", "required": true }
+            "role": {
+              "type": "String",
+              "required": true
+            }
           }
         }
       },
@@ -13,27 +16,175 @@
         "shape": {
           "type": "Record",
           "attributes": {
-            "amount": { "type": "Long", "required": false }
+            "amount": {
+              "type": "Long",
+              "required": false
+            }
           }
         }
       }
     },
     "actions": {
-      "Search":             { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
-      "ViewSalary":         { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
-      "ViewPerformance":    { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
-      "ViewOrgChart":       { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
-      "ViewLeaderboard":    { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
-      "EditGuardrail":      { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
-      "EditPolicy":         { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
-      "ViewIdentityAdmin":  { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
-      "ViewObservability":  { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
-      "ManageIngest":       { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
-      "EditSchema":         { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
-      "LabelFeedback":      { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
-      "ApproveTransaction": { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
-      "ManageCanary":       { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } },
-      "ManageKB":           { "appliesTo": { "principalTypes": ["User"], "resourceTypes": ["Application"] } }
+      "Search": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ViewSalary": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ViewPerformance": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ViewOrgChart": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ViewLeaderboard": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "EditGuardrail": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "EditPolicy": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ViewIdentityAdmin": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ViewObservability": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ManageIngest": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "EditSchema": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "LabelFeedback": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ApproveTransaction": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ManageCanary": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ManageKB": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ManageDevbox": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      }
     }
   }
 }

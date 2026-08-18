@@ -67,6 +67,21 @@ export class AgentCoreTelemetryStack extends cdk.Stack {
               resources: ['*'],
             }),
             new iam.PolicyStatement({
+              // The eval control plane creates + writes its results log group
+              // (/aws/bedrock-agentcore/evaluations/results/<config-id>) using
+              // this role — CreateOnlineEvaluationConfig 400s without these.
+              sid: 'EvaluationResultsWrite',
+              actions: [
+                'logs:CreateLogGroup',
+                'logs:CreateLogStream',
+                'logs:PutLogEvents',
+              ],
+              resources: [
+                `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/bedrock-agentcore/evaluations/*`,
+                `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/bedrock-agentcore/evaluations/*:*`,
+              ],
+            }),
+            new iam.PolicyStatement({
               sid: 'CloudWatchLogsRead',
               actions: [
                 'logs:GetLogEvents',
@@ -224,20 +239,22 @@ Consider: was a faster/simpler tool available? Was the tool capable of answering
         `/aws/bedrock-agentcore/runtimes/${prefix}_${name.replace(/-/g, '_')}`
       );
 
-      // CDK L1 type incorrectly marks serviceNames as required — omitting it causes CDK's
-      // runtime validator to fail, but the actual CloudFormation API accepts the resource
-      // without it. Use raw CfnResource to bypass CDK's validator entirely.
+      // ServiceNames became REQUIRED in the 2026-08 resource schema (CFN early
+      // validation rejects the resource without it; limit ≤ 1). It must match
+      // the OTEL_SERVICE_NAME the runtimes emit into aws/spans — supervisor is
+      // the user-facing entry point, so it's the one service we sample.
       const onlineEvalConfig = new cdk.CfnResource(this, 'OnlineEvalConfig', {
         type: 'AWS::BedrockAgentCore::OnlineEvaluationConfig',
         properties: {
           OnlineEvaluationConfigName: `${safeName}_online_eval`,
           Description: 'Continuous quality monitoring for 5 user-facing OrgIQ agents',
           EvaluationExecutionRoleArn: evalRole.roleArn,
+          // Configs are created with executionStatus DISABLED unless this is set.
+          ExecutionStatus: 'ENABLED',
           DataSourceConfig: {
             CloudWatchLogs: {
               LogGroupNames: logGroupNames,
-              // ServiceNames intentionally omitted: triggers aws/spans validation which
-              // requires X-Ray → CW Logs integration to be enabled in the account first.
+              ServiceNames: [`${prefix}-supervisor`],
             },
           },
           Evaluators: [

@@ -398,6 +398,40 @@ export function setJudgeArn(arn: string): void {
   update((s) => ({ ...s, judgeArn: arn, judgeVersionLabel: label }));
 }
 
+/**
+ * Rehydrate a live experiment from server snapshots on page load.
+ *
+ * The store boots every mount in 'setup', but the experiment itself lives
+ * server-side (subject ARNs + weight + control in SSM) — so a reload used to
+ * dump the operator back into the wizard while the experiment kept running.
+ * If the server says an experiment is active (both subject ARNs present and
+ * traffic shifted or halted), jump straight to the running view. No-op if the
+ * user already advanced the state locally.
+ */
+export function rehydrateExperiment(params: {
+  subjectAArn: string;
+  subjectBArn: string;
+  weightB: number;
+  halted: boolean;
+}): void {
+  const { subjectAArn, subjectBArn, weightB, halted } = params;
+  if (!subjectAArn || !subjectBArn) return;
+  if (!halted && weightB <= 0) return;
+  update((s) => {
+    if (s.experimentState !== 'setup') return s;
+    return {
+      ...s,
+      experimentState: 'running',
+      subjectAArn,
+      subjectBArn,
+      weightA: 100 - weightB,
+      weightB,
+      halted,
+      controllerState: halted ? 'halted' : s.controllerState,
+    };
+  });
+}
+
 export function startExperiment(subjectAArn: string, subjectBArn: string, initialWeightB: number): void {
   update((s) => ({
     ...s,

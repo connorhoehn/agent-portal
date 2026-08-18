@@ -150,7 +150,7 @@ export function OrgGraph({
             const targetId = typeof link.target === 'object' ? link.target.id : link.target;
             return (
               <OrgGraphEdge
-                key={`${sourceId}-${targetId}`}
+                key={`${sourceId}-${targetId}-${link.type}`}
                 source={link.source}
                 target={link.target}
                 type={link.type}

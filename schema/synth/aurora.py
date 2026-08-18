@@ -81,7 +81,13 @@ def execute_many(sql: str, param_sets: list[list[dict]]) -> None:
 # ── Seed-graph readers ────────────────────────────────────────────────────────
 
 def fetch_people() -> list[dict]:
-    return execute("SELECT id, name, email, title, team_id FROM people ORDER BY id")
+    # people has no team_id column in the deployed schema — team linkage lives
+    # in team_memberships (people.team is just the denormalised display name).
+    return execute(
+        "SELECT p.id, p.name, p.email, p.title, tm.team_id"
+        " FROM people p LEFT JOIN team_memberships tm ON tm.person_id = p.id"
+        " ORDER BY p.id"
+    )
 
 
 def fetch_teams() -> list[dict]:
@@ -101,11 +107,15 @@ def fetch_projects() -> list[dict]:
 
 
 def fetch_decisions() -> list[dict]:
-    return execute("SELECT id, title, summary, decided_at FROM decisions ORDER BY decided_at")
+    # Deployed schema names the headline column `topic` — alias it so the
+    # generator's downstream `decision["title"]` reads keep working.
+    return execute("SELECT id, topic AS title, summary, decided_at FROM decisions ORDER BY decided_at")
 
 
 def fetch_decision_participants() -> list[dict]:
-    return execute("SELECT decision_id, person_id, stance FROM decision_participants")
+    # Deployed schema stores the participant's `role`; alias to the `stance`
+    # key the generator prompts expect.
+    return execute("SELECT decision_id, person_id, role AS stance FROM decision_participants")
 
 
 def fetch_project_contributions() -> list[dict]:

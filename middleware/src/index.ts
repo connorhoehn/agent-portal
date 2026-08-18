@@ -34,10 +34,12 @@ import { sessionRouter } from './routes/session.js';
 import { identityRouter } from './routes/identity.js';
 import { canaryRouter } from './routes/canary.js';
 import { canaryLibraryRouter } from './routes/canary-library.js';
+import { evaluationsRouter } from './routes/evaluations.js';
 import { promptHistoryRouter } from './routes/prompt-history.js';
 import { workItemsRouter } from './routes/work-items.js';
 import { kbAdminRouter } from './routes/kb-admin.js';
 import { gatewayProxyRouter } from './routes/gateway-proxy.js';
+import { devboxRouter } from './routes/devbox.js';
 import { requireAction } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
 import { initCrawlTargets } from './lib/crawl-targets.js';
@@ -133,15 +135,18 @@ app.use('/api/observability/canary', canaryRouter);
 app.use('/api/observability/canary', canaryLibraryRouter);
 // Prompt history + experiment log — version timeline + outcome cards for /iq/history.
 app.use('/api/iq/prompts', promptHistoryRouter);
-// Evaluations — LLM-as-judge config + recent scores. Config is stored in the
-// portal (localStorage) and mirrored here for future server-side use.
-// The GET /recent endpoint returns rows from observability.evaluation_scores when
-// the table exists; it returns an empty array gracefully if it doesn't.
-app.put('/api/observability/evaluations/config', (_req, res) => { res.json({ ok: true }); });
-app.get('/api/observability/evaluations/recent', (_req, res) => { res.json({ scores: [] }); });
+// Evaluations — LLM-as-judge config + recent scores. The config is SSM-backed
+// and read by fireJudge() on every canary invocation, so the /iq/evaluations
+// page actually governs judging (enable, model, rubric weights, sampling).
+app.use('/api/observability/evaluations', evaluationsRouter);
 app.use('/api/observability', requireAction('ViewObservability'), observabilityRouter);
 app.use('/api/capabilities', capabilitiesRouter);
 app.use('/api/sessions', sessionsRouter);
+// Devbox — Claude Code in an AgentCore Runtime microVM. Operator surface for
+// a future portal page (no UI ships yet). Cedar-gated: the ManageDevbox
+// action must be allowed for the caller's role (open mode when no policy
+// store is configured, matching every other requireAction guard).
+app.use('/api/devbox', requireAction('ManageDevbox'), devboxRouter);
 // Gateway proxy — signs + forwards Wave 6 service-auth-gated endpoints so
 // the browser doesn't need to hold the HMAC secret. Reads GATEWAY_URL +
 // GATEWAY_SERVICE_AUTH_SECRET from env. No session required: the signing
