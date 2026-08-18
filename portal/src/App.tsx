@@ -36,6 +36,7 @@ const SearchPage = lazy(() => import('./pages/SearchPage'));
 const CanaryPage = lazy(() => import('./pages/CanaryPage'));
 const PromptStudioPage = lazy(() => import('./pages/capabilities/PromptsPage'));
 const PromptHistoryPage = lazy(() => import('./pages/iq/PromptHistoryPage'));
+const PromptOpsHomePage = lazy(() => import('./pages/iq/PromptOpsHomePage'));
 const DiffPage = lazy(() => import('./pages/iq/DiffPage'));
 const EvaluationsPage = lazy(() => import('./pages/iq/EvaluationsPage'));
 
@@ -175,6 +176,7 @@ export function App() {
           <Route path="explore" element={<Page element={<ExplorePage />} />} />
           <Route path="code-interpreter" element={<Page element={<CodeInterpreterDemoPage />} />} />
           <Route path="canary" element={<Page element={<CanaryPage />} />} />
+          <Route path="prompt-ops" element={<Page element={<PromptOpsHomePage />} />} />
           <Route path="prompts" element={<Page element={<PromptStudioPage />} />} />
           <Route path="history" element={<Page element={<PromptHistoryPage />} />} />
           <Route path="diff" element={<Page element={<DiffPage />} />} />

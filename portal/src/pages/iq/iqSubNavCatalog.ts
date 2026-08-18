@@ -3,9 +3,12 @@
 // duplicating the global Layout left sidebar.
 //
 // Items use query params (?focus=…, ?window=…, ?filter=…) so pages can react
-// to a selection without inventing new sub-routes. Pages that haven't wired
-// any of those params yet still show the menu for navigation flavor; the
-// params become live once the page reads them.
+// to a selection without inventing new sub-routes.
+//
+// RULE: only list an item whose target actually reads its param (or is a real
+// route). Decorative entries that silently do nothing were removed — a rail
+// full of inert filters reads as broken software, and hid which controls are
+// real. When a page learns to read a param, add its item back here.
 
 import { useMemo } from 'react';
 import type { SubNavItem } from '@connorhoehnslalom/ui-components/shared';
@@ -29,13 +32,6 @@ const ARCHITECTURE_ITEMS: SubNavItem[] = [
   { path: 'agents?window=1h',  label: '1 hour',  hint: 'Last 60 min of traffic',  group: 'Window' },
   { path: 'agents?window=24h', label: '24 hours', hint: 'Default window',         group: 'Window' },
   { path: 'agents?window=7d',  label: '7 days',  hint: 'Trend view',              group: 'Window' },
-  { path: 'agents?filter=all',     label: 'All agents',  group: 'Filter' },
-  { path: 'agents?filter=active',  label: 'Active only', hint: 'Recent traffic > 0', group: 'Filter' },
-  { path: 'agents?filter=errors',  label: 'With errors', hint: 'p95 over budget',  group: 'Filter' },
-  { path: 'agents?cluster=all',     label: 'All clusters', group: 'Cluster' },
-  { path: 'agents?cluster=orgiq',   label: 'OrgIQ',        hint: '6 core agents',   group: 'Cluster' },
-  { path: 'agents?cluster=newsroom',label: 'Newsroom',     hint: '3 newsroom agents', group: 'Cluster' },
-  { path: 'agents?focus=legend',   label: 'Edge colors', hint: 'green/amber/red',  group: 'Reference' },
 ];
 
 // Static items without History — History group is built dynamically from sessions.
@@ -46,41 +42,21 @@ const SEARCH_STATIC_ITEMS: SubNavItem[] = [
   { path: '/iq/search?prompt=compare',       label: 'Compare two people',   hint: 'Side-by-side profiles', group: 'Suggested' },
 ];
 
-const INVOKE_ITEMS: SubNavItem[] = [
-  { path: 'invoke?focus=orchestrator', label: 'Orchestrator',  hint: 'Top-level router',         group: 'Pipeline' },
-  { path: 'invoke?focus=sub-agents',   label: 'Sub-agents',    hint: 'Search / Scoring / Advisor', group: 'Pipeline' },
-  { path: 'invoke?focus=sessions',     label: 'Sessions',      hint: 'Recent invocations',       group: 'History' },
-  { path: 'invoke?prompt=find-expert', label: 'Find an expert',     group: 'Quick prompts' },
-  { path: 'invoke?prompt=strategic',   label: 'Strategic question', group: 'Quick prompts' },
-  { path: 'invoke?prompt=guardrail',   label: 'Test the guardrail', accent: 'warning', group: 'Quick prompts' },
-];
+// Invoke reads ?session= (deep-links from Memory/Sessions) but none of the
+// old focus/prompt params — its own session sidebar covers navigation.
+const INVOKE_ITEMS: SubNavItem[] = [];
 
 const SCORES_ITEMS: SubNavItem[] = [
   { path: 'scores',          label: 'Overview',  hint: 'Ranked influence + expertise', group: 'View' },
   { path: 'scores/cohorts',  label: 'Cohorts',   hint: 'Distribution by team',         group: 'View' },
   { path: 'scores/compare',  label: 'Compare',   hint: 'Two-person side-by-side',      group: 'View' },
-  { path: 'scores?window=7d',  label: '7 days',  group: 'Window' },
-  { path: 'scores?window=30d', label: '30 days', group: 'Window' },
-  { path: 'scores?window=90d', label: '90 days', group: 'Window' },
 ];
 
-const DECISIONS_ITEMS: SubNavItem[] = [
-  { path: 'decisions?status=open',     label: 'Open',     hint: 'Awaiting action',  group: 'Status' },
-  { path: 'decisions?status=approved', label: 'Approved', hint: 'Greenlit',         group: 'Status' },
-  { path: 'decisions?status=blocked',  label: 'Blocked',  hint: 'Held by review',   accent: 'warning', group: 'Status' },
-  { path: 'decisions?status=closed',   label: 'Closed',   hint: 'Resolved',         group: 'Status' },
-  { path: 'decisions?scope=platform',  label: 'Platform', group: 'Scope' },
-  { path: 'decisions?scope=product',   label: 'Product',  group: 'Scope' },
-  { path: 'decisions?scope=org',       label: 'Org-level', group: 'Scope' },
-];
+// /iq/decisions redirects to /iq/projects — this rail pointed at a dead route.
+const DECISIONS_ITEMS: SubNavItem[] = [];
 
-const PROJECTS_ITEMS: SubNavItem[] = [
-  { path: 'projects?status=active',  label: 'Active',  group: 'Status' },
-  { path: 'projects?status=paused',  label: 'Paused',  accent: 'warning', group: 'Status' },
-  { path: 'projects?status=done',    label: 'Shipped', accent: 'success', group: 'Status' },
-  { path: 'projects?sort=recent',    label: 'Recent activity', group: 'Sort' },
-  { path: 'projects?sort=size',      label: 'Most contributors', group: 'Sort' },
-];
+// Projects page reads no query params today — no rail until it does.
+const PROJECTS_ITEMS: SubNavItem[] = [];
 
 const EXPLORE_ITEMS: SubNavItem[] = [
   { path: 'explore?entities=people',    label: 'People',   group: 'Show' },
@@ -92,23 +68,20 @@ const EXPLORE_ITEMS: SubNavItem[] = [
   { path: 'explore?layout=radial', label: 'Radial', hint: 'By centrality', group: 'Layout' },
 ];
 
-const CODE_INTERPRETER_ITEMS: SubNavItem[] = [
-  { path: 'code-interpreter?example=stats',  label: 'Quick stats',  hint: 'Summary by team', group: 'Examples' },
-  { path: 'code-interpreter?example=chart',  label: 'Chart it',     hint: 'matplotlib demo', group: 'Examples' },
-  { path: 'code-interpreter?example=sql',    label: 'SQL via Aurora', hint: 'Data API path', group: 'Examples' },
-  { path: 'code-interpreter?focus=sessions', label: 'Sessions', group: 'History' },
-];
+// Code interpreter page reads no query params today.
+const CODE_INTERPRETER_ITEMS: SubNavItem[] = [];
 
 // ── Hook ───────────────────────────────────────────────────────────────────
 
-// Prompt Management sub-nav — shared across /iq/prompts and /iq/canary
+// Prompt Management sub-nav — shared across the prompt-ops overview,
+// /iq/prompts, /iq/canary, and the audit surfaces.
 const PROMPT_MGMT_ITEMS: SubNavItem[] = [
-  { path: '/iq/prompts',              label: 'Prompt Studio',   hint: 'Bedrock library browser + editor',  group: 'Prompts' },
-  { path: '/iq/canary',               label: 'Deployment',      hint: 'Canary A/B rollout',                group: 'Prompts' },
-  { path: '/iq/canary?focus=decisions', label: 'Experiments',   hint: 'Live canary decisions',             group: 'Prompts' },
-  { path: '/iq/history',              label: 'History',         hint: 'Version log + past experiments',    group: 'Audit' },
-  { path: '/iq/diff',                 label: 'Diff',            hint: 'Compare two prompt versions RO',    group: 'Audit' },
-  { path: '/iq/evaluations',          label: 'Evaluations',     hint: 'LLM-as-judge configuration',        group: 'Audit' },
+  { path: '/iq/prompt-ops',           label: 'Overview',        hint: 'What is deployed + what to do next', group: 'Start here' },
+  { path: '/iq/prompts',              label: 'Prompt Studio',   hint: 'Author, version, and test prompts',  group: 'Start here' },
+  { path: '/iq/canary',               label: 'Deployment',      hint: 'Canary A/B rollout',                 group: 'Start here' },
+  { path: '/iq/history',              label: 'History',         hint: 'Version log + past experiments',     group: 'Advanced' },
+  { path: '/iq/diff',                 label: 'Diff',            hint: 'Compare two prompt versions',        group: 'Advanced' },
+  { path: '/iq/evaluations',          label: 'Evaluations',     hint: 'LLM-as-judge configuration',         group: 'Advanced' },
 ];
 
 interface SessionSummary {
@@ -141,7 +114,7 @@ export function useIqSubNav(pathname: string): IqSubNavSpec | null {
     return [...SEARCH_STATIC_ITEMS, ...historyItems];
   }, [sessionData]);
 
-  if (pathname.startsWith('/iq/prompts') || pathname.startsWith('/iq/history') || pathname.startsWith('/iq/diff') || pathname.startsWith('/iq/evaluations')) {
+  if (pathname.startsWith('/iq/prompt-ops') || pathname.startsWith('/iq/prompts') || pathname.startsWith('/iq/history') || pathname.startsWith('/iq/diff') || pathname.startsWith('/iq/evaluations')) {
     return {
       title: 'Prompt Management',
       items: PROMPT_MGMT_ITEMS,
