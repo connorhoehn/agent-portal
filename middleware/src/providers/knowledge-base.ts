@@ -173,6 +173,44 @@ export interface IngestionJobSummary {
 const _client = (): BedrockAgentClient =>
   new BedrockAgentClient({ region: config.region });
 
+/**
+ * Why the knowledge base could not be read. `getKb()` collapses every failure
+ * into null, which made the Ingest page tell operators to "set KB_ID" when
+ * KB_ID was set correctly and the knowledge base had been deleted upstream —
+ * sending them to fix config that was already right.
+ */
+export interface KbLookup {
+  kb: KbSummary | null;
+  /** 'ok' | 'unconfigured' | 'missing' | 'error' */
+  state: 'ok' | 'unconfigured' | 'missing' | 'error';
+  kbId: string | null;
+  problem: string | null;
+}
+
+export async function lookupKb(): Promise<KbLookup> {
+  const kbId = config.knowledgeBase.id;
+  if (!kbId) {
+    return {
+      kb: null, state: 'unconfigured', kbId: null,
+      problem: 'KNOWLEDGE_BASE_ID is not set — run schema/dump-stack-outputs.sh after deploying OrgIQ-KnowledgeBase',
+    };
+  }
+  const kb = await getKb();
+  if (kb) return { kb, state: 'ok', kbId, problem: null };
+
+  // getKb swallowed the error; re-probe to classify it.
+  try {
+    await _client().send(new GetKnowledgeBaseCommand({ knowledgeBaseId: kbId }));
+    return { kb: null, state: 'error', kbId, problem: 'knowledge base returned no payload' };
+  } catch (err) {
+    const name = (err as { name?: string }).name ?? 'UnknownError';
+    return name === 'ResourceNotFoundException'
+      ? { kb: null, state: 'missing', kbId,
+          problem: `knowledge base ${kbId} does not exist in AWS — it was deleted upstream; redeploy OrgIQ-KnowledgeBase and refresh middleware/.env.aws` }
+      : { kb: null, state: 'error', kbId, problem: `knowledge base lookup failed (${name})` };
+  }
+}
+
 export async function getKb(): Promise<KbSummary | null> {
   const kbId = config.knowledgeBase.id;
   if (!kbId) return null;

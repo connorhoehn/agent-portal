@@ -25,7 +25,13 @@ interface S3Queue {
 }
 
 function SummaryPage() {
-  const { data: kbData } = useFetch<{ kb: KbSummary | null }>('/api/ingest/kb', 60_000);
+  const { data: kbData } = useFetch<{
+    kb: KbSummary | null;
+    /** Why the KB is unavailable — 'unconfigured' | 'missing' | 'error' | 'ok'. */
+    state?: 'ok' | 'unconfigured' | 'missing' | 'error';
+    kbId?: string | null;
+    problem?: string | null;
+  }>('/api/ingest/kb', 60_000);
   const { data: jobsData } = useFetch<{ jobs: IngestionJob[] }>('/api/ingest/jobs?limit=20', 10_000);
   const { data: queueData } = useFetch<S3Queue>('/api/ingest/queue', 60_000);
   const { data: targetsData } = useFetch<{ targets: CrawlTarget[] }>('/api/ingest/crawl-targets', 30_000);
@@ -45,8 +51,26 @@ function SummaryPage() {
       {/* KB info */}
       {!kb ? (
         <Card padding="md">
-          <div style={{ textAlign: 'center', color: 'var(--color-text-tertiary)', fontSize: 13 }}>
-            No Knowledge Base configured. Set <code>KB_ID</code> in <code>middleware/.env.aws</code>.
+          {/* The API now distinguishes "never configured" from "configured but
+              deleted upstream" — telling an operator to set KB_ID when it is
+              already set (and the KB was deleted) sends them to fix the wrong
+              thing. */}
+          <div style={{ textAlign: 'center', fontSize: 13 }}>
+            <div style={{ fontWeight: 600, color: kbData?.state === 'unconfigured' ? 'var(--color-text-secondary)' : 'var(--color-danger)' }}>
+              {kbData?.state === 'unconfigured'
+                ? 'No Knowledge Base configured'
+                : kbData?.state === 'missing'
+                  ? 'Knowledge Base missing in AWS'
+                  : 'Knowledge Base unavailable'}
+            </div>
+            <div style={{ marginTop: 6, color: 'var(--color-text-tertiary)', lineHeight: 1.6 }}>
+              {kbData?.problem ?? 'Set KB_ID in middleware/.env.aws.'}
+            </div>
+            {kbData?.state === 'missing' && (
+              <div style={{ marginTop: 6, color: 'var(--color-text-tertiary)' }}>
+                Documents already in S3 stay queued and will index on the first sync after the KB is restored.
+              </div>
+            )}
           </div>
         </Card>
       ) : (
