@@ -1,3 +1,4 @@
+import type React from 'react';
 import { Link } from 'react-router';
 import { Card, PageSection, StatCard } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -141,6 +142,13 @@ function SummaryPage() {
   const firing = alarms.filter((a) => a.severity !== 'ok');
   const steps = deriveNextSteps(alarms, runtimes, summary ?? null, health ?? null);
 
+  // With no usable credentials every AWS-backed panel comes back empty, and an
+  // empty result is indistinguishable from a healthy one unless we say so. A
+  // green "0 firing / all signals within thresholds" during an outage is worse
+  // than no panel at all — it actively tells you not to look.
+  const blind = health?.awsCredentials?.ok === false;
+  const dash = (v: React.ReactNode): React.ReactNode => (blind ? '—' : v);
+
   return (
     <PageSection
       title="Health"
@@ -155,12 +163,13 @@ function SummaryPage() {
           <div className="mt-1 flex items-baseline gap-2">
             <span className="text-3xl font-semibold">{runtimes.length || '—'}</span>
             <span className="text-sm text-[var(--color-text-secondary)]">
-              {healthy} healthy
-              {runtimes.length > healthy ? ` · ${runtimes.length - healthy} not` : ''}
+              {blind ? 'unknown' : `${healthy} healthy${runtimes.length > healthy ? ` · ${runtimes.length - healthy} not` : ''}`}
             </span>
           </div>
           <div className="mt-2 text-xs text-[var(--color-text-tertiary)]">
-            Live from AgentCore Runtime, not a static list.
+            {blind
+              ? 'Cannot list runtimes without credentials.'
+              : 'Live from AgentCore Runtime, not a static list.'}
           </div>
         </Card>
 
@@ -170,14 +179,16 @@ function SummaryPage() {
           </div>
           <div className="mt-1 flex items-baseline gap-2">
             <span
-              className={`text-3xl font-semibold ${firing.length ? 'text-red-600' : ''}`}
+              className={`text-3xl font-semibold ${!blind && firing.length ? 'text-red-600' : ''}`}
             >
-              {firing.length}
+              {dash(firing.length)}
             </span>
             <span className="text-sm text-[var(--color-text-secondary)]">firing</span>
           </div>
           <div className="mt-2 text-xs text-[var(--color-text-tertiary)]">
-            {alarms[0]?.reason ?? 'No alarm evaluation yet.'}
+            {blind
+              ? 'Cannot evaluate alarms without credentials.'
+              : alarms[0]?.reason ?? 'No alarm evaluation yet.'}
           </div>
         </Card>
 
@@ -187,12 +198,12 @@ function SummaryPage() {
           </div>
           <div className="mt-1 flex items-baseline gap-2">
             <span
-              className={`text-3xl font-semibold ${summary?.totalErrors24h ? 'text-red-600' : ''}`}
+              className={`text-3xl font-semibold ${!blind && summary?.totalErrors24h ? 'text-red-600' : ''}`}
             >
-              {summary?.totalErrors24h ?? 0}
+              {dash(summary?.totalErrors24h ?? 0)}
             </span>
             <span className="text-sm text-[var(--color-text-secondary)]">
-              of {summary?.totalInvocations24h ?? 0} runs
+              {blind ? 'no data' : `of ${summary?.totalInvocations24h ?? 0} runs`}
             </span>
           </div>
           <Link
@@ -240,8 +251,8 @@ function SummaryPage() {
         <StatCard label="Success Rate" value={summary ? `${summary.successRate}%` : '—'} accent />
         <StatCard
           label="Errors (24h)"
-          value={String(summary?.totalErrors24h ?? 0)}
-          danger={!!summary && summary.totalErrors24h > 0}
+          value={blind ? '—' : String(summary?.totalErrors24h ?? 0)}
+          danger={!blind && !!summary && summary.totalErrors24h > 0}
         />
       </div>
 
@@ -256,17 +267,17 @@ function SummaryPage() {
           <div className="flex gap-5 text-xs">
             <span>
               <span className="text-[var(--color-text-tertiary)]">Invocations: </span>
-              <b>{guardrail?.totalInvocations ?? 0}</b>
+              <b>{blind ? '—' : guardrail?.totalInvocations ?? 0}</b>
             </span>
             <span>
               <span className="text-[var(--color-text-tertiary)]">Interventions: </span>
-              <b className={(guardrail?.totalInterventions ?? 0) > 0 ? 'text-red-600' : ''}>
-                {guardrail?.totalInterventions ?? 0}
+              <b className={!blind && (guardrail?.totalInterventions ?? 0) > 0 ? 'text-red-600' : ''}>
+                {blind ? '—' : guardrail?.totalInterventions ?? 0}
               </b>
             </span>
             <span>
               <span className="text-[var(--color-text-tertiary)]">Rate: </span>
-              <b>{guardrail?.interventionRate ?? '0.0'}%</b>
+              <b>{blind ? '—' : `${guardrail?.interventionRate ?? '0.0'}%`}</b>
             </span>
           </div>
         </div>

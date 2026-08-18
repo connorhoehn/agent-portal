@@ -6,7 +6,7 @@
 // the loop itself — Findings (what was noticed) → Queue (what workers are
 // doing) → Proposals (what needs a human before it touches the graph).
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -49,6 +49,13 @@ const STATUS_TONE: Record<string, string> = {
 /** Statuses whose detail page streams live rather than replaying a transcript. */
 const LIVE_STATUSES = new Set(['claimed', 'running']);
 
+/** Sweep ids are snake_case machine names; these are what an operator reads. */
+const SWEEP_LABELS: Record<string, string> = {
+  bus_factor: 'Skill coverage risk',
+  stale_docs: 'Documents nothing references',
+  orphan_decisions: 'Decisions with no owner',
+};
+
 const SEVERITY_TONE: Record<string, string> = {
   critical: 'bg-danger-bg text-danger',
   warning: 'bg-warning-bg text-warning',
@@ -61,9 +68,12 @@ function money(n: number | undefined): string {
 
 export default function WorkHomePage() {
   const navigate = useNavigate();
+  const [findingStatus, setFindingStatus] = useState<'open' | 'promoted' | 'resolved' | 'dismissed'>('open');
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const { data: summary, refresh: refreshSummary } = useFetch<Summary>('/api/work/summary', 8_000);
   const { data: jobsData, refresh: refreshJobs } = useFetch<{ jobs: Job[] }>('/api/work/jobs?limit=25', 8_000);
-  const { data: findingsData, refresh: refreshFindings } = useFetch<{ findings: Finding[] }>('/api/work/findings?status=open&limit=50', 20_000);
+  const { data: findingsData, refresh: refreshFindings } = useFetch<{ findings: Finding[] }>(
+    `/api/work/findings?status=${findingStatus}&limit=200`, 20_000);
   const { data: proposalsData, refresh: refreshProposals } = useFetch<{ proposals: Proposal[] }>('/api/work/proposals?status=pending', 20_000);
 
   const [newTitle, setNewTitle] = useState('');
@@ -72,6 +82,20 @@ export default function WorkHomePage() {
 
   const jobs = jobsData?.jobs ?? [];
   const findings = findingsData?.findings ?? [];
+
+  // Group by sweep, worst severity first so a single critical outranks forty
+  // informational rows no matter how many of each there are.
+  const grouped = useMemo<Array<[string, Finding[]]>>(() => {
+    const by = new Map<string, Finding[]>();
+    for (const f of findings) {
+      const list = by.get(f.sweep);
+      if (list) list.push(f); else by.set(f.sweep, [f]);
+    }
+    const rank = (items: Finding[]): number =>
+      items.some((f) => f.severity === 'critical') ? 0
+        : items.some((f) => f.severity === 'warning') ? 1 : 2;
+    return [...by.entries()].sort((a, b) => rank(a[1]) - rank(b[1]) || b[1].length - a[1].length);
+  }, [findings]);
   const proposals = proposalsData?.proposals ?? [];
   const s = summary;
 
@@ -113,20 +137,33 @@ export default function WorkHomePage() {
   }
 
   async function promote(f: Finding) {
-    const tid = toastPending('Promoting finding', f.title);
+    const tid = toastPending('Putting a worker on it', f.title);
     try {
-      const res = await post('/api/work/jobs', {
-        title: `Mitigate: ${f.title}`,
-        findingId: f.id,
-        priority: f.severity === 'critical' ? 10 : 50,
-        prompt: `Investigate and address this org finding, then commit your work.\n\nFinding: ${f.title}\nDetail: ${f.detail ?? ''}\nEvidence: ${JSON.stringify(f.evidence)}\n\nWrite a short markdown plan file in the workspace and commit it with git.`,
-      });
-      if (!res.ok) throw new Error((await res.json() as { error?: string }).error ?? `HTTP ${res.status}`);
-      const job = await res.json() as Job;
-      toastSuccess(tid, 'Queued from finding', 'opening the job so you can watch it run');
+      // No prompt here on purpose: the remedy belongs to the sweep that
+      // produced the finding, so the server builds it. A stale doc gets an
+      // extraction diagnosis; a bus-factor risk gets a cross-training plan.
+      const res = await post(`/api/work/findings/${f.id}/promote`);
+      const body = await res.json() as Job & { error?: string; jobId?: string };
+      if (res.status === 409 && body.jobId) {
+        toastError(tid, 'Already has a worker', 'opening the existing job');
+        navigate(`/iq/work/${body.jobId}`);
+        return;
+      }
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+      toastSuccess(tid, 'Worker queued', 'opening the job so you can watch it run');
       refreshAll();
-      navigate(`/iq/work/${job.id}`);
+      navigate(`/iq/work/${body.id}`);
     } catch (err) { toastError(tid, 'Promote failed', (err as Error).message); }
+  }
+
+  async function dismiss(f: Finding) {
+    const tid = toastPending('Dismissing finding', f.title);
+    try {
+      const res = await post(`/api/work/findings/${f.id}/dismiss`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toastSuccess(tid, 'Dismissed', 'it will stay quiet unless it changes');
+      refreshAll();
+    } catch (err) { toastError(tid, 'Dismiss failed', (err as Error).message); }
   }
 
   async function reviewJob(job: Job, decision: 'accept' | 'reject') {
@@ -352,33 +389,99 @@ export default function WorkHomePage() {
         ))}
       </Card>
 
-      {/* ── Findings ── */}
+      {/* ── Findings ──────────────────────────────────────────────────────
+          Grouped by sweep. A sweep that flags 44 unlinked documents produces
+          44 near-identical rows, and a flat list of those buries the one
+          critical bus-factor finding underneath them. The group header is the
+          unit of attention; the rows are the drill-in. */}
       <Card padding="none" className="overflow-hidden">
-        <div className="px-3.5 py-3 border-b border-border flex items-center gap-2">
+        <div className="px-3.5 py-3 border-b border-border flex items-center gap-2 flex-wrap">
           <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">FINDINGS</span>
-          <span className="text-[11px] text-text-tertiary">from scheduled sweeps · promote one to put a worker on it</span>
+          <span className="text-[11px] text-text-tertiary">what the scheduled sweeps noticed</span>
+          <div className="flex-1" />
+          <div className="flex gap-1">
+            {(['open', 'promoted', 'resolved', 'dismissed'] as const).map((st) => (
+              <button
+                key={st}
+                onClick={() => setFindingStatus(st)}
+                className={`px-2 py-0.5 rounded text-[11px] font-semibold cursor-pointer border transition-colors ${
+                  findingStatus === st
+                    ? 'bg-primary text-white border-primary'
+                    : 'bg-surface text-text-secondary border-border hover:text-primary'}`}
+              >
+                {st}
+              </button>
+            ))}
+          </div>
         </div>
+
         {findings.length === 0 ? (
           <div className="px-3.5 py-8 text-center text-[12.5px] text-text-tertiary">
-            Nothing open. Sweeps run every 6 hours — or run them now above.
+            {findingStatus === 'open'
+              ? 'Nothing open. Sweeps run every 6 hours — or run them now above.'
+              : findingStatus === 'resolved'
+                ? 'Nothing resolved yet. A finding resolves when a later sweep stops reproducing it.'
+                : `No ${findingStatus} findings.`}
           </div>
-        ) : findings.slice(0, 12).map((f) => (
-          <div key={f.id} className="px-3.5 py-2.5 border-b border-border last:border-b-0 flex items-center gap-3 min-w-0">
-            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded shrink-0 ${SEVERITY_TONE[f.severity]}`}>{f.severity}</span>
-            <div className="flex-1 min-w-0">
-              <div className="text-[12.5px] text-text-primary truncate" title={f.title}>{f.title}</div>
-              {f.detail && <div className="text-[11px] text-text-tertiary truncate" title={f.detail}>{f.detail}</div>}
+        ) : grouped.map(([sweep, items]) => {
+          const open = expanded.has(sweep);
+          const worst = items.some((f) => f.severity === 'critical') ? 'critical'
+            : items.some((f) => f.severity === 'warning') ? 'warning' : 'info';
+          return (
+            <div key={sweep} className="border-b border-border last:border-b-0">
+              <button
+                onClick={() => setExpanded((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(sweep)) next.delete(sweep); else next.add(sweep);
+                  return next;
+                })}
+                className="w-full px-3.5 py-2.5 flex items-center gap-3 bg-transparent border-none cursor-pointer text-left hover:bg-surface-hover transition-colors"
+              >
+                <span className="text-[10px] text-text-tertiary w-3 shrink-0">{open ? '▾' : '▸'}</span>
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded shrink-0 ${SEVERITY_TONE[worst]}`}>{worst}</span>
+                <span className="text-[12.5px] font-semibold text-text-primary">{SWEEP_LABELS[sweep] ?? sweep}</span>
+                <span className="text-[11px] text-text-tertiary">
+                  {items.length} finding{items.length === 1 ? '' : 's'}
+                </span>
+                <div className="flex-1" />
+                <span className="text-[11px] text-text-tertiary">{open ? 'hide' : 'show'}</span>
+              </button>
+
+              {open && items.map((f) => (
+                <div key={f.id} className="px-3.5 py-2.5 pl-10 border-t border-border flex items-center gap-3 min-w-0 bg-surface-hover/30">
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded shrink-0 ${SEVERITY_TONE[f.severity]}`}>{f.severity}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12.5px] text-text-primary truncate" title={f.title}>{f.title}</div>
+                    {f.detail && <div className="text-[11px] text-text-tertiary truncate" title={f.detail}>{f.detail}</div>}
+                  </div>
+                  {f.jobId ? (
+                    <Link to={`/iq/work/${f.jobId}`} className="text-[11px] text-primary no-underline hover:underline shrink-0">
+                      see the work →
+                    </Link>
+                  ) : findingStatus === 'open' ? (
+                    <div className="flex gap-1.5 shrink-0">
+                      <button
+                        onClick={() => void promote(f)}
+                        className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] font-semibold text-text-secondary cursor-pointer hover:text-primary hover:border-primary/50 transition-colors"
+                      >
+                        Put a worker on it
+                      </button>
+                      <button
+                        onClick={() => void dismiss(f)}
+                        className="px-2 py-1 rounded-md border border-border bg-surface text-[11px] text-text-tertiary cursor-pointer hover:text-danger transition-colors"
+                        title="Stop reporting this unless it changes"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ))}
             </div>
-            <span className="text-[10px] text-text-tertiary shrink-0 hidden lg:inline">{f.sweep}</span>
-            <button
-              onClick={() => void promote(f)}
-              className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] font-semibold text-text-secondary cursor-pointer hover:text-primary hover:border-primary/50 transition-colors shrink-0"
-            >
-              Put a worker on it
-            </button>
-          </div>
-        ))}
+          );
+        })}
       </Card>
+
     </PageSection>
   );
 }

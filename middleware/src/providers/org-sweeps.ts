@@ -143,6 +143,122 @@ async function sweepOrphanDecisions(): Promise<DraftFinding[]> {
   }));
 }
 
+// ── Remediation ──────────────────────────────────────────────────────────────
+//
+// What a worker should actually DO about a finding depends on what was found:
+// a skill with one holder needs a cross-training plan, an unlinked document
+// needs an extraction diagnosis. These prompts used to be built in the browser
+// — one generic string for every sweep — which put the agent's instructions in
+// the least authoritative place in the system and meant a new sweep could not
+// carry its own remedy. They live with the sweep that produces the finding.
+//
+// The worker is Claude Code in a microVM: it has /mnt/workspace and git, and
+// NO database access. So every prompt must carry the evidence it needs inline
+// and ask for an artifact the worker can actually produce. Asking it to "fix
+// the graph" would be asking for something it cannot reach — graph changes go
+// through the proposal path, where a human approves them.
+
+export interface Remediation {
+  prompt: string;
+  /** Lower runs sooner. Criticals jump the queue. */
+  priority: number;
+}
+
+/** Deterministic, filesystem-safe slug so re-runs update a file, not fork it. */
+function slug(v: string): string {
+  return v.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'item';
+}
+
+const COMMIT_RULE =
+  'Write the file, then commit it with git (a short, specific message). ' +
+  'If the file already exists and already covers this, say so plainly and do NOT ' +
+  'duplicate it — report that no action was needed instead.';
+
+function busFactorRemedy(f: Finding): Remediation {
+  const ev = f.evidence as { holders?: number; holderNames?: string[] };
+  const holders = ev.holders ?? 0;
+  const names = (ev.holderNames ?? []).join(', ') || 'unknown';
+  return {
+    priority: holders <= 1 ? 10 : 40,
+    prompt:
+      `An organizational sweep found a skill coverage risk.\n\n` +
+      `Skill risk: ${f.title}\n` +
+      `Current holders (${holders}): ${names}\n\n` +
+      `Write \`coverage/${slug(f.title)}.md\` containing:\n` +
+      `  1. Why ${holders} holder${holders === 1 ? '' : 's'} is a risk for this specific skill.\n` +
+      `  2. What work would stall if they were unavailable.\n` +
+      `  3. Three concrete cross-training steps, each with a named first action.\n` +
+      `  4. How the org would know the risk is retired.\n\n` +
+      `Be specific and short — this is read by an engineering leader, not scored ` +
+      `by a rubric. ${COMMIT_RULE}`,
+  };
+}
+
+function staleDocRemedy(f: Finding): Remediation {
+  const ev = f.evidence as { source?: string; ingestedAt?: string };
+  return {
+    priority: 60,
+    prompt:
+      `An organizational sweep found an indexed document that nothing references.\n\n` +
+      `Document: ${f.title}\n` +
+      `Source: ${ev.source ?? 'unknown'} · ingested ${ev.ingestedAt ?? 'unknown'}\n\n` +
+      `No person, project, or decision links to it, which means entity extraction ` +
+      `either missed it or the knowledge is genuinely orphaned.\n\n` +
+      `Write \`linking/${slug(f.title)}.md\` containing:\n` +
+      `  1. The most likely reason extraction produced no mentions for a document ` +
+      `of this kind and source.\n` +
+      `  2. Which entity types SHOULD have matched, and what surface forms would ` +
+      `have to be recognised for that to happen.\n` +
+      `  3. Whether this is worth fixing for one document or points at a class of ` +
+      `documents — say which, and why.\n\n` +
+      `${COMMIT_RULE}`,
+  };
+}
+
+function orphanDecisionRemedy(f: Finding): Remediation {
+  const ev = f.evidence as { decidedAt?: string };
+  return {
+    priority: 30,
+    prompt:
+      `An organizational sweep found a decision with no participants recorded.\n\n` +
+      `Decision: ${f.title}\n` +
+      `Decided: ${ev.decidedAt ?? 'unknown'}\n\n` +
+      `Nobody owns it, so "who decided this?" has no answer and no one is ` +
+      `accountable for revisiting it.\n\n` +
+      `Write \`decisions/${slug(f.title)}.md\` containing:\n` +
+      `  1. What evidence would establish ownership of a decision like this.\n` +
+      `  2. The questions to ask, and who to ask them of.\n` +
+      `  3. What should change in the ingestion path so future decisions arrive ` +
+      `with participants attached.\n\n` +
+      `${COMMIT_RULE}`,
+  };
+}
+
+const REMEDIES: Record<SweepName, (f: Finding) => Remediation> = {
+  bus_factor: busFactorRemedy,
+  stale_docs: staleDocRemedy,
+  orphan_decisions: orphanDecisionRemedy,
+};
+
+/**
+ * How to act on a finding. Falls back to a generic investigation for findings
+ * from a sweep that has not declared a remedy — a new sweep should still be
+ * promotable on the day it ships.
+ */
+export function remediationFor(f: Finding): Remediation {
+  const build = REMEDIES[f.sweep as SweepName];
+  if (build) return build(f);
+  return {
+    priority: f.severity === 'critical' ? 10 : f.severity === 'warning' ? 40 : 70,
+    prompt:
+      `An organizational sweep produced a finding that needs a human-readable ` +
+      `assessment.\n\nFinding: ${f.title}\nDetail: ${f.detail ?? '(none)'}\n` +
+      `Evidence: ${JSON.stringify(f.evidence)}\n\n` +
+      `Write \`findings/${slug(f.title)}.md\` assessing what is actually wrong, ` +
+      `how much it matters, and the first concrete step. ${COMMIT_RULE}`,
+  };
+}
+
 const SWEEPS: Record<SweepName, () => Promise<DraftFinding[]>> = {
   bus_factor: sweepBusFactor,
   stale_docs: sweepStaleDocs,
@@ -260,6 +376,50 @@ export async function listFindings(opts: { status?: string; sweep?: string; limi
     firstSeenAt: toStr(r['first_seen_at']),
     lastSeenAt: toStr(r['last_seen_at']),
     fingerprint: toStr(r['fingerprint']),
+  }));
+}
+
+/** One finding by id, or null. */
+export async function getFinding(id: string): Promise<Finding | null> {
+  if (config.mock.aurora) return null;
+  const rows = await exec(
+    `SELECT id, sweep, severity, title, detail, entity_type, entity_id,
+            evidence::text AS evidence, status, job_id,
+            first_seen_at::text AS first_seen_at, last_seen_at::text AS last_seen_at, fingerprint
+       FROM agent_findings WHERE id = :id`,
+    [s('id', id)],
+  );
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    id: toStr(r['id']),
+    sweep: toStr(r['sweep']),
+    severity: toStr(r['severity'], 'info') as Finding['severity'],
+    title: toStr(r['title']),
+    detail: r['detail'] ? toStr(r['detail']) : null,
+    entityType: r['entity_type'] ? toStr(r['entity_type']) : null,
+    entityId: r['entity_id'] ? toStr(r['entity_id']) : null,
+    evidence: (() => { try { return JSON.parse(toStr(r['evidence'], '{}')) as Record<string, unknown>; } catch { return {}; } })(),
+    status: toStr(r['status']),
+    jobId: r['job_id'] ? toStr(r['job_id']) : null,
+    firstSeenAt: toStr(r['first_seen_at']),
+    lastSeenAt: toStr(r['last_seen_at']),
+    fingerprint: toStr(r['fingerprint']),
+  };
+}
+
+/** Counts by sweep and status — drives the grouped findings UI. */
+export async function findingStats(): Promise<Array<{ sweep: string; status: string; severity: string; n: number }>> {
+  if (config.mock.aurora) return [];
+  const rows = await exec(
+    `SELECT sweep, status, severity, count(*)::int AS n
+       FROM agent_findings GROUP BY sweep, status, severity`,
+  );
+  return rows.map((r) => ({
+    sweep: toStr(r['sweep']),
+    status: toStr(r['status']),
+    severity: toStr(r['severity']),
+    n: Number(r['n'] ?? 0),
   }));
 }
 

@@ -15,7 +15,8 @@ import {
   enqueueJob, listJobs, getJob, reviewJob, cancelJob, queueStats,
 } from '../providers/agent-jobs.js';
 import {
-  runSweep, runAllSweeps, listFindings, setFindingStatus, SWEEP_NAMES, type SweepName,
+  runSweep, runAllSweeps, listFindings, setFindingStatus, getFinding, findingStats,
+  remediationFor, SWEEP_NAMES, type SweepName,
 } from '../providers/org-sweeps.js';
 import {
   listProposals, decideProposal, proposeGraphChange, proposalStats,
@@ -131,6 +132,43 @@ workRouter.post('/sweeps/run', requireAction('ManageDevbox'), asyncHandler(async
   }
   const results = name ? [await runSweep(name)] : await runAllSweeps();
   res.json({ results });
+}));
+
+/**
+ * Put a worker on a finding.
+ *
+ * The remedy comes from the sweep that produced the finding, not from the
+ * caller — a client cannot dictate what the agent is told to do, and a new
+ * sweep ships its own remediation with it. The caller may override priority
+ * (an operator escalating something) but not the instructions.
+ */
+workRouter.post('/findings/:id/promote', requireAction('ManageDevbox'), asyncHandler(async (req, res) => {
+  const finding = await getFinding(String(req.params['id'] ?? ''));
+  if (!finding) { res.status(404).json({ error: 'finding not found' }); return; }
+  if (finding.jobId && finding.status === 'promoted') {
+    res.status(409).json({ error: 'finding already has a worker on it', jobId: finding.jobId });
+    return;
+  }
+
+  const remedy = remediationFor(finding);
+  const override = (req.body ?? {}) as { priority?: number };
+
+  const job = await enqueueJob({
+    kind: 'devbox:task',
+    title: `Mitigate: ${finding.title}`,
+    payload: { prompt: remedy.prompt, requiresReview: true, findingId: finding.id },
+    priority: override.priority ?? remedy.priority,
+    createdBy: (req as { session?: { sub?: string } }).session?.sub ?? 'portal',
+  });
+  if (!job) { res.status(503).json({ error: 'queue unavailable (Aurora mocked or unreachable)' }); return; }
+
+  await setFindingStatus(finding.id, 'promoted', job.id);
+  res.status(201).json(job);
+}));
+
+/** Counts by sweep/status/severity so the UI can group instead of listing 44 near-identical rows. */
+workRouter.get('/findings/stats', asyncHandler(async (_req, res) => {
+  res.json({ stats: await findingStats() });
 }));
 
 workRouter.post('/findings/:id/dismiss', requireAction('ManageDevbox'), asyncHandler(async (req, res) => {
