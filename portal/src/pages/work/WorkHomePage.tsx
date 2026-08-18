@@ -7,7 +7,7 @@
 // doing) → Proposals (what needs a human before it touches the graph).
 
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
@@ -46,6 +46,9 @@ const STATUS_TONE: Record<string, string> = {
   cancelled: 'bg-surface-hover text-text-tertiary',
 };
 
+/** Statuses whose detail page streams live rather than replaying a transcript. */
+const LIVE_STATUSES = new Set(['claimed', 'running']);
+
 const SEVERITY_TONE: Record<string, string> = {
   critical: 'bg-danger-bg text-danger',
   warning: 'bg-warning-bg text-warning',
@@ -57,6 +60,7 @@ function money(n: number | undefined): string {
 }
 
 export default function WorkHomePage() {
+  const navigate = useNavigate();
   const { data: summary, refresh: refreshSummary } = useFetch<Summary>('/api/work/summary', 8_000);
   const { data: jobsData, refresh: refreshJobs } = useFetch<{ jobs: Job[] }>('/api/work/jobs?limit=25', 8_000);
   const { data: findingsData, refresh: refreshFindings } = useFetch<{ findings: Finding[] }>('/api/work/findings?status=open&limit=50', 20_000);
@@ -98,9 +102,11 @@ export default function WorkHomePage() {
     try {
       const res = await post('/api/work/jobs', { title: newTitle.trim(), prompt: newPrompt.trim() });
       if (!res.ok) throw new Error((await res.json() as { error?: string }).error ?? `HTTP ${res.status}`);
-      toastSuccess(tid, 'Job queued', 'an idle box will pick it up within ~10s');
+      const job = await res.json() as Job;
+      toastSuccess(tid, 'Job queued', 'an idle worker picks it up within ~10s');
       setNewTitle(''); setNewPrompt('');
       refreshAll();
+      navigate(`/iq/work/${job.id}`);
     } catch (err) {
       toastError(tid, 'Could not queue job', (err as Error).message);
     } finally { setBusy(false); }
@@ -116,8 +122,10 @@ export default function WorkHomePage() {
         prompt: `Investigate and address this org finding, then commit your work.\n\nFinding: ${f.title}\nDetail: ${f.detail ?? ''}\nEvidence: ${JSON.stringify(f.evidence)}\n\nWrite a short markdown plan file in the workspace and commit it with git.`,
       });
       if (!res.ok) throw new Error((await res.json() as { error?: string }).error ?? `HTTP ${res.status}`);
-      toastSuccess(tid, 'Queued from finding', 'tracked back to this finding');
+      const job = await res.json() as Job;
+      toastSuccess(tid, 'Queued from finding', 'opening the job so you can watch it run');
       refreshAll();
+      navigate(`/iq/work/${job.id}`);
     } catch (err) { toastError(tid, 'Promote failed', (err as Error).message); }
   }
 
@@ -264,10 +272,16 @@ export default function WorkHomePage() {
             <div key={j.id} className="px-3.5 py-3 border-b border-border last:border-b-0">
               <div className="flex items-start gap-3 min-w-0">
                 <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-semibold text-text-primary">{j.title}</div>
+                  <Link to={`/iq/work/${j.id}`} className="text-[13px] font-semibold text-text-primary no-underline hover:text-primary">
+                    {j.title}
+                  </Link>
                   <div className="text-[12px] text-text-secondary mt-1 leading-snug">{j.result?.summary ?? 'No summary reported.'}</div>
                   <div className="text-[11px] text-text-tertiary mt-1">
-                    {j.result?.turns ?? 0} turns · {j.result?.toolCalls ?? 0} tools · {money(j.result?.costUsd)} · box {j.boxId ?? '—'}
+                    {j.result?.turns ?? 0} turns · {j.result?.toolCalls ?? 0} tools · {money(j.result?.costUsd)}
+                    {' · '}
+                    <Link to={`/iq/work/${j.id}`} className="text-primary no-underline hover:underline">
+                      read what it did →
+                    </Link>
                   </div>
                 </div>
                 <div className="flex gap-2 shrink-0">
@@ -318,16 +332,23 @@ export default function WorkHomePage() {
             No jobs yet — queue one above, or promote a finding below.
           </div>
         ) : jobs.map((j) => (
-          <div key={j.id} className="px-3.5 py-2.5 border-b border-border last:border-b-0 flex items-center gap-3 min-w-0">
+          <Link
+            key={j.id}
+            to={`/iq/work/${j.id}`}
+            className="px-3.5 py-2.5 border-b border-border last:border-b-0 flex items-center gap-3 min-w-0 no-underline hover:bg-surface-hover transition-colors group"
+          >
             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded shrink-0 ${STATUS_TONE[j.status] ?? 'bg-surface-hover text-text-secondary'}`}>
               {j.status.replace('_', ' ')}
             </span>
             <span className="text-[12.5px] text-text-primary truncate flex-1 min-w-0" title={j.title}>{j.title}</span>
             {j.error && <span className="text-[11px] text-danger truncate max-w-[240px]" title={j.error}>{j.error}</span>}
             <span className="text-[11px] text-text-tertiary shrink-0 hidden md:inline">
-              {j.boxId ? `box ${j.boxId}` : `priority ${j.priority}`}
+              {j.boxId ? `worker ${j.boxId}` : `priority ${j.priority}`}
             </span>
-          </div>
+            <span className="text-[11px] text-text-tertiary shrink-0 group-hover:text-primary">
+              {LIVE_STATUSES.has(j.status) ? 'watch →' : 'open →'}
+            </span>
+          </Link>
         ))}
       </Card>
 

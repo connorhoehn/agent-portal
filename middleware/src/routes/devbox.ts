@@ -403,7 +403,7 @@ export async function runDevboxTask(opts: {
   if (!arn) {
     return {
       ok: false, summary: '', turns: 0, durationMs: 0, costUsd: 0, toolCalls: 0,
-      exitCode: null, error: 'devbox runtime not deployed',
+      exitCode: null, error: 'devbox runtime not deployed', transcript: [],
     };
   }
   return executeDevboxTask({

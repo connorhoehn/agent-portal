@@ -39,6 +39,7 @@ const PromptStudioPage = lazy(() => import('./pages/capabilities/PromptsPage'));
 const PromptHistoryPage = lazy(() => import('./pages/iq/PromptHistoryPage'));
 const PromptOpsHomePage = lazy(() => import('./pages/iq/PromptOpsHomePage'));
 const WorkHomePage = lazy(() => import('./pages/work/WorkHomePage'));
+const JobDetailPage = lazy(() => import('./pages/work/JobDetailPage'));
 const DiffPage = lazy(() => import('./pages/iq/DiffPage'));
 const EvaluationsPage = lazy(() => import('./pages/iq/EvaluationsPage'));
 
@@ -186,6 +187,7 @@ export function App() {
           <Route path="canary" element={<Page element={<CanaryPage />} />} />
           <Route path="prompt-ops" element={<Page element={<PromptOpsHomePage />} />} />
           <Route path="work" element={<Page element={<WorkHomePage />} />} />
+          <Route path="work/:jobId" element={<Page element={<JobDetailPage />} />} />
           <Route path="prompts" element={<Page element={<PromptStudioPage />} />} />
           <Route path="history" element={<Page element={<PromptHistoryPage />} />} />
           <Route path="diff" element={<Page element={<DiffPage />} />} />

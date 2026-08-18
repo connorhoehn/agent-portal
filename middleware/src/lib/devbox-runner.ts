@@ -11,6 +11,34 @@ import {
   InvokeAgentRuntimeCommand as InvokeRuntime,
 } from '@aws-sdk/client-bedrock-agentcore';
 
+/**
+ * One line of what the worker actually did.
+ *
+ * The fleet event log is an in-memory ring buffer, so it cannot answer "what
+ * did this job do?" once the buffer rolls or the process restarts. A job is
+ * reviewed minutes-to-hours after it ran, so the transcript has to outlive
+ * the stream — this is the durable, bounded record that gets stored with the
+ * job and rendered on its detail page.
+ */
+export interface ActivityEntry {
+  /** 'text' = assistant prose, 'tool' = a tool invocation, 'error' = failure. */
+  t: 'text' | 'tool' | 'error';
+  /** Tool name, for 'tool' entries. */
+  name?: string;
+  detail: string;
+  ts: string;
+}
+
+/** Bounds — a runaway agent must not write an unbounded blob into Aurora. */
+const TRANSCRIPT_MAX_ENTRIES = 200;
+const TRANSCRIPT_MAX_DETAIL = 600;
+
+function clip(v: unknown, max = TRANSCRIPT_MAX_DETAIL): string {
+  const s = typeof v === 'string' ? v : JSON.stringify(v ?? '');
+  if (!s) return '';
+  return s.length > max ? `${s.slice(0, max)}…` : s;
+}
+
 export interface DevboxRunOutcome {
   ok: boolean;
   /** Claude Code's final answer text, when the run produced one. */
@@ -21,6 +49,8 @@ export interface DevboxRunOutcome {
   toolCalls: number;
   exitCode: number | null;
   error?: string;
+  /** Bounded record of the run, for review after the event buffer rolls. */
+  transcript: ActivityEntry[];
 }
 
 export interface DevboxRunOptions {
@@ -47,6 +77,14 @@ export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxR
   const started = Date.now();
   const outcome: DevboxRunOutcome = {
     ok: false, summary: '', turns: 0, durationMs: 0, costUsd: 0, toolCalls: 0, exitCode: null,
+    transcript: [],
+  };
+
+  const record = (entry: ActivityEntry): void => {
+    // Keep the head of the run rather than the tail: the first turns explain
+    // what the agent decided to do, which is what a reviewer needs. The tail
+    // is already summarised in `result`.
+    if (outcome.transcript.length < TRANSCRIPT_MAX_ENTRIES) outcome.transcript.push(entry);
   };
 
   const payload = JSON.stringify({
@@ -94,10 +132,23 @@ export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxR
         opts.onEvent?.(ev);
 
         const type = ev['type'];
+        const ts = new Date().toISOString();
         if (type === 'assistant') {
           const content = ((ev['message'] as { content?: unknown[] })?.content ?? []) as Record<string, unknown>[];
           for (const block of content) {
-            if (block['type'] === 'tool_use') outcome.toolCalls += 1;
+            if (block['type'] === 'tool_use') {
+              outcome.toolCalls += 1;
+              const name = String(block['name'] ?? 'tool');
+              const input = block['input'] as Record<string, unknown> | undefined;
+              // Prefer the field that says what the call is aimed at — a bare
+              // JSON dump of the input is unreadable in a review context.
+              const target = input?.['command'] ?? input?.['file_path'] ?? input?.['path']
+                ?? input?.['pattern'] ?? input?.['prompt'] ?? input;
+              record({ t: 'tool', name, detail: clip(target), ts });
+            } else if (block['type'] === 'text') {
+              const text = String(block['text'] ?? '').trim();
+              if (text) record({ t: 'text', detail: clip(text), ts });
+            }
           }
         } else if (type === 'result') {
           outcome.turns = Number(ev['num_turns'] ?? 0);
@@ -114,6 +165,7 @@ export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxR
         } else if (type === 'devbox_error') {
           outcome.ok = false;
           outcome.error = String(ev['error'] ?? 'devbox error');
+          record({ t: 'error', detail: clip(outcome.error), ts });
         }
       }
     }

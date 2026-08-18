@@ -17,9 +17,9 @@
 
 import { EventEmitter } from 'node:events';
 import {
-  claimNextJob, markRunning, completeJob, reapStaleJobs, type AgentJob,
+  claimNextJob, markRunning, completeJob, reapStaleJobs, listJobs, type AgentJob,
 } from '../providers/agent-jobs.js';
-import { listBoxes, appendEvent, getBox } from './devbox-fleet.js';
+import { listBoxes, appendEvent, getBox, registerBox } from './devbox-fleet.js';
 import { runDevboxTask } from '../routes/devbox.js';
 
 const TICK_MS = Number(process.env['JOB_DISPATCH_INTERVAL_MS'] ?? 10_000);
@@ -82,7 +82,18 @@ async function runJob(job: AgentJob): Promise<void> {
     });
 
     if (!outcome.ok) {
-      await completeJob(job.id, { status: 'failed', error: outcome.error ?? 'task failed' });
+      await completeJob(job.id, {
+        status: 'failed',
+        error: outcome.error ?? 'task failed',
+        result: {
+          summary: outcome.summary,
+          turns: outcome.turns,
+          durationMs: outcome.durationMs,
+          costUsd: outcome.costUsd,
+          toolCalls: outcome.toolCalls,
+          transcript: outcome.transcript,
+        },
+      });
       emit('failed', job, { boxId });
       return;
     }
@@ -99,6 +110,9 @@ async function runJob(job: AgentJob): Promise<void> {
         durationMs: outcome.durationMs,
         costUsd: outcome.costUsd,
         toolCalls: outcome.toolCalls,
+        // Stored so the job detail page can show what the worker did long
+        // after the fleet ring buffer has rolled past this run.
+        transcript: outcome.transcript,
       },
     });
     emit(requiresReview ? 'awaiting_review' : 'done', job, { boxId });
@@ -136,11 +150,51 @@ async function tick(): Promise<void> {
   }
 }
 
+/**
+ * Recover from a middleware restart.
+ *
+ * The fleet registry is in-memory, so a restart leaves Aurora holding jobs
+ * marked claimed/running whose runner died with the old process. Nothing is
+ * driving them, their box is no longer registered (so tailing them 404s), and
+ * the ordinary reaper would not touch them for a full stale window.
+ *
+ * Both halves are needed. Re-registering the boxes keeps their session ids
+ * addressable so the fleet is not silently empty after every dev reload; then
+ * reaping with a zero window requeues the orphans immediately, because in a
+ * single-process middleware any job still marked live at boot is orphaned by
+ * definition — there is no run left to wait for.
+ */
+async function recoverOrphanedWork(): Promise<void> {
+  try {
+    const live = [
+      ...(await listJobs({ status: 'running', limit: 100 })),
+      ...(await listJobs({ status: 'claimed', limit: 100 })),
+    ];
+    let adopted = 0;
+    for (const job of live) {
+      if (!job.boxId || !job.sessionId) continue;
+      if (getBox(job.boxId)) continue;
+      registerBox({ id: job.boxId, sessionId: job.sessionId });
+      adopted++;
+    }
+
+    const reaped = await reapStaleJobs(0);
+    if (adopted || reaped.requeued || reaped.failed) {
+      console.log(
+        `[dispatcher] restart recovery: re-registered ${adopted} worker(s), ` +
+        `requeued ${reaped.requeued}, failed ${reaped.failed}`,
+      );
+    }
+  } catch (err) {
+    console.warn('[dispatcher] restart recovery failed:', (err as Error).message);
+  }
+}
+
 export function startJobDispatcher(): void {
   if (timer) return;
   console.log(`[dispatcher] starting job dispatcher, interval ${TICK_MS / 1000}s`);
   timer = setInterval(() => void tick(), TICK_MS);
-  void tick();
+  void recoverOrphanedWork().then(() => tick());
 }
 
 export function stopJobDispatcher(): void {
