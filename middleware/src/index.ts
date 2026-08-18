@@ -201,9 +201,10 @@ if (sweepIntervalMin > 0) {
   console.log(`[sweeps] scheduling org sweeps every ${sweepIntervalMin} min`);
   const runSweeps = () => {
     void runAllSweeps()
-      .then((rs) => {
-        const summary = rs.map((r) => `${r.sweep}: ${r.found} found, ${r.created} new, ${r.resolved} resolved`).join(' | ');
+      .then(({ results, released }) => {
+        const summary = results.map((r) => `${r.sweep}: ${r.found} found, ${r.created} new, ${r.resolved} resolved`).join(' | ');
         if (summary) console.log(`[sweeps] ${summary}`);
+        if (released > 0) console.log(`[sweeps] released ${released} finding(s) whose worker never delivered`);
       })
       .catch((err: unknown) => console.warn('[sweeps] run failed:', (err as Error).message));
   };

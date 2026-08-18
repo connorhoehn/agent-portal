@@ -58,8 +58,11 @@ function deriveNextSteps(
 
   if (health?.awsCredentials?.ok === false) {
     steps.push({
-      label: 'Refresh AWS credentials',
-      detail: 'Every panel below is reading stale or empty data until you run aws-azure-login.',
+      label: 'Refresh AWS credentials, then restart the middleware',
+      detail:
+        'Run aws-azure-login, then restart the middleware process. The re-login alone is not ' +
+        'enough: the credentials file parse is memoized process-wide, so a long-running server ' +
+        'keeps serving the expired session until it restarts.',
       to: '/admin/observability/summary',
       urgent: true,
     });

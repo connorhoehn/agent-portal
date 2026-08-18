@@ -16,7 +16,7 @@ import {
 } from '../providers/agent-jobs.js';
 import {
   runSweep, runAllSweeps, listFindings, setFindingStatus, getFinding, findingStats,
-  remediationFor, SWEEP_NAMES, type SweepName,
+  remediationFor, reopenFindingForJob, releaseAbandonedFindings, SWEEP_NAMES, type SweepName,
 } from '../providers/org-sweeps.js';
 import {
   listProposals, decideProposal, proposeGraphChange, proposalStats,
@@ -93,13 +93,18 @@ workRouter.post('/jobs/:id/review', requireAction('ManageDevbox'), asyncHandler(
   }
   const job = await reviewJob(String(req.params['id'] ?? ''), decision, note);
   if (!job) { res.status(404).json({ error: 'job not found or not awaiting review' }); return; }
+  // Rejecting says the work did not solve it, so the finding goes back on the
+  // board rather than staying pinned to output a human refused.
+  if (decision === 'reject') await reopenFindingForJob(job.id);
   res.json(job);
 }));
 
 workRouter.delete('/jobs/:id', requireAction('ManageDevbox'), asyncHandler(async (req, res) => {
-  const ok = await cancelJob(String(req.params['id'] ?? ''));
+  const id = String(req.params['id'] ?? '');
+  const ok = await cancelJob(id);
   if (!ok) { res.status(409).json({ error: 'job is not cancellable (already running or finished)' }); return; }
-  res.json({ cancelled: true });
+  const reopened = await reopenFindingForJob(id);
+  res.json({ cancelled: true, reopenedFindings: reopened });
 }));
 
 /** Kick a dispatch pass now instead of waiting for the next tick. */
@@ -130,8 +135,14 @@ workRouter.post('/sweeps/run', requireAction('ManageDevbox'), asyncHandler(async
   if (name && !SWEEP_NAMES.includes(name)) {
     throw new ValidationError(`unknown sweep '${name}' — expected one of ${SWEEP_NAMES.join(', ')}`);
   }
-  const results = name ? [await runSweep(name)] : await runAllSweeps();
-  res.json({ results });
+  // A single-sweep run gets the same self-heal pass runAllSweeps does, so
+  // "Run sweeps now" always means the same thing whichever path it takes.
+  if (name) {
+    const released = await releaseAbandonedFindings();
+    res.json({ results: [await runSweep(name)], released });
+    return;
+  }
+  res.json(await runAllSweeps());
 }));
 
 /**

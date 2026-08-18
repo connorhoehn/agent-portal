@@ -125,7 +125,7 @@ export function Layout() {
   const statusLabel = !health
     ? '…'
     : credsExpired
-      ? 'AWS credentials expired — run aws-azure-login'
+      ? 'AWS credentials expired — re-login, then restart the middleware'
       : mockedSubsystems.length === 0
         ? `Live · ${health.region}`
         : `Mock: ${mockedSubsystems.join(', ')}`;

@@ -332,7 +332,39 @@ export async function runSweep(name: SweepName): Promise<{
   return { sweep: name, found: drafts.length, created, updated, resolved: resolvedRows.length };
 }
 
-export async function runAllSweeps(): Promise<Array<Awaited<ReturnType<typeof runSweep>>>> {
+/**
+ * Put findings back on the board when the work sent after them died.
+ *
+ * The per-run hooks (cancel, reject) cover the cases a human triggers, but a
+ * job can also end unproductively on its own — failed on the agent side, or
+ * failed by the reaper after exhausting attempts. The upsert in runSweep only
+ * reopens 'resolved' findings, so without this a 'promoted' finding pinned to
+ * a dead job is stuck forever: the problem still reproduces every sweep, and
+ * the board silently never mentions it again. Sweeping this before each run
+ * makes the loop self-healing no matter how the job died.
+ */
+export async function releaseAbandonedFindings(): Promise<number> {
+  if (config.mock.aurora) return 0;
+  const rows = await exec(
+    `UPDATE agent_findings f
+        SET status = 'open', job_id = NULL
+       FROM agent_jobs j
+      WHERE f.job_id = j.id
+        AND f.status = 'promoted'
+        AND j.status IN ('cancelled', 'failed')
+      RETURNING f.id`,
+  );
+  return rows.length;
+}
+
+export interface SweepRunReport {
+  results: Array<Awaited<ReturnType<typeof runSweep>>>;
+  /** Findings put back on the board because their worker never delivered. */
+  released: number;
+}
+
+export async function runAllSweeps(): Promise<SweepRunReport> {
+  const released = await releaseAbandonedFindings().catch(() => 0);
   const out: Array<Awaited<ReturnType<typeof runSweep>>> = [];
   for (const name of SWEEP_NAMES) {
     try {
@@ -341,7 +373,7 @@ export async function runAllSweeps(): Promise<Array<Awaited<ReturnType<typeof ru
       console.warn(`[sweeps] ${name} failed:`, (err as Error).message);
     }
   }
-  return out;
+  return { results: out, released };
 }
 
 export async function listFindings(opts: { status?: string; sweep?: string; limit?: number } = {}): Promise<Finding[]> {
@@ -421,6 +453,28 @@ export async function findingStats(): Promise<Array<{ sweep: string; status: str
     severity: toStr(r['severity']),
     n: Number(r['n'] ?? 0),
   }));
+}
+
+/**
+ * Release a finding whose job never produced anything.
+ *
+ * Promoting sets the finding to 'promoted' and pins it to a job. If that job
+ * is then cancelled or its output rejected, the underlying problem is still
+ * there — but the finding would sit in 'promoted' forever, pointing at work
+ * that never landed, and the next sweep would skip re-opening it because
+ * 'promoted' is not 'resolved'. That is how a real finding goes quiet without
+ * anyone deciding it should.
+ */
+export async function reopenFindingForJob(jobId: string): Promise<number> {
+  if (config.mock.aurora) return 0;
+  const rows = await exec(
+    `UPDATE agent_findings
+        SET status = 'open', job_id = NULL
+      WHERE job_id = :job AND status = 'promoted'
+      RETURNING id`,
+    [s('job', jobId)],
+  );
+  return rows.length;
 }
 
 export async function setFindingStatus(id: string, status: 'open' | 'dismissed' | 'promoted' | 'resolved', jobId?: string): Promise<boolean> {

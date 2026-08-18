@@ -192,10 +192,22 @@ export default function WorkHomePage() {
     const tid = toastPending('Running org sweeps', 'scanning the graph and knowledge base…');
     try {
       const res = await post('/api/work/sweeps/run', {});
-      const body = await res.json() as { results?: Array<{ sweep: string; found: number; created: number; resolved: number }> };
+      const body = await res.json() as {
+        results?: Array<{ sweep: string; found: number; created: number; resolved: number }>;
+        released?: number;
+      };
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const detail = (body.results ?? []).map((r) => `${r.sweep}: ${r.found} found`).join(' · ');
-      toastSuccess(tid, 'Sweeps complete', detail);
+      const results = body.results ?? [];
+      const created = results.reduce((n, r) => n + r.created, 0);
+      const resolved = results.reduce((n, r) => n + r.resolved, 0);
+      // Report what changed, not what was looked at — "44 found" reads the
+      // same whether or not anything moved.
+      const parts = [
+        created > 0 ? `${created} new` : null,
+        resolved > 0 ? `${resolved} resolved` : null,
+        body.released ? `${body.released} put back (worker never delivered)` : null,
+      ].filter(Boolean);
+      toastSuccess(tid, 'Sweeps complete', parts.length ? parts.join(' · ') : 'nothing changed');
       refreshAll();
     } catch (err) { toastError(tid, 'Sweep failed', (err as Error).message); }
   }
