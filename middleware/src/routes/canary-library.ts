@@ -333,7 +333,10 @@ canaryLibraryRouter.put(
       const variants = current.variants ?? [];
       const existing = variants[0];
       const variantName = existing?.name ?? 'default';
-      const modelId = modelIdOverride ?? existing?.modelId ?? '';
+      // Prompts created outside this surface (e.g. the notebook-provisioned
+      // agent system prompts) may carry no modelId — UpdatePrompt rejects an
+      // empty string, so fall back to the same default the create path uses.
+      const modelId = modelIdOverride || existing?.modelId || 'amazon.nova-pro-v1:0';
 
       // Build inference config: merge override onto existing text config.
       let inferenceConfiguration: PromptInferenceConfiguration | undefined;

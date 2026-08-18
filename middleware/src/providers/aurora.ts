@@ -35,6 +35,7 @@ import type {
   DecisionContribution,
   SkillsGraphSnapshot,
   ProjectsGraphSnapshot,
+  EvidenceDoc,
 } from './types.js';
 
 import {
@@ -923,6 +924,27 @@ async function realGetRadarBatch(personIds: string[]): Promise<RadarBatchEntry[]
   }));
 }
 
+async function realFetchPersonEvidence(personId: string): Promise<EvidenceDoc[]> {
+  const rows = await exec(
+    `SELECT d.id, d.title, d.source, d.source_uri,
+            d.ingested_at::text AS ingested_at, m.count
+       FROM mentions m
+       JOIN documents d ON d.id = m.document_id
+      WHERE m.entity_type = 'person' AND m.entity_id = :pid
+      ORDER BY m.count DESC, d.ingested_at DESC
+      LIMIT 12`,
+    [strParam('pid', personId)],
+  );
+  return rows.map((r) => ({
+    id: toStr(r['id']),
+    title: toStr(r['title'], '(untitled)'),
+    source: toStr(r['source']),
+    sourceUri: r['source_uri'] != null ? toStr(r['source_uri']) : null,
+    ingestedAt: r['ingested_at'] != null ? toStr(r['ingested_at']) : null,
+    mentionCount: toNumber(r['count'], 1),
+  }));
+}
+
 export const realAurora: AuroraProvider = {
   fetchGraph: realFetchGraph,
   fetchSkillsGraph: realFetchSkillsGraph,
@@ -936,6 +958,7 @@ export const realAurora: AuroraProvider = {
   getPersonRadar: realGetPersonRadar,
   getRadarBatch: realGetRadarBatch,
   getContributions: realGetContributions,
+  fetchPersonEvidence: realFetchPersonEvidence,
 };
 
 async function realGetContributions(personId: string): Promise<ContributionsResponse | null> {
@@ -1137,6 +1160,7 @@ export const mockAurora: AuroraProvider = {
   getPersonRadar: mockGetPersonRadar,
   getRadarBatch: mockGetRadarBatch,
   getContributions: mockGetContributions,
+  fetchPersonEvidence: async () => [],
 };
 
 async function mockGetContributions(_personId: string): Promise<ContributionsResponse | null> {

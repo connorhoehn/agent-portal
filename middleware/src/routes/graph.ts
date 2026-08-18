@@ -25,3 +25,11 @@ graphRouter.get('/people/:personId', asyncHandler(async (req, res) => {
   if (!detail) { res.status(404).json({ error: 'Person not found' }); return; }
   res.json(detail);
 }));
+
+// Documents that mention this person — the evidence behind skills/scores.
+// Empty array (not 404) when the corpus hasn't been ingested yet.
+graphRouter.get('/people/:personId/evidence', asyncHandler(async (req, res) => {
+  const personId = req.params['personId'];
+  const docs = typeof personId === 'string' ? await aurora.fetchPersonEvidence(personId) : [];
+  res.json({ documents: docs });
+}));

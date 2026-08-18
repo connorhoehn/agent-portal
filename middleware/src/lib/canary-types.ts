@@ -39,6 +39,8 @@ export type CanaryEvent =
         conciseness: number;
       };
       composite: number;
+      /** composite×10 vs the configured fail threshold (judge-config.ts). */
+      pass?: boolean;
       ts: string;
     }
   | {
