@@ -94,11 +94,16 @@ export async function proposeGraphChange(input: {
   findingId?: string;
 }): Promise<GraphProposal | null> {
   if (config.mock.aurora) return null;
+  // DO NOTHING against the live-dedupe index: proposing the same mutation
+  // twice while an identical one is already pending/approved/applied is a
+  // no-op, not a second row. Returns null in that case, which callers read as
+  // "already known" rather than as a failure.
   const rows = await exec(
     `INSERT INTO graph_proposals
        (source, job_id, finding_id, kind, target_type, target_id, payload, rationale, evidence, confidence)
      VALUES (:source, NULLIF(:job,''), NULLIF(:finding,''), :kind, :ttype, :tid,
              :payload::jsonb, NULLIF(:rationale,''), :evidence::jsonb, :confidence)
+     ON CONFLICT DO NOTHING
      RETURNING ${COLS}`,
     [
       s('source', input.source), s('job', input.jobId ?? ''), s('finding', input.findingId ?? ''),

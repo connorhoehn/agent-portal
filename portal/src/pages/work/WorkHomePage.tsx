@@ -198,6 +198,28 @@ export default function WorkHomePage() {
     } catch (err) { toastError(tid, 'Analysis failed', (err as Error).message); }
   }
 
+  async function analyzeBatch(sweep: string, count: number) {
+    const n = Math.min(count, 10);
+    const tid = toastPending(`Reading ${n} documents`, 'extracting the links each one should have');
+    try {
+      const res = await post('/api/work/findings/analyze-batch', { sweep, limit: n });
+      const r = await res.json() as {
+        analysed: number; proposed: number; alreadyKnown: number;
+        noLinks: number; failed: number; remaining: number;
+      };
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const parts = [
+        r.proposed > 0 ? `${r.proposed} links proposed` : null,
+        r.noLinks > 0 ? `${r.noLinks} had nothing to link` : null,
+        r.alreadyKnown > 0 ? `${r.alreadyKnown} already proposed` : null,
+        r.failed > 0 ? `${r.failed} failed` : null,
+        r.remaining > 0 ? `${r.remaining} still to go` : null,
+      ].filter(Boolean);
+      toastSuccess(tid, `Analysed ${r.analysed} documents`, parts.join(' · ') || 'nothing to do');
+      refreshAll();
+    } catch (err) { toastError(tid, 'Batch analysis failed', (err as Error).message); }
+  }
+
   async function dismiss(f: Finding) {
     const tid = toastPending('Dismissing finding', f.title);
     try {
@@ -549,6 +571,20 @@ export default function WorkHomePage() {
                 <div className="flex-1" />
                 <span className="text-[11px] text-text-tertiary">{open ? 'hide' : 'show'}</span>
               </button>
+
+              {/* Forty-one documents reviewed one click at a time is not a
+                  workflow. Bounded to ten per press so the cost of a click
+                  stays predictable, and the toast says how many remain. */}
+              {findingStatus === 'open' && items.some((f) => f.entityType === 'document') && (
+                <div className="px-3.5 pb-2.5 pl-10 -mt-1">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); void analyzeBatch(sweep, items.length); }}
+                    className="px-2.5 py-1 rounded-md border border-primary/50 bg-surface text-[11px] font-semibold text-primary cursor-pointer hover:bg-primary hover:text-white transition-colors"
+                  >
+                    Find links in {Math.min(items.length, 10)} of these
+                  </button>
+                </div>
+              )}
 
               {open && items.map((f) => (
                 <div key={f.id} className="px-3.5 py-2.5 pl-10 border-t border-border flex items-center gap-3 min-w-0 bg-surface-hover/30">

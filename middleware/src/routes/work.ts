@@ -22,7 +22,7 @@ import {
   listProposals, decideProposal, proposeGraphChange, proposalStats,
 } from '../providers/graph-proposals.js';
 import { dispatcherEvents, dispatchOnce, busyBoxes } from '../lib/job-dispatcher.js';
-import { analyzeDocumentLinks } from '../providers/doc-linker.js';
+import { analyzeDocumentLinks, analyzeDocumentFindings } from '../providers/doc-linker.js';
 
 export const workRouter = Router();
 
@@ -198,6 +198,25 @@ workRouter.post('/findings/:id/analyze', requireAction('ManageDevbox'), asyncHan
   const dryRun = Boolean((req.body as { dryRun?: boolean } | undefined)?.dryRun);
   const analysis = await analyzeDocumentLinks(finding.entityId, { findingId: finding.id, dryRun });
   res.json(analysis);
+}));
+
+/**
+ * Analyse a batch of open document findings.
+ *
+ * Bounded by the provider; the response reports what remains so the caller can
+ * say "10 done, 31 to go" instead of implying the whole backlog is cleared.
+ */
+workRouter.post('/findings/analyze-batch', requireAction('ManageDevbox'), asyncHandler(async (req, res) => {
+  const { limit, sweep } = (req.body ?? {}) as { limit?: number; sweep?: string };
+  const open = await listFindings({ status: 'open', ...(sweep ? { sweep } : {}), limit: 200 });
+  const docs = open
+    .filter((f) => f.entityType === 'document' && f.entityId)
+    .map((f) => ({ id: f.id, entityId: f.entityId as string, title: f.title }));
+  if (docs.length === 0) {
+    res.json({ analysed: 0, proposed: 0, alreadyKnown: 0, noLinks: 0, failed: 0, remaining: 0, outcomes: [] });
+    return;
+  }
+  res.json(await analyzeDocumentFindings(docs, limit ?? 10));
 }));
 
 /** Counts by sweep/status/severity so the UI can group instead of listing 44 near-identical rows. */

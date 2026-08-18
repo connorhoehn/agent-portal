@@ -67,6 +67,8 @@ export interface LinkAnalysis {
   candidatesConsidered: number;
   links: ProposedLink[];
   proposals: GraphProposal[];
+  /** Links already proposed (or already applied) — no second row was created. */
+  alreadyKnown: number;
   /** Set when the analysis could not run; links/proposals will be empty. */
   problem?: string;
 }
@@ -110,11 +112,19 @@ async function fetchText(sourceUri: string | null): Promise<string> {
  * actually name; people/skills/projects use their display name.
  */
 export async function loadCandidates(): Promise<Candidate[]> {
+  // ORDER BY is not cosmetic here. Without it Postgres may return rows in any
+  // order, which (a) changes the prompt text between runs, making extraction
+  // non-reproducible at temperature 0 — the same document really did yield a
+  // link on one run and none on the next — and (b) makes WHICH candidates
+  // survive the LIMIT arbitrary once the graph outgrows the cap.
   const rows = await exec(
-    `SELECT 'person' AS t, id, name FROM people
-     UNION ALL SELECT 'skill', id, name FROM skills
-     UNION ALL SELECT 'project', id, name FROM projects
-     UNION ALL SELECT 'decision', id, topic FROM decisions
+    `SELECT * FROM (
+       SELECT 'person' AS t, id, name FROM people
+       UNION ALL SELECT 'skill', id, name FROM skills
+       UNION ALL SELECT 'project', id, name FROM projects
+       UNION ALL SELECT 'decision', id, topic FROM decisions
+     ) c
+     ORDER BY t, id
      LIMIT ${MAX_CANDIDATES}`,
   );
   return rows.map((r) => ({
@@ -228,6 +238,7 @@ export async function analyzeDocumentLinks(
 ): Promise<LinkAnalysis> {
   const base: LinkAnalysis = {
     documentId, title: '', textLength: 0, candidatesConsidered: 0, links: [], proposals: [],
+    alreadyKnown: 0,
   };
   if (config.mock.aurora) return { ...base, problem: 'Aurora is mocked' };
 
@@ -289,7 +300,94 @@ export async function analyzeDocumentLinks(
       ...(opts.findingId ? { findingId: opts.findingId } : {}),
     });
     if (p) proposals.push(p);
+    else base.alreadyKnown += 1;   // deduped against a live proposal
   }
   base.proposals = proposals;
   return base;
+}
+
+
+// ── Batch ────────────────────────────────────────────────────────────────────
+
+/** Bounded so one click cannot start an unbounded run of model calls. */
+const BATCH_MAX = 25;
+/** Small: Bedrock throttles, and a batch that trips throttling is slower. */
+const BATCH_CONCURRENCY = 3;
+
+export interface BatchOutcome {
+  documentId: string;
+  findingId: string;
+  title: string;
+  proposed: number;
+  alreadyKnown: number;
+  problem?: string;
+}
+
+export interface BatchReport {
+  analysed: number;
+  proposed: number;
+  alreadyKnown: number;
+  noLinks: number;
+  failed: number;
+  /** Findings left unanalysed because the batch cap was hit. */
+  remaining: number;
+  outcomes: BatchOutcome[];
+}
+
+/**
+ * Analyse several document findings in one pass.
+ *
+ * Forty-one unlinked documents reviewed one click at a time is not a workflow.
+ * This is capped and runs at low concurrency: the cap keeps a single click from
+ * launching an unbounded number of model calls, and the concurrency keeps the
+ * batch under Bedrock's throttle, where a wider fan-out would finish slower.
+ *
+ * A failure on one document never fails the batch — every outcome is reported
+ * individually, because the interesting result of a bulk run is usually the
+ * handful that did not work.
+ */
+export async function analyzeDocumentFindings(
+  findings: Array<{ id: string; entityId: string; title: string }>,
+  limit = 10,
+): Promise<BatchReport> {
+  const capped = Math.min(Math.max(limit, 1), BATCH_MAX);
+  const queue = findings.filter((f) => f.entityId).slice(0, capped);
+  const report: BatchReport = {
+    analysed: 0, proposed: 0, alreadyKnown: 0, noLinks: 0, failed: 0,
+    remaining: Math.max(findings.length - queue.length, 0),
+    outcomes: [],
+  };
+
+  let cursor = 0;
+  async function worker(): Promise<void> {
+    for (;;) {
+      const index = cursor++;
+      const f = queue[index];
+      if (!f) return;
+      try {
+        const a = await analyzeDocumentLinks(f.entityId, { findingId: f.id });
+        report.outcomes.push({
+          documentId: f.entityId, findingId: f.id, title: a.title || f.title,
+          proposed: a.proposals.length, alreadyKnown: a.alreadyKnown,
+          ...(a.problem ? { problem: a.problem } : {}),
+        });
+        report.analysed += 1;
+        report.proposed += a.proposals.length;
+        report.alreadyKnown += a.alreadyKnown;
+        if (a.problem) report.failed += 1;
+        else if (a.proposals.length === 0 && a.alreadyKnown === 0) report.noLinks += 1;
+      } catch (err) {
+        report.failed += 1;
+        report.outcomes.push({
+          documentId: f.entityId, findingId: f.id, title: f.title,
+          proposed: 0, alreadyKnown: 0, problem: (err as Error).message,
+        });
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(BATCH_CONCURRENCY, queue.length) }, () => worker()),
+  );
+  return report;
 }

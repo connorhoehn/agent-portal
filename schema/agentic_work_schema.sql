@@ -147,3 +147,22 @@ ALTER TABLE graph_proposals DROP CONSTRAINT IF EXISTS graph_proposals_kind_check
 ALTER TABLE graph_proposals ADD CONSTRAINT graph_proposals_kind_check
   CHECK (kind IN ('add_person_skill','update_person_title','add_collaboration',
                   'add_skill','link_document_mention'));
+
+
+-- ---------------------------------------------------------------------------
+-- Migration: no duplicate live proposals for the same mutation
+--
+-- Re-analysing a document (a second click, a bulk pass, a retry) proposed the
+-- same links again, so a reviewer would face N copies of one change and could
+-- apply the same mutation repeatedly. Dedupe on the mutation itself — kind +
+-- target + payload — but only while the proposal is live. A rejected or failed
+-- proposal must remain re-proposable: rejecting says "not now", not "never
+-- ask again", and a failed apply should be retryable once its cause is fixed.
+--
+-- md5(payload::text) rather than the jsonb itself because jsonb has no default
+-- btree opclass for a unique index.
+-- ---------------------------------------------------------------------------
+
+CREATE UNIQUE INDEX IF NOT EXISTS graph_proposals_live_dedupe
+  ON graph_proposals (kind, target_id, md5(payload::text))
+  WHERE status IN ('pending', 'approved', 'applied');
