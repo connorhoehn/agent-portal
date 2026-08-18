@@ -65,9 +65,7 @@ CREATE INDEX IF NOT EXISTS canary_decisions_canary_ts_idx
   ON observability.canary_decisions (canary_name, decided_at DESC);
 
 COMMENT ON TABLE observability.canary_decisions IS
-  'Audit log of every canary controller tick: which prompt versions were '
-  'compared, what metrics they had, and what action (PROMOTE/ROLLBACK/HOLD/'
-  'FINALIZE_READY or a SKIPPED_* reason) was taken on B''s traffic weight.';
+  'Audit log of every canary controller tick: which prompt versions were compared, what metrics they had, and what action (PROMOTE/ROLLBACK/HOLD/FINALIZE_READY or a SKIPPED_* reason) was taken on B''s traffic weight.';
 
 -- ---------------------------------------------------------------------------
 -- v_canary_score_by_version_5m
@@ -118,7 +116,4 @@ GROUP BY
     - (EXTRACT(MINUTE FROM it.ts)::int % 5) * INTERVAL '1 minute';
 
 COMMENT ON VIEW observability.v_canary_score_by_version_5m IS
-  '5-minute rollup of invocation_traces by canary_name + version_label, '
-  'feeding the canary controller audit path and portal replay chart. '
-  'version_label is NULL until the EMF→Aurora projection adds it to '
-  'invocation_traces; see schema header comment.';
+  '5-minute rollup of invocation_traces by canary_name + version_label, feeding the canary controller audit path and portal replay chart. version_label is NULL until the EMF→Aurora projection adds it to invocation_traces; see schema header comment.';

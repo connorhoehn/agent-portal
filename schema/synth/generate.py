@@ -12,13 +12,15 @@ from __future__ import annotations
 import json
 import logging
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
 import random
 
-from pydantic import BaseModel
+from botocore.exceptions import ClientError
+from pydantic import BaseModel, ValidationError
 
 from . import cache, validate
 from .bedrock import converse_with_schema
@@ -454,14 +456,35 @@ def run_tasks(tasks: list[GenerationTask], graph: dict) -> list[LoadableDoc]:
         if hit:
             loadable = LoadableDoc(**hit)
         else:
-            gen = converse_with_schema(
-                task.output_model,
-                system=task.system,
-                user_prompt=task.user_prompt,
-                model_id=task.model_id,
-                temperature=task.temperature,
-                max_tokens=CONFIG.max_output_tokens,
-            )
+            # Models occasionally drop required fields (ValidationError) or
+            # emit a broken tool-use sequence (Bedrock ModelErrorException) —
+            # retry a few times before letting the whole pipeline die on one doc.
+            last_err: Exception | None = None
+            gen = None
+            for attempt in range(4):
+                try:
+                    gen = converse_with_schema(
+                        task.output_model,
+                        system=task.system,
+                        user_prompt=task.user_prompt,
+                        model_id=task.model_id,
+                        # Nudge temperature up on retries for a different sample.
+                        temperature=min(1.0, task.temperature + 0.15 * attempt),
+                        max_tokens=CONFIG.max_output_tokens,
+                    )
+                    break
+                except ValidationError as err:
+                    last_err = err
+                    print(f"  retry {attempt + 1}/4: {task.doc_type} {key} failed validation")
+                except ClientError as err:
+                    code = err.response.get("Error", {}).get("Code", "")
+                    if code not in ("ModelErrorException", "ThrottlingException", "ServiceUnavailableException"):
+                        raise
+                    last_err = err
+                    print(f"  retry {attempt + 1}/4: {task.doc_type} {key} bedrock {code}")
+                    time.sleep(2 * (attempt + 1))
+            if gen is None:
+                raise last_err  # type: ignore[misc]
             loadable = task.finalize(gen)
             cache.put(f"docs/{task.doc_type}", key, loadable.__dict__)
 
