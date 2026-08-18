@@ -219,6 +219,20 @@ function HarnessHomePage() {
         setModalErr('Response missing runId.');
         return;
       }
+
+      // Creating a run only inserts a row; this is what makes it execute.
+      // Until the engine existed there was nothing to call, so every run sat
+      // at pending and the poll below watched a number that never moved.
+      const exec = await fetch(
+        `/api/observability/harness/runs/${encodeURIComponent(json.runId)}/execute`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: '{}' },
+      );
+      if (!exec.ok) {
+        const body = (await exec.json().catch(() => ({}))) as { error?: string };
+        setModalErr(body.error ?? `Could not start the run (${exec.status}).`);
+        return;
+      }
+
       setActiveRunId(json.runId);
       setActiveStatus(null);
       setActiveDismissed(false);

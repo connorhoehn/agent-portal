@@ -29,6 +29,7 @@ import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handl
 import { exec } from '../providers/aurora.js';
 import { processTrace, type TraceInput } from '../lib/trace-sink.js';
 import { judgeResponse } from '../lib/judge.js';
+import { executeRun, loadCasesForRun } from '../lib/harness-runner.js';
 
 export const harnessRouter = Router();
 
@@ -567,6 +568,46 @@ harnessRouter.post('/runs', asyncHandler(async (req, res) => {
   );
 
   res.status(201).json({ runId, mode });
+}));
+
+// ── POST /runs/:id/execute — actually run the suite ────────────────────────
+//
+// The gap this closes: creating a run only ever inserted a 'pending' row, and
+// nothing in the repo posted results, so a run could never progress. This
+// invokes each active case against its real agent, judges the answer, and
+// records results. It returns immediately and the work continues in the
+// background — a forty-case suite outlives any sensible request timeout — so
+// the client polls /runs/:id/status, which already existed and finally has
+// something to report.
+
+harnessRouter.post('/runs/:id/execute', asyncHandler(async (req, res) => {
+  const runId = String(req.params['id'] ?? '');
+  const rows = await exec(
+    `SELECT status, judge_model_id FROM observability.test_runs
+      WHERE run_id = CAST(:id AS uuid)`,
+    [strParam('id', runId)],
+  );
+  if (rows.length === 0) { res.status(404).json({ error: 'run not found' }); return; }
+  const status = String(rows[0]?.['status'] ?? 'pending');
+  if (status === 'running') { res.status(409).json({ error: 'run is already executing' }); return; }
+
+  const body = (req.body ?? {}) as { agentId?: string };
+  const judgeModelId = String(rows[0]?.['judge_model_id'] ?? 'amazon.nova-pro-v1:0');
+
+  const cases = await loadCasesForRun(body.agentId);
+  if (cases.length === 0) {
+    res.status(400).json({
+      error: body.agentId
+        ? `no active test cases for agent '${body.agentId}'`
+        : 'no active test cases — add one before running the suite',
+    });
+    return;
+  }
+
+  void executeRun(runId, { ...(body.agentId ? { agentId: body.agentId } : {}), judgeModelId })
+    .catch((err: unknown) => console.warn('[harness] run failed:', (err as Error).message));
+
+  res.status(202).json({ runId, started: true, totalCases: cases.length });
 }));
 
 // ── GET /runs — recent runs ────────────────────────────────────────────────

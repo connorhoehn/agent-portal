@@ -543,7 +543,8 @@ let _runtimeArnCache: Map<string, string> | null = null;
 let _runtimeCacheFetchedAt = 0;
 const RUNTIME_CACHE_TTL_MS = 5 * 60_000;
 
-async function getRuntimeArn(agentId: string): Promise<string | null> {
+/** Exported so the harness runner resolves runtimes exactly as replay does. */
+export async function getRuntimeArn(agentId: string): Promise<string | null> {
   const runtimeName = agentId.replace(/-/g, '_'); // orgiq-supervisor → orgiq_supervisor
   const now = Date.now();
   if (
