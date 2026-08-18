@@ -453,8 +453,22 @@ async def handle(payload: dict) -> AsyncIterator | dict:
 
 
 async def _handle_streaming(payload: dict, input_text: str, role: str):
-    """AG-UI streaming path — yields SSE events as the LLM generates tokens."""
-    _, ag_ui_agent, _ = _agents_for_role(role)
+    """AG-UI streaming path — yields SSE events as the LLM generates tokens.
+
+    Establishes the same TraceContext the sync path does. Without it,
+    ``_invoke_sub_agent`` found ``_current_ctx`` empty and never threaded
+    ``parentInvocationId``, so every sub-agent trace landed with
+    parent_invocation_id NULL — and since the portal drives this streaming
+    path, the A2A topology graph could never show a single edge for real
+    user traffic no matter how many sub-agent calls the supervisor made.
+    """
+    _, ag_ui_agent, _prompt_sha = _agents_for_role(role)
+
+    ctx = TraceContext.from_request_payload(payload if isinstance(payload, dict) else {})
+    token = _current_ctx.set(ctx)
+    shared_token = set_active_ctx(ctx)
+    t0 = time.monotonic()
+    streamed_text: list[str] = []
 
     # Build AG-UI RunAgentInput from the middleware payload.
     thread_id = payload.get("sessionId", "default")
@@ -489,11 +503,46 @@ async def _handle_streaming(payload: dict, input_text: str, role: str):
         forwarded_props=None,
     )
 
-    log.info("Supervisor AG-UI streaming (role=%s, thread=%s, run=%s): %s",
-             role, thread_id, run_id, input_text[:120])
+    log.info(
+        "Supervisor AG-UI streaming (role=%s, thread=%s, run=%s, invocation=%s): %s",
+        role, thread_id, run_id, ctx.invocation_id, input_text[:120],
+    )
 
-    async for event in ag_ui_agent.run(run_input):
-        yield event
+    try:
+        with with_orgiq_root(
+            ctx,
+            agent_id="orgiq-supervisor",
+            agent_name="Supervisor",
+            prompt_version=_prompt_sha,
+        ) as oi_span:
+            async for event in ag_ui_agent.run(run_input):
+                # Accumulate assistant text so the persisted trace carries a
+                # real response snippet instead of an empty string.
+                delta = getattr(event, "delta", None)
+                if isinstance(delta, str) and delta:
+                    streamed_text.append(delta)
+                yield event
+            record_guardrail_action(oi_span, action=None, pii_detected=None)
+    finally:
+        duration_ms = int((time.monotonic() - t0) * 1000)
+        _current_ctx.reset(token)
+        reset_active_ctx(shared_token)
+        # Persist the root trace for the streamed run. Sub-agent traces carry
+        # parent_invocation_id == ctx.invocation_id, so this row is what the
+        # A2A topology joins them to.
+        try:
+            bundle = ctx.build_trace_bundle(
+                prompt=input_text,
+                response="".join(streamed_text),
+                agent_id="orgiq-supervisor",
+                agent_name="Supervisor",
+                model_id=MODEL_ID,
+                duration_ms=duration_ms,
+                prompt_version=_prompt_sha,
+            )
+            post_trace(bundle)
+        except Exception as exc:  # noqa: BLE001 — tracing must never break the stream
+            log.warning("supervisor: streaming trace emission failed: %s", exc)
 
 
 async def _handle_sync(payload: dict, input_text: str, role: str) -> dict:
