@@ -13,6 +13,7 @@ import { asyncHandler } from '../lib/async-handler.js';
 import {
   searchWorkItems,
   getProjectWorkTree,
+  getProjectActivity,
   getProjectDecisions,
   getPersonWorkItems,
   createWorkItem,
@@ -51,6 +52,20 @@ workItemsRouter.get(
     if (!id) { res.status(400).json({ error: 'Missing project id' }); return; }
     const tree = await getProjectWorkTree(id);
     res.json(tree);
+  }),
+);
+
+// ── Project activity feed ─────────────────────────────────────────────────────
+// GET /api/graph/projects/:id/activity?limit=25
+workItemsRouter.get(
+  '/projects/:id/activity',
+  asyncHandler(async (req, res) => {
+    const id = req.params['id'] as string;
+    if (!id) { res.status(400).json({ error: 'Missing project id' }); return; }
+    const rawLimit = parseInt(req.query['limit'] as string ?? '25', 10);
+    const limit = Number.isNaN(rawLimit) ? 25 : Math.min(Math.max(rawLimit, 1), 100);
+    const activity = await getProjectActivity(id, { limit });
+    res.json(activity);
   }),
 );
 

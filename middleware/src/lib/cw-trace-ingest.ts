@@ -266,6 +266,8 @@ export async function pollOnce(): Promise<{ ingested: number; errors: number }> 
 
   let ingested = 0;
   let errors = 0;
+  let sampledOut = 0;
+  let duplicates = 0;
   const rows = result.results ?? [];
   let matched = 0;
   for (const row of rows) {
@@ -317,8 +319,15 @@ export async function pollOnce(): Promise<{ ingested: number; errors: number }> 
     try {
       // processTrace is ON CONFLICT DO NOTHING on invocation_id — re-ingesting
       // a bundle the HTTP path already persisted is a no-op at the DB layer.
-      await processTrace(bundle);
-      ingested++;
+      // Count what actually landed: it returns sampled=false when the trace was
+      // dropped by the sampling gate, and inserted=false for a duplicate. The
+      // old code counted every call as "persisted", so a 10% sample rate read
+      // as "persisted 2" while the table gained nothing — which made the
+      // observability pages look broken with no way to tell why.
+      const result = await processTrace(bundle);
+      if (result.inserted) ingested++;
+      else if (result.sampled === false) sampledOut++;
+      else duplicates++;
     } catch (err) {
       errors++;
       console.warn('[cw-ingest] processTrace failed:',
@@ -332,7 +341,13 @@ export async function pollOnce(): Promise<{ ingested: number; errors: number }> 
   // Only log when something interesting happened — avoid spamming once-per-30s
   // when there's no agent activity. matched but not persisted is worth seeing.
   if (matched > 0 || errors > 0) {
-    console.log(`[cw-ingest] matched ${matched} line(s); persisted ${ingested}, parse errors ${errors}`);
+    const detail = [
+      `persisted ${ingested}`,
+      sampledOut > 0 ? `sampled-out ${sampledOut}` : '',
+      duplicates > 0 ? `duplicate ${duplicates}` : '',
+      `parse errors ${errors}`,
+    ].filter(Boolean).join(', ');
+    console.log(`[cw-ingest] matched ${matched} line(s); ${detail}`);
   }
   _lastPollTs = endTs;
   return { ingested, errors };

@@ -642,3 +642,113 @@ export async function updateWorkItem(id: string, patch: {
   if (patch.status === 'done') item.completedAt = item.completedAt ?? item.updatedAt;
   return { ...item };
 }
+
+// ── Project activity feed ─────────────────────────────────────────────────────
+// Real activity for a project, unioned from two sources and ordered newest-first:
+//   • work_items      — created / updated / completed events
+//   • work_item_comments — human comments and is_system audit events
+//
+// This replaces a hardcoded MOCK_FEED that shipped in ProjectsPage.tsx with
+// invented actors ("Alex Chen"), invented ticket ids ("K8S-182") and invented
+// relative timestamps ("2m ago") — a fabricated feed rendered over a database
+// that already held 132 work items and 249 comments.
+
+export interface ProjectActivityItem {
+  id: string;
+  kind: 'task' | 'pr' | 'comment' | 'status';
+  action: string;
+  actorId: string | null;
+  actorName: string | null;
+  workItemId: string;
+  ticketId: string;
+  subject: string;
+  at: string;
+  prUrl?: string | null;
+  prStatus?: string | null;
+}
+
+/** `wi-cdr-t6` → `CDR-T6`; falls back to the raw id when it has no dashes. */
+function ticketLabel(workItemId: string): string {
+  const parts = workItemId.split('-');
+  return parts.length >= 3 ? parts.slice(1).join('-').toUpperCase() : workItemId.toUpperCase();
+}
+
+export async function getProjectActivity(
+  projectId: string,
+  opts: { limit?: number } = {},
+): Promise<ProjectActivityItem[]> {
+  const limit = Math.min(Math.max(opts.limit ?? 25, 1), 100);
+  if (config.mock.aurora) return [];
+
+  // Comments (human + system audit rows) joined to their work item.
+  const commentRows = await exec(
+    `SELECT c.id, c.body, c.is_system, c.created_at::text AS at,
+            c.author_id, p.name AS author_name,
+            w.id AS work_item_id, w.title, w.pr_url, w.pr_status
+       FROM work_item_comments c
+       JOIN work_items w ON w.id = c.work_item_id
+       LEFT JOIN people p ON p.id = c.author_id
+      WHERE w.project_id = :pid
+      ORDER BY c.created_at DESC
+      LIMIT :lim`,
+    [strParam('pid', projectId), intParam('lim', limit)],
+  );
+
+  // Work-item lifecycle events. completed_at wins over updated_at so a finished
+  // item reads as "completed", not "updated".
+  const itemRows = await exec(
+    `SELECT w.id, w.title, w.type, w.status, w.pr_url, w.pr_status,
+            w.assignee_id, p.name AS assignee_name,
+            COALESCE(w.completed_at, w.updated_at, w.created_at)::text AS at,
+            (w.completed_at IS NOT NULL) AS is_done,
+            (w.updated_at > w.created_at) AS is_updated
+       FROM work_items w
+       LEFT JOIN people p ON p.id = w.assignee_id
+      WHERE w.project_id = :pid
+      ORDER BY COALESCE(w.completed_at, w.updated_at, w.created_at) DESC
+      LIMIT :lim`,
+    [strParam('pid', projectId), intParam('lim', limit)],
+  );
+
+  const activity: ProjectActivityItem[] = [];
+
+  for (const r of commentRows) {
+    const isSystem = r['is_system'] === true;
+    activity.push({
+      id: String(r['id']),
+      kind: isSystem ? 'status' : 'comment',
+      action: isSystem ? 'updated' : 'commented on',
+      actorId: r['author_id'] ? String(r['author_id']) : null,
+      actorName: r['author_name'] ? String(r['author_name']) : null,
+      workItemId: String(r['work_item_id']),
+      ticketId: ticketLabel(String(r['work_item_id'])),
+      subject: isSystem ? String(r['body']) : String(r['title']),
+      at: String(r['at']),
+      prUrl: r['pr_url'] ? String(r['pr_url']) : null,
+      prStatus: r['pr_status'] ? String(r['pr_status']) : null,
+    });
+  }
+
+  for (const r of itemRows) {
+    const prStatus = r['pr_status'] ? String(r['pr_status']) : null;
+    const done = r['is_done'] === true;
+    const updated = r['is_updated'] === true;
+    activity.push({
+      id: `wi-ev-${String(r['id'])}`,
+      kind: prStatus === 'merged' ? 'pr' : done ? 'status' : 'task',
+      action: done ? 'completed' : prStatus === 'merged' ? 'merged' : updated ? 'updated' : 'created',
+      actorId: r['assignee_id'] ? String(r['assignee_id']) : null,
+      actorName: r['assignee_name'] ? String(r['assignee_name']) : null,
+      workItemId: String(r['id']),
+      ticketId: ticketLabel(String(r['id'])),
+      subject: String(r['title']),
+      at: String(r['at']),
+      prUrl: r['pr_url'] ? String(r['pr_url']) : null,
+      prStatus,
+    });
+  }
+
+  return activity
+    .sort((a, b) => b.at.localeCompare(a.at))
+    .slice(0, limit);
+}

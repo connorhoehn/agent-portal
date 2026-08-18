@@ -54,8 +54,13 @@ CREATE TABLE IF NOT EXISTS observability.sampling_config (
   schema_json jsonb
 );
 
+-- Sample every trace by default. A 0.1 rate was silently dropping 90% of
+-- invocations in this lab, so with a handful of runs per day every
+-- observability surface (traces, A2A topology, cost, drift) rendered empty
+-- and looked broken. Lower this deliberately for a high-traffic deployment;
+-- the trade-off is cost/volume, not correctness.
 INSERT INTO observability.sampling_config (template_id, rate)
-VALUES ('default', 0.1)
+VALUES ('default', 1.0)
 ON CONFLICT (template_id) DO NOTHING;
 
 -- Test harness tables — populated by infra/scripts/harness.py and the

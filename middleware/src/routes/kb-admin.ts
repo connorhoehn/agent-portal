@@ -20,6 +20,7 @@ import { Router } from 'express';
 import {
   BedrockAgentClient,
   GetKnowledgeBaseCommand,
+  ListDataSourcesCommand,
   StartIngestionJobCommand,
   ListIngestionJobsCommand,
 } from '@aws-sdk/client-bedrock-agent';
@@ -89,20 +90,57 @@ kbAdminRouter.get('/check', asyncHandler(async (req, res) => {
 
 kbAdminRouter.get('/health', asyncHandler(async (_req, res) => {
   const kbs = await listKbs();
-  const summary = kbs.map(kb => ({
-    id: kb.id,
-    slug: kb.slug,
-    tenant: kb.tenant,
-    status: kb.status,
-    lastSyncStatus: null as string | null,  // enriched below if bedrockKbId set
-  }));
-
-  // Best-effort: enrich with last ingestion job status for ACTIVE KBs
   const client = new BedrockAgentClient({ region: config.region });
-  await Promise.allSettled(
-    summary.map(async (s, i) => {
-      const kb = kbs[i]!;
-      if (!kb.bedrockKbId || !kb.dataSourceId) return;
+
+  // Health must be a real probe of AWS, not an echo of the registry's own
+  // status column. Previously a KB deleted out-of-band still reported ACTIVE
+  // with no error — the enrichment call failed and the catch swallowed it, so
+  // "missing in AWS" and "healthy, never synced" rendered identically. Agents
+  // then failed KB retrieval at run time while this page stayed green.
+  const summary = await Promise.all(kbs.map(async (kb) => {
+    const base = {
+      id: kb.id,
+      slug: kb.slug,
+      tenant: kb.tenant,
+      /** Registry's own lifecycle column. */
+      status: kb.status,
+      /** True only when Bedrock confirms the knowledge base exists. */
+      reachable: false as boolean,
+      awsStatus: null as string | null,
+      dataSourceCount: null as number | null,
+      lastSyncStatus: null as string | null,
+      lastSyncAt: null as string | null,
+      problem: null as string | null,
+    };
+
+    if (!kb.bedrockKbId) {
+      base.problem = kb.status === 'PENDING'
+        ? 'not provisioned yet — no Bedrock knowledge base has been created'
+        : 'registry row has no Bedrock knowledge base id';
+      return base;
+    }
+
+    try {
+      const got = await client.send(new GetKnowledgeBaseCommand({ knowledgeBaseId: kb.bedrockKbId }));
+      base.reachable = true;
+      base.awsStatus = got.knowledgeBase?.status ?? null;
+    } catch (err) {
+      const name = (err as { name?: string }).name ?? 'UnknownError';
+      base.problem = name === 'ResourceNotFoundException'
+        ? `knowledge base ${kb.bedrockKbId} no longer exists in AWS — registered here but deleted upstream; agents will fail KB retrieval`
+        : `knowledge base lookup failed (${name})`;
+      return base;
+    }
+
+    try {
+      const ds = await client.send(new ListDataSourcesCommand({ knowledgeBaseId: kb.bedrockKbId }));
+      base.dataSourceCount = ds.dataSourceSummaries?.length ?? 0;
+      if (base.dataSourceCount === 0) {
+        base.problem = 'no data source attached — nothing can be ingested';
+      }
+    } catch { /* leave null; the KB itself is confirmed reachable */ }
+
+    if (kb.dataSourceId) {
       try {
         const jobs = await client.send(new ListIngestionJobsCommand({
           knowledgeBaseId: kb.bedrockKbId,
@@ -110,17 +148,27 @@ kbAdminRouter.get('/health', asyncHandler(async (_req, res) => {
           maxResults: 1,
           sortBy: { attribute: 'STARTED_AT', order: 'DESCENDING' },
         }));
-        s.lastSyncStatus = String(jobs.ingestionJobSummaries?.[0]?.status ?? '') || null;
-      } catch { /* best-effort */ }
-    }),
-  );
+        const latest = jobs.ingestionJobSummaries?.[0];
+        base.lastSyncStatus = latest?.status ?? null;
+        base.lastSyncAt = latest?.startedAt ? new Date(latest.startedAt).toISOString() : null;
+        if (!latest && !base.problem) base.problem = 'never synced — documents are not searchable yet';
+      } catch (err) {
+        const name = (err as { name?: string }).name ?? 'UnknownError';
+        if (!base.problem) base.problem = `ingestion history unavailable (${name})`;
+      }
+    }
 
-  const healthy  = summary.filter(s => s.status === 'ACTIVE').length;
-  const degraded = summary.filter(s => ['CREATING', 'UPDATING'].includes(s.status)).length;
-  const failed   = summary.filter(s => s.status === 'FAILED').length;
+    return base;
+  }));
+
+  // Counts reflect the PROBE, not the registry column: a KB the registry calls
+  // ACTIVE but AWS cannot find is broken, and must be counted as such.
+  const broken   = summary.filter(s => s.reachable === false && s.status !== 'PENDING').length;
+  const healthy  = summary.filter(s => s.reachable && !s.problem).length;
+  const degraded = summary.filter(s => s.reachable && Boolean(s.problem)).length;
   const pending  = summary.filter(s => s.status === 'PENDING').length;
 
-  res.json({ healthy, degraded, failed, pending, kbs: summary });
+  res.json({ healthy, degraded, broken, pending, kbs: summary });
 }));
 
 // ─── GET / ────────────────────────────────────────────────────────────────────
