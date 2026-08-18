@@ -733,7 +733,7 @@ aws-agentcore/
 
 ```bash
 # Prerequisites — only the `default` AWS profile is configured locally
-aws sso login            # uses the default profile (account 264161986065)
+aws-azure-login --mode gui   # default profile → innovation lab account 647757222309
 
 # Start the app stack (middleware + portal + jupyter)
 docker-compose up --build

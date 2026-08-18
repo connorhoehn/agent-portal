@@ -16,7 +16,7 @@ This starts three services:
 | Middleware | http://localhost:3001 | Express API + AG-UI SSE proxy |
 | Portal | http://localhost:5183 | React frontend |
 
-Requires AWS credentials via SSO — run `aws sso login` first. Only the `default` profile is configured (account `264161986065`).
+Requires AWS credentials — run `aws-azure-login --mode gui` first. The `default` profile targets the innovation lab account `647757222309` (us-east-1).
 
 ## Demo Portal
 
@@ -69,6 +69,7 @@ Progressive walkthrough of every AgentCore capability:
 | 17 | `17-telemetry` | OpenInference spans → ADOT → CloudWatch → Aurora |
 | 18 | `18-fairness` | Statistical fairness (DI ratio, SPD), LLM-as-judge bias check, Bedrock Model Evaluation (BOLD) |
 | 19 | `19-cleanup` | Resource teardown |
+| 20 | `20-coding-agent` | Devbox: Claude Code hosted in an AgentCore Runtime microVM — session storage, command API, interactive shell |
 
 ## AWS Services Used
 

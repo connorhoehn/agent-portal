@@ -27,7 +27,7 @@ docker-compose up middleware portal  # App stack at :3001 + :5183
 cd agents/<name> && agentcore dev    # Hot-reload local server at :8080
 ```
 
-Requires `~/.aws` credentials via SSO. Run `aws sso login` first (only the `default` profile is configured locally — account `264161986065`).
+Requires `~/.aws` credentials. Run `aws-azure-login --mode gui` first — the `default` profile assumes `aws-innovationlabs-washingtondc1-admin` in the **innovation lab account `647757222309`** (us-east-1). ⚠️ Account `264161986065` is a personal account and must NOT be used for this project.
 
 ## Key SDKs
 
@@ -38,7 +38,7 @@ Requires `~/.aws` credentials via SSO. Run `aws sso login` first (only the `defa
 | `ag-ui-protocol` | >=0.1.18 | AG-UI event types + SSE encoder |
 | `ag-ui-strands` | >=0.1.8 | Strands → AG-UI adapter (StrandsAgent) |
 | `boto3` | >=1.34 | Bedrock, RDS Data API (Aurora), S3, DynamoDB, OpenSearch, Verified Permissions |
-| `@aws/agentcore` | latest | AgentCore CLI (npm global install) |
+| `@aws/agentcore` | latest | AgentCore CLI (npm global install — bundled into the jupyter image; install globally on the host if you want `agentcore dev`/`agentcore exec` outside Docker) |
 
 ## CDK vs AgentCore CLI — what deploys what
 
@@ -59,6 +59,7 @@ Requires `~/.aws` credentials via SSO. Run `aws sso login` first (only the `defa
 | Custom Evaluators + Online Evaluation | CDK (`CfnEvaluator`, `CfnOnlineEvaluationConfig`) |
 | Online Evaluation (enable after runtimes) | CDK with `--context enableEval=true` |
 | Span Projector Lambda (OpenInference → Aurora observability tables) | CDK (`OrgIQ-SpanProjector`) |
+| Devbox runtime (Claude Code in a microVM, session storage) | CDK with `--context deployDevbox=true` (`OrgIQ-Devbox`) |
 
 ## Agent Dockerfile requirements (AgentCore Runtime)
 
@@ -67,7 +68,7 @@ Requires `~/.aws` credentials via SSO. Run `aws sso login` first (only the `defa
 - Ports: 8080 (HTTP/AG-UI invocations), 8000 (health/MCP)
 - Health check: `GET /ping`
 - CMD: `opentelemetry-instrument python -m main`
-- Max image size: 1 GB
+- Max image size: 2 GB (AgentCore Runtime quota)
 - ARM64 architecture at deploy (CodeBuild handles this)
 
 ## Conventions
@@ -165,6 +166,8 @@ run them casually. Cost ballpark: ~$0.50 per full demo-grade run (213 docs).
 
 - Aurora does NOT support Apache AGE — the graph is modeled as relational tables, not Cypher. Schema in `schema/orgiq_schema.sql`.
 - AgentCore Runtime is deployed via CDK `CfnRuntime` gated on `--context deployRuntimes=true`. Do NOT use the standalone `agentcore deploy` CLI for cloud deploys; it'll drift from the CDK source of truth. (`agentcore dev` is still the right tool for local hot-reload.)
+- **Session storage (`/mnt/workspace`, preview) is wiped on every runtime version update.** The runtime stacks digest-pin container URIs so CFN rolls the runtime on every image push — meaning every `build-all.sh`/devbox image push + deploy wipes all session workspaces for that agent. Treat `/mnt/workspace` as a cache, never a durable store; push work out via git or the command API. Also resets after 14 days idle. Limits: 1 GB/session, session IDs must be ≥33 chars.
+- **Devbox model exception**: the `orgiq-devbox` runtime runs Claude Code, which requires Claude models — via Bedrock inference profiles (`us.anthropic.claude-*` IDs), so still AWS-hosted/AWS-billed, no Anthropic API key anywhere. This is a deliberate, devbox-only exception to the "AWS-native models only" convention; the 9 OrgIQ agents stay on Nova.
 - Span projection runs on a schedule (Lambda) — span data in the Aurora `observability_*` tables can lag CloudWatch by a few minutes. If `OBS_USE_LEGACY_POLLER=true`, the middleware polls CloudWatch directly instead.
 - AgentCore Runtime requires ARM64 Docker images. Local `agentcore dev` runs on host arch.
 - `agentcore deploy` uses remote CodeBuild — no local Docker needed for deployment.
@@ -173,3 +176,6 @@ run them casually. Cost ballpark: ~$0.50 per full demo-grade run (213 docs).
 - OpenSearch Serverless has 2 OCU minimum billing even when idle. Budget alarm is critical.
 - Aurora Serverless v2 has a 0.5-ACU minimum that bills even when idle (~$45/mo). The cluster also takes 10–20s to scale up from a cold call. `./scripts/destroy.sh` pre-drains it before stack teardown.
 - `@connorhoehnslalom/ui-components` requires `GITHUB_TOKEN` env var for npm install to work.
+- **Agent images must install `aws-opentelemetry-distro` (ADOT), not vanilla `opentelemetry-distro`.** AgentCore Runtime injects `OTEL_PYTHON_CONFIGURATOR=aws_configurator`, which only exists in the ADOT package — with the vanilla distro no configurator loads and *no spans are ever exported* (`aws/spans` stays silently empty, which starves the span projector, `/recent-invocations`, and online evaluation). Runtime env also sets `OTEL_TRACES_EXPORTER=otlp` + `AGENT_OBSERVABILITY_ENABLED=true`; account-level X-Ray Transaction Search (`aws xray get-trace-segment-destination` → CloudWatchLogs/ACTIVE) must be on.
+- **Prompt canary** is deployed via `--context deployCanary=true` (`OrgIQ-PromptCanary`: subject A/B + judge managed prompts, SSM weight/control params, SFN controller). The LLM-as-judge config (enable, model, rubric weights, sample rate) lives in SSM `/orgiq/canary/judge_config`, edited from `/iq/evaluations`, and is read by `middleware/src/lib/canary-judge.ts` on every canary ask. Online evaluation needs BOTH `--context enableEval=true` AND `--context enableOnlineEvalConfig=true` (the config resource requires `ServiceNames` + `ExecutionStatus: ENABLED` and an exec role that can create its results log group).
+- **Newsroom is feature-flagged off** in the portal (`portal/src/lib/features.ts`); re-enable with `VITE_ENABLE_NEWSROOM=true`. Routes/backend stay live — only nav + tenant switcher hide.
