@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.approval_tool import request_approval  # noqa: E402
+from _shared.prompt_source import resolve_system_prompt
 from _shared.instrumentation import (  # noqa: E402
     TraceContext,
     install_bedrock_usage_capture,
@@ -356,48 +357,66 @@ def _model_kwargs(guardrail_id: str = "") -> dict:
     return kw
 
 
-def _build_agent(guardrail_id: str) -> Agent:
+def _build_agent(guardrail_id: str, system_prompt: str) -> Agent:
     return Agent(
         model=BedrockModel(**_model_kwargs(guardrail_id)),
         tools=SUPERVISOR_TOOLS,
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=system_prompt,
     )
 
 
-# Cache one Agent per role. Falls back to single-guardrail mode if the per-role
-# env vars aren't set (back-compat with pre-RBAC deployments).
-_AGENTS_BY_ROLE: dict[str, Agent] = {}
-for _role, _gid in ROLE_GUARDRAIL_IDS.items():
-    if _gid:
-        _AGENTS_BY_ROLE[_role] = _build_agent(_gid)
-if not _AGENTS_BY_ROLE:
-    _AGENTS_BY_ROLE[DEFAULT_ROLE] = _build_agent("")
-log.info("Supervisor initialized with roles: %s", sorted(_AGENTS_BY_ROLE.keys()))
-
-# Wrap each role agent with the AG-UI StrandsAgent adapter for SSE streaming.
-_AG_UI_AGENTS: dict[str, StrandsAgent] = {}
-for _role, _agent in _AGENTS_BY_ROLE.items():
-    _AG_UI_AGENTS[_role] = StrandsAgent(
-        agent=_agent,
-        name=f"orgiq-supervisor-{_role}",
+def _build_ag_ui(role: str, agent: Agent) -> StrandsAgent:
+    return StrandsAgent(
+        agent=agent,
+        name=f"orgiq-supervisor-{role}",
         config=StrandsAgentConfig(
             emit_messages_snapshot=False,
             replay_history_into_strands=True,
         ),
     )
-log.info("AG-UI StrandsAgent adapters created for roles: %s", sorted(_AG_UI_AGENTS.keys()))
+
+
+# One Agent (+ AG-UI adapter) per role. Both are rebuilt when the managed
+# system prompt changes — the supervisor's prompt is resolved from Bedrock
+# Prompt Management at run time, so editing `orgiq-supervisor-system-prompt`
+# in the portal takes effect within PROMPT_REFRESH_S without a redeploy.
+# Falls back to the SYSTEM_PROMPT literal if the library is unreachable.
+_ROLES: dict[str, str] = {r: g for r, g in ROLE_GUARDRAIL_IDS.items() if g} or {DEFAULT_ROLE: ""}
+_AGENTS_BY_ROLE: dict[str, Agent] = {}
+_AG_UI_AGENTS: dict[str, StrandsAgent] = {}
+_PROMPT_SHA_BY_ROLE: dict[str, str] = {}
+
+
+def _agents_for_role(role: str) -> tuple[Agent, StrandsAgent, str]:
+    """(agent, ag_ui_adapter, prompt_sha) for a role, rebuilt on prompt change."""
+    resolved = resolve_system_prompt(SYSTEM_PROMPT, agent_name="supervisor")
+    if _PROMPT_SHA_BY_ROLE.get(role) != resolved.sha or role not in _AGENTS_BY_ROLE:
+        agent = _build_agent(_ROLES.get(role, ""), resolved.text)
+        _AGENTS_BY_ROLE[role] = agent
+        _AG_UI_AGENTS[role] = _build_ag_ui(role, agent)
+        _PROMPT_SHA_BY_ROLE[role] = resolved.sha
+        log.info(
+            "Supervisor agent for role=%s built (prompt source=%s sha=%s)",
+            role, resolved.source, resolved.sha,
+        )
+    return _AGENTS_BY_ROLE[role], _AG_UI_AGENTS[role], _PROMPT_SHA_BY_ROLE[role]
+
+
+log.info("Supervisor roles configured: %s", sorted(_ROLES.keys()))
 
 
 def _resolve_role(payload: dict) -> str:
     """Pick the agent for the caller. Unknown / missing roles fall back to member."""
     auth = payload.get("auth") if isinstance(payload, dict) else None
     role = (auth or {}).get("role") if isinstance(auth, dict) else None
-    if role and role in _AGENTS_BY_ROLE:
+    if role and role in _ROLES:
         return role
-    return DEFAULT_ROLE if DEFAULT_ROLE in _AGENTS_BY_ROLE else next(iter(_AGENTS_BY_ROLE))
+    return DEFAULT_ROLE if DEFAULT_ROLE in _ROLES else next(iter(_ROLES))
 
 
-_SYSTEM_PROMPT_SHA = short_prompt_hash(SYSTEM_PROMPT)
+# Baked-prompt marker, kept for reference: the value actually recorded on
+# traces is the resolved prompt's sha (see _agents_for_role).
+_BAKED_PROMPT_SHA = short_prompt_hash(SYSTEM_PROMPT)
 
 # AG-UI streaming mode. When the middleware sends accept: text/event-stream
 # (or includes "stream": true in the payload), use the AG-UI adapter which
@@ -435,7 +454,7 @@ async def handle(payload: dict) -> AsyncIterator | dict:
 
 async def _handle_streaming(payload: dict, input_text: str, role: str):
     """AG-UI streaming path — yields SSE events as the LLM generates tokens."""
-    ag_ui_agent = _AG_UI_AGENTS[role]
+    _, ag_ui_agent, _ = _agents_for_role(role)
 
     # Build AG-UI RunAgentInput from the middleware payload.
     thread_id = payload.get("sessionId", "default")
@@ -479,7 +498,7 @@ async def _handle_streaming(payload: dict, input_text: str, role: str):
 
 async def _handle_sync(payload: dict, input_text: str, role: str) -> dict:
     """Synchronous dict-return path for A2A sub-agent calls."""
-    agent = _AGENTS_BY_ROLE[role]
+    agent, _, _prompt_sha = _agents_for_role(role)
 
     messages = []
     raw_history = payload.get("history", []) if isinstance(payload, dict) else []
@@ -500,7 +519,7 @@ async def _handle_sync(payload: dict, input_text: str, role: str) -> dict:
         ctx,
         agent_id="orgiq-supervisor",
         agent_name="Supervisor",
-        prompt_version=_SYSTEM_PROMPT_SHA,
+        prompt_version=_prompt_sha,
     ) as oi_span:
         t0 = time.monotonic()
         try:
@@ -521,7 +540,7 @@ async def _handle_sync(payload: dict, input_text: str, role: str) -> dict:
                 agent_name="Supervisor",
                 model_id=MODEL_ID,
                 duration_ms=duration_ms,
-                prompt_version=_SYSTEM_PROMPT_SHA,
+                prompt_version=_prompt_sha,
             )
             post_trace(bundle)
         except Exception as exc:

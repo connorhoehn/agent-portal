@@ -15,6 +15,7 @@ from strands.models.bedrock import BedrockModel
 # Shared instrumentation — pull TraceContext + decorator from agents/_shared.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.kb_resolver import resolve_kb_id as _resolve_kb_id  # noqa: E402
+from _shared.prompt_source import LiveAgent
 from _shared.instrumentation import (  # noqa: E402
     TraceContext,
     install_bedrock_usage_capture,
@@ -281,10 +282,18 @@ SYSTEM_PROMPT = (
 _SYSTEM_PROMPT_SHA = short_prompt_hash(SYSTEM_PROMPT)
 
 _model = BedrockModel(**_model_kwargs())
-_agent = Agent(
-    model=_model,
-    tools=[search_archive, find_entities_in_articles, find_co_mentions],
-    system_prompt=SYSTEM_PROMPT,
+# System prompt is resolved from Bedrock Prompt Management at run time
+# (falls back to the SYSTEM_PROMPT literal above). Editing the managed
+# prompt `orgiq-news-researcher-system-prompt` changes this agent within
+# PROMPT_REFRESH_S — no image rebuild, no redeploy.
+_agent = LiveAgent(
+    baked=SYSTEM_PROMPT,
+    agent_name="news-researcher",
+    build=lambda system_prompt: Agent(
+        model=_model,
+        tools=[search_archive, find_entities_in_articles, find_co_mentions],
+        system_prompt=system_prompt,
+    ),
 )
 
 
@@ -330,7 +339,7 @@ async def handle(payload: dict) -> dict:
             agent_name="NewsResearcher",
             model_id=MODEL_ID,
             duration_ms=duration_ms,
-            prompt_version=_SYSTEM_PROMPT_SHA,
+            prompt_version=_agent.prompt_sha,
         )
         post_trace(bundle)
     except Exception as exc:  # noqa: BLE001

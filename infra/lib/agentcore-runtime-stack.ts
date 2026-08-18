@@ -193,6 +193,18 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
                 resources: ['*'],
               }),
               new iam.PolicyStatement({
+                // Agents resolve their system prompt from Bedrock Prompt
+                // Management at run time (agents/_shared/prompt_source.py), so
+                // a Prompt Studio edit reaches the deployed agent without an
+                // image rebuild. Read-only: an agent must never mutate the
+                // library. NOTE: this must live on the *runtime execution*
+                // role — the OrgIQ-Agents `<agent>-role` is a different
+                // principal and granting it there has no effect at run time.
+                sid: 'BedrockPromptRead',
+                actions: ['bedrock:GetPrompt', 'bedrock:ListPrompts'],
+                resources: ['*'],
+              }),
+              new iam.PolicyStatement({
                 sid: 'EcrAccess',
                 // Agents pull layers from BOTH their per-agent repo and the
                 // shared base image repo. Without baseRepo here, the runtime
@@ -368,6 +380,14 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
           OTEL_RESOURCE_ATTRIBUTES: `deployment.environment=dev,service.namespace=orgiq,agent.id=orgiq-${agentName}`,
           OTEL_PYTHON_DISABLED_INSTRUMENTATIONS: '',
           AGENT_NAME: agentName,
+          // Live system prompts: each agent resolves `orgiq-<agent>-system-prompt`
+          // from Bedrock Prompt Management every PROMPT_REFRESH_S, so an edit in
+          // Prompt Studio reaches the deployed agent without an image rebuild.
+          // DRAFT is intentional — it is the studio's editable working copy.
+          // Set PROMPT_SOURCE_DISABLED=1 to pin an agent to its baked prompt.
+          SYSTEM_PROMPT_NAME: `${prefix}-${agentName}-system-prompt`,
+          SYSTEM_PROMPT_VERSION: 'DRAFT',
+          PROMPT_REFRESH_S: '60',
           MEMORY_ID: props.memoryId,
           // Sub-agents run without a guardrail — the supervisor enforces at the
           // edge based on the caller's role. Supervisor still gets per-role IDs

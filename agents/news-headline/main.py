@@ -1,5 +1,6 @@
 import json
 import logging
+from _shared.prompt_source import LiveAgent
 import os
 import re
 import sys
@@ -126,10 +127,18 @@ no preamble, no trailing commentary. The array must have exactly 5 objects:
 Strict JSON only. Do not wrap in markdown. Do not add any text before or after the array."""
 
 _model = BedrockModel(model_id=MODEL_ID)
-_agent = Agent(
-    model=_model,
-    tools=[score_headline],
-    system_prompt=SYSTEM_PROMPT,
+# System prompt is resolved from Bedrock Prompt Management at run time
+# (falls back to the SYSTEM_PROMPT literal above). Editing the managed
+# prompt `orgiq-news-headline-system-prompt` changes this agent within
+# PROMPT_REFRESH_S — no image rebuild, no redeploy.
+_agent = LiveAgent(
+    baked=SYSTEM_PROMPT,
+    agent_name="news-headline",
+    build=lambda system_prompt: Agent(
+        model=_model,
+        tools=[score_headline],
+        system_prompt=system_prompt,
+    ),
 )
 
 
