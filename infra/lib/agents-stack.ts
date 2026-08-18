@@ -103,6 +103,19 @@ export class AgentsStack extends cdk.Stack {
         resources: ['*'],
       }));
 
+      // Common: read managed prompts. Agents resolve their system prompt from
+      // Bedrock Prompt Management at run time (agents/_shared/prompt_source.py)
+      // so a Prompt Studio edit changes the deployed agent without a rebuild.
+      // Read-only by design — an agent must never mutate the library. Without
+      // these actions every agent silently falls back to its baked literal,
+      // which is safe but makes the studio a no-op.
+      role.addToPolicy(new iam.PolicyStatement({
+        sid: 'BedrockPromptRead',
+        effect: iam.Effect.ALLOW,
+        actions: ['bedrock:GetPrompt', 'bedrock:ListPrompts'],
+        resources: ['*'],
+      }));
+
       // Common: sessions table
       role.addToPolicy(new iam.PolicyStatement({
         sid: 'SessionsAccess',
