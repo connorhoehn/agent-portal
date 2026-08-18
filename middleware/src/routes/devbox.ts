@@ -106,11 +106,27 @@ async function resolveDevboxArn(): Promise<string | null> {
   return null;
 }
 
-// ─── Command allowlist ───────────────────────────────────────────────────────
-// The command API executes arbitrary shell in the agent container. A notebook
-// user already holds AWS credentials; a future portal user may not — so the
-// HTTP surface allows only read-only inspection commands, matched by prefix,
-// with shell metacharacters banned outright (no chaining past the allowlist).
+// ─── Command execution modes ─────────────────────────────────────────────────
+//
+// Two modes, and the distinction is about accidents rather than authorization.
+//
+//   safe (default) — read-only inspection commands, matched by prefix, with
+//                    shell metacharacters rejected. What you want when poking
+//                    at a box you do not own.
+//   full           — arbitrary shell. Explicitly opted into per request.
+//
+// `full` does NOT widen the blast radius. Every route in this file already
+// sits behind Cedar's ManageDevbox, and the same principal can POST /task to
+// have Claude Code run whatever it likes in the same container. So restricting
+// the deterministic path never prevented anything — it only made the cheap,
+// predictable way to run a command useless, and pushed people onto a slower,
+// costlier, non-deterministic one to do things as ordinary as `grep`. The
+// allowlist survives as a sane default, not as a security boundary.
+//
+// Deployments that genuinely want the capability gone can set
+// DEVBOX_FULL_EXEC_DISABLED=1, which refuses full mode outright.
+
+export type ExecMode = 'safe' | 'full';
 
 const DEFAULT_ALLOWLIST = [
   'ls', 'cat ', 'head ', 'tail ', 'wc ', 'stat ', 'pwd', 'whoami',
@@ -126,18 +142,85 @@ function commandAllowlist(): string[] {
   return raw.split(',').map((s) => s.trim()).filter(Boolean);
 }
 
-// Quotes are banned alongside the classic metacharacters: the validated
-// command is embedded in a single-quoted `sh -c '...'` wrapper below, and a
-// quote in user input could escape it.
+export function fullExecEnabled(): boolean {
+  return process.env['DEVBOX_FULL_EXEC_DISABLED'] !== '1';
+}
+
+// Safe mode only. In full mode the command never touches a shell as text — it
+// is base64-encoded and decoded inside the container — so there is nothing for
+// a metacharacter to escape.
 const SHELL_META = /[;&|`$<>\\'"\n\r]/;
 
-export function validateCommand(command: string): string | null {
-  if (!command || command.length > 500) return 'command must be 1–500 characters';
-  if (SHELL_META.test(command)) return 'shell metacharacters are not allowed';
+export function validateCommand(command: string, mode: ExecMode = 'safe'): string | null {
+  if (!command || command.length > 4000) return 'command must be 1–4000 characters';
+  if (mode === 'full') {
+    if (!fullExecEnabled()) return 'full shell mode is disabled on this deployment (DEVBOX_FULL_EXEC_DISABLED=1)';
+    return null;
+  }
+  if (SHELL_META.test(command)) {
+    return 'shell metacharacters are not allowed in safe mode — switch to full shell to use pipes, quotes or redirection';
+  }
   const allowed = commandAllowlist().some(
     (prefix) => command === prefix.trim() || command.startsWith(prefix),
   );
-  if (!allowed) return `command not in allowlist (allowed prefixes: ${commandAllowlist().join(', ')})`;
+  if (!allowed) {
+    return `not an allowlisted read-only command — switch to full shell to run it (allowed prefixes: ${commandAllowlist().join(', ')})`;
+  }
+  return null;
+}
+
+/** Marks the trailing line that reports the shell's final working directory. */
+export const CWD_MARKER = '__ORGIQ_CWD__:';
+
+/**
+ * Build the container-side command.
+ *
+ * The user's text is base64-encoded and decoded inside the container, so
+ * quoting is a non-problem: no amount of quotes, newlines or metacharacters in
+ * the input can break out of the wrapper, because the input is never
+ * interpolated into shell source. The decoded script is then SOURCED rather
+ * than run as a child, which is what lets `cd` persist — the terminal reports
+ * the resulting directory back so the next command starts where this one
+ * finished.
+ *
+ * The exit code of the user's command is preserved: the marker is printed
+ * after capturing $?, and the wrapper exits with the original status.
+ */
+export function buildContainerCommand(command: string, cwd: string): string {
+  const b64 = Buffer.from(command, 'utf8').toString('base64');
+  // cwd is validated by the caller; it is passed as an argument to sh rather
+  // than spliced into the script text.
+  // Every quote below is a DOUBLE quote on purpose: the whole script is
+  // wrapped in single quotes when handed to `sh -c`, so a single quote here
+  // would terminate the wrapper early.
+  const script = [
+    'export HOME=/mnt/workspace',
+    'export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0=/mnt/workspace',
+    'cd "$1" 2>/dev/null || cd /mnt/workspace',
+    `echo ${b64} | base64 -d > /tmp/.orgiq-cmd`,
+    // stdin from /dev/null so a command that waits on input (a bare `cat`, an
+    // interactive prompt) returns immediately instead of hanging the terminal
+    // until the runtime timeout — that failure mode has bitten this console
+    // before, and arbitrary commands make it far easier to hit.
+    '. /tmp/.orgiq-cmd < /dev/null',
+    'rc=$?',
+    `printf "\\n${CWD_MARKER}%s\\n" "$(pwd)"`,
+    'exit $rc',
+  ].join('; ');
+  return `sh -c '${script}' orgiq ${shellQuote(cwd)}`;
+}
+
+/** Single-quote for the one value we do interpolate: the working directory. */
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/** Reject a cwd that could not have come from our own marker. */
+export function validateCwd(cwd: string): string | null {
+  if (!cwd) return null;
+  if (cwd.length > 400) return 'working directory is too long';
+  if (/[\n\r\0]/.test(cwd)) return 'working directory contains a control character';
+  if (!cwd.startsWith('/')) return 'working directory must be absolute';
   return null;
 }
 
@@ -173,6 +256,8 @@ devboxRouter.get('/status', asyncHandler(async (_req, res) => {
     runtimeArn: arn,
     runtimeName: DEVBOX_RUNTIME_NAME,
     commandAllowlist: commandAllowlist(),
+    fullExecEnabled: fullExecEnabled(),
+    workspace: '/mnt/workspace',
   });
 }));
 
@@ -321,42 +406,59 @@ devboxRouter.post('/:sessionId/command', asyncHandler(async (req, res) => {
   const sessionId = requireSessionId(String(req.params['sessionId'] ?? ''), res);
   if (!sessionId) return;
 
-  const command = String((req.body as { command?: string } | undefined)?.command ?? '').trim();
-  const validationError = validateCommand(command);
-  if (validationError) { res.status(400).json({ error: validationError }); return; }
+  const body = (req.body ?? {}) as { command?: string; mode?: string; cwd?: string };
+  const command = String(body.command ?? '').trim();
+  const mode: ExecMode = body.mode === 'full' ? 'full' : 'safe';
+  const cwd = String(body.cwd ?? '/mnt/workspace').trim() || '/mnt/workspace';
+
+  const cwdError = validateCwd(cwd);
+  if (cwdError) { res.status(400).json({ error: cwdError }); return; }
+  const validationError = validateCommand(command, mode);
+  if (validationError) { res.status(400).json({ error: validationError, mode }); return; }
 
   const arn = await requireArn(res);
   if (!arn) return;
 
-  // The command API exec's argv directly — no shell. It DOES apply
-  // shell-style word splitting (quotes respected; verified live), so wrap in
-  // `sh -c '...'` to get shell semantics. The cwd prefix is composed
-  // server-side AFTER validation; quotes in user input are rejected above so
-  // the single-quoted wrapper cannot be escaped.
   const resp = await dataClient().send(new RunRuntimeCommand({
     agentRuntimeArn: arn,
     runtimeSessionId: sessionId,
     body: {
-      // HOME matches task mode's (the wrapper pins HOME to the workspace) so
-      // shared dotfiles line up, and GIT_CONFIG_* injects safe.directory for
-      // this invocation only — the mount is root-owned while commands run as
-      // UID 1000, so git otherwise fails with "dubious ownership" (found live).
-      command: `sh -c 'export HOME=/mnt/workspace GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0=/mnt/workspace; cd /mnt/workspace 2>/dev/null || true; ${command}'`,
+      command: buildContainerCommand(command, cwd),
       timeout: Number(process.env['DEVBOX_COMMAND_TIMEOUT_S'] ?? 120),
     },
   }));
 
   initSSE(res);
+  // The marker can be split across stream chunks, so buffer stdout until a
+  // newline before deciding whether a line is output or the cwd report.
+  let pending = '';
+  const flush = (final: boolean): void => {
+    for (;;) {
+      const nl = pending.indexOf('\n');
+      if (nl < 0) break;
+      const line = pending.slice(0, nl);
+      pending = pending.slice(nl + 1);
+      if (line.startsWith(CWD_MARKER)) writeSSE(res, { type: 'cwd', cwd: line.slice(CWD_MARKER.length) });
+      else writeSSE(res, { type: 'stdout', text: `${line}\n` });
+    }
+    if (final && pending) {
+      if (pending.startsWith(CWD_MARKER)) writeSSE(res, { type: 'cwd', cwd: pending.slice(CWD_MARKER.length) });
+      else writeSSE(res, { type: 'stdout', text: pending });
+      pending = '';
+    }
+  };
+
   try {
     for await (const event of resp.stream ?? []) {
       const chunk = (event as { chunk?: Record<string, unknown> }).chunk;
       if (!chunk) continue;
       const delta = chunk['contentDelta'] as { stdout?: string; stderr?: string } | undefined;
-      if (delta?.stdout) writeSSE(res, { type: 'stdout', text: delta.stdout });
+      if (delta?.stdout) { pending += delta.stdout; flush(false); }
       if (delta?.stderr) writeSSE(res, { type: 'stderr', text: delta.stderr });
       const stop = chunk['contentStop'] as { exitCode?: number; status?: string } | undefined;
-      if (stop) writeSSE(res, { type: 'exit', exitCode: stop.exitCode, status: stop.status });
+      if (stop) { flush(true); writeSSE(res, { type: 'exit', exitCode: stop.exitCode, status: stop.status }); }
     }
+    flush(true);
   } catch (err) {
     writeSSE(res, { type: 'devbox_error', error: (err as Error).message });
   } finally {
@@ -386,6 +488,8 @@ export const _internal = {
   setControlClient(client: BedrockAgentCoreControlClient | null): void { _control = client; },
   resetArnCache(): void { _arnCache = null; },
   validateCommand,
+  buildContainerCommand,
+  validateCwd,
 };
 
 // ─── Reusable task runner for the job dispatcher ─────────────────────────────

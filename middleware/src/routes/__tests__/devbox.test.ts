@@ -12,7 +12,7 @@
 
 import express from 'express';
 import request from 'supertest';
-import { devboxRouter, _internal, validateCommand } from '../devbox.js';
+import { devboxRouter, _internal, validateCommand, buildContainerCommand, validateCwd, CWD_MARKER } from '../devbox.js';
 
 const SESSION = 'devbox-0123456789abcdef0123456789abcdef';
 const ARN = 'arn:aws:bedrock-agentcore:us-east-1:111122223333:runtime/orgiq_devbox-abc123';
@@ -97,8 +97,29 @@ describe('validateCommand', () => {
   );
 
   it.each(['rm -rf /', 'curl https://example.com', 'npm install evil'])(
-    'rejects non-allowlisted %s', (cmd) => expect(validateCommand(cmd)).toMatch(/allowlist/),
+    'rejects non-allowlisted %s in safe mode', (cmd) => expect(validateCommand(cmd)).toMatch(/allowlisted/),
   );
+
+  it.each(['rm -rf /tmp/x', 'npm install', 'grep -r "foo bar" .', 'echo hi > f && cat f'])(
+    'allows %s in full mode', (cmd) => expect(validateCommand(cmd, 'full')).toBeNull(),
+  );
+
+  it('points at full mode rather than just refusing', () => {
+    // The old message listed prefixes and left you stuck; the way forward has
+    // to be in the error or nobody finds it.
+    expect(validateCommand('grep foo .')).toMatch(/full shell/);
+    expect(validateCommand('ls | wc -l')).toMatch(/full shell/);
+  });
+
+  it('can have full mode switched off for a locked-down deployment', () => {
+    process.env['DEVBOX_FULL_EXEC_DISABLED'] = '1';
+    try {
+      expect(validateCommand('rm -rf /tmp/x', 'full')).toMatch(/disabled/);
+      expect(validateCommand('ls', 'safe')).toBeNull();
+    } finally {
+      delete process.env['DEVBOX_FULL_EXEC_DISABLED'];
+    }
+  });
 
   it.each(['git status; rm -rf /', 'ls && whoami', 'cat `id`', 'ls | tee /tmp/x', 'cat $(pwd)',
            "git log --format='%h'", 'cat "x y"'])(
@@ -141,12 +162,15 @@ describe('POST /api/devbox/:sessionId/command', () => {
     expect(res.text).toContain('"type":"exit"');
     expect(res.text).toContain('"exitCode":0');
 
-    // Server wraps in `sh -c '...'` (the command API exec's argv, no shell)
-    // and composes the cwd prefix AFTER validation.
+    // Server wraps in `sh -c '...'` (the command API exec's argv, no shell).
+    // The user's text is carried as base64 and decoded inside the container,
+    // so it deliberately does NOT appear as shell source — that is what makes
+    // quoting and injection a non-issue.
     const input = calls[0]!.input as { body: { command: string }; runtimeSessionId: string };
     expect(input.body.command).toMatch(/^sh -c '/);
-    expect(input.body.command).toContain('cd /mnt/workspace');
-    expect(input.body.command).toContain('git status');
+    expect(input.body.command).toContain('cd "$1"');
+    expect(input.body.command).not.toContain('git status');
+    expect(input.body.command).toContain(Buffer.from('git status', 'utf8').toString('base64'));
     expect(input.runtimeSessionId).toBe(SESSION);
   });
 
@@ -225,5 +249,66 @@ describe('DELETE /api/devbox/:sessionId', () => {
     const input = calls[0]!.input as { agentRuntimeArn: string; runtimeSessionId: string };
     expect(input.agentRuntimeArn).toBe(ARN);
     expect(input.runtimeSessionId).toBe(SESSION);
+  });
+});
+
+
+// ─── 4. Container command construction ───────────────────────────────────────
+//
+// This is where a mistake becomes a shell injection or a silently broken
+// terminal, so the properties are pinned rather than eyeballed.
+
+describe('buildContainerCommand', () => {
+  it('never interpolates the command into shell source', () => {
+    // A quote-heavy, newline-bearing command must appear ONLY as base64.
+    const nasty = `echo 'it\\'s'; rm -rf /\nprintf "x"`;
+    const built = buildContainerCommand(nasty, '/mnt/workspace');
+    expect(built).not.toContain('rm -rf /');
+    expect(built).toContain(Buffer.from(nasty, 'utf8').toString('base64'));
+  });
+
+  it('keeps the wrapper single-quoted with no stray single quote inside it', () => {
+    // The script lives inside sh -c '...'; one single quote in the body would
+    // terminate it early and hand the rest to the shell as separate words.
+    const built = buildContainerCommand('ls -la', '/mnt/workspace');
+    const body = built.slice(built.indexOf("'") + 1, built.lastIndexOf("' orgiq"));
+    expect(body).not.toContain("'");
+  });
+
+  it('passes the working directory as an argument, not as script text', () => {
+    const built = buildContainerCommand('pwd', '/mnt/workspace/sub dir');
+    expect(built).toContain('cd "$1"');
+    expect(built.endsWith(`'/mnt/workspace/sub dir'`)).toBe(true);
+  });
+
+  it('sources the script so a cd survives into the reported cwd', () => {
+    const built = buildContainerCommand('cd /tmp', '/mnt/workspace');
+    expect(built).toContain('. /tmp/.orgiq-cmd');
+    expect(built).toContain(CWD_MARKER);
+  });
+
+  it('redirects stdin so an input-waiting command cannot hang the terminal', () => {
+    expect(buildContainerCommand('cat', '/mnt/workspace')).toContain('< /dev/null');
+  });
+
+  it("preserves the user command's exit code past the cwd report", () => {
+    const built = buildContainerCommand('false', '/mnt/workspace');
+    expect(built).toContain('rc=$?');
+    expect(built).toContain('exit $rc');
+  });
+});
+
+describe('validateCwd', () => {
+  it('accepts an absolute path and an empty value', () => {
+    expect(validateCwd('/mnt/workspace/pkg')).toBeNull();
+    expect(validateCwd('')).toBeNull();
+  });
+
+  it.each(['relative/path', 'x'])('rejects non-absolute %s', (p) => {
+    expect(validateCwd(p)).toMatch(/absolute/);
+  });
+
+  it('rejects control characters that could forge a second marker line', () => {
+    expect(validateCwd('/mnt/workspace\nrm -rf /')).toMatch(/control character/);
   });
 });

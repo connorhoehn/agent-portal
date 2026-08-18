@@ -26,6 +26,7 @@ interface DevboxStatus {
   runtimeArn: string | null;
   runtimeName: string;
   commandAllowlist: string[];
+  fullExecEnabled?: boolean;
 }
 
 /** One entry in the task execution timeline. */
@@ -176,8 +177,19 @@ export default function DevboxPage() {
   // ── Per-box streams (in-memory; switching boxes preserves each stream) ─────
   const [timelines, setTimelines] = useState<Record<string, TimelineItem[]>>({});
   const [consoles, setConsoles] = useState<Record<string, ConsoleLine[]>>({});
+  // Full shell is opt-in per box. It is not a privilege escalation — every
+  // devbox route already requires ManageDevbox, and task mode lets the same
+  // person run anything — but it should still be a deliberate switch rather
+  // than the default, so an inspection click cannot delete a workspace.
+  const [execMode, setExecMode] = useState<'safe' | 'full'>('safe');
+  const [cwds, setCwds] = useState<Record<string, string>>({});
+  const [history, setHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const timeline = activeBox ? (timelines[activeBox.id] ?? []) : [];
   const consoleLines = activeBox ? (consoles[activeBox.id] ?? []) : [];
+  const cwd = activeBox ? (cwds[activeBox.id] ?? '/mnt/workspace') : '/mnt/workspace';
+  /** What the prompt shows: the workspace root as ~, like a real shell. */
+  const cwdLabel = cwd.replace(/^\/mnt\/workspace/, '~') || '~';
 
   const pushTimeline = useCallback((boxId: string, updater: (prev: TimelineItem[]) => TimelineItem[]) => {
     setTimelines((all) => ({ ...all, [boxId]: updater(all[boxId] ?? []) }));
@@ -384,11 +396,19 @@ export default function DevboxPage() {
   const runCommand = useCallback(async (command: string, opts?: { silent?: boolean; snapshot?: boolean }) => {
     const text = command.trim();
     if (!text || cmdRunning) return;
-    const trap = stdinTrapHint(text);
-    if (trap) {
-      if (activeBox) pushConsole(activeBox.id, { id: nextId(), kind: 'err', text: trap });
-      else toastError(null, 'Command needs an argument', trap);
-      return;
+    // The stdin trap only matters in safe mode: full mode runs with stdin on
+    // /dev/null server-side, so a bare `cat` returns instead of hanging.
+    if (execMode === 'safe') {
+      const trap = stdinTrapHint(text);
+      if (trap) {
+        if (activeBox) pushConsole(activeBox.id, { id: nextId(), kind: 'err', text: trap });
+        else toastError(null, 'Command needs an argument', trap);
+        return;
+      }
+    }
+    if (!opts?.silent) {
+      setHistory((prev) => (prev[prev.length - 1] === text ? prev : [...prev, text]).slice(-100));
+      setHistoryIndex(null);
     }
     setCmdRunning(true);
     const box = await (async () => {
@@ -413,13 +433,28 @@ export default function DevboxPage() {
     }
     let sawOutput = false;
     try {
-      await readSse(`/api/devbox/${box.sessionId}/command`, { command: text }, (ev) => {
-        const type = ev['type'];
-        if (type === 'stdout') { sawOutput = true; pushConsole(box.id, { id: nextId(), kind: 'stdout', text: String(ev['text']) }); }
-        else if (type === 'stderr') { sawOutput = true; pushConsole(box.id, { id: nextId(), kind: 'stderr', text: String(ev['text']) }); }
-        else if (type === 'exit' && !opts?.silent) pushConsole(box.id, { id: nextId(), kind: 'exit', text: `exit ${String(ev['exitCode'])} — ${String(ev['status'] ?? '')}` });
-        else if (type === 'devbox_error') { sawOutput = true; pushConsole(box.id, { id: nextId(), kind: 'err', text: String(ev['error']) }); }
-      });
+      const boxCwd = cwds[box.id] ?? '/mnt/workspace';
+      await readSse(
+        `/api/devbox/${box.sessionId}/command`,
+        { command: text, mode: execMode, cwd: boxCwd },
+        (ev) => {
+          const type = ev['type'];
+          if (type === 'stdout') { sawOutput = true; pushConsole(box.id, { id: nextId(), kind: 'stdout', text: String(ev['text']) }); }
+          else if (type === 'stderr') { sawOutput = true; pushConsole(box.id, { id: nextId(), kind: 'stderr', text: String(ev['text']) }); }
+          // The shell reports where it ended up, so `cd` sticks for the next
+          // command instead of every line starting from the workspace root.
+          else if (type === 'cwd') setCwds((prev) => ({ ...prev, [box.id]: String(ev['cwd']) || '/mnt/workspace' }));
+          else if (type === 'exit' && !opts?.silent) {
+            const code = Number(ev['exitCode'] ?? 0);
+            pushConsole(box.id, {
+              id: nextId(),
+              kind: code === 0 ? 'exit' : 'err',
+              text: code === 0 ? 'exit 0' : `exit ${code}`,
+            });
+          }
+          else if (type === 'devbox_error') { sawOutput = true; pushConsole(box.id, { id: nextId(), kind: 'err', text: String(ev['error']) }); }
+        },
+      );
       if (opts?.snapshot && !sawOutput) {
         pushConsole(box.id, { id: nextId(), kind: 'exit', text: '(no output)' });
       }
@@ -429,7 +464,7 @@ export default function DevboxPage() {
     } finally {
       setCmdRunning(false);
     }
-  }, [activeBox, cmdRunning, pushConsole, selectBox]);
+  }, [activeBox, cmdRunning, pushConsole, selectBox, execMode, cwds]);
 
   // Watch mode — "tail a devbox": re-run the watch command on an interval so
   // you can observe a workspace another actor (a task, a notebook, an
@@ -560,7 +595,11 @@ export default function DevboxPage() {
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,420px)] gap-5 items-start">
+      {/* The terminal gets the wider column. Running a command is the cheap,
+          deterministic, most-used thing you do with a box; delegating to Claude
+          Code is the occasional expensive one. The old split had it backwards,
+          and 420px is not enough width for `ls -la` to avoid wrapping. */}
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,440px)_minmax(0,1fr)] gap-5 items-start">
         {/* ── Left: task runner + execution timeline ── */}
         <div className="flex flex-col gap-3 min-w-0">
           {/* Composer: textarea + toolbar in one frame, like a chat input. */}
@@ -671,7 +710,7 @@ export default function DevboxPage() {
           </Card>
         </div>
 
-        {/* ── Right: command console — a real terminal frame ── */}
+        {/* ── Terminal — the primary surface ── */}
         <Card className="!p-0 overflow-hidden min-w-0">
           <div className="px-3.5 py-2.5 flex items-center gap-2 bg-[#161b22] border-b border-[#30363d]">
             <span aria-hidden="true" className="flex items-center gap-1.5 mr-1">
@@ -680,11 +719,14 @@ export default function DevboxPage() {
               <span className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
             </span>
             <span className={`text-[11px] font-semibold text-[#e6edf3] select-none ${mono}`}>
-              {activeBox ? `${activeBox.label} — /mnt/workspace` : 'console'}
+              {activeBox ? `${activeBox.label} — ${cwd}` : 'terminal'}
             </span>
             <div className="flex-1" />
-            <span className="text-[9.5px] text-[#8b949e] select-none hidden sm:inline" title="Deterministic shell — allowlisted read-only commands, no LLM">
-              read-only · allowlisted
+            <span
+              className={`text-[9.5px] select-none hidden sm:inline ${execMode === 'full' ? 'text-[#f0883e]' : 'text-[#8b949e]'}`}
+              title="Deterministic shell in the microVM — no LLM, no token cost"
+            >
+              {execMode === 'full' ? 'full shell · writes enabled' : 'read-only · allowlisted'}
             </span>
             <button
               onClick={toggleWatch}
@@ -697,7 +739,7 @@ export default function DevboxPage() {
             </button>
           </div>
           <div className="bg-[#0d1117]">
-            <div ref={consoleRef} className={`h-[400px] overflow-y-auto px-3.5 py-2.5 text-[12px] leading-relaxed ${mono}`}>
+            <div ref={consoleRef} className={`h-[520px] overflow-y-auto px-3.5 py-2.5 text-[12px] leading-relaxed ${mono}`}>
               {consoleLines.length === 0 ? (
                 <div className="text-[#8b949e]">
                   Run read-only commands inside the microVM workspace.
@@ -715,21 +757,88 @@ export default function DevboxPage() {
               {(cmdRunning || watching) && <div className="text-[#8b949e]">{watching ? `◉ watching every ${WATCH_INTERVAL_MS / 1000}s…` : '…'}</div>}
             </div>
             <div className="border-t border-[#30363d] px-3.5 py-2.5 flex items-center gap-2">
-              <span className={`text-[12.5px] text-[#7ee787] ${mono}`}>$</span>
+              <span className={`text-[12.5px] shrink-0 ${mono} ${execMode === 'full' ? 'text-[#f0883e]' : 'text-[#7ee787]'}`}>
+                {cwdLabel} $
+              </span>
               <input
                 className={`flex-1 min-w-0 text-[12.5px] bg-transparent text-[#e6edf3] placeholder-[#8b949e]/60 border-none outline-none ${mono}`}
-                placeholder="git log --oneline"
+                placeholder={execMode === 'full' ? 'any shell command — pipes, quotes, redirection' : 'git log --oneline'}
                 value={cmd}
                 disabled={cmdRunning && !watching}
                 onChange={(e) => setCmd(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') submitCommand(); }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { submitCommand(); return; }
+                  // Shell-style history. Nothing else in this app has a reason
+                  // to bind the arrow keys, and a terminal without recall is
+                  // exhausting the second time you run the same thing.
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (history.length === 0) return;
+                    const next = historyIndex === null ? history.length - 1 : Math.max(0, historyIndex - 1);
+                    setHistoryIndex(next);
+                    setCmd(history[next] ?? '');
+                  } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (historyIndex === null) return;
+                    const next = historyIndex + 1;
+                    if (next >= history.length) { setHistoryIndex(null); setCmd(''); }
+                    else { setHistoryIndex(next); setCmd(history[next] ?? ''); }
+                  }
+                }}
               />
               {cmdRunning && (
                 <span aria-hidden="true" className="inline-block w-3 h-3 rounded-full border-[1.5px] border-[#8b949e] border-t-transparent shrink-0" style={{ animation: 'devbox-spin 0.8s linear infinite' }} />
               )}
             </div>
           </div>
-          {status && status.commandAllowlist.length > 0 && (
+
+          <div className="px-3 py-2 border-t border-border flex items-center gap-2 flex-wrap">
+            <div className="flex rounded-md border border-border overflow-hidden">
+              {(['safe', 'full'] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setExecMode(m)}
+                  disabled={m === 'full' && status?.fullExecEnabled === false}
+                  title={m === 'safe'
+                    ? 'Read-only inspection commands only'
+                    : status?.fullExecEnabled === false
+                      ? 'Disabled on this deployment (DEVBOX_FULL_EXEC_DISABLED=1)'
+                      : 'Any shell command, including writes. Same authorization as running a task.'}
+                  className={`px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                    execMode === m
+                      ? (m === 'full' ? 'bg-warning text-white' : 'bg-primary text-white')
+                      : 'bg-surface text-text-secondary hover:text-text-primary'} ${
+                    m === 'full' && status?.fullExecEnabled === false ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+                >
+                  {m === 'safe' ? 'read-only' : 'full shell'}
+                </button>
+              ))}
+            </div>
+            <span className="text-[11px] text-text-tertiary">
+              {execMode === 'full'
+                ? 'Writes, pipes and redirection are live in this workspace.'
+                : 'Inspection only — switch to full shell to write or pipe.'}
+            </span>
+            <div className="flex-1" />
+            {cwd !== '/mnt/workspace' && (
+              <button
+                onClick={() => activeBox && setCwds((prev) => ({ ...prev, [activeBox.id]: '/mnt/workspace' }))}
+                className="text-[11px] text-text-tertiary hover:text-primary bg-transparent border-none cursor-pointer p-0"
+              >
+                cd ~
+              </button>
+            )}
+            {consoleLines.length > 0 && (
+              <button
+                onClick={() => activeBox && setConsoles((prev) => ({ ...prev, [activeBox.id]: [] }))}
+                className="text-[11px] text-text-tertiary hover:text-primary bg-transparent border-none cursor-pointer p-0"
+              >
+                clear
+              </button>
+            )}
+          </div>
+
+          {status && status.commandAllowlist.length > 0 && execMode === 'safe' && (
             <div className="px-3 py-2 border-t border-border flex flex-wrap gap-1.5">
               {status.commandAllowlist.slice(0, 12).map((prefix) => (
                 <span key={prefix} onClick={() => setCmd(prefix.trim() + ' ')} className="cursor-pointer">
