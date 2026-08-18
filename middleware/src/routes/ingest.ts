@@ -7,6 +7,7 @@ import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 import { config } from '../config.js';
 import {
   getKb,
+  lookupKb,
   listDataSources,
   listIngestionJobs,
   getIngestionJob,
@@ -45,8 +46,10 @@ import type { CrawlTarget, CrawlMode } from '../lib/crawler-types.js';
 export const ingestRouter = Router();
 
 ingestRouter.get('/kb', asyncHandler(async (_req, res) => {
-  const kb = await getKb();
-  res.json({ kb });
+  // Return the diagnosis alongside the payload: "not configured" and
+  // "configured but deleted upstream" need different operator action.
+  const { kb, state, kbId, problem } = await lookupKb();
+  res.json({ kb, state, kbId, problem });
 }));
 
 ingestRouter.get('/data-sources', asyncHandler(async (_req, res) => {

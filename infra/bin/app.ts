@@ -183,7 +183,13 @@ const agentCoreRuntime = new AgentCoreRuntimeStack(app, 'OrgIQ-AgentCoreRuntime'
   guardrailIdHrAdmin: cdk.Fn.importValue(`${prefix}-guardrail-id-hr-admin`),
   auroraClusterArn: cdk.Fn.importValue(`${prefix}-aurora-cluster-arn`),
   auroraCredentialsSecretArn: cdk.Fn.importValue(`${prefix}-aurora-secret-arn`),
-  knowledgeBaseId: cdk.Fn.importValue(`${prefix}-knowledge-base-id`),
+  // `--context kbId=<id>` overrides the CFN import for the agent fleet.
+  // The KnowledgeBase stack's exports are imported by four other stacks, so a
+  // knowledge base deleted out-of-band cannot be replaced without a multi-stack
+  // teardown — the export value is frozen while consumers exist. This lets the
+  // runtimes point at a rebuilt KB immediately; drop it once the KB stack is
+  // recreated cleanly and the export matches reality.
+  knowledgeBaseId: app.node.tryGetContext('kbId') || cdk.Fn.importValue(`${prefix}-knowledge-base-id`),
   codeInterpreterId: cdk.Fn.importValue(`${prefix}-code-interpreter-id`),
   codeInterpreterArn: cdk.Fn.importValue(`${prefix}-code-interpreter-arn`),
   browserId: cdk.Fn.importValue(`${prefix}-browser-id`),
@@ -333,6 +339,12 @@ const middlewareService = new MiddlewareServiceStack(app, 'OrgIQ-MiddlewareServi
 
   // AgentCore identifiers (from AgentCoreMemoryStack + KnowledgeBaseStack)
   memoryId: cdk.Fn.importValue(`${prefix}-memory-id`),
+  // `--context kbId=<id>` overrides the CFN import. The KnowledgeBase stack's
+  // exports are imported by four other stacks, so a knowledge base deleted
+  // out-of-band cannot be replaced without a multi-stack teardown — the export
+  // value is frozen while consumers exist. This override lets the fleet point
+  // at a rebuilt knowledge base immediately; drop it once the KB stack is
+  // recreated cleanly and the export matches reality again.
   knowledgeBaseId: cdk.Fn.importValue(`${prefix}-knowledge-base-id`),
 
   // Guardrail IDs (from GuardrailsStack)
