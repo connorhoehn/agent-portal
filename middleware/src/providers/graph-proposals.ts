@@ -22,7 +22,8 @@ export type ProposalKind =
   | 'add_person_skill'      // payload: { personId, skillId, weight? }
   | 'update_person_title'   // payload: { personId, title }
   | 'add_collaboration'     // payload: { personAId, personBId, weight? }
-  | 'add_skill';            // payload: { skillId, name, domain? }
+  | 'add_skill'             // payload: { skillId, name, domain? }
+  | 'link_document_mention'; // payload: { documentId, entityType, entityId }
 
 export interface GraphProposal {
   id: string;
@@ -179,6 +180,29 @@ async function applyProposal(p: GraphProposal): Promise<void> {
         `INSERT INTO skills (id, name, domain) VALUES (:id, :name, NULLIF(:domain,''))
          ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
         [s('id', skillId), s('name', name), s('domain', toStr(pl['domain']))],
+      );
+      return;
+    }
+    case 'link_document_mention': {
+      const documentId = toStr(pl['documentId']);
+      const entityType = toStr(pl['entityType']);
+      const entityId = toStr(pl['entityId']);
+      if (!documentId || !entityType || !entityId) {
+        throw new Error('link_document_mention requires documentId, entityType and entityId');
+      }
+      // Only the node tables the graph actually has. An extractor that
+      // hallucinated an entity type would otherwise write an unreferenceable
+      // row — mentions has no FK on entity_id, so nothing else would catch it.
+      if (!['person', 'skill', 'project', 'decision'].includes(entityType)) {
+        throw new Error(`unsupported entity_type '${entityType}' for a mention`);
+      }
+      // DO NOTHING, not a count bump: applying the same approved proposal
+      // twice must not inflate the mention weight.
+      await exec(
+        `INSERT INTO mentions (document_id, entity_type, entity_id, count)
+         VALUES (:doc, :etype, :eid, 1)
+         ON CONFLICT (document_id, entity_type, entity_id) DO NOTHING`,
+        [s('doc', documentId), s('etype', entityType), s('eid', entityId)],
       );
       return;
     }

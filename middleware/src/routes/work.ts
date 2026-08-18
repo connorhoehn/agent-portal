@@ -22,6 +22,7 @@ import {
   listProposals, decideProposal, proposeGraphChange, proposalStats,
 } from '../providers/graph-proposals.js';
 import { dispatcherEvents, dispatchOnce, busyBoxes } from '../lib/job-dispatcher.js';
+import { analyzeDocumentLinks } from '../providers/doc-linker.js';
 
 export const workRouter = Router();
 
@@ -175,6 +176,28 @@ workRouter.post('/findings/:id/promote', requireAction('ManageDevbox'), asyncHan
 
   await setFindingStatus(finding.id, 'promoted', job.id);
   res.status(201).json(job);
+}));
+
+/**
+ * Ask the linker what a document should be connected to.
+ *
+ * This is the other way to act on a finding: instead of putting a worker on it
+ * to write about the problem, extract the links the document is missing and
+ * propose them. Output is pending proposals — approval still gates the graph.
+ * `dryRun` returns what it would propose without writing any.
+ */
+workRouter.post('/findings/:id/analyze', requireAction('ManageDevbox'), asyncHandler(async (req, res) => {
+  const finding = await getFinding(String(req.params['id'] ?? ''));
+  if (!finding) { res.status(404).json({ error: 'finding not found' }); return; }
+  if (finding.entityType !== 'document' || !finding.entityId) {
+    res.status(400).json({
+      error: `only document findings can be link-analysed (this one targets ${finding.entityType ?? 'nothing'})`,
+    });
+    return;
+  }
+  const dryRun = Boolean((req.body as { dryRun?: boolean } | undefined)?.dryRun);
+  const analysis = await analyzeDocumentLinks(finding.entityId, { findingId: finding.id, dryRun });
+  res.json(analysis);
 }));
 
 /** Counts by sweep/status/severity so the UI can group instead of listing 44 near-identical rows. */

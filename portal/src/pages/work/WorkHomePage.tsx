@@ -26,6 +26,7 @@ interface Finding {
 interface Proposal {
   id: string; source: string; kind: string; targetId: string;
   payload: Record<string, unknown>; rationale: string | null; confidence: number | null;
+  evidence: Record<string, unknown> | null;
   status: string; applyError: string | null; createdAt: string;
 }
 interface Summary {
@@ -48,6 +49,14 @@ const STATUS_TONE: Record<string, string> = {
 
 /** Statuses whose detail page streams live rather than replaying a transcript. */
 const LIVE_STATUSES = new Set(['claimed', 'running']);
+
+const PROPOSAL_LABELS: Record<string, string> = {
+  link_document_mention: 'Link this document to an entity',
+  add_person_skill: 'Give a person a skill',
+  update_person_title: 'Change a person\u2019s title',
+  add_collaboration: 'Record a collaboration',
+  add_skill: 'Add a new skill',
+};
 
 /** Sweep ids are snake_case machine names; these are what an operator reads. */
 const SWEEP_LABELS: Record<string, string> = {
@@ -97,6 +106,19 @@ export default function WorkHomePage() {
     return [...by.entries()].sort((a, b) => rank(a[1]) - rank(b[1]) || b[1].length - a[1].length);
   }, [findings]);
   const proposals = proposalsData?.proposals ?? [];
+
+  // One analysed document yields a proposal per link — seven for a news
+  // article that names seven projects. Reviewed one at a time that is a
+  // clicking exercise; grouped by target it is a single judgement about the
+  // document, with per-link control still available underneath.
+  const proposalGroups = useMemo<Array<[string, Proposal[]]>>(() => {
+    const by = new Map<string, Proposal[]>();
+    for (const p of proposals) {
+      const list = by.get(p.targetId);
+      if (list) list.push(p); else by.set(p.targetId, [p]);
+    }
+    return [...by.entries()];
+  }, [proposals]);
   const s = summary;
 
   const refreshAll = useCallback(() => {
@@ -156,6 +178,26 @@ export default function WorkHomePage() {
     } catch (err) { toastError(tid, 'Promote failed', (err as Error).message); }
   }
 
+  async function analyze(f: Finding) {
+    const tid = toastPending('Reading the document', 'extracting the links it should have');
+    try {
+      const res = await post(`/api/work/findings/${f.id}/analyze`);
+      const a = await res.json() as {
+        links?: unknown[]; proposals?: unknown[]; problem?: string; candidatesConsidered?: number;
+      };
+      if (!res.ok) throw new Error(a.problem ?? `HTTP ${res.status}`);
+      if (a.problem) { toastError(tid, 'Could not analyse', a.problem); return; }
+      const n = a.proposals?.length ?? 0;
+      if (n === 0) {
+        toastSuccess(tid, 'No links found',
+          `Nothing in the graph (${a.candidatesConsidered ?? 0} entities) is genuinely referenced.`);
+      } else {
+        toastSuccess(tid, `${n} link${n === 1 ? '' : 's'} proposed`, 'review them above before they touch the graph');
+      }
+      refreshAll();
+    } catch (err) { toastError(tid, 'Analysis failed', (err as Error).message); }
+  }
+
   async function dismiss(f: Finding) {
     const tid = toastPending('Dismissing finding', f.title);
     try {
@@ -186,6 +228,25 @@ export default function WorkHomePage() {
       else toastSuccess(tid, decision === 'approve' ? 'Applied to the graph' : 'Rejected');
       refreshAll();
     } catch (err) { toastError(tid, 'Decision failed', (err as Error).message); }
+  }
+
+  async function decideAll(group: Proposal[], decision: 'approve' | 'reject') {
+    const tid = toastPending(
+      decision === 'approve' ? `Applying ${group.length} changes` : `Rejecting ${group.length} changes`,
+      group[0]?.targetId ?? '',
+    );
+    let applied = 0;
+    let failed = 0;
+    for (const p of group) {
+      try {
+        const res = await post(`/api/work/proposals/${p.id}/decide`, { decision });
+        const body = await res.json() as Proposal;
+        if (!res.ok || body.status === 'failed') failed++; else applied++;
+      } catch { failed++; }
+    }
+    if (failed > 0) toastError(tid, `${failed} of ${group.length} failed`, `${applied} applied`);
+    else toastSuccess(tid, decision === 'approve' ? `${applied} applied to the graph` : `${applied} rejected`);
+    refreshAll();
   }
 
   async function runSweeps() {
@@ -342,29 +403,59 @@ export default function WorkHomePage() {
               </div>
             </div>
           ))}
-          {proposals.map((p) => (
-            <div key={p.id} className="px-3.5 py-3 border-b border-border last:border-b-0 bg-warning-bg/20">
-              <div className="flex items-start gap-3 min-w-0">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-warning-bg text-warning">graph change</span>
-                    <span className="text-[13px] font-semibold text-text-primary">{p.kind}</span>
-                    {p.confidence != null && (
-                      <span className="text-[11px] text-text-tertiary">confidence {(p.confidence * 100).toFixed(0)}%</span>
-                    )}
-                  </div>
-                  <div className="text-[12px] text-text-secondary mt-1 leading-snug">{p.rationale ?? '—'}</div>
-                  <div className={`text-[11px] text-text-tertiary mt-1 font-["Fira_Code",monospace]`}>
-                    {JSON.stringify(p.payload)}
-                  </div>
-                </div>
-                <div className="flex gap-2 shrink-0">
-                  <button onClick={() => void decideProposal(p, 'approve')}
-                    className="px-3 py-1 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer">Approve</button>
-                  <button onClick={() => void decideProposal(p, 'reject')}
-                    className="px-3 py-1 rounded-md border border-border bg-surface text-text-secondary text-[12px] font-semibold cursor-pointer hover:text-danger">Reject</button>
+          {proposalGroups.map(([targetId, group]) => (
+            <div key={targetId} className="border-b border-border last:border-b-0 bg-warning-bg/20">
+              <div className="px-3.5 py-2.5 flex items-center gap-3 flex-wrap">
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-warning-bg text-warning">
+                  graph change{group.length === 1 ? '' : 's'}
+                </span>
+                <span className="text-[12.5px] font-semibold text-text-primary">
+                  {group.length} proposed for {targetId}
+                </span>
+                <div className="flex-1" />
+                <div className="flex gap-2">
+                  <button onClick={() => void decideAll(group, 'approve')}
+                    className="px-3 py-1 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer">
+                    Approve all {group.length}
+                  </button>
+                  <button onClick={() => void decideAll(group, 'reject')}
+                    className="px-3 py-1 rounded-md border border-border bg-surface text-text-secondary text-[12px] font-semibold cursor-pointer hover:text-danger">
+                    Reject all
+                  </button>
                 </div>
               </div>
+
+              {group.map((p) => (
+                <div key={p.id} className="px-3.5 py-2.5 pl-8 border-t border-border flex items-start gap-3 min-w-0">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[12.5px] font-semibold text-text-primary">
+                        {PROPOSAL_LABELS[p.kind] ?? p.kind}
+                      </span>
+                      {p.confidence != null && (
+                        <span className="text-[11px] text-text-tertiary">confidence {(p.confidence * 100).toFixed(0)}%</span>
+                      )}
+                    </div>
+                    <div className="text-[12px] text-text-secondary mt-1 leading-snug">{p.rationale ?? '\u2014'}</div>
+                    {/* The quote is the reviewable part: it is verified to
+                        appear verbatim in the source document, so approving is
+                        a judgement about relevance, not about whether the
+                        extractor invented it. */}
+                    {typeof p.evidence?.['quote'] === 'string' && (
+                      <div className="text-[12px] text-text-primary mt-1.5 pl-2.5 border-l-2 border-primary/40 italic">
+                        “{String(p.evidence['quote'])}”
+                      </div>
+                    )}
+                    <div className="text-[11px] text-text-tertiary mt-1.5">{p.source}</div>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <button onClick={() => void decideProposal(p, 'approve')}
+                      className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] font-semibold text-text-secondary cursor-pointer hover:text-primary">Approve</button>
+                    <button onClick={() => void decideProposal(p, 'reject')}
+                      className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] text-text-tertiary cursor-pointer hover:text-danger">Reject</button>
+                  </div>
+                </div>
+              ))}
             </div>
           ))}
         </Card>
@@ -472,6 +563,15 @@ export default function WorkHomePage() {
                     </Link>
                   ) : findingStatus === 'open' ? (
                     <div className="flex gap-1.5 shrink-0">
+                      {f.entityType === 'document' && (
+                        <button
+                          onClick={() => void analyze(f)}
+                          className="px-2.5 py-1 rounded-md border border-primary/50 bg-surface text-[11px] font-semibold text-primary cursor-pointer hover:bg-primary hover:text-white transition-colors"
+                          title="Read the document and propose the graph links it is missing"
+                        >
+                          Find the links
+                        </button>
+                      )}
                       <button
                         onClick={() => void promote(f)}
                         className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] font-semibold text-text-secondary cursor-pointer hover:text-primary hover:border-primary/50 transition-colors"

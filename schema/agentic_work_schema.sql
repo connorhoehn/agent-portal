@@ -107,7 +107,8 @@ CREATE TABLE IF NOT EXISTS graph_proposals (
   -- The mutation, kept declarative so the applier is a small switch and every
   -- proposal is reviewable as data rather than as opaque SQL.
   kind          TEXT NOT NULL
-                CHECK (kind IN ('add_person_skill','update_person_title','add_collaboration','add_skill')),
+                CHECK (kind IN ('add_person_skill','update_person_title','add_collaboration',
+                                'add_skill','link_document_mention')),
   target_type   TEXT NOT NULL,
   target_id     TEXT NOT NULL,
   payload       JSONB NOT NULL,
@@ -131,3 +132,18 @@ COMMENT ON TABLE graph_proposals IS
   'human approves it; the applier then executes the declarative payload.';
 
 CREATE INDEX IF NOT EXISTS graph_proposals_status_idx ON graph_proposals (status, created_at DESC);
+
+
+-- ---------------------------------------------------------------------------
+-- Migration: link_document_mention
+--
+-- The stale-docs sweep finds documents nothing references, but there was no
+-- proposal kind that could actually link one — so 44 findings had no route to
+-- resolution beyond a worker writing a plan about them. This adds the kind
+-- that closes that loop. Idempotent: safe to re-run against a live database.
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE graph_proposals DROP CONSTRAINT IF EXISTS graph_proposals_kind_check;
+ALTER TABLE graph_proposals ADD CONSTRAINT graph_proposals_kind_check
+  CHECK (kind IN ('add_person_skill','update_person_title','add_collaboration',
+                  'add_skill','link_document_mention'));
