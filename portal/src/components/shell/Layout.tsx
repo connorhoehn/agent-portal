@@ -35,7 +35,7 @@ const NAV_ITEMS: NavItem[] = [
   // agent invocation surface.
   { path: '/iq/invoke',    label: 'Search',            tenant: 'orgiq' },
   { path: '/iq/explore',   label: 'Explore',           tenant: 'orgiq' },
-  { path: '/iq/prompts',   label: 'Prompt Management', tenant: 'orgiq' },
+  { path: '/iq/prompt-ops', label: 'Prompt Management', tenant: 'orgiq' },
   { path: '/iq/scores',    label: 'Reports',           tenant: 'orgiq' },
   { path: '/iq/projects',  label: 'Projects',          tenant: 'orgiq' },
   { path: '/newsroom',     label: 'Newsroom',          tenant: 'newsroom' },
