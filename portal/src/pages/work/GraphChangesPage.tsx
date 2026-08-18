@@ -14,6 +14,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
 
 interface Proposal {
   id: string;
@@ -79,10 +80,29 @@ function describe(p: Proposal): string {
 
 export default function GraphChangesPage() {
   const [filter, setFilter] = useState<Filter>('all');
-  const { data } = useFetch<{ proposals: Proposal[] }>(
+  const { data, refresh } = useFetch<{ proposals: Proposal[] }>(
     filter === 'all' ? '/api/work/proposals' : `/api/work/proposals?status=${filter}`,
     15_000,
   );
+
+  // A failed apply is actionable, not just history: retry it once its cause is
+  // fixed, or reject it off the board. Without this a single bad row sat here
+  // permanently with nothing a reviewer could do about it.
+  async function decide(p: Proposal, decision: 'approve' | 'reject') {
+    const tid = toastPending(decision === 'approve' ? 'Retrying' : 'Rejecting', p.rationale ?? p.kind);
+    try {
+      const res = await fetch(`/api/work/proposals/${p.id}/decide`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision }),
+      });
+      const body = await res.json() as Proposal;
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (body.status === 'failed') toastError(tid, 'Still failing', body.applyError ?? 'unknown error');
+      else toastSuccess(tid, body.status === 'applied' ? 'Applied to the graph' : 'Rejected');
+      void refresh();
+    } catch (err) { toastError(tid, 'Could not decide', (err as Error).message); }
+  }
 
   const proposals = useMemo(() => {
     const list = [...(data?.proposals ?? [])];
@@ -159,6 +179,19 @@ export default function GraphChangesPage() {
                 {p.applyError && (
                   <div className="text-[12px] text-danger mt-1.5">
                     Did not apply — {p.applyError}
+                  </div>
+                )}
+
+                {p.status === 'failed' && (
+                  <div className="flex gap-2 mt-2">
+                    <button onClick={() => void decide(p, 'approve')}
+                      className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] font-semibold text-text-secondary cursor-pointer hover:text-primary hover:border-primary/50">
+                      Retry
+                    </button>
+                    <button onClick={() => void decide(p, 'reject')}
+                      className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] text-text-tertiary cursor-pointer hover:text-danger">
+                      Reject it out
+                    </button>
                   </div>
                 )}
 

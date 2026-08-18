@@ -42,11 +42,34 @@ describe('approval gate', () => {
     expect(p?.status).toBe('rejected');
   });
 
-  it('only pending proposals can be decided', async () => {
+  it('leaves already-decided proposals alone', async () => {
+    // Only undecided or failed rows are actionable; an applied or rejected one
+    // must not be silently re-decided.
     execMock.mockResolvedValue([]);
     const p = await decideProposal('prop-1', 'approve');
-    expect(execMock.mock.calls[0][0]).toMatch(/status = 'pending'/);
+    expect(execMock.mock.calls[0][0]).toMatch(/status IN \('pending', 'failed'\)/);
     expect(p).toBeNull();
+  });
+
+  it('lets a failed proposal be rejected off the board', async () => {
+    // A failed apply used to be terminal: nothing could clear it or retry it,
+    // so one bad row sat in the record forever.
+    execMock.mockResolvedValue([{ ...PENDING, status: 'rejected', apply_error: 'FK violation' }]);
+    const p = await decideProposal('prop-1', 'reject', { reviewer: 'connor' });
+    expect(p?.status).toBe('rejected');
+    // History is preserved — rejecting does not erase why it failed.
+    expect(p?.applyError).toBe('FK violation');
+    expect(execMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries the apply when a failed proposal is approved again', async () => {
+    execMock
+      .mockResolvedValueOnce([{ ...PENDING, status: 'approved' }])   // decide
+      .mockResolvedValueOnce([])                                     // apply, now succeeds
+      .mockResolvedValueOnce([{ ...PENDING, status: 'applied' }]);   // mark applied
+    const p = await decideProposal('prop-1', 'approve');
+    expect(execMock.mock.calls[1][0]).toMatch(/INSERT INTO person_skills/);
+    expect(p?.status).toBe('applied');
   });
 
   it('approving applies the mutation idempotently, then marks applied', async () => {

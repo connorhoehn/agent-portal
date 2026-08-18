@@ -217,6 +217,16 @@ async function applyProposal(p: GraphProposal): Promise<void> {
 }
 
 /** Approve (and immediately apply) or reject a pending proposal. */
+/**
+ * Approve (and apply) or reject a proposal.
+ *
+ * Acts on 'pending' AND 'failed' rows. A failed apply used to be terminal —
+ * nothing could reject it off the board or retry it once its cause was fixed,
+ * so a single bad row sat in the record forever with no way to resolve it.
+ * Approving a failed proposal re-runs the apply; rejecting one clears it while
+ * leaving the history (and its original apply_error) intact, because the point
+ * of this table is to be auditable, not tidy.
+ */
 export async function decideProposal(
   id: string,
   decision: 'approve' | 'reject',
@@ -227,7 +237,7 @@ export async function decideProposal(
   const rows = await exec(
     `UPDATE graph_proposals
         SET status = :status, reviewer = NULLIF(:reviewer,''), review_note = NULLIF(:note,''), decided_at = NOW()
-      WHERE id = :id AND status = 'pending'
+      WHERE id = :id AND status IN ('pending', 'failed')
       RETURNING ${COLS}`,
     [
       s('id', id), s('status', decision === 'approve' ? 'approved' : 'rejected'),
