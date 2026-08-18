@@ -102,7 +102,7 @@ export default function PromptOpsHomePage() {
 
       {/* ── What is deployed ── */}
       <div className="grid gap-4 mb-5 grid-cols-1 lg:grid-cols-2">
-        <Card className="flex flex-col">
+        <Card padding="md" className="flex flex-col">
           <div className="flex items-baseline gap-2">
             <span className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Deployed agents</span>
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-success-bg text-success font-semibold">prompt resolved from library</span>
@@ -142,7 +142,7 @@ export default function PromptOpsHomePage() {
           </div>
         </Card>
 
-        <Card className="flex flex-col">
+        <Card padding="md" className="flex flex-col">
           <div className="flex items-baseline gap-2">
             <span className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Canary prompts</span>
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-success-bg text-success font-semibold">edits apply immediately</span>
@@ -171,7 +171,7 @@ export default function PromptOpsHomePage() {
 
       {/* ── Rollout + history ── */}
       <div className="grid gap-4 mb-5 grid-cols-1 md:grid-cols-2">
-        <Card className="flex flex-col">
+        <Card padding="md" className="flex flex-col">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Rollout</div>
           {experimentLive ? (
             <>
@@ -210,7 +210,7 @@ export default function PromptOpsHomePage() {
           )}
         </Card>
 
-        <Card className="flex flex-col">
+        <Card padding="md" className="flex flex-col">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Past experiments</div>
           <div className="flex items-baseline gap-2 mt-1">
             <span className="text-[24px] font-bold text-text-primary leading-none">{pastCount}</span>
@@ -232,7 +232,7 @@ export default function PromptOpsHomePage() {
       </div>
 
       {/* ── Guided path ── */}
-      <Card className="mb-5">
+      <Card padding="md" className="mb-5">
         <div className="text-xs font-semibold text-text-secondary tracking-wide select-none mb-3">HOW A CHANGE SHIPS</div>
         <ol className="list-none p-0 m-0 grid gap-3 grid-cols-1 md:grid-cols-3">
           {[
@@ -255,7 +255,7 @@ export default function PromptOpsHomePage() {
       </Card>
 
       {/* ── Full library, classified ── */}
-      <Card className="!p-0 overflow-hidden">
+      <Card className="overflow-hidden">
         <div className="px-3.5 py-3 border-b border-border flex items-center gap-2">
           <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">PROMPT LIBRARY</span>
           <span className="text-[11px] text-text-tertiary">{allPrompts.length} in Bedrock</span>

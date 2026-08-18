@@ -477,9 +477,10 @@ export default function DevboxPage() {
         @keyframes devbox-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
         @keyframes devbox-spin { to { transform: rotate(360deg); } }
       `}</style>
-      {/* Plain div, not <Card> — the Card component's own padding/layout rules
-          fought the toolbar classes here and made spacing unpredictable. */}
-      <div className="mb-4 rounded-lg border border-border bg-surface px-4 py-3">
+      {/* Card defaults to padding="none" — pass an explicit size or it renders
+          edge-to-edge (that was the cause of the cramped toolbar, not a
+          conflict with the component's own styles). */}
+      <Card padding="sm" className="mb-4">
         <div className="flex items-center justify-between gap-4 min-w-0">
         <div className="flex items-center gap-3 flex-wrap min-w-0 flex-1">
           <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">RUNTIME</span>
@@ -557,7 +558,7 @@ export default function DevboxPage() {
           </button>
         </div>
         </div>
-      </div>
+      </Card>
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,420px)] gap-5 items-start">
         {/* ── Left: task runner + execution timeline ── */}
