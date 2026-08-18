@@ -22,6 +22,7 @@ interface Health {
   service: string;
   mocks: Record<string, boolean>;
   region: string;
+  awsCredentials?: { ok: boolean; error?: string };
 }
 
 type Tenant = 'orgiq' | 'newsroom' | 'admin';
@@ -102,11 +103,14 @@ export function Layout() {
   const mockedSubsystems = health
     ? Object.entries(health.mocks).filter(([, v]) => v).map(([k]) => k)
     : [];
+  const credsExpired = health?.awsCredentials?.ok === false;
   const statusLabel = !health
     ? '…'
-    : mockedSubsystems.length === 0
-      ? `Live · ${health.region}`
-      : `Mock: ${mockedSubsystems.join(', ')}`;
+    : credsExpired
+      ? 'AWS credentials expired — run aws-azure-login'
+      : mockedSubsystems.length === 0
+        ? `Live · ${health.region}`
+        : `Mock: ${mockedSubsystems.join(', ')}`;
 
   const tenantLabel = TENANT_LABELS[session?.tenant ?? 'orgiq'];
 
@@ -116,7 +120,7 @@ export function Layout() {
         <ChannelHeader
           name={tenantLabel}
           description={statusLabel}
-          online={mockedSubsystems.length === 0 && !!health}
+          online={mockedSubsystems.length === 0 && !!health && !credsExpired}
           actions={
             <div className="flex items-center gap-3">
               <TenantSwitcher />

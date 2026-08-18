@@ -8,6 +8,7 @@ die mid-file. This driver retries those (and throttles) with backoff.
 
 Run from repo root:  python3 schema/apply_all_seed.py
 """
+import os
 import sys
 import time
 
@@ -27,7 +28,7 @@ FILES = [
 
 def main() -> int:
     arn, sec, db = get_cluster_info()
-    rds = boto3.client('rds-data', region_name='us-east-1')
+    rds = boto3.client('rds-data', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
     total_fail = 0
 
     for path in FILES:
