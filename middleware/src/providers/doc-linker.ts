@@ -309,6 +309,64 @@ export async function analyzeDocumentLinks(
 
 // ── Batch ────────────────────────────────────────────────────────────────────
 
+/** How many open document findings still have no live proposal. */
+export async function countUnproposedDocumentFindings(sweep = 'stale_docs'): Promise<number> {
+  if (config.mock.aurora) return 0;
+  const rows = await exec(
+    `SELECT count(*)::int AS n
+       FROM agent_findings f
+      WHERE f.sweep = :sweep
+        AND f.status = 'open'
+        AND f.entity_type = 'document'
+        AND f.entity_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM graph_proposals p
+           WHERE p.target_id = f.entity_id
+             AND p.status IN ('pending', 'approved', 'applied')
+        )`,
+    [s('sweep', sweep)],
+  );
+  return Number(rows[0]?.['n'] ?? 0);
+}
+
+/**
+ * Open document findings that do not already have a live proposal.
+ *
+ * Analysing a document does not change its finding — the finding only resolves
+ * once proposals are approved and a later sweep stops reproducing it. So a
+ * batch that simply took the first N open findings re-analysed the same head of
+ * the list on every press: real model calls, real money, and every link
+ * deduped away as already-known. This is the query that makes a second press
+ * pick up where the first stopped.
+ */
+export async function findUnproposedDocumentFindings(
+  limit: number,
+  sweep = 'stale_docs',
+): Promise<Array<{ id: string; entityId: string; title: string }>> {
+  if (config.mock.aurora) return [];
+  const rows = await exec(
+    `SELECT f.id, f.entity_id, f.title
+       FROM agent_findings f
+      WHERE f.sweep = :sweep
+        AND f.status = 'open'
+        AND f.entity_type = 'document'
+        AND f.entity_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM graph_proposals p
+           WHERE p.target_id = f.entity_id
+             AND p.status IN ('pending', 'approved', 'applied')
+        )
+      ORDER BY f.last_seen_at DESC
+      LIMIT :lim`,
+    [s('sweep', sweep), { name: 'lim', value: { longValue: Math.max(1, Math.min(limit, 200)) } }],
+  );
+  return rows.map((r) => ({
+    id: toStr(r['id']),
+    entityId: toStr(r['entity_id']),
+    title: toStr(r['title']),
+  }));
+}
+
 /** Bounded so one click cannot start an unbounded run of model calls. */
 const BATCH_MAX = 25;
 /** Small: Bedrock throttles, and a batch that trips throttling is slower. */
@@ -347,14 +405,14 @@ export interface BatchReport {
  * handful that did not work.
  */
 export async function analyzeDocumentFindings(
-  findings: Array<{ id: string; entityId: string; title: string }>,
   limit = 10,
+  sweep = 'stale_docs',
 ): Promise<BatchReport> {
   const capped = Math.min(Math.max(limit, 1), BATCH_MAX);
-  const queue = findings.filter((f) => f.entityId).slice(0, capped);
+  const queue = await findUnproposedDocumentFindings(capped, sweep);
   const report: BatchReport = {
     analysed: 0, proposed: 0, alreadyKnown: 0, noLinks: 0, failed: 0,
-    remaining: Math.max(findings.length - queue.length, 0),
+    remaining: 0,
     outcomes: [],
   };
 
@@ -389,5 +447,9 @@ export async function analyzeDocumentFindings(
   await Promise.all(
     Array.from({ length: Math.min(BATCH_CONCURRENCY, queue.length) }, () => worker()),
   );
+  // Counted after the pass, not inferred from what was fetched: the UI says
+  // "31 still to go", and that number has to be the real backlog rather than
+  // an artefact of the page size.
+  report.remaining = await countUnproposedDocumentFindings(sweep).catch(() => 0);
   return report;
 }

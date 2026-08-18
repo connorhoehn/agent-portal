@@ -203,20 +203,13 @@ workRouter.post('/findings/:id/analyze', requireAction('ManageDevbox'), asyncHan
 /**
  * Analyse a batch of open document findings.
  *
- * Bounded by the provider; the response reports what remains so the caller can
- * say "10 done, 31 to go" instead of implying the whole backlog is cleared.
+ * The provider picks the documents: open findings with no live proposal yet,
+ * so pressing this twice makes progress instead of re-analysing the same head
+ * of the list. `remaining` reports what is left after this pass.
  */
 workRouter.post('/findings/analyze-batch', requireAction('ManageDevbox'), asyncHandler(async (req, res) => {
   const { limit, sweep } = (req.body ?? {}) as { limit?: number; sweep?: string };
-  const open = await listFindings({ status: 'open', ...(sweep ? { sweep } : {}), limit: 200 });
-  const docs = open
-    .filter((f) => f.entityType === 'document' && f.entityId)
-    .map((f) => ({ id: f.id, entityId: f.entityId as string, title: f.title }));
-  if (docs.length === 0) {
-    res.json({ analysed: 0, proposed: 0, alreadyKnown: 0, noLinks: 0, failed: 0, remaining: 0, outcomes: [] });
-    return;
-  }
-  res.json(await analyzeDocumentFindings(docs, limit ?? 10));
+  res.json(await analyzeDocumentFindings(limit ?? 10, sweep ?? 'stale_docs'));
 }));
 
 /** Counts by sweep/status/severity so the UI can group instead of listing 44 near-identical rows. */
