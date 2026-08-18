@@ -35,6 +35,7 @@ import {
   normalizeRuntimeSessionId,
   RUNTIME_SESSION_ID_MIN_LENGTH,
 } from '../lib/runtime-session.js';
+import { executeDevboxTask, type DevboxRunOutcome } from '../lib/devbox-runner.js';
 import {
   registerBox,
   listBoxes,
@@ -386,3 +387,31 @@ export const _internal = {
   resetArnCache(): void { _arnCache = null; },
   validateCommand,
 };
+
+// ─── Reusable task runner for the job dispatcher ─────────────────────────────
+// The dispatcher must run queue work through the exact path the portal uses.
+// Exported here (rather than in devbox-runner.ts) because ARN resolution and
+// the SDK client — including the test hooks — live in this module.
+
+export async function runDevboxTask(opts: {
+  sessionId: string;
+  prompt: string;
+  resume?: boolean;
+  onEvent?: (event: Record<string, unknown>) => void;
+}): Promise<DevboxRunOutcome> {
+  const arn = await resolveDevboxArn();
+  if (!arn) {
+    return {
+      ok: false, summary: '', turns: 0, durationMs: 0, costUsd: 0, toolCalls: 0,
+      exitCode: null, error: 'devbox runtime not deployed',
+    };
+  }
+  return executeDevboxTask({
+    sessionId: opts.sessionId,
+    prompt: opts.prompt,
+    ...(opts.resume !== undefined ? { resume: opts.resume } : {}),
+    ...(opts.onEvent ? { onEvent: opts.onEvent } : {}),
+    runtimeArn: arn,
+    client: dataClient(),
+  });
+}

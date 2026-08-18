@@ -35,6 +35,9 @@ import { identityRouter } from './routes/identity.js';
 import { canaryRouter } from './routes/canary.js';
 import { canaryLibraryRouter } from './routes/canary-library.js';
 import { evaluationsRouter } from './routes/evaluations.js';
+import { workRouter } from './routes/work.js';
+import { startJobDispatcher } from './lib/job-dispatcher.js';
+import { runAllSweeps } from './providers/org-sweeps.js';
 import { checkAwsCredentials } from './lib/aws-creds-probe.js';
 import { promptHistoryRouter } from './routes/prompt-history.js';
 import { workItemsRouter } from './routes/work-items.js';
@@ -153,6 +156,11 @@ app.use('/api/sessions', sessionsRouter);
 // action must be allowed for the caller's role (open mode when no policy
 // store is configured, matching every other requireAction guard).
 app.use('/api/devbox', requireAction('ManageDevbox'), devboxRouter);
+// Work — the agentic loop: queue → devbox workers → review, scheduled sweeps
+// that produce findings, and agent-proposed graph writes gated on approval.
+// Reads are open so the overview renders for any role; mutations are gated
+// per-route with ManageDevbox.
+app.use('/api/work', workRouter);
 // Gateway proxy — signs + forwards Wave 6 service-auth-gated endpoints so
 // the browser doesn't need to hold the HMAC secret. Reads GATEWAY_URL +
 // GATEWAY_SERVICE_AUTH_SECRET from env. No session required: the signing
@@ -181,6 +189,29 @@ startTracePoller();
 startCanaryDecisionsPoller();
 // Local mock controller fills the Controller node in dev when SFN isn't deployed.
 startLocalController();
+
+// Agentic loop background workers.
+// The dispatcher hands queued jobs to idle devbox boxes; the sweep scheduler
+// makes the system notice things on its own instead of only when asked.
+// SWEEP_INTERVAL_MIN=0 disables scheduled sweeps (they remain runnable
+// on demand from the Work surface).
+startJobDispatcher();
+const sweepIntervalMin = Number(process.env['SWEEP_INTERVAL_MIN'] ?? 360);
+if (sweepIntervalMin > 0) {
+  console.log(`[sweeps] scheduling org sweeps every ${sweepIntervalMin} min`);
+  const runSweeps = () => {
+    void runAllSweeps()
+      .then((rs) => {
+        const summary = rs.map((r) => `${r.sweep}: ${r.found} found, ${r.created} new, ${r.resolved} resolved`).join(' | ');
+        if (summary) console.log(`[sweeps] ${summary}`);
+      })
+      .catch((err: unknown) => console.warn('[sweeps] run failed:', (err as Error).message));
+  };
+  setInterval(runSweeps, sweepIntervalMin * 60_000);
+  // Run once shortly after boot so a fresh environment has findings without
+  // waiting out the first interval.
+  setTimeout(runSweeps, 15_000);
+}
 
 // Seed AVP if it's empty. Idempotent — safe on every boot.
 // ensureSchema must complete before seeding policies (schema gates validation).
