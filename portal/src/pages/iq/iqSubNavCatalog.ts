@@ -44,21 +44,21 @@ const SEARCH_STATIC_ITEMS: SubNavItem[] = [
 
 // Invoke reads ?session= (deep-links from Memory/Sessions) but none of the
 // old focus/prompt params — its own session sidebar covers navigation.
-const INVOKE_ITEMS: SubNavItem[] = [];
-
 const SCORES_ITEMS: SubNavItem[] = [
-  { path: 'scores',          label: 'Overview',  hint: 'Ranked influence + expertise', group: 'View' },
-  { path: 'scores/cohorts',  label: 'Cohorts',   hint: 'Distribution by team',         group: 'View' },
-  { path: 'scores/compare',  label: 'Compare',   hint: 'Two-person side-by-side',      group: 'View' },
+  { path: '/iq/scores',          label: 'Overview',  hint: 'Ranked influence + expertise', group: 'Scores' },
+  { path: '/iq/scores/cohorts',  label: 'Cohorts',   hint: 'Distribution by team',         group: 'Scores' },
+  { path: '/iq/scores/compare',  label: 'Compare',   hint: 'Two-person side-by-side',      group: 'Scores' },
+  { path: '/iq/explore',         label: 'Graph',     hint: 'The org as a network',         group: 'Other views' },
+  { path: '/iq/projects',        label: 'Projects',  hint: 'Contributions + status',       group: 'Other views' },
 ];
 
-// /iq/decisions redirects to /iq/projects — this rail pointed at a dead route.
-const DECISIONS_ITEMS: SubNavItem[] = [];
-
-// Projects page reads no query params today — no rail until it does.
-const PROJECTS_ITEMS: SubNavItem[] = [];
-
+// Explore is the "look at the org" surface, so the other org views hang off
+// it. Scores and Projects lost their top-level nav slot in the five-job
+// collapse; they are real pages with real data, so they get a home here
+// rather than surviving only in the command palette.
 const EXPLORE_ITEMS: SubNavItem[] = [
+  { path: '/iq/scores',   label: 'Scores',   hint: 'Ranked influence + expertise', group: 'Other views' },
+  { path: '/iq/projects', label: 'Projects', hint: 'Contributions + status',       group: 'Other views' },
   { path: 'explore?entities=people',    label: 'People',   group: 'Show' },
   { path: 'explore?entities=skills',    label: 'Skills',   group: 'Show' },
   { path: 'explore?entities=projects',  label: 'Projects', group: 'Show' },
@@ -67,9 +67,6 @@ const EXPLORE_ITEMS: SubNavItem[] = [
   { path: 'explore?layout=force',  label: 'Force',  hint: 'Default',       group: 'Layout' },
   { path: 'explore?layout=radial', label: 'Radial', hint: 'By centrality', group: 'Layout' },
 ];
-
-// Code interpreter page reads no query params today.
-const CODE_INTERPRETER_ITEMS: SubNavItem[] = [];
 
 // ── Hook ───────────────────────────────────────────────────────────────────
 
@@ -89,6 +86,14 @@ interface SessionSummary {
   createdAt: string;
   title?: string;
 }
+
+// Work — the agentic queue. Only real routes: the queue itself, the workers
+// that drain it, and where finished work leaves a trace. No inert filters.
+const WORK_ITEMS: SubNavItem[] = [
+  { path: '/iq/work',                        label: 'Queue',   hint: 'Findings, jobs, and what needs you', group: 'Start here' },
+  { path: '/admin/devbox',                   label: 'Workers', hint: 'Devbox fleet that runs the jobs',    group: 'Start here' },
+  { path: '/admin/observability/invocations', label: 'Runs',   hint: 'What the workers actually did',      group: 'Advanced' },
+];
 
 export function useIqSubNav(pathname: string): IqSubNavSpec | null {
   // All hooks must be called unconditionally (rules of hooks).
@@ -113,6 +118,10 @@ export function useIqSubNav(pathname: string): IqSubNavSpec | null {
     ];
     return [...SEARCH_STATIC_ITEMS, ...historyItems];
   }, [sessionData]);
+
+  if (pathname.startsWith('/iq/work')) {
+    return { title: 'Work', items: WORK_ITEMS, storageKey: 'iq-work-subnav' };
+  }
 
   if (pathname.startsWith('/iq/prompt-ops') || pathname.startsWith('/iq/prompts') || pathname.startsWith('/iq/history') || pathname.startsWith('/iq/diff') || pathname.startsWith('/iq/evaluations')) {
     return {
@@ -141,18 +150,17 @@ export function useIqSubNav(pathname: string): IqSubNavSpec | null {
   if (pathname.startsWith('/iq/search')) {
     return { title: 'Search', items: searchItems, storageKey: 'iq-search-subnav' };
   }
-  if (pathname.startsWith('/iq/invoke')) {
-    return { title: 'Search', items: INVOKE_ITEMS, storageKey: 'iq-invoke-subnav' };
-  }
+  // Ask carries its own session picker in-page, so a rail here was a dead
+  // 200px column. Full width instead.
+  if (pathname.startsWith('/iq/invoke')) return null;
   if (pathname.startsWith('/iq/scores')) {
-    return { title: 'Scores', items: SCORES_ITEMS, storageKey: 'iq-scores-subnav' };
-  }
-  if (pathname.startsWith('/iq/decisions')) {
-    return { title: 'Decisions', items: DECISIONS_ITEMS, storageKey: 'iq-decisions-subnav' };
+    return { title: 'Explore', items: SCORES_ITEMS, storageKey: 'iq-scores-subnav' };
   }
   // Project list → show filter rail; detail pages (/iq/projects/:id) → full-width, no rail.
   if (pathname === '/iq/projects' || pathname.startsWith('/iq/projects?')) {
-    return { title: 'Projects', items: PROJECTS_ITEMS, storageKey: 'iq-projects-subnav' };
+    // Projects is an Explore view, so it keeps the Explore rail — an empty
+    // rail of its own was a dead 200px column with no way back.
+    return { title: 'Explore', items: EXPLORE_ITEMS, storageKey: 'iq-explore-subnav' };
   }
   if (pathname.startsWith('/iq/projects/')) {
     return null; // detail page is full-width
@@ -160,8 +168,6 @@ export function useIqSubNav(pathname: string): IqSubNavSpec | null {
   if (pathname.startsWith('/iq/explore')) {
     return { title: 'Explore', items: EXPLORE_ITEMS, storageKey: 'iq-explore-subnav' };
   }
-  if (pathname.startsWith('/iq/code-interpreter')) {
-    return { title: 'Code Interpreter', items: CODE_INTERPRETER_ITEMS, storageKey: 'iq-code-interpreter-subnav' };
-  }
+  if (pathname.startsWith('/iq/code-interpreter')) return null;
   return null;
 }

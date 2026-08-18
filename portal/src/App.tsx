@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router';
 import { Layout } from './components/shell/Layout';
 import { RequireRole } from './lib/auth';
 import { useSession } from './lib/auth';
+import { NEWSROOM_ENABLED } from './lib/features';
 import { GatewaySocketProvider } from '@connorhoehnslalom/realtime-modules/client/ws';
 
 const AgentFlowPage = lazy(() => import('./pages/AgentFlowPage'));
@@ -37,6 +38,7 @@ const CanaryPage = lazy(() => import('./pages/CanaryPage'));
 const PromptStudioPage = lazy(() => import('./pages/capabilities/PromptsPage'));
 const PromptHistoryPage = lazy(() => import('./pages/iq/PromptHistoryPage'));
 const PromptOpsHomePage = lazy(() => import('./pages/iq/PromptOpsHomePage'));
+const WorkHomePage = lazy(() => import('./pages/work/WorkHomePage'));
 const DiffPage = lazy(() => import('./pages/iq/DiffPage'));
 const EvaluationsPage = lazy(() => import('./pages/iq/EvaluationsPage'));
 
@@ -116,7 +118,7 @@ function Page({ element }: { element: React.ReactNode }) {
 function RootRedirect() {
   const { session, isLoading } = useSession();
   if (isLoading) return null;
-  return <Navigate to={session?.tenant === 'newsroom' ? '/newsroom/home' : '/iq/agents'} replace />;
+  return <Navigate to={session?.tenant === 'newsroom' ? '/newsroom/home' : '/iq/work'} replace />;
 }
 
 export function App() {
@@ -147,22 +149,28 @@ export function App() {
         <Route index element={<RootRedirect />} />
         <Route path="settings" element={<Page element={<SettingsPage />} />} />
 
-        {/* ── /newsroom/* — Newsroom tenant (unchanged) ── */}
-        <Route path="newsroom" element={<Page element={<NewsroomLayout />} />}>
-          <Route index element={<Navigate to="home" replace />} />
-          <Route path="home" element={<Page element={<NewsroomHomePage />} />} />
-          <Route path="articles" element={<Page element={<NewsroomArticlesPage />} />} />
-          <Route path="articles/:id" element={<Page element={<NewsroomArticleDetailPage />} />} />
-          <Route path="entities/:id" element={<Page element={<NewsroomEntityDetailPage />} />} />
-          <Route path="beats" element={<Page element={<NewsroomBeatsPage />} />} />
-          <Route path="researcher" element={<Page element={<NewsroomResearcherPage />} />} />
-          <Route path="briefs" element={<Page element={<NewsroomBriefsPage />} />} />
-          <Route path="headlines" element={<Page element={<NewsroomHeadlinesPage />} />} />
-        </Route>
+        {/* ── /newsroom/* — archived tenant. Feature-flagged off: the pages stay in
+             the repo but leave the route tree entirely, so deep links land home
+             instead of rendering a surface backed by empty tables. ── */}
+        {NEWSROOM_ENABLED ? (
+          <Route path="newsroom" element={<Page element={<NewsroomLayout />} />}>
+            <Route index element={<Navigate to="home" replace />} />
+            <Route path="home" element={<Page element={<NewsroomHomePage />} />} />
+            <Route path="articles" element={<Page element={<NewsroomArticlesPage />} />} />
+            <Route path="articles/:id" element={<Page element={<NewsroomArticleDetailPage />} />} />
+            <Route path="entities/:id" element={<Page element={<NewsroomEntityDetailPage />} />} />
+            <Route path="beats" element={<Page element={<NewsroomBeatsPage />} />} />
+            <Route path="researcher" element={<Page element={<NewsroomResearcherPage />} />} />
+            <Route path="briefs" element={<Page element={<NewsroomBriefsPage />} />} />
+            <Route path="headlines" element={<Page element={<NewsroomHeadlinesPage />} />} />
+          </Route>
+        ) : (
+          <Route path="newsroom/*" element={<Navigate to="/" replace />} />
+        )}
 
         {/* ── /iq/* — OrgIQ tenant pages ── */}
         <Route path="iq" element={<Page element={<IqLayout />} />}>
-          <Route index element={<Navigate to="agents" replace />} />
+          <Route index element={<Navigate to="work" replace />} />
           <Route path="agents" element={<Page element={<AgentFlowPage />} />} />
           <Route path="search" element={<Navigate to="/iq/invoke" replace />} />
           <Route path="invoke" element={<Page element={<InvokePage />} />} />
@@ -177,6 +185,7 @@ export function App() {
           <Route path="code-interpreter" element={<Page element={<CodeInterpreterDemoPage />} />} />
           <Route path="canary" element={<Page element={<CanaryPage />} />} />
           <Route path="prompt-ops" element={<Page element={<PromptOpsHomePage />} />} />
+          <Route path="work" element={<Page element={<WorkHomePage />} />} />
           <Route path="prompts" element={<Page element={<PromptStudioPage />} />} />
           <Route path="history" element={<Page element={<PromptHistoryPage />} />} />
           <Route path="diff" element={<Page element={<DiffPage />} />} />

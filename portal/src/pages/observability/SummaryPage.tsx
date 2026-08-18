@@ -25,7 +25,7 @@ function SummaryPage() {
   );
 
   return (
-    <PageSection title="Summary" description="Health overview">
+    <PageSection title="Health" description="Errors, latency, and guardrail activity across every deployed agent">
       <div
         style={{
           display: 'grid',

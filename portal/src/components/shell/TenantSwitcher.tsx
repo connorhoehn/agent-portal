@@ -4,7 +4,7 @@ import { useSession, type Tenant } from '../../lib/auth';
 import { NEWSROOM_ENABLED } from '../../lib/features';
 
 const TENANT_ROOTS: Record<Tenant, string> = {
-  orgiq: '/iq/agents',
+  orgiq: '/iq/work',
   newsroom: '/newsroom/home',
 };
 

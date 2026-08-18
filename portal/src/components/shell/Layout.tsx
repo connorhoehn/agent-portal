@@ -25,31 +25,38 @@ interface Health {
   awsCredentials?: { ok: boolean; error?: string };
 }
 
+interface WorkSummary {
+  jobs: Record<string, number>;
+  proposals: Record<string, number>;
+  findings: { open: number; critical: number; warning: number };
+}
+
 type Tenant = 'orgiq' | 'newsroom' | 'admin';
 type NavItem = { path: string; label: string; requireRoles?: string[]; tenant: Tenant | 'universal' };
 
 // Top-level nav — orgiq + universal items only. Admin items live in PLATFORM_ITEMS.
+// Five jobs-to-be-done. Everything else is reachable from inside one of these
+// (or from Operate's drill-ins) — a flat list of 20 destinations made the app
+// read as a pile of dashboards rather than a tool with a purpose.
 const NAV_ITEMS: NavItem[] = [
-  // "Search" = former Agent Tools (/iq/invoke). The legacy /iq/search route is
-  // now a redirect to /iq/invoke — all conversational search goes through the
-  // agent invocation surface.
-  { path: '/iq/invoke',    label: 'Search',            tenant: 'orgiq' },
-  { path: '/iq/explore',   label: 'Explore',           tenant: 'orgiq' },
-  { path: '/iq/prompt-ops', label: 'Prompt Management', tenant: 'orgiq' },
-  { path: '/iq/scores',    label: 'Reports',           tenant: 'orgiq' },
-  { path: '/iq/projects',  label: 'Projects',          tenant: 'orgiq' },
-  { path: '/newsroom',     label: 'Newsroom',          tenant: 'newsroom' },
-  { path: '/settings',     label: 'Settings',          tenant: 'universal' },
+  { path: '/iq/invoke',     label: 'Ask',      tenant: 'orgiq' },
+  { path: '/iq/explore',    label: 'Explore',  tenant: 'orgiq' },
+  { path: '/iq/work',       label: 'Work',     tenant: 'orgiq' },
+  { path: '/iq/prompt-ops', label: 'Prompts',  tenant: 'orgiq' },
+  { path: '/newsroom',      label: 'Newsroom', tenant: 'newsroom' },
+  { path: '/settings',      label: 'Settings', tenant: 'universal' },
 ];
 
 // Admin sub-items rendered inside the collapsible Platform group via SubNavItem.group.
+// Operate — the admin surfaces, grouped under one heading instead of seven
+// peers competing with the product surfaces above.
 const PLATFORM_ITEMS: NavItem[] = [
+  { path: '/admin/observability',   label: 'Health',          tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'] },
+  { path: '/admin/devbox',          label: 'Devbox',          tenant: 'admin' },
   { path: '/iq/agents',             label: 'Architecture',    tenant: 'admin' },
   { path: '/admin/knowledge-bases', label: 'Knowledge Bases', tenant: 'admin', requireRoles: ['hr-admin'] },
   { path: '/admin/ingest',          label: 'Ingest',          tenant: 'admin', requireRoles: ['hr-admin'] },
-  { path: '/admin/observability',   label: 'Observability',   tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'] },
   { path: '/admin/capabilities',    label: 'Capabilities',    tenant: 'admin' },
-  { path: '/admin/devbox',          label: 'Devbox',          tenant: 'admin' },
   { path: '/admin/identity',        label: 'Identity',        tenant: 'admin', requireRoles: ['hr-admin'] },
 ];
 
@@ -61,6 +68,7 @@ const TENANT_LABELS: Record<Tenant, string> = {
 
 export function Layout() {
   const { data: health } = useFetch<Health>('/api/health', 30_000);
+  const { data: work } = useFetch<WorkSummary>('/api/work/summary', 15_000);
   const { session } = useSession();
   const { pathname } = useLocation();
 
@@ -95,9 +103,19 @@ export function Layout() {
       })
     : [];
 
+  // The one number worth interrupting for: work that is blocked on a human.
+  // Findings and queued jobs are not counted — those are the system working,
+  // not the system waiting.
+  const needsYou =
+    (work?.jobs['awaiting_review'] ?? 0) + (work?.proposals['pending'] ?? 0);
+
   const subNavItems: SubNavItem[] = [
-    ...navItems.map((i) => ({ path: i.path, label: i.label })),
-    ...platformItems.map((i) => ({ path: i.path, label: i.label, group: 'Platform' })),
+    ...navItems.map((i) => ({
+      path: i.path,
+      label: i.label,
+      ...(i.path === '/iq/work' && needsYou > 0 ? { count: needsYou } : {}),
+    })),
+    ...platformItems.map((i) => ({ path: i.path, label: i.label, group: 'Operate' })),
   ];
 
   const mockedSubsystems = health
