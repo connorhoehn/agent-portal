@@ -35,6 +35,7 @@ import { identityRouter } from './routes/identity.js';
 import { canaryRouter } from './routes/canary.js';
 import { canaryLibraryRouter } from './routes/canary-library.js';
 import { evaluationsRouter } from './routes/evaluations.js';
+import { checkAwsCredentials } from './lib/aws-creds-probe.js';
 import { promptHistoryRouter } from './routes/prompt-history.js';
 import { workItemsRouter } from './routes/work-items.js';
 import { kbAdminRouter } from './routes/kb-admin.js';
@@ -56,11 +57,16 @@ app.use(cookieParser());
 app.use(sessionMiddleware());
 
 function healthHandler(_req: express.Request, res: express.Response): void {
-  res.json({
-    status: 'ok',
-    service: 'orgiq-middleware',
-    mocks: config.mock,
-    region: config.region,
+  // Fire-and-report: don't block health on STS when mocks are on.
+  const wantsAws = !Object.values(config.mock).every(Boolean);
+  void (wantsAws ? checkAwsCredentials() : Promise.resolve({ ok: true } as const)).then((creds) => {
+    res.json({
+      status: creds.ok ? 'ok' : 'degraded',
+      service: 'orgiq-middleware',
+      mocks: config.mock,
+      region: config.region,
+      awsCredentials: creds,
+    });
   });
 }
 app.get('/health', healthHandler);

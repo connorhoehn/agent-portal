@@ -6,7 +6,7 @@ import boto3
 import sys
 
 def get_cluster_info():
-    cf = boto3.client('cloudformation', region_name='us-east-1')
+    cf = boto3.client('cloudformation', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
     resp = cf.describe_stacks(StackName='OrgIQ-Aurora')
     outputs = {o['OutputKey']: o['OutputValue'] for o in resp['Stacks'][0]['Outputs']}
     return outputs['ClusterArn'], outputs['CredentialsSecretArn'], outputs['DbName']
@@ -29,7 +29,7 @@ def split_sql(content):
 
 def main():
     cluster_arn, secret_arn, db_name = get_cluster_info()
-    rds = boto3.client('rds-data', region_name='us-east-1')
+    rds = boto3.client('rds-data', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
 
     schema_files = [
         'orgiq_schema.sql',

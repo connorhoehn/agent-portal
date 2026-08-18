@@ -23,6 +23,23 @@ PREFIX="${PREFIX:-orgiq}"
 REGION="${AWS_DEFAULT_REGION:-us-east-1}"
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 
+# Failures are collected instead of aborting mid-drain, then reported honestly
+# at the end. The old behavior (|| true everywhere + unconditional "✓ Destroy
+# complete") once reported success after cdk destroy died on expired
+# credentials at stack 1/17 — with OpenSearch still billing.
+FAILURES=()
+
+# aws-azure-login sessions expire mid-run on long teardowns. Call before any
+# phase that must not fail silently.
+require_creds() {
+  if ! aws sts get-caller-identity > /dev/null 2>&1; then
+    echo ""
+    echo "✗ AWS credentials expired mid-destroy. Re-run after: aws-azure-login --mode gui"
+    echo "  (destroy.sh is idempotent — it will skip already-deleted resources)"
+    exit 1
+  fi
+}
+
 # CDK stack names use title-case "OrgIQ-" regardless of the resource PREFIX.
 # Use this for all CloudFormation stack-name queries.
 STACK_PREFIX="OrgIQ-"
@@ -210,90 +227,111 @@ CLUSTER_STATUS=$(aws rds describe-db-clusters \
   --region "$REGION" \
   --query 'DBClusters[0].Status' --output text 2>/dev/null || echo "not-found")
 
+cluster_status() {
+  aws rds describe-db-clusters --db-cluster-identifier "$CLUSTER_ID" \
+    --region "$REGION" --query 'DBClusters[0].Status' --output text 2>/dev/null || echo "not-found"
+}
+
 if [[ "$CLUSTER_STATUS" == "not-found" || "$CLUSTER_STATUS" == "None" ]]; then
   echo "  No Aurora cluster found"
 else
   echo "  Cluster status: ${CLUSTER_STATUS}"
 
-  # Can't delete instances while cluster is stopped — start it first
-  if [[ "$CLUSTER_STATUS" == "stopping" ]]; then
-    echo "  Waiting for cluster to finish stopping..."
-    for i in $(seq 1 24); do
-      CLUSTER_STATUS=$(aws rds describe-db-clusters --db-cluster-identifier "$CLUSTER_ID" \
-        --region "$REGION" --query 'DBClusters[0].Status' --output text 2>/dev/null || echo "not-found")
-      [[ "$CLUSTER_STATUS" == "stopped" ]] && break
-      sleep 10
+  # Instances can only be deleted from an *available* cluster. Converge on
+  # available from every transitional state — a `stopping` cluster silently
+  # blocked deletion here once, and every || true downstream hid it while the
+  # script announced "Aurora cluster deleted" over a cluster that never died.
+  for i in $(seq 1 60); do
+    CLUSTER_STATUS=$(cluster_status)
+    case "$CLUSTER_STATUS" in
+      available|not-found|None) break ;;
+      stopped)
+        echo "  Starting cluster so instances can be deleted..."
+        aws rds start-db-cluster --db-cluster-identifier "$CLUSTER_ID" \
+          --region "$REGION" > /dev/null 2>&1 || true
+        ;;
+      *) echo "    cluster=${CLUSTER_STATUS}, waiting..." ;;
+    esac
+    sleep 10
+  done
+
+  if [[ "$CLUSTER_STATUS" != "available" && "$CLUSTER_STATUS" != "not-found" && "$CLUSTER_STATUS" != "None" ]]; then
+    echo "  ✗ Cluster never reached 'available' (stuck at ${CLUSTER_STATUS}) — cannot delete"
+    FAILURES+=("Aurora cluster not deleted (stuck ${CLUSTER_STATUS})")
+  else
+    # Delete all DB instances in the cluster
+    INSTANCE_IDS=$(aws rds describe-db-instances \
+      --region "$REGION" \
+      --query "DBInstances[?DBClusterIdentifier=='${CLUSTER_ID}'].DBInstanceIdentifier" \
+      --output text 2>/dev/null || true)
+
+    for INSTANCE_ID in $INSTANCE_IDS; do
+      echo "  Deleting instance ${INSTANCE_ID}..."
+      aws rds delete-db-instance \
+        --db-instance-identifier "$INSTANCE_ID" \
+        --skip-final-snapshot \
+        --region "$REGION" > /dev/null 2>&1 || true
     done
-  fi
 
-  if [[ "$CLUSTER_STATUS" == "stopped" ]]; then
-    echo "  Starting cluster so instances can be deleted..."
-    aws rds start-db-cluster --db-cluster-identifier "$CLUSTER_ID" \
-      --region "$REGION" > /dev/null 2>&1 || true
-    for i in $(seq 1 36); do
-      CLUSTER_STATUS=$(aws rds describe-db-clusters --db-cluster-identifier "$CLUSTER_ID" \
-        --region "$REGION" --query 'DBClusters[0].Status' --output text 2>/dev/null || echo "not-found")
-      echo "    cluster=${CLUSTER_STATUS}"
-      [[ "$CLUSTER_STATUS" == "available" ]] && break
-      sleep 10
+    for INSTANCE_ID in $INSTANCE_IDS; do
+      echo "  Waiting for ${INSTANCE_ID} to be deleted..."
+      aws rds wait db-instance-deleted \
+        --db-instance-identifier "$INSTANCE_ID" \
+        --region "$REGION" 2>/dev/null || true
     done
-  fi
 
-  # Delete all DB instances in the cluster
-  INSTANCE_IDS=$(aws rds describe-db-instances \
-    --region "$REGION" \
-    --query "DBInstances[?DBClusterIdentifier=='${CLUSTER_ID}'].DBInstanceIdentifier" \
-    --output text 2>/dev/null || true)
-
-  for INSTANCE_ID in $INSTANCE_IDS; do
-    echo "  Deleting instance ${INSTANCE_ID}..."
-    aws rds delete-db-instance \
-      --db-instance-identifier "$INSTANCE_ID" \
+    echo "  Deleting cluster ${CLUSTER_ID}..."
+    aws rds delete-db-cluster \
+      --db-cluster-identifier "$CLUSTER_ID" \
       --skip-final-snapshot \
       --region "$REGION" > /dev/null 2>&1 || true
-  done
 
-  # Wait for all instances to be gone
-  for INSTANCE_ID in $INSTANCE_IDS; do
-    echo "  Waiting for ${INSTANCE_ID} to be deleted..."
-    aws rds wait db-instance-deleted \
-      --db-instance-identifier "$INSTANCE_ID" \
+    aws rds wait db-cluster-deleted \
+      --db-cluster-identifier "$CLUSTER_ID" \
       --region "$REGION" 2>/dev/null || true
-  done
 
-  # Delete the cluster itself
-  echo "  Deleting cluster ${CLUSTER_ID}..."
-  aws rds delete-db-cluster \
-    --db-cluster-identifier "$CLUSTER_ID" \
-    --skip-final-snapshot \
-    --region "$REGION" > /dev/null 2>&1 || true
+    # Trust the API, not the waiter — verify the cluster is actually gone.
+    CLUSTER_STATUS=$(cluster_status)
+    if [[ "$CLUSTER_STATUS" == "not-found" || "$CLUSTER_STATUS" == "None" ]]; then
+      echo "  Aurora cluster deleted"
+    else
+      echo "  ✗ Aurora cluster still exists (status: ${CLUSTER_STATUS})"
+      FAILURES+=("Aurora cluster still exists (${CLUSTER_STATUS})")
+    fi
+  fi
 
-  aws rds wait db-cluster-deleted \
-    --db-cluster-identifier "$CLUSTER_ID" \
-    --region "$REGION" 2>/dev/null || true
-
-  echo "  Aurora cluster deleted"
-
-  # Proactively force-delete the OrgIQ-Aurora CFN stack now that the cluster
-  # is gone. The AuroraFastDeleter custom resource has a known physical-ID-change
-  # bug that causes DELETE_FAILED on every destroy when CDK manages the deletion.
-  # Retaining AuroraFastDeleter is safe — the cluster is already deleted above.
+  # Proactively delete the OrgIQ-Aurora CFN stack once the cluster is gone.
+  # The AuroraFastDeleter custom resource has a physical-ID-change bug that
+  # causes DELETE_FAILED when CDK manages the deletion. NOTE: --retain-resources
+  # is only valid on stacks already in DELETE_FAILED — so delete plainly first,
+  # and only retry with retained resources if it lands in DELETE_FAILED.
   AURORA_STACK_STATUS=$(aws cloudformation describe-stacks \
     --stack-name "OrgIQ-Aurora" --region "$REGION" \
     --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "not-found")
 
-  if [[ "$AURORA_STACK_STATUS" != "not-found" && "$AURORA_STACK_STATUS" != "None" ]]; then
-    echo "  Pre-deleting OrgIQ-Aurora CFN stack (retaining AuroraFastDeleter)..."
-    aws cloudformation delete-stack \
-      --stack-name "OrgIQ-Aurora" \
-      --retain-resources AuroraFastDeleter \
-      --region "$REGION" 2>/dev/null || true
-
+  if [[ "$AURORA_STACK_STATUS" != "not-found" && "$AURORA_STACK_STATUS" != "None" && ${#FAILURES[@]} -eq 0 ]]; then
+    echo "  Pre-deleting OrgIQ-Aurora CFN stack..."
+    aws cloudformation delete-stack --stack-name "OrgIQ-Aurora" --region "$REGION" 2>/dev/null || true
     aws cloudformation wait stack-delete-complete \
-      --stack-name "OrgIQ-Aurora" \
-      --region "$REGION" 2>/dev/null || true
+      --stack-name "OrgIQ-Aurora" --region "$REGION" 2>/dev/null || true
 
-    echo "  OrgIQ-Aurora CFN stack deleted"
+    AURORA_STACK_STATUS=$(aws cloudformation describe-stacks \
+      --stack-name "OrgIQ-Aurora" --region "$REGION" \
+      --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "not-found")
+    if [[ "$AURORA_STACK_STATUS" == "DELETE_FAILED" ]]; then
+      echo "  Retrying with failed resources retained (AuroraFastDeleter bug)..."
+      RETAIN=$(aws cloudformation describe-stack-events \
+        --stack-name "OrgIQ-Aurora" --region "$REGION" \
+        --query 'StackEvents[?ResourceStatus==`DELETE_FAILED`].LogicalResourceId' \
+        --output text 2>/dev/null | tr '\t' '\n' | sort -u | tr '\n' ' ' || true)
+      aws cloudformation delete-stack --stack-name "OrgIQ-Aurora" \
+        --retain-resources $RETAIN --region "$REGION" 2>/dev/null || true
+      aws cloudformation wait stack-delete-complete \
+        --stack-name "OrgIQ-Aurora" --region "$REGION" 2>/dev/null || true
+    fi
+    echo "  OrgIQ-Aurora CFN stack handled (final: $(aws cloudformation describe-stacks \
+      --stack-name "OrgIQ-Aurora" --region "$REGION" \
+      --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo deleted))"
   fi
 fi
 echo ""
@@ -304,7 +342,13 @@ echo ""
 echo "── Running cdk destroy --all ──"
 echo ""
 
-npx cdk destroy --all --force || true
+# The pre-drain above can run long enough for aws-azure-login creds to expire;
+# cdk then fails on stack 1 with UnresolvedAccount. Fail loudly instead.
+require_creds
+
+if ! npx cdk destroy --all --force; then
+  FAILURES+=("cdk destroy --all exited non-zero — one or more stacks not destroyed")
+fi
 
 # ──────────────────────────────────────────────────────────────────
 # 7. Force-delete any stacks still stuck in DELETE_FAILED
@@ -345,5 +389,30 @@ else
   done
 fi
 
+# ──────────────────────────────────────────────────────────────────
+# 8. Verify — the only success criterion is "no OrgIQ stacks remain".
+# ──────────────────────────────────────────────────────────────────
 echo ""
-echo "✓ Destroy complete"
+echo "── Verifying teardown ──"
+
+REMAINING=$(aws cloudformation list-stacks \
+  --region "$REGION" \
+  --query "StackSummaries[?starts_with(StackName, '${STACK_PREFIX}') && StackStatus != 'DELETE_COMPLETE'].[StackName, StackStatus]" \
+  --output text 2>/dev/null | sort -u || true)
+
+if [[ -n "$REMAINING" ]]; then
+  echo "  Stacks still present:"
+  echo "$REMAINING" | sed 's/^/    /'
+  FAILURES+=("$(echo "$REMAINING" | wc -l | tr -d ' ') stack(s) still present")
+fi
+
+echo ""
+if [[ ${#FAILURES[@]} -gt 0 ]]; then
+  echo "✗ Destroy INCOMPLETE:"
+  for f in "${FAILURES[@]}"; do echo "  - $f"; done
+  echo ""
+  echo "  Re-run ./scripts/destroy.sh after fixing the above (it is idempotent)."
+  echo "  ⚠ If OrgIQ-KnowledgeBase remains, OpenSearch Serverless is still billing (~\$0.48/hr)."
+  exit 1
+fi
+echo "✓ Destroy complete — no OrgIQ stacks remain"
