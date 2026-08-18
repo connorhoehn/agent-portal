@@ -32,6 +32,8 @@ import {
   FilterLogEventsCommand,
 } from '@aws-sdk/client-cloudwatch-logs';
 import { config } from '../config.js';
+import { realAgentCore } from './agentcore.js';
+import type { AgentRuntimeSummary } from './types.js';
 import { mockTraces } from '../mock/traces.js';
 import { mockAgents } from '../mock/agent-statuses.js';
 import type {
@@ -130,54 +132,103 @@ const ZERO_SUMMARY: ObservabilitySummary = {
 };
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-const NAMESPACE_AGENTCORE = 'AWS/BedrockAgentCore';
 
-// Sum a metric across all dimensions in the last 24h. Returns 0 when no data.
+// AWS publishes AgentCore metrics under a HYPHENATED namespace. The
+// unhyphenated spelling does not exist — a GetMetricStatistics against it
+// returns an empty Datapoints array rather than an error, so this page
+// reported a confident 0 invocations / 0.0% success rate while 116 real
+// invocations sat in the account. agentcore.ts had the correct spelling all
+// along, which is why /api/agents and this summary disagreed.
+const NAMESPACE_AGENTCORE = 'AWS/Bedrock-AgentCore';
+
+// Account-wide roll-up dimension. AgentCore emits every per-runtime metric
+// with Resource/Operation dimensions, so an undimensioned query matches
+// nothing; AggregateOperation is the only cross-runtime total published, and
+// it comes in two flavours (direct invokes vs. the command API).
+const AGGREGATE_OPERATIONS = ['InvokeAgentRuntime', 'InvokeAgentRuntimeCommand'];
+
+/**
+ * Sum a metric over the last 24h across one or more dimension sets.
+ *
+ * `dimensionSets` defaults to a single undimensioned query. Pass explicit
+ * sets when the metric is only published with dimensions — CloudWatch treats
+ * a dimension-less query as its own distinct series and silently returns no
+ * datapoints rather than rolling up, which is exactly how this file came to
+ * report a confident zero.
+ */
 async function sumMetric(
   namespace: string,
   metricName: string,
+  dimensionSets: Array<Array<{ Name: string; Value: string }>> = [[]],
 ): Promise<number> {
   const end = new Date();
   const start = new Date(end.getTime() - ONE_DAY_MS);
-  const input: GetMetricStatisticsCommandInput = {
-    Namespace: namespace,
-    MetricName: metricName,
-    StartTime: start,
-    EndTime: end,
-    Period: 3600,
-    Statistics: ['Sum'],
-  };
-  try {
-    const out = await cw.send(new GetMetricStatisticsCommand(input));
-    return (out.Datapoints ?? []).reduce((s, d) => s + (d.Sum ?? 0), 0);
-  } catch {
-    return 0;
-  }
+  const totals = await Promise.all(
+    dimensionSets.map(async (dims) => {
+      const input: GetMetricStatisticsCommandInput = {
+        Namespace: namespace,
+        MetricName: metricName,
+        ...(dims.length ? { Dimensions: dims } : {}),
+        StartTime: start,
+        EndTime: end,
+        Period: 3600,
+        Statistics: ['Sum'],
+      };
+      try {
+        const out = await cw.send(new GetMetricStatisticsCommand(input));
+        return (out.Datapoints ?? []).reduce((s, d) => s + (d.Sum ?? 0), 0);
+      } catch {
+        return 0;
+      }
+    }),
+  );
+  return totals.reduce((s, n) => s + n, 0);
 }
 
+/** The two aggregate dimension sets AgentCore publishes cross-runtime totals under. */
+const AGGREGATE_DIMS = AGGREGATE_OPERATIONS.map((op) => [
+  { Name: 'AggregateOperation', Value: op },
+]);
+
+/**
+ * Sample-weighted mean latency across the aggregate dimensions.
+ *
+ * Averaging the hourly Averages would weight a quiet 3am hour the same as a
+ * busy afternoon one, so this recovers the underlying totals from Sum and
+ * SampleCount instead.
+ */
 async function avgMetric(
   namespace: string,
   metricName: string,
 ): Promise<number> {
   const end = new Date();
   const start = new Date(end.getTime() - ONE_DAY_MS);
-  const input: GetMetricStatisticsCommandInput = {
-    Namespace: namespace,
-    MetricName: metricName,
-    StartTime: start,
-    EndTime: end,
-    Period: 3600,
-    Statistics: ['Average'],
-  };
-  try {
-    const out = await cw.send(new GetMetricStatisticsCommand(input));
-    const points = out.Datapoints ?? [];
-    if (points.length === 0) return 0;
-    const sum = points.reduce((s, d) => s + (d.Average ?? 0), 0);
-    return Math.round(sum / points.length);
-  } catch {
-    return 0;
-  }
+  const perOp = await Promise.all(
+    AGGREGATE_DIMS.map(async (dims) => {
+      const input: GetMetricStatisticsCommandInput = {
+        Namespace: namespace,
+        MetricName: metricName,
+        Dimensions: dims,
+        StartTime: start,
+        EndTime: end,
+        Period: 3600,
+        Statistics: ['Sum', 'SampleCount'],
+      };
+      try {
+        const out = await cw.send(new GetMetricStatisticsCommand(input));
+        const points = out.Datapoints ?? [];
+        return {
+          sum: points.reduce((s, d) => s + (d.Sum ?? 0), 0),
+          count: points.reduce((s, d) => s + (d.SampleCount ?? 0), 0),
+        };
+      } catch {
+        return { sum: 0, count: 0 };
+      }
+    }),
+  );
+  const sum = perOp.reduce((s, p) => s + p.sum, 0);
+  const count = perOp.reduce((s, p) => s + p.count, 0);
+  return count > 0 ? Math.round(sum / count) : 0;
 }
 
 // Infer span kind from a segment/subsegment name when annotations don't carry it.
@@ -243,28 +294,77 @@ function mapXRayTrace(xt: XRayTrace): Trace | null {
   };
 }
 
+/**
+ * Lower-bound count of X-Ray traces in the last 24h.
+ *
+ * GetTraceSummaries walks the time range page by page and routinely returns
+ * an EMPTY first page with a NextToken — reading only page one reported zero
+ * traces against an account holding tens of thousands, which in turn made the
+ * health page claim span export was broken when it was fine. We page until we
+ * have enough evidence to answer "are traces flowing?", then stop: the exact
+ * total is not worth tens of API calls.
+ */
+const TRACE_PAGE_LIMIT = 10;
+const TRACE_COUNT_ENOUGH = 25;
+
+async function countTraces(): Promise<number> {
+  const end = new Date();
+  const start = new Date(end.getTime() - ONE_DAY_MS);
+  let token: string | undefined;
+  let seen = 0;
+  try {
+    for (let page = 0; page < TRACE_PAGE_LIMIT; page++) {
+      const out: { TraceSummaries?: unknown[]; NextToken?: string } = await xray.send(
+        new GetTraceSummariesCommand({
+          StartTime: start,
+          EndTime: end,
+          ...(token ? { NextToken: token } : {}),
+        }),
+      );
+      seen += (out.TraceSummaries ?? []).length;
+      if (seen >= TRACE_COUNT_ENOUGH) break;
+      token = out.NextToken;
+      if (!token) break;
+    }
+  } catch {
+    return seen;
+  }
+  return seen;
+}
+
 export const realCloudWatch: CloudWatchProvider = {
+  /**
+   * Fleet health over the last 24h.
+   *
+   * Invocations, errors, and latency are summed over OrgIQ's own deployed
+   * runtimes rather than the account-wide AggregateOperation roll-up. This
+   * account hosts other teams' agents too, so the roll-up would attribute
+   * their traffic to us; it also guarantees this endpoint and /api/agents
+   * agree, which they did not when each computed its own totals.
+   *
+   * Tokens remain account-wide — Bedrock publishes InputTokenCount without a
+   * per-runtime dimension, so there is nothing to scope it by.
+   */
   async getSummary(): Promise<ObservabilitySummary> {
     try {
-      // No agent runtimes deployed yet → all of these will be 0. That's fine.
-      const [invocations, errors, latencyAvg, tokens, traceCount] = await Promise.all([
-        sumMetric(NAMESPACE_AGENTCORE, 'Invocations'),
-        sumMetric(NAMESPACE_AGENTCORE, 'Errors'),
-        avgMetric(NAMESPACE_AGENTCORE, 'Latency'),
-        sumMetric('OrgIQ/Agents', 'TokensTotal'),
-        (async () => {
-          try {
-            const end = new Date();
-            const start = new Date(end.getTime() - ONE_DAY_MS);
-            const out = await xray.send(
-              new GetTraceSummariesCommand({ StartTime: start, EndTime: end }),
-            );
-            return (out.TraceSummaries ?? []).length;
-          } catch {
-            return 0;
-          }
-        })(),
+      const [runtimes, tokens, traceCount] = await Promise.all([
+        realAgentCore.listRuntimes().catch(() => [] as AgentRuntimeSummary[]),
+        (async () =>
+          (await sumMetric('AWS/Bedrock', 'InputTokenCount')) +
+          (await sumMetric('AWS/Bedrock', 'OutputTokenCount')))(),
+        countTraces(),
       ]);
+
+      const invocations = runtimes.reduce((n: number, r: AgentRuntimeSummary) => n + (r.invocationsLast24h ?? 0), 0);
+      const errors = runtimes.reduce((n: number, r: AgentRuntimeSummary) => n + (r.errorsLast24h ?? 0), 0);
+
+      // Weight each runtime's latency by how much traffic it actually took —
+      // a plain mean lets an idle agent's cold-start dominate a busy one.
+      const weighted = runtimes.reduce(
+        (n: number, r: AgentRuntimeSummary) => n + (r.latencyP50Ms ?? 0) * (r.invocationsLast24h ?? 0),
+        0,
+      );
+      const latencyAvg = invocations > 0 ? Math.round(weighted / invocations) : 0;
 
       if (invocations === 0 && errors === 0 && tokens === 0 && traceCount === 0) {
         return ZERO_SUMMARY;
