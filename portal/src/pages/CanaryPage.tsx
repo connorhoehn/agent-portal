@@ -24,6 +24,7 @@ import { nodeTypes, edgeTypes } from '../components/canary/index.js';
 import { useCanaryStream } from '../components/canary/useCanaryStream.js';
 import {
   setManualSliderOpen,
+  resetExperiment,
   useCanaryEdges,
   useCanaryNodes,
   useCanaryStore,
@@ -560,10 +561,44 @@ function CanaryPage(): React.ReactElement {
       />
       <div style={bodyStyle}>
         <div style={mainColStyle}>
-          <div style={flowWrapStyle}>
+          <div style={{ ...flowWrapStyle, position: 'relative' }}>
             <ReactFlowProvider>
               <CanaryFlowInner focusId={focusId} nodes={nodes} edges={edges} />
             </ReactFlowProvider>
+            {/* First-run guidance: a resumed/new experiment with no judgements
+                yet is just an empty diagram — point straight at the next step
+                instead of assuming the operator knows the Scenarios flow. */}
+            {!lastJudgedAt && !scenariosOpen && (
+              <div style={{
+                position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                pointerEvents: 'none', zIndex: 10,
+              }}>
+                <div style={{
+                  pointerEvents: 'auto', maxWidth: 380, textAlign: 'center',
+                  background: 'var(--color-surface, #fff)', border: '1px solid var(--color-border, #e2e8f0)',
+                  borderRadius: 12, boxShadow: '0 8px 28px rgba(0,0,0,0.10)', padding: '20px 24px',
+                }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary, #0f172a)' }}>
+                    Experiment is live — no traffic yet
+                  </div>
+                  <p style={{ margin: '8px 0 0', fontSize: 12.5, lineHeight: 1.6, color: 'var(--color-text-secondary, #475569)' }}>
+                    The router splits traffic A/B and the judge scores every answer,
+                    but nothing flows until you send requests. Generate test scenarios from your
+                    org graph and run them to see scores and controller decisions appear.
+                  </p>
+                  <button
+                    onClick={() => setScenariosOpen(true)}
+                    style={{
+                      marginTop: 14, padding: '8px 18px', borderRadius: 8, border: 'none',
+                      background: 'var(--color-primary, #6366f1)', color: '#fff',
+                      fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                    }}
+                  >
+                    ▶ Generate scenarios
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
           <ScenarioPanel open={scenariosOpen} />
         </div>
@@ -604,6 +639,18 @@ function Toolbar({
           <input type="checkbox" checked={debug} onChange={(e) => onDebugChange(e.target.checked)} />
           <span>Debug</span>
         </label>
+        <button
+          style={scenarioBtnStyle}
+          title="End this experiment and return to the setup wizard (traffic pins back to A)"
+          onClick={() => {
+            if (!window.confirm('End this experiment and start a new one?\nTraffic pins back to 100% A; decision history is kept.')) return;
+            void fetch('/api/observability/canary/reset', { method: 'POST', credentials: 'include' })
+              .catch(() => { /* store reset still returns the UI to the wizard */ })
+              .finally(() => resetExperiment());
+          }}
+        >
+          ＋ New experiment
+        </button>
         {!halted && <HaltButton />}
         <button
           style={{

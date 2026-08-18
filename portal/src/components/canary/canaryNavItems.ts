@@ -13,6 +13,7 @@ import {
 } from './canaryStore.js';
 
 export function useCanaryNavItems(): SubNavItem[] {
+  const experimentState = useCanaryStore((s) => s.experimentState);
   const weightA = useCanaryStore((s) => s.weightA);
   const weightB = useCanaryStore((s) => s.weightB);
   const halted = useCanaryStore((s) => s.halted);
@@ -21,6 +22,28 @@ export function useCanaryNavItems(): SubNavItem[] {
   const lastDecision = useCanaryStore((s) => s.recentDecisions[0]);
   const rps = useCanaryStore((s) => s.rps);
   const manualOpen = useCanaryStore((s) => s.manualSliderOpen);
+
+  // No live experiment → no run-state/controls noise. Showing "Halt canary"
+  // during setup was a trap: every item below assumes traffic exists. The
+  // wizard is the only sensible destination, plus past decisions for context.
+  if (experimentState !== 'running') {
+    return [
+      {
+        path: 'canary',
+        label: 'New experiment',
+        hint: '3-step wizard: pick prompt → versions → traffic',
+        accent: 'success',
+        group: 'Setup',
+      },
+      {
+        path: 'canary?focus=decisions',
+        label: 'Past decisions',
+        count: decisionsCount,
+        hint: lastDecision ? `Last: ${lastDecision.action}` : 'No decisions yet',
+        group: 'History',
+      },
+    ];
+  }
 
   return [
     // ── Prompts ──────────────────────────────────────────────────────────────

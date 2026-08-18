@@ -6,7 +6,12 @@
 // Mirrors the EventSource pattern in components/ingest/useCrawlStream.ts.
 
 import { useEffect } from 'react';
-import { dispatch, setPromptTemplates, setJudgeArn } from './canaryStore.js';
+import {
+  dispatch,
+  setPromptTemplates,
+  setJudgeArn,
+  rehydrateExperiment,
+} from './canaryStore.js';
 import type { CanaryEvent } from './types.js';
 
 interface PromptInfo {
@@ -23,6 +28,7 @@ interface PromptsResponse {
 
 interface WeightResponse {
   weight_b: number;
+  control?: { halted?: boolean };
 }
 
 export function useCanaryStream(): void {
@@ -32,10 +38,10 @@ export function useCanaryStream(): void {
     // Seed initial state from REST snapshots before opening the SSE stream
     // — the snapshot endpoints are cheap and let the UI render meaningfully
     // before any live event arrives.
-    fetch('/api/observability/canary/prompts', { credentials: 'include' })
+    const promptsP = fetch('/api/observability/canary/prompts', { credentials: 'include' })
       .then((r) => (r.ok ? (r.json() as Promise<PromptsResponse>) : null))
       .then((body) => {
-        if (cancelled || !body) return;
+        if (cancelled || !body) return null;
         setPromptTemplates({
           promptATemplate: body.subject_a?.template,
           promptBTemplate: body.subject_b?.template,
@@ -43,15 +49,14 @@ export function useCanaryStream(): void {
           promptBVersionLabel: body.subject_b?.label,
         });
         if (body.judge?.arn) setJudgeArn(body.judge.arn);
+        return body;
       })
-      .catch(() => {
-        // Endpoint may not exist yet — silently fall back to defaults.
-      });
+      .catch(() => null); // Endpoint may not exist yet — defaults are fine.
 
-    fetch('/api/observability/canary/weight', { credentials: 'include' })
+    const weightP = fetch('/api/observability/canary/weight', { credentials: 'include' })
       .then((r) => (r.ok ? (r.json() as Promise<WeightResponse>) : null))
       .then((body) => {
-        if (cancelled || !body || typeof body.weight_b !== 'number') return;
+        if (cancelled || !body || typeof body.weight_b !== 'number') return null;
         // Dispatch as a synthetic weight_changed event so the standard
         // reducer path stays the single source of truth.
         dispatch({
@@ -60,10 +65,21 @@ export function useCanaryStream(): void {
           source: 'controller',
           ts: new Date().toISOString(),
         });
+        return body;
       })
-      .catch(() => {
-        /* same — defaults are fine */
+      .catch(() => null);
+
+    // Once both snapshots land, rehydrate a server-side experiment so a page
+    // reload lands on the live view instead of the setup wizard.
+    void Promise.all([promptsP, weightP]).then(([prompts, weight]) => {
+      if (cancelled || !prompts || !weight) return;
+      rehydrateExperiment({
+        subjectAArn: prompts.subject_a?.arn ?? '',
+        subjectBArn: prompts.subject_b?.arn ?? '',
+        weightB: weight.weight_b,
+        halted: weight.control?.halted === true,
       });
+    });
 
     const es = new EventSource('/api/observability/canary/events');
 

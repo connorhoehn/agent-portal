@@ -421,7 +421,7 @@ export function MultiEntityGraph({ nodes, edges, selectedIds, onToggleSelect, ma
             const targetId = typeof link.target === 'object' ? link.target.id : link.target;
             return (
               <line
-                key={`${sourceId}-${targetId}`}
+                key={`${sourceId}-${targetId}-${link.type}`}
                 x1={link.source.x} y1={link.source.y}
                 x2={link.target.x} y2={link.target.y}
                 stroke="#94a3b8"

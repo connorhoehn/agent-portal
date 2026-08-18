@@ -12,6 +12,7 @@ import {
 import { ChatPanel } from '@connorhoehnslalom/ui-components/social';
 import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
+import { fetchSessionMessages, rememberSession, recallSession, forgetSession } from '../lib/chatSessions';
 import { usePresence, useChat } from '@connorhoehnslalom/realtime-modules/client';
 import { PresenceAvatarGroup } from '../components/shell/PresenceAvatarGroup';
 
@@ -84,14 +85,6 @@ interface SessionSummary {
   title?: string;
 }
 
-interface MemoryEvent {
-  eventId: string;
-  sessionId: string;
-  timestamp: string;
-  role: 'USER' | 'ASSISTANT' | 'OTHER';
-  text: string;
-}
-
 function InvokePage() {
   const { roster: peers } = usePresence('invoke');
   const { data: agents } = useFetch<AgentDef[]>('/api/agents');
@@ -109,23 +102,9 @@ function InvokePage() {
     loadHistory,
   } = useAgentStream({
     url: `/api/agents/${selectedId}/invoke`,
-    // Library hook's loadHistory(sid) calls this fetcher. The old hand-rolled
-    // loadHistory(sid, msgs) accepted pre-fetched messages; we lift that
-    // /api/sessions/<sid>/events fetch + USER/ASSISTANT filter + mapping into
-    // here so the page-side loadSession is a 1-line loadHistory(sid) call.
-    historyFetch: async (sid: string): Promise<AgentMessage[]> => {
-      const r = await fetch(`/api/sessions/${encodeURIComponent(sid)}/events`);
-      if (!r.ok) return [];
-      const body = (await r.json()) as { events: MemoryEvent[] };
-      return body.events
-        .filter(e => e.role === 'USER' || e.role === 'ASSISTANT')
-        .map<AgentMessage>(e => ({
-          id: e.eventId + ':' + e.role,
-          role: e.role === 'USER' ? 'user' : 'assistant',
-          content: e.text,
-          toolCalls: [],
-        }));
-    },
+    // Shared canonical fetcher (lib/chatSessions). keepThinking because this
+    // page renders <thinking> blocks as collapsible ThinkingBlock sections.
+    historyFetch: (sid: string) => fetchSessionMessages(sid, { keepThinking: true }),
   });
   const [input, setInput] = useState('');
   const [suggestionSeed, setSuggestionSeed] = useState(0);
@@ -158,6 +137,20 @@ function InvokePage() {
     setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams.get('session')]);
+
+  // Auto-resume: with no deep-link, reload lands back in the last conversation
+  // instead of a fresh one (transcript restored from AgentCore Memory).
+  useEffect(() => {
+    if (searchParams.get('session')) return; // deep-link wins
+    const saved = recallSession('invoke');
+    if (saved) void loadSession(saved);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist the active session whenever the hook mints or switches one.
+  useEffect(() => {
+    if (sessionId) rememberSession('invoke', sessionId);
+  }, [sessionId]);
 
   useEffect(() => {
     if (!isStreaming) {
@@ -213,7 +206,8 @@ function InvokePage() {
                 value={selectedId}
                 onChange={e => {
                   setSelectedId(e.target.value);
-                  reset();  // clear current conversation when switching agents
+                  forgetSession('invoke'); // sessions are agent-scoped — don't resume across agents
+                  reset();
                 }}
                 aria-label="Select agent"
                 style={{
@@ -234,7 +228,7 @@ function InvokePage() {
               </select>
             )}
             <button
-              onClick={reset}
+              onClick={() => { forgetSession('invoke'); reset(); }}
               title="New session"
               style={{ fontSize: 11, padding: '4px 10px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)', cursor: 'pointer', whiteSpace: 'nowrap' }}
             >

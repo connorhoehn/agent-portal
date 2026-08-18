@@ -11,6 +11,7 @@ import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import type { CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { usePromptList } from '../../components/canary/usePromptLibrary.js';
+import { useCanaryStream } from '../../components/canary/useCanaryStream.js';
 import {
   useCanaryStore,
   parsePromptIdFromArn,
@@ -211,8 +212,39 @@ function ScoreRow({ entry, i }: { entry: JudgeHistoryEntry; i: number }) {
 
 export default function EvaluationsPage(): React.ReactElement {
   const navigate = useNavigate();
+  // Open the canary SSE feed — the score history below reads from the canary
+  // store, which is only populated while a stream subscription is mounted.
+  // Without this, the page showed live data only if you visited /iq/canary
+  // first in the same session.
+  useCanaryStream();
   const [cfg, setCfg] = useState<JudgeConfig>(loadConfig);
   const [saved, setSaved] = useState(false);
+
+  // The middleware's SSM-backed config is what fireJudge() actually reads —
+  // hydrate from it on mount so the toggle/weights reflect live behavior.
+  // localStorage is just an offline fallback.
+  useEffect(() => {
+    fetch('/api/observability/evaluations/config')
+      .then(r => (r.ok ? (r.json() as Promise<Partial<JudgeConfig>>) : null))
+      .then(server => {
+        if (!server || typeof server !== 'object') return;
+        setCfg(c => ({
+          ...c,
+          ...(typeof server.enabled === 'boolean' ? { enabled: server.enabled } : {}),
+          ...(typeof server.modelId === 'string' && server.modelId ? { modelId: server.modelId } : {}),
+          ...(typeof server.minSampleRate === 'number' ? { minSampleRate: server.minSampleRate } : {}),
+          ...(typeof server.failThreshold === 'number' ? { failThreshold: server.failThreshold } : {}),
+          // Merge weights by key — keep the page's labels/descriptions.
+          dimensions: Array.isArray(server.dimensions)
+            ? c.dimensions.map(d => {
+                const s = server.dimensions?.find(x => x && x.key === d.key);
+                return s && typeof s.weight === 'number' ? { ...d, weight: s.weight } : d;
+              })
+            : c.dimensions,
+        }));
+      })
+      .catch(() => { /* offline — keep localStorage config */ });
+  }, []);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Clear any pending "Saved" reset timer on unmount to avoid setState after unmount.

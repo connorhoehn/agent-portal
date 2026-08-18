@@ -10,6 +10,15 @@ import { OrgGraph } from '../components/org-graph';
 import type { GraphPerson, GraphRelationship, GraphDepartment } from '../components/org-graph';
 import type { LayoutMode } from '../components/org-graph/useForceLayout';
 import { MultiEntityGraph } from '../components/multi-entity-graph/MultiEntityGraph';
+import {
+  GraphSearchBox,
+  PersonDetailCard,
+  ConnectionPathStrip,
+  DepartmentChips,
+  DepartmentInsightStrip,
+  findConnectionPath,
+  type PathHop,
+} from '../components/org-graph/ExplorePanels';
 import type { MENode, MEEdge } from '../components/multi-entity-graph/types';
 import {
   ChatComposer,
@@ -19,8 +28,16 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
+import { fetchSessionMessages, rememberSession, recallSession, forgetSession, stripThinking } from '../lib/chatSessions';
+import { ChatSessionPicker } from '../components/ChatSessionPicker';
 
-const SEARCH_AGENT_ID = 'orgiq-search';
+// The supervisor is the conversational entry point: it streams AG-UI events,
+// attaches the caller's role guardrail, replays multi-turn history from
+// AgentCore Memory, and routes to search/scoring internally. (orgiq-search
+// itself is a request/response A2A agent — invoking it directly yields a
+// single JSON dict, no AG-UI stream, so chat rendered nothing and no turn
+// was ever recorded to Memory.)
+const SEARCH_AGENT_ID = 'orgiq-supervisor';
 
 interface GraphData {
   nodes: GraphPerson[];
@@ -162,6 +179,10 @@ function ExplorePage() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Most recently selected person — drives the detail side panel.
+  const [detailId, setDetailId] = useState<string | null>(null);
+  // Department focus chip — highlights one department's people.
+  const [activeDepartment, setActiveDepartment] = useState<string | null>(null);
   const [topK, setTopK] = useState(4);
   const [minStrength, setMinStrength] = useState(0.6);
   const [chatOpen, setChatOpen] = useState(false);
@@ -208,6 +229,7 @@ function ExplorePage() {
   useEffect(() => {
     setSelectedIds(new Set());
     setActiveStatuses(null);
+    setActiveDepartment(null);
   }, [entityFilter]);
 
   // ?focus=<id> arrives from related-people cards on /search.
@@ -264,21 +286,67 @@ function ExplorePage() {
   const isEntityFiltered = data && entityFilter !== 'all' && entityFilter !== 'people' && (!filterToSelection || selectedIds.size === 0);
   const isFiltered = filterToSelection && selectedIds.size > 0 && data && visibleNodes.length < data.nodes.length;
 
+  // Connection path: exactly two selected people → BFS shortest path over the
+  // FULL edge set (view filters don't constrain "how are they connected?").
+  const connectionPath = useMemo(() => {
+    if (!data || selectedIds.size !== 2) return null;
+    const [a, b] = Array.from(selectedIds);
+    if (!a || !b) return null;
+    return findConnectionPath(data.nodes, data.edges, a, b);
+  }, [data, selectedIds]);
+
+  // "Show path on graph" replaces the selection with the whole corridor —
+  // which would un-satisfy the exactly-2 rule and vanish the strip. Pin the
+  // path so the strip stays visible while the corridor selection is intact.
+  const [pinnedPath, setPinnedPath] = useState<PathHop[] | null>(null);
+  const displayPath = connectionPath ?? (
+    pinnedPath &&
+    selectedIds.size === pinnedPath.length &&
+    pinnedPath.every(h => selectedIds.has(h.person.id))
+      ? pinnedPath
+      : null
+  );
+
   function toggleSelect(id: string) {
-    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setSelectedIds(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) {
+        n.delete(id);
+        setDetailId(d => (d === id ? null : d));
+      } else {
+        n.add(id);
+        // Only person nodes get a detail panel (skills/projects don't).
+        if (data?.nodes.some(p => p.id === id)) setDetailId(id);
+      }
+      return n;
+    });
   }
 
   // ── Embedded chat ──────────────────────────────────────────────────────────
 
   const pendingSelectionRef = useRef<{ peopleIds: string[] } | null>(null);
-  const { messages, isStreaming, streamingText, activeToolCalls, error, sendMessage, reset } = useAgentStream({
+  const { messages, isStreaming, streamingText, activeToolCalls, error, sessionId, sendMessage, reset, loadHistory } = useAgentStream({
     url: `/api/agents/${SEARCH_AGENT_ID}/invoke`,
     buildBody: (text, { sessionId }) => {
       const sel = pendingSelectionRef.current;
       pendingSelectionRef.current = null;
       return { message: text, ...(sessionId ? { sessionId } : {}), ...(sel ? { selection: sel } : {}) };
     },
+    // Transcript restore from AgentCore Memory. This page has no <thinking>
+    // renderer, so thinking blocks are stripped for display.
+    historyFetch: (sid) => fetchSessionMessages(sid),
   });
+
+  // Session persistence: resume the last Explore conversation on mount, and
+  // remember whichever session the hook is on. `reset` (↺) forgets it.
+  useEffect(() => {
+    const saved = recallSession('explore');
+    if (saved) void loadHistory(saved);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (sessionId) rememberSession('explore', sessionId);
+  }, [sessionId]);
 
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -385,8 +453,14 @@ function ExplorePage() {
     setInput('');
   }
 
+  // Closing the panel only hides it — the conversation stays (it's persisted
+  // in AgentCore Memory anyway). ↺ in the panel header starts a new one.
   function handleClose() {
     setChatOpen(false);
+  }
+
+  function handleNewConversation() {
+    forgetSession('explore');
     reset();
     setInput('');
     isFirstAutoSelectRef.current = true;
@@ -407,6 +481,19 @@ function ExplorePage() {
       {/* ── Toolbar ─────────────────────────────────────────────────────── */}
       <div style={toolbarStyle}>
         <span style={{ fontWeight: 600 }}>Explore</span>
+        <GraphSearchBox
+          people={data.nodes}
+          onPickPerson={(id) => {
+            setSelectedIds(new Set([id]));
+            setDetailId(id);
+            setFilterToSelection(true);
+          }}
+          onPickSkill={(_skill, personIds) => {
+            setSelectedIds(new Set(personIds));
+            setDetailId(null);
+            setFilterToSelection(true);
+          }}
+        />
         <span style={{ color: 'var(--color-text-tertiary)' }}>
           {meGraph
             ? <><b>{meGraph.nodes.filter(n => n.kind !== 'skill_domain').length}</b> nodes · <b>{meGraph.edges.filter(e => e.type !== 'belongs_to').length}</b> {entityFilter} edges</>
@@ -536,25 +623,81 @@ function ExplorePage() {
           );
         })()}
 
+        {(entityFilter === 'all' || entityFilter === 'people' || entityFilter === 'decisions') && (
+          <DepartmentChips
+            departments={data.departments}
+            people={data.nodes}
+            activeDepartment={activeDepartment}
+            onToggle={(name, memberIds) => {
+              setActiveDepartment(name);
+              if (name) {
+                setSelectedIds(new Set(memberIds));
+                setDetailId(null);
+                setFilterToSelection(true);
+              } else {
+                setSelectedIds(new Set());
+              }
+            }}
+          />
+        )}
+
         <span style={{ flex: 1 }} />
         {selectedIds.size > 0 && (
           <>
             <span style={{ color: 'var(--color-primary)', fontWeight: 600, fontSize: 12 }}>
               {selectedIds.size} selected
             </span>
-            <button onClick={() => { setSelectedIds(new Set()); setFilterToSelection(true); }} style={ghostBtn()}>Clear</button>
+            <button onClick={() => { setSelectedIds(new Set()); setActiveDepartment(null); setFilterToSelection(true); }} style={ghostBtn()}>Clear</button>
             <button onClick={() => openAndAsk(Array.from(selectedIds))} style={primaryBtn()}>Ask about selection →</button>
           </>
         )}
         <button onClick={() => chatOpen ? handleClose() : setChatOpen(true)} style={ghostBtn()}>
-          {chatOpen ? 'Close search' : 'Search'}
+          {chatOpen ? 'Close search' : messages.length > 0 ? `Search (${messages.length})` : 'Search'}
         </button>
       </div>
+
+      {/* ── Department insight strip — active department chip ─────────────── */}
+      {activeDepartment && (
+        <DepartmentInsightStrip
+          department={activeDepartment}
+          people={data.nodes}
+          onFocusPerson={(id) => {
+            setActiveDepartment(null);
+            setSelectedIds(new Set([id]));
+            setDetailId(id);
+            setFilterToSelection(true);
+          }}
+        />
+      )}
+
+      {/* ── Connection path strip — two people selected (or pinned corridor) ── */}
+      {displayPath && (
+        <ConnectionPathStrip
+          path={displayPath}
+          onHighlightPath={(ids) => {
+            setPinnedPath(displayPath);
+            setSelectedIds(new Set(ids));
+            setDetailId(null);
+            setFilterToSelection(true);
+          }}
+        />
+      )}
 
       {/* ── Graph + Chat split ───────────────────────────────────────────── */}
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         {/* Graph */}
         <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+          {detailId && selectedIds.has(detailId) && (
+            <PersonDetailCard
+              personId={detailId}
+              onClose={() => setDetailId(null)}
+              onFocusPerson={(id) => {
+                setSelectedIds(prev => new Set([...prev, id]));
+                setDetailId(id);
+              }}
+              onAsk={(id) => openAndAsk([id])}
+            />
+          )}
           {(() => {
             const meActive = entityFilter === 'skills' || entityFilter === 'projects';
             const meLoading = meActive && (entityFilter === 'skills' ? skillsLoading : projectsLoading);
@@ -646,8 +789,16 @@ function ExplorePage() {
             {/* Panel header */}
             <div style={chatHeaderStyle}>
               <span style={{ fontWeight: 600, fontSize: 12 }}>Search</span>
+              <span style={{ flex: 1 }} />
+              <ChatSessionPicker
+                activeSessionId={sessionId}
+                onPick={(sid) => {
+                  rememberSession('explore', sid);
+                  void loadHistory(sid);
+                }}
+              />
               {hasMessages && (
-                <button onClick={() => { reset(); setInput(''); }} style={iconBtn()} title="New conversation">↺</button>
+                <button onClick={handleNewConversation} style={iconBtn()} title="New conversation">↺</button>
               )}
             </div>
 
@@ -659,9 +810,10 @@ function ExplorePage() {
                 </div>
               )}
               {messages.map(msg => {
-                // Resolve raw person IDs (e.g. "Person with ID p-007") to names
+                // Strip <thinking> blocks (no ThinkingBlock renderer here) and
+                // resolve raw person IDs (e.g. "Person with ID p-007") to names.
                 const resolvedContent = msg.role === 'assistant' && data
-                  ? resolvePersonIds(msg.content, data.nodes)
+                  ? resolvePersonIds(stripThinking(msg.content), data.nodes)
                   : msg.content;
                 const mentioned = msg.role === 'assistant' && data
                   ? findMentionedPeople(resolvedContent, data.nodes)
@@ -695,7 +847,7 @@ function ExplorePage() {
                 <div>
                   <MessageBubble
                     role="assistant"
-                    content={streamingText ? (data ? resolvePersonIds(streamingText, data.nodes) : streamingText) : ''}
+                    content={streamingText ? (data ? resolvePersonIds(stripThinking(streamingText), data.nodes) : stripThinking(streamingText)) : ''}
                     toolCalls={activeToolCalls.map(tc => ({
                       id: tc.id,
                       name: tc.name,
@@ -747,7 +899,7 @@ function ExplorePage() {
 // ── Styles ───────────────────────────────────────────────────────────────────
 
 const toolbarStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 16,
+  display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
   padding: '8px 16px', borderBottom: '1px solid var(--color-border)',
   fontSize: 12, background: 'var(--color-surface)', flexShrink: 0,
 };

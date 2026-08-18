@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router';
+import { NavLink, Outlet, useLocation } from 'react-router';
 import {
   ChannelHeader,
   CommandPalette,
@@ -13,6 +13,9 @@ import { MasqueradeMenu } from './MasqueradeMenu';
 import { GatewayStatusBadge } from './GatewayStatusBadge';
 import { usePortalCommands, usePortalDynamicCommands } from './portalCommands';
 import { TenantSwitcher } from './TenantSwitcher';
+import { DevboxQuickSwitch } from './DevboxQuickSwitch';
+import { ToastHost } from './ToastHost';
+import { NEWSROOM_ENABLED } from '../../lib/features';
 
 interface Health {
   status: string;
@@ -45,6 +48,7 @@ const PLATFORM_ITEMS: NavItem[] = [
   { path: '/admin/ingest',          label: 'Ingest',          tenant: 'admin', requireRoles: ['hr-admin'] },
   { path: '/admin/observability',   label: 'Observability',   tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'] },
   { path: '/admin/capabilities',    label: 'Capabilities',    tenant: 'admin' },
+  { path: '/admin/devbox',          label: 'Devbox',          tenant: 'admin' },
   { path: '/admin/identity',        label: 'Identity',        tenant: 'admin', requireRoles: ['hr-admin'] },
 ];
 
@@ -57,10 +61,21 @@ const TENANT_LABELS: Record<Tenant, string> = {
 export function Layout() {
   const { data: health } = useFetch<Health>('/api/health', 30_000);
   const { session } = useSession();
+  const { pathname } = useLocation();
+
+  // Routes that render their own SubNavLayout (iq/admin/newsroom) go
+  // full-bleed — the outer p-6 was double-framing them and wasting a 24px
+  // ring of content space around every nested layout. Standalone pages
+  // (settings, etc.) keep the comfortable padding.
+  const fullBleed =
+    pathname.startsWith('/iq') ||
+    pathname.startsWith('/admin') ||
+    pathname.startsWith('/newsroom');
   const commands = usePortalCommands();
   const getDynamicCommands = usePortalDynamicCommands();
 
   const navItems = NAV_ITEMS.filter((item) => {
+    if (item.tenant === 'newsroom' && !NEWSROOM_ENABLED) return false;
     if (item.tenant === 'universal') return true;
     if (session?.role === 'admin') return item.tenant === session?.tenant;
     if (item.requireRoles && !(session && item.requireRoles.includes(session.role ?? ''))) return false;
@@ -130,12 +145,14 @@ export function Layout() {
               </NavLink>
             )}
           >
-            <div className="p-6 h-full overflow-auto">
+            <div className={`${fullBleed ? '' : 'p-6'} h-full overflow-auto`}>
               <Outlet />
             </div>
           </SubNavLayout>
         </div>
         <CommandPalette placeholder="Jump to a page, paste an invocation id, search runs…" />
+        <DevboxQuickSwitch />
+        <ToastHost />
       </div>
     </CommandPaletteProvider>
   );

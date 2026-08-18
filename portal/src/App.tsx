@@ -27,6 +27,7 @@ const NewsroomBriefsPage = lazy(() => import('./pages/newsroom/BriefsPage'));
 const NewsroomHeadlinesPage = lazy(() => import('./pages/newsroom/HeadlinesPage'));
 const KnowledgeBasePage = lazy(() => import('./pages/KnowledgeBasePage'));
 const KBRegistryPage = lazy(() => import('./pages/admin/KBRegistryPage.js'));
+const DevboxPage = lazy(() => import('./pages/admin/DevboxPage'));
 const KBDetailPage = lazy(() => import('./pages/admin/KBDetailPage.js'));
 const InvokePage = lazy(() => import('./pages/InvokePage'));
 const CodeInterpreterDemoPage = lazy(() => import('./pages/CodeInterpreterDemoPage'));
@@ -186,6 +187,7 @@ export function App() {
           <Route path="knowledge-bases" element={<Page element={<KBRegistryPage />} />} />
           <Route path="knowledge-bases/:id" element={<Page element={<KBDetailPage />} />} />
           <Route path="knowledge-base" element={<Navigate to="/admin/knowledge-bases" replace />} />
+          <Route path="devbox" element={<Page element={<DevboxPage />} />} />
 
           <Route path="ingest" element={
             <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
