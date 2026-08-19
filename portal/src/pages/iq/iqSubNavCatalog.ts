@@ -146,6 +146,11 @@ export function useIqSubNav(pathname: string): IqSubNavSpec | null {
     };
   }
   if (pathname.startsWith('/iq/agents')) {
+    // The window filter belongs to the fleet graph. On a single agent's page
+    // it inherited into the rail and did nothing — a control that looks live,
+    // changes the URL, and moves nothing on screen.
+    const isSingleAgent = /^\/iq\/agents\/[^/]+/.test(pathname);
+    if (isSingleAgent) return null;
     return { title: 'Architecture', items: ARCHITECTURE_ITEMS, storageKey: 'iq-agents-subnav' };
   }
   if (pathname.startsWith('/iq/search')) {

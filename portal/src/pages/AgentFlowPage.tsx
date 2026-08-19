@@ -492,17 +492,22 @@ function AgentDrawerBody({
       )}
 
       <div className="border-t border-border pt-2.5 flex flex-col gap-1.5">
+        {/* The drawer is a summary; this is where the depth lives — prompt
+            version in force, recent call timings, and the runtime's log.
+            "View invocation history" used to point at /iq/invoke, which is the
+            chat page: it answered a different question than the one being
+            asked, from a panel about one specific agent. */}
+        <Link
+          to={`/iq/agents/${encodeURIComponent(agentId)}`}
+          className="text-xs text-primary no-underline font-medium"
+        >
+          Open agent details →
+        </Link>
         <Link
           to={`/iq/invoke?agentId=${encodeURIComponent(agentId)}`}
           className="text-xs text-primary no-underline font-medium"
         >
           Invoke this agent →
-        </Link>
-        <Link
-          to="/iq/invoke?focus=sessions"
-          className="text-xs text-primary no-underline font-medium"
-        >
-          View invocation history →
         </Link>
       </div>
     </div>

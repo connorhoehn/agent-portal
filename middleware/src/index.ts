@@ -46,6 +46,7 @@ import { kbAdminRouter } from './routes/kb-admin.js';
 import { gatewayProxyRouter } from './routes/gateway-proxy.js';
 import { devboxRouter } from './routes/devbox.js';
 import { dropRouter } from './routes/drop.js';
+import { agentDetailRouter } from './routes/agent-detail.js';
 import { requireAction } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
 import { initCrawlTargets } from './lib/crawl-targets.js';
@@ -86,6 +87,9 @@ app.get('/api/health', healthHandler);
 
 app.use('/api/session', sessionRouter);
 app.use('/api/identity', identityRouter);
+// Per-agent detail, mounted first so /:agentId there is not swallowed by
+// the fleet router's own routes.
+app.use('/api/agent-detail', agentDetailRouter);
 app.use('/api/agents', agentsRouter);
 // Decisions + Projects mounted BEFORE graphRouter so their specific paths
 // resolve without going through the gated graph router.

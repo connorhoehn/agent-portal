@@ -7,6 +7,7 @@ import { NEWSROOM_ENABLED } from './lib/features';
 import { GatewaySocketProvider } from '@connorhoehnslalom/realtime-modules/client/ws';
 
 const AgentFlowPage = lazy(() => import('./pages/AgentFlowPage'));
+const AgentDetailPage = lazy(() => import('./pages/iq/AgentDetailPage'));
 const ScoresPage = lazy(() => import('./pages/ScoresPage'));
 const ScoresCohortPage = lazy(() => import('./pages/ScoresCohortPage'));
 const ScoresComparePage = lazy(() => import('./pages/ScoresComparePage'));
@@ -181,6 +182,9 @@ export function App() {
         <Route path="iq" element={<Page element={<IqLayout />} />}>
           <Route index element={<Navigate to="work" replace />} />
           <Route path="agents" element={<Page element={<AgentFlowPage />} />} />
+          {/* One agent in depth. Architecture answers "what is the fleet";
+              this answers "what is this one doing". */}
+          <Route path="agents/:agentId" element={<Page element={<AgentDetailPage />} />} />
           <Route path="search" element={<Navigate to="/iq/invoke" replace />} />
           <Route path="invoke" element={<Page element={<InvokePage />} />} />
           <Route path="scores" element={<Page element={<ScoresPage />} />} />
