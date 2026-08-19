@@ -7,7 +7,7 @@
 // the bounds are columns in a table, not a policy document someone has to get
 // right, and revoking is an UPDATE rather than a role rotation.
 
-import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import { exec } from './aurora.js';
 import { uploadToLandingZone } from './landing-zones.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
@@ -154,9 +154,7 @@ export async function listLinkFiles(id: string): Promise<Array<{
 /**
  * Resolve a token to its link.
  *
- * Compares hashes with a constant-time check. The lookup is by hash so the
- * database never sees a usable token, and a wrong token is indistinguishable
- * from an unknown one in both result and timing.
+ * The lookup is by hash, so the database never stores or sees a usable token.
  */
 async function linkForToken(token: string): Promise<UploadLink | null> {
   if (!token || token.length < 20 || token.length > 200) return null;
@@ -168,11 +166,11 @@ async function linkForToken(token: string): Promise<UploadLink | null> {
   const row = rows[0];
   if (!row) return null;
 
-  const stored = toStr(row['token_hash']);
-  const a = Buffer.from(stored, 'utf8');
-  const b = Buffer.from(hash, 'utf8');
-  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
-
+  // No constant-time comparison here, deliberately. The lookup is *by* hash,
+  // so any row returned already matches; comparing it again always passes and
+  // proves nothing. What matters is that the column holds a SHA-256 of the
+  // token rather than the token, so timing differences in the index probe leak
+  // at most which hash prefix exists — not a usable secret.
   return rowToLink(row);
 }
 
@@ -255,18 +253,47 @@ export async function uploadViaLink(
     };
   }
 
-  const result = await uploadToLandingZone(link.kbSlug, filename, body, contentType);
-
-  // Count it and record it. A quota that is only checked and never incremented
-  // is not a quota.
-  await exec(
+  // Claim the slot before uploading, in one statement the database arbitrates.
+  //
+  // Checking `filesUsed >= maxFiles` above and incrementing afterwards is a
+  // race: two uploads arriving together both read the same count, both pass,
+  // and the link exceeds its quota. Since a leaked link's blast radius is
+  // exactly this number, the check has to be the write. The same statement
+  // re-tests revocation and expiry, which close the same way.
+  const claimed = await exec(
     `UPDATE kb_upload_links
         SET files_used = files_used + 1,
             bytes_used = bytes_used + :bytes,
             last_used_at = NOW()
-      WHERE id = :id::uuid`,
+      WHERE id = :id::uuid
+        AND revoked_at IS NULL
+        AND expires_at > NOW()
+        AND files_used < max_files
+      RETURNING id`,
     [n('bytes', body.length), s('id', link.id)],
   );
+  if (claimed.length === 0) {
+    return {
+      ok: false, refusal: 'exhausted',
+      detail: 'This link just reached its limit, or was revoked while the file was uploading.',
+    };
+  }
+
+  let result: Awaited<ReturnType<typeof uploadToLandingZone>>;
+  try {
+    result = await uploadToLandingZone(link.kbSlug, filename, body, contentType);
+  } catch (err) {
+    // Give the slot back — a failed upload should not consume quota.
+    await exec(
+      `UPDATE kb_upload_links
+          SET files_used = GREATEST(0, files_used - 1),
+              bytes_used = GREATEST(0, bytes_used - :bytes)
+        WHERE id = :id::uuid`,
+      [n('bytes', body.length), s('id', link.id)],
+    ).catch(() => { /* the counter is now slightly high; the file did not land */ });
+    throw err;
+  }
+
   await exec(
     `INSERT INTO kb_upload_link_files (link_id, s3_key, filename, bytes, content_type)
      VALUES (:id::uuid, :key, :name, :bytes, :ct)`,

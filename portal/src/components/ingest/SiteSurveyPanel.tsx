@@ -35,7 +35,8 @@ interface Survey {
   id: string; startUrl: string; origin: string;
   status: 'running' | 'completed' | 'failed';
   pages: SurveyPage[]; tree: SurveyNode | null; sections: SurveySection[];
-  browserRescued: number; classificationProblem?: string;
+  browserRescued: number; browserSkipped: number; robotsExcluded: number;
+  classificationProblem?: string;
   startedAt: string; completedAt: string | null; error: string | null;
 }
 
@@ -201,6 +202,16 @@ export function SiteSurveyPanel({ onTargetCreated }: { onTargetCreated?: () => v
             {survey.browserRescued > 0 && (
               <span className="text-primary" title="Pages plain HTTP saw as empty; the browser rendered them">
                 {survey.browserRescued} recovered by the browser
+              </span>
+            )}
+            {survey.browserSkipped > 0 && (
+              <span className="text-warning" title="The browser fallback is capped so a survey cannot quietly become a full vision crawl">
+                {survey.browserSkipped} more needed the browser — crawl this one in browser mode
+              </span>
+            )}
+            {survey.robotsExcluded > 0 && (
+              <span className="text-text-tertiary" title="robots.txt asks crawlers not to fetch these">
+                {survey.robotsExcluded} excluded by robots.txt
               </span>
             )}
             <span className="text-text-tertiary">{survey.sections.length} sections</span>

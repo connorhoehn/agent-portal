@@ -90,6 +90,10 @@ export interface Survey {
   sections: SurveySection[];
   /** Pages plain HTTP could not read, that the browser recovered. */
   browserRescued: number;
+  /** Pages that needed the browser after the rescue budget ran out. */
+  browserSkipped: number;
+  /** Links skipped because robots.txt asks crawlers not to fetch them. */
+  robotsExcluded: number;
   /** Set when classification could not run; the tree is still valid. */
   classificationProblem?: string;
   startedAt: string;
@@ -97,7 +101,25 @@ export interface Survey {
   error: string | null;
 }
 
+/**
+ * Completed surveys, newest last.
+ *
+ * Each holds up to a few hundred pages of metadata and nothing evicted them,
+ * so a long-lived process grew by one survey's worth every time anyone looked
+ * at a site. Surveys are disposable — the durable output is the crawl target
+ * you create from one — so keeping the last handful is enough.
+ */
+const MAX_RETAINED_SURVEYS = 10;
 const _surveys = new Map<string, Survey>();
+
+function evictOldSurveys(): void {
+  while (_surveys.size > MAX_RETAINED_SURVEYS) {
+    // Map iteration is insertion-ordered, so the first key is the oldest.
+    const oldest = _surveys.keys().next().value;
+    if (oldest === undefined) break;
+    _surveys.delete(oldest);
+  }
+}
 
 export function getSurvey(id: string): Survey | null {
   return _surveys.get(id) ?? null;
@@ -110,6 +132,21 @@ export function listSurveys(limit = 10): Survey[] {
 }
 
 // ─── Fetching ─────────────────────────────────────────────────────────────────
+
+/**
+ * How many pages the browser fallback may rescue in one survey.
+ *
+ * The whole argument for the fallback is that it runs on the handful of pages
+ * plain HTTP cannot see. Nothing enforced that: a fully client-rendered site
+ * would have taken the fallback on every page, which is a vision call each —
+ * exactly the per-page cost the survey exists to avoid, incurred silently
+ * because the fallback fails soft.
+ *
+ * Past this many, the survey stops rescuing and says so. A site where more
+ * than a dozen pages need a real browser is not a site to survey cheaply; it
+ * is a site to crawl in browser mode deliberately.
+ */
+const MAX_BROWSER_RESCUES = 12;
 
 /** Assets and endpoints that are never worth surveying. */
 const SKIP_EXT = /\.(png|jpe?g|gif|svg|webp|ico|css|js|mjs|woff2?|ttf|eot|zip|tar|gz|pdf|mp4|webm|xml|rss|atom)(\?|$)/i;
@@ -132,6 +169,52 @@ function normalizeUrl(raw: string, base: string): string | null {
 }
 
 interface RawPage { title: string; text: string; links: string[] }
+
+/**
+ * Paths the site asks crawlers to leave alone.
+ *
+ * This fetches arbitrary third-party sites on someone's say-so, so honouring
+ * robots.txt is the minimum. Deliberately a small subset of the standard: the
+ * `User-agent: *` group's Disallow prefixes. Anything unparseable is treated
+ * as "no restrictions" rather than blocking the survey outright — a site with
+ * an odd robots.txt should still be surveyable.
+ */
+async function disallowedPrefixes(origin: string): Promise<string[]> {
+  try {
+    const res = await fetch(`${origin}/robots.txt`, {
+      headers: { 'User-Agent': 'OrgIQ-Survey/1.0' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return [];
+    const out: string[] = [];
+    let inStar = false;
+    for (const raw of (await res.text()).split('\n')) {
+      const line = raw.split('#')[0]?.trim() ?? '';
+      if (!line) continue;
+      const [keyRaw, ...rest] = line.split(':');
+      const key = (keyRaw ?? '').trim().toLowerCase();
+      const value = rest.join(':').trim();
+      if (key === 'user-agent') {
+        inStar = value === '*';
+      } else if (key === 'disallow' && inStar && value) {
+        out.push(value);
+      }
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+function isDisallowed(url: string, prefixes: string[]): boolean {
+  if (prefixes.length === 0) return false;
+  try {
+    const path = new URL(url).pathname;
+    return prefixes.some((p) => path.startsWith(p));
+  } catch {
+    return false;
+  }
+}
 
 async function readOverHttp(url: string): Promise<RawPage | { error: string }> {
   try {
@@ -400,11 +483,14 @@ export async function startSurvey(input: StartSurveyInput): Promise<Survey> {
     tree: null,
     sections: [],
     browserRescued: 0,
+    browserSkipped: 0,
+    robotsExcluded: 0,
     startedAt: new Date().toISOString(),
     completedAt: null,
     error: null,
   };
   _surveys.set(survey.id, survey);
+  evictOldSurveys();
 
   void runSurvey(survey, {
     maxPages: Math.max(1, Math.min(400, input.maxPages ?? 120)),
@@ -424,6 +510,9 @@ async function runSurvey(
 ): Promise<void> {
   const visited = new Set<string>([survey.startUrl]);
   const queue: Array<{ url: string; depth: number }> = [{ url: survey.startUrl, depth: 0 }];
+
+  // Asked once per origin, before anything is fetched.
+  const disallowed = await disallowedPrefixes(survey.origin);
 
   // Opened lazily: most sites never need it, and a browser session costs money
   // from the moment it exists.
@@ -453,6 +542,12 @@ async function runSurvey(
       let via: SurveyPage['via'] = 'http';
 
       if (!('error' in raw) && looksLikeJsShell(raw)) {
+        if (survey.browserRescued >= MAX_BROWSER_RESCUES) {
+          // Counted rather than silently skipped: "this site is mostly
+          // JavaScript" is the single most useful thing a survey can tell you
+          // about how it should be crawled.
+          survey.browserSkipped++;
+        } else {
         const sid = await ensureBrowser();
         if (sid) {
           const rendered = await readOverBrowser(sid, job.url);
@@ -461,6 +556,7 @@ async function runSurvey(
             via = 'browser';
             survey.browserRescued++;
           }
+        }
         }
       }
 
@@ -490,6 +586,7 @@ async function runSurvey(
         // thing you asked about.
         if (!link.startsWith(survey.origin)) continue;
         visited.add(link);
+        if (isDisallowed(link, disallowed)) { survey.robotsExcluded++; continue; }
         queue.push({ url: link, depth: job.depth + 1 });
       }
     }

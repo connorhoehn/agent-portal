@@ -119,6 +119,17 @@ export function ScoreAnalysisPanel() {
             influence and expertise, so it is a different number on a different scale.
           </div>
 
+          {/* A null fit is a real outcome, not a rendering gap: it happens when
+              the two signals are collinear, so no unique blend explains the
+              composite. Saying nothing looked like the panel had failed. */}
+          {!analysis.weights && (
+            <div className="px-3.5 py-3 border-b border-border text-[12px] text-text-secondary leading-snug">
+              No unique blend fits. Expertise and PageRank move together closely enough here that many
+              different weightings would reproduce the composite equally well — the correlations below
+              still hold, but the split cannot be pinned down.
+            </div>
+          )}
+
           {analysis.weights && (
             <div className="px-3.5 py-3 border-b border-border">
               <div className="text-[13px] font-semibold text-text-primary leading-snug">

@@ -111,11 +111,21 @@ async function loadPeople(): Promise<PersonRow[]> {
  * indistinguishable from the result.
  */
 function buildProgram(people: PersonRow[]): string {
-  const payload = JSON.stringify(people.map((p) => [p.id, p.name, p.team, p.expertise, p.pagerank, p.composite]));
+  // Base64, so that nothing out of the database is ever parsed as Python
+  // source. Interpolating JSON directly into an r'''...''' literal was remote
+  // code execution: JSON does not escape single quotes, so a person named
+  // `Bob ''' + __import__('os').system('...') + '''` closed the literal and
+  // ran. Names reach `people` from ingested documents — including anything
+  // dropped through an upload link — so this was reachable by someone with no
+  // account here at all.
+  const payload = Buffer.from(
+    JSON.stringify(people.map((p) => [p.id, p.name, p.team, p.expertise, p.pagerank, p.composite])),
+    'utf8',
+  ).toString('base64');
   return `
-import json, math
+import json, math, base64
 
-ROWS = json.loads(r'''${payload}''')
+ROWS = json.loads(base64.b64decode("${payload}").decode("utf-8"))
 people = [{"id": r[0], "name": r[1], "team": r[2],
            "expertise": float(r[3]), "pagerank": float(r[4]), "composite": float(r[5])}
           for r in ROWS]

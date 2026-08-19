@@ -18,6 +18,61 @@ import { describeLinkForRecipient, uploadViaLink } from '../providers/upload-lin
 
 export const dropRouter: Router = Router();
 
+/**
+ * Per-client throttle for the one endpoint anyone on the internet can reach.
+ *
+ * The token is 256 bits, so guessing one is not the worry; unbounded requests
+ * are. Every valid upload writes to S3 and every lookup hits Aurora, so a
+ * leaked link — or just a loop — turns into spend with nothing in the way.
+ *
+ * Deliberately in-memory and per-process: this is a blunt ceiling to keep a
+ * runaway client from costing money, not a distributed rate limiter. If the
+ * middleware is ever run multi-replica behind the ALB, the real limit is this
+ * times the replica count, which is still bounded.
+ */
+const WINDOW_MS = 60_000;
+const MAX_REQUESTS_PER_WINDOW = 60;
+const _hits = new Map<string, { count: number; resetAt: number }>();
+
+function throttled(key: string): boolean {
+  const now = Date.now();
+  const slot = _hits.get(key);
+  if (!slot || now >= slot.resetAt) {
+    _hits.set(key, { count: 1, resetAt: now + WINDOW_MS });
+    // Opportunistic sweep — without it the map grows one entry per distinct
+    // client forever, which is the leak a rate limiter is supposed to prevent.
+    if (_hits.size > 5000) {
+      for (const [k, v] of _hits) if (now >= v.resetAt) _hits.delete(k);
+    }
+    return false;
+  }
+  slot.count++;
+  return slot.count > MAX_REQUESTS_PER_WINDOW;
+}
+
+/** Client identity for throttling. Behind the ALB, the first XFF hop. */
+function clientKey(req: { ip?: string; get(h: string): string | undefined }): string {
+  const fwd = req.get('x-forwarded-for');
+  return (fwd?.split(',')[0]?.trim() || req.ip || 'unknown');
+}
+
+/**
+ * Throttle as middleware, so it can run *before* the body parser.
+ *
+ * Checking inside the handler meant express.raw had already buffered up to
+ * 50 MB into memory before the request was refused — the flood still cost
+ * bandwidth and heap, which is most of what the limit is for.
+ */
+function rateLimit(
+  req: express.Request, res: express.Response, next: express.NextFunction,
+): void {
+  if (throttled(clientKey(req))) {
+    res.status(429).json({ error: 'Too many requests — slow down.' });
+    return;
+  }
+  next();
+}
+
 /** Refusals the recipient caused, versus ones they cannot act on. */
 const STATUS_FOR_REFUSAL: Record<string, number> = {
   'unknown-link': 404,
@@ -31,7 +86,7 @@ const STATUS_FOR_REFUSAL: Record<string, number> = {
 
 // ─── GET /:token — what this link is for ──────────────────────────────────────
 
-dropRouter.get('/:token', asyncHandler(async (req, res) => {
+dropRouter.get('/:token', rateLimit, asyncHandler(async (req, res) => {
   const view = await describeLinkForRecipient(String(req.params['token'] ?? ''));
   if (!view) {
     // Same answer for a malformed token, an unknown one, and a deleted one.
@@ -45,6 +100,8 @@ dropRouter.get('/:token', asyncHandler(async (req, res) => {
 
 dropRouter.post(
   '/:token/upload',
+  // Before express.raw, on purpose — see rateLimit.
+  rateLimit,
   // The cap here is a backstop for the socket; the per-link limit is enforced
   // in the provider, which is the only place that knows what this link allows.
   express.raw({ type: '*/*', limit: '50mb' }),

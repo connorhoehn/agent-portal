@@ -33,6 +33,17 @@ const bedrock = (): BedrockAgentClient => (_bedrock ??= new BedrockAgentClient({
 let _logs: CloudWatchLogsClient | null = null;
 const logs = (): CloudWatchLogsClient => (_logs ??= new CloudWatchLogsClient({ region: config.region }));
 
+/**
+ * Prompt name -> id, remembered for the process.
+ *
+ * Resolving a name meant paginating the whole prompt library, and the detail
+ * page polls every 20 seconds — so leaving it open scanned every prompt in the
+ * account, three times a minute, to learn an id that never changes. The
+ * mapping is stable; only the prompt's *content* moves, and that is still
+ * fetched on every request.
+ */
+const _promptIdByName = new Map<string, string | null>();
+
 function toStr(v: unknown, f = ''): string { return typeof v === 'string' ? v : v == null ? f : String(v); }
 function toNum(v: unknown): number { return typeof v === 'number' ? v : Number(v ?? 0); }
 
@@ -72,17 +83,23 @@ async function livePrompt(runtimeName: string): Promise<LivePrompt> {
   const name = `orgiq-${agentSlug(runtimeName)}-system-prompt`;
   try {
     // ListPrompts must be paginated — the un-paginated call returns only the
-    // first page and silently misses prompts.
-    let promptId: string | null = null;
-    let nextToken: string | undefined;
-    do {
-      const page = await bedrock().send(new ListPromptsCommand({
-        maxResults: 100, ...(nextToken ? { nextToken } : {}),
-      }));
-      const hit = (page.promptSummaries ?? []).find((p) => p.name === name);
-      if (hit?.id) { promptId = hit.id; break; }
-      nextToken = page.nextToken;
-    } while (nextToken);
+    // first page and silently misses prompts. Done once per name per process;
+    // see _promptIdByName.
+    let promptId = _promptIdByName.get(name) ?? null;
+    if (!_promptIdByName.has(name)) {
+      let nextToken: string | undefined;
+      do {
+        const page = await bedrock().send(new ListPromptsCommand({
+          maxResults: 100, ...(nextToken ? { nextToken } : {}),
+        }));
+        const hit = (page.promptSummaries ?? []).find((p) => p.name === name);
+        if (hit?.id) { promptId = hit.id; break; }
+        nextToken = page.nextToken;
+      } while (nextToken);
+      // A negative result is cached too, otherwise an agent with no managed
+      // prompt pays the full scan on every poll forever.
+      _promptIdByName.set(name, promptId);
+    }
 
     if (!promptId) {
       return {
@@ -107,6 +124,9 @@ async function livePrompt(runtimeName: string): Promise<LivePrompt> {
       modelId: variant?.modelId ?? null,
     };
   } catch (err) {
+    // Drop the cached id: a prompt that was deleted and recreated has a new
+    // one, and holding the old id would make the failure permanent.
+    _promptIdByName.delete(name);
     return {
       source: 'unavailable', name, promptId: null, version: null, updatedAt: null,
       sha: null, characters: null, excerpt: null, modelId: null,
