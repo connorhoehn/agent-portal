@@ -14,13 +14,14 @@
 // Keyboard is the point. A terminal you have to go and find with the mouse is
 // not a terminal you will use.
 
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Rnd } from 'react-rnd';
+import { loadBoxes } from '../../lib/devboxRegistry';
 import { DevboxTerminal } from './DevboxTerminal';
 import {
   subscribeDock, getDock, closeShell, focusShell, cycleShell, selectShellByIndex,
   setMode, toggleDock, toggleFloating, setGeometry, cycleLayout, showsAllPanes,
-  reportShellStatus, MAX_SHELLS, type ShellStatus,
+  reportShellStatus, openShell, MAX_SHELLS, type ShellStatus,
 } from '../../lib/terminalDock';
 
 /** Colour per state. Busy pulses so a moving pane is findable in a grid. */
@@ -139,6 +140,12 @@ export function TerminalDock() {
             </div>
           );
         })}
+
+        {/* Reach a box that has no shell open yet.
+            The tab strip only ever showed shells you had already started, so
+            from inside a terminal there was no route to another devbox at all —
+            you had to leave, find the page, and click a chip. */}
+        <AddShellButton openSessionIds={dock.shells.map((s) => s.sessionId)} />
 
         <div className="flex-1" />
 
@@ -284,5 +291,74 @@ export function TerminalDock() {
     >
       {body}
     </Rnd>
+  );
+}
+
+/**
+ * "+" in the tab strip — open a shell on a devbox that does not have one.
+ *
+ * Boxes already open are listed as disabled rather than hidden, so the menu
+ * answers "which boxes exist" and not just "which can I add", and the count
+ * does not silently change as you open things.
+ */
+function AddShellButton({ openSessionIds }: { openSessionIds: string[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', away);
+    window.addEventListener('keydown', esc, true);
+    return () => {
+      document.removeEventListener('mousedown', away);
+      window.removeEventListener('keydown', esc, true);
+    };
+  }, [open]);
+
+  const boxes = (() => { try { return loadBoxes(); } catch { return []; } })();
+  if (boxes.length === 0) return null;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        onMouseDown={(e) => e.stopPropagation()}
+        title="Open a shell on another devbox"
+        aria-label="Open a shell on another devbox"
+        aria-expanded={open}
+        className="px-1.5 py-1 text-[11px] text-[#8b949e] hover:text-[#e6edf3] bg-transparent border-none cursor-pointer leading-none"
+      >
+        +
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full mt-1 z-50 min-w-[190px] rounded border border-[#30363d] bg-[#161b22] shadow-xl overflow-hidden">
+          {boxes.map((b) => {
+            const already = openSessionIds.includes(b.sessionId);
+            return (
+              <button
+                key={b.id}
+                disabled={already}
+                onClick={() => {
+                  openShell({ id: b.id, label: b.label, sessionId: b.sessionId });
+                  setOpen(false);
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                className={`w-full text-left px-3 py-1.5 text-[11px] font-mono border-none bg-transparent ${
+                  already
+                    ? 'text-[#484f58] cursor-default'
+                    : 'text-[#e6edf3] cursor-pointer hover:bg-[#0d1117]'}`}
+              >
+                {b.label}
+                {already && <span className="ml-1.5 text-[10px]">· open</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

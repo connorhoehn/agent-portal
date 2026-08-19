@@ -1,7 +1,7 @@
 // ⌘I — devbox quick-switch overlay, the devbox sibling of the ⌘K palette.
 // Lists the named devboxes (each its own AgentCore runtime session = its own
 // microVM + persistent workspace), jumps to one, or provisions a new one.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { createBox, loadBoxes, onBoxesChanged, type DevboxBox } from '../../lib/devboxRegistry';
 
@@ -13,6 +13,8 @@ export function DevboxQuickSwitch() {
   const [boxes, setBoxes] = useState<DevboxBox[]>([]);
   const [highlight, setHighlight] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [query, setQuery] = useState('');
+  const overlayRef = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(() => setBoxes(loadBoxes()), []);
 
@@ -21,8 +23,15 @@ export function DevboxQuickSwitch() {
     return onBoxesChanged(refresh);
   }, [refresh]);
 
-  // Rows: existing boxes + the "new devbox" action.
-  const rows = useMemo(() => boxes.length + 1, [boxes]);
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return boxes;
+    return boxes.filter((b) =>
+      b.label.toLowerCase().includes(q) || b.sessionId.toLowerCase().includes(q));
+  }, [boxes, query]);
+
+  // Rows: matching boxes + the "new devbox" action.
+  const rows = useMemo(() => matches.length + 1, [matches]);
 
   const go = useCallback((box: DevboxBox) => {
     setOpen(false);
@@ -44,23 +53,55 @@ export function DevboxQuickSwitch() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'i' && !e.shiftKey && !e.altKey) {
         e.preventDefault();
+        e.stopPropagation();
         setHighlight(0);
+        setQuery('');
         setOpen((v) => !v);
         return;
       }
       if (!open) return;
-      if (e.key === 'Escape') { e.preventDefault(); setOpen(false); }
-      else if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight((h) => (h + 1) % rows); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight((h) => (h - 1 + rows) % rows); }
+
+      if (e.key === 'Escape') { setOpen(false); }
+      else if (e.key === 'ArrowDown') { setHighlight((h) => (h + 1) % rows); }
+      else if (e.key === 'ArrowUp') { setHighlight((h) => (h - 1 + rows) % rows); }
+      else if (e.key === 'Tab') {
+        // Tab and shift-Tab walk the list, because that is what people press
+        // when a thing looks like a switcher.
+        setHighlight((h) => (h + (e.shiftKey ? -1 : 1) + rows) % rows);
+      }
       else if (e.key === 'Enter') {
-        e.preventDefault();
-        if (highlight < boxes.length) go(boxes[highlight]);
+        if (highlight < matches.length) { const b = matches[highlight]; if (b) go(b); }
         else void provision();
       }
+      else if (e.key === 'Backspace') { setQuery((q) => q.slice(0, -1)); setHighlight(0); }
+      else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        setQuery((q) => q + e.key);
+        setHighlight(0);
+      }
+
+      // Nothing escapes while the overlay is up.
+      //
+      // This used to listen in bubble phase and only preventDefault the four
+      // keys it handled. xterm's own handler sits on its textarea and runs
+      // first, so every other keystroke was typed into the terminal underneath
+      // — the overlay looked focused and wasn't, and there was no way to
+      // filter or even type without corrupting whatever shell was behind it.
+      e.preventDefault();
+      e.stopPropagation();
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, rows, highlight, boxes, go, provision]);
+    // Capture phase: xterm must not see these at all.
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [open, rows, highlight, matches, go, provision]);
+
+  // Take DOM focus off the terminal while the overlay is up, so the browser
+  // agrees with what the screen shows.
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.activeElement as HTMLElement | null;
+    overlayRef.current?.focus();
+    return () => previous?.focus?.();
+  }, [open]);
 
   if (!open) return null;
 
@@ -70,15 +111,21 @@ export function DevboxQuickSwitch() {
       onClick={() => setOpen(false)}
     >
       <div
-        className="w-[440px] max-w-[90vw] rounded-lg border border-border bg-surface shadow-xl overflow-hidden"
+        ref={overlayRef}
+        tabIndex={-1}
+        className="w-[440px] max-w-[90vw] rounded-lg border border-border bg-surface shadow-xl overflow-hidden outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
           <span className="text-xs font-semibold text-text-secondary">DEVBOXES</span>
-          <span className="text-[10px] text-text-tertiary">⌘I · ↑↓ · ⏎ · esc</span>
+          <span className="text-[10px] text-text-tertiary">⌘I · ↑↓ / tab · ⏎ · esc</span>
+          <div className="flex-1" />
+          {query
+            ? <span className={`text-[11px] text-text-primary ${mono}`}>{query}</span>
+            : <span className="text-[10px] text-text-tertiary">type to filter</span>}
         </div>
         <div className="max-h-[50vh] overflow-y-auto">
-          {boxes.map((box, i) => (
+          {matches.map((box, i) => (
             <div
               key={box.id}
               onClick={() => go(box)}
@@ -93,8 +140,8 @@ export function DevboxQuickSwitch() {
           ))}
           <div
             onClick={() => void provision()}
-            onMouseEnter={() => setHighlight(boxes.length)}
-            className={`px-4 py-2.5 flex items-center gap-2 cursor-pointer ${highlight === boxes.length ? 'bg-surface-hover' : ''}`}
+            onMouseEnter={() => setHighlight(matches.length)}
+            className={`px-4 py-2.5 flex items-center gap-2 cursor-pointer ${highlight === matches.length ? 'bg-surface-hover' : ''}`}
           >
             <span className="text-[13px] font-semibold text-primary">{busy ? '⏳ provisioning…' : '+ New devbox'}</span>
             <span className="text-[11px] text-text-tertiary">fresh microVM workspace</span>
