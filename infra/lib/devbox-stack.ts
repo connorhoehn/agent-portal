@@ -65,7 +65,11 @@ export class DevboxStack extends cdk.Stack {
 
     const modelId = (this.node.tryGetContext('devboxModel') as string | undefined)
       ?? props.modelId
-      ?? 'us.anthropic.claude-sonnet-5';
+      // Haiku by default. A devbox task is usually small — read a file, run a
+      // test, leave a note — and Sonnet was charging ~$0.12 for a three-second
+      // "are you there". Callers opt into a larger model per task when the work
+      // warrants it; see DEVBOX_ALLOWED_MODELS below.
+      ?? 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
     const smallModelId = (this.node.tryGetContext('devboxSmallModel') as string | undefined)
       ?? props.smallModelId
       ?? 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
@@ -208,6 +212,9 @@ export class DevboxStack extends cdk.Stack {
         CLAUDE_CODE_USE_BEDROCK: '1',
         ANTHROPIC_MODEL: modelId,
         ANTHROPIC_SMALL_FAST_MODEL: smallModelId,
+        // Per-task overrides are validated against this list in the container,
+        // so a typo or a stray client cannot bill against an arbitrary model.
+        DEVBOX_ALLOWED_MODELS: 'us.anthropic.claude-haiku-4-5-20251001-v1:0,us.anthropic.claude-sonnet-5,us.anthropic.claude-opus-4-8',
         DISABLE_AUTOUPDATER: '1',
         OTEL_TRACES_EXPORTER: 'console',
         OTEL_SERVICE_NAME: `${prefix}-devbox`,

@@ -150,6 +150,13 @@ function stdinTrapHint(text: string): string | null {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+/** Models the container will accept — mirrors DEVBOX_ALLOWED_MODELS. */
+const TASK_MODELS: Array<{ id: string; label: string; hint: string }> = [
+  { id: 'us.anthropic.claude-haiku-4-5-20251001-v1:0', label: 'Haiku', hint: 'default · cheapest · fine for most tasks' },
+  { id: 'us.anthropic.claude-sonnet-5', label: 'Sonnet', hint: 'harder multi-step work' },
+  { id: 'us.anthropic.claude-opus-4-8', label: 'Opus', hint: 'the expensive one — reach for it deliberately' },
+];
+
 export default function DevboxPage() {
   const { data: status, error: statusError } = useFetch<DevboxStatus>('/api/devbox/status');
   const [searchParams, setSearchParams] = useSearchParams();
@@ -182,6 +189,9 @@ export default function DevboxPage() {
   // person run anything — but it should still be a deliberate switch rather
   // than the default, so an inspection click cannot delete a workspace.
   const [execMode, setExecMode] = useState<'safe' | 'full'>('safe');
+  // Haiku by default. Most devbox work is small, and paying Sonnet rates for a
+  // three-second "are you there" is the common case rather than the exception.
+  const [taskModel, setTaskModel] = useState<string>(TASK_MODELS[0]!.id);
   const [cwds, setCwds] = useState<Record<string, string>>({});
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
@@ -210,6 +220,12 @@ export default function DevboxPage() {
   const nextId = () => String(++idRef.current);
   const timelineRef = useRef<HTMLDivElement>(null);
   const consoleRef = useRef<HTMLDivElement>(null);
+  // The prompt keeps focus across runs. Disabling the input while a command
+  // was in flight blurred it and nothing restored focus, so after every
+  // command you had to click back into the box before typing the next one.
+  // It stays enabled instead — submit is guarded on cmdRunning — and is
+  // re-focused when a run finishes in case something else stole it.
+  const cmdInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-scroll both streams as events land.
   useEffect(() => { timelineRef.current?.scrollTo({ top: timelineRef.current.scrollHeight }); }, [timeline]);
@@ -366,7 +382,7 @@ export default function DevboxPage() {
       taskProgressRef.current = { toastId, tools: 0, startedAt: Date.now() };
       // Timeline rendering comes from the server tail subscription (single
       // source of truth) — this POST stream only anchors the completion toast.
-      await readSse(`/api/devbox/${box.sessionId}/task`, { prompt: text, resume }, (ev) => {
+      await readSse(`/api/devbox/${box.sessionId}/task`, { prompt: text, resume, model: taskModel }, (ev) => {
         if (ev['type'] === 'result' && taskProgressRef.current) {
           taskProgressRef.current.result = {
             turns: Number(ev['num_turns'] ?? 0),
@@ -463,6 +479,8 @@ export default function DevboxPage() {
       if (!opts?.silent) toastError(null, 'Command failed', (err as Error).message);
     } finally {
       setCmdRunning(false);
+      // Back to the prompt, ready for the next command.
+      requestAnimationFrame(() => cmdInputRef.current?.focus());
     }
   }, [activeBox, cmdRunning, pushConsole, selectBox, execMode, cwds]);
 
@@ -620,6 +638,16 @@ export default function DevboxPage() {
                 <input type="checkbox" checked={resume} onChange={(e) => setResume(e.target.checked)} />
                 resume conversation
               </label>
+              <select
+                value={taskModel}
+                onChange={(e) => setTaskModel(e.target.value)}
+                title={TASK_MODELS.find((m) => m.id === taskModel)?.hint}
+                className="text-[11px] bg-surface text-text-secondary border border-border rounded px-1.5 py-0.5 cursor-pointer outline-none"
+              >
+                {TASK_MODELS.map((m) => (
+                  <option key={m.id} value={m.id}>{m.label}</option>
+                ))}
+              </select>
               <div className="flex-1" />
               <span className="text-[10px] text-text-tertiary select-none hidden sm:inline">⌘⏎ to run</span>
               <button
@@ -764,7 +792,7 @@ export default function DevboxPage() {
                 className={`flex-1 min-w-0 text-[12.5px] bg-transparent text-[#e6edf3] placeholder-[#8b949e]/60 border-none outline-none ${mono}`}
                 placeholder={execMode === 'full' ? 'any shell command — pipes, quotes, redirection' : 'git log --oneline'}
                 value={cmd}
-                disabled={cmdRunning && !watching}
+                ref={cmdInputRef}
                 onChange={(e) => setCmd(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') { submitCommand(); return; }

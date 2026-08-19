@@ -71,6 +71,8 @@ async function runJob(job: AgentJob): Promise<void> {
       sessionId,
       prompt,
       resume: Boolean(job.payload['resume']),
+      // A queued job may ask for a bigger model; most should not need to.
+      ...(typeof job.payload['model'] === 'string' ? { model: job.payload['model'] } : {}),
       onEvent: (ev) => appendEvent(boxId, ev),
     });
 

@@ -83,8 +83,31 @@ def _claude_bin() -> str:
     return path
 
 
-def _build_cmd(prompt: str, resume: bool, output_format: str) -> list[str]:
+def _resolve_model(requested: str | None) -> str:
+    """Model for this task.
+
+    Defaults to whatever the runtime was deployed with (Haiku) and lets a
+    caller opt into something larger per task. Most devbox work is small —
+    reading a file, running a test, writing a note — and paying Sonnet rates
+    for "are you there" is the common case, not the exception. Anything not on
+    the allowlist falls back to the default rather than being passed through,
+    so a typo cannot silently bill against an unexpected model.
+    """
+    default = os.environ.get("ANTHROPIC_MODEL", "").strip()
+    if not requested:
+        return default
+    allowed = {m.strip() for m in os.environ.get(
+        "DEVBOX_ALLOWED_MODELS", "").split(",") if m.strip()}
+    if requested in allowed:
+        return requested
+    log.warning("Requested model %s is not allowlisted — using %s", requested, default)
+    return default
+
+
+def _build_cmd(prompt: str, resume: bool, output_format: str, model: str = "") -> list[str]:
     cmd = [_claude_bin(), "-p", prompt, "--output-format", output_format]
+    if model:
+        cmd += ["--model", model]
     if output_format == "stream-json":
         # stream-json requires --verbose in headless mode.
         cmd.append("--verbose")
@@ -96,6 +119,13 @@ def _build_cmd(prompt: str, resume: bool, output_format: str) -> list[str]:
     # runs, and there is no interactive user to answer them.
     cmd.append("--dangerously-skip-permissions")
     return cmd
+
+
+def _model_of(cmd: list[str]) -> str:
+    """What this run actually used — the --model flag, else the runtime default."""
+    if "--model" in cmd:
+        return cmd[cmd.index("--model") + 1]
+    return os.environ.get("ANTHROPIC_MODEL", "")
 
 
 def _subprocess_env(workspace: str) -> dict:
@@ -122,7 +152,7 @@ async def _run_streaming(cmd: list[str], workspace: str, persistent: bool, timeo
         "type": "devbox_start",
         "workspace": workspace,
         "workspace_persistent": persistent,
-        "model": os.environ.get("ANTHROPIC_MODEL", ""),
+        "model": _model_of(cmd),
     }
 
     # start_new_session: claude spawns children (bash tool calls, subagents)
@@ -246,18 +276,19 @@ async def handle(payload: dict) -> AsyncIterator | dict:
     resume = bool(payload.get("resume", False))
     stream = payload.get("stream", True) is not False
     timeout_s = min(int(payload.get("timeout") or DEFAULT_TIMEOUT_S), MAX_TIMEOUT_S)
+    model = _resolve_model(payload.get("model"))
 
     workspace, persistent = _resolve_workspace()
     log.info(
-        "Devbox task: stream=%s resume=%s persistent=%s prompt=%s",
-        stream, resume, persistent, prompt[:120],
+        "Devbox task: stream=%s resume=%s persistent=%s model=%s prompt=%s",
+        stream, resume, persistent, model or "(default)", prompt[:120],
     )
 
     if stream:
-        cmd = _build_cmd(prompt, resume, "stream-json")
+        cmd = _build_cmd(prompt, resume, "stream-json", model)
         return _run_streaming(cmd, workspace, persistent, timeout_s)
 
-    cmd = _build_cmd(prompt, resume, "json")
+    cmd = _build_cmd(prompt, resume, "json", model)
     return await _run_sync(cmd, workspace, persistent, timeout_s)
 
 

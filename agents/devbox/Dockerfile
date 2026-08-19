@@ -54,8 +54,9 @@ COPY --chown=bedrock_agentcore:bedrock_agentcore main.py /app/
 # immutable; self-update inside a microVM is wasted work and version drift.
 ENV CLAUDE_CODE_USE_BEDROCK=1 \
     DISABLE_AUTOUPDATER=1 \
-    ANTHROPIC_MODEL=us.anthropic.claude-sonnet-5 \
-    ANTHROPIC_SMALL_FAST_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0
+    ANTHROPIC_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0 \
+    ANTHROPIC_SMALL_FAST_MODEL=us.anthropic.claude-haiku-4-5-20251001-v1:0 \
+    DEVBOX_ALLOWED_MODELS=us.anthropic.claude-haiku-4-5-20251001-v1:0,us.anthropic.claude-sonnet-5,us.anthropic.claude-opus-4-8
 
 # Runtime contract: exact CMD form, ports, /ping healthcheck.
 CMD ["opentelemetry-instrument", "python", "-m", "main"]

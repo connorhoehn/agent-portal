@@ -337,13 +337,14 @@ devboxRouter.post('/:sessionId/task', asyncHandler(async (req, res) => {
   const arn = await requireArn(res);
   if (!arn) return;
 
-  const body = (req.body ?? {}) as { prompt?: string; resume?: boolean; timeout?: number };
+  const body = (req.body ?? {}) as { prompt?: string; resume?: boolean; timeout?: number; model?: string };
   const prompt = (body.prompt ?? '').trim();
   if (!prompt) { res.status(400).json({ error: 'prompt is required' }); return; }
 
   const payload = JSON.stringify({
     prompt,
     resume: Boolean(body.resume),
+    ...(body.model ? { model: body.model } : {}),
     ...(body.timeout ? { timeout: Math.min(Number(body.timeout), 3300) } : {}),
   });
 
@@ -501,6 +502,7 @@ export async function runDevboxTask(opts: {
   sessionId: string;
   prompt: string;
   resume?: boolean;
+  model?: string;
   onEvent?: (event: Record<string, unknown>) => void;
 }): Promise<DevboxRunOutcome> {
   const arn = await resolveDevboxArn();
@@ -514,6 +516,7 @@ export async function runDevboxTask(opts: {
     sessionId: opts.sessionId,
     prompt: opts.prompt,
     ...(opts.resume !== undefined ? { resume: opts.resume } : {}),
+    ...(opts.model ? { model: opts.model } : {}),
     ...(opts.onEvent ? { onEvent: opts.onEvent } : {}),
     runtimeArn: arn,
     client: dataClient(),

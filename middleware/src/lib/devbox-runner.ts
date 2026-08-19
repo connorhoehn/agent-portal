@@ -58,6 +58,8 @@ export interface DevboxRunOptions {
   prompt: string;
   resume?: boolean;
   timeoutSeconds?: number;
+  /** Bedrock inference-profile id. Omitted = the runtime's default (Haiku). */
+  model?: string;
   /** Called for every parsed stream event (already unwrapped). */
   onEvent?: (event: Record<string, unknown>) => void;
   /** Resolved runtime ARN + client injected by the caller so this module
@@ -90,6 +92,7 @@ export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxR
   const payload = JSON.stringify({
     prompt: opts.prompt,
     resume: Boolean(opts.resume),
+    ...(opts.model ? { model: opts.model } : {}),
     ...(opts.timeoutSeconds ? { timeout: Math.min(opts.timeoutSeconds, 3300) } : {}),
   });
 
