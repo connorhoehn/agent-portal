@@ -466,6 +466,23 @@ export class MiddlewareServiceStack extends cdk.Stack {
         // ── ALB configuration ────────────────────────────────────────────
         // Public internet-facing; tasks live in private subnets.
         publicLoadBalancer: true,
+
+        // Do not let the construct open the listener to 0.0.0.0/0.
+        //
+        // This account runs a Cloud Custodian policy
+        // (`custodian-restrict-security-group-admin-ingress`) that revokes
+        // open ingress. On the first deploy CloudFormation authorized
+        // 0.0.0.0/0:80 at 14:20:22 and custodian revoked it at 14:20:28 — six
+        // seconds later, with no stack event and no drift reported. The
+        // result was the worst kind of healthy: task running, target group
+        // healthy, and an ALB nothing on earth could connect to.
+        //
+        // Re-adding the open rule just loses the same race again, so ingress
+        // is explicit instead. Pass the CIDRs that should reach it:
+        //   --context albAllowCidr=203.0.113.4/32,198.51.100.0/24
+        // With none given the load balancer stays closed, which is the honest
+        // default in an account that will close it anyway.
+        openListener: false,
         listenerPort: certArn ? 443 : 80,
         ...(certArn && {
           certificate: acm.Certificate.fromCertificateArn(this, 'AlbCertificate', certArn),
@@ -503,6 +520,37 @@ export class MiddlewareServiceStack extends cdk.Stack {
       const cfnService = fargateService.service.node.defaultChild as ecs.CfnService;
       cfnService.desiredCount = 0;
     }
+
+    // ── Who may reach the load balancer ───────────────────────────────────
+    // See `openListener: false` above for why this is not 0.0.0.0/0.
+    const allowRaw = this.node.tryGetContext('albAllowCidr');
+    const allowCidrs = typeof allowRaw === 'string'
+      ? allowRaw.split(',').map((c) => c.trim()).filter(Boolean)
+      : [];
+
+    const listenerPortNumber = certArn ? 443 : 80;
+    for (const cidr of allowCidrs) {
+      fargateService.loadBalancer.connections.allowFrom(
+        ec2.Peer.ipv4(cidr),
+        ec2.Port.tcp(listenerPortNumber),
+        `Allowed client ${cidr}`,
+      );
+    }
+
+    if (allowCidrs.length === 0) {
+      // Say it at synth time. A load balancer with no ingress is a support
+      // question that looks like a broken deploy, and the stack is the only
+      // thing that knows the difference.
+      cdk.Annotations.of(this).addWarning(
+        'No albAllowCidr given — the middleware load balancer will accept no traffic. '
+        + 'Deploy with --context albAllowCidr=<your-ip>/32 to reach it.',
+      );
+    }
+
+    new cdk.CfnOutput(this, 'MiddlewareAllowedCidrs', {
+      value: allowCidrs.length ? allowCidrs.join(',') : '(none — load balancer is closed)',
+      description: 'CIDRs permitted to reach the middleware load balancer',
+    });
 
     // ── HTTP → HTTPS redirect (only when certificate is present) ──────────
     if (certArn) {
