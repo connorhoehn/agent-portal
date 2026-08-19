@@ -18,6 +18,23 @@ TITAN_V2 = "amazon.titan-embed-text-v2:0"
 EMBEDDING_DIM = 1024
 
 
+_ACCOUNT_CACHE: dict[str, str] = {}
+
+
+def _caller_account() -> str:
+    """Account id of the active credentials, asked once per process."""
+    if "id" not in _ACCOUNT_CACHE:
+        import boto3
+        try:
+            _ACCOUNT_CACHE["id"] = boto3.client("sts").get_caller_identity()["Account"]
+        except Exception as exc:  # noqa: BLE001 — surface the real cause
+            raise RuntimeError(
+                "Could not determine the AWS account for the documents bucket. "
+                "Run `aws-azure-login --mode gui`, or set AWS_ACCOUNT_ID explicitly."
+            ) from exc
+    return _ACCOUNT_CACHE["id"]
+
+
 @dataclass(frozen=True)
 class SynthConfig:
     region: str = field(default_factory=lambda: os.environ.get("AWS_REGION", "us-east-1"))
@@ -44,9 +61,18 @@ class SynthConfig:
     # S3 layout for KB ingestion.
     @property
     def s3_bucket(self) -> str:
-        acct = os.environ.get("AWS_ACCOUNT_ID")
-        if not acct:
-            raise RuntimeError("AWS_ACCOUNT_ID not set — needed to construct documents bucket name")
+        """
+        The documents bucket for the account these credentials belong to.
+
+        Resolved from STS rather than required in the environment. An env var
+        has to be kept in agreement with the ambient credentials by hand, and
+        when it drifts the pipeline writes documents into a bucket name built
+        from one account while every other call in the run — Aurora, Bedrock,
+        the KB sync — goes to another. Asking the credentials who they are
+        cannot disagree with itself. AWS_ACCOUNT_ID still wins if set, so an
+        explicit override remains possible.
+        """
+        acct = os.environ.get("AWS_ACCOUNT_ID") or _caller_account()
         return f"orgiq-documents-{acct}-{self.region}"
 
     s3_internal_prefix: str = "synth/internal/"

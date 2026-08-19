@@ -35,6 +35,7 @@ interface Reconciled {
   dataSourceCount: number | null;
   lastSyncStatus: string | null;
   lastSyncAt: string | null;
+  lastSyncScanned: number | null;
   documentCount: number | null;
   drift: DriftKind;
   detail: string;
@@ -138,7 +139,14 @@ export default function KnowledgeHomePage() {
   const syncTarget = entries.find(
     (e) => e.id && e.drift === 'ok' && e.liveKbId && (e.dataSourceCount ?? 0) > 0,
   ) ?? null;
-  const stalled = (storage?.totalObjects ?? 0) > 0 && !lastSync;
+  // Behind, not merely never run. A sync that ran once and has been out of
+  // date ever since reports a recent, successful job — indistinguishable from
+  // a current index unless you compare what it covered against what is in
+  // storage now. Both states get the same offer, with different wording.
+  const stored = storage?.totalObjects ?? 0;
+  const scanned = syncTarget?.lastSyncScanned ?? null;
+  const behind = stored > 0 && (!lastSync || (scanned !== null && scanned < stored));
+  const neverRan = !lastSync;
 
   const startSync = useCallback(async (id: string, name: string) => {
     setBusy('sync');
@@ -287,18 +295,19 @@ export default function KnowledgeHomePage() {
           ACTIVE), and only the seam between them is broken. It is also the
           state a fresh environment starts in, so it is worth an action rather
           than a number. */}
-      {stalled && syncTarget && (
+      {behind && syncTarget && (
         <Card padding="md" className="mb-5 border-primary/40">
           <div className="flex items-start gap-3">
             <div className="flex-1 min-w-0">
               <div className="text-[13px] font-semibold text-text-primary">
-                {(storage?.totalObjects ?? 0).toLocaleString()} documents are in storage but have never been
-                indexed
+                {neverRan
+                  ? `${stored.toLocaleString()} documents are in storage but have never been indexed`
+                  : `The knowledge base is behind storage — it last indexed ${(scanned ?? 0).toLocaleString()} of ${stored.toLocaleString()} documents`}
               </div>
               <div className="text-[12px] text-text-secondary mt-1 leading-snug">
                 Agents can only cite what the knowledge base has read. Syncing starts a Bedrock ingestion
                 job over <span className="font-mono">{syncTarget.name}</span>; it runs in the background and
-                costs embedding tokens once per document.
+                costs embedding tokens once per document that changed.
               </div>
             </div>
             <button

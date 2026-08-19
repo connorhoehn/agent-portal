@@ -59,6 +59,8 @@ export interface ReconciledKb {
   dataSourceCount: number | null;
   lastSyncStatus: string | null;
   lastSyncAt: string | null;
+  /** Documents the last completed sync actually scanned. */
+  lastSyncScanned: number | null;
   documentCount: number | null;
   drift: DriftKind;
   /** Plain sentence naming the disagreement, for a UI to show verbatim. */
@@ -89,12 +91,13 @@ async function liveKnowledgeBases(): Promise<Array<{ id: string; name: string; s
 /** Sync state for one knowledge base, or nulls when it cannot be read. */
 async function syncState(kbId: string): Promise<{
   dataSourceCount: number | null; lastSyncStatus: string | null; lastSyncAt: string | null;
+  lastSyncScanned: number | null;
 }> {
   try {
     const ds = await client().send(new ListDataSourcesCommand({ knowledgeBaseId: kbId, maxResults: 20 }));
     const sources = ds.dataSourceSummaries ?? [];
     const first = sources[0]?.dataSourceId;
-    if (!first) return { dataSourceCount: sources.length, lastSyncStatus: null, lastSyncAt: null };
+    if (!first) return { dataSourceCount: sources.length, lastSyncStatus: null, lastSyncAt: null, lastSyncScanned: null };
 
     const jobs = await client().send(new ListIngestionJobsCommand({
       knowledgeBaseId: kbId, dataSourceId: first, maxResults: 1,
@@ -104,9 +107,13 @@ async function syncState(kbId: string): Promise<{
       dataSourceCount: sources.length,
       lastSyncStatus: job?.status ?? null,
       lastSyncAt: job?.updatedAt ? new Date(job.updatedAt).toISOString() : null,
+      // What the last run covered. Comparing this with what is in storage is
+      // the only way to tell a current index from one that ran once and has
+      // been behind ever since — both report a recent, successful sync.
+      lastSyncScanned: job?.statistics?.numberOfDocumentsScanned ?? null,
     };
   } catch {
-    return { dataSourceCount: null, lastSyncStatus: null, lastSyncAt: null };
+    return { dataSourceCount: null, lastSyncStatus: null, lastSyncAt: null, lastSyncScanned: null };
   }
 }
 
@@ -160,7 +167,7 @@ export async function reconcileKnowledgeBases(): Promise<{
         registryKbId: r['bedrock_kb_id'] ? toStr(r['bedrock_kb_id']) : null,
         registryStatus: toStr(r['status']) || null,
         liveKbId: null, liveStatus: null, dataSourceCount: null,
-        lastSyncStatus: null, lastSyncAt: null, documentCount: null,
+        lastSyncStatus: null, lastSyncAt: null, lastSyncScanned: null, documentCount: null,
         drift: 'ok' as DriftKind,
         detail: 'Could not read the account to compare.',
       })),
@@ -193,7 +200,9 @@ export async function reconcileKnowledgeBases(): Promise<{
       detail = `Registry says ACTIVE; the account reports ${match.status}.`;
     }
 
-    const sync = match ? await syncState(match.id) : { dataSourceCount: null, lastSyncStatus: null, lastSyncAt: null };
+    const sync = match
+      ? await syncState(match.id)
+      : { dataSourceCount: null, lastSyncStatus: null, lastSyncAt: null, lastSyncScanned: null };
     entries.push({
       id: toStr(r['id']) || null,
       slug, name: toStr(r['name']), tenant: toStr(r['tenant']) || null,
