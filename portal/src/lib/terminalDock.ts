@@ -11,7 +11,27 @@
 // Follows the house pattern — useSyncExternalStore, no state library — the
 // same as toastStore and canaryStore.
 
-export type DockMode = 'hidden' | 'docked' | 'floating';
+import { loadBoxes } from './devboxRegistry';
+import { toastError } from './toastStore';
+
+/**
+ * Layouts, because "several terminals" means different things:
+ *   docked   — one pane pinned to the bottom, tabbed. Working in one shell.
+ *   floating — a draggable window parked over the page.
+ *   grid     — every shell tiled and visible at once, tmux-style. Watching.
+ *   stack    — a narrow column down the right, all visible, page still usable.
+ */
+export type DockMode = 'hidden' | 'docked' | 'floating' | 'grid' | 'stack';
+
+/**
+ * What a shell is doing, as far as the client can tell.
+ *
+ * The PTY does not announce "busy" — there is no such frame. This is inferred
+ * from output timing, which is honest as long as it is labelled as activity
+ * rather than as process state: a command that prints nothing looks idle, and
+ * that is a limit worth knowing rather than papering over.
+ */
+export type ShellStatus = 'connecting' | 'ready' | 'busy' | 'detached' | 'error';
 
 export interface DockShell {
   /** Stable per-tab id; also the AgentCore shellId, so reattach works. */
@@ -19,6 +39,9 @@ export interface DockShell {
   sessionId: string;
   /** Box label for the tab, e.g. devbox-1. */
   label: string;
+  status: ShellStatus;
+  /** Output arrived while you were looking at a different tab. */
+  unread: boolean;
 }
 
 export interface DockGeometry {
@@ -53,7 +76,16 @@ function initial(): DockState {
       // Never restore as visible: a terminal springing open on load, before
       // anyone asked for one, is startling and costs a shell slot.
       mode: 'hidden',
-      shells: Array.isArray(saved.shells) ? saved.shells.slice(0, MAX_SHELLS) : [],
+      // Drop tabs whose box no longer exists. A restored tab pointing at a
+      // deleted session can never connect — it would sit there failing, and
+      // the operator has no way to tell it apart from a service problem.
+      shells: (Array.isArray(saved.shells) ? saved.shells : [])
+        .filter((s): s is DockShell => {
+          if (!s || typeof s.sessionId !== 'string') return false;
+          try { return loadBoxes().some((b) => b.sessionId === s.sessionId); } catch { return false; }
+        })
+        .map((s) => ({ ...s, status: 'connecting' as ShellStatus, unread: false }))
+        .slice(0, MAX_SHELLS),
       activeId: saved.activeId ?? null,
       geometry: { ...DEFAULT_GEOMETRY, ...(saved.geometry ?? {}) },
     };
@@ -106,7 +138,10 @@ export function openShell(box: { sessionId: string; label: string; id: string })
   }
   if (state.shells.length >= MAX_SHELLS) {
     // Refuse rather than let the service reject the upgrade with an opaque
-    // close code the operator cannot interpret.
+    // close code the operator cannot interpret — but say so. Silently doing
+    // nothing when a button is pressed reads as a broken button.
+    toastError(null, 'Too many terminals open',
+      `${MAX_SHELLS} is the limit here (AgentCore allows 10 per runtime). Close one first.`);
     set({ mode: state.mode === 'hidden' ? 'docked' : state.mode });
     return state.activeId ?? '';
   }
@@ -114,6 +149,8 @@ export function openShell(box: { sessionId: string; label: string; id: string })
     id: `portal-${box.id}-${Date.now().toString(36)}`,
     sessionId: box.sessionId,
     label: box.label,
+    status: 'connecting',
+    unread: false,
   };
   set({
     shells: [...state.shells, shell],
@@ -133,7 +170,29 @@ export function closeShell(id: string): void {
 }
 
 export function focusShell(id: string): void {
-  set({ activeId: id });
+  // Looking at a tab clears its unread marker — that is what unread means.
+  set({
+    activeId: id,
+    shells: state.shells.map((s) => (s.id === id ? { ...s, unread: false } : s)),
+  });
+}
+
+/**
+ * Report what a shell is doing.
+ *
+ * `sawOutput` marks the tab unread when it is not the one being looked at, so
+ * a grid or a stack shows which pane moved while your attention was elsewhere.
+ */
+export function reportShellStatus(id: string, status: ShellStatus, sawOutput = false): void {
+  let changed = false;
+  const shells = state.shells.map((s) => {
+    if (s.id !== id) return s;
+    const unread = sawOutput && state.activeId !== id ? true : s.unread;
+    if (s.status === status && s.unread === unread) return s;
+    changed = true;
+    return { ...s, status, unread };
+  });
+  if (changed) set({ shells });
 }
 
 /** Cycle tabs, tmux-style. `delta` of 1 is next, -1 is previous. */
@@ -153,17 +212,43 @@ export function setMode(mode: DockMode): void {
   set({ mode });
 }
 
-/** Show/hide without discarding the shells — the sockets stay attached. */
+/**
+ * Show/hide without discarding the shells — the sockets stay attached.
+ *
+ * With no shells open the dock renders nothing, so the hotkey used to look
+ * broken. Opening one for the most recent box makes ⌘' always do something:
+ * it is the "give me a terminal" key, not the "reveal a panel" key.
+ */
 export function toggleDock(): void {
-  if (state.mode === 'hidden') {
-    set({ mode: state.shells.length ? 'docked' : 'docked' });
-  } else {
-    set({ mode: 'hidden' });
+  if (state.mode !== 'hidden') { set({ mode: 'hidden' }); return; }
+
+  if (state.shells.length === 0) {
+    const boxes = (() => { try { return loadBoxes(); } catch { return []; } })();
+    const box = boxes[boxes.length - 1];
+    if (!box) {
+      toastError(null, 'No devbox to attach to', 'Create one on the Devbox page first.');
+      return;
+    }
+    openShell({ id: box.id, label: box.label, sessionId: box.sessionId });
+    return;
   }
+  set({ mode: 'docked' });
 }
 
 export function toggleFloating(): void {
   set({ mode: state.mode === 'floating' ? 'docked' : 'floating' });
+}
+
+/** Cycle docked → grid → stack → floating, so one key reaches every layout. */
+export function cycleLayout(): void {
+  const order: DockMode[] = ['docked', 'grid', 'stack', 'floating'];
+  const i = order.indexOf(state.mode);
+  set({ mode: order[(i + 1) % order.length] ?? 'docked' });
+}
+
+/** True when every shell is visible at once and tabs are not the navigation. */
+export function showsAllPanes(mode: DockMode): boolean {
+  return mode === 'grid' || mode === 'stack';
 }
 
 export function setGeometry(patch: Partial<DockGeometry>): void {

@@ -55,6 +55,12 @@ interface Props {
   fillHeight?: boolean;
   /** Connect on mount rather than waiting for a click. */
   autoConnect?: boolean;
+  /**
+   * Activity reporting for the dock's status dots. `sawOutput` is true when
+   * this call was triggered by bytes arriving, which is what marks an
+   * unattended pane as unread.
+   */
+  onStatus?: (status: 'connecting' | 'ready' | 'busy' | 'detached' | 'error', sawOutput?: boolean) => void;
 }
 
 /**
@@ -88,7 +94,7 @@ function frame(channel: number, payload?: Uint8Array): Uint8Array {
 
 export function DevboxTerminal({
   sessionId, shellId, label, onExit, height = 460,
-  chrome = true, fillHeight = false, autoConnect = false,
+  chrome = true, fillHeight = false, autoConnect = false, onStatus,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -97,6 +103,12 @@ export function DevboxTerminal({
   const shellIdRef = useRef<string | undefined>(shellId);
   const onExitRef = useRef(onExit);
   onExitRef.current = onExit;
+  const onStatusRef = useRef(onStatus);
+  onStatusRef.current = onStatus;
+  // Output settles into "ready" after a quiet moment. There is no busy frame
+  // in the protocol, so this is inferred from traffic — a command that prints
+  // nothing will look idle, which is a limit worth stating rather than hiding.
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retriesRef = useRef(0);
   const detachedRef = useRef(false);
   // A pending reconnect has to be cancellable. Without this, unmounting during
@@ -131,6 +143,7 @@ export function DevboxTerminal({
     } catch (err) {
       setPhase('error');
       setStatus((err as Error).message);
+      onStatusRef.current?.('error');
       return;
     }
 
@@ -142,6 +155,7 @@ export function DevboxTerminal({
       retriesRef.current = 0;
       detachedRef.current = false;
       setPhase('live');
+      onStatusRef.current?.('ready');
       // Tell the PTY how big it is, or output wraps at the server's default.
       const fit = fitRef.current;
       if (fit) {
@@ -160,6 +174,9 @@ export function DevboxTerminal({
 
       if (channel === CH.STDOUT || channel === CH.STDERR) {
         term.write(payload);
+        onStatusRef.current?.('busy', true);
+        if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = setTimeout(() => onStatusRef.current?.('ready'), 700);
         return;
       }
       if (channel === CH.STATUS) {
@@ -190,7 +207,12 @@ export function DevboxTerminal({
 
     ws.onclose = (ev) => {
       wsRef.current = null;
-      if (detachedRef.current) { setPhase('detached'); setStatus('detached — shell still running'); return; }
+      if (detachedRef.current) {
+        setPhase('detached');
+        setStatus('detached — shell still running');
+        onStatusRef.current?.('detached');
+        return;
+      }
 
       const advice = closeAdvice(ev.code);
       setStatus(advice.text);
@@ -203,6 +225,7 @@ export function DevboxTerminal({
           Math.min(500 * 2 ** retriesRef.current, 8000));
       } else {
         setPhase(ev.code === 1000 ? 'closed' : 'error');
+        onStatusRef.current?.('error');
         // A runtime already holding 10 shells rejects the upgrade, and
         // a failed upgrade reaches the browser as 1006 — indistinguishable
         // from a dropped network. Retrying will never clear a quota, so once
@@ -272,6 +295,7 @@ export function DevboxTerminal({
     return () => {
       disposedRef.current = true;
       if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
       clearInterval(beat);
       window.removeEventListener('resize', refit);
       onData.dispose();

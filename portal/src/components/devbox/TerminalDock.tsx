@@ -19,8 +19,18 @@ import { Rnd } from 'react-rnd';
 import { DevboxTerminal } from './DevboxTerminal';
 import {
   subscribeDock, getDock, closeShell, focusShell, cycleShell, selectShellByIndex,
-  setMode, toggleDock, toggleFloating, setGeometry, MAX_SHELLS,
+  setMode, toggleDock, toggleFloating, setGeometry, cycleLayout, showsAllPanes,
+  reportShellStatus, MAX_SHELLS, type ShellStatus,
 } from '../../lib/terminalDock';
+
+/** Colour per state. Busy pulses so a moving pane is findable in a grid. */
+const STATUS_DOT: Record<ShellStatus, string> = {
+  connecting: 'bg-[#8b949e] animate-pulse',
+  ready: 'bg-[#7ee787]',
+  busy: 'bg-[#f0883e] animate-pulse',
+  detached: 'bg-[#8b949e]',
+  error: 'bg-[#f85149]',
+};
 
 /**
  * Global shortcuts, in capture phase.
@@ -43,7 +53,7 @@ function useDockHotkeys(): void {
       if (cmd && (e.key === "'" || e.key === '"')) {
         e.preventDefault();
         e.stopPropagation();
-        if (e.shiftKey) toggleFloating(); else toggleDock();
+        if (e.shiftKey) cycleLayout(); else toggleDock();
         return;
       }
 
@@ -95,26 +105,38 @@ export function TerminalDock() {
         {dock.shells.map((s, i) => {
           const active = s.id === dock.activeId;
           return (
-            <button
+            // A row, not a button: the close control is its own button, and
+            // nesting one interactive element inside another is invalid HTML
+            // and leaves the inner control unreachable by keyboard.
+            <div
               key={s.id}
-              onClick={() => focusShell(s.id)}
-              onMouseDown={(e) => e.stopPropagation()}
-              title={`${s.label} · ⌥${i + 1}`}
-              className={`group flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-mono cursor-pointer border-none transition-colors ${
-                active ? 'bg-[#0d1117] text-[#e6edf3]' : 'bg-transparent text-[#8b949e] hover:text-[#e6edf3]'}`}
+              className={`group flex items-center gap-1.5 pl-2 pr-1 py-1 rounded transition-colors ${
+                active ? 'bg-[#0d1117]' : 'bg-transparent hover:bg-[#0d1117]/60'}`}
             >
-              <span className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-[#7ee787]' : 'bg-[#30363d]'}`} />
-              {s.label}
-              <span
-                role="button"
-                tabIndex={-1}
+              <button
+                onClick={() => focusShell(s.id)}
+                onMouseDown={(e) => e.stopPropagation()}
+                title={`${s.label} · ⌥${i + 1}`}
+                aria-current={active ? 'true' : undefined}
+                className={`flex items-center gap-1.5 text-[11px] font-mono cursor-pointer border-none bg-transparent p-0 ${
+                  active ? 'text-[#e6edf3]' : 'text-[#8b949e] hover:text-[#e6edf3]'}`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[s.status]}`} title={s.status} />
+                {s.label}
+                {s.unread && !active && (
+                  <span className="w-1 h-1 rounded-full bg-[#58a6ff]" title="new output while you were away" />
+                )}
+              </button>
+              <button
+                onClick={() => closeShell(s.id)}
+                onMouseDown={(e) => e.stopPropagation()}
                 aria-label={`Close ${s.label}`}
-                onClick={(e) => { e.stopPropagation(); closeShell(s.id); }}
-                className="opacity-0 group-hover:opacity-100 text-[#8b949e] hover:text-[#f85149] px-0.5"
+                title={`Close ${s.label} — the shell is killed`}
+                className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-[#8b949e] hover:text-[#f85149] bg-transparent border-none cursor-pointer px-1 leading-none"
               >
                 ×
-              </span>
-            </button>
+              </button>
+            </div>
           );
         })}
 
@@ -125,6 +147,19 @@ export function TerminalDock() {
             max shells
           </span>
         )}
+        <div className="flex rounded border border-[#30363d] overflow-hidden mr-1">
+          {(['docked', 'grid', 'stack', 'floating'] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              title={`${m} layout (⌘⇧' cycles)`}
+              className={`px-1.5 py-0.5 text-[10px] cursor-pointer border-none ${
+                dock.mode === m ? 'bg-[#30363d] text-[#e6edf3]' : 'bg-transparent text-[#8b949e] hover:text-[#e6edf3]'}`}
+            >
+              {m === 'docked' ? '▭' : m === 'grid' ? '▦' : m === 'stack' ? '▤' : '▢'}
+            </button>
+          ))}
+        </div>
         <button onClick={toggleFloating} title="Float / dock (⌘⇧')"
           className="text-[11px] px-1.5 py-0.5 text-[#8b949e] hover:text-[#e6edf3] bg-transparent border-none cursor-pointer">
           {floating ? '▣' : '▢'}
@@ -135,31 +170,94 @@ export function TerminalDock() {
         </button>
       </div>
 
-      {/* Every shell stays mounted. Hiding with CSS keeps the socket attached
-          and the scrollback intact when you switch tabs. */}
-      <div className="flex-1 min-h-0 relative">
-        {dock.shells.map((s) => (
-          <div
-            key={s.id}
-            className="absolute inset-0"
-            style={{ visibility: s.id === dock.activeId ? 'visible' : 'hidden' }}
-            aria-hidden={s.id !== dock.activeId}
-          >
-            <DevboxTerminal
-              sessionId={s.sessionId}
-              shellId={s.id}
-              label={s.label}
-              chrome={false}
-              fillHeight
-              autoConnect
-            />
-          </div>
-        ))}
-      </div>
+      {/* Every shell stays mounted. In tabbed layouts the inactive ones are
+          hidden with CSS — never unmounted — so switching does not drop a
+          socket. In grid and stack they are all laid out at once. */}
+      {showsAllPanes(dock.mode) ? (
+        <div
+          className={`flex-1 min-h-0 p-1.5 gap-1.5 overflow-auto ${
+            dock.mode === 'grid'
+              ? 'grid grid-cols-1 md:grid-cols-2 auto-rows-fr'
+              : 'flex flex-col'}`}
+        >
+          {dock.shells.map((s) => (
+            <div
+              key={s.id}
+              onMouseDown={() => focusShell(s.id)}
+              className={`min-h-[160px] rounded border overflow-hidden flex flex-col ${
+                s.id === dock.activeId ? 'border-[#7ee787]/50' : 'border-[#30363d]'}`}
+            >
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-[#161b22] border-b border-[#30363d]">
+                <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[s.status]}`} title={s.status} />
+                <span className="text-[10px] font-mono text-[#8b949e]">{s.label}</span>
+                <div className="flex-1" />
+                <button
+                  onClick={() => closeShell(s.id)}
+                  aria-label={`Close ${s.label}`}
+                  className="text-[10px] text-[#8b949e] hover:text-[#f85149] bg-transparent border-none cursor-pointer px-1"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="flex-1 min-h-0">
+                <DevboxTerminal
+                  sessionId={s.sessionId}
+                  shellId={s.id}
+                  label={s.label}
+                  chrome={false}
+                  fillHeight
+                  autoConnect
+                  onStatus={(st, sawOutput) => reportShellStatus(s.id, st, sawOutput)}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 relative">
+          {dock.shells.map((s) => (
+            <div
+              key={s.id}
+              className="absolute inset-0"
+              style={{ visibility: s.id === dock.activeId ? 'visible' : 'hidden' }}
+              aria-hidden={s.id !== dock.activeId}
+            >
+              <DevboxTerminal
+                sessionId={s.sessionId}
+                shellId={s.id}
+                label={s.label}
+                chrome={false}
+                fillHeight
+                autoConnect
+                onStatus={(st, sawOutput) => reportShellStatus(s.id, st, sawOutput)}
+              />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 
+  // Stack lives down the right edge: narrow enough that the page stays
+  // usable beside it, which is the point of stacking rather than docking.
+  if (dock.mode === 'stack') {
+    return (
+      <div className="fixed right-0 top-[64px] bottom-0 z-40 w-[380px] p-2">
+        {body}
+      </div>
+    );
+  }
+
+  if (dock.mode === 'grid') {
+    return (
+      <div className="fixed inset-x-0 bottom-0 z-40 px-2 pb-2" style={{ height: '62vh' }}>
+        {body}
+      </div>
+    );
+  }
+
   if (!floating) {
+
     return (
       <div
         className="fixed left-0 right-0 bottom-0 z-40 px-2 pb-2"
