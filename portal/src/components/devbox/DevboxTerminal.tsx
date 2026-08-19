@@ -15,7 +15,14 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 
-/** Channel bytes. Server→client: 1,2,3. Client→server: 0,4,5. Either: 0xff. */
+/**
+ * Channel bytes. Server→client: 1,2,3. Client→server: 0,4,5. Either: 0xff.
+ *
+ * Source of truth is `src/runtime/shell/protocol.ts` in
+ * aws/bedrock-agentcore-sdk-typescript. Mirrored here rather than imported
+ * because that package is Node-only and peer-depends on an agent framework.
+ * If a frame ever decodes wrong, diff against that file first.
+ */
 const CH = {
   STDIN: 0x00,
   STDOUT: 0x01,
@@ -30,6 +37,8 @@ const MAX_FRAME = 65_536;
 /** Ctrl-] detaches: drop the socket, leave the shell alive. */
 const DETACH = 0x1d;
 const HEARTBEAT_MS = 30_000;
+/** Bounded: a quota rejection never clears by retrying. */
+const MAX_RETRIES = 5;
 
 type Phase = 'idle' | 'connecting' | 'live' | 'detached' | 'closed' | 'error';
 
@@ -77,15 +86,24 @@ export function DevboxTerminal({ sessionId, shellId, label, onExit, height = 460
   const fitRef = useRef<FitAddon | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const shellIdRef = useRef<string | undefined>(shellId);
+  const onExitRef = useRef(onExit);
+  onExitRef.current = onExit;
   const retriesRef = useRef(0);
   const detachedRef = useRef(false);
+  // A pending reconnect has to be cancellable. Without this, unmounting during
+  // backoff still fires connect(): it mints a fresh URL and opens a socket
+  // nobody is watching, which silently consumes one of the 10 shell slots per
+  // runtime and sets state on a disposed terminal.
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const disposedRef = useRef(false);
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [status, setStatus] = useState<string>('');
 
   const connect = useCallback(async () => {
     const term = termRef.current;
-    if (!term) return;
+    if (!term || disposedRef.current) return;
+    if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
     setPhase('connecting');
     setStatus('');
 
@@ -154,7 +172,7 @@ export function DevboxTerminal({ sessionId, shellId, label, onExit, height = 460
           const causes = body.details?.causes ?? [];
           const raw = causes.find((c) => c.reason === 'ExitCode')?.message;
           const code = raw == null ? null : Number.parseInt(raw, 10);
-          onExit?.(Number.isNaN(code as number) ? null : code);
+          onExitRef.current?.(Number.isNaN(code as number) ? null : code);
         } catch { /* a malformed status frame is not worth killing the terminal */ }
         return;
       }
@@ -167,19 +185,29 @@ export function DevboxTerminal({ sessionId, shellId, label, onExit, height = 460
 
       const advice = closeAdvice(ev.code);
       setStatus(advice.text);
-      if (advice.retry && retriesRef.current < 5) {
+      if (advice.retry && retriesRef.current < MAX_RETRIES && !disposedRef.current) {
         retriesRef.current += 1;
         setPhase('connecting');
         // Backoff, because 1008 can mean we are being rate limited and an
         // immediate retry would earn another one.
-        setTimeout(() => { void connect(); }, Math.min(500 * 2 ** retriesRef.current, 8000));
+        retryTimerRef.current = setTimeout(() => { void connect(); },
+          Math.min(500 * 2 ** retriesRef.current, 8000));
       } else {
         setPhase(ev.code === 1000 ? 'closed' : 'error');
+        // A runtime already holding 10 shells rejects the upgrade, and
+        // a failed upgrade reaches the browser as 1006 — indistinguishable
+        // from a dropped network. Retrying will never clear a quota, so once
+        // the attempts are spent, say what it might actually be.
+        if (ev.code === 1006 && retriesRef.current >= MAX_RETRIES) {
+          setStatus('could not connect — the runtime may already hold 10 shells; close one and retry');
+        }
       }
     };
 
     ws.onerror = () => { /* close carries the actionable code; error does not */ };
-  }, [sessionId, onExit]);
+    // onExit is read through a ref so an inline arrow in the parent does not
+    // rebuild connect() on every render.
+  }, [sessionId]);
 
   // Terminal instance, created once per mount.
   useEffect(() => {
@@ -233,6 +261,8 @@ export function DevboxTerminal({ sessionId, shellId, label, onExit, height = 460
     }, HEARTBEAT_MS);
 
     return () => {
+      disposedRef.current = true;
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
       clearInterval(beat);
       window.removeEventListener('resize', refit);
       onData.dispose();

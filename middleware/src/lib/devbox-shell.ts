@@ -31,8 +31,12 @@ import { SignatureV4 } from '@aws-sdk/signature-v4';
 import { Sha256 } from '@aws-crypto/sha256-js';
 import { defaultProvider } from '@aws-sdk/credential-provider-node';
 
-/** Frame channels. First byte of every frame; the rest is payload. */
-export const SHELL_FRAME = {
+/**
+ * Frame channels, kept for reference only — nothing server-side speaks frames.
+ * The live implementation is the portal's DevboxTerminal, which holds the
+ * socket. Documented here because this is where someone looks first.
+ */
+const SHELL_FRAME_REFERENCE = {
   /** client → server: raw keystrokes */
   STDIN: 0x00,
   /** server → client */
@@ -55,7 +59,7 @@ export const SHELL_FRAME = {
 /** A frame larger than this is rejected by the service (close code 1009). */
 export const MAX_FRAME_BYTES = 65_536;
 /** Ctrl-] — the CLI's detach key. Closes the socket, leaves the shell running. */
-export const DETACH_BYTE = 0x1d;
+const DETACH_BYTE_REFERENCE = 0x1d;
 
 /**
  * Presigned URLs are deliberately short-lived. It is a bearer credential for a
@@ -80,7 +84,7 @@ function agentcoreHost(region: string): string {
  * The ARN is URI-encoded into a single path segment — its colons and slashes
  * must not be read as path separators.
  */
-export function buildShellUrl(
+function buildShellUrl(
   runtimeArn: string,
   opts: { shellId: string; sessionId: string; region: string; qualifier?: string },
 ): URL {
@@ -142,81 +146,4 @@ export async function presignShellUrl(
     out.searchParams.set(k, Array.isArray(v) ? (v[0] ?? '') : String(v));
   }
   return { url: out.toString(), expiresIn, shellId: opts.shellId };
-}
-
-// ── Frame codec ──────────────────────────────────────────────────────────────
-// Shared with the portal so both ends agree on the wire format. Kept here
-// rather than duplicated because a mismatch shows up as a terminal that
-// silently drops keystrokes.
-
-export interface ShellStatus {
-  type: 'confirmation' | 'termination' | 'unknown';
-  shellId?: string;
-  reconnected?: boolean;
-  /** Bytes lost from the replay buffer while disconnected. */
-  bytesDropped?: number;
-  exitCode?: number | null;
-  signal?: string | null;
-}
-
-/**
- * Parse a status frame.
- *
- * A frame carrying `metadata.shellId` is the connection confirmation — that is
- * how the client learns the id it needs in order to reconnect later. Anything
- * else is a termination, whose exit code and signal arrive as entries in
- * `details.causes[]` rather than as plain fields.
- */
-export function parseStatusFrame(payloadText: string): ShellStatus {
-  let body: {
-    metadata?: { shellId?: string; reconnected?: boolean; bytesDropped?: number };
-    details?: { causes?: Array<{ reason?: string; message?: string }> };
-  };
-  try {
-    body = JSON.parse(payloadText) as typeof body;
-  } catch {
-    return { type: 'unknown' };
-  }
-
-  const shellId = body.metadata?.shellId;
-  if (shellId) {
-    return {
-      type: 'confirmation',
-      shellId,
-      reconnected: body.metadata?.reconnected ?? false,
-      ...(body.metadata?.bytesDropped !== undefined ? { bytesDropped: body.metadata.bytesDropped } : {}),
-    };
-  }
-
-  const causes = body.details?.causes ?? [];
-  const exitRaw = causes.find((c) => c.reason === 'ExitCode')?.message ?? null;
-  const signal = causes.find((c) => c.reason === 'Signal')?.message ?? null;
-  const exitCode = exitRaw === null ? null : Number.parseInt(exitRaw, 10);
-  return {
-    type: 'termination',
-    exitCode: Number.isNaN(exitCode) ? null : exitCode,
-    signal,
-  };
-}
-
-/**
- * How a client should react to a close code.
- *
- * Reconnecting on every close is wrong in two specific cases, and both matter:
- * `1003` means we sent text frames on a binary-only socket (reconnecting
- * repeats the mistake), and `4000` means another client took this shell —
- * reconnecting would start a fight over one terminal between two operators.
- */
-export function reconnectPolicy(code: number): { retry: boolean; reason: string } {
-  switch (code) {
-    case 1000: return { retry: false, reason: 'shell exited' };
-    case 1001: return { retry: true, reason: 'server going away' };
-    case 1003: return { retry: false, reason: 'protocol error — binary frames only' };
-    case 1006: return { retry: true, reason: 'connection lost' };
-    case 1008: return { retry: true, reason: 'connection limit reached (1h TTL, rate, or buffer)' };
-    case 1009: return { retry: true, reason: 'frame too large — chunk input under 64 KB' };
-    case 1011: return { retry: true, reason: 'server error' };
-    case 4000: return { retry: false, reason: 'attached from another client' };
-    default: return { retry: false, reason: `closed (${code})` };
-  }
 }
