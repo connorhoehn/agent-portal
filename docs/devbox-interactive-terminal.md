@@ -1,161 +1,116 @@
-# Interactive terminals for devbox — what's possible, and what isn't
+# Interactive terminals for devbox
 
-Research note. The question: can we get a tmux-style interactive experience
-against a devbox, attach to boxes properly rather than driving a black box, and
-watch several boxes at once while they work a queue / do code discovery / review
-PRs?
+The question: can we get a tmux-style interactive experience against a devbox,
+attach to boxes properly rather than driving a black box, and watch several
+boxes at once while they work a queue / do code discovery / review PRs?
 
-Short answer: **a true PTY is impossible through the AgentCore Runtime data
-plane as it exists today.** Three workable paths exist around that, and the one
-that best serves the stated use cases needs no new transport at all.
+**Yes. AWS ships exactly this.** `InvokeAgentRuntimeCommandShell` gives a
+persistent, PTY-backed terminal over a bidirectional WebSocket — colors, tab
+completion, Ctrl-C, terminal resize, full-screen apps, and reconnect by
+`shellId`. Announced 5 June 2026.
 
-## The constraint, established from the SDK
+> **Correction.** The first version of this note concluded the opposite: that a
+> true PTY was impossible because the runtime data plane is half-duplex. That
+> was wrong, and the method is why. I enumerated the operations in the
+> *installed* SDK (`@aws-sdk/client-bedrock-agentcore` 3.1111.0) and reasoned
+> from the request shapes I found there. `InvokeAgentRuntimeCommandShell` is
+> not in that version, so I concluded the capability did not exist rather than
+> that our SDK was behind. Reading the installed types answers "what can this
+> client do", never "what can the service do". Check the service docs.
 
-`InvokeAgentRuntimeCommand` — the shell-exec operation the devbox console uses —
-has this request body:
+## What the API actually provides
 
-```ts
-interface InvokeAgentRuntimeCommandRequestBody {
-  command: string | undefined;
-  timeout?: number | undefined;
-}
-```
+Two shell modes, from
+[Shell execution](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-shell-execution.html):
 
-One string in. The response is a stream:
+| | `InvokeAgentRuntimeCommand` (what we use today) | `InvokeAgentRuntimeCommandShell` |
+|---|---|---|
+| Protocol | HTTP/2 request-response stream | **WebSocket, bidirectional** |
+| Shell state | Stateless — fresh process per command | **Persistent** — env, cwd, history |
+| Output | Structured `contentStart`/`contentDelta`/`contentStop` + exit code | **Binary frames** — raw terminal I/O |
+| Reconnect | No | **Yes, via `shellId`**, replays 256 KB |
+| Duration | 1–3600 s timeout | 1 hour, reconnect to continue |
 
-```ts
-interface InvokeAgentRuntimeCommandResponse {
-  stream: AsyncIterable<InvokeAgentRuntimeCommandStreamOutput> | undefined;
-}
-```
+The one-shot mode we already use is the right tool for deterministic work —
+the job dispatcher, CI-style gates, `git status`. It is not a worse terminal;
+it is a different thing, and the docs recommend it for exactly what we use it
+for. The interactive mode is the missing half.
 
-The task operation is the same shape: `InvokeAgentRuntimeRequest.payload` is a
-`Uint8Array`, a single buffer, not a stream.
+Limits worth designing against: **10 concurrent shells per runtime**, 64 KB max
+frame, 250 frames/sec, 1 hour per connection. Binary frames only — five
+consecutive text frames closes the socket with code `1003`.
 
-So the channel is **half-duplex**: one payload in, many chunks out. There is no
-stdin after the request begins. That rules out, through this API:
+## Why this maps onto what was asked for
 
-- typing into a running process (a REPL, `vim`, `less`)
-- `Ctrl-C` to a running command
-- `tmux attach` in the sense of a live attached client
-- terminal resize events
+- **tmux-style attach/detach** — `agentcore exec --it` binds `Ctrl+]` to detach
+  without closing, then prints a reconnect command carrying `--session-id` and
+  `--shell-id`. That is the tmux workflow, provided.
+- **Watching several boxes** — 10 concurrent shells per runtime, and each
+  session is its own Firecracker microVM. The blog's framing: "Run the same
+  agent against ten branches. Run three different agents against the same
+  ticket."
+- **Close the laptop** — the shell process keeps running while disconnected;
+  `/mnt/workspace` survives suspend/resume with 14-day inactivity retention.
+- **Code discovery / PR review** — these want a real terminal (pagers, `less`,
+  `git add -p`, full-screen TUIs), which binary framing supports and the
+  one-shot API cannot.
 
-Anything that "feels like a terminal" has to work around that, not through it.
+## Authentication — and why the browser should connect directly
 
-Worth knowing: AWS *does* ship a full-duplex interactive channel in this
-service — just not for Runtime. The Browser tool exposes a SigV4-signed
-WebSocket CDP endpoint, which `providers/agentcore.ts` already dials with
-`new WebSocket(wsUrl, { headers: signedWsHeaders(...) })`. The capability
-exists in the platform; it is not offered for runtime containers.
+Three auth modes are documented: SigV4 with default credentials, a **presigned
+URL**, and an OAuth bearer token.
 
-## Option 1 — Multi-pane fleet view (no new transport)
+The presigned URL is the one that matters for a web terminal. The middleware
+mints a short-lived presigned WebSocket URL and hands it to the browser;
+xterm.js connects **straight to AWS**. Binary terminal frames never traverse
+our Express process, which removes the proxy as a bottleneck, a failure point,
+and a place where 250 frames/sec of terminal output could stall the event loop.
 
-The use cases actually named — watching boxes drain a queue, following code
-discovery, reviewing what a PR-review run did — are **observation**, not
-interaction. Nothing about them needs stdin.
+We already have the hard part of the SigV4-over-WebSocket machinery:
+`middleware/src/providers/agentcore.ts` signs a WebSocket upgrade for the
+Browser tool's CDP endpoint (`signedWsHeaders`, then
+`new WebSocket(wsUrl, { headers })`). The same approach applies here.
 
-That is already served end to end: the dispatcher tees every task event into
-the box's server-side ring buffer, and `GET /api/devbox/boxes/:id/tail` replays
-the buffer then streams live over SSE, so any number of clients can watch any
-box. The gap is presentation, not plumbing — the portal shows one box at a
-time.
+## What this system needs before it works
 
-A grid of live panes, one per box, each an SSE tail with a status chip, gets
-the tmux *feeling* (several things visible at once, all live) for the workflows
-described. It is a UI change against infrastructure that already exists.
+1. **Upgrade the SDK.** Installed `@aws-sdk/client-bedrock-agentcore` is
+   3.1111.0 and has no `CommandShell` operation. (Or bypass the SDK entirely by
+   signing the URL ourselves, as the CDP path already does.)
+2. **Grant the caller `bedrock-agentcore:InvokeAgentRuntimeCommandShell`.**
+   `infra/lib/middleware-service-stack.ts` currently grants
+   `InvokeAgentRuntimeCommand` only. Note this is a *caller* permission — it
+   belongs to whoever opens the socket, not to the devbox execution role.
+3. **Redeploy the devbox runtime.** Only agents created after 5 June 2026
+   support interactive shells. Ours predates that, but the stack is being torn
+   down and rebuilt anyway, so a fresh deploy gets it for free.
+4. **Session id ≥ 33 characters** — already true of our devbox sessions.
 
-**Cost:** low. **Latency:** live. **Interactivity:** none, and none needed.
+## Plan
 
-## Option 2 — tmux in the container, driven by send-keys + capture-pane
+1. **xterm.js pane wired to a presigned shell URL.** Replaces the current
+   request-response console for interactive use. Keep the one-shot path: it is
+   better for scripted work and it is what the job dispatcher runs on.
+2. **Persist `shellId` per box** in the fleet registry so reload reattaches
+   instead of starting over, and surface "attached / detached / replaced"
+   honestly — close code `4000` means another client took the shell, which the
+   UI must show rather than silently reconnecting into a fight.
+3. **Multi-pane grid.** Up to 10 shells, so a row of live terminals across
+   boxes working the queue is within limits. Read frames promptly — a slow
+   client fills the server write buffer and gets closed with `1008`.
+4. **Handle the close codes deliberately.** `1001`/`1006` auto-reconnect,
+   `1008` back off then reconnect, `1003`/`4000` must *not* auto-reconnect. A
+   naive reconnect loop against `4000` would fight another operator for the
+   same shell.
 
-For when you do want to *drive* something interactive, the trick is to stop
-trying to hold the session open across the wire and let the container hold it
-instead. tmux becomes the state; AgentCore stays a half-duplex transport.
+## What is now obsolete
 
-```sh
-# once
-tmux new-session -d -s work -x 200 -y 50
+Earlier drafts proposed a tmux-in-the-container screen-scrape
+(`send-keys` + `capture-pane`) and a container-initiated reverse WebSocket
+tunnel to the middleware. Both were workarounds for a constraint that does not
+exist. Do not build either. The reverse tunnel in particular would have been a
+substantial piece of infrastructure — auth, reconnection, backpressure, a
+security review of a container dialing out with a shell attached — duplicating
+a managed API.
 
-# per interaction — this is one InvokeAgentRuntimeCommand
-tmux send-keys -t work 'npm test' Enter
-sleep 0.2
-tmux capture-pane -p -e -t work    # -e keeps ANSI colour
-```
-
-The session persists between invocations for as long as the microVM session
-lives, so `cd`, environment, a running `vim`, a paused REPL, and scrollback all
-survive. Multiple named windows give real multiplexing. `capture-pane` output
-renders straight into xterm.js.
-
-This genuinely runs interactive programs. You send `:wq` to vim the same way
-you send `ls`. What you do not get is fluid typing: every keystroke batch is a
-round trip, so expect 200–800 ms per exchange. It is command-and-look, not a
-smooth terminal.
-
-Needs `tmux` in the devbox image — the current one installs only
-`git curl ca-certificates ripgrep procps` plus node and python.
-
-**Cost:** small — one image change, one route, an xterm.js pane.
-**Latency:** a round trip per interaction. **Interactivity:** real but chunky.
-
-## Option 3 — Reverse WebSocket tunnel (a genuine TTY)
-
-If fluid typing matters, the container has to dial *out*, because nothing lets
-us dial in. AgentCore containers have egress (they reach Bedrock), so the
-devbox can open a WebSocket to the middleware and act as the client:
-
-```
-browser ──ws──> middleware ──ws (reverse, container-initiated)──> devbox PTY
-  xterm.js         bridge                      node-pty / script
-```
-
-The middleware already runs a `WebSocketServer` on `/ws`, so the browser leg is
-solved; the missing leg is container → middleware. Authenticate with the
-workload access token the runtime already has (`GetWorkloadAccessToken`).
-
-This gives the real thing: `Ctrl-C`, resize, `tmux attach`, `vim`, a proper
-prompt.
-
-The catch is topology. The container must be able to reach the middleware, so
-this works when the middleware is deployed behind a load balancer and does
-**not** work while it runs on a laptop — which is the current dev setup. It is
-also a real piece of infrastructure: reconnection, backpressure, auth, session
-affinity, and a security review of a container-initiated tunnel that carries a
-shell.
-
-**Cost:** high. **Latency:** true real time. **Interactivity:** complete.
-
-## Option 4 — Sidestep AgentCore for interactive work
-
-ECS Exec (`aws ecs execute-command`, SSM under the hood) gives a genuine
-interactive shell into a Fargate task, with existing browser frontends. If an
-interactive terminal is a first-class product requirement rather than a
-convenience, this is the boring correct answer.
-
-The trade is everything AgentCore Runtime provides that the rest of this system
-leans on: `/mnt/workspace` session storage, workload identity, the session
-lifecycle, and the observability integration. Running devboxes on ECS would
-mean rebuilding those.
-
-## Recommendation
-
-1. **Build the multi-pane fleet view first.** It is the smallest change and it
-   is what the described workflows actually need — several boxes visible and
-   live while they work. No new transport, no image change.
-2. **Add tmux + send-keys/capture-pane** when you want to drive something
-   interactive. Persistent multiplexed sessions, real interactive programs,
-   works with today's API. This is the best value-per-unit-effort for "attach
-   to a box properly".
-3. **Only build the reverse tunnel** if fluid typing turns out to matter, and
-   only once the middleware is deployed somewhere the container can reach. Do
-   not build it against a laptop.
-
-## What would change this
-
-The constraint is one API shape. If AgentCore Runtime ever exposes a
-bidirectional stream for `InvokeAgentRuntimeCommand` — or a signed WebSocket
-endpoint for runtime containers the way it already does for Browser sessions —
-option 3 collapses from "build a tunnel" to "connect to it", and becomes the
-obvious choice. Worth re-checking the SDK on each upgrade: the operation list
-is `node_modules/@aws-sdk/client-bedrock-agentcore/dist-types/commands/`, and
-the shape to watch is `InvokeAgentRuntimeCommandRequestBody`.
+The one earlier idea that survives is the multi-pane fleet view, and it gets
+better: the panes can be live terminals rather than read-only tails.
