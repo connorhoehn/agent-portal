@@ -429,12 +429,25 @@ export class MiddlewareServiceStack extends cdk.Stack {
         serviceName: `${prefix}-middleware`,
         cpu: 512,
         memoryLimitMiB: 1024,
-        // Zero until the image exists. A service with desiredCount 1 against an
-        // empty repository cannot pull, trips the deployment circuit breaker,
-        // and fails the stack — and the failed-stack cleanup then deletes the
-        // repository you were about to push to. Phase two
-        // (--context deployMiddlewareService=true) scales it up.
-        desiredCount: deployService ? 1 : 0,
+
+        // ARM64, to match the image.
+        //
+        // Fargate defaults to x86_64. The middleware image is built on the
+        // developer's Apple Silicon machine and pushed as arm64, so the default
+        // produced a task that started, failed with `exec format error` in the
+        // entrypoint, and was replaced — over and over, with the stack sitting
+        // in UPDATE_IN_PROGRESS and nothing in the ECS events naming an
+        // architecture. Graviton is also the cheaper of the two, so matching
+        // the build host is the right direction to reconcile in.
+        runtimePlatform: {
+          cpuArchitecture: ecs.CpuArchitecture.ARM64,
+          operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
+        },
+
+        // The L2 pattern rejects 0 here ("You must specify a desiredCount
+        // greater than 0"), so phase one drops it to zero through the escape
+        // hatch below instead.
+        desiredCount: 1,
 
         // ── Task definition ──────────────────────────────────────────────
         taskImageOptions: {
@@ -477,6 +490,19 @@ export class MiddlewareServiceStack extends cdk.Stack {
         maxHealthyPercent: 200,
       },
     );
+
+    // Phase one: create the infrastructure without asking anything to run.
+    //
+    // The L2 construct will not accept desiredCount 0, but CloudFormation
+    // will — so it is set on the underlying CfnService. Without this the
+    // service tries to pull from a repository that is still empty on a first
+    // deploy, the circuit breaker trips, the stack fails, and the failed-stack
+    // cleanup deletes the repository along with any image pushed into it.
+    // Phase two (--context deployMiddlewareService=true) scales it to one.
+    if (!deployService) {
+      const cfnService = fargateService.service.node.defaultChild as ecs.CfnService;
+      cfnService.desiredCount = 0;
+    }
 
     // ── HTTP → HTTPS redirect (only when certificate is present) ──────────
     if (certArn) {
