@@ -118,7 +118,16 @@ export async function listKbs(tenant?: string): Promise<KbRegistryEntry[]> {
 }
 
 /** Get a KB registry entry by UUID. */
+/** Shape check before the cast — see getKb. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function getKb(id: string): Promise<KbRegistryEntry | null> {
+  // A malformed id is a miss, not a fault. `:id::uuid` makes Postgres raise on
+  // anything that is not a UUID, which surfaced to callers as a 500 Internal
+  // server error for what is plainly a bad request — and every route here
+  // treats a null return as 404 already.
+  if (!UUID_RE.test(id)) return null;
+
   const rows = await exec(
     `SELECT * FROM knowledge_bases WHERE id = :id::uuid`,
     [strParam('id', id)],

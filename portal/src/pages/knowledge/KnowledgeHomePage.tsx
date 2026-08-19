@@ -20,6 +20,8 @@ import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
+import { DocumentDropzone } from '../../components/knowledge/DocumentDropzone';
+import { ShareLinks } from '../../components/knowledge/ShareLinks';
 
 type DriftKind = 'missing' | 'unregistered' | 'unprovisioned' | 'status-drift' | 'ok';
 
@@ -384,6 +386,20 @@ export default function KnowledgeHomePage() {
           reads when it looks for knowledge nothing references.
         </div>
       </Card>
+      {/* ── Getting documents in ──────────────────────────────────────────
+          Below the pipeline, because the pipeline is what explains where an
+          upload lands. Sources/crawling is one way in; these are the other
+          two, and until now neither existed in working form. */}
+      <div className="grid gap-4 mt-5 grid-cols-1 lg:grid-cols-2">
+        <DocumentDropzone
+          target={syncTarget && syncTarget.id
+            ? { id: syncTarget.id, slug: syncTarget.slug ?? '', name: syncTarget.name }
+            : null}
+          onUploaded={() => refreshRec()}
+        />
+        <ShareLinks kbSlug={syncTarget?.slug ?? null} />
+      </div>
+
     </PageSection>
   );
 }

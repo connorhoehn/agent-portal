@@ -28,6 +28,7 @@ const NewsroomBriefsPage = lazy(() => import('./pages/newsroom/BriefsPage'));
 const NewsroomHeadlinesPage = lazy(() => import('./pages/newsroom/HeadlinesPage'));
 const KnowledgeBasePage = lazy(() => import('./pages/KnowledgeBasePage'));
 const KnowledgeHomePage = lazy(() => import('./pages/knowledge/KnowledgeHomePage'));
+const DropPage = lazy(() => import('./pages/DropPage'));
 const KBRegistryPage = lazy(() => import('./pages/admin/KBRegistryPage.js'));
 const DevboxPage = lazy(() => import('./pages/admin/DevboxPage'));
 const KBDetailPage = lazy(() => import('./pages/admin/KBDetailPage.js'));
@@ -141,11 +142,17 @@ export function App() {
       <Route path="explore" element={<Navigate to="/iq/explore" replace />} />
       <Route path="graph" element={<Navigate to="/iq/explore" replace />} />
       <Route path="code-interpreter" element={<Navigate to="/iq/code-interpreter" replace />} />
-      <Route path="knowledge-base" element={<Navigate to="/admin/knowledge-bases" replace />} />
+      <Route path="knowledge-base" element={<Navigate to="/admin/knowledge" replace />} />
       <Route path="observability/*" element={<Navigate to="/admin/observability" replace />} />
       <Route path="ingest/*" element={<Navigate to="/admin/ingest" replace />} />
       <Route path="capabilities/*" element={<Navigate to="/admin/capabilities" replace />} />
       <Route path="identity/*" element={<Navigate to="/admin/identity" replace />} />
+
+      {/* Share-link drop page — deliberately outside Layout. The person
+          opening it has no account here, so showing them nav, a tenant
+          switcher and a masquerade control would be both confusing and a
+          small information leak about the org. */}
+      <Route path="drop/:token" element={<Page element={<DropPage />} />} />
 
       <Route element={<Layout />}>
         <Route index element={<RootRedirect />} />

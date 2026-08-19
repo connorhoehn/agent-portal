@@ -41,6 +41,11 @@ import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { reconcileKnowledgeBases, adoptKnowledgeBase } from '../providers/kb-reconcile.js';
+import express from 'express';
+import {
+  createUploadLink, listUploadLinks, revokeUploadLink, listLinkFiles,
+} from '../providers/upload-links.js';
+import { listLandingZoneFiles, uploadToLandingZone } from '../providers/landing-zones.js';
 
 export const kbAdminRouter = Router();
 
@@ -259,6 +264,89 @@ kbAdminRouter.post('/reconcile/adopt', asyncHandler(async (req, res) => {
   if (!out.ok) { res.status(502).json({ error: out.error }); return; }
   res.json(out);
 }));
+
+// ── Upload links — let someone add documents without giving them access ─────
+//
+// These sit above /:id so "upload-links" is not read as a knowledge-base id.
+
+kbAdminRouter.get('/upload-links', asyncHandler(async (req, res) => {
+  const kbSlug = req.query['kbSlug'] ? String(req.query['kbSlug']) : undefined;
+  res.json({ links: await listUploadLinks(kbSlug) });
+}));
+
+kbAdminRouter.post('/upload-links', asyncHandler(async (req, res) => {
+  const body = (req.body ?? {}) as {
+    kbSlug?: string; label?: string; expiresInHours?: number; maxFiles?: number; maxBytes?: number;
+  };
+  if (!body.kbSlug) throw new ValidationError('kbSlug is required');
+  if (!body.label?.trim()) {
+    // Refused rather than defaulted: an unlabelled link is untraceable the
+    // moment you have more than one, which is exactly when you need to know
+    // which one let something in.
+    throw new ValidationError('label is required — name who this link is for');
+  }
+
+  const kb = await getKbBySlug(body.kbSlug);
+  if (!kb) throw new NotFoundError(`No knowledge base registered as "${body.kbSlug}"`);
+
+  const created = await createUploadLink({
+    kbSlug: body.kbSlug,
+    label: body.label.trim(),
+    createdBy: (req as { session?: { email?: string } }).session?.email ?? null,
+    ...(body.expiresInHours !== undefined && { expiresInHours: Number(body.expiresInHours) }),
+    ...(body.maxFiles !== undefined && { maxFiles: Number(body.maxFiles) }),
+    ...(body.maxBytes !== undefined && { maxBytes: Number(body.maxBytes) }),
+  });
+
+  // The token is returned once and never again — it is not stored, only its
+  // hash. Callers that discard this response have to make a new link.
+  res.status(201).json(created);
+}));
+
+kbAdminRouter.get('/upload-links/:linkId/files', asyncHandler(async (req, res) => {
+  res.json({ files: await listLinkFiles(String(req.params['linkId'] ?? '')) });
+}));
+
+kbAdminRouter.delete('/upload-links/:linkId', asyncHandler(async (req, res) => {
+  const ok = await revokeUploadLink(String(req.params['linkId'] ?? ''));
+  if (!ok) throw new NotFoundError('No live upload link with that id');
+  res.json({ ok: true });
+}));
+
+// ── Landing zone — the authenticated way in ─────────────────────────────────
+//
+// The portal has had a landing-zone browser calling these two paths for a
+// while; they were never implemented, so every upload from it 404'd.
+
+kbAdminRouter.get('/:id/landing-zone/files', asyncHandler(async (req, res) => {
+  const entry = await getKb(String(req.params['id'] ?? ''));
+  if (!entry) throw new NotFoundError('Knowledge base not found');
+  const limit = Math.min(Number(req.query['limit'] ?? 50) || 50, 200);
+  const token = req.query['nextToken'] ? String(req.query['nextToken']) : undefined;
+  res.json(await listLandingZoneFiles(entry.s3Prefix, {
+    limit, ...(token ? { continuationToken: token } : {}),
+  }));
+}));
+
+kbAdminRouter.post(
+  '/:id/landing-zone/upload',
+  express.raw({ type: '*/*', limit: '50mb' }),
+  asyncHandler(async (req, res) => {
+    const entry = await getKb(String(req.params['id'] ?? ''));
+    if (!entry) throw new NotFoundError('Knowledge base not found');
+
+    const filename = String(req.query['filename'] ?? '').trim();
+    if (!filename) throw new ValidationError('filename query parameter is required');
+
+    const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    if (body.length === 0) throw new ValidationError('Empty file');
+
+    const result = await uploadToLandingZone(
+      entry.slug, filename, body, req.get('content-type') ?? 'application/octet-stream',
+    );
+    res.json({ file: { key: result.key, size: result.size, filename } });
+  }),
+);
 
 kbAdminRouter.get('/:id', asyncHandler(async (req, res) => {
   const entry = await getKb(String(req.params['id'] ?? ''));

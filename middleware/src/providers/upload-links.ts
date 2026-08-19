@@ -1,0 +1,282 @@
+// Upload links — token-scoped document drops into a knowledge base.
+//
+// The point is that the recipient gets a URL and nothing else. No AWS
+// credential leaves this process: every upload is validated here (link live,
+// under quota, allowed type, under size) and then written to S3 by the
+// middleware's own identity. That is what makes a leaked link survivable —
+// the bounds are columns in a table, not a policy document someone has to get
+// right, and revoking is an UPDATE rather than a role rotation.
+
+import { randomBytes, createHash, timingSafeEqual } from 'node:crypto';
+import { exec } from './aurora.js';
+import { uploadToLandingZone } from './landing-zones.js';
+import { type SqlParameter } from '@aws-sdk/client-rds-data';
+
+function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
+function n(name: string, value: number): SqlParameter { return { name, value: { longValue: value } }; }
+function toStr(v: unknown, f = ''): string { return typeof v === 'string' ? v : v == null ? f : String(v); }
+function toNum(v: unknown): number { return typeof v === 'number' ? v : Number(v ?? 0); }
+
+/** Extensions Bedrock can actually index. Anything else is refused up front. */
+const ALLOWED_EXTENSIONS = new Set([
+  '.pdf', '.txt', '.md', '.markdown', '.html', '.htm',
+  '.doc', '.docx', '.csv', '.xls', '.xlsx', '.json',
+]);
+
+/** Hard ceiling regardless of what a link asks for. */
+const ABSOLUTE_MAX_BYTES = 50 * 1024 * 1024;
+
+export interface UploadLink {
+  id: string;
+  kbSlug: string;
+  label: string;
+  createdBy: string | null;
+  expiresAt: string;
+  revokedAt: string | null;
+  maxFiles: number;
+  maxBytes: number;
+  filesUsed: number;
+  bytesUsed: number;
+  createdAt: string;
+  lastUsedAt: string | null;
+  /** Derived, so a UI does not re-implement the same three comparisons. */
+  status: 'live' | 'expired' | 'revoked' | 'exhausted';
+}
+
+function statusOf(row: {
+  revokedAt: string | null; expiresAt: string; filesUsed: number; maxFiles: number;
+}): UploadLink['status'] {
+  if (row.revokedAt) return 'revoked';
+  if (new Date(row.expiresAt).getTime() <= Date.now()) return 'expired';
+  if (row.filesUsed >= row.maxFiles) return 'exhausted';
+  return 'live';
+}
+
+function rowToLink(r: Record<string, unknown>): UploadLink {
+  const base = {
+    id: toStr(r['id']),
+    kbSlug: toStr(r['kb_slug']),
+    label: toStr(r['label']),
+    createdBy: r['created_by'] ? toStr(r['created_by']) : null,
+    expiresAt: toStr(r['expires_at']),
+    revokedAt: r['revoked_at'] ? toStr(r['revoked_at']) : null,
+    maxFiles: toNum(r['max_files']),
+    maxBytes: toNum(r['max_bytes']),
+    filesUsed: toNum(r['files_used']),
+    bytesUsed: toNum(r['bytes_used']),
+    createdAt: toStr(r['created_at']),
+    lastUsedAt: r['last_used_at'] ? toStr(r['last_used_at']) : null,
+  };
+  return { ...base, status: statusOf(base) };
+}
+
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+/**
+ * Create a link and return the token exactly once.
+ *
+ * The token is not stored, only its hash, so this return value is the single
+ * opportunity to capture it — the same contract as an API key.
+ */
+export async function createUploadLink(input: {
+  kbSlug: string;
+  label: string;
+  createdBy?: string | null;
+  expiresInHours?: number;
+  maxFiles?: number;
+  maxBytes?: number;
+}): Promise<{ link: UploadLink; token: string }> {
+  const token = randomBytes(32).toString('base64url');
+  const expiresInHours = Math.min(Math.max(input.expiresInHours ?? 72, 1), 24 * 30);
+  const maxFiles = Math.min(Math.max(input.maxFiles ?? 25, 1), 500);
+  const maxBytes = Math.min(Math.max(input.maxBytes ?? 25 * 1024 * 1024, 1024), ABSOLUTE_MAX_BYTES);
+
+  const rows = await exec(
+    `INSERT INTO kb_upload_links (token_hash, kb_slug, label, created_by, expires_at, max_files, max_bytes)
+     VALUES (:hash, :slug, :label, :by, NOW() + (:hours || ' hours')::interval, :files, :bytes)
+     RETURNING *`,
+    [
+      s('hash', hashToken(token)),
+      s('slug', input.kbSlug),
+      s('label', input.label),
+      input.createdBy ? s('by', input.createdBy) : { name: 'by', value: { isNull: true } },
+      s('hours', String(expiresInHours)),
+      n('files', maxFiles),
+      n('bytes', maxBytes),
+    ],
+  );
+  const row = rows[0];
+  if (!row) throw new Error('link insert returned no row');
+  return { link: rowToLink(row), token };
+}
+
+export async function listUploadLinks(kbSlug?: string): Promise<UploadLink[]> {
+  const rows = kbSlug
+    ? await exec(
+        `SELECT * FROM kb_upload_links WHERE kb_slug = :slug ORDER BY created_at DESC LIMIT 100`,
+        [s('slug', kbSlug)],
+      )
+    : await exec(`SELECT * FROM kb_upload_links ORDER BY created_at DESC LIMIT 100`);
+  return rows.map(rowToLink);
+}
+
+export async function revokeUploadLink(id: string): Promise<boolean> {
+  const rows = await exec(
+    `UPDATE kb_upload_links SET revoked_at = NOW()
+      WHERE id = :id::uuid AND revoked_at IS NULL
+      RETURNING id`,
+    [s('id', id)],
+  );
+  return rows.length > 0;
+}
+
+/** Files that arrived through one link, newest first. */
+export async function listLinkFiles(id: string): Promise<Array<{
+  filename: string; s3Key: string; bytes: number; contentType: string | null; uploadedAt: string;
+}>> {
+  const rows = await exec(
+    `SELECT filename, s3_key, bytes, content_type, uploaded_at
+       FROM kb_upload_link_files WHERE link_id = :id::uuid
+      ORDER BY uploaded_at DESC LIMIT 200`,
+    [s('id', id)],
+  );
+  return rows.map((r) => ({
+    filename: toStr(r['filename']),
+    s3Key: toStr(r['s3_key']),
+    bytes: toNum(r['bytes']),
+    contentType: r['content_type'] ? toStr(r['content_type']) : null,
+    uploadedAt: toStr(r['uploaded_at']),
+  }));
+}
+
+/**
+ * Resolve a token to its link.
+ *
+ * Compares hashes with a constant-time check. The lookup is by hash so the
+ * database never sees a usable token, and a wrong token is indistinguishable
+ * from an unknown one in both result and timing.
+ */
+async function linkForToken(token: string): Promise<UploadLink | null> {
+  if (!token || token.length < 20 || token.length > 200) return null;
+  const hash = hashToken(token);
+  const rows = await exec(
+    `SELECT * FROM kb_upload_links WHERE token_hash = :hash LIMIT 1`,
+    [s('hash', hash)],
+  );
+  const row = rows[0];
+  if (!row) return null;
+
+  const stored = toStr(row['token_hash']);
+  const a = Buffer.from(stored, 'utf8');
+  const b = Buffer.from(hash, 'utf8');
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+
+  return rowToLink(row);
+}
+
+/** What a recipient is allowed to know: enough to use the page, nothing more. */
+export interface PublicLinkView {
+  label: string;
+  /** Human-facing destination name, never the bucket or prefix. */
+  destination: string;
+  status: UploadLink['status'];
+  expiresAt: string;
+  filesRemaining: number;
+  maxBytes: number;
+  allowedExtensions: string[];
+}
+
+export async function describeLinkForRecipient(token: string): Promise<PublicLinkView | null> {
+  const link = await linkForToken(token);
+  if (!link) return null;
+  return {
+    label: link.label,
+    // Deliberately the registry name, not the S3 location. Someone holding a
+    // drop link has no reason to learn the bucket layout.
+    destination: link.kbSlug,
+    status: link.status,
+    expiresAt: link.expiresAt,
+    filesRemaining: Math.max(0, link.maxFiles - link.filesUsed),
+    maxBytes: link.maxBytes,
+    allowedExtensions: [...ALLOWED_EXTENSIONS].sort(),
+  };
+}
+
+export type UploadRefusal =
+  | 'unknown-link' | 'revoked' | 'expired' | 'exhausted'
+  | 'too-large' | 'bad-type' | 'empty';
+
+/**
+ * Accept one file through a link.
+ *
+ * Every check happens here rather than in a presigned-URL policy, because the
+ * ones that matter — is this link still live, has it used its quota — are
+ * facts about our data that S3 has no way to know.
+ */
+export async function uploadViaLink(
+  token: string,
+  filename: string,
+  body: Buffer,
+  contentType: string,
+): Promise<
+  | { ok: true; key: string; bytes: number }
+  | { ok: false; refusal: UploadRefusal; detail: string }
+> {
+  const link = await linkForToken(token);
+  if (!link) return { ok: false, refusal: 'unknown-link', detail: 'This upload link is not valid.' };
+
+  if (link.status === 'revoked') {
+    return { ok: false, refusal: 'revoked', detail: 'This link has been revoked.' };
+  }
+  if (link.status === 'expired') {
+    return { ok: false, refusal: 'expired', detail: 'This link has expired.' };
+  }
+  if (link.status === 'exhausted') {
+    return { ok: false, refusal: 'exhausted', detail: 'This link has already uploaded its maximum number of files.' };
+  }
+  if (body.length === 0) {
+    return { ok: false, refusal: 'empty', detail: 'That file is empty.' };
+  }
+  if (body.length > link.maxBytes) {
+    return {
+      ok: false, refusal: 'too-large',
+      detail: `That file is ${Math.round(body.length / 1024 / 1024)} MB; this link allows ${Math.round(link.maxBytes / 1024 / 1024)} MB per file.`,
+    };
+  }
+
+  const dot = filename.lastIndexOf('.');
+  const ext = dot >= 0 ? filename.slice(dot).toLowerCase() : '';
+  if (!ALLOWED_EXTENSIONS.has(ext)) {
+    return {
+      ok: false, refusal: 'bad-type',
+      detail: `${ext || 'That file type'} cannot be indexed. Allowed: ${[...ALLOWED_EXTENSIONS].sort().join(', ')}`,
+    };
+  }
+
+  const result = await uploadToLandingZone(link.kbSlug, filename, body, contentType);
+
+  // Count it and record it. A quota that is only checked and never incremented
+  // is not a quota.
+  await exec(
+    `UPDATE kb_upload_links
+        SET files_used = files_used + 1,
+            bytes_used = bytes_used + :bytes,
+            last_used_at = NOW()
+      WHERE id = :id::uuid`,
+    [n('bytes', body.length), s('id', link.id)],
+  );
+  await exec(
+    `INSERT INTO kb_upload_link_files (link_id, s3_key, filename, bytes, content_type)
+     VALUES (:id::uuid, :key, :name, :bytes, :ct)`,
+    [
+      s('id', link.id), s('key', result.key),
+      s('name', filename.slice(0, 512)), n('bytes', body.length), s('ct', contentType),
+    ],
+  );
+
+  return { ok: true, key: result.key, bytes: body.length };
+}
+
+export { ALLOWED_EXTENSIONS };

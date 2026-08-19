@@ -45,6 +45,7 @@ import { workItemsRouter } from './routes/work-items.js';
 import { kbAdminRouter } from './routes/kb-admin.js';
 import { gatewayProxyRouter } from './routes/gateway-proxy.js';
 import { devboxRouter } from './routes/devbox.js';
+import { dropRouter } from './routes/drop.js';
 import { requireAction } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
 import { initCrawlTargets } from './lib/crawl-targets.js';
@@ -100,6 +101,10 @@ app.use('/api/knowledge-base', knowledgeBaseRouter);
 // ManageKB action required (hr-admin role). Mounted before the gated
 // observability router so the portal wizard can reach it.
 app.use('/api/admin/kb-registry', requireAction('ManageKB'), kbAdminRouter);
+// Public document drop — deliberately ungated. The token in the URL is the
+// whole authority, which is why the router exposes no bucket, prefix or id
+// and every limit is enforced server-side per link.
+app.use('/api/drop', dropRouter);
 // Newsroom — beats mounted BEFORE articles so /beats doesn't get swallowed.
 app.use('/api/newsroom/beats', newsroomBeatsRouter);
 app.use('/api/newsroom', newsroomArticlesRouter);
