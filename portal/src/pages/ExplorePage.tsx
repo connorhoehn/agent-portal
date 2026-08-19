@@ -25,6 +25,7 @@ import {
   MessageBubble,
   PageSection,
   Spinner,
+  Card,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
@@ -175,7 +176,7 @@ function buildProjectsMEGraph(
 }
 
 function ExplorePage() {
-  const { data } = useFetch<GraphData>('/api/graph/entities');
+  const { data, error: graphError, refresh: refreshGraph } = useFetch<GraphData>('/api/graph/entities');
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -464,6 +465,29 @@ function ExplorePage() {
     reset();
     setInput('');
     isFirstAutoSelectRef.current = true;
+  }
+
+  // A failed graph load used to render "Loading graph…" forever, which is
+  // indistinguishable from a slow one — you wait instead of acting. Say what
+  // went wrong and offer the retry.
+  if (!data && graphError) {
+    return (
+      <PageSection title="Explore">
+        <Card padding="md" className="max-w-2xl border-danger/40">
+          <div className="text-[13px] font-semibold text-danger">Could not load the org graph</div>
+          <div className="text-[12px] text-text-secondary mt-1 leading-snug">
+            {graphError}. People, skills, projects and decisions all come from Aurora, so
+            this usually means the database is unreachable rather than that the graph is empty.
+          </div>
+          <button
+            onClick={() => refreshGraph()}
+            className="mt-3 px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] font-semibold text-text-secondary cursor-pointer hover:text-primary hover:border-primary/50 transition-colors"
+          >
+            Try again
+          </button>
+        </Card>
+      </PageSection>
+    );
   }
 
   if (!data) {
