@@ -26,6 +26,20 @@ import { Router } from 'express';
 import { asyncHandler } from '../lib/async-handler.js';
 import { exec } from '../providers/aurora.js';
 
+
+/**
+ * Marks a response whose query failed.
+ *
+ * These endpoints deliberately answer 200 with an empty payload rather than
+ * failing the page, which is reasonable — but it destroyed the distinction
+ * between "no spend in this window" and "the database is gone", and the portal
+ * rendered $0.0000 either way. `degraded` restores that distinction without
+ * changing any existing field.
+ */
+function degraded<T extends object>(body: T, err: unknown): T & { degraded: true; error: string } {
+  return { ...body, degraded: true, error: (err as Error).message.split('\n')[0]?.slice(0, 160) ?? 'query failed' };
+}
+
 export const costRouter = Router();
 
 // Standard window-hours clamp — same shape as drift.ts uses.
@@ -91,7 +105,7 @@ costRouter.get('/total', asyncHandler(async (req, res) => {
       withCost: 0,
       windowHours,
     };
-    res.json(empty);
+    res.json(degraded(empty, err));
   }
 }));
 
@@ -151,7 +165,7 @@ costRouter.get('/per-agent', asyncHandler(async (req, res) => {
     res.json(out);
   } catch (err) {
     console.warn('[cost] /per-agent failed:', (err as Error).message);
-    res.json({ byAgent: [], withCost: 0, windowHours } satisfies CostPerAgentResponse);
+    res.json(degraded({ byAgent: [], withCost: 0, windowHours } satisfies CostPerAgentResponse, err));
   }
 }));
 
@@ -218,7 +232,7 @@ costRouter.get('/timeseries', asyncHandler(async (req, res) => {
     res.json(out);
   } catch (err) {
     console.warn('[cost] /timeseries failed:', (err as Error).message);
-    res.json({ points: [], withCost: 0, bucketMin, windowHours } satisfies CostTimeseriesResponse);
+    res.json(degraded({ points: [], withCost: 0, bucketMin, windowHours } satisfies CostTimeseriesResponse, err));
   }
 }));
 
@@ -288,7 +302,7 @@ costRouter.get('/top', asyncHandler(async (req, res) => {
     res.json(out);
   } catch (err) {
     console.warn('[cost] /top failed:', (err as Error).message);
-    res.json({ invocations: [], withCost: 0, windowHours } satisfies CostTopResponse);
+    res.json(degraded({ invocations: [], withCost: 0, windowHours } satisfies CostTopResponse, err));
   }
 }));
 
@@ -345,7 +359,7 @@ costRouter.get('/by-model', asyncHandler(async (req, res) => {
     res.json(out);
   } catch (err) {
     console.warn('[cost] /by-model failed:', (err as Error).message);
-    res.json({ byModel: [], withCost: 0, windowHours } satisfies CostByModelResponse);
+    res.json(degraded({ byModel: [], withCost: 0, windowHours } satisfies CostByModelResponse, err));
   }
 }));
 
@@ -412,7 +426,7 @@ costRouter.get('/a2a-overhead', asyncHandler(async (req, res) => {
       directInvocations: 0,
       windowHours,
     };
-    res.json(empty);
+    res.json(degraded(empty, err));
   }
 }));
 
@@ -476,7 +490,7 @@ costRouter.get('/value-ratio', asyncHandler(async (req, res) => {
     res.json(out);
   } catch (err) {
     console.warn('[cost] /value-ratio failed:', (err as Error).message);
-    res.json({ byAgent: [], windowHours } satisfies CostValueRatioResponse);
+    res.json(degraded({ byAgent: [], windowHours } satisfies CostValueRatioResponse, err));
   }
 }));
 
@@ -527,6 +541,6 @@ costRouter.get('/deploy-markers', asyncHandler(async (req, res) => {
     res.json(out);
   } catch (err) {
     console.warn('[cost] /deploy-markers failed:', (err as Error).message);
-    res.json({ markers: [], windowHours } satisfies CostDeployMarkersResponse);
+    res.json(degraded({ markers: [], windowHours } satisfies CostDeployMarkersResponse, err));
   }
 }));

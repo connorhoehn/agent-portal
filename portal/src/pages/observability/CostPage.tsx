@@ -50,6 +50,9 @@ import { SmartEmptyState } from '../../components/observability/SmartEmptyState'
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 interface CostTotalResponse {
+  /** Set by the server when its query failed — the zeros are unknown. */
+  degraded?: boolean;
+  error?: string;
   totalCostUsd: number;
   invocations: number;
   inputTokens: number;
@@ -356,9 +359,12 @@ function CostPage() {
     >
       {/* Every panel below reads from the same cost tables. Saying it once at
           the top beats seven cards each quietly showing $0.00. */}
-      {totalError && (
+      {/* These endpoints answer 200 with zeros when their query fails, so a
+          transport error is not the only way to be blind here — `degraded`
+          is the server saying it could not read the numbers. */}
+      {(totalError || total?.degraded) && (
         <UnavailableNotice
-          error={totalError}
+          error={totalError ?? total?.error ?? 'the cost query failed'}
           what="cost data"
           source="Spend is aggregated from Aurora and CloudWatch"
           onRetry={refreshTotal}
