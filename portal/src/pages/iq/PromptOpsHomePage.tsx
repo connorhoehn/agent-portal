@@ -56,7 +56,7 @@ export default function PromptOpsHomePage() {
   const { data: library } = useFetch<LibraryResponse>('/api/observability/canary/library', 30_000);
   const { data: weight } = useFetch<WeightResponse>('/api/observability/canary/weight', 10_000);
   const { data: prompts } = useFetch<PromptsResponse>('/api/observability/canary/prompts', 30_000);
-  const { data: experiments } = useFetch<ExperimentsResponse>('/api/iq/prompts/experiments', 60_000);
+  const { data: experiments, error: experimentsError } = useFetch<ExperimentsResponse>('/api/iq/prompts/experiments', 60_000);
   const { data: runtimes } = useFetch<AgentRuntime[]>('/api/agents', 30_000);
 
   const allPrompts = library?.prompts ?? [];
@@ -213,15 +213,22 @@ export default function PromptOpsHomePage() {
         <Card padding="md" className="flex flex-col">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Past experiments</div>
           <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-[24px] font-bold text-text-primary leading-none">{pastCount}</span>
+            <span className="text-[24px] font-bold text-text-primary leading-none">
+              {experimentsError ? '—' : pastCount}
+            </span>
             <span className="text-[12px] text-text-secondary">
-              {pastCount === 0 ? 'none completed yet' : 'completed rollouts'}
+              {experimentsError ? 'unknown' : pastCount === 0 ? 'none completed yet' : 'completed rollouts'}
             </span>
           </div>
           <div className="text-[12px] text-text-tertiary mt-1 leading-snug">
-            {pastCount === 0
-              ? 'Finish a canary — promote or roll back — and its outcome is recorded here.'
-              : 'Recorded outcomes with judge scores and controller decisions.'}
+            {/* Experiment history lives in Aurora. A failed load used to render
+                a confident 0 and tell you to go run a canary, when the truth
+                was that we could not see the ones already there. */}
+            {experimentsError
+              ? 'Experiment history is unreachable, so this is unknown rather than none.'
+              : pastCount === 0
+                ? 'Finish a canary — promote or roll back — and its outcome is recorded here.'
+                : 'Recorded outcomes with judge scores and controller decisions.'}
           </div>
           {pastCount > 0 && (
             <Link to="/iq/history" className="mt-auto pt-3 text-[12px] font-semibold text-primary no-underline hover:underline">

@@ -38,6 +38,9 @@ function summarize(err: unknown): string {
   // its instance is deleted, and the Data API reports the missing instance.
   if (/Cannot find DBInstance/i.test(first)) return 'Aurora has no running instance';
   if (/not found|DatabaseNotFound|DBClusterNotFound/i.test(first)) return 'Aurora cluster not found';
+  // Emitted while a cluster is being torn down, and also when Aurora is
+  // deployed without enableDataApi — the raw text names an ARN and helps nobody.
+  if (/HttpEndpoint is not enabled/i.test(first)) return 'Aurora Data API is not enabled';
   if (/AccessDenied|not authorized/i.test(first)) return 'not authorized for the Data API';
   if (/ExpiredToken|credential/i.test(first)) return 'AWS credentials expired';
   return first.slice(0, 140);
