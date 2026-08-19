@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { PageSection, Card, Chip } from '@connorhoehnslalom/ui-components/shared';
-import { DevboxTerminal } from '../../components/devbox/DevboxTerminal';
+import { openShell } from '../../lib/terminalDock';
 import { useFetch } from '../../hooks/useFetch';
 import { Markdown } from '../../components/Markdown';
 import {
@@ -194,10 +194,6 @@ export default function DevboxPage() {
   // person run anything — but it should still be a deliberate switch rather
   // than the default, so an inspection click cannot delete a workspace.
   const [execMode, setExecMode] = useState<'safe' | 'full'>('safe');
-  // The interactive PTY is a different transport (WebSocket straight to AWS),
-  // not another mode of the request/response console, so it swaps the pane
-  // rather than joining the safe/full toggle.
-  const [interactive, setInteractive] = useState(false);
   // Haiku by default. Most devbox work is small, and paying Sonnet rates for a
   // three-second "are you there" is the common case rather than the exception.
   const [taskModel, setTaskModel] = useState<string>(TASK_MODELS[0]!.id);
@@ -765,30 +761,9 @@ export default function DevboxPage() {
              middleware. The PTY is better for working in; the console is
              better for scripted, deterministic commands and is what the job
              dispatcher uses, so both stay. */}
-        {interactive && activeBox ? (
-          <div className="flex flex-col gap-2 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-text-secondary tracking-wide">INTERACTIVE TERMINAL</span>
-              <span className="text-[11px] text-text-tertiary">
-                real PTY · Ctrl-] detaches and leaves it running
-              </span>
-              <div className="flex-1" />
-              <button
-                onClick={() => setInteractive(false)}
-                className="text-[11px] px-2.5 py-1 rounded-md border border-border bg-surface text-text-secondary cursor-pointer hover:text-primary"
-              >
-                Back to command console
-              </button>
-            </div>
-            <DevboxTerminal
-              key={activeBox.id}
-              sessionId={activeBox.sessionId}
-              shellId={`portal-${activeBox.id}`}
-              label={`${activeBox.label} — interactive`}
-              height={560}
-            />
-          </div>
-        ) : (
+        {/* Terminals live in the app-level dock (Ctrl-`), not here — a
+             terminal inside a page dies on navigation, and two systems would
+             fight over the same shellId. */}
         <Card className="!p-0 overflow-hidden min-w-0">
           <div className="px-3.5 py-2.5 flex items-center gap-2 bg-[#161b22] border-b border-[#30363d]">
             <span aria-hidden="true" className="flex items-center gap-1.5 mr-1">
@@ -899,11 +874,11 @@ export default function DevboxPage() {
             </span>
             {activeBox && (
               <button
-                onClick={() => setInteractive(true)}
-                title="Open a real PTY over WebSocket — colours, Ctrl-C, vim, detach and reattach"
+                onClick={() => openShell({ id: activeBox.id, label: activeBox.label, sessionId: activeBox.sessionId })}
+                title="Open a real PTY in the terminal dock — Ctrl-` toggles it, Ctrl-⇧-` floats it"
                 className="px-2.5 py-1 rounded-md border border-primary/50 bg-surface text-[11px] font-semibold text-primary cursor-pointer hover:bg-primary hover:text-white transition-colors"
               >
-                Interactive terminal
+                Terminal ⌃`
               </button>
             )}
             <div className="flex-1" />
@@ -935,7 +910,6 @@ export default function DevboxPage() {
             </div>
           )}
         </Card>
-        )}
       </div>
     </PageSection>
   );

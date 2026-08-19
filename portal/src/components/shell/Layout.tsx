@@ -15,6 +15,7 @@ import { usePortalCommands, usePortalDynamicCommands } from './portalCommands';
 import { TenantSwitcher } from './TenantSwitcher';
 import { DevboxQuickSwitch } from './DevboxQuickSwitch';
 import { ToastHost } from './ToastHost';
+import { TerminalDock } from '../devbox/TerminalDock';
 import { NEWSROOM_ENABLED } from '../../lib/features';
 
 interface Health {
@@ -182,6 +183,7 @@ export function Layout() {
         <CommandPalette placeholder="Jump to a page, paste an invocation id, search runs…" />
         <DevboxQuickSwitch />
         <ToastHost />
+        <TerminalDock />
       </div>
     </CommandPaletteProvider>
   );

@@ -17,6 +17,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { Command } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../../lib/auth';
+import { openShell } from '../../lib/terminalDock';
+import { loadBoxes } from '../../lib/devboxRegistry';
 
 type PageTenant = 'orgiq' | 'newsroom' | 'admin' | 'universal';
 
@@ -169,6 +171,35 @@ export function usePortalDynamicCommands(): (query: string) => Command[] {
 
   return useCallback((query: string): Command[] => {
     const q = query.trim();
+
+    // Terminals from anywhere. The dock has hotkeys, but a hotkey cannot open
+    // the FIRST shell — you have to pick a box — and the palette is where this
+    // app already puts "do a thing without navigating".
+    const wantsShell = /^(term|shell|tty|ssh|console)/i.test(q);
+    if (wantsShell || q === '') {
+      const boxes = loadBoxes();
+      const shellCommands: Command[] = boxes.map((b) => ({
+        id: `shell:${b.id}`,
+        label: `Terminal → ${b.label}`,
+        hint: 'open a shell in this devbox',
+        group: 'Terminals',
+        keywords: ['terminal', 'shell', 'tty', 'console', b.label, b.id],
+        run: () => { openShell({ id: b.id, label: b.label, sessionId: b.sessionId }); },
+      }));
+      if (boxes.length === 0 && wantsShell) {
+        shellCommands.push({
+          id: 'shell:none',
+          label: 'No devboxes yet — open Devbox to create one',
+          hint: 'a terminal needs a box to attach to',
+          group: 'Terminals',
+          keywords: ['terminal', 'shell'],
+          run: () => { navigate('/admin/devbox'); },
+        });
+      }
+      if (wantsShell) return shellCommands;
+      if (shellCommands.length) return shellCommands;
+    }
+
     if (!UUID_RE.test(q)) return [];
     const prefix = q.slice(0, 8);
     return [

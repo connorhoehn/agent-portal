@@ -49,6 +49,12 @@ interface Props {
   label?: string;
   onExit?: (code: number | null) => void;
   height?: number;
+  /** Hide the built-in header — the dock draws its own tab strip. */
+  chrome?: boolean;
+  /** Fill the parent instead of using a fixed height (for the dock). */
+  fillHeight?: boolean;
+  /** Connect on mount rather than waiting for a click. */
+  autoConnect?: boolean;
 }
 
 /**
@@ -80,7 +86,10 @@ function frame(channel: number, payload?: Uint8Array): Uint8Array {
   return out;
 }
 
-export function DevboxTerminal({ sessionId, shellId, label, onExit, height = 460 }: Props) {
+export function DevboxTerminal({
+  sessionId, shellId, label, onExit, height = 460,
+  chrome = true, fillHeight = false, autoConnect = false,
+}: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -275,6 +284,12 @@ export function DevboxTerminal({ sessionId, shellId, label, onExit, height = 460
     };
   }, []);
 
+  useEffect(() => {
+    // A tab the dock just opened should already be connecting. Guarded on
+    // phase so a manual disconnect is not immediately undone.
+    if (autoConnect && phase === 'idle') void connect();
+  }, [autoConnect, phase, connect]);
+
   const detach = () => {
     detachedRef.current = true;
     wsRef.current?.close();
@@ -288,7 +303,9 @@ export function DevboxTerminal({ sessionId, shellId, label, onExit, height = 460
 
   const live = phase === 'live';
   return (
-    <div className="flex flex-col rounded-lg overflow-hidden border border-[#30363d] bg-[#0d1117]">
+    <div className={`flex flex-col bg-[#0d1117] ${
+      fillHeight ? 'h-full min-h-0' : 'rounded-lg overflow-hidden border border-[#30363d]'}`}>
+      {chrome && (
       <div className="flex items-center gap-2 px-3 py-2 border-b border-[#30363d]">
         <span className="text-[11px] font-semibold text-[#e6edf3]">{label ?? 'terminal'}</span>
         <span className={`text-[10px] ${live ? 'text-[#7ee787]' : phase === 'error' ? 'text-[#f85149]' : 'text-[#8b949e]'}`}>
@@ -316,7 +333,27 @@ export function DevboxTerminal({ sessionId, shellId, label, onExit, height = 460
           </button>
         )}
       </div>
-      <div ref={hostRef} style={{ height }} className="px-2 py-1" />
+      )}
+      {/* When chrome is hidden the dock still needs the connection state, so
+          it surfaces as a thin strip rather than disappearing entirely. */}
+      {!chrome && phase !== 'live' && (
+        <div className="px-3 py-1 text-[10px] border-b border-[#30363d] flex items-center gap-2">
+          <span className={phase === 'error' ? 'text-[#f85149]' : 'text-[#8b949e]'}>
+            {phase}{status ? ` · ${status}` : ''}
+          </span>
+          {(phase === 'idle' || phase === 'detached' || phase === 'closed' || phase === 'error') && (
+            <button onClick={() => void connect()}
+              className="text-[#7ee787] bg-transparent border-none cursor-pointer p-0 hover:underline">
+              {phase === 'idle' ? 'connect' : 'reattach'}
+            </button>
+          )}
+        </div>
+      )}
+      <div
+        ref={hostRef}
+        style={fillHeight ? undefined : { height }}
+        className={`px-2 py-1 ${fillHeight ? 'flex-1 min-h-0' : ''}`}
+      />
     </div>
   );
 }
