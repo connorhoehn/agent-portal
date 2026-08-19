@@ -27,6 +27,10 @@ interface DevboxStatus {
   runtimeName: string;
   commandAllowlist: string[];
   fullExecEnabled?: boolean;
+  /** True only when the DEPLOYED image understands a per-task model. */
+  perTaskModel?: boolean;
+  defaultModel?: string | null;
+  allowedModels?: string[];
 }
 
 /** One entry in the task execution timeline. */
@@ -638,16 +642,28 @@ export default function DevboxPage() {
                 <input type="checkbox" checked={resume} onChange={(e) => setResume(e.target.checked)} />
                 resume conversation
               </label>
-              <select
-                value={taskModel}
-                onChange={(e) => setTaskModel(e.target.value)}
-                title={TASK_MODELS.find((m) => m.id === taskModel)?.hint}
-                className="text-[11px] bg-surface text-text-secondary border border-border rounded px-1.5 py-0.5 cursor-pointer outline-none"
-              >
-                {TASK_MODELS.map((m) => (
-                  <option key={m.id} value={m.id}>{m.label}</option>
-                ))}
-              </select>
+              {/* Offered only when the deployed runtime can honour it. A
+                  picker that silently does nothing because the image predates
+                  the feature is worse than no picker. */}
+              {status?.perTaskModel ? (
+                <select
+                  value={taskModel}
+                  onChange={(e) => setTaskModel(e.target.value)}
+                  title={TASK_MODELS.find((m) => m.id === taskModel)?.hint}
+                  className="text-[11px] bg-surface text-text-secondary border border-border rounded px-1.5 py-0.5 cursor-pointer outline-none"
+                >
+                  {TASK_MODELS
+                    .filter((m) => (status.allowedModels ?? []).includes(m.id))
+                    .map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                </select>
+              ) : status?.defaultModel ? (
+                <span
+                  className={`text-[10px] text-text-tertiary ${mono}`}
+                  title="This runtime was deployed before per-task model selection. Redeploy the devbox image to choose a model per task."
+                >
+                  {status.defaultModel.replace(/^us\.anthropic\.claude-/, '').replace(/-\d{8}-v1:0$/, '')}
+                </span>
+              ) : null}
               <div className="flex-1" />
               <span className="text-[10px] text-text-tertiary select-none hidden sm:inline">⌘⏎ to run</span>
               <button

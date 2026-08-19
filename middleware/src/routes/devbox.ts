@@ -26,6 +26,7 @@ import {
 } from '@aws-sdk/client-bedrock-agentcore';
 import {
   BedrockAgentCoreControlClient,
+  GetAgentRuntimeCommand,
   ListAgentRuntimesCommand,
 } from '@aws-sdk/client-bedrock-agentcore-control';
 
@@ -249,9 +250,42 @@ async function requireArn(res: Response): Promise<string | null> {
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
+/**
+ * What the DEPLOYED runtime can actually do.
+ *
+ * Per-task model selection needs the container to understand a `model` field.
+ * Reporting the capability from the deployed runtime's own environment — not
+ * from what this middleware happens to support — is what stops the portal
+ * offering a model picker that silently does nothing because the image
+ * predates it. DEVBOX_ALLOWED_MODELS is the marker: it ships with the same
+ * change that taught main.py to honour --model.
+ */
+async function deployedModelCapability(arn: string | null): Promise<{
+  defaultModel: string | null; allowedModels: string[]; perTaskModel: boolean;
+}> {
+  if (!arn) return { defaultModel: null, allowedModels: [], perTaskModel: false };
+  try {
+    const out = await controlClient().send(new GetAgentRuntimeCommand({
+      agentRuntimeId: arn.split('/').pop() ?? '',
+    }));
+    const env = (out as { environmentVariables?: Record<string, string> }).environmentVariables ?? {};
+    const allowed = (env['DEVBOX_ALLOWED_MODELS'] ?? '').split(',').map((m) => m.trim()).filter(Boolean);
+    return {
+      defaultModel: env['ANTHROPIC_MODEL'] ?? null,
+      allowedModels: allowed,
+      perTaskModel: allowed.length > 0,
+    };
+  } catch {
+    // Not fatal — the page still works, it just cannot promise model switching.
+    return { defaultModel: null, allowedModels: [], perTaskModel: false };
+  }
+}
+
 devboxRouter.get('/status', asyncHandler(async (_req, res) => {
   const arn = await resolveDevboxArn();
+  const models = await deployedModelCapability(arn);
   res.json({
+    ...models,
     deployed: Boolean(arn),
     runtimeArn: arn,
     runtimeName: DEVBOX_RUNTIME_NAME,
