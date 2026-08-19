@@ -43,11 +43,6 @@ type TimelineItem =
   | { id: string; kind: 'end'; exitCode: number | null; timedOut: boolean; stderr?: string }
   | { id: string; kind: 'error'; text: string };
 
-interface ConsoleLine {
-  id: string;
-  kind: 'cmd' | 'stdout' | 'stderr' | 'exit' | 'err';
-  text: string;
-}
 
 // ─── SSE helper (POST + fetch/ReadableStream, per repo convention) ───────────
 
@@ -123,7 +118,6 @@ function resultText(content: unknown): string {
   return content == null ? '' : JSON.stringify(content);
 }
 
-const WATCH_INTERVAL_MS = 5000;
 
 // Herd status → dot color. `waiting` = the last run ended by asking the
 // operator a question; `running` pulses.
@@ -148,10 +142,6 @@ const STATUS_LABEL: Record<BoxStatus, string> = {
 // server times out and the console looks dead. Catch them client-side.
 const STDIN_WAITERS = new Set(['cat', 'head', 'tail', 'wc', 'tee']);
 
-function stdinTrapHint(text: string): string | null {
-  if (!STDIN_WAITERS.has(text)) return null;
-  return `'${text}' needs a file argument — bare '${text}' waits on stdin forever in the microVM. Try '${text} notes.md'.`;
-}
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -188,53 +178,23 @@ export default function DevboxPage() {
 
   // ── Per-box streams (in-memory; switching boxes preserves each stream) ─────
   const [timelines, setTimelines] = useState<Record<string, TimelineItem[]>>({});
-  const [consoles, setConsoles] = useState<Record<string, ConsoleLine[]>>({});
-  // Full shell is opt-in per box. It is not a privilege escalation — every
-  // devbox route already requires ManageDevbox, and task mode lets the same
-  // person run anything — but it should still be a deliberate switch rather
-  // than the default, so an inspection click cannot delete a workspace.
-  const [execMode, setExecMode] = useState<'safe' | 'full'>('safe');
-  // Haiku by default. Most devbox work is small, and paying Sonnet rates for a
-  // three-second "are you there" is the common case rather than the exception.
   const [taskModel, setTaskModel] = useState<string>(TASK_MODELS[0]!.id);
-  const [cwds, setCwds] = useState<Record<string, string>>({});
-  const [history, setHistory] = useState<string[]>([]);
-  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
   const timeline = activeBox ? (timelines[activeBox.id] ?? []) : [];
-  const consoleLines = activeBox ? (consoles[activeBox.id] ?? []) : [];
-  const cwd = activeBox ? (cwds[activeBox.id] ?? '/mnt/workspace') : '/mnt/workspace';
-  /** What the prompt shows: the workspace root as ~, like a real shell. */
-  const cwdLabel = cwd.replace(/^\/mnt\/workspace/, '~') || '~';
 
   const pushTimeline = useCallback((boxId: string, updater: (prev: TimelineItem[]) => TimelineItem[]) => {
     setTimelines((all) => ({ ...all, [boxId]: updater(all[boxId] ?? []) }));
-  }, []);
-  const pushConsole = useCallback((boxId: string, line: ConsoleLine) => {
-    setConsoles((all) => ({ ...all, [boxId]: [...(all[boxId] ?? []), line] }));
   }, []);
 
   const [prompt, setPrompt] = useState('');
   const [resume, setResume] = useState(true);
   const [taskRunning, setTaskRunning] = useState(false);
-  const [cmd, setCmd] = useState('');
-  const [cmdRunning, setCmdRunning] = useState(false);
-  const [watching, setWatching] = useState(false);
-  const watchCmdRef = useRef('');
 
   const idRef = useRef(0);
   const nextId = () => String(++idRef.current);
   const timelineRef = useRef<HTMLDivElement>(null);
-  const consoleRef = useRef<HTMLDivElement>(null);
-  // The prompt keeps focus across runs. Disabling the input while a command
-  // was in flight blurred it and nothing restored focus, so after every
-  // command you had to click back into the box before typing the next one.
-  // It stays enabled instead — submit is guarded on cmdRunning — and is
-  // re-focused when a run finishes in case something else stole it.
-  const cmdInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-scroll both streams as events land.
+  // Auto-scroll the timeline as events land.
   useEffect(() => { timelineRef.current?.scrollTo({ top: timelineRef.current.scrollHeight }); }, [timeline]);
-  useEffect(() => { consoleRef.current?.scrollTo({ top: consoleRef.current.scrollHeight }); }, [consoleLines]);
 
   const [provisioning, setProvisioning] = useState(false);
 
@@ -376,6 +336,57 @@ export default function DevboxPage() {
     }
   }
 
+  // Workspace snapshot. Uses the same read-only command API the job dispatcher
+  // runs on, but renders the result as data — a file list and a git summary —
+  // rather than as terminal output. The distinction matters: this pane is for
+  // glancing, and anything you would want to type into belongs in a real PTY.
+  const [wsFiles, setWsFiles] = useState<string[]>([]);
+  const [wsGit, setWsGit] = useState<string[]>([]);
+  const [wsLoading, setWsLoading] = useState(false);
+  const [wsError, setWsError] = useState<string | null>(null);
+
+  const refreshWorkspace = useCallback(async () => {
+    const box = activeBox;
+    if (!box || wsLoading) return;
+    setWsLoading(true);
+    setWsError(null);
+    const collect = async (command: string): Promise<string[]> => {
+      const lines: string[] = [];
+      await readSse(`/api/devbox/${box.sessionId}/command`,
+        { command, mode: 'full', cwd: '/mnt/workspace' },
+        (ev) => {
+          if (ev['type'] === 'stdout' || ev['type'] === 'stderr') {
+            lines.push(...String(ev['text']).split('\n'));
+          }
+        });
+      return lines.map((l) => l.trim()).filter(Boolean);
+    };
+    try {
+      // -F marks directories with a trailing slash, which is what the list
+      // colours on; -A skips . and .. without hiding dotfiles.
+      const [files, git] = await Promise.all([
+        collect('ls -AF'),
+        collect('git log --oneline -3 2>/dev/null; git status --short 2>/dev/null | head -5'),
+      ]);
+      setWsFiles(files);
+      setWsGit(git);
+    } catch (err) {
+      setWsError((err as Error).message);
+    } finally {
+      setWsLoading(false);
+    }
+  }, [activeBox, wsLoading]);
+
+  // Read once per box rather than polling: a workspace changes when something
+  // acts on it, and the dock is where you watch that happen live.
+  useEffect(() => {
+    setWsFiles([]); setWsGit([]); setWsError(null);
+    if (activeBox) void refreshWorkspace();
+    // refreshWorkspace is deliberately omitted — including it would re-read on
+    // every keystroke that changes unrelated state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeBox?.id]);
+
   async function runTask() {
     const text = prompt.trim();
     if (!text || taskRunning) return;
@@ -412,119 +423,6 @@ export default function DevboxPage() {
     }
   }
 
-  // ── Command mode: allowlisted shell proxied into the microVM ───────────────
-
-  const runCommand = useCallback(async (command: string, opts?: { silent?: boolean; snapshot?: boolean }) => {
-    const text = command.trim();
-    if (!text || cmdRunning) return;
-    // The stdin trap only matters in safe mode: full mode runs with stdin on
-    // /dev/null server-side, so a bare `cat` returns instead of hanging.
-    if (execMode === 'safe') {
-      const trap = stdinTrapHint(text);
-      if (trap) {
-        if (activeBox) pushConsole(activeBox.id, { id: nextId(), kind: 'err', text: trap });
-        else toastError(null, 'Command needs an argument', trap);
-        return;
-      }
-    }
-    if (!opts?.silent) {
-      setHistory((prev) => (prev[prev.length - 1] === text ? prev : [...prev, text]).slice(-100));
-      setHistoryIndex(null);
-    }
-    setCmdRunning(true);
-    const box = await (async () => {
-      if (activeBox) return activeBox;
-      const tid = toastPending('Provisioning devbox', 'minting microVM runtime session…');
-      try {
-        const b = await createBox();
-        toastSuccess(tid, `${b.label} ready`, 'microVM session live');
-        selectBox(b.id);
-        return b;
-      } catch (err) {
-        toastError(tid, 'Provisioning failed', (err as Error).message);
-        throw err;
-      }
-    })();
-    if (!opts?.silent) pushConsole(box.id, { id: nextId(), kind: 'cmd', text });
-    // Snapshot mode (watch ticks): timestamped separator so each 5s pass is
-    // visually distinct in the terminal, plus an explicit no-output marker —
-    // otherwise a quiet command (e.g. `cat` with no args) looks like watch died.
-    if (opts?.snapshot) {
-      pushConsole(box.id, { id: nextId(), kind: 'exit', text: `── ${new Date().toLocaleTimeString()} ──` });
-    }
-    let sawOutput = false;
-    try {
-      const boxCwd = cwds[box.id] ?? '/mnt/workspace';
-      await readSse(
-        `/api/devbox/${box.sessionId}/command`,
-        { command: text, mode: execMode, cwd: boxCwd },
-        (ev) => {
-          const type = ev['type'];
-          if (type === 'stdout') { sawOutput = true; pushConsole(box.id, { id: nextId(), kind: 'stdout', text: String(ev['text']) }); }
-          else if (type === 'stderr') { sawOutput = true; pushConsole(box.id, { id: nextId(), kind: 'stderr', text: String(ev['text']) }); }
-          // The shell reports where it ended up, so `cd` sticks for the next
-          // command instead of every line starting from the workspace root.
-          else if (type === 'cwd') setCwds((prev) => ({ ...prev, [box.id]: String(ev['cwd']) || '/mnt/workspace' }));
-          else if (type === 'exit' && !opts?.silent) {
-            const code = Number(ev['exitCode'] ?? 0);
-            pushConsole(box.id, {
-              id: nextId(),
-              kind: code === 0 ? 'exit' : 'err',
-              text: code === 0 ? 'exit 0' : `exit ${code}`,
-            });
-          }
-          else if (type === 'devbox_error') { sawOutput = true; pushConsole(box.id, { id: nextId(), kind: 'err', text: String(ev['error']) }); }
-        },
-      );
-      if (opts?.snapshot && !sawOutput) {
-        pushConsole(box.id, { id: nextId(), kind: 'exit', text: '(no output)' });
-      }
-    } catch (err) {
-      pushConsole(box.id, { id: nextId(), kind: 'err', text: (err as Error).message });
-      if (!opts?.silent) toastError(null, 'Command failed', (err as Error).message);
-    } finally {
-      setCmdRunning(false);
-      // Back to the prompt, ready for the next command.
-      requestAnimationFrame(() => cmdInputRef.current?.focus());
-    }
-  }, [activeBox, cmdRunning, pushConsole, selectBox, execMode, cwds]);
-
-  // Watch mode — "tail a devbox": re-run the watch command on an interval so
-  // you can observe a workspace another actor (a task, a notebook, an
-  // orchestrator) is mutating. Deterministic command mode, zero LLM cost.
-  useEffect(() => {
-    if (!watching) return;
-    const tick = () => {
-      if (!cmdRunning && watchCmdRef.current) {
-        void runCommand(watchCmdRef.current, { silent: true, snapshot: true });
-      }
-    };
-    const interval = setInterval(tick, WATCH_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [watching, cmdRunning, runCommand]);
-
-  function toggleWatch() {
-    if (watching) { setWatching(false); return; }
-    // Empty input → sensible default so the button is never a dead end.
-    const text = cmd.trim() || 'ls -la';
-    const trap = stdinTrapHint(text);
-    if (trap) {
-      if (activeBox) pushConsole(activeBox.id, { id: nextId(), kind: 'err', text: trap });
-      else toastError(null, 'Command needs an argument', trap);
-      return;
-    }
-    watchCmdRef.current = text;
-    if (activeBox) {
-      pushConsole(activeBox.id, { id: nextId(), kind: 'cmd', text: `watch(${WATCH_INTERVAL_MS / 1000}s): ${text}` });
-    }
-    setWatching(true);
-    void runCommand(text, { silent: true, snapshot: true });
-  }
-
-  function submitCommand() {
-    setWatching(false);
-    void runCommand(cmd).then(() => setCmd(''));
-  }
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -755,161 +653,87 @@ export default function DevboxPage() {
           </Card>
         </div>
 
-        {/* ── Terminal — the primary surface ──
-             Two transports live here. The interactive PTY is a WebSocket
-             straight to AWS; the console below is request/response through the
-             middleware. The PTY is better for working in; the console is
-             better for scripted, deterministic commands and is what the job
-             dispatcher uses, so both stay. */}
-        {/* Terminals live in the app-level dock (Ctrl-`), not here — a
-             terminal inside a page dies on navigation, and two systems would
-             fight over the same shellId. */}
-        <Card className="!p-0 overflow-hidden min-w-0">
-          <div className="px-3.5 py-2.5 flex items-center gap-2 bg-[#161b22] border-b border-[#30363d]">
-            <span aria-hidden="true" className="flex items-center gap-1.5 mr-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
-              <span className="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
-              <span className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
-            </span>
-            <span className={`text-[11px] font-semibold text-[#e6edf3] select-none ${mono}`}>
-              {activeBox ? `${activeBox.label} — ${cwd}` : 'terminal'}
-            </span>
-            <div className="flex-1" />
-            <span
-              className={`text-[9.5px] select-none hidden sm:inline ${execMode === 'full' ? 'text-[#f0883e]' : 'text-[#8b949e]'}`}
-              title="Deterministic shell in the microVM — no LLM, no token cost"
-            >
-              {execMode === 'full' ? 'full shell · writes enabled' : 'read-only · allowlisted'}
-            </span>
-            <button
-              onClick={toggleWatch}
-              title={cmd.trim()
-                ? `Re-run "${cmd.trim()}" every ${WATCH_INTERVAL_MS / 1000}s — tail a workspace another actor is mutating`
-                : `Re-run a command every ${WATCH_INTERVAL_MS / 1000}s (defaults to ls -la) — tail a workspace another actor is mutating`}
-              className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border cursor-pointer ${watching ? 'bg-primary text-white border-primary' : 'bg-transparent text-[#8b949e] border-[#30363d] hover:text-[#e6edf3]'}`}
-            >
-              {watching ? '◉ watching' : '◎ watch'}
-            </button>
-          </div>
-          <div className="bg-[#0d1117]">
-            <div ref={consoleRef} className={`h-[520px] overflow-y-auto px-3.5 py-2.5 text-[12px] leading-relaxed ${mono}`}>
-              {consoleLines.length === 0 ? (
-                <div className="text-[#8b949e]">
-                  Run read-only commands inside the microVM workspace.
-                  <div className="mt-1 text-[11px]">Try <span className="text-[#7ee787]">git log --oneline</span> or <span className="text-[#7ee787]">ls -la</span> — or click a command below.</div>
-                </div>
-              ) : consoleLines.map((line) => (
-                <div key={line.id} className="whitespace-pre-wrap break-words">
-                  {line.kind === 'cmd' && <span className="text-[#7ee787]">$ {line.text}</span>}
-                  {line.kind === 'stdout' && <span className="text-[#e6edf3]">{line.text}</span>}
-                  {line.kind === 'stderr' && <span className="text-[#ffa657]">{line.text}</span>}
-                  {line.kind === 'exit' && <span className="text-[#8b949e]">[{line.text}]</span>}
-                  {line.kind === 'err' && <span className="text-[#f85149]">✗ {line.text}</span>}
-                </div>
-              ))}
-              {(cmdRunning || watching) && <div className="text-[#8b949e]">{watching ? `◉ watching every ${WATCH_INTERVAL_MS / 1000}s…` : '…'}</div>}
-            </div>
-            <div className="border-t border-[#30363d] px-3.5 py-2.5 flex items-center gap-2">
-              <span className={`text-[12.5px] shrink-0 ${mono} ${execMode === 'full' ? 'text-[#f0883e]' : 'text-[#7ee787]'}`}>
-                {cwdLabel} $
-              </span>
-              <input
-                className={`flex-1 min-w-0 text-[12.5px] bg-transparent text-[#e6edf3] placeholder-[#8b949e]/60 border-none outline-none ${mono}`}
-                placeholder={execMode === 'full' ? 'any shell command — pipes, quotes, redirection' : 'git log --oneline'}
-                value={cmd}
-                ref={cmdInputRef}
-                onChange={(e) => setCmd(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') { submitCommand(); return; }
-                  // Shell-style history. Nothing else in this app has a reason
-                  // to bind the arrow keys, and a terminal without recall is
-                  // exhausting the second time you run the same thing.
-                  if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    if (history.length === 0) return;
-                    const next = historyIndex === null ? history.length - 1 : Math.max(0, historyIndex - 1);
-                    setHistoryIndex(next);
-                    setCmd(history[next] ?? '');
-                  } else if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    if (historyIndex === null) return;
-                    const next = historyIndex + 1;
-                    if (next >= history.length) { setHistoryIndex(null); setCmd(''); }
-                    else { setHistoryIndex(next); setCmd(history[next] ?? ''); }
-                  }
-                }}
-              />
-              {cmdRunning && (
-                <span aria-hidden="true" className="inline-block w-3 h-3 rounded-full border-[1.5px] border-[#8b949e] border-t-transparent shrink-0" style={{ animation: 'devbox-spin 0.8s linear infinite' }} />
+        {/* ── Workspace ──────────────────────────────────────────────────
+             This used to be a black pane styled like a terminal — traffic
+             lights, a prompt, monospace output — that was not a terminal: no
+             stdin, no colour, no interactivity. Now that a real PTY exists in
+             the dock, a look-alike is worse than nothing, because it invites
+             you to type into something that cannot answer the way it looks
+             like it will.
+
+             What is left is what the PTY does not give you at a glance: the
+             box's identity and the state of its workspace, as data. Anything
+             interactive is one click away in a terminal that really is one. */}
+        <div className="flex flex-col gap-3 min-w-0">
+          <Card className="!p-0 overflow-hidden">
+            <div className="px-3.5 py-2.5 border-b border-border flex items-center gap-2">
+              <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">WORKSPACE</span>
+              {activeBox && <span className={`text-[10px] text-text-tertiary ${mono}`}>/mnt/workspace</span>}
+              <div className="flex-1" />
+              <button
+                onClick={() => void refreshWorkspace()}
+                disabled={!activeBox || wsLoading}
+                className="text-[11px] px-2 py-0.5 rounded border border-border bg-surface text-text-secondary cursor-pointer hover:text-primary disabled:opacity-40"
+              >
+                {wsLoading ? 'reading…' : 'refresh'}
+              </button>
+              {activeBox && (
+                <button
+                  onClick={() => openShell({ id: activeBox.id, label: activeBox.label, sessionId: activeBox.sessionId })}
+                  title="Open a real PTY — ⌘' toggles the dock"
+                  className="text-[11px] px-2 py-0.5 rounded border border-primary/50 bg-surface font-semibold text-primary cursor-pointer hover:bg-primary hover:text-white transition-colors"
+                >
+                  Open terminal ⌘&apos;
+                </button>
               )}
             </div>
-          </div>
 
-          <div className="px-3 py-2 border-t border-border flex items-center gap-2 flex-wrap">
-            <div className="flex rounded-md border border-border overflow-hidden">
-              {(['safe', 'full'] as const).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setExecMode(m)}
-                  disabled={m === 'full' && status?.fullExecEnabled === false}
-                  title={m === 'safe'
-                    ? 'Read-only inspection commands only'
-                    : status?.fullExecEnabled === false
-                      ? 'Disabled on this deployment (DEVBOX_FULL_EXEC_DISABLED=1)'
-                      : 'Any shell command, including writes. Same authorization as running a task.'}
-                  className={`px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                    execMode === m
-                      ? (m === 'full' ? 'bg-warning text-white' : 'bg-primary text-white')
-                      : 'bg-surface text-text-secondary hover:text-text-primary'} ${
-                    m === 'full' && status?.fullExecEnabled === false ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
-                >
-                  {m === 'safe' ? 'read-only' : 'full shell'}
-                </button>
-              ))}
-            </div>
-            <span className="text-[11px] text-text-tertiary">
-              {execMode === 'full'
-                ? 'Writes, pipes and redirection are live in this workspace.'
-                : 'Inspection only — switch to full shell to write or pipe.'}
-            </span>
-            {activeBox && (
-              <button
-                onClick={() => openShell({ id: activeBox.id, label: activeBox.label, sessionId: activeBox.sessionId })}
-                title="Open a real PTY in the terminal dock — ⌘' toggles it, ⌘⇧' floats it"
-                className="px-2.5 py-1 rounded-md border border-primary/50 bg-surface text-[11px] font-semibold text-primary cursor-pointer hover:bg-primary hover:text-white transition-colors"
-              >
-                Terminal ⌘'
-              </button>
-            )}
-            <div className="flex-1" />
-            {cwd !== '/mnt/workspace' && (
-              <button
-                onClick={() => activeBox && setCwds((prev) => ({ ...prev, [activeBox.id]: '/mnt/workspace' }))}
-                className="text-[11px] text-text-tertiary hover:text-primary bg-transparent border-none cursor-pointer p-0"
-              >
-                cd ~
-              </button>
-            )}
-            {consoleLines.length > 0 && (
-              <button
-                onClick={() => activeBox && setConsoles((prev) => ({ ...prev, [activeBox.id]: [] }))}
-                className="text-[11px] text-text-tertiary hover:text-primary bg-transparent border-none cursor-pointer p-0"
-              >
-                clear
-              </button>
-            )}
-          </div>
+            {!activeBox ? (
+              <div className="px-3.5 py-6 text-[12.5px] text-text-tertiary text-center">
+                No box selected. Create one above to get a workspace.
+              </div>
+            ) : wsError ? (
+              <div className="px-3.5 py-4 text-[12px] text-danger">{wsError}</div>
+            ) : (
+              <div className="divide-y divide-border">
+                <div className="px-3.5 py-2.5">
+                  <div className="text-[10px] uppercase tracking-wide text-text-tertiary mb-1.5">Files</div>
+                  {wsFiles.length === 0 ? (
+                    <div className="text-[12px] text-text-tertiary">
+                      {wsLoading ? 'reading…' : 'Empty — nothing has been written here yet.'}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-0.5">
+                      {wsFiles.slice(0, 24).map((f) => (
+                        <span key={f} className={`text-[12px] truncate ${mono} ${f.endsWith('/') ? 'text-primary' : 'text-text-secondary'}`} title={f}>
+                          {f}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {wsFiles.length > 24 && (
+                    <div className="text-[11px] text-text-tertiary mt-1">+{wsFiles.length - 24} more</div>
+                  )}
+                </div>
 
-          {status && status.commandAllowlist.length > 0 && execMode === 'safe' && (
-            <div className="px-3 py-2 border-t border-border flex flex-wrap gap-1.5">
-              {status.commandAllowlist.slice(0, 12).map((prefix) => (
-                <span key={prefix} onClick={() => setCmd(prefix.trim() + ' ')} className="cursor-pointer">
-                  <Chip mono>{prefix.trim()}</Chip>
-                </span>
-              ))}
-            </div>
-          )}
-        </Card>
+                <div className="px-3.5 py-2.5">
+                  <div className="text-[10px] uppercase tracking-wide text-text-tertiary mb-1.5">Git</div>
+                  {wsGit.length === 0 ? (
+                    <div className="text-[12px] text-text-tertiary">
+                      {wsLoading ? 'reading…' : 'Not a git repository.'}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-0.5">
+                      {wsGit.map((l, i) => (
+                        <span key={i} className={`text-[12px] text-text-secondary truncate ${mono}`} title={l}>{l}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </Card>
+        </div>
       </div>
     </PageSection>
   );
