@@ -34,6 +34,11 @@ FROM node:20-slim AS production
 
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
+# package.json is required here even though deps are already installed: it is
+# where the `build` script lives, and without it `npm run build` fails with
+# ENOENT on /app/package.json. This stage could not build before — compose only
+# ever exercised the development target, so it went unnoticed.
+COPY package*.json ./
 COPY src ./src
 COPY seeds ./seeds
 COPY tsconfig.json ./
