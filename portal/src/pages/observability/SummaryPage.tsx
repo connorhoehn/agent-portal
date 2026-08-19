@@ -38,6 +38,7 @@ interface Alarm {
 interface Health {
   mocks: Record<string, boolean>;
   awsCredentials?: { ok: boolean; error?: string };
+  datastore?: { ok: boolean; error?: string };
 }
 
 /** What the operator should do next, derived from live signals only. */
@@ -55,6 +56,19 @@ function deriveNextSteps(
   health: Health | null,
 ): NextStep[] {
   const steps: NextStep[] = [];
+
+  if (health?.datastore?.ok === false && health?.awsCredentials?.ok !== false) {
+    // Only when credentials are fine — an expired session explains a dead
+    // database, and reporting both would send someone down two paths at once.
+    steps.push({
+      label: 'Aurora is unreachable',
+      detail:
+        `${health.datastore.error ?? 'The cluster did not answer'}. Trace, quality and ` +
+        `evaluation history all live there, so those panels are unknown rather than empty.`,
+      to: '/admin/observability/summary',
+      urgent: true,
+    });
+  }
 
   if (health?.awsCredentials?.ok === false) {
     steps.push({
@@ -149,7 +163,8 @@ function SummaryPage() {
   // empty result is indistinguishable from a healthy one unless we say so. A
   // green "0 firing / all signals within thresholds" during an outage is worse
   // than no panel at all — it actively tells you not to look.
-  const blind = health?.awsCredentials?.ok === false;
+  // Blind covers both ways of not knowing: no credentials, or no database.
+  const blind = health?.awsCredentials?.ok === false || health?.datastore?.ok === false;
   const dash = (v: React.ReactNode): React.ReactNode => (blind ? '—' : v);
 
   return (
@@ -171,7 +186,7 @@ function SummaryPage() {
           </div>
           <div className="mt-2 text-xs text-[var(--color-text-tertiary)]">
             {blind
-              ? 'Cannot list runtimes without credentials.'
+              ? 'Cannot list runtimes while the backend is unreachable.'
               : 'Live from AgentCore Runtime, not a static list.'}
           </div>
         </Card>
@@ -190,7 +205,7 @@ function SummaryPage() {
           </div>
           <div className="mt-2 text-xs text-[var(--color-text-tertiary)]">
             {blind
-              ? 'Cannot evaluate alarms without credentials.'
+              ? 'Cannot evaluate alarms while the backend is unreachable.'
               : alarms[0]?.reason ?? 'No alarm evaluation yet.'}
           </div>
         </Card>

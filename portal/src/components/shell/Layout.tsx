@@ -23,6 +23,7 @@ interface Health {
   mocks: Record<string, boolean>;
   region: string;
   awsCredentials?: { ok: boolean; error?: string };
+  datastore?: { ok: boolean; error?: string };
 }
 
 interface WorkSummary {
@@ -122,13 +123,19 @@ export function Layout() {
     ? Object.entries(health.mocks).filter(([, v]) => v).map(([k]) => k)
     : [];
   const credsExpired = health?.awsCredentials?.ok === false;
+  const dbDown = health?.datastore?.ok === false;
+  // Credentials first: an expired session explains a dead database, but not
+  // the other way round, so leading with the database would send someone
+  // chasing the wrong thing.
   const statusLabel = !health
     ? '…'
     : credsExpired
       ? 'AWS credentials expired — re-login, then restart the middleware'
-      : mockedSubsystems.length === 0
-        ? `Live · ${health.region}`
-        : `Mock: ${mockedSubsystems.join(', ')}`;
+      : dbDown
+        ? `Database unavailable — ${health.datastore?.error ?? 'Aurora unreachable'}`
+        : mockedSubsystems.length === 0
+          ? `Live · ${health.region}`
+          : `Mock: ${mockedSubsystems.join(', ')}`;
 
   const tenantLabel = TENANT_LABELS[session?.tenant ?? 'orgiq'];
 
@@ -138,7 +145,7 @@ export function Layout() {
         <ChannelHeader
           name={tenantLabel}
           description={statusLabel}
-          online={mockedSubsystems.length === 0 && !!health && !credsExpired}
+          online={mockedSubsystems.length === 0 && !!health && !credsExpired && !dbDown}
           actions={
             <div className="flex items-center gap-3">
               <TenantSwitcher />

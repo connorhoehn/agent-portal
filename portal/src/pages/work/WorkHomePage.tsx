@@ -79,7 +79,7 @@ export default function WorkHomePage() {
   const navigate = useNavigate();
   const [findingStatus, setFindingStatus] = useState<'open' | 'promoted' | 'resolved' | 'dismissed'>('open');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const { data: summary, refresh: refreshSummary } = useFetch<Summary>('/api/work/summary', 8_000);
+  const { data: summary, error: summaryError, refresh: refreshSummary } = useFetch<Summary>('/api/work/summary', 8_000);
   const { data: jobsData, refresh: refreshJobs } = useFetch<{ jobs: Job[] }>('/api/work/jobs?limit=25', 8_000);
   const { data: findingsData, refresh: refreshFindings } = useFetch<{ findings: Finding[] }>(
     `/api/work/findings?status=${findingStatus}&limit=200`, 20_000);
@@ -301,6 +301,20 @@ export default function WorkHomePage() {
 
   return (
     <PageSection title="Work">
+      {/* A failed load renders as zeros everywhere below — "0 workers, 0 needs
+          you, 0 open findings" reads exactly like a healthy, idle system. Say
+          so plainly instead of letting every card quietly lie. */}
+      {summaryError && (
+        <Card padding="md" className="mb-4 border-danger/40">
+          <div className="text-[13px] font-semibold text-danger">Could not reach the work queue</div>
+          <div className="text-[12px] text-text-secondary mt-1 leading-snug">
+            {summaryError}. The numbers below are not zero — they are unknown. Findings,
+            jobs and proposals live in Aurora, so this usually means the database is
+            unavailable rather than that there is no work.
+          </div>
+        </Card>
+      )}
+
       <p className="text-[13px] text-text-secondary mt-1 mb-5 max-w-3xl leading-relaxed">
         Scheduled sweeps notice things, devbox workers act on them, and anything that would change
         the org graph waits for you. Queue a job and an idle box picks it up within ~10 seconds —
@@ -312,26 +326,30 @@ export default function WorkHomePage() {
         <Card padding="md" className="flex flex-col">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Workers</div>
           <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-[24px] font-bold text-text-primary leading-none">{active}</span>
+            <span className="text-[24px] font-bold text-text-primary leading-none">{summaryError ? '—' : active}</span>
             <span className="text-[12px] text-text-secondary">
-              running · {s?.jobs['queued'] ?? 0} queued
+              {summaryError ? 'unknown' : `running · ${s?.jobs['queued'] ?? 0} queued`}
             </span>
           </div>
           <div className="text-[11px] text-text-tertiary mt-2 leading-snug">
-            {active > 0
-              ? `Boxes busy: ${(s?.busyBoxes ?? []).join(', ') || '—'}`
-              : 'All boxes idle — the next queued job dispatches within ~10s.'}
+            {summaryError
+              ? 'Cannot tell what the workers are doing.'
+              : active > 0
+                ? `Boxes busy: ${(s?.busyBoxes ?? []).join(', ') || '—'}`
+                : 'All boxes idle — the next queued job dispatches within ~10s.'}
           </div>
         </Card>
 
         <Card padding="md" className="flex flex-col">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Needs you</div>
           <div className="flex items-baseline gap-2 mt-1">
-            <span className={`text-[24px] font-bold leading-none ${needsReview + pendingProposals > 0 ? 'text-warning' : 'text-text-primary'}`}>
-              {needsReview + pendingProposals}
+            <span className={`text-[24px] font-bold leading-none ${!summaryError && needsReview + pendingProposals > 0 ? 'text-warning' : 'text-text-primary'}`}>
+              {summaryError ? '—' : needsReview + pendingProposals}
             </span>
             <span className="text-[12px] text-text-secondary">
-              {needsReview} artifact{needsReview === 1 ? '' : 's'} · {pendingProposals} graph change{pendingProposals === 1 ? '' : 's'}
+              {summaryError
+                ? 'unknown'
+                : `${needsReview} artifact${needsReview === 1 ? '' : 's'} · ${pendingProposals} graph change${pendingProposals === 1 ? '' : 's'}`}
             </span>
           </div>
           <div className="text-[11px] text-text-tertiary mt-2 leading-snug">
@@ -344,14 +362,19 @@ export default function WorkHomePage() {
             <span className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Open findings</span>
           </div>
           <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-[24px] font-bold text-text-primary leading-none">{s?.findings.open ?? 0}</span>
+            <span className="text-[24px] font-bold text-text-primary leading-none">{summaryError ? '—' : s?.findings.open ?? 0}</span>
             <span className="text-[12px] text-text-secondary">
-              {s?.findings.critical ?? 0} critical · {s?.findings.warning ?? 0} warning
+              {summaryError ? 'unknown' : `${s?.findings.critical ?? 0} critical · ${s?.findings.warning ?? 0} warning`}
             </span>
           </div>
           <button
             onClick={() => void runSweeps()}
-            className="mt-auto self-start mt-3 px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] font-semibold text-text-secondary cursor-pointer hover:text-primary hover:border-primary/50 transition-colors"
+            disabled={!!summaryError}
+            title={summaryError ? 'Sweeps read the graph from Aurora, which is unreachable' : undefined}
+            className={`mt-auto self-start mt-3 px-3 py-1.5 rounded-md border text-[12px] font-semibold transition-colors ${
+              summaryError
+                ? 'border-border bg-surface-hover text-text-tertiary cursor-not-allowed'
+                : 'border-border bg-surface text-text-secondary cursor-pointer hover:text-primary hover:border-primary/50'}`}
           >
             Run sweeps now
           </button>
@@ -383,9 +406,9 @@ export default function WorkHomePage() {
           <div className="flex-1" />
           <button
             onClick={() => void enqueue()}
-            disabled={busy || !newTitle.trim() || !newPrompt.trim()}
+            disabled={busy || !!summaryError || !newTitle.trim() || !newPrompt.trim()}
             className={`px-[18px] py-1.5 rounded-md border-none text-[13px] font-semibold transition-colors ${
-              busy || !newTitle.trim() || !newPrompt.trim()
+              busy || summaryError || !newTitle.trim() || !newPrompt.trim()
                 ? 'bg-surface-hover text-text-secondary cursor-not-allowed'
                 : 'bg-primary text-white cursor-pointer hover:opacity-90'}`}
           >
@@ -491,7 +514,7 @@ export default function WorkHomePage() {
         </div>
         {jobs.length === 0 ? (
           <div className="px-3.5 py-8 text-center text-[12.5px] text-text-tertiary">
-            No jobs yet — queue one above, or promote a finding below.
+            {summaryError ? 'Queue unreachable — this list is unknown, not empty.' : 'No jobs yet — queue one above, or promote a finding below.'}
           </div>
         ) : jobs.map((j) => (
           <Link

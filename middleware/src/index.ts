@@ -39,6 +39,7 @@ import { workRouter } from './routes/work.js';
 import { startJobDispatcher } from './lib/job-dispatcher.js';
 import { runAllSweeps } from './providers/org-sweeps.js';
 import { checkAwsCredentials } from './lib/aws-creds-probe.js';
+import { checkDatastore } from './lib/datastore-probe.js';
 import { promptHistoryRouter } from './routes/prompt-history.js';
 import { workItemsRouter } from './routes/work-items.js';
 import { kbAdminRouter } from './routes/kb-admin.js';
@@ -62,13 +63,20 @@ app.use(sessionMiddleware());
 function healthHandler(_req: express.Request, res: express.Response): void {
   // Fire-and-report: don't block health on STS when mocks are on.
   const wantsAws = !Object.values(config.mock).every(Boolean);
-  void (wantsAws ? checkAwsCredentials() : Promise.resolve({ ok: true } as const)).then((creds) => {
+  void Promise.all([
+    wantsAws ? checkAwsCredentials() : Promise.resolve({ ok: true } as const),
+    // Valid credentials say nothing about the database existing. Without this
+    // the status line reported "ok" against a torn-down cluster while every
+    // Aurora-backed route 500'd.
+    checkDatastore(),
+  ]).then(([creds, datastore]) => {
     res.json({
-      status: creds.ok ? 'ok' : 'degraded',
+      status: creds.ok && datastore.ok ? 'ok' : 'degraded',
       service: 'orgiq-middleware',
       mocks: config.mock,
       region: config.region,
       awsCredentials: creds,
+      datastore,
     });
   });
 }
