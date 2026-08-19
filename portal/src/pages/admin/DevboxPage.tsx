@@ -875,10 +875,10 @@ export default function DevboxPage() {
             {activeBox && (
               <button
                 onClick={() => openShell({ id: activeBox.id, label: activeBox.label, sessionId: activeBox.sessionId })}
-                title="Open a real PTY in the terminal dock — Ctrl-` toggles it, Ctrl-⇧-` floats it"
+                title="Open a real PTY in the terminal dock — ⌘' toggles it, ⌘⇧' floats it"
                 className="px-2.5 py-1 rounded-md border border-primary/50 bg-surface text-[11px] font-semibold text-primary cursor-pointer hover:bg-primary hover:text-white transition-colors"
               >
-                Terminal ⌃`
+                Terminal ⌘'
               </button>
             )}
             <div className="flex-1" />

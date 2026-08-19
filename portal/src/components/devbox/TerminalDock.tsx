@@ -27,42 +27,50 @@ import {
  *
  * xterm swallows most keystrokes once focused, so these have to be seen before
  * it gets them or the dock becomes unreachable from inside its own terminal.
- * Ctrl-based combos are chosen deliberately: they do not collide with the
- * ⌘K palette, and Ctrl-` is the convention people already have in their hands
- * from editors.
+ *
+ * Command-key bindings, with one constraint worth knowing: the browser
+ * reserves a lot of ⌘ combos that a page cannot intercept — ⌘1-9 and ⌘⇧[ ]
+ * switch browser tabs, ⌘J opens Downloads, ⌘[ ] are back/forward. So the dock
+ * uses ⌘' (free), and numeric tab jumps use ⌥ (Option), which is not taken.
+ * Ctrl equivalents stay as aliases so editor muscle memory still works.
  */
 function useDockHotkeys(): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!e.ctrlKey) return;
+      const cmd = e.metaKey || e.ctrlKey;
 
-      // Ctrl-`  toggle the dock
-      if (e.key === '`' && !e.shiftKey) {
+      // ⌘'  toggle the dock   ·   ⌘⇧'  float / dock
+      if (cmd && (e.key === "'" || e.key === '"')) {
         e.preventDefault();
         e.stopPropagation();
-        toggleDock();
+        if (e.shiftKey) toggleFloating(); else toggleDock();
         return;
       }
-      // Ctrl-⇧-`  float / dock
-      if (e.key === '~' || (e.key === '`' && e.shiftKey)) {
+
+      // ⌘;  next shell   ·   ⌘⇧;  previous
+      if (cmd && (e.key === ';' || e.key === ':')) {
         e.preventDefault();
         e.stopPropagation();
-        toggleFloating();
+        cycleShell(e.shiftKey ? -1 : 1);
         return;
       }
-      // Ctrl-⇧-[  /  Ctrl-⇧-]   previous / next tab, tmux-ish
-      if (e.shiftKey && (e.key === '{' || e.key === '[')) {
-        e.preventDefault(); e.stopPropagation(); cycleShell(-1); return;
-      }
-      if (e.shiftKey && (e.key === '}' || e.key === ']')) {
-        e.preventDefault(); e.stopPropagation(); cycleShell(1); return;
-      }
-      // Ctrl-1..9  jump to a tab
-      if (/^[1-9]$/.test(e.key)) {
+
+      // ⌥1..9  jump to a tab. Not ⌘1-9 — the browser owns those.
+      if (e.altKey && !cmd && /^[1-9]$/.test(e.key)) {
         const idx = Number(e.key) - 1;
         if (idx < getDock().shells.length) {
-          e.preventDefault(); e.stopPropagation(); selectShellByIndex(idx);
+          e.preventDefault();
+          e.stopPropagation();
+          selectShellByIndex(idx);
         }
+        return;
+      }
+
+      // ⌃` stays as an alias — it is what editors trained everyone to press.
+      if (e.ctrlKey && e.key === '`') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.shiftKey) toggleFloating(); else toggleDock();
       }
     };
     window.addEventListener('keydown', onKey, true);
@@ -91,7 +99,7 @@ export function TerminalDock() {
               key={s.id}
               onClick={() => focusShell(s.id)}
               onMouseDown={(e) => e.stopPropagation()}
-              title={`${s.label} · Ctrl-${i + 1}`}
+              title={`${s.label} · ⌥${i + 1}`}
               className={`group flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-mono cursor-pointer border-none transition-colors ${
                 active ? 'bg-[#0d1117] text-[#e6edf3]' : 'bg-transparent text-[#8b949e] hover:text-[#e6edf3]'}`}
             >
@@ -117,11 +125,11 @@ export function TerminalDock() {
             max shells
           </span>
         )}
-        <button onClick={toggleFloating} title="Float / dock (Ctrl-⇧-`)"
+        <button onClick={toggleFloating} title="Float / dock (⌘⇧')"
           className="text-[11px] px-1.5 py-0.5 text-[#8b949e] hover:text-[#e6edf3] bg-transparent border-none cursor-pointer">
           {floating ? '▣' : '▢'}
         </button>
-        <button onClick={() => setMode('hidden')} title="Hide (Ctrl-`) — shells keep running"
+        <button onClick={() => setMode('hidden')} title="Hide (⌘') — shells keep running"
           className="text-[11px] px-1.5 py-0.5 text-[#8b949e] hover:text-[#e6edf3] bg-transparent border-none cursor-pointer">
           ▾
         </button>

@@ -276,8 +276,13 @@ async function deployedModelCapability(arn: string | null): Promise<{
       allowedModels: allowed,
       perTaskModel: allowed.length > 0,
     };
-  } catch {
+  } catch (err) {
     // Not fatal — the page still works, it just cannot promise model switching.
+    // Logged rather than swallowed: the way this fails in practice is a stale
+    // DEVBOX_RUNTIME_ARN pinning the service to a runtime that no longer
+    // exists, and a silent empty result makes that look like "the image is
+    // too old" instead of "you are pointed at the wrong box".
+    console.warn('[devbox] could not read runtime capability:', (err as Error).message);
     return { defaultModel: null, allowedModels: [], perTaskModel: false };
   }
 }
