@@ -123,13 +123,32 @@ export class MiddlewareServiceStack extends cdk.Stack {
     });
 
     // ── ECR Repository ─────────────────────────────────────────────────────
+    // ── ECR ─────────────────────────────────────────────────────────────────
+    //
+    // The repository is gated behind `deployMiddleware` and the service behind
+    // an image existing, because owning both in one stack is unshippable: the
+    // stack creates an empty repository, the Fargate service cannot pull,
+    // the deployment circuit breaker trips, and CREATE_FAILED follows. The
+    // usual recovery — delete the failed stack and retry — destroys the
+    // repository (emptyOnDelete) along with the image that was just pushed, so
+    // the loop never terminates.
+    //
+    // Two phases, the same pattern the agent stacks already use: deploy once to
+    // create the repository, push the image, deploy again with
+    // `--context deployMiddlewareService=true` to bring the service up.
     const repo = new ecr.Repository(this, 'MiddlewareEcrRepo', {
       repositoryName: `${prefix}-middleware`,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      emptyOnDelete: true,
+      // RETAIN so a failed-stack delete does not take the image with it. The
+      // orphan sweep in scripts/deploy.sh adopts an existing repository on the
+      // next deploy.
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      emptyOnDelete: false,
       lifecycleRules: [{ maxImageCount: 10 }],
     });
     this.ecrRepoUri = repo.repositoryUri;
+
+    const deployService = this.node.tryGetContext('deployMiddlewareService') === 'true'
+      || this.node.tryGetContext('deployMiddlewareService') === true;
 
     // ── CloudWatch Log Group ────────────────────────────────────────────────
     const logGroup = new logs.LogGroup(this, 'MiddlewareLogGroup', {
@@ -410,7 +429,12 @@ export class MiddlewareServiceStack extends cdk.Stack {
         serviceName: `${prefix}-middleware`,
         cpu: 512,
         memoryLimitMiB: 1024,
-        desiredCount: 1,
+        // Zero until the image exists. A service with desiredCount 1 against an
+        // empty repository cannot pull, trips the deployment circuit breaker,
+        // and fails the stack — and the failed-stack cleanup then deletes the
+        // repository you were about to push to. Phase two
+        // (--context deployMiddlewareService=true) scales it up.
+        desiredCount: deployService ? 1 : 0,
 
         // ── Task definition ──────────────────────────────────────────────
         taskImageOptions: {
