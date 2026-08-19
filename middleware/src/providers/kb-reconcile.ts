@@ -233,18 +233,39 @@ export async function reconcileKnowledgeBases(): Promise<{
  * delete or sync anything. Adoption is the one safe automatic repair — every
  * other kind of drift needs someone to decide what the right answer is.
  */
-export async function adoptKnowledgeBase(slug: string, kbId: string): Promise<{ ok: boolean; status?: string; error?: string }> {
+export async function adoptKnowledgeBase(slug: string, kbId: string): Promise<{
+  ok: boolean; status?: string; dataSourceId?: string | null; error?: string;
+}> {
   if (config.mock.aurora) return { ok: false, error: 'Aurora is mocked' };
   try {
     const live = await client().send(new GetKnowledgeBaseCommand({ knowledgeBaseId: kbId }));
     const status = live.knowledgeBase?.status ?? 'UNKNOWN';
+
+    // Capture the data source too. Sync needs both ids, so adopting the
+    // knowledge base alone would leave a row that looks repaired and still
+    // rejects every sync with "not yet provisioned" — a second, subtler
+    // version of the drift this whole thing exists to remove.
+    let dataSourceId: string | null = null;
+    try {
+      const ds = await client().send(new ListDataSourcesCommand({ knowledgeBaseId: kbId, maxResults: 5 }));
+      dataSourceId = ds.dataSourceSummaries?.[0]?.dataSourceId ?? null;
+    } catch { /* leave null — the row is still better off pointing at a real KB */ }
+
     await exec(
       `UPDATE knowledge_bases
-          SET bedrock_kb_id = :kb, status = :status, error_message = NULL, updated_at = NOW()
+          SET bedrock_kb_id = :kb,
+              data_source_id = COALESCE(:ds, data_source_id),
+              status = :status, error_message = NULL, updated_at = NOW()
         WHERE slug = :slug`,
-      [s('kb', kbId), s('status', status), s('slug', slug)],
+      [
+        s('kb', kbId),
+        dataSourceId
+          ? s('ds', dataSourceId)
+          : { name: 'ds', value: { isNull: true }, typeHint: undefined } as SqlParameter,
+        s('status', status), s('slug', slug),
+      ],
     );
-    return { ok: true, status };
+    return { ok: true, status, dataSourceId };
   } catch (err) {
     return { ok: false, error: (err as Error).message };
   }

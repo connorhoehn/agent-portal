@@ -127,6 +127,37 @@ export default function KnowledgeHomePage() {
    */
   const adopters = entries.filter((e) => e.slug && e.drift === 'missing');
 
+  /**
+   * A knowledge base that is in sync with the account and has a data source,
+   * but has never ingested anything, while storage is not empty.
+   *
+   * Both halves matter: without storage content there is nothing to sync, and
+   * without a data source the sync call is rejected outright — offering the
+   * button in either case would be offering a failure.
+   */
+  const syncTarget = entries.find(
+    (e) => e.id && e.drift === 'ok' && e.liveKbId && (e.dataSourceCount ?? 0) > 0,
+  ) ?? null;
+  const stalled = (storage?.totalObjects ?? 0) > 0 && !lastSync;
+
+  const startSync = useCallback(async (id: string, name: string) => {
+    setBusy('sync');
+    const tid = toastPending('Starting ingestion', name);
+    try {
+      const res = await fetch(`/api/admin/kb-registry/${id}/sync`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: 'Manual sync from Knowledge' }),
+      });
+      const body = await res.json() as { jobId?: string; error?: string };
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+      toastSuccess(tid, 'Ingestion started', `Job ${body.jobId} — this runs in the background.`);
+      refreshRec();
+    } catch (err) {
+      toastError(tid, 'Could not start ingestion', (err as Error).message);
+    } finally { setBusy(null); }
+  }, [refreshRec]);
+
   return (
     <PageSection
       title="Knowledge"
@@ -246,6 +277,38 @@ export default function KnowledgeHomePage() {
               )}
             </div>
           ))}
+        </Card>
+      )}
+
+      {/* ── The one state the pipeline gets stuck in ─────────────────────── */}
+      {/* Documents sitting in storage that the knowledge base has never read
+          is invisible in every per-stage view: storage looks healthy (objects
+          are there), the knowledge base looks healthy (it exists and is
+          ACTIVE), and only the seam between them is broken. It is also the
+          state a fresh environment starts in, so it is worth an action rather
+          than a number. */}
+      {stalled && syncTarget && (
+        <Card padding="md" className="mb-5 border-primary/40">
+          <div className="flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] font-semibold text-text-primary">
+                {(storage?.totalObjects ?? 0).toLocaleString()} documents are in storage but have never been
+                indexed
+              </div>
+              <div className="text-[12px] text-text-secondary mt-1 leading-snug">
+                Agents can only cite what the knowledge base has read. Syncing starts a Bedrock ingestion
+                job over <span className="font-mono">{syncTarget.name}</span>; it runs in the background and
+                costs embedding tokens once per document.
+              </div>
+            </div>
+            <button
+              disabled={busy === 'sync'}
+              onClick={() => void startSync(syncTarget.id as string, syncTarget.name)}
+              className="shrink-0 px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50"
+            >
+              {busy === 'sync' ? 'starting…' : 'Sync now'}
+            </button>
+          </div>
         </Card>
       )}
 
