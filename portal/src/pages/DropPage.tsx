@@ -23,7 +23,10 @@ interface LinkView {
 }
 
 type FileState = 'pending' | 'uploading' | 'done' | 'failed';
-interface Upload { name: string; size: number; state: FileState; error?: string }
+interface Upload { id: string; name: string; size: number; state: FileState; error?: string }
+
+let _uploadSeq = 0;
+const nextUploadId = (): string => `u${++_uploadSeq}`;
 
 function bytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -65,17 +68,34 @@ export default function DropPage() {
 
   const send = useCallback(async (files: File[]) => {
     if (files.length === 0) return;
-    const start = uploads.length;
-    setUploads((prev) => [
-      ...prev,
-      ...files.map((f) => ({ name: f.name, size: f.size, state: 'pending' as FileState })),
-    ]);
+    // Positional indexing broke when a second batch was dropped mid-upload:
+    // `start` came from a stale length and the new rows overwrote the old.
+    const queued = files.map((f) => ({
+      id: nextUploadId(), name: f.name, size: f.size, state: 'pending' as FileState,
+    }));
+    setUploads((prev) => [...prev, ...queued]);
+
+    const patch = (id: string, change: Partial<Upload>) =>
+      setUploads((prev) => prev.map((u) => (u.id === id ? { ...u, ...change } : u)));
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      if (!file) continue;
-      const idx = start + i;
-      setUploads((prev) => prev.map((u, j) => (j === idx ? { ...u, state: 'uploading' } : u)));
+      const row = queued[i];
+      if (!file || !row) continue;
+
+      // Refuse locally when the size is already known to be over. Sending a
+      // 40 MB file across a slow connection only to be told the limit was
+      // 25 MB wastes the upload and reads as a failure rather than a rule.
+      const cap = link?.maxBytes ?? Infinity;
+      if (file.size > cap) {
+        patch(row.id, {
+          state: 'failed',
+          error: `${bytes(file.size)} — this link allows ${bytes(cap)} per file`,
+        });
+        continue;
+      }
+
+      patch(row.id, { state: 'uploading' });
       try {
         const res = await fetch(
           `/api/drop/${encodeURIComponent(token)}/upload?filename=${encodeURIComponent(file.name)}`,
@@ -89,11 +109,9 @@ export default function DropPage() {
           const body = await res.json().catch(() => ({})) as { error?: string };
           throw new Error(body.error ?? `Upload failed (${res.status})`);
         }
-        setUploads((prev) => prev.map((u, j) => (j === idx ? { ...u, state: 'done' } : u)));
+        patch(row.id, { state: 'done' });
       } catch (err) {
-        setUploads((prev) => prev.map((u, j) => (
-          j === idx ? { ...u, state: 'failed', error: (err as Error).message } : u
-        )));
+        patch(row.id, { state: 'failed', error: (err as Error).message });
       }
     }
     // Re-read the link so the remaining-files count reflects what just landed.
@@ -101,7 +119,7 @@ export default function DropPage() {
       const res = await fetch(`/api/drop/${encodeURIComponent(token)}`);
       if (res.ok) setLink(await res.json() as LinkView);
     } catch { /* the uploads already reported themselves */ }
-  }, [token, uploads.length]);
+  }, [token, link?.maxBytes]);
 
   const shell = (children: React.ReactNode) => (
     <div className="min-h-screen bg-bg flex items-start justify-center px-4 py-14">
@@ -180,8 +198,8 @@ export default function DropPage() {
 
       {uploads.length > 0 && (
         <div className="border-t border-border">
-          {uploads.map((u, i) => (
-            <div key={`${u.name}-${i}`} className="px-5 py-2.5 border-b border-border last:border-b-0 flex items-center gap-2.5">
+          {uploads.map((u) => (
+            <div key={u.id} className="px-5 py-2.5 border-b border-border last:border-b-0 flex items-center gap-2.5">
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                 u.state === 'done' ? 'bg-success'
                   : u.state === 'failed' ? 'bg-danger'

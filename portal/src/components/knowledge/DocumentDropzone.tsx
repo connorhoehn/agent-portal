@@ -27,11 +27,19 @@ export interface DropTarget {
 type FileState = 'pending' | 'uploading' | 'done' | 'failed';
 
 interface Upload {
+  /** Stable identity. Rows used to be addressed by position, and position is
+      not stable: dropping a second batch while the first was still uploading
+      recomputed `start` from a stale `uploads.length` and overwrote the first
+      batch's rows with the second batch's progress. */
+  id: string;
   name: string;
   size: number;
   state: FileState;
   error?: string;
 }
+
+let _uploadSeq = 0;
+const nextUploadId = (): string => `u${++_uploadSeq}`;
 
 const ALLOWED = ['.pdf', '.txt', '.md', '.markdown', '.html', '.htm', '.doc', '.docx', '.csv', '.xls', '.xlsx', '.json'];
 
@@ -53,18 +61,20 @@ export function DocumentDropzone({ target, onUploaded }: {
   const send = useCallback(async (files: File[]) => {
     if (!target || files.length === 0) return;
 
-    const start = uploads.length;
-    setUploads((prev) => [
-      ...prev,
-      ...files.map((f) => ({ name: f.name, size: f.size, state: 'pending' as FileState })),
-    ]);
+    const queued = files.map((f) => ({
+      id: nextUploadId(), name: f.name, size: f.size, state: 'pending' as FileState,
+    }));
+    setUploads((prev) => [...prev, ...queued]);
+
+    const patch = (id: string, change: Partial<Upload>) =>
+      setUploads((prev) => prev.map((u) => (u.id === id ? { ...u, ...change } : u)));
 
     let succeeded = 0;
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      if (!file) continue;
-      const idx = start + i;
-      setUploads((prev) => prev.map((u, j) => (j === idx ? { ...u, state: 'uploading' } : u)));
+      const row = queued[i];
+      if (!file || !row) continue;
+      patch(row.id, { state: 'uploading' });
       try {
         // Raw body, not multipart: the service has no multipart parser, and a
         // File is already a valid request body.
@@ -82,15 +92,13 @@ export function DocumentDropzone({ target, onUploaded }: {
           throw new Error(body.error ?? `HTTP ${res.status}`);
         }
         succeeded++;
-        setUploads((prev) => prev.map((u, j) => (j === idx ? { ...u, state: 'done' } : u)));
+        patch(row.id, { state: 'done' });
       } catch (err) {
-        setUploads((prev) => prev.map((u, j) => (
-          j === idx ? { ...u, state: 'failed', error: (err as Error).message } : u
-        )));
+        patch(row.id, { state: 'failed', error: (err as Error).message });
       }
     }
     if (succeeded > 0) onUploaded?.(succeeded);
-  }, [target, uploads.length, onUploaded]);
+  }, [target, onUploaded]);
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -164,8 +172,8 @@ export function DocumentDropzone({ target, onUploaded }: {
 
       {uploads.length > 0 && (
         <div className="border-t border-border max-h-52 overflow-y-auto">
-          {uploads.map((u, i) => (
-            <div key={`${u.name}-${i}`} className="px-3.5 py-2 border-b border-border last:border-b-0 flex items-center gap-2.5">
+          {uploads.map((u) => (
+            <div key={u.id} className="px-3.5 py-2 border-b border-border last:border-b-0 flex items-center gap-2.5">
               <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                 u.state === 'done' ? 'bg-success'
                   : u.state === 'failed' ? 'bg-danger'

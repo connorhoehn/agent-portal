@@ -599,10 +599,18 @@ ingestRouter.post('/survey/:id/target', asyncHandler(async (req, res) => {
     : [];
   if (prefixes.length === 0) throw new ValidationError('Select at least one section to crawl');
 
-  // Anchor each prefix at the origin and escape it, so "/docs" cannot be read
-  // as a regex and cannot match "/not-docs".
+  // Matched against the URL's *pathname*, not the full URL.
+  //
+  // The crawler tests `includeRegex.test(new URL(target).pathname)`, so a
+  // pattern anchored at the origin — `^https://host(/docs)(/|$)` — matches
+  // nothing at all: every survey-created target silently excluded every page,
+  // and the crawl visited its start URL and stopped. Same origin is already
+  // enforced separately by sameOriginOnly.
+  //
+  // Escaped so "/docs" is read literally, and closed with (/|$) so it cannot
+  // also match "/docs-internal".
   const escaped = prefixes.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  const includePattern = `^${survey.origin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(${escaped.join('|')})(/|$)`;
+  const includePattern = `^(${escaped.join('|')})(/|$)`;
 
   const pagesInScope = survey.pages.filter(
     (pg) => pg.status === 'ok' && prefixes.some((pre) => pg.path === pre || pg.path.startsWith(`${pre}/`)),

@@ -30,15 +30,16 @@ interface LivePrompt {
   excerpt: string | null; modelId: string | null; problem?: string;
 }
 interface Invocation {
-  invocationId: string; startedAt: string; durationMs: number; status: string;
+  invocationId: string; startedAt: string; durationMs: number;
   promptVersion: string | null; promptSnippet: string | null;
-  totalTokens: number; modelId: string | null; sessionId: string | null;
+  totalTokens: number; costUsd: number | null; judgeScore: number | null;
+  guardrailAction: string | null; modelId: string | null; sessionId: string | null;
 }
 interface LogPane { logGroup: string; events: Array<{ at: string; message: string }>; problem?: string }
 interface Detail {
   runtime: Runtime; prompt: LivePrompt;
   metrics: { successRate?: string } | null;
-  invocations: Invocation[]; log: LogPane;
+  invocations: Invocation[]; invocationsProblem?: string; log: LogPane;
 }
 
 const STATUS_TONE: Record<string, string> = {
@@ -254,7 +255,11 @@ export default function AgentDetailPage() {
                 All invocations →
               </Link>
             </div>
-            {(data?.invocations.length ?? 0) === 0 ? (
+            {data?.invocationsProblem ? (
+              <div className="px-3.5 py-4 text-[12px] text-danger leading-snug">
+                {data.invocationsProblem}
+              </div>
+            ) : (data?.invocations.length ?? 0) === 0 ? (
               <div className="px-3.5 py-4 text-[12px] text-text-tertiary leading-snug">
                 No invocations recorded. Traces reach Aurora through the CloudWatch poller, so a call made in
                 the last minute may not be here yet.
@@ -265,9 +270,10 @@ export default function AgentDetailPage() {
                   <thead>
                     <tr className="text-[10px] uppercase tracking-wide text-text-tertiary">
                       <th className="text-left font-semibold px-3.5 py-2">When</th>
-                      <th className="text-left font-semibold px-3.5 py-2">Status</th>
                       <th className="text-right font-semibold px-3.5 py-2">Duration</th>
                       <th className="text-right font-semibold px-3.5 py-2">Tokens</th>
+                      <th className="text-right font-semibold px-3.5 py-2">Cost</th>
+                      <th className="text-right font-semibold px-3.5 py-2">Score</th>
                       <th className="text-left font-semibold px-3.5 py-2">Prompt</th>
                       <th className="text-left font-semibold px-3.5 py-2">Ask</th>
                     </tr>
@@ -281,13 +287,17 @@ export default function AgentDetailPage() {
                             {when(iv.startedAt)}
                           </Link>
                         </td>
-                        <td className="px-3.5 py-2">
-                          <span className={iv.status === 'error' ? 'text-danger' : 'text-text-secondary'}>
-                            {iv.status}
-                          </span>
-                        </td>
                         <td className="px-3.5 py-2 text-right font-mono">{ms(iv.durationMs)}</td>
                         <td className="px-3.5 py-2 text-right font-mono">{iv.totalTokens || '—'}</td>
+                        <td className="px-3.5 py-2 text-right font-mono">
+                          {iv.costUsd == null ? '—' : `$${iv.costUsd.toFixed(4)}`}
+                        </td>
+                        <td className={`px-3.5 py-2 text-right font-mono ${
+                          iv.guardrailAction && iv.guardrailAction !== 'NONE' ? 'text-warning' : ''}`}>
+                          {iv.guardrailAction && iv.guardrailAction !== 'NONE'
+                            ? iv.guardrailAction
+                            : iv.judgeScore == null ? '—' : iv.judgeScore.toFixed(2)}
+                        </td>
                         <td className="px-3.5 py-2 font-mono text-text-tertiary">
                           {iv.promptVersion?.slice(0, 12) ?? '—'}
                         </td>

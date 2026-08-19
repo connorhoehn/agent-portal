@@ -135,9 +135,19 @@ async function livePrompt(runtimeName: string): Promise<LivePrompt> {
   }
 }
 
-/** Recent calls, newest first. Empty is a real answer, not a failure. */
-async function recentInvocations(runtimeName: string): Promise<Array<Record<string, unknown>>> {
-  if (config.mock.aurora) return [];
+/**
+ * Recent calls, newest first.
+ *
+ * Returns its own failure rather than an empty list. The first version of this
+ * selected started_at, status and total_tokens — none of which exist on
+ * invocation_traces — so the query threw on every request and the catch turned
+ * that into "No invocations recorded". A broken query and a quiet system are
+ * not the same answer, and the page had no way to tell them apart.
+ */
+async function recentInvocations(runtimeName: string): Promise<{
+  rows: Array<Record<string, unknown>>; problem?: string;
+}> {
+  if (config.mock.aurora) return { rows: [] };
   const slug = agentSlug(runtimeName);
   const params: SqlParameter[] = [
     { name: 'a1', value: { stringValue: runtimeName } },
@@ -146,27 +156,32 @@ async function recentInvocations(runtimeName: string): Promise<Array<Record<stri
   ];
   try {
     const rows = await exec(
-      `SELECT invocation_id, started_at, duration_ms, status, prompt_version,
-              prompt_snippet, total_tokens, model_id, session_id
-         FROM invocation_traces
+      `SELECT invocation_id, ts, duration_ms, prompt_version, prompt_snippet,
+              COALESCE(input_tokens, 0) + COALESCE(output_tokens, 0) AS tokens,
+              total_cost_usd, judge_score, guardrail_action, model_id, session_id
+         FROM observability.invocation_traces
         WHERE agent_id IN (:a1, :a2, :a3)
-        ORDER BY started_at DESC
+        ORDER BY ts DESC
         LIMIT 25`,
       params,
     );
-    return rows.map((r) => ({
-      invocationId: toStr(r['invocation_id']),
-      startedAt: toStr(r['started_at']),
-      durationMs: toNum(r['duration_ms']),
-      status: toStr(r['status']),
-      promptVersion: r['prompt_version'] ? toStr(r['prompt_version']) : null,
-      promptSnippet: r['prompt_snippet'] ? toStr(r['prompt_snippet']) : null,
-      totalTokens: toNum(r['total_tokens']),
-      modelId: r['model_id'] ? toStr(r['model_id']) : null,
-      sessionId: r['session_id'] ? toStr(r['session_id']) : null,
-    }));
-  } catch {
-    return [];
+    return {
+      rows: rows.map((r) => ({
+        invocationId: toStr(r['invocation_id']),
+        startedAt: toStr(r['ts']),
+        durationMs: toNum(r['duration_ms']),
+        promptVersion: r['prompt_version'] ? toStr(r['prompt_version']) : null,
+        promptSnippet: r['prompt_snippet'] ? toStr(r['prompt_snippet']) : null,
+        totalTokens: toNum(r['tokens']),
+        costUsd: r['total_cost_usd'] == null ? null : toNum(r['total_cost_usd']),
+        judgeScore: r['judge_score'] == null ? null : toNum(r['judge_score']),
+        guardrailAction: r['guardrail_action'] ? toStr(r['guardrail_action']) : null,
+        modelId: r['model_id'] ? toStr(r['model_id']) : null,
+        sessionId: r['session_id'] ? toStr(r['session_id']) : null,
+      })),
+    };
+  } catch (err) {
+    return { rows: [], problem: `Could not read invocation traces: ${(err as Error).message}` };
   }
 }
 
@@ -225,5 +240,9 @@ agentDetailRouter.get('/:agentId', asyncHandler(async (req, res) => {
     recentLogs(runtime.id, logLimit),
   ]);
 
-  res.json({ runtime, prompt, metrics, invocations, log });
+  res.json({
+    runtime, prompt, metrics, log,
+    invocations: invocations.rows,
+    ...(invocations.problem ? { invocationsProblem: invocations.problem } : {}),
+  });
 }));

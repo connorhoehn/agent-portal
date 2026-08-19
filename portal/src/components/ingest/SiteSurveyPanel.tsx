@@ -68,18 +68,24 @@ export function SiteSurveyPanel({ onTargetCreated }: { onTargetCreated?: () => v
   // Poll while the walk is in flight. It is a background job on the server so
   // the request returns immediately; without polling the panel would sit on
   // "running" forever.
+  const surveyId = survey?.id;
+  const surveyStatus = survey?.status;
   useEffect(() => {
-    if (!survey || survey.status !== 'running') return;
+    if (!surveyId || surveyStatus !== 'running') return;
+    // Keyed on id and status, not the survey object. Depending on the whole
+    // object meant every poll replaced it, which tore down and rebuilt the
+    // interval on each tick — the cadence drifted and a timer was churned
+    // every two seconds for the life of the walk.
     const id = setInterval(() => {
       void (async () => {
         try {
-          const res = await fetch(`/api/ingest/survey/${survey.id}`, { credentials: 'include' });
+          const res = await fetch(`/api/ingest/survey/${surveyId}`, { credentials: 'include' });
           if (res.ok) setSurvey(await res.json() as Survey);
         } catch { /* keep the last good state */ }
       })();
     }, 2000);
     return () => clearInterval(id);
-  }, [survey]);
+  }, [surveyId, surveyStatus]);
 
   // Pre-select what the model recommended, so the common case is one click.
   useEffect(() => {
