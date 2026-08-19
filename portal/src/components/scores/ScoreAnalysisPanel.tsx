@@ -82,7 +82,7 @@ export function ScoreAnalysisPanel() {
           WHAT THE SCORE IS DOING
         </span>
         <span className="text-[11px] text-text-tertiary">
-          fitted from the real numbers, in the Code Interpreter
+          the stored composite_score, fitted in the Code Interpreter
         </span>
         <div className="flex-1" />
         {analysis && (
@@ -113,6 +113,12 @@ export function ScoreAnalysisPanel() {
 
       {analysis && (
         <>
+          <div className="px-3.5 py-2 border-b border-border text-[11px] text-text-tertiary leading-snug">
+            This describes <span className="font-mono">people.composite_score</span> as stored — the number
+            agents and every other surface use. The ranking below is re-weighted live by the slider from
+            influence and expertise, so it is a different number on a different scale.
+          </div>
+
           {analysis.weights && (
             <div className="px-3.5 py-3 border-b border-border">
               <div className="text-[13px] font-semibold text-text-primary leading-snug">
@@ -146,6 +152,12 @@ export function ScoreAnalysisPanel() {
                   {num(Math.abs(analysis.weights.intercept), 2)}
                 </span>
               </div>
+              {analysis.weights.r2 > 0.999 && (
+                <div className="text-[11px] text-warning mt-2 leading-snug">
+                  An exact fit means this column is derived, not measured. Showing it beside its own inputs
+                  invites double-counting the same evidence.
+                </div>
+              )}
               {analysis.weights.r2 < 0.5 && (
                 <div className="text-[11px] text-warning mt-2 leading-snug">
                   A low R² means the composite is not mostly a function of these two signals — treat the
@@ -211,6 +223,13 @@ export function ScoreAnalysisPanel() {
           </div>
 
           {/* ── Where the ranking disagrees with its own inputs ──────────── */}
+          {analysis.disagreements.length === 0 && analysis.weights && analysis.weights.r2 > 0.999 && (
+            <div className="px-3.5 py-3 text-[12px] text-text-secondary leading-snug">
+              Nobody is ranked differently than the signals imply — the composite reproduces them exactly,
+              so there is nothing here to disagree with.
+            </div>
+          )}
+
           {analysis.disagreements.length > 0 && (
             <div>
               <div className="px-3.5 py-2 text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">

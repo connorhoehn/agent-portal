@@ -79,12 +79,12 @@ function toNum(v: unknown): number { const n = Number(v); return Number.isFinite
 
 async function loadPeople(): Promise<PersonRow[]> {
   const rows = await exec(
-    `SELECT p.id, p.name, t.name AS team,
+    // `team` is a plain text column on people — there is no team_id foreign key.
+    `SELECT p.id, p.name, p.team,
             COALESCE(p.expertise_score, 0)  AS expertise,
             COALESCE(p.pagerank_score, 0)   AS pagerank,
             COALESCE(p.composite_score, 0)  AS composite
        FROM people p
-       LEFT JOIN teams t ON t.id = p.team_id
       WHERE p.composite_score IS NOT NULL
       ORDER BY p.composite_score DESC
       LIMIT 2000`,
@@ -232,7 +232,11 @@ if fit:
     contrib_p = abs(w2) * stdev(x2_vals)
     total = contrib_e + contrib_p
     share_e = contrib_e / total if total > 0 else 0
-    if r2 < 0.5:
+    if r2 > 0.999:
+        reading = ("The composite is exactly %.2f x expertise + %.2f x PageRank. It is a fixed formula, "
+                   "not an independent signal — it tells you nothing the two inputs do not already say, "
+                   "and ranking by it is the same as ranking by that blend." % (w1, w2))
+    elif r2 < 0.5:
         reading = ("The composite is not well explained by these two signals (R²=%.2f) — "
                    "something else is driving it, or it is partly noise." % r2)
     elif share_e > 0.75:
@@ -257,6 +261,10 @@ if fit:
             "rankDelta": int(pr[i] - cr[i]),
             "composite": C[i], "predicted": pred[i],
         })
+    # Only actual disagreements. When the composite is an exact formula over
+    # the two signals every delta is 0, and a list of twelve zeroes reads as
+    # data when it is the absence of any.
+    rows = [r for r in rows if r["rankDelta"] != 0]
     rows.sort(key=lambda r: -abs(r["rankDelta"]))
     disagreements = rows[:12]
 
