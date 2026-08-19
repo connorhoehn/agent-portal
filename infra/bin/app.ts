@@ -266,7 +266,13 @@ void spanProjector;
 // -------------------------------------------------------------------
 const deployCanary = app.node.tryGetContext('deployCanary') === 'true' || app.node.tryGetContext('deployCanary') === true;
 if (deployCanary) {
-  new PromptCanaryStack(app, 'OrgIQ-PromptCanary', { env, prefix });
+  const promptCanary = new PromptCanaryStack(app, 'OrgIQ-PromptCanary', { env, prefix });
+// PromptCanary reads the Aurora cluster and secret ARNs through raw
+// Fn.importValue, which creates no CDK dependency — so on a from-scratch
+// deploy with concurrency the canary stack raced ahead of Aurora and failed
+// with "No export named orgiq-aurora-secret-arn found". Every other Aurora
+// consumer declares this; this one was constructed inline and could not.
+promptCanary.addDependency(aurora);
 }
 
 // -------------------------------------------------------------------

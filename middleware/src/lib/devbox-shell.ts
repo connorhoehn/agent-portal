@@ -30,7 +30,6 @@ import { HttpRequest } from '@smithy/protocol-http';
 import { SignatureV4 } from '@aws-sdk/signature-v4';
 import { Sha256 } from '@aws-crypto/sha256-js';
 import { defaultProvider } from '@aws-sdk/credential-provider-node';
-import { config } from '../config.js';
 
 /** Frame channels. First byte of every frame; the rest is payload. */
 export const SHELL_FRAME = {
@@ -64,8 +63,12 @@ export const DETACH_BYTE = 0x1d;
  */
 const DEFAULT_EXPIRY_S = 120;
 
-function agentcoreHost(): string {
-  return `bedrock-agentcore.${config.region}.amazonaws.com`;
+// Region is passed in rather than read from config. That keeps this module
+// free of app wiring — it is pure URL construction and signing — and avoids
+// dragging config.ts (and its import.meta usage, which the test transform
+// rejects) into every suite that touches a devbox route.
+function agentcoreHost(region: string): string {
+  return `bedrock-agentcore.${region}.amazonaws.com`;
 }
 
 /**
@@ -79,9 +82,9 @@ function agentcoreHost(): string {
  */
 export function buildShellUrl(
   runtimeArn: string,
-  opts: { shellId: string; sessionId: string; qualifier?: string },
+  opts: { shellId: string; sessionId: string; region: string; qualifier?: string },
 ): URL {
-  const url = new URL(`wss://${agentcoreHost()}/runtimes/${encodeURIComponent(runtimeArn)}/ws/shells`);
+  const url = new URL(`wss://${agentcoreHost(opts.region)}/runtimes/${encodeURIComponent(runtimeArn)}/ws/shells`);
   url.searchParams.set('qualifier', opts.qualifier ?? 'DEFAULT');
   url.searchParams.set('shellId', opts.shellId);
   // Without the session id the service opens a NEW runtime session per
@@ -104,12 +107,14 @@ export function isValidShellId(shellId: string): boolean {
  */
 export async function presignShellUrl(
   runtimeArn: string,
-  opts: { shellId: string; sessionId: string; expiresIn?: number },
+  opts: { shellId: string; sessionId: string; region: string; expiresIn?: number },
 ): Promise<{ url: string; expiresIn: number; shellId: string }> {
   if (!isValidShellId(opts.shellId)) {
     throw new Error(`invalid shellId '${opts.shellId}' — 1-128 chars of [A-Za-z0-9_-]`);
   }
-  const wsUrl = buildShellUrl(runtimeArn, { shellId: opts.shellId, sessionId: opts.sessionId });
+  const wsUrl = buildShellUrl(runtimeArn, {
+    shellId: opts.shellId, sessionId: opts.sessionId, region: opts.region,
+  });
   const query: Record<string, string> = {};
   wsUrl.searchParams.forEach((v, k) => { query[k] = v; });
 
@@ -124,7 +129,7 @@ export async function presignShellUrl(
 
   const signer = new SignatureV4({
     service: 'bedrock-agentcore',
-    region: config.region,
+    region: opts.region,
     credentials: defaultProvider(),
     sha256: Sha256,
   });

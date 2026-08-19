@@ -49,6 +49,7 @@ import {
   subscribe as subscribeFleet,
   appendEvent,
 } from '../lib/devbox-fleet.js';
+import { presignShellUrl, isValidShellId, MAX_FRAME_BYTES } from '../lib/devbox-shell.js';
 
 export const devboxRouter = Router();
 
@@ -498,6 +499,46 @@ devboxRouter.post('/:sessionId/command', asyncHandler(async (req, res) => {
     writeSSE(res, { type: 'devbox_error', error: (err as Error).message });
   } finally {
     endSSE(res);
+  }
+}));
+
+/**
+ * Mint a short-lived presigned WebSocket URL for an interactive terminal.
+ *
+ * The browser opens the socket itself with this URL — terminal frames never
+ * pass through here, which is what keeps a 250 frames/sec stream off the
+ * Node event loop. The URL is a bearer credential for a shell inside the
+ * microVM, so it is deliberately short-lived and never logged.
+ *
+ * `shellId` is the reattachment handle: pass the same one back to land in the
+ * same PTY with its working directory, environment and running processes
+ * intact, and up to 256 KB of missed output replayed.
+ */
+devboxRouter.post('/:sessionId/shell-url', asyncHandler(async (req, res) => {
+  const sessionId = requireSessionId(String(req.params['sessionId'] ?? ''), res);
+  if (!sessionId) return;
+  const arn = await requireArn(res);
+  if (!arn) return;
+
+  const body = (req.body ?? {}) as { shellId?: string; expiresIn?: number };
+  // A stable default per session means a plain reload reattaches instead of
+  // stranding the old shell against the 10-per-runtime limit.
+  const shellId = (body.shellId ?? `portal-${sessionId.slice(-12)}`).trim();
+  if (!isValidShellId(shellId)) {
+    res.status(400).json({ error: `invalid shellId '${shellId}' — 1-128 chars of [A-Za-z0-9_-]` });
+    return;
+  }
+
+  try {
+    const minted = await presignShellUrl(arn, {
+      shellId,
+      sessionId,
+      region: region(),
+      ...(body.expiresIn ? { expiresIn: body.expiresIn } : {}),
+    });
+    res.json({ ...minted, maxFrameBytes: MAX_FRAME_BYTES });
+  } catch (err) {
+    res.status(502).json({ error: `could not mint a shell URL: ${(err as Error).message}` });
   }
 }));
 

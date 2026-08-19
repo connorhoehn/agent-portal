@@ -254,6 +254,10 @@ export class MiddlewareServiceStack extends cdk.Stack {
       sid: 'DevboxCommandAndStop',
       actions: [
         'bedrock-agentcore:InvokeAgentRuntimeCommand',
+        // Interactive PTY terminals. This is a CALLER permission — it belongs
+        // to whoever opens the WebSocket, not to the devbox execution role,
+        // which is a different principal entirely.
+        'bedrock-agentcore:InvokeAgentRuntimeCommandShell',
         'bedrock-agentcore:StopRuntimeSession',
       ],
       resources: [`arn:aws:bedrock-agentcore:${this.region}:${this.account}:runtime/${prefix}_devbox*`],
