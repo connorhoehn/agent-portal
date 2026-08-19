@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { PageSection } from '@connorhoehnslalom/ui-components/shared';
+import { ScoreAnalysisPanel } from '../components/scores/ScoreAnalysisPanel';
 import { useFetch } from '../hooks/useFetch';
 import { ScoreEntry, PersonDetail, DEPT_COLORS } from '../components/scores/types';
 import { StatCards } from '../components/scores/StatCards';
@@ -116,6 +117,11 @@ function ScoresPage() {
         mostRecentScoredAt={data.mostRecentScoredAt ?? null}
         weight={weight}
       />
+
+      {/* Above the filters: the numbers below are only interpretable once you
+          know what the composite is weighting, and that was never stated
+          anywhere. */}
+      <ScoreAnalysisPanel />
 
       <SkillFilter selectedSkill={skillFilter} onChange={setSkillFilter} />
 

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import express from 'express';
 import type { Readable } from 'node:stream';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
-import { asyncHandler } from '../lib/async-handler.js';
+import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 import { config } from '../config.js';
 import {
@@ -42,6 +42,7 @@ import {
   recordTargetRun,
 } from '../lib/crawl-targets.js';
 import type { CrawlTarget, CrawlMode } from '../lib/crawler-types.js';
+import { startSurvey, getSurvey, listSurveys } from '../lib/site-survey.js';
 
 export const ingestRouter = Router();
 
@@ -547,4 +548,78 @@ ingestRouter.get('/storage', asyncHandler(async (req, res) => {
   }
   const breakdown = await getStorageBreakdown();
   res.json(breakdown);
+}));
+
+// ── Site survey — reconnaissance before a crawl ─────────────────────────────
+//
+// A crawl target used to be configured blind: a URL and a page cap, with the
+// site's actual shape discoverable only by paying for a full vision crawl. The
+// survey walks the site cheaply first and hands back a tree you can choose
+// from.
+
+ingestRouter.post('/survey', asyncHandler(async (req, res) => {
+  const body = (req.body ?? {}) as {
+    startUrl?: string; maxPages?: number; useBrowserFallback?: boolean;
+  };
+  if (!body.startUrl?.trim()) throw new ValidationError('startUrl is required');
+  const survey = await startSurvey({
+    startUrl: body.startUrl.trim(),
+    ...(body.maxPages !== undefined && { maxPages: Number(body.maxPages) }),
+    ...(body.useBrowserFallback !== undefined && { useBrowserFallback: Boolean(body.useBrowserFallback) }),
+  });
+  res.status(202).json(survey);
+}));
+
+ingestRouter.get('/surveys', (_req, res) => {
+  res.json({ surveys: listSurveys() });
+});
+
+ingestRouter.get('/survey/:id', (req, res) => {
+  const survey = getSurvey(String(req.params['id'] ?? ''));
+  if (!survey) { res.status(404).json({ error: 'Survey not found' }); return; }
+  res.json(survey);
+});
+
+// ── Turn a selection into a crawl target ────────────────────────────────────
+//
+// The selected path prefixes become the target's includePattern, so the crawl
+// that eventually runs is scoped to what was actually chosen rather than to
+// the whole origin. This is the entire point of surveying first.
+
+ingestRouter.post('/survey/:id/target', asyncHandler(async (req, res) => {
+  const survey = getSurvey(String(req.params['id'] ?? ''));
+  if (!survey) { res.status(404).json({ error: 'Survey not found' }); return; }
+
+  const body = (req.body ?? {}) as {
+    prefixes?: unknown; label?: string; maxPages?: number;
+    mode?: string; cronExpr?: string | null;
+  };
+  const prefixes = Array.isArray(body.prefixes)
+    ? body.prefixes.map(String).filter((s) => s.startsWith('/'))
+    : [];
+  if (prefixes.length === 0) throw new ValidationError('Select at least one section to crawl');
+
+  // Anchor each prefix at the origin and escape it, so "/docs" cannot be read
+  // as a regex and cannot match "/not-docs".
+  const escaped = prefixes.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const includePattern = `^${survey.origin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(${escaped.join('|')})(/|$)`;
+
+  const pagesInScope = survey.pages.filter(
+    (pg) => pg.status === 'ok' && prefixes.some((pre) => pg.path === pre || pg.path.startsWith(`${pre}/`)),
+  ).length;
+
+  const target = addCrawlTarget({
+    label: body.label?.trim() || `${new URL(survey.origin).hostname} ${prefixes.join(' ')}`,
+    startUrl: survey.startUrl,
+    // Default the cap to what the survey actually found in scope rather than a
+    // round number, so the first run covers the selection and stops.
+    maxPages: Math.max(1, Math.min(200, Number(body.maxPages) || pagesInScope || 25)),
+    mode: (body.mode === 'fetch' || body.mode === 'browser_spa' ? body.mode : 'browser') as CrawlMode,
+    includePattern,
+    sameOriginOnly: true,
+    cronExpr: body.cronExpr?.trim() || null,
+    enabled: true,
+  });
+
+  res.status(201).json({ target, pagesInScope, includePattern });
 }));

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { aurora } from '../providers/index.js';
 import { getPersonHistory } from '../providers/scores-history.js';
 import { asyncHandler } from '../lib/async-handler.js';
+import { analyzeScores } from '../lib/score-analysis.js';
 
 export const scoresRouter = Router();
 
@@ -80,4 +81,21 @@ scoresRouter.get('/:personId', asyncHandler(async (req, res) => {
   const score = await aurora.getScore(req.params['personId'] as string);
   if (!score) { res.status(404).json({ error: 'Score not found' }); return; }
   res.json(score);
+}));
+
+// ── POST /analysis — real arithmetic over the score columns ─────────────────
+//
+// The three score columns are rendered as-is everywhere else, which supports
+// exactly two questions: who is highest, and what is the number. This fits the
+// composite against its own inputs so the page can say what the score is
+// actually weighting and where it disagrees with the evidence.
+//
+// POST because it costs a Code Interpreter session and takes seconds — it is
+// an action someone chooses, not something a page load triggers.
+scoresRouter.post('/analysis', asyncHandler(async (_req, res) => {
+  try {
+    res.json(await analyzeScores());
+  } catch (err) {
+    res.status(503).json({ error: (err as Error).message });
+  }
 }));
