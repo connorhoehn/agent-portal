@@ -52,7 +52,11 @@ interface DeployMarker {
 
 interface AlarmState {
   name: string;
-  severity: 'critical' | 'warning' | 'ok';
+  // 'unknown' is not a cosmetic addition. Without it, a probe that could not
+  // run was reported as 'ok', so the on-call surface asserted "all signals
+  // within thresholds" during a total database outage — the one moment it
+  // must not claim things are fine.
+  severity: 'critical' | 'warning' | 'ok' | 'unknown';
   reason: string;
   firedAt: string | null;
   affectedAgent: string | null;
@@ -99,6 +103,9 @@ function parseBucketMin(raw: unknown, def: number): number {
 async function computeAlarms(): Promise<AlarmState[]> {
   const out: AlarmState[] = [];
   const now = new Date().toISOString();
+  // Which probes actually completed. An 'ok' beacon is only honest if every
+  // signal it claims to summarise was really evaluated.
+  const failedProbes: string[] = [];
 
   // 1) Per-agent quality signals: schema conformance, judge P05, drift P95.
   try {
@@ -180,6 +187,7 @@ async function computeAlarms(): Promise<AlarmState[]> {
     }
   } catch (err) {
     console.warn('[oncall] quality alarms failed:', (err as Error).message);
+    failedProbes.push('quality');
   }
 
   // 2) HITL queue depth + oldest-pending age.
@@ -222,10 +230,26 @@ async function computeAlarms(): Promise<AlarmState[]> {
     }
   } catch (err) {
     console.warn('[oncall] hitl alarms failed:', (err as Error).message);
+    failedProbes.push('approval queue');
   }
 
-  // If no alarms fired, surface a single 'ok' beacon so the UI can render
-  // "all clear" with a concrete attestation rather than the absence of data.
+  // A probe that could not run is reported as such. Previously any failure
+  // fell through to the 'ok' beacon below, so a dead database rendered as
+  // "all signals within thresholds" — an alerting surface claiming health at
+  // exactly the moment it had no idea.
+  if (failedProbes.length > 0) {
+    out.push({
+      name: 'evaluation',
+      severity: 'unknown',
+      reason: `Could not evaluate ${failedProbes.join(' and ')} — signals are unknown, not clear`,
+      firedAt: now,
+      affectedAgent: null,
+    });
+    return out;
+  }
+
+  // Every probe ran and nothing fired: surface a single 'ok' beacon so the UI
+  // can render "all clear" as a concrete attestation rather than an absence.
   if (out.length === 0) {
     out.push({
       name: 'overall',
@@ -609,7 +633,9 @@ oncallRouter.get('/recent-events', asyncHandler(async (req, res) => {
       events.push({
         ts: a.firedAt ?? new Date().toISOString(),
         kind: 'alarm',
-        severity: a.severity,
+        // The event feed carries severities it can style; an unevaluated probe
+        // is informational there rather than an alarm firing.
+        severity: a.severity === 'unknown' ? 'info' : a.severity,
         title: `Alarm: ${a.name}`,
         detail: a.reason,
         relatedAgentId: a.affectedAgent ?? undefined,

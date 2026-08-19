@@ -34,6 +34,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { useFetch } from '../../hooks/useFetch';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 
 // ── API contracts (mirrors middleware/src/routes/oncall.ts) ────────────────
 
@@ -57,7 +58,7 @@ interface DeployMarker {
 
 interface AlarmState {
   name: string;
-  severity: 'critical' | 'warning' | 'ok';
+  severity: 'critical' | 'warning' | 'ok' | 'unknown';
   reason: string;
   firedAt: string | null;
   affectedAgent: string | null;
@@ -108,7 +109,7 @@ function OnCallPage() {
 
   // Timeline (drift/judge/cost/errors + deploy markers + alarms in one shot).
   // 15s poll — faster than other pages, this is operational.
-  const { data: timeline, refresh: refreshTimeline } = useFetch<TimelineResponse>(
+  const { data: timeline, error: timelineError, refresh: refreshTimeline } = useFetch<TimelineResponse>(
     `/api/observability/oncall/timeline?windowHours=${win.hours}&bucketMin=${win.bucket}`,
     15_000,
   );
@@ -192,6 +193,18 @@ function OnCallPage() {
         </div>
       }
     >
+      {/* Alarms and the incident timeline both come from here. An empty
+          timeline during an outage would read as "nothing is wrong". */}
+      {timelineError && (
+        <UnavailableNotice
+          error={timelineError}
+          what="the on-call timeline"
+          source="Alarms and incidents are computed from Aurora and CloudWatch"
+          onRetry={refreshTimeline}
+          className="mb-4"
+        />
+      )}
+
       {/* Status strip */}
       <Card padding="md">
         <div style={subline}>
@@ -406,8 +419,17 @@ function OnCallPage() {
 // ── Sub-components ─────────────────────────────────────────────────────────
 
 function AlarmChip({ alarm }: { alarm: AlarmState }) {
-  const tone = alarm.severity === 'critical' ? 'danger' : alarm.severity === 'warning' ? 'warning' : 'success';
-  const glyph = alarm.severity === 'critical' ? '✗' : alarm.severity === 'warning' ? '⚠' : '✓';
+  // 'unknown' must not fall through to the success branch. A probe that could
+  // not run rendered as a green tick here, which is the same false all-clear
+  // the server used to emit.
+  const tone = alarm.severity === 'critical' ? 'danger'
+    : alarm.severity === 'warning' ? 'warning'
+    : alarm.severity === 'unknown' ? 'neutral'
+    : 'success';
+  const glyph = alarm.severity === 'critical' ? '✗'
+    : alarm.severity === 'warning' ? '⚠'
+    : alarm.severity === 'unknown' ? '?'
+    : '✓';
   return (
     <div style={alarmChipBox(alarm.severity)}>
       <span style={alarmGlyph(alarm.severity)}>{glyph}</span>
@@ -515,7 +537,7 @@ function EventRow({ event, onClick }: { event: RecentEvent; onClick: () => void 
 function SeverityDot({
   severity,
 }: {
-  severity: 'critical' | 'warning' | 'ok';
+  severity: 'critical' | 'warning' | 'ok' | 'unknown';
 }) {
   const color = severity === 'critical'
     ? 'var(--color-danger, #ef4444)'

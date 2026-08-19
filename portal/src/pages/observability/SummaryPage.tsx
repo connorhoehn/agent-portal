@@ -30,7 +30,8 @@ interface AgentRuntime {
 
 interface Alarm {
   name: string;
-  severity: 'ok' | 'warning' | 'critical' | string;
+  /** 'unknown' means the probe could not run — not that things are fine. */
+  severity: 'ok' | 'warning' | 'critical' | 'unknown' | string;
   reason: string;
   affectedAgent: string | null;
 }

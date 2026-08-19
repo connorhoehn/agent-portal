@@ -43,6 +43,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { useFetch } from '../../hooks/useFetch';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { CostChip } from '../../components/observability/CostChip';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 
@@ -222,7 +223,7 @@ function CostPage() {
   const [windowIdx, setWindowIdx] = useState(1); // 24h default
   const win = WINDOW_OPTIONS[windowIdx];
 
-  const { data: total } = useFetch<CostTotalResponse>(
+  const { data: total, error: totalError, refresh: refreshTotal } = useFetch<CostTotalResponse>(
     `/api/observability/cost/total?windowHours=${win.hours}`,
     30_000,
   );
@@ -353,6 +354,18 @@ function CostPage() {
       description={headerSubline}
       actions={<WindowPicker value={windowIdx} onChange={setWindowIdx} />}
     >
+      {/* Every panel below reads from the same cost tables. Saying it once at
+          the top beats seven cards each quietly showing $0.00. */}
+      {totalError && (
+        <UnavailableNotice
+          error={totalError}
+          what="cost data"
+          source="Spend is aggregated from Aurora and CloudWatch"
+          onRetry={refreshTotal}
+          className="mb-4"
+        />
+      )}
+
       <Card padding="md">
         {/* Headline cards row. */}
         <div style={headlineRow}>
