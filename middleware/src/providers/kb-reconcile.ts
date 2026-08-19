@@ -99,8 +99,15 @@ async function syncState(kbId: string): Promise<{
     const first = sources[0]?.dataSourceId;
     if (!first) return { dataSourceCount: sources.length, lastSyncStatus: null, lastSyncAt: null, lastSyncScanned: null };
 
+    // Newest first, explicitly. ListIngestionJobs does not promise an order,
+    // and unsorted `maxResults: 1` returned the *oldest* job — so after a
+    // second sync the page still reported the first one's coverage and went
+    // on claiming the index was behind when it had just caught up.
     const jobs = await client().send(new ListIngestionJobsCommand({
-      knowledgeBaseId: kbId, dataSourceId: first, maxResults: 1,
+      knowledgeBaseId: kbId,
+      dataSourceId: first,
+      maxResults: 1,
+      sortBy: { attribute: 'STARTED_AT', order: 'DESCENDING' },
     }));
     const job = (jobs.ingestionJobSummaries ?? [])[0];
     return {
