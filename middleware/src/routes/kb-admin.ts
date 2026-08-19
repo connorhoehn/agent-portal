@@ -40,6 +40,7 @@ import { provisioningBroker, type ProvisioningBrokerEvent } from '../lib/provisi
 import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
+import { reconcileKnowledgeBases, adoptKnowledgeBase } from '../providers/kb-reconcile.js';
 
 export const kbAdminRouter = Router();
 
@@ -238,6 +239,26 @@ kbAdminRouter.post('/', asyncHandler(async (req, res) => {
 }));
 
 // ─── GET /:id ─────────────────────────────────────────────────────────────────
+
+// ── GET /reconcile — registry vs. the live account ──────────────────────────
+//
+// The registry is bookkeeping about external resources, and nothing kept it
+// honest: a seeded row claimed a knowledge base id that had never existed,
+// with status ACTIVE, while the knowledge base agents actually query was
+// absent. This is the endpoint that makes that visible instead of rendering
+// the fiction as fact.
+kbAdminRouter.get('/reconcile', asyncHandler(async (_req, res) => {
+  res.json(await reconcileKnowledgeBases());
+}));
+
+// ── POST /reconcile/adopt — repoint a row at a knowledge base that exists ───
+kbAdminRouter.post('/reconcile/adopt', asyncHandler(async (req, res) => {
+  const { slug, kbId } = (req.body ?? {}) as { slug?: string; kbId?: string };
+  if (!slug || !kbId) throw new ValidationError('slug and kbId are required');
+  const out = await adoptKnowledgeBase(slug, kbId);
+  if (!out.ok) { res.status(502).json({ error: out.error }); return; }
+  res.json(out);
+}));
 
 kbAdminRouter.get('/:id', asyncHandler(async (req, res) => {
   const entry = await getKb(String(req.params['id'] ?? ''));

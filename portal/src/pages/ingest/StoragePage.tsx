@@ -11,7 +11,10 @@ function StoragePage() {
   const { data: storage } = useFetch<StorageBreakdown>('/api/ingest/storage', 60_000);
 
   return (
-    <PageSection title="Storage">
+    <PageSection
+      title="3 · Storage"
+      description="Where ingested documents land in S3, and how much of it the knowledge base has chunked."
+    >
       {/* Totals row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
         <TotalCard

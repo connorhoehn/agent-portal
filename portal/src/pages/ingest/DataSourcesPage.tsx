@@ -107,7 +107,10 @@ function DataSourcesPage() {
   }
 
   return (
-    <PageSection title="Data Sources">
+    <PageSection
+      title="4 · KB sync"
+      description="The data sources that carry storage into the knowledge base, and the jobs that ran."
+    >
       {actionMessage && (
         <div style={{
           padding: 10, marginBottom: 12, borderRadius: 4, fontSize: 12,

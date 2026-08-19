@@ -123,7 +123,10 @@ function CrawlTargetsPage() {
   }
 
   return (
-    <PageSection title="Crawl Targets">
+    <PageSection
+      title="1 · Sources"
+      description="What content gets pulled in. Each target is a site the crawler reads and turns into documents."
+    >
       {actionMessage && (
         <div style={{
           padding: 10, marginBottom: 12, borderRadius: 4, fontSize: 12,
@@ -137,7 +140,6 @@ function CrawlTargetsPage() {
       {/* Crawl Targets */}
       <Card padding="md" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <h2 style={{ fontSize: 14, fontWeight: 600 }}>Crawl Targets</h2>
           <Button variant="primary" onClick={() => setShowNewTarget(true)}>
             + New Target
           </Button>

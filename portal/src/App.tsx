@@ -27,6 +27,7 @@ const NewsroomResearcherPage = lazy(() => import('./pages/newsroom/ResearcherPag
 const NewsroomBriefsPage = lazy(() => import('./pages/newsroom/BriefsPage'));
 const NewsroomHeadlinesPage = lazy(() => import('./pages/newsroom/HeadlinesPage'));
 const KnowledgeBasePage = lazy(() => import('./pages/KnowledgeBasePage'));
+const KnowledgeHomePage = lazy(() => import('./pages/knowledge/KnowledgeHomePage'));
 const KBRegistryPage = lazy(() => import('./pages/admin/KBRegistryPage.js'));
 const DevboxPage = lazy(() => import('./pages/admin/DevboxPage'));
 const KBDetailPage = lazy(() => import('./pages/admin/KBDetailPage.js'));
@@ -46,7 +47,6 @@ const EvaluationsPage = lazy(() => import('./pages/iq/EvaluationsPage'));
 
 // Ingest sub-pages
 const IngestLayout = lazy(() => import('./pages/ingest/IngestLayout'));
-const IngestSummaryPage = lazy(() => import('./pages/ingest/SummaryPage'));
 const IngestCrawlPage = lazy(() => import('./pages/ingest/CrawlTargetsPage'));
 const IngestHistoryPage = lazy(() => import('./pages/ingest/RunHistoryPage'));
 const IngestSourcesPage = lazy(() => import('./pages/ingest/DataSourcesPage'));
@@ -199,9 +199,17 @@ export function App() {
         {/* ── /admin/* — Admin / operations pages ── */}
         <Route path="admin" element={<Page element={<AdminLayout />} />}>
           <Route index element={<Navigate to="observability" replace />} />
-          <Route path="knowledge-bases" element={<Page element={<KBRegistryPage />} />} />
+
+          {/* Knowledge — one destination for "where the agents' knowledge comes
+              from". The registry list and the ingest summary were two front
+              doors to the same subject, neither of which said whether any of it
+              was working; both now land here. The stage pages below stay as
+              drill-ins, reached from the pipeline rather than from the nav. */}
+          <Route path="knowledge" element={<Page element={<KnowledgeHomePage />} />} />
+          <Route path="knowledge/registry" element={<Page element={<KBRegistryPage />} />} />
+          <Route path="knowledge-bases" element={<Navigate to="/admin/knowledge" replace />} />
           <Route path="knowledge-bases/:id" element={<Page element={<KBDetailPage />} />} />
-          <Route path="knowledge-base" element={<Navigate to="/admin/knowledge-bases" replace />} />
+          <Route path="knowledge-base" element={<Navigate to="/admin/knowledge" replace />} />
           <Route path="devbox" element={<Page element={<DevboxPage />} />} />
 
           <Route path="ingest" element={
@@ -209,8 +217,10 @@ export function App() {
               <Page element={<IngestLayout />} />
             </RequireRole>
           }>
-            <Route index element={<Navigate to="summary" replace />} />
-            <Route path="summary" element={<Page element={<IngestSummaryPage />} />} />
+            {/* The old summary duplicated the Knowledge home, minus the part
+                that mattered — whether the registry and the account agree. */}
+            <Route index element={<Navigate to="/admin/knowledge" replace />} />
+            <Route path="summary" element={<Navigate to="/admin/knowledge" replace />} />
             <Route path="crawl" element={<Page element={<IngestCrawlPage />} />} />
             <Route path="history" element={<Page element={<IngestHistoryPage />} />} />
             <Route path="sources" element={<Page element={<IngestSourcesPage />} />} />

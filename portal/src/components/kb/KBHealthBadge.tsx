@@ -88,7 +88,7 @@ export function KBHealthBadge(): ReactElement | null {
   return (
     <button
       type="button"
-      onClick={() => navigate('/admin/knowledge-bases')}
+      onClick={() => navigate('/admin/knowledge')}
       title={tooltip}
       style={{
         display: 'inline-flex',

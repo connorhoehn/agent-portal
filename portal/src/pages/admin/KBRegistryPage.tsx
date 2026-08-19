@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, Link } from 'react-router';
 import { KBCreateWizard } from '../../components/kb/KBCreateWizard.js';
 import { useFetch } from '../../hooks/useFetch.js';
 import {
@@ -119,15 +119,15 @@ export function KBRegistryPage() {
     : allKbs.filter(kb => kb.tenant === tenantFilter);
 
   return (
-    <PageSection title="Knowledge Bases">
+    <PageSection
+      title="Knowledge base registry"
+      description="The rows the platform keeps about Bedrock knowledge bases. Whether they match the account is answered on Knowledge."
+    >
       {/* Header row */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div>
-          <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 4px' }}>Knowledge Bases</h2>
-          <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: 0 }}>
-            Registered Bedrock Knowledge Base entries and their ingestion status.
-          </p>
-        </div>
+        <Link to="/admin/knowledge" style={{ fontSize: 12, color: 'var(--color-primary)', textDecoration: 'none' }}>
+          ← Knowledge
+        </Link>
         <button
           onClick={() => setWizardOpen(true)}
           style={{
@@ -174,7 +174,7 @@ export function KBRegistryPage() {
           </button>
         ))}
         <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginLeft: 4 }}>
-          {isLoading && !data ? 'Loading…' : `${visible.length} ${visible.length === 1 ? 'entry' : 'entries'}`}
+          {error && !data ? '' : isLoading && !data ? 'Loading…' : `${visible.length} ${visible.length === 1 ? 'entry' : 'entries'}`}
         </span>
       </div>
 
@@ -284,7 +284,11 @@ export function KBRegistryPage() {
                   colSpan={7}
                   style={{ textAlign: 'center', color: 'var(--color-text-tertiary)', fontSize: 13, padding: '32px 0' }}
                 >
-                  {data ? 'No knowledge bases match this filter.' : 'No knowledge bases found.'}
+                  {data
+                    ? 'No knowledge bases match this filter.'
+                    : error
+                      ? 'Could not read the registry — see the error above.'
+                      : 'No knowledge bases found.'}
                 </TableTd>
               </TableRow>
             )}

@@ -37,7 +37,10 @@ function SchedulesPage() {
   const sources = sourcesData?.sources ?? [];
 
   return (
-    <PageSection title="Schedules">
+    <PageSection
+      title="5 · Schedule"
+      description="How often the knowledge base re-syncs. Without a schedule it only updates when someone presses Sync now."
+    >
       <SchedulesPanel sources={sources} />
     </PageSection>
   );

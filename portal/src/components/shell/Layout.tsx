@@ -56,8 +56,10 @@ const PLATFORM_ITEMS: NavItem[] = [
   { path: '/admin/observability',   label: 'Health',          tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'] },
   { path: '/admin/devbox',          label: 'Devbox',          tenant: 'admin' },
   { path: '/iq/agents',             label: 'Architecture',    tenant: 'admin' },
-  { path: '/admin/knowledge-bases', label: 'Knowledge Bases', tenant: 'admin', requireRoles: ['hr-admin'] },
-  { path: '/admin/ingest',          label: 'Ingest',          tenant: 'admin', requireRoles: ['hr-admin'] },
+  // One entry, not two: sources, ingestion, storage and knowledge bases are
+  // consecutive stages of one pipeline, and splitting them across two nav
+  // items made you check both to find out whether either was working.
+  { path: '/admin/knowledge',       label: 'Knowledge',       tenant: 'admin', requireRoles: ['hr-admin'] },
   { path: '/admin/capabilities',    label: 'Capabilities',    tenant: 'admin' },
   { path: '/admin/identity',        label: 'Identity',        tenant: 'admin', requireRoles: ['hr-admin'] },
 ];

@@ -35,7 +35,10 @@ function RunHistoryPage() {
   }
 
   return (
-    <PageSection title="Crawl Run History" description="10s refresh">
+    <PageSection
+      title="2 · Runs"
+      description="What each pull actually did — pages fetched, documents produced, and where a run stopped. Refreshes every 10s."
+    >
       <Card padding="md">
         {historyCrawls.length === 0 ? (
           <EmptyState title="No crawl runs yet" body="Trigger one from a target above." />
