@@ -239,10 +239,26 @@ export function App() {
           {/* Repositories agents work on — distinct from /iq/projects, which
               is the org graph's initiatives. A repo may deliver one of those;
               the two are joined, not merged. */}
-          <Route path="projects" element={<Page element={<AgentProjectsPage />} />} />
+          {/* These three are hr-admin action surfaces (link/run codebases, approve
+              & deliver changes, drive devboxes) — their APIs require ManageDevbox,
+              so the route is guarded to match, keeping the page out of a role that
+              would only hit 403s. */}
+          <Route path="projects" element={
+            <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
+              <Page element={<AgentProjectsPage />} />
+            </RequireRole>
+          } />
           {/* The governance queue for code agents wrote — review, approve, deliver. */}
-          <Route path="changes" element={<Page element={<ChangesPage />} />} />
-          <Route path="devbox" element={<Page element={<DevboxPage />} />} />
+          <Route path="changes" element={
+            <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
+              <Page element={<ChangesPage />} />
+            </RequireRole>
+          } />
+          <Route path="devbox" element={
+            <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
+              <Page element={<DevboxPage />} />
+            </RequireRole>
+          } />
 
           <Route path="ingest" element={
             <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
