@@ -24,6 +24,8 @@ import {
 import { isAllowed } from '../lib/authz.js';
 import { eventFromSession, logAuthz } from '../lib/audit.js';
 import { rateLimit } from '../lib/rate-limit.js';
+import { cognitoEnabled } from '../lib/oidc.js';
+import { demoModeEnabled } from '../lib/session.js';
 import { listUsers, getUser } from '../providers/identity.js';
 
 export const sessionRouter = Router();
@@ -68,6 +70,13 @@ sessionRouter.get('/users', asyncHandler(async (_req, res) => {
 }));
 
 sessionRouter.post('/login', loginLimit, asyncHandler(async (req, res) => {
+  // When SSO is configured, the picker is a dev-only convenience: disable it in
+  // production (unless AUTH_DEMO_MODE explicitly re-opens it) so the only real
+  // login path is the authenticated Cognito flow.
+  if (cognitoEnabled() && !demoModeEnabled()) {
+    res.status(403).json({ error: 'Picker login is disabled; sign in with SSO', ssoEnabled: true });
+    return;
+  }
   const { userId } = req.body as { userId?: string };
   if (!userId) { res.status(400).json({ error: 'userId is required' }); return; }
   const user = await getUser(userId);

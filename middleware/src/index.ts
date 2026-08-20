@@ -32,6 +32,7 @@ import { testFixturesRouter } from './routes/test-fixtures.js';
 import { capabilitiesRouter } from './routes/capabilities.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { sessionRouter } from './routes/session.js';
+import { authRouter } from './routes/auth.js';
 import { identityRouter } from './routes/identity.js';
 import { canaryRouter } from './routes/canary.js';
 import { canaryLibraryRouter } from './routes/canary-library.js';
@@ -93,6 +94,8 @@ app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
 
 app.use('/api/session', sessionRouter);
+// Enterprise SSO (Cognito OIDC). Inert unless COGNITO_* are configured.
+app.use('/api/auth', authRouter);
 app.use('/api/identity', identityRouter);
 // Per-agent detail, mounted first so /:agentId there is not swallowed by
 // the fleet router's own routes.

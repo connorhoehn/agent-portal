@@ -159,6 +159,69 @@ export async function getUser(userId: string): Promise<UserInfo | null> {
   }
 }
 
+// ── IdP identity resolution (Cognito / OIDC) ─────────────────────────────────
+// The BFF resolves an authenticated federated identity to an OrgIQ user by its
+// external subject (app_users.external_sub), falling back to an email match the
+// first time a user signs in (then linking the sub so later logins are direct).
+
+async function hydrate(id: string, displayName: string, email: string | null, personId: string | null): Promise<UserInfo> {
+  const grantRows = await exec(
+    `SELECT user_id, tenant_id, role FROM user_tenant_roles WHERE user_id = :id ORDER BY granted_at, tenant_id, role`,
+    [str('id', id)]);
+  return { id, displayName, email, personId, grants: groupGrants(grantRows).get(id) ?? {} };
+}
+
+/** Resolve an OrgIQ user by the IdP subject stored in app_users.external_sub. */
+export async function getUserByExternalSub(sub: string): Promise<UserInfo | null> {
+  if (!sub) return null;
+  if (!auroraConfigured()) return null; // fallback users have no external_sub
+  try {
+    const rows = await exec(
+      `SELECT id, display_name, email, person_id FROM app_users WHERE external_sub = :sub`,
+      [str('sub', sub)]);
+    if (rows.length === 0) return null;
+    const [id, displayName, email, personId] = rows[0]!;
+    return hydrate(id as string, displayName as string, (email as string | null) ?? null, (personId as string | null) ?? null);
+  } catch {
+    return null;
+  }
+}
+
+/** Resolve an OrgIQ user by email (case-insensitive) — the first-login link path. */
+export async function getUserByEmail(email: string): Promise<UserInfo | null> {
+  if (!email) return null;
+  const needle = email.trim().toLowerCase();
+  if (!auroraConfigured()) {
+    return FALLBACK_USERS.find(u => (u.email ?? '').toLowerCase() === needle) ?? null;
+  }
+  try {
+    const rows = await exec(
+      `SELECT id, display_name, email, person_id FROM app_users WHERE lower(email) = :email`,
+      [str('email', needle)]);
+    if (rows.length === 0) {
+      return FALLBACK_USERS.find(u => (u.email ?? '').toLowerCase() === needle) ?? null;
+    }
+    const [id, displayName, mail, personId] = rows[0]!;
+    return hydrate(id as string, displayName as string, (mail as string | null) ?? null, (personId as string | null) ?? null);
+  } catch {
+    return FALLBACK_USERS.find(u => (u.email ?? '').toLowerCase() === needle) ?? null;
+  }
+}
+
+/** Link an IdP subject to an OrgIQ user so subsequent logins resolve directly.
+ * Best-effort: a failure (e.g. Aurora unconfigured in local dev) is swallowed —
+ * the session is still minted from the email match, it just isn't persisted. */
+export async function linkExternalSub(userId: string, sub: string): Promise<void> {
+  if (!auroraConfigured() || !userId || !sub) return;
+  try {
+    await exec(
+      `UPDATE app_users SET external_sub = :sub WHERE id = :id`,
+      [str('sub', sub), str('id', userId)]);
+  } catch {
+    // non-fatal — see doc comment
+  }
+}
+
 // ── Provisioning (admin UI) ──────────────────────────────────────────────────
 
 export async function createTenant(id: string, displayName: string): Promise<TenantInfo> {

@@ -13,6 +13,7 @@ import { AgentCoreGatewayStack } from '../lib/agentcore-gateway-stack';
 import { AgentCoreTelemetryStack } from '../lib/agentcore-telemetry-stack';
 import { AgentCoreCapabilitiesStack } from '../lib/agentcore-capabilities-stack';
 import { AuthorizationStack } from '../lib/authorization-stack';
+import { AuthenticationStack } from '../lib/authentication-stack';
 import { SpanProjectorStack } from '../lib/span-projector-stack';
 import { PromptCanaryStack } from '../lib/prompt-canary-stack';
 import { MiddlewareServiceStack } from '../lib/middleware-service-stack';
@@ -82,6 +83,26 @@ const authorization = new AuthorizationStack(app, 'OrgIQ-Authorization', {
   env,
   prefix,
   description: 'OrgIQ Authorization: Cedar policies + AVP policy store + session signing key',
+});
+
+// -------------------------------------------------------------------
+// Stack 4c: Authentication (Cognito User Pool + Hosted UI — enterprise SSO)
+// Additive + independently destroyable. The middleware BFF drives OIDC and
+// mints its own session cookie; unwired, the picker login stays the only path.
+//   cdk deploy OrgIQ-Authentication \
+//     --context authCallbackUrls=https://mw.example.com/api/auth/callback \
+//     --context authLogoutUrls=https://portal.example.com/
+// -------------------------------------------------------------------
+const authCallbackUrls = (app.node.tryGetContext('authCallbackUrls') as string | undefined)
+  ?.split(',').map(s => s.trim()).filter(Boolean);
+const authLogoutUrls = (app.node.tryGetContext('authLogoutUrls') as string | undefined)
+  ?.split(',').map(s => s.trim()).filter(Boolean);
+const authentication = new AuthenticationStack(app, 'OrgIQ-Authentication', {
+  env,
+  prefix,
+  ...(authCallbackUrls ? { callbackUrls: authCallbackUrls } : {}),
+  ...(authLogoutUrls ? { logoutUrls: authLogoutUrls } : {}),
+  description: 'OrgIQ Authentication: Cognito User Pool + Hosted UI (OIDC SSO)',
 });
 
 // -------------------------------------------------------------------
@@ -338,6 +359,13 @@ const middlewareService = new MiddlewareServiceStack(app, 'OrgIQ-MiddlewareServi
   // Authorization
   sessionSigningSecretArn: cdk.Fn.importValue(`${prefix}-session-signing-secret-arn`),
   policyStoreId: cdk.Fn.importValue(`${prefix}-policy-store-id`),
+
+  // Authentication (Cognito SSO). Values come from OrgIQ-Authentication; the
+  // BFF stays inert until COGNITO_CALLBACK_URL (HTTPS) is also set at deploy.
+  cognitoUserPoolId: authentication.userPoolId,
+  cognitoClientId: authentication.userPoolClientId,
+  cognitoDomain: authentication.hostedUiDomain,
+  cognitoClientSecretArn: authentication.clientSecretArn,
 
   // Aurora (from AuroraStack exports)
   auroraClusterArn: cdk.Fn.importValue(`${prefix}-aurora-cluster-arn`),

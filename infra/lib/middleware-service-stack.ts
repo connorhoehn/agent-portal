@@ -56,6 +56,15 @@ export interface MiddlewareServiceStackProps extends cdk.StackProps {
   readonly guardrailIdMember?: string;
   readonly guardrailIdOrgLeader?: string;
   readonly guardrailIdHrAdmin?: string;
+
+  // ── Cognito SSO (optional) ───────────────────────────────────────────────
+  // When present, the BFF exposes the OIDC sign-in flow. The callback URL must
+  // be HTTPS for a non-localhost origin, so it's only set when a certificate
+  // (HTTPS listener) is configured; without it, SSO stays off on ECS.
+  readonly cognitoUserPoolId?: string;
+  readonly cognitoClientId?: string;
+  readonly cognitoDomain?: string;
+  readonly cognitoClientSecretArn?: string;
 }
 
 /**
@@ -414,9 +423,29 @@ export class MiddlewareServiceStack extends cdk.Stack {
       ...(props.guardrailIdOrgLeader && { GUARDRAIL_ID_ORG_LEADER: props.guardrailIdOrgLeader }),
       ...(props.guardrailIdHrAdmin && { GUARDRAIL_ID_HR_ADMIN: props.guardrailIdHrAdmin }),
 
+      // Cognito SSO — ids/domain (the client secret is injected below as an ECS
+      // secret). COGNITO_CALLBACK_URL is intentionally NOT set here: it must be
+      // an HTTPS origin registered on the app client, which only exists once a
+      // certificate + real domain are attached — set it (or PUBLIC_BASE_URL) as
+      // an env override at that point. Until then the BFF stays inert (cognitoEnabled
+      // is false without a callback URL) and the picker login remains.
+      ...(props.cognitoUserPoolId && { COGNITO_USER_POOL_ID: props.cognitoUserPoolId }),
+      ...(props.cognitoClientId && { COGNITO_CLIENT_ID: props.cognitoClientId }),
+      ...(props.cognitoDomain && { COGNITO_DOMAIN: props.cognitoDomain }),
+
       // WebSocket gateway
       ...(props.websocketGatewayUrl && { WEBSOCKET_GATEWAY_URL: props.websocketGatewayUrl }),
     };
+
+    // Cognito app-client secret injected as an ECS secret (pulled at task start
+    // by the execution role, never rendered into the task-def env in plaintext).
+    const containerSecrets: Record<string, ecs.Secret> = {};
+    if (props.cognitoClientSecretArn) {
+      const cognitoSecretRef = secretsmanager.Secret.fromSecretCompleteArn(
+        this, 'CognitoClientSecretRef', props.cognitoClientSecretArn,
+      );
+      containerSecrets['COGNITO_CLIENT_SECRET'] = ecs.Secret.fromSecretsManager(cognitoSecretRef);
+    }
 
     // ── Fargate service via L2 pattern ─────────────────────────────────────
     // ApplicationLoadBalancedFargateService handles the ALB, target group,
@@ -457,6 +486,7 @@ export class MiddlewareServiceStack extends cdk.Stack {
           taskRole,
           executionRole,
           environment,
+          ...(Object.keys(containerSecrets).length > 0 ? { secrets: containerSecrets } : {}),
           logDriver: ecs.LogDrivers.awsLogs({
             logGroup,
             streamPrefix: 'middleware',

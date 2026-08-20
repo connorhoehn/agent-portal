@@ -24,7 +24,8 @@ function roleLabel(role: string): string {
 }
 
 export function MasqueradeMenu() {
-  const { session, setRole, login, masquerade, stopMasquerade, listUsers, isLoading } = useSession();
+  const { session, setRole, login, masquerade, stopMasquerade, listUsers, isLoading,
+    ssoEnabled, signInWithSso, logout } = useSession();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [users, setUsers] = useState<DirectoryUser[] | null>(null);
@@ -150,6 +151,35 @@ export function MasqueradeMenu() {
             </div>
           )}
 
+          {ssoEnabled && (
+            <>
+              <SectionLabel>Enterprise sign-in</SectionLabel>
+              <div style={{ display: 'flex', gap: 8, padding: '2px 10px 10px' }}>
+                <button
+                  type="button"
+                  onClick={() => signInWithSso()}
+                  style={{
+                    flex: 1, padding: '7px 10px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                    borderRadius: 6, border: 'none', background: 'var(--color-primary)', color: '#fff',
+                  }}
+                >
+                  Sign in with SSO
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void logout()}
+                  style={{
+                    padding: '7px 10px', fontSize: 12.5, cursor: 'pointer', borderRadius: 6,
+                    border: '1px solid var(--color-border)', background: 'var(--color-surface)',
+                    color: 'var(--color-text-secondary)',
+                  }}
+                >
+                  Sign out
+                </button>
+              </div>
+            </>
+          )}
+
           <SectionLabel>Switch role · {session.tenant}</SectionLabel>
           {session.availableRoles.map(role => {
             const active = role === session.role;
@@ -166,7 +196,7 @@ export function MasqueradeMenu() {
             );
           })}
 
-          <SectionLabel>{canMasquerade ? 'Masquerade as' : 'Sign in as'}</SectionLabel>
+          <SectionLabel>{canMasquerade ? 'Masquerade as' : (ssoEnabled ? 'Sign in as · dev' : 'Sign in as')}</SectionLabel>
           {users === null && (
             <div style={{ padding: '6px 10px', fontSize: 12, color: 'var(--color-text-tertiary)' }}>Loading users…</div>
           )}

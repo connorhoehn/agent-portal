@@ -28,11 +28,17 @@ export interface DirectoryUser {
 interface SessionContextValue {
   session: Session | null;
   isLoading: boolean;
+  /** True when Cognito SSO is configured — the portal offers a real sign-in. */
+  ssoEnabled: boolean;
   setRole: (role: string) => Promise<void>;
   setTenant: (tenant: Tenant) => Promise<void>;
   login: (userId: string) => Promise<void>;
   masquerade: (userId: string) => Promise<void>;
   stopMasquerade: () => Promise<void>;
+  /** Redirect to the Cognito Hosted UI, returning to the current path after. */
+  signInWithSso: () => void;
+  /** Clear the session; bounce through Cognito logout when SSO is on. */
+  logout: () => Promise<void>;
   listUsers: () => Promise<DirectoryUser[]>;
   refresh: () => Promise<void>;
 }
@@ -101,8 +107,30 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const [ssoEnabled, setSsoEnabled] = useState(false);
+
   useEffect(() => {
     void refresh();
+    // Ask the BFF whether enterprise SSO is configured.
+    fetch('/api/auth/config', { credentials: 'include' })
+      .then(r => (r.ok ? r.json() : null))
+      .then((j: { ssoEnabled?: boolean } | null) => setSsoEnabled(!!j?.ssoEnabled))
+      .catch(() => setSsoEnabled(false));
+  }, [refresh]);
+
+  const signInWithSso = useCallback(() => {
+    const returnTo = window.location.pathname + window.location.search;
+    window.location.href = `/api/auth/login?returnTo=${encodeURIComponent(returnTo)}`;
+  }, []);
+
+  const logout = useCallback(async () => {
+    let ssoLogoutUrl: string | undefined;
+    try {
+      const res = await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+      if (res.ok) ssoLogoutUrl = ((await res.json()) as { ssoLogoutUrl?: string }).ssoLogoutUrl;
+    } catch { /* fall through to a local refresh */ }
+    if (ssoLogoutUrl) { window.location.href = ssoLogoutUrl; return; }
+    await refresh();
   }, [refresh]);
 
   const setRole = useCallback(async (role: string) => {
@@ -137,8 +165,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const ctxValue = useMemo(
-    () => ({ session, isLoading, setRole, setTenant, login, masquerade, stopMasquerade, listUsers, refresh }),
-    [session, isLoading, setRole, setTenant, login, masquerade, stopMasquerade, listUsers, refresh],
+    () => ({ session, isLoading, ssoEnabled, setRole, setTenant, login, masquerade, stopMasquerade, signInWithSso, logout, listUsers, refresh }),
+    [session, isLoading, ssoEnabled, setRole, setTenant, login, masquerade, stopMasquerade, signInWithSso, logout, listUsers, refresh],
   );
 
   return (

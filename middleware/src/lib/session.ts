@@ -166,6 +166,31 @@ export async function signSession(session: Session): Promise<string> {
   return `${payload}.${mac}`;
 }
 
+/** Sign an arbitrary short-lived JSON payload (e.g. the OIDC state/PKCE cookie)
+ * with the same HMAC key as the session cookie. Returns "payload.mac". */
+export async function signValue(value: unknown): Promise<string> {
+  const key = await loadSigningKey();
+  const payload = b64url(JSON.stringify(value));
+  const mac = b64url(createHmac('sha256', key).update(payload).digest());
+  return `${payload}.${mac}`;
+}
+
+/** Verify + parse a value produced by signValue. Returns null on tamper/parse error. */
+export async function verifyValue<T>(signed: string): Promise<T | null> {
+  const dot = signed.lastIndexOf('.');
+  if (dot < 1) return null;
+  const payload = signed.slice(0, dot);
+  const key = await loadSigningKey();
+  const expected = createHmac('sha256', key).update(payload).digest();
+  const provided = fromB64url(signed.slice(dot + 1));
+  if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) return null;
+  try {
+    return JSON.parse(fromB64url(payload).toString('utf8')) as T;
+  } catch {
+    return null;
+  }
+}
+
 function isKnownRole(role: string): boolean {
   return role === ADMIN_ROLE || TENANTS.some(t => ROLES_BY_TENANT[t].includes(role));
 }
