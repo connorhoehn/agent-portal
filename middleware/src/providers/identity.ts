@@ -120,7 +120,10 @@ export async function listUsers(): Promise<UserInfo[]> {
       `SELECT id, display_name, email, person_id FROM app_users ORDER BY display_name`);
     if (users.length === 0) return FALLBACK_USERS;
     const grants = groupGrants(await exec(
-      `SELECT user_id, tenant_id, role FROM user_tenant_roles ORDER BY granted_at`));
+      // tenant_id, role tie-break granted_at so the ordering is total and
+      // deterministic — seed rows share a granted_at timestamp, so ordering by
+      // it alone left multi-role users' landing role unstable.
+      `SELECT user_id, tenant_id, role FROM user_tenant_roles ORDER BY granted_at, tenant_id, role`));
     return users.map(([id, displayName, email, personId]) => ({
       id: id as string,
       displayName: displayName as string,
@@ -142,7 +145,7 @@ export async function getUser(userId: string): Promise<UserInfo | null> {
     if (rows.length === 0) return FALLBACK_USERS.find(u => u.id === userId) ?? null;
     const [id, displayName, email, personId] = rows[0]!;
     const grantRows = await exec(
-      `SELECT user_id, tenant_id, role FROM user_tenant_roles WHERE user_id = :id ORDER BY granted_at`,
+      `SELECT user_id, tenant_id, role FROM user_tenant_roles WHERE user_id = :id ORDER BY granted_at, tenant_id, role`,
       [str('id', userId)]);
     return {
       id: id as string,

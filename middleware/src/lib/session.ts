@@ -80,6 +80,27 @@ export function hasGrant(grants: Grants, tenant: string, role: string): boolean 
   return rolesForTenant(grants, tenant).includes(role);
 }
 
+// Privilege rank, lower = less privileged. Used to choose a login landing role.
+const ROLE_RANK: Record<string, number> = {
+  member: 0, reporter: 0, 'org-leader': 1, editor: 1, 'hr-admin': 2, admin: 99,
+};
+
+/**
+ * The role a session lands on when none is explicitly preferred: the
+ * least-privileged non-admin role held, chosen deterministically (rank, then
+ * name). A multi-role user therefore always starts in the same minimal role and
+ * escalates explicitly via the switcher — instead of the old "first grant in DB
+ * order", which varied with `granted_at` ties between the Aurora and fallback
+ * paths. Falls back to admin only when that's the only role held.
+ */
+export function landingRole(held: readonly string[]): Role {
+  const nonAdmin = held.filter(r => r !== ADMIN_ROLE);
+  const pool = nonAdmin.length > 0 ? nonAdmin : held;
+  return [...pool].sort(
+    (a, b) => (ROLE_RANK[a] ?? 50) - (ROLE_RANK[b] ?? 50) || a.localeCompare(b),
+  )[0] as Role;
+}
+
 /**
  * Single choke point for creating a session from an identity + grants.
  * Picks a valid (tenant, role) pair from the grants, preferring the requested
@@ -99,7 +120,7 @@ export function mintSession(
   const held = rolesForTenant(grants, tenant);
   const role = (prefer?.role && held.includes(prefer.role))
     ? prefer.role as Role
-    : (held.find(r => r !== ADMIN_ROLE) ?? held[0]!) as Role;
+    : landingRole(held);
   const session: Session = {
     sub: user.id,
     role,

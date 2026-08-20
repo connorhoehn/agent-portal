@@ -330,13 +330,19 @@ SYSTEM_PROMPT = (
 
 # Per-role guardrail IDs, populated from env at module load. Middleware passes
 # the caller's role in the invoke payload; we map it here to one of these.
+# Newsroom roles (reporter/editor) get their own guardrails when
+# GUARDRAIL_ID_REPORTER / GUARDRAIL_ID_EDITOR are set; unset, they fall back to
+# the member guardrail via GUARDRAIL_ROLE_FALLBACK below (unchanged default).
 ROLE_GUARDRAIL_IDS: dict[str, str] = {
     "member": os.environ.get("GUARDRAIL_ID_MEMBER", ""),
     "org-leader": os.environ.get("GUARDRAIL_ID_ORG_LEADER", ""),
     "hr-admin": os.environ.get("GUARDRAIL_ID_HR_ADMIN", ""),
+    "reporter": os.environ.get("GUARDRAIL_ID_REPORTER", ""),
+    "editor": os.environ.get("GUARDRAIL_ID_EDITOR", ""),
 }
 DEFAULT_ROLE = "member"
 DEFAULT_TENANT = "orgiq"
+KNOWN_TENANTS = frozenset({"orgiq", "newsroom"})
 
 # Roles without a guardrail of their own borrow one: newsroom roles ride on the
 # strictest (member) guardrail; the cross-tenant admin gets hr-admin's (the
@@ -434,13 +440,23 @@ log.info("Supervisor roles configured: %s", sorted(_ROLES.keys()))
 
 def _resolve_identity(payload: dict) -> tuple[str, str]:
     """(tenant, role) for the caller. Unknown roles keep their name (the
-    guardrail mapping happens in _agents_for_role); missing auth falls back to
-    the orgiq member identity."""
+    guardrail mapping in _agents_for_role maps them to the strictest, member,
+    guardrail); an unrecognized or missing tenant falls back to orgiq. A payload
+    with no auth block is treated as the least-privileged orgiq member AND
+    logged, since in normal operation the middleware always attaches auth — a
+    missing block means a direct-invoke that bypassed it, which we want visible
+    rather than silently trusted."""
     auth = payload.get("auth") if isinstance(payload, dict) else None
-    role = (auth or {}).get("role") if isinstance(auth, dict) else None
-    tenant = (auth or {}).get("tenant") if isinstance(auth, dict) else None
+    if not isinstance(auth, dict):
+        log.warning(
+            "invoke payload has no auth block; defaulting to %s/%s (least privilege)",
+            DEFAULT_TENANT, DEFAULT_ROLE,
+        )
+        return DEFAULT_TENANT, DEFAULT_ROLE
+    role = auth.get("role")
+    tenant = auth.get("tenant")
     return (
-        tenant if isinstance(tenant, str) and tenant else DEFAULT_TENANT,
+        tenant if isinstance(tenant, str) and tenant in KNOWN_TENANTS else DEFAULT_TENANT,
         role if isinstance(role, str) and role else DEFAULT_ROLE,
     )
 

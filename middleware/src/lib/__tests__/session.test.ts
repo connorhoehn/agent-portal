@@ -6,6 +6,7 @@ jest.mock('../../config.js', () => ({
 
 import {
   mintSession,
+  landingRole,
   signSession,
   verifySession,
   hasGrant,
@@ -44,6 +45,30 @@ describe('mintSession', () => {
   it('prefers a non-admin role when several are held', () => {
     const s = mintSession(user, { orgiq: ['admin', 'member'] });
     expect(s?.role).toBe('member');
+  });
+
+  it('lands on the least-privileged role regardless of grant order', () => {
+    // Same grants, different array order — both must land on member.
+    expect(mintSession(user, { orgiq: ['org-leader', 'member'] })?.role).toBe('member');
+    expect(mintSession(user, { orgiq: ['member', 'org-leader'] })?.role).toBe('member');
+    // hr-admin is the most privileged, so it's never the landing role here.
+    expect(mintSession(user, { orgiq: ['hr-admin', 'org-leader', 'member'] })?.role).toBe('member');
+    // newsroom: reporter (rank 0) beats editor (rank 1).
+    expect(mintSession(user, { newsroom: ['editor', 'reporter'] })?.role).toBe('reporter');
+  });
+});
+
+describe('landingRole', () => {
+  it('picks the lowest-rank non-admin role, deterministically', () => {
+    expect(landingRole(['org-leader', 'member'])).toBe('member');
+    expect(landingRole(['member', 'org-leader'])).toBe('member');
+    expect(landingRole(['editor', 'reporter'])).toBe('reporter');
+    expect(landingRole(['hr-admin'])).toBe('hr-admin');
+  });
+
+  it('returns admin only when it is the sole role held', () => {
+    expect(landingRole(['admin'])).toBe('admin');
+    expect(landingRole(['admin', 'member'])).toBe('member');
   });
 });
 

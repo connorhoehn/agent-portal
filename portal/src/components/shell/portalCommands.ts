@@ -38,18 +38,16 @@ interface RecentRun {
 }
 
 const PAGES: PageEntry[] = [
-  { label: 'Search',             hint: 'Ask the org-search agent',            path: '/iq/search',                                  tenant: 'orgiq' },
+  { label: 'Ask',                hint: 'Ask the org-search agent',            path: '/iq/invoke',                                  tenant: 'orgiq' },
   { label: 'Explore',            hint: 'Force-directed org graph',            path: '/iq/explore',                                 tenant: 'orgiq' },
   { label: 'Architecture',       hint: 'A2A agent topology',                  path: '/iq/agents',                                  tenant: 'orgiq' },
-  { label: 'Agent Tools',        hint: 'Multi-agent debug surface',           path: '/iq/invoke',                                  tenant: 'orgiq' },
   { label: 'Canary',             hint: 'Live A/B prompt rollout',             path: '/iq/canary',                                  tenant: 'orgiq' },
   { label: 'Scores',             hint: 'Per-person influence leaderboard',    path: '/iq/scores',                                  tenant: 'orgiq' },
-  { label: 'Decisions',          hint: 'Editorial / org-level decisions',     path: '/iq/decisions',                               tenant: 'orgiq' },
-  { label: 'Projects',           hint: 'Project contributions + status',      path: '/iq/projects',                                tenant: 'orgiq' },
+  { label: 'Projects',           hint: 'Project contributions + decisions',   path: '/iq/projects',                                tenant: 'orgiq' },
   { label: 'Newsroom',           hint: 'Articles, beats, briefs, pitches',    path: '/newsroom',                                   tenant: 'newsroom' },
   { label: 'Newsroom — Articles',hint: 'Browse articles + filters',           path: '/newsroom/articles',                          tenant: 'newsroom' },
   { label: 'Newsroom — Beats',   hint: 'Coverage heatmap by topic',           path: '/newsroom/beats',                             tenant: 'newsroom' },
-  { label: 'Knowledge Base',     hint: 'Documents + data sources',            path: '/admin/knowledge-base',                       tenant: 'admin' },
+  { label: 'Knowledge Base',     hint: 'Documents + data sources',            path: '/admin/knowledge',                            tenant: 'admin' },
   { label: 'Settings',           hint: 'User preferences',                    path: '/settings',                                   tenant: 'universal' },
   { label: 'On-Call',            hint: 'Live alarms + incident timeline',     path: '/admin/observability/oncall',                 tenant: 'admin' },
   { label: 'Summary',            hint: 'Health overview',                     path: '/admin/observability/summary',                tenant: 'admin' },
@@ -68,12 +66,15 @@ const PAGES: PageEntry[] = [
   { label: 'Approvals',          hint: 'Pending HITL decisions',              path: '/admin/observability/approvals',              tenant: 'admin' },
   { label: 'Harness',            hint: 'Replay test set + view runs',         path: '/admin/observability/harness',                tenant: 'admin' },
   { label: 'Calibration',        hint: 'Judge vs human MAE drift',            path: '/admin/observability/calibration',            tenant: 'admin' },
-  { label: 'Prompts',            hint: 'Managed prompt registry',             path: '/admin/capabilities/prompts',                 tenant: 'admin' },
+  { label: 'Prompts',            hint: 'Managed prompt registry',             path: '/iq/prompts',                                 tenant: 'admin' },
   { label: 'Model Compare',      hint: 'Side-by-side run delta',              path: '/admin/observability/model-compare',          tenant: 'admin' },
 ];
 
 const ADMIN_ROLES = new Set(['hr-admin', 'org-leader', 'admin']);
-const HR_ADMIN_PATHS = ['/admin/identity', '/admin/ingest', '/admin/knowledge-base'];
+// Palette gate must match the nav's requireRoles: Identity, Ingest and
+// Knowledge are hr-admin-only. Uses the real /admin/knowledge path (the old
+// /admin/knowledge-base is a redirect, so the gate never matched it).
+const HR_ADMIN_PATHS = ['/admin/identity', '/admin/ingest', '/admin/knowledge'];
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 
 function isHrAdminGated(path: string): boolean {
