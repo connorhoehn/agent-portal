@@ -53,15 +53,24 @@ function deriveSessionId(req: { body?: Record<string, unknown> }): string {
 // deriveSessionId option — no more CUSTOM `session` workaround.
 // Tool results are emitted via standard TOOL_CALL_RESULT events — no more
 // CUSTOM `tool_call_result` workaround.
-// Newsroom agents serve newsroom-tenant sessions only (admin excepted). This
-// runs BEFORE the SSE stream opens so the caller gets a plain 403, not a
-// mid-stream error event.
+// Agents are tenant-scoped both ways: news-* agents serve newsroom sessions
+// only, and the orgiq specialists (search, scoring, advisor, ingestion,
+// graph-builder) serve orgiq sessions only. The supervisor is tenant-aware
+// (it builds a per-(tenant, role) Agent) so any tenant may invoke it, and
+// the cross-tenant admin role passes every guard. This runs BEFORE the SSE
+// stream opens so the caller gets a plain 403, not a mid-stream error event.
+function agentTenant(agentId: string): 'newsroom' | 'orgiq' | null {
+  if (/(^|-)news-/.test(agentId)) return 'newsroom';
+  if (/supervisor/.test(agentId)) return null; // serves all tenants
+  return 'orgiq';
+}
+
 function requireAgentTenant(req: import('express').Request, res: import('express').Response, next: import('express').NextFunction): void {
   const agentId = String(req.params['agentId'] ?? '');
   const session = req.session;
-  const isNewsAgent = /(^|-)news-/.test(agentId);
-  if (session && isNewsAgent && session.tenant !== 'newsroom' && session.role !== 'admin') {
-    res.status(403).json({ error: 'Forbidden', requiredTenant: 'newsroom', agentId });
+  const required = agentTenant(agentId);
+  if (session && required && session.tenant !== required && session.role !== 'admin') {
+    res.status(403).json({ error: 'Forbidden', requiredTenant: required, agentId });
     return;
   }
   next();
