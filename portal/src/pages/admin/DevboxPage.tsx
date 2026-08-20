@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { PageSection, Card, Chip } from '@connorhoehnslalom/ui-components/shared';
 import { openShell } from '../../lib/terminalDock';
+import { DEVBOX_MODELS } from '../../lib/devboxModels';
 import { useFetch } from '../../hooks/useFetch';
 import { Markdown } from '../../components/Markdown';
 import {
@@ -145,12 +146,8 @@ const STDIN_WAITERS = new Set(['cat', 'head', 'tail', 'wc', 'tee']);
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-/** Models the container will accept — mirrors DEVBOX_ALLOWED_MODELS. */
-const TASK_MODELS: Array<{ id: string; label: string; hint: string }> = [
-  { id: 'us.anthropic.claude-haiku-4-5-20251001-v1:0', label: 'Haiku', hint: 'default · cheapest · fine for most tasks' },
-  { id: 'us.anthropic.claude-sonnet-5', label: 'Sonnet', hint: 'harder multi-step work' },
-  { id: 'us.anthropic.claude-opus-4-8', label: 'Opus', hint: 'the expensive one — reach for it deliberately' },
-];
+/** Models the container will accept — the shared list, mirroring DEVBOX_ALLOWED_MODELS. */
+const TASK_MODELS = DEVBOX_MODELS;
 
 export default function DevboxPage() {
   const { data: status, error: statusError } = useFetch<DevboxStatus>('/api/devbox/status');

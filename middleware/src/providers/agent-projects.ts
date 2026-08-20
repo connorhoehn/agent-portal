@@ -199,8 +199,26 @@ export async function buildCloneCommand(project: AgentProject): Promise<{ comman
   const url = `https://github.com/${project.repoFullName}.git`;
   const redacted = `git clone --depth 50 ${url} ${target}`;
 
+  // `2>&1 | tail -20` bounds the output, but is appended so the pipe binds only
+  // to the final `git log` (| is tighter than &&) — a clone that fails stops the
+  // && chain and exits nonzero rather than being swallowed by tail's exit 0. The
+  // public branch below must follow the same shape; piping `git clone` directly
+  // would mask its failure and report a broken checkout as a clean one.
+  const tail = ' 2>&1 | tail -20';
+
+  // `-c safe.directory=*` on the verification log: the checkout is owned by a
+  // different uid than the shell, and without it `git log` prints a scary
+  // "fatal: detected dubious ownership" — harmless (the clone already
+  // succeeded) but it looks like a failure in the streamed output.
+  const verify = `git -c safe.directory='*' -C ${target} log --oneline -1`;
+
   if (!project.connectionName) {
-    return { command: `rm -rf ${target} && ${redacted} 2>&1 | tail -20`, redacted };
+    const command = [
+      `rm -rf ${target}`,
+      `git clone --depth 50 ${url} ${target}`,
+      verify,
+    ].join(' && ') + tail;
+    return { command, redacted };
   }
 
   const token = await borrowApiKey(project.connectionName);
@@ -208,10 +226,9 @@ export async function buildCloneCommand(project: AgentProject): Promise<{ comman
   const command = [
     `rm -rf ${target}`,
     `git clone --depth 50 ${authed} ${target}`,
-    `cd ${target}`,
-    `git remote set-url origin ${url}`,
-    `git log --oneline -1`,
-  ].join(' && ') + ' 2>&1 | tail -20';
+    `git -c safe.directory='*' -C ${target} remote set-url origin ${url}`,
+    verify,
+  ].join(' && ') + tail;
   return { command, redacted };
 }
 

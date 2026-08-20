@@ -16,11 +16,13 @@
 // can lapse and be re-established, never as a property of the project.
 
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
 import { loadBoxes, createBox, type DevboxBox } from '../../lib/devboxRegistry';
 import { openShell } from '../../lib/terminalDock';
+import { DEVBOX_MODELS, DEFAULT_DEVBOX_MODEL } from '../../lib/devboxModels';
 
 interface Run {
   id: string; prompt: string; model: string | null;
@@ -67,6 +69,10 @@ export default function AgentProjectsPage() {
   // The initiatives a repository can be attached to. An enterprise has both:
   // people who own the work and code that delivers it.
   const { data: orgProjects } = useFetch<OrgProject[]>('/api/graph/projects', 120_000);
+  // Open change requests, so a codebase shows what governance is holding — the
+  // SDLC loop is only legible if it is visible from where the runs start.
+  const { data: changesData } = useFetch<{ changes: Array<{ projectId: string; status: string }> }>(
+    '/api/sdlc/changes?open=true', 15_000);
 
   const [boxes, setBoxes] = useState<DevboxBox[]>([]);
   useEffect(() => { try { setBoxes(loadBoxes()); } catch { setBoxes([]); } }, [data]);
@@ -81,7 +87,7 @@ export default function AgentProjectsPage() {
   // The run box: one prompt, one project, fired into a workspace.
   const [runFor, setRunFor] = useState<Project | null>(null);
   const [prompt, setPrompt] = useState('');
-  const [model, setModel] = useState('claude-haiku-4-5');
+  const [model, setModel] = useState(DEFAULT_DEVBOX_MODEL);
 
   const githubConnections = (connections?.sources ?? []).filter((c) => c.kind === 'github');
 
@@ -163,7 +169,25 @@ export default function AgentProjectsPage() {
       });
       if (!run.ok) throw new Error(`clone failed: HTTP ${run.status}`);
       // The command endpoint streams; draining it is what waits for completion.
-      await run.text();
+      // HTTP 200 only means the command *ran* — a git clone that failed (bad
+      // repo, auth, private without a credential) still returns 200 with the
+      // failure in the stream. Reporting that as "Cloned" sends the user on to a
+      // run against an empty checkout, so inspect the output and the exit event.
+      const out = await run.text();
+      // The command's exit code is authoritative — the stream ends with an
+      // {type:'exit', exitCode} event. Trust it over scanning for "fatal:":
+      // a *successful* clone's verification step can still print a benign
+      // "fatal: detected dubious ownership" (the checkout is owned by another
+      // uid), and flagging on that text alone turns good clones into false
+      // failures. Only fall back to text markers if no exit event arrived.
+      const exitMatch = out.match(/"exitcode":\s*(\d+)/i);
+      const failed = exitMatch
+        ? exitMatch[1] !== '0'
+        : /fatal:|repository not found|authentication failed|could not read username|could not resolve host|permission denied/i.test(out);
+      if (failed) {
+        const m = out.match(/(fatal:[^"\\\n]*|repository not found|authentication failed|could not read username[^"\\\n]*|could not resolve host[^"\\\n]*|permission denied)/i);
+        throw new Error(m ? m[0].slice(0, 200) : 'the clone did not complete — check the repository name and credential');
+      }
 
       toastSuccess(tid, 'Cloned', `${p.repoFullName} is in ${box.label}.`);
       setBoxes(loadBoxes());
@@ -203,6 +227,10 @@ export default function AgentProjectsPage() {
   }, [runFor, prompt, model, boxes, refresh]);
 
   const projects = data?.projects ?? [];
+  const openChangesByProject = (changesData?.changes ?? []).reduce<Record<string, number>>((acc, c) => {
+    acc[c.projectId] = (acc[c.projectId] ?? 0) + 1;
+    return acc;
+  }, {});
 
   return (
     <PageSection
@@ -398,6 +426,14 @@ export default function AgentProjectsPage() {
                     </div>
                   ))
                 )}
+
+                {(openChangesByProject[p.id] ?? 0) > 0 && (
+                  <div className="px-3.5 py-2 border-t border-border bg-warning-bg/40">
+                    <Link to="/admin/changes" className="text-[11px] font-semibold text-warning no-underline hover:underline">
+                      {openChangesByProject[p.id]} change{openChangesByProject[p.id] === 1 ? '' : 's'} awaiting review →
+                    </Link>
+                  </div>
+                )}
               </Card>
             );
           })}
@@ -437,9 +473,9 @@ export default function AgentProjectsPage() {
                   onChange={(e) => setModel(e.target.value)}
                   className="px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary"
                 >
-                  <option value="claude-haiku-4-5">Haiku</option>
-                  <option value="claude-sonnet-5">Sonnet</option>
-                  <option value="claude-opus-5">Opus</option>
+                  {DEVBOX_MODELS.map((m) => (
+                    <option key={m.id} value={m.id} title={m.hint}>{m.label}</option>
+                  ))}
                 </select>
                 <span className="text-[11px] text-text-tertiary flex-1">⌘⏎ to run · esc to close</span>
                 <button

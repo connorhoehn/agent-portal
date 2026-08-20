@@ -51,6 +51,7 @@ import { dropRouter } from './routes/drop.js';
 import { agentDetailRouter } from './routes/agent-detail.js';
 import { connectionsRouter } from './routes/connections.js';
 import { agentProjectsRouter } from './routes/agent-projects.js';
+import { sdlcRouter } from './routes/sdlc.js';
 import { requireAction, requireTenant } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
 import { initCrawlTargets } from './lib/crawl-targets.js';
@@ -143,6 +144,9 @@ app.use('/api/connections', requireAction('ManageIngest'), connectionsRouter);
 // Repositories that agents work on. Distinct from /api/graph/projects, which
 // is the org graph's own notion of a project.
 app.use('/api/agent-projects', agentProjectsRouter);
+// AI SDLC governance — change requests, reviews, gates, policies. Gated as a
+// devbox-management action.
+app.use('/api/sdlc', requireAction('ManageDevbox'), sdlcRouter);
 // Approvals are mounted BEFORE the gated observability router so that the
 // agent-facing POST /approvals/request endpoint doesn't require ViewObservability
 // (the agent's identity is captured as `agentId` in the request body instead).

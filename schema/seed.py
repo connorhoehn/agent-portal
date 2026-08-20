@@ -436,22 +436,37 @@ def get_cluster_arns() -> tuple[str, str]:
 
 
 def apply(stmts: list[str]) -> None:
+    import time
     cluster_arn, secret_arn = get_cluster_arns()
     region = os.environ.get("AWS_REGION", "us-east-1")
     import boto3
     rds = boto3.client("rds-data", region_name=region)
     for i, stmt in enumerate(stmts):
-        try:
-            rds.execute_statement(
-                resourceArn=cluster_arn,
-                secretArn=secret_arn,
-                database="orgiq",
-                sql=stmt,
-            )
-        except Exception as e:
-            print(f"  ✗ stmt {i + 1}/{len(stmts)} failed: {stmt[:120]}", file=sys.stderr)
-            print(f"    {e}", file=sys.stderr)
-            raise
+        # A freshly-created Aurora cluster intermittently reports its Data API
+        # endpoint as not-yet-enabled for the first few minutes, even after it
+        # reports available. That is transient, so retry the statement rather
+        # than aborting the whole seed on one flake.
+        last_err = None
+        for attempt in range(8):
+            try:
+                rds.execute_statement(
+                    resourceArn=cluster_arn,
+                    secretArn=secret_arn,
+                    database="orgiq",
+                    sql=stmt,
+                )
+                last_err = None
+                break
+            except rds.exceptions.HttpEndpointNotEnabledException as e:
+                last_err = e
+                time.sleep(5)
+            except Exception as e:
+                print(f"  ✗ stmt {i + 1}/{len(stmts)} failed: {stmt[:120]}", file=sys.stderr)
+                print(f"    {e}", file=sys.stderr)
+                raise
+        if last_err is not None:
+            print(f"  ✗ stmt {i + 1}/{len(stmts)} still failing after retries: {stmt[:120]}", file=sys.stderr)
+            raise last_err
         if (i + 1) % 50 == 0:
             print(f"  applied {i + 1}/{len(stmts)} statements...")
     print(f"  applied {len(stmts)} statements.")
