@@ -32,6 +32,7 @@ const KnowledgeHomePage = lazy(() => import('./pages/knowledge/KnowledgeHomePage
 const DropPage = lazy(() => import('./pages/DropPage'));
 const KBRegistryPage = lazy(() => import('./pages/admin/KBRegistryPage.js'));
 const DevboxPage = lazy(() => import('./pages/admin/DevboxPage'));
+const AgentProjectsPage = lazy(() => import('./pages/admin/AgentProjectsPage'));
 const KBDetailPage = lazy(() => import('./pages/admin/KBDetailPage.js'));
 const InvokePage = lazy(() => import('./pages/InvokePage'));
 const CodeInterpreterDemoPage = lazy(() => import('./pages/CodeInterpreterDemoPage'));
@@ -219,6 +220,10 @@ export function App() {
           <Route path="knowledge-bases" element={<Navigate to="/admin/knowledge" replace />} />
           <Route path="knowledge-bases/:id" element={<Page element={<KBDetailPage />} />} />
           <Route path="knowledge-base" element={<Navigate to="/admin/knowledge" replace />} />
+          {/* Repositories agents work on — distinct from /iq/projects, which
+              is the org graph's initiatives. A repo may deliver one of those;
+              the two are joined, not merged. */}
+          <Route path="projects" element={<Page element={<AgentProjectsPage />} />} />
           <Route path="devbox" element={<Page element={<DevboxPage />} />} />
 
           <Route path="ingest" element={
