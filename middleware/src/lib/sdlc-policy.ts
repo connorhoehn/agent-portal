@@ -207,10 +207,11 @@ export function evaluate(policies: SdlcPolicy[], facts: ChangeFacts): Evaluation
 
   // A review that requested changes is a distinct decision from a hard block,
   // so it is detected before collapsing everything else to blocked/approval.
-  const reviewChangesRequested = gates.some(
-    (g) => g.kind === 'require_review' && g.outcome === 'block'
-      && g.detail.includes('requested changes'),
-  );
+  // Keyed off the actual verdict, not the gate's wording: matching on detail
+  // text would make the aggregate silently wrong the moment that sentence is
+  // reworded. It still requires the review gate to be enabled and firing.
+  const reviewChangesRequested = facts.reviewVerdict === 'request_changes'
+    && gates.some((g) => g.kind === 'require_review' && g.outcome === 'block');
 
   const anyBlock = gates.some((g) => g.outcome === 'block');
   const anyApproval = gates.some((g) => g.outcome === 'requires_approval');
