@@ -47,6 +47,7 @@ import { gatewayProxyRouter } from './routes/gateway-proxy.js';
 import { devboxRouter } from './routes/devbox.js';
 import { dropRouter } from './routes/drop.js';
 import { agentDetailRouter } from './routes/agent-detail.js';
+import { connectionsRouter } from './routes/connections.js';
 import { requireAction } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
 import { initCrawlTargets } from './lib/crawl-targets.js';
@@ -113,6 +114,9 @@ app.use('/api/drop', dropRouter);
 app.use('/api/newsroom/beats', newsroomBeatsRouter);
 app.use('/api/newsroom', newsroomArticlesRouter);
 app.use('/api/ingest', requireAction('ManageIngest'), ingestRouter);
+// Connected sources — credentials for Confluence/Jira/GitHub. Gated as an
+// ingestion decision, because that is what connecting a source is.
+app.use('/api/connections', requireAction('ManageIngest'), connectionsRouter);
 // Approvals are mounted BEFORE the gated observability router so that the
 // agent-facing POST /approvals/request endpoint doesn't require ViewObservability
 // (the agent's identity is captured as `agentId` in the request body instead).

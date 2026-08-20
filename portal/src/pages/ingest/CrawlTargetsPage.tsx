@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Card, ConfirmDialog, PageSection } from '@connorhoehnslalom/ui-components/shared';
 import { SiteSurveyPanel } from '../../components/ingest/SiteSurveyPanel';
+import { ConnectedSources } from '../../components/ingest/ConnectedSources';
 import { useFetch } from '../../hooks/useFetch';
 import type { CrawlSession, CrawlTarget } from '../../components/ingest/types';
 import { TargetsTable } from '../../components/ingest/TargetsTable';
@@ -137,6 +138,8 @@ function CrawlTargetsPage() {
           {actionMessage.text}
         </div>
       )}
+
+      <ConnectedSources />
 
       <SiteSurveyPanel onTargetCreated={refreshTargets} />
 
