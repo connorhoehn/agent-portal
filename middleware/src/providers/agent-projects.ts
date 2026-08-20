@@ -206,12 +206,17 @@ export async function buildCloneCommand(project: AgentProject): Promise<{ comman
   // would mask its failure and report a broken checkout as a clean one.
   const tail = ' 2>&1 | tail -20';
 
+  // `-c safe.directory=*` on the verification log: the checkout is owned by a
+  // different uid than the shell, and without it `git log` prints a scary
+  // "fatal: detected dubious ownership" — harmless (the clone already
+  // succeeded) but it looks like a failure in the streamed output.
+  const verify = `git -c safe.directory='*' -C ${target} log --oneline -1`;
+
   if (!project.connectionName) {
     const command = [
       `rm -rf ${target}`,
       `git clone --depth 50 ${url} ${target}`,
-      `cd ${target}`,
-      `git log --oneline -1`,
+      verify,
     ].join(' && ') + tail;
     return { command, redacted };
   }
@@ -221,9 +226,8 @@ export async function buildCloneCommand(project: AgentProject): Promise<{ comman
   const command = [
     `rm -rf ${target}`,
     `git clone --depth 50 ${authed} ${target}`,
-    `cd ${target}`,
-    `git remote set-url origin ${url}`,
-    `git log --oneline -1`,
+    `git -c safe.directory='*' -C ${target} remote set-url origin ${url}`,
+    verify,
   ].join(' && ') + tail;
   return { command, redacted };
 }

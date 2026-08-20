@@ -174,8 +174,16 @@ export default function AgentProjectsPage() {
       // failure in the stream. Reporting that as "Cloned" sends the user on to a
       // run against an empty checkout, so inspect the output and the exit event.
       const out = await run.text();
-      const failed = /"exitcode":\s*(?!0\b)\d+/i.test(out)
-        || /fatal:|repository not found|authentication failed|could not read username|could not resolve host|permission denied|remote: (repository not found|invalid)/i.test(out);
+      // The command's exit code is authoritative — the stream ends with an
+      // {type:'exit', exitCode} event. Trust it over scanning for "fatal:":
+      // a *successful* clone's verification step can still print a benign
+      // "fatal: detected dubious ownership" (the checkout is owned by another
+      // uid), and flagging on that text alone turns good clones into false
+      // failures. Only fall back to text markers if no exit event arrived.
+      const exitMatch = out.match(/"exitcode":\s*(\d+)/i);
+      const failed = exitMatch
+        ? exitMatch[1] !== '0'
+        : /fatal:|repository not found|authentication failed|could not read username|could not resolve host|permission denied/i.test(out);
       if (failed) {
         const m = out.match(/(fatal:[^"\\\n]*|repository not found|authentication failed|could not read username[^"\\\n]*|could not resolve host[^"\\\n]*|permission denied)/i);
         throw new Error(m ? m[0].slice(0, 200) : 'the clone did not complete — check the repository name and credential');
