@@ -16,6 +16,7 @@
 
 import { runDevboxShell } from './project-runner.js';
 import { openPullRequest } from './github-connector.js';
+import { buildDeliveryScript } from './delivery-script.js';
 import type { BedrockAgentCoreClient } from '@aws-sdk/client-bedrock-agentcore';
 
 export interface DeliveryInput {
@@ -73,23 +74,17 @@ export async function deliverChange(input: DeliveryInput): Promise<DeliveryResul
   }
 
   // 2. Branch, commit, push. The token is placed in the remote URL only for the
-  //    push and stripped immediately, so it is not persisted in .git/config —
-  //    the same discipline the clone uses.
+  //    push and stripped afterwards (see buildDeliveryScript in delivery-script.ts,
+  //    where the strip's unconditional ordering is enforced and tested), so it is
+  //    not persisted in .git/config — the same discipline the clone uses.
   const commitMsg = `${input.title}\n\nProposed by an OrgIQ agent and reviewed before delivery.`;
   const b64Msg = Buffer.from(commitMsg, 'utf8').toString('base64');
-  const authedRemote = `https://x-access-token:$ORGIQ_GH_TOKEN@github.com/${input.repoFullName}.git`;
+  const script = buildDeliveryScript({ git, branch, b64CommitMsg: b64Msg, repoFullName: input.repoFullName });
 
-  const script = [
-    `${git} checkout -B ${branch}`,
-    `${git} add -A`,
-    `${git} commit -m "$(echo ${b64Msg} | base64 -d)" || true`,
-    `${git} remote set-url origin ${authedRemote}`,
-    `${git} push -u origin ${branch} --force-with-lease`,
-    `${git} remote set-url origin https://github.com/${input.repoFullName}.git`,
-  ].join(' && ');
-
-  // The token reaches the shell as an env var rather than being baked into the
-  // command string, so it does not sit in the command text the fleet log tees.
+  // The token is interpolated into the command as a leading env assignment, so
+  // it never enters the git argv (visible to `ps`) or .git/config beyond the
+  // window above. Unlike the agent-task path, runDevboxShell does not tee the
+  // command to the fleet log, so the command text is not persisted app-side.
   const token = await borrowTokenFor(input.connectionName);
   const withEnv = `ORGIQ_GH_TOKEN='${token}' sh -c '${script.replace(/'/g, `'\\''`)}'`;
 
