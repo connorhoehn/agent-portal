@@ -101,7 +101,15 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), agentStreamMiddle
     message: userMessage,
     sessionId: canonicalSessionId,
     history,
-    ...(req.session ? { userId: req.session.sub, auth: { sub: req.session.sub, role: req.session.role } } : {}),
+    ...(req.session ? {
+      userId: req.session.sub,
+      auth: {
+        sub: req.session.sub,
+        role: req.session.role,
+        tenant: req.session.tenant,
+        ...(req.session.act ? { actor: req.session.act.sub } : {}),
+      },
+    } : {}),
   };
 
   // AG-UI streaming path: pipe events directly from the agent runtime.

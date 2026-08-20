@@ -49,7 +49,7 @@ import { dropRouter } from './routes/drop.js';
 import { agentDetailRouter } from './routes/agent-detail.js';
 import { connectionsRouter } from './routes/connections.js';
 import { agentProjectsRouter } from './routes/agent-projects.js';
-import { requireAction } from './lib/authz.js';
+import { requireAction, requireTenant } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
 import { initCrawlTargets } from './lib/crawl-targets.js';
 import { ensureSchema, seedPoliciesIfMissing } from './lib/policy-seeds.js';
@@ -95,13 +95,15 @@ app.use('/api/agent-detail', agentDetailRouter);
 app.use('/api/agents', agentsRouter);
 // Decisions + Projects mounted BEFORE graphRouter so their specific paths
 // resolve without going through the gated graph router.
-app.use('/api/graph/decisions', decisionsRouter);
-app.use('/api/graph/projects', projectsRouter);
+// Org-graph surfaces are orgiq-tenant data: sessions parked in another tenant
+// are rejected here (the cross-tenant admin role passes any tenant guard).
+app.use('/api/graph/decisions', requireTenant('orgiq'), decisionsRouter);
+app.use('/api/graph/projects', requireTenant('orgiq'), projectsRouter);
 // Work-items: mounted at /api/graph so its sub-paths (/work, /projects/:id/work,
 // /people/:id/work, /work-items) resolve before the gated graphRouter.
-app.use('/api/graph', workItemsRouter);
-app.use('/api/graph', graphRouter);
-app.use('/api/scores', scoresRouter);
+app.use('/api/graph', requireTenant('orgiq'), workItemsRouter);
+app.use('/api/graph', requireTenant('orgiq'), graphRouter);
+app.use('/api/scores', requireTenant('orgiq'), scoresRouter);
 app.use('/api/knowledge-base', knowledgeBaseRouter);
 // KB Registry admin — CRUD + async provisioning for multi-KB support.
 // ManageKB action required (hr-admin role). Mounted before the gated
@@ -112,8 +114,10 @@ app.use('/api/admin/kb-registry', requireAction('ManageKB'), kbAdminRouter);
 // and every limit is enforced server-side per link.
 app.use('/api/drop', dropRouter);
 // Newsroom — beats mounted BEFORE articles so /beats doesn't get swallowed.
-app.use('/api/newsroom/beats', newsroomBeatsRouter);
-app.use('/api/newsroom', newsroomArticlesRouter);
+// Tenant-guarded: an orgiq session cannot read newsroom data (and vice versa
+// via the orgiq guards above). This is the no-cross-pollination boundary.
+app.use('/api/newsroom/beats', requireTenant('newsroom'), newsroomBeatsRouter);
+app.use('/api/newsroom', requireTenant('newsroom'), newsroomArticlesRouter);
 app.use('/api/ingest', requireAction('ManageIngest'), ingestRouter);
 // Connected sources — credentials for Confluence/Jira/GitHub. Gated as an
 // ingestion decision, because that is what connecting a source is.

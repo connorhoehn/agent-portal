@@ -14,6 +14,9 @@ export interface AuthzEvent {
   action: string;
   sub: string;
   role: string;
+  tenant?: string;
+  /** Real identity when the event was produced under masquerade. */
+  actor?: string;
   reason?: string;
   path?: string;
   ts?: string;
@@ -46,6 +49,8 @@ export function eventFromSession(session: Session, action: string, decision: 'AL
     action,
     sub: session.sub,
     role: session.role,
+    tenant: session.tenant,
+    ...(session.act ? { actor: session.act.sub } : {}),
     ...extra,
   };
 }

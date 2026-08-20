@@ -108,7 +108,8 @@ export function Layout() {
   const platformItems = showPlatform
     ? PLATFORM_ITEMS.filter((item) => {
         if (!item.requireRoles) return true;
-        return session && item.requireRoles.includes(session.role ?? '');
+        // The cross-tenant admin role passes every role gate.
+        return session && (session.role === 'admin' || item.requireRoles.includes(session.role ?? ''));
       })
     : [];
 

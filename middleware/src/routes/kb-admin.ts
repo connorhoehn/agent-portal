@@ -180,7 +180,11 @@ kbAdminRouter.get('/health', asyncHandler(async (_req, res) => {
 // ─── GET / ────────────────────────────────────────────────────────────────────
 
 kbAdminRouter.get('/', asyncHandler(async (req, res) => {
-  const tenant = typeof req.query['tenant'] === 'string' ? req.query['tenant'] : undefined;
+  // Tenant scope comes from the session, never the client. The cross-tenant
+  // admin role may pass ?tenant= to inspect a specific tenant (or omit it for all).
+  const session = req.session;
+  const requested = typeof req.query['tenant'] === 'string' ? req.query['tenant'] : undefined;
+  const tenant = session?.role === 'admin' ? requested : session?.tenant;
   const kbs = await listKbs(tenant);
   res.json({ kbs });
 }));

@@ -21,7 +21,9 @@ import { asyncHandler } from '../lib/async-handler.js';
 import { clearAuthzCache, requireAction } from '../lib/authz.js';
 import { logAuthz } from '../lib/audit.js';
 import { config } from '../config.js';
-import { ROLES } from '../lib/session.js';
+import { roleRegistry } from '../lib/role-registry.js';
+import { listTenants, listUsers, getUser, createTenant, createUser, setGrants } from '../providers/identity.js';
+import type { Grants } from '../lib/session.js';
 
 export const identityRouter = Router();
 
@@ -31,32 +33,64 @@ const client = new VerifiedPermissionsClient({ region: config.region });
 
 identityRouter.use(requireAction('ViewIdentityAdmin'));
 
-const ROLE_DESCRIPTIONS: Record<string, { label: string; summary: string; capabilities: string[] }> = {
-  member: {
-    label: 'Member',
-    summary: 'Rank-and-file IC. Search the org, see basic profile pages.',
-    capabilities: ['Search', 'ViewOrgChart'],
-  },
-  'org-leader': {
-    label: 'Org Leader',
-    summary: 'VPs / Directors. Full org visibility, leaderboards, and system observability.',
-    capabilities: ['Search', 'ViewOrgChart', 'ViewLeaderboard', 'ViewObservability'],
-  },
-  'hr-admin': {
-    label: 'HR Admin',
-    summary: 'People Ops. Sees salary + performance, edits guardrails/policies, manages ingest.',
-    capabilities: [
-      'Search', 'ViewOrgChart', 'ViewLeaderboard',
-      'ViewSalary', 'ViewPerformance',
-      'EditGuardrail', 'EditPolicy', 'EditSchema', 'ViewIdentityAdmin',
-      'ViewObservability', 'ManageIngest',
-    ],
-  },
-};
-
-identityRouter.get('/roles', (_req, res) => {
-  res.json(ROLES.map(r => ({ id: r, ...ROLE_DESCRIPTIONS[r]! })));
+// Role definitions are derived from the enforced Cedar seed files — there is
+// deliberately no second hand-maintained capability list here.
+identityRouter.get('/roles', (req, res) => {
+  const tenant = req.query['tenant'] as string | undefined;
+  const roles = roleRegistry();
+  res.json(tenant ? roles.filter(r => r.tenant === null || r.tenant === tenant) : roles);
 });
+
+// ── Tenants + users (grants admin, gated ManageUsers) ─────────────────────────
+
+identityRouter.get('/tenants', asyncHandler(async (_req, res) => {
+  res.json(await listTenants());
+}));
+
+identityRouter.post('/tenants', requireAction('ManageUsers'), asyncHandler(async (req, res) => {
+  const { id, displayName } = req.body as { id?: string; displayName?: string };
+  if (!id || !/^[a-z][a-z0-9-]{1,30}$/.test(id)) {
+    res.status(400).json({ error: 'id must be lowercase kebab-case, 2-31 chars' });
+    return;
+  }
+  res.status(201).json(await createTenant(id, displayName || id));
+}));
+
+identityRouter.get('/users', asyncHandler(async (_req, res) => {
+  res.json(await listUsers());
+}));
+
+identityRouter.post('/users', requireAction('ManageUsers'), asyncHandler(async (req, res) => {
+  const { id, displayName, email, personId, grants } = req.body as {
+    id?: string; displayName?: string; email?: string; personId?: string; grants?: Grants;
+  };
+  if (!id || !displayName) {
+    res.status(400).json({ error: 'id and displayName are required' });
+    return;
+  }
+  await createUser({ id, displayName, ...(email && { email }), ...(personId && { personId }) });
+  if (grants) await setGrants(id, grants);
+  res.status(201).json(await getUser(id));
+}));
+
+identityRouter.put('/users/:id/grants', requireAction('ManageUsers'), asyncHandler(async (req, res) => {
+  const { grants } = req.body as { grants?: Grants };
+  if (!grants || typeof grants !== 'object') {
+    res.status(400).json({ error: 'grants object is required' });
+    return;
+  }
+  const known = new Map(roleRegistry().map(r => [`${r.tenant ?? '*'}/${r.id}`, r]));
+  for (const [tenant, roles] of Object.entries(grants)) {
+    for (const role of roles) {
+      if (!known.has(`${tenant}/${role}`) && !known.has(`*/${role}`)) {
+        res.status(400).json({ error: `unknown role '${role}' for tenant '${tenant}'` });
+        return;
+      }
+    }
+  }
+  await setGrants(req.params['id']!, grants);
+  res.json(await getUser(req.params['id']!));
+}));
 
 // ── Policy simulator: dry-run AVP IsAuthorized for arbitrary (role, action) ──
 //
@@ -65,11 +99,14 @@ identityRouter.get('/roles', (_req, res) => {
 
 identityRouter.post('/policies/test', asyncHandler(async (req, res) => {
   const policyStoreId = ensureStore(res); if (!policyStoreId) return;
-  const { role, action, resourceId } = req.body as { role?: string; action?: string; resourceId?: string };
+  const { role, action, tenant, resourceId } = req.body as {
+    role?: string; action?: string; tenant?: string; resourceId?: string;
+  };
   if (!role || !action) {
     res.status(400).json({ error: 'role and action are required' });
     return;
   }
+  const testTenant = tenant || 'orgiq';
   try {
     const out = await client.send(new IsAuthorizedCommand({
       policyStoreId,
@@ -79,7 +116,7 @@ identityRouter.post('/policies/test', asyncHandler(async (req, res) => {
       entities: {
         entityList: [{
           identifier: { entityType: 'OrgIQ::User', entityId: role },
-          attributes: { role: { string: role } },
+          attributes: { role: { string: role }, tenant: { string: testTenant } },
           parents: [],
         }],
       },

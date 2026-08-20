@@ -35,7 +35,7 @@ import {
 } from '../lib/approval-broker.js';
 import { isAllowed } from '../lib/authz.js';
 import { logAuthz } from '../lib/audit.js';
-import { DEFAULT_ROLE, DEFAULT_TENANT, type Role } from '../lib/session.js';
+import { demoSession } from '../lib/session.js';
 
 export const approvalsRouter = Router();
 
@@ -368,7 +368,7 @@ approvalsRouter.post('/:id/decision', asyncHandler(async (req, res) => {
 
   // Cedar PEP — pass `resource.amount` from the captured payload so threshold
   // policies on org-leader can fire correctly.
-  const session = req.session ?? { sub: 'anon', role: DEFAULT_ROLE, tenant: DEFAULT_TENANT, iat: 0 };
+  const session = req.session ?? demoSession();
   const amountRaw = existing.payload['amount'];
   const amount = typeof amountRaw === 'number'
     ? amountRaw
@@ -377,7 +377,7 @@ approvalsRouter.post('/:id/decision', asyncHandler(async (req, res) => {
 
   let allowed = false;
   try {
-    allowed = await isAllowed(session.role as Role, 'ApproveTransaction', resourceAttrs);
+    allowed = await isAllowed(session, 'ApproveTransaction', resourceAttrs);
   } catch (err) {
     logAuthz({
       decision: 'DENY',
