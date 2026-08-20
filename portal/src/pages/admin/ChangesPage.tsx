@@ -29,6 +29,7 @@ interface Review {
 interface Gate { policyName: string; kind: string; outcome: string; detail: string }
 interface Change {
   id: string; runId: string | null; projectId: string; repoFullName: string | null;
+  orgProjectName: string | null;
   title: string; status: string; diff: string | null; diffTruncated: boolean;
   files: string[]; filesChanged: number; model: string | null;
   branchName: string | null; prUrl: string | null;
@@ -202,6 +203,10 @@ function ChangeCard({ change: c, open, onToggle, busy, act }: {
       <div className="px-3.5 py-2.5">
         <div className="text-[11px] text-text-tertiary">
           {c.filesChanged} {c.filesChanged === 1 ? 'file' : 'files'} · {c.model ?? 'unknown model'} · {when(c.createdAt)}
+          {/* The initiative this code serves — the thread from org intent to a
+              delivered change, which is the whole reason codebases join the
+              org graph. */}
+          {c.orgProjectName && <span> · delivering <span className="text-text-secondary">{c.orgProjectName}</span></span>}
         </div>
 
         {/* Why a human is here — the gates that did not pass. */}
