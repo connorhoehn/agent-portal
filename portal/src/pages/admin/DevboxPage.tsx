@@ -504,6 +504,15 @@ export default function DevboxPage() {
           >
             i
           </span>
+          {activeBox?.stopsInMs != null && (
+            <span
+              className={`text-[10px] whitespace-nowrap select-none ${
+                activeBox.stopsInMs < 5 * 60_000 ? 'text-warning' : 'text-text-tertiary'}`}
+              title={'Boxes stop on their own: after a stretch with nothing happening, and at a hard ceiling regardless of activity.\nThe workspace is a cache — the repository and its run history survive.'}
+            >
+              stops in {Math.max(0, Math.round(activeBox.stopsInMs / 60_000))}m
+            </span>
+          )}
           <span className="text-[10px] text-text-tertiary whitespace-nowrap hidden lg:inline select-none">⌘I quick-switch</span>
           <button
             onClick={() => void stopSession()}

@@ -1,0 +1,161 @@
+// Running an agent against a codebase, and recording what it did to it.
+//
+// Starting a task was easy; knowing whether anything came of it was the gap.
+// A run row was written as `running` and left that way forever, because the
+// only thing watching the stream was a browser tab — so closing the tab, or
+// the run simply finishing, left a permanent "in progress" that meant nothing.
+//
+// The whole thing happens here instead: invoke the task, wait for it, then ask
+// the repository what changed. `git status --porcelain` is the honest answer —
+// not what the agent said it did, which is a claim, but what is actually
+// different on disk, which is a fact. Agents are wrong about their own work
+// often enough that the difference matters.
+
+import {
+  BedrockAgentCoreClient,
+  // Aliased for the same reason routes/devbox.ts aliases it: the wire name is
+  // one "Command" away from InvokeAgentRuntimeCommand, which invokes an agent
+  // rather than running a shell command.
+  InvokeAgentRuntimeCommandCommand as RunRuntimeCommand,
+} from '@aws-sdk/client-bedrock-agentcore';
+import { executeDevboxTask } from './devbox-runner.js';
+import { finishRun } from '../providers/agent-projects.js';
+
+/**
+ * Run a shell command in a devbox and collect its output as text.
+ *
+ * The command is base64'd into the script rather than interpolated, the same
+ * way the interactive console does it — a path or a message containing a quote
+ * would otherwise terminate the wrapper early and run something else.
+ */
+async function shell(
+  client: BedrockAgentCoreClient, arn: string, sessionId: string, command: string,
+): Promise<string> {
+  const b64 = Buffer.from(command, 'utf8').toString('base64');
+  const script = [
+    'export HOME=/mnt/workspace',
+    'export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0=/mnt/workspace',
+    `echo ${b64} | base64 -d > /tmp/.orgiq-probe`,
+    '. /tmp/.orgiq-probe < /dev/null',
+  ].join('; ');
+
+  const resp = await client.send(new RunRuntimeCommand({
+    agentRuntimeArn: arn,
+    runtimeSessionId: sessionId,
+    body: { command: `sh -c '${script}'`, timeout: 60 },
+  }));
+
+  let out = '';
+  for await (const event of resp.stream ?? []) {
+    const chunk = (event as { chunk?: Record<string, unknown> }).chunk;
+    const delta = chunk?.['contentDelta'] as { stdout?: string; stderr?: string } | undefined;
+    if (delta?.stdout) out += delta.stdout;
+    if (delta?.stderr) out += delta.stderr;
+  }
+  return out;
+}
+
+export interface DiffSummary {
+  filesChanged: number;
+  summary: string;
+}
+
+/**
+ * What actually changed in the checkout.
+ *
+ * Counts porcelain lines rather than parsing `--stat`, because porcelain is
+ * stable output meant for machines and covers untracked files — an agent that
+ * adds a new file has changed the repository just as much as one that edits.
+ */
+export async function readWorkingTree(
+  client: BedrockAgentCoreClient, arn: string, sessionId: string, checkout: string,
+): Promise<DiffSummary> {
+  // `safe.directory=*` because the checkout is owned by a different uid than
+  // the one running the probe, and git refuses with "detected dubious
+  // ownership" rather than reading it. Scoped to this invocation, not written
+  // into any config.
+  const git = `git -c safe.directory='*' -C ${checkout}`;
+  const status = await shell(client, arn, sessionId, `${git} status --porcelain | head -200`);
+
+  // Never discard git's stderr. The first version sent it to /dev/null, so the
+  // ownership refusal above arrived as empty output and was recorded as "no
+  // change to the working tree" — a confident, wrong answer about whether an
+  // agent had done anything, which is the worst thing this function can say.
+  if (/^fatal:|^error:/m.test(status)) {
+    const firstLine = status.split('\n').find((l) => /^(fatal|error):/.test(l)) ?? 'git failed';
+    return { filesChanged: 0, summary: `Could not read the working tree — ${firstLine}` };
+  }
+
+  const lines = status.split('\n').map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0) return { filesChanged: 0, summary: 'No change to the working tree.' };
+
+  const stat = await shell(client, arn, sessionId, `${git} diff --stat | tail -1`);
+
+  // Name the first few files: "12 files changed" tells you the size of the
+  // change and nothing about whether it was the right one.
+  const names = lines.slice(0, 5).map((l) => l.replace(/^\S+\s+/, '')).join(', ');
+  const tail = lines.length > 5 ? `, +${lines.length - 5} more` : '';
+  const statLine = stat.trim();
+  return {
+    filesChanged: lines.length,
+    summary: `${names}${tail}${statLine ? ` · ${statLine}` : ''}`,
+  };
+}
+
+export interface ProjectRunRequest {
+  runId: string;
+  sessionId: string;
+  checkout: string;
+  prompt: string;
+  model?: string | null;
+  runtimeArn: string;
+  client: BedrockAgentCoreClient;
+  onEvent?: (event: Record<string, unknown>) => void;
+}
+
+/**
+ * Execute a run to completion and record its outcome.
+ *
+ * Never throws. A run that fails has to be *recorded* as failed — leaving the
+ * row at `running` because the failure path threw would recreate exactly the
+ * problem this exists to fix.
+ */
+export async function executeProjectRun(req: ProjectRunRequest): Promise<void> {
+  try {
+    const outcome = await executeDevboxTask({
+      sessionId: req.sessionId,
+      // Scope the agent to the checkout, so "this repo" means the repo and not
+      // the whole workspace.
+      prompt: `Work in ${req.checkout}. ${req.prompt}`,
+      resume: false,
+      ...(req.model ? { model: req.model } : {}),
+      runtimeArn: req.runtimeArn,
+      client: req.client,
+      ...(req.onEvent ? { onEvent: req.onEvent } : {}),
+    });
+
+    // Measure the repository even when the agent reported failure — a run that
+    // errored partway through can still have left changes behind, and that is
+    // precisely when someone needs to know.
+    let diff: DiffSummary = { filesChanged: 0, summary: '' };
+    try {
+      diff = await readWorkingTree(req.client, req.runtimeArn, req.sessionId, req.checkout);
+    } catch (err) {
+      diff = { filesChanged: 0, summary: `Could not read the working tree: ${(err as Error).message}` };
+    }
+
+    await finishRun(req.runId, {
+      status: outcome.ok ? 'done' : 'failed',
+      filesChanged: diff.filesChanged,
+      diffSummary: diff.summary || null,
+      error: outcome.ok ? null : (outcome.error ?? 'the agent reported a failure'),
+    });
+  } catch (err) {
+    await finishRun(req.runId, {
+      status: 'failed',
+      filesChanged: null,
+      diffSummary: null,
+      error: (err as Error).message,
+    }).catch(() => { /* the run is lost either way; do not mask the original */ });
+  }
+}

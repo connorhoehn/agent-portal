@@ -15,6 +15,8 @@ export interface DevboxBox {
   createdAt: string;   // ISO
   status?: BoxStatus;
   lastActivityAt?: string;
+  /** Milliseconds until the reaper stops this box, from the server's policy. */
+  stopsInMs?: number;
   currentTask?: string;
   lastResult?: { subtype: string; turns: number; durationMs: number; costUsd: number };
 }

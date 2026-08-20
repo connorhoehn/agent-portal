@@ -50,8 +50,13 @@ import {
   appendEvent,
 } from '../lib/devbox-fleet.js';
 import { presignShellUrl, isValidShellId, MAX_FRAME_BYTES } from '../lib/devbox-shell.js';
+import { startReaper, timeLeft } from '../lib/devbox-reaper.js';
 
 export const devboxRouter = Router();
+
+// Idle and maximum-lifetime enforcement. A devbox bills while it exists, and
+// until now only a person remembering to press stop ended one.
+startReaper({ client: dataClient, runtimeArn: resolveDevboxArn });
 
 // ─── Clients (lazy; overridable for tests via _internal) ─────────────────────
 
@@ -313,7 +318,12 @@ devboxRouter.post('/sessions', asyncHandler(async (req, res) => {
 // derived from the task-event tee below, and any client can tail any box.
 
 devboxRouter.get('/boxes', asyncHandler(async (_req, res) => {
-  res.json({ boxes: listBoxes() });
+  // Each box carries how long it has left. A workspace that disappears is
+  // fine; a workspace that disappears without warning is not, and the client
+  // should not have to re-derive the policy to say so.
+  res.json({
+    boxes: listBoxes().map((b) => ({ ...b, ...timeLeft(b) })),
+  });
 }));
 
 devboxRouter.post('/boxes', asyncHandler(async (req, res) => {

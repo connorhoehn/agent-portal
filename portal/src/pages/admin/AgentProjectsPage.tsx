@@ -183,6 +183,9 @@ export default function AgentProjectsPage() {
       const box = boxes.find((b) => b.sessionId === p.sessionId);
       if (!box) throw new Error('This project has no workspace yet — clone it first.');
 
+      // The server owns the run from here: it invokes the task, waits for it,
+      // then measures the repository. Previously this tab drove the task, so
+      // closing it left the run recorded as `running` forever.
       const started = await fetch(`/api/agent-projects/${p.id}/runs`, {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -191,16 +194,7 @@ export default function AgentProjectsPage() {
       const rec = await started.json() as { run?: { id: string }; checkout?: string; error?: string };
       if (!started.ok || !rec.run) throw new Error(rec.error ?? `HTTP ${started.status}`);
 
-      // Scope the agent to the checkout, so a prompt about "this repo" means
-      // the repo and not the whole workspace.
-      const scoped = `Work in ${rec.checkout}. ${prompt.trim()}`;
-      void fetch(`/api/devbox/${encodeURIComponent(box.sessionId)}/task`, {
-        method: 'POST', credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: scoped, model, resume: false }),
-      });
-
-      toastSuccess(tid, 'Running', 'Opening the workspace so you can watch it.');
+      toastSuccess(tid, 'Running', 'It will finish on its own — you can close this.');
       openShell({ id: box.id, label: box.label, sessionId: box.sessionId });
       setRunFor(null); setPrompt('');
       refresh();
@@ -395,6 +389,11 @@ export default function AgentProjectsPage() {
                           {r.durationMs != null ? ` · ${dur(r.durationMs)}` : ''}
                           {r.filesChanged != null ? ` · ${r.filesChanged} files changed` : ''}
                         </div>
+                        {r.diffSummary && (
+                          <div className="text-[11px] text-text-secondary mt-0.5 truncate" title={r.diffSummary}>
+                            {r.diffSummary}
+                          </div>
+                        )}
                         {r.error && <div className="text-[11px] text-danger mt-0.5 truncate">{r.error}</div>}
                       </div>
                     </div>

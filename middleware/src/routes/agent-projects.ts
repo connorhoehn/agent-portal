@@ -11,6 +11,9 @@ import {
   listAgentProjects, getAgentProject, linkAgentProject, unlinkAgentProject,
   buildCloneCommand, markCloned, checkoutPath, startRun, finishRun, listRuns,
 } from '../providers/agent-projects.js';
+import { executeProjectRun } from '../lib/project-runner.js';
+import { resolveDevboxArn, devboxDataClient } from '../lib/devbox-arn.js';
+import { registerBox, getBoxBySession, appendEvent } from '../lib/devbox-fleet.js';
 
 export const agentProjectsRouter: Router = Router();
 
@@ -89,13 +92,44 @@ agentProjectsRouter.post('/:id/runs', asyncHandler(async (req, res) => {
   const prompt = body.prompt?.trim();
   if (!prompt) throw new ValidationError('prompt is required');
 
+  const sessionId = body.sessionId ?? project.sessionId;
+  if (!sessionId) {
+    throw new ValidationError('This project has no workspace — clone it before running anything against it');
+  }
+
   const run = await startRun({
-    projectId: project.id,
+    projectId: project.id, prompt, model: body.model ?? null, sessionId,
+  });
+  const checkout = checkoutPath(project);
+
+  // Answer now, finish in the background.
+  //
+  // The run used to be driven by whichever browser tab started it, so closing
+  // the tab left the row at `running` forever. Owning the lifecycle here means
+  // a run completes — and records what changed — whether or not anyone is
+  // watching.
+  const arn = await resolveDevboxArn();
+  if (!arn) {
+    await finishRun(run.id, { status: 'failed', error: 'the devbox runtime is not deployed' });
+    res.status(503).json({ error: 'devbox runtime not deployed' });
+    return;
+  }
+
+  const box = getBoxBySession(sessionId) ?? registerBox({ sessionId });
+  void executeProjectRun({
+    runId: run.id,
+    sessionId,
+    checkout,
     prompt,
     model: body.model ?? null,
-    sessionId: body.sessionId ?? project.sessionId ?? null,
+    runtimeArn: arn,
+    client: devboxDataClient(),
+    // Tee into the fleet log so the terminal dock and box tail show the run
+    // as it happens, exactly as a manually started task does.
+    onEvent: (ev) => appendEvent(box.id, ev),
   });
-  res.status(201).json({ run, checkout: checkoutPath(project) });
+
+  res.status(202).json({ run, checkout });
 }));
 
 agentProjectsRouter.post('/runs/:runId/finish', asyncHandler(async (req, res) => {
