@@ -142,6 +142,28 @@ describe('aggregate decision', () => {
     expect(e.decision).toBe('blocked');
   });
 
+  it('a policy block wins even when the reviewer only requested changes', () => {
+    // The sharp edge: `changes_requested` is human-approvable, `blocked` is not.
+    // If a policy hard-blocked the change AND the reviewer happened to request
+    // changes, ordering the review case first would relabel it changes_requested
+    // and let a human approve a change a policy forbade. The policy block must win.
+    const blocker = policy({
+      name: 'blocker', enabled: true, kind: 'protected_paths',
+      config: { globs: ['**/*.secret'] }, action: 'block',
+    });
+    const e = evaluate([review, blocker], facts({ files: ['config/app.secret'], reviewVerdict: 'request_changes' }));
+    expect(e.decision).toBe('blocked');
+    expect(e.autoApproved).toBe(false);
+  });
+
+  it('still surfaces changes_requested when the only block is the review itself', () => {
+    // No policy block here — the reviewer asking for changes is recoverable, and
+    // a human may still address or override it. Guards against over-correcting
+    // the fix above into blocking every requested-changes review.
+    const e = evaluate([review, paths], facts({ files: ['README.md'], reviewVerdict: 'request_changes' }));
+    expect(e.decision).toBe('changes_requested');
+  });
+
   it('is never auto-approved before a review when review is required', () => {
     // The most important case: a change must not sail through just because it
     // was evaluated before the reviewer ran.

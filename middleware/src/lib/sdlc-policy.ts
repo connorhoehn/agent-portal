@@ -206,6 +206,14 @@ export function evaluate(policies: SdlcPolicy[], facts: ChangeFacts): Evaluation
     .map((p) => evaluatePolicy(p, facts))
     .filter((g): g is GateResult => g !== null);
 
+  // A hard block from a *policy* (protected_paths, model_allowlist, max_files
+  // with action:block) is terminal and must win over everything — including a
+  // reviewer that happens to also ask for changes. Without this, a change a
+  // policy forbade could be relabelled `changes_requested`, which a human is
+  // allowed to approve: the policy block would be silently downgraded to a
+  // recoverable, shippable state. A policy block is never recoverable.
+  const policyBlock = gates.some((g) => g.outcome === 'block' && g.kind !== 'require_review');
+
   // A review that requested changes is a distinct decision from a hard block,
   // so it is detected before collapsing everything else to blocked/approval.
   // Keyed off the actual verdict, not the gate's wording: matching on detail
@@ -218,7 +226,8 @@ export function evaluate(policies: SdlcPolicy[], facts: ChangeFacts): Evaluation
   const anyApproval = gates.some((g) => g.outcome === 'requires_approval');
 
   let decision: ChangeDecision;
-  if (reviewChangesRequested) decision = 'changes_requested';
+  if (policyBlock) decision = 'blocked';
+  else if (reviewChangesRequested) decision = 'changes_requested';
   else if (anyBlock) decision = 'blocked';
   else if (anyApproval) decision = 'needs_approval';
   else decision = 'approved';
