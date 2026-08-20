@@ -17,6 +17,7 @@ import {
   PutSchemaCommand,
 } from '@aws-sdk/client-verifiedpermissions';
 import { config } from '../config.js';
+import { splitStatements } from './cedar-parse.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -83,33 +84,6 @@ export async function seedPoliciesIfMissing(): Promise<void> {
     const desc = p.definition?.static?.description ?? '';
     const id = p.policyId ?? '';
     if (desc && id) existingById.set(desc, id);
-  }
-
-  // Split a Cedar file into individual policy statements. AVP's CreatePolicy
-  // only accepts one statement (permit/forbid) per call.
-  function splitStatements(cedar: string): string[] {
-    const noComments = cedar.replace(/\/\/[^\n]*/g, '');
-    const statements: string[] = [];
-    let remaining = noComments;
-    while (remaining.length > 0) {
-      const m = remaining.match(/\b(permit|forbid)\s*\(/);
-      if (!m || m.index === undefined) break;
-      remaining = remaining.slice(m.index);
-      let depth = 0;
-      let i = 0;
-      for (; i < remaining.length; i++) {
-        if (remaining[i] === '(') depth++;
-        else if (remaining[i] === ')') { depth--; if (depth === 0) break; }
-      }
-      const withWhen = remaining.slice(0, i + 1);
-      const afterParen = remaining.slice(i + 1);
-      const whenMatch = afterParen.match(/^\s*when\s*\{[^}]*\}\s*;?/);
-      const stmt = whenMatch ? withWhen + whenMatch[0] : withWhen;
-      const trimmed = stmt.trim().replace(/;?\s*$/, ';');
-      if (trimmed) statements.push(trimmed);
-      remaining = afterParen.slice(whenMatch ? whenMatch[0].length : 0);
-    }
-    return statements.filter(s => s.length > 0);
   }
 
   function normalizeStmt(s: string): string {

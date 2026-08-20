@@ -167,9 +167,11 @@ export async function verifySession(cookieValue: string): Promise<Session | null
     const tenant: Tenant = TENANTS.includes(raw['tenant'] as Tenant)
       ? (raw['tenant'] as Tenant)
       : DEFAULT_TENANT;
+    // Legacy (pre-tenancy) cookies carry no grants: treat them like the
+    // cookie-less demo identity — permissive in dev, zero grants in prod.
     const grants: Grants = (raw['grants'] && typeof raw['grants'] === 'object')
       ? raw['grants'] as Grants
-      : permissiveGrants();
+      : (demoModeEnabled() ? permissiveGrants() : {});
     const session: Session = {
       sub: raw['sub'] as string,
       role,
@@ -212,28 +214,79 @@ declare module 'express-serve-static-core' {
   }
 }
 
+/** True when cookie-less requests should get the fully-permissive demo
+ * identity. Always on outside production; in production it must be opted into
+ * explicitly (AUTH_DEMO_MODE=true), otherwise anonymous callers hold zero
+ * grants and can neither switch tenants/roles nor pass any Cedar check. */
+export function demoModeEnabled(): boolean {
+  return process.env['NODE_ENV'] !== 'production' || process.env['AUTH_DEMO_MODE'] === 'true';
+}
+
 export function demoSession(): Session {
   return {
     sub: 'demo-user',
     name: 'Demo User',
     role: DEFAULT_ROLE,
     tenant: DEFAULT_TENANT,
-    grants: permissiveGrants(),
+    grants: demoModeEnabled() ? permissiveGrants() : {},
     iat: Math.floor(Date.now() / 1000),
   };
 }
 
+/** How long a session may use its cookie-cached grants before they are
+ * re-resolved from the identity store, so grant revocations reach live
+ * sessions without waiting out the 7-day cookie. */
+const GRANTS_REFRESH_S = parseInt(process.env['GRANTS_REFRESH_S'] ?? '120', 10);
+
+/** Injected by index.ts at boot to avoid a static import cycle
+ * (providers/identity imports types from this module). */
+type GrantsResolver = (userId: string) => Promise<{ displayName: string; grants: Grants } | null>;
+let grantsResolver: GrantsResolver | null = null;
+export function setGrantsResolver(fn: GrantsResolver): void {
+  grantsResolver = fn;
+}
+
 /**
  * Resolve the caller's session from the cookie and attach to req.session.
- * Falls back to a demo-user identity (permissive grants) if no cookie is
- * present so the app stays usable without an explicit login step.
+ * Falls back to the demo-user identity if no cookie is present (permissive in
+ * dev, zero grants in production) so the app stays usable without a login
+ * step. Real users' grants are re-resolved from the identity store every
+ * GRANTS_REFRESH_S so revocations propagate to live sessions.
  */
 export function sessionMiddleware() {
-  return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const raw = (req as Request & { cookies?: Record<string, string> }).cookies?.[COOKIE_NAME];
     if (raw) {
       const verified = await verifySession(raw);
       if (verified) {
+        const age = Math.floor(Date.now() / 1000) - verified.iat;
+        const isRealUser = verified.sub !== 'demo-user' && !verified.act;
+        if (isRealUser && grantsResolver && age > GRANTS_REFRESH_S) {
+          try {
+            const fresh = await grantsResolver(verified.sub);
+            if (!fresh) {
+              // User no longer exists — drop to the anonymous identity.
+              clearSessionCookie(res);
+              req.session = demoSession();
+              next();
+              return;
+            }
+            const reminted = mintSession(
+              { id: verified.sub, displayName: fresh.displayName },
+              fresh.grants,
+              { tenant: verified.tenant, role: verified.role },
+            );
+            if (reminted) {
+              setSessionCookie(res, await signSession(reminted));
+              req.session = reminted;
+              next();
+              return;
+            }
+          } catch {
+            // Identity store unreachable — keep the cookie's grants rather
+            // than logging the user out on a transient failure.
+          }
+        }
         req.session = verified;
         next();
         return;

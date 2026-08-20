@@ -4,7 +4,8 @@ import cookieParser from 'cookie-parser';
 import { WebSocketServer } from 'ws';
 import { config } from './config.js';
 import { errorHandler } from './lib/async-handler.js';
-import { sessionMiddleware } from './lib/session.js';
+import { sessionMiddleware, setGrantsResolver } from './lib/session.js';
+import { getUser as getIdentityUser } from './providers/identity.js';
 import { agentsRouter } from './routes/agents.js';
 import { graphRouter } from './routes/graph.js';
 import { scoresRouter } from './routes/scores.js';
@@ -62,6 +63,10 @@ const app = express();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
+setGrantsResolver(async (id) => {
+  const u = await getIdentityUser(id);
+  return u ? { displayName: u.displayName, grants: u.grants } : null;
+});
 app.use(sessionMiddleware());
 
 function healthHandler(_req: express.Request, res: express.Response): void {

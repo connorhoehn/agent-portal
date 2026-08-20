@@ -23,9 +23,15 @@ import {
 } from '../lib/session.js';
 import { isAllowed } from '../lib/authz.js';
 import { eventFromSession, logAuthz } from '../lib/audit.js';
+import { rateLimit } from '../lib/rate-limit.js';
 import { listUsers, getUser } from '../providers/identity.js';
 
 export const sessionRouter = Router();
+
+// Identity switching is the credential surface of this app — brake it.
+// Reads (/me, /users) stay unthrottled; the portal polls them.
+const loginLimit = rateLimit('session-login', 15, 60_000);
+const switchLimit = rateLimit('session-switch', 30, 60_000);
 
 function publicView(session: Session) {
   return {
@@ -61,7 +67,7 @@ sessionRouter.get('/users', asyncHandler(async (_req, res) => {
   })));
 }));
 
-sessionRouter.post('/login', asyncHandler(async (req, res) => {
+sessionRouter.post('/login', loginLimit, asyncHandler(async (req, res) => {
   const { userId } = req.body as { userId?: string };
   if (!userId) { res.status(400).json({ error: 'userId is required' }); return; }
   const user = await getUser(userId);
@@ -72,7 +78,7 @@ sessionRouter.post('/login', asyncHandler(async (req, res) => {
   await issue(res, session);
 }));
 
-sessionRouter.post('/role', asyncHandler(async (req, res) => {
+sessionRouter.post('/role', switchLimit, asyncHandler(async (req, res) => {
   const { role } = req.body as { role?: string };
   const session = req.session ?? demoSession();
   if (!role) { res.status(400).json({ error: 'role is required' }); return; }
@@ -89,7 +95,7 @@ sessionRouter.post('/role', asyncHandler(async (req, res) => {
   await issue(res, { ...session, role: role as Role, iat: Math.floor(Date.now() / 1000) });
 }));
 
-sessionRouter.post('/tenant', asyncHandler(async (req, res) => {
+sessionRouter.post('/tenant', switchLimit, asyncHandler(async (req, res) => {
   const { tenant } = req.body as { tenant?: string };
   const session = req.session ?? demoSession();
   if (!tenant || !TENANTS.includes(tenant as Tenant)) {
@@ -118,7 +124,7 @@ sessionRouter.post('/tenant', asyncHandler(async (req, res) => {
 // Masquerade: adopt another user's identity + grants, keeping the real
 // identity in session.act for audit and restore. Gated by the Cedar
 // Masquerade action (granted to the admin role only in the seeds).
-sessionRouter.post('/masquerade', asyncHandler(async (req, res) => {
+sessionRouter.post('/masquerade', loginLimit, asyncHandler(async (req, res) => {
   const { userId } = req.body as { userId?: string };
   const session = req.session ?? demoSession();
   if (!userId) { res.status(400).json({ error: 'userId is required' }); return; }
