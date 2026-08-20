@@ -107,13 +107,23 @@ app.use('/api/graph/projects', requireTenant('orgiq'), projectsRouter);
 // Work-items: mounted at /api/graph so its sub-paths (/work, /projects/:id/work,
 // /people/:id/work, /work-items) resolve before the gated graphRouter.
 app.use('/api/graph', requireTenant('orgiq'), workItemsRouter);
-app.use('/api/graph', requireTenant('orgiq'), graphRouter);
-app.use('/api/scores', requireTenant('orgiq'), scoresRouter);
-app.use('/api/knowledge-base', knowledgeBaseRouter);
+// The org roster + relationship graph is the org-chart surface: tenant-scoped
+// AND gated on ViewOrgChart (every orgiq role holds it; a grantless anonymous
+// production session does not — closing the roster leak).
+app.use('/api/graph', requireTenant('orgiq'), requireAction('ViewOrgChart'), graphRouter);
+// Ranked people-intelligence (leaderboard, cohorts, radar, contributions) is
+// leadership data: ViewLeaderboard, held only by org-leader / hr-admin / admin.
+// Tenant guard alone previously let any orgiq member — and any anonymous
+// caller — read it.
+app.use('/api/scores', requireTenant('orgiq'), requireAction('ViewLeaderboard'), scoresRouter);
+// The knowledge base belongs to the orgiq tenant; scope it so a newsroom
+// session (even one holding ManageKB) cannot read or mutate it.
+app.use('/api/knowledge-base', requireTenant('orgiq'), knowledgeBaseRouter);
 // KB Registry admin — CRUD + async provisioning for multi-KB support.
-// ManageKB action required (hr-admin role). Mounted before the gated
-// observability router so the portal wizard can reach it.
-app.use('/api/admin/kb-registry', requireAction('ManageKB'), kbAdminRouter);
+// ManageKB action required (hr-admin role), AND tenant-scoped to orgiq: the
+// newsroom editor holds ManageKB but must not reach orgiq's KB registry
+// (its DELETE/provision routes are destructive). Admin bypasses the tenant guard.
+app.use('/api/admin/kb-registry', requireTenant('orgiq'), requireAction('ManageKB'), kbAdminRouter);
 // Public document drop — deliberately ungated. The token in the URL is the
 // whole authority, which is why the router exposes no bucket, prefix or id
 // and every limit is enforced server-side per link.
@@ -141,10 +151,15 @@ app.use('/api/observability/harness', harnessRouter);
 // Prompt-versions registry — populated at run start by the harness runner.
 // Mounted ungated (no session) like approvals/harness.
 app.use('/api/observability/prompt-versions', promptVersionsRouter);
-// Every observability aggregate below carries the ViewObservability gate.
-// (In dev the cookie-less demo session holds every grant, so these render
-// without login; in production a reporter or anonymous session is denied.)
-const viewObs = requireAction('ViewObservability');
+// Every observability aggregate below carries the ViewObservability gate AND a
+// tenant scope. Platform telemetry (traces, cost, topology, per-user traffic)
+// is not partitioned by tenant, so it belongs to the orgiq home tenant's
+// privileged roles plus admin — a newsroom editor holding ViewObservability
+// must not read orgiq agent telemetry. Admin bypasses the tenant guard.
+// (In dev the cookie-less demo session is orgiq and holds every grant, so
+// these render without login; in production a newsroom or anonymous session
+// is denied.)
+const viewObs = [requireTenant('orgiq'), requireAction('ViewObservability')];
 // Cost aggregation routes — read-only aggregates over invocation_traces cost
 // columns.
 app.use('/api/observability/cost', viewObs, costRouter);
@@ -183,7 +198,7 @@ app.use('/api/iq/prompts', viewObs, promptHistoryRouter);
 // and read by fireJudge() on every canary invocation, so the /iq/evaluations
 // page actually governs judging (enable, model, rubric weights, sampling).
 app.use('/api/observability/evaluations', viewObs, evaluationsRouter);
-app.use('/api/observability', requireAction('ViewObservability'), observabilityRouter);
+app.use('/api/observability', viewObs, observabilityRouter);
 app.use('/api/capabilities', capabilitiesRouter);
 app.use('/api/sessions', sessionsRouter);
 // Devbox — Claude Code in an AgentCore Runtime microVM. Operator surface for

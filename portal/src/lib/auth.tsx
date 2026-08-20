@@ -39,14 +39,20 @@ interface SessionContextValue {
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
-const FALLBACK_SESSION: Session = {
-  sub: 'demo-user',
-  name: 'Demo User',
+// Fail closed. When /api/session/me is unreachable we do NOT know who the user
+// is, so we grant nothing: an empty grants map, no switchable roles/tenants.
+// Every RequireRole gate then falls back and every gated nav item hides,
+// instead of a middleware blip silently painting the full admin surface.
+// (In normal operation the server owns the demo identity: in dev, /me returns
+// a permissive demo session, so this constant is only ever seen on error.)
+const UNAVAILABLE_SESSION: Session = {
+  sub: 'unknown',
+  name: 'Session unavailable',
   role: 'member',
   tenant: 'orgiq',
-  grants: { orgiq: ['member', 'org-leader', 'hr-admin', 'admin'], newsroom: ['reporter', 'editor', 'admin'] },
-  availableRoles: ['member', 'org-leader', 'hr-admin', 'admin'],
-  availableTenants: ['orgiq', 'newsroom'],
+  grants: {},
+  availableRoles: [],
+  availableTenants: ['orgiq'],
   masquerading: null,
 };
 
@@ -73,18 +79,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const res = await fetch('/api/session/me', { credentials: 'include' });
       if (!res.ok) throw new Error(`${res.status}`);
       const raw = (await res.json()) as Partial<Session>;
-      // Backward-compatible with pre-tenancy /me responses.
+      // Take grants and switch lists only from the server — never inherit them
+      // from a client-side default, so a malformed /me can't fabricate access.
       setSession({
-        ...FALLBACK_SESSION,
-        ...raw,
+        sub: raw.sub ?? 'unknown',
+        name: raw.name ?? raw.sub ?? 'unknown',
+        role: (raw.role as SessionRole) ?? 'member',
         tenant: (raw.tenant as Tenant) ?? 'orgiq',
-        name: raw.name ?? raw.sub ?? 'demo-user',
+        grants: raw.grants ?? {},
+        availableRoles: raw.availableRoles ?? [],
+        availableTenants: raw.availableTenants ?? ['orgiq'],
         masquerading: raw.masquerading ?? null,
       });
     } catch {
-      // If session lookup fails (middleware down, etc.) treat as the default
-      // member identity so the UI degrades gracefully instead of going blank.
-      setSession(FALLBACK_SESSION);
+      // Session lookup failed (middleware down, etc.). Fail closed: an identity
+      // with no grants, so the UI hides gated surfaces instead of going blank
+      // OR silently showing admin.
+      setSession(UNAVAILABLE_SESSION);
     } finally {
       setIsLoading(false);
     }
