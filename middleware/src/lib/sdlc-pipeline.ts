@@ -138,6 +138,20 @@ export async function captureAndGate(input: CaptureInput): Promise<string | null
   });
   console.warn(`[sdlc] captured change ${change.id} (${captured.files.length} file(s)) for project ${input.projectId}`);
 
+  // Stage the captured files so a *later* run's edits to them are visible to
+  // the working-tree delta. The delta is computed from `git status` codes, and
+  // an untracked file's code (`??`) does not change when its content does — so
+  // an address run that only modifies a file a prior run left uncommitted would
+  // register as "no change" and never reach governance (the self-correction
+  // loop silently stalls). A staged file's code *does* change on edit
+  // (`A ` -> `AM`), which is enough for the next run to be detected. Staging,
+  // not committing: delivery still ships the working tree and its "changes still
+  // here?" check still passes. Best-effort — a failure here only costs that
+  // next-run detection, not this change.
+  const git = `git -c safe.directory='*' -C ${input.checkout}`;
+  await runDevboxShell(input.client, input.runtimeArn, input.sessionId, `${git} add -A`)
+    .catch((err) => console.warn(`[sdlc] could not stage captured files: ${(err as Error).message}`));
+
   try {
     await markInReview(change.id);
     const review = await reviewDiff({
