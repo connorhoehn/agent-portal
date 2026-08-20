@@ -331,7 +331,7 @@ function useVersionDetail(promptId: string | null, version: string | null): { te
 type Tab = 'versions' | 'experiments';
 
 export default function PromptHistoryPage(): React.ReactElement {
-  const { prompts } = usePromptList();
+  const { prompts, error: promptsError } = usePromptList();
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('versions');
   const [selectedVersions, setSelectedVersions] = useState<string[]>([]);
@@ -372,6 +372,24 @@ export default function PromptHistoryPage(): React.ReactElement {
   const selectedVersion = !compareMode && selectedVersions.length === 1 ? selectedVersions[0]! : null;
   const versionDetail = selectedVersion ? versions.find(v => v.version === selectedVersion) : null;
   const inDiffMode = compareMode && selectedVersions.length === 2;
+
+  // The prompt library gates the whole page; a denial must not render as an
+  // empty picker that looks like "no prompts exist".
+  if (promptsError) {
+    const denied = /403|forbidden/i.test(promptsError);
+    return (
+      <div style={{ padding: 40, maxWidth: 560 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>
+          {denied ? 'Prompt history access needed' : 'Could not load prompt history'}
+        </h2>
+        <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
+          {denied
+            ? 'Prompt history is limited to the org-leader and HR Admin roles. Switch role from the identity menu, top right.'
+            : <>The prompt library did not load. {promptsError}</>}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div style={pageStyle}>

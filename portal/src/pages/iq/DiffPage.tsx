@@ -185,7 +185,7 @@ function SideBySide({ textA, textB, labelA, labelB }: {
 type ViewMode = 'diff' | 'side-by-side';
 
 export default function DiffPage(): React.ReactElement {
-  const { prompts } = usePromptList();
+  const { prompts, error: promptsError } = usePromptList();
 
   const [promptIdA, setPromptIdA] = useState<string | null>(null);
   const [versionA, setVersionA] = useState<string | null>(null);
@@ -211,6 +211,24 @@ export default function DiffPage(): React.ReactElement {
 
   const canCompare = !!(promptIdA && versionA && promptIdB && versionB);
   const loading = loadingA || loadingB;
+
+  // The prompt library gates this page; surface a denial instead of two empty
+  // "Select prompt…" pickers that read as "nothing to compare".
+  if (promptsError) {
+    const denied = /403|forbidden/i.test(promptsError);
+    return (
+      <div style={{ padding: 40, maxWidth: 560 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>
+          {denied ? 'Prompt diff access needed' : 'Could not load prompts'}
+        </h2>
+        <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
+          {denied
+            ? 'Prompt comparison is limited to the org-leader and HR Admin roles. Switch role from the identity menu, top right.'
+            : <>The prompt library did not load. {promptsError}</>}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div style={pageStyle}>
