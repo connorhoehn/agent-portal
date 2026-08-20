@@ -50,7 +50,7 @@ import { agentDetailRouter } from './routes/agent-detail.js';
 import { connectionsRouter } from './routes/connections.js';
 import { agentProjectsRouter } from './routes/agent-projects.js';
 import { sdlcRouter } from './routes/sdlc.js';
-import { requireAction } from './lib/authz.js';
+import { requireAction, readForRolesElseAction } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
 import { initCrawlTargets } from './lib/crawl-targets.js';
 import { ensureSchema, seedPoliciesIfMissing } from './lib/policy-seeds.js';
@@ -105,9 +105,11 @@ app.use('/api/graph', graphRouter);
 app.use('/api/scores', scoresRouter);
 app.use('/api/knowledge-base', knowledgeBaseRouter);
 // KB Registry admin — CRUD + async provisioning for multi-KB support.
-// ManageKB action required (hr-admin role). Mounted before the gated
+// Reading the registry is operational visibility (org-leader + hr-admin, like
+// Health); creating/adopting/provisioning/syncing/deleting a KB is a mutation
+// that still requires ManageKB (hr-admin). Mounted before the gated
 // observability router so the portal wizard can reach it.
-app.use('/api/admin/kb-registry', requireAction('ManageKB'), kbAdminRouter);
+app.use('/api/admin/kb-registry', readForRolesElseAction(['org-leader', 'hr-admin'], 'ManageKB'), kbAdminRouter);
 // Public document drop — deliberately ungated. The token in the URL is the
 // whole authority, which is why the router exposes no bucket, prefix or id
 // and every limit is enforced server-side per link.
