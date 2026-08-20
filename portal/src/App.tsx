@@ -56,10 +56,8 @@ const IngestStoragePage = lazy(() => import('./pages/ingest/StoragePage'));
 const IngestSchedulesPage = lazy(() => import('./pages/ingest/SchedulesPage'));
 
 // Capabilities sub-pages
-const CapabilitiesLayout = lazy(() => import('./pages/capabilities/CapabilitiesLayout'));
-const CapabilitiesSummaryPage = lazy(() => import('./pages/capabilities/SummaryPage'));
+const CapabilitiesHomePage = lazy(() => import('./pages/capabilities/CapabilitiesHomePage'));
 const CapabilitiesGuardrailsPage = lazy(() => import('./pages/capabilities/GuardrailsPage'));
-const CapabilitiesPromptsPage = lazy(() => import('./pages/capabilities/PromptsPage'));
 const CapabilitiesCodeInterpreterPage = lazy(() => import('./pages/capabilities/CodeInterpreterPage'));
 const CapabilitiesBrowserPage = lazy(() => import('./pages/capabilities/BrowserPage'));
 const CapabilitiesMemoryPage = lazy(() => import('./pages/capabilities/MemoryPage'));
@@ -270,11 +268,19 @@ export function App() {
             </Route>
           </Route>
 
-          <Route path="capabilities" element={<Page element={<CapabilitiesLayout />} />}>
-            <Route index element={<Navigate to="summary" replace />} />
-            <Route path="summary" element={<Page element={<CapabilitiesSummaryPage />} />} />
+          {/* Capabilities is one page now, not a menu of AWS service names.
+              The overview says what each capability is for and what in this
+              app depends on it; the pages below are the diagnostics behind
+              that, reached from the cards rather than from a rail. */}
+          <Route path="capabilities">
+            <Route index element={<Page element={<CapabilitiesHomePage />} />} />
+            {/* The old landing tab duplicated the overview. */}
+            <Route path="summary" element={<Navigate to="/admin/capabilities" replace />} />
+            {/* This rendered the very same component as /iq/prompts — the
+                same 2,000-line page mounted at two routes under two lazy
+                names. One prompt library, one place to edit it. */}
+            <Route path="prompts" element={<Navigate to="/iq/prompts" replace />} />
             <Route path="guardrails" element={<Page element={<CapabilitiesGuardrailsPage />} />} />
-            <Route path="prompts" element={<Page element={<CapabilitiesPromptsPage />} />} />
             <Route path="code-interpreter" element={<Page element={<CapabilitiesCodeInterpreterPage />} />} />
             <Route path="browser" element={<Page element={<CapabilitiesBrowserPage />} />} />
             <Route path="memory" element={<Page element={<CapabilitiesMemoryPage />} />} />

@@ -23,6 +23,7 @@ import {
 } from '../lib/crawler.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 import { requireAction } from '../lib/authz.js';
+import { reconcileCapabilities } from '../providers/capability-reconcile.js';
 
 const _bedrockRt = new BedrockRuntimeClient({ region: config.region });
 const VISION_MODEL = 'amazon.nova-lite-v1:0';
@@ -397,3 +398,12 @@ capabilitiesRouter.get('/browser/crawl/:crawlId/stream', (req, res) => {
 
   req.on('close', () => { unsubscribe(); endSSE(res); });
 });
+
+// ── GET /reconcile — are the configured capability ids real? ────────────────
+//
+// The class of failure this catches cost a whole afternoon: after a stack
+// rebuild every id in .env.aws pointed at a resource that no longer existed,
+// and each one failed somewhere far from the cause.
+capabilitiesRouter.get('/reconcile', asyncHandler(async (_req, res) => {
+  res.json(await reconcileCapabilities());
+}));
