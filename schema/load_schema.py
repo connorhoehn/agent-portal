@@ -37,6 +37,10 @@ def main():
         'newsroom_schema.sql',
         'orgiq_kb_registry_schema.sql',
         'orgiq_work_items_schema.sql',
+        # The agentic loop: agent_jobs, agent_findings, graph_proposals. Was
+        # applied only by apply_agentic_work.py, so a rebuild left the Work
+        # page 500ing on missing tables.
+        'agentic_work_schema.sql',
         # Document uploads via share links (standalone).
         'kb_upload_links_schema.sql',
         # Codebases agents work on. References `projects` (orgiq_schema), so it
