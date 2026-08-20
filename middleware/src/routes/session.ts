@@ -137,7 +137,13 @@ sessionRouter.post('/masquerade', asyncHandler(async (req, res) => {
     { id: target.id, displayName: target.displayName },
     target.grants,
     { tenant: session.tenant },
-    { sub: session.sub, role: session.role, tenant: session.tenant, grants: session.grants },
+    {
+      sub: session.sub,
+      ...(session.name ? { name: session.name } : {}),
+      role: session.role,
+      tenant: session.tenant,
+      grants: session.grants,
+    },
   );
   if (!masqueraded) { res.status(403).json({ error: `${userId} holds no tenant grants` }); return; }
   await issue(res, masqueraded);
@@ -148,6 +154,7 @@ sessionRouter.post('/masquerade/stop', asyncHandler(async (req, res) => {
   if (!session?.act) { res.status(400).json({ error: 'not masquerading' }); return; }
   const restored: Session = {
     sub: session.act.sub,
+    ...(session.act.name ? { name: session.act.name } : {}),
     role: session.act.role,
     tenant: session.act.tenant,
     grants: session.act.grants,

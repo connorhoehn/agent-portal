@@ -46,6 +46,7 @@ export type Grants = Record<string, string[]>;
 /** The real identity behind a masqueraded session, so it can be restored and audited. */
 export interface Actor {
   sub: string;
+  name?: string;
   role: Role;
   tenant: Tenant;
   grants: Grants;
