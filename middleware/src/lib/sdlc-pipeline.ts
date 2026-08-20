@@ -16,10 +16,11 @@ import { runDevboxShell, executeProjectRun } from './project-runner.js';
 import { reviewDiff } from './change-reviewer.js';
 import {
   createChangeRequest, recordReview, evaluateChange, getChangeRequest,
-  markInReview, markDelivering, markDelivered, markFailed,
+  markInReview, markDelivering, markDelivered, markFailed, hasNewerChangeForProject,
 } from '../providers/sdlc.js';
 import { startRun, checkoutPath, type AgentProject } from '../providers/agent-projects.js';
 import { deliverChange } from './change-delivery.js';
+import { deliveryBlockReason } from './delivery-guard.js';
 import { resolveDevboxArn, devboxDataClient } from './devbox-arn.js';
 import { registerBox, getBoxBySession, appendEvent } from './devbox-fleet.js';
 import type { BedrockAgentCoreClient } from '@aws-sdk/client-bedrock-agentcore';
@@ -164,19 +165,24 @@ export async function deliverApprovedChange(input: {
   project: { sessionId: string | null; checkout: string; repoFullName: string; defaultBranch: string; connectionName: string | null };
 }): Promise<{ ok: boolean; prUrl?: string; error?: string }> {
   const change = await getChangeRequest(input.changeId);
-  if (!change) return { ok: false, error: 'change not found' };
-  if (change.status !== 'approved') {
-    return { ok: false, error: `change is ${change.status}, not approved` };
-  }
-  if (!input.project.sessionId) {
-    return { ok: false, error: 'this project has no live workspace to deliver from — re-run the task first' };
-  }
+  const { sessionId } = input.project;
+  // The latest-capture check hits the DB, so it is resolved here and handed to
+  // the pure guard alongside the change and the session — see delivery-guard.ts
+  // for why the ordering (and the newer-change refusal in particular) matters.
+  const block = deliveryBlockReason({
+    change,
+    hasSession: Boolean(sessionId),
+    hasNewer: change ? await hasNewerChangeForProject(input.changeId) : false,
+  });
+  // The `!change`/`!sessionId` arms are unreachable once `block` is null (the
+  // guard returns a reason for each), but they narrow the types for the push.
+  if (block || !change || !sessionId) return { ok: false, error: block ?? 'change not found' };
 
   await markDelivering(input.changeId);
   const result = await deliverChange({
     client: input.client,
     runtimeArn: input.runtimeArn,
-    sessionId: input.project.sessionId,
+    sessionId,
     checkout: input.project.checkout,
     repoFullName: input.project.repoFullName,
     defaultBranch: input.project.defaultBranch,

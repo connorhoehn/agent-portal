@@ -244,6 +244,34 @@ export async function listChangeRequests(opts: { projectId?: string; open?: bool
   return rows.map(rowToChange);
 }
 
+/**
+ * Has a newer change been captured for this change's project?
+ *
+ * Delivery ships the *live workspace*, and a project has exactly one workspace,
+ * so a change captured after this one means the workspace has moved on since —
+ * its files now reflect the newer run, not this one. Delivering this change
+ * would push the newer change's content under this change's review and gates:
+ * the reviewed thing and the delivered thing would differ. Only the latest
+ * capture for a project corresponds to what is on disk, so only it is
+ * deliverable. This is the guard the schema's "a new run supersedes" comment
+ * describes; enforced here rather than by mutating the older row, so no new
+ * status is needed and an approved-but-stale change simply cannot be shipped.
+ */
+export async function hasNewerChangeForProject(changeId: string): Promise<boolean> {
+  if (!isUuid(changeId)) return false;
+  const rows = await exec(
+    `SELECT 1
+       FROM agent_change_requests newer, agent_change_requests cur
+      WHERE cur.id = :id::uuid
+        AND newer.project_id = cur.project_id
+        AND newer.id <> cur.id
+        AND newer.created_at > cur.created_at
+      LIMIT 1`,
+    [s('id', changeId)],
+  );
+  return rows.length > 0;
+}
+
 async function setStatus(id: string, status: string, extra: SqlParameter[] = [], set = ''): Promise<void> {
   await exec(
     `UPDATE agent_change_requests SET status = :status, updated_at = NOW()${set ? `, ${set}` : ''} WHERE id = :id::uuid`,
