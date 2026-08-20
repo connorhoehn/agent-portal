@@ -149,6 +149,17 @@ describe('aggregate decision', () => {
     expect(e.autoApproved).toBe(false);
     expect(e.decision).toBe('needs_approval');
   });
+
+  it('an empty policy set auto-approves — the sharp edge the provider guards', () => {
+    // The pure engine cannot tell "no policies configured" from "policies
+    // configured, none fired", so zero gates reads as approved. This is why
+    // evaluateChange() seeds defaults and, if the set is still empty, forces
+    // needs_approval rather than trusting this result. Pinning the contract so
+    // nobody "fixes" it here and quietly breaks that fail-closed reasoning.
+    const e = evaluate([], facts({ files: ['infra/prod.tf'], reviewVerdict: null }));
+    expect(e.decision).toBe('approved');
+    expect(e.autoApproved).toBe(true);
+  });
 });
 
 describe('default policies are safe out of the box', () => {

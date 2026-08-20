@@ -329,6 +329,12 @@ export async function evaluateChange(changeId: string): Promise<{ evaluation: Ev
   const change = await getChangeRequest(changeId);
   if (!change) return null;
 
+  // Seed before evaluating, not only when the policy UI is opened. A governed
+  // run can capture a change before anyone has visited the policy page, and
+  // evaluating against an empty policy set auto-approves it — governance
+  // silently off exactly when a fresh environment most needs it on. Idempotent:
+  // seeding is a no-op once any policy exists.
+  await seedDefaultPolicies().catch(() => { /* fail-safe below covers a failed seed */ });
   const policies = await listPolicies();
   const latestReview = change.reviews[0] ?? null;
   const facts: ChangeFacts = {
@@ -337,6 +343,23 @@ export async function evaluateChange(changeId: string): Promise<{ evaluation: Ev
     reviewVerdict: latestReview?.verdict ?? null,
   };
   const evaluation = evaluate(policies, facts);
+
+  // Defence in depth: the pure engine reads zero gates as "approved" because it
+  // cannot tell "no policies configured" from "policies configured, none
+  // fired". If the policy set is empty here — seeding raced or failed — refuse
+  // to auto-approve and route to a human instead. A governance layer must fail
+  // closed, never open.
+  if (policies.length === 0 && evaluation.decision === 'approved') {
+    evaluation.decision = 'needs_approval';
+    evaluation.autoApproved = false;
+    evaluation.gates.push({
+      policyId: null,
+      policyName: 'no policies configured',
+      kind: 'require_review',
+      outcome: 'requires_approval',
+      detail: 'No governance policies are configured; routed to a human to fail closed.',
+    });
+  }
 
   // Replace prior gate rows for this change — the recorded gates should reflect
   // the current decision, not accumulate every re-evaluation.

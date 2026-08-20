@@ -55,7 +55,8 @@ export interface ChangeFacts {
 export type GateOutcome = 'pass' | 'requires_approval' | 'block';
 
 export interface GateResult {
-  policyId: string;
+  /** The policy row's id, or null for a synthetic gate not backed by a row. */
+  policyId: string | null;
   policyName: string;
   kind: PolicyKind;
   outcome: GateOutcome;
