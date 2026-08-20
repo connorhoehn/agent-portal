@@ -32,6 +32,11 @@ CREATE TABLE IF NOT EXISTS agent_change_requests (
   files         JSONB       NOT NULL DEFAULT '[]',   -- repo-relative paths touched
   files_changed INTEGER     NOT NULL DEFAULT 0,
 
+  -- The model that authored the run behind this change, stored here so a
+  -- model_allowlist policy can gate on who wrote it even after the run row is
+  -- gone. createChangeRequest writes it; rowToChange reads it.
+  model         TEXT,
+
   -- The lifecycle, enforced. Mirrors the discipline of agent_jobs: a change
   -- can only be in a state the pipeline put it in.
   --   captured           diff taken, not yet evaluated
@@ -62,6 +67,12 @@ CREATE TABLE IF NOT EXISTS agent_change_requests (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Backfill for databases whose agent_change_requests predates the `model`
+-- column: CREATE TABLE IF NOT EXISTS above will not alter an existing table, so
+-- without this a reload leaves the table missing a column createChangeRequest
+-- inserts, and every governed-change capture fails. Idempotent.
+ALTER TABLE agent_change_requests ADD COLUMN IF NOT EXISTS model TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_agent_change_requests_project
   ON agent_change_requests (project_id, created_at DESC);

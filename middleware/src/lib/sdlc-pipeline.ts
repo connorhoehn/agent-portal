@@ -116,7 +116,13 @@ async function captureDiff(input: CaptureInput): Promise<{ diff: string; files: 
  */
 export async function captureAndGate(input: CaptureInput): Promise<string | null> {
   const captured = await captureDiff(input);
-  if (!captured) return null;
+  if (!captured) {
+    // The run reported changed files but the diff came back empty. Worth a line:
+    // this is the difference between "governance saw nothing to do" and a silent
+    // failure, and without it the change simply never appears with no trace why.
+    console.warn(`[sdlc] run ${input.runId ?? '?'} reported changes but captureDiff found nothing in ${input.checkout}`);
+    return null;
+  }
 
   const change = await createChangeRequest({
     projectId: input.projectId,
@@ -126,6 +132,7 @@ export async function captureAndGate(input: CaptureInput): Promise<string | null
     files: captured.files,
     model: input.model ?? null,
   });
+  console.warn(`[sdlc] captured change ${change.id} (${captured.files.length} file(s)) for project ${input.projectId}`);
 
   try {
     await markInReview(change.id);
@@ -142,10 +149,12 @@ export async function captureAndGate(input: CaptureInput): Promise<string | null
       summary: review.summary,
       findings: review.findings,
     });
-    await evaluateChange(change.id);
+    const evaluated = await evaluateChange(change.id);
+    console.warn(`[sdlc] change ${change.id} reviewed=${review.verdict} decided=${evaluated?.status ?? '?'}`);
   } catch (err) {
     // The change exists and is captured; only the review/gate errored. Record
     // it on the change rather than losing the diff.
+    console.warn(`[sdlc] change ${change.id} review/gate errored:`, (err as Error).message);
     await markFailed(change.id, `pipeline error: ${(err as Error).message}`);
   }
   return change.id;

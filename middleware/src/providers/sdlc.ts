@@ -193,7 +193,7 @@ export async function createChangeRequest(input: {
   const rows = await exec(
     `INSERT INTO agent_change_requests
         (project_id, run_id, title, diff, diff_truncated, files, files_changed, model, status)
-     VALUES (:pid::uuid, :rid, :title, :diff, :trunc, :files::jsonb, :nfiles, :model, 'captured')
+     VALUES (:pid::uuid, :rid::uuid, :title, :diff, :trunc, :files::jsonb, :nfiles, :model, 'captured')
      RETURNING *`,
     [
       s('pid', input.projectId),
