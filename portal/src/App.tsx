@@ -223,10 +223,25 @@ export function App() {
               doors to the same subject, neither of which said whether any of it
               was working; both now land here. The stage pages below stay as
               drill-ins, reached from the pipeline rather than from the nav. */}
-          <Route path="knowledge" element={<Page element={<KnowledgeHomePage />} />} />
-          <Route path="knowledge/registry" element={<Page element={<KBRegistryPage />} />} />
+          {/* Guarded to match the nav + backend: reading the registry is
+              org-leader/hr-admin visibility. Without this the route rendered for
+              any role and then showed a raw 403 from the hr-admin-only API. */}
+          <Route path="knowledge" element={
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/" replace />}>
+              <Page element={<KnowledgeHomePage />} />
+            </RequireRole>
+          } />
+          <Route path="knowledge/registry" element={
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/" replace />}>
+              <Page element={<KBRegistryPage />} />
+            </RequireRole>
+          } />
           <Route path="knowledge-bases" element={<Navigate to="/admin/knowledge" replace />} />
-          <Route path="knowledge-bases/:id" element={<Page element={<KBDetailPage />} />} />
+          <Route path="knowledge-bases/:id" element={
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/" replace />}>
+              <Page element={<KBDetailPage />} />
+            </RequireRole>
+          } />
           <Route path="knowledge-base" element={<Navigate to="/admin/knowledge" replace />} />
           {/* Repositories agents work on — distinct from /iq/projects, which
               is the org graph's initiatives. A repo may deliver one of those;

@@ -154,6 +154,26 @@ export async function isAllowed(principal: PrincipalRef, action: string, resourc
 }
 
 /**
+ * Read-wide, write-narrow gating for a router.
+ *
+ * A GET is treated as operational visibility and allowed for any of `readRoles`
+ * (plus `admin`); every mutating method falls through to `requireAction(action)`.
+ * Use where a surface should be *viewable* more broadly than it is *writable* —
+ * e.g. the knowledge-base registry, which org-leaders read but only hr-admins
+ * change. `admin` always passes, matching requireAction's future bypass.
+ */
+export function readForRolesElseAction(readRoles: Role[], action: string) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const role = (req.session?.role ?? DEFAULT_ROLE) as Role;
+    if (req.method === 'GET' && (role === 'admin' || readRoles.includes(role))) {
+      next();
+      return;
+    }
+    void requireAction(action)(req, res, next);
+  };
+}
+
+/**
  * Drop every cached Cedar decision. Call this from mutating routes
  * (CreatePolicy / UpdatePolicy / DeletePolicy / PutSchema) so the next
  * IsAuthorized check reflects the new state.

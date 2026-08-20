@@ -52,7 +52,7 @@ import { agentDetailRouter } from './routes/agent-detail.js';
 import { connectionsRouter } from './routes/connections.js';
 import { agentProjectsRouter } from './routes/agent-projects.js';
 import { sdlcRouter } from './routes/sdlc.js';
-import { requireAction, requireTenant } from './lib/authz.js';
+import { requireAction, requireTenant, readForRolesElseAction } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
 import { initCrawlTargets } from './lib/crawl-targets.js';
 import { ensureSchema, seedPoliciesIfMissing } from './lib/policy-seeds.js';
@@ -124,10 +124,13 @@ app.use('/api/scores', requireTenant('orgiq'), requireAction('ViewLeaderboard'),
 // session (even one holding ManageKB) cannot read or mutate it.
 app.use('/api/knowledge-base', requireTenant('orgiq'), knowledgeBaseRouter);
 // KB Registry admin — CRUD + async provisioning for multi-KB support.
-// ManageKB action required (hr-admin role), AND tenant-scoped to orgiq: the
-// newsroom editor holds ManageKB but must not reach orgiq's KB registry
-// (its DELETE/provision routes are destructive). Admin bypasses the tenant guard.
-app.use('/api/admin/kb-registry', requireTenant('orgiq'), requireAction('ManageKB'), kbAdminRouter);
+// Tenant-scoped to orgiq first (the KB belongs to orgiq; a newsroom editor
+// holds ManageKB but must not reach it — its DELETE/provision routes are
+// destructive, and admin bypasses the tenant guard). Then: reading the registry
+// is operational visibility (org-leader + hr-admin, like Health), while
+// create/adopt/provision/sync/delete still require ManageKB (hr-admin). Mounted
+// before the gated observability router so the portal wizard can reach it.
+app.use('/api/admin/kb-registry', requireTenant('orgiq'), readForRolesElseAction(['org-leader', 'hr-admin'], 'ManageKB'), kbAdminRouter);
 // Public document drop — deliberately ungated. The token in the URL is the
 // whole authority, which is why the router exposes no bucket, prefix or id
 // and every limit is enforced server-side per link.
