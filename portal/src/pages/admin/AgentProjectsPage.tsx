@@ -22,6 +22,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
 import { loadBoxes, createBox, type DevboxBox } from '../../lib/devboxRegistry';
 import { openShell } from '../../lib/terminalDock';
+import { DEVBOX_MODELS, DEFAULT_DEVBOX_MODEL } from '../../lib/devboxModels';
 
 interface Run {
   id: string; prompt: string; model: string | null;
@@ -86,7 +87,7 @@ export default function AgentProjectsPage() {
   // The run box: one prompt, one project, fired into a workspace.
   const [runFor, setRunFor] = useState<Project | null>(null);
   const [prompt, setPrompt] = useState('');
-  const [model, setModel] = useState('claude-haiku-4-5');
+  const [model, setModel] = useState(DEFAULT_DEVBOX_MODEL);
 
   const githubConnections = (connections?.sources ?? []).filter((c) => c.kind === 'github');
 
@@ -454,9 +455,9 @@ export default function AgentProjectsPage() {
                   onChange={(e) => setModel(e.target.value)}
                   className="px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary"
                 >
-                  <option value="claude-haiku-4-5">Haiku</option>
-                  <option value="claude-sonnet-5">Sonnet</option>
-                  <option value="claude-opus-5">Opus</option>
+                  {DEVBOX_MODELS.map((m) => (
+                    <option key={m.id} value={m.id} title={m.hint}>{m.label}</option>
+                  ))}
                 </select>
                 <span className="text-[11px] text-text-tertiary flex-1">⌘⏎ to run · esc to close</span>
                 <button
