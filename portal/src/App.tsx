@@ -122,7 +122,13 @@ function Page({ element }: { element: React.ReactNode }) {
 function RootRedirect() {
   const { session, isLoading } = useSession();
   if (isLoading) return null;
-  return <Navigate to={session?.tenant === 'newsroom' ? '/newsroom/home' : '/iq/work'} replace />;
+  // Only route to the newsroom home when the newsroom surface is actually
+  // enabled — otherwise a newsroom-tenant session lands on a route the
+  // flag-off catch-all bounces straight back here, looping. Fall back to the
+  // orgiq root instead. (The TenantSwitcher migration can't cover this: it
+  // hides itself for single-tenant users, which every newsroom persona is.)
+  const toNewsroom = session?.tenant === 'newsroom' && NEWSROOM_ENABLED;
+  return <Navigate to={toNewsroom ? '/newsroom/home' : '/iq/work'} replace />;
 }
 
 export function App() {

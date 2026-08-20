@@ -9,6 +9,10 @@ permit (
     OrgIQ::Action::"Search",
     OrgIQ::Action::"ViewOrgChart",
     OrgIQ::Action::"ViewLeaderboard",
+    // RESERVED: ViewSalary / ViewPerformance are granted here but not yet
+    // enforced by any route — the salary/performance data surface doesn't
+    // exist in the service yet. They pre-declare the grant so the PEP is a
+    // one-line add when those endpoints land; today they gate nothing.
     OrgIQ::Action::"ViewSalary",
     OrgIQ::Action::"ViewPerformance",
     OrgIQ::Action::"EditGuardrail",

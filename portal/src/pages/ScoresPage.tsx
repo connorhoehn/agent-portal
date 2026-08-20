@@ -18,7 +18,7 @@ function ScoresPage() {
   const leaderboardUrl = skillFilter
     ? `/api/scores/by-skill?skill=${encodeURIComponent(skillFilter)}&limit=100`
     : '/api/scores/leaderboard?limit=100';
-  const { data } = useFetch<{ entries: ScoreEntry[]; total: number; mostRecentScoredAt: string | null }>(leaderboardUrl);
+  const { data, isLoading, error, refresh } = useFetch<{ entries: ScoreEntry[]; total: number; mostRecentScoredAt: string | null }>(leaderboardUrl);
   const [deptFilter, setDeptFilter] = useState<string>('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [comparisonIds, setComparisonIds] = useState<Set<string>>(new Set());
@@ -90,7 +90,32 @@ function ScoresPage() {
     navigate(`/iq/scores/compare${query}`);
   }, [comparisonIds, searchParams, navigate]);
 
-  if (!data) return <div style={{ padding: 24, color: 'var(--color-text-tertiary)' }}>Loading scores...</div>;
+  if (isLoading) return <div style={{ padding: 24, color: 'var(--color-text-tertiary)' }}>Loading scores…</div>;
+  if (error) {
+    const denied = /403|forbidden/i.test(error);
+    return (
+      <div style={{ padding: 40, maxWidth: 560 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>
+          {denied ? 'Leaderboard access needed' : 'Could not load scores'}
+        </h2>
+        <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
+          {denied
+            ? 'The scoring dashboard is limited to the org-leader and HR Admin roles (the ViewLeaderboard permission). Switch role from the identity menu, top right — or ask an admin for the grant.'
+            : <>Scores come from Aurora. {error}</>}
+        </p>
+        {!denied && (
+          <button
+            type="button"
+            onClick={refresh}
+            style={{ marginTop: 14, padding: '6px 14px', fontSize: 13, cursor: 'pointer' }}
+          >
+            Try again
+          </button>
+        )}
+      </div>
+    );
+  }
+  if (!data) return null;
   if (data.entries.length === 0) {
     return (
       <div style={{ padding: 40, maxWidth: 560 }}>
