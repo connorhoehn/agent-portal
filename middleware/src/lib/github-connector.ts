@@ -85,6 +85,55 @@ async function gh<T>({ token, path, params }: FetchOpts): Promise<T> {
 }
 
 /**
+ * Open a pull request.
+ *
+ * The one write this connector does, and it is deliberately the only one — the
+ * agent pushes a branch and this proposes it for merge; a human still merges.
+ * A PR is a proposal, not a commit to main, which is the right amount of
+ * authority to hand an automated pipeline.
+ *
+ * Idempotent-ish: if a PR already exists for the branch, GitHub returns 422 and
+ * we surface the existing one rather than treating a re-delivery as an error.
+ */
+export async function openPullRequest(
+  providerName: string,
+  input: { owner: string; repo: string; head: string; base: string; title: string; body: string },
+): Promise<{ url: string; number: number }> {
+  const token = await borrowApiKey(providerName);
+  const res = await fetch(`${API}/repos/${input.owner}/${input.repo}/pulls`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'OrgIQ-Connector/1.0',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ title: input.title, head: input.head, base: input.base, body: input.body }),
+    signal: AbortSignal.timeout(20_000),
+  });
+
+  if (res.ok) {
+    const pr = await res.json() as { html_url?: string; number?: number };
+    return { url: pr.html_url ?? '', number: pr.number ?? 0 };
+  }
+
+  // A branch that already has an open PR comes back 422; find and return it
+  // rather than failing a re-run of delivery.
+  if (res.status === 422) {
+    const existing = await gh<Array<{ html_url?: string; number?: number }>>({
+      token, path: `/repos/${input.owner}/${input.repo}/pulls`,
+      params: { head: `${input.owner}:${input.head}`, state: 'open' },
+    });
+    const pr = existing[0];
+    if (pr?.html_url) return { url: pr.html_url, number: pr.number ?? 0 };
+    const detail = await res.text();
+    throw new Error(`GitHub refused the pull request (422): ${detail.slice(0, 200)}`);
+  }
+  throw new Error(`Could not open a pull request: HTTP ${res.status}`);
+}
+
+/**
  * Who the stored token belongs to, and what it may do.
  *
  * Worth its own call: the scopes decide whether a sync can see private repos

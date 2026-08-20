@@ -28,7 +28,7 @@ import { finishRun } from '../providers/agent-projects.js';
  * way the interactive console does it — a path or a message containing a quote
  * would otherwise terminate the wrapper early and run something else.
  */
-async function shell(
+export async function runDevboxShell(
   client: BedrockAgentCoreClient, arn: string, sessionId: string, command: string,
 ): Promise<string> {
   const b64 = Buffer.from(command, 'utf8').toString('base64');
@@ -77,7 +77,7 @@ export async function readWorkingTree(
   // ownership" rather than reading it. Scoped to this invocation, not written
   // into any config.
   const git = `git -c safe.directory='*' -C ${checkout}`;
-  const status = await shell(client, arn, sessionId, `${git} status --porcelain | head -200`);
+  const status = await runDevboxShell(client, arn, sessionId, `${git} status --porcelain | head -200`);
 
   // Never discard git's stderr. The first version sent it to /dev/null, so the
   // ownership refusal above arrived as empty output and was recorded as "no
@@ -104,7 +104,7 @@ export async function readWorkingTree(
     };
   }
 
-  const stat = await shell(client, arn, sessionId, `${git} diff --stat | tail -1`);
+  const stat = await runDevboxShell(client, arn, sessionId, `${git} diff --stat | tail -1`);
 
   // Name the first few files: "12 files changed" tells you the size of the
   // change and nothing about whether it was the right one.
@@ -122,7 +122,7 @@ export async function snapshotWorkingTree(
   client: BedrockAgentCoreClient, arn: string, sessionId: string, checkout: string,
 ): Promise<Set<string>> {
   try {
-    const out = await shell(client, arn, sessionId,
+    const out = await runDevboxShell(client, arn, sessionId,
       `git -c safe.directory='*' -C ${checkout} status --porcelain | head -200`);
     if (/^fatal:|^error:/m.test(out)) return new Set();
     return new Set(out.split('\n').map((l) => l.trim()).filter(Boolean));
@@ -142,6 +142,12 @@ export interface ProjectRunRequest {
   runtimeArn: string;
   client: BedrockAgentCoreClient;
   onEvent?: (event: Record<string, unknown>) => void;
+  /**
+   * Fired after a run that changed files, with the file count. The runner does
+   * not know what governance does with that — a callback keeps the SDLC
+   * pipeline importing the runner without the runner importing back into it.
+   */
+  onChanged?: (filesChanged: number) => void;
 }
 
 /**
@@ -183,6 +189,12 @@ export async function executeProjectRun(req: ProjectRunRequest): Promise<void> {
       diffSummary: diff.summary || null,
       error: outcome.ok ? null : (outcome.error ?? 'the agent reported a failure'),
     });
+
+    // Hand a changed run to governance. Fired only when the tree actually
+    // moved — a run that changed nothing has nothing to review.
+    if (diff.filesChanged > 0) {
+      try { req.onChanged?.(diff.filesChanged); } catch { /* governance failures are the callback's to record, not the run's */ }
+    }
   } catch (err) {
     await finishRun(req.runId, {
       status: 'failed',

@@ -12,6 +12,7 @@ import {
   buildCloneCommand, markCloned, checkoutPath, startRun, finishRun, listRuns,
 } from '../providers/agent-projects.js';
 import { executeProjectRun } from '../lib/project-runner.js';
+import { captureAndGate } from '../lib/sdlc-pipeline.js';
 import { resolveDevboxArn, devboxDataClient } from '../lib/devbox-arn.js';
 import { registerBox, getBoxBySession, appendEvent } from '../lib/devbox-fleet.js';
 
@@ -127,6 +128,15 @@ agentProjectsRouter.post('/:id/runs', asyncHandler(async (req, res) => {
     // Tee into the fleet log so the terminal dock and box tail show the run
     // as it happens, exactly as a manually started task does.
     onEvent: (ev) => appendEvent(box.id, ev),
+    // Every code change an agent makes flows through governance — captured,
+    // reviewed, and gated — without anyone having to remember to submit it.
+    // That automatic capture is the point: no agent change escapes review.
+    onChanged: () => {
+      void captureAndGate({
+        client: devboxDataClient(), runtimeArn: arn, sessionId, checkout,
+        projectId: project.id, runId: run.id, prompt, model: body.model ?? null,
+      }).catch((err) => console.warn('[sdlc] capture failed:', (err as Error).message));
+    },
   });
 
   res.status(202).json({ run, checkout });
