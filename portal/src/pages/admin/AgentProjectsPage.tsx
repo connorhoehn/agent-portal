@@ -16,6 +16,7 @@
 // can lapse and be re-established, never as a property of the project.
 
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router';
 import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
@@ -67,6 +68,10 @@ export default function AgentProjectsPage() {
   // The initiatives a repository can be attached to. An enterprise has both:
   // people who own the work and code that delivers it.
   const { data: orgProjects } = useFetch<OrgProject[]>('/api/graph/projects', 120_000);
+  // Open change requests, so a codebase shows what governance is holding — the
+  // SDLC loop is only legible if it is visible from where the runs start.
+  const { data: changesData } = useFetch<{ changes: Array<{ projectId: string; status: string }> }>(
+    '/api/sdlc/changes?open=true', 15_000);
 
   const [boxes, setBoxes] = useState<DevboxBox[]>([]);
   useEffect(() => { try { setBoxes(loadBoxes()); } catch { setBoxes([]); } }, [data]);
@@ -203,6 +208,10 @@ export default function AgentProjectsPage() {
   }, [runFor, prompt, model, boxes, refresh]);
 
   const projects = data?.projects ?? [];
+  const openChangesByProject = (changesData?.changes ?? []).reduce<Record<string, number>>((acc, c) => {
+    acc[c.projectId] = (acc[c.projectId] ?? 0) + 1;
+    return acc;
+  }, {});
 
   return (
     <PageSection
@@ -397,6 +406,14 @@ export default function AgentProjectsPage() {
                       </div>
                     </div>
                   ))
+                )}
+
+                {(openChangesByProject[p.id] ?? 0) > 0 && (
+                  <div className="px-3.5 py-2 border-t border-border bg-warning-bg/40">
+                    <Link to="/admin/changes" className="text-[11px] font-semibold text-warning no-underline hover:underline">
+                      {openChangesByProject[p.id]} change{openChangesByProject[p.id] === 1 ? '' : 's'} awaiting review →
+                    </Link>
+                  </div>
                 )}
               </Card>
             );

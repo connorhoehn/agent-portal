@@ -9,12 +9,9 @@ import { Router } from 'express';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
 import {
   listAgentProjects, getAgentProject, linkAgentProject, unlinkAgentProject,
-  buildCloneCommand, markCloned, checkoutPath, startRun, finishRun, listRuns,
+  buildCloneCommand, markCloned, checkoutPath, finishRun, listRuns,
 } from '../providers/agent-projects.js';
-import { executeProjectRun } from '../lib/project-runner.js';
-import { captureAndGate } from '../lib/sdlc-pipeline.js';
-import { resolveDevboxArn, devboxDataClient } from '../lib/devbox-arn.js';
-import { registerBox, getBoxBySession, appendEvent } from '../lib/devbox-fleet.js';
+import { dispatchGovernedRun } from '../lib/sdlc-pipeline.js';
 
 export const agentProjectsRouter: Router = Router();
 
@@ -98,48 +95,14 @@ agentProjectsRouter.post('/:id/runs', asyncHandler(async (req, res) => {
     throw new ValidationError('This project has no workspace — clone it before running anything against it');
   }
 
-  const run = await startRun({
-    projectId: project.id, prompt, model: body.model ?? null, sessionId,
-  });
-  const checkout = checkoutPath(project);
+  // A run finishes on its own and, if it changed code, flows through
+  // governance — capture, review, gates — without anyone submitting it. The
+  // dispatch itself lives in one shared place so this and the review loop's
+  // "address these findings" cannot diverge.
+  const started = await dispatchGovernedRun({ project, prompt, model: body.model ?? null, sessionId });
+  if (!started.ok) { res.status(503).json({ error: started.error }); return; }
 
-  // Answer now, finish in the background.
-  //
-  // The run used to be driven by whichever browser tab started it, so closing
-  // the tab left the row at `running` forever. Owning the lifecycle here means
-  // a run completes — and records what changed — whether or not anyone is
-  // watching.
-  const arn = await resolveDevboxArn();
-  if (!arn) {
-    await finishRun(run.id, { status: 'failed', error: 'the devbox runtime is not deployed' });
-    res.status(503).json({ error: 'devbox runtime not deployed' });
-    return;
-  }
-
-  const box = getBoxBySession(sessionId) ?? registerBox({ sessionId });
-  void executeProjectRun({
-    runId: run.id,
-    sessionId,
-    checkout,
-    prompt,
-    model: body.model ?? null,
-    runtimeArn: arn,
-    client: devboxDataClient(),
-    // Tee into the fleet log so the terminal dock and box tail show the run
-    // as it happens, exactly as a manually started task does.
-    onEvent: (ev) => appendEvent(box.id, ev),
-    // Every code change an agent makes flows through governance — captured,
-    // reviewed, and gated — without anyone having to remember to submit it.
-    // That automatic capture is the point: no agent change escapes review.
-    onChanged: () => {
-      void captureAndGate({
-        client: devboxDataClient(), runtimeArn: arn, sessionId, checkout,
-        projectId: project.id, runId: run.id, prompt, model: body.model ?? null,
-      }).catch((err) => console.warn('[sdlc] capture failed:', (err as Error).message));
-    },
-  });
-
-  res.status(202).json({ run, checkout });
+  res.status(202).json({ run: { id: started.runId }, checkout: started.checkout });
 }));
 
 agentProjectsRouter.post('/runs/:runId/finish', asyncHandler(async (req, res) => {

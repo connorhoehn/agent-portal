@@ -12,13 +12,16 @@
 // concern, not a run concern: the runner's job is to run the agent and record
 // what changed; whether that change is allowed to ship is this file's job.
 
-import { runDevboxShell } from './project-runner.js';
+import { runDevboxShell, executeProjectRun } from './project-runner.js';
 import { reviewDiff } from './change-reviewer.js';
 import {
   createChangeRequest, recordReview, evaluateChange, getChangeRequest,
   markInReview, markDelivering, markDelivered, markFailed,
 } from '../providers/sdlc.js';
+import { startRun, checkoutPath, type AgentProject } from '../providers/agent-projects.js';
 import { deliverChange } from './change-delivery.js';
+import { resolveDevboxArn, devboxDataClient } from './devbox-arn.js';
+import { registerBox, getBoxBySession, appendEvent } from './devbox-fleet.js';
 import type { BedrockAgentCoreClient } from '@aws-sdk/client-bedrock-agentcore';
 
 export interface CaptureInput {
@@ -30,6 +33,49 @@ export interface CaptureInput {
   runId?: string | null;
   prompt: string;
   model?: string | null;
+}
+
+/**
+ * Start a run against a project and wire it into governance.
+ *
+ * The one place a run is dispatched, so the codebase's "run a task" and the
+ * review loop's "address these findings" cannot drift apart in how a run is
+ * started, logged, or captured. A run begun either way finishes on its own,
+ * tees into the fleet log, and — if it changed code — flows through capture,
+ * review, and the gates.
+ */
+export async function dispatchGovernedRun(input: {
+  project: AgentProject; prompt: string; model?: string | null; sessionId: string;
+}): Promise<{ ok: true; runId: string; checkout: string } | { ok: false; error: string }> {
+  const arn = await resolveDevboxArn();
+  if (!arn) return { ok: false, error: 'the devbox runtime is not deployed' };
+
+  const run = await startRun({
+    projectId: input.project.id, prompt: input.prompt,
+    model: input.model ?? null, sessionId: input.sessionId,
+  });
+  const checkout = checkoutPath(input.project);
+  const box = getBoxBySession(input.sessionId) ?? registerBox({ sessionId: input.sessionId });
+
+  void executeProjectRun({
+    runId: run.id,
+    sessionId: input.sessionId,
+    checkout,
+    prompt: input.prompt,
+    model: input.model ?? null,
+    runtimeArn: arn,
+    client: devboxDataClient(),
+    onEvent: (ev) => appendEvent(box.id, ev),
+    onChanged: () => {
+      void captureAndGate({
+        client: devboxDataClient(), runtimeArn: arn, sessionId: input.sessionId,
+        checkout, projectId: input.project.id, runId: run.id,
+        prompt: input.prompt, model: input.model ?? null,
+      }).catch((err) => console.warn('[sdlc] capture failed:', (err as Error).message));
+    },
+  });
+
+  return { ok: true, runId: run.id, checkout };
 }
 
 /** A concise change title from the task prompt — the first line, bounded. */

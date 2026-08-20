@@ -14,7 +14,7 @@ import {
   recordReview, markInReview,
 } from '../providers/sdlc.js';
 import { reviewDiff } from '../lib/change-reviewer.js';
-import { deliverApprovedChange } from '../lib/sdlc-pipeline.js';
+import { deliverApprovedChange, dispatchGovernedRun } from '../lib/sdlc-pipeline.js';
 import { getAgentProject, checkoutPath } from '../providers/agent-projects.js';
 import { resolveDevboxArn, devboxDataClient } from '../lib/devbox-arn.js';
 import type { PolicyKind, PolicyAction } from '../lib/sdlc-policy.js';
@@ -109,6 +109,46 @@ sdlcRouter.post('/changes/:id/rereview', asyncHandler(async (req, res) => {
   });
   const evaluated = await evaluateChange(id);
   res.json({ ok: true, verdict: review.verdict, status: evaluated?.status });
+}));
+
+// ── Address a review — loop the feedback back to an agent ───────────────────
+//
+// The closing move of the SDLC loop: instead of a human hand-fixing what the
+// reviewer flagged, dispatch a fresh agent run with the findings as its task.
+// That run changes the code, which is captured and reviewed again — the review
+// is not a dead end but a step that feeds the next iteration. Work performed by
+// agents, governed each time round.
+
+sdlcRouter.post('/changes/:id/address', asyncHandler(async (req, res) => {
+  const change = await getChangeRequest(String(req.params['id'] ?? ''));
+  if (!change) throw new NotFoundError('No such change request');
+
+  const review = change.reviews[0];
+  if (!review || review.verdict === 'approve') {
+    throw new ValidationError('There is no review feedback to address on this change.');
+  }
+
+  const project = await getAgentProject(change.projectId);
+  if (!project) throw new NotFoundError('The change\'s project no longer exists');
+  if (!project.sessionId) {
+    throw new ValidationError('This project has no live workspace — re-clone it before addressing the review.');
+  }
+
+  // Build the task from the reviewer's own words, so the agent is fixing the
+  // stated objections rather than guessing what "changes requested" meant.
+  const findings = review.findings.map((f) => `- ${f.file ? `${f.file}${f.line ? `:${f.line}` : ''}: ` : ''}${f.note}`).join('\n');
+  const prompt = [
+    `A reviewer asked for changes to your last edit of this repository, titled "${change.title}".`,
+    review.summary ? `Reviewer summary: ${review.summary}` : '',
+    findings ? `Specific points to address:\n${findings}` : '',
+    'Apply the requested changes. Do not revert your earlier work unless a point explicitly asks you to.',
+  ].filter(Boolean).join('\n\n');
+
+  const started = await dispatchGovernedRun({
+    project, prompt, model: (req.body as { model?: string })?.model ?? null, sessionId: project.sessionId,
+  });
+  if (!started.ok) { res.status(503).json({ error: started.error }); return; }
+  res.status(202).json({ ok: true, runId: started.runId });
 }));
 
 // ── Deliver an approved change ──────────────────────────────────────────────

@@ -350,21 +350,29 @@ export async function evaluateChange(changeId: string): Promise<{ evaluation: Ev
   return { evaluation, status: evaluation.decision };
 }
 
+/** States a human may still decide on. */
+const DECIDABLE = new Set(['needs_approval', 'changes_requested']);
+
 /**
- * A human's decision on a change that needs approval.
+ * A human's decision on a change awaiting one.
  *
- * Deliberately narrow: it moves a change out of `needs_approval` and records
- * who and why, and does nothing else — delivery is a separate, explicit step,
- * because approving a change and shipping it are two decisions and collapsing
- * them removes the moment to stop.
+ * A human can decide a `changes_requested` change too, not only a
+ * `needs_approval` one: the reviewer is an advisor, and a person overruling it
+ * — approving a change the bot wanted revised, or rejecting one it did not — is
+ * the whole reason a human is in this loop. The decision and who made it are
+ * recorded either way, so an override is auditable rather than invisible.
+ *
+ * Deliberately narrow beyond that: it records the decision and stops. Delivery
+ * is a separate, explicit step, because approving a change and shipping it are
+ * two decisions and collapsing them removes the moment to stop.
  */
 export async function decideChange(id: string, decision: 'approve' | 'reject', input: {
   by?: string | null; note?: string | null;
 }): Promise<{ ok: boolean; status?: string; error?: string }> {
   const change = await getChangeRequest(id);
   if (!change) return { ok: false, error: 'change not found' };
-  if (change.status !== 'needs_approval') {
-    return { ok: false, error: `change is ${change.status}, not awaiting approval` };
+  if (!DECIDABLE.has(change.status)) {
+    return { ok: false, error: `change is ${change.status}, not awaiting a decision` };
   }
   const status = decision === 'approve' ? 'approved' : 'rejected';
   await setStatus(id, status,

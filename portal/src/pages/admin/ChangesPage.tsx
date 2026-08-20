@@ -253,11 +253,11 @@ function ChangeCard({ change: c, open, onToggle, busy, act }: {
 
         {/* Actions, by state. */}
         <div className="mt-3 flex items-center gap-2 flex-wrap">
-          {c.status === 'needs_approval' && (
+          {(c.status === 'needs_approval' || c.status === 'changes_requested') && (
             <>
               <button disabled={busy} onClick={() => act(c.id, 'decide', 'Approving', { decision: 'approve' })}
                 className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-50">
-                Approve
+                {c.status === 'changes_requested' ? 'Approve anyway' : 'Approve'}
               </button>
               <button disabled={busy} onClick={() => act(c.id, 'decide', 'Rejecting', { decision: 'reject' })}
                 className="px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-secondary cursor-pointer hover:border-danger hover:text-danger transition-colors disabled:opacity-50">
@@ -269,6 +269,13 @@ function ChangeCard({ change: c, open, onToggle, busy, act }: {
             <button disabled={busy} onClick={() => act(c.id, 'deliver', 'Delivering', {})}
               className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-50">
               {busy ? 'delivering…' : 'Deliver as pull request'}
+            </button>
+          )}
+          {c.status === 'changes_requested' && (
+            <button disabled={busy} onClick={() => act(c.id, 'address', 'Dispatching a fix', {})}
+              title="Send the reviewer's findings back to an agent to fix"
+              className="px-3 py-1.5 rounded-md border border-primary/50 bg-surface text-[12px] font-semibold text-primary cursor-pointer hover:bg-primary hover:text-white transition-colors disabled:opacity-50">
+              Address with an agent
             </button>
           )}
           {(c.status === 'changes_requested' || c.status === 'failed') && (
