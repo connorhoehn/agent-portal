@@ -12,7 +12,7 @@
 // nothing of the collaboration furniture a human-authored PR carries, because
 // there is no team discussing this change, only a decision to make about it.
 
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -60,6 +60,14 @@ const STATUS_LABEL: Record<string, string> = {
 const VERDICT_LABEL: Record<Verdict, string> = {
   approve: 'approved', request_changes: 'requested changes', reject: 'rejected',
 };
+
+/** Parse a DB timestamp (with or without a T/Z) to millis. */
+function tsOf(iso: string): number {
+  return new Date(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`).getTime();
+}
+
+/** Terminal states — a real final outcome, never "superseded" even if older. */
+const TERMINAL = new Set(['delivered', 'rejected', 'blocked']);
 
 function when(iso: string): string {
   const d = new Date(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`);
@@ -117,7 +125,33 @@ export default function ChangesPage() {
   }, [refresh]);
 
   const changes = data?.changes ?? [];
-  const needsYou = changes.filter((c) => c.status === 'needs_approval' || c.status === 'changes_requested');
+
+  // Delivery ships the live workspace, and a project has one workspace, so only
+  // the newest change for a project matches what is on disk — the backend
+  // refuses to deliver any older one. Mirror that here: a non-terminal change
+  // that a newer capture has overtaken is superseded, and we suppress its
+  // forward actions so nobody approves a change they then cannot deliver.
+  const supersededIds = useMemo(() => {
+    const latestAt = new Map<string, number>();
+    for (const c of changes) {
+      const t = tsOf(c.createdAt);
+      const prev = latestAt.get(c.projectId);
+      if (prev === undefined || t > prev) latestAt.set(c.projectId, t);
+    }
+    const ids = new Set<string>();
+    for (const c of changes) {
+      if (TERMINAL.has(c.status)) continue;
+      if (tsOf(c.createdAt) < (latestAt.get(c.projectId) ?? 0)) ids.add(c.id);
+    }
+    return ids;
+  }, [changes]);
+
+  // A superseded change is not something the reviewer still needs to act on —
+  // the action moved to the newer capture — so keep it out of the "needs you"
+  // queue even while its row still reads needs_approval/changes_requested.
+  const needsYou = changes.filter(
+    (c) => (c.status === 'needs_approval' || c.status === 'changes_requested') && !supersededIds.has(c.id),
+  );
   const rest = changes.filter((c) => !needsYou.includes(c));
 
   return (
@@ -147,7 +181,7 @@ export default function ChangesPage() {
                 {needsYou.map((c) => (
                   <ChangeCard key={c.id} change={c} open={openId === c.id}
                     onToggle={() => setOpenId(openId === c.id ? null : c.id)}
-                    busy={busy === c.id} act={act} />
+                    busy={busy === c.id} act={act} superseded={supersededIds.has(c.id)} />
                 ))}
               </div>
             </div>
@@ -160,7 +194,7 @@ export default function ChangesPage() {
                 {rest.map((c) => (
                   <ChangeCard key={c.id} change={c} open={openId === c.id}
                     onToggle={() => setOpenId(openId === c.id ? null : c.id)}
-                    busy={busy === c.id} act={act} />
+                    busy={busy === c.id} act={act} superseded={supersededIds.has(c.id)} />
                 ))}
               </div>
             </div>
@@ -182,9 +216,10 @@ export default function ChangesPage() {
   );
 }
 
-function ChangeCard({ change: c, open, onToggle, busy, act }: {
+function ChangeCard({ change: c, open, onToggle, busy, act, superseded }: {
   change: Change; open: boolean; onToggle: () => void; busy: boolean;
   act: (id: string, path: string, verb: string, body: Record<string, unknown>) => void;
+  superseded: boolean;
 }) {
   const review = c.reviews[0] ?? null;
   const blockingGates = c.gates.filter((g) => g.outcome !== 'pass');
@@ -195,6 +230,11 @@ function ChangeCard({ change: c, open, onToggle, busy, act }: {
         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded shrink-0 ${STATUS_TONE[c.status] ?? 'bg-surface-hover text-text-tertiary'}`}>
           {STATUS_LABEL[c.status] ?? c.status}
         </span>
+        {superseded && (
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded shrink-0 bg-surface-hover text-text-tertiary" title="A newer change has been captured for this codebase">
+            superseded
+          </span>
+        )}
         <span className="text-[13px] font-semibold text-text-primary truncate">{c.title}</span>
         <div className="flex-1" />
         {c.repoFullName && <span className="text-[11px] font-mono text-text-tertiary shrink-0">{c.repoFullName}</span>}
@@ -256,38 +296,48 @@ function ChangeCard({ change: c, open, onToggle, busy, act }: {
           </a>
         )}
 
-        {/* Actions, by state. */}
+        {/* Actions, by state. A superseded change has been overtaken by a newer
+            capture on the same codebase; its forward actions are gone because
+            delivery would ship the newer change's content — act on that one. */}
         <div className="mt-3 flex items-center gap-2 flex-wrap">
-          {(c.status === 'needs_approval' || c.status === 'changes_requested') && (
+          {superseded ? (
+            <span className="text-[11px] text-text-tertiary italic">
+              A newer change supersedes this one — decide and deliver the latest change for this codebase instead.
+            </span>
+          ) : (
             <>
-              <button disabled={busy} onClick={() => act(c.id, 'decide', 'Approving', { decision: 'approve' })}
-                className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-50">
-                {c.status === 'changes_requested' ? 'Approve anyway' : 'Approve'}
-              </button>
-              <button disabled={busy} onClick={() => act(c.id, 'decide', 'Rejecting', { decision: 'reject' })}
-                className="px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-secondary cursor-pointer hover:border-danger hover:text-danger transition-colors disabled:opacity-50">
-                Reject
-              </button>
+              {(c.status === 'needs_approval' || c.status === 'changes_requested') && (
+                <>
+                  <button disabled={busy} onClick={() => act(c.id, 'decide', 'Approving', { decision: 'approve' })}
+                    className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-50">
+                    {c.status === 'changes_requested' ? 'Approve anyway' : 'Approve'}
+                  </button>
+                  <button disabled={busy} onClick={() => act(c.id, 'decide', 'Rejecting', { decision: 'reject' })}
+                    className="px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-secondary cursor-pointer hover:border-danger hover:text-danger transition-colors disabled:opacity-50">
+                    Reject
+                  </button>
+                </>
+              )}
+              {c.status === 'approved' && (
+                <button disabled={busy} onClick={() => act(c.id, 'deliver', 'Delivering', {})}
+                  className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-50">
+                  {busy ? 'delivering…' : 'Deliver as pull request'}
+                </button>
+              )}
+              {c.status === 'changes_requested' && (
+                <button disabled={busy} onClick={() => act(c.id, 'address', 'Dispatching a fix', {})}
+                  title="Send the reviewer's findings back to an agent to fix"
+                  className="px-3 py-1.5 rounded-md border border-primary/50 bg-surface text-[12px] font-semibold text-primary cursor-pointer hover:bg-primary hover:text-white transition-colors disabled:opacity-50">
+                  Address with an agent
+                </button>
+              )}
+              {(c.status === 'changes_requested' || c.status === 'failed') && (
+                <button disabled={busy} onClick={() => act(c.id, 'rereview', 'Re-reviewing', {})}
+                  className="px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors disabled:opacity-50">
+                  Re-review
+                </button>
+              )}
             </>
-          )}
-          {c.status === 'approved' && (
-            <button disabled={busy} onClick={() => act(c.id, 'deliver', 'Delivering', {})}
-              className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-50">
-              {busy ? 'delivering…' : 'Deliver as pull request'}
-            </button>
-          )}
-          {c.status === 'changes_requested' && (
-            <button disabled={busy} onClick={() => act(c.id, 'address', 'Dispatching a fix', {})}
-              title="Send the reviewer's findings back to an agent to fix"
-              className="px-3 py-1.5 rounded-md border border-primary/50 bg-surface text-[12px] font-semibold text-primary cursor-pointer hover:bg-primary hover:text-white transition-colors disabled:opacity-50">
-              Address with an agent
-            </button>
-          )}
-          {(c.status === 'changes_requested' || c.status === 'failed') && (
-            <button disabled={busy} onClick={() => act(c.id, 'rereview', 'Re-reviewing', {})}
-              className="px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors disabled:opacity-50">
-              Re-review
-            </button>
           )}
           {c.diff && (
             <button onClick={onToggle}
