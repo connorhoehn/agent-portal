@@ -17,6 +17,7 @@ import {
   startSync,
 } from '../providers/knowledge-base.js';
 import { config } from '../config.js';
+import { requireAction } from '../lib/authz.js';
 
 export const knowledgeBaseRouter = Router();
 
@@ -41,7 +42,9 @@ knowledgeBaseRouter.get('/data-sources', asyncHandler(async (req, res) => {
 
 // ─── POST /sync ───────────────────────────────────────────────────────────────
 
-knowledgeBaseRouter.post('/sync', asyncHandler(async (req, res) => {
+// Triggering an ingestion job spends real Bedrock/OpenSearch resources —
+// gated as a KB-management decision (hr-admin / admin).
+knowledgeBaseRouter.post('/sync', requireAction('ManageKB'), asyncHandler(async (req, res) => {
   const { dataSourceId } = req.body as { dataSourceId?: unknown };
   if (typeof dataSourceId !== 'string' || !dataSourceId.trim()) {
     throw new ValidationError('dataSourceId must be a non-empty string');

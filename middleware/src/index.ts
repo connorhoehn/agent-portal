@@ -141,47 +141,48 @@ app.use('/api/observability/harness', harnessRouter);
 // Prompt-versions registry — populated at run start by the harness runner.
 // Mounted ungated (no session) like approvals/harness.
 app.use('/api/observability/prompt-versions', promptVersionsRouter);
+// Every observability aggregate below carries the ViewObservability gate.
+// (In dev the cookie-less demo session holds every grant, so these render
+// without login; in production a reporter or anonymous session is denied.)
+const viewObs = requireAction('ViewObservability');
 // Cost aggregation routes — read-only aggregates over invocation_traces cost
-// columns. Mounted ungated for now; can be Cedar-gated later if PII surfaces.
-app.use('/api/observability/cost', costRouter);
+// columns.
+app.use('/api/observability/cost', viewObs, costRouter);
 // Sprint 4 (M10) — judge calibration. Curated (prompt, response, human_score)
-// tuples + periodic judge re-runs to measure judge drift. Mounted ungated
-// like cost so the portal can render without a session, same rationale as the
-// rest of the observability surface.
-app.use('/api/observability/calibration', calibrationRouter);
+// tuples + periodic judge re-runs to measure judge drift.
+app.use('/api/observability/calibration', viewObs, calibrationRouter);
 // Sprint 3 (M9) — on-call / incident response. Composes drift + cost +
-// errors + HITL + deploys into one timeline. Mounted ungated like cost so
-// the on-call surface keeps working past session expiry at 3am.
-app.use('/api/observability/oncall', oncallRouter);
+// errors + HITL + deploys into one timeline. (The old "works past session
+// expiry at 3am" rationale is covered by demo mode in dev; prod operators
+// hold a session.)
+app.use('/api/observability/oncall', viewObs, oncallRouter);
 // Sprint 4 (M11) — AgentCore Memory ops observability.
-app.use('/api/observability/memory', memoryRouter);
+app.use('/api/observability/memory', viewObs, memoryRouter);
 // Sprint 4 (M12) — guardrail rule-level interventions.
-app.use('/api/observability/guardrails-detail', guardrailsDetailRouter);
+app.use('/api/observability/guardrails-detail', viewObs, guardrailsDetailRouter);
 // Sprint 4 (M13) — traffic shape: RPS, hour-of-week heatmap, top users.
-app.use('/api/observability/traffic', trafficRouter);
-// Test fixtures — E2E-only reset utilities. NODE_ENV=production locks them.
+app.use('/api/observability/traffic', viewObs, trafficRouter);
+// Test fixtures — E2E-only reset utilities. NODE_ENV=production locks them
+// internally, so they stay ungated for the sessionless E2E runner.
 app.use('/api/observability/test-fixtures', testFixturesRouter);
 // Sprint 2 — invocation search + per-invocation drill-down (M3/M5 triage).
-// Mounted ungated so the portal triage page can hit it directly, same as cost.
-app.use('/api/observability/invocations', invocationsRouter);
+app.use('/api/observability/invocations', viewObs, invocationsRouter);
 // A2A topology — derived from parent_invocation_id linkage in invocation_traces.
-// Ungated: same surface as the agents list (/api/agents).
-app.use('/api/topology', topologyRouter);
+// An observability read like invocations.
+app.use('/api/topology', viewObs, topologyRouter);
 // Sprint 2 — per-tool latency aggregates + error tail (M4).
-app.use('/api/observability/tools', toolCallsRouter);
-// Canary — A/B prompt experiment surface. Mounted BEFORE the gated
-// observability router so the portal landing page (GET /prompts, /events,
-// /weight) works without a session, matching cost/approvals/harness.
-// Mutation endpoints (PUT /weight, POST /halt) are individually Cedar-gated
+app.use('/api/observability/tools', viewObs, toolCallsRouter);
+// Canary — A/B prompt experiment surface. Reads need ViewObservability;
+// mutation endpoints (PUT /weight, POST /halt) are additionally Cedar-gated
 // via `ManageCanary` inside the router.
-app.use('/api/observability/canary', canaryRouter);
-app.use('/api/observability/canary', canaryLibraryRouter);
+app.use('/api/observability/canary', viewObs, canaryRouter);
+app.use('/api/observability/canary', viewObs, canaryLibraryRouter);
 // Prompt history + experiment log — version timeline + outcome cards for /iq/history.
-app.use('/api/iq/prompts', promptHistoryRouter);
+app.use('/api/iq/prompts', viewObs, promptHistoryRouter);
 // Evaluations — LLM-as-judge config + recent scores. The config is SSM-backed
 // and read by fireJudge() on every canary invocation, so the /iq/evaluations
 // page actually governs judging (enable, model, rubric weights, sampling).
-app.use('/api/observability/evaluations', evaluationsRouter);
+app.use('/api/observability/evaluations', viewObs, evaluationsRouter);
 app.use('/api/observability', requireAction('ViewObservability'), observabilityRouter);
 app.use('/api/capabilities', capabilitiesRouter);
 app.use('/api/sessions', sessionsRouter);
