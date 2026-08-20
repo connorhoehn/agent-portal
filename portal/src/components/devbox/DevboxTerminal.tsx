@@ -47,6 +47,8 @@ interface Props {
   /** Stable id so a reload reattaches to the same PTY. */
   shellId?: string;
   label?: string;
+  /** Directory to cd into once the PTY is live. */
+  cwd?: string;
   onExit?: (code: number | null) => void;
   height?: number;
   /** Hide the built-in header — the dock draws its own tab strip. */
@@ -94,7 +96,7 @@ function frame(channel: number, payload?: Uint8Array): Uint8Array {
 
 export function DevboxTerminal({
   sessionId, shellId, label, onExit, height = 460,
-  chrome = true, fillHeight = false, autoConnect = false, onStatus,
+  chrome = true, fillHeight = false, autoConnect = false, onStatus, cwd,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -162,6 +164,12 @@ export function DevboxTerminal({
         fit.fit();
         const { cols, rows } = term;
         ws.send(frame(CH.RESIZE, new TextEncoder().encode(JSON.stringify({ width: cols, height: rows }))));
+      }
+      // Land where the shell was opened from. Sent as a normal line so the
+      // shell records it and the prompt reflects the directory — a silent
+      // chdir would leave the prompt lying about where you are.
+      if (cwd) {
+        ws.send(frame(CH.STDIN, new TextEncoder().encode(`cd ${cwd} 2>/dev/null || true\n`)));
       }
       term.focus();
     };

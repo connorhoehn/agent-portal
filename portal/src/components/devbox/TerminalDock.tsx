@@ -211,6 +211,7 @@ export function TerminalDock() {
                   sessionId={s.sessionId}
                   shellId={s.id}
                   label={s.label}
+                  {...(s.cwd ? { cwd: s.cwd } : {})}
                   chrome={false}
                   fillHeight
                   autoConnect
@@ -233,6 +234,7 @@ export function TerminalDock() {
                 sessionId={s.sessionId}
                 shellId={s.id}
                 label={s.label}
+                {...(s.cwd ? { cwd: s.cwd } : {})}
                 chrome={false}
                 fillHeight
                 autoConnect

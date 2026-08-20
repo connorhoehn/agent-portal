@@ -37,6 +37,15 @@ export interface DockShell {
   /** Stable per-tab id; also the AgentCore shellId, so reattach works. */
   id: string;
   sessionId: string;
+  /**
+   * Directory to start in.
+   *
+   * A PTY opens at `/`, which is right for a bare box and wrong when the shell
+   * was opened from a specific codebase — landing at the filesystem root with
+   * no git and no checkout in sight is a shell you have to orient yourself in
+   * before you can use it.
+   */
+  cwd?: string;
   /** Box label for the tab, e.g. devbox-1. */
   label: string;
   status: ShellStatus;
@@ -130,10 +139,16 @@ export function getDock(): DockState {
  * is a real PTY against a quota of ten, and two tabs on one shellId would
  * fight — the second connection kicks the first with close code 4000.
  */
-export function openShell(box: { sessionId: string; label: string; id: string }): string {
+export function openShell(box: { sessionId: string; label: string; id: string; cwd?: string }): string {
   const existing = state.shells.find((s) => s.sessionId === box.sessionId);
   if (existing) {
-    set({ activeId: existing.id, mode: state.mode === 'hidden' ? 'docked' : state.mode });
+    set({
+      activeId: existing.id,
+      mode: state.mode === 'hidden' ? 'docked' : state.mode,
+      ...(box.cwd && box.cwd !== existing.cwd
+        ? { shells: state.shells.map((s) => (s.id === existing.id ? { ...s, cwd: box.cwd } : s)) }
+        : {}),
+    });
     return existing.id;
   }
   if (state.shells.length >= MAX_SHELLS) {
@@ -149,6 +164,7 @@ export function openShell(box: { sessionId: string; label: string; id: string })
     id: `portal-${box.id}-${Date.now().toString(36)}`,
     sessionId: box.sessionId,
     label: box.label,
+    ...(box.cwd ? { cwd: box.cwd } : {}),
     status: 'connecting',
     unread: false,
   };

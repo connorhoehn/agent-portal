@@ -195,7 +195,6 @@ export default function AgentProjectsPage() {
       if (!started.ok || !rec.run) throw new Error(rec.error ?? `HTTP ${started.status}`);
 
       toastSuccess(tid, 'Running', 'It will finish on its own — you can close this.');
-      openShell({ id: box.id, label: box.label, sessionId: box.sessionId });
       setRunFor(null); setPrompt('');
       refresh();
     } catch (err) {
@@ -339,7 +338,7 @@ export default function AgentProjectsPage() {
                         Run a task
                       </button>
                       <button
-                        onClick={() => box && openShell({ id: box.id, label: box.label, sessionId: box.sessionId })}
+                        onClick={() => box && openShell({ id: box.id, label: box.label, sessionId: box.sessionId, cwd: p.checkout })}
                         className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors"
                       >
                         Open shell
@@ -387,7 +386,7 @@ export default function AgentProjectsPage() {
                           {when(r.startedAt)}
                           {r.model ? ` · ${r.model}` : ''}
                           {r.durationMs != null ? ` · ${dur(r.durationMs)}` : ''}
-                          {r.filesChanged != null ? ` · ${r.filesChanged} files changed` : ''}
+                          {r.filesChanged != null ? ` · ${r.filesChanged} ${r.filesChanged === 1 ? 'file' : 'files'} changed` : ''}
                         </div>
                         {r.diffSummary && (
                           <div className="text-[11px] text-text-secondary mt-0.5 truncate" title={r.diffSummary}>

@@ -69,6 +69,8 @@ export interface DiffSummary {
  */
 export async function readWorkingTree(
   client: BedrockAgentCoreClient, arn: string, sessionId: string, checkout: string,
+  /** Porcelain lines seen before the run, so the result is this run's delta. */
+  before: Set<string> = new Set(),
 ): Promise<DiffSummary> {
   // `safe.directory=*` because the checkout is owned by a different uid than
   // the one running the probe, and git refuses with "detected dubious
@@ -86,8 +88,21 @@ export async function readWorkingTree(
     return { filesChanged: 0, summary: `Could not read the working tree — ${firstLine}` };
   }
 
-  const lines = status.split('\n').map((l) => l.trim()).filter(Boolean);
-  if (lines.length === 0) return { filesChanged: 0, summary: 'No change to the working tree.' };
+  const all = status.split('\n').map((l) => l.trim()).filter(Boolean);
+
+  // Only what *this* run did. Reporting the whole working tree credited every
+  // run with changes an earlier one had left uncommitted — a task told to
+  // change nothing was recorded as changing a file, which is worse than saying
+  // nothing at all.
+  const lines = all.filter((l) => !before.has(l));
+  if (lines.length === 0) {
+    return {
+      filesChanged: 0,
+      summary: all.length > 0
+        ? `No change from this run. ${all.length} uncommitted ${all.length === 1 ? 'file' : 'files'} remain from earlier runs.`
+        : 'No change to the working tree.',
+    };
+  }
 
   const stat = await shell(client, arn, sessionId, `${git} diff --stat | tail -1`);
 
@@ -100,6 +115,22 @@ export async function readWorkingTree(
     filesChanged: lines.length,
     summary: `${names}${tail}${statLine ? ` · ${statLine}` : ''}`,
   };
+}
+
+/** Porcelain lines as they stand right now, for before/after comparison. */
+export async function snapshotWorkingTree(
+  client: BedrockAgentCoreClient, arn: string, sessionId: string, checkout: string,
+): Promise<Set<string>> {
+  try {
+    const out = await shell(client, arn, sessionId,
+      `git -c safe.directory='*' -C ${checkout} status --porcelain | head -200`);
+    if (/^fatal:|^error:/m.test(out)) return new Set();
+    return new Set(out.split('\n').map((l) => l.trim()).filter(Boolean));
+  } catch {
+    // A missing snapshot degrades to reporting the whole tree, which is the
+    // old behaviour — imperfect, not wrong enough to fail the run over.
+    return new Set();
+  }
 }
 
 export interface ProjectRunRequest {
@@ -122,6 +153,8 @@ export interface ProjectRunRequest {
  */
 export async function executeProjectRun(req: ProjectRunRequest): Promise<void> {
   try {
+    const before = await snapshotWorkingTree(req.client, req.runtimeArn, req.sessionId, req.checkout);
+
     const outcome = await executeDevboxTask({
       sessionId: req.sessionId,
       // Scope the agent to the checkout, so "this repo" means the repo and not
@@ -139,7 +172,7 @@ export async function executeProjectRun(req: ProjectRunRequest): Promise<void> {
     // precisely when someone needs to know.
     let diff: DiffSummary = { filesChanged: 0, summary: '' };
     try {
-      diff = await readWorkingTree(req.client, req.runtimeArn, req.sessionId, req.checkout);
+      diff = await readWorkingTree(req.client, req.runtimeArn, req.sessionId, req.checkout, before);
     } catch (err) {
       diff = { filesChanged: 0, summary: `Could not read the working tree: ${(err as Error).message}` };
     }
