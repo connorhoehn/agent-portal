@@ -77,7 +77,10 @@ export async function readWorkingTree(
   // ownership" rather than reading it. Scoped to this invocation, not written
   // into any config.
   const git = `git -c safe.directory='*' -C ${checkout}`;
-  const status = await runDevboxShell(client, arn, sessionId, `${git} status --porcelain | head -200`);
+  // `-uall` lists untracked files individually rather than collapsing them to a
+  // parent directory, so a run that adds files reports each one (and matches the
+  // before-snapshot, which uses the same flag).
+  const status = await runDevboxShell(client, arn, sessionId, `${git} status --porcelain -uall | head -400`);
 
   // Never discard git's stderr. The first version sent it to /dev/null, so the
   // ownership refusal above arrived as empty output and was recorded as "no
@@ -123,7 +126,7 @@ export async function snapshotWorkingTree(
 ): Promise<Set<string>> {
   try {
     const out = await runDevboxShell(client, arn, sessionId,
-      `git -c safe.directory='*' -C ${checkout} status --porcelain | head -200`);
+      `git -c safe.directory='*' -C ${checkout} status --porcelain -uall | head -400`);
     if (/^fatal:|^error:/m.test(out)) return new Set();
     return new Set(out.split('\n').map((l) => l.trim()).filter(Boolean));
   } catch {

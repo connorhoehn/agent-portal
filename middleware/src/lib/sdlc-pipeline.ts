@@ -95,8 +95,12 @@ function titleFrom(prompt: string): string {
  */
 async function captureDiff(input: CaptureInput): Promise<{ diff: string; files: string[] } | null> {
   const git = `git -c safe.directory='*' -C ${input.checkout}`;
+  // `-uall`: list untracked files individually, not collapsed to their parent
+  // directory. Without it a new file shows as `?? config/`, and a path-based
+  // gate (protected_paths on **/*.secret, **/auth/**) never sees `config/app.secret`
+  // — a sensitive file in a new directory would slip past governance entirely.
   const status = await runDevboxShell(input.client, input.runtimeArn, input.sessionId,
-    `${git} status --porcelain | head -200`);
+    `${git} status --porcelain -uall | head -400`);
   if (/^fatal:|^error:/m.test(status)) return null;
   const files = status.split('\n').map((l) => l.trim().replace(/^\S+\s+/, '')).filter(Boolean);
   if (files.length === 0) return null;
