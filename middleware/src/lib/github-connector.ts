@@ -128,7 +128,27 @@ export async function openPullRequest(
     const pr = existing[0];
     if (pr?.html_url) return { url: pr.html_url, number: pr.number ?? 0 };
     const detail = await res.text();
-    throw new Error(`GitHub refused the pull request (422): ${detail.slice(0, 200)}`);
+    // Translate the common 422s into something a person can act on. The raw
+    // body ("field":"base","code":"invalid") is opaque; the usual cause is an
+    // empty repository with no base branch to propose against.
+    let reason = '';
+    try {
+      const parsed = JSON.parse(detail) as {
+        message?: string; errors?: Array<{ field?: string; code?: string; message?: string }>;
+      };
+      const e = parsed.errors?.[0];
+      if (e?.field === 'base' && e?.code === 'invalid') {
+        reason = `the base branch "${input.base}" does not exist on ${input.owner}/${input.repo}. `
+          + `An empty repository has no branch to open a pull request against — initialize it with a commit on "${input.base}" first.`;
+      } else if (e?.field === 'head' && e?.code === 'invalid') {
+        reason = `the branch "${input.head}" was not found on the remote — the push may not have landed.`;
+      } else if (/no commits between/i.test(parsed.message ?? e?.message ?? '')) {
+        reason = `there are no commits on "${input.head}" beyond "${input.base}", so there is nothing to propose.`;
+      }
+    } catch { /* not JSON — fall back to the raw body below */ }
+    throw new Error(reason
+      ? `Cannot open a pull request: ${reason}`
+      : `GitHub refused the pull request (422): ${detail.slice(0, 200)}`);
   }
   throw new Error(`Could not open a pull request: HTTP ${res.status}`);
 }
