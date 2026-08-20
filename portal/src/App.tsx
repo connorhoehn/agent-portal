@@ -33,6 +33,7 @@ const DropPage = lazy(() => import('./pages/DropPage'));
 const KBRegistryPage = lazy(() => import('./pages/admin/KBRegistryPage.js'));
 const DevboxPage = lazy(() => import('./pages/admin/DevboxPage'));
 const AgentProjectsPage = lazy(() => import('./pages/admin/AgentProjectsPage'));
+const ChangesPage = lazy(() => import('./pages/admin/ChangesPage'));
 const KBDetailPage = lazy(() => import('./pages/admin/KBDetailPage.js'));
 const InvokePage = lazy(() => import('./pages/InvokePage'));
 const CodeInterpreterDemoPage = lazy(() => import('./pages/CodeInterpreterDemoPage'));
@@ -224,6 +225,8 @@ export function App() {
               is the org graph's initiatives. A repo may deliver one of those;
               the two are joined, not merged. */}
           <Route path="projects" element={<Page element={<AgentProjectsPage />} />} />
+          {/* The governance queue for code agents wrote — review, approve, deliver. */}
+          <Route path="changes" element={<Page element={<ChangesPage />} />} />
           <Route path="devbox" element={<Page element={<DevboxPage />} />} />
 
           <Route path="ingest" element={

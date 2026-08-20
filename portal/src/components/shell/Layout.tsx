@@ -59,6 +59,7 @@ const PLATFORM_ITEMS: NavItem[] = [
   // code that delivers them, and two nav items called Projects would be
   // a coin toss every time.
   { path: '/admin/projects',        label: 'Codebases',       tenant: 'admin' },
+  { path: '/admin/changes',         label: 'Changes',         tenant: 'admin' },
   { path: '/admin/devbox',          label: 'Devbox',          tenant: 'admin' },
   { path: '/iq/agents',             label: 'Architecture',    tenant: 'admin' },
   // One entry, not two: sources, ingestion, storage and knowledge bases are
