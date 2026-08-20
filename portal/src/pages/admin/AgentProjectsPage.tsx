@@ -169,7 +169,17 @@ export default function AgentProjectsPage() {
       });
       if (!run.ok) throw new Error(`clone failed: HTTP ${run.status}`);
       // The command endpoint streams; draining it is what waits for completion.
-      await run.text();
+      // HTTP 200 only means the command *ran* — a git clone that failed (bad
+      // repo, auth, private without a credential) still returns 200 with the
+      // failure in the stream. Reporting that as "Cloned" sends the user on to a
+      // run against an empty checkout, so inspect the output and the exit event.
+      const out = await run.text();
+      const failed = /"exitcode":\s*(?!0\b)\d+/i.test(out)
+        || /fatal:|repository not found|authentication failed|could not read username|could not resolve host|permission denied|remote: (repository not found|invalid)/i.test(out);
+      if (failed) {
+        const m = out.match(/(fatal:[^"\\\n]*|repository not found|authentication failed|could not read username[^"\\\n]*|could not resolve host[^"\\\n]*|permission denied)/i);
+        throw new Error(m ? m[0].slice(0, 200) : 'the clone did not complete — check the repository name and credential');
+      }
 
       toastSuccess(tid, 'Cloned', `${p.repoFullName} is in ${box.label}.`);
       setBoxes(loadBoxes());

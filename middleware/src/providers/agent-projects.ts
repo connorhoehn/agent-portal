@@ -199,8 +199,21 @@ export async function buildCloneCommand(project: AgentProject): Promise<{ comman
   const url = `https://github.com/${project.repoFullName}.git`;
   const redacted = `git clone --depth 50 ${url} ${target}`;
 
+  // `2>&1 | tail -20` bounds the output, but is appended so the pipe binds only
+  // to the final `git log` (| is tighter than &&) — a clone that fails stops the
+  // && chain and exits nonzero rather than being swallowed by tail's exit 0. The
+  // public branch below must follow the same shape; piping `git clone` directly
+  // would mask its failure and report a broken checkout as a clean one.
+  const tail = ' 2>&1 | tail -20';
+
   if (!project.connectionName) {
-    return { command: `rm -rf ${target} && ${redacted} 2>&1 | tail -20`, redacted };
+    const command = [
+      `rm -rf ${target}`,
+      `git clone --depth 50 ${url} ${target}`,
+      `cd ${target}`,
+      `git log --oneline -1`,
+    ].join(' && ') + tail;
+    return { command, redacted };
   }
 
   const token = await borrowApiKey(project.connectionName);
@@ -211,7 +224,7 @@ export async function buildCloneCommand(project: AgentProject): Promise<{ comman
     `cd ${target}`,
     `git remote set-url origin ${url}`,
     `git log --oneline -1`,
-  ].join(' && ') + ' 2>&1 | tail -20';
+  ].join(' && ') + tail;
   return { command, redacted };
 }
 
