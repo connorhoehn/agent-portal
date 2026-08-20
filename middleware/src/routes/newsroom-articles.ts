@@ -6,8 +6,12 @@ import {
   getEntity,
   getClusters,
   getPitches,
+  updatePitchStatus,
+  publishArticle,
+  PITCH_STATUSES,
 } from '../providers/newsroom-articles.js';
 import { asyncHandler } from '../lib/async-handler.js';
+import { requireAction } from '../lib/authz.js';
 
 export const newsroomArticlesRouter = Router();
 
@@ -89,5 +93,35 @@ newsroomArticlesRouter.get(
   asyncHandler(async (req, res) => {
     const status = (req.query['status'] as string) || 'open';
     res.json(await getPitches(status));
+  }),
+);
+
+// PATCH /api/newsroom/pitches/:id — desk decision on a pitch.
+// ManagePitches: reporters + editors hold it; orgiq roles do not.
+newsroomArticlesRouter.patch(
+  '/pitches/:id',
+  requireAction('ManagePitches'),
+  asyncHandler(async (req, res) => {
+    const { status } = req.body as { status?: string };
+    if (!status || !(PITCH_STATUSES as readonly string[]).includes(status)) {
+      res.status(400).json({ error: `status must be one of ${PITCH_STATUSES.join(', ')}` });
+      return;
+    }
+    const id = String(req.params['id']);
+    const ok = await updatePitchStatus(id, status);
+    if (!ok) { res.status(404).json({ error: 'Pitch not found' }); return; }
+    res.json({ id, status });
+  }),
+);
+
+// POST /api/newsroom/articles/:id/publish — editor-only publish authority.
+newsroomArticlesRouter.post(
+  '/articles/:id/publish',
+  requireAction('PublishArticle'),
+  asyncHandler(async (req, res) => {
+    const id = String(req.params['id']);
+    const ok = await publishArticle(id);
+    if (!ok) { res.status(404).json({ error: 'Article not found' }); return; }
+    res.json({ id, status: 'published' });
   }),
 );

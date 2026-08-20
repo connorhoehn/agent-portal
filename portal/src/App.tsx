@@ -65,6 +65,7 @@ const CapabilitiesMemoryPage = lazy(() => import('./pages/capabilities/MemoryPag
 
 // Identity Management sub-pages (HRAdmin only)
 const IdentityLayout = lazy(() => import('./pages/identity/IdentityLayout'));
+const IdentityUsersPage = lazy(() => import('./pages/identity/UsersPage'));
 const IdentityRolesPage = lazy(() => import('./pages/identity/RolesPage'));
 const IdentityPoliciesPage = lazy(() => import('./pages/identity/PoliciesPage'));
 const IdentitySchemaPage = lazy(() => import('./pages/identity/SchemaPage'));
@@ -297,6 +298,7 @@ export function App() {
             </RequireRole>
           }>
             <Route index element={<Navigate to="roles" replace />} />
+            <Route path="users" element={<Page element={<IdentityUsersPage />} />} />
             <Route path="roles" element={<Page element={<IdentityRolesPage />} />} />
             <Route path="policies" element={<Page element={<IdentityPoliciesPage />} />} />
             <Route path="schema" element={<Page element={<IdentitySchemaPage />} />} />

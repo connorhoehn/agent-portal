@@ -493,3 +493,24 @@ export async function getPitches(status = 'open'): Promise<PitchesSummary> {
     })),
   };
 }
+
+// ─── Mutations (Cedar-gated in the router) ───────────────────────────────────
+
+export const PITCH_STATUSES = ['open', 'assigned', 'approved', 'killed', 'filed'] as const;
+
+export async function updatePitchStatus(id: string, status: string): Promise<boolean> {
+  const rows = await exec(
+    'UPDATE pitches SET status = :status, updated_at = NOW() WHERE id = :id RETURNING id',
+    [strParam('status', status), strParam('id', id)],
+  );
+  return rows.length > 0;
+}
+
+export async function publishArticle(id: string): Promise<boolean> {
+  const rows = await exec(
+    "UPDATE documents SET status = 'published', published_at = COALESCE(published_at, NOW()) " +
+    "WHERE id = :id AND doc_type = 'article' RETURNING id",
+    [strParam('id', id)],
+  );
+  return rows.length > 0;
+}

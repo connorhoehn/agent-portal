@@ -55,7 +55,10 @@ function attrsToAvp(attrs: ResourceAttrs): Record<string, AttributeValue> {
 
 async function evaluate(principal: PrincipalRef, action: string, resourceAttrs?: ResourceAttrs): Promise<'ALLOW' | 'DENY'> {
   if (!config.auth.policyStoreId) {
-    // No policy store wired up — open mode for local dev. Audit log still fires.
+    // No policy store wired up. Open mode is a local-dev convenience only —
+    // in production a missing POLICY_STORE_ID is a misconfiguration, and
+    // silently disabling every tenant/role boundary is the worst failure mode.
+    if (process.env['NODE_ENV'] === 'production') return 'DENY';
     return 'ALLOW';
   }
   // Only cache evaluations that don't depend on per-request resource attributes.

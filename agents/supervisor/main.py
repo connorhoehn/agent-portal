@@ -336,6 +336,16 @@ ROLE_GUARDRAIL_IDS: dict[str, str] = {
     "hr-admin": os.environ.get("GUARDRAIL_ID_HR_ADMIN", ""),
 }
 DEFAULT_ROLE = "member"
+DEFAULT_TENANT = "orgiq"
+
+# Roles without a guardrail of their own borrow one: newsroom roles ride on the
+# strictest (member) guardrail; the cross-tenant admin gets hr-admin's (the
+# least restrictive — denies only Health topics).
+GUARDRAIL_ROLE_FALLBACK: dict[str, str] = {
+    "reporter": "member",
+    "editor": "member",
+    "admin": "hr-admin",
+}
 
 
 def _model_kwargs(guardrail_id: str = "") -> dict:
@@ -376,42 +386,63 @@ def _build_ag_ui(role: str, agent: Agent) -> StrandsAgent:
     )
 
 
-# One Agent (+ AG-UI adapter) per role. Both are rebuilt when the managed
-# system prompt changes — the supervisor's prompt is resolved from Bedrock
-# Prompt Management at run time, so editing `orgiq-supervisor-system-prompt`
-# in the portal takes effect within PROMPT_REFRESH_S without a redeploy.
-# Falls back to the SYSTEM_PROMPT literal if the library is unreachable.
+# One Agent (+ AG-UI adapter) per (tenant, role). Both are rebuilt when the
+# managed system prompt changes — the supervisor's prompt is resolved from
+# Bedrock Prompt Management at run time, so editing
+# `orgiq-supervisor-system-prompt` in the portal takes effect within
+# PROMPT_REFRESH_S without a redeploy. Falls back to the SYSTEM_PROMPT literal
+# if the library is unreachable. The tenant key exists so per-tenant prompts /
+# guardrails can attach later without another cache reshape; today all tenants
+# share the prompt and the guardrail comes from the (mapped) role.
 _ROLES: dict[str, str] = {r: g for r, g in ROLE_GUARDRAIL_IDS.items() if g} or {DEFAULT_ROLE: ""}
-_AGENTS_BY_ROLE: dict[str, Agent] = {}
-_AG_UI_AGENTS: dict[str, StrandsAgent] = {}
-_PROMPT_SHA_BY_ROLE: dict[str, str] = {}
+_AGENTS_BY_KEY: dict[tuple[str, str], Agent] = {}
+_AG_UI_AGENTS: dict[tuple[str, str], StrandsAgent] = {}
+_PROMPT_SHA_BY_KEY: dict[tuple[str, str], str] = {}
 
 
-def _agents_for_role(role: str) -> tuple[Agent, StrandsAgent, str]:
-    """(agent, ag_ui_adapter, prompt_sha) for a role, rebuilt on prompt change."""
+def _guardrail_role(role: str) -> str:
+    """Map a session role to the role whose guardrail it uses."""
+    if role in _ROLES:
+        return role
+    mapped = GUARDRAIL_ROLE_FALLBACK.get(role, DEFAULT_ROLE)
+    if mapped in _ROLES:
+        return mapped
+    return DEFAULT_ROLE if DEFAULT_ROLE in _ROLES else next(iter(_ROLES))
+
+
+def _agents_for_role(role: str, tenant: str = DEFAULT_TENANT) -> tuple[Agent, StrandsAgent, str]:
+    """(agent, ag_ui_adapter, prompt_sha) for (tenant, role), rebuilt on prompt change."""
+    key = (tenant, role)
     resolved = resolve_system_prompt(SYSTEM_PROMPT, agent_name="supervisor")
-    if _PROMPT_SHA_BY_ROLE.get(role) != resolved.sha or role not in _AGENTS_BY_ROLE:
-        agent = _build_agent(_ROLES.get(role, ""), resolved.text)
-        _AGENTS_BY_ROLE[role] = agent
-        _AG_UI_AGENTS[role] = _build_ag_ui(role, agent)
-        _PROMPT_SHA_BY_ROLE[role] = resolved.sha
+    if _PROMPT_SHA_BY_KEY.get(key) != resolved.sha or key not in _AGENTS_BY_KEY:
+        agent = _build_agent(_ROLES.get(_guardrail_role(role), ""), resolved.text)
+        # Keep the historical adapter name for orgiq so topology/session naming
+        # stays stable; other tenants get a tenant-qualified name.
+        suffix = role if tenant == DEFAULT_TENANT else f"{tenant}-{role}"
+        _AGENTS_BY_KEY[key] = agent
+        _AG_UI_AGENTS[key] = _build_ag_ui(suffix, agent)
+        _PROMPT_SHA_BY_KEY[key] = resolved.sha
         log.info(
-            "Supervisor agent for role=%s built (prompt source=%s sha=%s)",
-            role, resolved.source, resolved.sha,
+            "Supervisor agent for tenant=%s role=%s built (guardrail_role=%s prompt source=%s sha=%s)",
+            tenant, role, _guardrail_role(role), resolved.source, resolved.sha,
         )
-    return _AGENTS_BY_ROLE[role], _AG_UI_AGENTS[role], _PROMPT_SHA_BY_ROLE[role]
+    return _AGENTS_BY_KEY[key], _AG_UI_AGENTS[key], _PROMPT_SHA_BY_KEY[key]
 
 
 log.info("Supervisor roles configured: %s", sorted(_ROLES.keys()))
 
 
-def _resolve_role(payload: dict) -> str:
-    """Pick the agent for the caller. Unknown / missing roles fall back to member."""
+def _resolve_identity(payload: dict) -> tuple[str, str]:
+    """(tenant, role) for the caller. Unknown roles keep their name (the
+    guardrail mapping happens in _agents_for_role); missing auth falls back to
+    the orgiq member identity."""
     auth = payload.get("auth") if isinstance(payload, dict) else None
     role = (auth or {}).get("role") if isinstance(auth, dict) else None
-    if role and role in _ROLES:
-        return role
-    return DEFAULT_ROLE if DEFAULT_ROLE in _ROLES else next(iter(_ROLES))
+    tenant = (auth or {}).get("tenant") if isinstance(auth, dict) else None
+    return (
+        tenant if isinstance(tenant, str) and tenant else DEFAULT_TENANT,
+        role if isinstance(role, str) and role else DEFAULT_ROLE,
+    )
 
 
 # Baked-prompt marker, kept for reference: the value actually recorded on
@@ -440,19 +471,19 @@ async def handle(payload: dict) -> AsyncIterator | dict:
     if not input_text:
         return {"agent": "supervisor", "error": "missing input_text/prompt/message"}
 
-    role = _resolve_role(payload if isinstance(payload, dict) else {})
+    tenant, role = _resolve_identity(payload if isinstance(payload, dict) else {})
 
     # A2A sub-agent calls (from other agents) use the synchronous path.
     # The middleware sets "stream": true for user-facing requests.
     use_streaming = AG_UI_STREAMING and isinstance(payload, dict) and payload.get("stream", False)
 
     if use_streaming:
-        return _handle_streaming(payload, input_text, role)
+        return _handle_streaming(payload, input_text, role, tenant)
 
-    return await _handle_sync(payload, input_text, role)
+    return await _handle_sync(payload, input_text, role, tenant)
 
 
-async def _handle_streaming(payload: dict, input_text: str, role: str):
+async def _handle_streaming(payload: dict, input_text: str, role: str, tenant: str = DEFAULT_TENANT):
     """AG-UI streaming path — yields SSE events as the LLM generates tokens.
 
     Establishes the same TraceContext the sync path does. Without it,
@@ -462,7 +493,7 @@ async def _handle_streaming(payload: dict, input_text: str, role: str):
     path, the A2A topology graph could never show a single edge for real
     user traffic no matter how many sub-agent calls the supervisor made.
     """
-    _, ag_ui_agent, _prompt_sha = _agents_for_role(role)
+    _, ag_ui_agent, _prompt_sha = _agents_for_role(role, tenant)
 
     ctx = TraceContext.from_request_payload(payload if isinstance(payload, dict) else {})
     token = _current_ctx.set(ctx)
@@ -504,8 +535,8 @@ async def _handle_streaming(payload: dict, input_text: str, role: str):
     )
 
     log.info(
-        "Supervisor AG-UI streaming (role=%s, thread=%s, run=%s, invocation=%s): %s",
-        role, thread_id, run_id, ctx.invocation_id, input_text[:120],
+        "Supervisor AG-UI streaming (tenant=%s, role=%s, thread=%s, run=%s, invocation=%s): %s",
+        tenant, role, thread_id, run_id, ctx.invocation_id, input_text[:120],
     )
 
     try:
@@ -545,9 +576,9 @@ async def _handle_streaming(payload: dict, input_text: str, role: str):
             log.warning("supervisor: streaming trace emission failed: %s", exc)
 
 
-async def _handle_sync(payload: dict, input_text: str, role: str) -> dict:
+async def _handle_sync(payload: dict, input_text: str, role: str, tenant: str = DEFAULT_TENANT) -> dict:
     """Synchronous dict-return path for A2A sub-agent calls."""
-    agent, _, _prompt_sha = _agents_for_role(role)
+    agent, _, _prompt_sha = _agents_for_role(role, tenant)
 
     messages = []
     raw_history = payload.get("history", []) if isinstance(payload, dict) else []

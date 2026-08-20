@@ -88,8 +88,9 @@ identityRouter.put('/users/:id/grants', requireAction('ManageUsers'), asyncHandl
       }
     }
   }
-  await setGrants(req.params['id']!, grants);
-  res.json(await getUser(req.params['id']!));
+  const userId = String(req.params['id']);
+  await setGrants(userId, grants);
+  res.json(await getUser(userId));
 }));
 
 // ── Policy simulator: dry-run AVP IsAuthorized for arbitrary (role, action) ──

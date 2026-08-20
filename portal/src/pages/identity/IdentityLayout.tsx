@@ -2,6 +2,7 @@ import { NavLink, Outlet } from 'react-router';
 import { SubNavLayout, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
 
 const ITEMS: SubNavItem[] = [
+  { path: 'users',    label: 'Users',    hint: 'Identities + tenant grants' },
   { path: 'roles',    label: 'Roles',    hint: 'Cedar permission matrix' },
   { path: 'policies', label: 'Policies', hint: 'AVP Cedar source' },
   { path: 'schema',   label: 'Schema',   hint: 'Entity types + actions' },

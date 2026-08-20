@@ -53,7 +53,21 @@ function deriveSessionId(req: { body?: Record<string, unknown> }): string {
 // deriveSessionId option — no more CUSTOM `session` workaround.
 // Tool results are emitted via standard TOOL_CALL_RESULT events — no more
 // CUSTOM `tool_call_result` workaround.
-agentsRouter.post('/:agentId/invoke', requireAction('Search'), agentStreamMiddleware(async (req, stream, signal) => {
+// Newsroom agents serve newsroom-tenant sessions only (admin excepted). This
+// runs BEFORE the SSE stream opens so the caller gets a plain 403, not a
+// mid-stream error event.
+function requireAgentTenant(req: import('express').Request, res: import('express').Response, next: import('express').NextFunction): void {
+  const agentId = String(req.params['agentId'] ?? '');
+  const session = req.session;
+  const isNewsAgent = /(^|-)news-/.test(agentId);
+  if (session && isNewsAgent && session.tenant !== 'newsroom' && session.role !== 'admin') {
+    res.status(403).json({ error: 'Forbidden', requiredTenant: 'newsroom', agentId });
+    return;
+  }
+  next();
+}
+
+agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenant, agentStreamMiddleware(async (req, stream, signal) => {
   const agentId = String(req.params['agentId'] ?? '');
   const { message, sessionId, actorId, selection } = req.body as {
     message?: string;
