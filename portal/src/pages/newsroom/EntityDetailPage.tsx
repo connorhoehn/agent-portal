@@ -1,6 +1,4 @@
-// TODO(N3): wire post-merge —
-//   1. portal/src/App.tsx: under <Route path="newsroom">, add:
-//      <Route path="entities/:id" element={<Page element={<EntityDetailPage />} />} />
+// One entity in depth — where it appears and what it co-occurs with.
 
 import type { CSSProperties } from 'react';
 import { Link, useParams } from 'react-router';

@@ -6,6 +6,7 @@ import {
   getEntity,
   getClusters,
   getPitches,
+  getPitchBoard,
   updatePitchStatus,
   publishArticle,
   PITCH_STATUSES,
@@ -84,6 +85,16 @@ newsroomArticlesRouter.get(
   '/clusters',
   asyncHandler(async (_req, res) => {
     res.json(await getClusters());
+  }),
+);
+
+// GET /api/newsroom/pitches/board — the full desk view: every pitch with its
+// beat, proposer, assignee and cluster, plus counts per status. Declared
+// before /pitches so Express never mistakes "board" for a query on it.
+newsroomArticlesRouter.get(
+  '/pitches/board',
+  asyncHandler(async (_req, res) => {
+    res.json(await getPitchBoard());
   }),
 );
 

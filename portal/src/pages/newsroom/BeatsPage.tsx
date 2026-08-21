@@ -1,8 +1,4 @@
-// TODO(N4): wire post-merge —
-//   1. middleware/src/index.ts: import + mount newsroomBeatsRouter at /api/newsroom/beats.
-//      Mount BEFORE /api/newsroom (whichever order N3 uses) so /beats doesn't get swallowed.
-//   2. portal/src/App.tsx: add child route under <Route path="newsroom">:
-//      <Route path="beats" element={<Page element={<BeatsPage />} />} />
+// Beat coverage — the heatmap that shows where the desk is thin.
 
 import type { CSSProperties } from 'react';
 import { useState } from 'react';

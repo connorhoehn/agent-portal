@@ -494,6 +494,68 @@ export async function getPitches(status = 'open'): Promise<PitchesSummary> {
   };
 }
 
+// ─── Pitch board (full desk view, /newsroom/pitches) ─────────────────────────
+// The home card shows a one-status summary; the board is the whole backlog:
+// every pitch with its beat, proposer, assignee and cluster, plus counts per
+// status so the page can filter without refetching.
+
+export interface PitchBoardItem {
+  id: string;
+  title: string;
+  body: string | null;
+  beat: string | null;
+  status: string;
+  proposedBy: { id: string; name: string } | null;
+  assignedTo: { id: string; name: string } | null;
+  cluster: { id: string; title: string } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PitchBoard {
+  counts: Record<string, number>;
+  pitches: PitchBoardItem[];
+}
+
+export async function getPitchBoard(): Promise<PitchBoard> {
+  const countRows = await exec('SELECT status, count(*)::int AS n FROM pitches GROUP BY status');
+  const rows = await exec(`
+    SELECT p.id, p.title, p.body, p.beat, p.status, p.created_at, p.updated_at,
+           pp.id AS proposer_id, pp.name AS proposer_name,
+           ap.id AS assignee_id, ap.name AS assignee_name,
+           sc.id AS cluster_id, sc.title AS cluster_title
+    FROM pitches p
+    LEFT JOIN people pp ON pp.id = p.proposed_by
+    LEFT JOIN people ap ON ap.id = p.assigned_to
+    LEFT JOIN story_clusters sc ON sc.id = p.cluster_id
+    ORDER BY p.updated_at DESC
+    LIMIT 200
+  `);
+  const counts: Record<string, number> = {};
+  for (const r of countRows) counts[String(r['status'])] = Number(r['n'] ?? 0);
+  return {
+    counts,
+    pitches: rows.map((r) => ({
+      id: String(r['id']),
+      title: String(r['title'] ?? ''),
+      body: r['body'] ? String(r['body']) : null,
+      beat: r['beat'] ? String(r['beat']) : null,
+      status: String(r['status'] ?? 'open'),
+      proposedBy: r['proposer_id']
+        ? { id: String(r['proposer_id']), name: String(r['proposer_name'] ?? '') }
+        : null,
+      assignedTo: r['assignee_id']
+        ? { id: String(r['assignee_id']), name: String(r['assignee_name'] ?? '') }
+        : null,
+      cluster: r['cluster_id']
+        ? { id: String(r['cluster_id']), title: String(r['cluster_title'] ?? '') }
+        : null,
+      createdAt: String(r['created_at'] ?? ''),
+      updatedAt: String(r['updated_at'] ?? ''),
+    })),
+  };
+}
+
 // ─── Mutations (Cedar-gated in the router) ───────────────────────────────────
 
 export const PITCH_STATUSES = ['open', 'assigned', 'approved', 'killed', 'filed'] as const;

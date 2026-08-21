@@ -1,13 +1,5 @@
-// TODO(N2): wire post-merge —
-//   1. portal/src/App.tsx: lazy import NewsroomLayout + HomePage. Add
-//      <Route path="newsroom" element={<Page element={<NewsroomLayout />} />}>
-//        <Route index element={<Navigate to="home" replace />} />
-//        <Route path="home" element={<Page element={<HomePage />} />} />
-//        // articles, beats, briefs, pitches sub-routes added by N3/N4/N6/N8 agents
-//      </Route>
-//   2. portal/src/components/shell/Layout.tsx: NAV_ITEMS insert
-//      { path: '/newsroom', label: 'Newsroom' } before Observability.
-//   3. portal/src/components/shell/CommandPalette.tsx: add { label: 'Newsroom', hint: 'Articles, beats, briefs', path: '/newsroom' } to PAGES.
+// Newsroom home — today's output, beats, clusters, and open pitches at a
+// glance, each card linking to its full surface.
 
 import type { CSSProperties } from 'react';
 import { Link } from 'react-router';
@@ -15,8 +7,6 @@ import { Card, PageSection } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
 // ── API response types ────────────────────────────────────────────────────────
-// These endpoints are created by N3/N4/N6/N8 agents. Until they land, all
-// fetches will 404 and the page will gracefully show empty-state hints.
 
 interface TodayResponse {
   total: number;
@@ -111,7 +101,7 @@ function BeatsCard() {
       <StatNumber value={isEmpty ? null : beats.length} />
       <div style={cardDetailStyle}>top beats this week</div>
       {isEmpty ? (
-        <EmptyHint text="No beat data yet — beat coverage added by N4" />
+        <EmptyHint text="No beat data yet — the synth corpus pipeline seeds beats" />
       ) : beats.length > 0 ? (
         <ul style={listStyle}>
           {beats.slice(0, 5).map((b) => (
@@ -148,7 +138,7 @@ function ClustersCard() {
       <StatNumber value={isEmpty ? null : data.total} />
       <div style={cardDetailStyle}>active clusters</div>
       {isEmpty ? (
-        <EmptyHint text="No cluster data yet — clusters built by N3" />
+        <EmptyHint text="No cluster data yet — clusters come from the synth corpus pipeline" />
       ) : clusters.length > 0 ? (
         <ul style={listStyle}>
           {clusters.slice(0, 3).map((c) => (
@@ -185,7 +175,7 @@ function PitchesCard() {
       <StatNumber value={isEmpty ? null : data.total} />
       <div style={cardDetailStyle}>open pitches</div>
       {isEmpty ? (
-        <EmptyHint text="No pitches yet — story backlog added by N8" />
+        <EmptyHint text="No pitches yet — the desk backlog starts empty" />
       ) : pitches.length > 0 ? (
         <ul style={listStyle}>
           {pitches.slice(0, 3).map((p) => (
