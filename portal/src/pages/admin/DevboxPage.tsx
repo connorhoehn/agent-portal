@@ -424,7 +424,7 @@ export default function DevboxPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <PageSection title="Devbox — Claude Code in a microVM">
+    <PageSection title="Computers — Claude Code in a microVM">
       {/* ── Boxes bar ── */}
       <style>{`
         @keyframes devbox-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }

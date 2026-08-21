@@ -33,40 +33,45 @@ interface WorkSummary {
 }
 
 type Tenant = 'orgiq' | 'newsroom' | 'admin';
-type NavItem = { path: string; label: string; requireRoles?: string[]; tenant: Tenant | 'universal' };
+type NavItem = { path: string; label: string; requireRoles?: string[]; tenant: Tenant | 'universal'; group?: string };
 
-// Top-level nav — orgiq + universal items only. Admin items live in PLATFORM_ITEMS.
-// Five jobs-to-be-done. Everything else is reachable from inside one of these
-// (or from Operate's drill-ins) — a flat list of 20 destinations made the app
-// read as a pile of dashboards rather than a tool with a purpose.
+// The app is an SDLC agent platform first — agents that link codebases, run in
+// computers, and deliver reviewed changes. OrgIQ (organizational intelligence)
+// is one feature subset of that, not the frame. So the rail leads with BUILD
+// (the SDLC loop), then ORGIQ, then OPERATE (platform/ops). Rail groups are
+// derived from each item's `group`; ordering is by GROUP_ORDER below.
+
+// Rail group order (top → bottom).
+const GROUP_ORDER = ['Build', 'OrgIQ', 'Operate', 'System'];
+
+// Tenant/universal items (visible per tenant + role, not just to admins).
 const NAV_ITEMS: NavItem[] = [
-  { path: '/iq/invoke',     label: 'Ask',      tenant: 'orgiq' },
-  { path: '/iq/explore',    label: 'Explore',  tenant: 'orgiq' },
-  { path: '/iq/work',       label: 'Work',     tenant: 'orgiq' },
-  { path: '/iq/prompt-ops', label: 'Prompts',  tenant: 'orgiq' },
+  { path: '/iq/work',       label: 'Work',     tenant: 'orgiq',     group: 'Build' },
+  { path: '/iq/invoke',     label: 'Ask',      tenant: 'orgiq',     group: 'OrgIQ' },
+  { path: '/iq/explore',    label: 'Explore',  tenant: 'orgiq',     group: 'OrgIQ' },
+  { path: '/iq/prompt-ops', label: 'Prompts',  tenant: 'orgiq',     group: 'Operate' },
   { path: '/newsroom',      label: 'Newsroom', tenant: 'newsroom' },
-  { path: '/settings',      label: 'Settings', tenant: 'universal' },
+  { path: '/settings',      label: 'Settings', tenant: 'universal', group: 'System' },
 ];
 
-// Admin sub-items rendered inside the collapsible Platform group via SubNavItem.group.
-// Operate — the admin surfaces, grouped under one heading instead of seven
-// peers competing with the product surfaces above.
+// Platform/admin surfaces, gated by role and grouped SDLC-first.
 const PLATFORM_ITEMS: NavItem[] = [
-  { path: '/admin/observability',   label: 'Health',          tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'] },
-  // 'Codebases', not 'Projects': /iq/projects is already the org's
-  // initiatives — epics, features, the people who own them. This is the
-  // code that delivers them, and two nav items called Projects would be
-  // a coin toss every time.
-  { path: '/admin/projects',        label: 'Codebases',       tenant: 'admin', requireRoles: ['hr-admin'] },
-  { path: '/admin/changes',         label: 'Changes',         tenant: 'admin', requireRoles: ['hr-admin'] },
-  { path: '/admin/devbox',          label: 'Devbox',          tenant: 'admin', requireRoles: ['hr-admin'] },
-  { path: '/iq/agents',             label: 'Architecture',    tenant: 'admin' },
+  // BUILD — the SDLC core: the repos, the reviews, and the machines agents run on.
+  // 'Codebases', not 'Projects': /iq/projects is already the org's initiatives —
+  // epics, features, the people who own them. This is the code that delivers them.
+  { path: '/admin/projects',        label: 'Codebases',       tenant: 'admin', requireRoles: ['hr-admin'], group: 'Build' },
+  { path: '/admin/changes',         label: 'Changes',         tenant: 'admin', requireRoles: ['hr-admin'], group: 'Build' },
+  // 'Computers', not 'Devbox': the page is a fleet of microVMs agents work in,
+  // and the top-level menu reads as a place, not a single box.
+  { path: '/admin/devbox',          label: 'Computers',       tenant: 'admin', requireRoles: ['hr-admin'], group: 'Build' },
+  // OPERATE — platform + ops.
+  { path: '/admin/observability',   label: 'Health',          tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'], group: 'Operate' },
+  { path: '/iq/agents',             label: 'Architecture',    tenant: 'admin', group: 'Operate' },
   // One entry, not two: sources, ingestion, storage and knowledge bases are
-  // consecutive stages of one pipeline, and splitting them across two nav
-  // items made you check both to find out whether either was working.
-  { path: '/admin/knowledge',       label: 'Knowledge',       tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'] },
-  { path: '/admin/capabilities',    label: 'Capabilities',    tenant: 'admin' },
-  { path: '/admin/identity',        label: 'Identity',        tenant: 'admin', requireRoles: ['hr-admin'] },
+  // consecutive stages of one pipeline.
+  { path: '/admin/knowledge',       label: 'Knowledge',       tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'], group: 'Operate' },
+  { path: '/admin/capabilities',    label: 'Capabilities',    tenant: 'admin', group: 'Operate' },
+  { path: '/admin/identity',        label: 'Identity',        tenant: 'admin', requireRoles: ['hr-admin'], group: 'Operate' },
 ];
 
 const TENANT_LABELS: Record<Tenant, string> = {
@@ -119,14 +124,20 @@ export function Layout() {
   const needsYou =
     (work?.jobs['awaiting_review'] ?? 0) + (work?.proposals['pending'] ?? 0);
 
-  const subNavItems: SubNavItem[] = [
-    ...navItems.map((i) => ({
+  // Combine the tenant + platform items and order them by rail group
+  // (Build → OrgIQ → Operate → System). Array.sort is stable, so items keep
+  // their definition order within a group.
+  const subNavItems: SubNavItem[] = [...navItems, ...platformItems]
+    .map((i) => ({
       path: i.path,
       label: i.label,
+      ...(i.group ? { group: i.group } : {}),
       ...(i.path === '/iq/work' && needsYou > 0 ? { count: needsYou } : {}),
-    })),
-    ...platformItems.map((i) => ({ path: i.path, label: i.label, group: 'Operate' })),
-  ];
+    }))
+    .sort((a, b) => {
+      const rank = (g?: string) => { const n = GROUP_ORDER.indexOf(g ?? 'System'); return n < 0 ? GROUP_ORDER.length : n; };
+      return rank(a.group) - rank(b.group);
+    });
 
   const mockedSubsystems = health
     ? Object.entries(health.mocks).filter(([, v]) => v).map(([k]) => k)

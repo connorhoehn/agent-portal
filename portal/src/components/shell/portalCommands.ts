@@ -190,7 +190,7 @@ export function usePortalDynamicCommands(): (query: string) => Command[] {
       if (boxes.length === 0 && wantsShell) {
         shellCommands.push({
           id: 'shell:none',
-          label: 'No devboxes yet — open Devbox to create one',
+          label: 'No computers yet — open Computers to create one',
           hint: 'a terminal needs a box to attach to',
           group: 'Terminals',
           keywords: ['terminal', 'shell'],
