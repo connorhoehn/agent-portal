@@ -63,6 +63,32 @@ function dur(ms: number | null): string {
   return ms < 1000 ? `${ms}ms` : ms < 60_000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms / 60_000)}m`;
 }
 
+// Accept a pasted GitHub URL (HTTPS or SSH) or a bare owner/name and reduce it
+// to "owner/repo". Handles: https://github.com/o/r(.git)(/tree/main…),
+// git@github.com:o/r.git, ssh://git@github.com/o/r, github.com/o/r, o/r.
+export function parseRepoInput(raw: string): string | null {
+  let s = (raw ?? '').trim();
+  if (!s) return null;
+  s = s.replace(/^git@[^:]+:/i, '');            // scp-style SSH → path
+  s = s.replace(/^[a-z][a-z0-9+.-]*:\/\//i, ''); // scheme://
+  s = s.replace(/^[^@/]+@/, '');                 // user@ (ssh:// form)
+  const parts = s.split('/').filter(Boolean);
+  let owner: string | undefined;
+  let repo: string | undefined;
+  if (parts[0]?.includes('.')) {                 // leading segment is a host
+    if (parts.length < 3) return null;
+    [, owner, repo] = parts;
+  } else if (parts.length >= 2) {
+    [owner, repo] = parts;
+  } else {
+    return null;
+  }
+  repo = (repo ?? '').split(/[?#]/)[0]!.replace(/\.git$/i, '');
+  if (!owner || !repo) return null;
+  if (!/^[A-Za-z0-9._-]+$/.test(owner) || !/^[A-Za-z0-9._-]+$/.test(repo)) return null;
+  return `${owner}/${repo}`;
+}
+
 export default function AgentProjectsPage() {
   const { data, refresh } = useFetch<{ projects: Project[] }>('/api/agent-projects', 15_000);
   const { data: connections } = useFetch<{ sources: ConnectedSource[] }>('/api/connections', 60_000);
@@ -110,21 +136,28 @@ export default function AgentProjectsPage() {
 
   const link = useCallback(async () => {
     if (!repo.trim()) return;
+    // Accept a full GitHub URL (HTTPS/SSH) or owner/name.
+    const fullName = parseRepoInput(repo);
+    if (!fullName) {
+      toastError(null, 'That doesn’t look like a repo',
+        'Paste a GitHub URL (https://github.com/owner/repo or git@github.com:owner/repo.git) or type owner/name.');
+      return;
+    }
     setBusy('link');
-    const tid = toastPending('Linking project', repo);
+    const tid = toastPending('Linking project', fullName);
     try {
       const res = await fetch('/api/agent-projects', {
         method: 'POST', credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          repoFullName: repo.trim(),
+          repoFullName: fullName,
           connectionName: connection || null,
           orgProjectId: orgProject || null,
         }),
       });
       const body = await res.json() as { error?: string };
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
-      toastSuccess(tid, 'Linked', `${repo} is now a project.`);
+      toastSuccess(tid, 'Linked', `${fullName} is now a project.`);
       setRepo(''); setLinking(false); refresh();
     } catch (err) {
       toastError(tid, 'Could not link', (err as Error).message);
@@ -276,7 +309,7 @@ export default function AgentProjectsPage() {
                 value={repo}
                 onChange={(e) => setRepo(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') void link(); }}
-                placeholder="owner/name"
+                placeholder="Paste a GitHub URL (https:// or git@…) or owner/name"
                 className="w-full px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary font-mono"
               />
               <datalist id="repo-options">
