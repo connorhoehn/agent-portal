@@ -32,6 +32,8 @@ interface SessionContextValue {
   ssoEnabled: boolean;
   setRole: (role: string) => Promise<void>;
   setTenant: (tenant: Tenant) => Promise<void>;
+  /** Switch account (tenant) AND role in one step — used by the context chooser. */
+  enterContext: (tenant: Tenant, role: string) => Promise<void>;
   login: (userId: string) => Promise<void>;
   masquerade: (userId: string) => Promise<void>;
   stopMasquerade: () => Promise<void>;
@@ -143,6 +145,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     await refresh();
   }, [refresh]);
 
+  // Set the account (tenant) and the role together, refreshing once. The role
+  // must be held in the target tenant — the chooser only ever offers held ones.
+  const enterContext = useCallback(async (tenant: Tenant, role: string) => {
+    await post('/api/session/tenant', { tenant });
+    await post('/api/session/role', { role });
+    await refresh();
+  }, [refresh]);
+
   const login = useCallback(async (userId: string) => {
     await post('/api/session/login', { userId });
     await refresh();
@@ -165,8 +175,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const ctxValue = useMemo(
-    () => ({ session, isLoading, ssoEnabled, setRole, setTenant, login, masquerade, stopMasquerade, signInWithSso, logout, listUsers, refresh }),
-    [session, isLoading, ssoEnabled, setRole, setTenant, login, masquerade, stopMasquerade, signInWithSso, logout, listUsers, refresh],
+    () => ({ session, isLoading, ssoEnabled, setRole, setTenant, enterContext, login, masquerade, stopMasquerade, signInWithSso, logout, listUsers, refresh }),
+    [session, isLoading, ssoEnabled, setRole, setTenant, enterContext, login, masquerade, stopMasquerade, signInWithSso, logout, listUsers, refresh],
   );
 
   return (

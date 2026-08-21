@@ -12,7 +12,6 @@ import { useSession } from '../../lib/auth';
 import { MasqueradeMenu } from './MasqueradeMenu';
 import { GatewayStatusBadge } from './GatewayStatusBadge';
 import { usePortalCommands, usePortalDynamicCommands } from './portalCommands';
-import { TenantSwitcher } from './TenantSwitcher';
 import { DevboxQuickSwitch } from './DevboxQuickSwitch';
 import { ToastHost } from './ToastHost';
 import { TerminalDock } from '../devbox/TerminalDock';
@@ -158,7 +157,6 @@ export function Layout() {
           online={mockedSubsystems.length === 0 && !!health && !credsExpired && !dbDown}
           actions={
             <div className="flex items-center gap-3">
-              <TenantSwitcher />
               <CommandPaletteHint />
               <GatewayStatusBadge />
               <MasqueradeMenu />

@@ -4,6 +4,7 @@ import { Layout } from './components/shell/Layout';
 import { RequireRole } from './lib/auth';
 import { useSession } from './lib/auth';
 import { NEWSROOM_ENABLED } from './lib/features';
+import { hasChosenContext } from './lib/contextChoice';
 import { GatewaySocketProvider } from '@connorhoehnslalom/realtime-modules/client/ws';
 
 const AgentFlowPage = lazy(() => import('./pages/AgentFlowPage'));
@@ -27,6 +28,7 @@ const NewsroomBriefsPage = lazy(() => import('./pages/newsroom/BriefsPage'));
 const NewsroomHeadlinesPage = lazy(() => import('./pages/newsroom/HeadlinesPage'));
 const KnowledgeHomePage = lazy(() => import('./pages/knowledge/KnowledgeHomePage'));
 const DropPage = lazy(() => import('./pages/DropPage'));
+const SelectContextPage = lazy(() => import('./pages/SelectContextPage'));
 const KBRegistryPage = lazy(() => import('./pages/admin/KBRegistryPage.js'));
 const DevboxPage = lazy(() => import('./pages/admin/DevboxPage'));
 const AgentProjectsPage = lazy(() => import('./pages/admin/AgentProjectsPage'));
@@ -119,11 +121,17 @@ function Page({ element }: { element: React.ReactNode }) {
 function RootRedirect() {
   const { session, isLoading } = useSession();
   if (isLoading) return null;
-  // Only route to the newsroom home when the newsroom surface is actually
-  // enabled — otherwise a newsroom-tenant session lands on a route the
-  // flag-off catch-all bounces straight back here, looping. Fall back to the
-  // orgiq root instead. (The TenantSwitcher migration can't cover this: it
-  // hides itself for single-tenant users, which every newsroom persona is.)
+  // Count the workspaces (tenant, role) actually usable to this identity —
+  // newsroom is dropped when the flag is off. A multi-context identity that
+  // hasn't picked yet this session lands on the chooser first (AWS-style);
+  // a single-context or already-chosen identity goes straight in. Masqueraders
+  // skip the chooser — the operator deliberately chose who to view as.
+  const usable = Object.entries(session?.grants ?? {})
+    .filter(([t]) => NEWSROOM_ENABLED || t !== 'newsroom')
+    .reduce((n, [, roles]) => n + (roles?.length ?? 0), 0);
+  if (usable > 1 && !session?.masquerading && !hasChosenContext(session?.sub ?? '')) {
+    return <Navigate to="/select" replace />;
+  }
   const toNewsroom = session?.tenant === 'newsroom' && NEWSROOM_ENABLED;
   return <Navigate to={toNewsroom ? '/newsroom/home' : '/iq/work'} replace />;
 }
@@ -157,6 +165,10 @@ export function App() {
           switcher and a masquerade control would be both confusing and a
           small information leak about the org. */}
       <Route path="drop/:token" element={<Page element={<DropPage />} />} />
+
+      {/* Workspace chooser — outside Layout: it's the pre-app "select account +
+          role" step, shown once after login for multi-context identities. */}
+      <Route path="select" element={<Page element={<SelectContextPage />} />} />
 
       <Route element={<Layout />}>
         <Route index element={<RootRedirect />} />

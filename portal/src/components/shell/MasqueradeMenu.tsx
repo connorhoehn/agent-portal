@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { useSession, type DirectoryUser, type SessionRole } from '../../lib/auth';
+import { useNavigate } from 'react-router';
+import { useSession, type DirectoryUser, type SessionRole, type Tenant } from '../../lib/auth';
+import { NEWSROOM_ENABLED } from '../../lib/features';
 
 const ROLE_LABELS: Record<string, string> = {
   member: 'Member',
@@ -19,13 +21,20 @@ const ROLE_HINTS: Record<string, string> = {
   admin: 'Cross-tenant operator. Can masquerade.',
 };
 
+const TENANT_LABELS: Record<string, string> = { orgiq: 'OrgIQ', newsroom: 'Newsroom' };
+const TENANT_ROOT: Record<string, string> = { orgiq: '/iq/work', newsroom: '/newsroom/home' };
+
 function roleLabel(role: string): string {
   return ROLE_LABELS[role] ?? role;
 }
+function tenantLabel(t: string): string {
+  return TENANT_LABELS[t] ?? t;
+}
 
 export function MasqueradeMenu() {
-  const { session, setRole, login, masquerade, stopMasquerade, listUsers, isLoading,
+  const { session, setRole, setTenant, login, masquerade, stopMasquerade, listUsers, isLoading,
     ssoEnabled, signInWithSso, logout } = useSession();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [users, setUsers] = useState<DirectoryUser[] | null>(null);
@@ -58,6 +67,10 @@ export function MasqueradeMenu() {
   const isAdmin = session.role === 'admin'
     || Object.values(session.grants).some(roles => roles.includes('admin'));
   const canMasquerade = isAdmin || !!session.masquerading;
+
+  // Accounts (tenants) this identity can switch between, newsroom filtered by flag.
+  const accountTenants = (session.availableTenants ?? [])
+    .filter(t => NEWSROOM_ENABLED || t !== 'newsroom');
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -99,7 +112,7 @@ export function MasqueradeMenu() {
         }} />
         <span style={{ fontWeight: 500 }}>{session.name}</span>
         <span style={{ color: 'var(--color-text-tertiary)', fontSize: 11 }}>
-          {roleLabel(session.role)}{session.masquerading ? ' · masquerade' : ''} <span aria-hidden="true">▾</span>
+          {tenantLabel(session.tenant)} · {roleLabel(session.role)}{session.masquerading ? ' · masquerade' : ''} <span aria-hidden="true">▾</span>
         </span>
       </button>
 
@@ -118,6 +131,23 @@ export function MasqueradeMenu() {
           padding: 6,
           zIndex: 100,
         }}>
+          {/* Current identity — always visible so "who/what am I now" is unambiguous. */}
+          <div style={{ padding: '8px 10px 10px', borderBottom: '1px solid var(--color-border)', marginBottom: 4 }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>{session.name}</div>
+            <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 8 }}>{session.sub}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+              <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: roleColor(session.role) }} />
+              <strong>{tenantLabel(session.tenant)}</strong>
+              <span style={{ color: 'var(--color-text-tertiary)' }}>·</span>
+              <span>{roleLabel(session.role)}</span>
+              {session.masquerading && (
+                <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--color-warning)' }}>
+                  masquerading
+                </span>
+              )}
+            </div>
+          </div>
+
           {session.masquerading && (
             <div style={{
               margin: '2px 4px 6px',
@@ -180,7 +210,32 @@ export function MasqueradeMenu() {
             </>
           )}
 
-          <SectionLabel>Switch role · {session.tenant}</SectionLabel>
+          {/* ACCOUNT — the tenant/workspace, kept distinct from role so the two
+              aren't tangled. Switching navigates to that workspace's home. */}
+          {accountTenants.length > 1 && (
+            <>
+              <SectionLabel>Account</SectionLabel>
+              {accountTenants.map(t => {
+                const active = t === session.tenant;
+                return (
+                  <MenuItem
+                    key={t}
+                    active={active}
+                    busy={busy}
+                    onClick={() => active
+                      ? setOpen(false)
+                      : void run(async () => { await setTenant(t); navigate(TENANT_ROOT[t] ?? '/iq/work'); })}
+                    title={tenantLabel(t)}
+                    hint={active ? 'current workspace' : 'switch to this workspace'}
+                    dotColor="var(--color-info)"
+                  />
+                );
+              })}
+            </>
+          )}
+
+          {/* ROLE — within the current account. */}
+          <SectionLabel>Role in {tenantLabel(session.tenant)}</SectionLabel>
           {session.availableRoles.map(role => {
             const active = role === session.role;
             return (
@@ -222,6 +277,22 @@ export function MasqueradeMenu() {
           {users !== null && users.length === 0 && (
             <div style={{ padding: '6px 10px', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
               No users provisioned.
+            </div>
+          )}
+
+          {(accountTenants.length > 1 || session.availableRoles.length > 1) && (
+            <div style={{ borderTop: '1px solid var(--color-border)', marginTop: 6, paddingTop: 6 }}>
+              <button
+                type="button"
+                onClick={() => { setOpen(false); navigate('/select'); }}
+                style={{
+                  width: '100%', textAlign: 'left', padding: '8px 10px', background: 'transparent',
+                  border: 'none', borderRadius: 'var(--radius-sm, 4px)', color: 'var(--color-primary)',
+                  cursor: 'pointer', fontSize: 12.5, fontWeight: 600,
+                }}
+              >
+                Switch workspace…
+              </button>
             </div>
           )}
 
