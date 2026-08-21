@@ -23,6 +23,8 @@ import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
 import { loadBoxes, createBox, type DevboxBox } from '../../lib/devboxRegistry';
 import { openShell } from '../../lib/terminalDock';
 import { DEVBOX_MODELS, DEFAULT_DEVBOX_MODEL } from '../../lib/devboxModels';
+import { ConnectionSetup } from '../../components/codebases/ConnectionSetup';
+import { RepoDiscovery } from '../../components/codebases/RepoDiscovery';
 
 interface Run {
   id: string; prompt: string; model: string | null;
@@ -107,7 +109,8 @@ export default function AgentProjectsPage() {
     if (!focusProject || !data) return;
     document.getElementById(`project-${focusProject}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }, [focusProject, data]);
-  const { data: connections } = useFetch<{ sources: ConnectedSource[] }>('/api/connections', 60_000);
+  const { data: connections, refresh: refreshConnections } =
+    useFetch<{ sources: ConnectedSource[] }>('/api/connections', 60_000);
   // The initiatives a repository can be attached to. An enterprise has both:
   // people who own the work and code that delivers it.
   const { data: orgProjects } = useFetch<OrgProject[]>('/api/graph/projects', 120_000);
@@ -120,6 +123,10 @@ export default function AgentProjectsPage() {
   useEffect(() => { try { setBoxes(loadBoxes()); } catch { setBoxes([]); } }, [data]);
 
   const [linking, setLinking] = useState(false);
+  // GitHub setup + discovery live on this page now — no detour to Knowledge →
+  // Sources just to paste a PAT, and no typing owner/name from memory.
+  const [showConnections, setShowConnections] = useState(false);
+  const [discovering, setDiscovering] = useState(false);
   const [repo, setRepo] = useState('');
   const [connection, setConnection] = useState('');
   const [orgProject, setOrgProject] = useState('');
@@ -310,19 +317,49 @@ export default function AgentProjectsPage() {
       title="Codebases"
       description="Repositories that agents work on, and the initiatives they deliver. What matters here is what the bots did — not the human collaboration furniture."
     >
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
         <button
           onClick={() => setLinking((v) => !v)}
           className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer"
         >
           {linking ? 'Cancel' : '+ Link a repository'}
         </button>
+        <button
+          disabled={githubConnections.length === 0}
+          title={githubConnections.length === 0
+            ? 'Connect GitHub first — discovery browses what a credential can see.'
+            : 'Browse repositories by connection and organization'}
+          onClick={() => setDiscovering(true)}
+          className="px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors disabled:opacity-40 disabled:cursor-default"
+        >
+          Discover
+        </button>
+        <button
+          onClick={() => setShowConnections((v) => !v)}
+          className="px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors"
+        >
+          {showConnections ? 'Hide connections' : 'Connections'}
+        </button>
         {githubConnections.length === 0 && (
-          <span className="text-[11px] text-text-tertiary">
-            No GitHub connection yet — add one in Knowledge → Sources to link private repositories.
+          <span className="text-[11px] text-text-tertiary inline-flex items-center gap-1.5">
+            No GitHub connection yet
+            <button
+              onClick={() => setShowConnections(true)}
+              className="px-2 py-0.5 rounded-md border border-border bg-surface text-[11px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors"
+            >
+              Add one here
+            </button>
+            <span>— Knowledge → Sources also manages these; ingest shares the vault.</span>
           </span>
         )}
       </div>
+
+      {showConnections && (
+        <ConnectionSetup
+          sources={connections?.sources ?? []}
+          onChanged={refreshConnections}
+        />
+      )}
 
       {linking && (
         <Card padding="md" className="mb-4">
@@ -543,6 +580,15 @@ export default function AgentProjectsPage() {
           })}
         </div>
       )}
+
+      <RepoDiscovery
+        open={discovering}
+        onClose={() => setDiscovering(false)}
+        connections={githubConnections}
+        orgProjects={orgProjects ?? []}
+        linkedFullNames={projects.map((p) => p.repoFullName)}
+        onLinked={refresh}
+      />
 
       {/* The run box. One prompt, one project — the thing you reach for. */}
       {runFor && (

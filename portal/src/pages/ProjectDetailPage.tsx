@@ -1,11 +1,21 @@
 import { useState, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router';
-import { Chip, PageSection, StatusDot, type ChipTone } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Chip, CollapsibleSection, PageSection, StatusDot, type ChipTone } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
+import { EstimateDrawer } from '../components/marketplace/EstimateDrawer';
+import {
+  useInitiativeAgentActivity,
+  AgentsRailCard,
+  OutcomesRailCard,
+} from '../components/marketplace/InitiativeAgentRail';
+import type { BotRun } from './bots/BotsPage';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type WorkItemType   = 'epic' | 'feature' | 'story' | 'task';
+// The taxonomy is deliberately flat: epics contain stories and bugs, and
+// that's the tree. Stories and bugs are the dispatchable units; the server
+// migrates legacy feature/task rows to story.
+type WorkItemType   = 'epic' | 'story' | 'bug';
 type WorkItemStatus = 'open' | 'in_progress' | 'in_review' | 'done' | 'cancelled';
 type WorkItemPriority = 'critical' | 'high' | 'medium' | 'low';
 type PrStatus = 'open' | 'draft' | 'merged' | 'closed';
@@ -55,6 +65,10 @@ interface ProjectDetail {
   status: string | null;
   description?: string | null;
   githubUrl?: string | null;
+  // Owner — who runs this initiative. Optional: render when present, omit
+  // cleanly when the detail response doesn't carry it yet.
+  ownerId?: string | null;
+  ownerName?: string | null;
   createdAt: string | null;
   contributors: Array<{
     personId: string;
@@ -177,7 +191,7 @@ function PrBadge({ prStatus, prUrl }: { prStatus: PrStatus; prUrl: string | null
 function countPoints(item: WorkItemTree): { done: number; total: number } {
   let done = 0, total = 0;
   function walk(node: WorkItemTree) {
-    if (node.type === 'story' || node.type === 'task') {
+    if (node.type === 'story' || node.type === 'bug') {
       if (node.storyPoints) {
         total += node.storyPoints;
         if (node.status === 'done') done += node.storyPoints;
@@ -202,22 +216,85 @@ function countStories(item: WorkItemTree): { done: number; total: number } {
   return { done, total };
 }
 
+/** Aurora timestamps arrive without T/Z — same normalization as the bots pages. */
+function parseTs(iso: string): number {
+  return new Date(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`).getTime();
+}
+
+// ─── Marketplace affordances (shared by tree rows and board cards) ────────────
+
+/** The Estimate chip — opens the estimate → authorize drawer. Only on open,
+    pointed stories and bugs; sized so it doesn't fight the row's own click. */
+function EstimateChip({ item, onEstimate }: { item: WorkItemTree; onEstimate: (item: WorkItemTree) => void }) {
+  if (item.status !== 'open' || item.storyPoints == null) return null;
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); onEstimate(item); }}
+      title="Estimate cost & duration, then authorize an agent run"
+      style={{
+        fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 9999,
+        border: '1px solid var(--color-primary)', background: 'transparent',
+        color: 'var(--color-primary)', cursor: 'pointer', flexShrink: 0,
+        letterSpacing: '0.02em',
+      }}
+    >
+      ⚡ Estimate
+    </button>
+  );
+}
+
+/** Live marketplace state for a work item: a pulsing chip while an agent is on
+    it (linking to its Computers box), and a review link once a change landed. */
+function RunStateChips({ item, run }: { item: WorkItemTree; run: BotRun | undefined }) {
+  return (
+    <>
+      {run?.status === 'running' && (
+        run.outcome?.boxId ? (
+          <Link
+            to={`/admin/devbox?box=${encodeURIComponent(run.outcome.boxId)}`}
+            className="no-underline"
+            onClick={(e) => e.stopPropagation()}
+            title="An agent is working this item — open its Computers box"
+          >
+            <Chip tone="info" size="xs" dot="pulse">agent working</Chip>
+          </Link>
+        ) : (
+          <Chip tone="info" size="xs" dot="pulse">agent working</Chip>
+        )
+      )}
+      {item.status === 'in_review' && run?.outcome?.changeId && (
+        <Link
+          to="/admin/changes"
+          onClick={(e) => e.stopPropagation()}
+          title="The agent's change is waiting in the review queue"
+          style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-primary)', textDecoration: 'none', flexShrink: 0, whiteSpace: 'nowrap' }}
+        >
+          → review
+        </Link>
+      )}
+    </>
+  );
+}
+
 // ─── New Work Item inline form ────────────────────────────────────────────────
 
 interface NewItemFormProps {
   projectId: string;
   parentId: string | null;
   defaultType: WorkItemType;
+  /** Which types the select offers — inside an epic that's story/bug only. */
+  typeOptions?: WorkItemType[];
   onSave: (item: { title: string; type: WorkItemType; priority: WorkItemPriority }) => void;
   onCancel: () => void;
 }
 
-function NewItemForm({ projectId: _projectId, parentId: _parentId, defaultType, onSave, onCancel }: NewItemFormProps) {
+function NewItemForm({ projectId: _projectId, parentId: _parentId, defaultType, typeOptions, onSave, onCancel }: NewItemFormProps) {
   const [title, setTitle] = useState('');
   const [type, setType] = useState<WorkItemType>(defaultType);
   const [priority, setPriority] = useState<WorkItemPriority>('medium');
 
-  const TYPES: WorkItemType[] = ['epic', 'feature', 'story', 'task'];
+  const TYPES: WorkItemType[] = typeOptions ?? ['epic', 'story', 'bug'];
   const PRIORITIES: WorkItemPriority[] = ['critical', 'high', 'medium', 'low'];
 
   return (
@@ -269,224 +346,109 @@ function NewItemForm({ projectId: _projectId, parentId: _parentId, defaultType, 
   );
 }
 
-// ─── Task row ─────────────────────────────────────────────────────────────────
+// ─── Story / bug row ──────────────────────────────────────────────────────────
+// The dispatchable unit. No expansion — the two-level tree ends here.
 
-function TaskRow({ item, onStatusToggle }: { item: WorkItemTree; onStatusToggle: (id: string, current: WorkItemStatus) => void }) {
+function ItemRow({
+  item,
+  onStatusToggle,
+  run,
+  onEstimate,
+}: {
+  item: WorkItemTree;
+  onStatusToggle: (id: string, current: WorkItemStatus) => void;
+  run: BotRun | undefined;
+  onEstimate: (item: WorkItemTree) => void;
+}) {
   const isDone = item.status === 'done';
+  const isBug = item.type === 'bug';
+
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 10,
-      padding: '6px 12px',
+      display: 'flex', alignItems: 'center', gap: 8,
+      padding: '7px 14px',
       borderRadius: 6,
       background: isDone ? 'var(--color-bg)' : 'var(--color-surface)',
-      opacity: isDone ? 0.7 : 1,
-    }}>
+      transition: 'background 0.1s',
+    }}
+      onMouseEnter={(e) => { if (!isDone) (e.currentTarget as HTMLElement).style.background = 'var(--color-surface-panel)'; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = isDone ? 'var(--color-bg)' : 'var(--color-surface)'; }}
+    >
       <input
         type="checkbox"
         checked={isDone}
         onChange={() => onStatusToggle(item.id, item.status)}
         style={{ cursor: 'pointer', accentColor: 'var(--color-primary)', width: 15, height: 15, flexShrink: 0 }}
       />
-      <span style={{ flex: 1, fontSize: 13, color: isDone ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)',
-        textDecoration: isDone ? 'line-through' : 'none' }}>
+
+      {/* Type glyph — stories keep the soft indigo square (data-viz, leave);
+          bugs read danger so they can't be mistaken for stories at a glance. */}
+      {isBug ? (
+        <span aria-hidden="true" title="bug" style={{ fontSize: 12, color: 'var(--color-danger)', fontFamily: 'monospace', flexShrink: 0 }}>◆</span>
+      ) : (
+        <span aria-hidden="true" title="story" style={{ fontSize: 12, color: '#a5b4fc', fontFamily: 'monospace', flexShrink: 0 }}>■</span>
+      )}
+      {isBug && <Chip tone="danger" size="xs">bug</Chip>}
+
+      {/* Title */}
+      <span style={{
+        flex: 1, fontSize: 13, fontWeight: 500,
+        color: isDone ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)',
+        textDecoration: isDone ? 'line-through' : 'none',
+      }}>
         {item.title}
       </span>
-      {item.assigneeName && (
-        <Avatar name={item.assigneeName} size={20} />
+
+      {/* Labels */}
+      {item.labels.slice(0, 2).map((l) => (
+        <span key={l} style={{ fontSize: 10, padding: '1px 5px', borderRadius: 3,
+          background: 'var(--color-surface-hover)', color: 'var(--color-text-secondary)' }}>{l}</span>
+      ))}
+
+      {/* Marketplace: estimate affordance + live run state */}
+      <EstimateChip item={item} onEstimate={onEstimate} />
+      <RunStateChips item={item} run={run} />
+
+      {/* PR badge */}
+      {item.prStatus && <PrBadge prStatus={item.prStatus} prUrl={item.prUrl} />}
+
+      {/* Story points */}
+      {item.storyPoints != null && (
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)',
+          background: 'var(--color-surface-hover)', padding: '1px 6px', borderRadius: 9999, minWidth: 24, textAlign: 'center' }}>
+          {item.storyPoints}
+        </span>
       )}
+
+      {/* Assignee */}
+      {item.assigneeName && <Avatar name={item.assigneeName} size={22} />}
+
+      {/* Status */}
       <StatusChip status={item.status} />
     </div>
   );
 }
 
-// ─── Story row ────────────────────────────────────────────────────────────────
-
-function StoryRow({
-  item,
-  onStatusToggle,
-  depth = 0,
-}: {
-  item: WorkItemTree;
-  onStatusToggle: (id: string, current: WorkItemStatus) => void;
-  depth?: number;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const hasTasks = item.children.length > 0;
-
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={() => hasTasks && setExpanded((v) => !v)}
-        aria-expanded={hasTasks ? expanded : undefined}
-        aria-controls={hasTasks ? `detail-${item.id}` : undefined}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          width: '100%', textAlign: 'left',
-          padding: `7px ${14 + depth * 12}px`,
-          borderRadius: 6,
-          cursor: hasTasks ? 'pointer' : 'default',
-          background: item.status === 'done' ? 'var(--color-bg)' : 'var(--color-surface)',
-          transition: 'background 0.1s',
-          border: 'none',
-        }}
-        onMouseEnter={(e) => { if (item.status !== 'done') (e.currentTarget as HTMLElement).style.background = 'var(--color-surface-panel)'; }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = item.status === 'done' ? 'var(--color-bg)' : 'var(--color-surface)'; }}
-      >
-        {/* Expand chevron for tasks */}
-        <span aria-hidden="true" style={{ width: 14, flexShrink: 0, color: 'var(--color-text-tertiary)', fontSize: 10 }}>
-          {hasTasks ? (expanded ? '▾' : '▸') : ''}
-        </span>
-
-        {/* Story number / icon — soft indigo identity for story rows (data-viz, leave) */}
-        <span aria-hidden="true" style={{ fontSize: 12, color: '#a5b4fc', fontFamily: 'monospace', flexShrink: 0 }}>■</span>
-
-        {/* Title */}
-        <span style={{
-          flex: 1, fontSize: 13, fontWeight: 500,
-          color: item.status === 'done' ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)',
-          textDecoration: item.status === 'done' ? 'line-through' : 'none',
-        }}>
-          {item.title}
-        </span>
-
-        {/* Labels */}
-        {item.labels.slice(0, 2).map((l) => (
-          <span key={l} style={{ fontSize: 10, padding: '1px 5px', borderRadius: 3,
-            background: 'var(--color-surface-hover)', color: 'var(--color-text-secondary)' }}>{l}</span>
-        ))}
-
-        {/* PR badge */}
-        {item.prStatus && <PrBadge prStatus={item.prStatus} prUrl={item.prUrl} />}
-
-        {/* Story points */}
-        {item.storyPoints != null && (
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)',
-            background: 'var(--color-surface-hover)', padding: '1px 6px', borderRadius: 9999, minWidth: 24, textAlign: 'center' }}>
-            {item.storyPoints}
-          </span>
-        )}
-
-        {/* Assignee */}
-        {item.assigneeName && <Avatar name={item.assigneeName} size={22} />}
-
-        {/* Status */}
-        <StatusChip status={item.status} />
-      </button>
-
-      {/* Tasks */}
-      {expanded && hasTasks && (
-        <div id={`detail-${item.id}`} style={{ marginLeft: 28, borderLeft: '2px solid var(--color-border)', paddingLeft: 8, marginTop: 2, marginBottom: 4 }}>
-          {item.children.map((task) => (
-            <TaskRow key={task.id} item={task} onStatusToggle={onStatusToggle} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Feature section ──────────────────────────────────────────────────────────
-
-function FeatureSection({
-  item,
-  onStatusToggle,
-  projectId,
-  onAddItem,
-}: {
-  item: WorkItemTree;
-  onStatusToggle: (id: string, current: WorkItemStatus) => void;
-  projectId: string;
-  onAddItem: (parentId: string, type: WorkItemType, title: string, priority: WorkItemPriority) => void;
-}) {
-  const [expanded, setExpanded] = useState(true);
-  const [addingStory, setAddingStory] = useState(false);
-  const stories = item.status !== 'done' ? item.children : item.children;
-  const storyStats = countStories(item);
-
-  return (
-    <div style={{ marginBottom: 6 }}>
-      {/* Feature header */}
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        aria-expanded={expanded}
-        aria-controls={`detail-${item.id}`}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          width: '100%', textAlign: 'left',
-          padding: '8px 10px', borderRadius: 8,
-          background: 'var(--color-surface-panel)', cursor: 'pointer',
-          border: '1px solid var(--color-border)',
-        }}
-      >
-        <span aria-hidden="true" style={{ fontSize: 10, color: 'var(--color-text-tertiary)', width: 14 }}>{expanded ? '▾' : '▸'}</span>
-        {/* Feature glyph — soft indigo identity (data-viz, leave) */}
-        <span aria-hidden="true" style={{ fontSize: 12, color: '#818cf8', fontFamily: 'monospace', flexShrink: 0 }}>◈</span>
-        <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>{item.title}</span>
-        {storyStats.total > 0 && (
-          <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-            {storyStats.done}/{storyStats.total} stories
-          </span>
-        )}
-        {item.prStatus && <PrBadge prStatus={item.prStatus} prUrl={item.prUrl} />}
-        {item.assigneeName && <Avatar name={item.assigneeName} size={20} />}
-        <StatusChip status={item.status} />
-      </button>
-
-      {expanded && (
-        <div id={`detail-${item.id}`} style={{ paddingLeft: 20, paddingTop: 4, display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {stories.map((story) => (
-            <StoryRow key={story.id} item={story} onStatusToggle={onStatusToggle} />
-          ))}
-          {stories.length === 0 && (
-            <div style={{ padding: '6px 14px', fontSize: 12, color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>
-              No stories yet
-            </div>
-          )}
-          {addingStory ? (
-            <NewItemForm
-              projectId={projectId}
-              parentId={item.id}
-              defaultType="story"
-              onSave={({ title, type, priority }) => {
-                onAddItem(item.id, type, title, priority);
-                setAddingStory(false);
-              }}
-              onCancel={() => setAddingStory(false)}
-            />
-          ) : (
-            <button
-              onClick={(e) => { e.stopPropagation(); setAddingStory(true); }}
-              style={{
-                padding: '4px 10px', borderRadius: 5, border: '1px dashed var(--color-border-emphasis)',
-                background: 'transparent', color: 'var(--color-text-tertiary)', fontSize: 12, cursor: 'pointer',
-                textAlign: 'left', marginTop: 2,
-              }}>
-              + Add story
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── Epic card ────────────────────────────────────────────────────────────────
+// Directly contains its stories and bugs — the feature tier is gone.
 
 function EpicCard({
   item,
   onStatusToggle,
   projectId,
   onAddItem,
+  marketRuns,
+  onEstimate,
 }: {
   item: WorkItemTree;
   onStatusToggle: (id: string, current: WorkItemStatus) => void;
   projectId: string;
   onAddItem: (parentId: string, type: WorkItemType, title: string, priority: WorkItemPriority) => void;
+  marketRuns: Record<string, BotRun>;
+  onEstimate: (item: WorkItemTree) => void;
 }) {
   const [expanded, setExpanded] = useState(item.status !== 'done');
-  const [addingFeature, setAddingFeature] = useState(false);
+  const [addingItem, setAddingItem] = useState(false);
   const pts = countPoints(item);
   const stories = countStories(item);
   const pct = pts.total > 0 ? Math.round((pts.done / pts.total) * 100) : 0;
@@ -556,7 +518,7 @@ function EpicCard({
         <StatusChip status={item.status} />
       </button>
 
-      {/* Epic body */}
+      {/* Epic body — stories and bugs, directly */}
       {expanded && (
         <div id={`detail-${item.id}`} style={{ padding: '12px 16px', background: 'var(--color-surface-inset)' }}>
           {item.description && (
@@ -565,42 +527,47 @@ function EpicCard({
             </p>
           )}
 
-          {/* Features */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {item.children.map((feature) => (
-              <FeatureSection
-                key={feature.id}
-                item={feature}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {item.children.map((child) => (
+              <ItemRow
+                key={child.id}
+                item={child}
                 onStatusToggle={onStatusToggle}
-                projectId={projectId}
-                onAddItem={onAddItem}
+                run={marketRuns[child.id]}
+                onEstimate={onEstimate}
               />
             ))}
+            {item.children.length === 0 && (
+              <div style={{ padding: '6px 14px', fontSize: 12, color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>
+                No stories or bugs yet
+              </div>
+            )}
           </div>
 
-          {/* Add feature */}
-          {addingFeature ? (
+          {/* Add story / bug */}
+          {addingItem ? (
             <div style={{ marginTop: 10 }}>
               <NewItemForm
                 projectId={projectId}
                 parentId={item.id}
-                defaultType="feature"
+                defaultType="story"
+                typeOptions={['story', 'bug']}
                 onSave={({ title, type, priority }) => {
                   onAddItem(item.id, type, title, priority);
-                  setAddingFeature(false);
+                  setAddingItem(false);
                 }}
-                onCancel={() => setAddingFeature(false)}
+                onCancel={() => setAddingItem(false)}
               />
             </div>
           ) : (
             <button
-              onClick={(e) => { e.stopPropagation(); setAddingFeature(true); }}
+              onClick={(e) => { e.stopPropagation(); setAddingItem(true); }}
               style={{
                 marginTop: 10, padding: '5px 12px', borderRadius: 6,
                 border: '1px dashed var(--color-border-emphasis)', background: 'transparent',
                 color: 'var(--color-text-tertiary)', fontSize: 12, cursor: 'pointer',
               }}>
-              + Add feature
+              + Add story / bug
             </button>
           )}
         </div>
@@ -677,13 +644,22 @@ function flattenByType(nodes: WorkItemTree[], types: WorkItemType[]): WorkItemTr
   return acc;
 }
 
-function BoardCard({ item }: { item: WorkItemTree }) {
+function BoardCard({
+  item,
+  run,
+  onEstimate,
+}: {
+  item: WorkItemTree;
+  run: BotRun | undefined;
+  onEstimate: (item: WorkItemTree) => void;
+}) {
   const priColor: Record<WorkItemPriority, string> = {
     critical: 'var(--color-danger)',
     high:     'var(--color-warning)',
     medium:   'var(--color-warning)',
     low:      'var(--color-text-tertiary)',
   };
+  const isBug = item.type === 'bug';
   return (
     <div style={{
       background: 'var(--color-surface)',
@@ -694,12 +670,12 @@ function BoardCard({ item }: { item: WorkItemTree }) {
       marginBottom: 6,
       cursor: 'default',
     }}>
-      {/* Type badge + title */}
+      {/* Type badge + title — bugs carry the danger tone */}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 6 }}>
         <span style={{
           fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
-          background: item.type === 'story' ? 'var(--color-info-bg)' : 'var(--color-success-bg)',
-          color: item.type === 'story' ? 'var(--color-primary)' : 'var(--color-success)',
+          background: isBug ? 'var(--color-danger-bg)' : 'var(--color-info-bg)',
+          color: isBug ? 'var(--color-danger)' : 'var(--color-primary)',
           textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0, marginTop: 1,
         }}>
           {item.type}
@@ -712,8 +688,8 @@ function BoardCard({ item }: { item: WorkItemTree }) {
           {item.title}
         </span>
       </div>
-      {/* Footer: assignee + points + PR */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+      {/* Footer: assignee + points + marketplace state + PR */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           {item.assigneeName && (
             <Avatar name={item.assigneeName} size={18} />
@@ -727,22 +703,34 @@ function BoardCard({ item }: { item: WorkItemTree }) {
             </span>
           )}
         </div>
-        {item.prStatus && (
-          <span style={{
-            fontSize: 9.5, fontWeight: 600, padding: '1px 5px', borderRadius: 3,
-            background: item.prStatus === 'merged' ? 'var(--color-success-bg)' : item.prStatus === 'open' ? 'var(--color-info-bg)' : 'var(--color-bg)',
-            color: item.prStatus === 'merged' ? 'var(--color-success)' : item.prStatus === 'open' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-          }}>
-            {item.prStatus === 'merged' ? '⎇ merged' : item.prStatus === 'open' ? '⎇ open' : item.prStatus}
-          </span>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <EstimateChip item={item} onEstimate={onEstimate} />
+          <RunStateChips item={item} run={run} />
+          {item.prStatus && (
+            <span style={{
+              fontSize: 9.5, fontWeight: 600, padding: '1px 5px', borderRadius: 3,
+              background: item.prStatus === 'merged' ? 'var(--color-success-bg)' : item.prStatus === 'open' ? 'var(--color-info-bg)' : 'var(--color-bg)',
+              color: item.prStatus === 'merged' ? 'var(--color-success)' : item.prStatus === 'open' ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+            }}>
+              {item.prStatus === 'merged' ? '⎇ merged' : item.prStatus === 'open' ? '⎇ open' : item.prStatus}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-function EpicSwimlane({ epic }: { epic: WorkItemTree }) {
-  const stories = flattenByType([epic], ['story', 'task']);
+function EpicSwimlane({
+  epic,
+  marketRuns,
+  onEstimate,
+}: {
+  epic: WorkItemTree;
+  marketRuns: Record<string, BotRun>;
+  onEstimate: (item: WorkItemTree) => void;
+}) {
+  const stories = flattenByType([epic], ['story', 'bug']);
   const byStatus = new Map<WorkItemStatus, WorkItemTree[]>();
   BOARD_STATUSES.forEach(s => byStatus.set(s, []));
   stories.forEach(item => {
@@ -784,7 +772,9 @@ function EpicSwimlane({ epic }: { epic: WorkItemTree }) {
             // `done` column gets a faint cool-white tint to subtly distinguish completed swim cells
             background: status === 'done' ? '#fafffe' : 'var(--color-surface)',
           }}>
-            {items.map(item => <BoardCard key={item.id} item={item} />)}
+            {items.map(item => (
+              <BoardCard key={item.id} item={item} run={marketRuns[item.id]} onEstimate={onEstimate} />
+            ))}
             {items.length === 0 && (
               <div style={{
                 height: 36, border: '1.5px dashed var(--color-border)', borderRadius: 6,
@@ -800,7 +790,15 @@ function EpicSwimlane({ epic }: { epic: WorkItemTree }) {
   );
 }
 
-function BoardView({ epics }: { epics: WorkItemTree[] }) {
+function BoardView({
+  epics,
+  marketRuns,
+  onEstimate,
+}: {
+  epics: WorkItemTree[];
+  marketRuns: Record<string, BotRun>;
+  onEstimate: (item: WorkItemTree) => void;
+}) {
   if (epics.length === 0) {
     return (
       <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--color-text-tertiary)', fontSize: 13 }}>
@@ -823,7 +821,7 @@ function BoardView({ epics }: { epics: WorkItemTree[] }) {
         </div>
         {BOARD_STATUSES.map((s, i) => {
           const count = epics.reduce((n, epic) =>
-            n + flattenByType([epic], ['story', 'task']).filter(it => it.status === s).length, 0);
+            n + flattenByType([epic], ['story', 'bug']).filter(it => it.status === s).length, 0);
           return (
             <div key={s} style={{
               padding: '8px 10px', borderRight: i < 3 ? '1px solid var(--color-border)' : 'none',
@@ -846,7 +844,9 @@ function BoardView({ epics }: { epics: WorkItemTree[] }) {
         })}
       </div>
       {/* Swimlane rows */}
-      {epics.map(epic => <EpicSwimlane key={epic.id} epic={epic} />)}
+      {epics.map(epic => (
+        <EpicSwimlane key={epic.id} epic={epic} marketRuns={marketRuns} onEstimate={onEstimate} />
+      ))}
     </div>
   );
 }
@@ -873,7 +873,11 @@ function ContributorsTable({ contributors }: { contributors: ProjectDetail['cont
           </tr>
         </thead>
         <tbody>
-          {contributors.map((c, idx) => (
+          {contributors.map((c, idx) => {
+            // Reserved roles get chips — owner runs the initiative, SMEs
+            // direct agents across the initiatives they're attached to.
+            const role = (c.role ?? '').toLowerCase();
+            return (
             <tr key={c.personId} style={{
               borderBottom: idx < contributors.length - 1 ? '1px solid var(--color-border)' : 'none',
               cursor: 'pointer',
@@ -889,7 +893,15 @@ function ContributorsTable({ contributors }: { contributors: ProjectDetail['cont
                 </div>
               </td>
               <td style={{ padding: '11px 16px', fontSize: 13, color: 'var(--color-text-secondary)' }}>{c.title ?? '—'}</td>
-              <td style={{ padding: '11px 16px', fontSize: 13, color: 'var(--color-text-secondary)' }}>{c.role ?? '—'}</td>
+              <td style={{ padding: '11px 16px', fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                {role === 'owner' ? (
+                  <Chip tone="purple" size="xs">owner</Chip>
+                ) : role === 'sme' ? (
+                  <Chip tone="info" size="xs">sme</Chip>
+                ) : (
+                  c.role ?? '—'
+                )}
+              </td>
               <td style={{ padding: '11px 16px', textAlign: 'right' }}>
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ width: 60, height: 5, borderRadius: 3, background: 'var(--color-border)', overflow: 'hidden' }}>
@@ -904,7 +916,8 @@ function ContributorsTable({ contributors }: { contributors: ProjectDetail['cont
                 </div>
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -912,13 +925,14 @@ function ContributorsTable({ contributors }: { contributors: ProjectDetail['cont
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
+// Mission control for an initiative: one owner, SMEs directing agents. The
+// work is always front and center; agents, outcomes, codebases and the
+// org-graph attribution live in the rail.
 
-type Tab = 'work' | 'decisions' | 'contributors';
 type WorkView = 'tree' | 'board';
 
 function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [tab, setTab] = useState<Tab>('work');
   const [workView, setWorkView] = useState<WorkView>('tree');
   const [localItems, setLocalItems] = useState<WorkItemTree[] | null>(null);
 
@@ -938,6 +952,29 @@ function ProjectDetailPage() {
     id: string; repoFullName: string; orgProjectId: string | null;
   }> }>('/api/agent-projects', 60_000);
   const codebases = (codebasesData?.projects ?? []).filter((p) => p.orgProjectId === id);
+
+  // Bot-less marketplace runs for this initiative — polled while the page is
+  // open so "agent working" chips appear/disappear live.
+  const { data: marketData } = useFetch<{ runs: BotRun[] }>(
+    id ? `/api/bots/marketplace-runs?orgProjectId=${encodeURIComponent(id)}` : null,
+    10_000,
+  );
+  const marketplaceRuns = marketData?.runs ?? [];
+
+  // Bots targeting this initiative + their runs merged with the marketplace
+  // runs — feeds the header's spend stat and the rail's Agents/Outcomes cards.
+  const agentActivity = useInitiativeAgentActivity(id, codebases, marketplaceRuns);
+
+  // The run that speaks for each work item: a running one wins, else newest.
+  const marketRuns: Record<string, BotRun> = {};
+  for (const r of marketplaceRuns) {
+    if (!r.workItemId) continue;
+    const prev = marketRuns[r.workItemId];
+    if (!prev) { marketRuns[r.workItemId] = r; continue; }
+    if (prev.status === 'running' && r.status !== 'running') continue;
+    if (r.status === 'running' && prev.status !== 'running') { marketRuns[r.workItemId] = r; continue; }
+    if (parseTs(r.startedAt) > parseTs(prev.startedAt)) marketRuns[r.workItemId] = r;
+  }
 
   const workTree = localItems ?? rawTree ?? [];
 
@@ -1031,9 +1068,23 @@ function ProjectDetailPage() {
     fetch('/api/graph/work-items', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId: id, parentId: null, type: 'epic', title, priority }),
+      body: JSON.stringify({ projectId: id, parentId: null, type, title, priority }),
     }).catch(() => {});
   }, [id, project, localItems, rawTree]);
+
+  // Marketplace: the item being estimated, and the optimistic flip on 202.
+  const [estimateItem, setEstimateItem] = useState<WorkItemTree | null>(null);
+
+  const handleDispatched = useCallback((workItemId: string, _run: BotRun) => {
+    function patchTree(nodes: WorkItemTree[]): WorkItemTree[] {
+      return nodes.map((n) => ({
+        ...n,
+        status: n.id === workItemId ? ('in_progress' as WorkItemStatus) : n.status,
+        children: patchTree(n.children),
+      }));
+    }
+    setLocalItems(patchTree(localItems ?? rawTree ?? []));
+  }, [localItems, rawTree]);
 
   if (projLoading) {
     return (
@@ -1063,12 +1114,15 @@ function ProjectDetailPage() {
 
   const projColors = PROJECT_STATUS_COLORS[project.status ?? ''] ?? PROJECT_STATUS_COLORS['planning']!;
   const escalatedCount = (decisions ?? []).filter((d) => d.status === 'escalated').length;
+  const openDecisionCount = (decisions ?? []).filter((d) => d.status === 'open' || d.status === 'escalated').length;
+  // Cross-initiative SMEs — the people directing agents here.
+  const smes = project.contributors.filter((c) => (c.role ?? '').toLowerCase() === 'sme');
 
   // Aggregate point stats from work tree
   let totalDone = 0, totalPts = 0;
   function sumPoints(nodes: WorkItemTree[]) {
     for (const n of nodes) {
-      if ((n.type === 'story' || n.type === 'task') && n.storyPoints) {
+      if ((n.type === 'story' || n.type === 'bug') && n.storyPoints) {
         totalPts += n.storyPoints;
         if (n.status === 'done') totalDone += n.storyPoints;
       }
@@ -1079,7 +1133,7 @@ function ProjectDetailPage() {
   const overallPct = totalPts > 0 ? Math.round((totalDone / totalPts) * 100) : 0;
 
   return (
-    <div style={{ padding: '0 0 60px', maxWidth: 900 }}>
+    <div style={{ padding: '0 0 60px', maxWidth: 1240 }}>
       {/* Back link */}
       <Link to="/iq/projects" style={{
         display: 'inline-flex', alignItems: 'center', gap: 4,
@@ -1109,6 +1163,39 @@ function ProjectDetailPage() {
                 {project.status ?? 'unknown'}
               </span>
             </div>
+            {/* Identity line — one owner runs the initiative, SMEs direct agents */}
+            {(project.ownerName || smes.length > 0) && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, fontSize: 12, color: 'var(--color-text-secondary)', flexWrap: 'wrap' }}>
+                {project.ownerName && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <Avatar name={project.ownerName} size={18} />
+                    <span>
+                      Run by{' '}
+                      {project.ownerId ? (
+                        <Link
+                          to={`/iq/explore?focus=${encodeURIComponent(project.ownerId)}`}
+                          style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 600 }}
+                        >
+                          {project.ownerName}
+                        </Link>
+                      ) : (
+                        <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>{project.ownerName}</span>
+                      )}
+                    </span>
+                  </span>
+                )}
+                {smes.map((s) => (
+                  <Link
+                    key={s.personId}
+                    to={`/iq/explore?focus=${encodeURIComponent(s.personId)}`}
+                    className="no-underline"
+                    title={`${s.name} — SME directing agents on this initiative`}
+                  >
+                    <Chip tone="info" size="xs">SME · {s.name}</Chip>
+                  </Link>
+                ))}
+              </div>
+            )}
             {project.description && (
               <p style={{ margin: 0, fontSize: 14, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
                 {project.description}
@@ -1125,15 +1212,15 @@ function ProjectDetailPage() {
               </div>
             )}
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--color-text-primary)' }}>{project.contributors.length}</div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>contributors</div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--color-text-primary)' }}>${agentActivity.spendUsd.toFixed(2)}</div>
+              <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>agent spend</div>
             </div>
-            {escalatedCount > 0 && (
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--color-danger)' }}>{escalatedCount}</div>
-                <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>escalated</div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 22, fontWeight: 800, color: escalatedCount > 0 ? 'var(--color-danger)' : 'var(--color-text-primary)' }}>
+                {openDecisionCount}
               </div>
-            )}
+              <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>open decisions</div>
+            </div>
             {project.githubUrl && (
               <a href={project.githubUrl} target="_blank" rel="noreferrer"
                 style={{ display: 'flex', alignItems: 'center', gap: 4,
@@ -1156,66 +1243,13 @@ function ProjectDetailPage() {
             </div>
           </div>
         )}
-
-        {/* The code that delivers this initiative — the other half of the
-            repo ↔ initiative join. Each entry lands on the codebase's console. */}
-        {codebases.length > 0 && (
-          <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Delivered by
-            </span>
-            {codebases.map((cb) => (
-              <Link
-                key={cb.id}
-                to={`/admin/projects?project=${cb.id}`}
-                title="Open this codebase — runs, changes, workspace"
-                style={{
-                  fontSize: 12, fontFamily: 'monospace', textDecoration: 'none',
-                  color: 'var(--color-primary)', background: 'var(--color-info-bg)',
-                  padding: '2px 10px', borderRadius: 9999,
-                }}
-              >
-                {cb.repoFullName}
-              </Link>
-            ))}
-          </div>
-        )}
       </div>
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1.5px solid var(--color-border)' }}>
-        {([
-          { key: 'work',         label: 'Work Items', badge: workTree.length > 0 ? `${workTree.length} epics` : undefined },
-          { key: 'decisions',    label: 'Decisions',  badge: escalatedCount > 0 ? `${escalatedCount} escalated` : undefined },
-          { key: 'contributors', label: 'Contributors', badge: undefined },
-        ] as { key: Tab; label: string; badge?: string }[]).map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            style={{
-              padding: '8px 18px', border: 'none', background: 'transparent', cursor: 'pointer',
-              fontSize: 14, fontWeight: tab === t.key ? 700 : 500,
-              color: tab === t.key ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-              borderBottom: tab === t.key ? '2.5px solid var(--color-primary)' : '2.5px solid transparent',
-              display: 'flex', alignItems: 'center', gap: 6,
-            }}>
-            {t.label}
-            {t.badge && (
-              <span style={{
-                padding: '1px 7px', borderRadius: 9999, fontSize: 10, fontWeight: 700,
-                background: t.key === 'decisions' ? 'var(--color-danger-bg)' : 'var(--color-info-bg)',
-                color: t.key === 'decisions' ? 'var(--color-danger)' : 'var(--color-primary)',
-              }}>
-                {t.badge}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      {/* ── Two-column body: the work (main) + mission-control rail ── */}
+      <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
 
-      {/* Work Items tab */}
-      {tab === 'work' && (
-        <div>
+        {/* ── MAIN — the work, always visible ── */}
+        <div style={{ flex: '1 1 520px', minWidth: 0 }}>
           {/* Tree / Board toggle */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
@@ -1245,12 +1279,12 @@ function ProjectDetailPage() {
           )}
 
           {workView === 'board' ? (
-            <BoardView epics={workTree} />
+            <BoardView epics={workTree} marketRuns={marketRuns} onEstimate={setEstimateItem} />
           ) : (
             <>
               {!workLoading && workTree.length === 0 && !addingEpic && (
                 <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--color-text-tertiary)', fontSize: 13 }}>
-                  No epics yet. Create the first epic to start tracking work.
+                  No work yet. Create an epic, add sized stories and bugs, and dispatch them to agents from here.
                 </div>
               )}
               {workTree.map((epic) => (
@@ -1260,6 +1294,8 @@ function ProjectDetailPage() {
                   onStatusToggle={handleStatusToggle}
                   projectId={id ?? ''}
                   onAddItem={handleAddItem}
+                  marketRuns={marketRuns}
+                  onEstimate={setEstimateItem}
                 />
               ))}
               {addingEpic ? (
@@ -1284,18 +1320,79 @@ function ProjectDetailPage() {
               )}
             </>
           )}
+
+          {/* Decisions — reachable, no longer a headline */}
+          <div style={{ marginTop: 24 }}>
+            <CollapsibleSection
+              title="Decisions"
+              defaultOpen={false}
+              badge={escalatedCount > 0
+                ? <Chip tone="danger" size="xs">{escalatedCount} escalated</Chip>
+                : (decisions ?? []).length > 0
+                  ? <Chip tone="neutral" size="xs" mono>{(decisions ?? []).length}</Chip>
+                  : undefined}
+            >
+              <DecisionQueue decisions={decisions ?? []} />
+            </CollapsibleSection>
+          </div>
         </div>
-      )}
 
-      {/* Decisions tab */}
-      {tab === 'decisions' && (
-        <DecisionQueue decisions={decisions ?? []} />
-      )}
+        {/* ── RIGHT RAIL — agents, outcomes, codebases, attribution ── */}
+        <div style={{
+          flex: '0 1 300px', width: 300, minWidth: 260,
+          position: 'sticky', top: 16, alignSelf: 'flex-start',
+          display: 'flex', flexDirection: 'column', gap: 14,
+        }}>
+          <AgentsRailCard activity={agentActivity} />
+          <OutcomesRailCard activity={agentActivity} />
 
-      {/* Contributors tab */}
-      {tab === 'contributors' && (
-        <ContributorsTable contributors={project.contributors} />
-      )}
+          {/* The code that delivers this initiative — the other half of the
+              repo ↔ initiative join. Each chip lands on the codebase's console. */}
+          {codebases.length > 0 && (
+            <Card padding="none" className="overflow-hidden">
+              <div className="px-3 py-2.5 border-b border-border">
+                <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">DELIVERED BY</span>
+              </div>
+              <div style={{ padding: '10px 12px', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {codebases.map((cb) => (
+                  <Link
+                    key={cb.id}
+                    to={`/admin/projects?project=${cb.id}`}
+                    title="Open this codebase — runs, changes, workspace"
+                    style={{
+                      fontSize: 12, fontFamily: 'monospace', textDecoration: 'none',
+                      color: 'var(--color-primary)', background: 'var(--color-info-bg)',
+                      padding: '2px 10px', borderRadius: 9999,
+                    }}
+                  >
+                    {cb.repoFullName}
+                  </Link>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* Org-graph attribution — reachable, not a headline */}
+          <CollapsibleSection
+            title="Contributors"
+            defaultOpen={false}
+            badge={project.contributors.length > 0
+              ? <Chip tone="neutral" size="xs" mono>{project.contributors.length}</Chip>
+              : undefined}
+          >
+            <ContributorsTable contributors={project.contributors} />
+          </CollapsibleSection>
+        </div>
+      </div>
+
+      {/* Marketplace: estimate → authorize drawer */}
+      <EstimateDrawer
+        open={estimateItem != null}
+        onClose={() => setEstimateItem(null)}
+        item={estimateItem}
+        codebases={codebases.map((cb) => ({ id: cb.id, repoFullName: cb.repoFullName }))}
+        onDispatched={handleDispatched}
+      />
     </div>
   );
 }

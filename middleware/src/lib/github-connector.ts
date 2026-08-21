@@ -18,7 +18,7 @@ import { borrowApiKey } from '../providers/connected-sources.js';
 
 const API = 'https://api.github.com';
 
-export interface RepoRef { owner: string; name: string; fullName: string }
+export interface RepoRef { owner: string; name: string; fullName: string; pushedAt?: string | null }
 
 export interface ContributionSignal {
   /** GitHub login — reconciled to a person separately, since it may not match. */
@@ -188,12 +188,32 @@ export async function identify(providerName: string): Promise<GitHubIdentity> {
 export async function listRepos(providerName: string, opts: { org?: string; limit?: number } = {}): Promise<RepoRef[]> {
   const token = await borrowApiKey(providerName);
   const limit = Math.min(Math.max(opts.limit ?? 30, 1), 100);
-  const repos = await gh<Array<{ name: string; full_name: string; owner: { login: string } }>>({
+  const repos = await gh<Array<{ name: string; full_name: string; owner: { login: string }; pushed_at?: string | null }>>({
     token,
     path: opts.org ? `/orgs/${opts.org}/repos` : '/user/repos',
     params: { per_page: String(limit), sort: 'pushed', direction: 'desc' },
   });
-  return repos.map((r) => ({ owner: r.owner.login, name: r.name, fullName: r.full_name }));
+  return repos.map((r) => ({
+    owner: r.owner.login, name: r.name, fullName: r.full_name, pushedAt: r.pushed_at ?? null,
+  }));
+}
+
+/**
+ * Organizations the token's user belongs to.
+ *
+ * Takes the token directly (like listPulls): the discovery tree in the portal
+ * borrows one token per credential and walks personal + org levels with it,
+ * and borrowing per-level would hit the credential vault once per expand.
+ */
+export async function listOrgs(token: string): Promise<Array<{ login: string; description: string | null }>> {
+  const orgs = await gh<Array<{ login?: string; description?: string | null }>>({
+    token,
+    path: '/user/orgs',
+    params: { per_page: '100' },
+  });
+  return orgs
+    .filter((o) => Boolean(o.login))
+    .map((o) => ({ login: o.login as string, description: o.description ?? null }));
 }
 
 export interface PullSummary {
