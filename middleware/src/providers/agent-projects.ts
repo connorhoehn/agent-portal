@@ -59,6 +59,8 @@ export interface ProjectRun {
   filesChanged: number | null;
   diffSummary: string | null;
   error: string | null;
+  /** What the run actually cost, as reported by the agent runtime. */
+  costUsd: number | null;
 }
 
 function rowToProject(r: Record<string, unknown>): AgentProject {
@@ -90,6 +92,7 @@ function rowToRun(r: Record<string, unknown>): ProjectRun {
     filesChanged: r['files_changed'] == null ? null : toNum(r['files_changed']),
     diffSummary: r['diff_summary'] ? toStr(r['diff_summary']) : null,
     error: r['error'] ? toStr(r['error']) : null,
+    costUsd: r['cost_usd'] == null ? null : toNum(r['cost_usd']),
   };
 }
 
@@ -261,6 +264,7 @@ export async function startRun(input: {
 
 export async function finishRun(id: string, outcome: {
   status: 'done' | 'failed'; filesChanged?: number | null; diffSummary?: string | null; error?: string | null;
+  costUsd?: number | null;
 }): Promise<void> {
   await exec(
     `UPDATE agent_project_runs
@@ -269,13 +273,17 @@ export async function finishRun(id: string, outcome: {
             duration_ms = (EXTRACT(EPOCH FROM (NOW() - started_at)) * 1000)::int,
             files_changed = :files,
             diff_summary = :diff,
-            error = :err
+            error = :err,
+            cost_usd = :cost
       WHERE id = :id::uuid`,
     [
       s('status', outcome.status), s('id', id),
       outcome.filesChanged == null ? nul('files') : { name: 'files', value: { longValue: outcome.filesChanged } },
       maybe('diff', outcome.diffSummary ?? null),
       maybe('err', outcome.error ?? null),
+      // The column existed from day one; it was simply never written. Every
+      // row that lands here feeds the bot/marketplace cost estimator.
+      outcome.costUsd == null ? nul('cost') : { name: 'cost', value: { doubleValue: outcome.costUsd } },
     ],
   );
 }

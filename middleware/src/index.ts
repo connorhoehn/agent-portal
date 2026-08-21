@@ -52,8 +52,10 @@ import { agentDetailRouter } from './routes/agent-detail.js';
 import { connectionsRouter } from './routes/connections.js';
 import { agentProjectsRouter } from './routes/agent-projects.js';
 import { sdlcRouter } from './routes/sdlc.js';
+import { botsRouter } from './routes/bots.js';
 import { requireAction, requireTenant, readForRolesElseAction } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
+import { initBotScheduler } from './lib/bot-scheduler.js';
 import { initCrawlTargets } from './lib/crawl-targets.js';
 import { ensureSchema, seedPoliciesIfMissing } from './lib/policy-seeds.js';
 import { startTracePoller } from './lib/cw-trace-ingest.js';
@@ -157,6 +159,10 @@ app.use('/api/agent-projects', requireAction('ManageDevbox'), agentProjectsRoute
 // AI SDLC governance — change requests, reviews, gates, policies. Gated as a
 // devbox-management action.
 app.use('/api/sdlc', requireAction('ManageDevbox'), sdlcRouter);
+// Bots — durable mission-configured agents. Creating one and firing it
+// dispatches the same governed runs the SDLC surface reviews, so it carries
+// the same gate.
+app.use('/api/bots', requireAction('ManageDevbox'), botsRouter);
 // Approvals are mounted BEFORE the gated observability router so that the
 // agent-facing POST /approvals/request endpoint doesn't require ViewObservability
 // (the agent's identity is captured as `agentId` in the request body instead).
@@ -239,6 +245,9 @@ app.use(errorHandler);
 
 initScheduler();
 initCrawlTargets();
+// Cron bots + the bot-run reconciler. Aurora-backed, so it awaits nothing at
+// boot — a missing bots table logs and stands down.
+void initBotScheduler();
 
 // Start the CW Logs Insights trace poller. Decouples agent telemetry from
 // HTTP reachability — deployed AgentCore runtimes can't necessarily reach

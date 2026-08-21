@@ -4,7 +4,7 @@ import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
 import { openShell } from '../../lib/terminalDock';
 import { DEVBOX_MODELS } from '../../lib/devboxModels';
 import { useFetch } from '../../hooks/useFetch';
-import { Markdown } from '../../components/Markdown';
+import { RunTimeline, toolSummary, type RunTimelineHandle } from '../../components/runs/RunTimeline';
 import {
   createBox,
   loadBoxes,
@@ -43,16 +43,6 @@ interface AgentProjectRef {
   id: string; repoFullName: string; sessionId: string | null;
   orgProjectId: string | null; orgProjectName: string | null;
 }
-
-/** One entry in the task execution timeline. */
-type TimelineItem =
-  | { id: string; kind: 'meta'; text: string }
-  | { id: string; kind: 'text'; text: string }
-  | { id: string; kind: 'tool'; name: string; summary: string; detail?: string; output?: string; isError?: boolean }
-  | { id: string; kind: 'result'; subtype: string; turns: number; durationMs: number; costUsd: number; text?: string }
-  | { id: string; kind: 'end'; exitCode: number | null; timedOut: boolean; stderr?: string }
-  | { id: string; kind: 'error'; text: string };
-
 
 // ─── SSE helper (POST + fetch/ReadableStream, per repo convention) ───────────
 
@@ -98,35 +88,6 @@ async function readSse(
 // ─── Rendering helpers ───────────────────────────────────────────────────────
 
 const mono = 'font-["Fira_Code","Cascadia_Code","JetBrains_Mono",monospace]';
-
-function toolSummary(name: string, input: Record<string, unknown>): { summary: string; detail?: string } {
-  if (name === 'Bash') {
-    return { summary: String(input['command'] ?? ''), detail: input['description'] ? String(input['description']) : undefined };
-  }
-  if (name === 'Write' || name === 'Edit' || name === 'Read' || name === 'NotebookEdit') {
-    return { summary: String(input['file_path'] ?? input['notebook_path'] ?? '') };
-  }
-  const json = JSON.stringify(input);
-  return { summary: json.length > 120 ? json.slice(0, 120) + '…' : json };
-}
-
-function toolIcon(name: string): string {
-  if (name === 'Bash') return '$';
-  if (name === 'Write' || name === 'Edit' || name === 'NotebookEdit') return '✎';
-  if (name === 'Read' || name === 'Glob' || name === 'Grep') return '⌕';
-  return '⚙';
-}
-
-/** stream-json tool_result content → plain text. */
-function resultText(content: unknown): string {
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content
-      .map((b) => (b && typeof b === 'object' && 'text' in b ? String((b as { text: unknown }).text) : ''))
-      .join('\n');
-  }
-  return content == null ? '' : JSON.stringify(content);
-}
 
 // ─── Workspace tree ──────────────────────────────────────────────────────────
 // The glance rail's file view is a collapsible tree, not a flat ls: once a
@@ -299,25 +260,13 @@ export default function DevboxPage() {
     setSearchParams((prev) => { prev.set('box', id); return prev; }, { replace: true });
   }, [setSearchParams]);
 
-  // ── Per-box streams (in-memory; switching boxes preserves each stream) ─────
-  const [timelines, setTimelines] = useState<Record<string, TimelineItem[]>>({});
+  // ── Per-box streams — owned by the shared RunTimeline component ────────────
   const [taskModel, setTaskModel] = useState<string>(TASK_MODELS[0]!.id);
-  const timeline = activeBox ? (timelines[activeBox.id] ?? []) : [];
-
-  const pushTimeline = useCallback((boxId: string, updater: (prev: TimelineItem[]) => TimelineItem[]) => {
-    setTimelines((all) => ({ ...all, [boxId]: updater(all[boxId] ?? []) }));
-  }, []);
+  const timelineRef = useRef<RunTimelineHandle>(null);
 
   const [prompt, setPrompt] = useState('');
   const [resume, setResume] = useState(true);
   const [taskRunning, setTaskRunning] = useState(false);
-
-  const idRef = useRef(0);
-  const nextId = () => String(++idRef.current);
-  const timelineRef = useRef<HTMLDivElement>(null);
-
-  // Auto-scroll the timeline as events land.
-  useEffect(() => { timelineRef.current?.scrollTo({ top: timelineRef.current.scrollHeight }); }, [timeline]);
 
   const [provisioning, setProvisioning] = useState(false);
 
@@ -354,28 +303,6 @@ export default function DevboxPage() {
     });
   }
 
-  // ── Live tail — the timeline's single source of truth ──────────────────────
-  // Every task event is teed server-side into the box's event log; this SSE
-  // subscription replays the buffer then streams live. That means the timeline
-  // survives reloads, and shows runs started by OTHER clients (curl, notebook,
-  // a queue dispatcher) — the herd's read-only observation mode.
-  useEffect(() => {
-    const boxId = activeBox?.id;
-    if (!boxId) return;
-    const es = new EventSource(`/api/devbox/boxes/${encodeURIComponent(boxId)}/tail`);
-    es.onopen = () => {
-      // Replay rebuilds the full history — clear so reconnects don't duplicate.
-      setTimelines((all) => ({ ...all, [boxId]: [] }));
-    };
-    es.onmessage = (evt: MessageEvent) => {
-      try {
-        handleTaskEvent(boxId, JSON.parse(evt.data) as Record<string, unknown>);
-      } catch { /* non-JSON frame — skip */ }
-    };
-    return () => es.close();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeBox?.id]);
-
   async function stopSession() {
     if (!activeBox) return;
     const tid = toastPending(`Stopping ${activeBox.label}`, 'sending StopRuntimeSession…');
@@ -383,7 +310,7 @@ export default function DevboxPage() {
       const res = await fetch(`/api/devbox/${activeBox.sessionId}`, { method: 'DELETE', credentials: 'include' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       toastSuccess(tid, `${activeBox.label} stopped`, 'workspace persists — next task or command resumes it');
-      pushTimeline(activeBox.id, (prev) => [...prev, { id: nextId(), kind: 'meta', text: 'session stopped — workspace persists; next invoke resumes it' }]);
+      timelineRef.current?.push({ kind: 'meta', text: 'session stopped — workspace persists; next invoke resumes it' });
     } catch (err) {
       toastError(tid, `Stop failed`, (err as Error).message);
     }
@@ -395,69 +322,30 @@ export default function DevboxPage() {
   // every stream event so the toast reads like a heartbeat.
   const taskProgressRef = useRef<{ toastId: string; tools: number; startedAt: number; result?: { turns: number; durationMs: number; costUsd: number } } | null>(null);
 
-  function handleTaskEvent(boxId: string, ev: Record<string, unknown>) {
+  // Task-runner concern kept OUT of the shared RunTimeline: heartbeat the task
+  // toast with live tool activity as raw tail frames arrive.
+  const handleTailEvent = useCallback((ev: Record<string, unknown>) => {
     const type = ev['type'];
-    if (type === 'task_started') {
-      pushTimeline(boxId, (prev) => [...prev, { id: nextId(), kind: 'meta', text: `▶ task: ${String(ev['prompt'] ?? '')}` }]);
-    } else if (type === 'devbox_start') {
-      const persistent = ev['workspace_persistent'] ? 'persistent' : 'EPHEMERAL — no session storage mount!';
-      pushTimeline(boxId, (prev) => [...prev, {
-        id: nextId(), kind: 'meta',
-        text: `workspace ${String(ev['workspace'])} [${persistent}] · ${String(ev['model'])}`,
-      }]);
-    } else if (type === 'assistant') {
+    if (type === 'assistant') {
       const content = ((ev['message'] as { content?: unknown[] })?.content ?? []) as Record<string, unknown>[];
       for (const block of content) {
-        if (block['type'] === 'text' && String(block['text'] ?? '').trim()) {
-          pushTimeline(boxId, (prev) => [...prev, { id: nextId(), kind: 'text', text: String(block['text']) }]);
-        } else if (block['type'] === 'tool_use') {
-          const name = String(block['name'] ?? 'tool');
-          const { summary, detail } = toolSummary(name, (block['input'] ?? {}) as Record<string, unknown>);
-          // Keyed by the tool_use id so the matching tool_result attaches below.
-          pushTimeline(boxId, (prev) => [...prev, { id: String(block['id'] ?? nextId()), kind: 'tool', name, summary, detail }]);
-          // Heartbeat the task toast with live tool activity.
-          const p = taskProgressRef.current;
-          if (p) {
-            p.tools += 1;
-            const elapsed = Math.round((Date.now() - p.startedAt) / 1000);
-            toastUpdate(p.toastId, { detail: `${p.tools} tool ${p.tools === 1 ? 'call' : 'calls'} · ${elapsed}s · ${name}: ${summary.slice(0, 48)}` });
-          }
-        }
+        if (block['type'] !== 'tool_use') continue;
+        const p = taskProgressRef.current;
+        if (!p) continue;
+        const name = String(block['name'] ?? 'tool');
+        const { summary } = toolSummary(name, (block['input'] ?? {}) as Record<string, unknown>);
+        p.tools += 1;
+        const elapsed = Math.round((Date.now() - p.startedAt) / 1000);
+        toastUpdate(p.toastId, { detail: `${p.tools} tool ${p.tools === 1 ? 'call' : 'calls'} · ${elapsed}s · ${name}: ${summary.slice(0, 48)}` });
       }
-    } else if (type === 'user') {
-      // tool_result events — attach output to the matching execution card.
-      const content = ((ev['message'] as { content?: unknown[] })?.content ?? []) as Record<string, unknown>[];
-      for (const block of content) {
-        if (block['type'] !== 'tool_result') continue;
-        const target = String(block['tool_use_id'] ?? '');
-        const output = resultText(block['content']).slice(0, 4000);
-        const isError = Boolean(block['is_error']);
-        pushTimeline(boxId, (prev) => prev.map((item) =>
-          item.kind === 'tool' && item.id === target ? { ...item, output, isError } : item,
-        ));
-      }
-    } else if (type === 'result') {
-      const turns = Number(ev['num_turns'] ?? 0);
-      const durationMs = Number(ev['duration_ms'] ?? 0);
-      const costUsd = Number(ev['total_cost_usd'] ?? 0);
-      if (taskProgressRef.current) taskProgressRef.current.result = { turns, durationMs, costUsd };
-      pushTimeline(boxId, (prev) => [...prev, {
-        id: nextId(), kind: 'result',
-        subtype: String(ev['subtype'] ?? ''),
-        turns, durationMs, costUsd,
-        text: typeof ev['result'] === 'string' ? (ev['result'] as string) : undefined,
-      }]);
-    } else if (type === 'devbox_end') {
-      pushTimeline(boxId, (prev) => [...prev, {
-        id: nextId(), kind: 'end',
-        exitCode: (ev['exit_code'] ?? null) as number | null,
-        timedOut: Boolean(ev['timed_out']),
-        stderr: ev['stderr'] ? String(ev['stderr']) : undefined,
-      }]);
-    } else if (type === 'devbox_error') {
-      pushTimeline(boxId, (prev) => [...prev, { id: nextId(), kind: 'error', text: String(ev['error'] ?? 'unknown error') }]);
+    } else if (type === 'result' && taskProgressRef.current) {
+      taskProgressRef.current.result = {
+        turns: Number(ev['num_turns'] ?? 0),
+        durationMs: Number(ev['duration_ms'] ?? 0),
+        costUsd: Number(ev['total_cost_usd'] ?? 0),
+      };
     }
-  }
+  }, []);
 
   // Workspace snapshot. Uses the same read-only command API the job dispatcher
   // runs on, but renders the result as data — a file list and a git summary —
@@ -554,7 +442,7 @@ export default function DevboxPage() {
       setPrompt('');
     } catch (err) {
       if (toastId) toastError(toastId, 'Task failed', (err as Error).message);
-      if (activeBox) pushTimeline(activeBox.id, (prev) => [...prev, { id: nextId(), kind: 'error', text: (err as Error).message }]);
+      if (activeBox) timelineRef.current?.push({ kind: 'error', text: (err as Error).message });
     } finally {
       taskProgressRef.current = null;
       setTaskRunning(false);
@@ -776,79 +664,29 @@ export default function DevboxPage() {
             </div>
           </Card>
 
-          <Card className="!p-0 overflow-hidden">
-            <div className="px-3.5 py-3 border-b border-border flex items-center gap-2">
-              <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">EXECUTION TIMELINE</span>
-              {activeBox && <span className={`text-[10px] text-text-tertiary ${mono}`}>{activeBox.label}</span>}
-              {(taskRunning || activeBox?.status === 'running') && (
-                <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-primary ml-auto">
-                  <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-primary" style={{ animation: 'devbox-pulse 1s ease-in-out infinite' }} />
-                  {taskRunning ? 'live' : 'tailing remote run (read-only)'}
-                </span>
-              )}
-              {activeBox?.status === 'waiting' && !taskRunning && (
-                <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-warning ml-auto">
-                  <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-warning" />
-                  waiting for your feedback — reply via a new task with resume on
-                </span>
-              )}
-            </div>
-            <div ref={timelineRef} className="overflow-y-auto overflow-x-hidden min-h-[280px] max-h-[calc(100vh-260px)] px-3.5 py-2">
-              {timeline.length === 0 ? (
-                <div className="py-10 text-center select-none">
-                  <svg aria-hidden="true" viewBox="0 0 24 24" className="w-8 h-8 mx-auto mb-2.5 text-text-tertiary" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="4" width="20" height="16" rx="2" />
-                    <path d="m7 9 3 3-3 3" />
-                    <path d="M13 15h4" />
-                  </svg>
-                  <div className="text-[13px] font-semibold text-text-secondary">No executions yet</div>
-                  <div className="text-[12px] text-text-tertiary mt-1">
-                    Describe a task above and hit <b>▶ Run task</b> — every tool call Claude Code makes streams here live.
-                  </div>
-                </div>
-              ) : timeline.map((item) => {
-                if (item.kind === 'meta') return (
-                  <div key={item.id} className={`py-1 text-[11px] text-text-tertiary ${mono}`}>── {item.text}</div>
-                );
-                if (item.kind === 'text') return (
-                  <div key={item.id} className="py-1.5 text-[13px] text-text-primary [&_pre]:overflow-x-auto [&_pre]:text-[12px] [&_code]:text-[12px] [&_h1]:text-[15px] [&_h2]:text-[14px] [&_h3]:text-[13.5px]">
-                    <Markdown>{item.text}</Markdown>
-                  </div>
-                );
-                if (item.kind === 'tool') return (
-                  <div key={item.id} className="my-1.5 border border-border rounded-md overflow-hidden">
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-surface-hover min-w-0">
-                      <span className={`text-[12px] font-bold ${item.isError ? 'text-danger' : 'text-primary'}`}>{toolIcon(item.name)}</span>
-                      <span className="text-[11px] font-semibold text-text-secondary">{item.name}</span>
-                      <span className={`flex-1 min-w-0 text-[12px] text-text-primary overflow-hidden text-ellipsis whitespace-nowrap ${mono}`} title={item.summary}>{item.summary}</span>
-                    </div>
-                    {item.detail && (
-                      <div className="px-3 py-1 text-[11px] text-text-tertiary border-t border-border">{item.detail}</div>
-                    )}
-                    {item.output !== undefined && (
-                      <pre className={`m-0 px-3 py-2 text-[11.5px] leading-snug border-t border-border overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap ${mono} ${item.isError ? 'text-danger' : 'text-text-secondary'}`}>
-                        {item.output || '(no output)'}
-                      </pre>
-                    )}
-                  </div>
-                );
-                if (item.kind === 'result') return (
-                  <div key={item.id} className="my-2 px-3 py-2 rounded-md bg-success-bg text-[12px] text-success">
-                    {item.subtype} · {item.turns} turns · {(item.durationMs / 1000).toFixed(0)}s · ${item.costUsd.toFixed(4)}
-                  </div>
-                );
-                if (item.kind === 'end') return (
-                  <div key={item.id} className={`py-1 text-[11px] ${mono} ${item.exitCode === 0 ? 'text-text-tertiary' : 'text-danger'}`}>
-                    ── exit {String(item.exitCode)}{item.timedOut ? ' (timed out)' : ''}
-                    {item.stderr && item.exitCode !== 0 ? ` · ${item.stderr.slice(0, 300)}` : ''}
-                  </div>
-                );
-                return (
-                  <div key={item.id} className="my-2 px-3 py-2 rounded-md bg-danger-bg text-[12px] text-danger">{item.text}</div>
-                );
-              })}
-            </div>
-          </Card>
+          <RunTimeline
+            ref={timelineRef}
+            boxId={activeBox.id}
+            onEvent={handleTailEvent}
+            emptyHint={<>Describe a task above and hit <b>▶ Run task</b> — every tool call Claude Code makes streams here live.</>}
+            headerExtra={
+              <>
+                <span className={`text-[10px] text-text-tertiary ${mono}`}>{activeBox.label}</span>
+                {(taskRunning || activeBox.status === 'running') && (
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-primary ml-auto">
+                    <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-primary" style={{ animation: 'devbox-pulse 1s ease-in-out infinite' }} />
+                    {taskRunning ? 'live' : 'tailing remote run (read-only)'}
+                  </span>
+                )}
+                {activeBox.status === 'waiting' && !taskRunning && (
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-warning ml-auto">
+                    <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-warning" />
+                    waiting for your feedback — reply via a new task with resume on
+                  </span>
+                )}
+              </>
+            }
+          />
         </div>
         )}
 

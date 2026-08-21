@@ -35,6 +35,8 @@ const SelectContextPage = lazy(() => import('./pages/SelectContextPage'));
 const KBRegistryPage = lazy(() => import('./pages/admin/KBRegistryPage.js'));
 const DevboxPage = lazy(() => import('./pages/admin/DevboxPage'));
 const AgentProjectsPage = lazy(() => import('./pages/admin/AgentProjectsPage'));
+const BotsPage = lazy(() => import('./pages/bots/BotsPage'));
+const BotDetailPage = lazy(() => import('./pages/bots/BotDetailPage'));
 const ChangesPage = lazy(() => import('./pages/admin/ChangesPage'));
 const KBDetailPage = lazy(() => import('./pages/admin/KBDetailPage.js'));
 const InvokePage = lazy(() => import('./pages/InvokePage'));
@@ -278,6 +280,18 @@ export function App() {
           <Route path="projects" element={
             <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
               <Page element={<AgentProjectsPage />} />
+            </RequireRole>
+          } />
+          {/* Bots — durable, mission-configured agents. Same gate as the other
+              Build action surfaces: their API is hr-admin territory. */}
+          <Route path="bots" element={
+            <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
+              <Page element={<BotsPage />} />
+            </RequireRole>
+          } />
+          <Route path="bots/:id" element={
+            <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
+              <Page element={<BotDetailPage />} />
             </RequireRole>
           } />
           {/* The governance queue for code agents wrote — review, approve, deliver. */}
