@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useCapabilities } from '../../lib/capabilities';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
 
 interface Job {
@@ -77,6 +78,10 @@ function money(n: number | undefined): string {
 
 export default function WorkHomePage() {
   const navigate = useNavigate();
+  // Every mutation here rides /api/work/* (ManageDevbox): queueing jobs,
+  // sweeps, finding actions, job review, proposal decisions. Reads stay open.
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageDevbox');
   const [findingStatus, setFindingStatus] = useState<'open' | 'promoted' | 'resolved' | 'dismissed'>('open');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const { data: summary, error: summaryError, refresh: refreshSummary } = useFetch<Summary>('/api/work/summary', 8_000);
@@ -367,21 +372,24 @@ export default function WorkHomePage() {
               {summaryError ? 'unknown' : `${s?.findings.critical ?? 0} critical · ${s?.findings.warning ?? 0} warning`}
             </span>
           </div>
-          <button
-            onClick={() => void runSweeps()}
-            disabled={!!summaryError}
-            title={summaryError ? 'Sweeps read the graph from Aurora, which is unreachable' : undefined}
-            className={`mt-auto self-start mt-3 px-3 py-1.5 rounded-md border text-[12px] font-semibold transition-colors ${
-              summaryError
-                ? 'border-border bg-surface-hover text-text-tertiary cursor-not-allowed'
-                : 'border-border bg-surface text-text-secondary cursor-pointer hover:text-primary hover:border-primary/50'}`}
-          >
-            Run sweeps now
-          </button>
+          {canManage && (
+            <button
+              onClick={() => void runSweeps()}
+              disabled={!!summaryError}
+              title={summaryError ? 'Sweeps read the graph from Aurora, which is unreachable' : undefined}
+              className={`mt-auto self-start mt-3 px-3 py-1.5 rounded-md border text-[12px] font-semibold transition-colors ${
+                summaryError
+                  ? 'border-border bg-surface-hover text-text-tertiary cursor-not-allowed'
+                  : 'border-border bg-surface text-text-secondary cursor-pointer hover:text-primary hover:border-primary/50'}`}
+            >
+              Run sweeps now
+            </button>
+          )}
         </Card>
       </div>
 
-      {/* ── Queue a job ── */}
+      {/* ── Queue a job — POST /api/work/jobs (ManageDevbox) ── */}
+      {canManage && (
       <Card padding="none" className="mb-5 overflow-hidden">
         <div className="px-3.5 pt-3 pb-1 text-xs font-semibold text-text-secondary tracking-wide select-none">
           QUEUE A JOB
@@ -416,6 +424,7 @@ export default function WorkHomePage() {
           </button>
         </div>
       </Card>
+      )}
 
       {/* ── Needs review first: it is the only thing blocking progress ── */}
       {(needsReview > 0 || pendingProposals > 0) && (
@@ -439,12 +448,14 @@ export default function WorkHomePage() {
                     </Link>
                   </div>
                 </div>
-                <div className="flex gap-2 shrink-0">
-                  <button onClick={() => void reviewJob(j, 'accept')}
-                    className="px-3 py-1 rounded-md border-none bg-success text-white text-[12px] font-semibold cursor-pointer">Accept</button>
-                  <button onClick={() => void reviewJob(j, 'reject')}
-                    className="px-3 py-1 rounded-md border border-border bg-surface text-text-secondary text-[12px] font-semibold cursor-pointer hover:text-danger">Reject</button>
-                </div>
+                {canManage && (
+                  <div className="flex gap-2 shrink-0">
+                    <button onClick={() => void reviewJob(j, 'accept')}
+                      className="px-3 py-1 rounded-md border-none bg-success text-white text-[12px] font-semibold cursor-pointer">Accept</button>
+                    <button onClick={() => void reviewJob(j, 'reject')}
+                      className="px-3 py-1 rounded-md border border-border bg-surface text-text-secondary text-[12px] font-semibold cursor-pointer hover:text-danger">Reject</button>
+                  </div>
+                )}
               </div>
             </div>
           ))}
@@ -458,16 +469,18 @@ export default function WorkHomePage() {
                   {group.length} proposed for {targetId}
                 </span>
                 <div className="flex-1" />
-                <div className="flex gap-2">
-                  <button onClick={() => void decideAll(group, 'approve')}
-                    className="px-3 py-1 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer">
-                    Approve all {group.length}
-                  </button>
-                  <button onClick={() => void decideAll(group, 'reject')}
-                    className="px-3 py-1 rounded-md border border-border bg-surface text-text-secondary text-[12px] font-semibold cursor-pointer hover:text-danger">
-                    Reject all
-                  </button>
-                </div>
+                {canManage && (
+                  <div className="flex gap-2">
+                    <button onClick={() => void decideAll(group, 'approve')}
+                      className="px-3 py-1 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer">
+                      Approve all {group.length}
+                    </button>
+                    <button onClick={() => void decideAll(group, 'reject')}
+                      className="px-3 py-1 rounded-md border border-border bg-surface text-text-secondary text-[12px] font-semibold cursor-pointer hover:text-danger">
+                      Reject all
+                    </button>
+                  </div>
+                )}
               </div>
 
               {group.map((p) => (
@@ -493,12 +506,14 @@ export default function WorkHomePage() {
                     )}
                     <div className="text-[11px] text-text-tertiary mt-1.5">{p.source}</div>
                   </div>
-                  <div className="flex gap-2 shrink-0">
-                    <button onClick={() => void decideProposal(p, 'approve')}
-                      className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] font-semibold text-text-secondary cursor-pointer hover:text-primary">Approve</button>
-                    <button onClick={() => void decideProposal(p, 'reject')}
-                      className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] text-text-tertiary cursor-pointer hover:text-danger">Reject</button>
-                  </div>
+                  {canManage && (
+                    <div className="flex gap-2 shrink-0">
+                      <button onClick={() => void decideProposal(p, 'approve')}
+                        className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] font-semibold text-text-secondary cursor-pointer hover:text-primary">Approve</button>
+                      <button onClick={() => void decideProposal(p, 'reject')}
+                        className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] text-text-tertiary cursor-pointer hover:text-danger">Reject</button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -514,7 +529,11 @@ export default function WorkHomePage() {
         </div>
         {jobs.length === 0 ? (
           <div className="px-3.5 py-8 text-center text-[12.5px] text-text-tertiary">
-            {summaryError ? 'Queue unreachable — this list is unknown, not empty.' : 'No jobs yet — queue one above, or promote a finding below.'}
+            {summaryError
+              ? 'Queue unreachable — this list is unknown, not empty.'
+              : canManage
+                ? 'No jobs yet — queue one above, or promote a finding below.'
+                : 'No jobs yet.'}
           </div>
         ) : jobs.map((j) => (
           <Link
@@ -598,7 +617,7 @@ export default function WorkHomePage() {
               {/* Forty-one documents reviewed one click at a time is not a
                   workflow. Bounded to ten per press so the cost of a click
                   stays predictable, and the toast says how many remain. */}
-              {findingStatus === 'open' && items.some((f) => f.entityType === 'document') && (
+              {canManage && findingStatus === 'open' && items.some((f) => f.entityType === 'document') && (
                 <div className="px-3.5 pb-2.5 pl-10 -mt-1">
                   <button
                     onClick={(e) => { e.stopPropagation(); void analyzeBatch(sweep, items.length); }}
@@ -620,7 +639,7 @@ export default function WorkHomePage() {
                     <Link to={`/iq/work/${f.jobId}`} className="text-[11px] text-primary no-underline hover:underline shrink-0">
                       see the work →
                     </Link>
-                  ) : findingStatus === 'open' ? (
+                  ) : canManage && findingStatus === 'open' ? (
                     <div className="flex gap-1.5 shrink-0">
                       {f.entityType === 'document' && (
                         <button

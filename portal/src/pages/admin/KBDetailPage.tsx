@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
+import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch.js';
 import { ProvisioningProgress } from '../../components/kb/ProvisioningProgress.js';
 import type { KbRegistryEntry } from './KBRegistryPage.js';
@@ -546,6 +547,9 @@ function InfoPill({ label, value }: { label: string; value: string }) {
 export function KBDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  // Provision/sync/delete ride /api/admin/kb-registry (ManageKB).
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageKB');
   const [activeTab, setActiveTab] = useState<TabId>('landing-zone');
   const [reprovisionOpen, setReprovisionOpen] = useState(false);
   const [syncLoading, setSyncLoading] = useState(false);
@@ -592,8 +596,8 @@ export function KBDetailPage() {
     );
   }
 
-  const canProvision = ['PENDING', 'FAILED'].includes(kb.status);
-  const canSync = kb.status === 'ACTIVE' && !!kb.bedrockKbId && !!kb.dataSourceId;
+  const canProvision = canManage && ['PENDING', 'FAILED'].includes(kb.status);
+  const canSync = canManage && kb.status === 'ACTIVE' && !!kb.bedrockKbId && !!kb.dataSourceId;
 
   async function handleSync() {
     const kbId = kb?.id;

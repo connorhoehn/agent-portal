@@ -7,6 +7,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { Button } from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch.js';
 import {
   usePromptList,
@@ -395,11 +396,14 @@ function ViewPanel({
   onVersionChange,
   onEdit,
   onTest,
+  canManage,
 }: {
   selection: Selection;
   onVersionChange: (v: string) => void;
   onEdit: () => void;
   onTest: () => void;
+  /** ManageCanary — Test/Edit affordances hide without it. */
+  canManage: boolean;
 }): React.ReactElement {
   const { detail, loading, error } = usePromptVersionDetail(selection.promptId, selection.version);
 
@@ -443,12 +447,16 @@ function ViewPanel({
             value={selection.version}
             onChange={onVersionChange}
           />
-          <Button variant="ghost" onClick={onTest}>
-            Test ▶
-          </Button>
-          <Button variant="primary" onClick={onEdit}>
-            Edit / new version
-          </Button>
+          {canManage && (
+            <>
+              <Button variant="ghost" onClick={onTest}>
+                Test ▶
+              </Button>
+              <Button variant="primary" onClick={onEdit}>
+                Edit / new version
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -1287,6 +1295,10 @@ function CreatePanel({
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 function PromptsPage(): React.ReactElement {
+  // Create/edit/publish/test/optimize all POST the canary prompt library
+  // (ManageCanary); reading the library stays open.
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageCanary');
   const { prompts, loading: listLoading, error: listError, refresh } = usePromptList();
   const [search, setSearch] = useState('');
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -1339,14 +1351,16 @@ function PromptsPage(): React.ReactElement {
     <div style={pageStyle}>
       <div style={sidebarStyle}>
         <div style={sidebarTopStyle}>
-          <Button
-            variant="primary"
-            fullWidth
-            onClick={() => { setSelection(null); setMode('create'); }}
-            style={{ marginBottom: 8 }}
-          >
-            + New prompt
-          </Button>
+          {canManage && (
+            <Button
+              variant="primary"
+              fullWidth
+              onClick={() => { setSelection(null); setMode('create'); }}
+              style={{ marginBottom: 8 }}
+            >
+              + New prompt
+            </Button>
+          )}
           <input
             type="text"
             value={search}
@@ -1407,6 +1421,7 @@ function PromptsPage(): React.ReactElement {
             onVersionChange={handleVersionChange}
             onEdit={() => setMode('edit')}
             onTest={() => setMode('test')}
+            canManage={canManage}
           />
         )}
 

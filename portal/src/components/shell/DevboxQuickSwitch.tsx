@@ -3,12 +3,16 @@
 // microVM + persistent workspace), jumps to one, or provisions a new one.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { useCapabilities } from '../../lib/capabilities';
 import { createBox, loadBoxes, onBoxesChanged, type DevboxBox } from '../../lib/devboxRegistry';
 
 const mono = 'font-["Fira_Code","Cascadia_Code","JetBrains_Mono",monospace]';
 
 export function DevboxQuickSwitch() {
   const navigate = useNavigate();
+  // Provisioning a computer POSTs /api/devbox (ManageDevbox).
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageDevbox');
   const [open, setOpen] = useState(false);
   const [boxes, setBoxes] = useState<DevboxBox[]>([]);
   const [highlight, setHighlight] = useState(0);
@@ -30,8 +34,8 @@ export function DevboxQuickSwitch() {
       b.label.toLowerCase().includes(q) || b.sessionId.toLowerCase().includes(q));
   }, [boxes, query]);
 
-  // Rows: matching boxes + the "new devbox" action.
-  const rows = useMemo(() => matches.length + 1, [matches]);
+  // Rows: matching boxes + the "new devbox" action (ManageDevbox only).
+  const rows = useMemo(() => matches.length + (canManage ? 1 : 0), [matches, canManage]);
 
   const go = useCallback((box: DevboxBox) => {
     setOpen(false);
@@ -71,7 +75,7 @@ export function DevboxQuickSwitch() {
       }
       else if (e.key === 'Enter') {
         if (highlight < matches.length) { const b = matches[highlight]; if (b) go(b); }
-        else void provision();
+        else if (canManage) void provision();
       }
       else if (e.key === 'Backspace') { setQuery((q) => q.slice(0, -1)); setHighlight(0); }
       else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
@@ -92,7 +96,7 @@ export function DevboxQuickSwitch() {
     // Capture phase: xterm must not see these at all.
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [open, rows, highlight, matches, go, provision]);
+  }, [open, rows, highlight, matches, go, provision, canManage]);
 
   // Take DOM focus off the terminal while the overlay is up, so the browser
   // agrees with what the screen shows.
@@ -138,14 +142,16 @@ export function DevboxQuickSwitch() {
               <span className="text-[10px] text-text-tertiary">{new Date(box.createdAt).toLocaleDateString()}</span>
             </div>
           ))}
-          <div
-            onClick={() => void provision()}
-            onMouseEnter={() => setHighlight(matches.length)}
-            className={`px-4 py-2.5 flex items-center gap-2 cursor-pointer ${highlight === matches.length ? 'bg-surface-hover' : ''}`}
-          >
-            <span className="text-[13px] font-semibold text-primary">{busy ? '⏳ provisioning…' : '+ New computer'}</span>
-            <span className="text-[11px] text-text-tertiary">fresh microVM workspace</span>
-          </div>
+          {canManage && (
+            <div
+              onClick={() => void provision()}
+              onMouseEnter={() => setHighlight(matches.length)}
+              className={`px-4 py-2.5 flex items-center gap-2 cursor-pointer ${highlight === matches.length ? 'bg-surface-hover' : ''}`}
+            >
+              <span className="text-[13px] font-semibold text-primary">{busy ? '⏳ provisioning…' : '+ New computer'}</span>
+              <span className="text-[11px] text-text-tertiary">fresh microVM workspace</span>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router';
 import { KBCreateWizard } from '../../components/kb/KBCreateWizard.js';
+import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch.js';
 import {
   PageSection,
@@ -105,6 +106,9 @@ function filterBtnStyle(active: boolean): React.CSSProperties {
 
 export function KBRegistryPage() {
   const navigate = useNavigate();
+  // Create/provision/sync/delete ride /api/admin/kb-registry (ManageKB).
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageKB');
   const [tenantFilter, setTenantFilter] = useState<TenantFilter>('all');
   const [wizardOpen, setWizardOpen] = useState(false);
 
@@ -128,21 +132,23 @@ export function KBRegistryPage() {
         <Link to="/admin/knowledge" style={{ fontSize: 12, color: 'var(--color-primary)', textDecoration: 'none' }}>
           ← Knowledge
         </Link>
-        <button
-          onClick={() => setWizardOpen(true)}
-          style={{
-            fontSize: 13,
-            fontWeight: 600,
-            padding: '7px 16px',
-            background: 'var(--color-primary)',
-            color: '#fff',
-            border: 'none',
-            borderRadius: 'var(--radius-sm)',
-            cursor: 'pointer',
-          }}
-        >
-          + New Knowledge Base
-        </button>
+        {canManage && (
+          <button
+            onClick={() => setWizardOpen(true)}
+            style={{
+              fontSize: 13,
+              fontWeight: 600,
+              padding: '7px 16px',
+              background: 'var(--color-primary)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 'var(--radius-sm)',
+              cursor: 'pointer',
+            }}
+          >
+            + New Knowledge Base
+          </button>
+        )}
       </div>
 
       {/* Error banner */}
@@ -333,7 +339,9 @@ function SyncButton({
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { can, ready } = useCapabilities();
 
+  if (!ready || !can('ManageKB')) return null;
   if (!dataSourceId) return <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>—</span>;
 
   async function handleSync() {
@@ -386,6 +394,8 @@ function ProvisionButton({
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageKB');
 
   async function handleProvision() {
     setLoading(true);
@@ -404,6 +414,8 @@ function ProvisionButton({
       setLoading(false);
     }
   }
+
+  if (!canManage) return null;
 
   return (
     <div>
@@ -444,6 +456,8 @@ export function DeleteButton({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageKB');
 
   async function performDelete() {
     setConfirmOpen(false);
@@ -463,6 +477,8 @@ export function DeleteButton({
       setLoading(false);
     }
   }
+
+  if (!canManage) return null;
 
   return (
     <div>

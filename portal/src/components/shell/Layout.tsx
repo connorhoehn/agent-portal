@@ -63,8 +63,11 @@ const NAV_ITEMS: NavItem[] = [
 // Platform/admin surfaces, gated by role and grouped SDLC-first.
 const PLATFORM_ITEMS: NavItem[] = [
   // BUILD — the SDLC core: the repos, the reviews, and the machines agents run on.
-  // Bots first: the standing missions that drive the loop, rendered between
-  // Initiatives (in NAV_ITEMS above) and Codebases.
+  // Budgets first: it renders directly after Initiatives (in NAV_ITEMS above) —
+  // the allocation ledger sits beside the initiatives it funds. Read-wide
+  // (org-leader + hr-admin); writes are capability-gated inside the page.
+  { path: '/admin/budgets',         label: 'Budgets',         tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'], group: 'Build' },
+  // Bots next: the standing missions that drive the loop.
   { path: '/admin/bots',            label: 'Bots',            tenant: 'admin', requireRoles: ['hr-admin'], group: 'Build' },
   // 'Codebases', not 'Projects': /iq/projects is already the org's initiatives —
   // epics, features, the people who own them. This is the code that delivers them.

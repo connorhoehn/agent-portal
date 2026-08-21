@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CodeEditor, TagEditor, ConfirmDialog, CollapsibleSection, PageSection } from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { parsePolicy, buildPolicy, type Effect, type ParsedPolicy } from '../../lib/cedarPolicy';
 
@@ -52,6 +53,9 @@ const NEW_TEMPLATE: ParsedPolicy = {
 };
 
 function PoliciesPage() {
+  // Policy CRUD rides /api/identity/policies (EditPolicy).
+  const { can, ready } = useCapabilities();
+  const canEdit = ready && can('EditPolicy');
   const { data, isLoading, error, refresh } = useFetch<PoliciesResponse>('/api/identity/policies');
   const { data: schema } = useFetch<SchemaResponse>('/api/identity/schema');
   const allActions = useMemo(
@@ -149,7 +153,7 @@ function PoliciesPage() {
       title="Cedar Policies"
       description="Live in AVS Verified Permissions. Edits take effect within ~60s (decision cache TTL)."
       actions={
-        !creating ? (
+        canEdit && !creating ? (
           <button onClick={() => { setCreating(true); setErrMsg(null); }} style={btnPrimary}>+ New Policy</button>
         ) : undefined
       }
@@ -183,7 +187,7 @@ function PoliciesPage() {
                 <code style={{ fontSize: 10, color: 'var(--color-text-tertiary)' }}>{p.policyId}</code>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
-                {!isEditing && (
+                {!isEditing && canEdit && (
                   <>
                     <button onClick={() => startEdit(p)} disabled={busy} style={btnSecondary}>Edit</button>
                     <button onClick={() => setDeleteTarget(p.policyId)} disabled={busy} style={btnDanger}>Delete</button>

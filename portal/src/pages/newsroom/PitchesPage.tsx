@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { useState } from 'react';
 import { PageSection, Card, FilterChip } from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 
 // The story backlog — the desk view behind the home page's "Open pitches"
@@ -73,6 +74,10 @@ function formatDate(iso: string): string {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 function PitchesPage() {
+  // Desk decisions PATCH /api/newsroom/pitches/:id (ManagePitches — reporters
+  // and editors). Without it the board is read-only.
+  const { can, ready } = useCapabilities();
+  const canDecide = ready && can('ManagePitches');
   const [statusFilter, setStatusFilter] = useState<string>('open');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -153,7 +158,7 @@ function PitchesPage() {
                   {p.cluster && <span style={metaStyle}>Cluster: <b>{p.cluster.title}</b></span>}
                   <span style={metaStyle}>{formatDate(p.createdAt)}</span>
                 </div>
-                {actions.length > 0 && (
+                {canDecide && actions.length > 0 && (
                   <div style={actionRowStyle}>
                     {actions.map((a) => (
                       <button

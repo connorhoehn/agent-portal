@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { ReactFlow, Background, Controls, MiniMap, type Node, type Edge, MarkerType } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Card, PageSection, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip, SegmentedControl } from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -92,6 +93,10 @@ function BrowserPage() {
 // ── Web Q&A: URL + question → screenshot + Nova Lite answer ────────────────
 
 function WebQATab() {
+  // Web Q&A spins up a real browser microVM — /api/capabilities mutations
+  // require ManageDevbox.
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageDevbox');
   const [url, setUrl] = useState('https://example.com');
   const [question, setQuestion] = useState('What is this page about?');
   const [busy, setBusy] = useState(false);
@@ -128,26 +133,32 @@ function WebQATab() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-        <input
-          value={url}
-          onChange={e => setUrl(e.target.value)}
-          placeholder="https://..."
-          style={inputStyle()}
-        />
-        <input
-          value={question}
-          onChange={e => setQuestion(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && ask()}
-          placeholder="What do you want to know about this page?"
-          style={inputStyle()}
-        />
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <button onClick={ask} disabled={busy || !url || !question} style={primaryBtnStyle(busy || !url || !question)}>
-            {busy ? 'Asking…' : 'Ask the page'}
-          </button>
+      {canManage ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+          <input
+            value={url}
+            onChange={e => setUrl(e.target.value)}
+            placeholder="https://..."
+            style={inputStyle()}
+          />
+          <input
+            value={question}
+            onChange={e => setQuestion(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && ask()}
+            placeholder="What do you want to know about this page?"
+            style={inputStyle()}
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button onClick={ask} disabled={busy || !url || !question} style={primaryBtnStyle(busy || !url || !question)}>
+              {busy ? 'Asking…' : 'Ask the page'}
+            </button>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', fontStyle: 'italic', marginBottom: 12 }}>
+          Viewing only — your role can&apos;t drive the browser.
+        </div>
+      )}
 
       {error && <div style={errBoxStyle()}>{error}</div>}
 
@@ -180,6 +191,10 @@ function WebQATab() {
 // ── Journey Recorder: build a sequence of URL visits with carousel + timeline ──
 
 function JourneyTab() {
+  // Starting/steering/ending a journey mutates /api/capabilities (ManageDevbox);
+  // resuming to VIEW recorded steps is a read and stays open.
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageDevbox');
   const { data: sessionsData, refresh: refreshSessions } = useFetch<{ sessions: BrowserSession[] }>('/api/capabilities/browser-sessions', 10000);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [url, setUrl] = useState('https://example.com');
@@ -270,26 +285,32 @@ function JourneyTab() {
 
       {!activeSessionId ? (
         <div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <input
-              value={label}
-              onChange={e => setLabel(e.target.value)}
-              placeholder="Journey label (e.g. competitor-research)"
-              style={inputStyle()}
-            />
-            <div style={{ display: 'flex', gap: 8 }}>
+          {canManage ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <input
-                value={url}
-                onChange={e => setUrl(e.target.value)}
-                placeholder="Starting URL"
-                onKeyDown={e => e.key === 'Enter' && startJourney()}
-                style={{ ...inputStyle(), flex: 1 }}
+                value={label}
+                onChange={e => setLabel(e.target.value)}
+                placeholder="Journey label (e.g. competitor-research)"
+                style={inputStyle()}
               />
-              <button onClick={startJourney} disabled={navigating || !url} style={primaryBtnStyle(navigating || !url)}>
-                {navigating ? 'Starting…' : 'Start journey'}
-              </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  value={url}
+                  onChange={e => setUrl(e.target.value)}
+                  placeholder="Starting URL"
+                  onKeyDown={e => e.key === 'Enter' && startJourney()}
+                  style={{ ...inputStyle(), flex: 1 }}
+                />
+                <button onClick={startJourney} disabled={navigating || !url} style={primaryBtnStyle(navigating || !url)}>
+                  {navigating ? 'Starting…' : 'Start journey'}
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>
+              Viewing only — your role can&apos;t start a journey. Open sessions below can still be replayed.
+            </div>
+          )}
 
           {openSessions.length > 0 && (
             <div style={{ marginTop: 16, padding: 10, background: 'var(--color-surface-hover)', borderRadius: 4 }}>
@@ -321,21 +342,23 @@ function JourneyTab() {
         </div>
       ) : (
         <div>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-            <input
-              value={url}
-              onChange={e => setUrl(e.target.value)}
-              placeholder="Next URL"
-              onKeyDown={e => e.key === 'Enter' && stepTo(url)}
-              style={{ ...inputStyle(), flex: 1 }}
-            />
-            <button onClick={() => stepTo(url)} disabled={navigating || !url} style={primaryBtnStyle(navigating || !url)}>
-              {navigating ? 'Navigating…' : 'Navigate (record)'}
-            </button>
-            <button onClick={endJourney} style={{ ...primaryBtnStyle(false), background: 'var(--color-danger, #dc2626)' }}>
-              End
-            </button>
-          </div>
+          {canManage && (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <input
+                value={url}
+                onChange={e => setUrl(e.target.value)}
+                placeholder="Next URL"
+                onKeyDown={e => e.key === 'Enter' && stepTo(url)}
+                style={{ ...inputStyle(), flex: 1 }}
+              />
+              <button onClick={() => stepTo(url)} disabled={navigating || !url} style={primaryBtnStyle(navigating || !url)}>
+                {navigating ? 'Navigating…' : 'Navigate (record)'}
+              </button>
+              <button onClick={endJourney} style={{ ...primaryBtnStyle(false), background: 'var(--color-danger, #dc2626)' }}>
+                End
+              </button>
+            </div>
+          )}
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
@@ -545,6 +568,9 @@ function buildSiteMap(pages: CrawlPage[]): { nodes: Node[]; edges: Edge[] } {
 // ── Sessions: raw open + closed session lists (admin power-user view) ───────
 
 function SessionsRawTab() {
+  // Launch/close mutate /api/capabilities (ManageDevbox); the lists stay.
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageDevbox');
   const { data, refresh } = useFetch<{ sessions: BrowserSession[] }>('/api/capabilities/browser-sessions', 10000);
   const [newSessionAgent, setNewSessionAgent] = useState('portal');
   const [newSessionUrl, setNewSessionUrl] = useState('');
@@ -579,6 +605,7 @@ function SessionsRawTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Launch new session */}
+      {canManage && (
       <Card padding="md">
         <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Launch Browser Session</h2>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -603,6 +630,7 @@ function SessionsRawTab() {
           </button>
         </div>
       </Card>
+      )}
 
       {/* Active sessions */}
       <Card padding="md">
@@ -640,12 +668,14 @@ function SessionsRawTab() {
                   <TableTd>{session.requestCount}</TableTd>
                   <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{formatAge(session.lastActivityAt)}</TableTd>
                   <TableTd>
-                    <button
-                      onClick={() => closeSession(session.sessionId)}
-                      style={{ fontSize: 11, padding: '2px 8px', background: 'none', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
-                    >
-                      Close
-                    </button>
+                    {canManage && (
+                      <button
+                        onClick={() => closeSession(session.sessionId)}
+                        style={{ fontSize: 11, padding: '2px 8px', background: 'none', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)', borderRadius: 'var(--radius-sm)', cursor: 'pointer' }}
+                      >
+                        Close
+                      </button>
+                    )}
                   </TableTd>
                 </TableRow>
               ))}

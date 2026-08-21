@@ -17,7 +17,7 @@
 import { useCallback, useState } from 'react';
 import { Link } from 'react-router';
 import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
-import { useSession } from '../../lib/auth';
+import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
@@ -84,12 +84,13 @@ function when(iso: string | null | undefined): string {
 
 export default function KnowledgeHomePage() {
   // Reading the knowledge surface is open to org-leaders; changing it (adopt,
-  // sync, upload, share links) requires hr-admin, so those controls are hidden
-  // for anyone who would only get a 403 on click.
-  const { session } = useSession();
-  // hr-admin manages the pipeline; the cross-tenant admin role passes every
-  // role gate (RequireRole), so it must see the same controls.
-  const canManage = session?.role === 'hr-admin' || session?.role === 'admin';
+  // sync, upload, share links) requires the ManageKB capability — the same
+  // Cedar decision the /api/admin/kb-registry mutations enforce — so those
+  // controls are hidden for anyone who would only get a 403 on click. The
+  // ingest drill-ins ride the ManageIngest capability (the /api/ingest gate).
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageKB');
+  const canIngest = ready && can('ManageIngest');
 
   const { data: rec, error: recError, refresh: refreshRec } =
     useFetch<{ entries: Reconciled[]; problem?: string }>('/api/admin/kb-registry/reconcile', 30_000);
@@ -351,7 +352,7 @@ export default function KnowledgeHomePage() {
                 ? `${(targets?.targets ?? []).filter((t) => t.enabled !== false).length} enabled`
                 : 'Nothing is configured to pull content in.'
             }
-            {...(canManage ? { to: '/admin/ingest/crawl' } : {})}
+            {...(canIngest ? { to: '/admin/ingest/crawl' } : {})}
             cta="Manage sources"
           />
           <Stage
@@ -363,7 +364,7 @@ export default function KnowledgeHomePage() {
                 ? `Last job ${jobs.jobs[0].status.toLowerCase()} ${when(jobs.jobs[0].startedAt)}`
                 : 'No ingestion has run.'
             }
-            {...(canManage ? { to: '/admin/ingest/sources' } : {})}
+            {...(canIngest ? { to: '/admin/ingest/sources' } : {})}
             cta="Run history"
           />
           <Stage
@@ -371,7 +372,7 @@ export default function KnowledgeHomePage() {
             value={storage?.totalObjects != null ? storage.totalObjects.toLocaleString() : '—'}
             unit="objects in S3"
             detail={storage?.totalBytes ? bytes(storage.totalBytes) : 'Nothing stored yet.'}
-            {...(canManage ? { to: '/admin/ingest/storage' } : {})}
+            {...(canIngest ? { to: '/admin/ingest/storage' } : {})}
             cta="Browse storage"
           />
           <Stage

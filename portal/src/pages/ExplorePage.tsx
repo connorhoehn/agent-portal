@@ -31,6 +31,10 @@ import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
 import { fetchSessionMessages, rememberSession, recallSession, forgetSession, stripThinking } from '../lib/chatSessions';
 import { ChatSessionPicker } from '../components/ChatSessionPicker';
+import { extractSources } from '../components/chat/answerSources';
+import { SourceChips } from '../components/chat/SourceChips';
+import { summarizeToolCalls } from '../components/chat/toolCallSummary';
+import { coalesceAssistantMessages } from '../components/chat/coalesceMessages';
 
 // The supervisor is the conversational entry point: it streams AG-UI events,
 // attaches the caller's role guardrail, replays multi-turn history from
@@ -351,6 +355,12 @@ function ExplorePage() {
 
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  // The hook flushes an assistant message at every TEXT_MESSAGE_END, so one
+  // supervisor turn (text → tool → more text) arrives as several adjacent
+  // assistant messages — each MessageBubble printing its own "Search agent"
+  // label. Coalesce them so the label appears once per turn.
+  const displayMessages = useMemo(() => coalesceAssistantMessages(messages), [messages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
@@ -843,15 +853,22 @@ function ExplorePage() {
                   Ask anything about your org — people, skills, connections, decisions.
                 </div>
               )}
-              {messages.map(msg => {
-                // Strip <thinking> blocks (no ThinkingBlock renderer here) and
+              {displayMessages.map(msg => {
+                // Compose: strip <thinking> blocks (no ThinkingBlock renderer
+                // here) → extract [Source: …] citations out of the prose →
                 // resolve raw person IDs (e.g. "Person with ID p-007") to names.
+                const { cleaned, sources } = msg.role === 'assistant'
+                  ? extractSources(stripThinking(msg.content))
+                  : { cleaned: msg.content, sources: [] };
                 const resolvedContent = msg.role === 'assistant' && data
-                  ? resolvePersonIds(stripThinking(msg.content), data.nodes)
-                  : msg.content;
+                  ? resolvePersonIds(cleaned, data.nodes)
+                  : cleaned;
                 const mentioned = msg.role === 'assistant' && data
                   ? findMentionedPeople(resolvedContent, data.nodes)
                   : [];
+                // Behind-the-scenes semantics: what this turn actually did,
+                // from the tool calls the stream captured (if any).
+                const toolSummary = msg.role === 'assistant' ? summarizeToolCalls(msg.toolCalls) : null;
                 return (
                   <div key={msg.id}>
                     <MessageBubble
@@ -860,6 +877,12 @@ function ExplorePage() {
                       agentName="Search agent"
                       renderMarkdown={(content) => <Markdown>{content}</Markdown>}
                     />
+                    {toolSummary && (
+                      <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                        {toolSummary}
+                      </div>
+                    )}
+                    <SourceChips sources={sources} />
                     {mentioned.length > 0 && (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
                         {mentioned.map(p => (
@@ -881,7 +904,12 @@ function ExplorePage() {
                 <div>
                   <MessageBubble
                     role="assistant"
-                    content={streamingText ? (data ? resolvePersonIds(stripThinking(streamingText), data.nodes) : stripThinking(streamingText)) : ''}
+                    content={streamingText ? (() => {
+                      // Same composition as completed messages, applied live so
+                      // raw s3:// URIs never flash into the streaming prose.
+                      const live = extractSources(stripThinking(streamingText)).cleaned;
+                      return data ? resolvePersonIds(live, data.nodes) : live;
+                    })() : ''}
                     toolCalls={activeToolCalls.map(tc => ({
                       id: tc.id,
                       name: tc.name,

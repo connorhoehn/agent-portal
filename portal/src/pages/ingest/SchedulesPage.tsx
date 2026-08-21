@@ -3,6 +3,7 @@ import {
   Card, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip,
   PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import {
   Button, EmptyState, Toggle, labelStyle,
@@ -47,6 +48,9 @@ function SchedulesPage() {
 }
 
 function SchedulesPanel({ sources }: { sources: DataSource[] }) {
+  // Schedule CRUD rides /api/ingest/schedules (ManageIngest).
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageIngest');
   const { data, refresh } = useFetch<{ schedules: IngestSchedule[] }>('/api/ingest/schedules', 30_000);
   const schedules = data?.schedules ?? [];
   const [showForm, setShowForm] = useState(false);
@@ -69,9 +73,11 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
     <Card padding="md">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <h3 style={{ fontSize: 13, fontWeight: 600 }}>KB Sync Schedules</h3>
-        <Button variant="secondary" onClick={() => setShowForm(v => !v)}>
-          {showForm ? 'Cancel' : '+ New Schedule'}
-        </Button>
+        {canManage && (
+          <Button variant="secondary" onClick={() => setShowForm(v => !v)}>
+            {showForm ? 'Cancel' : '+ New Schedule'}
+          </Button>
+        )}
       </div>
 
       {showForm && (
@@ -107,16 +113,22 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
                     : <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>—</span>}
                 </TableTd>
                 <TableTd>
-                  <Toggle
-                    checked={s.enabled}
-                    onChange={v => onToggle(s.id, v)}
-                    aria-label={`Enable schedule ${s.label}`}
-                  />
+                  {canManage ? (
+                    <Toggle
+                      checked={s.enabled}
+                      onChange={v => onToggle(s.id, v)}
+                      aria-label={`Enable schedule ${s.label}`}
+                    />
+                  ) : (
+                    <Chip tone={s.enabled ? 'success' : 'neutral'} size="xs">{s.enabled ? 'on' : 'off'}</Chip>
+                  )}
                 </TableTd>
                 <TableTd>
-                  <Button variant="danger" size="sm" onClick={() => onDelete(s.id)}>
-                    Remove
-                  </Button>
+                  {canManage && (
+                    <Button variant="danger" size="sm" onClick={() => onDelete(s.id)}>
+                      Remove
+                    </Button>
+                  )}
                 </TableTd>
               </TableRow>
             ))}

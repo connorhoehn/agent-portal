@@ -19,6 +19,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
 import { loadBoxes, createBox, type DevboxBox } from '../../lib/devboxRegistry';
 import { openShell } from '../../lib/terminalDock';
@@ -94,6 +95,11 @@ export function parseRepoInput(raw: string): string | null {
 
 export default function AgentProjectsPage() {
   const { data, refresh } = useFetch<{ projects: Project[] }>('/api/agent-projects', 15_000);
+  // link/unlink/clone/run-task ride /api/agent-projects + /api/devbox
+  // (ManageDevbox); connection add/delete rides /api/connections (ManageIngest).
+  const { can, ready } = useCapabilities();
+  const canDevbox = ready && can('ManageDevbox');
+  const canIngest = ready && can('ManageIngest');
 
   // Deep links from the rest of the SDLC loop: /admin/projects?project=<id>
   // scrolls to that codebase, &run=<id> highlights the run that a change was
@@ -251,7 +257,7 @@ export default function AgentProjectsPage() {
           throw new Error(
             p.connectionName
               ? `Couldn't access ${p.repoFullName} with the “${p.connectionName}” credential — check that its token can reach this repository.`
-              : `Couldn't access ${p.repoFullName}. It was linked as a public repo, so no credential was sent. If it's private, add a GitHub connection under Knowledge → Sources and re-link it with that credential; if it's public, double-check the owner/name.`,
+              : `Couldn't access ${p.repoFullName}. It was linked as a public repo, so no credential was sent. If it's private, add a GitHub connection with the Connections button on this page and re-link it with that credential; if it's public, double-check the owner/name.`,
           );
         }
         if (/could not resolve host|network is unreachable|connection timed out/i.test(out)) {
@@ -318,29 +324,33 @@ export default function AgentProjectsPage() {
       description="Repositories that agents work on, and the initiatives they deliver. What matters here is what the bots did — not the human collaboration furniture."
     >
       <div className="flex items-center gap-2 mb-4 flex-wrap">
-        <button
-          onClick={() => setLinking((v) => !v)}
-          className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer"
-        >
-          {linking ? 'Cancel' : '+ Link a repository'}
-        </button>
-        <button
-          disabled={githubConnections.length === 0}
-          title={githubConnections.length === 0
-            ? 'Connect GitHub first — discovery browses what a credential can see.'
-            : 'Browse repositories by connection and organization'}
-          onClick={() => setDiscovering(true)}
-          className="px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors disabled:opacity-40 disabled:cursor-default"
-        >
-          Discover
-        </button>
+        {canDevbox && (
+          <>
+            <button
+              onClick={() => setLinking((v) => !v)}
+              className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer"
+            >
+              {linking ? 'Cancel' : '+ Link a repository'}
+            </button>
+            <button
+              disabled={githubConnections.length === 0}
+              title={githubConnections.length === 0
+                ? 'Connect GitHub first — discovery browses what a credential can see.'
+                : 'Browse repositories by connection and organization'}
+              onClick={() => setDiscovering(true)}
+              className="px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors disabled:opacity-40 disabled:cursor-default"
+            >
+              Discover
+            </button>
+          </>
+        )}
         <button
           onClick={() => setShowConnections((v) => !v)}
           className="px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors"
         >
           {showConnections ? 'Hide connections' : 'Connections'}
         </button>
-        {githubConnections.length === 0 && (
+        {githubConnections.length === 0 && canIngest && (
           <span className="text-[11px] text-text-tertiary inline-flex items-center gap-1.5">
             No GitHub connection yet
             <button
@@ -481,12 +491,14 @@ export default function AgentProjectsPage() {
                     )
                   )}
                   <div className="flex-1" />
-                  <button
-                    onClick={() => void unlink(p)}
-                    className="text-[11px] text-text-tertiary hover:text-danger bg-transparent border-none cursor-pointer"
-                  >
-                    unlink
-                  </button>
+                  {canDevbox && (
+                    <button
+                      onClick={() => void unlink(p)}
+                      className="text-[11px] text-text-tertiary hover:text-danger bg-transparent border-none cursor-pointer"
+                    >
+                      unlink
+                    </button>
+                  )}
                 </div>
 
                 <div className="px-3.5 py-2.5 flex items-center gap-2 flex-wrap border-b border-border">
@@ -495,18 +507,22 @@ export default function AgentProjectsPage() {
                       <span className="text-[11px] text-success">in {box?.label}</span>
                       <span className="text-[11px] text-text-tertiary font-mono truncate">{p.checkout}</span>
                       <div className="flex-1" />
-                      <button
-                        onClick={() => { setRunFor(p); setPrompt(''); }}
-                        className="px-2.5 py-1 rounded-md border-none bg-primary text-white text-[11px] font-semibold cursor-pointer"
-                      >
-                        Run a task
-                      </button>
-                      <button
-                        onClick={() => box && openShell({ id: box.id, label: box.label, sessionId: box.sessionId, cwd: p.checkout })}
-                        className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors"
-                      >
-                        Open shell
-                      </button>
+                      {canDevbox && (
+                        <>
+                          <button
+                            onClick={() => { setRunFor(p); setPrompt(''); }}
+                            className="px-2.5 py-1 rounded-md border-none bg-primary text-white text-[11px] font-semibold cursor-pointer"
+                          >
+                            Run a task
+                          </button>
+                          <button
+                            onClick={() => box && openShell({ id: box.id, label: box.label, sessionId: box.sessionId, cwd: p.checkout })}
+                            className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors"
+                          >
+                            Open shell
+                          </button>
+                        </>
+                      )}
                     </>
                   ) : (
                     <>
@@ -517,13 +533,15 @@ export default function AgentProjectsPage() {
                           : 'Not in a workspace yet.'}
                       </span>
                       <div className="flex-1" />
-                      <button
-                        disabled={busy === `clone:${p.id}`}
-                        onClick={() => void clone(p)}
-                        className="px-2.5 py-1 rounded-md border-none bg-primary text-white text-[11px] font-semibold cursor-pointer disabled:opacity-50"
-                      >
-                        {busy === `clone:${p.id}` ? 'cloning…' : p.clonedAt ? 'Re-clone' : 'Clone into workspace'}
-                      </button>
+                      {canDevbox && (
+                        <button
+                          disabled={busy === `clone:${p.id}`}
+                          onClick={() => void clone(p)}
+                          className="px-2.5 py-1 rounded-md border-none bg-primary text-white text-[11px] font-semibold cursor-pointer disabled:opacity-50"
+                        >
+                          {busy === `clone:${p.id}` ? 'cloning…' : p.clonedAt ? 'Re-clone' : 'Clone into workspace'}
+                        </button>
+                      )}
                     </>
                   )}
                 </div>

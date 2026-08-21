@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Card, PageSection, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip, StatCard } from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -48,6 +49,10 @@ interface InvocationWithSandbox {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 function CodeInterpreterPage() {
+  // Executions and session termination mutate /api/capabilities (ManageDevbox
+  // — sandboxes spend real AWS resources). Reads stay open.
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageDevbox');
   const { data, refresh } = useFetch<{ sessions: CodeSession[] }>('/api/capabilities/code-sessions', 10000);
   const { data: eventsData } = useFetch<{ events: CodeCapabilityEvent[] }>(
     '/api/observability/capability-events?kind=code_execute&limit=50',
@@ -129,6 +134,7 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
           <StatCard label="Last Activity" value={lastEverActive ? formatAge(lastEverActive.lastActivityAt) : '—'} />
         </div>
 
+        {canManage && (
         <Card padding="md">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm font-semibold">
@@ -172,6 +178,7 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
             </div>
           )}
         </Card>
+        )}
 
         {active.length > 0 && (
           <Card padding="md">
@@ -193,12 +200,14 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
                   <span className="text-[11px] text-text-tertiary">
                     Last active {formatAge(session.lastActivityAt)}
                   </span>
-                  <button
-                    onClick={e => { e.stopPropagation(); terminateSession(session.sessionId); }}
-                    className="text-[11px] px-2 py-0.5 bg-transparent border border-danger text-danger rounded-sm cursor-pointer"
-                  >
-                    Terminate
-                  </button>
+                  {canManage && (
+                    <button
+                      onClick={e => { e.stopPropagation(); terminateSession(session.sessionId); }}
+                      className="text-[11px] px-2 py-0.5 bg-transparent border border-danger text-danger rounded-sm cursor-pointer"
+                    >
+                      Terminate
+                    </button>
+                  )}
                 </div>
 
                 {expanded === session.sessionId && (

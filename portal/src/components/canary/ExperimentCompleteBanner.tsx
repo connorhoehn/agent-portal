@@ -3,6 +3,7 @@
 
 import { useState } from 'react';
 import { Banner, Button, Spinner } from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../lib/capabilities';
 import { useCanaryStore } from './canaryStore.js';
 import { resetCanaryExperiment } from './usePromptLibrary.js';
 
@@ -15,6 +16,9 @@ export function ExperimentCompleteBanner({ onReset }: ExperimentCompleteBannerPr
   const subjectBArn = useCanaryStore((s) => s.subjectBArn);
   const [pinning, setPinning] = useState(false);
   const [pinError, setPinError] = useState<string | null>(null);
+  // Pinning and restarting POST /api/observability/canary/start (ManageCanary).
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageCanary');
 
   const isPromoted = controllerState === 'promoted';
 
@@ -68,29 +72,33 @@ export function ExperimentCompleteBanner({ onReset }: ExperimentCompleteBannerPr
             Error — see console
           </span>
         )}
-        {isPromoted && (
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => { void handlePinAsBaseline(); }}
-            disabled={pinning}
-          >
-            {pinning && (
-              <span className="mr-1.5 inline-block align-middle">
-                <Spinner size="sm" color="var(--color-surface)" />
-              </span>
+        {canManage && (
+          <>
+            {isPromoted && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => { void handlePinAsBaseline(); }}
+                disabled={pinning}
+              >
+                {pinning && (
+                  <span className="mr-1.5 inline-block align-middle">
+                    <Spinner size="sm" color="var(--color-surface)" />
+                  </span>
+                )}
+                {pinning ? 'Pinning…' : 'Pin as new baseline A'}
+              </Button>
             )}
-            {pinning ? 'Pinning…' : 'Pin as new baseline A'}
-          </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => { void handleStartNew(); }}
+              disabled={pinning}
+            >
+              Start new experiment
+            </Button>
+          </>
         )}
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => { void handleStartNew(); }}
-          disabled={pinning}
-        >
-          Start new experiment
-        </Button>
       </div>
     </Banner>
   );

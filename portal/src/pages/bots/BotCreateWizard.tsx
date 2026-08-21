@@ -307,7 +307,11 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
 
   // ── Small shared bits ───────────────────────────────────────────────────────
 
-  const inputCls = 'w-full px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary box-border';
+  // App-wide input convention (matches admin/AgentProjectsPage). Every
+  // input/textarea/select in the wizard uses this — FormField's render props
+  // carry no styling of their own, so an unclassed control renders as a raw
+  // browser default.
+  const inputCls = 'w-full px-2.5 py-2 rounded-md border border-border bg-surface text-[13px] text-text-primary box-border placeholder:text-text-tertiary';
   const selectedRepo = projects.find((p) => p.id === step2.agentProjectId);
   const selectedInitiative = (orgProjects ?? []).find((p) => p.id === step2.orgProjectId);
   const targetLabel = step2.targetKind === 'codebase'
@@ -354,6 +358,10 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
       onClose={onClose}
       title={createdBot ? `${createdBot.name} is live` : `New bot — Step ${step} of 5 — ${STEP_LABELS[step - 1]}`}
       maxWidth={560}
+      // maxWidth alone doesn't constrain the library card (and its default is
+      // hard-coded bg-white) — cardStyle merges over the card container, so
+      // this is what actually makes the modal ~560px and theme-correct.
+      cardStyle={{ maxWidth: 560, width: '100%', background: 'var(--color-surface)' }}
       footer={footer}
     >
       {/* Step indicator bar */}
@@ -386,11 +394,12 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
         <>
           {/* ── Step 1 — Template & mission ── */}
           {step === 1 && (
-            <div>
+            <div className="flex flex-col gap-4">
               <FormField label="Name" required error={step1Touched.has('name') ? step1Errors.name : undefined}>
                 {(p) => (
                   <input
                     {...p}
+                    className={inputCls}
                     value={step1.name}
                     onChange={(e) => setStep1((prev) => ({ ...prev, name: e.target.value }))}
                     onBlur={() => setStep1Touched((prev) => new Set([...prev, 'name']))}
@@ -407,7 +416,7 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
                 hint="The template shapes the outcome contract — the mission below says what to do."
               >
                 {() => (
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-2 items-stretch">
                     {TEMPLATES.map((t) => {
                       const active = step1.template === t.id;
                       return (
@@ -440,7 +449,7 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
                 {(p) => (
                   <textarea
                     {...p}
-                    style={{ resize: 'vertical', minHeight: 96 }}
+                    className={`${inputCls} leading-relaxed min-h-[120px] resize-y`}
                     value={step1.prompt}
                     onChange={(e) => setStep1((prev) => ({ ...prev, prompt: e.target.value }))}
                     onBlur={() => setStep1Touched((prev) => new Set([...prev, 'prompt']))}
@@ -453,7 +462,7 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
 
           {/* ── Step 2 — Target ── */}
           {step === 2 && (
-            <div>
+            <div className="flex flex-col gap-4">
               <FormField
                 label="What does it work on?"
                 required
@@ -540,11 +549,12 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
 
           {/* ── Step 3 — Guardrails ── */}
           {step === 3 && (
-            <div>
+            <div className="flex flex-col gap-4">
               <FormField label="Model" hint={models.find((m) => m.id === step3.model)?.hint}>
                 {(p) => (
                   <select
                     {...p}
+                    className={inputCls}
                     value={step3.model}
                     onChange={(e) => setStep3((prev) => ({ ...prev, model: e.target.value }))}
                   >
@@ -561,6 +571,7 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
                 {(p) => (
                   <input
                     {...p}
+                    className={inputCls}
                     type="number" min={0} step="0.01" placeholder="none"
                     value={step3.budgetPerRunUsd}
                     onChange={(e) => setStep3((prev) => ({ ...prev, budgetPerRunUsd: e.target.value }))}
@@ -577,6 +588,7 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
                 {(p) => (
                   <input
                     {...p}
+                    className={inputCls}
                     type="number" min={0} step="0.01" placeholder="none"
                     value={step3.budgetPerDayUsd}
                     onChange={(e) => setStep3((prev) => ({ ...prev, budgetPerDayUsd: e.target.value }))}
@@ -593,6 +605,7 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
                 {(p) => (
                   <input
                     {...p}
+                    className={inputCls}
                     type="number" min={1}
                     value={step3.maxRunsPerDay}
                     onChange={(e) => setStep3((prev) => ({ ...prev, maxRunsPerDay: Number(e.target.value) }))}
@@ -601,23 +614,25 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
                 )}
               </FormField>
 
-              <label className="flex items-center gap-2 text-[12px] text-text-primary cursor-pointer select-none mt-1">
-                <input
-                  type="checkbox"
-                  checked={step3.requiresReview}
-                  onChange={(e) => setStep3((prev) => ({ ...prev, requiresReview: e.target.checked }))}
-                />
-                Requires review
-              </label>
-              <div className="text-[11px] text-text-tertiary mt-1">
-                Every change still passes independent review and policy gates either way — this adds an explicit human approval.
+              <div>
+                <label className="flex items-center gap-2 text-[12px] text-text-primary cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={step3.requiresReview}
+                    onChange={(e) => setStep3((prev) => ({ ...prev, requiresReview: e.target.checked }))}
+                  />
+                  Requires review
+                </label>
+                <div className="text-[11px] text-text-tertiary mt-1">
+                  Every change still passes independent review and policy gates either way — this adds an explicit human approval.
+                </div>
               </div>
             </div>
           )}
 
           {/* ── Step 4 — Trigger ── */}
           {step === 4 && (
-            <div>
+            <div className="flex flex-col gap-4">
               <FormField
                 label="When does it fire?"
                 error={step4Touched.has('trigger') ? step4Errors.trigger : undefined}
@@ -702,8 +717,8 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
 
           {/* ── Step 5 — Review & launch ── */}
           {step === 5 && (
-            <div>
-              <div className="mb-3 px-3.5 py-3 rounded-md border border-border bg-surface-hover/40">
+            <div className="flex flex-col gap-3">
+              <div className="px-3.5 py-3 rounded-md border border-border bg-surface-hover/40">
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-text-secondary mb-2">
                   {step1.name.trim() || 'Unnamed bot'}
                 </div>
@@ -734,7 +749,7 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
               </div>
 
               {/* Estimate panel — ranges only, basis always stated. */}
-              <div className="px-3.5 py-2.5 rounded-md border border-border text-[12px]">
+              <div className="px-3.5 py-2.5 rounded-md border border-border bg-surface text-[12px]">
                 <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">What a run costs</div>
                 {estimateLoading ? (
                   <span className="text-text-tertiary">estimating…</span>

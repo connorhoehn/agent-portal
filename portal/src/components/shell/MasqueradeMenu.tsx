@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useSession, type DirectoryUser, type SessionRole } from '../../lib/auth';
+import { useCapabilities } from '../../lib/capabilities';
 
 const ROLE_LABELS: Record<string, string> = {
   member: 'Member',
@@ -31,6 +32,7 @@ function tenantLabel(t: string): string {
 export function MasqueradeMenu() {
   const { session, setRole, login, masquerade, stopMasquerade, listUsers, isLoading,
     ssoEnabled, signInWithSso, logout } = useSession();
+  const { can, ready } = useCapabilities();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [users, setUsers] = useState<DirectoryUser[] | null>(null);
@@ -60,9 +62,11 @@ export function MasqueradeMenu() {
 
   if (isLoading || !session) return null;
 
-  const isAdmin = session.role === 'admin'
-    || Object.values(session.grants).some(roles => roles.includes('admin'));
-  const canMasquerade = isAdmin || !!session.masquerading;
+  // Masquerade is Cedar's Masquerade action (admin-only in the seeds) — the
+  // capability probe replaces the old hardcoded admin-role check. While
+  // already masquerading, the section stays so the operator can hop identities
+  // (the server re-validates against the REAL actor on every call).
+  const canMasquerade = (ready && can('Masquerade')) || !!session.masquerading;
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);

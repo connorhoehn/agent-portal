@@ -1,5 +1,30 @@
 # Bots & the Work Marketplace — design plan
 
+> **Status (2026-08-21, post-audit):** Phases 0–3 are built, merged, and were
+> audited live end-to-end (real bot run, real marketplace authorize →
+> independent review → gate). Material learnings folded back in:
+>
+> - **The pipeline contract**: every dispatched mission gets a platform-owned
+>   line — *leave changes uncommitted; the platform captures, reviews, and
+>   commits*. The audit caught a self-committing agent leaving a clean tree
+>   and silently escaping capture. Prompts must never ask agents to commit.
+> - **Capabilities are the one permission source**: GET
+>   /api/session/capabilities evaluates the session against every Cedar
+>   action (same engine + cache as the route gates; resource-conditioned
+>   actions probed with representative attrs). The portal gates every action
+>   affordance on it — no button exists that the role cannot use. Permission
+>   failures are 401/403/503, never 500.
+> - **Cedar seeds must guard optional attributes** (`principal has tenant &&
+>   principal.tenant == …`) — unguarded access fails AVP validation and the
+>   seeder's policy reconciliation silently can't deploy, leaving live stores
+>   stale (found live: DispatchAgentRun missing from the store).
+> - **Budgets (in progress)**: initiative allocations
+>   (`initiative_budgets`, monthly) + a program-manager dashboard under
+>   Build; spend attribution reuses the three-way predicate (work item → bot
+>   target → codebase-of-initiative). ManageBudgets Cedar action.
+> - The initiative surfaces drop synthetic people noise (mock activity
+>   feeds, avatar walls) in favor of owner + SMEs + real work + agent spend.
+
 Two flows, one primitive. A **bot** is a durable, mission-configured agent: pick a
 template, point it at a repo or an initiative, set budget guardrails and a trigger,
 then watch it work and govern what it ships. The **marketplace** is the

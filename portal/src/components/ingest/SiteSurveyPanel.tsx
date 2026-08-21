@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Card } from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
 
 type SectionKind =
@@ -58,6 +59,10 @@ function chars(n: number): string {
 }
 
 export function SiteSurveyPanel({ onTargetCreated }: { onTargetCreated?: () => void }) {
+  // Surveys and target creation POST /api/ingest (ManageIngest); the whole
+  // panel is an action surface, so it hides without the capability.
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageIngest');
   const [url, setUrl] = useState('');
   const [maxPages, setMaxPages] = useState(120);
   const [survey, setSurvey] = useState<Survey | null>(null);
@@ -144,6 +149,8 @@ export function SiteSurveyPanel({ onTargetCreated }: { onTargetCreated?: () => v
   const selectedPages = (survey?.sections ?? [])
     .filter((s) => selected.has(s.prefix))
     .reduce((n, s) => n + s.pages, 0);
+
+  if (!canManage) return null;
 
   return (
     <Card padding="none" className="overflow-hidden mb-4">

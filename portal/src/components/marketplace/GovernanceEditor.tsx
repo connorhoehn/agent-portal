@@ -1,13 +1,16 @@
 // GovernanceEditor — the initiative's governance affordances: who runs it
 // (owner) and which contributors are reserved-role (owner / sme).
 //
-// Permission model is attempt-and-surface: the controls always render, the
-// PATCH is optimistic, and a 403 maps to a quiet "needs dispatch rights"
-// toast with a revert — no capability probe up front. A 503 means the owner
-// column predates the migration; the server's error is shown as-is.
+// Permission model: the controls render only when the session holds
+// DispatchAgentRun (the capability the PATCH APIs enforce) — without it the
+// owner line and role chips stay read-only. The PATCH is still optimistic and
+// a 403 (e.g. authz-degraded probe was optimistic) maps to a quiet "needs
+// dispatch rights" toast with a revert. A 503 means the owner column predates
+// the migration; the server's error is shown as-is.
 
 import { useState } from 'react';
 import { Chip } from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastInfo } from '../../lib/toastStore';
 
 // ─── The reserved-role vocabulary ────────────────────────────────────────────
@@ -76,6 +79,7 @@ export interface OwnerEditorProps {
 
 export function OwnerEditor({ projectId, contributors, ownerId, ownerName, onOwner, onRole }: OwnerEditorProps) {
   const [open, setOpen] = useState(false);
+  const { can, ready } = useCapabilities();
 
   async function pick(person: GovernanceContributor | null) {
     setOpen(false);
@@ -104,6 +108,10 @@ export function OwnerEditor({ projectId, contributors, ownerId, ownerName, onOwn
       surfacePatchError(roleRes.reason, "Marking the owner's contributor role");
     }
   }
+
+  // Hide the affordance entirely without dispatch rights — the "Run by" line
+  // in the header stays; only the pencil goes away.
+  if (!ready || !can('DispatchAgentRun')) return null;
 
   return (
     <span style={{ position: 'relative', display: 'inline-flex' }}>
@@ -200,8 +208,21 @@ export function RoleCycleChip({
   onRole: (personId: string, role: string | null) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const { can, ready } = useCapabilities();
   const norm = normalizeRole(role);
   const next = nextRole(role);
+
+  // Without dispatch rights the role stays informational: the same chip,
+  // not a button.
+  if (!ready || !can('DispatchAgentRun')) {
+    return norm === 'owner' ? (
+      <Chip tone="purple" size="xs">owner</Chip>
+    ) : norm === 'sme' ? (
+      <Chip tone="info" size="xs">sme</Chip>
+    ) : (
+      <span style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>{role ?? '—'}</span>
+    );
+  }
 
   async function cycle() {
     if (busy) return;

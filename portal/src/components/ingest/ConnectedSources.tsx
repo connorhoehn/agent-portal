@@ -16,6 +16,7 @@
 
 import { useCallback, useState } from 'react';
 import { Card } from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
 
@@ -39,6 +40,9 @@ const KIND_LABEL: Record<SourceKind, string> = {
 const READY_KINDS = new Set<SourceKind>(['github']);
 
 export function ConnectedSources() {
+  // Connect/remove ride /api/connections (ManageIngest).
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageIngest');
   const { data, refresh } = useFetch<{ sources: ConnectedSource[] }>('/api/connections', 60_000);
   const [adding, setAdding] = useState(false);
   const [kind, setKind] = useState<SourceKind>('github');
@@ -142,12 +146,14 @@ export function ConnectedSources() {
         <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">CONNECTED SOURCES</span>
         <span className="text-[11px] text-text-tertiary">systems that need a login</span>
         <div className="flex-1" />
-        <button
-          onClick={() => setAdding((v) => !v)}
-          className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] font-semibold text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors"
-        >
-          {adding ? 'Cancel' : '+ Connect'}
-        </button>
+        {canManage && (
+          <button
+            onClick={() => setAdding((v) => !v)}
+            className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] font-semibold text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors"
+          >
+            {adding ? 'Cancel' : '+ Connect'}
+          </button>
+        )}
       </div>
 
       {adding && (
@@ -226,12 +232,14 @@ export function ConnectedSources() {
                 {openSource === s.name ? 'Hide' : 'Inspect'}
               </button>
             )}
-            <button
-              onClick={() => void disconnect(s.name)}
-              className="px-2 py-1 rounded-md border border-border bg-surface text-[11px] text-text-secondary cursor-pointer hover:border-danger hover:text-danger transition-colors shrink-0"
-            >
-              Remove
-            </button>
+            {canManage && (
+              <button
+                onClick={() => void disconnect(s.name)}
+                className="px-2 py-1 rounded-md border border-border bg-surface text-[11px] text-text-secondary cursor-pointer hover:border-danger hover:text-danger transition-colors shrink-0"
+              >
+                Remove
+              </button>
+            )}
           </div>
 
           {openSource === s.name && (

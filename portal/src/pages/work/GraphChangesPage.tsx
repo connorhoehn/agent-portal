@@ -14,6 +14,7 @@ import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useCapabilities } from '../../lib/capabilities';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
 
 interface Proposal {
@@ -80,6 +81,9 @@ function describe(p: Proposal): string {
 
 export default function GraphChangesPage() {
   const [filter, setFilter] = useState<Filter>('all');
+  // Retry/reject POST /api/work/proposals/:id/decide (ManageDevbox).
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageDevbox');
   // ?job=<id> narrows the audit log to one job's proposals — the landing view
   // for "what did this worker propose?" links from the job detail page.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -205,7 +209,7 @@ export default function GraphChangesPage() {
                   </div>
                 )}
 
-                {p.status === 'failed' && (
+                {canManage && p.status === 'failed' && (
                   <div className="flex gap-2 mt-2">
                     <button onClick={() => void decide(p, 'approve')}
                       className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] font-semibold text-text-secondary cursor-pointer hover:text-primary hover:border-primary/50">

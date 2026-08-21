@@ -4,6 +4,7 @@ import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
 import { openShell } from '../../lib/terminalDock';
 import { DEVBOX_MODELS } from '../../lib/devboxModels';
 import { useFetch } from '../../hooks/useFetch';
+import { useCapabilities } from '../../lib/capabilities';
 import { RunTimeline, toolSummary, type RunTimelineHandle } from '../../components/runs/RunTimeline';
 import {
   createBox,
@@ -226,6 +227,10 @@ const TASK_MODELS = DEVBOX_MODELS;
 export default function DevboxPage() {
   const { data: status, error: statusError } = useFetch<DevboxStatus>('/api/devbox/status');
   const [searchParams, setSearchParams] = useSearchParams();
+  // The route is already hr-admin-gated; mirror the /api/devbox ManageDevbox
+  // gate on the mutating affordances anyway so one source of truth decides.
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageDevbox');
 
   // ── Box registry — server fleet is the source of truth ─────────────────────
   // Mirror renders instantly; syncBoxes reconciles with the middleware (and
@@ -510,17 +515,19 @@ export default function DevboxPage() {
             <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">COMPUTERS</span>
             <span className="text-[10px] text-text-tertiary">{computerCount}</span>
             <div className="flex-1" />
-            <button
-              onClick={() => void provisionBox().catch(() => { /* toast already shown */ })}
-              disabled={provisioning}
-              title="Provision a fresh microVM computer"
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border border-dashed border-border text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors disabled:opacity-60 disabled:cursor-wait"
-            >
-              {provisioning && (
-                <span aria-hidden="true" className="inline-block w-3 h-3 rounded-full border-[1.5px] border-primary border-t-transparent" style={{ animation: 'devbox-spin 0.8s linear infinite' }} />
-              )}
-              {provisioning ? '…' : '+ New'}
-            </button>
+            {canManage && (
+              <button
+                onClick={() => void provisionBox().catch(() => { /* toast already shown */ })}
+                disabled={provisioning}
+                title="Provision a fresh microVM computer"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border border-dashed border-border text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors disabled:opacity-60 disabled:cursor-wait"
+              >
+                {provisioning && (
+                  <span aria-hidden="true" className="inline-block w-3 h-3 rounded-full border-[1.5px] border-primary border-t-transparent" style={{ animation: 'devbox-spin 0.8s linear infinite' }} />
+                )}
+                {provisioning ? '…' : '+ New'}
+              </button>
+            )}
           </div>
 
           {boxes.length === 0 ? (
@@ -593,23 +600,29 @@ export default function DevboxPage() {
                 </span>
               )}
               <div className="flex-1" />
-              <button
-                onClick={() => openShell({ id: activeBox.id, label: activeBox.label, sessionId: activeBox.sessionId })}
-                title="Open a real PTY — ⌘' toggles the dock"
-                className="text-[11px] px-2.5 py-1 rounded-md border border-primary/50 bg-surface font-semibold text-primary cursor-pointer hover:bg-primary hover:text-white transition-colors"
-              >
-                Terminal ⌘&apos;
-              </button>
-              <button
-                onClick={() => void stopSession()}
-                className="text-[11px] px-2.5 py-1 rounded-md border border-border bg-surface text-text-secondary cursor-pointer hover:text-danger hover:border-danger/50 transition-colors"
-              >
-                Stop
-              </button>
+              {canManage && (
+                <>
+                  <button
+                    onClick={() => openShell({ id: activeBox.id, label: activeBox.label, sessionId: activeBox.sessionId })}
+                    title="Open a real PTY — ⌘' toggles the dock"
+                    className="text-[11px] px-2.5 py-1 rounded-md border border-primary/50 bg-surface font-semibold text-primary cursor-pointer hover:bg-primary hover:text-white transition-colors"
+                  >
+                    Terminal ⌘&apos;
+                  </button>
+                  <button
+                    onClick={() => void stopSession()}
+                    className="text-[11px] px-2.5 py-1 rounded-md border border-border bg-surface text-text-secondary cursor-pointer hover:text-danger hover:border-danger/50 transition-colors"
+                  >
+                    Stop
+                  </button>
+                </>
+              )}
             </div>
           </Card>
 
-          {/* Composer: textarea + toolbar in one frame, like a chat input. */}
+          {/* Composer: textarea + toolbar in one frame, like a chat input.
+              Dispatching a task rides /api/devbox (ManageDevbox). */}
+          {canManage && (
           <Card className="!p-0 overflow-hidden">
             <div className="px-3.5 pt-3 pb-1 flex items-center gap-2">
               <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">TASK</span>
@@ -663,6 +676,7 @@ export default function DevboxPage() {
               </button>
             </div>
           </Card>
+          )}
 
           <RunTimeline
             ref={timelineRef}

@@ -18,6 +18,7 @@ import {
   TableTh,
   useToast,
 } from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -63,6 +64,10 @@ const PII_ACTIONS: PiiAction[] = ['BLOCK', 'ANONYMIZE', 'NONE'];
 function GuardrailsPage() {
   const { data: guardrail, refresh } = useFetch<Guardrail>('/api/capabilities/guardrail', 30000);
   const { data: metrics } = useFetch<GuardrailMetrics>('/api/capabilities/guardrail/metrics?hours=6', 60000);
+  // Guardrail mutations are Cedar's EditGuardrail; without it the page is a
+  // read-only view of the same config.
+  const { can, ready } = useCapabilities();
+  const canEdit = ready && can('EditGuardrail');
 
   const { toast } = useToast();
 
@@ -273,31 +278,41 @@ function GuardrailsPage() {
                       </Chip>
                     </TableTd>
                     <TableTd>
-                      <select
-                        aria-label={`Action for ${filter.type}`}
-                        data-testid={`pii-action-${filter.type}`}
-                        value={filter.action}
-                        onChange={e => patchPii(filter.type, { action: e.target.value as PiiAction })}
-                        style={{
-                          fontSize: 12,
-                          padding: '4px 8px',
-                          border: '1px solid var(--color-border)',
-                          borderRadius: 'var(--radius-sm)',
-                          background: 'var(--color-surface)',
-                        }}
-                      >
-                        {PII_ACTIONS.map(a => (
-                          <option key={a} value={a}>{a}</option>
-                        ))}
-                      </select>
+                      {canEdit ? (
+                        <select
+                          aria-label={`Action for ${filter.type}`}
+                          data-testid={`pii-action-${filter.type}`}
+                          value={filter.action}
+                          onChange={e => patchPii(filter.type, { action: e.target.value as PiiAction })}
+                          style={{
+                            fontSize: 12,
+                            padding: '4px 8px',
+                            border: '1px solid var(--color-border)',
+                            borderRadius: 'var(--radius-sm)',
+                            background: 'var(--color-surface)',
+                          }}
+                        >
+                          {PII_ACTIONS.map(a => (
+                            <option key={a} value={a}>{a}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span style={{ fontSize: 12 }}>{filter.action}</span>
+                      )}
                     </TableTd>
                     <TableTd>
-                      <Switch
-                        checked={filter.enabled}
-                        onChange={v => patchPii(filter.type, { enabled: v })}
-                        aria-label={`Toggle PII filter ${filter.type}`}
-                        data-testid={`pii-switch-${filter.type}`}
-                      />
+                      {canEdit ? (
+                        <Switch
+                          checked={filter.enabled}
+                          onChange={v => patchPii(filter.type, { enabled: v })}
+                          aria-label={`Toggle PII filter ${filter.type}`}
+                          data-testid={`pii-switch-${filter.type}`}
+                        />
+                      ) : (
+                        <Chip tone={filter.enabled ? 'success' : 'neutral'} size="xs">
+                          {filter.enabled ? 'on' : 'off'}
+                        </Chip>
+                      )}
                     </TableTd>
                   </TableRow>
                 ))}
@@ -330,6 +345,7 @@ function GuardrailsPage() {
         {/* Denied Topics */}
         <PageSection title="Denied Topics" description="Topics the guardrail will refuse to discuss.">
           <Card padding="md" data-testid="denied-topics-card">
+            {canEdit && (
             <div
               style={{
                 display: 'grid',
@@ -395,6 +411,7 @@ function GuardrailsPage() {
                 {adding ? 'Adding…' : 'Add'}
               </Button>
             </div>
+            )}
 
             <Table>
               <TableHead>
@@ -411,34 +428,42 @@ function GuardrailsPage() {
                     <TableTd style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{topic.name}</TableTd>
                     <TableTd style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{topic.definition}</TableTd>
                     <TableTd>
-                      <Switch
-                        checked={topic.enabled}
-                        onChange={v => patchTopicEnabled(topic.name, v)}
-                        aria-label={`Toggle denied topic ${topic.name}`}
-                        data-testid={`topic-switch-${topic.name}`}
-                      />
+                      {canEdit ? (
+                        <Switch
+                          checked={topic.enabled}
+                          onChange={v => patchTopicEnabled(topic.name, v)}
+                          aria-label={`Toggle denied topic ${topic.name}`}
+                          data-testid={`topic-switch-${topic.name}`}
+                        />
+                      ) : (
+                        <Chip tone={topic.enabled ? 'success' : 'neutral'} size="xs">
+                          {topic.enabled ? 'on' : 'off'}
+                        </Chip>
+                      )}
                     </TableTd>
                     <TableTd>
-                      <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
-                        <IconButton
-                          aria-label={`Edit definition for ${topic.name}`}
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openEdit(topic)}
-                          data-testid={`topic-edit-${topic.name}`}
-                        >
-                          Edit
-                        </IconButton>
-                        <IconButton
-                          aria-label={`Remove ${topic.name}`}
-                          variant="danger"
-                          size="sm"
-                          onClick={() => setConfirmDelete(topic)}
-                          data-testid={`topic-delete-${topic.name}`}
-                        >
-                          Remove
-                        </IconButton>
-                      </div>
+                      {canEdit && (
+                        <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                          <IconButton
+                            aria-label={`Edit definition for ${topic.name}`}
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEdit(topic)}
+                            data-testid={`topic-edit-${topic.name}`}
+                          >
+                            Edit
+                          </IconButton>
+                          <IconButton
+                            aria-label={`Remove ${topic.name}`}
+                            variant="danger"
+                            size="sm"
+                            onClick={() => setConfirmDelete(topic)}
+                            data-testid={`topic-delete-${topic.name}`}
+                          >
+                            Remove
+                          </IconButton>
+                        </div>
+                      )}
                     </TableTd>
                   </TableRow>
                 ))}

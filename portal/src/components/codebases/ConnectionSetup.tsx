@@ -11,6 +11,7 @@
 
 import { useCallback, useState } from 'react';
 import { Card, ConfirmDialog } from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
 
 export interface ConnectionSource { name: string; kind: string }
@@ -34,6 +35,10 @@ function describeFailure(status: number, body: { error?: string; problem?: strin
 
 export function ConnectionSetup({ sources, onChanged }: Props) {
   const github = sources.filter((s) => s.kind === 'github');
+  // Create/delete ride /api/connections (ManageIngest) — the list stays
+  // readable, the mutating affordances hide without the capability.
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageIngest');
 
   const [adding, setAdding] = useState(false);
   const [label, setLabel] = useState('');
@@ -100,12 +105,14 @@ export function ConnectionSetup({ sources, onChanged }: Props) {
       <div className="flex items-center gap-2">
         <div className="text-[13px] font-semibold text-text-primary">GitHub connections</div>
         <div className="flex-1" />
-        <button
-          onClick={() => { setAdding((v) => !v); setVerified(null); }}
-          className="px-2.5 py-1 rounded-md border-none bg-primary text-white text-[11px] font-semibold cursor-pointer"
-        >
-          {adding ? 'Cancel' : 'Connect GitHub'}
-        </button>
+        {canManage && (
+          <button
+            onClick={() => { setAdding((v) => !v); setVerified(null); }}
+            className="px-2.5 py-1 rounded-md border-none bg-primary text-white text-[11px] font-semibold cursor-pointer"
+          >
+            {adding ? 'Cancel' : 'Connect GitHub'}
+          </button>
+        )}
       </div>
       <div className="text-[11px] text-text-tertiary mt-1">
         Personal access tokens, held in the credential vault — never stored or shown here.
@@ -172,12 +179,14 @@ export function ConnectionSetup({ sources, onChanged }: Props) {
             <div key={c.name} className="flex items-center gap-2 py-1.5 border-t border-border first:border-t-0">
               <span className="text-[12px] font-mono text-text-primary truncate">{c.name}</span>
               <div className="flex-1" />
-              <button
-                onClick={() => setDeleting(c.name)}
-                className="text-[11px] text-text-tertiary hover:text-danger bg-transparent border-none cursor-pointer"
-              >
-                delete
-              </button>
+              {canManage && (
+                <button
+                  onClick={() => setDeleting(c.name)}
+                  className="text-[11px] text-text-tertiary hover:text-danger bg-transparent border-none cursor-pointer"
+                >
+                  delete
+                </button>
+              )}
             </div>
           ))
         )}

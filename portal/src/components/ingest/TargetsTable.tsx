@@ -8,6 +8,7 @@ import { Button, Toggle } from './ui';
 export function TargetsTable({
   targets,
   busyId,
+  readOnly = false,
   onRun,
   onEdit,
   onDelete,
@@ -15,6 +16,9 @@ export function TargetsTable({
 }: {
   targets: CrawlTarget[];
   busyId: string | null;
+  /** True when the session lacks ManageIngest — rows render without the
+      run/edit/delete/toggle affordances. */
+  readOnly?: boolean;
   onRun: (t: CrawlTarget) => void;
   onEdit: (t: CrawlTarget) => void;
   onDelete: (t: CrawlTarget) => void;
@@ -74,20 +78,26 @@ export function TargetsTable({
               </TableTd>
               <TableTd style={{ textAlign: 'right', fontSize: 12, fontWeight: 600 }}>{t.maxPages}</TableTd>
               <TableTd>
-                <Toggle
-                  checked={t.enabled}
-                  onChange={v => onToggle(t, v)}
-                  aria-label={`Enable target ${t.label}`}
-                />
+                {readOnly ? (
+                  <Chip tone={t.enabled ? 'success' : 'neutral'} size="xs">{t.enabled ? 'on' : 'off'}</Chip>
+                ) : (
+                  <Toggle
+                    checked={t.enabled}
+                    onChange={v => onToggle(t, v)}
+                    aria-label={`Enable target ${t.label}`}
+                  />
+                )}
               </TableTd>
               <TableTd>
-                <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                  <Button variant="secondary" size="sm" onClick={() => onRun(t)} disabled={isBusy}>
-                    {isBusy ? 'Starting…' : 'Run now'}
-                  </Button>
-                  <Button variant="secondary" size="sm" onClick={() => onEdit(t)}>Edit</Button>
-                  <Button variant="danger" size="sm" onClick={() => onDelete(t)}>Delete</Button>
-                </div>
+                {!readOnly && (
+                  <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                    <Button variant="secondary" size="sm" onClick={() => onRun(t)} disabled={isBusy}>
+                      {isBusy ? 'Starting…' : 'Run now'}
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={() => onEdit(t)}>Edit</Button>
+                    <Button variant="danger" size="sm" onClick={() => onDelete(t)}>Delete</Button>
+                  </div>
+                )}
               </TableTd>
             </TableRow>
           );
