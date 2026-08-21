@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo, useCallback, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router';
+import { useSearchParams, Link } from 'react-router';
 import { useAgentStream } from '@connorhoehnslalom/realtime-modules/agent-streaming/client';
 import type { Message as AgentMessage } from '@connorhoehnslalom/realtime-modules/agent-streaming/client';
 import {
@@ -13,6 +13,10 @@ import { ChatPanel } from '@connorhoehnslalom/ui-components/social';
 import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
 import { fetchSessionMessages, rememberSession, recallSession, forgetSession } from '../lib/chatSessions';
+import {
+  sortPeople, buildMentionRegexes, findMentionedPeople, generateFollowUps,
+  type GraphEntities, type GraphPerson,
+} from '../lib/orgMentions';
 import { usePresence, useChat } from '@connorhoehnslalom/realtime-modules/client';
 import { PresenceAvatarGroup } from '../components/shell/PresenceAvatarGroup';
 
@@ -214,9 +218,25 @@ function InvokePage() {
   const sessions = sessionList?.sessions ?? [];
 
   // Contextual follow-up suggestions derived from conversation + refreshed on demand
+  // Org-graph enrichment: which *real* people the answer named. Matched exactly
+  // (word-boundary hits against actual graph people), so the "People in this
+  // answer" panel and the follow-ups are accurate — unlike guessing at any two
+  // capitalized words. Harvested from the retired dedicated search page.
+  const { data: graph } = useFetch<GraphEntities>('/api/graph/entities');
+  const sortedPeople = useMemo(() => sortPeople(graph?.nodes), [graph]);
+  const mentionRegexes = useMemo(() => buildMentionRegexes(sortedPeople), [sortedPeople]);
+  const lastAssistant = useMemo(
+    () => [...messages].reverse().find((m) => m.role === 'assistant'),
+    [messages],
+  );
+  const mentionedPeople = useMemo(
+    () => findMentionedPeople([lastAssistant?.content ?? '', streamingText].join(' '), sortedPeople, mentionRegexes),
+    [lastAssistant, streamingText, sortedPeople, mentionRegexes],
+  );
+
   const suggestions = useMemo(
-    () => buildSuggestions(messages, selectedId, suggestionSeed),
-    [messages, selectedId, suggestionSeed],
+    () => buildSuggestions(messages, selectedId, suggestionSeed, mentionedPeople),
+    [messages, selectedId, suggestionSeed, mentionedPeople],
   );
 
   const handleSuggestion = useCallback((s: string) => {
@@ -361,6 +381,32 @@ function InvokePage() {
           {error && <div style={{ color: 'var(--color-danger)', fontSize: 13 }}>Error: {error}</div>}
           <div ref={bottomRef} />
         </div>
+
+        {/* People in this answer — the org-graph names the response actually
+            mentioned, each a jump into the graph. The organizational-intelligence
+            payoff: an answer about "who knows X" surfaces the real people. */}
+        {mentionedPeople.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginBottom: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+              People in this answer
+            </span>
+            {mentionedPeople.slice(0, 8).map((p) => (
+              <Link
+                key={p.id}
+                to={`/iq/explore?focus=${encodeURIComponent(p.id)}`}
+                title={`Show ${p.name} in the org graph`}
+                style={{
+                  fontSize: 12, fontWeight: 600, textDecoration: 'none',
+                  padding: '2px 10px', borderRadius: 999,
+                  border: '1px solid var(--color-primary)',
+                  color: 'var(--color-primary)', background: 'transparent',
+                }}
+              >
+                {p.name}
+              </Link>
+            ))}
+          </div>
+        )}
 
         {/* Suggested search bubbles — shown when conversation has messages */}
         {messages.length > 0 && !isStreaming && suggestions.length > 0 && (
@@ -533,23 +579,18 @@ function poolFor(agentId: string): string[] {
   return SUPERVISOR_POOL;
 }
 
-function buildSuggestions(messages: SuggestionMessage[], agentId: string, seed: number): string[] {
+function buildSuggestions(
+  messages: SuggestionMessage[], agentId: string, seed: number, mentionedPeople: GraphPerson[] = [],
+): string[] {
   const pool = poolFor(agentId);
 
-  // Extract people names from the last assistant message to generate contextual follow-ups
   const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
   const content = lastAssistant?.content ?? '';
 
-  // Simple proper-noun extraction: two-word capitalized sequences
-  const nameMatches = content.match(/\b([A-Z][a-z]{1,14} [A-Z][a-z]{1,14})\b/g) ?? [];
-  // Deduplicate and filter out common sentence-starters
-  const SKIP = new Set(['The Agent', 'Source Organization', 'Knowledge Base', 'Platform Engineering']);
-  const uniqueNames = [...new Set(nameMatches)].filter(n => !SKIP.has(n)).slice(0, 2);
-
-  const contextual: string[] = uniqueNames.flatMap(name => [
-    `What projects is ${name.split(' ')[0]} working on?`,
-    `Show ${name.split(' ')[0]}'s skill profile and expertise score`,
-  ]).slice(0, 3);
+  // Contextual follow-ups from the *real* org-graph people the answer named —
+  // an exact word-boundary match against actual people, not a guess at any two
+  // capitalized words (which used to surface "Source Organization" as a person).
+  const contextual = generateFollowUps(content, mentionedPeople).slice(0, 3);
 
   // Build final list: contextual first, then rotate through pool
   const offset = seed % Math.max(pool.length - 4, 1);
