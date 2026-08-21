@@ -77,6 +77,9 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
   if (root === 'admin') {
     switch (a) {
       case 'projects': return [{ label: 'Build' }, { label: 'Codebases' }];
+      case 'bots':
+        if (!b) return [{ label: 'Build' }, { label: 'Bots' }];
+        return [{ label: 'Build' }, { label: 'Bots', path: '/admin/bots' }, { label: `Bot ${shortId(b)}` }];
       case 'changes': return [{ label: 'Build' }, { label: 'Changes' }];
       case 'devbox': return [{ label: 'Build' }, { label: 'Computers' }];
       case 'knowledge':

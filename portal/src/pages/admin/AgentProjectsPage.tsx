@@ -29,6 +29,7 @@ interface Run {
   status: 'running' | 'done' | 'failed';
   startedAt: string; durationMs: number | null;
   filesChanged: number | null; diffSummary: string | null; error: string | null;
+  costUsd?: number | null;
 }
 interface Project {
   id: string; repoFullName: string; defaultBranch: string;
@@ -517,6 +518,7 @@ export default function AgentProjectsPage() {
                           {r.model ? ` · ${r.model}` : ''}
                           {r.durationMs != null ? ` · ${dur(r.durationMs)}` : ''}
                           {r.filesChanged != null ? ` · ${r.filesChanged} ${r.filesChanged === 1 ? 'file' : 'files'} changed` : ''}
+                          {r.costUsd != null ? ` · $${r.costUsd.toFixed(4)}` : ''}
                         </div>
                         {r.diffSummary && (
                           <div className="text-[11px] text-text-secondary mt-0.5 truncate" title={r.diffSummary}>
