@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { useSearchParams } from 'react-router';
 import {
   Card,
   Table,
@@ -72,7 +73,11 @@ function InvocationsPage() {
     20000,
   );
 
-  const [agentFilter, setAgentFilter] = useState<string>('all');
+  // Seed the agent filter from ?agentId= so "view this agent's invocations"
+  // links (from the Architecture graph and agent detail page) land pre-filtered
+  // instead of showing every agent's traffic.
+  const [searchParams] = useSearchParams();
+  const [agentFilter, setAgentFilter] = useState<string>(() => searchParams.get('agentId') ?? 'all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   const allInvocations = recent?.invocations ?? [];
