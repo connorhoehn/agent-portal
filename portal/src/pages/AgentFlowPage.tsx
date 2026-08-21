@@ -210,7 +210,7 @@ function AgentNodeComp({ id, data }: { id: string; data: unknown }) {
           className="text-[9px] font-bold rounded uppercase tracking-wide px-[5px] py-px"
           style={{ color: clusterColor, background: `${clusterColor}18`, border: `1px solid ${clusterColor}40` }}
         >
-          {meta.cluster === 'orgiq' ? 'OrgIQ' : 'Newsroom'}
+          {meta.cluster === 'orgiq' ? 'Org' : 'Newsroom'}
         </span>
       </div>
 
@@ -455,7 +455,7 @@ function AgentDrawerBody({
           className="text-[9px] font-bold rounded uppercase px-[5px] py-px"
           style={{ color: clusterColor, background: `${clusterColor}18`, border: `1px solid ${clusterColor}40` }}
         >
-          {meta.cluster === 'orgiq' ? 'OrgIQ' : 'Newsroom'}
+          {meta.cluster === 'orgiq' ? 'Org' : 'Newsroom'}
         </span>
       </div>
 

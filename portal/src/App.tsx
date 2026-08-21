@@ -27,6 +27,7 @@ const NewsroomResearcherPage = lazy(() => import('./pages/newsroom/ResearcherPag
 const NewsroomBriefsPage = lazy(() => import('./pages/newsroom/BriefsPage'));
 const NewsroomHeadlinesPage = lazy(() => import('./pages/newsroom/HeadlinesPage'));
 const KnowledgeHomePage = lazy(() => import('./pages/knowledge/KnowledgeHomePage'));
+const KnowledgeLayout = lazy(() => import('./pages/knowledge/KnowledgeLayout'));
 const DropPage = lazy(() => import('./pages/DropPage'));
 const SelectContextPage = lazy(() => import('./pages/SelectContextPage'));
 const KBRegistryPage = lazy(() => import('./pages/admin/KBRegistryPage.js'));
@@ -236,14 +237,12 @@ export function App() {
               any role and then showed a raw 403 from the hr-admin-only API. */}
           <Route path="knowledge" element={
             <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/" replace />}>
-              <Page element={<KnowledgeHomePage />} />
+              <Page element={<KnowledgeLayout />} />
             </RequireRole>
-          } />
-          <Route path="knowledge/registry" element={
-            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/" replace />}>
-              <Page element={<KBRegistryPage />} />
-            </RequireRole>
-          } />
+          }>
+            <Route index element={<Page element={<KnowledgeHomePage />} />} />
+            <Route path="registry" element={<Page element={<KBRegistryPage />} />} />
+          </Route>
           <Route path="knowledge-bases" element={<Navigate to="/admin/knowledge" replace />} />
           <Route path="knowledge-bases/:id" element={
             <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/" replace />}>

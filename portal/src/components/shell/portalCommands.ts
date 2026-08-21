@@ -94,7 +94,7 @@ function isPageVisible(page: PageEntry, tenant: string, role: string): boolean {
 
 function groupLabel(tenant: PageTenant): string {
   switch (tenant) {
-    case 'orgiq': return 'OrgIQ';
+    case 'orgiq': return 'Org';
     case 'newsroom': return 'Newsroom';
     case 'admin': return 'Admin';
     case 'universal': return 'Universal';

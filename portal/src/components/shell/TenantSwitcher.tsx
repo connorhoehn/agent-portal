@@ -9,7 +9,7 @@ const TENANT_ROOTS: Record<Tenant, string> = {
 };
 
 const TENANT_LABELS: Record<Tenant, string> = {
-  orgiq: 'OrgIQ',
+  orgiq: 'Org',
   newsroom: 'Newsroom',
 };
 
