@@ -138,6 +138,21 @@ function InvokePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams.get('session')]);
 
+  // Honor /iq/invoke?agentId=<id> — the "invoke this agent" links from the
+  // Architecture graph and the agent detail page. Pre-select that agent for a
+  // fresh conversation and strip the param. Without this the links silently
+  // opened the default supervisor, so "talk to the search agent" never did.
+  useEffect(() => {
+    const aid = searchParams.get('agentId');
+    if (!aid) return;
+    setSelectedId(aid);
+    forgetSession('invoke'); // agent changed — don't resume a different agent's session
+    const next = new URLSearchParams(searchParams);
+    next.delete('agentId');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.get('agentId')]);
+
   // Honor deep-links like /iq/invoke?prompt=<slug-or-text> — the subnav
   // "Suggested" searches ("Who knows X?", "Decisions about X"…) point here.
   // Resolve a known slug to its full prompt, else send the text verbatim, run
@@ -159,7 +174,7 @@ function InvokePage() {
   // instead of a fresh one (transcript restored from AgentCore Memory). A
   // ?prompt= deep-link is a fresh question, so it wins over resuming too.
   useEffect(() => {
-    if (searchParams.get('session') || searchParams.get('prompt')) return; // deep-link wins
+    if (searchParams.get('session') || searchParams.get('prompt') || searchParams.get('agentId')) return; // deep-link wins
     const saved = recallSession('invoke');
     if (saved) void loadSession(saved);
     // eslint-disable-next-line react-hooks/exhaustive-deps
