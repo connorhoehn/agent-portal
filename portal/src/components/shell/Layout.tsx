@@ -9,6 +9,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
+import { Breadcrumbs } from './Breadcrumbs';
 import { MasqueradeMenu } from './MasqueradeMenu';
 import { GatewayStatusBadge } from './GatewayStatusBadge';
 import { usePortalCommands, usePortalDynamicCommands } from './portalCommands';
@@ -204,8 +205,13 @@ export function Layout() {
               </NavLink>
             )}
           >
-            <div className={`${fullBleed ? '' : 'p-6'} h-full overflow-auto`}>
-              <Outlet />
+            <div className={`${fullBleed ? '' : 'p-6'} h-full flex flex-col`}>
+              {/* Where you are, once you're 3+ levels deep — stacked rails say
+                  what you can open, the trail says where you stand. */}
+              <Breadcrumbs />
+              <div className="flex-1 min-h-0 overflow-auto">
+                <Outlet />
+              </div>
             </div>
           </SubNavLayout>
         </div>
