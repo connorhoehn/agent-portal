@@ -20,7 +20,7 @@
 import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import {
-  getBot, createBotRun, finalizeBotRun, setPausedReason, markBotRan,
+  getBot, createBotRun, finalizeBotRun, setPausedReason, markBotRan, countRunningRuns,
   type BotRun,
 } from '../providers/bots.js';
 import {
@@ -83,6 +83,34 @@ export function decideFire(bot: FireGuardInput): FireDecision {
 /** The written mission plus the operator's one-shot steering, when given. */
 export function renderPrompt(promptTemplate: string, instruction?: string): string {
   return instruction ? `${promptTemplate}\n\nFor this run specifically: ${instruction}` : promptTemplate;
+}
+
+// ─── The concurrency ceiling, pure ────────────────────────────────────────────
+
+/** Global cap on simultaneously-running bot_runs (bot AND marketplace). */
+export function botMaxConcurrent(): number {
+  const n = Number(process.env['BOT_MAX_CONCURRENT']);
+  return Number.isFinite(n) && n > 0 ? n : 3;
+}
+
+export type ConcurrencyDecision = { kind: 'proceed' } | { kind: 'refuse'; reason: string };
+
+/**
+ * Whether another run may start while `runningCount` are already going. The
+ * count is global — every running bot_run, bot-fired or marketplace — because
+ * the ceiling protects the shared devbox pool and the shared budget, neither
+ * of which cares which trigger started a run.
+ */
+export function decideConcurrency(runningCount: number, ceiling = botMaxConcurrent()): ConcurrencyDecision {
+  if (runningCount >= ceiling) {
+    return { kind: 'refuse', reason: `concurrency ceiling (${ceiling}) reached` };
+  }
+  return { kind: 'proceed' };
+}
+
+/** The guard both dispatch paths share: count what runs, judge the ceiling. */
+async function checkConcurrency(): Promise<ConcurrencyDecision> {
+  return decideConcurrency(await countRunningRuns());
 }
 
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
@@ -148,6 +176,18 @@ export async function fireBot(botId: string, opts: {
       outcome: { reason: decision.reason },
     });
     return { ok: false, reason: decision.reason, ...(run ? { run } : {}) };
+  }
+
+  // The global ceiling, after the bot's own brakes: a capped or paused bot
+  // reports its own state, not the fleet's. A braked trigger is visible
+  // history, same as the run cap.
+  const congestion = await checkConcurrency();
+  if (congestion.kind === 'refuse') {
+    const run = await createBotRun({
+      botId: bot.id, trigger: opts.trigger, status: 'skipped',
+      outcome: { reason: congestion.reason },
+    });
+    return { ok: false, reason: congestion.reason, ...(run ? { run } : {}) };
   }
 
   const prompt = renderPrompt(bot.prompt, opts.instruction);
@@ -303,6 +343,14 @@ export async function dispatchWorkItem(input: {
       ok: false, status: decision.status, error: decision.error,
       ...(decision.options ? { options: decision.options } : {}),
     };
+  }
+
+  // The global ceiling, before any workspace side effect: a refused dispatch
+  // leaves the work item exactly as it was — no run row, no status flip — so
+  // the operator retries when a slot frees up.
+  const congestion = await checkConcurrency();
+  if (congestion.kind === 'refuse') {
+    return { ok: false, status: 429, error: congestion.reason };
   }
 
   const project = await getAgentProject(decision.agentProjectId);

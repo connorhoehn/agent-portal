@@ -61,6 +61,7 @@ import { ensureSchema, seedPoliciesIfMissing } from './lib/policy-seeds.js';
 import { startTracePoller } from './lib/cw-trace-ingest.js';
 import { startCanaryDecisionsPoller } from './lib/canary-decisions-poller.js';
 import { startPrWatchPoller } from './lib/pr-watch-poller.js';
+import { startRetentionSweep } from './lib/retention-sweep.js';
 import { startLocalController } from './lib/canary-local-controller.js';
 
 const app = express();
@@ -160,10 +161,13 @@ app.use('/api/agent-projects', requireAction('ManageDevbox'), agentProjectsRoute
 // AI SDLC governance — change requests, reviews, gates, policies. Gated as a
 // devbox-management action.
 app.use('/api/sdlc', requireAction('ManageDevbox'), sdlcRouter);
-// Bots — durable mission-configured agents. Creating one and firing it
-// dispatches the same governed runs the SDLC surface reviews, so it carries
-// the same gate.
-app.use('/api/bots', requireAction('ManageDevbox'), botsRouter);
+// Bots — durable mission-configured agents. Gated per-route inside the
+// router: reads are operational visibility (org-leader + hr-admin, like the
+// KB registry), bot mutations carry ManageDevbox (they dispatch the same
+// governed runs the SDLC surface reviews), and the marketplace's
+// dispatch-work carries the seeded DispatchAgentRun action so org-leaders
+// can authorize work without holding the devbox keys.
+app.use('/api/bots', botsRouter);
 // Approvals are mounted BEFORE the gated observability router so that the
 // agent-facing POST /approvals/request endpoint doesn't require ViewObservability
 // (the agent's identity is captured as `agentId` in the request body instead).
@@ -266,6 +270,9 @@ startTracePoller();
 startCanaryDecisionsPoller();
 // PR-watch bot triggers + marketplace merge detection (lib/pr-watch-poller.ts).
 startPrWatchPoller();
+// Retention sweep — deletes terminal agentic rows past RETENTION_DAYS so the
+// jobs/runs/findings tables don't grow without bound (lib/retention-sweep.ts).
+startRetentionSweep();
 // Local mock controller fills the Controller node in dev when SFN isn't deployed.
 startLocalController();
 

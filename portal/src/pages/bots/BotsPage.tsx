@@ -66,6 +66,18 @@ export interface BotRun {
     filesChanged?: number;
     reason?: string;
     summary?: string;
+    /** Echo of the authorize-time estimate (marketplace runs) — feeds the
+        estimate-vs-actual coloring on outcome rows. */
+    estimate?: {
+      basis: 'repo' | 'model' | 'prior';
+      sampleCount: number;
+      costUsdP25: number;
+      costUsdP75: number;
+      minutesP25: number;
+      minutesP75: number;
+      points: number | null;
+      scaled: boolean;
+    };
   };
 }
 

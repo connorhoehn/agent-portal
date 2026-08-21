@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router';
 import { Card, Chip, CollapsibleSection, PageSection, StatusDot, type ChipTone } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { EstimateDrawer } from '../components/marketplace/EstimateDrawer';
+import { OwnerEditor, RoleCycleChip } from '../components/marketplace/GovernanceEditor';
 import {
   useInitiativeAgentActivity,
   AgentsRailCard,
@@ -853,7 +854,16 @@ function BoardView({
 
 // ─── Contributors table ───────────────────────────────────────────────────────
 
-function ContributorsTable({ contributors }: { contributors: ProjectDetail['contributors'] }) {
+function ContributorsTable({
+  contributors,
+  projectId,
+  onRole,
+}: {
+  contributors: ProjectDetail['contributors'];
+  projectId: string;
+  /** Optimistic apply / revert of one contributor's role. */
+  onRole: (personId: string, role: string | null) => void;
+}) {
   const navigate = useNavigate();
   if (contributors.length === 0) {
     return <div style={{ padding: 24, color: 'var(--color-text-tertiary)' }}>No contributors recorded.</div>;
@@ -875,8 +885,9 @@ function ContributorsTable({ contributors }: { contributors: ProjectDetail['cont
         <tbody>
           {contributors.map((c, idx) => {
             // Reserved roles get chips — owner runs the initiative, SMEs
-            // direct agents across the initiatives they're attached to.
-            const role = (c.role ?? '').toLowerCase();
+            // direct agents across the initiatives they're attached to. The
+            // cell is a compact cycle control ('—' → sme → owner) that PATCHes
+            // the role optimistically; a 403 reverts with a quiet toast.
             return (
             <tr key={c.personId} style={{
               borderBottom: idx < contributors.length - 1 ? '1px solid var(--color-border)' : 'none',
@@ -894,13 +905,12 @@ function ContributorsTable({ contributors }: { contributors: ProjectDetail['cont
               </td>
               <td style={{ padding: '11px 16px', fontSize: 13, color: 'var(--color-text-secondary)' }}>{c.title ?? '—'}</td>
               <td style={{ padding: '11px 16px', fontSize: 13, color: 'var(--color-text-secondary)' }}>
-                {role === 'owner' ? (
-                  <Chip tone="purple" size="xs">owner</Chip>
-                ) : role === 'sme' ? (
-                  <Chip tone="info" size="xs">sme</Chip>
-                ) : (
-                  c.role ?? '—'
-                )}
+                <RoleCycleChip
+                  projectId={projectId}
+                  personId={c.personId}
+                  role={c.role}
+                  onRole={onRole}
+                />
               </td>
               <td style={{ padding: '11px 16px', textAlign: 'right' }}>
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -935,6 +945,14 @@ function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [workView, setWorkView] = useState<WorkView>('tree');
   const [localItems, setLocalItems] = useState<WorkItemTree[] | null>(null);
+
+  // Governance edits are optimistic: overrides sit on top of the fetched
+  // project until the next reload; the editors revert them on PATCH failure.
+  const [ownerOverride, setOwnerOverride] = useState<{ ownerId: string | null; ownerName: string | null } | null>(null);
+  const [roleOverrides, setRoleOverrides] = useState<Record<string, string | null>>({});
+  const handleRoleOverride = useCallback((personId: string, role: string | null) => {
+    setRoleOverrides((prev) => ({ ...prev, [personId]: role }));
+  }, []);
 
   const { data: project, isLoading: projLoading, error: projError } =
     useFetch<ProjectDetail>(id ? `/api/graph/projects/${encodeURIComponent(id)}` : '');
@@ -1115,8 +1133,14 @@ function ProjectDetailPage() {
   const projColors = PROJECT_STATUS_COLORS[project.status ?? ''] ?? PROJECT_STATUS_COLORS['planning']!;
   const escalatedCount = (decisions ?? []).filter((d) => d.status === 'escalated').length;
   const openDecisionCount = (decisions ?? []).filter((d) => d.status === 'open' || d.status === 'escalated').length;
+  // Governance, with optimistic overrides applied on top of the fetch.
+  const contributors = project.contributors.map((c) =>
+    c.personId in roleOverrides ? { ...c, role: roleOverrides[c.personId] ?? null } : c,
+  );
+  const ownerId = ownerOverride ? ownerOverride.ownerId : project.ownerId ?? null;
+  const ownerName = ownerOverride ? ownerOverride.ownerName : project.ownerName ?? null;
   // Cross-initiative SMEs — the people directing agents here.
-  const smes = project.contributors.filter((c) => (c.role ?? '').toLowerCase() === 'sme');
+  const smes = contributors.filter((c) => (c.role ?? '').toLowerCase() === 'sme');
 
   // Aggregate point stats from work tree
   let totalDone = 0, totalPts = 0;
@@ -1163,27 +1187,37 @@ function ProjectDetailPage() {
                 {project.status ?? 'unknown'}
               </span>
             </div>
-            {/* Identity line — one owner runs the initiative, SMEs direct agents */}
-            {(project.ownerName || smes.length > 0) && (
+            {/* Identity line — one owner runs the initiative, SMEs direct agents.
+                The edit affordance always shows (attempt-and-surface: the PATCH
+                403s quietly for viewers without dispatch rights). */}
+            {(ownerName || smes.length > 0 || contributors.length > 0) && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, fontSize: 12, color: 'var(--color-text-secondary)', flexWrap: 'wrap' }}>
-                {project.ownerName && (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <Avatar name={project.ownerName} size={18} />
-                    <span>
-                      Run by{' '}
-                      {project.ownerId ? (
-                        <Link
-                          to={`/iq/explore?focus=${encodeURIComponent(project.ownerId)}`}
-                          style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 600 }}
-                        >
-                          {project.ownerName}
-                        </Link>
-                      ) : (
-                        <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>{project.ownerName}</span>
-                      )}
-                    </span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  {ownerName && <Avatar name={ownerName} size={18} />}
+                  <span>
+                    Run by{' '}
+                    {ownerName && ownerId ? (
+                      <Link
+                        to={`/iq/explore?focus=${encodeURIComponent(ownerId)}`}
+                        style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 600 }}
+                      >
+                        {ownerName}
+                      </Link>
+                    ) : ownerName ? (
+                      <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>{ownerName}</span>
+                    ) : (
+                      <span style={{ color: 'var(--color-text-tertiary)' }}>—</span>
+                    )}
                   </span>
-                )}
+                  <OwnerEditor
+                    projectId={id ?? ''}
+                    contributors={contributors}
+                    ownerId={ownerId}
+                    ownerName={ownerName}
+                    onOwner={(oid, oname) => setOwnerOverride({ ownerId: oid, ownerName: oname })}
+                    onRole={handleRoleOverride}
+                  />
+                </span>
                 {smes.map((s) => (
                   <Link
                     key={s.personId}
@@ -1376,11 +1410,15 @@ function ProjectDetailPage() {
           <CollapsibleSection
             title="Contributors"
             defaultOpen={false}
-            badge={project.contributors.length > 0
-              ? <Chip tone="neutral" size="xs" mono>{project.contributors.length}</Chip>
+            badge={contributors.length > 0
+              ? <Chip tone="neutral" size="xs" mono>{contributors.length}</Chip>
               : undefined}
           >
-            <ContributorsTable contributors={project.contributors} />
+            <ContributorsTable
+              contributors={contributors}
+              projectId={id ?? ''}
+              onRole={handleRoleOverride}
+            />
           </CollapsibleSection>
         </div>
       </div>

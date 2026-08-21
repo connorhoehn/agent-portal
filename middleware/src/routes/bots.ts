@@ -1,12 +1,21 @@
 // Bots — /api/bots
 //
 // The roster of durable, mission-configured agents: create one from the
-// wizard, run it now, pause it, watch its firings. Gated as ManageDevbox in
-// index.ts because a bot dispatches the same governed runs the SDLC and
-// Codebases surfaces do — same authority, same gate.
+// wizard, run it now, pause it, watch its firings.
+//
+// Gated per-route, in three tiers, because three different authorities meet
+// on this surface:
+//   reads     — operational visibility (the roster, runs, the estimator):
+//               org-leader + hr-admin, like the other read-wide surfaces.
+//   bot CRUD  — creating/patching/firing a bot dispatches the same governed
+//               runs the SDLC and Codebases surfaces do: ManageDevbox.
+//   dispatch  — authorizing a sized work item into a run is a marketplace
+//               decision, not devbox administration: DispatchAgentRun, so
+//               org-leaders can dispatch without holding the devbox keys.
 
 import { Router } from 'express';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
+import { readForRolesElseAction, requireAction } from '../lib/authz.js';
 import {
   listBots, getBot, createBot, updateBot, deleteBot, setPausedReason, listBotRuns,
   listMarketplaceRuns, runCostSamples, perPointCostSamples,
@@ -19,6 +28,13 @@ import { selectEstimate } from '../lib/bot-estimate.js';
 import { selectPerPointEstimate } from '../lib/marketplace-estimate.js';
 
 export const botsRouter: Router = Router();
+
+// The three gate tiers (see the header). readGate only fast-paths GETs, so
+// attaching it to a read route is exactly "org-leader/hr-admin/admin may look,
+// anyone else needs ManageDevbox".
+const readGate = readForRolesElseAction(['org-leader', 'hr-admin'], 'ManageDevbox');
+const manageGate = requireAction('ManageDevbox');
+const dispatchGate = requireAction('DispatchAgentRun');
 
 const TEMPLATES: readonly BotTemplate[] = ['epic', 'story', 'bug'];
 const TRIGGERS: readonly BotTrigger[] = ['manual', 'cron', 'pr_watch'];
@@ -47,7 +63,7 @@ function checkShape(bot: {
 // ─── Estimator ───────────────────────────────────────────────────────────────
 // Registered before /:id so "estimate" is never read as a bot id.
 
-botsRouter.get('/estimate', asyncHandler(async (req, res) => {
+botsRouter.get('/estimate', readGate, asyncHandler(async (req, res) => {
   const model = String(req.query['model'] ?? '').trim();
   if (!model) throw new ValidationError('model is required');
   const agentProjectId = req.query['agentProjectId'] ? String(req.query['agentProjectId']) : null;
@@ -77,7 +93,7 @@ botsRouter.get('/estimate', asyncHandler(async (req, res) => {
 // Declared before the '/:id' routes so 'dispatch-work' and 'marketplace-runs'
 // are never read as bot ids.
 
-botsRouter.post('/dispatch-work', asyncHandler(async (req, res) => {
+botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as {
     workItemId?: string; model?: string; agentProjectId?: string; instruction?: string;
     estimate?: Record<string, unknown>;
@@ -107,7 +123,7 @@ botsRouter.post('/dispatch-work', asyncHandler(async (req, res) => {
   res.status(202).json({ run: result.run });
 }));
 
-botsRouter.get('/marketplace-runs', asyncHandler(async (req, res) => {
+botsRouter.get('/marketplace-runs', readGate, asyncHandler(async (req, res) => {
   const orgProjectId = String(req.query['orgProjectId'] ?? '').trim();
   if (!orgProjectId) throw new ValidationError('orgProjectId is required');
   res.json({ runs: await listMarketplaceRuns(orgProjectId) });
@@ -115,11 +131,11 @@ botsRouter.get('/marketplace-runs', asyncHandler(async (req, res) => {
 
 // ─── CRUD ────────────────────────────────────────────────────────────────────
 
-botsRouter.get('/', asyncHandler(async (_req, res) => {
+botsRouter.get('/', readGate, asyncHandler(async (_req, res) => {
   res.json({ bots: await listBots() });
 }));
 
-botsRouter.post('/', asyncHandler(async (req, res) => {
+botsRouter.post('/', manageGate, asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as {
     name?: string; template?: string; prompt?: string; model?: string; trigger?: string;
     cronExpr?: string | null; agentProjectId?: string | null; orgProjectId?: string | null;
@@ -159,13 +175,13 @@ botsRouter.post('/', asyncHandler(async (req, res) => {
   res.status(201).json({ bot });
 }));
 
-botsRouter.get('/:id', asyncHandler(async (req, res) => {
+botsRouter.get('/:id', readGate, asyncHandler(async (req, res) => {
   const bot = await getBot(String(req.params['id'] ?? ''));
   if (!bot) throw new NotFoundError('No such bot');
   res.json({ bot });
 }));
 
-botsRouter.patch('/:id', asyncHandler(async (req, res) => {
+botsRouter.patch('/:id', manageGate, asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
   const existing = await getBot(id);
   if (!existing) throw new NotFoundError('No such bot');
@@ -213,7 +229,7 @@ botsRouter.patch('/:id', asyncHandler(async (req, res) => {
   res.json({ bot });
 }));
 
-botsRouter.delete('/:id', asyncHandler(async (req, res) => {
+botsRouter.delete('/:id', manageGate, asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
   const ok = await deleteBot(id);
   if (!ok) throw new NotFoundError('No such bot');
@@ -223,7 +239,7 @@ botsRouter.delete('/:id', asyncHandler(async (req, res) => {
 
 // ─── Controls ────────────────────────────────────────────────────────────────
 
-botsRouter.post('/:id/run', asyncHandler(async (req, res) => {
+botsRouter.post('/:id/run', manageGate, asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
   const instruction = String((req.body as { instruction?: string } ?? {}).instruction ?? '').trim();
   const result = await fireBot(id, {
@@ -233,7 +249,7 @@ botsRouter.post('/:id/run', asyncHandler(async (req, res) => {
   res.status(202).json({ run: result.run });
 }));
 
-botsRouter.post('/:id/pause', asyncHandler(async (req, res) => {
+botsRouter.post('/:id/pause', manageGate, asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
   if (!await getBot(id)) throw new NotFoundError('No such bot');
   const reason = String((req.body as { reason?: string } ?? {}).reason ?? '').trim();
@@ -241,7 +257,7 @@ botsRouter.post('/:id/pause', asyncHandler(async (req, res) => {
   res.json({ bot: await getBot(id) });
 }));
 
-botsRouter.post('/:id/resume', asyncHandler(async (req, res) => {
+botsRouter.post('/:id/resume', manageGate, asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
   if (!await getBot(id)) throw new NotFoundError('No such bot');
   // Resume clears BOTH halves of "paused": the operator/self-pause reason and
@@ -252,6 +268,6 @@ botsRouter.post('/:id/resume', asyncHandler(async (req, res) => {
   res.json({ bot: await getBot(id) });
 }));
 
-botsRouter.get('/:id/runs', asyncHandler(async (req, res) => {
+botsRouter.get('/:id/runs', readGate, asyncHandler(async (req, res) => {
   res.json({ runs: await listBotRuns(String(req.params['id'] ?? ''), 50) });
 }));
