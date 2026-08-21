@@ -33,7 +33,9 @@ def main():
 
     schema_files = [
         'orgiq_schema.sql',
+        'identity_schema.sql',
         'observability_schema.sql',
+        'observability_authz_schema.sql',
         'newsroom_schema.sql',
         'orgiq_kb_registry_schema.sql',
         'orgiq_work_items_schema.sql',

@@ -1,5 +1,6 @@
 // OrgLeader: VPs/Directors. Full org visibility incl. expertise leaderboards.
 // Still blocked from salary/performance reviews and admin surfaces.
+// Scoped to the orgiq tenant.
 permit (
   principal,
   action in [
@@ -12,7 +13,7 @@ permit (
   ],
   resource
 )
-when { principal.role == "org-leader" };
+when { principal.role == "org-leader" && principal.tenant == "orgiq" };
 
 // Org leaders are the only role allowed to approve human-in-the-loop
 // transaction requests, and only when the resource amount exceeds the
@@ -23,4 +24,4 @@ permit (
   action == OrgIQ::Action::"ApproveTransaction",
   resource
 )
-when { principal.role == "org-leader" && resource has amount && resource.amount > 10000 };
+when { principal.role == "org-leader" && principal.tenant == "orgiq" && resource has amount && resource.amount > 10000 };

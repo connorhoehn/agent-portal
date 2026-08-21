@@ -74,6 +74,26 @@ export const config = {
     sessionSigningSecretArn: env('SESSION_SIGNING_SECRET_ARN'),
   },
 
+  // Cognito Hosted UI (OIDC) — the enterprise sign-in path. When these are set
+  // the BFF exposes /api/auth/login → Cognito → /api/auth/callback and mints a
+  // session from the federated identity. When unset, the user picker is the
+  // only login surface (demo/local dev). See lib/oidc.ts + routes/auth.ts.
+  cognito: {
+    userPoolId: env('COGNITO_USER_POOL_ID'),
+    clientId: env('COGNITO_CLIENT_ID'),
+    clientSecret: env('COGNITO_CLIENT_SECRET'),
+    // Hosted-UI domain host, e.g. orgiq-auth-647757222309.auth.us-east-1.amazoncognito.com
+    domain: env('COGNITO_DOMAIN'),
+    // Where Cognito redirects after login. MUST be registered as a callback URL
+    // on the app client and match exactly. Defaults to this middleware's own
+    // origin when PUBLIC_BASE_URL is set.
+    callbackUrl: env('COGNITO_CALLBACK_URL') || (env('PUBLIC_BASE_URL') ? `${env('PUBLIC_BASE_URL')}/api/auth/callback` : ''),
+    // Where the BFF sends the browser after a successful login (the portal).
+    postLoginUrl: env('COGNITO_POST_LOGIN_URL', '/'),
+    // Where Cognito sends the browser after logout (must be a registered sign-out URL).
+    logoutRedirectUrl: env('COGNITO_LOGOUT_URL', '/'),
+  },
+
   agentcore: {
     memoryId: env('MEMORY_ID'),
     browserId: env('BROWSER_ID'),

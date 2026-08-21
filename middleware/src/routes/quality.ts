@@ -8,6 +8,7 @@
 import { Router } from 'express';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
+import { requireAction } from '../lib/authz.js';
 import { exec } from '../providers/aurora.js';
 
 export const qualityRouter = Router();
@@ -80,7 +81,11 @@ qualityRouter.get('/scores', asyncHandler(async (req, res) => {
 
 const ALLOWED_LABELS = new Set(['good', 'bad', 'fixed']);
 
-qualityRouter.post('/feedback', asyncHandler(async (req, res) => {
+// Writing a human label onto a trace is the LabelFeedback action — the one
+// endpoint that consumes that grant. (The router already sits behind the
+// observability mount's tenant + ViewObservability gate; this makes the
+// action explicit so LabelFeedback is enforced, not a decorative grant.)
+qualityRouter.post('/feedback', requireAction('LabelFeedback'), asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as {
     invocationId?: string;
     label?: string;

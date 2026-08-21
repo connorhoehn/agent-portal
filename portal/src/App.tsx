@@ -66,6 +66,7 @@ const CapabilitiesMemoryPage = lazy(() => import('./pages/capabilities/MemoryPag
 
 // Identity Management sub-pages (HRAdmin only)
 const IdentityLayout = lazy(() => import('./pages/identity/IdentityLayout'));
+const IdentityUsersPage = lazy(() => import('./pages/identity/UsersPage'));
 const IdentityRolesPage = lazy(() => import('./pages/identity/RolesPage'));
 const IdentityPoliciesPage = lazy(() => import('./pages/identity/PoliciesPage'));
 const IdentitySchemaPage = lazy(() => import('./pages/identity/SchemaPage'));
@@ -122,7 +123,13 @@ function Page({ element }: { element: React.ReactNode }) {
 function RootRedirect() {
   const { session, isLoading } = useSession();
   if (isLoading) return null;
-  return <Navigate to={session?.tenant === 'newsroom' ? '/newsroom/home' : '/iq/work'} replace />;
+  // Only route to the newsroom home when the newsroom surface is actually
+  // enabled — otherwise a newsroom-tenant session lands on a route the
+  // flag-off catch-all bounces straight back here, looping. Fall back to the
+  // orgiq root instead. (The TenantSwitcher migration can't cover this: it
+  // hides itself for single-tenant users, which every newsroom persona is.)
+  const toNewsroom = session?.tenant === 'newsroom' && NEWSROOM_ENABLED;
+  return <Navigate to={toNewsroom ? '/newsroom/home' : '/iq/work'} replace />;
 }
 
 export function App() {
@@ -331,6 +338,7 @@ export function App() {
             </RequireRole>
           }>
             <Route index element={<Navigate to="roles" replace />} />
+            <Route path="users" element={<Page element={<IdentityUsersPage />} />} />
             <Route path="roles" element={<Page element={<IdentityRolesPage />} />} />
             <Route path="policies" element={<Page element={<IdentityPoliciesPage />} />} />
             <Route path="schema" element={<Page element={<IdentitySchemaPage />} />} />

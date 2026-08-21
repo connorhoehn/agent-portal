@@ -251,7 +251,7 @@ function AgentFlowPage() {
   // ?cluster=orgiq | newsroom | all (default = all)
   const clusterFilter = (searchParams.get('cluster') ?? 'all') as 'all' | 'orgiq' | 'newsroom';
 
-  const { data: topology } = useFetch<TopologyResponse>(
+  const { data: topology, error: topologyError } = useFetch<TopologyResponse>(
     `/api/topology/a2a?windowHours=${windowHours}`, 30_000,
   );
   const { data: agents } = useFetch<AgentDef[]>('/api/agents', 30_000);
@@ -341,13 +341,18 @@ function AgentFlowPage() {
 
   return (
     <div className="w-full h-full flex flex-col">
+      {topologyError && (
+        <div className="py-2 px-4 text-[12px] text-danger bg-danger/10 border-b border-danger/30 shrink-0">
+          Live metrics unavailable — {topologyError}. Showing the static architecture; the call/error overlay needs the observability permission (org-leader or HR Admin).
+        </div>
+      )}
       {/* ── Summary bar ── */}
       <div className="flex items-center justify-between py-2.5 px-4 border-b border-border bg-surface gap-4 shrink-0">
         <div className="flex items-center gap-5">
           <SummaryKV label="Agents" value={`${onlineCount} / ${Object.keys(AGENTS).length} online`} />
-          <SummaryKV label={`Calls (${windowHours < 24 ? windowHours + 'h' : windowHours === 24 ? '24h' : '7d'})`} value={fmtCount(totalCalls)} />
-          <SummaryKV label="Errors" value={fmtCount(totalErrors)} accent={totalErrors > 0 ? 'warn' : undefined} />
-          <SummaryKV label="Err rate" value={errRate} accent={totalErrors > 0 ? 'warn' : undefined} />
+          <SummaryKV label={`Calls (${windowHours < 24 ? windowHours + 'h' : windowHours === 24 ? '24h' : '7d'})`} value={topologyError ? '—' : fmtCount(totalCalls)} />
+          <SummaryKV label="Errors" value={topologyError ? '—' : fmtCount(totalErrors)} accent={!topologyError && totalErrors > 0 ? 'warn' : undefined} />
+          <SummaryKV label="Err rate" value={topologyError ? '—' : errRate} accent={!topologyError && totalErrors > 0 ? 'warn' : undefined} />
           {topology?.generatedAt && (
             <span className="text-[10.5px] text-text-tertiary">
               Refreshed {new Date(topology.generatedAt).toLocaleTimeString()}

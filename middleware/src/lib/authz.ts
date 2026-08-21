@@ -1,6 +1,11 @@
 // Verified Permissions enforcement middleware. One IsAuthorized call per
-// (role, action) is cached for 60 seconds — Cedar policies aren't expected to
-// change per-request, and AVP charges per evaluation.
+// (tenant, role, action) is cached for 60 seconds — Cedar policies aren't
+// expected to change per-request, and AVP charges per evaluation.
+//
+// The principal sent to Cedar is the *user* (entityId = session.sub) carrying
+// role + tenant as attributes; policies condition on the attributes
+// (`principal.role == "..." && principal.tenant == "..."`), so decisions are
+// cacheable across users holding the same (tenant, role) pair.
 
 import type { Request, Response, NextFunction } from 'express';
 import {
@@ -11,7 +16,7 @@ import {
 } from '@aws-sdk/client-verifiedpermissions';
 import { config } from '../config.js';
 import { eventFromSession, logAuthz } from './audit.js';
-import { DEFAULT_ROLE, DEFAULT_TENANT, type Role } from './session.js';
+import { demoSession, ADMIN_ROLE, DEFAULT_ROLE, type Tenant, type Role } from './session.js';
 
 const NAMESPACE = 'OrgIQ';
 const RESOURCE_ID = 'app';
@@ -20,6 +25,13 @@ const client = new VerifiedPermissionsClient({ region: config.region });
 
 const cache = new Map<string, { decision: 'ALLOW' | 'DENY'; expiresAt: number }>();
 const TTL_MS = 60_000;
+
+/** The slice of a session that authorization decisions depend on. */
+export interface PrincipalRef {
+  sub: string;
+  role: string;
+  tenant: string;
+}
 
 /** Optional resource attributes — used by Cedar `when { resource.amount > N }` policies. */
 export interface ResourceAttrs {
@@ -41,24 +53,30 @@ function attrsToAvp(attrs: ResourceAttrs): Record<string, AttributeValue> {
   return out;
 }
 
-async function evaluate(role: Role, action: string, resourceAttrs?: ResourceAttrs): Promise<'ALLOW' | 'DENY'> {
+async function evaluate(principal: PrincipalRef, action: string, resourceAttrs?: ResourceAttrs): Promise<'ALLOW' | 'DENY'> {
   if (!config.auth.policyStoreId) {
-    // No policy store wired up — open mode for local dev. Audit log still fires.
+    // No policy store wired up. Open mode is a local-dev convenience only —
+    // in production a missing POLICY_STORE_ID is a misconfiguration, and
+    // silently disabling every tenant/role boundary is the worst failure mode.
+    if (process.env['NODE_ENV'] === 'production') return 'DENY';
     return 'ALLOW';
   }
   // Only cache evaluations that don't depend on per-request resource attributes.
   // Attribute-bearing checks (e.g. ApproveTransaction when amount > N) must be
   // evaluated fresh each time since the cache key would otherwise collide.
   const hasAttrs = !!resourceAttrs && Object.keys(resourceAttrs).length > 0;
-  const key = `${role}|${action}`;
+  const key = `${principal.tenant}|${principal.role}|${action}`;
   if (!hasAttrs) {
     const cached = cache.get(key);
     if (cached && cached.expiresAt > Date.now()) return cached.decision;
   }
 
   const entityList: EntityItem[] = [{
-    identifier: { entityType: `${NAMESPACE}::User`, entityId: role },
-    attributes: { role: { string: role } as AttributeValue },
+    identifier: { entityType: `${NAMESPACE}::User`, entityId: principal.sub },
+    attributes: {
+      role: { string: principal.role } as AttributeValue,
+      tenant: { string: principal.tenant } as AttributeValue,
+    },
     parents: [],
   }];
   if (hasAttrs) {
@@ -71,7 +89,7 @@ async function evaluate(role: Role, action: string, resourceAttrs?: ResourceAttr
 
   const out = await client.send(new IsAuthorizedCommand({
     policyStoreId: config.auth.policyStoreId,
-    principal: { entityType: `${NAMESPACE}::User`, entityId: role },
+    principal: { entityType: `${NAMESPACE}::User`, entityId: principal.sub },
     action: { actionType: `${NAMESPACE}::Action`, actionId: action },
     resource: { entityType: `${NAMESPACE}::Application`, entityId: RESOURCE_ID },
     entities: { entityList },
@@ -89,15 +107,15 @@ async function evaluate(role: Role, action: string, resourceAttrs?: ResourceAttr
  */
 export function requireAction(action: string) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const session = req.session ?? { sub: 'anon', role: DEFAULT_ROLE, tenant: DEFAULT_TENANT, iat: 0 };
+    const session = req.session ?? demoSession();
     try {
-      const decision = await evaluate(session.role as Role, action);
+      const decision = await evaluate(session, action);
       logAuthz(eventFromSession(session, action, decision, { path: req.path }));
       if (decision === 'ALLOW') {
         next();
         return;
       }
-      res.status(403).json({ error: 'Forbidden', action, role: session.role });
+      res.status(403).json({ error: 'Forbidden', action, role: session.role, tenant: session.tenant });
     } catch (err) {
       logAuthz(eventFromSession(session, action, 'DENY', {
         path: req.path,
@@ -108,9 +126,31 @@ export function requireAction(action: string) {
   };
 }
 
-/** Synchronously look up a cached decision for use in non-middleware code. */
-export async function isAllowed(role: Role, action: string, resourceAttrs?: ResourceAttrs): Promise<boolean> {
-  return (await evaluate(role, action, resourceAttrs)) === 'ALLOW';
+/**
+ * Returns a middleware that requires the session's active tenant to be
+ * `tenant`. This is the data-boundary guard: routes serving one tenant's
+ * tables reject sessions parked in another tenant. The tenant comes from the
+ * signed cookie only — never from a header or query param. The cross-tenant
+ * `admin` role passes any tenant guard.
+ */
+export function requireTenant(tenant: Tenant) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const session = req.session ?? demoSession();
+    if (session.tenant === tenant || session.role === ADMIN_ROLE) {
+      next();
+      return;
+    }
+    logAuthz(eventFromSession(session, 'TenantScope', 'DENY', {
+      path: req.path,
+      reason: `route requires tenant=${tenant}`,
+    }));
+    res.status(403).json({ error: 'Forbidden', requiredTenant: tenant, tenant: session.tenant });
+  };
+}
+
+/** Evaluate a Cedar decision outside middleware (approvals, masquerade, ...). */
+export async function isAllowed(principal: PrincipalRef, action: string, resourceAttrs?: ResourceAttrs): Promise<boolean> {
+  return (await evaluate(principal, action, resourceAttrs)) === 'ALLOW';
 }
 
 /**

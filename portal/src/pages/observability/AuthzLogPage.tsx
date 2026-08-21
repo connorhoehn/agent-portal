@@ -10,12 +10,16 @@ interface AuthzEvent {
   action: string;
   sub: string;
   role: string;
+  tenant?: string;
+  /** Real identity when the event was produced under masquerade. */
+  actor?: string;
   reason?: string;
   path?: string;
   ts: string;
 }
 
-const ROLE_FILTERS = ['', 'member', 'org-leader', 'hr-admin'] as const;
+const ROLE_FILTERS = ['', 'member', 'org-leader', 'hr-admin', 'reporter', 'editor', 'admin'] as const;
+const TENANT_FILTERS = ['', 'orgiq', 'newsroom'] as const;
 const DECISION_FILTERS = ['', 'ALLOW', 'DENY'] as const;
 const MAX_EVENTS = 500;
 
@@ -23,6 +27,7 @@ function AuthzLogPage() {
   const [events, setEvents] = useState<AuthzEvent[]>([]);
   const [decision, setDecision] = useState<typeof DECISION_FILTERS[number]>('');
   const [role, setRole] = useState<typeof ROLE_FILTERS[number]>('');
+  const [tenant, setTenant] = useState<typeof TENANT_FILTERS[number]>('');
   const [actionQ, setActionQ] = useState('');
   const [streaming, setStreaming] = useState(false);
 
@@ -51,10 +56,11 @@ function AuthzLogPage() {
     return events.filter(e => {
       if (decision && e.decision !== decision) return false;
       if (role && e.role !== role) return false;
+      if (tenant && e.tenant !== tenant) return false;
       if (actionQ && !e.action.toLowerCase().includes(actionQ.toLowerCase())) return false;
       return true;
     });
-  }, [events, decision, role, actionQ]);
+  }, [events, decision, role, tenant, actionQ]);
 
   const allowCount = events.filter(e => e.decision === 'ALLOW').length;
   const denyCount = events.length - allowCount;
@@ -86,6 +92,11 @@ function AuthzLogPage() {
             {ROLE_FILTERS.map(r => <option key={r || 'any'} value={r}>{r || 'Any'}</option>)}
           </select>
         </FilterField>
+        <FilterField label="Tenant">
+          <select value={tenant} onChange={e => setTenant(e.target.value as typeof TENANT_FILTERS[number])} style={selectStyle}>
+            {TENANT_FILTERS.map(t => <option key={t || 'any'} value={t}>{t || 'Any'}</option>)}
+          </select>
+        </FilterField>
         <FilterField label="Action">
           <input
             type="text"
@@ -95,8 +106,8 @@ function AuthzLogPage() {
             style={{ ...selectStyle, minWidth: 180 }}
           />
         </FilterField>
-        {(decision || role || actionQ) && (
-          <button onClick={() => { setDecision(''); setRole(''); setActionQ(''); }} style={btnSecondary}>Clear</button>
+        {(decision || role || tenant || actionQ) && (
+          <button onClick={() => { setDecision(''); setRole(''); setTenant(''); setActionQ(''); }} style={btnSecondary}>Clear</button>
         )}
         <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
           showing {filtered.length} of {events.length}
@@ -109,6 +120,8 @@ function AuthzLogPage() {
             <tr style={{ background: 'var(--color-surface-hover)' }}>
               <th style={th}>Time</th>
               <th style={th}>Decision</th>
+              <th style={th}>Identity</th>
+              <th style={th}>Tenant</th>
               <th style={th}>Role</th>
               <th style={th}>Action</th>
               <th style={th}>Path</th>
@@ -118,7 +131,7 @@ function AuthzLogPage() {
           <tbody>
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={6} style={{ padding: 16, textAlign: 'center', color: 'var(--color-text-tertiary)' }}>
+                <td colSpan={8} style={{ padding: 16, textAlign: 'center', color: 'var(--color-text-tertiary)' }}>
                   {events.length === 0 ? 'Waiting for events… try clicking around the app.' : 'No events match the filters.'}
                 </td>
               </tr>
@@ -133,6 +146,15 @@ function AuthzLogPage() {
                     {e.decision}
                   </Chip>
                 </td>
+                <td style={{ ...td, fontFamily: 'ui-monospace, monospace' }}>
+                  {e.sub}
+                  {e.actor && (
+                    <span title={`Masquerade — real identity: ${e.actor}`} style={{ marginLeft: 6, fontSize: 10, color: 'var(--color-warning, #d97706)' }}>
+                      via {e.actor}
+                    </span>
+                  )}
+                </td>
+                <td style={{ ...td, fontFamily: 'ui-monospace, monospace', color: 'var(--color-text-secondary)' }}>{e.tenant ?? ''}</td>
                 <td style={{ ...td, fontFamily: 'ui-monospace, monospace' }}>{e.role}</td>
                 <td style={{ ...td, fontWeight: 500 }}>{e.action}</td>
                 <td style={{ ...td, color: 'var(--color-text-secondary)', fontFamily: 'ui-monospace, monospace' }}>{e.path ?? ''}</td>

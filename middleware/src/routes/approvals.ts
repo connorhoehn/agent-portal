@@ -15,8 +15,8 @@
 // Server-side expiry: GET /approvals/:id flips PENDING rows older than 5min
 // to EXPIRED on read so a crashed/forgotten poller can never re-emerge.
 
-import { Router } from 'express';
-import { randomUUID } from 'node:crypto';
+import { Router, type Request, type Response, type NextFunction } from 'express';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import {
   RDSDataClient,
   ExecuteStatementCommand,
@@ -35,9 +35,31 @@ import {
 } from '../lib/approval-broker.js';
 import { isAllowed } from '../lib/authz.js';
 import { logAuthz } from '../lib/audit.js';
-import { DEFAULT_ROLE, DEFAULT_TENANT, type Role } from '../lib/session.js';
+import { demoSession } from '../lib/session.js';
+import { rateLimit } from '../lib/rate-limit.js';
 
 export const approvalsRouter = Router();
+
+// Filing an approval request is agent-facing and sessionless (the agent identity
+// rides in the body as `agentId`), so it can't use the Cedar guards. Two brakes
+// that don't change that contract:
+//   1. A per-IP rate limit so an unauthenticated caller can't flood the queue.
+//   2. OPTIONAL service auth: when APPROVALS_REQUEST_SECRET is set, the caller
+//      must present it in `x-approvals-auth`; unset (the demo default) leaves the
+//      endpoint open exactly as before. This lets an operator lock the endpoint
+//      to the agent fleet without breaking local dev.
+const requestLimit = rateLimit('approvals-request', 60, 60_000);
+
+function requireServiceAuth(req: Request, res: Response, next: NextFunction): void {
+  const secret = process.env['APPROVALS_REQUEST_SECRET'];
+  if (!secret) { next(); return; } // open when unconfigured
+  const got = req.headers['x-approvals-auth'];
+  const presented = typeof got === 'string' ? got : '';
+  const a = Buffer.from(presented);
+  const b = Buffer.from(secret);
+  if (a.length === b.length && timingSafeEqual(a, b)) { next(); return; }
+  res.status(401).json({ error: 'service authentication required' });
+}
 
 // ── RDS Data API helpers (same shape as providers/aurora.ts) ───────────────
 
@@ -265,8 +287,9 @@ function isPastExpiry(requestedAt: string): boolean {
 // ── Routes ─────────────────────────────────────────────────────────────────
 
 // Create a new approval request. Called from the agent's `request_approval`
-// Strands tool. No auth gate — the agent identity is captured as `agentId`.
-approvalsRouter.post('/request', asyncHandler(async (req, res) => {
+// Strands tool. Rate-limited and optionally service-authed (see above); the
+// agent identity is still captured as `agentId`.
+approvalsRouter.post('/request', requestLimit, requireServiceAuth, asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as { txId?: unknown; agentId?: unknown; payload?: unknown; reason?: unknown };
   const txId = typeof body.txId === 'string' ? body.txId : '';
   const agentId = typeof body.agentId === 'string' ? body.agentId : '';
@@ -276,6 +299,17 @@ approvalsRouter.post('/request', asyncHandler(async (req, res) => {
   const reason = typeof body.reason === 'string' ? body.reason : null;
   if (!txId) throw new ValidationError('txId is required');
   if (!agentId) throw new ValidationError('agentId is required');
+  // If an amount is present it drives the ApproveTransaction threshold policy,
+  // so reject values that can't be a real transaction amount rather than
+  // storing NaN/negative/Infinity that would later evaluate unpredictably.
+  if ('amount' in payload) {
+    const amt = typeof payload['amount'] === 'number'
+      ? payload['amount']
+      : (typeof payload['amount'] === 'string' ? Number(payload['amount']) : NaN);
+    if (!Number.isFinite(amt) || amt < 0) {
+      throw new ValidationError('payload.amount must be a non-negative number');
+    }
+  }
 
   const approvalId = randomUUID();
   const row: ApprovalRow = {
@@ -368,16 +402,23 @@ approvalsRouter.post('/:id/decision', asyncHandler(async (req, res) => {
 
   // Cedar PEP — pass `resource.amount` from the captured payload so threshold
   // policies on org-leader can fire correctly.
-  const session = req.session ?? { sub: 'anon', role: DEFAULT_ROLE, tenant: DEFAULT_TENANT, iat: 0 };
+  const session = req.session ?? demoSession();
   const amountRaw = existing.payload['amount'];
   const amount = typeof amountRaw === 'number'
     ? amountRaw
     : (typeof amountRaw === 'string' ? Number(amountRaw) : NaN);
-  const resourceAttrs = Number.isFinite(amount) ? { amount } : {};
+  // Cedar `long` attributes are integers; the policy compares `amount > 10000`.
+  // ceil (not trunc) is the exact integer proxy for strict-greater-than on a
+  // non-negative amount: 10000.01 → 10001 > 10000 (needs approval), while a
+  // whole 10000 stays 10000 (does not). trunc silently dropped the fraction,
+  // letting 10000.99 read as 10000 and fail the threshold.
+  const resourceAttrs = Number.isFinite(amount) && amount >= 0
+    ? { amount: Math.ceil(amount) }
+    : {};
 
   let allowed = false;
   try {
-    allowed = await isAllowed(session.role as Role, 'ApproveTransaction', resourceAttrs);
+    allowed = await isAllowed(session, 'ApproveTransaction', resourceAttrs);
   } catch (err) {
     logAuthz({
       decision: 'DENY',

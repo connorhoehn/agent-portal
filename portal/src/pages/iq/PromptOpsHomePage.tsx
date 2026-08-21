@@ -20,6 +20,7 @@
 import { Link, useNavigate } from 'react-router';
 import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 
 interface LibraryPrompt { id: string; name: string; updatedAt?: string; description?: string }
 interface LibraryResponse { prompts?: LibraryPrompt[] }
@@ -53,7 +54,7 @@ function runtimeForSystemPrompt(name: string): string | null {
 
 export default function PromptOpsHomePage() {
   const navigate = useNavigate();
-  const { data: library } = useFetch<LibraryResponse>('/api/observability/canary/library', 30_000);
+  const { data: library, error: libraryError } = useFetch<LibraryResponse>('/api/observability/canary/library', 30_000);
   const { data: weight } = useFetch<WeightResponse>('/api/observability/canary/weight', 10_000);
   const { data: prompts } = useFetch<PromptsResponse>('/api/observability/canary/prompts', 30_000);
   const { data: experiments, error: experimentsError } = useFetch<ExperimentsResponse>('/api/iq/prompts/experiments', 60_000);
@@ -89,6 +90,21 @@ export default function PromptOpsHomePage() {
   const weightB = weight?.weight_b ?? 0;
   const experimentLive = halted || weightB > 0;
   const pastCount = experiments?.experiments?.length ?? 0;
+
+  // The whole surface is driven by the prompt library, which is ViewObservability-
+  // gated. If it's denied, say so plainly rather than rendering an empty library
+  // that reads as "nothing is deployed".
+  if (libraryError) {
+    return (
+      <PageSection title="Prompt Management">
+        <UnavailableNotice
+          error={libraryError}
+          what="the prompt library"
+          source="Prompt management is limited to the org-leader and HR Admin roles"
+        />
+      </PageSection>
+    );
+  }
 
   return (
     <PageSection title="Prompt Management">

@@ -8,6 +8,10 @@
             "role": {
               "type": "String",
               "required": true
+            },
+            "tenant": {
+              "type": "String",
+              "required": false
             }
           }
         }
@@ -176,6 +180,56 @@
         }
       },
       "ManageDevbox": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ManageUsers": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "Masquerade": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "WriteArticle": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "PublishArticle": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ManagePitches": {
         "appliesTo": {
           "principalTypes": [
             "User"

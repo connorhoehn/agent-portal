@@ -53,7 +53,30 @@ function deriveSessionId(req: { body?: Record<string, unknown> }): string {
 // deriveSessionId option — no more CUSTOM `session` workaround.
 // Tool results are emitted via standard TOOL_CALL_RESULT events — no more
 // CUSTOM `tool_call_result` workaround.
-agentsRouter.post('/:agentId/invoke', requireAction('Search'), agentStreamMiddleware(async (req, stream, signal) => {
+// Agents are tenant-scoped both ways: news-* agents serve newsroom sessions
+// only, and the orgiq specialists (search, scoring, advisor, ingestion,
+// graph-builder) serve orgiq sessions only. The supervisor is tenant-aware
+// (it builds a per-(tenant, role) Agent) so any tenant may invoke it, and
+// the cross-tenant admin role passes every guard. This runs BEFORE the SSE
+// stream opens so the caller gets a plain 403, not a mid-stream error event.
+function agentTenant(agentId: string): 'newsroom' | 'orgiq' | null {
+  if (/(^|-)news-/.test(agentId)) return 'newsroom';
+  if (/supervisor/.test(agentId)) return null; // serves all tenants
+  return 'orgiq';
+}
+
+function requireAgentTenant(req: import('express').Request, res: import('express').Response, next: import('express').NextFunction): void {
+  const agentId = String(req.params['agentId'] ?? '');
+  const session = req.session;
+  const required = agentTenant(agentId);
+  if (session && required && session.tenant !== required && session.role !== 'admin') {
+    res.status(403).json({ error: 'Forbidden', requiredTenant: required, agentId });
+    return;
+  }
+  next();
+}
+
+agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenant, agentStreamMiddleware(async (req, stream, signal) => {
   const agentId = String(req.params['agentId'] ?? '');
   const { message, sessionId, actorId, selection } = req.body as {
     message?: string;
@@ -101,7 +124,15 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), agentStreamMiddle
     message: userMessage,
     sessionId: canonicalSessionId,
     history,
-    ...(req.session ? { userId: req.session.sub, auth: { sub: req.session.sub, role: req.session.role } } : {}),
+    ...(req.session ? {
+      userId: req.session.sub,
+      auth: {
+        sub: req.session.sub,
+        role: req.session.role,
+        tenant: req.session.tenant,
+        ...(req.session.act ? { actor: req.session.act.sub } : {}),
+      },
+    } : {}),
   };
 
   // AG-UI streaming path: pipe events directly from the agent runtime.

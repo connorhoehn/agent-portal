@@ -4,7 +4,8 @@ import cookieParser from 'cookie-parser';
 import { WebSocketServer } from 'ws';
 import { config } from './config.js';
 import { errorHandler } from './lib/async-handler.js';
-import { sessionMiddleware } from './lib/session.js';
+import { sessionMiddleware, setGrantsResolver } from './lib/session.js';
+import { getUser as getIdentityUser } from './providers/identity.js';
 import { agentsRouter } from './routes/agents.js';
 import { graphRouter } from './routes/graph.js';
 import { scoresRouter } from './routes/scores.js';
@@ -31,6 +32,7 @@ import { testFixturesRouter } from './routes/test-fixtures.js';
 import { capabilitiesRouter } from './routes/capabilities.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { sessionRouter } from './routes/session.js';
+import { authRouter } from './routes/auth.js';
 import { identityRouter } from './routes/identity.js';
 import { canaryRouter } from './routes/canary.js';
 import { canaryLibraryRouter } from './routes/canary-library.js';
@@ -50,7 +52,7 @@ import { agentDetailRouter } from './routes/agent-detail.js';
 import { connectionsRouter } from './routes/connections.js';
 import { agentProjectsRouter } from './routes/agent-projects.js';
 import { sdlcRouter } from './routes/sdlc.js';
-import { requireAction, readForRolesElseAction } from './lib/authz.js';
+import { requireAction, requireTenant, readForRolesElseAction } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
 import { initCrawlTargets } from './lib/crawl-targets.js';
 import { ensureSchema, seedPoliciesIfMissing } from './lib/policy-seeds.js';
@@ -63,6 +65,10 @@ const app = express();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
+setGrantsResolver(async (id) => {
+  const u = await getIdentityUser(id);
+  return u ? { displayName: u.displayName, grants: u.grants } : null;
+});
 app.use(sessionMiddleware());
 
 function healthHandler(_req: express.Request, res: express.Response): void {
@@ -89,6 +95,8 @@ app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
 
 app.use('/api/session', sessionRouter);
+// Enterprise SSO (Cognito OIDC). Inert unless COGNITO_* are configured.
+app.use('/api/auth', authRouter);
 app.use('/api/identity', identityRouter);
 // Per-agent detail, mounted first so /:agentId there is not swallowed by
 // the fleet router's own routes.
@@ -96,27 +104,42 @@ app.use('/api/agent-detail', agentDetailRouter);
 app.use('/api/agents', agentsRouter);
 // Decisions + Projects mounted BEFORE graphRouter so their specific paths
 // resolve without going through the gated graph router.
-app.use('/api/graph/decisions', decisionsRouter);
-app.use('/api/graph/projects', projectsRouter);
+// Org-graph surfaces are orgiq-tenant data: sessions parked in another tenant
+// are rejected here (the cross-tenant admin role passes any tenant guard).
+app.use('/api/graph/decisions', requireTenant('orgiq'), decisionsRouter);
+app.use('/api/graph/projects', requireTenant('orgiq'), projectsRouter);
 // Work-items: mounted at /api/graph so its sub-paths (/work, /projects/:id/work,
 // /people/:id/work, /work-items) resolve before the gated graphRouter.
-app.use('/api/graph', workItemsRouter);
-app.use('/api/graph', graphRouter);
-app.use('/api/scores', scoresRouter);
-app.use('/api/knowledge-base', knowledgeBaseRouter);
+app.use('/api/graph', requireTenant('orgiq'), workItemsRouter);
+// The org roster + relationship graph is the org-chart surface: tenant-scoped
+// AND gated on ViewOrgChart (every orgiq role holds it; a grantless anonymous
+// production session does not — closing the roster leak).
+app.use('/api/graph', requireTenant('orgiq'), requireAction('ViewOrgChart'), graphRouter);
+// Ranked people-intelligence (leaderboard, cohorts, radar, contributions) is
+// leadership data: ViewLeaderboard, held only by org-leader / hr-admin / admin.
+// Tenant guard alone previously let any orgiq member — and any anonymous
+// caller — read it.
+app.use('/api/scores', requireTenant('orgiq'), requireAction('ViewLeaderboard'), scoresRouter);
+// The knowledge base belongs to the orgiq tenant; scope it so a newsroom
+// session (even one holding ManageKB) cannot read or mutate it.
+app.use('/api/knowledge-base', requireTenant('orgiq'), knowledgeBaseRouter);
 // KB Registry admin — CRUD + async provisioning for multi-KB support.
-// Reading the registry is operational visibility (org-leader + hr-admin, like
-// Health); creating/adopting/provisioning/syncing/deleting a KB is a mutation
-// that still requires ManageKB (hr-admin). Mounted before the gated
-// observability router so the portal wizard can reach it.
-app.use('/api/admin/kb-registry', readForRolesElseAction(['org-leader', 'hr-admin'], 'ManageKB'), kbAdminRouter);
+// Tenant-scoped to orgiq first (the KB belongs to orgiq; a newsroom editor
+// holds ManageKB but must not reach it — its DELETE/provision routes are
+// destructive, and admin bypasses the tenant guard). Then: reading the registry
+// is operational visibility (org-leader + hr-admin, like Health), while
+// create/adopt/provision/sync/delete still require ManageKB (hr-admin). Mounted
+// before the gated observability router so the portal wizard can reach it.
+app.use('/api/admin/kb-registry', requireTenant('orgiq'), readForRolesElseAction(['org-leader', 'hr-admin'], 'ManageKB'), kbAdminRouter);
 // Public document drop — deliberately ungated. The token in the URL is the
 // whole authority, which is why the router exposes no bucket, prefix or id
 // and every limit is enforced server-side per link.
 app.use('/api/drop', dropRouter);
 // Newsroom — beats mounted BEFORE articles so /beats doesn't get swallowed.
-app.use('/api/newsroom/beats', newsroomBeatsRouter);
-app.use('/api/newsroom', newsroomArticlesRouter);
+// Tenant-guarded: an orgiq session cannot read newsroom data (and vice versa
+// via the orgiq guards above). This is the no-cross-pollination boundary.
+app.use('/api/newsroom/beats', requireTenant('newsroom'), newsroomBeatsRouter);
+app.use('/api/newsroom', requireTenant('newsroom'), newsroomArticlesRouter);
 // Ingest — reading jobs/storage/crawl status is operational visibility that the
 // Knowledge page surfaces to org-leaders; starting crawls, editing schedules and
 // other mutations still require ManageIngest (hr-admin).
@@ -145,48 +168,54 @@ app.use('/api/observability/harness', harnessRouter);
 // Prompt-versions registry — populated at run start by the harness runner.
 // Mounted ungated (no session) like approvals/harness.
 app.use('/api/observability/prompt-versions', promptVersionsRouter);
+// Every observability aggregate below carries the ViewObservability gate AND a
+// tenant scope. Platform telemetry (traces, cost, topology, per-user traffic)
+// is not partitioned by tenant, so it belongs to the orgiq home tenant's
+// privileged roles plus admin — a newsroom editor holding ViewObservability
+// must not read orgiq agent telemetry. Admin bypasses the tenant guard.
+// (In dev the cookie-less demo session is orgiq and holds every grant, so
+// these render without login; in production a newsroom or anonymous session
+// is denied.)
+const viewObs = [requireTenant('orgiq'), requireAction('ViewObservability')];
 // Cost aggregation routes — read-only aggregates over invocation_traces cost
-// columns. Mounted ungated for now; can be Cedar-gated later if PII surfaces.
-app.use('/api/observability/cost', costRouter);
+// columns.
+app.use('/api/observability/cost', viewObs, costRouter);
 // Sprint 4 (M10) — judge calibration. Curated (prompt, response, human_score)
-// tuples + periodic judge re-runs to measure judge drift. Mounted ungated
-// like cost so the portal can render without a session, same rationale as the
-// rest of the observability surface.
-app.use('/api/observability/calibration', calibrationRouter);
+// tuples + periodic judge re-runs to measure judge drift.
+app.use('/api/observability/calibration', viewObs, calibrationRouter);
 // Sprint 3 (M9) — on-call / incident response. Composes drift + cost +
-// errors + HITL + deploys into one timeline. Mounted ungated like cost so
-// the on-call surface keeps working past session expiry at 3am.
-app.use('/api/observability/oncall', oncallRouter);
+// errors + HITL + deploys into one timeline. (The old "works past session
+// expiry at 3am" rationale is covered by demo mode in dev; prod operators
+// hold a session.)
+app.use('/api/observability/oncall', viewObs, oncallRouter);
 // Sprint 4 (M11) — AgentCore Memory ops observability.
-app.use('/api/observability/memory', memoryRouter);
+app.use('/api/observability/memory', viewObs, memoryRouter);
 // Sprint 4 (M12) — guardrail rule-level interventions.
-app.use('/api/observability/guardrails-detail', guardrailsDetailRouter);
+app.use('/api/observability/guardrails-detail', viewObs, guardrailsDetailRouter);
 // Sprint 4 (M13) — traffic shape: RPS, hour-of-week heatmap, top users.
-app.use('/api/observability/traffic', trafficRouter);
-// Test fixtures — E2E-only reset utilities. NODE_ENV=production locks them.
+app.use('/api/observability/traffic', viewObs, trafficRouter);
+// Test fixtures — E2E-only reset utilities. NODE_ENV=production locks them
+// internally, so they stay ungated for the sessionless E2E runner.
 app.use('/api/observability/test-fixtures', testFixturesRouter);
 // Sprint 2 — invocation search + per-invocation drill-down (M3/M5 triage).
-// Mounted ungated so the portal triage page can hit it directly, same as cost.
-app.use('/api/observability/invocations', invocationsRouter);
+app.use('/api/observability/invocations', viewObs, invocationsRouter);
 // A2A topology — derived from parent_invocation_id linkage in invocation_traces.
-// Ungated: same surface as the agents list (/api/agents).
-app.use('/api/topology', topologyRouter);
+// An observability read like invocations.
+app.use('/api/topology', viewObs, topologyRouter);
 // Sprint 2 — per-tool latency aggregates + error tail (M4).
-app.use('/api/observability/tools', toolCallsRouter);
-// Canary — A/B prompt experiment surface. Mounted BEFORE the gated
-// observability router so the portal landing page (GET /prompts, /events,
-// /weight) works without a session, matching cost/approvals/harness.
-// Mutation endpoints (PUT /weight, POST /halt) are individually Cedar-gated
+app.use('/api/observability/tools', viewObs, toolCallsRouter);
+// Canary — A/B prompt experiment surface. Reads need ViewObservability;
+// mutation endpoints (PUT /weight, POST /halt) are additionally Cedar-gated
 // via `ManageCanary` inside the router.
-app.use('/api/observability/canary', canaryRouter);
-app.use('/api/observability/canary', canaryLibraryRouter);
+app.use('/api/observability/canary', viewObs, canaryRouter);
+app.use('/api/observability/canary', viewObs, canaryLibraryRouter);
 // Prompt history + experiment log — version timeline + outcome cards for /iq/history.
-app.use('/api/iq/prompts', promptHistoryRouter);
+app.use('/api/iq/prompts', viewObs, promptHistoryRouter);
 // Evaluations — LLM-as-judge config + recent scores. The config is SSM-backed
 // and read by fireJudge() on every canary invocation, so the /iq/evaluations
 // page actually governs judging (enable, model, rubric weights, sampling).
-app.use('/api/observability/evaluations', evaluationsRouter);
-app.use('/api/observability', requireAction('ViewObservability'), observabilityRouter);
+app.use('/api/observability/evaluations', viewObs, evaluationsRouter);
+app.use('/api/observability', viewObs, observabilityRouter);
 app.use('/api/capabilities', capabilitiesRouter);
 app.use('/api/sessions', sessionsRouter);
 // Devbox — Claude Code in an AgentCore Runtime microVM. Operator surface for
