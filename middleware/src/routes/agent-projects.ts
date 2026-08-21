@@ -75,9 +75,24 @@ agentProjectsRouter.post('/:id/clone-command', asyncHandler(async (req, res) => 
   const sessionId = String((req.body as { sessionId?: string } ?? {}).sessionId ?? '').trim();
   if (!sessionId) throw new ValidationError('sessionId is required — a project is cloned into a workspace');
 
+  // Build the command but do NOT mark the project cloned yet — generating the
+  // command is not the same as the clone succeeding. The caller runs it in the
+  // devbox and confirms via POST /:id/cloned only when git exits 0, so a failed
+  // clone (e.g. a private repo linked without a credential) never leaves the
+  // project looking "in workspace" with an empty/nonexistent checkout.
   const { command, redacted } = await buildCloneCommand(project);
-  await markCloned(project.id, sessionId);
   res.json({ command, redacted, checkout: checkoutPath(project), cwd: project.workspacePath });
+}));
+
+// Confirm a successful clone. The portal calls this after the clone command
+// exits 0 in the devbox — only then is the project actually in a workspace.
+agentProjectsRouter.post('/:id/cloned', asyncHandler(async (req, res) => {
+  const project = await getAgentProject(String(req.params['id'] ?? ''));
+  if (!project) throw new NotFoundError('No such project');
+  const sessionId = String((req.body as { sessionId?: string } ?? {}).sessionId ?? '').trim();
+  if (!sessionId) throw new ValidationError('sessionId is required');
+  await markCloned(project.id, sessionId);
+  res.json({ ok: true });
 }));
 
 // ─── Runs ────────────────────────────────────────────────────────────────────

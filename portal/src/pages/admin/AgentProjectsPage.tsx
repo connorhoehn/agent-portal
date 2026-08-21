@@ -218,10 +218,34 @@ export default function AgentProjectsPage() {
         ? exitMatch[1] !== '0'
         : /fatal:|repository not found|authentication failed|could not read username|could not resolve host|permission denied/i.test(out);
       if (failed) {
-        const m = out.match(/(fatal:[^"\\\n]*|repository not found|authentication failed|could not read username[^"\\\n]*|could not resolve host[^"\\\n]*|permission denied)/i);
-        throw new Error(m ? m[0].slice(0, 200) : 'the clone did not complete — check the repository name and credential');
+        // Translate the raw git failure into something actionable. An auth
+        // prompt ("could not read Username"), auth failure, permission denied,
+        // or "repository not found" all mean the same thing here: the clone
+        // couldn't access the repo, almost always because it's private and no
+        // credential was sent.
+        const isAccess = /could not read username|authentication failed|permission denied|repository not found|invalid username or password/i.test(out);
+        if (isAccess) {
+          throw new Error(
+            p.connectionName
+              ? `Couldn't access ${p.repoFullName} with the “${p.connectionName}” credential — check that its token can reach this repository.`
+              : `Couldn't access ${p.repoFullName}. It was linked as a public repo, so no credential was sent. If it's private, add a GitHub connection under Knowledge → Sources and re-link it with that credential; if it's public, double-check the owner/name.`,
+          );
+        }
+        if (/could not resolve host|network is unreachable|connection timed out/i.test(out)) {
+          throw new Error(`Network error reaching GitHub while cloning ${p.repoFullName}. Try again in a moment.`);
+        }
+        const m = out.match(/(fatal:[^"\\\n]*|the clone did not complete[^"\\\n]*)/i);
+        throw new Error(m ? m[0].slice(0, 200) : 'The clone did not complete — check the repository name and credential.');
       }
 
+      // The clone exited 0 — only now confirm it so the project shows as
+      // in-workspace. (Generating the command no longer marks it, so a failed
+      // clone can't leave a phantom checkout with a broken "Open shell".)
+      await fetch(`/api/agent-projects/${p.id}/cloned`, {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: box.sessionId }),
+      });
       toastSuccess(tid, 'Cloned', `${p.repoFullName} is in ${box.label}.`);
       setBoxes(loadBoxes());
       refresh();
