@@ -332,6 +332,17 @@ export async function finalizeBotRun(id: string, result: {
   );
 }
 
+/**
+ * Every bot_run currently running — bot firings and marketplace dispatches
+ * alike. The global concurrency ceiling in lib/bot-runner.ts is judged against
+ * this one number, so the two dispatch paths cannot count differently.
+ */
+export async function countRunningRuns(): Promise<number> {
+  if (config.mock.aurora) return 0;
+  const rows = await safeExec(`SELECT COUNT(*)::int AS n FROM bot_runs WHERE status = 'running'`);
+  return toNum(rows[0]?.['n']);
+}
+
 export async function todayStats(botId: string): Promise<{ spendUsd: number; runCount: number }> {
   if (config.mock.aurora || !isUuid(botId)) return { spendUsd: 0, runCount: 0 };
   const rows = await exec(

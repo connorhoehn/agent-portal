@@ -326,3 +326,93 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
     })),
   };
 }
+
+// ─── Governance writes (owner + contribution roles) ─────────────────────────
+
+/** One shape for both governance writes: the route maps status straight onto
+    the response, so every refusal names its own HTTP meaning here. */
+export type GovernanceWriteResult =
+  | { ok: true }
+  | { ok: false; status: 400 | 404 | 503; error: string };
+
+/**
+ * Set (or clear, with null) the one person running an initiative
+ * (projects.owner_id). The person must exist when non-null — a dangling
+ * owner_id would render as "Run by nobody" while blocking reassignment.
+ * The column arrives with the work-items schema, so a pre-migration cluster
+ * answers 503 with the fix, not a bare SQL error.
+ */
+export async function updateProjectOwner(
+  projectId: string,
+  ownerId: string | null,
+): Promise<GovernanceWriteResult> {
+  if (config.mock.aurora) {
+    return { ok: false, status: 503, error: 'project owner updates require Aurora' };
+  }
+
+  if (ownerId != null) {
+    const person = await exec('SELECT id FROM people WHERE id = :pid LIMIT 1', [strParam('pid', ownerId)]);
+    if (person.length === 0) return { ok: false, status: 400, error: 'No such person' };
+  }
+
+  try {
+    const params = [strParam('id', projectId)];
+    const setClause = ownerId == null
+      ? 'owner_id = NULL'
+      : (params.push(strParam('owner', ownerId)), 'owner_id = :owner');
+    const rows = await exec(
+      `UPDATE projects SET ${setClause} WHERE id = :id RETURNING id`,
+      params,
+    );
+    if (rows.length === 0) return { ok: false, status: 404, error: 'Project not found' };
+    // One owner means one 'owner' role chip: demote any other contributor
+    // still carrying it to 'sme' (the portal promotes the new owner's row
+    // itself, but nothing else would ever demote the previous one).
+    if (ownerId != null) {
+      await exec(
+        `UPDATE project_contributions SET role = 'sme'
+          WHERE project_id = :id AND role = 'owner' AND person_id <> :owner`,
+        [strParam('id', projectId), strParam('owner', ownerId)],
+      ).catch(() => { /* advisory roles — never fail the owner write over this */ });
+    }
+    return { ok: true };
+  } catch (err) {
+    const msg = (err as Error).message ?? '';
+    if (/owner_id.*does not exist|column.*does not exist/i.test(msg)) {
+      return {
+        ok: false, status: 503,
+        error: 'projects.owner_id is missing — apply schema/orgiq_work_items_schema.sql first',
+      };
+    }
+    throw err;
+  }
+}
+
+/**
+ * Set (or clear, with null) a contributor's role on an initiative
+ * (project_contributions.role — free text; 'owner' and 'sme' are the reserved
+ * values the marketplace honors). 404 when the person has no contribution row:
+ * role editing annotates an existing attachment, it does not create one.
+ */
+export async function setContributionRole(
+  projectId: string,
+  personId: string,
+  role: string | null,
+): Promise<GovernanceWriteResult> {
+  if (config.mock.aurora) {
+    return { ok: false, status: 503, error: 'contribution role updates require Aurora' };
+  }
+
+  const params = [strParam('pid', projectId), strParam('person', personId)];
+  const setClause = role == null ? 'role = NULL' : (params.push(strParam('role', role)), 'role = :role');
+  const rows = await exec(
+    `UPDATE project_contributions SET ${setClause}
+      WHERE project_id = :pid AND person_id = :person
+      RETURNING person_id`,
+    params,
+  );
+  if (rows.length === 0) {
+    return { ok: false, status: 404, error: 'No contribution row for that person on this project' };
+  }
+  return { ok: true };
+}

@@ -9,7 +9,7 @@
 jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn() }));
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: false } } }));
 
-import { decideFire, renderPrompt, type FireGuardInput } from '../bot-runner.js';
+import { decideFire, renderPrompt, decideConcurrency, botMaxConcurrent, type FireGuardInput } from '../bot-runner.js';
 
 function bot(over: Partial<FireGuardInput> = {}): FireGuardInput {
   return {
@@ -57,6 +57,46 @@ describe('decideFire', () => {
   it('checks the run cap before the budget — the cap is the cost-independent brake', () => {
     const d = decideFire(bot({ todayRunCount: 4, budgetPerDayUsd: 1, todaySpendUsd: 2 }));
     expect(d.kind).toBe('skip');
+  });
+});
+
+describe('decideConcurrency', () => {
+  it('proceeds below the ceiling', () => {
+    expect(decideConcurrency(0, 3)).toEqual({ kind: 'proceed' });
+    expect(decideConcurrency(2, 3)).toEqual({ kind: 'proceed' });
+  });
+
+  it('refuses at the ceiling, naming the limit in the reason the skipped run records', () => {
+    expect(decideConcurrency(3, 3)).toEqual({
+      kind: 'refuse', reason: 'concurrency ceiling (3) reached',
+    });
+  });
+
+  it('refuses above the ceiling — a count that overshot must not slip through', () => {
+    expect(decideConcurrency(7, 3)).toMatchObject({ kind: 'refuse' });
+  });
+
+  it('judges against BOT_MAX_CONCURRENT by default', () => {
+    const prev = process.env['BOT_MAX_CONCURRENT'];
+    try {
+      delete process.env['BOT_MAX_CONCURRENT'];
+      expect(botMaxConcurrent()).toBe(3);
+      expect(decideConcurrency(3)).toMatchObject({ kind: 'refuse' });
+      process.env['BOT_MAX_CONCURRENT'] = '5';
+      expect(botMaxConcurrent()).toBe(5);
+      expect(decideConcurrency(3)).toEqual({ kind: 'proceed' });
+      expect(decideConcurrency(5)).toMatchObject({
+        kind: 'refuse', reason: 'concurrency ceiling (5) reached',
+      });
+      // Unusable values fall back rather than opening the gate wide or shut.
+      process.env['BOT_MAX_CONCURRENT'] = '0';
+      expect(botMaxConcurrent()).toBe(3);
+      process.env['BOT_MAX_CONCURRENT'] = 'many';
+      expect(botMaxConcurrent()).toBe(3);
+    } finally {
+      if (prev === undefined) delete process.env['BOT_MAX_CONCURRENT'];
+      else process.env['BOT_MAX_CONCURRENT'] = prev;
+    }
   });
 });
 
