@@ -47,6 +47,10 @@ interface SessionContextValue {
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
+// A tenant's landing route. Switching account redirects here so the whole app
+// re-drives from the freshly re-minted session cookie.
+const TENANT_HOME: Record<string, string> = { orgiq: '/iq/work', newsroom: '/newsroom/home' };
+
 // Fail closed. When /api/session/me is unreachable we do NOT know who the user
 // is, so we grant nothing: an empty grants map, no switchable roles/tenants.
 // Every RequireRole gate then falls back and every gated nav item hides,
@@ -135,38 +139,48 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     await refresh();
   }, [refresh]);
 
+  // Identity changes go through the BFF (which re-mints the signed cookie) and
+  // then HARD-REDIRECT, so the entire app remounts from the new session —
+  // the AWS assume-role model. This "re-drives the layout" instead of patching
+  // React state in place, which is what made switching feel flaky. A failed
+  // POST (e.g. 403 on an ungranted role) throws before the redirect, so the
+  // caller's error handling still shows the message.
+
   const setRole = useCallback(async (role: string) => {
     await post('/api/session/role', { role });
-    await refresh();
-  }, [refresh]);
+    // Reload the current page under the new role.
+    window.location.assign(window.location.pathname + window.location.search);
+  }, []);
 
   const setTenant = useCallback(async (tenant: Tenant) => {
     await post('/api/session/tenant', { tenant });
-    await refresh();
-  }, [refresh]);
+    window.location.assign(TENANT_HOME[tenant] ?? '/');
+  }, []);
 
-  // Set the account (tenant) and the role together, refreshing once. The role
-  // must be held in the target tenant — the chooser only ever offers held ones.
+  // Set the account (tenant) and role together, then enter that workspace. The
+  // role must be held in the target tenant — the chooser only offers held ones.
   const enterContext = useCallback(async (tenant: Tenant, role: string) => {
     await post('/api/session/tenant', { tenant });
     await post('/api/session/role', { role });
-    await refresh();
-  }, [refresh]);
+    window.location.assign(TENANT_HOME[tenant] ?? '/');
+  }, []);
 
   const login = useCallback(async (userId: string) => {
     await post('/api/session/login', { userId });
-    await refresh();
-  }, [refresh]);
+    window.location.assign('/');
+  }, []);
 
   const masquerade = useCallback(async (userId: string) => {
     await post('/api/session/masquerade', { userId });
-    await refresh();
-  }, [refresh]);
+    // Root re-drives to the masqueraded identity's workspace (chooser is skipped
+    // while masquerading).
+    window.location.assign('/');
+  }, []);
 
   const stopMasquerade = useCallback(async () => {
     await post('/api/session/masquerade/stop', {});
-    await refresh();
-  }, [refresh]);
+    window.location.assign('/');
+  }, []);
 
   const listUsers = useCallback(async (): Promise<DirectoryUser[]> => {
     const res = await fetch('/api/session/users', { credentials: 'include' });

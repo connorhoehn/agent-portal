@@ -330,9 +330,16 @@ export default function AgentProjectsPage() {
             return (
               <Card key={p.id} padding="none" className="overflow-hidden">
                 <div className="px-3.5 py-2.5 border-b border-border flex items-center gap-2">
-                  <span className="text-[13px] font-semibold font-mono text-text-primary truncate">
+                  <a
+                    href={`https://github.com/${p.repoFullName}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={`Open ${p.repoFullName} on GitHub`}
+                    className="text-[13px] font-semibold font-mono text-text-primary truncate hover:text-primary hover:underline inline-flex items-center gap-1"
+                  >
                     {p.repoFullName}
-                  </span>
+                    <span aria-hidden="true" className="text-[10px] text-text-tertiary">↗</span>
+                  </a>
                   {!p.connectionName && (
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-hover text-text-tertiary shrink-0">
                       public

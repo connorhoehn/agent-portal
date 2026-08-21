@@ -22,7 +22,6 @@ const ROLE_HINTS: Record<string, string> = {
 };
 
 const TENANT_LABELS: Record<string, string> = { orgiq: 'OrgIQ', newsroom: 'Newsroom' };
-const TENANT_ROOT: Record<string, string> = { orgiq: '/iq/work', newsroom: '/newsroom/home' };
 
 function roleLabel(role: string): string {
   return ROLE_LABELS[role] ?? role;
@@ -224,7 +223,7 @@ export function MasqueradeMenu() {
                     busy={busy}
                     onClick={() => active
                       ? setOpen(false)
-                      : void run(async () => { await setTenant(t); navigate(TENANT_ROOT[t] ?? '/iq/work'); })}
+                      : void run(() => setTenant(t))}
                     title={tenantLabel(t)}
                     hint={active ? 'current workspace' : 'switch to this workspace'}
                     dotColor="var(--color-info)"
