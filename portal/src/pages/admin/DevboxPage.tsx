@@ -128,6 +128,110 @@ function resultText(content: unknown): string {
   return content == null ? '' : JSON.stringify(content);
 }
 
+// ─── Workspace tree ──────────────────────────────────────────────────────────
+// The glance rail's file view is a collapsible tree, not a flat ls: once a
+// repository is cloned, the top level says almost nothing and the structure is
+// the interesting part. Fed by one bounded `find` (depth 3, noise dirs pruned),
+// so expanding a directory is instant — its contents are already here.
+
+interface WsNode {
+  name: string;
+  path: string;
+  kind: 'dir' | 'file';
+  /** Directory whose contents were deliberately not listed (.git, node_modules…). */
+  pruned?: boolean;
+  children: WsNode[];
+}
+
+/** Parse `find -printf "%y %p"` lines ("d src", "f src/main.py", "p node_modules"). */
+function buildWsTree(lines: string[]): WsNode[] {
+  const roots: WsNode[] = [];
+  const byPath = new Map<string, WsNode>();
+  const ensureDir = (path: string): WsNode | null => {
+    if (!path) return null;
+    const existing = byPath.get(path);
+    if (existing) return existing;
+    const idx = path.lastIndexOf('/');
+    const node: WsNode = { name: path.slice(idx + 1), path, kind: 'dir', children: [] };
+    byPath.set(path, node);
+    const parent = idx >= 0 ? ensureDir(path.slice(0, idx)) : null;
+    (parent ? parent.children : roots).push(node);
+    return node;
+  };
+  for (const line of lines) {
+    const sp = line.indexOf(' ');
+    if (sp < 1) continue;
+    const marker = line.slice(0, sp);
+    let p = line.slice(sp + 1);
+    if (p.startsWith('./')) p = p.slice(2);
+    if (!p || p === '.') continue;
+    if (marker === 'd' || marker === 'p') {
+      const node = ensureDir(p);
+      if (node && marker === 'p') node.pruned = true;
+    } else {
+      const idx = p.lastIndexOf('/');
+      const parent = idx >= 0 ? ensureDir(p.slice(0, idx)) : null;
+      const node: WsNode = { name: p.slice(idx + 1), path: p, kind: 'file', children: [] };
+      byPath.set(p, node);
+      (parent ? parent.children : roots).push(node);
+    }
+  }
+  const sortRec = (nodes: WsNode[]) => {
+    nodes.sort((a, b) =>
+      a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'dir' ? -1 : 1);
+    for (const n of nodes) sortRec(n.children);
+  };
+  sortRec(roots);
+  return roots;
+}
+
+function countRec(node: WsNode): number {
+  return node.children.reduce((n, c) => n + 1 + countRec(c), 0);
+}
+
+function WsTreeRows({ nodes, depth, expanded, onToggle }: {
+  nodes: WsNode[]; depth: number; expanded: Set<string>; onToggle: (path: string) => void;
+}) {
+  return (
+    <>
+      {nodes.map((n) => {
+        const isOpen = expanded.has(n.path);
+        const pad = 4 + depth * 12;
+        if (n.kind === 'file') {
+          return (
+            <div key={n.path} className={`text-[12px] text-text-secondary truncate ${mono}`}
+              style={{ paddingLeft: pad + 12 }} title={n.path}>
+              {n.name}
+            </div>
+          );
+        }
+        return (
+          <div key={n.path}>
+            <div
+              onClick={() => { if (!n.pruned) onToggle(n.path); }}
+              title={n.pruned ? `${n.path} — contents not listed` : n.path}
+              className={`flex items-center gap-1 text-[12px] truncate ${mono} ${
+                n.pruned ? 'text-text-tertiary' : 'text-primary cursor-pointer hover:underline'}`}
+              style={{ paddingLeft: pad }}
+            >
+              <span aria-hidden="true" className="text-[9px] w-2 shrink-0 no-underline">
+                {n.pruned ? '·' : isOpen ? '▾' : '▸'}
+              </span>
+              <span className="truncate">{n.name}/</span>
+              {!n.pruned && !isOpen && n.children.length > 0 && (
+                <span className="text-[10px] text-text-tertiary no-underline shrink-0">{countRec(n)}</span>
+              )}
+            </div>
+            {isOpen && !n.pruned && (
+              <WsTreeRows nodes={n.children} depth={depth + 1} expanded={expanded} onToggle={onToggle} />
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 
 // Herd status → dot color. `waiting` = the last run ended by asking the
 // operator a question; `running` pulses.
@@ -359,10 +463,20 @@ export default function DevboxPage() {
   // runs on, but renders the result as data — a file list and a git summary —
   // rather than as terminal output. The distinction matters: this pane is for
   // glancing, and anything you would want to type into belongs in a real PTY.
-  const [wsFiles, setWsFiles] = useState<string[]>([]);
+  const [wsTree, setWsTree] = useState<WsNode[]>([]);
+  const [wsTruncated, setWsTruncated] = useState(false);
+  const [wsExpanded, setWsExpanded] = useState<Set<string>>(new Set());
   const [wsGit, setWsGit] = useState<string[]>([]);
   const [wsLoading, setWsLoading] = useState(false);
   const [wsError, setWsError] = useState<string | null>(null);
+
+  const toggleWsDir = useCallback((path: string) => {
+    setWsExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path); else next.add(path);
+      return next;
+    });
+  }, []);
 
   const refreshWorkspace = useCallback(async () => {
     const box = activeBox;
@@ -381,13 +495,18 @@ export default function DevboxPage() {
       return lines.map((l) => l.trim()).filter(Boolean);
     };
     try {
-      // -F marks directories with a trailing slash, which is what the list
-      // colours on; -A skips . and .. without hiding dotfiles.
+      // One bounded find feeds the whole tree: %y = type (d/f), noise dirs are
+      // pruned but still printed (marker "p") so they show as unexpandable
+      // stubs rather than silently vanishing. Depth 3 keeps the payload small
+      // while making every expand instant — no follow-up reads.
       const [files, git] = await Promise.all([
-        collect('ls -AF'),
+        collect(
+          String.raw`find . -maxdepth 3 \( -name .git -o -name node_modules -o -name .venv -o -name __pycache__ -o -name dist \) -prune -printf "p %p\n" -o -printf "%y %p\n" 2>/dev/null | head -400`,
+        ),
         collect('git log --oneline -3 2>/dev/null; git status --short 2>/dev/null | head -5'),
       ]);
-      setWsFiles(files);
+      setWsTree(buildWsTree(files));
+      setWsTruncated(files.length >= 400);
       setWsGit(git);
     } catch (err) {
       setWsError((err as Error).message);
@@ -399,7 +518,7 @@ export default function DevboxPage() {
   // Read once per box rather than polling: a workspace changes when something
   // acts on it, and the dock is where you watch that happen live.
   useEffect(() => {
-    setWsFiles([]); setWsGit([]); setWsError(null);
+    setWsTree([]); setWsExpanded(new Set()); setWsGit([]); setWsError(null);
     if (activeBox) void refreshWorkspace();
     // refreshWorkspace is deliberately omitted — including it would re-read on
     // every keystroke that changes unrelated state.
@@ -816,21 +935,17 @@ export default function DevboxPage() {
               </div>
               <div className="px-3 py-2.5">
                 <div className="text-[10px] uppercase tracking-wide text-text-tertiary mb-1.5">Files</div>
-                {wsFiles.length === 0 ? (
+                {wsTree.length === 0 ? (
                   <div className="text-[12px] text-text-tertiary">
                     {wsLoading ? 'reading…' : 'Empty — nothing written yet.'}
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-0.5">
-                    {wsFiles.slice(0, 30).map((f) => (
-                      <span key={f} className={`text-[12px] truncate ${mono} ${f.endsWith('/') ? 'text-primary' : 'text-text-secondary'}`} title={f}>
-                        {f}
-                      </span>
-                    ))}
+                  <div className="flex flex-col gap-0.5 max-h-[46vh] overflow-y-auto">
+                    <WsTreeRows nodes={wsTree} depth={0} expanded={wsExpanded} onToggle={toggleWsDir} />
                   </div>
                 )}
-                {wsFiles.length > 30 && (
-                  <div className="text-[11px] text-text-tertiary mt-1">+{wsFiles.length - 30} more</div>
+                {wsTruncated && (
+                  <div className="text-[11px] text-text-tertiary mt-1">listing capped at 400 entries — open a terminal for the rest</div>
                 )}
               </div>
 
