@@ -11,7 +11,7 @@ permit (
   ],
   resource
 )
-when { principal.role == "member" && principal.tenant == "orgiq" };
+when { principal.role == "member" && principal has tenant && principal.tenant == "orgiq" };
 
 // Members can never approve transactions, even if some future broader permit
 // rule would otherwise grant it. Explicit forbid wins under Cedar evaluation.

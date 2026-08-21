@@ -44,6 +44,11 @@ describe('RETENTION_RULES', () => {
     expect(p).toContain('finished_at < :cutoff::timestamptz');
   });
 
+  it('bot_runs: keeps any run whose run_id still backs a change request — same audit guard as agent_project_runs', () => {
+    const p = rule('bot_runs').predicate;
+    expect(p).toMatch(/NOT EXISTS\s*\(SELECT 1 FROM agent_change_requests c WHERE c\.run_id = bot_runs\.run_id\)/);
+  });
+
   it('agent_project_runs: keeps any run an agent_change_requests row still references', () => {
     const p = rule('agent_project_runs').predicate;
     expect(p).toContain(`status IN ('done','failed')`);

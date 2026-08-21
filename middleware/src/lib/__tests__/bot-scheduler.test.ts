@@ -11,7 +11,7 @@ jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn() }));
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: false } } }));
 jest.mock('../ingest-scheduler.js', () => ({ validateCronExpr: () => true }));
 
-import { shouldCatchUp } from '../bot-scheduler.js';
+import { shouldCatchUp, parseRdsTimestamp } from '../bot-scheduler.js';
 
 const NOW = new Date('2026-08-21T12:00:00Z');
 const hoursAgo = (h: number): string => new Date(NOW.getTime() - h * 3_600_000).toISOString();
@@ -36,5 +36,31 @@ describe('shouldCatchUp', () => {
 
   it('fires on an unparseable timestamp rather than trusting garbage to mean "recent"', () => {
     expect(shouldCatchUp('not-a-date', NOW)).toBe(true);
+  });
+
+  it('reads RDS "YYYY-MM-DD HH:MM:SS" as UTC, not host-local time', () => {
+    // 23h ago in UTC, RDS form. Parsed as local time on a UTC-negative host it
+    // would look >24h stale and double-fire; as UTC it is fresh.
+    expect(shouldCatchUp('2026-08-20 13:00:00', NOW)).toBe(false);
+    expect(shouldCatchUp('2026-08-20 11:00:00', NOW)).toBe(true); // 25h ago
+  });
+});
+
+describe('parseRdsTimestamp', () => {
+  const utc = Date.parse('2026-08-20T13:00:00Z');
+
+  it('pins zoneless RDS timestamps to UTC', () => {
+    expect(parseRdsTimestamp('2026-08-20 13:00:00')).toBe(utc);
+    expect(parseRdsTimestamp('2026-08-20 13:00:00.000')).toBe(utc);
+  });
+
+  it('leaves an explicit zone alone', () => {
+    expect(parseRdsTimestamp('2026-08-20 13:00:00+00')).toBe(utc);
+    expect(parseRdsTimestamp('2026-08-20 08:00:00-05:00')).toBe(utc);
+    expect(parseRdsTimestamp('2026-08-20T13:00:00Z')).toBe(utc);
+  });
+
+  it('still NaNs on garbage so the caller can treat it as never-ran', () => {
+    expect(Number.isFinite(parseRdsTimestamp('not-a-date'))).toBe(false);
   });
 });

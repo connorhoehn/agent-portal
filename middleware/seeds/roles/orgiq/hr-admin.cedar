@@ -29,11 +29,13 @@ permit (
     // Dispatch agent runs against initiatives (bots, marketplace authorize).
     // Held globally by hr-admin and org-leader; the middleware additionally
     // honors initiative-scoped owner/SME membership at the route layer.
-    OrgIQ::Action::"DispatchAgentRun"
+    OrgIQ::Action::"DispatchAgentRun",
+    // Program management — allocating agent spend per initiative.
+    OrgIQ::Action::"ManageBudgets"
   ],
   resource
 )
-when { principal.role == "hr-admin" && principal.tenant == "orgiq" };
+when { principal.role == "hr-admin" && principal has tenant && principal.tenant == "orgiq" };
 
 // HR is explicitly NOT a transaction approver. Separation of duties.
 forbid (

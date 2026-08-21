@@ -15,4 +15,4 @@ permit (
   ],
   resource
 )
-when { principal.role == "reporter" && principal.tenant == "newsroom" };
+when { principal.role == "reporter" && principal has tenant && principal.tenant == "newsroom" };

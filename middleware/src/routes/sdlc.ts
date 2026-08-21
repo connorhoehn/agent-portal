@@ -81,7 +81,7 @@ sdlcRouter.post('/changes/:id/decide', asyncHandler(async (req, res) => {
     throw new ValidationError('decision must be approve or reject');
   }
   const out = await decideChange(String(req.params['id'] ?? ''), body.decision, {
-    by: (req as { session?: { email?: string } }).session?.email ?? null,
+    by: req.session?.sub ?? null,
     note: body.note ?? null,
   });
   if (!out.ok) throw new ValidationError(out.error ?? 'could not decide');

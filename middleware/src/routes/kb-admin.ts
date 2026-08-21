@@ -296,7 +296,7 @@ kbAdminRouter.post('/upload-links', asyncHandler(async (req, res) => {
   const created = await createUploadLink({
     kbSlug: body.kbSlug,
     label: body.label.trim(),
-    createdBy: (req as { session?: { email?: string } }).session?.email ?? null,
+    createdBy: req.session?.sub ?? null,
     ...(body.expiresInHours !== undefined && { expiresInHours: Number(body.expiresInHours) }),
     ...(body.maxFiles !== undefined && { maxFiles: Number(body.maxFiles) }),
     ...(body.maxBytes !== undefined && { maxBytes: Number(body.maxBytes) }),

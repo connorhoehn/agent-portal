@@ -132,6 +132,9 @@ export interface ChangeRequest {
   /** The initiative the codebase serves — lets the UI link a change to it. */
   orgProjectId: string | null;
   orgProjectName: string | null;
+  /** The work item the run behind this change was serving — null for changes
+   *  captured outside the marketplace loop. */
+  workItemId: string | null;
   title: string;
   status: string;
   diff: string | null;
@@ -162,6 +165,7 @@ function rowToChange(r: Record<string, unknown>): ChangeRequest {
     repoFullName: r['repo_full_name'] ? toStr(r['repo_full_name']) : null,
     orgProjectId: r['org_project_id'] ? toStr(r['org_project_id']) : null,
     orgProjectName: r['org_project_name'] ? toStr(r['org_project_name']) : null,
+    workItemId: r['work_item_id'] ? toStr(r['work_item_id']) : null,
     title: toStr(r['title']),
     status: toStr(r['status'], 'captured'),
     diff: r['diff'] ? toStr(r['diff']) : null,
@@ -196,10 +200,14 @@ export async function createChangeRequest(input: {
 }): Promise<ChangeRequest> {
   const truncated = input.diff.length > MAX_DIFF_CHARS;
   const diff = truncated ? input.diff.slice(0, MAX_DIFF_CHARS) : input.diff;
+  // work_item_id is copied from the run at capture time, so the change carries
+  // its marketplace attribution even after the run row is retained away. The
+  // subquery yields NULL when runId is absent (no row matches a NULL id).
   const rows = await exec(
     `INSERT INTO agent_change_requests
-        (project_id, run_id, title, diff, diff_truncated, files, files_changed, model, status)
-     VALUES (:pid::uuid, :rid::uuid, :title, :diff, :trunc, :files::jsonb, :nfiles, :model, 'captured')
+        (project_id, run_id, title, diff, diff_truncated, files, files_changed, model, status, work_item_id)
+     VALUES (:pid::uuid, :rid::uuid, :title, :diff, :trunc, :files::jsonb, :nfiles, :model, 'captured',
+             (SELECT work_item_id FROM agent_project_runs WHERE id = :rid::uuid))
      RETURNING *`,
     [
       s('pid', input.projectId),

@@ -21,7 +21,7 @@ import {
   listMarketplaceRuns, runCostSamples, perPointCostSamples,
   type BotTemplate, type BotTrigger, type BotPatch,
 } from '../providers/bots.js';
-import { fireBot, dispatchWorkItem } from '../lib/bot-runner.js';
+import { fireBot, dispatchWorkItem, decideRunBudget } from '../lib/bot-runner.js';
 import { registerBot, unregisterBot } from '../lib/bot-scheduler.js';
 import { validateCronExpr } from '../lib/ingest-scheduler.js';
 import { selectEstimate } from '../lib/bot-estimate.js';
@@ -38,6 +38,37 @@ const dispatchGate = requireAction('DispatchAgentRun');
 
 const TEMPLATES: readonly BotTemplate[] = ['epic', 'story', 'bug'];
 const TRIGGERS: readonly BotTrigger[] = ['manual', 'cron', 'pr_watch'];
+
+const isUuid = (v: string): boolean =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+
+/**
+ * Shape checks the SQL layer cannot express as a 400: a non-UUID
+ * agentProjectId dies in a ::uuid cast (500), a string budget dies in the
+ * NUMERIC bind, and a fractional or negative maxRunsPerDay corrupts the run
+ * cap. Validated here on create AND patch so garbage never reaches Aurora.
+ */
+function checkFieldTypes(body: {
+  agentProjectId?: string | null; orgProjectId?: string | null;
+  budgetPerRunUsd?: unknown; budgetPerDayUsd?: unknown; maxRunsPerDay?: unknown;
+}): void {
+  if (body.agentProjectId != null && (typeof body.agentProjectId !== 'string' || !isUuid(body.agentProjectId))) {
+    throw new ValidationError('agentProjectId must be a codebase UUID');
+  }
+  if (body.orgProjectId != null && (typeof body.orgProjectId !== 'string' || !body.orgProjectId.trim())) {
+    throw new ValidationError('orgProjectId must be a non-empty project id');
+  }
+  for (const key of ['budgetPerRunUsd', 'budgetPerDayUsd'] as const) {
+    const v = body[key];
+    if (v !== undefined && v !== null && (typeof v !== 'number' || !Number.isFinite(v) || v < 0)) {
+      throw new ValidationError(`${key} must be a non-negative number, or null to clear it`);
+    }
+  }
+  const runs = body.maxRunsPerDay;
+  if (runs !== undefined && (typeof runs !== 'number' || !Number.isInteger(runs) || runs < 0)) {
+    throw new ValidationError('maxRunsPerDay must be an integer >= 0 (0 means the bot never fires)');
+  }
+}
 
 /**
  * The trigger/target/cron rules shared by create and patch. A pr_watch bot
@@ -96,14 +127,34 @@ botsRouter.get('/estimate', readGate, asyncHandler(async (req, res) => {
 botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as {
     workItemId?: string; model?: string; agentProjectId?: string; instruction?: string;
-    estimate?: Record<string, unknown>;
+    estimate?: Record<string, unknown>; budgetPerRunUsd?: unknown; confirmOverBudget?: boolean;
   };
   const workItemId = String(body.workItemId ?? '').trim();
   if (!workItemId) throw new ValidationError('workItemId is required');
   const model = String(body.model ?? '').trim();
   if (!model) throw new ValidationError('model is required');
+  if (body.agentProjectId != null && !isUuid(String(body.agentProjectId))) {
+    throw new ValidationError('agentProjectId must be a codebase UUID');
+  }
   const instruction = String(body.instruction ?? '').trim();
-  const actor = (req as { session?: { email?: string } }).session?.email;
+  const actor = req.session?.sub;
+
+  // Per-run budget, request-supplied (there is no bot here to carry one).
+  // Judged against a FRESH estimate, not the estimate echoed in body.estimate
+  // — the operator's copy may be stale or shaped by the client.
+  if (body.budgetPerRunUsd !== undefined && body.budgetPerRunUsd !== null) {
+    const budget = body.budgetPerRunUsd;
+    if (typeof budget !== 'number' || !Number.isFinite(budget) || budget < 0) {
+      throw new ValidationError('budgetPerRunUsd must be a non-negative number');
+    }
+    const repoSample = body.agentProjectId ? await runCostSamples(model, String(body.agentProjectId)) : null;
+    const fresh = selectEstimate(model, repoSample, await runCostSamples(model, null));
+    const gate = decideRunBudget(budget, fresh.costUsdP75, body.confirmOverBudget === true);
+    if (gate.kind === 'confirm') {
+      res.status(409).json({ error: gate.reason, estimate: fresh });
+      return;
+    }
+  }
 
   const result = await dispatchWorkItem({
     workItemId, model,
@@ -158,6 +209,7 @@ botsRouter.post('/', manageGate, asyncHandler(async (req, res) => {
     trigger: body.trigger as BotTrigger, cronExpr: body.cronExpr ?? null,
     agentProjectId: body.agentProjectId ?? null, orgProjectId: body.orgProjectId ?? null,
   });
+  checkFieldTypes(body);
 
   const bot = await createBot({
     name, template: body.template as BotTemplate, prompt, model,
@@ -168,7 +220,7 @@ botsRouter.post('/', manageGate, asyncHandler(async (req, res) => {
     budgetPerDayUsd: body.budgetPerDayUsd ?? null,
     ...(body.maxRunsPerDay !== undefined ? { maxRunsPerDay: body.maxRunsPerDay } : {}),
     ...(body.requiresReview !== undefined ? { requiresReview: body.requiresReview } : {}),
-    createdBy: (req as { session?: { email?: string } }).session?.email ?? null,
+    createdBy: req.session?.sub ?? null,
   });
   if (!bot) { res.status(503).json({ error: 'bots require Aurora' }); return; }
   registerBot(bot);
@@ -221,6 +273,7 @@ botsRouter.patch('/:id', manageGate, asyncHandler(async (req, res) => {
     agentProjectId: patch.agentProjectId !== undefined ? (patch.agentProjectId ?? null) : existing.agentProjectId,
     orgProjectId: patch.orgProjectId !== undefined ? (patch.orgProjectId ?? null) : existing.orgProjectId,
   });
+  checkFieldTypes(patch);
 
   const bot = await updateBot(id, patch);
   if (!bot) throw new NotFoundError('No such bot');
@@ -241,7 +294,24 @@ botsRouter.delete('/:id', manageGate, asyncHandler(async (req, res) => {
 
 botsRouter.post('/:id/run', manageGate, asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
-  const instruction = String((req.body as { instruction?: string } ?? {}).instruction ?? '').trim();
+  const body = (req.body ?? {}) as { instruction?: string; confirmOverBudget?: boolean };
+  const instruction = String(body.instruction ?? '').trim();
+
+  // The per-run budget gate: a bot carrying budgetPerRunUsd is judged against
+  // a fresh estimate (the bot's model, its repo's history) before dispatch.
+  // Over budget demands an explicit confirmOverBudget — 409 with the estimate
+  // attached so the operator sees what they are confirming.
+  const bot = await getBot(id);
+  if (bot?.budgetPerRunUsd != null) {
+    const repoSample = bot.agentProjectId ? await runCostSamples(bot.model, bot.agentProjectId) : null;
+    const fresh = selectEstimate(bot.model, repoSample, await runCostSamples(bot.model, null));
+    const gate = decideRunBudget(bot.budgetPerRunUsd, fresh.costUsdP75, body.confirmOverBudget === true);
+    if (gate.kind === 'confirm') {
+      res.status(409).json({ error: gate.reason, estimate: fresh });
+      return;
+    }
+  }
+
   const result = await fireBot(id, {
     trigger: 'manual', ...(instruction ? { instruction } : {}),
   });

@@ -73,9 +73,12 @@ async function safeExec(sql: string, params: SqlParameter[] = []): Promise<Recor
   try {
     return await exec(sql, params);
   } catch (err: unknown) {
-    // Treat "table does not exist" / "relation does not exist" errors as empty
+    // Swallow ONLY the missing-table error (pre-schema cluster → empty reads).
+    // The old broad match (any 'does not exist', any mention of 'work_items')
+    // also ate constraint violations, so a failed INSERT read as an empty
+    // result and dbCreateWorkItem fabricated a 201 for a row that never landed.
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('does not exist') || msg.includes('relation') || msg.includes('work_items')) {
+    if (/relation .* does not exist/i.test(msg)) {
       return [];
     }
     throw err;

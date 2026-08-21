@@ -97,7 +97,9 @@ function rowToBot(r: Record<string, unknown>): Bot {
     enabled: toBool(r['enabled']),
     budgetPerRunUsd: r['budget_per_run_usd'] == null ? null : toNum(r['budget_per_run_usd']),
     budgetPerDayUsd: r['budget_per_day_usd'] == null ? null : toNum(r['budget_per_day_usd']),
-    maxRunsPerDay: toNum(r['max_runs_per_day']) || 4,
+    // Null-coalesce, not || — 0 is a real value meaning "never fires"; the
+    // default of 4 applies only when the column itself is NULL.
+    maxRunsPerDay: r['max_runs_per_day'] == null ? 4 : toNum(r['max_runs_per_day']),
     requiresReview: toBool(r['requires_review']),
     createdBy: r['created_by'] ? toStr(r['created_by']) : null,
     createdAt: toStr(r['created_at']),
@@ -135,7 +137,7 @@ const BOT_SELECT = `
     LEFT JOIN projects p ON p.id = b.org_project_id
     LEFT JOIN LATERAL (
       SELECT COALESCE(SUM(r.cost_usd), 0)::float8 AS today_spend_usd,
-             COUNT(*)::int AS today_run_count
+             COUNT(*) FILTER (WHERE r.status <> 'skipped')::int AS today_run_count
         FROM bot_runs r
        WHERE r.bot_id = b.id AND r.started_at >= date_trunc('day', NOW())
     ) t ON TRUE`;
@@ -293,20 +295,40 @@ export async function createBotRun(input: {
    *  never dispatched (skipped by a guard, failed before dispatch). */
   status?: 'running' | 'failed' | 'skipped';
   outcome?: Record<string, unknown>;
+  /** For 'running' inserts: the concurrency ceiling, enforced atomically in
+   *  the INSERT itself (INSERT ... SELECT guarded on the live count) so two
+   *  interleaved dispatches cannot both pass a read-then-write check. A null
+   *  return with ceiling set means the ceiling refused the row. */
+  ceiling?: number;
 }): Promise<BotRun | null> {
   if (config.mock.aurora) return null;
   const status = input.status ?? 'running';
+  const params: SqlParameter[] = [
+    maybe('bid', input.botId), s('trigger', input.trigger),
+    maybe('run', input.runId ?? null), maybe('job', input.jobId ?? null),
+    maybe('work_item', input.workItemId ?? null), s('status', status),
+    s('outcome', JSON.stringify(input.outcome ?? {})),
+  ];
+  if (status === 'running' && input.ceiling != null) {
+    // The TOCTOU-safe form: the count and the insert are one statement, so the
+    // database — not a racy pre-check — is what holds the ceiling. Same 24h
+    // window as countRunningRuns, so a stuck ancient row cannot wedge it shut.
+    const rows = await exec(
+      `INSERT INTO bot_runs (bot_id, trigger, run_id, job_id, work_item_id, status, outcome, finished_at)
+       SELECT :bid::uuid, :trigger, :run::uuid, :job, :work_item, :status, :outcome::jsonb, NULL
+        WHERE (SELECT COUNT(*) FROM bot_runs
+                WHERE status = 'running' AND started_at > NOW() - INTERVAL '24 hours') < :ceiling
+       RETURNING *`,
+      [...params, int('ceiling', input.ceiling)],
+    );
+    return rows[0] ? rowToRun(rows[0]) : null;
+  }
   const rows = await exec(
     `INSERT INTO bot_runs (bot_id, trigger, run_id, job_id, work_item_id, status, outcome, finished_at)
      VALUES (:bid::uuid, :trigger, :run::uuid, :job, :work_item, :status, :outcome::jsonb,
              CASE WHEN :status = 'running' THEN NULL ELSE NOW() END)
      RETURNING *`,
-    [
-      maybe('bid', input.botId), s('trigger', input.trigger),
-      maybe('run', input.runId ?? null), maybe('job', input.jobId ?? null),
-      maybe('work_item', input.workItemId ?? null), s('status', status),
-      s('outcome', JSON.stringify(input.outcome ?? {})),
-    ],
+    params,
   );
   return rows[0] ? rowToRun(rows[0]) : null;
 }
@@ -338,15 +360,23 @@ export async function finalizeBotRun(id: string, result: {
  * this one number, so the two dispatch paths cannot count differently.
  */
 export async function countRunningRuns(): Promise<number> {
+  // Rows older than 24h are ignored as a defence in depth: a bot_run stuck
+  // 'running' (crashed reconcile, vanished linkage) must not eat a concurrency
+  // slot forever. The boot sweep and reconcile arms fail such rows properly;
+  // this window just caps the damage until they do.
   if (config.mock.aurora) return 0;
-  const rows = await safeExec(`SELECT COUNT(*)::int AS n FROM bot_runs WHERE status = 'running'`);
+  const rows = await safeExec(
+    `SELECT COUNT(*)::int AS n FROM bot_runs
+      WHERE status = 'running' AND started_at > NOW() - INTERVAL '24 hours'`,
+  );
   return toNum(rows[0]?.['n']);
 }
 
 export async function todayStats(botId: string): Promise<{ spendUsd: number; runCount: number }> {
   if (config.mock.aurora || !isUuid(botId)) return { spendUsd: 0, runCount: 0 };
   const rows = await exec(
-    `SELECT COALESCE(SUM(cost_usd), 0)::float8 AS spend, COUNT(*)::int AS runs
+    `SELECT COALESCE(SUM(cost_usd), 0)::float8 AS spend,
+            COUNT(*) FILTER (WHERE status <> 'skipped')::int AS runs
        FROM bot_runs
       WHERE bot_id = :bid::uuid AND started_at >= date_trunc('day', NOW())`,
     [s('bid', botId)],

@@ -13,11 +13,13 @@ permit (
     // Dispatch agent runs against initiatives (bots, marketplace authorize).
     // Leaders direct agent work across the org the same way they approve the
     // spend it represents.
-    OrgIQ::Action::"DispatchAgentRun"
+    OrgIQ::Action::"DispatchAgentRun",
+    // Program management — allocating agent spend per initiative.
+    OrgIQ::Action::"ManageBudgets"
   ],
   resource
 )
-when { principal.role == "org-leader" && principal.tenant == "orgiq" };
+when { principal.role == "org-leader" && principal has tenant && principal.tenant == "orgiq" };
 
 // Org leaders are the only role allowed to approve human-in-the-loop
 // transaction requests, and only when the resource amount exceeds the
@@ -28,4 +30,4 @@ permit (
   action == OrgIQ::Action::"ApproveTransaction",
   resource
 )
-when { principal.role == "org-leader" && principal.tenant == "orgiq" && resource has amount && resource.amount > 10000 };
+when { principal.role == "org-leader" && principal has tenant && principal.tenant == "orgiq" && resource has amount && resource.amount > 10000 };

@@ -71,6 +71,12 @@ export type FireDecision =
 export function decideFire(bot: FireGuardInput): FireDecision {
   if (!bot.enabled) return { kind: 'refuse', reason: 'bot is disabled' };
   if (bot.pausedReason) return { kind: 'refuse', reason: `bot is paused: ${bot.pausedReason}` };
+  // 0 is "never fires" — a deliberate off-switch, not a cap that was reached
+  // today. Refuse (no run row) rather than skip: there was no live trigger
+  // being braked, the bot is configured to never run.
+  if (bot.maxRunsPerDay === 0) {
+    return { kind: 'refuse', reason: 'maxRunsPerDay is 0 — this bot never fires' };
+  }
   if (bot.todayRunCount >= bot.maxRunsPerDay) {
     return { kind: 'skip', reason: `max runs per day reached (${bot.maxRunsPerDay})` };
   }
@@ -80,9 +86,22 @@ export function decideFire(bot: FireGuardInput): FireDecision {
   return { kind: 'fire' };
 }
 
+/**
+ * The pipeline contract appended to EVERY dispatched mission. Capture diffs
+ * the working tree (commit-per-capture commits on the agent's behalf), so an
+ * agent that commits its own work leaves a clean tree and silently escapes
+ * governance — a live audit caught exactly that: a successful run, zero
+ * change captured. The contract line is the platform's, not the mission
+ * author's, so it cannot be forgotten.
+ */
+const PIPELINE_CONTRACT =
+  'Leave your changes UNCOMMITTED in the working tree — do not run git commit. ' +
+  'The platform captures your diff, sends it through independent review and policy gates, and commits it for you.';
+
 /** The written mission plus the operator's one-shot steering, when given. */
 export function renderPrompt(promptTemplate: string, instruction?: string): string {
-  return instruction ? `${promptTemplate}\n\nFor this run specifically: ${instruction}` : promptTemplate;
+  const mission = instruction ? `${promptTemplate}\n\nFor this run specifically: ${instruction}` : promptTemplate;
+  return `${mission}\n\n${PIPELINE_CONTRACT}`;
 }
 
 // ─── The concurrency ceiling, pure ────────────────────────────────────────────
@@ -109,8 +128,36 @@ export function decideConcurrency(runningCount: number, ceiling = botMaxConcurre
 }
 
 /** The guard both dispatch paths share: count what runs, judge the ceiling. */
-async function checkConcurrency(): Promise<ConcurrencyDecision> {
+export async function checkConcurrency(): Promise<ConcurrencyDecision> {
   return decideConcurrency(await countRunningRuns());
+}
+
+// ─── The per-run budget gate, pure ────────────────────────────────────────────
+
+export type RunBudgetDecision =
+  | { kind: 'proceed' }
+  /** The estimate exceeds the per-run budget and the operator has not
+   *  confirmed — the route answers 409 with the estimate attached. */
+  | { kind: 'confirm'; reason: string };
+
+/**
+ * Whether a firing may proceed against its per-run budget. The budget is a
+ * soft cap: an estimate's p75 over it demands an explicit confirmOverBudget
+ * from the operator rather than refusing outright — the estimate is a
+ * forecast, not a bill.
+ */
+export function decideRunBudget(
+  budgetPerRunUsd: number | null | undefined,
+  costUsdP75: number,
+  confirmed: boolean,
+): RunBudgetDecision {
+  if (budgetPerRunUsd == null || costUsdP75 <= budgetPerRunUsd || confirmed) {
+    return { kind: 'proceed' };
+  }
+  return {
+    kind: 'confirm',
+    reason: `estimated p75 cost $${costUsdP75.toFixed(2)} exceeds the per-run budget $${budgetPerRunUsd.toFixed(2)} — pass confirmOverBudget to dispatch anyway`,
+  };
 }
 
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
@@ -139,7 +186,6 @@ async function ensureWorkspace(project: AgentProject): Promise<
   // Keep the project's session id when it satisfies the runtime's ≥33-char
   // rule — the workspace may still hold the checkout — else mint a fresh one.
   const sessionId = normalizeRuntimeSessionId(project.sessionId);
-  const box = registerBox({ sessionId });
 
   const { command, redacted } = await buildCloneCommand(project);
   let output = '';
@@ -154,6 +200,11 @@ async function ensureWorkspace(project: AgentProject): Promise<
     return { ok: false, error: `clone failed: ${line.trim()}` };
   }
 
+  // Register the box only once the clone succeeded. Registering first would
+  // leave a live-looking fleet entry for a workspace with no checkout, and the
+  // sessionId+registry check at the top would then trust it on the next fire —
+  // a failed clone poisoning every later dispatch.
+  const box = registerBox({ sessionId });
   await markCloned(project.id, sessionId);
   return { ok: true, sessionId, boxId: box.id };
 }
@@ -192,6 +243,12 @@ export async function fireBot(botId: string, opts: {
 
   const prompt = renderPrompt(bot.prompt, opts.instruction);
 
+  // last_run_at is recorded BEFORE dispatch, not after: the boot catch-up and
+  // a cron firing can interleave, and marking first means the second of the
+  // two sees a fresh last_run_at (and today's run count) instead of both
+  // firing. A dispatch that then fails still shows a truthful "last fired".
+  await markBotRan(bot.id);
+
   if (bot.agentProjectId) {
     const project = await getAgentProject(bot.agentProjectId);
     if (!project) return { ok: false, reason: 'the bot\'s target codebase no longer exists' };
@@ -218,9 +275,9 @@ export async function fireBot(botId: string, opts: {
 
     const run = await createBotRun({
       botId: bot.id, trigger: opts.trigger, runId: started.runId,
+      ceiling: botMaxConcurrent(),
       outcome: { sessionId: ws.sessionId, boxId: ws.boxId },
     });
-    await markBotRan(bot.id);
     if (!run) return { ok: false, reason: 'could not record the bot run' };
     return { ok: true, run };
   }
@@ -228,13 +285,16 @@ export async function fireBot(botId: string, opts: {
   // Initiative-target (or untargeted) bot: queue work for the fleet dispatcher
   // rather than a repo-bound governed run. requiresReview rides the payload —
   // the dispatcher parks the artifact at awaiting_review unless it is false.
+  // The bot's model rides too, else the dispatcher falls back to its default
+  // and the bot's configured model is silently ignored.
   const job = await enqueueJob({
     kind: 'devbox:task', title: bot.name,
-    payload: { prompt, requiresReview: bot.requiresReview, botId: bot.id },
+    payload: { prompt, requiresReview: bot.requiresReview, botId: bot.id, model: bot.model },
   });
   if (!job) return { ok: false, reason: 'could not enqueue the job' };
-  const run = await createBotRun({ botId: bot.id, trigger: opts.trigger, jobId: job.id });
-  await markBotRan(bot.id);
+  const run = await createBotRun({
+    botId: bot.id, trigger: opts.trigger, jobId: job.id, ceiling: botMaxConcurrent(),
+  });
   if (!run) return { ok: false, reason: 'could not record the bot run' };
   return { ok: true, run };
 }
@@ -304,7 +364,7 @@ export function renderWorkItemPrompt(
   if (item.description) parts.push(item.description);
   if (item.labels.length > 0) parts.push(`Labels: ${item.labels.join(', ')}`);
   if (instruction) parts.push(`For this run specifically: ${instruction}`);
-  parts.push('Commit your work; it will be captured, reviewed and gated automatically.');
+  parts.push(PIPELINE_CONTRACT);
   return parts.join('\n\n');
 }
 
@@ -356,14 +416,36 @@ export async function dispatchWorkItem(input: {
   const project = await getAgentProject(decision.agentProjectId);
   if (!project) return { ok: false, status: 404, error: 'the chosen codebase no longer exists' };
 
+  // Claim the work item BEFORE any dispatch side effect, atomically: only an
+  // 'open' item flips to in_progress, and no returned row means another
+  // dispatch got there first — the read-then-dispatch race two interleaved
+  // authorizations used to win together. (A failed run hands the item back to
+  // 'open' via reconcile, so retries re-claim cleanly.)
+  const claimed = await exec(
+    `UPDATE work_items SET status = 'in_progress', updated_at = NOW()
+      WHERE id = :wid AND status IN ('open') RETURNING id`,
+    [s('wid', item.id)],
+  );
+  if (claimed.length === 0) {
+    return { ok: false, status: 409, error: 'this work item is already being worked' };
+  }
+  const revertClaim = async (): Promise<void> => {
+    await exec(
+      `UPDATE work_items SET status = 'open', updated_at = NOW()
+        WHERE id = :wid AND status = 'in_progress'`,
+      [s('wid', item.id)],
+    ).catch((err: unknown) =>
+      console.warn(`[bots] could not revert claim on ${item.id}:`, (err as Error).message));
+  };
+
   const ws = await ensureWorkspace(project);
-  if (!ws.ok) return { ok: false, status: 503, error: ws.error };
+  if (!ws.ok) { await revertClaim(); return { ok: false, status: 503, error: ws.error }; }
 
   const prompt = renderWorkItemPrompt(item, input.instruction);
   const started = await dispatchGovernedRun({
     project, prompt, model: input.model, sessionId: ws.sessionId,
   });
-  if (!started.ok) return { ok: false, status: 503, error: started.error };
+  if (!started.ok) { await revertClaim(); return { ok: false, status: 503, error: started.error }; }
 
   // Bind the governed run to its work item. Direct SQL on purpose — the
   // sdlc-pipeline API takes no work-item concept and stays that way; the
@@ -375,17 +457,17 @@ export async function dispatchWorkItem(input: {
 
   const run = await createBotRun({
     botId: null, trigger: 'marketplace', runId: started.runId, workItemId: item.id,
+    ceiling: botMaxConcurrent(),
     outcome: {
       sessionId: ws.sessionId, boxId: ws.boxId,
       ...(input.actor ? { actor: input.actor } : {}),
       ...(input.estimate ? { estimate: input.estimate } : {}),
     },
   });
-  if (!run) return { ok: false, status: 503, error: 'could not record the marketplace run' };
-
-  // The board's "agent working" state. Through the provider so the mock path
-  // and updated_at behave the same as a hand-driven status change.
-  await updateWorkItem(item.id, { status: 'in_progress' });
+  if (!run) {
+    await revertClaim();
+    return { ok: false, status: 503, error: 'could not record the marketplace run' };
+  }
   return { ok: true, run };
 }
 
@@ -406,11 +488,15 @@ export async function reconcileBotRuns(): Promise<{ settled: number }> {
 
   // Governed runs. The lateral takes the newest change request for the run —
   // a re-review appends reviews, not changes, so one run has at most one.
+  // The bot's per-run budget joins in so the soft cap can be judged against
+  // the actual cost the moment it is known.
   const runBacked = await exec(
     `SELECT br.id, br.work_item_id, r.status AS run_status, r.cost_usd::float8 AS cost_usd,
-            r.files_changed, r.error AS run_error, cr.change_id, cr.pr_url
+            r.files_changed, r.error AS run_error, cr.change_id, cr.pr_url,
+            b.budget_per_run_usd::float8 AS budget_per_run_usd
        FROM bot_runs br
        JOIN agent_project_runs r ON r.id = br.run_id
+       LEFT JOIN bots b ON b.id = br.bot_id
        LEFT JOIN LATERAL (
          SELECT c.id AS change_id, c.pr_url
            FROM agent_change_requests c
@@ -421,39 +507,53 @@ export async function reconcileBotRuns(): Promise<{ settled: number }> {
         AND r.status IN ('done','failed')`,
   );
   for (const row of runBacked) {
-    const done = toStr(row['run_status']) === 'done';
-    await finalizeBotRun(toStr(row['id']), {
-      status: done ? 'done' : 'failed',
-      costUsd: row['cost_usd'] == null ? null : Number(row['cost_usd']),
-      outcome: {
-        ...(row['change_id'] ? { changeId: toStr(row['change_id']) } : {}),
-        ...(row['pr_url'] ? { prUrl: toStr(row['pr_url']) } : {}),
-        ...(row['files_changed'] == null ? {} : { filesChanged: Number(row['files_changed']) }),
-      },
-    });
-    settled++;
+    // Per-row: one bad row (deleted work item, transient Data API error) must
+    // not strand every other finished run at 'running'.
+    try {
+      const done = toStr(row['run_status']) === 'done';
+      const costUsd = row['cost_usd'] == null ? null : Number(row['cost_usd']);
 
-    // A run bound to a work item settles the work item too — the marketplace
-    // loop: change captured → in_review (the Changes queue owns it now); a PR
-    // already delivered rides along; a failure hands the item back to 'open'
-    // with a visible system comment, never a silent stall in in_progress.
-    const workItemId = row['work_item_id'] ? toStr(row['work_item_id']) : null;
-    if (workItemId) {
-      if (done && row['change_id']) {
-        await updateWorkItem(workItemId, {
-          status: 'in_review',
-          ...(row['pr_url'] ? { prUrl: toStr(row['pr_url']), prStatus: 'open' as const } : {}),
-        });
-      } else if (!done) {
-        await updateWorkItem(workItemId, { status: 'open' });
-        const why = row['run_error'] ? toStr(row['run_error']) : 'the run failed without a recorded error';
-        await addWorkItemComment(workItemId, `Marketplace run failed: ${why}`, { isSystem: true });
-      } else {
-        // Done but nothing captured: the agent committed no change. Back to
-        // open with a comment, else the item is stuck in_progress forever.
-        await updateWorkItem(workItemId, { status: 'open' });
-        await addWorkItemComment(workItemId, 'Marketplace run completed without a captured change.', { isSystem: true });
+      // Settle the bound work item FIRST, finalize the bot_run LAST: the
+      // br.status='running' filter is what re-selects this row next tick, so
+      // finalizing first and then failing the settle would strand the item in
+      // in_progress with nothing left to retry it.
+      const workItemId = row['work_item_id'] ? toStr(row['work_item_id']) : null;
+      if (workItemId) {
+        if (done && row['change_id']) {
+          await updateWorkItem(workItemId, {
+            status: 'in_review',
+            ...(row['pr_url'] ? { prUrl: toStr(row['pr_url']), prStatus: 'open' as const } : {}),
+          });
+        } else if (!done) {
+          await updateWorkItem(workItemId, { status: 'open' });
+          const why = row['run_error'] ? toStr(row['run_error']) : 'the run failed without a recorded error';
+          await addWorkItemComment(workItemId, `Marketplace run failed: ${why}`, { isSystem: true });
+        } else {
+          // Done but nothing captured: the agent committed no change. Back to
+          // open with a comment, else the item is stuck in_progress forever.
+          await updateWorkItem(workItemId, { status: 'open' });
+          await addWorkItemComment(workItemId, 'Marketplace run completed without a captured change.', { isSystem: true });
+        }
       }
+
+      // The per-run budget is a soft cap: exceeding it flags the run for the
+      // Outcomes tab rather than clawing anything back — the money is spent.
+      const budget = row['budget_per_run_usd'] == null ? null : Number(row['budget_per_run_usd']);
+      const overRunBudget = budget != null && costUsd != null && costUsd > budget;
+
+      await finalizeBotRun(toStr(row['id']), {
+        status: done ? 'done' : 'failed',
+        costUsd,
+        outcome: {
+          ...(row['change_id'] ? { changeId: toStr(row['change_id']) } : {}),
+          ...(row['pr_url'] ? { prUrl: toStr(row['pr_url']) } : {}),
+          ...(row['files_changed'] == null ? {} : { filesChanged: Number(row['files_changed']) }),
+          ...(overRunBudget ? { overRunBudget: true } : {}),
+        },
+      });
+      settled++;
+    } catch (err) {
+      console.warn(`[bots] reconcile failed for bot_run ${toStr(row['id'])}:`, (err as Error).message);
     }
   }
 
@@ -461,21 +561,73 @@ export async function reconcileBotRuns(): Promise<{ settled: number }> {
   // finished; what remains is the human decision, which lives on the Work
   // surface. cancelled is terminal too, else the bot_run runs forever.
   const jobBacked = await exec(
-    `SELECT br.id, j.status AS job_status, (j.result->>'costUsd')::float8 AS cost_usd
+    `SELECT br.id, j.status AS job_status, (j.result->>'costUsd')::float8 AS cost_usd,
+            b.budget_per_run_usd::float8 AS budget_per_run_usd
        FROM bot_runs br
        JOIN agent_jobs j ON j.id = br.job_id
+       LEFT JOIN bots b ON b.id = br.bot_id
       WHERE br.status = 'running' AND br.job_id IS NOT NULL
         AND j.status IN ('done','awaiting_review','failed','cancelled')`,
   );
   for (const row of jobBacked) {
-    const jobStatus = toStr(row['job_status']);
-    await finalizeBotRun(toStr(row['id']), {
-      status: jobStatus === 'done' || jobStatus === 'awaiting_review' ? 'done' : 'failed',
-      costUsd: row['cost_usd'] == null ? null : Number(row['cost_usd']),
-      outcome: jobStatus === 'awaiting_review' ? { awaitingReview: true } : {},
-    });
-    settled++;
+    try {
+      const jobStatus = toStr(row['job_status']);
+      const costUsd = row['cost_usd'] == null ? null : Number(row['cost_usd']);
+      const budget = row['budget_per_run_usd'] == null ? null : Number(row['budget_per_run_usd']);
+      const overRunBudget = budget != null && costUsd != null && costUsd > budget;
+      await finalizeBotRun(toStr(row['id']), {
+        status: jobStatus === 'done' || jobStatus === 'awaiting_review' ? 'done' : 'failed',
+        costUsd,
+        outcome: {
+          ...(jobStatus === 'awaiting_review' ? { awaitingReview: true } : {}),
+          ...(overRunBudget ? { overRunBudget: true } : {}),
+        },
+      });
+      settled++;
+    } catch (err) {
+      console.warn(`[bots] reconcile failed for bot_run ${toStr(row['id'])}:`, (err as Error).message);
+    }
   }
 
+  // Vanished linkage: a bot_run still 'running' whose run_id AND job_id are
+  // both NULL can never be settled by the arms above — the linked row was
+  // deleted (ON DELETE SET NULL) out from under it. Fail it, else it eats a
+  // concurrency slot until the 24h count window ages it out.
+  const vanished = await exec(
+    `UPDATE bot_runs
+        SET status = 'failed', finished_at = NOW(),
+            outcome = COALESCE(outcome, '{}'::jsonb) || '{"reason":"linked run vanished"}'::jsonb
+      WHERE status = 'running' AND run_id IS NULL AND job_id IS NULL
+      RETURNING id`,
+  );
+  settled += vanished.length;
+
   return { settled };
+}
+
+// ─── Boot sweep ───────────────────────────────────────────────────────────────
+
+/** When this process started — the boot sweep's cutoff. A run 'running' from
+ *  before this instant belongs to a previous process and cannot still exist:
+ *  governed runs execute in-process and do not survive a restart. */
+const PROCESS_START_ISO = new Date().toISOString();
+
+/**
+ * Fail agent_project_runs left 'running' by a previous process. Called once
+ * from the scheduler's init path; the regular reconcile arms then settle the
+ * bot_runs (and work items) linked to the newly-failed runs.
+ */
+export async function sweepOrphanedRuns(): Promise<{ failed: number }> {
+  if (config.mock.aurora) return { failed: 0 };
+  const rows = await exec(
+    `UPDATE agent_project_runs
+        SET status = 'failed', error = 'middleware restarted mid-run', finished_at = NOW()
+      WHERE status = 'running' AND started_at < :boot::timestamptz
+      RETURNING id`,
+    [s('boot', PROCESS_START_ISO)],
+  );
+  if (rows.length > 0) {
+    console.log(`[bots] boot sweep failed ${rows.length} run(s) orphaned by a restart`);
+  }
+  return { failed: rows.length };
 }
