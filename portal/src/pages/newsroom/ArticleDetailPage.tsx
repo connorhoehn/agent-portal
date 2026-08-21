@@ -1,6 +1,4 @@
-// TODO(N3): wire post-merge —
-//   1. portal/src/App.tsx: under <Route path="newsroom">, add:
-//      <Route path="articles/:id" element={<Page element={<ArticleDetailPage />} />} />
+// One article in depth — body, entities, sources, and its story cluster.
 
 import type { CSSProperties } from 'react';
 import { Link, useParams } from 'react-router';

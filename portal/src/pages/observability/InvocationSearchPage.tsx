@@ -9,7 +9,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, FormEvent } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import {
   Card,
   Table,
@@ -218,6 +218,14 @@ function InvocationSearchPage() {
         applied
           ? `30s refresh · ${rows.length} loaded of ${totalCount}`
           : 'Filter to triage by prompt / agent / score'
+      }
+      actions={
+        <Link
+          to="/admin/observability/invocations"
+          style={{ fontSize: 12, color: 'var(--color-primary)', textDecoration: 'none' }}
+        >
+          ← Recent activity
+        </Link>
       }
     >
       <Card padding="md">

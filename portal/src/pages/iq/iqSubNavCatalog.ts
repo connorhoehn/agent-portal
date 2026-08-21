@@ -10,11 +10,9 @@
 // full of inert filters reads as broken software, and hid which controls are
 // real. When a page learns to read a param, add its item back here.
 
-import { useMemo } from 'react';
 import type { SubNavItem } from '@connorhoehnslalom/ui-components/shared';
 import { useCanaryNavItems } from '../../components/canary/canaryNavItems';
 import { useCanaryStore } from '../../components/canary/canaryStore';
-import { useFetch } from '../../hooks/useFetch';
 
 export interface IqSubNavSpec {
   title: string;
@@ -34,33 +32,20 @@ const ARCHITECTURE_ITEMS: SubNavItem[] = [
   { path: 'agents?window=7d',  label: '7 days',  hint: 'Trend view',              group: 'Window' },
 ];
 
-// Static items without History — History group is built dynamically from sessions.
-const SEARCH_STATIC_ITEMS: SubNavItem[] = [
-  // Point at the live Ask surface (/iq/invoke) — /iq/search only redirects here
-  // and the redirect dropped the ?prompt= param, so these did nothing before.
-  { path: '/iq/invoke?prompt=who-knows',     label: 'Who knows X?',         hint: 'Deepest expertise',     group: 'Suggested' },
-  { path: '/iq/invoke?prompt=decisions',     label: 'Decisions about X',    hint: 'Recent platform calls', group: 'Suggested' },
-  { path: '/iq/invoke?prompt=who-works-on',  label: 'Who works on Y',       hint: 'Contributors + roles',  group: 'Suggested' },
-  { path: '/iq/invoke?prompt=compare',       label: 'Compare two people',   hint: 'Side-by-side profiles', group: 'Suggested' },
-];
-
 // Invoke reads ?session= (deep-links from Memory/Sessions) but none of the
 // old focus/prompt params — its own session sidebar covers navigation.
 const SCORES_ITEMS: SubNavItem[] = [
   { path: '/iq/scores',          label: 'Overview',  hint: 'Ranked influence + expertise', group: 'Scores' },
   { path: '/iq/scores/cohorts',  label: 'Cohorts',   hint: 'Distribution by team',         group: 'Scores' },
   { path: '/iq/scores/compare',  label: 'Compare',   hint: 'Two-person side-by-side',      group: 'Scores' },
-  { path: '/iq/explore',         label: 'Graph',     hint: 'The org as a network',         group: 'Other views' },
-  { path: '/iq/projects',        label: 'Projects',  hint: 'Contributions + status',       group: 'Other views' },
+  { path: '/iq/explore',         label: 'Graph',       hint: 'The org as a network',       group: 'Other views' },
+  { path: '/iq/projects',        label: 'Initiatives', hint: 'Contributions + status',     group: 'Other views' },
 ];
 
-// Explore is the "look at the org" surface, so the other org views hang off
-// it. Scores and Projects lost their top-level nav slot in the five-job
-// collapse; they are real pages with real data, so they get a home here
-// rather than surviving only in the command palette.
+// Explore is the "look at the org" surface, so the other org views hang off it.
 const EXPLORE_ITEMS: SubNavItem[] = [
-  { path: '/iq/scores',   label: 'Scores',   hint: 'Ranked influence + expertise', group: 'Other views' },
-  { path: '/iq/projects', label: 'Projects', hint: 'Contributions + status',       group: 'Other views' },
+  { path: '/iq/scores',   label: 'Scores',      hint: 'Ranked influence + expertise', group: 'Other views' },
+  { path: '/iq/projects', label: 'Initiatives', hint: 'Contributions + status',       group: 'Other views' },
   { path: 'explore?entities=people',    label: 'People',   group: 'Show' },
   { path: 'explore?entities=skills',    label: 'Skills',   group: 'Show' },
   { path: 'explore?entities=projects',  label: 'Projects', group: 'Show' },
@@ -83,18 +68,13 @@ const PROMPT_MGMT_ITEMS: SubNavItem[] = [
   { path: '/iq/evaluations',          label: 'Evaluations',     hint: 'LLM-as-judge configuration',         group: 'Advanced' },
 ];
 
-interface SessionSummary {
-  sessionId: string;
-  createdAt: string;
-  title?: string;
-}
-
 // Work — the agentic queue. Only real routes: the queue itself, the workers
 // that drain it, and where finished work leaves a trace. No inert filters.
 const WORK_ITEMS: SubNavItem[] = [
   { path: '/iq/work',                        label: 'Queue',   hint: 'Findings, jobs, and what needs you', group: 'Start here' },
   { path: '/admin/devbox',                   label: 'Workers', hint: 'Computers fleet that runs the jobs', group: 'Start here' },
-  { path: '/iq/work/changes',                label: 'Graph changes', hint: 'What reached the org graph',   group: 'Start here' },
+  // "Graph updates", not "Graph changes" — Changes (/admin/changes) is code review.
+  { path: '/iq/work/changes',                label: 'Graph updates', hint: 'What reached the org graph',   group: 'Start here' },
   { path: '/admin/observability/invocations', label: 'Runs',   hint: 'What the workers actually did',      group: 'Advanced' },
 ];
 
@@ -102,25 +82,6 @@ export function useIqSubNav(pathname: string): IqSubNavSpec | null {
   // All hooks must be called unconditionally (rules of hooks).
   const canaryItems = useCanaryNavItems();
   const experimentState = useCanaryStore((s) => s.experimentState);
-  const { data: sessionData } = useFetch<{ sessions: SessionSummary[] }>(
-    pathname.startsWith('/iq/search') ? '/api/sessions' : null,
-    8000,
-  );
-
-  const searchItems = useMemo<SubNavItem[]>(() => {
-    const sessions = sessionData?.sessions ?? [];
-    const historyItems: SubNavItem[] = [
-      { path: '/iq/search?session=new', label: 'New session', group: 'History', groupScrollAfter: 7 },
-      ...sessions.slice(0, 20).map<SubNavItem>((s) => ({
-        path: `/iq/search?session=${encodeURIComponent(s.sessionId)}`,
-        label: s.title || 'Untitled session',
-        hint: new Date(s.createdAt).toLocaleString(),
-        group: 'History',
-        groupScrollAfter: 7,
-      })),
-    ];
-    return [...SEARCH_STATIC_ITEMS, ...historyItems];
-  }, [sessionData]);
 
   if (pathname.startsWith('/iq/work')) {
     return { title: 'Work', items: WORK_ITEMS, storageKey: 'iq-work-subnav' };
@@ -155,11 +116,8 @@ export function useIqSubNav(pathname: string): IqSubNavSpec | null {
     if (isSingleAgent) return null;
     return { title: 'Architecture', items: ARCHITECTURE_ITEMS, storageKey: 'iq-agents-subnav' };
   }
-  if (pathname.startsWith('/iq/search')) {
-    return { title: 'Search', items: searchItems, storageKey: 'iq-search-subnav' };
-  }
-  // Ask carries its own session picker in-page, so a rail here was a dead
-  // 200px column. Full width instead.
+  // /iq/search is a redirect to /iq/invoke — no rail of its own. Ask carries
+  // its own session picker in-page, so a rail here was a dead 200px column.
   if (pathname.startsWith('/iq/invoke')) return null;
   if (pathname.startsWith('/iq/scores')) {
     return { title: 'Explore', items: SCORES_ITEMS, storageKey: 'iq-scores-subnav' };
@@ -176,6 +134,5 @@ export function useIqSubNav(pathname: string): IqSubNavSpec | null {
   if (pathname.startsWith('/iq/explore')) {
     return { title: 'Explore', items: EXPLORE_ITEMS, storageKey: 'iq-explore-subnav' };
   }
-  if (pathname.startsWith('/iq/code-interpreter')) return null;
   return null;
 }

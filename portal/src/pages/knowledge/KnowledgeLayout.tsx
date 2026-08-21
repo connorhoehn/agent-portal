@@ -7,12 +7,18 @@
 
 import { NavLink, Outlet } from 'react-router';
 import { SubNavLayout, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
+import { useSession } from '../../lib/auth';
 
-const items: SubNavItem[] = [
+const KNOWLEDGE_ITEMS: SubNavItem[] = [
   { path: '/admin/knowledge',          label: 'Overview', hint: 'Health & recent activity', group: 'Knowledge' },
   { path: '/admin/knowledge/registry', label: 'Registry', hint: 'Knowledge bases',          group: 'Knowledge' },
-  // The ingest pipeline, in run order — same stages IngestLayout shows, hoisted
-  // here so they're discoverable from Knowledge.
+];
+
+// The ingest pipeline, in run order — same stages IngestLayout shows, hoisted
+// here so they're discoverable from Knowledge. hr-admin only: /admin/ingest/*
+// routes are hr-admin-gated, so showing these to an org-leader gave them five
+// links that all silently bounced to /.
+const PIPELINE_ITEMS: SubNavItem[] = [
   { path: '/admin/ingest/crawl',       label: 'Sources',  hint: 'What content is pulled in', group: 'Pipeline' },
   { path: '/admin/ingest/history',     label: 'Runs',     hint: 'What each pull did',        group: 'Pipeline' },
   { path: '/admin/ingest/storage',     label: 'Storage',  hint: 'Where documents land',      group: 'Pipeline' },
@@ -21,6 +27,9 @@ const items: SubNavItem[] = [
 ];
 
 export default function KnowledgeLayout() {
+  const { session } = useSession();
+  const canIngest = session?.role === 'hr-admin' || session?.role === 'admin';
+  const items = canIngest ? [...KNOWLEDGE_ITEMS, ...PIPELINE_ITEMS] : KNOWLEDGE_ITEMS;
   return (
     <SubNavLayout
       title="Knowledge"

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { Link } from 'react-router';
 import {
   Card,
   Table,
@@ -76,9 +77,14 @@ function CapabilityEventsPage() {
               color: 'var(--color-text-tertiary)',
             }}
           >
-            {events.length === 0
-              ? 'No browser or code-interpreter activity yet. Use the Capabilities page to trigger some.'
-              : 'No events match the current filter.'}
+            {events.length === 0 ? (
+              <>
+                No browser or code-interpreter activity yet. Trigger some from the{' '}
+                <Link to="/admin/capabilities" style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>
+                  Capabilities page
+                </Link>.
+              </>
+            ) : 'No events match the current filter.'}
           </div>
         ) : (
           <Table>

@@ -27,6 +27,11 @@ interface PageEntry {
   hint: string;
   path: string;
   tenant: PageTenant;
+  /** Palette group — mirrors the rail's Build/Org/Operate/System grouping. */
+  group: string;
+  /** Roles that may open it; omitted = any role in the right tenant. The
+      cross-tenant 'admin' role bypasses this, same as the nav and routes. */
+  roles?: string[];
 }
 
 interface RecentRun {
@@ -37,68 +42,87 @@ interface RecentRun {
   status?: string;
 }
 
+// The full navigable surface, grouped the way the rail groups it. Every page
+// with a rail or sub-rail entry is here; gates mirror the routes' RequireRole
+// so the palette never offers a jump that bounces.
+const PLATFORM = ['org-leader', 'hr-admin'];
+const BUILD = ['hr-admin'];
+
 const PAGES: PageEntry[] = [
-  { label: 'Ask',                hint: 'Ask the org-search agent',            path: '/iq/invoke',                                  tenant: 'orgiq' },
-  { label: 'Explore',            hint: 'Force-directed org graph',            path: '/iq/explore',                                 tenant: 'orgiq' },
-  { label: 'Architecture',       hint: 'A2A agent topology',                  path: '/iq/agents',                                  tenant: 'orgiq' },
-  { label: 'Canary',             hint: 'Live A/B prompt rollout',             path: '/iq/canary',                                  tenant: 'orgiq' },
-  { label: 'Scores',             hint: 'Per-person influence leaderboard',    path: '/iq/scores',                                  tenant: 'orgiq' },
-  { label: 'Projects',           hint: 'Project contributions + decisions',   path: '/iq/projects',                                tenant: 'orgiq' },
-  { label: 'Newsroom',           hint: 'Articles, beats, briefs, pitches',    path: '/newsroom',                                   tenant: 'newsroom' },
-  { label: 'Newsroom — Articles',hint: 'Browse articles + filters',           path: '/newsroom/articles',                          tenant: 'newsroom' },
-  { label: 'Newsroom — Beats',   hint: 'Coverage heatmap by topic',           path: '/newsroom/beats',                             tenant: 'newsroom' },
-  { label: 'Knowledge Base',     hint: 'Documents + data sources',            path: '/admin/knowledge',                            tenant: 'admin' },
-  { label: 'Settings',           hint: 'User preferences',                    path: '/settings',                                   tenant: 'universal' },
-  { label: 'On-Call',            hint: 'Live alarms + incident timeline',     path: '/admin/observability/oncall',                 tenant: 'admin' },
-  { label: 'Summary',            hint: 'Health overview',                     path: '/admin/observability/summary',                tenant: 'admin' },
-  { label: 'Traffic',            hint: 'RPS + heatmap + top users',           path: '/admin/observability/traffic',                tenant: 'admin' },
-  { label: 'Recent',             hint: 'Last 50 agent calls',                 path: '/admin/observability/invocations',            tenant: 'admin' },
-  { label: 'Invocations Search', hint: 'Triage by prompt / agent / score',    path: '/admin/observability/invocations/search',     tenant: 'admin' },
-  { label: 'Capability Events',  hint: 'Browser & code-interpreter events',   path: '/admin/observability/capability-events',      tenant: 'admin' },
-  { label: 'Agent Metrics',      hint: 'Per-agent stats',                     path: '/admin/observability/agents',                 tenant: 'admin' },
-  { label: 'Sessions',           hint: 'Chat threads',                        path: '/admin/observability/sessions',               tenant: 'admin' },
-  { label: 'Authz Log',          hint: 'Live AVP / Cedar decisions',          path: '/admin/observability/authz',                  tenant: 'admin' },
-  { label: 'Memory',             hint: 'Memory ops + cold sessions',          path: '/admin/observability/memory',                 tenant: 'admin' },
-  { label: 'Guardrail Rules',    hint: 'Per-rule intervention details',       path: '/admin/observability/guardrail-rules',        tenant: 'admin' },
-  { label: 'Drift',              hint: 'Schema + judge + embedding drift',    path: '/admin/observability/drift',                  tenant: 'admin' },
-  { label: 'Quality',            hint: 'Judge scores + feedback',             path: '/admin/observability/quality',                tenant: 'admin' },
-  { label: 'Cost',               hint: 'Spend by agent + deploy markers',     path: '/admin/observability/cost',                   tenant: 'admin' },
-  { label: 'Approvals',          hint: 'Pending HITL decisions',              path: '/admin/observability/approvals',              tenant: 'admin' },
-  { label: 'Harness',            hint: 'Replay test set + view runs',         path: '/admin/observability/harness',                tenant: 'admin' },
-  { label: 'Calibration',        hint: 'Judge vs human MAE drift',            path: '/admin/observability/calibration',            tenant: 'admin' },
-  { label: 'Prompts',            hint: 'Managed prompt registry',             path: '/iq/prompts',                                 tenant: 'admin' },
-  { label: 'Model Compare',      hint: 'Side-by-side run delta',              path: '/admin/observability/model-compare',          tenant: 'admin' },
+  // ── Build — the SDLC loop ──
+  { label: 'Work',               hint: 'Findings, jobs, proposals',           path: '/iq/work',                                    tenant: 'orgiq',  group: 'Build' },
+  { label: 'Graph updates',      hint: 'What reached the org graph',          path: '/iq/work/changes',                            tenant: 'orgiq',  group: 'Build' },
+  { label: 'Initiatives',        hint: 'Epics, decisions, contributors',      path: '/iq/projects',                                tenant: 'orgiq',  group: 'Build' },
+  { label: 'Codebases',          hint: 'Repos agents work on + runs',         path: '/admin/projects',                             tenant: 'admin',  group: 'Build',   roles: BUILD },
+  { label: 'Changes',            hint: 'Code review queue + policies',        path: '/admin/changes',                              tenant: 'admin',  group: 'Build',   roles: BUILD },
+  { label: 'Computers',          hint: 'MicroVM fleet + task runner',         path: '/admin/devbox',                               tenant: 'admin',  group: 'Build',   roles: BUILD },
+  // ── Org — organizational intelligence ──
+  { label: 'Ask',                hint: 'Ask the org-search agent',            path: '/iq/invoke',                                  tenant: 'orgiq',  group: 'Org' },
+  { label: 'Explore',            hint: 'Force-directed org graph',            path: '/iq/explore',                                 tenant: 'orgiq',  group: 'Org' },
+  { label: 'Scores',             hint: 'Per-person influence leaderboard',    path: '/iq/scores',                                  tenant: 'orgiq',  group: 'Org' },
+  { label: 'Score cohorts',      hint: 'Scores grouped by team',              path: '/iq/scores/cohorts',                          tenant: 'orgiq',  group: 'Org' },
+  { label: 'Score compare',      hint: 'Radar overlay of people',             path: '/iq/scores/compare',                          tenant: 'orgiq',  group: 'Org' },
+  // ── Operate — prompts, health, platform ──
+  { label: 'Prompt Ops',         hint: 'Prompt management overview',          path: '/iq/prompt-ops',                              tenant: 'orgiq',  group: 'Operate' },
+  { label: 'Prompt Studio',      hint: 'Managed prompt registry',             path: '/iq/prompts',                                 tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Prompt History',     hint: 'Version timeline per prompt',         path: '/iq/history',                                 tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Prompt Diff',        hint: 'Compare two prompt versions',         path: '/iq/diff',                                    tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Canary',             hint: 'Live A/B prompt rollout',             path: '/iq/canary',                                  tenant: 'orgiq',  group: 'Operate' },
+  { label: 'Evaluations',        hint: 'LLM-as-judge configuration',          path: '/iq/evaluations',                             tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Architecture',       hint: 'A2A agent topology',                  path: '/iq/agents',                                  tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Knowledge',          hint: 'Pipeline health + registry',          path: '/admin/knowledge',                            tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Ingest sources',     hint: 'What content is pulled in',           path: '/admin/ingest/crawl',                         tenant: 'admin',  group: 'Operate', roles: BUILD },
+  { label: 'Ingest runs',        hint: 'What each pull did',                  path: '/admin/ingest/history',                       tenant: 'admin',  group: 'Operate', roles: BUILD },
+  { label: 'Ingest storage',     hint: 'Where documents land',                path: '/admin/ingest/storage',                       tenant: 'admin',  group: 'Operate', roles: BUILD },
+  { label: 'KB sync',            hint: 'Storage → knowledge base',            path: '/admin/ingest/sources',                       tenant: 'admin',  group: 'Operate', roles: BUILD },
+  { label: 'Ingest schedule',    hint: 'How often it re-syncs',               path: '/admin/ingest/schedules',                     tenant: 'admin',  group: 'Operate', roles: BUILD },
+  { label: 'Capabilities',       hint: 'Guardrails, browser, interpreter',    path: '/admin/capabilities',                         tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'On-Call',            hint: 'Live alarms + incident timeline',     path: '/admin/observability/oncall',                 tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Health',             hint: 'Health overview',                     path: '/admin/observability/summary',                tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Traffic',            hint: 'RPS + heatmap + top users',           path: '/admin/observability/traffic',                tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Runs',               hint: 'Last 50 agent calls',                 path: '/admin/observability/invocations',            tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Invocations Search', hint: 'Triage by prompt / agent / score',    path: '/admin/observability/invocations/search',     tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Capability Events',  hint: 'Browser & code-interpreter events',   path: '/admin/observability/capability-events',      tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Agent Metrics',      hint: 'Per-agent stats',                     path: '/admin/observability/agents',                 tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Sessions',           hint: 'Chat threads',                        path: '/admin/observability/sessions',               tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Authz Log',          hint: 'Live AVP / Cedar decisions',          path: '/admin/observability/authz',                  tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Memory',             hint: 'Memory ops + cold sessions',          path: '/admin/observability/memory',                 tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Guardrail Rules',    hint: 'Per-rule intervention details',       path: '/admin/observability/guardrail-rules',        tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Drift',              hint: 'Schema + judge + embedding drift',    path: '/admin/observability/drift',                  tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Quality',            hint: 'Judge scores + feedback',             path: '/admin/observability/quality',                tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Cost',               hint: 'Spend by agent + deploy markers',     path: '/admin/observability/cost',                   tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Approvals',          hint: 'Pending HITL decisions',              path: '/admin/observability/approvals',              tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Harness',            hint: 'Replay test set + view runs',         path: '/admin/observability/harness',                tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Calibration',        hint: 'Judge vs human MAE drift',            path: '/admin/observability/calibration',            tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Model Compare',      hint: 'Side-by-side run delta',              path: '/admin/observability/model-compare',          tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  // ── System — administration ──
+  { label: 'Identity',           hint: 'Users, roles, Cedar policies',        path: '/admin/identity',                             tenant: 'admin',  group: 'System',  roles: BUILD },
+  { label: 'Policy sandbox',     hint: 'Dry-run an authz decision',           path: '/admin/identity/test',                        tenant: 'admin',  group: 'System',  roles: BUILD },
+  { label: 'Settings',           hint: 'User preferences',                    path: '/settings',                                   tenant: 'universal', group: 'System' },
+  // ── Newsroom tenant ──
+  { label: 'Newsroom',           hint: 'Today at a glance',                   path: '/newsroom',                                   tenant: 'newsroom', group: 'Newsroom' },
+  { label: 'Articles',           hint: 'Browse articles + filters',           path: '/newsroom/articles',                          tenant: 'newsroom', group: 'Newsroom' },
+  { label: 'Beats',              hint: 'Coverage heatmap by topic',           path: '/newsroom/beats',                             tenant: 'newsroom', group: 'Newsroom' },
+  { label: 'Researcher',         hint: 'Story research agent',                path: '/newsroom/researcher',                        tenant: 'newsroom', group: 'Newsroom' },
+  { label: 'Briefs',             hint: 'Generated digests',                   path: '/newsroom/briefs',                            tenant: 'newsroom', group: 'Newsroom' },
+  { label: 'Headlines',          hint: 'A/B variants for any draft',          path: '/newsroom/headlines',                         tenant: 'newsroom', group: 'Newsroom' },
+  { label: 'Pitches',            hint: 'Story backlog + desk decisions',      path: '/newsroom/pitches',                           tenant: 'newsroom', group: 'Newsroom' },
 ];
 
-const ADMIN_ROLES = new Set(['hr-admin', 'org-leader', 'admin']);
-// Palette gate must match the nav's requireRoles: Identity, Ingest and
-// Knowledge are hr-admin-only. Uses the real /admin/knowledge path (the old
-// /admin/knowledge-base is a redirect, so the gate never matched it).
-const HR_ADMIN_PATHS = ['/admin/identity', '/admin/ingest', '/admin/knowledge'];
 const UUID_RE = /^[0-9a-f-]{36}$/i;
-
-function isHrAdminGated(path: string): boolean {
-  return HR_ADMIN_PATHS.some((prefix) => path === prefix || path.startsWith(prefix + '/'));
-}
 
 function isPageVisible(page: PageEntry, tenant: string, role: string): boolean {
   if (page.tenant === 'universal') return true;
-  if (role === 'admin') {
-    if (page.tenant === 'admin') return true;
-    return page.tenant === tenant;
+  // Platform pages (tenant 'admin') are org-tenant surfaces — same scoping as
+  // the rail: a session parked on newsroom doesn't get org platform jumps.
+  if (page.tenant === 'admin') {
+    if (tenant !== 'orgiq') return false;
+    if (role === 'admin') return true;
+    return !page.roles || page.roles.includes(role);
   }
-  if (isHrAdminGated(page.path) && role !== 'hr-admin') return false;
-  if (page.tenant === 'admin') return ADMIN_ROLES.has(role);
-  return page.tenant === tenant;
-}
-
-function groupLabel(tenant: PageTenant): string {
-  switch (tenant) {
-    case 'orgiq': return 'Org';
-    case 'newsroom': return 'Newsroom';
-    case 'admin': return 'Admin';
-    case 'universal': return 'Universal';
-  }
+  if (page.tenant !== tenant) return false;
+  if (role === 'admin') return true;
+  return !page.roles || page.roles.includes(role);
 }
 
 // Lazy-fetch recent harness runs the first time something asks for them.
@@ -145,7 +169,7 @@ export function usePortalCommands(): Command[] {
         id: `page:${p.path}`,
         label: p.label,
         hint: p.hint,
-        group: groupLabel(p.tenant),
+        group: p.group,
         keywords: [p.path],
         run: () => { navigate(p.path); },
       }));
