@@ -17,6 +17,7 @@
 import { useCallback, useState } from 'react';
 import { Link } from 'react-router';
 import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
+import { useSession } from '../../lib/auth';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
@@ -82,6 +83,12 @@ function when(iso: string | null | undefined): string {
 }
 
 export default function KnowledgeHomePage() {
+  // Reading the knowledge surface is open to org-leaders; changing it (adopt,
+  // sync, upload, share links) requires hr-admin, so those controls are hidden
+  // for anyone who would only get a 403 on click.
+  const { session } = useSession();
+  const canManage = session?.role === 'hr-admin';
+
   const { data: rec, error: recError, refresh: refreshRec } =
     useFetch<{ entries: Reconciled[]; problem?: string }>('/api/admin/kb-registry/reconcile', 30_000);
   const { data: jobs } = useFetch<{ jobs: IngestJob[] }>('/api/ingest/jobs?limit=10', 30_000);
@@ -271,7 +278,7 @@ export default function KnowledgeHomePage() {
                 </Link>
               )}
 
-              {e.drift === 'unregistered' && e.liveKbId && adopters.length > 0 && (
+              {e.drift === 'unregistered' && e.liveKbId && adopters.length > 0 && canManage && (
                 <div className="flex gap-1.5 shrink-0">
                   {adopters.map((target) => (
                     <button
@@ -312,13 +319,15 @@ export default function KnowledgeHomePage() {
                 costs embedding tokens once per document that changed.
               </div>
             </div>
-            <button
-              disabled={busy === 'sync'}
-              onClick={() => void startSync(syncTarget.id as string, syncTarget.name)}
-              className="shrink-0 px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50"
-            >
-              {busy === 'sync' ? 'starting…' : 'Sync now'}
-            </button>
+            {canManage && (
+              <button
+                disabled={busy === 'sync'}
+                onClick={() => void startSync(syncTarget.id as string, syncTarget.name)}
+                className="shrink-0 px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50"
+              >
+                {busy === 'sync' ? 'starting…' : 'Sync now'}
+              </button>
+            )}
           </div>
         </Card>
       )}
@@ -389,16 +398,19 @@ export default function KnowledgeHomePage() {
       {/* ── Getting documents in ──────────────────────────────────────────
           Below the pipeline, because the pipeline is what explains where an
           upload lands. Sources/crawling is one way in; these are the other
-          two, and until now neither existed in working form. */}
-      <div className="grid gap-4 mt-5 grid-cols-1 lg:grid-cols-2">
-        <DocumentDropzone
-          target={syncTarget && syncTarget.id
-            ? { id: syncTarget.id, slug: syncTarget.slug ?? '', name: syncTarget.name }
-            : null}
-          onUploaded={() => refreshRec()}
-        />
-        <ShareLinks kbSlug={syncTarget?.slug ?? null} />
-      </div>
+          two, and until now neither existed in working form. Uploading and
+          minting share links are writes — hr-admin only. */}
+      {canManage && (
+        <div className="grid gap-4 mt-5 grid-cols-1 lg:grid-cols-2">
+          <DocumentDropzone
+            target={syncTarget && syncTarget.id
+              ? { id: syncTarget.id, slug: syncTarget.slug ?? '', name: syncTarget.name }
+              : null}
+            onUploaded={() => refreshRec()}
+          />
+          <ShareLinks kbSlug={syncTarget?.slug ?? null} />
+        </div>
+      )}
 
     </PageSection>
   );

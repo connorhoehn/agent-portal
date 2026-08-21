@@ -140,13 +140,20 @@ app.use('/api/drop', dropRouter);
 // via the orgiq guards above). This is the no-cross-pollination boundary.
 app.use('/api/newsroom/beats', requireTenant('newsroom'), newsroomBeatsRouter);
 app.use('/api/newsroom', requireTenant('newsroom'), newsroomArticlesRouter);
-app.use('/api/ingest', requireAction('ManageIngest'), ingestRouter);
+// Ingest — reading jobs/storage/crawl status is operational visibility that the
+// Knowledge page surfaces to org-leaders; starting crawls, editing schedules and
+// other mutations still require ManageIngest (hr-admin).
+app.use('/api/ingest', readForRolesElseAction(['org-leader', 'hr-admin'], 'ManageIngest'), ingestRouter);
 // Connected sources — credentials for Confluence/Jira/GitHub. Gated as an
 // ingestion decision, because that is what connecting a source is.
 app.use('/api/connections', requireAction('ManageIngest'), connectionsRouter);
 // Repositories that agents work on. Distinct from /api/graph/projects, which
 // is the org graph's own notion of a project.
-app.use('/api/agent-projects', agentProjectsRouter);
+// Codebases — linking a repo and dispatching a governed agent run against it is
+// the same authority as the SDLC/devbox surfaces, so it carries the same gate.
+// Previously ungated: any role (member included) could link a repo and dispatch
+// runs, bypassing ManageDevbox entirely.
+app.use('/api/agent-projects', requireAction('ManageDevbox'), agentProjectsRouter);
 // AI SDLC governance — change requests, reviews, gates, policies. Gated as a
 // devbox-management action.
 app.use('/api/sdlc', requireAction('ManageDevbox'), sdlcRouter);

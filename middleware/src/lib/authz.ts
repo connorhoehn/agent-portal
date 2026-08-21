@@ -16,7 +16,7 @@ import {
 } from '@aws-sdk/client-verifiedpermissions';
 import { config } from '../config.js';
 import { eventFromSession, logAuthz } from './audit.js';
-import { demoSession, ADMIN_ROLE, type Tenant } from './session.js';
+import { demoSession, ADMIN_ROLE, DEFAULT_ROLE, type Tenant, type Role } from './session.js';
 
 const NAMESPACE = 'OrgIQ';
 const RESOURCE_ID = 'app';

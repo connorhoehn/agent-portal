@@ -58,9 +58,9 @@ const PLATFORM_ITEMS: NavItem[] = [
   // initiatives — epics, features, the people who own them. This is the
   // code that delivers them, and two nav items called Projects would be
   // a coin toss every time.
-  { path: '/admin/projects',        label: 'Codebases',       tenant: 'admin' },
-  { path: '/admin/changes',         label: 'Changes',         tenant: 'admin' },
-  { path: '/admin/devbox',          label: 'Devbox',          tenant: 'admin' },
+  { path: '/admin/projects',        label: 'Codebases',       tenant: 'admin', requireRoles: ['hr-admin'] },
+  { path: '/admin/changes',         label: 'Changes',         tenant: 'admin', requireRoles: ['hr-admin'] },
+  { path: '/admin/devbox',          label: 'Devbox',          tenant: 'admin', requireRoles: ['hr-admin'] },
   { path: '/iq/agents',             label: 'Architecture',    tenant: 'admin' },
   // One entry, not two: sources, ingestion, storage and knowledge bases are
   // consecutive stages of one pipeline, and splitting them across two nav
