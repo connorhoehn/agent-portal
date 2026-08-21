@@ -177,7 +177,7 @@ function SessionsPage() {
                   </TableTd>
                   <TableTd>
                     <Link
-                      to={`/invoke?session=${encodeURIComponent(s.sessionId)}`}
+                      to={`/iq/invoke?session=${encodeURIComponent(s.sessionId)}`}
                       style={{
                         fontSize: 11,
                         padding: '2px 8px',
