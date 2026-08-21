@@ -42,13 +42,13 @@ type NavItem = { path: string; label: string; requireRoles?: string[]; tenant: T
 // derived from each item's `group`; ordering is by GROUP_ORDER below.
 
 // Rail group order (top → bottom).
-const GROUP_ORDER = ['Build', 'OrgIQ', 'Operate', 'System'];
+const GROUP_ORDER = ['Build', 'Org', 'Operate', 'System'];
 
 // Tenant/universal items (visible per tenant + role, not just to admins).
 const NAV_ITEMS: NavItem[] = [
   { path: '/iq/work',       label: 'Work',     tenant: 'orgiq',     group: 'Build' },
-  { path: '/iq/invoke',     label: 'Ask',      tenant: 'orgiq',     group: 'OrgIQ' },
-  { path: '/iq/explore',    label: 'Explore',  tenant: 'orgiq',     group: 'OrgIQ' },
+  { path: '/iq/invoke',     label: 'Ask',      tenant: 'orgiq',     group: 'Org' },
+  { path: '/iq/explore',    label: 'Explore',  tenant: 'orgiq',     group: 'Org' },
   { path: '/iq/prompt-ops', label: 'Prompts',  tenant: 'orgiq',     group: 'Operate' },
   { path: '/newsroom',      label: 'Newsroom', tenant: 'newsroom' },
   { path: '/settings',      label: 'Settings', tenant: 'universal', group: 'System' },
@@ -75,7 +75,7 @@ const PLATFORM_ITEMS: NavItem[] = [
 ];
 
 const TENANT_LABELS: Record<Tenant, string> = {
-  orgiq: 'OrgIQ',
+  orgiq: 'Org',
   newsroom: 'Newsroom',
   admin: 'Admin',
 };
@@ -176,7 +176,7 @@ export function Layout() {
         />
         <div className="flex-1 min-h-0">
           <SubNavLayout
-            title="OrgIQ"
+            title={tenantLabel}
             items={subNavItems}
             railWidth={200}
             storageKey="orgiq-shell"

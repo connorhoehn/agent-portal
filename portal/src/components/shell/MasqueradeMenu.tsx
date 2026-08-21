@@ -21,7 +21,7 @@ const ROLE_HINTS: Record<string, string> = {
   admin: 'Cross-tenant operator. Can masquerade.',
 };
 
-const TENANT_LABELS: Record<string, string> = { orgiq: 'OrgIQ', newsroom: 'Newsroom' };
+const TENANT_LABELS: Record<string, string> = { orgiq: 'Org', newsroom: 'Newsroom' };
 
 function roleLabel(role: string): string {
   return ROLE_LABELS[role] ?? role;

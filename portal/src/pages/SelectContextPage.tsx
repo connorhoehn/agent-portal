@@ -10,7 +10,7 @@ import { NEWSROOM_ENABLED } from '../lib/features';
 import { markContextChosen } from '../lib/contextChoice';
 
 const TENANT_META: Record<Tenant, { label: string; blurb: string }> = {
-  orgiq: { label: 'OrgIQ', blurb: 'Organizational intelligence — people, projects, decisions' },
+  orgiq: { label: 'Org', blurb: 'Organizational intelligence — people, projects, decisions' },
   newsroom: { label: 'Newsroom', blurb: 'Editorial desk — articles, beats, pitches' },
 };
 
@@ -49,7 +49,7 @@ export default function SelectContextPage() {
   return (
     <div style={styles.screen}>
       <div style={styles.panel}>
-        <div style={styles.brand}>OrgIQ</div>
+        <div style={styles.brand}>Org</div>
         <h1 style={styles.title}>Choose a workspace</h1>
         <p style={styles.subtitle}>Signed in as <strong>{name}</strong>. Pick the account and role to continue with — you can switch any time from the menu.</p>
 
