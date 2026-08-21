@@ -15,6 +15,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router';
 import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
 
@@ -110,6 +111,9 @@ function toEntries(ev: Record<string, unknown>): ActivityEntry[] {
 export default function JobDetailPage() {
   const { jobId = '' } = useParams();
   const navigate = useNavigate();
+  // Cancel/review ride /api/work (ManageDevbox).
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageDevbox');
 
   // Poll fast while the job is live so status transitions land quickly; the
   // SSE tail carries the activity, this carries the state machine.
@@ -261,7 +265,7 @@ export default function JobDetailPage() {
           </Link>
         )}
         <div className="flex-1" />
-        {(job.status === 'queued' || job.status === 'claimed') && (
+        {canManage && (job.status === 'queued' || job.status === 'claimed') && (
           <button
             onClick={() => void cancel()}
             className="px-3 py-1 rounded-md border border-border bg-surface text-text-secondary text-[12px] font-semibold cursor-pointer hover:text-danger"
@@ -269,7 +273,7 @@ export default function JobDetailPage() {
             Cancel
           </button>
         )}
-        {job.status === 'awaiting_review' && (
+        {canManage && job.status === 'awaiting_review' && (
           <div className="flex gap-2">
             <button onClick={() => void review('accept')}
               className="px-3 py-1 rounded-md border-none bg-success text-white text-[12px] font-semibold cursor-pointer">Accept</button>

@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Chip, PageSection } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../../lib/auth';
+import { useCapabilities } from '../../lib/capabilities';
 
 interface TenantInfo { id: string; displayName: string; status: string }
 interface RoleInfo { id: string; tenant: string | null; label: string; summary: string; capabilities: string[] }
@@ -33,6 +34,9 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 function UsersPage() {
   const { session, refresh } = useSession();
+  // Tenant/user creation and grant edits ride /api/identity (ManageUsers).
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageUsers');
   const [tenants, setTenants] = useState<TenantInfo[]>([]);
   const [roles, setRoles] = useState<RoleInfo[]>([]);
   const [users, setUsers] = useState<UserInfo[]>([]);
@@ -109,12 +113,12 @@ function UsersPage() {
     <PageSection
       title="Users & Tenants"
       description="Login-able identities and their per-tenant role grants. A user with no grant in a tenant cannot switch into it."
-      actions={
+      actions={canManage ? (
         <div style={{ display: 'flex', gap: 8 }}>
           <button style={btnSecondary} onClick={() => setShowNewTenant(s => !s)}>+ Tenant</button>
           <button style={btnPrimary} onClick={() => setShowNewUser(s => !s)}>+ User</button>
         </div>
-      }
+      ) : undefined}
     >
       {error && (
         <div role="alert" style={{
@@ -188,6 +192,7 @@ function UsersPage() {
                 tenants={tenants}
                 rolesForTenant={rolesForTenant}
                 busy={busy}
+                canEdit={canManage}
                 onEdit={() => openEditor(u)}
                 onCancel={() => setEditing(null)}
                 onToggle={toggleGrant}
@@ -201,7 +206,7 @@ function UsersPage() {
   );
 }
 
-function UserRow({ user, isSelf, isEditing, draftGrants, tenants, rolesForTenant, busy, onEdit, onCancel, onToggle, onSave }: {
+function UserRow({ user, isSelf, isEditing, draftGrants, tenants, rolesForTenant, busy, canEdit, onEdit, onCancel, onToggle, onSave }: {
   user: UserInfo;
   isSelf: boolean;
   isEditing: boolean;
@@ -209,6 +214,8 @@ function UserRow({ user, isSelf, isEditing, draftGrants, tenants, rolesForTenant
   tenants: TenantInfo[];
   rolesForTenant: Map<string, RoleInfo[]>;
   busy: boolean;
+  /** ManageUsers — grant edits hide without it. */
+  canEdit: boolean;
   onEdit: () => void;
   onCancel: () => void;
   onToggle: (tenant: string, role: string) => void;
@@ -238,9 +245,11 @@ function UserRow({ user, isSelf, isEditing, draftGrants, tenants, rolesForTenant
           </div>
         </td>
         <td style={{ ...td, textAlign: 'right' }}>
-          <button style={btnSecondary} disabled={busy} onClick={isEditing ? onCancel : onEdit}>
-            {isEditing ? 'Cancel' : 'Edit grants'}
-          </button>
+          {canEdit && (
+            <button style={btnSecondary} disabled={busy} onClick={isEditing ? onCancel : onEdit}>
+              {isEditing ? 'Cancel' : 'Edit grants'}
+            </button>
+          )}
         </td>
       </tr>
       {isEditing && (

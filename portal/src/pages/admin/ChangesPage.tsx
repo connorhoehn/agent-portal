@@ -16,6 +16,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useCapabilities } from '../../lib/capabilities';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
 import { PolicyEditor } from '../../components/sdlc/PolicyEditor';
 
@@ -100,6 +101,10 @@ function DiffView({ diff }: { diff: string }) {
 
 export default function ChangesPage() {
   const [tab, setTab] = useState<'queue' | 'policies'>('queue');
+  // Decisions and policy edits ride /api/sdlc (ManageDevbox). Without it, the
+  // queue stays readable but the decision buttons and Policies tab hide.
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageDevbox');
   const { data, refresh } = useFetch<{ changes: Change[] }>('/api/sdlc/changes', 15_000);
   const [busy, setBusy] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -160,7 +165,7 @@ export default function ChangesPage() {
       description="Code agents wrote, and the decision each one is waiting on. Every agent change is reviewed and gated before it can ship."
     >
       <div className="flex items-center gap-1 mb-4">
-        {(['queue', 'policies'] as const).map((t) => (
+        {(canManage ? (['queue', 'policies'] as const) : (['queue'] as const)).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -172,7 +177,7 @@ export default function ChangesPage() {
         ))}
       </div>
 
-      {tab === 'policies' ? <PolicyEditor /> : (
+      {tab === 'policies' && canManage ? <PolicyEditor /> : (
         <>
           {needsYou.length > 0 && (
             <div className="mb-5">
@@ -221,6 +226,8 @@ function ChangeCard({ change: c, open, onToggle, busy, act, superseded }: {
   act: (id: string, path: string, verb: string, body: Record<string, unknown>) => void;
   superseded: boolean;
 }) {
+  const { can, ready } = useCapabilities();
+  const canDecide = ready && can('ManageDevbox');
   const review = c.reviews[0] ?? null;
   const blockingGates = c.gates.filter((g) => g.outcome !== 'pass');
 
@@ -342,7 +349,7 @@ function ChangeCard({ change: c, open, onToggle, busy, act, superseded }: {
             <span className="text-[11px] text-text-tertiary italic">
               A newer change supersedes this one — decide and deliver the latest change for this codebase instead.
             </span>
-          ) : (
+          ) : !canDecide ? null : (
             <>
               {(c.status === 'needs_approval' || c.status === 'changes_requested') && (
                 <>

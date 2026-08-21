@@ -22,11 +22,11 @@ import {
   type Session,
   type Tenant,
 } from '../lib/session.js';
-import { isAllowed } from '../lib/authz.js';
+import { isAllowed, CAPABILITY_ACTIONS } from '../lib/authz.js';
 import { eventFromSession, logAuthz } from '../lib/audit.js';
 import { rateLimit } from '../lib/rate-limit.js';
 import { cognitoEnabled } from '../lib/oidc.js';
-import { demoModeEnabled } from '../lib/session.js';
+import { demoModeEnabled, ssoAvailable } from '../lib/session.js';
 import { listUsers, getUser } from '../providers/identity.js';
 
 export const sessionRouter = Router();
@@ -62,7 +62,7 @@ function sessionOrNull(req: import('express').Request): Session | null {
 }
 
 function unauthenticated(res: import('express').Response): void {
-  res.status(401).json({ error: 'Unauthenticated', ssoRequired: true });
+  res.status(401).json({ error: 'Unauthenticated', ssoRequired: ssoAvailable() });
 }
 
 sessionRouter.get('/me', (req, res) => {
@@ -70,6 +70,44 @@ sessionRouter.get('/me', (req, res) => {
   if (!session) { unauthenticated(res); return; }
   res.json(publicView(session));
 });
+
+// Every UI-gated Cedar action evaluated for the current session, through the
+// exact same path requireAction uses (isAllowed → evaluate + decision cache),
+// so a `true` here means the corresponding route would pass its guard. The
+// portal uses this to hide/disable controls instead of surfacing 403s.
+//
+// An AVP outage must not 500 this endpoint: a failed evaluation reports the
+// action as `false` and flips `degraded` so the UI can choose to show the
+// control and let the server decide (which would then 503, not 500).
+// Actions whose Cedar policies condition on resource attributes can never
+// pass a bare capability probe (no resource → the `resource has X` guard
+// fails). Probe them with a representative resource that can satisfy the
+// condition — the per-instance decision still happens at the real endpoint.
+const CAPABILITY_PROBE_ATTRS: Record<string, Record<string, number | string | boolean>> = {
+  ApproveTransaction: { amount: 20000 },
+};
+
+sessionRouter.get('/capabilities', asyncHandler(async (req, res) => {
+  const session = sessionOrNull(req);
+  if (!session) { unauthenticated(res); return; }
+  let degraded = false;
+  const entries = await Promise.all(
+    CAPABILITY_ACTIONS.map(async (action): Promise<[string, boolean]> => {
+      try {
+        return [action, await isAllowed(session, action, CAPABILITY_PROBE_ATTRS[action])];
+      } catch {
+        degraded = true;
+        return [action, false];
+      }
+    }),
+  );
+  res.json({
+    role: session.role,
+    tenant: session.tenant,
+    degraded,
+    actions: Object.fromEntries(entries) as Record<string, boolean>,
+  });
+}));
 
 // Login-able users for the picker. Deliberately open: this is the demo login
 // surface, equivalent to the username list on a shared dev box.
@@ -161,7 +199,18 @@ sessionRouter.post('/masquerade', loginLimit, asyncHandler(async (req, res) => {
     res.status(409).json({ error: 'already masquerading — stop first' });
     return;
   }
-  const allowed = await isAllowed(session, 'Masquerade');
+  let allowed = false;
+  try {
+    allowed = await isAllowed(session, 'Masquerade');
+  } catch (err) {
+    // AVP outage — authorization infrastructure failure, not a DENY. Without
+    // this catch the error bubbled through asyncHandler to the generic 500.
+    logAuthz(eventFromSession(session, 'Masquerade', 'DENY', {
+      path: req.path, reason: `authz-error: ${(err as Error).message}`,
+    }));
+    res.status(503).json({ error: 'authorization unavailable', action: 'Masquerade' });
+    return;
+  }
   logAuthz(eventFromSession(session, 'Masquerade', allowed ? 'ALLOW' : 'DENY', {
     path: req.path, reason: allowed ? `as ${userId}` : undefined,
   }));

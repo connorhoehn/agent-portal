@@ -31,6 +31,8 @@
 import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import { borrowApiKey } from '../providers/connected-sources.js';
+import { createBotRun } from '../providers/bots.js';
+import { checkConcurrency, botMaxConcurrent } from './bot-runner.js';
 import { listPulls, getPullStatus, type PullSummary } from './github-connector.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 
@@ -69,7 +71,11 @@ export function nextDispatchSet<T extends { number: number }>(
 ): { toDispatch: T[]; newWatermark: number | null } {
   const max = prs.reduce((m, p) => Math.max(m, p.number), watermark ?? 0);
   if (watermark == null) {
-    return { toDispatch: [], newWatermark: prs.length > 0 ? max : null };
+    // No open PRs on the first poll baselines the watermark to 0, not null:
+    // "never polled" and "polled, repo was quiet" are different states, and
+    // leaving null meant the repo's very first PR arrived into a null-watermark
+    // poll and was silently baselined over instead of dispatched.
+    return { toDispatch: [], newWatermark: prs.length > 0 ? max : 0 };
   }
   const toDispatch = prs
     .filter((p) => p.number > watermark)
@@ -136,6 +142,7 @@ interface WatchedBot {
   prWatermark: string | null;
   maxRunsPerDay: number;
   budgetPerDayUsd: number | null;
+  model: string;
   repoFullName: string;
   connectionName: string | null;
 }
@@ -144,7 +151,7 @@ async function watchedBots(): Promise<WatchedBot[]> {
   const rows = await exec(
     `SELECT b.id, b.name, b.prompt_template, b.requires_review, b.pr_watermark,
             b.max_runs_per_day, b.budget_per_day_usd::float8 AS budget_per_day_usd,
-            ap.repo_full_name, ap.connection_name
+            b.model, ap.repo_full_name, ap.connection_name
        FROM bots b
        JOIN agent_projects ap ON ap.id = b.agent_project_id
       WHERE b.enabled AND b.trigger = 'pr_watch' AND b.paused_reason IS NULL`,
@@ -157,15 +164,18 @@ async function watchedBots(): Promise<WatchedBot[]> {
     prWatermark: r['pr_watermark'] == null ? null : toStr(r['pr_watermark']),
     maxRunsPerDay: toNum(r['max_runs_per_day']),
     budgetPerDayUsd: r['budget_per_day_usd'] == null ? null : Number(r['budget_per_day_usd']),
+    model: toStr(r['model']),
     repoFullName: toStr(r['repo_full_name']),
     connectionName: r['connection_name'] == null ? null : toStr(r['connection_name']),
   }));
 }
 
-/** Same day window the bot runner's brakes use (providers/bots.js BOT_SELECT). */
+/** Same day window and skipped-run exclusion as the bot runner's brakes
+ *  (providers/bots.js BOT_SELECT / todayStats). */
 async function todayStats(botId: string): Promise<{ spendUsd: number; runCount: number }> {
   const rows = await exec(
-    `SELECT COALESCE(SUM(cost_usd), 0)::float8 AS spend, COUNT(*)::int AS runs
+    `SELECT COALESCE(SUM(cost_usd), 0)::float8 AS spend,
+            COUNT(*) FILTER (WHERE status <> 'skipped')::int AS runs
        FROM bot_runs
       WHERE bot_id = :bid::uuid AND started_at >= date_trunc('day', NOW())`,
     [s('bid', botId)],
@@ -205,16 +215,25 @@ async function dispatchPrRun(bot: WatchedBot, pr: PullSummary): Promise<void> {
      VALUES ('devbox:task', :title, :payload::jsonb, 'pr-watch') RETURNING id`,
     [
       s('title', `PR #${pr.number}: ${pr.title}`.slice(0, 300)),
-      s('payload', JSON.stringify({ prompt, requiresReview: bot.requiresReview, botId: bot.id })),
+      // model rides the payload so the job dispatcher runs the bot's configured
+      // model, not its own default.
+      s('payload', JSON.stringify({ prompt, requiresReview: bot.requiresReview, botId: bot.id, model: bot.model })),
     ],
   );
   const jobId = toStr(jobRows[0]?.['id']);
-  await exec(
-    `INSERT INTO bot_runs (bot_id, trigger, job_id, status, outcome)
-     VALUES (:bid::uuid, 'pr_watch', :jid, 'running', :outcome::jsonb)`,
-    [s('bid', bot.id), s('jid', jobId),
-      s('outcome', JSON.stringify({ prNumber: pr.number, prUrl: pr.url }))],
-  );
+  // Through the provider's ceiling-guarded insert — the same atomic guard the
+  // manual/cron/marketplace paths use, so a pr_watch dispatch cannot slip past
+  // the global concurrency ceiling in a race.
+  const run = await createBotRun({
+    botId: bot.id, trigger: 'pr_watch', jobId, ceiling: botMaxConcurrent(),
+    outcome: { prNumber: pr.number, prUrl: pr.url },
+  });
+  if (!run) {
+    // Ceiling refused the row: un-enqueue the job so it does not run untracked,
+    // and fail the dispatch — the watermark stays behind and retries next tick.
+    await exec(`DELETE FROM agent_jobs WHERE id = :jid AND status = 'queued'`, [s('jid', jobId)]);
+    throw new Error('concurrency ceiling reached');
+  }
 }
 
 /** The PR-watch half of a tick: one bot at a time, brakes per dispatch. */
@@ -286,6 +305,16 @@ async function pollWatchedBots(tokens: Map<string, string | null>): Promise<{ di
         });
         break;
       }
+      // The global concurrency ceiling, per dispatch — the same brake every
+      // other trigger path passes. On refuse: stop without advancing the
+      // watermark (and without a skipped row per tick — the PRs are deferred,
+      // not consumed) so a freed slot picks them up next tick.
+      const congestion = await checkConcurrency();
+      if (congestion.kind === 'refuse') {
+        console.log(`[pr-watch] bot ${bot.id} deferred at PR #${pr.number}: ${congestion.reason}`);
+        failed = true;
+        break;
+      }
       try {
         await dispatchPrRun(bot, pr);
       } catch (err) {
@@ -312,22 +341,58 @@ async function pollWatchedBots(tokens: Map<string, string | null>): Promise<{ di
   return { dispatched, errors };
 }
 
+/**
+ * Where the merge-scan cursor lands after a batch. Pure: a full batch means
+ * more may remain — advance to the last row's updated_at; a short batch means
+ * the backlog under scan is drained — wrap to the start (null) so the next
+ * tick begins over. Without the cursor, a backlog larger than one batch made
+ * the same first N ids eat every tick's GitHub quota while the rest starved.
+ */
+export function nextMergeCursor(
+  batch: { count: number; lastUpdatedAt: string | null },
+  limit: number,
+): string | null {
+  if (batch.count < limit) return null;
+  return batch.lastUpdatedAt;
+}
+
+/** Module-state watermark over work_items.updated_at for the merge scan. */
+let mergeCursor: string | null = null;
+
+/** Test hook. */
+export function _resetMergeCursor(): void { mergeCursor = null; }
+
 /** The marketplace half: settle open-PR work items whose PR reached an end. */
 async function settleMergedPrs(tokens: Map<string, string | null>): Promise<{ settled: number; errors: number }> {
   let settled = 0;
   let errors = 0;
 
-  // DISTINCT ON: an initiative can have several linked codebases, and any of
-  // their connections can read the PR — one row per work item is enough.
+  // The lateral picks one connection able to read the PR — and only from a
+  // codebase whose repo actually matches the PR url's host+repo. Without the
+  // match, any initiative-linked connection was used to poll whatever host the
+  // pr_url named: quota burnt on repos nobody linked, and a poller that could
+  // be pointed at attacker-chosen repos through a crafted pr_url.
+  // Cursor: batches walk updated_at forward, wrapping when a batch comes up
+  // short, so a deep backlog rotates through instead of starving the tail.
   const rows = await exec(
-    `SELECT DISTINCT ON (wi.id) wi.id, wi.pr_url, ap.connection_name
+    `SELECT wi.id, wi.pr_url, wi.updated_at::text AS updated_at, conn.connection_name
        FROM work_items wi
-       JOIN agent_projects ap ON ap.org_project_id = wi.project_id
+       JOIN LATERAL (
+         SELECT ap.connection_name
+           FROM agent_projects ap
+          WHERE ap.org_project_id = wi.project_id
+            AND ap.connection_name IS NOT NULL
+            AND wi.pr_url LIKE '%github.com/' || ap.repo_full_name || '/pull/%'
+          LIMIT 1
+       ) conn ON TRUE
       WHERE wi.pr_url IS NOT NULL AND wi.pr_status = 'open'
-        AND ap.connection_name IS NOT NULL
-      ORDER BY wi.id
+        AND wi.updated_at > :cursor::timestamptz
+      ORDER BY wi.updated_at ASC
       LIMIT ${MERGE_SCAN_LIMIT}`,
+    [s('cursor', mergeCursor ?? '1970-01-01T00:00:00Z')],
   );
+  const lastUpdatedAt = rows.length > 0 ? toStr(rows[rows.length - 1]!['updated_at']) : null;
+  mergeCursor = nextMergeCursor({ count: rows.length, lastUpdatedAt }, MERGE_SCAN_LIMIT);
 
   for (const row of rows) {
     const id = toStr(row['id']);

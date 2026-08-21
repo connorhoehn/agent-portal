@@ -30,6 +30,7 @@ import {
   Chip,
   PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { CostChip } from '../../components/observability/CostChip';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
@@ -68,6 +69,9 @@ function isoSince24h(): string {
 
 function QualityPage() {
   const navigate = useNavigate();
+  // Human labels POST /api/observability/quality/feedback (LabelFeedback).
+  const { can, ready } = useCapabilities();
+  const canLabel = ready && can('LabelFeedback');
   // Reuse the drift summary endpoint just to populate the agent picker — both
   // pages share the same set of sampled agents. If it 404s, fall back to an
   // empty list; user can still pick once the endpoint returns data.
@@ -357,7 +361,7 @@ function QualityPage() {
                             cancel
                           </button>
                         </div>
-                      ) : (
+                      ) : !canLabel ? null : (
                         <div style={fbBtnRow}>
                           <FeedbackBtn
                             label="good"

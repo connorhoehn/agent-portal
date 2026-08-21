@@ -12,6 +12,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import type { CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router';
+import { useCapabilities } from '../../lib/capabilities';
 import { usePromptList } from '../../components/canary/usePromptLibrary.js';
 import { useCanaryStream } from '../../components/canary/useCanaryStream.js';
 import {
@@ -219,6 +220,9 @@ export default function EvaluationsPage(): React.ReactElement {
   // Without this, the page showed live data only if you visited /iq/canary
   // first in the same session.
   useCanaryStream();
+  // Saving judge config PUTs /api/observability/evaluations/config (ManageCanary).
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageCanary');
   const [cfg, setCfg] = useState<JudgeConfig>(loadConfig);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -436,22 +440,24 @@ export default function EvaluationsPage(): React.ReactElement {
           </div>
         </section>
 
-        {/* Save */}
-        <div style={saveRowStyle}>
-          <button
-            type="button"
-            style={!weightOk || saving ? saveBtnDisabledStyle : saveBtnStyle}
-            disabled={!weightOk || saving}
-            onClick={() => void handleSave()}
-          >
-            {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save configuration'}
-          </button>
-          {saveError && (
-            <span role="alert" style={{ fontSize: 12, color: 'var(--color-danger)', marginLeft: 10 }}>
-              Not saved — {saveError}
-            </span>
-          )}
-        </div>
+        {/* Save — ManageCanary only; without it the config is a read-only view. */}
+        {canManage && (
+          <div style={saveRowStyle}>
+            <button
+              type="button"
+              style={!weightOk || saving ? saveBtnDisabledStyle : saveBtnStyle}
+              disabled={!weightOk || saving}
+              onClick={() => void handleSave()}
+            >
+              {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save configuration'}
+            </button>
+            {saveError && (
+              <span role="alert" style={{ fontSize: 12, color: 'var(--color-danger)', marginLeft: 10 }}>
+                Not saved — {saveError}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Right column: Live scores ── */}

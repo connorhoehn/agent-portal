@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router';
 import { Card, Chip, CollapsibleSection, PageSection, StatusDot, type ChipTone } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
+import { useCapabilities } from '../lib/capabilities';
 import { EstimateDrawer } from '../components/marketplace/EstimateDrawer';
 import { OwnerEditor, RoleCycleChip } from '../components/marketplace/GovernanceEditor';
 import {
@@ -225,9 +226,12 @@ function parseTs(iso: string): number {
 // ─── Marketplace affordances (shared by tree rows and board cards) ────────────
 
 /** The Estimate chip — opens the estimate → authorize drawer. Only on open,
-    pointed stories and bugs; sized so it doesn't fight the row's own click. */
+    pointed stories and bugs, and only for sessions holding DispatchAgentRun;
+    sized so it doesn't fight the row's own click. */
 function EstimateChip({ item, onEstimate }: { item: WorkItemTree; onEstimate: (item: WorkItemTree) => void }) {
+  const { can, ready } = useCapabilities();
   if (item.status !== 'open' || item.storyPoints == null) return null;
+  if (!ready || !can('DispatchAgentRun')) return null;
   return (
     <button
       type="button"
@@ -286,7 +290,7 @@ interface NewItemFormProps {
   defaultType: WorkItemType;
   /** Which types the select offers — inside an epic that's story/bug only. */
   typeOptions?: WorkItemType[];
-  onSave: (item: { title: string; type: WorkItemType; priority: WorkItemPriority }) => void;
+  onSave: (item: { title: string; type: WorkItemType; priority: WorkItemPriority; storyPoints: number | null }) => void;
   onCancel: () => void;
 }
 
@@ -294,9 +298,23 @@ function NewItemForm({ projectId: _projectId, parentId: _parentId, defaultType, 
   const [title, setTitle] = useState('');
   const [type, setType] = useState<WorkItemType>(defaultType);
   const [priority, setPriority] = useState<WorkItemPriority>('medium');
+  // Optional points at creation — without this, UI-created stories/bugs could
+  // never be estimated (the ⚡ Estimate chip requires storyPoints != null).
+  const [points, setPoints] = useState('');
 
   const TYPES: WorkItemType[] = typeOptions ?? ['epic', 'story', 'bug'];
   const PRIORITIES: WorkItemPriority[] = ['critical', 'high', 'medium', 'low'];
+
+  // Epics are containers — they aren't sized, so the field hides for them.
+  const parsedPoints = (): number | null => {
+    if (type === 'epic') return null;
+    const n = parseInt(points, 10);
+    return Number.isFinite(n) && n >= 1 && n <= 21 ? n : null;
+  };
+  const save = () => {
+    if (!title.trim()) return;
+    onSave({ title: title.trim(), type, priority, storyPoints: parsedPoints() });
+  };
 
   return (
     <div style={{
@@ -309,7 +327,7 @@ function NewItemForm({ projectId: _projectId, parentId: _parentId, defaultType, 
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && title.trim()) onSave({ title: title.trim(), type, priority });
+          if (e.key === 'Enter') save();
           if (e.key === 'Escape') onCancel();
         }}
         style={{
@@ -326,6 +344,25 @@ function NewItemForm({ projectId: _projectId, parentId: _parentId, defaultType, 
           style={{ padding: '4px 8px', borderRadius: 6, border: '1px solid var(--color-border-emphasis)', fontSize: 12, background: 'var(--color-surface)' }}>
           {PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
+        {type !== 'epic' && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--color-text-secondary)' }}>
+            pts
+            <input
+              type="number"
+              min={1}
+              max={21}
+              placeholder="—"
+              title="Story points (1–21, optional) — sized items can be estimated and dispatched"
+              value={points}
+              onChange={(e) => setPoints(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') save();
+                if (e.key === 'Escape') onCancel();
+              }}
+              style={{ width: 52, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--color-border-emphasis)', fontSize: 12, background: 'var(--color-surface)' }}
+            />
+          </label>
+        )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
           <button onClick={onCancel} style={{
             padding: '4px 12px', borderRadius: 6, border: '1px solid var(--color-border)',
@@ -333,7 +370,7 @@ function NewItemForm({ projectId: _projectId, parentId: _parentId, defaultType, 
           }}>Cancel</button>
           <button
             disabled={!title.trim()}
-            onClick={() => title.trim() && onSave({ title: title.trim(), type, priority })}
+            onClick={save}
             style={{
               padding: '4px 12px', borderRadius: 6, border: 'none',
               background: title.trim() ? 'var(--color-primary)' : 'var(--color-border)',
@@ -363,6 +400,8 @@ function ItemRow({
 }) {
   const isDone = item.status === 'done';
   const isBug = item.type === 'bug';
+  const { can, ready } = useCapabilities();
+  const canEdit = ready && can('DispatchAgentRun');
 
   return (
     <div style={{
@@ -375,12 +414,16 @@ function ItemRow({
       onMouseEnter={(e) => { if (!isDone) (e.currentTarget as HTMLElement).style.background = 'var(--color-surface-panel)'; }}
       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = isDone ? 'var(--color-bg)' : 'var(--color-surface)'; }}
     >
-      <input
-        type="checkbox"
-        checked={isDone}
-        onChange={() => onStatusToggle(item.id, item.status)}
-        style={{ cursor: 'pointer', accentColor: 'var(--color-primary)', width: 15, height: 15, flexShrink: 0 }}
-      />
+      {/* The done-toggle PATCHes the item — DispatchAgentRun only. Viewers
+          still see the status via the glyph, strikethrough and status chip. */}
+      {canEdit && (
+        <input
+          type="checkbox"
+          checked={isDone}
+          onChange={() => onStatusToggle(item.id, item.status)}
+          style={{ cursor: 'pointer', accentColor: 'var(--color-primary)', width: 15, height: 15, flexShrink: 0 }}
+        />
+      )}
 
       {/* Type glyph — stories keep the soft indigo square (data-viz, leave);
           bugs read danger so they can't be mistaken for stories at a glance. */}
@@ -444,12 +487,14 @@ function EpicCard({
   item: WorkItemTree;
   onStatusToggle: (id: string, current: WorkItemStatus) => void;
   projectId: string;
-  onAddItem: (parentId: string, type: WorkItemType, title: string, priority: WorkItemPriority) => void;
+  onAddItem: (parentId: string, type: WorkItemType, title: string, priority: WorkItemPriority, storyPoints: number | null) => void;
   marketRuns: Record<string, BotRun>;
   onEstimate: (item: WorkItemTree) => void;
 }) {
   const [expanded, setExpanded] = useState(item.status !== 'done');
   const [addingItem, setAddingItem] = useState(false);
+  const { can, ready } = useCapabilities();
+  const canEdit = ready && can('DispatchAgentRun');
   const pts = countPoints(item);
   const stories = countStories(item);
   const pct = pts.total > 0 ? Math.round((pts.done / pts.total) * 100) : 0;
@@ -545,16 +590,16 @@ function EpicCard({
             )}
           </div>
 
-          {/* Add story / bug */}
-          {addingItem ? (
+          {/* Add story / bug — creation POSTs a work item (DispatchAgentRun) */}
+          {!canEdit ? null : addingItem ? (
             <div style={{ marginTop: 10 }}>
               <NewItemForm
                 projectId={projectId}
                 parentId={item.id}
                 defaultType="story"
                 typeOptions={['story', 'bug']}
-                onSave={({ title, type, priority }) => {
-                  onAddItem(item.id, type, title, priority);
+                onSave={({ title, type, priority, storyPoints }) => {
+                  onAddItem(item.id, type, title, priority, storyPoints);
                   setAddingItem(false);
                 }}
                 onCancel={() => setAddingItem(false)}
@@ -945,6 +990,8 @@ function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [workView, setWorkView] = useState<WorkView>('tree');
   const [localItems, setLocalItems] = useState<WorkItemTree[] | null>(null);
+  const { can: canDo, ready: capsReady } = useCapabilities();
+  const canDispatch = capsReady && canDo('DispatchAgentRun');
 
   // Governance edits are optimistic: overrides sit on top of the fetched
   // project until the next reload; the editors revert them on PATCH failure.
@@ -1017,7 +1064,7 @@ function ProjectDetailPage() {
   }, [localItems, rawTree]);
 
   // Add item optimistically
-  const handleAddItem = useCallback((parentId: string, type: WorkItemType, title: string, priority: WorkItemPriority) => {
+  const handleAddItem = useCallback((parentId: string, type: WorkItemType, title: string, priority: WorkItemPriority, storyPoints: number | null) => {
     const newItem: WorkItemTree = {
       id: `wi-new-${Date.now()}`,
       projectId: id ?? '',
@@ -1032,7 +1079,7 @@ function ProjectDetailPage() {
       assigneeName: null,
       assigneeDept: null,
       labels: [],
-      storyPoints: null,
+      storyPoints,
       prUrl: null,
       prStatus: null,
       createdAt: new Date().toISOString(),
@@ -1057,13 +1104,13 @@ function ProjectDetailPage() {
     fetch('/api/graph/work-items', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId: id, parentId, type, title, priority }),
+      body: JSON.stringify({ projectId: id, parentId, type, title, priority, storyPoints }),
     }).catch(() => {});
   }, [id, project, localItems, rawTree]);
 
   const [addingEpic, setAddingEpic] = useState(false);
 
-  const handleAddEpic = useCallback(({ title, type, priority }: { title: string; type: WorkItemType; priority: WorkItemPriority }) => {
+  const handleAddEpic = useCallback(({ title, type, priority, storyPoints }: { title: string; type: WorkItemType; priority: WorkItemPriority; storyPoints: number | null }) => {
     const newEpic: WorkItemTree = {
       id: `wi-new-epic-${Date.now()}`,
       projectId: id ?? '',
@@ -1075,7 +1122,7 @@ function ProjectDetailPage() {
       status: 'open',
       priority,
       assigneeId: null, assigneeName: null, assigneeDept: null,
-      labels: [], storyPoints: null, prUrl: null, prStatus: null,
+      labels: [], storyPoints, prUrl: null, prStatus: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       completedAt: null, childCount: 0, childDoneCount: 0,
@@ -1086,7 +1133,7 @@ function ProjectDetailPage() {
     fetch('/api/graph/work-items', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId: id, parentId: null, type, title, priority }),
+      body: JSON.stringify({ projectId: id, parentId: null, type, title, priority, storyPoints }),
     }).catch(() => {});
   }, [id, project, localItems, rawTree]);
 
@@ -1188,8 +1235,8 @@ function ProjectDetailPage() {
               </span>
             </div>
             {/* Identity line — one owner runs the initiative, SMEs direct agents.
-                The edit affordance always shows (attempt-and-surface: the PATCH
-                403s quietly for viewers without dispatch rights). */}
+                The edit affordance only renders for sessions holding
+                DispatchAgentRun (OwnerEditor gates itself). */}
             {(ownerName || smes.length > 0 || contributors.length > 0) && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, fontSize: 12, color: 'var(--color-text-secondary)', flexWrap: 'wrap' }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -1318,7 +1365,9 @@ function ProjectDetailPage() {
             <>
               {!workLoading && workTree.length === 0 && !addingEpic && (
                 <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--color-text-tertiary)', fontSize: 13 }}>
-                  No work yet. Create an epic, add sized stories and bugs, and dispatch them to agents from here.
+                  {canDispatch
+                    ? 'No work yet. Create an epic, add sized stories and bugs, and dispatch them to agents from here.'
+                    : 'No work yet.'}
                 </div>
               )}
               {workTree.map((epic) => (
@@ -1332,7 +1381,7 @@ function ProjectDetailPage() {
                   onEstimate={setEstimateItem}
                 />
               ))}
-              {addingEpic ? (
+              {!canDispatch ? null : addingEpic ? (
                 <NewItemForm
                   projectId={id ?? ''}
                   parentId={null}

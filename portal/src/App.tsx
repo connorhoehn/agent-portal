@@ -36,6 +36,7 @@ const KBRegistryPage = lazy(() => import('./pages/admin/KBRegistryPage.js'));
 const DevboxPage = lazy(() => import('./pages/admin/DevboxPage'));
 const AgentProjectsPage = lazy(() => import('./pages/admin/AgentProjectsPage'));
 const BotsPage = lazy(() => import('./pages/bots/BotsPage'));
+const BudgetsPage = lazy(() => import('./pages/budgets/BudgetsPage'));
 const BotDetailPage = lazy(() => import('./pages/bots/BotDetailPage'));
 const ChangesPage = lazy(() => import('./pages/admin/ChangesPage'));
 const KBDetailPage = lazy(() => import('./pages/admin/KBDetailPage.js'));
@@ -280,6 +281,15 @@ export function App() {
           <Route path="projects" element={
             <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
               <Page element={<AgentProjectsPage />} />
+            </RequireRole>
+          } />
+          {/* Budgets — the program-manager's ledger: allocations vs. agent
+              spend per initiative. Reads are platform-wide visibility
+              (org-leader + hr-admin, like observability); writes are gated
+              per-affordance on ManageBudgets inside the page. */}
+          <Route path="budgets" element={
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/" replace />}>
+              <Page element={<BudgetsPage />} />
             </RequireRole>
           } />
           {/* Bots — durable, mission-configured agents. Same gate as the other

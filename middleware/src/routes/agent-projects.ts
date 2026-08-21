@@ -42,7 +42,7 @@ agentProjectsRouter.post('/', asyncHandler(async (req, res) => {
     ...(body.defaultBranch ? { defaultBranch: body.defaultBranch } : {}),
     connectionName: body.connectionName ?? null,
     orgProjectId: body.orgProjectId ?? null,
-    addedBy: (req as { session?: { email?: string } }).session?.email ?? null,
+    addedBy: req.session?.sub ?? null,
   });
   res.status(201).json({ project });
 }));

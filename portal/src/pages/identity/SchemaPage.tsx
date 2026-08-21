@@ -5,6 +5,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { TagEditor, CollapsibleSection, PageSection } from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 
 interface SchemaResponse {
@@ -24,6 +25,9 @@ const DEFAULT_APPLIES_TO = {
 };
 
 function SchemaPage() {
+  // Schema edits PUT /api/identity/schema (EditSchema).
+  const { can, ready } = useCapabilities();
+  const canEdit = ready && can('EditSchema');
   const { data, isLoading, error, refresh } = useFetch<SchemaResponse>('/api/identity/schema');
   const [busy, setBusy] = useState(false);
   const [errMsg, setErrMsg] = useState<string | null>(null);
@@ -100,7 +104,7 @@ function SchemaPage() {
       title="Schema"
       description="Cedar entity types and actions enforced by AVP. Removing actions referenced by a live policy will fail validation."
       actions={
-        dirty ? (
+        canEdit && dirty ? (
           <>
             <button onClick={discard} disabled={busy} style={btnSecondary}>Discard</button>
             <button onClick={save} disabled={busy} style={btnPrimary}>Save changes</button>
@@ -127,15 +131,25 @@ function SchemaPage() {
 
         <div>
           <div style={sectionLabel}>Actions</div>
-          <TagEditor
-            value={actions}
-            onChange={setActions}
-            placeholder="add action…"
-            lowercase={false}
-          />
-          <div style={hint}>
-            Type an action name and press Enter. New actions inherit appliesTo: {DEFAULT_APPLIES_TO.principalTypes.join(', ')} → {DEFAULT_APPLIES_TO.resourceTypes.join(', ')}.
-          </div>
+          {canEdit ? (
+            <>
+              <TagEditor
+                value={actions}
+                onChange={setActions}
+                placeholder="add action…"
+                lowercase={false}
+              />
+              <div style={hint}>
+                Type an action name and press Enter. New actions inherit appliesTo: {DEFAULT_APPLIES_TO.principalTypes.join(', ')} → {DEFAULT_APPLIES_TO.resourceTypes.join(', ')}.
+              </div>
+            </>
+          ) : (
+            <div style={chipRow}>
+              {actions.length > 0
+                ? actions.map(a => <span key={a} style={chip}>{a}</span>)
+                : <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>(none)</span>}
+            </div>
+          )}
         </div>
       </article>
 

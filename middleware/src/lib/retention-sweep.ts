@@ -57,8 +57,10 @@ export interface RetentionRule {
   predicate: string;
 }
 
-// bot_runs go directly: they cascade-delete only from bots, so an old terminal
-// run row (including skipped firings) has nothing downstream depending on it.
+// bot_runs carry the same audit guard as agent_project_runs: a bot_run whose
+// run_id backs a change request is half of the trail from a review decision
+// back to the firing that caused it — deleting it would orphan that trail.
+// (run_id NULL rows pass the NOT EXISTS trivially and expire normally.)
 // agent_jobs are safe to drop even when a bot_run still points at one —
 // bot_runs.job_id is ON DELETE SET NULL, and the reconciler has long since
 // copied the terminal status across.
@@ -69,7 +71,8 @@ export const RETENTION_RULES: readonly RetentionRule[] = [
   },
   {
     table: 'bot_runs',
-    predicate: `status IN ('done','failed','skipped') AND finished_at IS NOT NULL AND finished_at < :cutoff::timestamptz`,
+    predicate: `status IN ('done','failed','skipped') AND finished_at IS NOT NULL AND finished_at < :cutoff::timestamptz
+        AND NOT EXISTS (SELECT 1 FROM agent_change_requests c WHERE c.run_id = bot_runs.run_id)`,
   },
   {
     table: 'agent_project_runs',

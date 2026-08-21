@@ -17,6 +17,7 @@ import {
   EmptyState,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useCapabilities } from '../../lib/capabilities';
 import { BotCreateWizard } from './BotCreateWizard';
 
 // ─── Types (the /api/bots contract) ──────────────────────────────────────────
@@ -112,6 +113,8 @@ export function when(iso: string | null): string {
 export default function BotsPage() {
   const { data, error, refresh } = useFetch<{ bots: Bot[] }>('/api/bots', 15_000);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageDevbox');
 
   const bots = data?.bots ?? [];
 
@@ -121,12 +124,14 @@ export default function BotsPage() {
       description="Standing missions: pick a template, write what the bot should do, point it at a codebase or an initiative, and govern what it ships."
     >
       <div className="flex items-center gap-2 mb-4">
-        <button
-          onClick={() => setWizardOpen(true)}
-          className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer"
-        >
-          + New bot
-        </button>
+        {canManage && (
+          <button
+            onClick={() => setWizardOpen(true)}
+            className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer"
+          >
+            + New bot
+          </button>
+        )}
         {bots.length > 0 && (
           <span className="text-[11px] text-text-tertiary">
             {bots.length} {bots.length === 1 ? 'bot' : 'bots'} · every change still passes review + policy gates
@@ -144,8 +149,7 @@ export default function BotsPage() {
         <EmptyState
           title="No bots yet"
           description="A bot is a durable, mission-configured agent — a written mission with budget guardrails and a trigger, whose every change still passes review and policy gates."
-          actionLabel="+ New bot"
-          onAction={() => setWizardOpen(true)}
+          {...(canManage ? { actionLabel: '+ New bot', onAction: () => setWizardOpen(true) } : {})}
         />
       ) : (
         <div className="grid gap-4 grid-cols-1 xl:grid-cols-2">

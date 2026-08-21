@@ -19,6 +19,10 @@ import {
 } from '../lib/orgMentions';
 import { usePresence, useChat } from '@connorhoehnslalom/realtime-modules/client';
 import { PresenceAvatarGroup } from '../components/shell/PresenceAvatarGroup';
+import { extractSources } from '../components/chat/answerSources';
+import { SourceChips } from '../components/chat/SourceChips';
+import { summarizeToolCalls } from '../components/chat/toolCallSummary';
+import { coalesceAssistantMessages } from '../components/chat/coalesceMessages';
 
 // Feature flag: set VITE_ORGIQ_CHAT_ENABLED=true to show the session chat sidebar.
 // We avoid import.meta.env typing concerns (no vite-env.d.ts in this repo) by
@@ -217,6 +221,11 @@ function InvokePage() {
 
   const sessions = sessionList?.sessions ?? [];
 
+  // One supervisor turn can stream as several adjacent assistant messages
+  // (the hook flushes at every TEXT_MESSAGE_END) — merge them so the role
+  // label renders once per turn instead of once per fragment.
+  const displayMessages = useMemo(() => coalesceAssistantMessages(messages), [messages]);
+
   // Contextual follow-up suggestions derived from conversation + refreshed on demand
   // Org-graph enrichment: which *real* people the answer named. Matched exactly
   // (word-boundary hits against actual graph people), so the "People in this
@@ -349,24 +358,40 @@ function InvokePage() {
               />
             </div>
           )}
-          {messages.map(msg => (
-            <MessageBubble
-              key={msg.id}
-              role={msg.role}
-              content={msg.content}
-              toolCalls={(msg.toolCalls ?? []).map(tc => ({
-                id: tc.id,
-                name: tc.name,
-                done: Boolean(tc.result),
-              }))}
-              agentName={selectedAgent?.name ?? 'Agent'}
-              renderMarkdown={(content) => renderMessageContent(content, false)}
-            />
-          ))}
+          {displayMessages.map(msg => {
+            // Pull [Source: …] citations out of the prose (thinking blocks are
+            // kept — renderMessageContent handles those) and summarize what the
+            // turn's captured tool calls actually did.
+            const { cleaned, sources } = msg.role === 'assistant'
+              ? extractSources(msg.content)
+              : { cleaned: msg.content, sources: [] };
+            const toolSummary = msg.role === 'assistant' ? summarizeToolCalls(msg.toolCalls) : null;
+            return (
+              <div key={msg.id}>
+                <MessageBubble
+                  role={msg.role}
+                  content={cleaned}
+                  toolCalls={(msg.toolCalls ?? []).map(tc => ({
+                    id: tc.id,
+                    name: tc.name,
+                    done: Boolean(tc.result),
+                  }))}
+                  agentName={selectedAgent?.name ?? 'Agent'}
+                  renderMarkdown={(content) => renderMessageContent(content, false)}
+                />
+                {toolSummary && (
+                  <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
+                    {toolSummary}
+                  </div>
+                )}
+                <SourceChips sources={sources} />
+              </div>
+            );
+          })}
           {isStreaming && (
             <MessageBubble
               role="assistant"
-              content={streamingText}
+              content={extractSources(streamingText).cleaned}
               toolCalls={activeToolCalls.map(tc => ({
                 id: tc.id,
                 name: tc.name,

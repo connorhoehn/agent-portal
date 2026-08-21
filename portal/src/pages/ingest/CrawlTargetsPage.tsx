@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Card, ConfirmDialog, PageSection } from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../lib/capabilities';
 import { SiteSurveyPanel } from '../../components/ingest/SiteSurveyPanel';
 import { ConnectedSources } from '../../components/ingest/ConnectedSources';
 import { useFetch } from '../../hooks/useFetch';
@@ -12,6 +13,9 @@ import type { TargetDraft } from '../../components/ingest/NewTargetModal';
 import { Button, EmptyState, PulseDot } from '../../components/ingest/ui';
 
 function CrawlTargetsPage() {
+  // Target CRUD, runs and cancels all ride /api/ingest (ManageIngest).
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageIngest');
   const { data: targetsData, refresh: refreshTargets } = useFetch<{ targets: CrawlTarget[] }>(
     '/api/ingest/crawl-targets',
     30_000,
@@ -145,17 +149,20 @@ function CrawlTargetsPage() {
 
       {/* Crawl Targets */}
       <Card padding="md" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <Button variant="primary" onClick={() => setShowNewTarget(true)}>
-            + New Target
-          </Button>
-        </div>
+        {canManage && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <Button variant="primary" onClick={() => setShowNewTarget(true)}>
+              + New Target
+            </Button>
+          </div>
+        )}
         {targets.length === 0 ? (
           <EmptyState title="No crawl targets yet" body="Define a target to start ingesting public web content with vision-LLM extraction." />
         ) : (
           <TargetsTable
             targets={targets}
             busyId={targetBusy}
+            readOnly={!canManage}
             onRun={runTarget}
             onEdit={(t) => setEditTarget(t)}
             onDelete={(t) => setDeleteTarget(t)}

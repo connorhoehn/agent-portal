@@ -53,6 +53,7 @@ const PAGES: PageEntry[] = [
   { label: 'Work',               hint: 'Findings, jobs, proposals',           path: '/iq/work',                                    tenant: 'orgiq',  group: 'Build' },
   { label: 'Graph updates',      hint: 'What reached the org graph',          path: '/iq/work/changes',                            tenant: 'orgiq',  group: 'Build' },
   { label: 'Initiatives',        hint: 'Epics, decisions, contributors',      path: '/iq/projects',                                tenant: 'orgiq',  group: 'Build' },
+  { label: 'Budgets',            hint: 'Agent spend vs allocation',           path: '/admin/budgets',                              tenant: 'admin',  group: 'Build',   roles: PLATFORM },
   { label: 'Bots',               hint: 'Mission-configured agents',           path: '/admin/bots',                                 tenant: 'admin',  group: 'Build',   roles: BUILD },
   { label: 'Codebases',          hint: 'Repos agents work on + runs',         path: '/admin/projects',                             tenant: 'admin',  group: 'Build',   roles: BUILD },
   { label: 'Changes',            hint: 'Code review queue + policies',        path: '/admin/changes',                              tenant: 'admin',  group: 'Build',   roles: BUILD },

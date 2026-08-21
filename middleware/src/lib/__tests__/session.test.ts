@@ -95,19 +95,29 @@ describe('sign/verify round trip', () => {
 
   it('repairs a validly-signed cookie whose role is not granted in its tenant', async () => {
     // Simulate a stale cookie: role carried into a tenant where it isn't held.
+    // iat must be recent — verifySession now enforces the session age
+    // server-side, so an ancient iat is (correctly) an expired session.
     const stale: Session = {
       sub: 'u-x', role: 'hr-admin', tenant: 'newsroom',
-      grants: { newsroom: ['reporter'] }, iat: 1,
+      grants: { newsroom: ['reporter'] }, iat: Math.floor(Date.now() / 1000),
     };
     const verified = await verifySession(await signSession(stale));
     expect(verified).toMatchObject({ tenant: 'newsroom', role: 'reporter' });
   });
 
   it('grants permissive access to legacy cookies without a grants field', async () => {
-    const legacy = { sub: 'demo-user', role: 'member', tenant: 'orgiq', iat: 1 };
+    const legacy = { sub: 'demo-user', role: 'member', tenant: 'orgiq', iat: Math.floor(Date.now() / 1000) };
     const verified = await verifySession(await signSession(legacy as unknown as Session));
     expect(verified).not.toBeNull();
     expect(rolesForTenant(verified!.grants, 'newsroom').length).toBeGreaterThan(0);
+  });
+
+  it('rejects a validly-signed cookie whose iat is older than the session TTL', async () => {
+    const ancient: Session = {
+      sub: 'u-x', role: 'member', tenant: 'orgiq',
+      grants: { orgiq: ['member'] }, iat: 1,
+    };
+    expect(await verifySession(await signSession(ancient))).toBeNull();
   });
 });
 

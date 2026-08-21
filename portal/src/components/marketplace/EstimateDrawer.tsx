@@ -15,6 +15,7 @@ import {
   Chip,
 } from '@connorhoehnslalom/ui-components/shared';
 import { DEVBOX_MODELS, DEFAULT_DEVBOX_MODEL } from '../../lib/devboxModels';
+import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import type { BotRun } from '../../pages/bots/BotsPage';
 
@@ -108,6 +109,8 @@ export function estimateLine(est: WorkEstimate): string {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }: EstimateDrawerProps) {
+  const { can, ready } = useCapabilities();
+  const canDispatch = ready && can('DispatchAgentRun');
   const [model, setModel] = useState<string>(DEFAULT_DEVBOX_MODEL);
   const [instruction, setInstruction] = useState('');
   const [agentProjectId, setAgentProjectId] = useState<string | null>(null);
@@ -224,13 +227,15 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
             >
               Cancel
             </button>
-            <button
-              onClick={() => setConfirmOpen(true)}
-              disabled={estLoading || estimate == null || dispatching}
-              className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-40"
-            >
-              {dispatching ? 'dispatching…' : 'Authorize'}
-            </button>
+            {canDispatch && (
+              <button
+                onClick={() => setConfirmOpen(true)}
+                disabled={estLoading || estimate == null || dispatching}
+                className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-40"
+              >
+                {dispatching ? 'dispatching…' : 'Authorize'}
+              </button>
+            )}
           </div>
         }
       >

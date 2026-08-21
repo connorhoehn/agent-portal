@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Spinner } from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../lib/capabilities';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -48,6 +49,9 @@ function truncateKey(key: string, max = 60): string {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) {
+  // Uploads POST /api/admin/kb-registry landing-zone (ManageKB); listing stays.
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageKB');
   const [files, setFiles] = useState<LandingZoneFile[]>([]);
   const [nextToken, setNextToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -168,33 +172,35 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
           s3://&lt;bucket&gt;/{s3Prefix}
         </code>
 
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploading}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '6px 14px',
-            fontSize: 12,
-            fontWeight: 600,
-            background: uploading ? 'var(--color-state-pending)' : 'var(--color-info)',
-            color: 'var(--color-surface)',
-            border: 'none',
-            borderRadius: 6,
-            cursor: uploading ? 'not-allowed' : 'pointer',
-            flexShrink: 0,
-          }}
-        >
-          {uploading ? (
-            <>
-              <Spinner size="sm" color="var(--color-surface)" />
-              Uploading…
-            </>
-          ) : (
-            'Upload File'
-          )}
-        </button>
+        {canManage && (
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 14px',
+              fontSize: 12,
+              fontWeight: 600,
+              background: uploading ? 'var(--color-state-pending)' : 'var(--color-info)',
+              color: 'var(--color-surface)',
+              border: 'none',
+              borderRadius: 6,
+              cursor: uploading ? 'not-allowed' : 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            {uploading ? (
+              <>
+                <Spinner size="sm" color="var(--color-surface)" />
+                Uploading…
+              </>
+            ) : (
+              'Upload File'
+            )}
+          </button>
+        )}
 
         {/* Hidden file input */}
         <input

@@ -10,6 +10,7 @@
 
 import { useCallback, useState } from 'react';
 import { Drawer } from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
 
 interface OrgRef { login: string; description: string | null }
@@ -53,6 +54,11 @@ const CHEVRON = 'text-[9px] w-2 shrink-0';
 const NODE = 'flex items-center gap-1.5 text-[12px] cursor-pointer hover:underline py-1';
 
 export function RepoDiscovery({ open, onClose, connections, orgProjects, linkedFullNames, onLinked }: Props) {
+  // Linking POSTs /api/agent-projects (ManageDevbox); browsing rides
+  // /api/connections and surfaces its own 403 message when ManageIngest is
+  // missing.
+  const { can, ready } = useCapabilities();
+  const canLink = ready && can('ManageDevbox');
   const [expandedConns, setExpandedConns] = useState<Set<string>>(new Set());
   // Owner key: `<connection>|<org login>` — empty login means Personal.
   const [expandedOwners, setExpandedOwners] = useState<Set<string>>(new Set());
@@ -168,7 +174,7 @@ export function RepoDiscovery({ open, onClose, connections, orgProjects, linkedF
             <div className="flex-1" />
             {isLinked ? (
               <span className="text-[10px] px-1.5 py-0.5 rounded bg-success-bg text-success shrink-0">linked</span>
-            ) : (
+            ) : !canLink ? null : (
               <button
                 onClick={() => { setConfirmFor(confirming ? null : rowKey); setOrgProject(''); }}
                 className="px-2 py-0.5 rounded-md border border-border bg-surface text-[11px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors shrink-0"

@@ -85,7 +85,10 @@ describe('renderWorkItemPrompt', () => {
     expect(p).toContain('Fix the login flow');
     expect(p).toContain('The redirect loops on expired sessions.');
     expect(p).toContain('Labels: auth, bug');
-    expect(p).toContain('Commit your work; it will be captured, reviewed and gated automatically.');
+    // The pipeline contract, not the old "commit your work" line: capture
+    // diffs the working tree, so the agent must NOT commit.
+    expect(p).toContain('do not run git commit');
+    expect(p).toContain('UNCOMMITTED');
   });
 
   it('omits the pts suffix, description and labels when absent', () => {
@@ -98,6 +101,6 @@ describe('renderWorkItemPrompt', () => {
   it('appends the one-shot instruction before the governance line', () => {
     const p = renderWorkItemPrompt(wi, 'touch only auth/');
     expect(p.indexOf('For this run specifically: touch only auth/'))
-      .toBeLessThan(p.indexOf('Commit your work'));
+      .toBeLessThan(p.indexOf('UNCOMMITTED'));
   });
 });

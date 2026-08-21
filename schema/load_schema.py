@@ -54,6 +54,9 @@ def main():
         # agent_project_runs, agent_jobs and projects, and its ALTERs add
         # linkage columns to tables the files above create.
         'agent_bots_schema.sql',
+        # Initiative budget allocations. Loads after agent_bots_schema.sql
+        # (spend reads join bot_runs) and orgiq_schema.sql (FK on projects).
+        'agent_budgets_schema.sql',
     ]
 
     for filename in schema_files:

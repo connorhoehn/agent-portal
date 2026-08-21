@@ -248,6 +248,16 @@
             "Application"
           ]
         }
+      },
+      "ManageBudgets": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
       }
     }
   }

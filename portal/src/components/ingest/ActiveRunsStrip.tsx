@@ -1,4 +1,5 @@
 import { Card, Chip } from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../lib/capabilities';
 import { CRAWL_STATUS_TONE, durationOf, formatDuration } from './types';
 import type { CrawlSession } from './types';
 import { useCrawlStream } from './useCrawlStream';
@@ -35,6 +36,9 @@ function ActiveRunCard({
   // Live snapshot via SSE; fall back to the initial snapshot until first event.
   const { session: live } = useCrawlStream(initial.id);
   const session = live ?? initial;
+  // Cancelling a crawl is a DELETE on /api/ingest (ManageIngest).
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageIngest');
 
   const pagesDone = session.pages.length;
   const pct = session.maxPages > 0
@@ -167,7 +171,7 @@ function ActiveRunCard({
           }}>
             Open
           </button>
-          {isRunning && (
+          {isRunning && canManage && (
             <Button variant="danger" onClick={() => onCancel(session.id)}>
               Cancel
             </Button>

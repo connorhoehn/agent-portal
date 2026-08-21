@@ -29,6 +29,7 @@ import {
   useCanaryNodes,
   useCanaryStore,
 } from '../components/canary/canaryStore.js';
+import { useCapabilities } from '../lib/capabilities';
 import { HaltButton } from '../components/canary/HaltButton.js';
 import { ManualWeightSlider } from '../components/canary/ManualWeightSlider.js';
 import { DecisionHistoryPanel } from '../components/canary/DecisionHistoryPanel.js';
@@ -491,6 +492,10 @@ function CanaryFlowInner({
 
 function CanaryPage(): React.ReactElement {
   useCanaryStream();
+  // Start/reset/halt/weight all require Cedar's ManageCanary — the same
+  // action the /api/observability/canary mutations enforce.
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageCanary');
   const experimentState = useCanaryStore((s) => s.experimentState);
   const debug = useCanaryStore((s) => s.manualSliderOpen);
   const halted = useCanaryStore((s) => s.halted);
@@ -521,9 +526,15 @@ function CanaryPage(): React.ReactElement {
           <span style={setupSubtitleStyle}>Configure a new experiment</span>
         </div>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'var(--color-bg, #f8fafc)' }}>
-          <React.Suspense fallback={<div style={{ fontSize: 13, color: 'var(--color-text-tertiary, #94a3b8)' }}>Loading…</div>}>
-            <CanarySetupFlow onStarted={() => { /* store handles state transition */ }} />
-          </React.Suspense>
+          {canManage ? (
+            <React.Suspense fallback={<div style={{ fontSize: 13, color: 'var(--color-text-tertiary, #94a3b8)' }}>Loading…</div>}>
+              <CanarySetupFlow onStarted={() => { /* store handles state transition */ }} />
+            </React.Suspense>
+          ) : (
+            <div style={{ fontSize: 13, color: 'var(--color-text-tertiary, #94a3b8)', maxWidth: 380, textAlign: 'center', lineHeight: 1.6 }}>
+              No experiment is running. Viewing only — your role can&apos;t start a canary experiment.
+            </div>
+          )}
         </div>
       </div>
     );
@@ -558,6 +569,7 @@ function CanaryPage(): React.ReactElement {
         onDebugChange={setManualSliderOpen}
         scenariosOpen={scenariosOpen}
         onScenariosToggle={() => setScenariosOpen((v) => !v)}
+        canManage={canManage}
       />
       <div style={bodyStyle}>
         <div style={mainColStyle}>
@@ -615,6 +627,7 @@ function Toolbar({
   onDebugChange,
   scenariosOpen,
   onScenariosToggle,
+  canManage,
 }: {
   halted: boolean;
   lastJudgedAt: string | undefined;
@@ -622,6 +635,8 @@ function Toolbar({
   onDebugChange: (v: boolean) => void;
   scenariosOpen: boolean;
   onScenariosToggle: () => void;
+  /** ManageCanary — controls that mutate the experiment hide without it. */
+  canManage: boolean;
 }): React.ReactElement {
   return (
     <div style={toolbarStyle}>
@@ -634,24 +649,28 @@ function Toolbar({
         </span>
       </div>
       <div style={rightGroupStyle}>
-        {debug && <ManualWeightSlider />}
-        <label style={debugLabelStyle}>
-          <input type="checkbox" checked={debug} onChange={(e) => onDebugChange(e.target.checked)} />
-          <span>Debug</span>
-        </label>
-        <button
-          style={scenarioBtnStyle}
-          title="End this experiment and return to the setup wizard (traffic pins back to A)"
-          onClick={() => {
-            if (!window.confirm('End this experiment and start a new one?\nTraffic pins back to 100% A; decision history is kept.')) return;
-            void fetch('/api/observability/canary/reset', { method: 'POST', credentials: 'include' })
-              .catch(() => { /* store reset still returns the UI to the wizard */ })
-              .finally(() => resetExperiment());
-          }}
-        >
-          ＋ New experiment
-        </button>
-        {!halted && <HaltButton />}
+        {canManage && (
+          <>
+            {debug && <ManualWeightSlider />}
+            <label style={debugLabelStyle}>
+              <input type="checkbox" checked={debug} onChange={(e) => onDebugChange(e.target.checked)} />
+              <span>Debug</span>
+            </label>
+            <button
+              style={scenarioBtnStyle}
+              title="End this experiment and return to the setup wizard (traffic pins back to A)"
+              onClick={() => {
+                if (!window.confirm('End this experiment and start a new one?\nTraffic pins back to 100% A; decision history is kept.')) return;
+                void fetch('/api/observability/canary/reset', { method: 'POST', credentials: 'include' })
+                  .catch(() => { /* store reset still returns the UI to the wizard */ })
+                  .finally(() => resetExperiment());
+              }}
+            >
+              ＋ New experiment
+            </button>
+            {!halted && <HaltButton />}
+          </>
+        )}
         <button
           style={{
             ...scenarioBtnStyle,

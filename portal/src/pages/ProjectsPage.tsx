@@ -1,27 +1,37 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
-  AvatarGroup,
+  Avatar,
+  Chip,
   PageSection,
   SkeletonCard,
-  ProjectCard,
 } from '@connorhoehnslalom/ui-components/shared';
-import type { ActivityFeedItem } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
+
+// The operating model: one person runs each initiative, a few SMEs cut across
+// them directing agents. The cards show that — owner + SMEs + real work
+// rollups + agent spend — not fabricated activity feeds or ten-avatar walls.
 
 interface ProjectSummary {
   id: string;
   name: string;
   status: string | null;
   description?: string | null;
-  // Owner — optional; the list response may gain these alongside the detail
-  // endpoint. Render when present, omit cleanly when absent.
-  ownerId?: string | null;
-  ownerName?: string | null;
   contributorCount: number;
   topContributorNames?: string[];
   lastActivityAt?: string | null;
   createdAt: string | null;
+  // Operating-model rollups. All null/[] on pre-migration clusters — render
+  // what's present, omit cleanly what isn't.
+  ownerId?: string | null;
+  ownerName?: string | null;
+  smeNames?: string[];
+  openStories?: number | null;
+  openBugs?: number | null;
+  pointsDone?: number | null;
+  pointsTotal?: number | null;
+  agentSpendUsd?: number | null;
+  lastAgentActivityAt?: string | null;
 }
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -32,7 +42,7 @@ const STATUS_LABELS: Record<string, string> = {
   planning: 'Planning', completed: 'Completed', archived: 'Archived',
 };
 
-// ─── Status color helpers (for list-view and StatusChip) ─────────────────────
+// ─── Status color helpers ─────────────────────────────────────────────────────
 
 const STATUS_COLORS: Record<string, { bg: string; border: string; text: string; accent: string }> = {
   active:       { bg: '#f0fdf4', border: '#86efac', text: '#166534', accent: '#16a34a' },
@@ -66,117 +76,6 @@ function deriveProjectKey(projectId: string, projectName: string): string {
   return projectName.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 4);
 }
 
-// ─── Mock activity feeds ──────────────────────────────────────────────────────
-// ticketId: "KEY-NNN", subject: clean task title (no # prefix)
-
-const MOCK_FEED: Record<string, ActivityFeedItem[]> = {
-  'proj-k8s': [
-    { id: 'k1', actor: 'Alex Chen',    action: 'completed',         ticketId: 'K8S-182', subject: 'Node pool autoscaler config',     timeLabel: '2m ago',  kind: 'task' },
-    { id: 'k2', actor: 'Maria Santos', action: 'merged',            ticketId: 'K8S-179', subject: 'etcd backup script',              timeLabel: '8m ago',  kind: 'pr' },
-    { id: 'k3', actor: 'Priya Patel',  action: 'created',           ticketId: 'K8S-183', subject: 'Upgrade CoreDNS to 1.11',         timeLabel: '23m ago', kind: 'task' },
-    { id: 'k4', actor: 'Ahmed Hassan', action: 'commented on',      ticketId: 'K8S-176', subject: 'cluster version pinning',         timeLabel: '45m ago', kind: 'comment' },
-    { id: 'k5', actor: 'Alex Chen',    action: 'closed',            ticketId: 'K8S-171', subject: 'kube-proxy DaemonSet rollout',    timeLabel: '1h ago',  kind: 'status' },
-    { id: 'k6', actor: 'Maria Santos', action: 'merged',            ticketId: 'K8S-168', subject: 'node-local DNS cache',            timeLabel: '2h ago',  kind: 'pr' },
-    { id: 'k7', actor: "Ryan O'Brien", action: 'updated',           ticketId: 'K8S-162', subject: 'cluster upgrade runbook',         timeLabel: '3h ago',  kind: 'task' },
-    { id: 'k8', actor: 'Priya Patel',  action: 'created',           ticketId: 'K8S-184', subject: 'pod security admission controls', timeLabel: '4h ago',  kind: 'task' },
-  ],
-  'proj-istio': [
-    { id: 'i1', actor: 'Alex Chen',    action: 'merged',            ticketId: 'IST-91',  subject: 'mTLS policy for payments svc',    timeLabel: '5m ago',  kind: 'pr' },
-    { id: 'i2', actor: 'Sophie Turner',action: 'decided',           ticketId: 'IST-88',  subject: 'Adopt Ambient mesh mode',         timeLabel: '30m ago', kind: 'decision' },
-    { id: 'i3', actor: 'Priya Patel',  action: 'created',           ticketId: 'IST-92',  subject: 'Canary rollout for v1.20',        timeLabel: '1h ago',  kind: 'task' },
-    { id: 'i4', actor: "Ryan O'Brien", action: 'updated',           ticketId: 'IST-79',  subject: 'traffic routing docs',            timeLabel: '2h ago',  kind: 'task' },
-    { id: 'i5', actor: 'Alex Chen',    action: 'completed',         ticketId: 'IST-85',  subject: 'Envoy filter for JWT validation', timeLabel: '3h ago',  kind: 'task' },
-    { id: 'i6', actor: 'Sophie Turner',action: 'commented on',      ticketId: 'IST-83',  subject: 'sidecar injection defaults',      timeLabel: '4h ago',  kind: 'comment' },
-  ],
-  'proj-cicd': [
-    { id: 'c1', actor: 'Maria Santos', action: 'merged',            ticketId: 'CICD-247',subject: 'parallel test runner',            timeLabel: '12m ago', kind: 'pr' },
-    { id: 'c2', actor: 'Sophie Turner',action: 'created',           ticketId: 'CICD-251',subject: 'OIDC token caching for runners',  timeLabel: '35m ago', kind: 'task' },
-    { id: 'c3', actor: 'James Wright', action: 'completed',         ticketId: 'CICD-239',subject: 'Migrate repo to GitHub Actions',  timeLabel: '2h ago',  kind: 'task' },
-    { id: 'c4', actor: 'David Kim',    action: 'decided',           ticketId: 'CICD-232',subject: 'single pipeline template',        timeLabel: '3h ago',  kind: 'decision' },
-    { id: 'c5', actor: 'Maria Santos', action: 'opened PR',         ticketId: 'CICD-244',subject: 'artifact retention policy',       timeLabel: '5h ago',  kind: 'pr' },
-    { id: 'c6', actor: 'James Wright', action: 'commented on',      ticketId: 'CICD-228',subject: 'cache invalidation strategy',     timeLabel: '6h ago',  kind: 'comment' },
-  ],
-  'proj-otel': [
-    { id: 'o1', actor: 'Ben Foster',   action: 'completed',         ticketId: 'OTEL-64', subject: 'Collector gateway HA setup',      timeLabel: '18m ago', kind: 'task' },
-    { id: 'o2', actor: 'Alex Chen',    action: 'merged',            ticketId: 'OTEL-61', subject: 'span exporter for Aurora',        timeLabel: '1h ago',  kind: 'pr' },
-    { id: 'o3', actor: 'David Kim',    action: 'decided',           ticketId: 'OTEL-58', subject: 'Grafana Alloy as collector',      timeLabel: '2h ago',  kind: 'decision' },
-    { id: 'o4', actor: 'Ben Foster',   action: 'created',           ticketId: 'OTEL-65', subject: 'SLO dashboards for API latency',  timeLabel: '3h ago',  kind: 'task' },
-    { id: 'o5', actor: 'Alex Chen',    action: 'completed',         ticketId: 'OTEL-57', subject: 'instrument search agent OTEL',    timeLabel: '4h ago',  kind: 'task' },
-  ],
-  'proj-cedar': [
-    { id: 'ce1', actor: 'Sophie Turner',action: 'merged',           ticketId: 'CDR-48',  subject: 'Cedar policy for HR-admin',       timeLabel: '7m ago',  kind: 'pr' },
-    { id: 'ce2', actor: 'James Wright', action: 'completed',        ticketId: 'CDR-45',  subject: 'policy simulator test suite',     timeLabel: '40m ago', kind: 'task' },
-    { id: 'ce3', actor: 'David Kim',    action: 'decided',          ticketId: 'CDR-42',  subject: 'enforce deny-all baseline',       timeLabel: '1h ago',  kind: 'decision' },
-    { id: 'ce4', actor: 'Sophie Turner',action: 'created',          ticketId: 'CDR-49',  subject: 'Cedar policy for Bedrock KB',     timeLabel: '2h ago',  kind: 'task' },
-    { id: 'ce5', actor: 'James Wright', action: 'commented on',     ticketId: 'CDR-40',  subject: 'role hierarchy design',           timeLabel: '3h ago',  kind: 'comment' },
-  ],
-  'proj-onboard': [
-    { id: 'ob1', actor: 'David Kim',    action: 'created',          ticketId: 'OBD-12',  subject: 'Week 1 onboarding checklist',     timeLabel: '1h ago',  kind: 'task' },
-    { id: 'ob2', actor: 'James Wright', action: 'created',          ticketId: 'OBD-11',  subject: 'dev environment setup guide',     timeLabel: '3h ago',  kind: 'task' },
-    { id: 'ob3', actor: "Ryan O'Brien", action: 'updated',          ticketId: 'OBD-9',   subject: 'glossary of internal tools',      timeLabel: '5h ago',  kind: 'task' },
-    { id: 'ob4', actor: 'David Kim',    action: 'decided',          ticketId: 'OBD-7',   subject: 'buddy system for first 30 days',  timeLabel: '1d ago',  kind: 'decision' },
-    { id: 'ob5', actor: 'James Wright', action: 'commented on',     ticketId: 'OBD-5',   subject: 'knowledge base access policy',    timeLabel: '1d ago',  kind: 'comment' },
-  ],
-};
-
-// ─── Activity generator for real Aurora projects ──────────────────────────────
-
-const GEN_ACTIONS: Array<{ action: string; kind: string }> = [
-  { action: 'completed',   kind: 'task' },
-  { action: 'merged',      kind: 'pr' },
-  { action: 'created',     kind: 'task' },
-  { action: 'opened PR',   kind: 'pr' },
-  { action: 'commented on',kind: 'comment' },
-  { action: 'decided',     kind: 'decision' },
-  { action: 'closed',      kind: 'status' },
-  { action: 'updated',     kind: 'task' },
-];
-
-const GEN_SUBJECTS = [
-  'refactor stale cache logic',   'add retry on timeout',      'update API schema',
-  'fix null pointer in handler',  'improve error reporting',   'add integration tests',
-  'bump dependency versions',     'extract shared util module', 'performance profiling',
-  'review security headers',      'update runbook',            'add telemetry spans',
-];
-
-const GEN_TIMES = ['3m ago', '11m ago', '28m ago', '1h ago', '2h ago', '3h ago', '5h ago', '8h ago'];
-
-function djb2(s: string): number {
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
-  return h;
-}
-
-function generateActivities(project: ProjectSummary): ActivityFeedItem[] {
-  const names = project.topContributorNames ?? [];
-  if (names.length === 0) return [];
-  const key = deriveProjectKey(project.id, project.name);
-  const seed = djb2(project.id);
-  // Starting ticket number: deterministic per project, 50–499
-  const baseNum = 50 + (seed % 450);
-
-  return Array.from({ length: Math.min(8, names.length + 4) }, (_, i) => {
-    const h = djb2(project.id + String(i));
-    const actor = names[i % names.length]!;
-    const a = GEN_ACTIONS[h % GEN_ACTIONS.length]!;
-    const subj = GEN_SUBJECTS[(h ^ (h >> 8)) % GEN_SUBJECTS.length]!;
-    const ticketNum = baseNum + (i * 3);
-    return {
-      id: `${project.id}-g${i}`,
-      actor,
-      action: a.action,
-      ticketId: `${key}-${ticketNum}`,
-      subject: subj,
-      timeLabel: GEN_TIMES[i % GEN_TIMES.length]!,
-      kind: a.kind,
-    };
-  });
-}
-
-function getActivityItems(project: ProjectSummary): ActivityFeedItem[] {
-  return MOCK_FEED[project.id] ?? generateActivities(project);
-}
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function relativeTime(isoDate: string | null | undefined): string {
@@ -200,7 +99,21 @@ function presenceColor(isoDate: string | null | undefined): string {
   return '#d1d5db';
 }
 
-// ─── StatusChip (list-view only) ─────────────────────────────────────────────
+/** "{openStories} stories · {openBugs} bugs · {done}/{total} pts" — parts the
+ *  rollup didn't provide (pre-migration clusters) are omitted, not zeroed. */
+function workLine(p: ProjectSummary): string | null {
+  const parts: string[] = [];
+  if (p.openStories != null) parts.push(`${p.openStories} ${p.openStories === 1 ? 'story' : 'stories'}`);
+  if (p.openBugs != null) parts.push(`${p.openBugs} ${p.openBugs === 1 ? 'bug' : 'bugs'}`);
+  if (p.pointsDone != null && p.pointsTotal != null) parts.push(`${p.pointsDone}/${p.pointsTotal} pts`);
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+function usd(n: number): string {
+  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+// ─── StatusChip ──────────────────────────────────────────────────────────────
 
 function StatusChip({ status }: { status: string | null }) {
   const label = status ?? 'unknown';
@@ -221,19 +134,103 @@ function StatusChip({ status }: { status: string | null }) {
   );
 }
 
+// ─── Grid card ────────────────────────────────────────────────────────────────
+// Local card, not the library ProjectCard: that component is built around an
+// activity feed + avatar wall, which is exactly the synthetic noise this page
+// dropped. At most one owner avatar + up to three SME chips.
+
+const MAX_SME_CHIPS = 3;
+
+function InitiativeCard({ project, onClick }: { project: ProjectSummary; onClick: () => void }) {
+  const rawStatus = (project.status ?? 'unknown').toLowerCase().replace(/ /g, '_');
+  const colors = STATUS_COLORS[rawStatus] ?? STATUS_COLORS['planning']!;
+  const smes = project.smeNames ?? [];
+  const work = workLine(project);
+  const spend = project.agentSpendUsd ?? 0;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        display: 'flex', flexDirection: 'column', gap: 10,
+        padding: '14px 16px', minHeight: 150,
+        background: '#fff', borderRadius: 10,
+        border: '1.5px solid #e5e7eb', borderTop: `3px solid ${colors.accent}`,
+        cursor: 'pointer', textAlign: 'left', font: 'inherit', color: 'inherit',
+        transition: 'box-shadow 0.15s, border-color 0.15s',
+      }}
+      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 12px rgba(0,0,0,0.07)'; }}
+      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
+    >
+      {/* Name + status */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: '#111827', lineHeight: 1.3 }}>
+          {project.name}
+        </div>
+        <StatusChip status={project.status} />
+      </div>
+
+      {/* Owner — the one person running it */}
+      {project.ownerName ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+          <Avatar name={project.ownerName} size={20} />
+          <span style={{ fontSize: 12, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            Run by <span style={{ fontWeight: 600 }}>{project.ownerName}</span>
+          </span>
+        </div>
+      ) : (
+        <div style={{ fontSize: 12, color: '#9ca3af' }}>No owner yet</div>
+      )}
+
+      {/* SMEs — the cross-initiative specialists directing agents */}
+      {smes.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+          {smes.slice(0, MAX_SME_CHIPS).map(name => (
+            <Chip key={name} tone="info" size="xs" title={`SME: ${name}`}>{name}</Chip>
+          ))}
+          {smes.length > MAX_SME_CHIPS && (
+            <span style={{ fontSize: 10, color: '#9ca3af' }}>+{smes.length - MAX_SME_CHIPS}</span>
+          )}
+        </div>
+      )}
+
+      {/* Work + agent rollups */}
+      <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {work && <div style={{ fontSize: 12, color: '#6b7280' }}>{work}</div>}
+        {spend > 0 ? (
+          <div style={{ fontSize: 12, color: '#374151' }}>
+            <span style={{ fontWeight: 600 }}>{usd(spend)}</span> agent spend
+            {project.lastAgentActivityAt && <> · last run {relativeTime(project.lastAgentActivityAt)}</>}
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, color: '#9ca3af' }}>no agent runs yet</div>
+        )}
+      </div>
+
+      {/* Footer: freshness */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, borderTop: '1px solid #f3f4f6', paddingTop: 8 }}>
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: presenceColor(project.lastActivityAt), flexShrink: 0 }} />
+        <span style={{ fontSize: 11, color: '#9ca3af' }}>
+          {relativeTime(project.lastActivityAt ?? project.createdAt)}
+        </span>
+      </div>
+    </button>
+  );
+}
+
 // ─── List-view row ────────────────────────────────────────────────────────────
 
 // Shared column template — must match header exactly.
-const LIST_COLS = '3px 1fr 132px 188px 82px';
+// accent | name | status | owner | spend | updated
+const LIST_COLS = '3px 1fr 132px 176px 96px 82px';
 
 function ProjectListRow({ project, onClick }: { project: ProjectSummary; onClick: () => void }) {
   const rawStatus = (project.status ?? 'unknown').toLowerCase().replace(/ /g, '_');
   const colors = STATUS_COLORS[rawStatus] ?? STATUS_COLORS['planning']!;
-  const topNames = project.topContributorNames ?? [];
   const activityDot = presenceColor(project.lastActivityAt);
   const activityLabel = relativeTime(project.lastActivityAt ?? project.createdAt);
-  const overflow = project.contributorCount - topNames.length;
   const key = deriveProjectKey(project.id, project.name);
+  const spend = project.agentSpendUsd ?? 0;
   return (
     <button
       type="button"
@@ -263,35 +260,39 @@ function ProjectListRow({ project, onClick }: { project: ProjectSummary; onClick
       {/* Accent bar */}
       <div style={{ width: 3, height: 36, borderRadius: 2, background: colors.accent }} />
 
-      {/* Name + slug — left gap from accent bar, right gap from Status */}
+      {/* Name + slug */}
       <div style={{ minWidth: 0, paddingLeft: 10, paddingRight: 24 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {project.name}
         </div>
-        {/* Secondary line: the owner runs the initiative — the slug is the fallback */}
-        {project.ownerName ? (
-          <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            Run by {project.ownerName}
-          </div>
-        ) : (
-          <div style={{ fontSize: 10, color: '#9ca3af', fontFamily: 'ui-monospace, monospace', marginTop: 1 }}>
-            {key}
-          </div>
-        )}
+        <div style={{ fontSize: 10, color: '#9ca3af', fontFamily: 'ui-monospace, monospace', marginTop: 1 }}>
+          {key}
+        </div>
       </div>
 
       {/* Status chip — fixed column, left-aligned */}
       <div><StatusChip status={project.status} /></div>
 
-      {/* Team avatars — fixed column */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {topNames.length > 0 ? (
-          <AvatarGroup names={topNames.slice(0, 3)} maxVisible={4} size={22} />
+      {/* Owner — replaces the old avatar-wall team column */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, paddingRight: 12 }}>
+        {project.ownerName ? (
+          <>
+            <Avatar name={project.ownerName} size={20} />
+            <span style={{ fontSize: 12, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {project.ownerName}
+            </span>
+          </>
         ) : (
-          <span style={{ fontSize: 11, color: '#9ca3af' }}>{project.contributorCount} people</span>
+          <span style={{ fontSize: 11, color: '#9ca3af' }}>—</span>
         )}
-        {topNames.length > 0 && overflow > 0 && (
-          <span style={{ fontSize: 10, color: '#9ca3af' }}>+{overflow}</span>
+      </div>
+
+      {/* Agent spend */}
+      <div style={{ fontSize: 12, textAlign: 'right', paddingRight: 12, whiteSpace: 'nowrap' }}>
+        {spend > 0 ? (
+          <span style={{ color: '#374151', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{usd(spend)}</span>
+        ) : (
+          <span style={{ color: '#9ca3af' }}>—</span>
         )}
       </div>
 
@@ -379,113 +380,92 @@ function ProjectsPage() {
   }
 
   return (
-    <>
-      <style>{`
-        @keyframes projActivityIn {
-          from { opacity: 0; transform: translateY(-7px); }
-          to   { transform: translateY(0); }
-        }
-        .uc-activity-row {
-          animation: projActivityIn 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-        }
-      `}</style>
-
-      <PageSection
-        title="Projects"
-        description="Epics, stories, bugs and decisions across the organization."
-        actions={
-          <div style={{
-            display: 'flex', border: '1.5px solid #e5e7eb', borderRadius: 7,
-            overflow: 'hidden', flexShrink: 0,
-          }}>
-            {(['grid', 'list'] as const).map(mode => (
-              <button
-                key={mode}
-                onClick={() => switchView(mode)}
-                title={mode === 'grid' ? 'Card view' : 'List view'}
-                style={{
-                  padding: '6px 10px',
-                  background: viewMode === mode ? '#f5f3ff' : '#fff',
-                  border: 'none', cursor: 'pointer',
-                  borderRight: mode === 'grid' ? '1.5px solid #e5e7eb' : 'none',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}
-              >
-                {mode === 'grid' ? <GridIcon active={viewMode === 'grid'} /> : <ListIcon active={viewMode === 'list'} />}
-              </button>
-            ))}
-          </div>
-        }
-      >
-        {/* ── Filter chips ── */}
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
-          {visibleOptions.map(s => {
-            const active = statusFilter === s;
-            return (
-              <button key={s} onClick={() => setStatusFilter(s)} style={{
-                padding: '4px 14px', borderRadius: 9999, cursor: 'pointer',
-                border: active ? '2px solid #6366f1' : '1.5px solid #e5e7eb',
-                background: active ? '#6366f1' : 'transparent',
-                color: active ? '#fff' : '#6b7280',
-                fontSize: 12, fontWeight: active ? 600 : 400,
-                transition: 'all 0.15s', fontFamily: 'inherit',
-              }}>
-                {STATUS_LABELS[s] ?? s}
-              </button>
-            );
-          })}
+    <PageSection
+      title="Projects"
+      description="Initiatives: who runs each one, the work in flight, and what agents have spent delivering it."
+      actions={
+        <div style={{
+          display: 'flex', border: '1.5px solid #e5e7eb', borderRadius: 7,
+          overflow: 'hidden', flexShrink: 0,
+        }}>
+          {(['grid', 'list'] as const).map(mode => (
+            <button
+              key={mode}
+              onClick={() => switchView(mode)}
+              title={mode === 'grid' ? 'Card view' : 'List view'}
+              style={{
+                padding: '6px 10px',
+                background: viewMode === mode ? '#f5f3ff' : '#fff',
+                border: 'none', cursor: 'pointer',
+                borderRight: mode === 'grid' ? '1.5px solid #e5e7eb' : 'none',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              {mode === 'grid' ? <GridIcon active={viewMode === 'grid'} /> : <ListIcon active={viewMode === 'list'} />}
+            </button>
+          ))}
         </div>
-
-        {filtered.length === 0 ? (
-          <div style={{ padding: 40, color: '#9ca3af', textAlign: 'center' }}>No projects match the selected filter.</div>
-        ) : viewMode === 'list' ? (
-          /* ── List view ── */
-          <div style={{ border: '1.5px solid #e5e7eb', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
-            {/* Column headers — must match LIST_COLS exactly */}
-            <div style={{
-              display: 'grid', gridTemplateColumns: LIST_COLS,
-              alignItems: 'center', gap: 0, padding: '0 16px',
-              background: '#f9fafb', borderBottom: '1px solid #e5e7eb',
-              minHeight: 34,
+      }
+    >
+      {/* ── Filter chips ── */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+        {visibleOptions.map(s => {
+          const active = statusFilter === s;
+          return (
+            <button key={s} onClick={() => setStatusFilter(s)} style={{
+              padding: '4px 14px', borderRadius: 9999, cursor: 'pointer',
+              border: active ? '2px solid #6366f1' : '1.5px solid #e5e7eb',
+              background: active ? '#6366f1' : 'transparent',
+              color: active ? '#fff' : '#6b7280',
+              fontSize: 12, fontWeight: active ? 600 : 400,
+              transition: 'all 0.15s', fontFamily: 'inherit',
             }}>
-              <div />
-              <span style={{ fontSize: 10.5, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', paddingLeft: 10 }}>Project</span>
-              <span style={{ fontSize: 10.5, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Status</span>
-              <span style={{ fontSize: 10.5, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Team</span>
-              <span style={{ fontSize: 10.5, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'right' }}>Updated</span>
-            </div>
-            {filtered.map(project => (
-              <ProjectListRow
-                key={project.id}
-                project={project}
-                onClick={() => navigate(`/iq/projects/${project.id}`)}
-              />
-            ))}
+              {STATUS_LABELS[s] ?? s}
+            </button>
+          );
+        })}
+      </div>
+
+      {filtered.length === 0 ? (
+        <div style={{ padding: 40, color: '#9ca3af', textAlign: 'center' }}>No projects match the selected filter.</div>
+      ) : viewMode === 'list' ? (
+        /* ── List view ── */
+        <div style={{ border: '1.5px solid #e5e7eb', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
+          {/* Column headers — must match LIST_COLS exactly */}
+          <div style={{
+            display: 'grid', gridTemplateColumns: LIST_COLS,
+            alignItems: 'center', gap: 0, padding: '0 16px',
+            background: '#f9fafb', borderBottom: '1px solid #e5e7eb',
+            minHeight: 34,
+          }}>
+            <div />
+            <span style={{ fontSize: 10.5, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', paddingLeft: 10 }}>Project</span>
+            <span style={{ fontSize: 10.5, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Status</span>
+            <span style={{ fontSize: 10.5, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Owner</span>
+            <span style={{ fontSize: 10.5, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'right', paddingRight: 12 }}>Spend</span>
+            <span style={{ fontSize: 10.5, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'right' }}>Updated</span>
           </div>
-        ) : (
-          /* ── Grid view ── */
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
-            {filtered.map((project, idx) => (
-              <ProjectCard
-                key={project.id}
-                name={project.name}
-                // Secondary line under the name: the owner when known
-                // (contributor count in the footer stays as the fallback signal).
-                id={project.ownerName ? `Run by ${project.ownerName}` : project.id}
-                status={project.status ?? undefined}
-                contributorNames={project.topContributorNames ?? []}
-                contributorCount={project.contributorCount}
-                activityItems={getActivityItems(project)}
-                presenceDotColor={presenceColor(project.lastActivityAt)}
-                activityLabel={relativeTime(project.lastActivityAt ?? project.createdAt)}
-                cardIndex={idx}
-                onClick={() => navigate(`/iq/projects/${project.id}`)}
-              />
-            ))}
-          </div>
-        )}
-      </PageSection>
-    </>
+          {filtered.map(project => (
+            <ProjectListRow
+              key={project.id}
+              project={project}
+              onClick={() => navigate(`/iq/projects/${project.id}`)}
+            />
+          ))}
+        </div>
+      ) : (
+        /* ── Grid view ── */
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
+          {filtered.map(project => (
+            <InitiativeCard
+              key={project.id}
+              project={project}
+              onClick={() => navigate(`/iq/projects/${project.id}`)}
+            />
+          ))}
+        </div>
+      )}
+    </PageSection>
   );
 }
 

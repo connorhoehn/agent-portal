@@ -3,6 +3,7 @@ import {
   Card, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip,
   PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { EmptyState, PulseDot } from '../../components/ingest/ui';
 
@@ -59,6 +60,9 @@ function useIngestionStream(
 }
 
 function DataSourcesPage() {
+  // Starting a KB sync POSTs /api/ingest/start (ManageIngest).
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageIngest');
   const { data: sourcesData, refresh: refreshSources } = useFetch<{ sources: DataSource[] }>(
     '/api/ingest/data-sources',
     30_000,
@@ -159,13 +163,15 @@ function DataSourcesPage() {
                     <Chip tone={ds.status === 'AVAILABLE' ? 'success' : 'warning'} size="xs">{ds.status}</Chip>
                   </TableTd>
                   <TableTd>
-                    <button
-                      onClick={() => triggerSync(ds.id)}
-                      disabled={triggering === ds.id || !!activeJob}
-                      style={syncBtnStyle(triggering === ds.id || !!activeJob)}
-                    >
-                      {triggering === ds.id ? 'Syncing…' : activeJob ? 'In Progress' : 'Sync now'}
-                    </button>
+                    {canManage && (
+                      <button
+                        onClick={() => triggerSync(ds.id)}
+                        disabled={triggering === ds.id || !!activeJob}
+                        style={syncBtnStyle(triggering === ds.id || !!activeJob)}
+                      >
+                        {triggering === ds.id ? 'Syncing…' : activeJob ? 'In Progress' : 'Sync now'}
+                      </button>
+                    )}
                   </TableTd>
                 </TableRow>
               ))}

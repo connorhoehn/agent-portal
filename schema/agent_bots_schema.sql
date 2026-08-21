@@ -31,7 +31,10 @@ CREATE TABLE IF NOT EXISTS bots (
   cron_expr           TEXT,       -- validated by validateCronExpr before it is stored
   enabled             BOOLEAN     NOT NULL DEFAULT TRUE,
 
-  -- Guardrails. Per-run is a soft cap (warn + flag); per-day is a hard cap —
+  -- Guardrails. Per-run is a soft cap — a fresh estimate's p75 over it makes
+  -- the run route demand an explicit confirmOverBudget (409 otherwise), and
+  -- reconciliation flags the finished run's outcome with overRunBudget when
+  -- the actual cost exceeded it. Per-day is a hard cap —
   -- the bot pauses itself via paused_reason when today's summed bot_runs cost
   -- reaches it. max_runs_per_day backstops runaway triggers independently of
   -- cost, so a mispriced model cannot defeat the brake.

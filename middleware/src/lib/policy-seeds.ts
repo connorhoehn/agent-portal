@@ -107,10 +107,15 @@ export async function seedPoliciesIfMissing(): Promise<void> {
         const got = await client.send(new GetPolicyCommand({ policyStoreId, policyId }));
         const existingStmt = got.definition?.static?.statement ?? '';
         if (normalizeStmt(existingStmt) !== normalizeStmt(statement)) {
+          // The description MUST ride along: UpdatePolicy replaces the whole
+          // static definition, and AVP clears an omitted description — which
+          // orphans this policy from the description-keyed map above, so every
+          // later boot CreatePolicy's a duplicate. (Found live: 7 seed
+          // policies had multiplied to 34 across restarts.)
           await client.send(new UpdatePolicyCommand({
             policyStoreId,
             policyId,
-            definition: { static: { statement } },
+            definition: { static: { description, statement } },
           }));
           console.log(`[seed] updated policy for role=${role} stmt=${i + 1}/${statements.length}`);
           updated++;

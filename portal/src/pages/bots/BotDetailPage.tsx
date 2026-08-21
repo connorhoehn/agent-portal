@@ -20,6 +20,7 @@ import {
   TableTd,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { CostVsEstimate, runEstimate } from '../../components/marketplace/EstimateDrawer';
 import { RunTimeline } from '../../components/runs/RunTimeline';
@@ -55,6 +56,8 @@ function modelLabel(id: string): string {
 export default function BotDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageDevbox');
 
   const { data: botData, error: botError, refresh: refreshBot } =
     useFetch<{ bot: Bot }>(id ? `/api/bots/${id}` : null, 15_000);
@@ -236,25 +239,29 @@ export default function BotDetailPage() {
           )}
           <span className="text-[11px] text-text-tertiary">{triggerSummary(bot)} · last ran {when(bot.lastRunAt)}</span>
           <div className="flex-1" />
-          <button
-            onClick={() => setRunOpen((v) => !v)}
-            className="px-2.5 py-1 rounded-md border-none bg-primary text-white text-[11px] font-semibold cursor-pointer"
-          >
-            {runOpen ? 'Cancel' : '▶ Run now'}
-          </button>
-          <button
-            onClick={() => void pauseOrResume()}
-            disabled={busy === 'pause' || busy === 'resume'}
-            className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
-          >
-            {paused ? 'Resume' : 'Pause'}
-          </button>
-          <button
-            onClick={() => setConfirmDelete(true)}
-            className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] text-text-secondary cursor-pointer hover:text-danger hover:border-danger/50 transition-colors"
-          >
-            Delete
-          </button>
+          {canManage && (
+            <>
+              <button
+                onClick={() => setRunOpen((v) => !v)}
+                className="px-2.5 py-1 rounded-md border-none bg-primary text-white text-[11px] font-semibold cursor-pointer"
+              >
+                {runOpen ? 'Cancel' : '▶ Run now'}
+              </button>
+              <button
+                onClick={() => void pauseOrResume()}
+                disabled={busy === 'pause' || busy === 'resume'}
+                className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
+              >
+                {paused ? 'Resume' : 'Pause'}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] text-text-secondary cursor-pointer hover:text-danger hover:border-danger/50 transition-colors"
+              >
+                Delete
+              </button>
+            </>
+          )}
         </div>
         {paused && bot.pausedReason && (
           <div className="mt-2 px-3 py-1.5 rounded bg-warning-bg/40 text-[11px] text-warning">{bot.pausedReason}</div>
@@ -290,12 +297,14 @@ export default function BotDetailPage() {
           <div className="px-3.5 py-2.5 border-b border-border flex items-center gap-2">
             <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">THE MISSION</span>
             <div className="flex-1" />
-            <button
-              onClick={() => { setMissionText(bot.prompt); setEditMission((v) => !v); }}
-              className="text-[11px] px-2 py-0.5 rounded border border-border bg-surface text-text-secondary cursor-pointer hover:text-primary"
-            >
-              {editMission ? 'cancel' : 'edit'}
-            </button>
+            {canManage && (
+              <button
+                onClick={() => { setMissionText(bot.prompt); setEditMission((v) => !v); }}
+                className="text-[11px] px-2 py-0.5 rounded border border-border bg-surface text-text-secondary cursor-pointer hover:text-primary"
+              >
+                {editMission ? 'cancel' : 'edit'}
+              </button>
+            )}
           </div>
           {editMission ? (
             <div className="p-3.5">
@@ -327,12 +336,14 @@ export default function BotDetailPage() {
           <div className="px-3.5 py-2.5 border-b border-border flex items-center gap-2">
             <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">GUARDRAILS</span>
             <div className="flex-1" />
-            <button
-              onClick={() => (editGuards ? setEditGuards(false) : beginEditGuards())}
-              className="text-[11px] px-2 py-0.5 rounded border border-border bg-surface text-text-secondary cursor-pointer hover:text-primary"
-            >
-              {editGuards ? 'cancel' : 'edit'}
-            </button>
+            {canManage && (
+              <button
+                onClick={() => (editGuards ? setEditGuards(false) : beginEditGuards())}
+                className="text-[11px] px-2 py-0.5 rounded border border-border bg-surface text-text-secondary cursor-pointer hover:text-primary"
+              >
+                {editGuards ? 'cancel' : 'edit'}
+              </button>
+            )}
           </div>
           {editGuards ? (
             <div className="p-3.5 flex flex-col gap-2.5">

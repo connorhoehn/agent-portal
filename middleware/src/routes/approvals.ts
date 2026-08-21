@@ -34,6 +34,7 @@ import {
   type ApprovalDecisionEvent,
 } from '../lib/approval-broker.js';
 import { isAllowed, resolveSession } from '../lib/authz.js';
+import { ssoAvailable } from '../lib/session.js';
 import { logAuthz } from '../lib/audit.js';
 import { rateLimit } from '../lib/rate-limit.js';
 
@@ -404,7 +405,7 @@ approvalsRouter.post('/:id/decision', asyncHandler(async (req, res) => {
   // guards: with a real IdP configured, anonymous never demotes to demo-user.
   const session = resolveSession(req);
   if (!session) {
-    res.status(401).json({ error: 'Unauthenticated', ssoRequired: true });
+    res.status(401).json({ error: 'Unauthenticated', ssoRequired: ssoAvailable() });
     return;
   }
   const amountRaw = existing.payload['amount'];
@@ -432,7 +433,9 @@ approvalsRouter.post('/:id/decision', asyncHandler(async (req, res) => {
       path: req.path,
       reason: `authz-error: ${(err as Error).message}`,
     });
-    res.status(500).json({ error: 'Authorization check failed' });
+    // Authorization infrastructure failure (AVP unreachable) — 503, not 500,
+    // so clients can tell "retry later" apart from an application bug.
+    res.status(503).json({ error: 'authorization unavailable', action: 'ApproveTransaction' });
     return;
   }
   logAuthz({

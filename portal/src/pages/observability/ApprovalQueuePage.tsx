@@ -21,6 +21,7 @@ import {
   PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
+import { useCapabilities } from '../../lib/capabilities';
 
 interface Approval {
   approvalId: string;
@@ -52,6 +53,10 @@ interface DecisionEvent {
 type StreamEvent = ApprovalEvent | DecisionEvent;
 
 function ApprovalQueuePage() {
+  // Deciding an approval is Cedar's ApproveTransaction — the same action the
+  // decision endpoint enforces.
+  const { can, ready } = useCapabilities();
+  const canApprove = ready && can('ApproveTransaction');
   const [items, setItems] = useState<Approval[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -242,33 +247,39 @@ function ApprovalQueuePage() {
                         </button>
                       </TableTd>
                       <TableTd>
-                        <div style={decideRow}>
-                          <input
-                            value={notes[a.approvalId] ?? ''}
-                            onChange={(e) =>
-                              setNotes((m) => ({ ...m, [a.approvalId]: e.target.value }))
-                            }
-                            placeholder="note (optional)"
-                            style={{ ...inputStyle, minWidth: 140 }}
-                          />
-                          <button
-                            style={btnApprove}
-                            onClick={() => decide(a.approvalId, 'APPROVED')}
-                          >
-                            Approve
-                          </button>
-                          <button
-                            style={btnReject}
-                            onClick={() => decide(a.approvalId, 'REJECTED')}
-                          >
-                            Reject
-                          </button>
-                          {denied[a.approvalId] && (
-                            <Chip tone="danger" size="xs">
-                              Not authorized
-                            </Chip>
-                          )}
-                        </div>
+                        {canApprove ? (
+                          <div style={decideRow}>
+                            <input
+                              value={notes[a.approvalId] ?? ''}
+                              onChange={(e) =>
+                                setNotes((m) => ({ ...m, [a.approvalId]: e.target.value }))
+                              }
+                              placeholder="note (optional)"
+                              style={{ ...inputStyle, minWidth: 140 }}
+                            />
+                            <button
+                              style={btnApprove}
+                              onClick={() => decide(a.approvalId, 'APPROVED')}
+                            >
+                              Approve
+                            </button>
+                            <button
+                              style={btnReject}
+                              onClick={() => decide(a.approvalId, 'REJECTED')}
+                            >
+                              Reject
+                            </button>
+                            {denied[a.approvalId] && (
+                              <Chip tone="danger" size="xs">
+                                Not authorized
+                              </Chip>
+                            )}
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>
+                            Viewing only — your role can&apos;t decide approvals
+                          </span>
+                        )}
                       </TableTd>
                     </TableRow>
                     {open && (

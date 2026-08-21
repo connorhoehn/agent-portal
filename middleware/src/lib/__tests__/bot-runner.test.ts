@@ -9,7 +9,10 @@
 jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn() }));
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: false } } }));
 
-import { decideFire, renderPrompt, decideConcurrency, botMaxConcurrent, type FireGuardInput } from '../bot-runner.js';
+import {
+  decideFire, renderPrompt, decideConcurrency, botMaxConcurrent, decideRunBudget,
+  type FireGuardInput,
+} from '../bot-runner.js';
 
 function bot(over: Partial<FireGuardInput> = {}): FireGuardInput {
   return {
@@ -58,6 +61,40 @@ describe('decideFire', () => {
     const d = decideFire(bot({ todayRunCount: 4, budgetPerDayUsd: 1, todaySpendUsd: 2 }));
     expect(d.kind).toBe('skip');
   });
+
+  it('refuses maxRunsPerDay 0 — "never fires" is configuration, not a cap reached today', () => {
+    const d = decideFire(bot({ maxRunsPerDay: 0, todayRunCount: 0 }));
+    expect(d).toMatchObject({ kind: 'refuse', reason: expect.stringMatching(/never fires/) as string });
+  });
+});
+
+describe('decideRunBudget', () => {
+  it('proceeds with no per-run budget set', () => {
+    expect(decideRunBudget(null, 99, false)).toEqual({ kind: 'proceed' });
+    expect(decideRunBudget(undefined, 99, false)).toEqual({ kind: 'proceed' });
+  });
+
+  it('proceeds when the estimate p75 is within budget', () => {
+    expect(decideRunBudget(1.0, 0.8, false)).toEqual({ kind: 'proceed' });
+    expect(decideRunBudget(1.0, 1.0, false)).toEqual({ kind: 'proceed' }); // at the line is within
+  });
+
+  it('demands confirmation when the estimate exceeds the budget', () => {
+    const d = decideRunBudget(1.0, 1.5, false);
+    expect(d.kind).toBe('confirm');
+    expect((d as { reason: string }).reason).toMatch(/\$1\.50/);
+    expect((d as { reason: string }).reason).toMatch(/\$1\.00/);
+    expect((d as { reason: string }).reason).toMatch(/confirmOverBudget/);
+  });
+
+  it('an explicit confirmation overrides the gate — the budget is soft', () => {
+    expect(decideRunBudget(1.0, 1.5, true)).toEqual({ kind: 'proceed' });
+  });
+
+  it('a zero budget over-budgets any positive estimate', () => {
+    expect(decideRunBudget(0, 0.01, false)).toMatchObject({ kind: 'confirm' });
+    expect(decideRunBudget(0, 0, false)).toEqual({ kind: 'proceed' });
+  });
 });
 
 describe('decideConcurrency', () => {
@@ -101,12 +138,16 @@ describe('decideConcurrency', () => {
 });
 
 describe('renderPrompt', () => {
-  it('appends the one-shot instruction on its own paragraph', () => {
-    expect(renderPrompt('Hunt tech debt.', 'focus on the auth module'))
-      .toBe('Hunt tech debt.\n\nFor this run specifically: focus on the auth module');
+  it('appends the one-shot instruction on its own paragraph, before the contract', () => {
+    const p = renderPrompt('Hunt tech debt.', 'focus on the auth module');
+    expect(p).toContain('Hunt tech debt.\n\nFor this run specifically: focus on the auth module');
+    expect(p.indexOf('For this run specifically')).toBeLessThan(p.indexOf('UNCOMMITTED'));
   });
 
-  it('leaves the mission untouched when there is no instruction', () => {
-    expect(renderPrompt('Hunt tech debt.')).toBe('Hunt tech debt.');
+  it('always appends the pipeline contract — a self-committing agent escapes capture', () => {
+    const p = renderPrompt('Hunt tech debt.');
+    expect(p).toContain('Hunt tech debt.');
+    expect(p).toContain('do not run git commit');
+    expect(p).toContain('UNCOMMITTED');
   });
 });

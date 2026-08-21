@@ -13,6 +13,7 @@ jest.mock('../../providers/connected-sources.js', () => ({ borrowApiKey: jest.fn
 
 import {
   nextDispatchSet,
+  nextMergeCursor,
   parseWatermark,
   parsePrUrl,
   renderPrReviewPrompt,
@@ -28,10 +29,19 @@ describe('nextDispatchSet', () => {
     expect(r.newWatermark).toBe(12);
   });
 
-  it('stays unpolled when there are no PRs yet', () => {
+  it('baselines a quiet repo at 0 on the first poll — the very first PR must dispatch', () => {
+    // If an empty first poll left the watermark null, the repo's first-ever PR
+    // would arrive into another null-watermark poll and be baselined over
+    // instead of dispatched.
     const r = nextDispatchSet([], null);
     expect(r.toDispatch).toEqual([]);
-    expect(r.newWatermark).toBeNull();
+    expect(r.newWatermark).toBe(0);
+  });
+
+  it('dispatches the first PR after a quiet-repo baseline', () => {
+    const r = nextDispatchSet([pr(1)], 0);
+    expect(r.toDispatch.map((p) => p.number)).toEqual([1]);
+    expect(r.newWatermark).toBe(1);
   });
 
   it('dispatches everything above the watermark, oldest first', () => {
@@ -58,6 +68,20 @@ describe('nextDispatchSet', () => {
     const r = nextDispatchSet([], 9);
     expect(r.toDispatch).toEqual([]);
     expect(r.newWatermark).toBe(9);
+  });
+});
+
+describe('nextMergeCursor', () => {
+  const LIMIT = 50;
+
+  it('advances to the last row seen when the batch was full — more may remain', () => {
+    expect(nextMergeCursor({ count: LIMIT, lastUpdatedAt: '2026-08-21 10:00:00' }, LIMIT))
+      .toBe('2026-08-21 10:00:00');
+  });
+
+  it('wraps to the start when the batch came up short — the backlog is drained', () => {
+    expect(nextMergeCursor({ count: LIMIT - 1, lastUpdatedAt: '2026-08-21 10:00:00' }, LIMIT)).toBeNull();
+    expect(nextMergeCursor({ count: 0, lastUpdatedAt: null }, LIMIT)).toBeNull();
   });
 });
 

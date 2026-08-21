@@ -17,7 +17,7 @@
 import cron from 'node-cron';
 import { config } from '../config.js';
 import { listBots, type Bot } from '../providers/bots.js';
-import { fireBot, reconcileBotRuns } from './bot-runner.js';
+import { fireBot, reconcileBotRuns, sweepOrphanedRuns } from './bot-runner.js';
 import { validateCronExpr } from './ingest-scheduler.js';
 
 const tasks = new Map<string, cron.ScheduledTask>();
@@ -38,9 +38,27 @@ const CATCH_UP_DELAY_MS = 20_000;
  */
 export function shouldCatchUp(lastRunAt: string | null, now: Date = new Date()): boolean {
   if (!lastRunAt) return true;
-  const last = Date.parse(lastRunAt);
+  const last = parseRdsTimestamp(lastRunAt);
   if (!Number.isFinite(last)) return true;
   return now.getTime() - last > 24 * 60 * 60 * 1000;
+}
+
+/**
+ * Parse a timestamp that may arrive in RDS Data API form. Postgres renders
+ * timestamps as 'YYYY-MM-DD HH:MM:SS[.fff]' — no 'T', often no zone — and
+ * Date.parse reads that as LOCAL time, shifting every stored UTC instant by
+ * the host's offset (a bot could look up-to-a-day staler or fresher than it
+ * is). The values are UTC, so normalise to ISO and pin the zone when the
+ * string carries none.
+ */
+export function parseRdsTimestamp(ts: string): number {
+  let iso = ts.trim();
+  if (iso.includes(' ') && !iso.includes('T')) iso = iso.replace(' ', 'T');
+  // Postgres renders a bare-hour offset ('+00'); Date.parse needs '+00:00'.
+  if (/[+-]\d{2}$/.test(iso)) iso = `${iso}:00`;
+  // Append Z only when no zone designator is present ('...Z', '...+00:00').
+  if (!/(?:Z|[+-]\d{2}:?\d{2})$/i.test(iso)) iso = `${iso}Z`;
+  return Date.parse(iso);
 }
 
 /**
@@ -73,6 +91,18 @@ export async function initBotScheduler(): Promise<void> {
   if (config.mock.aurora) {
     console.log('[bots] scheduler skipped (mock aurora)');
     return;
+  }
+
+  // Boot sweep BEFORE anything is scheduled: in-process runs cannot survive a
+  // restart, so agent_project_runs still 'running' from a previous process are
+  // failed here, and one reconcile pass settles the bot_runs (and work items)
+  // they back — freeing their concurrency slots before the first firing.
+  try {
+    await sweepOrphanedRuns();
+    await reconcileBotRuns();
+  } catch (err) {
+    // A missing table (schema not yet loaded) must not take boot down.
+    console.warn('[bots] boot sweep failed:', (err as Error).message);
   }
 
   let bots: Bot[] = [];
