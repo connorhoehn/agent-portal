@@ -17,6 +17,7 @@ import { reviewDiff } from './change-reviewer.js';
 import {
   createChangeRequest, recordReview, evaluateChange, getChangeRequest,
   markInReview, markDelivering, markDelivered, markFailed, hasNewerChangeForProject,
+  setCommitSha,
 } from '../providers/sdlc.js';
 import { startRun, checkoutPath, type AgentProject } from '../providers/agent-projects.js';
 import { deliverChange } from './change-delivery.js';
@@ -112,6 +113,44 @@ async function captureDiff(input: CaptureInput): Promise<{ diff: string; files: 
 }
 
 /**
+ * Commit-per-capture: commit the run's work on the workspace's work branch and
+ * return the commit SHA.
+ *
+ * Committing at capture time is what makes the *next* run's diff clean (its
+ * changes are the only thing uncommitted), so the reviewer sees one run's change
+ * instead of a cumulative tree — and lets delivery push exactly this commit.
+ * Best-effort: on failure it returns null and the change stays on the legacy
+ * working-tree delivery path; the change itself is never lost (its diff is
+ * already recorded in Aurora).
+ */
+async function commitCapture(input: CaptureInput, title: string): Promise<string | null> {
+  const git = `git -c safe.directory='*' -c user.name='OrgIQ Agent' -c user.email='agent@orgiq.local' -C ${input.checkout}`;
+  const b64 = Buffer.from(`orgiq: ${title.slice(0, 200)}`, 'utf8').toString('base64');
+  try {
+    const out = await runDevboxShell(input.client, input.runtimeArn, input.sessionId,
+      `${git} add -A && ${git} commit -q -m "$(echo ${b64} | base64 -d)" && ${git} rev-parse HEAD`);
+    const sha = out.trim().split('\n').map((l) => l.trim()).filter(Boolean).pop() ?? '';
+    return /^[0-9a-f]{40}$/.test(sha) ? sha : null;
+  } catch (err) {
+    console.warn(`[sdlc] commit-per-capture failed, using working-tree delivery: ${(err as Error).message}`);
+    return null;
+  }
+}
+
+/**
+ * Roll the work branch back to before a refused change, so blocked work never
+ * carries into a later change's delivery. Guarded: only resets when `sha` is
+ * still HEAD (it is, immediately after capture) and has a parent — so it can
+ * never discard a later change or leave an empty repo. Best-effort.
+ */
+async function resetToParentOf(input: CaptureInput, sha: string): Promise<void> {
+  const git = `git -c safe.directory='*' -C ${input.checkout}`;
+  await runDevboxShell(input.client, input.runtimeArn, input.sessionId,
+    `if [ "$(${git} rev-parse HEAD)" = "${sha}" ] && ${git} rev-parse ${sha}~1 >/dev/null 2>&1; then ${git} reset -q --hard ${sha}~1; fi`)
+    .catch((err) => console.warn(`[sdlc] reset-on-block failed: ${(err as Error).message}`));
+}
+
+/**
  * Run the full capture → review → gate pipeline for a finished run.
  *
  * Returns the change request id, or null when the run changed nothing (in
@@ -139,19 +178,17 @@ export async function captureAndGate(input: CaptureInput): Promise<string | null
   });
   console.warn(`[sdlc] captured change ${change.id} (${captured.files.length} file(s)) for project ${input.projectId}`);
 
-  // Stage the captured files so a *later* run's edits to them are visible to
-  // the working-tree delta. The delta is computed from `git status` codes, and
-  // an untracked file's code (`??`) does not change when its content does — so
-  // an address run that only modifies a file a prior run left uncommitted would
-  // register as "no change" and never reach governance (the self-correction
-  // loop silently stalls). A staged file's code *does* change on edit
-  // (`A ` -> `AM`), which is enough for the next run to be detected. Staging,
-  // not committing: delivery still ships the working tree and its "changes still
-  // here?" check still passes. Best-effort — a failure here only costs that
-  // next-run detection, not this change.
-  const git = `git -c safe.directory='*' -C ${input.checkout}`;
-  await runDevboxShell(input.client, input.runtimeArn, input.sessionId, `${git} add -A`)
-    .catch((err) => console.warn(`[sdlc] could not stage captured files: ${(err as Error).message}`));
+  // Commit-per-capture: commit the run's work now. This clears the working tree
+  // so the next run's diff is only its own changes (no cumulative pollution, so
+  // the reviewer stops false-blocking on a prior run's files), and lets delivery
+  // push exactly this commit. Best-effort — a null sha falls back to legacy
+  // working-tree delivery. This supersedes the old `git add -A` staging hack: a
+  // committed base makes a later in-place edit a real, detectable diff.
+  const sha = await commitCapture(input, change.title);
+  if (sha) {
+    await setCommitSha(change.id, sha);
+    console.warn(`[sdlc] change ${change.id} committed as ${sha.slice(0, 8)}`);
+  }
 
   try {
     await markInReview(change.id);
@@ -170,6 +207,9 @@ export async function captureAndGate(input: CaptureInput): Promise<string | null
     });
     const evaluated = await evaluateChange(change.id);
     console.warn(`[sdlc] change ${change.id} reviewed=${review.verdict} decided=${evaluated?.status ?? '?'}`);
+    // A hard-blocked change must not carry into a later change's delivery — roll
+    // the work branch back to before it while its commit is still HEAD.
+    if (sha && evaluated?.status === 'blocked') await resetToParentOf(input, sha);
   } catch (err) {
     // The change exists and is captured; only the review/gate errored. Record
     // it on the change rather than losing the diff.
@@ -218,6 +258,7 @@ export async function deliverApprovedChange(input: {
     changeId: input.changeId,
     title: change.title,
     reviewSummary: change.reviews[0]?.summary ?? null,
+    commitSha: change.commitSha,
   });
 
   if (result.ok && result.prUrl) {

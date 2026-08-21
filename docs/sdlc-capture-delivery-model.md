@@ -1,7 +1,12 @@
 # SDLC capture & delivery model — decision record
 
-**Status:** direction decided; implementation gated on greenlight (destructive
-workspace ops + a change to the delivery contract).
+**Status:** IMPLEMENTED (commit-per-capture), proven live. A run's captured
+change is now scoped to its own work — verified end-to-end: two sequential runs
+produced `change1=['docs/AAA.md']` and `change2=['docs/BBB.md']` (was
+`['AAA','BBB']` before), each committed with its own SHA. Delivery pushes the
+captured commit (delivery-script tests cover both the commit path and the legacy
+working-tree fallback). Legacy changes with a null `commit_sha` still deliver
+via the working tree, so in-flight work is unaffected.
 **Scope:** `middleware/src/lib/sdlc-pipeline.ts` (captureAndGate),
 `change-delivery.ts`, `providers/sdlc.ts`, `schema/agent_sdlc_schema.sql`,
 `project-runner.ts`.

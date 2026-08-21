@@ -13,6 +13,9 @@ export interface DeliveryScriptInput {
   /** base64 of the commit message, decoded in-shell to avoid quoting hazards. */
   b64CommitMsg: string;
   repoFullName: string;
+  /** Commit-per-capture: branch from this commit and push it as-is. When null,
+   *  legacy delivery snapshots the working tree into a fresh commit. */
+  commitSha?: string | null;
 }
 
 /**
@@ -22,10 +25,16 @@ export interface DeliveryScriptInput {
 export function buildDeliveryScript(input: DeliveryScriptInput): string {
   const cleanRemote = `https://github.com/${input.repoFullName}.git`;
   const authedRemote = `https://x-access-token:$ORGIQ_GH_TOKEN@github.com/${input.repoFullName}.git`;
+  // Prepare the branch. With a captured commit the work is already committed, so
+  // branch straight from that commit and push exactly it — nothing to add or
+  // commit. Legacy: snapshot the uncommitted working tree into a fresh commit.
+  // Either way, if prep fails the authed remote is never set, so the token never
+  // touches .git/config — bail out clean.
+  const prep = input.commitSha
+    ? `${input.git} checkout -B ${input.branch} ${input.commitSha} || exit 1`
+    : `${input.git} checkout -B ${input.branch} && ${input.git} add -A && { ${input.git} commit -m "$(echo ${input.b64CommitMsg} | base64 -d)" || true; } || exit 1`;
   return [
-    // Prepare the branch and commit. If any of this fails the authed remote is
-    // never set, so the token never touches .git/config — bail out clean.
-    `${input.git} checkout -B ${input.branch} && ${input.git} add -A && { ${input.git} commit -m "$(echo ${input.b64CommitMsg} | base64 -d)" || true; } || exit 1`,
+    prep,
     // From here the token is in .git/config; everything below must run.
     `${input.git} remote set-url origin ${authedRemote}`,
     `${input.git} push -u origin ${input.branch} --force-with-lease`,

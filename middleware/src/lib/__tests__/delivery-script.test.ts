@@ -9,12 +9,13 @@
 
 import { buildDeliveryScript } from '../delivery-script.js';
 
-const script = () =>
+const script = (commitSha?: string | null) =>
   buildDeliveryScript({
     git: "git -C /mnt/workspace/repo",
     branch: 'orgiq/change-abcd1234',
     b64CommitMsg: 'dGl0bGU=',
     repoFullName: 'acme/widgets',
+    commitSha,
   });
 
 describe('buildDeliveryScript token hygiene', () => {
@@ -56,5 +57,28 @@ describe('buildDeliveryScript token hygiene', () => {
     const authed = s.indexOf('set-url origin https://x-access-token');
     expect(exitGuard).toBeGreaterThanOrEqual(0);
     expect(authed).toBeGreaterThan(exitGuard);
+  });
+});
+
+describe('buildDeliveryScript commit-per-capture vs legacy', () => {
+  const SHA = 'a'.repeat(40);
+
+  it('legacy (no commit) snapshots the working tree', () => {
+    const s = script();
+    expect(s).toContain('add -A');
+    expect(s).toContain('commit -m');
+    expect(s).toContain('checkout -B orgiq/change-abcd1234 &&'); // then add/commit
+  });
+
+  it('commit-per-capture branches from the captured commit and pushes it as-is', () => {
+    const s = script(SHA);
+    // Branch is created *at* the captured commit — no add, no commit.
+    expect(s).toContain(`checkout -B orgiq/change-abcd1234 ${SHA}`);
+    expect(s).not.toContain('add -A');
+    expect(s).not.toContain('commit -m');
+    // Still guarded, still strips the credential unconditionally.
+    expect(s).toContain('|| exit 1');
+    expect(s).toContain('remote set-url origin https://github.com/acme/widgets.git');
+    expect(s.split('\n').at(-1)!.trim()).toBe('exit $push_rc');
   });
 });

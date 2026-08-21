@@ -54,6 +54,13 @@ CREATE TABLE IF NOT EXISTS agent_change_requests (
                                   'needs_approval','approved','delivering','delivered',
                                   'rejected','failed')),
 
+  -- The commit this change was captured as. With commit-per-capture the run's
+  -- work is committed on the workspace's work branch at capture time, so the
+  -- next run's diff is clean and delivery pushes exactly this commit rather than
+  -- the whole (possibly cumulative) working tree. NULL = legacy change captured
+  -- before this model; delivery falls back to shipping the working tree.
+  commit_sha    TEXT,
+
   -- Delivery outcome.
   branch_name   TEXT,
   pr_url        TEXT,
@@ -73,6 +80,7 @@ CREATE TABLE IF NOT EXISTS agent_change_requests (
 -- without this a reload leaves the table missing a column createChangeRequest
 -- inserts, and every governed-change capture fails. Idempotent.
 ALTER TABLE agent_change_requests ADD COLUMN IF NOT EXISTS model TEXT;
+ALTER TABLE agent_change_requests ADD COLUMN IF NOT EXISTS commit_sha TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_agent_change_requests_project
   ON agent_change_requests (project_id, created_at DESC);

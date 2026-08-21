@@ -31,6 +31,9 @@ export interface DeliveryInput {
   title: string;
   /** For the PR body — what the change is and how it was reviewed. */
   reviewSummary: string | null;
+  /** The captured commit to deliver (commit-per-capture). Null = legacy change
+   *  whose work is uncommitted in the tree, delivered by snapshotting it. */
+  commitSha: string | null;
 }
 
 export interface DeliveryResult {
@@ -63,14 +66,25 @@ export async function deliverChange(input: DeliveryInput): Promise<DeliveryResul
   const branch = branchName(input.changeId);
   const git = `git -c safe.directory='*' -c user.name='OrgIQ Agent' -c user.email='agent@orgiq.local' -C ${input.checkout}`;
 
-  // 1. Are the changes still here? A reaped workspace has a clean tree.
-  const status = await runDevboxShell(input.client, input.runtimeArn, input.sessionId,
-    `${git} status --porcelain | head -5`);
-  if (/^fatal:|^error:/m.test(status)) {
-    return { ok: false, error: `Could not read the checkout — ${status.split('\n')[0]}. The workspace may be gone; re-run to regenerate the change.` };
-  }
-  if (!status.trim()) {
-    return { ok: false, error: 'The workspace no longer holds these changes — its microVM was likely reaped. Re-run the task to regenerate them.' };
+  // 1. Are the changes still here? A reaped workspace loses both the uncommitted
+  //    tree and the captured commit, so the check differs by delivery mode.
+  if (input.commitSha) {
+    // Commit-per-capture: the change is a commit — verify it still exists.
+    const check = await runDevboxShell(input.client, input.runtimeArn, input.sessionId,
+      `${git} cat-file -e ${input.commitSha}^{commit} 2>&1 && echo __OK__ || echo __MISSING__`);
+    if (!/__OK__/.test(check)) {
+      return { ok: false, error: 'The captured commit is no longer in the workspace — its microVM was likely reaped. Re-run the task to regenerate the change.' };
+    }
+  } else {
+    // Legacy: are the uncommitted changes still here? A reaped workspace is clean.
+    const status = await runDevboxShell(input.client, input.runtimeArn, input.sessionId,
+      `${git} status --porcelain | head -5`);
+    if (/^fatal:|^error:/m.test(status)) {
+      return { ok: false, error: `Could not read the checkout — ${status.split('\n')[0]}. The workspace may be gone; re-run to regenerate the change.` };
+    }
+    if (!status.trim()) {
+      return { ok: false, error: 'The workspace no longer holds these changes — its microVM was likely reaped. Re-run the task to regenerate them.' };
+    }
   }
 
   // 2. Branch, commit, push. The token is placed in the remote URL only for the
@@ -79,7 +93,7 @@ export async function deliverChange(input: DeliveryInput): Promise<DeliveryResul
   //    not persisted in .git/config — the same discipline the clone uses.
   const commitMsg = `${input.title}\n\nProposed by an OrgIQ agent and reviewed before delivery.`;
   const b64Msg = Buffer.from(commitMsg, 'utf8').toString('base64');
-  const script = buildDeliveryScript({ git, branch, b64CommitMsg: b64Msg, repoFullName: input.repoFullName });
+  const script = buildDeliveryScript({ git, branch, b64CommitMsg: b64Msg, repoFullName: input.repoFullName, commitSha: input.commitSha });
 
   // The token is interpolated into the command as a leading env assignment, so
   // it never enters the git argv (visible to `ps`) or .git/config beyond the

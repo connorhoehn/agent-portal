@@ -137,6 +137,8 @@ export interface ChangeRequest {
   files: string[];
   filesChanged: number;
   model: string | null;
+  /** The workspace commit this change was captured as; null for legacy changes. */
+  commitSha: string | null;
   branchName: string | null;
   prUrl: string | null;
   decidedBy: string | null;
@@ -164,6 +166,7 @@ function rowToChange(r: Record<string, unknown>): ChangeRequest {
     files: parseJson<string[]>(r['files'], []),
     filesChanged: toNum(r['files_changed']),
     model: r['model'] ? toStr(r['model']) : null,
+    commitSha: r['commit_sha'] ? toStr(r['commit_sha']) : null,
     branchName: r['branch_name'] ? toStr(r['branch_name']) : null,
     prUrl: r['pr_url'] ? toStr(r['pr_url']) : null,
     decidedBy: r['decided_by'] ? toStr(r['decided_by']) : null,
@@ -207,6 +210,14 @@ export async function createChangeRequest(input: {
     ],
   );
   return rowToChange(rows[0]!);
+}
+
+/** Record the workspace commit a change was captured as (commit-per-capture). */
+export async function setCommitSha(id: string, sha: string): Promise<void> {
+  await exec(
+    `UPDATE agent_change_requests SET commit_sha = :sha, updated_at = NOW() WHERE id = :id::uuid`,
+    [s('id', id), s('sha', sha)],
+  );
 }
 
 export async function getChangeRequest(id: string): Promise<ChangeRequest | null> {
