@@ -21,6 +21,7 @@ import {
 import { startRun, checkoutPath, type AgentProject } from '../providers/agent-projects.js';
 import { deliverChange } from './change-delivery.js';
 import { deliveryBlockReason } from './delivery-guard.js';
+import { isGitFailure, parsePorcelainFiles } from './capture-parse.js';
 import { resolveDevboxArn, devboxDataClient } from './devbox-arn.js';
 import { registerBox, getBoxBySession, appendEvent } from './devbox-fleet.js';
 import type { BedrockAgentCoreClient } from '@aws-sdk/client-bedrock-agentcore';
@@ -101,8 +102,8 @@ async function captureDiff(input: CaptureInput): Promise<{ diff: string; files: 
   // — a sensitive file in a new directory would slip past governance entirely.
   const status = await runDevboxShell(input.client, input.runtimeArn, input.sessionId,
     `${git} status --porcelain -uall | head -400`);
-  if (/^fatal:|^error:/m.test(status)) return null;
-  const files = status.split('\n').map((l) => l.trim().replace(/^\S+\s+/, '')).filter(Boolean);
+  if (isGitFailure(status)) return null;
+  const files = parsePorcelainFiles(status);
   if (files.length === 0) return null;
 
   const diff = await runDevboxShell(input.client, input.runtimeArn, input.sessionId,
