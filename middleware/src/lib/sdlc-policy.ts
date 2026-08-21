@@ -24,7 +24,9 @@ export type PolicyKind =
   /** A change over this many files is large enough to warrant a second look. */
   | 'max_files'
   /** Only these models may author a change that ships. */
-  | 'model_allowlist';
+  | 'model_allowlist'
+  /** A change whose run cost more than this many dollars needs a human. */
+  | 'max_cost';
 
 /** What a triggered policy does — never silently; always one of these. */
 export type PolicyAction = 'require_approval' | 'block';
@@ -50,6 +52,8 @@ export interface ChangeFacts {
   model: string | null;
   /** The independent review verdict, once one exists. */
   reviewVerdict: ReviewVerdict | null;
+  /** Dollar cost of the run that authored the change, when recorded. */
+  costUsd: number | null;
 }
 
 export type GateOutcome = 'pass' | 'requires_approval' | 'block';
@@ -185,6 +189,23 @@ export function evaluatePolicy(policy: SdlcPolicy, facts: ChangeFacts): GateResu
       };
     }
 
+    case 'max_cost': {
+      const maxUsd = Number(policy.config['maxUsd'] ?? 0);
+      if (!Number.isFinite(maxUsd) || maxUsd <= 0) return null;
+      // No recorded cost means this policy has no fact to judge — a spend gate
+      // cannot fire on a number that does not exist. Fail-open is correct
+      // *here* because it is not open overall: the require_review policy still
+      // gates the change, so a run whose cost was never recorded is reviewed
+      // like any other rather than stuck behind a gate nobody can satisfy.
+      if (facts.costUsd == null) return null;
+      if (facts.costUsd <= maxUsd) return null;
+      return {
+        ...base,
+        outcome: policy.action === 'block' ? 'block' : 'requires_approval',
+        detail: `The run cost $${facts.costUsd.toFixed(2)}; the limit is $${maxUsd.toFixed(2)}.`,
+      };
+    }
+
     default:
       return null;
   }
@@ -270,6 +291,13 @@ export const DEFAULT_POLICIES: Omit<SdlcPolicy, 'id'>[] = [
     enabled: true,
     kind: 'max_files',
     config: { max: 40 },
+    action: 'require_approval',
+  },
+  {
+    name: 'Expensive runs need a human',
+    enabled: true,
+    kind: 'max_cost',
+    config: { maxUsd: 5 },
     action: 'require_approval',
   },
 ];

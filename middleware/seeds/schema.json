@@ -238,6 +238,16 @@
             "Application"
           ]
         }
+      },
+      "DispatchAgentRun": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
       }
     }
   }

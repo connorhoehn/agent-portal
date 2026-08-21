@@ -18,7 +18,7 @@ function policy(p: Omit<SdlcPolicy, 'id'>): SdlcPolicy {
   return { id: `p${++_seq}`, ...p };
 }
 function facts(f: Partial<ChangeFacts>): ChangeFacts {
-  return { files: [], model: null, reviewVerdict: null, ...f };
+  return { files: [], model: null, reviewVerdict: null, costUsd: null, ...f };
 }
 
 describe('globToRegExp', () => {
@@ -94,6 +94,38 @@ describe('model_allowlist gate', () => {
   });
   it('treats an unknown author as not-allowed', () => {
     expect(evaluatePolicy(p, facts({ model: null }))!.outcome).toBe('block');
+  });
+});
+
+describe('max_cost gate', () => {
+  const p = policy({ name: 'spend', enabled: true, kind: 'max_cost', config: { maxUsd: 5 }, action: 'require_approval' });
+
+  it('does not fire when no cost was recorded — the fact is missing, not over', () => {
+    // Fail-open here is correct because it is not open overall: require_review
+    // still gates the change, so an unrecorded cost gets reviewed, not stuck.
+    expect(evaluatePolicy(p, facts({ costUsd: null }))).toBeNull();
+  });
+  it('ignores runs at or under the limit', () => {
+    expect(evaluatePolicy(p, facts({ costUsd: 4.99 }))).toBeNull();
+    expect(evaluatePolicy(p, facts({ costUsd: 5 }))).toBeNull();
+  });
+  it('fires over the limit, naming both numbers', () => {
+    const g = evaluatePolicy(p, facts({ costUsd: 7.25 }))!;
+    expect(g.outcome).toBe('requires_approval');
+    expect(g.detail).toContain('$7.25');
+    expect(g.detail).toContain('$5.00');
+  });
+  it('hard-blocks when the action is block', () => {
+    const blocker = { ...p, action: 'block' as const };
+    expect(evaluatePolicy(blocker, facts({ costUsd: 100 }))!.outcome).toBe('block');
+  });
+  it('is a no-op with a non-positive or nonsense limit', () => {
+    const zero = { ...p, config: { maxUsd: 0 } };
+    const negative = { ...p, config: { maxUsd: -3 } };
+    const junk = { ...p, config: { maxUsd: 'lots' } };
+    expect(evaluatePolicy(zero, facts({ costUsd: 100 }))).toBeNull();
+    expect(evaluatePolicy(negative, facts({ costUsd: 100 }))).toBeNull();
+    expect(evaluatePolicy(junk, facts({ costUsd: 100 }))).toBeNull();
   });
 });
 
@@ -197,6 +229,14 @@ describe('default policies are safe out of the box', () => {
   });
   it('auto-approves a small, reviewed docs change', () => {
     const e = evaluate(defaults, facts({ files: ['docs/readme.md'], reviewVerdict: 'approve' }));
+    expect(e.decision).toBe('approved');
+  });
+  it('sends an expensive run to a human even after review passes', () => {
+    const e = evaluate(defaults, facts({ files: ['docs/readme.md'], reviewVerdict: 'approve', costUsd: 12 }));
+    expect(e.decision).toBe('needs_approval');
+  });
+  it('does not gate a run whose cost was never recorded', () => {
+    const e = evaluate(defaults, facts({ files: ['docs/readme.md'], reviewVerdict: 'approve', costUsd: null }));
     expect(e.decision).toBe('approved');
   });
 });

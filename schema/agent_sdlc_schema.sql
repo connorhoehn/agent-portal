@@ -134,10 +134,19 @@ CREATE TABLE IF NOT EXISTS sdlc_policies (
   name        TEXT        NOT NULL,
   enabled     BOOLEAN     NOT NULL DEFAULT TRUE,
   kind        TEXT        NOT NULL
-              CHECK (kind IN ('require_review','protected_paths','max_files','model_allowlist')),
+              CHECK (kind IN ('require_review','protected_paths','max_files','model_allowlist','max_cost')),
   config      JSONB       NOT NULL DEFAULT '{}',
   action      TEXT        NOT NULL DEFAULT 'require_approval'
               CHECK (action IN ('require_approval','block')),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Backfill for databases whose sdlc_policies predates the max_cost kind:
+-- CREATE TABLE IF NOT EXISTS above will not alter an existing table's CHECK,
+-- and a constraint cannot be modified in place — so drop and recreate it under
+-- its default name. Idempotent: on a fresh database this drops the inline
+-- constraint just created and re-adds the identical one.
+ALTER TABLE sdlc_policies DROP CONSTRAINT IF EXISTS sdlc_policies_kind_check;
+ALTER TABLE sdlc_policies ADD CONSTRAINT sdlc_policies_kind_check
+  CHECK (kind IN ('require_review','protected_paths','max_files','model_allowlist','max_cost'));

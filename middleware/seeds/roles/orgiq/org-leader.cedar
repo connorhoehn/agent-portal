@@ -9,7 +9,11 @@ permit (
     OrgIQ::Action::"ViewLeaderboard",
     OrgIQ::Action::"ViewObservability",
     OrgIQ::Action::"LabelFeedback",
-    OrgIQ::Action::"ManageCanary"
+    OrgIQ::Action::"ManageCanary",
+    // Dispatch agent runs against initiatives (bots, marketplace authorize).
+    // Leaders direct agent work across the org the same way they approve the
+    // spend it represents.
+    OrgIQ::Action::"DispatchAgentRun"
   ],
   resource
 )
