@@ -16,7 +16,10 @@ import {
 } from '@aws-sdk/client-verifiedpermissions';
 import { config } from '../config.js';
 import { eventFromSession, logAuthz } from './audit.js';
-import { demoSession, ADMIN_ROLE, DEFAULT_ROLE, type Tenant, type Role } from './session.js';
+import {
+  demoSession, demoFallbackAllowed, ADMIN_ROLE, DEFAULT_ROLE,
+  type Tenant, type Role, type Session,
+} from './session.js';
 
 const NAMESPACE = 'OrgIQ';
 const RESOURCE_ID = 'app';
@@ -101,13 +104,30 @@ async function evaluate(principal: PrincipalRef, action: string, resourceAttrs?:
   return decision;
 }
 
+/** The caller's session, or the demo fallback while it's still allowed (no
+ * real IdP configured + demo mode). Null means the request is anonymous and a
+ * real login exists — guards must 401 with ssoRequired so the client routes
+ * through Cognito instead of silently demoting to demo-user. */
+export function resolveSession(req: Request): Session | null {
+  return req.session ?? (demoFallbackAllowed() ? demoSession() : null);
+}
+
+function denyUnauthenticated(req: Request, res: Response, action: string): void {
+  logAuthz({
+    decision: 'DENY', action, sub: 'anonymous', role: '-',
+    path: req.path, reason: 'no session',
+  });
+  res.status(401).json({ error: 'Unauthenticated', ssoRequired: true });
+}
+
 /**
  * Returns a middleware that requires Cedar permission for `action`.
  * Action ids match the Cedar schema (Search, ViewSalary, EditGuardrail, ...).
  */
 export function requireAction(action: string) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    const session = req.session ?? demoSession();
+    const session = resolveSession(req);
+    if (!session) { denyUnauthenticated(req, res, action); return; }
     try {
       const decision = await evaluate(session, action);
       logAuthz(eventFromSession(session, action, decision, { path: req.path }));
@@ -135,7 +155,8 @@ export function requireAction(action: string) {
  */
 export function requireTenant(tenant: Tenant) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const session = req.session ?? demoSession();
+    const session = resolveSession(req);
+    if (!session) { denyUnauthenticated(req, res, 'TenantScope'); return; }
     if (session.tenant === tenant || session.role === ADMIN_ROLE) {
       next();
       return;
@@ -164,8 +185,10 @@ export async function isAllowed(principal: PrincipalRef, action: string, resourc
  */
 export function readForRolesElseAction(readRoles: Role[], action: string) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const role = (req.session?.role ?? DEFAULT_ROLE) as Role;
-    if (req.method === 'GET' && (role === 'admin' || readRoles.includes(role))) {
+    const session = resolveSession(req);
+    const role = (session?.role ?? DEFAULT_ROLE) as Role;
+    // No session → skip the read fast-path; requireAction below 401s it.
+    if (req.method === 'GET' && session && (role === 'admin' || readRoles.includes(role))) {
       next();
       return;
     }

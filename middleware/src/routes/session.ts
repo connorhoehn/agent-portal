@@ -17,6 +17,7 @@ import {
   setSessionCookie,
   clearSessionCookie,
   demoSession,
+  demoFallbackAllowed,
   type Role,
   type Session,
   type Tenant,
@@ -53,8 +54,21 @@ async function issue(res: import('express').Response, session: Session) {
   res.json(publicView(session));
 }
 
+/** The caller's session, or the demo fallback while it's still allowed. Null
+ * means anonymous with a real IdP configured — respond 401 { ssoRequired } so
+ * the portal routes through Cognito instead of showing demo-user forever. */
+function sessionOrNull(req: import('express').Request): Session | null {
+  return req.session ?? (demoFallbackAllowed() ? demoSession() : null);
+}
+
+function unauthenticated(res: import('express').Response): void {
+  res.status(401).json({ error: 'Unauthenticated', ssoRequired: true });
+}
+
 sessionRouter.get('/me', (req, res) => {
-  res.json(publicView(req.session ?? demoSession()));
+  const session = sessionOrNull(req);
+  if (!session) { unauthenticated(res); return; }
+  res.json(publicView(session));
 });
 
 // Login-able users for the picker. Deliberately open: this is the demo login
@@ -84,12 +98,16 @@ sessionRouter.post('/login', loginLimit, asyncHandler(async (req, res) => {
   const session = mintSession({ id: user.id, displayName: user.displayName }, user.grants);
   if (!session) { res.status(403).json({ error: `${userId} holds no tenant grants` }); return; }
   logAuthz(eventFromSession(session, 'Login', 'ALLOW', { path: '/api/session/login' }));
+  // Defense in depth: drop any prior identity's cookie before minting the new
+  // one, so no stale session material survives a user switch.
+  clearSessionCookie(res);
   await issue(res, session);
 }));
 
 sessionRouter.post('/role', switchLimit, asyncHandler(async (req, res) => {
   const { role } = req.body as { role?: string };
-  const session = req.session ?? demoSession();
+  const session = sessionOrNull(req);
+  if (!session) { unauthenticated(res); return; }
   if (!role) { res.status(400).json({ error: 'role is required' }); return; }
   if (!hasGrant(session.grants, session.tenant, role)) {
     logAuthz(eventFromSession(session, 'SwitchRole', 'DENY', {
@@ -106,7 +124,8 @@ sessionRouter.post('/role', switchLimit, asyncHandler(async (req, res) => {
 
 sessionRouter.post('/tenant', switchLimit, asyncHandler(async (req, res) => {
   const { tenant } = req.body as { tenant?: string };
-  const session = req.session ?? demoSession();
+  const session = sessionOrNull(req);
+  if (!session) { unauthenticated(res); return; }
   if (!tenant || !TENANTS.includes(tenant as Tenant)) {
     res.status(400).json({ error: `tenant must be one of ${TENANTS.join(', ')}` });
     return;
@@ -135,7 +154,8 @@ sessionRouter.post('/tenant', switchLimit, asyncHandler(async (req, res) => {
 // Masquerade action (granted to the admin role only in the seeds).
 sessionRouter.post('/masquerade', loginLimit, asyncHandler(async (req, res) => {
   const { userId } = req.body as { userId?: string };
-  const session = req.session ?? demoSession();
+  const session = sessionOrNull(req);
+  if (!session) { unauthenticated(res); return; }
   if (!userId) { res.status(400).json({ error: 'userId is required' }); return; }
   if (session.act) {
     res.status(409).json({ error: 'already masquerading — stop first' });

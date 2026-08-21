@@ -13,6 +13,12 @@ export function hasChosenContext(sub: string): boolean {
   try { return !!sub && sessionStorage.getItem(KEY) === sub; } catch { return false; }
 }
 
+/** Forget the chooser decision. Sign-out and sign-in call this so the next
+ * session re-drives through /select instead of inheriting the old pick. */
+export function clearContextChosen(): void {
+  try { sessionStorage.removeItem(KEY); } catch { /* private mode — ignore */ }
+}
+
 /** Count the distinct (tenant, role) contexts a grants map offers. */
 export function contextCount(grants: Record<string, string[]> | undefined): number {
   if (!grants) return 0;

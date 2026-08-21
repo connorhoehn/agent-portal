@@ -33,9 +33,8 @@ import {
   type ApprovalCreatedEvent,
   type ApprovalDecisionEvent,
 } from '../lib/approval-broker.js';
-import { isAllowed } from '../lib/authz.js';
+import { isAllowed, resolveSession } from '../lib/authz.js';
 import { logAuthz } from '../lib/audit.js';
-import { demoSession } from '../lib/session.js';
 import { rateLimit } from '../lib/rate-limit.js';
 
 export const approvalsRouter = Router();
@@ -401,8 +400,13 @@ approvalsRouter.post('/:id/decision', asyncHandler(async (req, res) => {
   }
 
   // Cedar PEP — pass `resource.amount` from the captured payload so threshold
-  // policies on org-leader can fire correctly.
-  const session = req.session ?? demoSession();
+  // policies on org-leader can fire correctly. Same fallback rule as the authz
+  // guards: with a real IdP configured, anonymous never demotes to demo-user.
+  const session = resolveSession(req);
+  if (!session) {
+    res.status(401).json({ error: 'Unauthenticated', ssoRequired: true });
+    return;
+  }
   const amountRaw = existing.payload['amount'];
   const amount = typeof amountRaw === 'number'
     ? amountRaw
