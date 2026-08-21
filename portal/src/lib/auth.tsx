@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { clearContextChosen } from './contextChoice';
 
 export type Role = 'member' | 'org-leader' | 'hr-admin' | 'reporter' | 'editor';
 export type SessionRole = Role | 'admin';
@@ -30,9 +31,14 @@ interface SessionContextValue {
   isLoading: boolean;
   /** True when Cognito SSO is configured — the portal offers a real sign-in. */
   ssoEnabled: boolean;
+  /** True when the middleware rejected the anonymous request (401 with
+   * ssoRequired) — a real sign-in is required, no demo fallback. */
+  ssoRequired: boolean;
   setRole: (role: string) => Promise<void>;
-  setTenant: (tenant: Tenant) => Promise<void>;
-  /** Switch account (tenant) AND role in one step — used by the context chooser. */
+  /** Switch account (tenant) AND role in one step. This is the ONLY tenant
+   * switch the portal exposes, and it belongs to the /select chooser — there
+   * is deliberately no inline setTenant: switching workspaces goes back
+   * through the chooser so the boundary stays authoritative. */
   enterContext: (tenant: Tenant, role: string) => Promise<void>;
   login: (userId: string) => Promise<void>;
   masquerade: (userId: string) => Promise<void>;
@@ -82,15 +88,35 @@ async function post(path: string, body: unknown): Promise<void> {
   }
 }
 
+// Survives the round-trip to the Cognito Hosted UI (unlike a module variable),
+// so a user who comes back still unauthenticated — cancelled login,
+// unprovisioned account — gets a button instead of a redirect loop.
+const SSO_REDIRECT_KEY = 'orgiq.ssoAutoRedirected';
+
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [ssoRequired, setSsoRequired] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
       const res = await fetch('/api/session/me', { credentials: 'include' });
+      if (res.status === 401) {
+        // The middleware refused the anonymous request: a real IdP is
+        // configured and the demo fallback is off. Surface the unauthenticated
+        // state (session stays null → every gated surface hides) and let the
+        // auto-redirect effect below route through Cognito.
+        let sso = false;
+        try { sso = !!((await res.json()) as { ssoRequired?: boolean }).ssoRequired; } catch { /* body optional */ }
+        setSsoRequired(sso);
+        setSession(null);
+        return;
+      }
       if (!res.ok) throw new Error(`${res.status}`);
       const raw = (await res.json()) as Partial<Session>;
+      setSsoRequired(false);
+      // A real session arrived — allow a future sign-out to auto-redirect again.
+      try { sessionStorage.removeItem(SSO_REDIRECT_KEY); } catch { /* private mode */ }
       // Take grants and switch lists only from the server — never inherit them
       // from a client-side default, so a malformed /me can't fabricate access.
       setSession({
@@ -129,15 +155,30 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     window.location.href = `/api/auth/login?returnTo=${encodeURIComponent(returnTo)}`;
   }, []);
 
+  // When the middleware demands a real sign-in, bounce to the Cognito screen
+  // — once. The sessionStorage marker survives the redirect, so landing back
+  // still unauthenticated renders the sign-in gate instead of looping.
+  useEffect(() => {
+    if (isLoading || !ssoRequired || !ssoEnabled) return;
+    let already = false;
+    try { already = sessionStorage.getItem(SSO_REDIRECT_KEY) === '1'; } catch { /* private mode */ }
+    if (already) return;
+    try { sessionStorage.setItem(SSO_REDIRECT_KEY, '1'); } catch { /* private mode */ }
+    signInWithSso();
+  }, [isLoading, ssoRequired, ssoEnabled, signInWithSso]);
+
   const logout = useCallback(async () => {
     let ssoLogoutUrl: string | undefined;
     try {
       const res = await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
       if (res.ok) ssoLogoutUrl = ((await res.json()) as { ssoLogoutUrl?: string }).ssoLogoutUrl;
-    } catch { /* fall through to a local refresh */ }
-    if (ssoLogoutUrl) { window.location.href = ssoLogoutUrl; return; }
-    await refresh();
-  }, [refresh]);
+    } catch { /* cookie may already be gone — still hard-redirect below */ }
+    // Forget the chooser decision so the next login re-drives through /select.
+    clearContextChosen();
+    // Hard redirect: through the Cognito hosted logout when SSO is on (clears
+    // the IdP session too), else to the root so the app remounts signed-out.
+    window.location.href = ssoLogoutUrl ?? '/';
+  }, []);
 
   // Identity changes go through the BFF (which re-mints the signed cookie) and
   // then HARD-REDIRECT, so the entire app remounts from the new session —
@@ -152,13 +193,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     window.location.assign(window.location.pathname + window.location.search);
   }, []);
 
-  const setTenant = useCallback(async (tenant: Tenant) => {
-    await post('/api/session/tenant', { tenant });
-    window.location.assign(TENANT_HOME[tenant] ?? '/');
-  }, []);
-
   // Set the account (tenant) and role together, then enter that workspace. The
   // role must be held in the target tenant — the chooser only offers held ones.
+  // (There is intentionally no standalone setTenant: the /select chooser is
+  // the only tenant boundary, so inline switching can't bypass it.)
   const enterContext = useCallback(async (tenant: Tenant, role: string) => {
     await post('/api/session/tenant', { tenant });
     await post('/api/session/role', { role });
@@ -167,6 +205,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (userId: string) => {
     await post('/api/session/login', { userId });
+    // A different identity must make its own chooser decision.
+    clearContextChosen();
     window.location.assign('/');
   }, []);
 
@@ -189,14 +229,55 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const ctxValue = useMemo(
-    () => ({ session, isLoading, ssoEnabled, setRole, setTenant, enterContext, login, masquerade, stopMasquerade, signInWithSso, logout, listUsers, refresh }),
-    [session, isLoading, ssoEnabled, setRole, setTenant, enterContext, login, masquerade, stopMasquerade, signInWithSso, logout, listUsers, refresh],
+    () => ({ session, isLoading, ssoEnabled, ssoRequired, setRole, enterContext, login, masquerade, stopMasquerade, signInWithSso, logout, listUsers, refresh }),
+    [session, isLoading, ssoEnabled, ssoRequired, setRole, enterContext, login, masquerade, stopMasquerade, signInWithSso, logout, listUsers, refresh],
   );
+
+  // Unauthenticated + a real IdP required: replace the app with a sign-in
+  // gate. This renders only after the one-shot auto-redirect above has been
+  // spent (the user came back from Cognito still without a session).
+  const showSsoGate = !isLoading && ssoRequired && session === null;
 
   return (
     <SessionContext.Provider value={ctxValue}>
-      {children}
+      {showSsoGate ? <SsoGate ssoEnabled={ssoEnabled} onSignIn={signInWithSso} /> : children}
     </SessionContext.Provider>
+  );
+}
+
+function SsoGate({ ssoEnabled, onSignIn }: { ssoEnabled: boolean; onSignIn: () => void }) {
+  return (
+    <div style={{
+      minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 24, background: 'var(--color-bg, #0e1116)',
+    }}>
+      <div style={{ maxWidth: 420, textAlign: 'center' }}>
+        <div style={{
+          fontSize: 13, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase',
+          color: 'var(--color-primary)', marginBottom: 16,
+        }}>Org</div>
+        <h1 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 8px', color: 'var(--color-text-primary)' }}>
+          Sign in required
+        </h1>
+        <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--color-text-secondary)', margin: '0 0 20px' }}>
+          {ssoEnabled
+            ? 'This deployment uses enterprise sign-in. Continue with your identity provider.'
+            : 'No session and no sign-in method is available. Contact an administrator.'}
+        </p>
+        {ssoEnabled && (
+          <button
+            type="button"
+            onClick={onSignIn}
+            style={{
+              padding: '10px 20px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+              borderRadius: 8, border: 'none', background: 'var(--color-primary)', color: '#fff',
+            }}
+          >
+            Sign in with SSO
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 

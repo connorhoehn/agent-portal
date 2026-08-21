@@ -68,7 +68,8 @@ export interface Bot {
 
 export interface BotRun {
   id: string;
-  botId: string;
+  /** Null for marketplace runs — a firing with no bot behind it. */
+  botId: string | null;
   trigger: string;
   runId: string | null;
   jobId: string | null;
@@ -110,7 +111,7 @@ function rowToBot(r: Record<string, unknown>): Bot {
 function rowToRun(r: Record<string, unknown>): BotRun {
   return {
     id: toStr(r['id']),
-    botId: toStr(r['bot_id']),
+    botId: r['bot_id'] ? toStr(r['bot_id']) : null,
     trigger: toStr(r['trigger']),
     runId: r['run_id'] ? toStr(r['run_id']) : null,
     jobId: r['job_id'] ? toStr(r['job_id']) : null,
@@ -139,15 +140,28 @@ const BOT_SELECT = `
        WHERE r.bot_id = b.id AND r.started_at >= date_trunc('day', NOW())
     ) t ON TRUE`;
 
+/** Reads degrade to empty until the bots schema is applied — a cluster that
+ * predates agent_bots_schema.sql should render an empty roster, not a 500.
+ * Writes stay loud: creating a bot against a missing table is a real error. */
+async function safeExec(sql: string, params: SqlParameter[] = []): Promise<Record<string, unknown>[]> {
+  try {
+    return await exec(sql, params);
+  } catch (err) {
+    const msg = (err as Error).message ?? '';
+    if (/does not exist|relation/i.test(msg)) return [];
+    throw err;
+  }
+}
+
 export async function listBots(): Promise<Bot[]> {
   if (config.mock.aurora) return [];
-  const rows = await exec(`${BOT_SELECT} ORDER BY b.created_at DESC LIMIT 200`);
+  const rows = await safeExec(`${BOT_SELECT} ORDER BY b.created_at DESC LIMIT 200`);
   return rows.map(rowToBot);
 }
 
 export async function getBot(id: string): Promise<Bot | null> {
   if (config.mock.aurora || !isUuid(id)) return null;
-  const rows = await exec(`${BOT_SELECT} WHERE b.id = :id::uuid`, [s('id', id)]);
+  const rows = await safeExec(`${BOT_SELECT} WHERE b.id = :id::uuid`, [s('id', id)]);
   return rows[0] ? rowToBot(rows[0]) : null;
 }
 
@@ -246,7 +260,7 @@ export async function markBotRan(id: string): Promise<void> {
 
 export async function listBotRuns(botId: string, limit = 50): Promise<BotRun[]> {
   if (config.mock.aurora || !isUuid(botId)) return [];
-  const rows = await exec(
+  const rows = await safeExec(
     `SELECT * FROM bot_runs WHERE bot_id = :bid::uuid
       ORDER BY started_at DESC LIMIT :lim`,
     [s('bid', botId), int('lim', Math.min(Math.max(limit, 1), 200))],
@@ -254,8 +268,26 @@ export async function listBotRuns(botId: string, limit = 50): Promise<BotRun[]> 
   return rows.map(rowToRun);
 }
 
+/**
+ * Marketplace runs for one initiative: bot-less firings (bot_id IS NULL) whose
+ * work item belongs to the initiative, newest first. Keyed through work_items
+ * because the bot_run itself carries no project linkage.
+ */
+export async function listMarketplaceRuns(orgProjectId: string, limit = 100): Promise<BotRun[]> {
+  if (config.mock.aurora) return [];
+  const rows = await safeExec(
+    `SELECT * FROM bot_runs
+      WHERE bot_id IS NULL
+        AND work_item_id IN (SELECT id FROM work_items WHERE project_id = :pid)
+      ORDER BY started_at DESC LIMIT :lim`,
+    [s('pid', orgProjectId), int('lim', Math.min(Math.max(limit, 1), 200))],
+  );
+  return rows.map(rowToRun);
+}
+
 export async function createBotRun(input: {
-  botId: string; trigger: string; runId?: string | null; jobId?: string | null;
+  /** Null for a marketplace run — the work item is the mission, no bot exists. */
+  botId: string | null; trigger: string; runId?: string | null; jobId?: string | null;
   workItemId?: string | null;
   /** 'running' for a dispatched run; a terminal status records a firing that
    *  never dispatched (skipped by a guard, failed before dispatch). */
@@ -270,7 +302,7 @@ export async function createBotRun(input: {
              CASE WHEN :status = 'running' THEN NULL ELSE NOW() END)
      RETURNING *`,
     [
-      s('bid', input.botId), s('trigger', input.trigger),
+      maybe('bid', input.botId), s('trigger', input.trigger),
       maybe('run', input.runId ?? null), maybe('job', input.jobId ?? null),
       maybe('work_item', input.workItemId ?? null), s('status', status),
       s('outcome', JSON.stringify(input.outcome ?? {})),
@@ -336,6 +368,48 @@ export async function runCostSamples(model: string, projectId: string | null): P
        FROM agent_project_runs
       WHERE status = 'done' AND cost_usd IS NOT NULL AND duration_ms IS NOT NULL
         AND model = :model ${scope}`,
+    params,
+  );
+  const r = rows[0];
+  const count = toNum(r?.['n']);
+  if (!r || count === 0) return null;
+  return {
+    count,
+    costUsdP25: toNum(r['cost_p25']),
+    costUsdP75: toNum(r['cost_p75']),
+    minutesP25: toNum(r['min_p25']),
+    minutesP75: toNum(r['min_p75']),
+  };
+}
+
+/**
+ * Per-POINT percentiles: cost and minutes divided by the story points of the
+ * work item each run delivered. Only runs bound to a sized work item qualify —
+ * that binding is what lets a 5-pt estimate be 5 × the per-point history
+ * rather than a blind run-level range. Same RunPercentiles shape as
+ * runCostSamples, but the numbers mean $/point and minutes/point; the caller
+ * multiplies by N (lib/marketplace-estimate.ts).
+ */
+export async function perPointCostSamples(model: string, projectId: string | null): Promise<RunPercentiles | null> {
+  if (config.mock.aurora) return null;
+  if (projectId && !isUuid(projectId)) return null;
+  const params: SqlParameter[] = [s('model', model)];
+  let scope = '';
+  if (projectId) {
+    scope = 'AND r.project_id = :pid::uuid';
+    params.push(s('pid', projectId));
+  }
+  const rows = await exec(
+    `SELECT COUNT(*)::int AS n,
+            (percentile_cont(0.25) WITHIN GROUP (ORDER BY r.cost_usd / wi.story_points))::float8 AS cost_p25,
+            (percentile_cont(0.75) WITHIN GROUP (ORDER BY r.cost_usd / wi.story_points))::float8 AS cost_p75,
+            (percentile_cont(0.25) WITHIN GROUP (ORDER BY r.duration_ms / 60000.0 / wi.story_points))::float8 AS min_p25,
+            (percentile_cont(0.75) WITHIN GROUP (ORDER BY r.duration_ms / 60000.0 / wi.story_points))::float8 AS min_p75
+       FROM agent_project_runs r
+       JOIN work_items wi ON wi.id = r.work_item_id
+      WHERE r.status = 'done' AND r.cost_usd IS NOT NULL AND r.duration_ms IS NOT NULL
+        AND r.work_item_id IS NOT NULL AND wi.story_points > 0
+        AND r.model = :model ${scope}`,
     params,
   );
   const r = rows[0];

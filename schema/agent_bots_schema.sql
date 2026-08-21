@@ -57,8 +57,10 @@ CREATE TABLE IF NOT EXISTS bots (
 -- this cost today" without joining the whole pipeline.
 CREATE TABLE IF NOT EXISTS bot_runs (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  bot_id        UUID        NOT NULL REFERENCES bots (id) ON DELETE CASCADE,
-  trigger       TEXT        NOT NULL,               -- manual | cron | pr_watch
+  -- Nullable on purpose: a marketplace run (trigger = 'marketplace') is a
+  -- firing with no bot behind it — the work item is the mission.
+  bot_id        UUID        REFERENCES bots (id) ON DELETE CASCADE,
+  trigger       TEXT        NOT NULL,               -- manual | cron | pr_watch | marketplace
 
   -- Exactly one of these is set for a dispatched run: a governed run against a
   -- repo target, or a queue job for an initiative target. Both null for a run
@@ -76,6 +78,12 @@ CREATE TABLE IF NOT EXISTS bot_runs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_bot_runs_bot ON bot_runs (bot_id, started_at DESC);
+-- Marketplace lookups go work_item → runs, with no bot to key on.
+CREATE INDEX IF NOT EXISTS idx_bot_runs_work_item ON bot_runs (work_item_id, started_at DESC);
+
+-- Migration for databases that created bot_runs when bot_id was NOT NULL.
+-- Idempotent: DROP NOT NULL on an already-nullable column is a no-op.
+ALTER TABLE bot_runs ALTER COLUMN bot_id DROP NOT NULL;
 
 -- Close the work-item linkage gap (Phase 2 reads these; adding them now means
 -- every run recorded from here on can be attributed). Idempotent — these

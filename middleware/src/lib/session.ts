@@ -4,9 +4,10 @@
 //
 // Authentication is still deliberately lightweight: login is a user picker
 // (POST /api/session/login) against the app_users table, and requests with no
-// cookie fall back to the permissive "demo-user" identity. mintSession() is the
-// single choke point that turns an identity + grants into a session, so a real
-// authenticator (e.g. a Cognito OIDC callback) can slot in later by resolving
+// cookie fall back to the permissive "demo-user" identity — but only while no
+// real authenticator is configured (see demoFallbackAllowed). mintSession() is
+// the single choke point that turns an identity + grants into a session, so a
+// real authenticator (e.g. the Cognito OIDC callback) slots in by resolving
 // its subject to an app_users row and calling the same function.
 //
 // The tenancy invariant lives here: session.role is only ever valid for
@@ -38,7 +39,11 @@ export type Role = 'member' | 'org-leader' | 'hr-admin' | 'reporter' | 'editor' 
 export const DEFAULT_ROLE: Role = 'member';
 export const DEFAULT_TENANT: Tenant = 'orgiq';
 export const COOKIE_NAME = 'orgiq.session';
-const COOKIE_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 7;
+// Cookie lifetime, env-tunable in hours (SESSION_MAX_AGE_H). Default is 12h,
+// down from the original 7 days: a laptop demo cookie should not outlive a
+// workday by much, and SSO re-auth is cheap — when the Cognito session is
+// still live the hosted UI bounces straight back without prompting.
+const COOKIE_MAX_AGE_MS = parseInt(process.env['SESSION_MAX_AGE_H'] ?? '12', 10) * 60 * 60 * 1000;
 
 /** tenant id → roles the user holds there. Loaded from user_tenant_roles. */
 export type Grants = Record<string, string[]>;
@@ -268,6 +273,24 @@ export function demoModeEnabled(): boolean {
   return process.env['NODE_ENV'] !== 'production' || process.env['AUTH_DEMO_MODE'] === 'true';
 }
 
+/** Mirror of lib/oidc.ts cognitoEnabled(), duplicated here so session.ts does
+ * not import oidc.ts — its aws-jwt-verify dependency is ESM-only and would
+ * break the CJS jest build for every suite that touches session/authz. */
+function cognitoConfigured(): boolean {
+  const c = config.cognito;
+  return !!(c?.userPoolId && c?.clientId && c?.domain && c?.callbackUrl);
+}
+
+/**
+ * True when a cookie-less request may fall back to the demo identity. Once a
+ * real IdP (Cognito) is configured, anonymous requests must be sent through
+ * SSO instead of silently becoming demo-user — otherwise the login screen
+ * never appears and the permissive demo identity masks the real one forever.
+ */
+export function demoFallbackAllowed(): boolean {
+  return !cognitoConfigured() && demoModeEnabled();
+}
+
 export function demoSession(): Session {
   return {
     sub: 'demo-user',
@@ -294,10 +317,12 @@ export function setGrantsResolver(fn: GrantsResolver): void {
 
 /**
  * Resolve the caller's session from the cookie and attach to req.session.
- * Falls back to the demo-user identity if no cookie is present (permissive in
- * dev, zero grants in production) so the app stays usable without a login
- * step. Real users' grants are re-resolved from the identity store every
- * GRANTS_REFRESH_S so revocations propagate to live sessions.
+ * Falls back to the demo-user identity if no cookie is present — but only
+ * while demoFallbackAllowed() (no Cognito configured + demo mode); with a
+ * real IdP wired up, cookie-less requests carry no session and downstream
+ * guards 401 with ssoRequired so the client routes through SSO. Real users'
+ * grants are re-resolved from the identity store every GRANTS_REFRESH_S so
+ * revocations propagate to live sessions.
  */
 export function sessionMiddleware() {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -313,7 +338,7 @@ export function sessionMiddleware() {
             if (!fresh) {
               // User no longer exists — drop to the anonymous identity.
               clearSessionCookie(res);
-              req.session = demoSession();
+              if (demoFallbackAllowed()) req.session = demoSession();
               next();
               return;
             }
@@ -338,7 +363,7 @@ export function sessionMiddleware() {
         return;
       }
     }
-    req.session = demoSession();
+    if (demoFallbackAllowed()) req.session = demoSession();
     next();
   };
 }

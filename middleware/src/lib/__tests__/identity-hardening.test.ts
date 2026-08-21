@@ -1,19 +1,32 @@
 // Hardening tests: Cedar statement parsing, tenant guards, production
-// demo-mode lockdown, and the session rate limiter.
+// demo-mode lockdown, the demo-fallback gate once Cognito is configured,
+// and the session rate limiter.
 
 jest.mock('../../config.js', () => ({
   config: {
     region: 'us-east-1',
     auth: { sessionSigningSecretArn: '', policyStoreId: '' },
     aurora: { clusterArn: '', secretArn: '', database: 'orgiq' },
+    // Mutable in tests: setCognito() flips the IdP on/off per case.
+    cognito: { userPoolId: '', clientId: '', domain: '', callbackUrl: '' },
   },
 }));
 
 import type { Request, Response } from 'express';
+import { config } from '../../config.js';
 import { splitStatements } from '../cedar-parse.js';
-import { requireTenant } from '../authz.js';
-import { demoSession, permissiveGrants } from '../session.js';
+import { requireTenant, requireAction } from '../authz.js';
+import { demoSession, demoFallbackAllowed, permissiveGrants, setSessionCookie } from '../session.js';
 import { rateLimit, resetRateLimits } from '../rate-limit.js';
+
+/** Flip the mocked Cognito config on/off — demoFallbackAllowed reads it live. */
+function setCognito(on: boolean) {
+  const c = (config as unknown as { cognito: Record<string, string> }).cognito;
+  c['userPoolId'] = on ? 'us-east-1_TEST' : '';
+  c['clientId'] = on ? 'client123' : '';
+  c['domain'] = on ? 'orgiq-auth.auth.us-east-1.amazoncognito.com' : '';
+  c['callbackUrl'] = on ? 'http://localhost:3001/api/auth/callback' : '';
+}
 
 describe('splitStatements', () => {
   it('splits permit + forbid with simple when clauses', () => {
@@ -120,6 +133,78 @@ describe('production demo-mode lockdown', () => {
     process.env['NODE_ENV'] = 'production';
     process.env['AUTH_DEMO_MODE'] = 'true';
     expect(demoSession().grants).toEqual(permissiveGrants());
+  });
+});
+
+describe('demoFallbackAllowed', () => {
+  const prevEnv = process.env['NODE_ENV'];
+  const prevFlag = process.env['AUTH_DEMO_MODE'];
+  afterEach(() => {
+    setCognito(false);
+    if (prevEnv === undefined) delete process.env['NODE_ENV']; else process.env['NODE_ENV'] = prevEnv;
+    if (prevFlag === undefined) delete process.env['AUTH_DEMO_MODE']; else process.env['AUTH_DEMO_MODE'] = prevFlag;
+  });
+
+  // Matrix: cognito configured × NODE_ENV × AUTH_DEMO_MODE. The fallback is
+  // allowed only when NO real IdP exists AND demo mode is on.
+  it.each([
+    // [cognito, env,          demoFlag,    expected]
+    [false, 'test',       undefined, true],   // plain local dev
+    [false, 'production', undefined, false],  // prod, no opt-in
+    [false, 'production', 'true',    true],   // prod, explicit demo opt-in
+    [true,  'test',       undefined, false],  // real IdP wins even in dev
+    [true,  'production', undefined, false],
+    [true,  'production', 'true',    false],  // even the opt-in can't bypass SSO
+  ] as Array<[boolean, string, string | undefined, boolean]>)(
+    'cognito=%s NODE_ENV=%s AUTH_DEMO_MODE=%s → %s',
+    (cognito, env, demoFlag, expected) => {
+      setCognito(cognito);
+      process.env['NODE_ENV'] = env;
+      if (demoFlag === undefined) delete process.env['AUTH_DEMO_MODE'];
+      else process.env['AUTH_DEMO_MODE'] = demoFlag;
+      expect(demoFallbackAllowed()).toBe(expected);
+    },
+  );
+});
+
+describe('anonymous requests once Cognito is configured', () => {
+  const noSession = () => ({ path: '/x' }) as unknown as Request;
+  afterEach(() => setCognito(false));
+
+  it('requireTenant 401s a cookie-less request with ssoRequired', () => {
+    setCognito(true);
+    const res = fakeRes();
+    const next = jest.fn();
+    requireTenant('orgiq')(noSession(), res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(401);
+    expect(res.body).toMatchObject({ error: 'Unauthenticated', ssoRequired: true });
+  });
+
+  it('requireAction 401s a cookie-less request before evaluating Cedar', async () => {
+    setCognito(true);
+    const res = fakeRes();
+    const next = jest.fn();
+    await requireAction('Search')(noSession(), res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.statusCode).toBe(401);
+    expect(res.body).toMatchObject({ error: 'Unauthenticated', ssoRequired: true });
+  });
+
+  it('still falls back to the demo identity when Cognito is off', () => {
+    setCognito(false);
+    const next = jest.fn();
+    requireTenant('orgiq')(noSession(), fakeRes(), next);
+    expect(next).toHaveBeenCalled();
+  });
+});
+
+describe('session cookie lifetime', () => {
+  it('defaults to 12 hours (SESSION_MAX_AGE_H unset)', () => {
+    const cookie = jest.fn();
+    setSessionCookie({ cookie } as unknown as Response, 'value');
+    expect(cookie).toHaveBeenCalledWith('orgiq.session', 'value',
+      expect.objectContaining({ maxAge: 12 * 60 * 60 * 1000, httpOnly: true }));
   });
 });
 

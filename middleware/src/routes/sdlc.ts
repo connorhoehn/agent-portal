@@ -36,7 +36,7 @@ sdlcRouter.post('/policies', asyncHandler(async (req, res) => {
     config?: Record<string, unknown>; action?: string;
   };
   if (!body.name?.trim()) throw new ValidationError('name is required');
-  const validKinds: PolicyKind[] = ['require_review', 'protected_paths', 'max_files', 'model_allowlist'];
+  const validKinds: PolicyKind[] = ['require_review', 'protected_paths', 'max_files', 'model_allowlist', 'max_cost'];
   if (!validKinds.includes(body.kind as PolicyKind)) {
     throw new ValidationError(`kind must be one of: ${validKinds.join(', ')}`);
   }

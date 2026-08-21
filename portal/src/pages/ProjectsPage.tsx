@@ -14,6 +14,10 @@ interface ProjectSummary {
   name: string;
   status: string | null;
   description?: string | null;
+  // Owner — optional; the list response may gain these alongside the detail
+  // endpoint. Render when present, omit cleanly when absent.
+  ownerId?: string | null;
+  ownerName?: string | null;
   contributorCount: number;
   topContributorNames?: string[];
   lastActivityAt?: string | null;
@@ -264,9 +268,16 @@ function ProjectListRow({ project, onClick }: { project: ProjectSummary; onClick
         <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {project.name}
         </div>
-        <div style={{ fontSize: 10, color: '#9ca3af', fontFamily: 'ui-monospace, monospace', marginTop: 1 }}>
-          {key}
-        </div>
+        {/* Secondary line: the owner runs the initiative — the slug is the fallback */}
+        {project.ownerName ? (
+          <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            Run by {project.ownerName}
+          </div>
+        ) : (
+          <div style={{ fontSize: 10, color: '#9ca3af', fontFamily: 'ui-monospace, monospace', marginTop: 1 }}>
+            {key}
+          </div>
+        )}
       </div>
 
       {/* Status chip — fixed column, left-aligned */}
@@ -381,7 +392,7 @@ function ProjectsPage() {
 
       <PageSection
         title="Projects"
-        description="Epics, features, stories and decisions across the organization."
+        description="Epics, stories, bugs and decisions across the organization."
         actions={
           <div style={{
             display: 'flex', border: '1.5px solid #e5e7eb', borderRadius: 7,
@@ -458,7 +469,9 @@ function ProjectsPage() {
               <ProjectCard
                 key={project.id}
                 name={project.name}
-                id={project.id}
+                // Secondary line under the name: the owner when known
+                // (contributor count in the footer stays as the fallback signal).
+                id={project.ownerName ? `Run by ${project.ownerName}` : project.id}
                 status={project.status ?? undefined}
                 contributorNames={project.topContributorNames ?? []}
                 contributorCount={project.contributorCount}

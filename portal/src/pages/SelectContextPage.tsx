@@ -3,6 +3,9 @@
 // (tenant, role) context. Picking a role sets both the account (tenant) and the
 // role in one step, then enters the app. A single-context identity never sees
 // this (RootRedirect sends it straight in).
+//
+// This page is THE tenant boundary: there is no inline tenant switching inside
+// a workspace — the menu's "Switch workspace…" hard-navigates back here.
 
 import { useMemo } from 'react';
 import { useSession, type Tenant } from '../lib/auth';
@@ -26,7 +29,7 @@ const ROLE_META: Record<string, { label: string; hint: string }> = {
 function roleLabel(role: string): string { return ROLE_META[role]?.label ?? role; }
 
 export default function SelectContextPage() {
-  const { session, enterContext, logout } = useSession();
+  const { session, enterContext, logout, ssoEnabled, signInWithSso } = useSession();
 
   // Build the account → roles structure from grants, newest-tenant filter applied.
   const accounts = useMemo(() => {
@@ -46,12 +49,38 @@ export default function SelectContextPage() {
 
   const name = session?.name ?? session?.sub ?? 'you';
 
+  // A demo identity should not be choosing real workspaces when a real IdP is
+  // configured — offer the actual sign-in instead of the grant list.
+  const demoWithRealIdp = session?.sub === 'demo-user' && ssoEnabled;
+
+  if (demoWithRealIdp) {
+    return (
+      <div style={styles.screen}>
+        <div style={styles.panel}>
+          <div style={styles.brand}>Org</div>
+          <h1 style={styles.title}>Sign in to continue</h1>
+          <p style={styles.subtitle}>
+            You're on the fallback <strong>demo-user</strong> identity, but this
+            deployment has enterprise sign-in configured. Sign in with your real
+            identity to choose a workspace.
+          </p>
+          <button type="button" onClick={() => signInWithSso()} style={styles.ssoBtn}>
+            Sign in with SSO
+          </button>
+          <button type="button" onClick={() => void logout()} style={styles.signOutLink}>
+            Sign out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={styles.screen}>
       <div style={styles.panel}>
         <div style={styles.brand}>Org</div>
         <h1 style={styles.title}>Choose a workspace</h1>
-        <p style={styles.subtitle}>Signed in as <strong>{name}</strong>. Pick the account and role to continue with — you can switch any time from the menu.</p>
+        <p style={styles.subtitle}>Signed in as <strong>{name}</strong>. Pick the account and role to enter. Switching workspaces happens here — use "Switch workspace…" in the menu to come back.</p>
 
         <div style={styles.accounts}>
           {accounts.map(({ tenant, roles }) => (
@@ -100,6 +129,12 @@ export default function SelectContextPage() {
             </div>
           )}
         </div>
+
+        {accounts.length > 0 && (
+          <button type="button" onClick={() => void logout()} style={styles.signOutLink}>
+            Sign out
+          </button>
+        )}
       </div>
     </div>
   );
@@ -143,4 +178,13 @@ const styles: Record<string, React.CSSProperties> = {
   },
   roleArrow: { color: 'var(--color-text-tertiary)', fontSize: 15 },
   empty: { fontSize: 14, color: 'var(--color-text-secondary)' },
+  ssoBtn: {
+    padding: '10px 20px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+    borderRadius: 8, border: 'none', background: 'var(--color-primary)', color: '#fff',
+  },
+  signOutLink: {
+    display: 'block', marginTop: 20, padding: 0, fontSize: 13, cursor: 'pointer',
+    background: 'transparent', border: 'none', color: 'var(--color-text-tertiary)',
+    textDecoration: 'underline',
+  },
 };

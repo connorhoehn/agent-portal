@@ -11,6 +11,11 @@
 // through dispatchGovernedRun (capture → review → gates → human), initiative
 // bots enqueue an agent_jobs row for the fleet dispatcher. A bot adds no new
 // way for code to change ungoverned.
+//
+// The work marketplace (dispatchWorkItem) is the bot-less sibling: a sized
+// story or bug is authorized directly into a governed run bound to its work
+// item, recorded as a bot_run with bot_id NULL. Same workspace machinery,
+// same governance, no bot row.
 
 import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
@@ -18,14 +23,19 @@ import {
   getBot, createBotRun, finalizeBotRun, setPausedReason, markBotRan,
   type BotRun,
 } from '../providers/bots.js';
-import { getAgentProject, buildCloneCommand, markCloned, type AgentProject } from '../providers/agent-projects.js';
+import {
+  getAgentProject, listAgentProjects, buildCloneCommand, markCloned, type AgentProject,
+} from '../providers/agent-projects.js';
+import { getWorkItem, updateWorkItem, addWorkItemComment, type WorkItem } from '../providers/work-items.js';
 import { enqueueJob } from '../providers/agent-jobs.js';
 import { dispatchGovernedRun } from './sdlc-pipeline.js';
 import { runDevboxShell } from './project-runner.js';
 import { resolveDevboxArn, devboxDataClient } from './devbox-arn.js';
 import { registerBox, getBoxBySession } from './devbox-fleet.js';
 import { normalizeRuntimeSessionId } from './runtime-session.js';
+import { type SqlParameter } from '@aws-sdk/client-rds-data';
 
+function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
 function toStr(v: unknown, f = ''): string { return typeof v === 'string' ? v : v == null ? f : String(v); }
 
 // The portal's clone-check heuristic: the devbox command API streams text with
@@ -189,6 +199,148 @@ export async function fireBot(botId: string, opts: {
   return { ok: true, run };
 }
 
+// ─── Marketplace dispatch ─────────────────────────────────────────────────────
+
+export interface DispatchCandidate { id: string; repoFullName: string }
+
+export type DispatchDecision =
+  | { kind: 'proceed'; agentProjectId: string }
+  | { kind: 'error'; status: number; error: string; options?: DispatchCandidate[] };
+
+/**
+ * Whether a work item may be dispatched, and against which codebase. Pure —
+ * the refusal matrix in one place, judgeable without a database. Ordering:
+ * item-shape refusals (type, status) come before codebase resolution, because
+ * "pick a codebase" is a useless answer for an epic or a done item.
+ */
+export function decideDispatch(
+  item: Pick<WorkItem, 'type' | 'status'>,
+  codebases: DispatchCandidate[],
+  agentProjectId?: string,
+): DispatchDecision {
+  if (item.type !== 'story' && item.type !== 'bug') {
+    return { kind: 'error', status: 400, error: 'only stories and bugs dispatch — epics roll up, they do not run' };
+  }
+  // open or in_progress may (re)dispatch; done/cancelled are finished and
+  // in_review already has a change awaiting a human — dispatching over it
+  // would race the review.
+  if (item.status !== 'open' && item.status !== 'in_progress') {
+    return { kind: 'error', status: 400, error: `a ${item.status} work item cannot be dispatched` };
+  }
+  if (codebases.length === 0) {
+    return { kind: 'error', status: 400, error: 'no codebase delivers this initiative — link one in Codebases' };
+  }
+  if (agentProjectId) {
+    const chosen = codebases.find((c) => c.id === agentProjectId);
+    if (!chosen) {
+      return { kind: 'error', status: 400, error: 'that codebase does not deliver this initiative' };
+    }
+    return { kind: 'proceed', agentProjectId: chosen.id };
+  }
+  if (codebases.length > 1) {
+    return {
+      kind: 'error', status: 409,
+      error: 'multiple codebases deliver this initiative — pick one',
+      options: codebases,
+    };
+  }
+  return { kind: 'proceed', agentProjectId: codebases[0]!.id };
+}
+
+/**
+ * The work item rendered as a mission: what to do (title, description,
+ * labels), which item it serves (so the trail from run back to story survives
+ * in the prompt itself), and the standing instruction that governance — not
+ * the agent — delivers the result.
+ */
+export function renderWorkItemPrompt(
+  item: Pick<WorkItem, 'id' | 'type' | 'title' | 'description' | 'labels' | 'storyPoints'>,
+  instruction?: string,
+): string {
+  const preamble = item.storyPoints != null
+    ? `Work item ${item.id} (${item.type}, ${item.storyPoints} pts)`
+    : `Work item ${item.id} (${item.type})`;
+  const parts = [`${preamble}\n${item.title}`];
+  if (item.description) parts.push(item.description);
+  if (item.labels.length > 0) parts.push(`Labels: ${item.labels.join(', ')}`);
+  if (instruction) parts.push(`For this run specifically: ${instruction}`);
+  parts.push('Commit your work; it will be captured, reviewed and gated automatically.');
+  return parts.join('\n\n');
+}
+
+export type DispatchWorkResult =
+  | { ok: true; run: BotRun }
+  | { ok: false; status: number; error: string; options?: DispatchCandidate[] };
+
+/**
+ * Authorize a story or bug into a governed run — the marketplace's dispatch.
+ *
+ * No bot exists here: the work item is the mission and the bot_run rides with
+ * bot_id NULL. The codebase is resolved from the initiative the item belongs
+ * to (agent_projects.org_project_id); one match dispatches, several demand a
+ * choice (409 + options), none is a setup error the operator must fix in
+ * Codebases. The estimate the operator authorized against is echoed onto the
+ * bot_run outcome so estimate-vs-actual calibration has both halves.
+ */
+export async function dispatchWorkItem(input: {
+  workItemId: string;
+  model: string;
+  agentProjectId?: string;
+  instruction?: string;
+  actor?: string;
+  /** The estimate shown at authorize time, echoed onto the bot_run outcome. */
+  estimate?: Record<string, unknown>;
+}): Promise<DispatchWorkResult> {
+  const item = await getWorkItem(input.workItemId);
+  if (!item) return { ok: false, status: 404, error: 'no such work item' };
+
+  const codebases = (await listAgentProjects())
+    .filter((p) => p.orgProjectId != null && p.orgProjectId === item.projectId)
+    .map((p) => ({ id: p.id, repoFullName: p.repoFullName }));
+  const decision = decideDispatch(item, codebases, input.agentProjectId);
+  if (decision.kind === 'error') {
+    return {
+      ok: false, status: decision.status, error: decision.error,
+      ...(decision.options ? { options: decision.options } : {}),
+    };
+  }
+
+  const project = await getAgentProject(decision.agentProjectId);
+  if (!project) return { ok: false, status: 404, error: 'the chosen codebase no longer exists' };
+
+  const ws = await ensureWorkspace(project);
+  if (!ws.ok) return { ok: false, status: 503, error: ws.error };
+
+  const prompt = renderWorkItemPrompt(item, input.instruction);
+  const started = await dispatchGovernedRun({
+    project, prompt, model: input.model, sessionId: ws.sessionId,
+  });
+  if (!started.ok) return { ok: false, status: 503, error: started.error };
+
+  // Bind the governed run to its work item. Direct SQL on purpose — the
+  // sdlc-pipeline API takes no work-item concept and stays that way; the
+  // column was added by agent_bots_schema.sql for exactly this write.
+  await exec(
+    `UPDATE agent_project_runs SET work_item_id = :wid WHERE id = :rid::uuid`,
+    [s('wid', item.id), s('rid', started.runId)],
+  );
+
+  const run = await createBotRun({
+    botId: null, trigger: 'marketplace', runId: started.runId, workItemId: item.id,
+    outcome: {
+      sessionId: ws.sessionId, boxId: ws.boxId,
+      ...(input.actor ? { actor: input.actor } : {}),
+      ...(input.estimate ? { estimate: input.estimate } : {}),
+    },
+  });
+  if (!run) return { ok: false, status: 503, error: 'could not record the marketplace run' };
+
+  // The board's "agent working" state. Through the provider so the mock path
+  // and updated_at behave the same as a hand-driven status change.
+  await updateWorkItem(item.id, { status: 'in_progress' });
+  return { ok: true, run };
+}
+
 // ─── Reconciliation ───────────────────────────────────────────────────────────
 
 /**
@@ -207,8 +359,8 @@ export async function reconcileBotRuns(): Promise<{ settled: number }> {
   // Governed runs. The lateral takes the newest change request for the run —
   // a re-review appends reviews, not changes, so one run has at most one.
   const runBacked = await exec(
-    `SELECT br.id, r.status AS run_status, r.cost_usd::float8 AS cost_usd,
-            r.files_changed, cr.change_id, cr.pr_url
+    `SELECT br.id, br.work_item_id, r.status AS run_status, r.cost_usd::float8 AS cost_usd,
+            r.files_changed, r.error AS run_error, cr.change_id, cr.pr_url
        FROM bot_runs br
        JOIN agent_project_runs r ON r.id = br.run_id
        LEFT JOIN LATERAL (
@@ -221,8 +373,9 @@ export async function reconcileBotRuns(): Promise<{ settled: number }> {
         AND r.status IN ('done','failed')`,
   );
   for (const row of runBacked) {
+    const done = toStr(row['run_status']) === 'done';
     await finalizeBotRun(toStr(row['id']), {
-      status: toStr(row['run_status']) === 'done' ? 'done' : 'failed',
+      status: done ? 'done' : 'failed',
       costUsd: row['cost_usd'] == null ? null : Number(row['cost_usd']),
       outcome: {
         ...(row['change_id'] ? { changeId: toStr(row['change_id']) } : {}),
@@ -231,6 +384,29 @@ export async function reconcileBotRuns(): Promise<{ settled: number }> {
       },
     });
     settled++;
+
+    // A run bound to a work item settles the work item too — the marketplace
+    // loop: change captured → in_review (the Changes queue owns it now); a PR
+    // already delivered rides along; a failure hands the item back to 'open'
+    // with a visible system comment, never a silent stall in in_progress.
+    const workItemId = row['work_item_id'] ? toStr(row['work_item_id']) : null;
+    if (workItemId) {
+      if (done && row['change_id']) {
+        await updateWorkItem(workItemId, {
+          status: 'in_review',
+          ...(row['pr_url'] ? { prUrl: toStr(row['pr_url']), prStatus: 'open' as const } : {}),
+        });
+      } else if (!done) {
+        await updateWorkItem(workItemId, { status: 'open' });
+        const why = row['run_error'] ? toStr(row['run_error']) : 'the run failed without a recorded error';
+        await addWorkItemComment(workItemId, `Marketplace run failed: ${why}`, { isSystem: true });
+      } else {
+        // Done but nothing captured: the agent committed no change. Back to
+        // open with a comment, else the item is stuck in_progress forever.
+        await updateWorkItem(workItemId, { status: 'open' });
+        await addWorkItemComment(workItemId, 'Marketplace run completed without a captured change.', { isSystem: true });
+      }
+    }
   }
 
   // Queue jobs. awaiting_review counts as done for the bot — the work is

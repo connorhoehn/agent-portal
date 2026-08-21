@@ -15,7 +15,7 @@ import {
   listConnectedSources, connectApiKeySource, disconnectSource, borrowApiKey,
   type SourceKind,
 } from '../providers/connected-sources.js';
-import { identify, listRepos, readRepoSignal } from '../lib/github-connector.js';
+import { identify, listOrgs, listRepos, readRepoSignal } from '../lib/github-connector.js';
 
 export const connectionsRouter: Router = Router();
 
@@ -82,6 +82,12 @@ connectionsRouter.get('/:name/check', asyncHandler(async (req, res) => {
 }));
 
 // ── GitHub: what this credential can see ────────────────────────────────────
+
+connectionsRouter.get('/:name/github/orgs', asyncHandler(async (req, res) => {
+  const name = String(req.params['name'] ?? '');
+  const token = await borrowApiKey(name);
+  res.json({ orgs: await listOrgs(token) });
+}));
 
 connectionsRouter.get('/:name/github/repos', asyncHandler(async (req, res) => {
   const name = String(req.params['name'] ?? '');

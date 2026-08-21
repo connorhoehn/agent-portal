@@ -1,7 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router';
-import { useSession, type DirectoryUser, type SessionRole, type Tenant } from '../../lib/auth';
-import { NEWSROOM_ENABLED } from '../../lib/features';
+import { useSession, type DirectoryUser, type SessionRole } from '../../lib/auth';
 
 const ROLE_LABELS: Record<string, string> = {
   member: 'Member',
@@ -31,9 +29,8 @@ function tenantLabel(t: string): string {
 }
 
 export function MasqueradeMenu() {
-  const { session, setRole, setTenant, login, masquerade, stopMasquerade, listUsers, isLoading,
+  const { session, setRole, login, masquerade, stopMasquerade, listUsers, isLoading,
     ssoEnabled, signInWithSso, logout } = useSession();
-  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [users, setUsers] = useState<DirectoryUser[] | null>(null);
@@ -66,10 +63,6 @@ export function MasqueradeMenu() {
   const isAdmin = session.role === 'admin'
     || Object.values(session.grants).some(roles => roles.includes('admin'));
   const canMasquerade = isAdmin || !!session.masquerading;
-
-  // Accounts (tenants) this identity can switch between, newsroom filtered by flag.
-  const accountTenants = (session.availableTenants ?? [])
-    .filter(t => NEWSROOM_ENABLED || t !== 'newsroom');
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -194,46 +187,13 @@ export function MasqueradeMenu() {
                 >
                   Sign in with SSO
                 </button>
-                <button
-                  type="button"
-                  onClick={() => void logout()}
-                  style={{
-                    padding: '7px 10px', fontSize: 12.5, cursor: 'pointer', borderRadius: 6,
-                    border: '1px solid var(--color-border)', background: 'var(--color-surface)',
-                    color: 'var(--color-text-secondary)',
-                  }}
-                >
-                  Sign out
-                </button>
               </div>
             </>
           )}
 
-          {/* ACCOUNT — the tenant/workspace, kept distinct from role so the two
-              aren't tangled. Switching navigates to that workspace's home. */}
-          {accountTenants.length > 1 && (
-            <>
-              <SectionLabel>Account</SectionLabel>
-              {accountTenants.map(t => {
-                const active = t === session.tenant;
-                return (
-                  <MenuItem
-                    key={t}
-                    active={active}
-                    busy={busy}
-                    onClick={() => active
-                      ? setOpen(false)
-                      : void run(() => setTenant(t))}
-                    title={tenantLabel(t)}
-                    hint={active ? 'current workspace' : 'switch to this workspace'}
-                    dotColor="var(--color-info)"
-                  />
-                );
-              })}
-            </>
-          )}
-
-          {/* ROLE — within the current account. */}
+          {/* ROLE — within the current account only. Switching the account
+              (tenant) is deliberately NOT offered here: the workspace boundary
+              lives on /select, reached via "Switch workspace…" below. */}
           <SectionLabel>Role in {tenantLabel(session.tenant)}</SectionLabel>
           {session.availableRoles.map(role => {
             const active = role === session.role;
@@ -279,21 +239,34 @@ export function MasqueradeMenu() {
             </div>
           )}
 
-          {(accountTenants.length > 1 || session.availableRoles.length > 1) && (
-            <div style={{ borderTop: '1px solid var(--color-border)', marginTop: 6, paddingTop: 6 }}>
-              <button
-                type="button"
-                onClick={() => { setOpen(false); navigate('/select'); }}
-                style={{
-                  width: '100%', textAlign: 'left', padding: '8px 10px', background: 'transparent',
-                  border: 'none', borderRadius: 'var(--radius-sm, 4px)', color: 'var(--color-primary)',
-                  cursor: 'pointer', fontSize: 12.5, fontWeight: 600,
-                }}
-              >
-                Switch workspace…
-              </button>
-            </div>
-          )}
+          <div style={{ borderTop: '1px solid var(--color-border)', marginTop: 6, paddingTop: 6 }}>
+            {/* Hard navigation, not a router push: the chooser must re-drive
+                from the server session, so it stays the authoritative tenant
+                boundary rather than a client-side route. */}
+            <button
+              type="button"
+              onClick={() => { setOpen(false); window.location.assign('/select'); }}
+              style={{
+                width: '100%', textAlign: 'left', padding: '8px 10px', background: 'transparent',
+                border: 'none', borderRadius: 'var(--radius-sm, 4px)', color: 'var(--color-primary)',
+                cursor: 'pointer', fontSize: 12.5, fontWeight: 600,
+              }}
+            >
+              Switch workspace…
+            </button>
+            <button
+              type="button"
+              onClick={() => void run(logout)}
+              disabled={busy}
+              style={{
+                width: '100%', textAlign: 'left', padding: '8px 10px', background: 'transparent',
+                border: 'none', borderRadius: 'var(--radius-sm, 4px)', color: 'var(--color-text-secondary)',
+                cursor: busy ? 'wait' : 'pointer', fontSize: 12.5,
+              }}
+            >
+              Sign out
+            </button>
+          </div>
 
           {error && (
             <div style={{

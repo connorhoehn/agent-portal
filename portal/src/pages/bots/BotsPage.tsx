@@ -48,7 +48,8 @@ export interface Bot {
 
 export interface BotRun {
   id: string;
-  botId: string;
+  /** Null for marketplace runs — they are dispatched from a work item, not a bot. */
+  botId: string | null;
   trigger: 'manual' | 'cron' | 'pr_watch' | 'marketplace';
   runId: string | null;
   jobId: string | null;

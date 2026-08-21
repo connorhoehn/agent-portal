@@ -360,6 +360,23 @@ async function listGates(changeId: string): Promise<ChangeGate[]> {
 }
 
 /**
+ * The recorded dollar cost of the run behind a change — the max_cost fact.
+ *
+ * Null when the change has no run, the run row is gone, or the run finished
+ * without a cost being recorded. The engine treats a null cost as "cannot
+ * judge" rather than "over budget"; see the max_cost case in sdlc-policy.ts.
+ */
+async function runCostUsd(runId: string | null): Promise<number | null> {
+  if (!runId || !isUuid(runId)) return null;
+  const rows = await exec(
+    `SELECT cost_usd::float8 AS cost_usd FROM agent_project_runs WHERE id = :id::uuid`,
+    [s('id', runId)],
+  );
+  const v = rows[0]?.['cost_usd'];
+  return v == null ? null : Number(v);
+}
+
+/**
  * Run the gate engine over a change and record the result.
  *
  * This is the one function that moves a change into `approved`, `needs_approval`,
@@ -383,6 +400,7 @@ export async function evaluateChange(changeId: string): Promise<{ evaluation: Ev
     files: change.files,
     model: change.model,
     reviewVerdict: latestReview?.verdict ?? null,
+    costUsd: await runCostUsd(change.runId),
   };
   const evaluation = evaluate(policies, facts);
 

@@ -28,6 +28,10 @@ export interface ProjectDetail {
   name: string;
   status: string | null;
   createdAt: string | null;
+  /** The one person running this initiative (projects.owner_id) — null when
+      unset or when the column predates the work-items schema. */
+  ownerId: string | null;
+  ownerName: string | null;
   contributors: Array<{
     personId: string;
     name: string;
@@ -128,7 +132,9 @@ const MOCK_PROJECTS: ProjectSummary[] = [
   },
 ];
 
-const MOCK_PROJECT_DETAILS: Record<string, ProjectDetail> = {
+// Owner fields are defaulted at the return site so the fixtures don't need
+// per-entry churn every time the detail shape grows.
+const MOCK_PROJECT_DETAILS: Record<string, Omit<ProjectDetail, 'ownerId' | 'ownerName'>> = {
   'proj-k8s': {
     id: 'proj-k8s', name: 'Kubernetes Cluster Upgrade', status: 'active',
     createdAt: '2026-04-06T12:00:00Z',
@@ -256,7 +262,12 @@ export async function listProjects(opts: {
 
 export async function getProject(id: string): Promise<ProjectDetail | null> {
   if (config.mock.aurora) {
-    return MOCK_PROJECT_DETAILS[id] ?? null;
+    const mock = MOCK_PROJECT_DETAILS[id];
+    if (!mock) return null;
+    // First contributor stands in as owner so the "Run by" surface is
+    // demonstrable in mock mode.
+    const lead = mock.contributors[0];
+    return { ...mock, ownerId: lead?.personId ?? null, ownerName: lead?.name ?? null };
   }
 
   const projectRows = await exec(
@@ -281,11 +292,31 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
     [strParam('id', id)],
   );
 
+  // Owner in its own guarded query: projects.owner_id arrives with the
+  // work-items schema, so a cluster that predates it must degrade to "no
+  // owner" rather than 500 the whole detail page.
+  let ownerId: string | null = null;
+  let ownerName: string | null = null;
+  try {
+    const ownerRows = await exec(
+      `SELECT p.owner_id, pe.name AS owner_name
+         FROM projects p LEFT JOIN people pe ON pe.id = p.owner_id
+        WHERE p.id = :id LIMIT 1`,
+      [strParam('id', id)],
+    );
+    if (ownerRows[0]?.['owner_id'] != null) {
+      ownerId = String(ownerRows[0]['owner_id']);
+      ownerName = ownerRows[0]['owner_name'] != null ? String(ownerRows[0]['owner_name']) : null;
+    }
+  } catch { /* column absent — pre-work-items schema */ }
+
   return {
     id: String(proj['id'] ?? ''),
     name: String(proj['name'] ?? ''),
     status: proj['status'] != null ? String(proj['status']) : null,
     createdAt: proj['created_at'] != null ? String(proj['created_at']) : null,
+    ownerId,
+    ownerName,
     contributors: contribRows.map((r) => ({
       personId: String(r['person_id'] ?? ''),
       name: String(r['name'] ?? ''),

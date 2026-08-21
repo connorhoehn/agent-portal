@@ -60,6 +60,7 @@ import { initCrawlTargets } from './lib/crawl-targets.js';
 import { ensureSchema, seedPoliciesIfMissing } from './lib/policy-seeds.js';
 import { startTracePoller } from './lib/cw-trace-ingest.js';
 import { startCanaryDecisionsPoller } from './lib/canary-decisions-poller.js';
+import { startPrWatchPoller } from './lib/pr-watch-poller.js';
 import { startLocalController } from './lib/canary-local-controller.js';
 
 const app = express();
@@ -263,6 +264,8 @@ startTracePoller();
 // so the portal's Decision History panel updates when the SFN controller
 // writes audit rows. No-ops in mock mode or without Aurora.
 startCanaryDecisionsPoller();
+// PR-watch bot triggers + marketplace merge detection (lib/pr-watch-poller.ts).
+startPrWatchPoller();
 // Local mock controller fills the Controller node in dev when SFN isn't deployed.
 startLocalController();
 
