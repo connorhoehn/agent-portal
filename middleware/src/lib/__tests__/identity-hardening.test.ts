@@ -24,6 +24,9 @@ function setCognito(on: boolean) {
   const c = (config as unknown as { cognito: Record<string, string> }).cognito;
   c['userPoolId'] = on ? 'us-east-1_TEST' : '';
   c['clientId'] = on ? 'client123' : '';
+  // The secret is part of the presence check: a secret-less half-config must
+  // read as SSO-off (demo fallback stays) instead of bricking every login.
+  c['clientSecret'] = on ? 'secret123' : '';
   c['domain'] = on ? 'orgiq-auth.auth.us-east-1.amazoncognito.com' : '';
   c['callbackUrl'] = on ? 'http://localhost:3001/api/auth/callback' : '';
 }

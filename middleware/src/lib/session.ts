@@ -44,6 +44,9 @@ export const COOKIE_NAME = 'orgiq.session';
 // workday by much, and SSO re-auth is cheap — when the Cognito session is
 // still live the hosted UI bounces straight back without prompting.
 const COOKIE_MAX_AGE_MS = parseInt(process.env['SESSION_MAX_AGE_H'] ?? '12', 10) * 60 * 60 * 1000;
+/** A masquerade token is an impersonation credential — it gets a shorter
+ * server-enforced leash than a normal session (see verifySession). */
+const MASQUERADE_MAX_AGE_H = parseInt(process.env['MASQUERADE_MAX_AGE_H'] ?? '2', 10);
 
 /** tenant id → roles the user holds there. Loaded from user_tenant_roles. */
 export type Grants = Record<string, string[]>;
@@ -212,6 +215,18 @@ export async function verifySession(cookieValue: string): Promise<Session | null
   try {
     const raw = JSON.parse(fromB64url(payload).toString('utf8')) as Record<string, unknown>;
     if (typeof raw['sub'] !== 'string') return null;
+    // Server-side age enforcement. The cookie's browser maxAge is only a
+    // hint — a captured cookie VALUE replayed later still verifies unless the
+    // signed iat is checked here. Grant-refresh re-mints (fresh iat) for live
+    // users, so an honest session never trips this; a stale token does.
+    // Masquerade sessions get a shorter leash: an impersonation token is a
+    // frozen-privilege credential and must not live a full workday.
+    const iat = typeof raw['iat'] === 'number' ? raw['iat'] : 0;
+    const isMasq = Boolean(raw['act'] && typeof raw['act'] === 'object');
+    const maxAgeS = isMasq
+      ? Math.min(COOKIE_MAX_AGE_MS / 1000, MASQUERADE_MAX_AGE_H * 3600)
+      : COOKIE_MAX_AGE_MS / 1000;
+    if (iat <= 0 || (Date.now() / 1000) - iat > maxAgeS) return null;
     const role = raw['role'] as Role;
     if (typeof role !== 'string' || !isKnownRole(role)) return null;
     // Backward-compatible defaults: pre-tenancy cookies lack tenant/grants.
@@ -276,9 +291,18 @@ export function demoModeEnabled(): boolean {
 /** Mirror of lib/oidc.ts cognitoEnabled(), duplicated here so session.ts does
  * not import oidc.ts — its aws-jwt-verify dependency is ESM-only and would
  * break the CJS jest build for every suite that touches session/authz. */
+/** Whether a real IdP is wired — controls the ssoRequired hint on 401s so
+ * clients are only pointed at SSO when it actually exists. */
+export function ssoAvailable(): boolean {
+  return cognitoConfigured();
+}
+
 function cognitoConfigured(): boolean {
   const c = config.cognito;
-  return !!(c?.userPoolId && c?.clientId && c?.domain && c?.callbackUrl);
+  // Includes the client secret — in lockstep with oidc.ts cognitoEnabled().
+  // A secret-less half-config must NOT disable the demo fallback while the
+  // SSO exchange cannot succeed either (total lockout).
+  return !!(c?.userPoolId && c?.clientId && c?.clientSecret && c?.domain && c?.callbackUrl);
 }
 
 /**
@@ -331,8 +355,15 @@ export function sessionMiddleware() {
       const verified = await verifySession(raw);
       if (verified) {
         const age = Math.floor(Date.now() / 1000) - verified.iat;
-        const isRealUser = verified.sub !== 'demo-user' && !verified.act;
-        if (isRealUser && grantsResolver && age > GRANTS_REFRESH_S) {
+        // Masquerade sessions refresh too: the impersonated grants must track
+        // revocation, not freeze for the token's life. The re-mint PRESERVES
+        // the original iat so the masquerade age cap counts from when the
+        // impersonation began — a refreshed iat would make the cap unreachable.
+        // (The actor's own Masquerade right is not re-checked here — authz
+        // imports this module, so evaluating Cedar from session middleware
+        // would be a cycle; the short masquerade age cap bounds that window.)
+        const isRefreshable = verified.sub !== 'demo-user';
+        if (isRefreshable && grantsResolver && age > GRANTS_REFRESH_S) {
           try {
             const fresh = await grantsResolver(verified.sub);
             if (!fresh) {
@@ -346,8 +377,10 @@ export function sessionMiddleware() {
               { id: verified.sub, displayName: fresh.displayName },
               fresh.grants,
               { tenant: verified.tenant, role: verified.role },
+              verified.act,
             );
             if (reminted) {
+              if (verified.act) reminted.iat = verified.iat;
               setSessionCookie(res, await signSession(reminted));
               req.session = reminted;
               next();

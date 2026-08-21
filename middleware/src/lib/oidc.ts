@@ -11,10 +11,14 @@ import { createHash, randomBytes } from 'node:crypto';
 import { CognitoJwtVerifier } from 'aws-jwt-verify';
 import { config } from '../config.js';
 
-/** True when the Hosted-UI sign-in path is configured. */
+/** True when the Hosted-UI sign-in path is FULLY configured — including the
+ * client secret. Without it the token exchange sends no Basic auth and every
+ * callback fails invalid_client, while the picker is already 403'd: a
+ * four-of-five misconfig would brick every login path. Keep this derivation
+ * in lockstep with session.ts cognitoConfigured(). */
 export function cognitoEnabled(): boolean {
   const c = config.cognito;
-  return !!(c.userPoolId && c.clientId && c.domain && c.callbackUrl);
+  return !!(c.userPoolId && c.clientId && c.clientSecret && c.domain && c.callbackUrl);
 }
 
 function domainBase(): string {

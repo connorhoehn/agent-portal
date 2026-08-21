@@ -17,12 +17,44 @@ import {
 import { config } from '../config.js';
 import { eventFromSession, logAuthz } from './audit.js';
 import {
-  demoSession, demoFallbackAllowed, ADMIN_ROLE, DEFAULT_ROLE,
+  demoSession, demoFallbackAllowed, ssoAvailable, ADMIN_ROLE, DEFAULT_ROLE,
   type Tenant, type Role, type Session,
 } from './session.js';
 
 const NAMESPACE = 'OrgIQ';
 const RESOURCE_ID = 'app';
+
+/**
+ * Every Cedar action the UI gates on — the union of all requireAction() /
+ * readForRolesElseAction() / isAllowed() action ids across the middleware
+ * routes. GET /api/session/capabilities evaluates each of these for the
+ * current session so the portal can hide/disable controls the server would
+ * 403 anyway. Keep in sync when adding a new requireAction() guard.
+ */
+export const CAPABILITY_ACTIONS = [
+  'Search',              // agents.ts — agent invoke
+  'ViewOrgChart',        // index.ts — /api/graph
+  'ViewLeaderboard',     // index.ts — /api/scores
+  'ViewObservability',   // index.ts — observability surfaces
+  'ViewIdentityAdmin',   // identity.ts — admin identity read
+  'ManageUsers',         // identity.ts — tenants/users/grants
+  'EditPolicy',          // identity.ts — Cedar policy CRUD
+  'EditSchema',          // identity.ts — Cedar schema
+  'EditGuardrail',       // capabilities.ts — guardrail config
+  'ManageDevbox',        // index.ts, work.ts, bots.ts, capabilities.ts
+  'DispatchAgentRun',    // projects.ts, bots.ts
+  'ManageIngest',        // index.ts — ingest + connections
+  'ManageKB',            // index.ts kb-registry, knowledge-base.ts
+  'ManageCanary',        // canary.ts, canary-library.ts, evaluations.ts, prompt-history.ts
+  'LabelFeedback',       // quality.ts
+  'ApproveTransaction',  // approvals.ts
+  'ManagePitches',       // newsroom-articles.ts
+  'PublishArticle',      // newsroom-articles.ts
+  'Masquerade',          // session.ts
+  'ManageBudgets',       // budgets.ts — initiative allocations (program management)
+] as const;
+
+export type CapabilityAction = (typeof CAPABILITY_ACTIONS)[number];
 
 const client = new VerifiedPermissionsClient({ region: config.region });
 
@@ -64,12 +96,16 @@ async function evaluate(principal: PrincipalRef, action: string, resourceAttrs?:
     if (process.env['NODE_ENV'] === 'production') return 'DENY';
     return 'ALLOW';
   }
-  // Only cache evaluations that don't depend on per-request resource attributes.
-  // Attribute-bearing checks (e.g. ApproveTransaction when amount > N) must be
-  // evaluated fresh each time since the cache key would otherwise collide.
+  // Attribute-bearing checks (e.g. ApproveTransaction when amount > N) cache
+  // under a key that includes the attributes (sorted, so ordering can't split
+  // entries) — a plain key would collide across different resources, but
+  // skipping the cache entirely made every capabilities probe re-hit AVP.
   const hasAttrs = !!resourceAttrs && Object.keys(resourceAttrs).length > 0;
-  const key = `${principal.tenant}|${principal.role}|${action}`;
-  if (!hasAttrs) {
+  const attrsKey = hasAttrs
+    ? '|' + JSON.stringify(Object.fromEntries(Object.entries(resourceAttrs).sort(([a], [b]) => a.localeCompare(b))))
+    : '';
+  const key = `${principal.tenant}|${principal.role}|${action}${attrsKey}`;
+  {
     const cached = cache.get(key);
     if (cached && cached.expiresAt > Date.now()) return cached.decision;
   }
@@ -98,9 +134,7 @@ async function evaluate(principal: PrincipalRef, action: string, resourceAttrs?:
     entities: { entityList },
   }));
   const decision = out.decision === 'ALLOW' ? 'ALLOW' : 'DENY';
-  if (!hasAttrs) {
-    cache.set(key, { decision, expiresAt: Date.now() + TTL_MS });
-  }
+  cache.set(key, { decision, expiresAt: Date.now() + TTL_MS });
   return decision;
 }
 
@@ -117,7 +151,9 @@ function denyUnauthenticated(req: Request, res: Response, action: string): void 
     decision: 'DENY', action, sub: 'anonymous', role: '-',
     path: req.path, reason: 'no session',
   });
-  res.status(401).json({ error: 'Unauthenticated', ssoRequired: true });
+  // ssoRequired only when an IdP actually exists — pointing a client at a
+  // sign-in flow that isn't wired up is worse than a plain 401.
+  res.status(401).json({ error: 'Unauthenticated', ssoRequired: ssoAvailable() });
 }
 
 /**
@@ -137,11 +173,14 @@ export function requireAction(action: string) {
       }
       res.status(403).json({ error: 'Forbidden', action, role: session.role, tenant: session.tenant });
     } catch (err) {
+      // Authorization *infrastructure* failure (AVP unreachable, throttled,
+      // IAM broken) — not a policy DENY. 503 keeps it distinguishable from
+      // both a real 403 and an application 500, and tells clients to retry.
       logAuthz(eventFromSession(session, action, 'DENY', {
         path: req.path,
         reason: `authz-error: ${(err as Error).message}`,
       }));
-      res.status(500).json({ error: 'Authorization check failed' });
+      res.status(503).json({ error: 'authorization unavailable', action });
     }
   };
 }
