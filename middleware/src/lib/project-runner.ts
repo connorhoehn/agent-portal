@@ -191,6 +191,9 @@ export async function executeProjectRun(req: ProjectRunRequest): Promise<void> {
       filesChanged: diff.filesChanged,
       diffSummary: diff.summary || null,
       error: outcome.ok ? null : (outcome.error ?? 'the agent reported a failure'),
+      // Real spend as the runtime reported it — the estimation engine's whole
+      // data supply. Recorded even for failed runs; failures cost money too.
+      costUsd: outcome.costUsd,
     });
 
     // Hand a changed run to governance. Fired only when the tree actually

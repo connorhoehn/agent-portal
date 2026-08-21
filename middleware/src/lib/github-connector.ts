@@ -196,6 +196,85 @@ export async function listRepos(providerName: string, opts: { org?: string; limi
   return repos.map((r) => ({ owner: r.owner.login, name: r.name, fullName: r.full_name }));
 }
 
+export interface PullSummary {
+  number: number;
+  title: string;
+  state: string;
+  headRef: string;
+  baseRef: string;
+  author: string | null;
+  createdAt: string;
+  updatedAt: string;
+  url: string;
+  draft: boolean;
+}
+
+/**
+ * Pull requests on a repository, most recently updated first.
+ *
+ * Takes the token directly rather than a provider name: the pr_watch poller
+ * (a later phase) borrows one token per sweep and fans it across every watched
+ * repo, and borrowing per-repo would hit the credential vault N times a tick.
+ *
+ * `since` filters client-side on updatedAt — the pulls endpoint has no `since`
+ * parameter (that is the issues API), and sorting by updated lets the caller's
+ * watermark stop the scan at one page in the common no-news case.
+ */
+export async function listPulls(
+  token: string,
+  repoFullName: string,
+  opts: { state?: 'open' | 'closed' | 'all'; since?: string } = {},
+): Promise<PullSummary[]> {
+  const state = opts.state ?? 'open';
+  const pulls = await gh<Array<{
+    number: number; title?: string; state?: string; draft?: boolean;
+    head?: { ref?: string }; base?: { ref?: string };
+    user?: { login?: string } | null;
+    created_at?: string; updated_at?: string; html_url?: string;
+  }>>({
+    token,
+    path: `/repos/${repoFullName}/pulls`,
+    params: { state, per_page: '100', sort: 'updated', direction: 'desc' },
+  });
+  return pulls
+    .filter((p) => !opts.since || (p.updated_at ?? '') > opts.since)
+    .map((p) => ({
+      number: p.number,
+      title: p.title ?? '',
+      state: p.state ?? 'open',
+      headRef: p.head?.ref ?? '',
+      baseRef: p.base?.ref ?? '',
+      author: p.user?.login ?? null,
+      createdAt: p.created_at ?? '',
+      updatedAt: p.updated_at ?? '',
+      url: p.html_url ?? '',
+      draft: Boolean(p.draft),
+    }));
+}
+
+/**
+ * One pull request's terminal-state facts. `merged` is the field worth the
+ * extra call: the list endpoint says only open/closed, and a closed-unmerged
+ * PR means the work was declined, not delivered — marketplace merge-detection
+ * must not confuse the two.
+ */
+export async function getPullStatus(
+  token: string,
+  repoFullName: string,
+  number: number,
+): Promise<{ number: number; state: string; merged: boolean; mergedAt: string | null; url: string }> {
+  const pr = await gh<{
+    number?: number; state?: string; merged?: boolean; merged_at?: string | null; html_url?: string;
+  }>({ token, path: `/repos/${repoFullName}/pulls/${number}` });
+  return {
+    number: pr.number ?? number,
+    state: pr.state ?? '',
+    merged: Boolean(pr.merged),
+    mergedAt: pr.merged_at ?? null,
+    url: pr.html_url ?? '',
+  };
+}
+
 /**
  * Contribution signal for one repository.
  *
