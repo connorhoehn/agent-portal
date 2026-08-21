@@ -64,6 +64,36 @@ function rangeText(est: WorkEstimate): string {
   return `${money(est.costUsdP25)}–${money(est.costUsdP75)} · ${Math.round(est.minutesP25)}–${Math.round(est.minutesP75)} min`;
 }
 
+/** The estimate echoed at authorize time on a run's outcome, when present.
+    BotRun.outcome doesn't declare it (the type lives in BotsPage), so read it
+    through a narrow cast here — one place that knows the wire shape. */
+export function runEstimate(run: Pick<BotRun, 'outcome'>): WorkEstimate | undefined {
+  return (run.outcome as { estimate?: WorkEstimate } | undefined)?.estimate;
+}
+
+/** An actual cost against its authorize-time estimate: the actual tints danger
+    when it ran over p75 and success when it came in under p25, with the range
+    appended muted. Falls back to a plain actual (or —) without an estimate. */
+export function CostVsEstimate({ costUsd, estimate }: { costUsd: number | null; estimate: WorkEstimate | undefined }) {
+  if (costUsd == null) return <span className="text-text-tertiary whitespace-nowrap">—</span>;
+  const actual = `$${costUsd.toFixed(4)}`;
+  if (!estimate) return <span className="text-text-tertiary whitespace-nowrap">{actual}</span>;
+  const over = costUsd > estimate.costUsdP75;
+  const under = costUsd < estimate.costUsdP25;
+  const range = `${money(estimate.costUsdP25)}–${money(estimate.costUsdP75)}`;
+  const title = over
+    ? `Actual ${actual} ran over the authorize-time estimate (${range}, p25–p75)`
+    : under
+      ? `Actual ${actual} came in under the authorize-time estimate (${range}, p25–p75)`
+      : `Actual ${actual} landed inside the authorize-time estimate (${range}, p25–p75)`;
+  return (
+    <span className="whitespace-nowrap" title={title}>
+      <span className={over ? 'text-danger' : under ? 'text-success' : 'text-text-tertiary'}>{actual}</span>
+      <span className="text-text-tertiary opacity-70"> est {range}</span>
+    </span>
+  );
+}
+
 /** The basis, stated plainly — exact copy per the estimate contract. */
 export function estimateLine(est: WorkEstimate): string {
   if (est.scaled) {
@@ -90,6 +120,8 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
   const [dispatching, setDispatching] = useState(false);
   /** Set from a 409 — the server wants a codebase picked before it will run. */
   const [pickerOptions, setPickerOptions] = useState<CodebaseOption[] | null>(null);
+  /** Set from a 429 — the platform's agent-run concurrency ceiling is full. */
+  const [concurrencyMsg, setConcurrencyMsg] = useState<string | null>(null);
 
   // Reset per item — a fresh drawer for each estimate.
   const itemId = item?.id ?? null;
@@ -98,6 +130,7 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
     setModel(DEFAULT_DEVBOX_MODEL);
     setInstruction('');
     setPickerOptions(null);
+    setConcurrencyMsg(null);
     setConfirmOpen(false);
     setAgentProjectId(codebases.length === 1 ? codebases[0]!.id : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -129,6 +162,7 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
   async function dispatch(overrideAgentProjectId?: string) {
     if (!item || dispatching) return;
     setDispatching(true);
+    setConcurrencyMsg(null);
     try {
       const target = overrideAgentProjectId ?? agentProjectId;
       const body: Record<string, unknown> = { workItemId: item.id, model };
@@ -146,6 +180,12 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
       if (res.status === 409 && payload.options && payload.options.length > 0) {
         // Multiple codebases deliver this initiative — pick one and retry.
         setPickerOptions(payload.options);
+        setConfirmOpen(false);
+        return;
+      }
+      if (res.status === 429) {
+        // Concurrency ceiling — no picker, just say so plainly inline.
+        setConcurrencyMsg(payload.error ?? 'Agent runs already in flight are at the concurrency ceiling');
         setConfirmOpen(false);
         return;
       }
@@ -267,6 +307,17 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
               className="w-full px-2.5 py-2 rounded-md border border-border bg-surface text-[12px] text-text-primary resize-y box-border"
             />
           </label>
+
+          {/* 429 — the concurrency ceiling is full; wait or raise it */}
+          {concurrencyMsg && (
+            <div className="px-3 py-2.5 rounded-md border border-danger/50 bg-danger-bg/40">
+              <div className="text-[12px] font-semibold text-danger mb-0.5">Concurrency ceiling reached</div>
+              <div className="text-[12px] text-text-primary leading-relaxed">
+                {concurrencyMsg} — raise <code className="font-mono text-[11px]">BOT_MAX_CONCURRENT</code> or
+                wait for a run to finish, then authorize again.
+              </div>
+            </div>
+          )}
 
           {/* 409 fallback — the server wants a codebase before it will run */}
           {pickerOptions && (

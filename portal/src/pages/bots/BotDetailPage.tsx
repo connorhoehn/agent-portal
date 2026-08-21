@@ -21,6 +21,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { toastError, toastSuccess } from '../../lib/toastStore';
+import { CostVsEstimate, runEstimate } from '../../components/marketplace/EstimateDrawer';
 import { RunTimeline } from '../../components/runs/RunTimeline';
 import { DEVBOX_MODELS } from '../../lib/devboxModels';
 import { TEMPLATE_TONE, triggerSummary, when, type Bot, type BotRun } from './BotsPage';
@@ -33,10 +34,6 @@ const RUN_STATUS_TONE: Record<BotRun['status'], 'warning' | 'success' | 'danger'
   failed: 'danger',
   skipped: 'neutral',
 };
-
-function money(n: number | null | undefined): string {
-  return typeof n === 'number' ? `$${n.toFixed(4)}` : '—';
-}
 
 function parseTs(iso: string): number {
   return new Date(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`).getTime();
@@ -480,7 +477,9 @@ export default function BotDetailPage() {
                       {r.status}
                     </Chip>
                   </TableTd>
-                  <TableTd style={{ fontSize: 12, color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>{money(r.costUsd)}</TableTd>
+                  <TableTd style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                    <CostVsEstimate costUsd={r.costUsd} estimate={runEstimate(r)} />
+                  </TableTd>
                   <TableTd style={{ fontSize: 12, color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>{runDuration(r)}</TableTd>
                   <TableTd style={{ fontSize: 12, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }} title={r.startedAt}>
                     {when(r.startedAt)}

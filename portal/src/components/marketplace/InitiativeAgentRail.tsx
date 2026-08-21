@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { Card, Chip } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { CostVsEstimate, runEstimate } from './EstimateDrawer';
 import {
   TEMPLATE_TONE,
   triggerSummary,
@@ -206,9 +207,7 @@ export function OutcomesRailCard({ activity }: { activity: InitiativeAgentActivi
                 {r.status}
               </Chip>
               <div className="flex-1" />
-              <span className="text-text-tertiary whitespace-nowrap">
-                {r.costUsd != null ? `$${r.costUsd.toFixed(4)}` : '—'}
-              </span>
+              <CostVsEstimate costUsd={r.costUsd} estimate={runEstimate(r)} />
               <span className="text-text-tertiary whitespace-nowrap" title={r.startedAt}>
                 {when(r.startedAt)}
               </span>
