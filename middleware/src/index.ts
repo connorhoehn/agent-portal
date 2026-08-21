@@ -52,6 +52,7 @@ import { agentDetailRouter } from './routes/agent-detail.js';
 import { connectionsRouter } from './routes/connections.js';
 import { agentProjectsRouter } from './routes/agent-projects.js';
 import { sdlcRouter } from './routes/sdlc.js';
+import { budgetsRouter } from './routes/budgets.js';
 import { botsRouter } from './routes/bots.js';
 import { requireAction, requireTenant, readForRolesElseAction } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
@@ -113,7 +114,10 @@ app.use('/api/agents', agentsRouter);
 app.use('/api/graph/decisions', requireTenant('orgiq'), decisionsRouter);
 app.use('/api/graph/projects', requireTenant('orgiq'), projectsRouter);
 // Work-items: mounted at /api/graph so its sub-paths (/work, /projects/:id/work,
-// /people/:id/work, /work-items) resolve before the gated graphRouter.
+// /people/:id/work, /work-items) resolve before the gated graphRouter. Reads
+// are tenant-open; the router gates its POST/PATCH per-route on
+// DispatchAgentRun so board writes need the marketplace authority, not
+// merely a seat in the tenant.
 app.use('/api/graph', requireTenant('orgiq'), workItemsRouter);
 // The org roster + relationship graph is the org-chart surface: tenant-scoped
 // AND gated on ViewOrgChart (every orgiq role holds it; a grantless anonymous
@@ -161,6 +165,9 @@ app.use('/api/agent-projects', requireAction('ManageDevbox'), agentProjectsRoute
 // AI SDLC governance — change requests, reviews, gates, policies. Gated as a
 // devbox-management action.
 app.use('/api/sdlc', requireAction('ManageDevbox'), sdlcRouter);
+// Budgets — initiative spend allocations. Gated per-route (reads open to
+// org-leader, writes require ManageBudgets).
+app.use('/api/budgets', budgetsRouter);
 // Bots — durable mission-configured agents. Gated per-route inside the
 // router: reads are operational visibility (org-leader + hr-admin, like the
 // KB registry), bot mutations carry ManageDevbox (they dispatch the same

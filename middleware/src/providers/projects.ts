@@ -21,7 +21,28 @@ export interface ProjectSummary {
   createdAt: string | null;
   topContributorNames: string[];
   lastActivityAt: string | null;
+  /** Operating-model rollups: one owner + a few SMEs directing agents. Null
+      when the cluster predates the work-items/bots schema (see the legacy
+      fallback in listProjects) — the portal renders what's present. */
+  ownerId: string | null;
+  ownerName: string | null;
+  smeNames: string[];
+  openStories: number | null;
+  openBugs: number | null;
+  pointsDone: number | null;
+  pointsTotal: number | null;
+  agentSpendUsd: number | null;
+  lastAgentActivityAt: string | null;
 }
+
+/** The rollup fields defaulted for mock mode and the legacy fallback. */
+const EMPTY_ROLLUPS: Pick<ProjectSummary,
+  'ownerId' | 'ownerName' | 'smeNames' | 'openStories' | 'openBugs'
+  | 'pointsDone' | 'pointsTotal' | 'agentSpendUsd' | 'lastAgentActivityAt'> = {
+  ownerId: null, ownerName: null, smeNames: [],
+  openStories: null, openBugs: null, pointsDone: null, pointsTotal: null,
+  agentSpendUsd: null, lastAgentActivityAt: null,
+};
 
 export interface ProjectDetail {
   id: string;
@@ -93,7 +114,7 @@ export function intParam(name: string, value: number): SqlParameter {
 // so that navigating from the projects list to a project detail page resolves
 // the same mock work items.
 
-const MOCK_PROJECTS: ProjectSummary[] = [
+const MOCK_PROJECTS: Array<Omit<ProjectSummary, keyof typeof EMPTY_ROLLUPS>> = [
   {
     id: 'proj-k8s', name: 'Kubernetes Cluster Upgrade', status: 'active', contributorCount: 5,
     createdAt: '2026-04-06T12:00:00Z',
@@ -204,7 +225,12 @@ export async function listProjects(opts: {
   if (config.mock.aurora) {
     let items = MOCK_PROJECTS.slice();
     if (opts.status) items = items.filter((p) => p.status === opts.status);
-    return items.slice(0, Math.min(opts.limit ?? 50, 200));
+    // Lead contributor stands in as owner so the operating-model card layout
+    // is demonstrable in mock mode.
+    return items.slice(0, Math.min(opts.limit ?? 50, 200)).map((p) => ({
+      ...p, ...EMPTY_ROLLUPS,
+      ownerName: p.topContributorNames[0] ?? null,
+    }));
   }
 
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
@@ -217,8 +243,7 @@ export async function listProjects(opts: {
   // Note: projects table has (id, name, status, created_at) — no updated_at.
   // Top contributor names are fetched via a correlated subquery to avoid
   // blowing up GROUP BY with per-row ARRAY_AGG on large tables.
-  const sql = `
-    SELECT
+  const legacySelect = `
       p.id,
       p.name,
       p.status,
@@ -233,19 +258,72 @@ export async function listProjects(opts: {
          ORDER BY pc2.weight DESC NULLS LAST
          LIMIT 4
        ) cnames
-      ) AS top_names
+      ) AS top_names`;
+
+  // The operating-model rollups: owner + SMEs (few people, not avatar walls),
+  // real open work, and agent spend. Spend attributes a bot_run to the
+  // initiative through any of its three linkages: the run's work item, a bot
+  // targeting the initiative directly, or a bot targeting a codebase that
+  // delivers it.
+  const spendPredicate = `
+        br.cost_usd IS NOT NULL AND (
+          br.work_item_id IN (SELECT w2.id FROM work_items w2 WHERE w2.project_id = p.id)
+          OR br.bot_id IN (
+            SELECT b.id FROM bots b
+             WHERE b.org_project_id = p.id
+                OR b.agent_project_id IN (SELECT ap.id FROM agent_projects ap WHERE ap.org_project_id = p.id)
+          )
+        )`;
+  const rollupSelect = `,
+      p.owner_id,
+      own.name AS owner_name,
+      (SELECT STRING_AGG(sn.name, '|||')
+       FROM (
+         SELECT pe3.name FROM project_contributions pc3
+         JOIN people pe3 ON pe3.id = pc3.person_id
+         WHERE pc3.project_id = p.id AND pc3.role = 'sme'
+         ORDER BY pc3.weight DESC NULLS LAST LIMIT 3
+       ) sn) AS sme_names,
+      (SELECT COUNT(*) FROM work_items w WHERE w.project_id = p.id AND w.type = 'story'
+        AND w.status IN ('open','in_progress','in_review'))::int AS open_stories,
+      (SELECT COUNT(*) FROM work_items w WHERE w.project_id = p.id AND w.type = 'bug'
+        AND w.status IN ('open','in_progress','in_review'))::int AS open_bugs,
+      (SELECT COALESCE(SUM(w.story_points), 0) FROM work_items w
+        WHERE w.project_id = p.id AND w.type IN ('story','bug'))::int AS points_total,
+      (SELECT COALESCE(SUM(w.story_points), 0) FROM work_items w
+        WHERE w.project_id = p.id AND w.type IN ('story','bug') AND w.status = 'done')::int AS points_done,
+      (SELECT COALESCE(SUM(br.cost_usd), 0)::float8 FROM bot_runs br WHERE ${spendPredicate}) AS agent_spend_usd,
+      (SELECT MAX(br.started_at) FROM bot_runs br WHERE ${spendPredicate}) AS last_agent_activity_at`;
+
+  const buildSql = (withRollups: boolean) => `
+    SELECT
+      ${legacySelect}${withRollups ? rollupSelect : ''}
     FROM projects p
     LEFT JOIN project_contributions pc ON pc.project_id = p.id
+    ${withRollups ? 'LEFT JOIN people own ON own.id = p.owner_id' : ''}
     ${whereClause}
-    GROUP BY p.id, p.name, p.status, p.created_at
+    GROUP BY p.id, p.name, p.status, p.created_at${withRollups ? ', p.owner_id, own.name' : ''}
     ORDER BY contributor_count DESC, p.created_at DESC
     LIMIT :lim
   `;
 
-  const rows = await exec(sql, params);
+  let rows: Record<string, unknown>[];
+  let hasRollups = true;
+  try {
+    rows = await exec(buildSql(true), params);
+  } catch (err) {
+    // owner_id / work_items / bots may predate the migrations on this
+    // cluster — degrade to the legacy shape rather than 500 the page.
+    if (!/does not exist/i.test((err as Error).message ?? '')) throw err;
+    hasRollups = false;
+    rows = await exec(buildSql(false), params);
+  }
+
   return rows.map((r) => {
     const createdAt = r['created_at'] != null ? String(r['created_at']) : null;
     const rawTopNames = r['top_names'] != null ? String(r['top_names']) : null;
+    const rawSmeNames = r['sme_names'] != null ? String(r['sme_names']) : null;
+    const lastAgent = r['last_agent_activity_at'] != null ? String(r['last_agent_activity_at']) : null;
     return {
       id: String(r['id'] ?? ''),
       name: String(r['name'] ?? ''),
@@ -255,7 +333,18 @@ export async function listProjects(opts: {
       topContributorNames: rawTopNames
         ? rawTopNames.split('|||').filter((n) => n.length > 0)
         : [],
-      lastActivityAt: createdAt,
+      lastActivityAt: lastAgent ?? createdAt,
+      ...(hasRollups ? {
+        ownerId: r['owner_id'] != null ? String(r['owner_id']) : null,
+        ownerName: r['owner_name'] != null ? String(r['owner_name']) : null,
+        smeNames: rawSmeNames ? rawSmeNames.split('|||').filter((n) => n.length > 0) : [],
+        openStories: Number(r['open_stories'] ?? 0),
+        openBugs: Number(r['open_bugs'] ?? 0),
+        pointsDone: Number(r['points_done'] ?? 0),
+        pointsTotal: Number(r['points_total'] ?? 0),
+        agentSpendUsd: Number(r['agent_spend_usd'] ?? 0),
+        lastAgentActivityAt: lastAgent,
+      } : EMPTY_ROLLUPS),
     };
   });
 }
