@@ -878,7 +878,7 @@ function ContributorsTable({ contributors }: { contributors: ProjectDetail['cont
               borderBottom: idx < contributors.length - 1 ? '1px solid var(--color-border)' : 'none',
               cursor: 'pointer',
             }}
-              onClick={() => navigate(`/iq/explore?person=${encodeURIComponent(c.name)}`)}
+              onClick={() => navigate(`/iq/explore?focus=${encodeURIComponent(c.personId)}`)}
               onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.background = 'var(--color-surface-inset)'}
               onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.background = 'var(--color-surface)'}
             >
