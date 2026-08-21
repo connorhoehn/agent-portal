@@ -1,4 +1,7 @@
-node_modules/
+# No trailing slash: the slash form only matches real directories, and a
+# node_modules SYMLINK once slipped through `git add -A` and shipped a
+# self-pointing loop that destroyed checkouts on pull.
+node_modules
 dist/
 .venv/
 .venv-*/
