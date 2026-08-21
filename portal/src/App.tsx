@@ -38,7 +38,6 @@ const KBDetailPage = lazy(() => import('./pages/admin/KBDetailPage.js'));
 const InvokePage = lazy(() => import('./pages/InvokePage'));
 const CodeInterpreterDemoPage = lazy(() => import('./pages/CodeInterpreterDemoPage'));
 const ExplorePage = lazy(() => import('./pages/ExplorePage'));
-const SearchPage = lazy(() => import('./pages/SearchPage'));
 const CanaryPage = lazy(() => import('./pages/CanaryPage'));
 const PromptStudioPage = lazy(() => import('./pages/capabilities/PromptsPage'));
 const PromptHistoryPage = lazy(() => import('./pages/iq/PromptHistoryPage'));

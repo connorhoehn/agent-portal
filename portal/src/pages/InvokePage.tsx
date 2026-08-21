@@ -138,10 +138,28 @@ function InvokePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams.get('session')]);
 
-  // Auto-resume: with no deep-link, reload lands back in the last conversation
-  // instead of a fresh one (transcript restored from AgentCore Memory).
+  // Honor deep-links like /iq/invoke?prompt=<slug-or-text> — the subnav
+  // "Suggested" searches ("Who knows X?", "Decisions about X"…) point here.
+  // Resolve a known slug to its full prompt, else send the text verbatim, run
+  // it once, and strip the param so a reload doesn't re-fire it. Previously
+  // these links redirected to /invoke and the param was dropped, so every
+  // suggested search did nothing.
   useEffect(() => {
-    if (searchParams.get('session')) return; // deep-link wins
+    const p = searchParams.get('prompt');
+    if (!p) return;
+    const resolved = PROMPT_SLUGS[p] ?? p;
+    const next = new URLSearchParams(searchParams);
+    next.delete('prompt');
+    setSearchParams(next, { replace: true });
+    void sendMessage(resolved);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.get('prompt')]);
+
+  // Auto-resume: with no deep-link, reload lands back in the last conversation
+  // instead of a fresh one (transcript restored from AgentCore Memory). A
+  // ?prompt= deep-link is a fresh question, so it wins over resuming too.
+  useEffect(() => {
+    if (searchParams.get('session') || searchParams.get('prompt')) return; // deep-link wins
     const saved = recallSession('invoke');
     if (saved) void loadSession(saved);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -393,6 +411,17 @@ interface QuickPrompt {
   badge?: string;
   badgeColor?: string;
 }
+
+// Deep-link prompt slugs — the subnav "Suggested" searches link here as
+// /iq/invoke?prompt=<slug>. Kept short in the URL and resolved to a full,
+// org-graph-aware prompt so a click actually asks a real question. An unknown
+// slug falls through to being sent verbatim (so ?prompt=<free text> also works).
+const PROMPT_SLUGS: Record<string, string> = {
+  'who-knows': 'Who in the organization has the deepest expertise in Kubernetes? Use the search sub-agent to query the graph.',
+  'decisions': 'What significant platform decisions have been made recently, and who made them?',
+  'who-works-on': 'Who works on the authentication service, and what are their roles?',
+  'compare': 'Compare the two people with the strongest platform expertise, side by side.',
+};
 
 // Per-agent quick-prompt suggestions. The Browse 🌐 entry on the search agent
 // is the discoverable doorway into the fetch_web_page tool we added earlier —

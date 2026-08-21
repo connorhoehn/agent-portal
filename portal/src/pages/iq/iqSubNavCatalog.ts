@@ -36,10 +36,12 @@ const ARCHITECTURE_ITEMS: SubNavItem[] = [
 
 // Static items without History — History group is built dynamically from sessions.
 const SEARCH_STATIC_ITEMS: SubNavItem[] = [
-  { path: '/iq/search?prompt=who-knows',     label: 'Who knows X?',         hint: 'Deepest expertise',     group: 'Suggested' },
-  { path: '/iq/search?prompt=decisions',     label: 'Decisions about X',    hint: 'Recent platform calls', group: 'Suggested' },
-  { path: '/iq/search?prompt=who-works-on',  label: 'Who works on Y',       hint: 'Contributors + roles',  group: 'Suggested' },
-  { path: '/iq/search?prompt=compare',       label: 'Compare two people',   hint: 'Side-by-side profiles', group: 'Suggested' },
+  // Point at the live Ask surface (/iq/invoke) — /iq/search only redirects here
+  // and the redirect dropped the ?prompt= param, so these did nothing before.
+  { path: '/iq/invoke?prompt=who-knows',     label: 'Who knows X?',         hint: 'Deepest expertise',     group: 'Suggested' },
+  { path: '/iq/invoke?prompt=decisions',     label: 'Decisions about X',    hint: 'Recent platform calls', group: 'Suggested' },
+  { path: '/iq/invoke?prompt=who-works-on',  label: 'Who works on Y',       hint: 'Contributors + roles',  group: 'Suggested' },
+  { path: '/iq/invoke?prompt=compare',       label: 'Compare two people',   hint: 'Side-by-side profiles', group: 'Suggested' },
 ];
 
 // Invoke reads ?session= (deep-links from Memory/Sessions) but none of the
