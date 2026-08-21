@@ -11,7 +11,7 @@
 // "what changed recently?" — not "what is pending", which is the Work page's job.
 
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
@@ -80,6 +80,10 @@ function describe(p: Proposal): string {
 
 export default function GraphChangesPage() {
   const [filter, setFilter] = useState<Filter>('all');
+  // ?job=<id> narrows the audit log to one job's proposals — the landing view
+  // for "what did this worker propose?" links from the job detail page.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const jobFilter = searchParams.get('job');
   const { data, refresh } = useFetch<{ proposals: Proposal[] }>(
     filter === 'all' ? '/api/work/proposals' : `/api/work/proposals?status=${filter}`,
     15_000,
@@ -105,12 +109,12 @@ export default function GraphChangesPage() {
   }
 
   const proposals = useMemo(() => {
-    const list = [...(data?.proposals ?? [])];
+    const list = (data?.proposals ?? []).filter((p) => !jobFilter || p.jobId === jobFilter);
     // Decided work first by recency; anything still undecided sorts by when it
     // was raised, so a pending row never hides below month-old history.
     return list.sort((a, b) =>
       (b.decidedAt ?? b.createdAt).localeCompare(a.decidedAt ?? a.createdAt));
-  }, [data]);
+  }, [data, jobFilter]);
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -118,13 +122,32 @@ export default function GraphChangesPage() {
     return c;
   }, [data]);
 
+  // "Graph updates", not "Graph changes" — /admin/changes is the CODE review
+  // queue, and two queues one word apart kept getting confused.
   return (
-    <PageSection title="Graph changes">
+    <PageSection title="Graph updates">
       <p className="text-[13px] text-text-secondary mt-1 mb-5 max-w-3xl leading-relaxed">
         Every change an agent proposed to the org graph and what you decided about it.
         Nothing here was written without an approval — this is the record that makes
         that checkable. Raise new ones from <Link to="/iq/work" className="text-primary no-underline hover:underline">Work</Link>.
       </p>
+
+      {jobFilter && (
+        <div className="flex items-center gap-2 mb-3 text-[12px] text-text-secondary">
+          <span>
+            Showing proposals from job{' '}
+            <Link to={`/iq/work/${jobFilter}`} className="text-primary no-underline hover:underline font-mono">
+              {jobFilter.slice(0, 8)}
+            </Link>
+          </span>
+          <button
+            onClick={() => setSearchParams({}, { replace: true })}
+            className="text-[11px] text-text-tertiary bg-transparent border border-border rounded px-1.5 py-0.5 cursor-pointer hover:text-primary"
+          >
+            clear
+          </button>
+        </div>
+      )}
 
       <div className="flex gap-1.5 mb-4 flex-wrap">
         {(['all', 'applied', 'pending', 'rejected', 'failed'] as const).map((f) => (

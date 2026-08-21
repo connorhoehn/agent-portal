@@ -115,6 +115,13 @@ export default function JobDetailPage() {
   // SSE tail carries the activity, this carries the state machine.
   const { data: job, refresh } = useFetch<Job>(jobId ? `/api/work/jobs/${jobId}` : null, 5_000);
 
+  // What this job produced downstream: graph proposals carry the jobId that
+  // raised them, so the job page can point at its own output instead of
+  // ending at a transcript.
+  const { data: proposalsData } = useFetch<{ proposals: Array<{ id: string; jobId: string | null }> }>(
+    jobId ? '/api/work/proposals' : null, 30_000);
+  const proposalCount = (proposalsData?.proposals ?? []).filter((p) => p.jobId === jobId).length;
+
   const [live, setLive] = useState<ActivityEntry[]>([]);
   const [tailState, setTailState] = useState<'idle' | 'open' | 'retrying' | 'unavailable'>('idle');
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -235,6 +242,24 @@ export default function JobDetailPage() {
         <span className="text-[11px] text-text-tertiary">
           attempt {job.attempts} of {job.maxAttempts} · queued by {job.createdBy ?? 'unknown'}
         </span>
+        {/* Provenance: this job exists because a sweep found something. */}
+        {typeof job.payload['findingId'] === 'string' && (
+          <Link
+            to="/iq/work"
+            title="This job was promoted from a sweep finding"
+            className="text-[11px] text-text-tertiary no-underline hover:text-primary hover:underline"
+          >
+            from a finding
+          </Link>
+        )}
+        {proposalCount > 0 && (
+          <Link
+            to={`/iq/work/changes?job=${job.id}`}
+            className="text-[12px] text-primary no-underline hover:underline"
+          >
+            {proposalCount} graph proposal{proposalCount === 1 ? '' : 's'} →
+          </Link>
+        )}
         <div className="flex-1" />
         {(job.status === 'queued' || job.status === 'claimed') && (
           <button

@@ -16,7 +16,7 @@
 // can lapse and be re-established, never as a property of the project.
 
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
@@ -91,6 +91,21 @@ export function parseRepoInput(raw: string): string | null {
 
 export default function AgentProjectsPage() {
   const { data, refresh } = useFetch<{ projects: Project[] }>('/api/agent-projects', 15_000);
+
+  // Deep links from the rest of the SDLC loop: /admin/projects?project=<id>
+  // scrolls to that codebase, &run=<id> highlights the run that a change was
+  // captured from — so "run 1a2b3c4d" on a change card lands on the evidence.
+  const [searchParams] = useSearchParams();
+  const focusProject = searchParams.get('project');
+  const focusRun = searchParams.get('run');
+  // The list API carries only each project's 5 newest runs; a linked run may
+  // be older, so the focused project gets its full run history.
+  const { data: focusRuns } = useFetch<{ runs: Run[] }>(
+    focusProject ? `/api/agent-projects/${focusProject}/runs` : null, 30_000);
+  useEffect(() => {
+    if (!focusProject || !data) return;
+    document.getElementById(`project-${focusProject}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }, [focusProject, data]);
   const { data: connections } = useFetch<{ sources: ConnectedSource[] }>('/api/connections', 60_000);
   // The initiatives a repository can be attached to. An enterprise has both:
   // people who own the work and code that delivers it.
@@ -384,8 +399,17 @@ export default function AgentProjectsPage() {
           {projects.map((p) => {
             const box = boxes.find((b) => b.sessionId === p.sessionId);
             const inWorkspace = Boolean(p.clonedAt && box);
+            const focused = p.id === focusProject;
+            // The focused card shows its full run history so a deep-linked run
+            // is present even when it has scrolled out of the newest five.
+            const runs = focused && focusRuns?.runs?.length ? focusRuns.runs : p.runs;
             return (
-              <Card key={p.id} padding="none" className="overflow-hidden">
+              <Card
+                key={p.id}
+                id={`project-${p.id}`}
+                padding="none"
+                className={`overflow-hidden ${focused ? 'ring-2 ring-primary/60' : ''}`}
+              >
                 <div className="px-3.5 py-2.5 border-b border-border flex items-center gap-2">
                   <a
                     href={`https://github.com/${p.repoFullName}`}
@@ -403,10 +427,20 @@ export default function AgentProjectsPage() {
                     </span>
                   )}
                   {p.orgProjectName && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0 truncate max-w-[40%]"
-                          title={`Delivers: ${p.orgProjectName}`}>
-                      {p.orgProjectName}
-                    </span>
+                    p.orgProjectId ? (
+                      <Link
+                        to={`/iq/projects/${p.orgProjectId}`}
+                        title={`Open the initiative this codebase delivers: ${p.orgProjectName}`}
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0 truncate max-w-[40%] no-underline hover:underline"
+                      >
+                        {p.orgProjectName}
+                      </Link>
+                    ) : (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0 truncate max-w-[40%]"
+                            title={`Delivers: ${p.orgProjectName}`}>
+                        {p.orgProjectName}
+                      </span>
+                    )
                   )}
                   <div className="flex-1" />
                   <button
@@ -462,13 +496,17 @@ export default function AgentProjectsPage() {
                   </div>
                 )}
 
-                {p.runs.length === 0 ? (
+                {runs.length === 0 ? (
                   <div className="px-3.5 py-3 text-[11px] text-text-tertiary">
                     Nothing has been run against this yet.
                   </div>
                 ) : (
-                  p.runs.map((r) => (
-                    <div key={r.id} className="px-3.5 py-2 border-b border-border last:border-b-0 flex items-start gap-2.5">
+                  runs.map((r) => (
+                    <div
+                      key={r.id}
+                      className={`px-3.5 py-2 border-b border-border last:border-b-0 flex items-start gap-2.5 ${
+                        r.id === focusRun ? 'bg-primary/5 border-l-2 border-l-primary' : ''}`}
+                    >
                       <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${STATUS_TONE[r.status]}`}>
                         {r.status}
                       </span>

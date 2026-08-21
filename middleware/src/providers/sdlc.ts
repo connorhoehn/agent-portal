@@ -129,6 +129,8 @@ export interface ChangeRequest {
   runId: string | null;
   projectId: string;
   repoFullName: string | null;
+  /** The initiative the codebase serves — lets the UI link a change to it. */
+  orgProjectId: string | null;
   orgProjectName: string | null;
   title: string;
   status: string;
@@ -158,6 +160,7 @@ function rowToChange(r: Record<string, unknown>): ChangeRequest {
     runId: r['run_id'] ? toStr(r['run_id']) : null,
     projectId: toStr(r['project_id']),
     repoFullName: r['repo_full_name'] ? toStr(r['repo_full_name']) : null,
+    orgProjectId: r['org_project_id'] ? toStr(r['org_project_id']) : null,
     orgProjectName: r['org_project_name'] ? toStr(r['org_project_name']) : null,
     title: toStr(r['title']),
     status: toStr(r['status'], 'captured'),
@@ -223,7 +226,7 @@ export async function setCommitSha(id: string, sha: string): Promise<void> {
 export async function getChangeRequest(id: string): Promise<ChangeRequest | null> {
   if (!isUuid(id)) return null;
   const rows = await exec(
-    `SELECT cr.*, ap.repo_full_name, op.name AS org_project_name
+    `SELECT cr.*, ap.repo_full_name, ap.org_project_id, op.name AS org_project_name
        FROM agent_change_requests cr
        JOIN agent_projects ap ON ap.id = cr.project_id
        LEFT JOIN projects op ON op.id = ap.org_project_id
@@ -244,7 +247,7 @@ export async function listChangeRequests(opts: { projectId?: string; open?: bool
   if (opts.projectId && isUuid(opts.projectId)) { where.push('cr.project_id = :pid::uuid'); params.push(s('pid', opts.projectId)); }
   if (opts.open) where.push(`cr.status IN ('needs_approval','changes_requested','in_review','captured')`);
   const rows = await exec(
-    `SELECT cr.*, ap.repo_full_name, op.name AS org_project_name
+    `SELECT cr.*, ap.repo_full_name, ap.org_project_id, op.name AS org_project_name
        FROM agent_change_requests cr
        JOIN agent_projects ap ON ap.id = cr.project_id
        LEFT JOIN projects op ON op.id = ap.org_project_id

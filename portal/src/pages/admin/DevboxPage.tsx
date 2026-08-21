@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { PageSection, Card, Chip } from '@connorhoehnslalom/ui-components/shared';
 import { openShell } from '../../lib/terminalDock';
 import { DEVBOX_MODELS } from '../../lib/devboxModels';
@@ -33,6 +33,15 @@ interface DevboxStatus {
   perTaskModel?: boolean;
   defaultModel?: string | null;
   allowedModels?: string[];
+}
+
+/** What the rest of the SDLC loop knows about a box (see BoxContext card). */
+interface WorkJobRef {
+  id: string; title: string; status: string; boxId: string | null; finishedAt: string | null;
+}
+interface AgentProjectRef {
+  id: string; repoFullName: string; sessionId: string | null;
+  orgProjectId: string | null; orgProjectName: string | null;
 }
 
 /** One entry in the task execution timeline. */
@@ -168,6 +177,19 @@ export default function DevboxPage() {
 
   const boxParam = searchParams.get('box');
   const activeBox = boxes.find((b) => b.id === boxParam) ?? boxes[0] ?? null;
+
+  // What this machine is doing and for whom — the reverse links of the SDLC
+  // loop. Jobs record the box that ran them; codebases record the workspace
+  // session they were cloned into. A machine page that can't say either is a
+  // dead end.
+  const { data: jobsData } = useFetch<{ jobs: WorkJobRef[] }>('/api/work/jobs?limit=50', 15_000);
+  const { data: projectsData } = useFetch<{ projects: AgentProjectRef[] }>('/api/agent-projects', 30_000);
+  const boxJobs = (jobsData?.jobs ?? []).filter((j) => j.boxId === activeBox?.id);
+  const liveJob = boxJobs.find((j) => j.status === 'running' || j.status === 'claimed') ?? null;
+  const recentJobs = boxJobs.filter((j) => j !== liveJob).slice(0, 3);
+  const boxProjects = (projectsData?.projects ?? []).filter(
+    (p) => p.sessionId && p.sessionId === activeBox?.sessionId,
+  );
 
   const selectBox = useCallback((id: string) => {
     setSearchParams((prev) => { prev.set('box', id); return prev; }, { replace: true });
@@ -671,6 +693,57 @@ export default function DevboxPage() {
              box's identity and the state of its workspace, as data. Anything
              interactive is one click away in a terminal that really is one. */}
         <div className="flex flex-col gap-3 min-w-0">
+          {/* ── This box in the loop: the job it's running, the jobs it ran,
+               and the codebases checked out here — each one a link back into
+               the surface that owns it. ── */}
+          {activeBox && (liveJob || recentJobs.length > 0 || boxProjects.length > 0) && (
+            <Card className="!p-0 overflow-hidden">
+              <div className="px-3.5 py-2.5 border-b border-border flex items-center gap-2">
+                <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">THIS BOX</span>
+                <span className={`text-[10px] text-text-tertiary ${mono}`}>{activeBox.label}</span>
+              </div>
+              <div className="divide-y divide-border">
+                {liveJob && (
+                  <div className="px-3.5 py-2 flex items-center gap-2 min-w-0">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" style={{ animation: 'devbox-pulse 1s ease-in-out infinite' }} />
+                    <span className="text-[11px] text-text-tertiary shrink-0">running job</span>
+                    <Link to={`/iq/work/${liveJob.id}`} className="text-[12px] text-primary no-underline hover:underline truncate">
+                      {liveJob.title}
+                    </Link>
+                  </div>
+                )}
+                {recentJobs.map((j) => (
+                  <div key={j.id} className="px-3.5 py-2 flex items-center gap-2 min-w-0">
+                    <span className="text-[11px] text-text-tertiary shrink-0">{j.status.replace('_', ' ')}</span>
+                    <Link to={`/iq/work/${j.id}`} className="text-[12px] text-text-secondary no-underline hover:text-primary hover:underline truncate">
+                      {j.title}
+                    </Link>
+                  </div>
+                ))}
+                {boxProjects.map((p) => (
+                  <div key={p.id} className="px-3.5 py-2 flex items-center gap-2 min-w-0">
+                    <span className="text-[11px] text-text-tertiary shrink-0">checked out</span>
+                    <Link
+                      to={`/admin/projects?project=${p.id}`}
+                      className={`text-[12px] text-text-secondary no-underline hover:text-primary hover:underline truncate ${mono}`}
+                    >
+                      {p.repoFullName}
+                    </Link>
+                    {p.orgProjectId && p.orgProjectName && (
+                      <Link
+                        to={`/iq/projects/${p.orgProjectId}`}
+                        title={`Delivers: ${p.orgProjectName}`}
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary no-underline hover:underline truncate shrink-0 max-w-[40%]"
+                      >
+                        {p.orgProjectName}
+                      </Link>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
           <Card className="!p-0 overflow-hidden">
             <div className="px-3.5 py-2.5 border-b border-border flex items-center gap-2">
               <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">WORKSPACE</span>

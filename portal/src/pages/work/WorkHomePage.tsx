@@ -318,7 +318,7 @@ export default function WorkHomePage() {
       <p className="text-[13px] text-text-secondary mt-1 mb-5 max-w-3xl leading-relaxed">
         Scheduled sweeps notice things, devbox workers act on them, and anything that would change
         the org graph waits for you. Queue a job and an idle box picks it up within ~10 seconds —
-        watch it work in <Link to="/admin/devbox" className="text-primary no-underline hover:underline">Devbox</Link>.
+        watch it work in <Link to="/admin/devbox" className="text-primary no-underline hover:underline">Computers</Link>.
       </p>
 
       {/* ── What's happening ── */}

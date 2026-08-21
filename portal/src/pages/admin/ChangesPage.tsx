@@ -29,7 +29,7 @@ interface Review {
 interface Gate { policyName: string; kind: string; outcome: string; detail: string }
 interface Change {
   id: string; runId: string | null; projectId: string; repoFullName: string | null;
-  orgProjectName: string | null;
+  orgProjectId: string | null; orgProjectName: string | null;
   title: string; status: string; diff: string | null; diffTruncated: boolean;
   files: string[]; filesChanged: number; model: string | null;
   branchName: string | null; prUrl: string | null;
@@ -237,16 +237,54 @@ function ChangeCard({ change: c, open, onToggle, busy, act, superseded }: {
         )}
         <span className="text-[13px] font-semibold text-text-primary truncate">{c.title}</span>
         <div className="flex-1" />
-        {c.repoFullName && <span className="text-[11px] font-mono text-text-tertiary shrink-0">{c.repoFullName}</span>}
+        {c.repoFullName && (
+          <Link
+            to={`/admin/projects?project=${c.projectId}`}
+            title="Open this codebase"
+            className="text-[11px] font-mono text-text-tertiary shrink-0 no-underline hover:text-primary hover:underline"
+          >
+            {c.repoFullName}
+          </Link>
+        )}
       </div>
 
       <div className="px-3.5 py-2.5">
         <div className="text-[11px] text-text-tertiary">
           {c.filesChanged} {c.filesChanged === 1 ? 'file' : 'files'} · {c.model ?? 'unknown model'} · {when(c.createdAt)}
+          {/* The run that wrote this change — jumps to the codebase with that
+              run highlighted, so a reviewer can read what the agent was asked
+              before judging what it did. */}
+          {c.runId && (
+            <span>
+              {' · '}
+              <Link
+                to={`/admin/projects?project=${c.projectId}&run=${c.runId}`}
+                title="Open the run that produced this change"
+                className="text-text-secondary no-underline hover:text-primary hover:underline"
+              >
+                run {c.runId.slice(0, 8)}
+              </Link>
+            </span>
+          )}
           {/* The initiative this code serves — the thread from org intent to a
               delivered change, which is the whole reason codebases join the
               org graph. */}
-          {c.orgProjectName && <span> · delivering <span className="text-text-secondary">{c.orgProjectName}</span></span>}
+          {c.orgProjectName && (
+            <span>
+              {' · delivering '}
+              {c.orgProjectId ? (
+                <Link
+                  to={`/iq/projects/${c.orgProjectId}`}
+                  title="Open this initiative"
+                  className="text-text-secondary no-underline hover:text-primary hover:underline"
+                >
+                  {c.orgProjectName}
+                </Link>
+              ) : (
+                <span className="text-text-secondary">{c.orgProjectName}</span>
+              )}
+            </span>
+          )}
         </div>
 
         {/* Why a human is here — the gates that did not pass. */}

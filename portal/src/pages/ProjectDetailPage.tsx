@@ -931,6 +931,14 @@ function ProjectDetailPage() {
   const { data: decisions } =
     useFetch<ProjectDecision[]>(id ? `/api/graph/projects/${encodeURIComponent(id)}/decisions` : '');
 
+  // The codebases that deliver this initiative — the Build side of the join.
+  // The endpoint is hr-admin-gated (ManageDevbox); for anyone else the fetch
+  // 403s and the strip simply doesn't render.
+  const { data: codebasesData } = useFetch<{ projects: Array<{
+    id: string; repoFullName: string; orgProjectId: string | null;
+  }> }>('/api/agent-projects', 60_000);
+  const codebases = (codebasesData?.projects ?? []).filter((p) => p.orgProjectId === id);
+
   const workTree = localItems ?? rawTree ?? [];
 
   // Optimistic status toggle
@@ -1146,6 +1154,30 @@ function ProjectDetailPage() {
                 width: `${overallPct}%`, transition: 'width 0.4s',
               }} />
             </div>
+          </div>
+        )}
+
+        {/* The code that delivers this initiative — the other half of the
+            repo ↔ initiative join. Each entry lands on the codebase's console. */}
+        {codebases.length > 0 && (
+          <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Delivered by
+            </span>
+            {codebases.map((cb) => (
+              <Link
+                key={cb.id}
+                to={`/admin/projects?project=${cb.id}`}
+                title="Open this codebase — runs, changes, workspace"
+                style={{
+                  fontSize: 12, fontFamily: 'monospace', textDecoration: 'none',
+                  color: 'var(--color-primary)', background: 'var(--color-info-bg)',
+                  padding: '2px 10px', borderRadius: 9999,
+                }}
+              >
+                {cb.repoFullName}
+              </Link>
+            ))}
           </div>
         )}
       </div>
