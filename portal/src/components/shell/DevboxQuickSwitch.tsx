@@ -42,7 +42,7 @@ export function DevboxQuickSwitch() {
     if (busy) return;
     setBusy(true);
     try {
-      const box = await createBox();
+      const box = await createBox(`computer-${loadBoxes().length + 1}`);
       go(box);
     } finally {
       setBusy(false);
@@ -117,7 +117,7 @@ export function DevboxQuickSwitch() {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
-          <span className="text-xs font-semibold text-text-secondary">DEVBOXES</span>
+          <span className="text-xs font-semibold text-text-secondary">COMPUTERS</span>
           <span className="text-[10px] text-text-tertiary">⌘I · ↑↓ / tab · ⏎ · esc</span>
           <div className="flex-1" />
           {query
@@ -143,7 +143,7 @@ export function DevboxQuickSwitch() {
             onMouseEnter={() => setHighlight(matches.length)}
             className={`px-4 py-2.5 flex items-center gap-2 cursor-pointer ${highlight === matches.length ? 'bg-surface-hover' : ''}`}
           >
-            <span className="text-[13px] font-semibold text-primary">{busy ? '⏳ provisioning…' : '+ New devbox'}</span>
+            <span className="text-[13px] font-semibold text-primary">{busy ? '⏳ provisioning…' : '+ New computer'}</span>
             <span className="text-[11px] text-text-tertiary">fresh microVM workspace</span>
           </div>
         </div>

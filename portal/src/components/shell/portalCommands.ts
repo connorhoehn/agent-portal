@@ -206,7 +206,7 @@ export function usePortalDynamicCommands(): (query: string) => Command[] {
       const shellCommands: Command[] = boxes.map((b) => ({
         id: `shell:${b.id}`,
         label: `Terminal → ${b.label}`,
-        hint: 'open a shell in this devbox',
+        hint: 'open a shell in this computer',
         group: 'Terminals',
         keywords: ['terminal', 'shell', 'tty', 'console', b.label, b.id],
         run: () => { openShell({ id: b.id, label: b.label, sessionId: b.sessionId }); },
@@ -215,7 +215,7 @@ export function usePortalDynamicCommands(): (query: string) => Command[] {
         shellCommands.push({
           id: 'shell:none',
           label: 'No computers yet — open Computers to create one',
-          hint: 'a terminal needs a box to attach to',
+          hint: 'a terminal needs a computer to attach to',
           group: 'Terminals',
           keywords: ['terminal', 'shell'],
           run: () => { navigate('/admin/devbox'); },

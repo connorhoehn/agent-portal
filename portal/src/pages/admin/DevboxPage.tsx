@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { PageSection, Card, Chip } from '@connorhoehnslalom/ui-components/shared';
+import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
 import { openShell } from '../../lib/terminalDock';
 import { DEVBOX_MODELS } from '../../lib/devboxModels';
 import { useFetch } from '../../hooks/useFetch';
@@ -35,7 +35,7 @@ interface DevboxStatus {
   allowedModels?: string[];
 }
 
-/** What the rest of the SDLC loop knows about a box (see BoxContext card). */
+/** What the rest of the SDLC loop knows about a computer (THIS COMPUTER card). */
 interface WorkJobRef {
   id: string; title: string; status: string; boxId: string | null; finishedAt: string | null;
 }
@@ -179,9 +179,9 @@ export default function DevboxPage() {
   const activeBox = boxes.find((b) => b.id === boxParam) ?? boxes[0] ?? null;
 
   // What this machine is doing and for whom — the reverse links of the SDLC
-  // loop. Jobs record the box that ran them; codebases record the workspace
-  // session they were cloned into. A machine page that can't say either is a
-  // dead end.
+  // loop. Jobs record the computer that ran them; codebases record the
+  // workspace session they were cloned into. A machine page that can't say
+  // either is a dead end.
   const { data: jobsData } = useFetch<{ jobs: WorkJobRef[] }>('/api/work/jobs?limit=50', 15_000);
   const { data: projectsData } = useFetch<{ projects: AgentProjectRef[] }>('/api/agent-projects', 30_000);
   const boxJobs = (jobsData?.jobs ?? []).filter((j) => j.boxId === activeBox?.id);
@@ -219,11 +219,11 @@ export default function DevboxPage() {
 
   /** Mint a session with live toast feedback — shared by + new and auto-provision. */
   async function provisionBox(): Promise<DevboxBox> {
-    const label = `devbox-${loadBoxes().length + 1}`;
+    const label = `computer-${loadBoxes().length + 1}`;
     setProvisioning(true);
     const tid = toastPending(`Provisioning ${label}`, 'minting microVM runtime session…');
     try {
-      const box = await createBox();
+      const box = await createBox(label);
       toastUpdate(tid, { detail: `session …${box.sessionId.slice(-8)} · mounting /mnt/workspace` });
       toastSuccess(tid, `${box.label} ready`, `microVM session live · workspace persists across restarts`);
       selectBox(box.id);
@@ -445,117 +445,168 @@ export default function DevboxPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
+  const computerCount = boxes.length;
+  const activeStatus: BoxStatus = activeBox?.status ?? 'idle';
+
   return (
     <PageSection title="Computers — Claude Code in a microVM">
-      {/* ── Boxes bar ── */}
       <style>{`
         @keyframes devbox-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
         @keyframes devbox-spin { to { transform: rotate(360deg); } }
       `}</style>
-      {/* Card defaults to padding="none" — pass an explicit size or it renders
-          edge-to-edge (that was the cause of the cramped toolbar, not a
-          conflict with the component's own styles). */}
-      <Card padding="sm" className="mb-4">
-        <div className="flex items-center justify-between gap-4 min-w-0">
-        <div className="flex items-center gap-3 flex-wrap min-w-0 flex-1">
-          <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">RUNTIME</span>
-          {status ? (
-            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${status.deployed ? 'bg-success-bg text-success' : 'bg-danger-bg text-danger'}`}>
-              <span aria-hidden="true" className={`w-1.5 h-1.5 rounded-full ${status.deployed ? 'bg-success' : 'bg-danger'}`} />
-              {status.deployed ? `${status.runtimeName} · deployed` : 'not deployed'}
-            </span>
-          ) : (
-            <span className={`inline-flex items-center gap-1.5 text-[11px] ${statusError ? 'text-danger font-semibold' : 'text-text-tertiary'}`}>
-              {!statusError && (
-                <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-text-tertiary" style={{ animation: 'devbox-pulse 1.2s ease-in-out infinite' }} />
-              )}
-              {statusError
-                ? (/403|Forbidden/i.test(statusError)
-                    ? 'access denied — devbox requires the HR Admin role (masquerade menu, top right)'
-                    : `status failed: ${statusError}`)
-                : 'checking runtime…'}
-            </span>
-          )}
-          <span aria-hidden="true" className="w-px h-4 bg-border mx-1" />
-          <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">BOXES</span>
-          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-            {boxes.map((box) => {
-              const st = box.status ?? 'idle';
-              return (
-              <span
-                key={box.id}
-                onClick={() => selectBox(box.id)}
-                title={`${STATUS_LABEL[st]}${box.currentTask ? ` — ${box.currentTask}` : ''} · session …${box.sessionId.slice(-12)}`}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold cursor-pointer border transition-colors ${activeBox?.id === box.id ? 'bg-primary text-white border-primary shadow-sm' : 'bg-surface text-text-secondary border-border hover:border-primary/50'}`}
-              >
-                <span
-                  aria-hidden="true"
-                  className={`w-1.5 h-1.5 rounded-full ${activeBox?.id === box.id && st !== 'running' && st !== 'waiting' && st !== 'error' ? 'bg-white' : STATUS_DOT[st]}`}
-                  style={st === 'running' ? { animation: 'devbox-pulse 1s ease-in-out infinite' } : undefined}
-                />
-                {box.label}
-                <span
-                  onClick={(e) => { e.stopPropagation(); forgetBox(box.id); }}
-                  title="Forget this box (workspace persists server-side until idle expiry)"
-                  className="opacity-60 hover:opacity-100"
-                >
-                  ×
-                </span>
-              </span>
-              );
-            })}
+
+      {/* ── Slim runtime bar — global state only; per-computer controls moved
+             into each computer's header, below. ── */}
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">RUNTIME</span>
+        {status ? (
+          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${status.deployed ? 'bg-success-bg text-success' : 'bg-danger-bg text-danger'}`}>
+            <span aria-hidden="true" className={`w-1.5 h-1.5 rounded-full ${status.deployed ? 'bg-success' : 'bg-danger'}`} />
+            {status.deployed ? `${status.runtimeName} · deployed` : 'not deployed'}
+          </span>
+        ) : (
+          <span className={`inline-flex items-center gap-1.5 text-[11px] ${statusError ? 'text-danger font-semibold' : 'text-text-tertiary'}`}>
+            {!statusError && (
+              <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-text-tertiary" style={{ animation: 'devbox-pulse 1.2s ease-in-out infinite' }} />
+            )}
+            {statusError
+              ? (/403|Forbidden/i.test(statusError)
+                  ? 'access denied — Computers requires the HR Admin role (masquerade menu, top right)'
+                  : `status failed: ${statusError}`)
+              : 'checking runtime…'}
+          </span>
+        )}
+        <span
+          className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full border border-border text-[10px] text-text-tertiary cursor-help select-none shrink-0 hover:text-text-secondary hover:border-text-tertiary transition-colors"
+          title={'Each computer is its own runtime session — its own microVM + persistent /mnt/workspace.\nSurvives stop/resume · wiped on image redeploys and after 14 idle days · 1 GB cap.'}
+        >
+          i
+        </span>
+        <div className="flex-1" />
+        <span className="text-[10px] text-text-tertiary whitespace-nowrap select-none">
+          {computerCount} {computerCount === 1 ? 'computer' : 'computers'}
+          <span className="hidden sm:inline"> · ⌘I quick-switch</span>
+        </span>
+      </div>
+
+      {/* ── Three panes: computer list · work · workspace glance ──
+           The computer list is a vertical nav so the fleet scales past what a
+           chip bar can hold (assume up to ~20). Work — the composer and the
+           execution timeline — is the hero and takes the room. The workspace is
+           a narrow at-a-glance rail: files and git as data, with the real, only
+           interactive thing (a PTY) promoted into the computer's own header. */}
+      <div className="grid grid-cols-1 xl:grid-cols-[230px_minmax(0,1fr)_270px] gap-4 items-start">
+
+        {/* ── Col 1: COMPUTERS vertical nav ── */}
+        <Card className="!p-0 overflow-hidden xl:sticky xl:top-4">
+          <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+            <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">COMPUTERS</span>
+            <span className="text-[10px] text-text-tertiary">{computerCount}</span>
+            <div className="flex-1" />
             <button
               onClick={() => void provisionBox().catch(() => { /* toast already shown */ })}
               disabled={provisioning}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border border-dashed border-border bg-transparent text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors disabled:opacity-60 disabled:cursor-wait"
+              title="Provision a fresh microVM computer"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border border-dashed border-border text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors disabled:opacity-60 disabled:cursor-wait"
             >
               {provisioning && (
                 <span aria-hidden="true" className="inline-block w-3 h-3 rounded-full border-[1.5px] border-primary border-t-transparent" style={{ animation: 'devbox-spin 0.8s linear infinite' }} />
               )}
-              {provisioning ? 'provisioning…' : '+ new'}
+              {provisioning ? '…' : '+ New'}
             </button>
           </div>
-        </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <span
-            className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full border border-border text-[10px] text-text-tertiary cursor-help select-none shrink-0 hover:text-text-secondary hover:border-text-tertiary transition-colors"
-            title={'Each box is its own runtime session — its own microVM + persistent /mnt/workspace.\nSurvives stop/resume · wiped on devbox image redeploys and after 14 idle days · 1 GB cap.'}
-          >
-            i
-          </span>
-          {activeBox?.stopsInMs != null && (
-            <span
-              className={`text-[10px] whitespace-nowrap select-none ${
-                activeBox.stopsInMs < 5 * 60_000 ? 'text-warning' : 'text-text-tertiary'}`}
-              title={'Boxes stop on their own: after a stretch with nothing happening, and at a hard ceiling regardless of activity.\nThe workspace is a cache — the repository and its run history survive.'}
-            >
-              stops in {Math.max(0, Math.round(activeBox.stopsInMs / 60_000))}m
-            </span>
-          )}
-          <span className="text-[10px] text-text-tertiary whitespace-nowrap hidden lg:inline select-none">⌘I quick-switch</span>
-          <button
-            onClick={() => void stopSession()}
-            disabled={!activeBox}
-            className="px-3 py-1.5 text-xs font-semibold rounded-md border border-border bg-surface text-text-secondary cursor-pointer whitespace-nowrap hover:text-danger hover:border-danger/50 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Stop session
-          </button>
-        </div>
-        </div>
-      </Card>
 
-      {/* The terminal gets the wider column. Running a command is the cheap,
-          deterministic, most-used thing you do with a box; delegating to Claude
-          Code is the occasional expensive one. The old split had it backwards,
-          and 420px is not enough width for `ls -la` to avoid wrapping. */}
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,440px)_minmax(0,1fr)] gap-5 items-start">
-        {/* ── Left: task runner + execution timeline ── */}
+          {boxes.length === 0 ? (
+            <div className="px-3 py-8 text-[12px] text-text-tertiary text-center leading-relaxed">
+              No computers yet.<br />Create one to get a workspace.
+            </div>
+          ) : (
+            <div className="max-h-[72vh] overflow-y-auto py-1">
+              {boxes.map((box) => {
+                const st = box.status ?? 'idle';
+                const isActive = activeBox?.id === box.id;
+                const sub = (st === 'running' || st === 'waiting') && box.currentTask ? box.currentTask : STATUS_LABEL[st];
+                return (
+                  <div
+                    key={box.id}
+                    onClick={() => selectBox(box.id)}
+                    title={`${STATUS_LABEL[st]}${box.currentTask ? ` — ${box.currentTask}` : ''} · session …${box.sessionId.slice(-12)}`}
+                    className={`group relative flex items-start gap-2 px-3 py-2 cursor-pointer border-l-2 transition-colors ${isActive ? 'border-primary bg-primary/5' : 'border-transparent hover:bg-surface-hover'}`}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`mt-[5px] w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[st]}`}
+                      style={st === 'running' ? { animation: 'devbox-pulse 1s ease-in-out infinite' } : undefined}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className={`text-[13px] font-semibold truncate ${isActive ? 'text-primary' : 'text-text-primary'}`}>{box.label}</div>
+                      <div className="text-[10.5px] text-text-tertiary truncate">{sub}</div>
+                    </div>
+                    <span
+                      onClick={(e) => { e.stopPropagation(); forgetBox(box.id); }}
+                      title="Forget this computer (workspace persists server-side until idle expiry)"
+                      className="opacity-0 group-hover:opacity-60 hover:!opacity-100 text-text-tertiary text-sm leading-none shrink-0 px-1 transition-opacity"
+                    >
+                      ×
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+
+        {/* ── Col 2: WORK — computer header · composer · execution timeline ── */}
+        {!activeBox ? (
+          <Card className="py-16 text-center">
+            <div className="text-[13px] font-semibold text-text-secondary">No computer selected</div>
+            <div className="text-[12px] text-text-tertiary mt-1">
+              Create a computer in the list to the left, then describe a task for Claude Code.
+            </div>
+          </Card>
+        ) : (
         <div className="flex flex-col gap-3 min-w-0">
+          {/* Computer header: identity + the per-computer actions (terminal, stop) */}
+          <Card padding="sm">
+            <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
+              <span
+                aria-hidden="true"
+                className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOT[activeStatus]}`}
+                style={activeStatus === 'running' ? { animation: 'devbox-pulse 1s ease-in-out infinite' } : undefined}
+              />
+              <span className="text-sm font-semibold text-text-primary">{activeBox.label}</span>
+              <span className="text-[10px] font-semibold text-text-secondary px-1.5 py-0.5 rounded bg-surface-hover">{STATUS_LABEL[activeStatus]}</span>
+              <span className={`text-[10px] text-text-tertiary ${mono}`}>session …{activeBox.sessionId.slice(-8)}</span>
+              {activeBox.stopsInMs != null && (
+                <span
+                  className={`text-[10px] whitespace-nowrap ${activeBox.stopsInMs < 5 * 60_000 ? 'text-warning' : 'text-text-tertiary'}`}
+                  title={'This computer stops on its own after idle time and at a hard ceiling.\nThe workspace is a cache — the repository and its run history survive.'}
+                >
+                  stops in {Math.max(0, Math.round(activeBox.stopsInMs / 60_000))}m
+                </span>
+              )}
+              <div className="flex-1" />
+              <button
+                onClick={() => openShell({ id: activeBox.id, label: activeBox.label, sessionId: activeBox.sessionId })}
+                title="Open a real PTY — ⌘' toggles the dock"
+                className="text-[11px] px-2.5 py-1 rounded-md border border-primary/50 bg-surface font-semibold text-primary cursor-pointer hover:bg-primary hover:text-white transition-colors"
+              >
+                Terminal ⌘&apos;
+              </button>
+              <button
+                onClick={() => void stopSession()}
+                className="text-[11px] px-2.5 py-1 rounded-md border border-border bg-surface text-text-secondary cursor-pointer hover:text-danger hover:border-danger/50 transition-colors"
+              >
+                Stop
+              </button>
+            </div>
+          </Card>
+
           {/* Composer: textarea + toolbar in one frame, like a chat input. */}
           <Card className="!p-0 overflow-hidden">
             <div className="px-3.5 pt-3 pb-1 flex items-center gap-2">
               <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">TASK</span>
-              {activeBox && <span className={`text-[10px] text-text-tertiary ${mono}`}>→ {activeBox.label}</span>}
+              <span className={`text-[10px] text-text-tertiary ${mono}`}>→ {activeBox.label}</span>
             </div>
             <textarea
               className="w-full min-h-[84px] text-[13px] leading-relaxed bg-transparent text-text-primary border-none px-3.5 py-2 resize-y outline-none box-border"
@@ -623,7 +674,7 @@ export default function DevboxPage() {
                 </span>
               )}
             </div>
-            <div ref={timelineRef} className="overflow-y-auto overflow-x-hidden max-h-[560px] px-3.5 py-2">
+            <div ref={timelineRef} className="overflow-y-auto overflow-x-hidden min-h-[280px] max-h-[calc(100vh-260px)] px-3.5 py-2">
               {timeline.length === 0 ? (
                 <div className="py-10 text-center select-none">
                   <svg aria-hidden="true" viewBox="0 0 24 24" className="w-8 h-8 mx-auto mb-2.5 text-text-tertiary" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -680,138 +731,126 @@ export default function DevboxPage() {
             </div>
           </Card>
         </div>
+        )}
 
-        {/* ── Workspace ──────────────────────────────────────────────────
-             This used to be a black pane styled like a terminal — traffic
-             lights, a prompt, monospace output — that was not a terminal: no
-             stdin, no colour, no interactivity. Now that a real PTY exists in
-             the dock, a look-alike is worse than nothing, because it invites
-             you to type into something that cannot answer the way it looks
-             like it will.
-
-             What is left is what the PTY does not give you at a glance: the
-             box's identity and the state of its workspace, as data. Anything
-             interactive is one click away in a terminal that really is one. */}
-        <div className="flex flex-col gap-3 min-w-0">
-          {/* ── This box in the loop: the job it's running, the jobs it ran,
-               and the codebases checked out here — each one a link back into
-               the surface that owns it. ── */}
-          {activeBox && (liveJob || recentJobs.length > 0 || boxProjects.length > 0) && (
-            <Card className="!p-0 overflow-hidden">
-              <div className="px-3.5 py-2.5 border-b border-border flex items-center gap-2">
-                <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">THIS BOX</span>
-                <span className={`text-[10px] text-text-tertiary ${mono}`}>{activeBox.label}</span>
-              </div>
-              <div className="divide-y divide-border">
-                {liveJob && (
-                  <div className="px-3.5 py-2 flex items-center gap-2 min-w-0">
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" style={{ animation: 'devbox-pulse 1s ease-in-out infinite' }} />
-                    <span className="text-[11px] text-text-tertiary shrink-0">running job</span>
-                    <Link to={`/iq/work/${liveJob.id}`} className="text-[12px] text-primary no-underline hover:underline truncate">
-                      {liveJob.title}
+        {/* ── Col 3: WORKSPACE glance rail ──────────────────────────────────
+             A narrow, data-only view of the computer's /mnt/workspace — the
+             file tree and git state at a glance. Deliberately not a terminal
+             look-alike: the one interactive thing (a real PTY) lives in the
+             computer header, one click away. This used to be half the page for
+             a static file list; here it is a rail, and the timeline gets the
+             room. Above it: what this computer is doing in the SDLC loop — the
+             job it's running, recent jobs, and the codebases checked out here,
+             each a link back into the surface that owns it. */}
+        <div className="flex flex-col gap-4 min-w-0 xl:sticky xl:top-4">
+        {activeBox && (liveJob || recentJobs.length > 0 || boxProjects.length > 0) && (
+          <Card className="!p-0 overflow-hidden">
+            <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+              <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">THIS COMPUTER</span>
+            </div>
+            <div className="divide-y divide-border">
+              {liveJob && (
+                <div className="px-3 py-2 flex items-center gap-2 min-w-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" style={{ animation: 'devbox-pulse 1s ease-in-out infinite' }} />
+                  <span className="text-[11px] text-text-tertiary shrink-0">running</span>
+                  <Link to={`/iq/work/${liveJob.id}`} className="text-[12px] text-primary no-underline hover:underline truncate">
+                    {liveJob.title}
+                  </Link>
+                </div>
+              )}
+              {recentJobs.map((j) => (
+                <div key={j.id} className="px-3 py-2 flex items-center gap-2 min-w-0">
+                  <span className="text-[11px] text-text-tertiary shrink-0">{j.status.replace('_', ' ')}</span>
+                  <Link to={`/iq/work/${j.id}`} className="text-[12px] text-text-secondary no-underline hover:text-primary hover:underline truncate">
+                    {j.title}
+                  </Link>
+                </div>
+              ))}
+              {boxProjects.map((p) => (
+                <div key={p.id} className="px-3 py-2 flex items-center gap-2 min-w-0 flex-wrap">
+                  <span className="text-[11px] text-text-tertiary shrink-0">checked out</span>
+                  <Link
+                    to={`/admin/projects?project=${p.id}`}
+                    className={`text-[12px] text-text-secondary no-underline hover:text-primary hover:underline truncate ${mono}`}
+                  >
+                    {p.repoFullName}
+                  </Link>
+                  {p.orgProjectId && p.orgProjectName && (
+                    <Link
+                      to={`/iq/projects/${p.orgProjectId}`}
+                      title={`Delivers: ${p.orgProjectName}`}
+                      className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary no-underline hover:underline truncate shrink-0 max-w-full"
+                    >
+                      {p.orgProjectName}
                     </Link>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+        <Card className="!p-0 overflow-hidden">
+          <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
+            <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">WORKSPACE</span>
+            <div className="flex-1" />
+            <button
+              onClick={() => void refreshWorkspace()}
+              disabled={!activeBox || wsLoading}
+              className="text-[11px] px-2 py-0.5 rounded border border-border bg-surface text-text-secondary cursor-pointer hover:text-primary disabled:opacity-40"
+            >
+              {wsLoading ? 'reading…' : 'refresh'}
+            </button>
+          </div>
+
+          {!activeBox ? (
+            <div className="px-3 py-6 text-[12px] text-text-tertiary text-center">
+              Select a computer to see its workspace.
+            </div>
+          ) : wsError ? (
+            <div className="px-3 py-4 text-[12px] text-danger">{wsError}</div>
+          ) : (
+            <div className="divide-y divide-border">
+              <div className="px-3 py-1.5 text-[10px] text-text-tertiary flex items-center gap-1.5">
+                <span className={mono}>/mnt/workspace</span>
+                <span className="text-text-tertiary/60">· cache — push work out via git</span>
+              </div>
+              <div className="px-3 py-2.5">
+                <div className="text-[10px] uppercase tracking-wide text-text-tertiary mb-1.5">Files</div>
+                {wsFiles.length === 0 ? (
+                  <div className="text-[12px] text-text-tertiary">
+                    {wsLoading ? 'reading…' : 'Empty — nothing written yet.'}
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-0.5">
+                    {wsFiles.slice(0, 30).map((f) => (
+                      <span key={f} className={`text-[12px] truncate ${mono} ${f.endsWith('/') ? 'text-primary' : 'text-text-secondary'}`} title={f}>
+                        {f}
+                      </span>
+                    ))}
                   </div>
                 )}
-                {recentJobs.map((j) => (
-                  <div key={j.id} className="px-3.5 py-2 flex items-center gap-2 min-w-0">
-                    <span className="text-[11px] text-text-tertiary shrink-0">{j.status.replace('_', ' ')}</span>
-                    <Link to={`/iq/work/${j.id}`} className="text-[12px] text-text-secondary no-underline hover:text-primary hover:underline truncate">
-                      {j.title}
-                    </Link>
-                  </div>
-                ))}
-                {boxProjects.map((p) => (
-                  <div key={p.id} className="px-3.5 py-2 flex items-center gap-2 min-w-0">
-                    <span className="text-[11px] text-text-tertiary shrink-0">checked out</span>
-                    <Link
-                      to={`/admin/projects?project=${p.id}`}
-                      className={`text-[12px] text-text-secondary no-underline hover:text-primary hover:underline truncate ${mono}`}
-                    >
-                      {p.repoFullName}
-                    </Link>
-                    {p.orgProjectId && p.orgProjectName && (
-                      <Link
-                        to={`/iq/projects/${p.orgProjectId}`}
-                        title={`Delivers: ${p.orgProjectName}`}
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary no-underline hover:underline truncate shrink-0 max-w-[40%]"
-                      >
-                        {p.orgProjectName}
-                      </Link>
-                    )}
-                  </div>
-                ))}
+                {wsFiles.length > 30 && (
+                  <div className="text-[11px] text-text-tertiary mt-1">+{wsFiles.length - 30} more</div>
+                )}
               </div>
-            </Card>
-          )}
 
-          <Card className="!p-0 overflow-hidden">
-            <div className="px-3.5 py-2.5 border-b border-border flex items-center gap-2">
-              <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">WORKSPACE</span>
-              {activeBox && <span className={`text-[10px] text-text-tertiary ${mono}`}>/mnt/workspace</span>}
-              <div className="flex-1" />
-              <button
-                onClick={() => void refreshWorkspace()}
-                disabled={!activeBox || wsLoading}
-                className="text-[11px] px-2 py-0.5 rounded border border-border bg-surface text-text-secondary cursor-pointer hover:text-primary disabled:opacity-40"
-              >
-                {wsLoading ? 'reading…' : 'refresh'}
-              </button>
-              {activeBox && (
-                <button
-                  onClick={() => openShell({ id: activeBox.id, label: activeBox.label, sessionId: activeBox.sessionId })}
-                  title="Open a real PTY — ⌘' toggles the dock"
-                  className="text-[11px] px-2 py-0.5 rounded border border-primary/50 bg-surface font-semibold text-primary cursor-pointer hover:bg-primary hover:text-white transition-colors"
-                >
-                  Open terminal ⌘&apos;
-                </button>
-              )}
+              <div className="px-3 py-2.5">
+                <div className="text-[10px] uppercase tracking-wide text-text-tertiary mb-1.5">Git</div>
+                {wsGit.length === 0 ? (
+                  <div className="text-[12px] text-text-tertiary">
+                    {wsLoading ? 'reading…' : 'Not a git repository.'}
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-0.5">
+                    {wsGit.map((l, i) => (
+                      <span key={i} className={`text-[12px] text-text-secondary truncate ${mono}`} title={l}>{l}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-
-            {!activeBox ? (
-              <div className="px-3.5 py-6 text-[12.5px] text-text-tertiary text-center">
-                No box selected. Create one above to get a workspace.
-              </div>
-            ) : wsError ? (
-              <div className="px-3.5 py-4 text-[12px] text-danger">{wsError}</div>
-            ) : (
-              <div className="divide-y divide-border">
-                <div className="px-3.5 py-2.5">
-                  <div className="text-[10px] uppercase tracking-wide text-text-tertiary mb-1.5">Files</div>
-                  {wsFiles.length === 0 ? (
-                    <div className="text-[12px] text-text-tertiary">
-                      {wsLoading ? 'reading…' : 'Empty — nothing has been written here yet.'}
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-0.5">
-                      {wsFiles.slice(0, 24).map((f) => (
-                        <span key={f} className={`text-[12px] truncate ${mono} ${f.endsWith('/') ? 'text-primary' : 'text-text-secondary'}`} title={f}>
-                          {f}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {wsFiles.length > 24 && (
-                    <div className="text-[11px] text-text-tertiary mt-1">+{wsFiles.length - 24} more</div>
-                  )}
-                </div>
-
-                <div className="px-3.5 py-2.5">
-                  <div className="text-[10px] uppercase tracking-wide text-text-tertiary mb-1.5">Git</div>
-                  {wsGit.length === 0 ? (
-                    <div className="text-[12px] text-text-tertiary">
-                      {wsLoading ? 'reading…' : 'Not a git repository.'}
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-0.5">
-                      {wsGit.map((l, i) => (
-                        <span key={i} className={`text-[12px] text-text-secondary truncate ${mono}`} title={l}>{l}</span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </Card>
+          )}
+        </Card>
         </div>
       </div>
     </PageSection>

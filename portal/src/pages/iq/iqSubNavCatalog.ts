@@ -72,7 +72,7 @@ const PROMPT_MGMT_ITEMS: SubNavItem[] = [
 // that drain it, and where finished work leaves a trace. No inert filters.
 const WORK_ITEMS: SubNavItem[] = [
   { path: '/iq/work',                        label: 'Queue',   hint: 'Findings, jobs, and what needs you', group: 'Start here' },
-  { path: '/admin/devbox',                   label: 'Workers', hint: 'Devbox fleet that runs the jobs',    group: 'Start here' },
+  { path: '/admin/devbox',                   label: 'Workers', hint: 'Computers fleet that runs the jobs', group: 'Start here' },
   // "Graph updates", not "Graph changes" — Changes (/admin/changes) is code review.
   { path: '/iq/work/changes',                label: 'Graph updates', hint: 'What reached the org graph',   group: 'Start here' },
   { path: '/admin/observability/invocations', label: 'Runs',   hint: 'What the workers actually did',      group: 'Advanced' },

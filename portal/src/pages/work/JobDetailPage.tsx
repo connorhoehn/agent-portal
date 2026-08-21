@@ -102,7 +102,7 @@ function toEntries(ev: Record<string, unknown>): ActivityEntry[] {
     return out;
   }
   if (type === 'devbox_error') {
-    return [{ t: 'error', detail: String(ev['error'] ?? 'devbox error'), ts }];
+    return [{ t: 'error', detail: String(ev['error'] ?? 'computer error'), ts }];
   }
   return [];
 }

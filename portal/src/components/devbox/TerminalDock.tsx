@@ -329,8 +329,8 @@ function AddShellButton({ openSessionIds }: { openSessionIds: string[] }) {
       <button
         onClick={() => setOpen((v) => !v)}
         onMouseDown={(e) => e.stopPropagation()}
-        title="Open a shell on another devbox"
-        aria-label="Open a shell on another devbox"
+        title="Open a shell on another computer"
+        aria-label="Open a shell on another computer"
         aria-expanded={open}
         className="px-1.5 py-1 text-[11px] text-[#8b949e] hover:text-[#e6edf3] bg-transparent border-none cursor-pointer leading-none"
       >

@@ -32,7 +32,7 @@ function readMirror(): DevboxBox[] {
   } catch { /* corrupted mirror — treat as empty */ }
   const legacy = localStorage.getItem(LEGACY_SESSION_KEY);
   if (legacy) {
-    return [{ id: legacy.slice(-8), label: 'devbox-1', sessionId: legacy, createdAt: new Date().toISOString() }];
+    return [{ id: legacy.slice(-8), label: 'computer-1', sessionId: legacy, createdAt: new Date().toISOString() }];
   }
   return [];
 }
