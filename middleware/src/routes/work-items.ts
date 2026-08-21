@@ -1,4 +1,4 @@
-// Work-items routes — Epic/Feature/Story/Task hierarchy for the Projects surface.
+// Work-items routes — Epic → Story | Bug hierarchy for the Projects surface.
 //
 // Mounted at /api/graph/projects (see index.ts) with specific sub-paths:
 //   GET  /api/graph/work                   — cross-project search (label, team, status, period)
@@ -110,7 +110,7 @@ workItemsRouter.post(
       res.status(400).json({ error: 'projectId, type, and title are required' });
       return;
     }
-    const VALID_TYPES: WorkItemType[] = ['epic', 'feature', 'story', 'task'];
+    const VALID_TYPES: WorkItemType[] = ['epic', 'story', 'bug'];
     if (!VALID_TYPES.includes(type)) {
       res.status(400).json({ error: `type must be one of: ${VALID_TYPES.join(', ')}` });
       return;
@@ -145,6 +145,7 @@ workItemsRouter.patch(
       status:     (body['status']     as WorkItemStatus  | undefined),
       priority:   (body['priority']   as WorkItemPriority | undefined),
       assigneeId: (body['assigneeId'] as string | null | undefined),
+      prUrl:      (body['prUrl']      as string | null | undefined),
       prStatus:   (body['prStatus']   as PrStatus | null | undefined),
     });
 

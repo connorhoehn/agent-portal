@@ -1,7 +1,9 @@
 -- Work-item hierarchy for OrgIQ Projects.
--- Mirrors GitHub/GitLab concepts: Epic → Feature → Story → Task.
--- All four levels live in one self-referencing table (work_items) keyed by type
--- so queries can cross levels without four-table joins.
+-- Deliberately flat: Epic → Story | Bug, and that's the tree. Stories and bugs
+-- are the dispatchable units; epics roll up progress and spend. Both levels
+-- live in one self-referencing table (work_items) keyed by type so queries can
+-- cross levels without joins. (The original four-type Epic → Feature → Story
+-- → Task hierarchy collapsed to two levels — see the migration at the bottom.)
 --
 -- Decisions are linked to projects and gain a status+escalation model so they
 -- can surface inside the project work view and be routed to the right roles.
@@ -14,7 +16,7 @@ CREATE TABLE IF NOT EXISTS work_items (
   id           TEXT PRIMARY KEY DEFAULT ('wi-' || gen_random_uuid()::TEXT),
   project_id   TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   parent_id    TEXT REFERENCES work_items(id) ON DELETE CASCADE,
-  type         TEXT NOT NULL CHECK (type IN ('epic','feature','story','task')),
+  type         TEXT NOT NULL CHECK (type IN ('epic','story','bug')),
   title        TEXT NOT NULL,
   description  TEXT,
   status       TEXT NOT NULL DEFAULT 'open'
@@ -32,10 +34,9 @@ CREATE TABLE IF NOT EXISTS work_items (
 );
 
 COMMENT ON TABLE work_items IS
-  'Epic/Feature/Story/Task hierarchy. parent_id links child to parent level. '
+  'Epic/Story/Bug two-level hierarchy. parent_id links child to parent. '
   'type enforces the level; hierarchy rules are application-enforced: '
-  'epic.parent_id IS NULL, feature.parent_id = epic, story.parent_id = feature|epic, '
-  'task.parent_id = story|feature|epic.';
+  'epic.parent_id IS NULL, story.parent_id = epic|NULL, bug.parent_id = epic|NULL.';
 
 CREATE INDEX IF NOT EXISTS work_items_project_id_idx  ON work_items (project_id);
 CREATE INDEX IF NOT EXISTS work_items_parent_id_idx   ON work_items (parent_id);
@@ -155,3 +156,46 @@ GROUP BY d.id, p.name, wi.title
 ORDER BY
   CASE d.status WHEN 'escalated' THEN 0 WHEN 'open' THEN 1 ELSE 2 END,
   COALESCE(d.escalated_at, d.created_at) DESC;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Migration: collapse Epic → Feature → Story → Task to Epic → Story | Bug
+-- ─────────────────────────────────────────────────────────────────────────────
+-- The marketplace dispatches stories and bugs; epics roll up. Every statement
+-- here is safe to re-run: on a fresh database (created with the two-level
+-- CHECK above) the updates match nothing and the constraint swap is a no-op
+-- rename. On an existing database the UPDATEs must run BEFORE the constraint
+-- is re-added, or the old feature/task rows would violate it.
+-- (Neither v_work_item_summary nor v_decision_queue filters on specific type
+-- values — they pass wi.type through — so the views need no change.)
+
+-- Retype first: features and tasks both become stories (they were the
+-- mid-grain units of work; bugs are a new type with no legacy rows).
+UPDATE work_items SET type = 'story' WHERE type IN ('feature','task');
+
+-- Epics are roots in a two-level tree, unconditionally.
+UPDATE work_items SET parent_id = NULL WHERE type = 'epic' AND parent_id IS NOT NULL;
+
+-- Re-parent to keep a strict two-level tree. Rule: any item whose parent is
+-- not an epic is re-parented to its NEAREST EPIC ANCESTOR, or NULL when the
+-- chain reaches a root without passing an epic. Each pass hoists such items
+-- one level (to their grandparent); the loop runs to fixpoint, so arbitrarily
+-- deep legacy chains (epic → feature → story → task) all land on the epic.
+DO $$
+DECLARE
+  moved INTEGER;
+BEGIN
+  LOOP
+    UPDATE work_items wi
+       SET parent_id = parent.parent_id
+      FROM work_items parent
+     WHERE wi.parent_id = parent.id
+       AND parent.type <> 'epic';
+    GET DIAGNOSTICS moved = ROW_COUNT;
+    EXIT WHEN moved = 0;
+  END LOOP;
+END $$;
+
+-- Only after the data conforms: swap the CHECK to the two-level taxonomy.
+ALTER TABLE work_items DROP CONSTRAINT IF EXISTS work_items_type_check;
+ALTER TABLE work_items ADD CONSTRAINT work_items_type_check
+  CHECK (type IN ('epic','story','bug'));

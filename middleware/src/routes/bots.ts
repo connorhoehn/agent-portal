@@ -9,12 +9,14 @@ import { Router } from 'express';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
 import {
   listBots, getBot, createBot, updateBot, deleteBot, setPausedReason, listBotRuns,
-  runCostSamples, type BotTemplate, type BotTrigger, type BotPatch,
+  listMarketplaceRuns, runCostSamples, perPointCostSamples,
+  type BotTemplate, type BotTrigger, type BotPatch,
 } from '../providers/bots.js';
-import { fireBot } from '../lib/bot-runner.js';
+import { fireBot, dispatchWorkItem } from '../lib/bot-runner.js';
 import { registerBot, unregisterBot } from '../lib/bot-scheduler.js';
 import { validateCronExpr } from '../lib/ingest-scheduler.js';
 import { selectEstimate } from '../lib/bot-estimate.js';
+import { selectPerPointEstimate } from '../lib/marketplace-estimate.js';
 
 export const botsRouter: Router = Router();
 
@@ -49,17 +51,66 @@ botsRouter.get('/estimate', asyncHandler(async (req, res) => {
   const model = String(req.query['model'] ?? '').trim();
   if (!model) throw new ValidationError('model is required');
   const agentProjectId = req.query['agentProjectId'] ? String(req.query['agentProjectId']) : null;
-  // Accepted and echoed but not yet applied: estimates are per-run until the
-  // marketplace phase brings per-point history. Echoing it now keeps the
-  // response contract stable when it starts to matter.
   const pointsRaw = Number(req.query['points']);
   const points = Number.isFinite(pointsRaw) && pointsRaw > 0 ? pointsRaw : null;
 
-  // Both samples are fetched so the fallback chain is decided by the pure
+  // A sized request first tries the per-point basis: percentiles of $/point
+  // and minutes/point over runs bound to sized work items, multiplied by N.
+  // scaled:true tells the portal the range actually reflects the item's size.
+  if (points != null) {
+    const repoPerPoint = agentProjectId ? await perPointCostSamples(model, agentProjectId) : null;
+    const modelPerPoint = await perPointCostSamples(model, null);
+    const scaled = selectPerPointEstimate(points, repoPerPoint, modelPerPoint);
+    if (scaled) { res.json({ ...scaled, points, scaled: true }); return; }
+  }
+
+  // Fallback (and the unsized path): the run-level estimate, labeled
+  // scaled:false — the range forecasts a run, not this item's size. Both
+  // samples are fetched so the fallback chain is decided by the pure
   // selector, not by which query happened to run.
   const repoSample = agentProjectId ? await runCostSamples(model, agentProjectId) : null;
   const modelSample = await runCostSamples(model, null);
-  res.json({ ...selectEstimate(model, repoSample, modelSample), points });
+  res.json({ ...selectEstimate(model, repoSample, modelSample), points, scaled: false });
+}));
+
+// ─── Marketplace ─────────────────────────────────────────────────────────────
+// Declared before the '/:id' routes so 'dispatch-work' and 'marketplace-runs'
+// are never read as bot ids.
+
+botsRouter.post('/dispatch-work', asyncHandler(async (req, res) => {
+  const body = (req.body ?? {}) as {
+    workItemId?: string; model?: string; agentProjectId?: string; instruction?: string;
+    estimate?: Record<string, unknown>;
+  };
+  const workItemId = String(body.workItemId ?? '').trim();
+  if (!workItemId) throw new ValidationError('workItemId is required');
+  const model = String(body.model ?? '').trim();
+  if (!model) throw new ValidationError('model is required');
+  const instruction = String(body.instruction ?? '').trim();
+  const actor = (req as { session?: { email?: string } }).session?.email;
+
+  const result = await dispatchWorkItem({
+    workItemId, model,
+    ...(body.agentProjectId ? { agentProjectId: String(body.agentProjectId) } : {}),
+    ...(instruction ? { instruction } : {}),
+    ...(actor ? { actor } : {}),
+    ...(body.estimate && typeof body.estimate === 'object' ? { estimate: body.estimate } : {}),
+  });
+  if (!result.ok) {
+    // The dispatcher decides the status: 400 undispatchable, 404 missing,
+    // 409 ambiguous codebase (with options to choose from), 503 infrastructure.
+    res.status(result.status).json({
+      error: result.error, ...(result.options ? { options: result.options } : {}),
+    });
+    return;
+  }
+  res.status(202).json({ run: result.run });
+}));
+
+botsRouter.get('/marketplace-runs', asyncHandler(async (req, res) => {
+  const orgProjectId = String(req.query['orgProjectId'] ?? '').trim();
+  if (!orgProjectId) throw new ValidationError('orgProjectId is required');
+  res.json({ runs: await listMarketplaceRuns(orgProjectId) });
 }));
 
 // ─── CRUD ────────────────────────────────────────────────────────────────────
