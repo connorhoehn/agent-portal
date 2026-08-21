@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import {
   Card,
   Table,
@@ -106,6 +106,12 @@ function InvocationsPage() {
       description="Live · last 50 invocations · 5s refresh"
       actions={
         <>
+          <Link
+            to="/admin/observability/invocations/search"
+            style={{ fontSize: 12, color: 'var(--color-primary)', textDecoration: 'none', marginRight: 10 }}
+          >
+            Search & triage →
+          </Link>
           <select
             value={agentFilter}
             onChange={(e) => setAgentFilter(e.target.value)}

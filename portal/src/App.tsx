@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router';
+import { Routes, Route, Navigate, Outlet, useParams } from 'react-router';
 import { Layout } from './components/shell/Layout';
 import { RequireRole } from './lib/auth';
 import { useSession } from './lib/auth';
@@ -26,6 +26,8 @@ const NewsroomBeatsPage = lazy(() => import('./pages/newsroom/BeatsPage'));
 const NewsroomResearcherPage = lazy(() => import('./pages/newsroom/ResearcherPage'));
 const NewsroomBriefsPage = lazy(() => import('./pages/newsroom/BriefsPage'));
 const NewsroomHeadlinesPage = lazy(() => import('./pages/newsroom/HeadlinesPage'));
+const NewsroomPitchesPage = lazy(() => import('./pages/newsroom/PitchesPage'));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const KnowledgeHomePage = lazy(() => import('./pages/knowledge/KnowledgeHomePage'));
 const KnowledgeLayout = lazy(() => import('./pages/knowledge/KnowledgeLayout'));
 const DropPage = lazy(() => import('./pages/DropPage'));
@@ -36,7 +38,6 @@ const AgentProjectsPage = lazy(() => import('./pages/admin/AgentProjectsPage'));
 const ChangesPage = lazy(() => import('./pages/admin/ChangesPage'));
 const KBDetailPage = lazy(() => import('./pages/admin/KBDetailPage.js'));
 const InvokePage = lazy(() => import('./pages/InvokePage'));
-const CodeInterpreterDemoPage = lazy(() => import('./pages/CodeInterpreterDemoPage'));
 const ExplorePage = lazy(() => import('./pages/ExplorePage'));
 const CanaryPage = lazy(() => import('./pages/CanaryPage'));
 const PromptStudioPage = lazy(() => import('./pages/capabilities/PromptsPage'));
@@ -61,7 +62,6 @@ const CapabilitiesHomePage = lazy(() => import('./pages/capabilities/Capabilitie
 const CapabilitiesGuardrailsPage = lazy(() => import('./pages/capabilities/GuardrailsPage'));
 const CapabilitiesCodeInterpreterPage = lazy(() => import('./pages/capabilities/CodeInterpreterPage'));
 const CapabilitiesBrowserPage = lazy(() => import('./pages/capabilities/BrowserPage'));
-const CapabilitiesMemoryPage = lazy(() => import('./pages/capabilities/MemoryPage'));
 
 // Identity Management sub-pages (HRAdmin only)
 const IdentityLayout = lazy(() => import('./pages/identity/IdentityLayout'));
@@ -119,6 +119,11 @@ function Page({ element }: { element: React.ReactNode }) {
   return <Suspense fallback={<Loading />}>{element}</Suspense>;
 }
 
+function KbDetailRedirect() {
+  const { id } = useParams();
+  return <Navigate to={`/admin/knowledge/registry/${id ?? ''}`} replace />;
+}
+
 function RootRedirect() {
   const { session, isLoading } = useSession();
   if (isLoading) return null;
@@ -154,7 +159,7 @@ export function App() {
       <Route path="projects/:id" element={<Navigate to="/iq/projects" replace />} />
       <Route path="explore" element={<Navigate to="/iq/explore" replace />} />
       <Route path="graph" element={<Navigate to="/iq/explore" replace />} />
-      <Route path="code-interpreter" element={<Navigate to="/iq/code-interpreter" replace />} />
+      <Route path="code-interpreter" element={<Navigate to="/admin/capabilities/code-interpreter" replace />} />
       <Route path="knowledge-base" element={<Navigate to="/admin/knowledge" replace />} />
       <Route path="observability/*" element={<Navigate to="/admin/observability" replace />} />
       <Route path="ingest/*" element={<Navigate to="/admin/ingest" replace />} />
@@ -189,6 +194,7 @@ export function App() {
             <Route path="researcher" element={<Page element={<NewsroomResearcherPage />} />} />
             <Route path="briefs" element={<Page element={<NewsroomBriefsPage />} />} />
             <Route path="headlines" element={<Page element={<NewsroomHeadlinesPage />} />} />
+            <Route path="pitches" element={<Page element={<NewsroomPitchesPage />} />} />
           </Route>
         ) : (
           <Route path="newsroom/*" element={<Navigate to="/" replace />} />
@@ -197,10 +203,20 @@ export function App() {
         {/* ── /iq/* — OrgIQ tenant pages ── */}
         <Route path="iq" element={<Page element={<IqLayout />} />}>
           <Route index element={<Navigate to="work" replace />} />
-          <Route path="agents" element={<Page element={<AgentFlowPage />} />} />
+          {/* Architecture is a platform surface — nav shows it to platform
+              roles only, so the route matches (it was URL-open to anyone). */}
+          <Route path="agents" element={
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/" replace />}>
+              <Page element={<AgentFlowPage />} />
+            </RequireRole>
+          } />
           {/* One agent in depth. Architecture answers "what is the fleet";
               this answers "what is this one doing". */}
-          <Route path="agents/:agentId" element={<Page element={<AgentDetailPage />} />} />
+          <Route path="agents/:agentId" element={
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/" replace />}>
+              <Page element={<AgentDetailPage />} />
+            </RequireRole>
+          } />
           <Route path="search" element={<Navigate to="/iq/invoke" replace />} />
           <Route path="invoke" element={<Page element={<InvokePage />} />} />
           <Route path="scores" element={<Page element={<ScoresPage />} />} />
@@ -211,7 +227,9 @@ export function App() {
           <Route path="projects" element={<Page element={<ProjectsPage />} />} />
           <Route path="projects/:id" element={<Page element={<ProjectDetailPage />} />} />
           <Route path="explore" element={<Page element={<ExplorePage />} />} />
-          <Route path="code-interpreter" element={<Page element={<CodeInterpreterDemoPage />} />} />
+          {/* The demo page duplicated /admin/capabilities/code-interpreter
+              (same execute endpoint) and had no inbound link anywhere. */}
+          <Route path="code-interpreter" element={<Navigate to="/admin/capabilities/code-interpreter" replace />} />
           <Route path="canary" element={<Page element={<CanaryPage />} />} />
           <Route path="prompt-ops" element={<Page element={<PromptOpsHomePage />} />} />
           <Route path="work" element={<Page element={<WorkHomePage />} />} />
@@ -242,13 +260,13 @@ export function App() {
           }>
             <Route index element={<Page element={<KnowledgeHomePage />} />} />
             <Route path="registry" element={<Page element={<KBRegistryPage />} />} />
+            {/* Detail lives under the Knowledge layout so it keeps the rail,
+                and "back" can return to the registry list it came from. */}
+            <Route path="registry/:id" element={<Page element={<KBDetailPage />} />} />
           </Route>
-          <Route path="knowledge-bases" element={<Navigate to="/admin/knowledge" replace />} />
-          <Route path="knowledge-bases/:id" element={
-            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/" replace />}>
-              <Page element={<KBDetailPage />} />
-            </RequireRole>
-          } />
+          <Route path="knowledge-bases" element={<Navigate to="/admin/knowledge/registry" replace />} />
+          {/* Old detail URL — preserved for bookmarks and stale links. */}
+          <Route path="knowledge-bases/:id" element={<KbDetailRedirect />} />
           <Route path="knowledge-base" element={<Navigate to="/admin/knowledge" replace />} />
           {/* Repositories agents work on — distinct from /iq/projects, which
               is the org graph's initiatives. A repo may deliver one of those;
@@ -325,7 +343,11 @@ export function App() {
               The overview says what each capability is for and what in this
               app depends on it; the pages below are the diagnostics behind
               that, reached from the cards rather than from a rail. */}
-          <Route path="capabilities">
+          <Route path="capabilities" element={
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/" replace />}>
+              <Outlet />
+            </RequireRole>
+          }>
             <Route index element={<Page element={<CapabilitiesHomePage />} />} />
             {/* The old landing tab duplicated the overview. */}
             <Route path="summary" element={<Navigate to="/admin/capabilities" replace />} />
@@ -336,7 +358,9 @@ export function App() {
             <Route path="guardrails" element={<Page element={<CapabilitiesGuardrailsPage />} />} />
             <Route path="code-interpreter" element={<Page element={<CapabilitiesCodeInterpreterPage />} />} />
             <Route path="browser" element={<Page element={<CapabilitiesBrowserPage />} />} />
-            <Route path="memory" element={<Page element={<CapabilitiesMemoryPage />} />} />
+            {/* Rendered the same /api/sessions table as Observability →
+                Sessions; one page owns that job now. */}
+            <Route path="memory" element={<Navigate to="/admin/observability/sessions" replace />} />
           </Route>
 
           <Route path="identity" element={
@@ -352,6 +376,9 @@ export function App() {
             <Route path="test" element={<Page element={<IdentityTestPage />} />} />
           </Route>
         </Route>
+
+        {/* Catch-all: an unmatched path used to render a blank document. */}
+        <Route path="*" element={<Page element={<NotFoundPage />} />} />
       </Route>
     </Routes>
     </GatewaySocketProvider>

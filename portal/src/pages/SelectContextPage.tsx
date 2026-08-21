@@ -26,7 +26,7 @@ const ROLE_META: Record<string, { label: string; hint: string }> = {
 function roleLabel(role: string): string { return ROLE_META[role]?.label ?? role; }
 
 export default function SelectContextPage() {
-  const { session, enterContext } = useSession();
+  const { session, enterContext, logout } = useSession();
 
   // Build the account → roles structure from grants, newest-tenant filter applied.
   const accounts = useMemo(() => {
@@ -81,7 +81,23 @@ export default function SelectContextPage() {
             </section>
           ))}
           {accounts.length === 0 && (
-            <p style={styles.empty}>Your account holds no workspace grants. Ask an administrator to add you.</p>
+            <div>
+              <p style={styles.empty}>
+                Your account holds no workspace grants. An administrator can add you
+                from Identity → Users; until then there is nothing to enter.
+              </p>
+              <button
+                type="button"
+                onClick={() => void logout()}
+                style={{
+                  marginTop: 12, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  color: 'var(--color-primary)', background: 'transparent',
+                  border: '1px solid var(--color-border)', borderRadius: 8, padding: '8px 16px',
+                }}
+              >
+                Sign out and try another account
+              </button>
+            </div>
           )}
         </div>
       </div>

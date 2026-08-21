@@ -4,7 +4,7 @@
 // throughout so you can visualise the connections as you explore.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { useAgentStream } from '@connorhoehnslalom/realtime-modules/agent-streaming/client';
 import { OrgGraph } from '../components/org-graph';
 import type { GraphPerson, GraphRelationship, GraphDepartment } from '../components/org-graph';
@@ -814,6 +814,16 @@ function ExplorePage() {
             <div style={chatHeaderStyle}>
               <span style={{ fontWeight: 600, fontSize: 12 }}>Search</span>
               <span style={{ flex: 1 }} />
+              {/* This panel is Ask embedded beside the graph, not a second
+                  chat product — hand the session over when the conversation
+                  outgrows a side panel. */}
+              <Link
+                to={`/iq/invoke${sessionId ? `?session=${encodeURIComponent(sessionId)}` : ''}`}
+                title="Continue this conversation full-width in Ask"
+                style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none', marginRight: 6 }}
+              >
+                Open in Ask →
+              </Link>
               <ChatSessionPicker
                 activeSessionId={sessionId}
                 onPick={(sid) => {

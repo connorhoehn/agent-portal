@@ -1,7 +1,9 @@
 // Evaluations — LLM-as-judge configuration + live score feed.
 //
-// Judge config (model, rubric weights, sample rate) is stored in localStorage
-// and mirrored to the middleware via a best-effort PUT.
+// The middleware's SSM-backed config is authoritative — it is what fireJudge()
+// reads on every canary ask. This page hydrates from it on mount and saves by
+// PUTting it; a save only reads "Saved" when the server accepted it.
+// localStorage is a display cache for the offline case, nothing more.
 //
 // Recent evaluation scores come directly from the canary store, which is
 // fed by the SSE stream — no separate REST table required.
@@ -219,6 +221,8 @@ export default function EvaluationsPage(): React.ReactElement {
   useCanaryStream();
   const [cfg, setCfg] = useState<JudgeConfig>(loadConfig);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // The middleware's SSM-backed config is what fireJudge() actually reads —
   // hydrate from it on mount so the toggle/weights reflect live behavior.
@@ -272,16 +276,35 @@ export default function EvaluationsPage(): React.ReactElement {
     [prompts],
   );
 
-  const handleSave = useCallback(() => {
-    saveConfig(cfg);
-    setSaved(true);
-    if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-    savedTimerRef.current = setTimeout(() => setSaved(false), 2000);
-    fetch('/api/observability/evaluations/config', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cfg),
-    }).catch(() => { /* best-effort */ });
+  // The PUT is the save — SSM is what live judging reads, so claiming "Saved"
+  // before the server accepted it would present a setting that isn't in
+  // effect. localStorage is only refreshed after the server has it.
+  const handleSave = useCallback(async () => {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const res = await fetch('/api/observability/evaluations/config', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cfg),
+      });
+      if (res.status === 403) {
+        throw new Error('Your role cannot change judge config (needs ManageCanary — org-leader or hr-admin).');
+      }
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error ?? `HTTP ${res.status}`);
+      }
+      saveConfig(cfg);
+      setSaved(true);
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+      savedTimerRef.current = setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setSaveError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
   }, [cfg]);
 
   const setDimWeight = useCallback((key: string, w: number) => {
@@ -417,12 +440,17 @@ export default function EvaluationsPage(): React.ReactElement {
         <div style={saveRowStyle}>
           <button
             type="button"
-            style={!weightOk ? saveBtnDisabledStyle : saveBtnStyle}
-            disabled={!weightOk}
-            onClick={handleSave}
+            style={!weightOk || saving ? saveBtnDisabledStyle : saveBtnStyle}
+            disabled={!weightOk || saving}
+            onClick={() => void handleSave()}
           >
-            {saved ? '✓ Saved' : 'Save configuration'}
+            {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save configuration'}
           </button>
+          {saveError && (
+            <span role="alert" style={{ fontSize: 12, color: 'var(--color-danger)', marginLeft: 10 }}>
+              Not saved — {saveError}
+            </span>
+          )}
         </div>
       </div>
 

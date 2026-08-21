@@ -46,12 +46,17 @@ const GROUP_ORDER = ['Build', 'Org', 'Operate', 'System'];
 
 // Tenant/universal items (visible per tenant + role, not just to admins).
 const NAV_ITEMS: NavItem[] = [
-  { path: '/iq/work',       label: 'Work',     tenant: 'orgiq',     group: 'Build' },
-  { path: '/iq/invoke',     label: 'Ask',      tenant: 'orgiq',     group: 'Org' },
-  { path: '/iq/explore',    label: 'Explore',  tenant: 'orgiq',     group: 'Org' },
-  { path: '/iq/prompt-ops', label: 'Prompts',  tenant: 'orgiq',     group: 'Operate' },
-  { path: '/newsroom',      label: 'Newsroom', tenant: 'newsroom' },
-  { path: '/settings',      label: 'Settings', tenant: 'universal', group: 'System' },
+  { path: '/iq/work',       label: 'Work',        tenant: 'orgiq',     group: 'Build' },
+  // The planning layer. Changes trace to the initiative they serve, so the
+  // "why are we building this" page belongs in the lifecycle group — it was
+  // previously reachable only through the Explore sub-rail.
+  { path: '/iq/projects',   label: 'Initiatives', tenant: 'orgiq',     group: 'Build' },
+  { path: '/iq/invoke',     label: 'Ask',         tenant: 'orgiq',     group: 'Org' },
+  { path: '/iq/explore',    label: 'Explore',     tenant: 'orgiq',     group: 'Org' },
+  { path: '/iq/scores',     label: 'Scores',      tenant: 'orgiq',     group: 'Org' },
+  { path: '/iq/prompt-ops', label: 'Prompts',     tenant: 'orgiq',     group: 'Operate' },
+  { path: '/newsroom',      label: 'Newsroom',    tenant: 'newsroom' },
+  { path: '/settings',      label: 'Settings',    tenant: 'universal', group: 'System' },
 ];
 
 // Platform/admin surfaces, gated by role and grouped SDLC-first.
@@ -70,8 +75,10 @@ const PLATFORM_ITEMS: NavItem[] = [
   // One entry, not two: sources, ingestion, storage and knowledge bases are
   // consecutive stages of one pipeline.
   { path: '/admin/knowledge',       label: 'Knowledge',       tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'], group: 'Operate' },
-  { path: '/admin/capabilities',    label: 'Capabilities',    tenant: 'admin', group: 'Operate' },
-  { path: '/admin/identity',        label: 'Identity',        tenant: 'admin', requireRoles: ['hr-admin'], group: 'Operate' },
+  { path: '/admin/capabilities',    label: 'Capabilities',    tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'], group: 'Operate' },
+  // SYSTEM — administration, not runtime. Identity sits with Settings: who can
+  // do what is configuration of the platform, not operating it.
+  { path: '/admin/identity',        label: 'Identity',        tenant: 'admin', requireRoles: ['hr-admin'], group: 'System' },
 ];
 
 const TENANT_LABELS: Record<Tenant, string> = {
@@ -105,10 +112,14 @@ export function Layout() {
     return item.tenant === session?.tenant;
   });
 
+  // Platform surfaces (Build tooling, Operate, Identity) are org-tenant
+  // scoped: a session parked on the newsroom tenant gets the newsroom nav,
+  // not the org platform's — switching workspace brings it back.
   const showPlatform =
-    session?.role === 'hr-admin' ||
-    session?.role === 'org-leader' ||
-    session?.role === 'admin';
+    (session?.tenant ?? 'orgiq') === 'orgiq' &&
+    (session?.role === 'hr-admin' ||
+      session?.role === 'org-leader' ||
+      session?.role === 'admin');
 
   const platformItems = showPlatform
     ? PLATFORM_ITEMS.filter((item) => {

@@ -244,12 +244,24 @@ const NODE_TYPES = { agentNode: AgentNodeComp };
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 function AgentFlowPage() {
-  const [windowHours, setWindowHours] = useState(24);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // ?cluster=orgiq | newsroom | all (default = all)
   const clusterFilter = (searchParams.get('cluster') ?? 'all') as 'all' | 'orgiq' | 'newsroom';
+
+  // ?window=1h|24h|7d — the URL is the source of truth, so the Architecture
+  // sub-nav's window links and the in-page buttons drive the same thing and a
+  // window choice survives copy-pasting the URL.
+  const windowLabel = searchParams.get('window') ?? '24h';
+  const windowHours = WINDOWS.find((w) => w.label === windowLabel)?.hours ?? 24;
+  const setWindowLabel = (label: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('window', label);
+      return next;
+    }, { replace: true });
+  };
 
   const { data: topology, error: topologyError } = useFetch<TopologyResponse>(
     `/api/topology/a2a?windowHours=${windowHours}`, 30_000,
@@ -366,7 +378,7 @@ function AgentFlowPage() {
             return (
               <button
                 key={w.hours}
-                onClick={() => setWindowHours(w.hours)}
+                onClick={() => setWindowLabel(w.label)}
                 className={
                   active
                     ? 'py-[3px] px-2.5 text-[11px] rounded border bg-primary text-white border-primary cursor-pointer font-[inherit]'

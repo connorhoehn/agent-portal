@@ -107,7 +107,7 @@ const ROLES: Record<CapabilityStatus['key'], {
       to: '/iq/invoke',
       description: 'Multi-turn conversations survive reloads and resume where they left off.',
     },
-    tools: { label: 'Session store', to: '/admin/capabilities/memory' },
+    tools: { label: 'Session store', to: '/admin/observability/sessions' },
   },
   guardrailMember: GUARDRAIL_ROLE('member'),
   guardrailOrgLeader: GUARDRAIL_ROLE('org leader'),

@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { PageSection } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
@@ -8,15 +9,31 @@ interface RoleInfo {
   capabilities: string[];
 }
 
-const ALL_ACTIONS = [
-  'Search', 'ViewOrgChart', 'ViewLeaderboard',
-  'ViewSalary', 'ViewPerformance',
-  'ViewObservability', 'ManageIngest',
-  'EditGuardrail', 'EditPolicy', 'ViewIdentityAdmin',
-];
+// Matches SchemaPage's read of GET /api/identity/schema.
+interface SchemaResponse {
+  schema: {
+    OrgIQ?: {
+      actions?: Record<string, unknown>;
+    };
+  };
+}
 
 function RolesPage() {
   const { data, isLoading, error } = useFetch<RoleInfo[]>('/api/identity/roles');
+  // The matrix rows come from the SAME live schema the Schema tab edits — a
+  // hardcoded action list here silently drifted from it the first time anyone
+  // added an action.
+  const { data: schemaData } = useFetch<SchemaResponse>('/api/identity/schema');
+
+  const actions = useMemo(() => {
+    const live = Object.keys(schemaData?.schema?.OrgIQ?.actions ?? {});
+    if (live.length > 0) return live.sort();
+    // Schema unavailable (mock mode / AVP down) — derive rows from the roles'
+    // own capability lists so the matrix still says something true.
+    const union = new Set<string>();
+    for (const r of data ?? []) for (const c of r.capabilities) union.add(c);
+    return [...union].sort();
+  }, [schemaData, data]);
 
   if (isLoading) return <div style={{ color: 'var(--color-text-tertiary)' }}>Loading roles…</div>;
   if (error) return <div style={{ color: 'var(--color-error, #ef4444)' }}>Error: {error}</div>;
@@ -78,7 +95,7 @@ function RolesPage() {
               </tr>
             </thead>
             <tbody>
-              {ALL_ACTIONS.map(action => (
+              {actions.map(action => (
                 <tr key={action} style={{ borderTop: '1px solid var(--color-border)' }}>
                   <td style={{ padding: '8px 12px', color: 'var(--color-text-primary)' }}>{action}</td>
                   {data.map(r => (

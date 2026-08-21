@@ -580,7 +580,7 @@ export function KBDetailPage() {
             <code style={{ fontFamily: 'monospace' }}>{id}</code>.
             <div style={{ marginTop: 12 }}>
               <button
-                onClick={() => navigate('/admin/knowledge-bases')}
+                onClick={() => navigate('/admin/knowledge/registry')}
                 style={{ fontSize: 12, cursor: 'pointer', color: '#2563eb', background: 'none', border: 'none', textDecoration: 'underline' }}
               >
                 ← Back to Knowledge Bases
@@ -621,7 +621,7 @@ export function KBDetailPage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button
-            onClick={() => navigate('/admin/knowledge-bases')}
+            onClick={() => navigate('/admin/knowledge/registry')}
             title="Back to Knowledge Bases"
             style={{
               display: 'inline-flex',
@@ -675,7 +675,7 @@ export function KBDetailPage() {
               kbId={kb.id}
               kbName={kb.name}
               variant="full"
-              onDone={() => navigate('/admin/knowledge-bases')}
+              onDone={() => navigate('/admin/knowledge/registry')}
             />
           )}
           {canSync && (

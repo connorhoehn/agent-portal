@@ -87,7 +87,9 @@ export default function KnowledgeHomePage() {
   // sync, upload, share links) requires hr-admin, so those controls are hidden
   // for anyone who would only get a 403 on click.
   const { session } = useSession();
-  const canManage = session?.role === 'hr-admin';
+  // hr-admin manages the pipeline; the cross-tenant admin role passes every
+  // role gate (RequireRole), so it must see the same controls.
+  const canManage = session?.role === 'hr-admin' || session?.role === 'admin';
 
   const { data: rec, error: recError, refresh: refreshRec } =
     useFetch<{ entries: Reconciled[]; problem?: string }>('/api/admin/kb-registry/reconcile', 30_000);
@@ -271,7 +273,7 @@ export default function KnowledgeHomePage() {
                   the old registry page left people stuck. */}
               {e.drift === 'unprovisioned' && e.id && (
                 <Link
-                  to={`/admin/knowledge-bases/${e.id}`}
+                  to={`/admin/knowledge/registry/${e.id}`}
                   className="shrink-0 px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] font-semibold text-text-secondary no-underline hover:border-primary hover:text-primary transition-colors"
                 >
                   set it up →
@@ -349,7 +351,7 @@ export default function KnowledgeHomePage() {
                 ? `${(targets?.targets ?? []).filter((t) => t.enabled !== false).length} enabled`
                 : 'Nothing is configured to pull content in.'
             }
-            to="/admin/ingest/crawl"
+            {...(canManage ? { to: '/admin/ingest/crawl' } : {})}
             cta="Manage sources"
           />
           <Stage
@@ -361,7 +363,7 @@ export default function KnowledgeHomePage() {
                 ? `Last job ${jobs.jobs[0].status.toLowerCase()} ${when(jobs.jobs[0].startedAt)}`
                 : 'No ingestion has run.'
             }
-            to="/admin/ingest/sources"
+            {...(canManage ? { to: '/admin/ingest/sources' } : {})}
             cta="Run history"
           />
           <Stage
@@ -369,7 +371,7 @@ export default function KnowledgeHomePage() {
             value={storage?.totalObjects != null ? storage.totalObjects.toLocaleString() : '—'}
             unit="objects in S3"
             detail={storage?.totalBytes ? bytes(storage.totalBytes) : 'Nothing stored yet.'}
-            to="/admin/ingest/storage"
+            {...(canManage ? { to: '/admin/ingest/storage' } : {})}
             cta="Browse storage"
           />
           <Stage
@@ -417,7 +419,7 @@ export default function KnowledgeHomePage() {
 }
 
 function Stage({ title, value, unit, detail, to, cta }: {
-  title: string; value: string; unit: string; detail: string; to: string; cta: string;
+  title: string; value: string; unit: string; detail: string; to?: string; cta: string;
 }) {
   return (
     <div className="px-3.5 py-3 flex flex-col">
@@ -427,7 +429,9 @@ function Stage({ title, value, unit, detail, to, cta }: {
         <span className="text-[11px] text-text-secondary">{unit}</span>
       </div>
       <div className="text-[11px] text-text-tertiary mt-1.5 leading-snug flex-1">{detail}</div>
-      <Link to={to} className="text-[11px] text-primary no-underline hover:underline mt-2">{cta} →</Link>
+      {/* No `to` = the viewer's role can't open the drill-in (ingest pages are
+          hr-admin-only). The stat stays; a link that bounces does not. */}
+      {to && <Link to={to} className="text-[11px] text-primary no-underline hover:underline mt-2">{cta} →</Link>}
     </div>
   );
 }

@@ -197,7 +197,7 @@ export function KBRegistryPage() {
               <TableRow
                 key={kb.id}
                 style={{ cursor: 'pointer' }}
-                onClick={() => navigate(`/admin/knowledge-bases/${kb.id}`)}
+                onClick={() => navigate(`/admin/knowledge/registry/${kb.id}`)}
               >
                 {/* Name + slug */}
                 <TableTd>
@@ -263,7 +263,7 @@ export function KBRegistryPage() {
                     {kb.status === 'ACTIVE' ? (
                       <SyncButton kbId={kb.id} dataSourceId={kb.dataSourceId} onDone={refresh} />
                     ) : ['PENDING', 'FAILED'].includes(kb.status) ? (
-                      <ProvisionButton kbId={kb.id} onDone={() => navigate(`/admin/knowledge-bases/${kb.id}`)} />
+                      <ProvisionButton kbId={kb.id} onDone={() => navigate(`/admin/knowledge/registry/${kb.id}`)} />
                     ) : (
                       <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
                         {kb.status === 'CREATING' ? 'Provisioning…' : '—'}
@@ -313,7 +313,7 @@ export function KBRegistryPage() {
         onCreated={(kb) => {
           setWizardOpen(false);
           refresh();
-          navigate(`/admin/knowledge-bases/${kb.id}`);
+          navigate(`/admin/knowledge/registry/${kb.id}`);
         }}
       />
     </PageSection>
