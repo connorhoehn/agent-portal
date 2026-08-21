@@ -46,7 +46,7 @@ export interface DockShell {
    * before you can use it.
    */
   cwd?: string;
-  /** Box label for the tab, e.g. devbox-1. */
+  /** Computer label for the tab, e.g. computer-1. */
   label: string;
   status: ShellStatus;
   /** Output arrived while you were looking at a different tab. */
@@ -242,7 +242,7 @@ export function toggleDock(): void {
     const boxes = (() => { try { return loadBoxes(); } catch { return []; } })();
     const box = boxes[boxes.length - 1];
     if (!box) {
-      toastError(null, 'No devbox to attach to', 'Create one on the Devbox page first.');
+      toastError(null, 'No computer to attach to', 'Create one on the Computers page first.');
       return;
     }
     openShell({ id: box.id, label: box.label, sessionId: box.sessionId });

@@ -56,7 +56,7 @@ export function registerBox(opts: { sessionId: string; label?: string; id?: stri
   if (existing) return existing.box;
   const box: FleetBox = {
     id,
-    label: opts.label ?? `devbox-${boxes.size + 1}`,
+    label: opts.label ?? `computer-${boxes.size + 1}`,
     sessionId: opts.sessionId,
     createdAt: opts.createdAt ?? now(),
     status: 'idle',
