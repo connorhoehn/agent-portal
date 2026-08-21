@@ -5,7 +5,6 @@
 // this (RootRedirect sends it straight in).
 
 import { useMemo } from 'react';
-import { useNavigate } from 'react-router';
 import { useSession, type Tenant } from '../lib/auth';
 import { NEWSROOM_ENABLED } from '../lib/features';
 import { markContextChosen } from '../lib/contextChoice';
@@ -24,16 +23,10 @@ const ROLE_META: Record<string, { label: string; hint: string }> = {
   editor: { label: 'Editor', hint: 'Publish + desk-lead the newsroom' },
 };
 
-const TENANT_ROOT: Record<Tenant, string> = {
-  orgiq: '/iq/work',
-  newsroom: '/newsroom/home',
-};
-
 function roleLabel(role: string): string { return ROLE_META[role]?.label ?? role; }
 
 export default function SelectContextPage() {
   const { session, enterContext } = useSession();
-  const navigate = useNavigate();
 
   // Build the account → roles structure from grants, newest-tenant filter applied.
   const accounts = useMemo(() => {
@@ -45,9 +38,10 @@ export default function SelectContextPage() {
   }, [session?.grants]);
 
   async function choose(tenant: Tenant, role: string) {
-    await enterContext(tenant, role);
+    // Mark chosen before entering, since enterContext hard-redirects into the
+    // workspace (re-driving the layout from the re-minted cookie).
     markContextChosen(session?.sub ?? '');
-    navigate(TENANT_ROOT[tenant] ?? '/iq/work', { replace: true });
+    await enterContext(tenant, role);
   }
 
   const name = session?.name ?? session?.sub ?? 'you';
