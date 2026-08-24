@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router';
-import { Card, Chip, CollapsibleSection, PageSection, StatusDot, type ChipTone } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Chip, CollapsibleSection, Modal, PageSection, StatusDot, type ChipTone } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { useCapabilities } from '../lib/capabilities';
 import { toastError, toastInfo } from '../lib/toastStore';
@@ -951,19 +951,125 @@ function BoardView({
   );
 }
 
+// ─── Contributor detail modal ──────────────────────────────────────────────
+// Clicking a contributor used to navigate to /iq/explore?focus=…, which threw
+// the user out of the initiative and dropped their breadcrumb trail. This
+// keeps them in place: a card with the person's title, skills, influence and
+// top collaborators, and an explicit "Explore graph" that is now a choice
+// rather than an accident.
+
+interface PersonDetail {
+  id: string;
+  name: string;
+  title: string | null;
+  department: string | null;
+  skills: string[];
+  influenceScore: number | null;
+  connections: Array<{
+    strength: number;
+    otherPerson: { id: string; name: string; title: string | null };
+  }>;
+}
+
+function ContributorModal({
+  personId, roleLabel, onClose,
+}: {
+  personId: string;
+  roleLabel: string | null;
+  onClose: () => void;
+}) {
+  const navigate = useNavigate();
+  const { data, error } = useFetch<PersonDetail>(`/api/graph/people/${encodeURIComponent(personId)}`);
+  const person = data;
+  const topCollaborators = (person?.connections ?? [])
+    .slice()
+    .sort((a, b) => b.strength - a.strength)
+    .slice(0, 5);
+
+  return (
+    <Modal open onClose={onClose} ariaLabel={person ? `${person.name} details` : 'Contributor details'} maxWidth={460}>
+      {error && (
+        <div style={{ padding: 20, color: 'var(--color-text-tertiary)' }}>
+          Couldn't load this person. <button onClick={onClose} style={{ color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer' }}>Close</button>
+        </div>
+      )}
+      {!error && !person && (
+        <div style={{ padding: 20, color: 'var(--color-text-tertiary)' }}>Loading…</div>
+      )}
+      {person && (
+        <div style={{ padding: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+            <Avatar name={person.name} size={44} />
+            <div>
+              <div style={{ fontSize: 17, fontWeight: 600, color: 'var(--color-text-primary)' }}>{person.name}</div>
+              <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                {[person.title, person.department].filter(Boolean).join(' · ') || '—'}
+              </div>
+            </div>
+            {roleLabel && <div style={{ marginLeft: 'auto' }}><Chip tone="info">{roleLabel}</Chip></div>}
+          </div>
+
+          {person.skills.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--color-text-tertiary)', marginBottom: 6 }}>Skills</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {person.skills.map((s) => <Chip key={s}>{s}</Chip>)}
+              </div>
+            </div>
+          )}
+
+          {person.influenceScore != null && (
+            <div style={{ marginBottom: 14, fontSize: 13, color: 'var(--color-text-secondary)' }}>
+              Influence score <strong style={{ color: 'var(--color-text-primary)' }}>{person.influenceScore}</strong>
+            </div>
+          )}
+
+          {topCollaborators.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--color-text-tertiary)', marginBottom: 6 }}>Top collaborators</div>
+              {topCollaborators.map((c) => (
+                <div key={c.otherPerson.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0' }}>
+                  <Avatar name={c.otherPerson.name} size={22} />
+                  <span style={{ fontSize: 13, color: 'var(--color-text-primary)' }}>{c.otherPerson.name}</span>
+                  <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>{c.otherPerson.title ?? ''}</span>
+                  <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--color-text-tertiary)' }}>{Math.round(c.strength * 100)}%</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <button
+            onClick={() => navigate(`/iq/explore?focus=${encodeURIComponent(person.id)}`)}
+            style={{
+              width: '100%', padding: '9px 12px', fontSize: 13, fontWeight: 600,
+              color: 'var(--color-primary)', background: 'var(--color-surface-inset)',
+              border: '1px solid var(--color-border)', borderRadius: 8, cursor: 'pointer',
+            }}
+          >
+            Explore {person.name.split(' ')[0]}'s graph →
+          </button>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 // ─── Contributors table ───────────────────────────────────────────────────────
 
 function ContributorsTable({
   contributors,
   projectId,
   onRole,
+  onOpenPerson,
 }: {
   contributors: ProjectDetail['contributors'];
   projectId: string;
   /** Optimistic apply / revert of one contributor's role. */
   onRole: (personId: string, role: string | null) => void;
+  /** Open the shared, page-level person card (keeps the breadcrumb). */
+  onOpenPerson: (personId: string, role: string | null) => void;
 }) {
-  const navigate = useNavigate();
+
   if (contributors.length === 0) {
     return <div style={{ padding: 24, color: 'var(--color-text-tertiary)' }}>No contributors recorded.</div>;
   }
@@ -992,7 +1098,7 @@ function ContributorsTable({
               borderBottom: idx < contributors.length - 1 ? '1px solid var(--color-border)' : 'none',
               cursor: 'pointer',
             }}
-              onClick={() => navigate(`/iq/explore?focus=${encodeURIComponent(c.personId)}`)}
+              onClick={() => onOpenPerson(c.personId, c.role)}
               onMouseEnter={(e) => (e.currentTarget as HTMLElement).style.background = 'var(--color-surface-inset)'}
               onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.background = 'var(--color-surface)'}
             >
@@ -1099,6 +1205,10 @@ function ProjectDetailPage() {
   // project until the next reload; the editors revert them on PATCH failure.
   const [ownerOverride, setOwnerOverride] = useState<{ ownerId: string | null; ownerName: string | null } | null>(null);
   const [roleOverrides, setRoleOverrides] = useState<Record<string, string | null>>({});
+  // Page-level so both the identity line (owner/SME chips) and the Contributors
+  // table open the same in-place person card instead of navigating into the
+  // graph and dropping the breadcrumb.
+  const [openPerson, setOpenPerson] = useState<{ id: string; role: string | null } | null>(null);
   const handleRoleOverride = useCallback((personId: string, role: string | null) => {
     setRoleOverrides((prev) => ({ ...prev, [personId]: role }));
   }, []);
@@ -1386,12 +1496,12 @@ function ProjectDetailPage() {
                   <span>
                     Run by{' '}
                     {ownerName && ownerId ? (
-                      <Link
-                        to={`/iq/explore?focus=${encodeURIComponent(ownerId)}`}
-                        style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 600 }}
+                      <button
+                        onClick={() => setOpenPerson({ id: ownerId, role: 'owner' })}
+                        style={{ color: 'var(--color-primary)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontWeight: 600, font: 'inherit' }}
                       >
                         {ownerName}
-                      </Link>
+                      </button>
                     ) : ownerName ? (
                       <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>{ownerName}</span>
                     ) : (
@@ -1408,14 +1518,14 @@ function ProjectDetailPage() {
                   />
                 </span>
                 {smes.map((s) => (
-                  <Link
+                  <button
                     key={s.personId}
-                    to={`/iq/explore?focus=${encodeURIComponent(s.personId)}`}
-                    className="no-underline"
+                    onClick={() => setOpenPerson({ id: s.personId, role: 'sme' })}
+                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
                     title={`${s.name} — SME directing agents on this initiative`}
                   >
                     <Chip tone="info" size="xs">SME · {s.name}</Chip>
-                  </Link>
+                  </button>
                 ))}
               </div>
             )}
@@ -1612,10 +1722,21 @@ function ProjectDetailPage() {
               contributors={contributors}
               projectId={id ?? ''}
               onRole={handleRoleOverride}
+              onOpenPerson={(pid, role) => setOpenPerson({ id: pid, role })}
             />
           </CollapsibleSection>
         </div>
       </div>
+
+      {/* Contributor detail card — opened from the identity line or the table,
+          keeping the user (and their breadcrumb) on this initiative. */}
+      {openPerson && (
+        <ContributorModal
+          personId={openPerson.id}
+          roleLabel={openPerson.role}
+          onClose={() => setOpenPerson(null)}
+        />
+      )}
 
       {/* Marketplace: estimate → authorize drawer */}
       <EstimateDrawer
