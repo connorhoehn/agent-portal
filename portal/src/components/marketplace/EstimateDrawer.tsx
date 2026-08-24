@@ -7,8 +7,25 @@
 // Dispatch is the governed path: POST /api/bots/dispatch-work binds a run to
 // the work item; a 409 with options means the initiative has several codebases
 // and the server wants us to pick one.
+//
+// ── Four different 409s ──────────────────────────────────────────────────────
+// The server can refuse a dispatch four ways, and each is a different question
+// for the operator, so each gets its own affordance rather than a shared error
+// toast. They are told apart by `gate` on the body (with `options` for the
+// codebase pick, which predates the discriminator):
+//
+//   options       several codebases deliver this initiative — pick one.
+//   run-budget    the operator's OWN cap on this run, set in this drawer.
+//   allocation    the initiative's monthly allocation, set by a release manager.
+//   envelope      the operator's sprint envelope, granted to them.
+//
+// Each carries its own confirm flag and this drawer sends only that flag —
+// confirming your own cap must never quietly confirm somebody else's fence.
+// Confirmations ACCUMULATE across a chain (cap → allocation → envelope): a
+// retry that dropped an earlier confirmation would trip the same gate again and
+// loop the operator through the same dialog forever.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Drawer,
   ConfirmDialog,
@@ -135,6 +152,64 @@ export function overAllocationBody(over: OverAllocation): string {
   return `${ledger} ${forecast} Dispatching anyway spends over the allocation.`;
 }
 
+export interface OverRunBudget {
+  reason: string;
+  budgetPerRunUsd: number;
+  costUsdP25?: number;
+  costUsdP75?: number;
+}
+
+/** The per-run cap refused this dispatch. Deliberately says whose limit it is:
+    this one is the operator's own, set two fields up in this very drawer, and
+    confusing it with the initiative's allocation would make "dispatch anyway"
+    look like overspending someone else's money. */
+export function overRunBudgetBody(over: OverRunBudget): string {
+  const forecast = over.costUsdP25 != null && over.costUsdP75 != null
+    ? `This run is forecast at ${money(over.costUsdP25)}–${money(over.costUsdP75)}`
+    : over.reason.split(' — ')[0];
+  return `${forecast}, over the ${money(over.budgetPerRunUsd)} cap you set for it. `
+    + 'The cap is yours alone — nothing about the initiative\'s allocation or your sprint '
+    + 'envelope is being waived here.';
+}
+
+export interface OverEnvelope {
+  reason: string;
+  confidence?: ForecastConfidence;
+  estimate?: WorkEstimate;
+  allocatedUsd: number;
+  attributedSpentUsd: number;
+  remainingUsd: number;
+  attributionAvailable: boolean;
+  sprintName?: string | null;
+}
+
+/** The sprint envelope refused this dispatch — and the honest part is what the
+    burn is NOT. Only runs recorded as dispatched by this person count, and
+    nothing counted before attribution was turned on, so the figure is small by
+    construction. Saying "$2 of your $30" without that caveat would read as
+    "you have barely spent", which is not something this data supports. */
+export function overEnvelopeBody(over: OverEnvelope): string {
+  const envelope = over.sprintName
+    ? `your ${money(over.allocatedUsd)} envelope on ${over.sprintName}`
+    : `your ${money(over.allocatedUsd)} sprint envelope`;
+  if (!over.attributionAvailable) {
+    return `This run's forecast does not fit ${envelope} at all. No run here is recorded as `
+      + 'dispatched by anyone yet, so nothing has been counted against the envelope — the '
+      + 'only thing being compared is the forecast against the envelope\'s full size.';
+  }
+  const ledger = `${money(over.attributedSpentUsd)} of ${envelope} is recorded as spent by you, `
+    + `leaving ${money(over.remainingUsd)}.`;
+  const caveat = 'That counts only runs recorded as dispatched by you — runs from before '
+    + 'attribution was turned on, and everyone else\'s, count against nobody.';
+  const est = over.estimate;
+  if (!est) return `${ledger} ${caveat}`;
+  const range = `${money(est.costUsdP25)}–${money(est.costUsdP75)}`;
+  const forecast = over.confidence === 'prior'
+    ? `This run is forecast at ${range}, from a deliberately wide prior — nothing has run on this model here yet.`
+    : `This run is forecast at ${range}.`;
+  return `${ledger} ${forecast} ${caveat}`;
+}
+
 /** The basis, stated plainly — exact copy per the estimate contract. */
 export function estimateLine(est: WorkEstimate): string {
   if (est.scaled) {
@@ -154,6 +229,10 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
   const [model, setModel] = useState<string>(DEFAULT_DEVBOX_MODEL);
   const [instruction, setInstruction] = useState('');
   const [agentProjectId, setAgentProjectId] = useState<string | null>(null);
+  // The operator's own ceiling on this one run: "don't start it if it is
+  // forecast over $X". Held as the raw text so a half-typed "0." is not
+  // rewritten under the cursor; parsed into `capUsd` for the wire.
+  const [capText, setCapText] = useState('');
 
   const [estimate, setEstimate] = useState<WorkEstimate | null>(null);
   const [estLoading, setEstLoading] = useState(false);
@@ -179,6 +258,18 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
       allocatedUsd: number; spentUsd: number; remainingUsd: number;
     } | null
   >(null);
+  // The operator's own cap refused this run. Its own state and its own confirm,
+  // because it is a different limit from the allocation and set by a different
+  // person — the one clicking.
+  const [overRunBudget, setOverRunBudget] = useState<OverRunBudget | null>(null);
+  // Their sprint envelope refused it. Third dialog, third flag.
+  const [overEnvelope, setOverEnvelope] = useState<OverEnvelope | null>(null);
+
+  // What the operator has already confirmed on THIS authorize attempt. A ref,
+  // not state: a chained retry reads it in the same tick it is written, and a
+  // dropped confirmation would re-trip the gate the operator just cleared and
+  // loop them through the same dialog.
+  const confirmsRef = useRef<{ runBudget?: boolean; allocation?: boolean; envelope?: boolean }>({});
 
   // Reset per item — a fresh drawer for each estimate.
   const itemId = item?.id ?? null;
@@ -186,12 +277,24 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
     if (!open) return;
     setModel(DEFAULT_DEVBOX_MODEL);
     setInstruction('');
+    setCapText('');
     setPickerOptions(null);
     setConcurrencyMsg(null);
     setConfirmOpen(false);
+    setOverAllocation(null);
+    setOverRunBudget(null);
+    setOverEnvelope(null);
+    confirmsRef.current = {};
     setAgentProjectId(codebases.length === 1 ? codebases[0]!.id : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, itemId]);
+
+  // The cap on the wire. Blank, malformed or negative means "no cap" — a cap
+  // is an opt-in, so anything unreadable must not become an accidental $0
+  // ceiling that refuses every run.
+  const capParsed = capText.trim() === '' ? null : Number(capText);
+  const capUsd = capParsed != null && Number.isFinite(capParsed) && capParsed >= 0 ? capParsed : null;
+  const capBelowForecast = capUsd != null && estimate != null && estimate.costUsdP75 > capUsd;
 
   // Live estimate — on open and whenever the model or target codebase changes.
   useEffect(() => {
@@ -216,7 +319,7 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
     return () => { cancelled = true; };
   }, [open, item, model, agentProjectId]);
 
-  async function dispatch(overrideAgentProjectId?: string, confirmOverBudget = false) {
+  async function dispatch(overrideAgentProjectId?: string) {
     if (!item || dispatching) return;
     setDispatching(true);
     setConcurrencyMsg(null);
@@ -225,7 +328,14 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
       const body: Record<string, unknown> = { workItemId: item.id, model };
       if (target) body['agentProjectId'] = target;
       if (instruction.trim()) body['instruction'] = instruction.trim();
-      if (confirmOverBudget) body['confirmOverBudget'] = true;
+      if (capUsd != null) body['budgetPerRunUsd'] = capUsd;
+      // One flag per fence, and only the ones actually confirmed. The retired
+      // `confirmOverBudget` answered several limits at once, which is precisely
+      // why the per-run cap above could never be offered here before.
+      const confirms = confirmsRef.current;
+      if (confirms.runBudget) body['confirmOverRunBudget'] = true;
+      if (confirms.allocation) body['confirmOverAllocation'] = true;
+      if (confirms.envelope) body['confirmOverEnvelope'] = true;
       const res = await fetch('/api/bots/dispatch-work', {
         method: 'POST',
         credentials: 'include',
@@ -234,12 +344,29 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
       });
       const payload = await res.json().catch(() => ({})) as {
         run?: BotRun; error?: string; options?: CodebaseOption[];
+        gate?: 'run-budget' | 'allocation' | 'envelope';
         confidence?: ForecastConfidence; estimate?: WorkEstimate;
+        runBudget?: { budgetPerRunUsd: number; costUsdP25?: number; costUsdP75?: number };
         allocation?: { allocatedUsd: number; spentUsd: number; remainingUsd: number };
+        envelope?: {
+          sprintName: string | null; allocatedUsd: number; attributedSpentUsd: number;
+          remainingUsd: number; attributionAvailable: boolean;
+        };
       };
       if (res.status === 409 && payload.options && payload.options.length > 0) {
         // Multiple codebases deliver this initiative — pick one and retry.
         setPickerOptions(payload.options);
+        setConfirmOpen(false);
+        return;
+      }
+      if (res.status === 409 && payload.gate === 'run-budget' && payload.runBudget) {
+        // Over the operator's OWN cap. Separate path from the allocation
+        // dialog below, and separate flag: the two are different limits and a
+        // single confirmation must never answer both.
+        setOverRunBudget({
+          reason: payload.error ?? 'over the per-run cap',
+          ...payload.runBudget,
+        });
         setConfirmOpen(false);
         return;
       }
@@ -251,6 +378,17 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
           ...(payload.confidence ? { confidence: payload.confidence } : {}),
           ...(payload.estimate ? { estimate: payload.estimate } : {}),
           ...payload.allocation,
+        });
+        setConfirmOpen(false);
+        return;
+      }
+      if (res.status === 409 && payload.envelope) {
+        // Over the operator's own sprint envelope.
+        setOverEnvelope({
+          reason: payload.error ?? 'over your sprint envelope',
+          ...(payload.confidence ? { confidence: payload.confidence } : {}),
+          ...(payload.estimate ? { estimate: payload.estimate } : {}),
+          ...payload.envelope,
         });
         setConfirmOpen(false);
         return;
@@ -298,7 +436,12 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
             </button>
             {canDispatch && (
               <button
-                onClick={() => setConfirmOpen(true)}
+                onClick={() => {
+                  // A fresh authorize attempt confirms nothing yet — a stale
+                  // confirmation from an abandoned attempt must not carry over.
+                  confirmsRef.current = {};
+                  setConfirmOpen(true);
+                }}
                 disabled={estLoading || estimate == null || dispatching}
                 className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-40"
               >
@@ -369,6 +512,38 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
               <div className="text-[12px] text-text-tertiary">—</div>
             )}
           </div>
+
+          {/* The operator's own ceiling on this run. Optional, and soft: the
+              server answers a 409 the operator can still confirm, which is why
+              it is a cap rather than a refusal. Its own confirmation flag, so
+              waving it through says nothing about the initiative's allocation
+              or the sprint envelope. */}
+          <label className="flex flex-col gap-1 text-[12px] text-text-secondary">
+            <span className="font-semibold">
+              Cap this run <span className="font-normal text-text-tertiary">(optional)</span>
+            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-text-tertiary">$</span>
+              <input
+                type="number"
+                min="0"
+                step="0.25"
+                inputMode="decimal"
+                value={capText}
+                onChange={(e) => setCapText(e.target.value)}
+                placeholder={estimate ? estimate.costUsdP75.toFixed(2) : 'no cap'}
+                className="w-28 px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary"
+              />
+              <span className="text-[11px] text-text-tertiary">
+                don't start it if it's forecast over this
+              </span>
+            </div>
+            {capBelowForecast && (
+              <span className="text-[11px] text-warning">
+                The high end of the current forecast is over this cap — you'll be asked to confirm.
+              </span>
+            )}
+          </label>
 
           {/* Optional one-shot steering, without editing any standing mission */}
           <label className="flex flex-col gap-1 text-[12px] text-text-secondary">
@@ -455,9 +630,50 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
         onConfirm={() => {
           const target = agentProjectId ?? undefined;
           setOverAllocation(null);
-          void dispatch(target, true);
+          // Only the allocation flag. The cap the operator set on this run, and
+          // their sprint envelope, are separate fences and stay shut.
+          confirmsRef.current = { ...confirmsRef.current, allocation: true };
+          void dispatch(target);
         }}
         onCancel={() => setOverAllocation(null)}
+      />
+
+      {/* The operator's own cap. Caution, never destructive: they set this
+          number themselves a moment ago, and going over it spends nobody
+          else's money. */}
+      <ConfirmDialog
+        open={overRunBudget != null}
+        tone="caution"
+        title="Over the cap you set for this run"
+        body={overRunBudget ? overRunBudgetBody(overRunBudget) : ''}
+        confirmLabel={dispatching ? 'Dispatching…' : 'Dispatch anyway'}
+        confirmDisabled={dispatching}
+        onConfirm={() => {
+          const target = agentProjectId ?? undefined;
+          setOverRunBudget(null);
+          confirmsRef.current = { ...confirmsRef.current, runBudget: true };
+          void dispatch(target);
+        }}
+        onCancel={() => setOverRunBudget(null)}
+      />
+
+      {/* The sprint envelope a release manager granted. Softest tone while the
+          burn is unknown — with no attribution recorded there is no ledger
+          behind the refusal, only the envelope's size. */}
+      <ConfirmDialog
+        open={overEnvelope != null}
+        tone={overEnvelope && !overEnvelope.attributionAvailable ? 'caution' : 'destructive'}
+        title="Over your sprint envelope"
+        body={overEnvelope ? overEnvelopeBody(overEnvelope) : ''}
+        confirmLabel={dispatching ? 'Dispatching…' : 'Dispatch anyway'}
+        confirmDisabled={dispatching}
+        onConfirm={() => {
+          const target = agentProjectId ?? undefined;
+          setOverEnvelope(null);
+          confirmsRef.current = { ...confirmsRef.current, envelope: true };
+          void dispatch(target);
+        }}
+        onCancel={() => setOverEnvelope(null)}
       />
     </>
   );

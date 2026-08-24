@@ -11,8 +11,8 @@ jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', mock: { aur
 
 import {
   decideFire, renderPrompt, decideConcurrency, botMaxConcurrent, decideRunBudget,
-  decideAllocation,
-  type FireGuardInput,
+  decideAllocation, decideEnvelope,
+  type FireGuardInput, type EnvelopeState,
 } from '../bot-runner.js';
 
 function bot(over: Partial<FireGuardInput> = {}): FireGuardInput {
@@ -85,7 +85,9 @@ describe('decideRunBudget', () => {
     expect(d.kind).toBe('confirm');
     expect((d as { reason: string }).reason).toMatch(/\$1\.50/);
     expect((d as { reason: string }).reason).toMatch(/\$1\.00/);
-    expect((d as { reason: string }).reason).toMatch(/confirmOverBudget/);
+    // Its own flag, not the shared one: confirming a per-run cap must not be
+    // spendable as a confirmation of the initiative's allocation.
+    expect((d as { reason: string }).reason).toMatch(/confirmOverRunBudget/);
   });
 
   it('an explicit confirmation overrides the gate — the budget is soft', () => {
@@ -115,7 +117,7 @@ describe('decideAllocation', () => {
     const d = decideAllocation({ allocatedUsd: 30, spentUsd: 25 }, 8, false);
     expect(d.kind).toBe('confirm');
     expect((d as { reason: string }).reason).toMatch(/\$5\.00 left/);
-    expect((d as { reason: string }).reason).toMatch(/confirmOverBudget/);
+    expect((d as { reason: string }).reason).toMatch(/confirmOverAllocation/);
   });
 
   it('reports an exhausted allocation differently from a partial overrun', () => {
@@ -194,7 +196,7 @@ describe('decideAllocation', () => {
       false,
     );
     expect((d as { reason: string }).reason).toBe(
-      "estimated $8.00 exceeds the $5.00 left of this initiative's $30.00 allocation — raise it or pass confirmOverBudget",
+      "estimated $8.00 exceeds the $5.00 left of this initiative's $30.00 allocation — raise it or pass confirmOverAllocation",
     );
   });
 
@@ -207,7 +209,7 @@ describe('decideAllocation', () => {
       false,
     );
     expect((d as { reason: string }).reason).toBe(
-      "this initiative's $5.00 allocation is exhausted ($5.00 spent) — raise the allocation or pass confirmOverBudget",
+      "this initiative's $5.00 allocation is exhausted ($5.00 spent) — raise the allocation or pass confirmOverAllocation",
     );
   });
 
@@ -228,6 +230,168 @@ describe('decideAllocation', () => {
       { costUsdP75: 99, costUsdP25: 1, confidence: 'prior' },
       false,
     )).toEqual({ kind: 'proceed' });
+  });
+});
+
+// ─── The sprint envelope ─────────────────────────────────────────────────────
+//
+// budget_grants rendered on the Budgets page and nothing checked it. These pin
+// the replacement — and, just as importantly, pin what it refuses to claim: the
+// burn is only ever the runs recorded as dispatched by this caller, never the
+// initiative's spend in the window (which the Budgets page deliberately does
+// NOT present as anyone's burn), and an absent attribution column means the
+// burn is UNKNOWN rather than zero.
+
+describe('decideEnvelope', () => {
+  function envelope(over: Partial<EnvelopeState> = {}): EnvelopeState {
+    return {
+      allocatedUsd: 30, attributedSpentUsd: 0, attributionAvailable: true,
+      // Deliberately the seed's own shape: real sprint names carry an em dash.
+      sprintName: 'Sprint 98 — Span metrics', ...over,
+    };
+  }
+  const reason = (d: unknown): string => (d as { reason: string }).reason;
+
+  it('proceeds while the forecast fits what the caller has left', () => {
+    expect(decideEnvelope(envelope({ attributedSpentUsd: 20 }), 5, false)).toEqual({ kind: 'proceed' });
+    // Exactly consuming the remainder is within it — same line as the others.
+    expect(decideEnvelope(envelope({ attributedSpentUsd: 20 }), 10, false)).toEqual({ kind: 'proceed' });
+  });
+
+  it('demands its OWN confirmation when the forecast overruns the remainder', () => {
+    const d = decideEnvelope(envelope({ attributedSpentUsd: 25 }), 8, false);
+    expect(d.kind).toBe('confirm');
+    expect(reason(d)).toMatch(/\$5\.00 left of your \$30\.00 envelope on Sprint 98/);
+    expect(reason(d)).toMatch(/confirmOverEnvelope/);
+    // Not the other two gates' flags — one confirmation, one fence.
+    expect(reason(d)).not.toMatch(/confirmOverAllocation|confirmOverRunBudget/);
+  });
+
+  it('names the envelope generically when the grant has no sprint', () => {
+    const d = decideEnvelope(envelope({ sprintName: null, attributedSpentUsd: 29 }), 8, false);
+    expect(reason(d)).toMatch(/your \$30\.00 sprint envelope/);
+  });
+
+  it('is soft — an explicit confirmation dispatches', () => {
+    expect(decideEnvelope(envelope({ attributedSpentUsd: 30 }), 99, true)).toEqual({ kind: 'proceed' });
+  });
+
+  // ── What the burn is, said out loud, every time ───────────────────────────
+  // A burn of $2 out of $30 is NOT "this SME has barely spent". It is "$2 of
+  // spend is recorded as theirs". Every non-exhausted refusal carries that
+  // caveat, because the number is small by construction.
+  it('says the burn counts only runs recorded as dispatched by the caller', () => {
+    const d = decideEnvelope(envelope({ attributedSpentUsd: 28 }), 8, false);
+    expect(reason(d)).toMatch(/counting only runs recorded as dispatched by you/);
+  });
+
+  it('reports a spent-out envelope as a fact, with no forecast talk', () => {
+    const d = decideEnvelope(
+      envelope({ attributedSpentUsd: 30 }),
+      { costUsdP75: 1.5, costUsdP25: 0.15, confidence: 'prior' },
+      false,
+    );
+    expect(reason(d)).toBe(
+      'your $30.00 envelope on Sprint 98 – Span metrics is spent out ($30.00 dispatched by you)'
+      + ' — ask for a larger envelope or pass confirmOverEnvelope',
+    );
+    // Overspent past the envelope is still "spent out", never a negative left.
+    expect(reason(decideEnvelope(envelope({ attributedSpentUsd: 44 }), 1, false))).toMatch(/spent out/);
+  });
+
+  // ── Attribution missing: unknown, never zero ──────────────────────────────
+  // The honest failure mode. Without the column nothing can be said about how
+  // much of the envelope is gone, so the only surviving claim is about its
+  // SIZE — and the refusal states plainly that nothing is counted against it,
+  // rather than implying a full envelope.
+  describe('when bot_runs carries no attribution yet', () => {
+    const blind = () => envelope({ attributionAvailable: false, attributedSpentUsd: 0 });
+
+    it('does not brake a forecast that fits the whole envelope', () => {
+      expect(decideEnvelope(blind(), 29.99, false)).toEqual({ kind: 'proceed' });
+    });
+
+    it('brakes only a forecast bigger than the envelope itself, and says why', () => {
+      const d = decideEnvelope(blind(), 40, false);
+      expect(d.kind).toBe('confirm');
+      expect(reason(d)).toMatch(/exceeds your \$30\.00 envelope on Sprint 98 . Span metrics outright/);
+      expect(reason(d)).toMatch(/no run here is recorded as dispatched by anyone yet/);
+      expect(reason(d)).toMatch(/nothing is counted against it/);
+      expect(reason(d)).toMatch(/confirmOverEnvelope/);
+    });
+
+    it('never claims a burn it cannot support', () => {
+      const d = decideEnvelope(blind(), 40, false);
+      expect(reason(d)).not.toMatch(/spent out|left of/);
+    });
+  });
+
+  // ── Confidence shapes the sentence, never the verdict ─────────────────────
+  // Same discipline as decideAllocation: p75 is what is tested, whatever the
+  // forecast is worth, and the wording is what changes.
+
+  it('tests p75, not p25 — a low end that fits does not excuse the range', () => {
+    const d = decideEnvelope(
+      envelope({ attributedSpentUsd: 29 }),
+      { costUsdP75: 1.5, costUsdP25: 0.15, confidence: 'prior' },
+      false,
+    );
+    expect(d).toMatchObject({ kind: 'confirm', confidence: 'prior' });
+    expect(reason(d)).toMatch(/may not fit/);
+    expect(reason(d)).toMatch(/no history for this model yet/);
+  });
+
+  it('escalates the wording when even the low end overruns', () => {
+    const d = decideEnvelope(
+      envelope({ attributedSpentUsd: 29.95 }),
+      { costUsdP75: 1.5, costUsdP25: 0.15, confidence: 'prior' },
+      false,
+    );
+    expect(reason(d)).toMatch(/even the low end/);
+  });
+
+  it('hedges an unscaled run-level range as a bracket, not a measurement', () => {
+    const d = decideEnvelope(
+      envelope({ attributedSpentUsd: 28 }),
+      { costUsdP75: 4, costUsdP25: 1, confidence: 'run-history' },
+      false,
+    );
+    expect(d).toMatchObject({ confidence: 'run-history' });
+    expect(reason(d)).toMatch(/not scaled to this item's size/);
+    expect(reason(d)).toMatch(/pick a cheaper model/);
+  });
+
+  it('states a scaled forecast plainly', () => {
+    const d = decideEnvelope(
+      envelope({ attributedSpentUsd: 25 }),
+      { costUsdP75: 8, costUsdP25: 3, confidence: 'scaled' },
+      false,
+    );
+    expect(reason(d)).toBe(
+      'estimated $8.00 exceeds the $5.00 left of your $30.00 envelope on Sprint 98 – Span metrics'
+      + ' (counting only runs recorded as dispatched by you)'
+      + ' — ask for a larger envelope or pass confirmOverEnvelope',
+    );
+  });
+
+  // Clients split the reason on its first ' — ' to separate claim from remedy.
+  it('keeps a single em dash in every reason', () => {
+    const forecasts = [
+      { costUsdP75: 99, costUsdP25: 1, confidence: 'prior' as const },
+      { costUsdP75: 99, costUsdP25: 1, confidence: 'run-history' as const },
+      { costUsdP75: 99, costUsdP25: 1, confidence: 'scaled' as const },
+    ];
+    const states = [
+      envelope({ attributedSpentUsd: 25 }),
+      envelope({ attributedSpentUsd: 30 }),
+      envelope({ attributionAvailable: false }),
+    ];
+    for (const f of forecasts) {
+      for (const st of states) {
+        const d = decideEnvelope(st, f, false);
+        expect(reason(d).split(' — ')).toHaveLength(2);
+      }
+    }
   });
 });
 

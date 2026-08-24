@@ -11,6 +11,10 @@
 
 import { exec } from './aurora.js';
 import { config } from '../config.js';
+// The attribution model of record for "which initiative did this run spend
+// against" (imported, never re-derived — two copies of that predicate is how
+// two surfaces come to disagree about the same dollar).
+import { spendPredicateSql } from './budgets.js';
 import type { RunPercentiles } from '../lib/bot-estimate.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 
@@ -79,6 +83,10 @@ export interface BotRun {
   startedAt: string;
   finishedAt: string | null;
   outcome: Record<string, unknown>;
+  /** The session subject that authorized this run, when one did and the
+   *  attribution column exists. Null for cron firings and for every run that
+   *  predates schema/agent_run_attribution_schema.sql. */
+  dispatchedBy: string | null;
 }
 
 function rowToBot(r: Record<string, unknown>): Bot {
@@ -123,6 +131,8 @@ function rowToRun(r: Record<string, unknown>): BotRun {
     startedAt: toStr(r['started_at']),
     finishedAt: r['finished_at'] ? toStr(r['finished_at']) : null,
     outcome: parseJson<Record<string, unknown>>(r['outcome'], {}),
+    // Absent on a pre-migration cluster: `SELECT *` simply has no such key.
+    dispatchedBy: r['dispatched_by'] ? toStr(r['dispatched_by']) : null,
   };
 }
 
@@ -151,6 +161,105 @@ async function safeExec(sql: string, params: SqlParameter[] = []): Promise<Recor
   } catch (err) {
     const msg = (err as Error).message ?? '';
     if (/does not exist|relation/i.test(msg)) return [];
+    throw err;
+  }
+}
+
+// ─── Dispatch attribution (bot_runs.dispatched_by) ────────────────────────────
+//
+// Who authorized a run. Added by schema/agent_run_attribution_schema.sql and
+// deliberately additive: every read and write below works on a cluster that has
+// not had that migration applied yet, because the middleware ships ahead of the
+// schema and a missing column must degrade to "unknown", never to a 500 and
+// never to a fabricated zero that a budget brake would treat as headroom.
+
+let _attribution: boolean | null = null;
+
+/**
+ * Does bot_runs carry dispatched_by here? Probed once per process against
+ * information_schema rather than inferred from a failed INSERT — a failed
+ * insert is an ambiguous signal (constraint? column? connection?) and retrying
+ * writes on it is how a run gets recorded twice.
+ */
+export async function attributionAvailable(): Promise<boolean> {
+  if (config.mock.aurora) return false;
+  if (_attribution !== null) return _attribution;
+  try {
+    const rows = await exec(
+      `SELECT 1 AS ok FROM information_schema.columns
+        WHERE table_name = 'bot_runs' AND column_name = 'dispatched_by' LIMIT 1`,
+    );
+    _attribution = rows.length > 0;
+  } catch {
+    _attribution = false;
+  }
+  return _attribution;
+}
+
+/** Test seam: forget the probe so the next call re-asks. */
+export function resetAttributionProbe(): void { _attribution = null; }
+
+export interface DispatchedSpend {
+  /** Cost of runs this subject is RECORDED as having dispatched. 0 when the
+   *  column is absent — read it together with attributionAvailable, never
+   *  alone. */
+  spentUsd: number;
+  /** false → the burn is UNKNOWN, not zero. */
+  attributionAvailable: boolean;
+}
+
+/**
+ * What one person has spent inside a sprint envelope: the runs THEY dispatched
+ * (bot_runs.dispatched_by), attributed to this initiative by the same predicate
+ * the Budgets ledger uses, inside the sprint's dates.
+ *
+ * This is narrower than GrantRow.initiativeSpendInWindowUsd on purpose. That
+ * figure is the INITIATIVE's spend in the window and is explicitly not called
+ * anyone's burn; this one names a person, so it may only count runs that
+ * actually carry that person's subject. Runs from before the column existed,
+ * cron firings, and other people's dispatches count against nobody.
+ *
+ * A null/absent window bound is unbounded on that side — a standing grant with
+ * no sprint sums everything this subject dispatched here.
+ */
+export async function dispatchedSpendInWindow(input: {
+  orgProjectId: string;
+  dispatchedBy: string;
+  startsOn: string | null;
+  endsOn: string | null;
+}): Promise<DispatchedSpend> {
+  if (config.mock.aurora) return { spentUsd: 0, attributionAvailable: false };
+  if (!(await attributionAvailable())) return { spentUsd: 0, attributionAvailable: false };
+
+  const params: SqlParameter[] = [s('pid', input.orgProjectId), s('by', input.dispatchedBy)];
+  let window = '';
+  if (input.startsOn) {
+    window += ' AND br.started_at >= :from::date';
+    params.push(s('from', input.startsOn));
+  }
+  if (input.endsOn) {
+    // ends_on is inclusive (a sprint ends ON that day), so the exclusive upper
+    // bound is the day after — same convention as listGrants' window.
+    window += ' AND br.started_at < :to::date + 1';
+    params.push(s('to', input.endsOn));
+  }
+  try {
+    const rows = await exec(
+      `SELECT COALESCE(SUM(br.cost_usd), 0)::float8 AS spent
+         FROM bot_runs br
+        WHERE br.dispatched_by = :by
+          AND (${spendPredicateSql(':pid')})${window}`,
+      params,
+    );
+    return { spentUsd: toNum(rows[0]?.['spent']), attributionAvailable: true };
+  } catch (err) {
+    // Schema-tolerant, like the safeExec reads: a cluster that raced ahead of
+    // the migration reports an unknown burn rather than failing the dispatch.
+    // Re-probe next time in case the migration lands mid-process.
+    if (/does not exist|relation|column/i.test((err as Error).message ?? '')) {
+      _attribution = null;
+      return { spentUsd: 0, attributionAvailable: false };
+    }
     throw err;
   }
 }
@@ -300,6 +409,12 @@ export async function createBotRun(input: {
    *  interleaved dispatches cannot both pass a read-then-write check. A null
    *  return with ceiling set means the ceiling refused the row. */
   ceiling?: number;
+  /** The session subject that authorized this firing — what a sprint envelope
+   *  burns down against. Null for cron/pr_watch: nobody authorized those from
+   *  inside an envelope. Dropped silently on a cluster without the attribution
+   *  migration; a run that cannot be attributed is still a run worth
+   *  recording. */
+  dispatchedBy?: string | null;
 }): Promise<BotRun | null> {
   if (config.mock.aurora) return null;
   const status = input.status ?? 'running';
@@ -309,13 +424,19 @@ export async function createBotRun(input: {
     maybe('work_item', input.workItemId ?? null), s('status', status),
     s('outcome', JSON.stringify(input.outcome ?? {})),
   ];
+  // Only widen the statement when the column is really there — the middleware
+  // may be running ahead of schema/agent_run_attribution_schema.sql.
+  const withBy = input.dispatchedBy != null && await attributionAvailable();
+  if (withBy) params.push(s('by', input.dispatchedBy as string));
+  const cols = `bot_id, trigger, run_id, job_id, work_item_id, status, outcome, finished_at${withBy ? ', dispatched_by' : ''}`;
+
   if (status === 'running' && input.ceiling != null) {
     // The TOCTOU-safe form: the count and the insert are one statement, so the
     // database — not a racy pre-check — is what holds the ceiling. Same 24h
     // window as countRunningRuns, so a stuck ancient row cannot wedge it shut.
     const rows = await exec(
-      `INSERT INTO bot_runs (bot_id, trigger, run_id, job_id, work_item_id, status, outcome, finished_at)
-       SELECT :bid::uuid, :trigger, :run::uuid, :job, :work_item, :status, :outcome::jsonb, NULL
+      `INSERT INTO bot_runs (${cols})
+       SELECT :bid::uuid, :trigger, :run::uuid, :job, :work_item, :status, :outcome::jsonb, NULL${withBy ? ', :by' : ''}
         WHERE (SELECT COUNT(*) FROM bot_runs
                 WHERE status = 'running' AND started_at > NOW() - INTERVAL '24 hours') < :ceiling
        RETURNING *`,
@@ -324,9 +445,9 @@ export async function createBotRun(input: {
     return rows[0] ? rowToRun(rows[0]) : null;
   }
   const rows = await exec(
-    `INSERT INTO bot_runs (bot_id, trigger, run_id, job_id, work_item_id, status, outcome, finished_at)
+    `INSERT INTO bot_runs (${cols})
      VALUES (:bid::uuid, :trigger, :run::uuid, :job, :work_item, :status, :outcome::jsonb,
-             CASE WHEN :status = 'running' THEN NULL ELSE NOW() END)
+             CASE WHEN :status = 'running' THEN NULL ELSE NOW() END${withBy ? ', :by' : ''})
      RETURNING *`,
     params,
   );
