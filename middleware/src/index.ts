@@ -77,6 +77,11 @@ setGrantsResolver(async (id) => {
 });
 app.use(sessionMiddleware());
 
+// Observability read floor: orgiq tenant + ViewObservability. Declared here
+// (not beside its first API mount) so the harness/prompt-versions mounts above
+// the /api/observability block can share it.
+const viewObs = [requireTenant('orgiq'), requireAction('ViewObservability')];
+
 function healthHandler(_req: express.Request, res: express.Response): void {
   // Fire-and-report: don't block health on STS when mocks are on.
   const wantsAws = !Object.values(config.mock).every(Boolean);
@@ -187,10 +192,10 @@ app.use('/api/bots', botsRouter);
 app.use('/api/observability/approvals', approvalsRouter);
 // Harness routes — mounted ungated so the test runner (infra/scripts/harness.py)
 // can POST results without a session cookie. Same rationale as approvals.
-app.use('/api/observability/harness', harnessRouter);
+app.use('/api/observability/harness', ...viewObs, harnessRouter);
 // Prompt-versions registry — populated at run start by the harness runner.
 // Mounted ungated (no session) like approvals/harness.
-app.use('/api/observability/prompt-versions', promptVersionsRouter);
+app.use('/api/observability/prompt-versions', ...viewObs, promptVersionsRouter);
 // Every observability aggregate below carries the ViewObservability gate AND a
 // tenant scope. Platform telemetry (traces, cost, topology, per-user traffic)
 // is not partitioned by tenant, so it belongs to the orgiq home tenant's
@@ -199,7 +204,6 @@ app.use('/api/observability/prompt-versions', promptVersionsRouter);
 // (In dev the cookie-less demo session is orgiq and holds every grant, so
 // these render without login; in production a newsroom or anonymous session
 // is denied.)
-const viewObs = [requireTenant('orgiq'), requireAction('ViewObservability')];
 // Cost aggregation routes — read-only aggregates over invocation_traces cost
 // columns.
 app.use('/api/observability/cost', viewObs, costRouter);
@@ -219,7 +223,7 @@ app.use('/api/observability/guardrails-detail', viewObs, guardrailsDetailRouter)
 app.use('/api/observability/traffic', viewObs, trafficRouter);
 // Test fixtures — E2E-only reset utilities. NODE_ENV=production locks them
 // internally, so they stay ungated for the sessionless E2E runner.
-app.use('/api/observability/test-fixtures', testFixturesRouter);
+app.use('/api/observability/test-fixtures', requireSession('TestFixtures'), testFixturesRouter);
 // Sprint 2 — invocation search + per-invocation drill-down (M3/M5 triage).
 app.use('/api/observability/invocations', viewObs, invocationsRouter);
 // A2A topology — derived from parent_invocation_id linkage in invocation_traces.
@@ -256,7 +260,7 @@ app.use('/api/work', requireSession('ViewWork'), workRouter);
 // GATEWAY_SERVICE_AUTH_SECRET from env. No session required: the signing
 // is the auth mechanism; individual portal routes can add requireAction()
 // guards if per-user authz is needed in future.
-app.use('/api/gateway', gatewayProxyRouter);
+app.use('/api/gateway', requireSession('ViewGateway'), gatewayProxyRouter);
 
 app.use(errorHandler);
 
