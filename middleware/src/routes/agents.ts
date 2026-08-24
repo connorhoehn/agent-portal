@@ -8,6 +8,7 @@ import { detectIntervention, recordInvocation, snippet } from '../lib/invocation
 import { listEvents, recordTurn } from '../providers/memory.js';
 import { maybeGenerateTitle } from '../lib/session-titles.js';
 import { requireAction } from '../lib/authz.js';
+import { annotateToolResult } from '../lib/answer-sources.js';
 
 export const agentsRouter = Router();
 
@@ -151,6 +152,10 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
   // from the agent's stream and forward everything else.
   let fullText = '';
   let hasError = false;
+  // TOOL_CALL_RESULT carries no tool name, only the id — so remember what each
+  // id was. The portal builds an answer's citations from these results, and
+  // only a retrieval result is worth annotating with document titles.
+  const toolNameById = new Map<string, string>();
 
   try {
     for await (const event of agentcore.invokeAgentStreaming(agentId, invokePayload)) {
@@ -184,12 +189,13 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
         case 'TEXT_MESSAGE_END':
           stream.textMessageEnd(field(ev as Record<string, unknown>, 'messageId', 'message_id') ?? '');
           break;
-        case 'TOOL_CALL_START':
-          stream.toolCallStart(
-            field(ev as Record<string, unknown>, 'toolCallId', 'tool_call_id') ?? randomUUID(),
-            field(ev as Record<string, unknown>, 'toolCallName', 'tool_call_name') ?? 'unknown',
-          );
+        case 'TOOL_CALL_START': {
+          const id = field(ev as Record<string, unknown>, 'toolCallId', 'tool_call_id') ?? randomUUID();
+          const name = field(ev as Record<string, unknown>, 'toolCallName', 'tool_call_name') ?? 'unknown';
+          toolNameById.set(id, name);
+          stream.toolCallStart(id, name);
           break;
+        }
         case 'TOOL_CALL_ARGS':
           stream.toolCallArgs(
             field(ev as Record<string, unknown>, 'toolCallId', 'tool_call_id') ?? '',
@@ -199,13 +205,23 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
         case 'TOOL_CALL_END':
           stream.toolCallEnd(field(ev as Record<string, unknown>, 'toolCallId', 'tool_call_id') ?? '');
           break;
-        case 'TOOL_CALL_RESULT':
-          stream.toolCallResult(
-            field(ev as Record<string, unknown>, 'messageId', 'message_id') ?? '',
-            field(ev as Record<string, unknown>, 'toolCallId', 'tool_call_id') ?? '',
+        case 'TOOL_CALL_RESULT': {
+          const id = field(ev as Record<string, unknown>, 'toolCallId', 'tool_call_id') ?? '';
+          // Retrieval results reach the portal carrying only s3:// keys. Resolve
+          // documents.title here (the browser can't) so a citation chip reads as
+          // a document name instead of a filename or a bare UUID. No-op — and no
+          // query — when the result names no documents.
+          const annotated = await annotateToolResult(
+            toolNameById.get(id) ?? '',
             (ev as { content?: unknown }).content,
           );
+          stream.toolCallResult(
+            field(ev as Record<string, unknown>, 'messageId', 'message_id') ?? '',
+            id,
+            annotated,
+          );
           break;
+        }
         case 'STEP_STARTED':
           stream.stepStarted(field(ev as Record<string, unknown>, 'stepName', 'step_name') ?? 'working');
           break;
