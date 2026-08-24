@@ -21,6 +21,7 @@ const ROW = {
   allocated_usd: 250, period: 'monthly', updated_by: 'pm@example.com',
   updated_at: '2026-08-01T00:00:00Z', spent_this_period_usd: 42.5,
   run_count_this_period: 7, last_agent_activity_at: '2026-08-20T12:00:00Z',
+  maintenance_usd: 12.25,
 };
 
 // ─── Pure SQL builders ───────────────────────────────────────────────────────
@@ -82,10 +83,29 @@ describe('listBudgets', () => {
       allocatedUsd: 250, period: 'monthly', updatedBy: 'pm@example.com',
       updatedAt: '2026-08-01T00:00:00Z', spentThisPeriodUsd: 42.5,
       runCountThisPeriod: 7, lastAgentActivityAt: '2026-08-20T12:00:00Z',
+      maintenanceUsd: 12.25,
     });
     // The unallocated-but-spending row keeps null allocation — the signal.
     expect(rows[1]!.allocatedUsd).toBeNull();
     expect(rows[1]!.spentThisPeriodUsd).toBe(42.5);
+  });
+
+  // The maintenance floor is the cron-triggered SUBSET of spend, never an
+  // addition to it — a UI that added the two would double-count every
+  // scheduled run.
+  it('reads the maintenance floor as a cron-filtered subset of spend', async () => {
+    execMock.mockResolvedValue([ROW]);
+    const rows = await listBudgets();
+    expect(rows[0]!.maintenanceUsd).toBe(12.25);
+    expect(rows[0]!.maintenanceUsd).toBeLessThanOrEqual(rows[0]!.spentThisPeriodUsd);
+    const sql = String(execMock.mock.calls[0]?.[0] ?? '');
+    expect(sql).toContain(`FILTER (WHERE br.trigger = 'cron')`);
+  });
+
+  it('reports no floor when an initiative has no scheduled runs', async () => {
+    const { maintenance_usd: _omitted, ...noCron } = ROW;
+    execMock.mockResolvedValue([noCron]);
+    expect((await listBudgets())[0]!.maintenanceUsd).toBe(0);
   });
 
   it('degrades to empty when the schema predates the budgets tables', async () => {
@@ -154,7 +174,8 @@ describe('orgSummary', () => {
   it('returns the zeroed shape when nothing exists yet', async () => {
     execMock.mockResolvedValue([]);
     expect(await orgSummary()).toEqual({
-      totalAllocatedUsd: 0, totalSpentThisPeriodUsd: 0, byModel: [], byTrigger: [],
+      totalAllocatedUsd: 0, totalSpentThisPeriodUsd: 0, totalMaintenanceUsd: 0,
+      byModel: [], byTrigger: [],
     });
   });
 
@@ -192,7 +213,8 @@ describe('orgSummary', () => {
   it('degrades to the zeroed shape when the bots schema is missing', async () => {
     execMock.mockRejectedValue(new Error('relation "bot_runs" does not exist'));
     expect(await orgSummary()).toEqual({
-      totalAllocatedUsd: 0, totalSpentThisPeriodUsd: 0, byModel: [], byTrigger: [],
+      totalAllocatedUsd: 0, totalSpentThisPeriodUsd: 0, totalMaintenanceUsd: 0,
+      byModel: [], byTrigger: [],
     });
   });
 });

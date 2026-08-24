@@ -35,11 +35,21 @@ export interface BudgetRow {
   spentThisPeriodUsd: number;
   runCountThisPeriod: number;
   lastAgentActivityAt: string | null;
+  /** The cron-triggered subset of this period's spend: the recurring floor of
+   *  keeping this initiative's repos alive (dependency bumps, drift checks,
+   *  evidence sweeps). A subset of spentThisPeriodUsd, never additional to it.
+   *  Read an allocation against this — only the remainder is available for new
+   *  work, and a floor approaching the allocation means the initiative cannot
+   *  take anything on. See docs/program-operating-model.md. */
+  maintenanceUsd: number;
 }
 
 export interface OrgBudgetSummary {
   totalAllocatedUsd: number;
   totalSpentThisPeriodUsd: number;
+  /** Org-wide cron spend this period — the baseline cost of ownership across
+   *  every initiative. Subset of totalSpentThisPeriodUsd. */
+  totalMaintenanceUsd: number;
   byModel: Array<{ model: string; spentUsd: number; runCount: number }>;
   byTrigger: Array<{ trigger: string; spentUsd: number; runCount: number }>;
 }
@@ -98,6 +108,7 @@ function rowToBudget(r: Record<string, unknown>): BudgetRow {
     spentThisPeriodUsd: toNum(r['spent_this_period_usd']),
     runCountThisPeriod: toNum(r['run_count_this_period']),
     lastAgentActivityAt: r['last_agent_activity_at'] != null ? toStr(r['last_agent_activity_at']) : null,
+    maintenanceUsd: toNum(r['maintenance_usd']),
   };
 }
 
@@ -112,7 +123,10 @@ function budgetSelectSql(scopeToId: boolean): string {
       SELECT p.id AS org_project_id,
              SUM(br.cost_usd)::float8 AS spent_this_period_usd,
              COUNT(*)::int AS run_count_this_period,
-             MAX(br.started_at) AS last_agent_activity_at
+             MAX(br.started_at) AS last_agent_activity_at,
+             -- The cron subset: the maintenance floor, not a separate bucket.
+             COALESCE(SUM(br.cost_usd) FILTER (WHERE br.trigger = 'cron'), 0)::float8
+               AS maintenance_usd
         FROM projects p
         JOIN bot_runs br
           ON br.started_at >= ${PERIOD_START_SQL}
@@ -132,7 +146,8 @@ function budgetSelectSql(scopeToId: boolean): string {
            ib.updated_at,
            COALESCE(ps.spent_this_period_usd, 0)::float8 AS spent_this_period_usd,
            COALESCE(ps.run_count_this_period, 0)::int AS run_count_this_period,
-           ps.last_agent_activity_at
+           ps.last_agent_activity_at,
+           COALESCE(ps.maintenance_usd, 0)::float8 AS maintenance_usd
       FROM ids
       LEFT JOIN initiative_budgets ib ON ib.org_project_id = ids.org_project_id
       LEFT JOIN period_spend ps ON ps.org_project_id = ids.org_project_id
@@ -196,7 +211,8 @@ export async function deleteAllocation(orgProjectId: string): Promise<boolean> {
 
 export async function orgSummary(): Promise<OrgBudgetSummary> {
   const empty: OrgBudgetSummary = {
-    totalAllocatedUsd: 0, totalSpentThisPeriodUsd: 0, byModel: [], byTrigger: [],
+    totalAllocatedUsd: 0, totalSpentThisPeriodUsd: 0, totalMaintenanceUsd: 0,
+    byModel: [], byTrigger: [],
   };
   if (config.mock.aurora) return empty;
 
@@ -207,7 +223,9 @@ export async function orgSummary(): Promise<OrgBudgetSummary> {
     `SELECT
        (SELECT COALESCE(SUM(allocated_usd), 0)::float8 FROM initiative_budgets) AS total_allocated,
        (SELECT COALESCE(SUM(cost_usd), 0)::float8 FROM bot_runs
-         WHERE started_at >= ${PERIOD_START_SQL}) AS total_spent`,
+         WHERE started_at >= ${PERIOD_START_SQL}) AS total_spent,
+       (SELECT COALESCE(SUM(cost_usd), 0)::float8 FROM bot_runs
+         WHERE started_at >= ${PERIOD_START_SQL} AND trigger = 'cron') AS total_maintenance`,
   );
 
   // By-model is scoped to run-backed spend (bot_runs.run_id →
@@ -241,6 +259,7 @@ export async function orgSummary(): Promise<OrgBudgetSummary> {
   return {
     totalAllocatedUsd: toNum(totals[0]?.['total_allocated']),
     totalSpentThisPeriodUsd: toNum(totals[0]?.['total_spent']),
+    totalMaintenanceUsd: toNum(totals[0]?.['total_maintenance']),
     byModel: byModel.map((r) => ({
       model: toStr(r['model']), spentUsd: toNum(r['spent_usd']), runCount: toNum(r['run_count']),
     })),

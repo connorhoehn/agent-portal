@@ -47,11 +47,14 @@ interface BudgetRow {
   spentThisPeriodUsd: number;
   runCountThisPeriod: number;
   lastAgentActivityAt: string | null;
+  /** Cron-triggered subset of spend — the maintenance floor, not extra spend. */
+  maintenanceUsd: number;
 }
 
 interface BudgetSummary {
   totalAllocatedUsd: number;
   totalSpentThisPeriodUsd: number;
+  totalMaintenanceUsd: number;
   byModel: Array<{ model: string; spentUsd: number; runCount: number }>;
   byTrigger: Array<{ trigger: string; spentUsd: number; runCount: number }>;
 }
@@ -292,6 +295,7 @@ export default function BudgetsPage() {
   const totalAllocated = summary?.totalAllocatedUsd ?? 0;
   const totalSpent = summary?.totalSpentThisPeriodUsd ?? 0;
   const remaining = totalAllocated - totalSpent;
+  const totalMaintenance = summary?.totalMaintenanceUsd ?? 0;
   const totalRuns = budgets.reduce((n, b) => n + b.runCountThisPeriod, 0);
 
   async function deleteAllocation(row: BudgetRow) {
@@ -349,7 +353,16 @@ export default function BudgetsPage() {
                 hint={remaining < 0 ? 'over allocation' : 'allocated − spent'}
                 mono
               />
-              <StatCard label="Runs this period" value={totalRuns} mono />
+              {/* The recurring floor: what scheduled bots cost to keep the
+                  repos alive. Only the remainder of an allocation is available
+                  for new work, so this belongs beside the totals, not buried
+                  in the by-trigger split. */}
+              <StatCard
+                label="Maintenance floor"
+                value={usd(totalMaintenance)}
+                hint={totalSpent > 0 ? `${Math.round((totalMaintenance / totalSpent) * 100)}% of spend · scheduled bots` : 'scheduled bots'}
+                mono
+              />
             </KPIGrid>
           </div>
 
@@ -413,6 +426,14 @@ export default function BudgetsPage() {
                       </TableTd>
                       <TableTd>
                         <span className="tabular-nums">{usd(row.spentThisPeriodUsd)}</span>
+                        {row.maintenanceUsd > 0 && (
+                          <div
+                            className="text-[11px] text-text-tertiary tabular-nums mt-0.5"
+                            title="Cron-triggered bot runs — the recurring floor of keeping this initiative's repos alive"
+                          >
+                            {usd(row.maintenanceUsd)} maintenance
+                          </div>
+                        )}
                       </TableTd>
                       <TableTd>
                         {rowRemaining == null || burn == null ? (
