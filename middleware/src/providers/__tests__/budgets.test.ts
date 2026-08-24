@@ -17,7 +17,7 @@ const execMock = exec as unknown as jest.Mock;
 beforeEach(() => execMock.mockReset());
 
 const ROW = {
-  org_project_id: 'proj-k8s', org_project_name: 'Kubernetes Cluster Upgrade',
+  org_project_id: 'p-observability', org_project_name: 'Observability Platform',
   allocated_usd: 250, period: 'monthly', updated_by: 'pm@example.com',
   updated_at: '2026-08-01T00:00:00Z', spent_this_period_usd: 42.5,
   run_count_this_period: 7, last_agent_activity_at: '2026-08-20T12:00:00Z',
@@ -78,7 +78,7 @@ describe('listBudgets', () => {
     }]);
     const rows = await listBudgets();
     expect(rows[0]).toEqual({
-      orgProjectId: 'proj-k8s', orgProjectName: 'Kubernetes Cluster Upgrade',
+      orgProjectId: 'p-observability', orgProjectName: 'Observability Platform',
       allocatedUsd: 250, period: 'monthly', updatedBy: 'pm@example.com',
       updatedAt: '2026-08-01T00:00:00Z', spentThisPeriodUsd: 42.5,
       runCountThisPeriod: 7, lastAgentActivityAt: '2026-08-20T12:00:00Z',
@@ -102,10 +102,10 @@ describe('listBudgets', () => {
 describe('getBudget', () => {
   it('scopes the same list shape to one initiative', async () => {
     execMock.mockResolvedValue([ROW]);
-    const budget = await getBudget('proj-k8s');
+    const budget = await getBudget('p-observability');
     const sql = execMock.mock.calls[0][0] as string;
     expect(sql).toMatch(/WHERE ids\.org_project_id = :pid/);
-    expect(budget?.orgProjectId).toBe('proj-k8s');
+    expect(budget?.orgProjectId).toBe('p-observability');
   });
 
   it('returns null when nothing matches', async () => {
@@ -119,7 +119,7 @@ describe('getBudget', () => {
 describe('upsertAllocation', () => {
   it('upserts idempotently and re-reads through the list shape', async () => {
     execMock.mockResolvedValueOnce([]).mockResolvedValueOnce([ROW]);
-    const budget = await upsertAllocation('proj-k8s', 250, 'pm@example.com');
+    const budget = await upsertAllocation('p-observability', 250, 'pm@example.com');
     const insertSql = execMock.mock.calls[0][0] as string;
     expect(insertSql).toMatch(/INSERT INTO initiative_budgets/);
     expect(insertSql).toMatch(/ON CONFLICT \(org_project_id\) DO UPDATE/);
@@ -133,8 +133,8 @@ describe('upsertAllocation', () => {
 
 describe('deleteAllocation', () => {
   it('reports whether a row was actually deleted', async () => {
-    execMock.mockResolvedValueOnce([{ org_project_id: 'proj-k8s' }]).mockResolvedValueOnce([]);
-    expect(await deleteAllocation('proj-k8s')).toBe(true);
+    execMock.mockResolvedValueOnce([{ org_project_id: 'p-observability' }]).mockResolvedValueOnce([]);
+    expect(await deleteAllocation('p-observability')).toBe(true);
     expect(await deleteAllocation('proj-none')).toBe(false);
     expect(execMock.mock.calls[0][0]).toMatch(/DELETE FROM initiative_budgets WHERE org_project_id = :pid/);
   });
@@ -142,8 +142,8 @@ describe('deleteAllocation', () => {
 
 describe('initiativeExists', () => {
   it('checks the projects table', async () => {
-    execMock.mockResolvedValue([{ id: 'proj-k8s' }]);
-    expect(await initiativeExists('proj-k8s')).toBe(true);
+    execMock.mockResolvedValue([{ id: 'p-observability' }]);
+    expect(await initiativeExists('p-observability')).toBe(true);
     expect(execMock.mock.calls[0][0]).toMatch(/FROM projects WHERE id = :pid/);
   });
 });

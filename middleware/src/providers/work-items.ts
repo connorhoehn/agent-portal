@@ -512,19 +512,21 @@ const MOCK_WORK_ITEMS: WorkItem[] = [
   { id: 'wi-onboard-s2', projectId: 'p-mobile-redesign', projectName: 'Developer Onboarding Improvements', parentId: 'wi-onboard-f1', type: 'story', title: 'Create ONBOARDING.md with architecture overview + runbook', description: null, status: 'open', priority: 'medium', assigneeId: 'p-009', assigneeName: "Ryan O'Brien", assigneeDept: 'Product', labels: ['onboarding', 'documentation'], storyPoints: 3, prUrl: null, prStatus: null, createdAt: D(20), updatedAt: D(7), completedAt: null, childCount: 0, childDoneCount: 0 },
 ];
 
+// Mirrors the decisions in schema/seed_program.sql so mock mode and a seeded
+// Aurora tell the same story.
 const MOCK_DECISIONS: ProjectDecision[] = [
-  { id: 'dec-001', topic: 'Observability stack: Datadog vs Grafana OSS', summary: 'Evaluate Datadog vs Grafana stack for unified observability. Datadog\'s APM integration is strong but $180k/yr at current scale. Grafana Tempo + Mimir offers 60% cost reduction with more ops overhead. Decision unblocks OTel migration epic.', status: 'escalated', requiredRole: 'org-leader', escalatedAt: D(5), workItemId: 'wi-otel-e1', workItemTitle: 'OpenTelemetry Collector Migration' },
-  { id: 'dec-002', topic: 'SSO provider: Okta vs AWS IAM Identity Center', summary: 'Platform needs to pick a single SSO provider before Cedar policy migration completes. AWS IAM Identity Center integrates natively with Verified Permissions but has limited SCIM support. Okta has mature SCIM and broad app catalog.', status: 'escalated', requiredRole: 'hr-admin', escalatedAt: D(3), workItemId: 'wi-cedar-e1', workItemTitle: 'Replace RBAC with Cedar Policy Engine' },
-  { id: 'dec-003', topic: 'Kubernetes upgrade window: maintenance or rolling?', summary: 'Control-plane upgrade can be done during a 2-hour maintenance window (simpler) or via zero-downtime rolling strategy (more complex). SRE recommends rolling given 99.95% SLO commitment.', status: 'resolved', requiredRole: null, escalatedAt: null, workItemId: 'wi-k8s-e1', workItemTitle: 'Control Plane Upgrade to 1.29' },
-  { id: 'dec-004', topic: 'Istio vs Linkerd for service mesh', summary: 'Original ADR chose Linkerd for simplicity but Istio selected after audit of team expertise and integration requirements for Kiali/Jaeger. Decision is resolved.', status: 'resolved', requiredRole: null, escalatedAt: null, workItemId: 'wi-istio-e1', workItemTitle: 'Sidecar Injection Rollout' },
+  { id: 'd-otel-vendor', topic: 'Self-hosted OTel collectors over vendor agents', summary: 'Vendor agents priced per-host at 3x our infra cost; the collector fleet is ours to tune and the escape hatch stays open.', status: 'resolved', requiredRole: null, escalatedAt: null, workItemId: 'wi-obs-e1', workItemTitle: 'OpenTelemetry everywhere' },
+  { id: 'd-cognito-cutover', topic: 'Cutover order for legacy SSO tenants', summary: 'Smallest tenant first vs. riskiest first. Riskiest-first surfaces unknowns while rollback is cheap, but a failed first cutover is loud.', status: 'escalated', requiredRole: 'org-leader', escalatedAt: D(3), workItemId: 'wi-auth-e2', workItemTitle: 'Legacy SSO decommission' },
+  { id: 'd-eval-judge-model', topic: 'Judge model for canary evaluation', summary: 'Nova Pro judges cost ~6x Nova Lite but agree with human labels 11 points more often on the current rubric. Sample-rate tuning could fund the gap.', status: 'open', requiredRole: null, escalatedAt: null, workItemId: 'wi-llm-e1', workItemTitle: 'Prompt management and canary' },
+  { id: 'd-iceberg', topic: 'Iceberg over Delta for the lakehouse table format', summary: 'Engine-neutral catalog support and snapshot isolation fit the multi-engine roadmap; Delta\'s tighter Spark coupling was the deciding cost.', status: 'resolved', requiredRole: null, escalatedAt: null, workItemId: 'wi-lake-e1', workItemTitle: 'Lakehouse foundation' },
 ];
 
 // Project ID → decisions index
 const PROJECT_DECISIONS: Record<string, string[]> = {
-  'p-observability': ['dec-003'],
-  'p-inference-platform': ['dec-001'],
-  'p-rag-search': ['dec-002'],
-  'p-zero-trust': ['dec-004'],
+  'p-observability':  ['d-otel-vendor'],
+  'p-auth-migration': ['d-cognito-cutover'],
+  'p-llm-platform':   ['d-eval-judge-model'],
+  'p-data-lake':      ['d-iceberg'],
 };
 
 // ─── Public API ───────────────────────────────────────────────────────────────
