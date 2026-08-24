@@ -179,7 +179,15 @@ async function insertApproval(row: ApprovalRow): Promise<void> {
   );
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 async function fetchApproval(approvalId: string): Promise<ApprovalRow | null> {
+  // A non-UUID id used to reach `CAST(:id AS uuid)` and blow up in Postgres,
+  // surfacing as a bare 500 — for anonymous callers too, since this lookup runs
+  // BEFORE the Cedar ApproveTransaction check. "Not a valid id" is a not-found,
+  // not a server fault, and it must not be a way to make the server throw
+  // before it has decided whether you are allowed to ask.
+  if (!UUID_RE.test(approvalId)) return null;
   if (MOCK_ENABLED) {
     return mockStore.get(approvalId) ?? null;
   }

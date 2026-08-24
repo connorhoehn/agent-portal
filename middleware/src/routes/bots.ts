@@ -38,6 +38,14 @@ const readGate = readForRolesElseAction(['org-leader', 'hr-admin'], 'ManageDevbo
 const manageGate = requireAction('ManageDevbox');
 const dispatchGate = requireAction('DispatchAgentRun');
 
+// Reads that belong to the DISPATCH journey rather than to bot administration.
+// An SME holds DispatchAgentRun and nothing else, so gating these on
+// ManageDevbox locks the role out of the very thing it exists to do: the
+// portal disables Authorize while the estimate is null, so a 403 here latches
+// the button off permanently and the failure reads as "estimate unavailable"
+// rather than "you lack permission".
+const marketReadGate = readForRolesElseAction(['org-leader', 'hr-admin'], 'DispatchAgentRun');
+
 const TEMPLATES: readonly BotTemplate[] = ['epic', 'story', 'bug'];
 const TRIGGERS: readonly BotTrigger[] = ['manual', 'cron', 'pr_watch'];
 
@@ -96,7 +104,7 @@ function checkShape(bot: {
 // ─── Estimator ───────────────────────────────────────────────────────────────
 // Registered before /:id so "estimate" is never read as a bot id.
 
-botsRouter.get('/estimate', readGate, asyncHandler(async (req, res) => {
+botsRouter.get('/estimate', marketReadGate, asyncHandler(async (req, res) => {
   const model = String(req.query['model'] ?? '').trim();
   if (!model) throw new ValidationError('model is required');
   const agentProjectId = req.query['agentProjectId'] ? String(req.query['agentProjectId']) : null;
@@ -220,11 +228,6 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
   }
   res.status(202).json({ run: result.run });
 }));
-
-// The work-board surface: SMEs holding DispatchAgentRun read the runs behind
-// the initiative board they dispatch from, without holding the bots-admin
-// read roles.
-const marketReadGate = readForRolesElseAction(['org-leader', 'hr-admin'], 'DispatchAgentRun');
 
 botsRouter.get('/marketplace-runs', marketReadGate, asyncHandler(async (req, res) => {
   const orgProjectId = String(req.query['orgProjectId'] ?? '').trim();
