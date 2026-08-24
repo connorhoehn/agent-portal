@@ -46,6 +46,25 @@ interface TopologyResponse {
   generatedAt: string;
 }
 
+// agent_id is the identity; agent_name is a label that varies by whoever
+// wrote the row. The agent's own bundle says "Supervisor"; a middleware-side
+// fallback row says "orgiq-supervisor"; a future writer may say something
+// else again. Grouping by (agent_id, agent_name) turned that variance into
+// TWO nodes for one agent — the graph disagreed with itself about how many
+// agents exist, and each node carried half the traffic.
+//
+// So: group by agent_id alone, and pick one display name for the group,
+// preferring a name that is not just the id echoed back. MIN() over the
+// filtered set keeps it deterministic; the COALESCE chain falls back to any
+// name, then to the id, so a group can never render nameless.
+function agentNamePick(nameCol: string, idCol: string): string {
+  return `COALESCE(
+                MIN(${nameCol}) FILTER (WHERE ${nameCol} IS NOT NULL AND ${nameCol} <> ${idCol}),
+                MIN(${nameCol}),
+                MIN(${idCol})
+              )`;
+}
+
 // Clamp the window so a buggy frontend can't scan 10 years of traces.
 function clampWindow(raw: string | undefined): number {
   const n = parseInt(raw ?? '24', 10);
@@ -66,7 +85,7 @@ topologyRouter.get('/a2a', asyncHandler(async (req, res) => {
   try {
     const nodeRows = await exec(
       `SELECT agent_id,
-              agent_name,
+              ${agentNamePick('agent_name', 'agent_id')} AS agent_name,
               COUNT(*)::int AS invocation_count,
               PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY duration_ms)::float8 AS p50_ms,
               PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms)::float8 AS p95_ms,
@@ -80,7 +99,7 @@ topologyRouter.get('/a2a', asyncHandler(async (req, res) => {
         WHERE ts > now() - make_interval(hours => :hours::int)
           AND agent_id IS NOT NULL
           AND agent_id NOT LIKE 'test:%'
-        GROUP BY agent_id, agent_name`,
+        GROUP BY agent_id`,
       params,
     );
     nodes = nodeRows.map((r) => ({
@@ -110,9 +129,9 @@ topologyRouter.get('/a2a', asyncHandler(async (req, res) => {
             AND agent_id NOT LIKE 'test:%'
        )
        SELECT p.agent_id      AS source_agent_id,
-              p.agent_name    AS source_agent_name,
+              ${agentNamePick('p.agent_name', 'p.agent_id')} AS source_agent_name,
               c.agent_id      AS target_agent_id,
-              c.agent_name    AS target_agent_name,
+              ${agentNamePick('c.agent_name', 'c.agent_id')} AS target_agent_name,
               COUNT(*)::int   AS call_count,
               PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY c.duration_ms)::float8 AS p50_ms,
               PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY c.duration_ms)::float8 AS p95_ms,
@@ -124,7 +143,7 @@ topologyRouter.get('/a2a', asyncHandler(async (req, res) => {
                   END)::int AS error_count
          FROM win p
          JOIN win c ON c.parent_invocation_id = p.invocation_id
-        GROUP BY p.agent_id, p.agent_name, c.agent_id, c.agent_name
+        GROUP BY p.agent_id, c.agent_id
         ORDER BY call_count DESC`,
       params,
     );

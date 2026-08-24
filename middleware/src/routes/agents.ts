@@ -254,6 +254,15 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
   }
 
   // Record successful invocation.
+  //
+  // This always feeds the in-memory activity ring. Whether it ALSO writes an
+  // observability.invocation_traces row is decided by
+  // `shouldWriteMiddlewareTrace()` in lib/invocations.ts — normally it does
+  // not, because the agent emits its own, richer bundle for this same run
+  // (model, tokens, tool calls, parent link) and the two writers key on
+  // different invocation ids, so nothing would dedupe them. Do not add a
+  // direct `traceSink.enqueue` here; that is exactly the double-write that
+  // doubled every cost figure and split each agent into two topology nodes.
   const intervened = await detectIntervention(fullText);
   recordInvocation({
     id: stream.runId,
