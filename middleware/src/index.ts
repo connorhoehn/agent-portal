@@ -192,7 +192,7 @@ app.use('/api/bots', botsRouter);
 app.use('/api/observability/approvals', approvalsRouter);
 // Harness routes — mounted ungated so the test runner (infra/scripts/harness.py)
 // can POST results without a session cookie. Same rationale as approvals.
-app.use('/api/observability/harness', ...viewObs, harnessRouter);
+app.use('/api/observability/harness', harnessRouter);
 // Prompt-versions registry — populated at run start by the harness runner.
 // Mounted ungated (no session) like approvals/harness.
 app.use('/api/observability/prompt-versions', ...viewObs, promptVersionsRouter);

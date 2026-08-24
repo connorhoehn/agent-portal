@@ -17,6 +17,7 @@
 // the /harness and /approvals routers.
 
 import { Router } from 'express';
+import { requireAction } from '../lib/authz.js';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { exec } from '../providers/aurora.js';
@@ -70,7 +71,7 @@ interface RegisterBody {
   notes?: string | null;
 }
 
-promptVersionsRouter.post('/', asyncHandler(async (req, res) => {
+promptVersionsRouter.post('/', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as RegisterBody;
   const agentId = typeof body.agentId === 'string' ? body.agentId.trim() : '';
   const content = typeof body.content === 'string' ? body.content : '';

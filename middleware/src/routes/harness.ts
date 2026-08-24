@@ -22,16 +22,34 @@
 //
 // All Aurora I/O uses the RDS Data API via providers/aurora.ts exec().
 
-import { Router } from 'express';
-import { randomUUID } from 'node:crypto';
+import { Router, type Request, type Response, type NextFunction } from 'express';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
 import { exec } from '../providers/aurora.js';
 import { processTrace, type TraceInput } from '../lib/trace-sink.js';
 import { judgeResponse } from '../lib/judge.js';
 import { executeRun, loadCasesForRun } from '../lib/harness-runner.js';
+import { requireAction, requireSession } from '../lib/authz.js';
 
 export const harnessRouter = Router();
+
+// The trace callback (`POST /trace`) is agent-facing: deployed runtimes post
+// their bundles here with no session (agents/_shared/instrumentation.py). It
+// therefore cannot take the session floor the rest of this router does — but
+// it must not be anonymously writable either, since the body carries userId
+// and cost and would poison telemetry. Same shape as approvals' service auth:
+// open when HARNESS_TRACE_SECRET is unset (dev), a constant-time header check
+// when it is set. The stdout+CloudWatch path is unaffected by any of this.
+function requireTraceAuth(req: Request, res: Response, next: NextFunction): void {
+  const secret = process.env['HARNESS_TRACE_SECRET'];
+  if (!secret) { next(); return; }
+  const got = typeof req.headers['x-harness-auth'] === 'string' ? req.headers['x-harness-auth'] as string : '';
+  const a = Buffer.from(got);
+  const b = Buffer.from(secret);
+  if (a.length === b.length && timingSafeEqual(a, b)) { next(); return; }
+  res.status(401).json({ error: 'service authentication required' });
+}
 
 // ── Shared types ───────────────────────────────────────────────────────────
 
@@ -235,7 +253,7 @@ function autoTestId(agentId: string, prompt: string): string {
 //     processTrace) so harness runs never silently drop on a sampling miss
 //   - non-Aurora failures degrade to nulls; Aurora INSERT failure → 500
 
-harnessRouter.post('/trace', asyncHandler(async (req, res) => {
+harnessRouter.post('/trace', requireTraceAuth, asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as Partial<TraceInput>;
   const agentId = typeof body.agentId === 'string' ? body.agentId : '';
   const prompt = typeof body.prompt === 'string' ? body.prompt : '';
@@ -330,7 +348,7 @@ harnessRouter.post('/trace', asyncHandler(async (req, res) => {
 
 // ── GET /cases ─────────────────────────────────────────────────────────────
 
-harnessRouter.get('/cases', asyncHandler(async (req, res) => {
+harnessRouter.get('/cases', requireSession('ViewObservability'), asyncHandler(async (req, res) => {
   const includeInactive = req.query['includeInactive'] === '1'
     || req.query['includeInactive'] === 'true';
   const sql = `
@@ -349,7 +367,7 @@ harnessRouter.get('/cases', asyncHandler(async (req, res) => {
 
 // ── GET /cases/:id ─────────────────────────────────────────────────────────
 
-harnessRouter.get('/cases/:id', asyncHandler(async (req, res) => {
+harnessRouter.get('/cases/:id', requireSession('ViewObservability'), asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
   const rows = await exec(
     `SELECT test_id, agent_id, template_id, prompt, reference_output,
@@ -384,7 +402,7 @@ interface UpsertCaseBody {
   notes?: string | null;
 }
 
-harnessRouter.post('/cases', asyncHandler(async (req, res) => {
+harnessRouter.post('/cases', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as UpsertCaseBody;
   const agentId = typeof body.agentId === 'string' ? body.agentId : '';
   const prompt = typeof body.prompt === 'string' ? body.prompt : '';
@@ -442,7 +460,7 @@ harnessRouter.post('/cases', asyncHandler(async (req, res) => {
 
 // ── PATCH /cases/:id — partial update ──────────────────────────────────────
 
-harnessRouter.patch('/cases/:id', asyncHandler(async (req, res) => {
+harnessRouter.patch('/cases/:id', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
   const body = (req.body ?? {}) as UpsertCaseBody;
   const sets: string[] = [];
@@ -502,7 +520,7 @@ harnessRouter.patch('/cases/:id', asyncHandler(async (req, res) => {
 
 // ── DELETE /cases/:id — soft delete ────────────────────────────────────────
 
-harnessRouter.delete('/cases/:id', asyncHandler(async (req, res) => {
+harnessRouter.delete('/cases/:id', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
   const rows = await exec(
     `UPDATE observability.test_cases
@@ -527,7 +545,7 @@ interface CreateRunBody {
   mode?: 'live' | 'sim';
 }
 
-harnessRouter.post('/runs', asyncHandler(async (req, res) => {
+harnessRouter.post('/runs', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as CreateRunBody;
   const label = typeof body.label === 'string' && body.label.trim()
     ? body.label.trim()
@@ -580,7 +598,7 @@ harnessRouter.post('/runs', asyncHandler(async (req, res) => {
 // the client polls /runs/:id/status, which already existed and finally has
 // something to report.
 
-harnessRouter.post('/runs/:id/execute', asyncHandler(async (req, res) => {
+harnessRouter.post('/runs/:id/execute', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
   const runId = String(req.params['id'] ?? '');
   const rows = await exec(
     `SELECT status, judge_model_id FROM observability.test_runs
@@ -612,7 +630,7 @@ harnessRouter.post('/runs/:id/execute', asyncHandler(async (req, res) => {
 
 // ── GET /runs — recent runs ────────────────────────────────────────────────
 
-harnessRouter.get('/runs', asyncHandler(async (req, res) => {
+harnessRouter.get('/runs', requireSession('ViewObservability'), asyncHandler(async (req, res) => {
   const rawLimit = parseInt((req.query['limit'] as string) ?? '14', 10);
   const limit = Number.isFinite(rawLimit) && rawLimit > 0
     ? Math.min(rawLimit, 100)
@@ -634,7 +652,7 @@ harnessRouter.get('/runs', asyncHandler(async (req, res) => {
 
 // ── GET /runs/:id — run + joined results ───────────────────────────────────
 
-harnessRouter.get('/runs/:id', asyncHandler(async (req, res) => {
+harnessRouter.get('/runs/:id', requireSession('ViewObservability'), asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
   const runRows = await exec(
     `SELECT run_id::text AS run_id, label, git_sha, judge_model_id,
@@ -686,7 +704,7 @@ harnessRouter.get('/runs/:id', asyncHandler(async (req, res) => {
 
 // ── GET /runs/:id/status — live counters ───────────────────────────────────
 
-harnessRouter.get('/runs/:id/status', asyncHandler(async (req, res) => {
+harnessRouter.get('/runs/:id/status', requireSession('ViewObservability'), asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
   const rows = await exec(
     `SELECT status, total_cases, completed, passed, failed, pass_rate
@@ -737,7 +755,7 @@ interface UpsertResultBody {
   estCostUsd?: number | null;
 }
 
-harnessRouter.post('/runs/:runId/results', asyncHandler(async (req, res) => {
+harnessRouter.post('/runs/:runId/results', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
   const runId = String(req.params['runId'] ?? '');
   const body = (req.body ?? {}) as UpsertResultBody;
   const testId = typeof body.testId === 'string' ? body.testId : '';
@@ -815,7 +833,7 @@ interface PatchRunBody {
   agentVersions?: Record<string, string>;
 }
 
-harnessRouter.patch('/runs/:id', asyncHandler(async (req, res) => {
+harnessRouter.patch('/runs/:id', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
   const body = (req.body ?? {}) as PatchRunBody;
   const sets: string[] = [];
@@ -878,7 +896,7 @@ harnessRouter.patch('/runs/:id', asyncHandler(async (req, res) => {
 
 // ── POST /results/:invocationId/rejudge — re-run judge 3x ──────────────────
 
-harnessRouter.post('/results/:invocationId/rejudge', asyncHandler(async (req, res) => {
+harnessRouter.post('/results/:invocationId/rejudge', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
   const invocationId = String(req.params['invocationId'] ?? '');
   if (!/^[0-9a-f-]{36}$/i.test(invocationId)) {
     throw new ValidationError('invocationId must be a UUID');
@@ -917,7 +935,7 @@ interface CoverageRow {
   lastRunAt?: string;
 }
 
-harnessRouter.get('/coverage', asyncHandler(async (_req, res) => {
+harnessRouter.get('/coverage', requireSession('ViewObservability'), asyncHandler(async (_req, res) => {
   // Count active cases per agent + join the most-recent run's pass numbers.
   // We compute the latest run per agent by looking at when its results last
   // landed in test_results. This is approximate (a run touches multiple
@@ -1136,7 +1154,7 @@ function diffPromptVersions(
   return out;
 }
 
-harnessRouter.get('/runs/:runIdA/compare/:runIdB', asyncHandler(async (req, res) => {
+harnessRouter.get('/runs/:runIdA/compare/:runIdB', requireSession('ViewObservability'), asyncHandler(async (req, res) => {
   const runIdA = String(req.params['runIdA'] ?? '');
   const runIdB = String(req.params['runIdB'] ?? '');
   if (!runIdA || !runIdB) {
@@ -1271,7 +1289,7 @@ interface PromoteBody {
   promotedBy?: string | null;
 }
 
-harnessRouter.post('/promote', asyncHandler(async (req, res) => {
+harnessRouter.post('/promote', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as PromoteBody;
   const promptVersion = typeof body.promptVersion === 'string' ? body.promptVersion.trim() : '';
   const agentId = typeof body.agentId === 'string' ? body.agentId.trim() : '';
@@ -1355,7 +1373,7 @@ function rowToPromotedVersion(r: Record<string, unknown>): PromotedPromptVersion
   };
 }
 
-harnessRouter.get('/promoted-versions', asyncHandler(async (_req, res) => {
+harnessRouter.get('/promoted-versions', requireSession('ViewObservability'), asyncHandler(async (_req, res) => {
   const rows = await exec(
     `SELECT prompt_version, agent_id, content, content_sha256,
             registered_at::text AS registered_at,
