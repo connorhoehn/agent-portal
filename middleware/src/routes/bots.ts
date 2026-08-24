@@ -21,7 +21,9 @@ import {
   listMarketplaceRuns, runCostSamples, perPointCostSamples,
   type BotTemplate, type BotTrigger, type BotPatch,
 } from '../providers/bots.js';
-import { fireBot, dispatchWorkItem, decideRunBudget } from '../lib/bot-runner.js';
+import { fireBot, dispatchWorkItem, decideRunBudget, decideAllocation } from '../lib/bot-runner.js';
+import { getWorkItem } from '../providers/work-items.js';
+import { getBudget } from '../providers/budgets.js';
 import { registerBot, unregisterBot } from '../lib/bot-scheduler.js';
 import { validateCronExpr } from '../lib/ingest-scheduler.js';
 import { selectEstimate } from '../lib/bot-estimate.js';
@@ -153,6 +155,45 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
     if (gate.kind === 'confirm') {
       res.status(409).json({ error: gate.reason, estimate: fresh });
       return;
+    }
+  }
+
+  // The initiative's allocation, as a brake rather than a report: dispatching
+  // work whose forecast does not fit the money left this period demands the
+  // same explicit confirmation the per-run cap does. Skipped entirely when the
+  // initiative has no allocation — unbudgeted is not zero-budget — and when
+  // the item's estimate cannot be established, since refusing on an unknown
+  // would brake every dispatch against a repo with no history.
+  {
+    const item = await getWorkItem(workItemId);
+    const points = item?.storyPoints ?? null;
+    if (item && points != null && points > 0) {
+      const budgetRow = await getBudget(item.projectId);
+      if (budgetRow?.allocatedUsd != null) {
+        const repoPerPoint = body.agentProjectId
+          ? await perPointCostSamples(model, String(body.agentProjectId)) : null;
+        const scaled = selectPerPointEstimate(points, repoPerPoint, await perPointCostSamples(model, null));
+        if (scaled) {
+          const gate = decideAllocation(
+            { allocatedUsd: budgetRow.allocatedUsd, spentUsd: budgetRow.spentThisPeriodUsd },
+            scaled.costUsdP75,
+            body.confirmOverBudget === true,
+          );
+          if (gate.kind === 'confirm') {
+            res.status(409).json({
+              error: gate.reason,
+              estimate: { ...scaled, points, scaled: true },
+              allocation: {
+                orgProjectId: item.projectId,
+                allocatedUsd: budgetRow.allocatedUsd,
+                spentUsd: budgetRow.spentThisPeriodUsd,
+                remainingUsd: budgetRow.allocatedUsd - budgetRow.spentThisPeriodUsd,
+              },
+            });
+            return;
+          }
+        }
+      }
     }
   }
 

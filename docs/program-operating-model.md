@@ -181,14 +181,30 @@ begin doing real work against them with no schema change:
 Private repos need a stored connection (`agent_projects.connection_name`); the
 clone path reports a missing credential rather than failing soft.
 
+## The allocation as a brake
+
+`POST /api/bots/dispatch-work` checks the initiative's remaining allocation
+before dispatching (`decideAllocation` in `lib/bot-runner.ts`). A forecast that
+does not fit answers **409** with the estimate and the allocation state
+attached, and proceeds only with an explicit `confirmOverBudget`.
+
+Three deliberate choices:
+
+- **Soft, not hard.** Unlike the per-day bot budget, which self-pauses the bot,
+  this gates human-initiated work. A hard stop with no override would strand an
+  SME mid-sprint, and the estimate is a forecast, not a bill.
+- **Unbudgeted is not zero-budget.** An initiative with no allocation row is not
+  braked at all; it shows up on the Budgets page as a blind spot instead.
+- **Unknown estimates do not brake.** If the item is unsized or the repo has no
+  per-point history, the dispatch proceeds — refusing on an unknown would brake
+  every first dispatch against a new repo.
+
+Still to do here: the same check on the bot fire path (`decideFire` knows the
+bot's own budgets but not its initiative's), and enforcement against the
+per-SME `budget_grants` envelope rather than only the initiative total.
+
 ## Not built yet
 
-- **The allocation brake.** Allocations report; they do not yet refuse. Daily
-  bot budgets self-pause, but an initiative whose monthly allocation is
-  exhausted still accepts dispatches. Making the grant a real brake means
-  checking remaining envelope in `decideFire` and in the marketplace dispatch
-  path, and returning the same 409-with-confirmation shape the per-run soft cap
-  uses.
 - **Sprint surfaces in the portal.** The tables and the seed are there; there
   is no sprint board or envelope-burn view yet.
 - **Grant-scoped dispatch.** `DispatchAgentRun` is currently role-wide. Cedar

@@ -11,6 +11,7 @@ jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', mock: { aur
 
 import {
   decideFire, renderPrompt, decideConcurrency, botMaxConcurrent, decideRunBudget,
+  decideAllocation,
   type FireGuardInput,
 } from '../bot-runner.js';
 
@@ -94,6 +95,41 @@ describe('decideRunBudget', () => {
   it('a zero budget over-budgets any positive estimate', () => {
     expect(decideRunBudget(0, 0.01, false)).toMatchObject({ kind: 'confirm' });
     expect(decideRunBudget(0, 0, false)).toEqual({ kind: 'proceed' });
+  });
+});
+
+describe('decideAllocation', () => {
+  // Unbudgeted is not zero-budget. An initiative nobody has funded must stay
+  // dispatchable — the Budgets page surfaces it as a blind spot instead.
+  it('proceeds when the initiative has no allocation', () => {
+    expect(decideAllocation({ allocatedUsd: null, spentUsd: 500 }, 99, false)).toEqual({ kind: 'proceed' });
+  });
+
+  it('proceeds while the estimate fits the remaining allocation', () => {
+    expect(decideAllocation({ allocatedUsd: 30, spentUsd: 10 }, 5, false)).toEqual({ kind: 'proceed' });
+    // Exactly consuming the remainder is within it.
+    expect(decideAllocation({ allocatedUsd: 30, spentUsd: 10 }, 20, false)).toEqual({ kind: 'proceed' });
+  });
+
+  it('demands confirmation when the estimate overruns what is left', () => {
+    const d = decideAllocation({ allocatedUsd: 30, spentUsd: 25 }, 8, false);
+    expect(d.kind).toBe('confirm');
+    expect((d as { reason: string }).reason).toMatch(/\$5\.00 left/);
+    expect((d as { reason: string }).reason).toMatch(/confirmOverBudget/);
+  });
+
+  it('reports an exhausted allocation differently from a partial overrun', () => {
+    const d = decideAllocation({ allocatedUsd: 30, spentUsd: 30 }, 1, false);
+    expect((d as { reason: string }).reason).toMatch(/exhausted/);
+    // Overspent past the allocation is still "exhausted", not a negative remainder.
+    const over = decideAllocation({ allocatedUsd: 30, spentUsd: 44 }, 1, false);
+    expect((over as { reason: string }).reason).toMatch(/exhausted/);
+  });
+
+  // Soft, like the per-run cap: this gates human-initiated work, and a hard
+  // stop with no override would strand an SME mid-sprint.
+  it('an explicit confirmation overrides the brake', () => {
+    expect(decideAllocation({ allocatedUsd: 30, spentUsd: 30 }, 99, true)).toEqual({ kind: 'proceed' });
   });
 });
 
