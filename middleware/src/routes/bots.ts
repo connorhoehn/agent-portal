@@ -164,6 +164,12 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
   // initiative has no allocation — unbudgeted is not zero-budget — and when
   // the item's estimate cannot be established, since refusing on an unknown
   // would brake every dispatch against a repo with no history.
+  //
+  // Note both gates read the same confirmOverBudget flag. That is unambiguous
+  // today because the portal never sends budgetPerRunUsd here (the per-run cap
+  // belongs to bots, which carry their own), so at most one gate is ever
+  // live per request. If a client starts sending both, split the flag — one
+  // confirmation should not silently answer two different limits.
   {
     const item = await getWorkItem(workItemId);
     const points = item?.storyPoints ?? null;
