@@ -337,7 +337,17 @@ SYSTEM_PROMPT = (
     "WHERE LOWER(p.name) LIKE '%theo%' ORDER BY ps.proficiency DESC\n\n"
     "IMPORTANT: Always use query_graph for relationship questions (projects, collaborators, "
     "skills, teams). Use LOWER() and LIKE for name matching. "
-    "Always return source citations. Combine tools for comprehensive answers."
+    "Combine tools for comprehensive answers.\n"
+    # Citations: "Always return source citations" produced things like
+    # "[Source: Search agent]" and "Sources: Relational graph" — an internal
+    # component name presented to the user as evidence. The portal now derives
+    # provenance from the tool calls it observed, so the only citation worth
+    # writing is one it cannot derive: the s3 URI of a retrieved document.
+    "CITATIONS: cite a document only by the exact s3:// URI from the "
+    "query_knowledge_base `source` field, written as [Source: s3://...]. "
+    "Never name a tool, an agent or a specialist as a source, and never write "
+    "'Source: relational graph' — where the data came from is recorded "
+    "automatically. If no document supports a claim, write no citation."
 )
 
 _SYSTEM_PROMPT_SHA = short_prompt_hash(SYSTEM_PROMPT)
