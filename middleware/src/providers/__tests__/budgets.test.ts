@@ -10,6 +10,7 @@ import { exec } from '../aurora.js';
 import {
   PERIOD_START_SQL, spendPredicateSql,
   listBudgets, getBudget, upsertAllocation, deleteAllocation, initiativeExists, orgSummary,
+  listGrants,
 } from '../budgets.js';
 
 const execMock = exec as unknown as jest.Mock;
@@ -216,5 +217,57 @@ describe('orgSummary', () => {
       totalAllocatedUsd: 0, totalSpentThisPeriodUsd: 0, totalMaintenanceUsd: 0,
       byModel: [], byTrigger: [],
     });
+  });
+});
+
+describe('listGrants', () => {
+  const GRANT = {
+    id: 'bg-obs-3', org_project_id: 'p-observability',
+    org_project_name: 'Observability Platform',
+    grantee_person_id: 'p-008', grantee_name: 'Layla Hassan',
+    sprint_id: 'spr-obs-s3', sprint_name: 'Sprint 98 — Span metrics + decom',
+    starts_on: '2026-08-10', ends_on: '2026-08-24', sprint_status: 'active',
+    allocated_usd: 30, granted_by: 'u-release', window_spend_usd: 2.74,
+  };
+
+  it('maps an envelope with its holder, sprint window and in-window spend', async () => {
+    execMock.mockResolvedValue([GRANT]);
+    const [g] = await listGrants();
+    expect(g).toEqual({
+      id: 'bg-obs-3', orgProjectId: 'p-observability',
+      orgProjectName: 'Observability Platform',
+      granteePersonId: 'p-008', granteeName: 'Layla Hassan',
+      sprintId: 'spr-obs-s3', sprintName: 'Sprint 98 — Span metrics + decom',
+      startsOn: '2026-08-10', endsOn: '2026-08-24', sprintStatus: 'active',
+      allocatedUsd: 30, grantedBy: 'u-release', initiativeSpendInWindowUsd: 2.74,
+    });
+  });
+
+  // The window figure is the initiative's, bounded by the sprint dates — it is
+  // NOT the grantee's personal burn, because bot_runs never record whose
+  // envelope paid. The SQL must therefore window on the sprint and attribute
+  // by initiative, using the same predicate the rest of the ledger uses.
+  it('windows spend on the sprint and attributes it by initiative', async () => {
+    execMock.mockResolvedValue([GRANT]);
+    await listGrants();
+    const sql = String(execMock.mock.calls[0]?.[0] ?? '');
+    expect(sql).toContain('br.started_at >= sp.starts_on');
+    expect(sql).toContain('br.started_at < sp.ends_on + 1');
+    expect(sql).toContain(spendPredicateSql('g.org_project_id').trim().slice(0, 40));
+    expect(sql).not.toContain('grantee_person_id = ');
+  });
+
+  it('scopes to one initiative when asked', async () => {
+    execMock.mockResolvedValue([]);
+    await listGrants('p-auth-migration');
+    expect(String(execMock.mock.calls[0]?.[0])).toContain('WHERE g.org_project_id = :pid');
+    expect(execMock.mock.calls[0]?.[1]).toEqual([
+      { name: 'pid', value: { stringValue: 'p-auth-migration' } },
+    ]);
+  });
+
+  it('degrades to empty when the program schema is missing', async () => {
+    execMock.mockRejectedValue(new Error('relation "budget_grants" does not exist'));
+    expect(await listGrants()).toEqual([]);
   });
 });
