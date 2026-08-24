@@ -290,6 +290,9 @@ export async function fireBot(botId: string, opts: {
   const job = await enqueueJob({
     kind: 'devbox:task', title: bot.name,
     payload: { prompt, requiresReview: bot.requiresReview, botId: bot.id, model: bot.model },
+    // Also on the column, not just in the payload: the queue joins bots on it
+    // to name the mission behind a scheduled job.
+    botId: bot.id,
   });
   if (!job) return { ok: false, reason: 'could not enqueue the job' };
   const run = await createBotRun({
