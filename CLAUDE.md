@@ -22,6 +22,18 @@ docker-compose up jupyter-gcp        # GCP notebooks at :8889 (cd /workspace/gcp
 docker-compose up middleware portal  # App stack at :3001 + :5183
 ```
 
+**Working without AWS** (stack torn down, credentials expired, offline):
+```bash
+cd middleware && npm run dev:mock    # then `cd portal && npm run dev` as usual
+```
+`dev:mock` turns on the MOCK_* providers *and* blanks `POLICY_STORE_ID` and the
+`COGNITO_*` vars. Blanking matters: `.env.aws` is only read for vars the shell
+leaves undefined, so a stale `POLICY_STORE_ID` makes every gated route 503 with
+"authorization unavailable", and stale Cognito vars redirect login to a hosted
+UI that may no longer resolve. Blank means open-mode authz (dev-only) plus the
+user picker. The mock fixtures mirror `schema/seed_program.sql`, so initiatives,
+work items, budgets and sprint envelopes all render with the real cast.
+
 **Agents are NOT in docker-compose.** Develop agents with:
 ```bash
 cd agents/<name> && agentcore dev    # Hot-reload local server at :8080
