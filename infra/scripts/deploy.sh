@@ -139,7 +139,11 @@ for repo in "${ECR_REPOS[@]}"; do
     STACK_TAG=$(aws ecr describe-repositories --repository-names "$repo" \
       --query 'repositories[0].tags[?Key==`aws:cloudformation:stack-name`].Value' \
       --output text 2>/dev/null || echo "")
-    if [[ -z "$STACK_TAG" ]]; then
+    # `--output text` on an empty JMESPath result prints the literal "None",
+    # not an empty string — so the -z test never fired and every genuine
+    # orphan was reported as "owned by stack 'None' — skipping", which is the
+    # exact opposite of the truth.
+    if [[ -z "$STACK_TAG" || "$STACK_TAG" == "None" ]]; then
       echo "  Removing orphan ECR repo (no CFN owner): ${repo}"
       aws ecr delete-repository --repository-name "$repo" --force > /dev/null
     else
