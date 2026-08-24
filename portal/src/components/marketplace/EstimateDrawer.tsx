@@ -125,6 +125,12 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
   const [pickerOptions, setPickerOptions] = useState<CodebaseOption[] | null>(null);
   /** Set from a 429 — the platform's agent-run concurrency ceiling is full. */
   const [concurrencyMsg, setConcurrencyMsg] = useState<string | null>(null);
+  // The initiative's allocation refused this dispatch. Soft brake: we show
+  // what is left and offer to proceed anyway, rather than dead-ending on an
+  // error toast that merely names an API flag the operator cannot reach.
+  const [overAllocation, setOverAllocation] = useState<
+    { reason: string; allocatedUsd: number; spentUsd: number; remainingUsd: number } | null
+  >(null);
 
   // Reset per item — a fresh drawer for each estimate.
   const itemId = item?.id ?? null;
@@ -162,7 +168,7 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
     return () => { cancelled = true; };
   }, [open, item, model, agentProjectId]);
 
-  async function dispatch(overrideAgentProjectId?: string) {
+  async function dispatch(overrideAgentProjectId?: string, confirmOverBudget = false) {
     if (!item || dispatching) return;
     setDispatching(true);
     setConcurrencyMsg(null);
@@ -171,6 +177,7 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
       const body: Record<string, unknown> = { workItemId: item.id, model };
       if (target) body['agentProjectId'] = target;
       if (instruction.trim()) body['instruction'] = instruction.trim();
+      if (confirmOverBudget) body['confirmOverBudget'] = true;
       const res = await fetch('/api/bots/dispatch-work', {
         method: 'POST',
         credentials: 'include',
@@ -179,10 +186,18 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
       });
       const payload = await res.json().catch(() => ({})) as {
         run?: BotRun; error?: string; options?: CodebaseOption[];
+        allocation?: { allocatedUsd: number; spentUsd: number; remainingUsd: number };
       };
       if (res.status === 409 && payload.options && payload.options.length > 0) {
         // Multiple codebases deliver this initiative — pick one and retry.
         setPickerOptions(payload.options);
+        setConfirmOpen(false);
+        return;
+      }
+      if (res.status === 409 && payload.allocation) {
+        // Over the initiative's allocation. Show the money and let the
+        // operator decide — the brake is soft by design.
+        setOverAllocation({ reason: payload.error ?? 'over the allocation', ...payload.allocation });
         setConfirmOpen(false);
         return;
       }
@@ -364,6 +379,27 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
         confirmDisabled={dispatching}
         onConfirm={() => void dispatch()}
         onCancel={() => setConfirmOpen(false)}
+      />
+
+      {/* The allocation brake. Naming the remaining money is the whole point:
+          "over budget" is a shrug, "$2.40 left of $30" is a decision. */}
+      <ConfirmDialog
+        open={overAllocation != null}
+        tone="destructive"
+        title="Over this initiative's budget"
+        body={
+          overAllocation
+            ? `${money(overAllocation.spentUsd)} of ${money(overAllocation.allocatedUsd)} is already spent this month, leaving ${money(overAllocation.remainingUsd)}. ${overAllocation.reason.replace(/ — .*$/, '')}. Dispatching anyway spends over the allocation.`
+            : ''
+        }
+        confirmLabel={dispatching ? 'Dispatching…' : 'Dispatch anyway'}
+        confirmDisabled={dispatching}
+        onConfirm={() => {
+          const target = agentProjectId ?? undefined;
+          setOverAllocation(null);
+          void dispatch(target, true);
+        }}
+        onCancel={() => setOverAllocation(null)}
       />
     </>
   );
