@@ -25,6 +25,7 @@ import {
 } from '../providers/bots.js';
 import {
   fireBot, dispatchWorkItem, preflightWorkItem, decideRunBudget, decideAllocation,
+  decideEnvelope, loadEnvelope,
 } from '../lib/bot-runner.js';
 import { getBudget } from '../providers/budgets.js';
 import { registerBot, unregisterBot } from '../lib/bot-scheduler.js';
@@ -133,6 +134,47 @@ function estimateBody(f: Awaited<ReturnType<typeof loadForecast>>) {
   return { ...f.estimate, points: f.points, scaled: f.scaled, confidence: f.confidence };
 }
 
+// ─── The confirmation flags ──────────────────────────────────────────────────
+//
+// Three soft money gates can refuse one dispatch, and they are three DIFFERENT
+// limits set by three different people:
+//
+//   run budget  the caller's own cap for this one run ("don't start it if it
+//               is forecast over $X") — theirs, nobody else's;
+//   allocation  the initiative's monthly allocation, set by a release manager;
+//   envelope    the caller's sprint envelope, granted to them by a release
+//               manager (budget_grants).
+//
+// They used to share one `confirmOverBudget`, with a comment claiming that was
+// safe because the portal never sent budgetPerRunUsd. That was true and it was
+// also the reason the per-run gate could never be wired to the portal: the
+// moment a client sends both, one click silently answers two questions the
+// operator was only shown one of. Each gate now names its own flag, in the 409
+// it returns and in the reason text, so a confirmation can only ever confirm
+// the fence it was shown.
+//
+// `confirmOverBudget` is kept as a DEPRECATED synonym for the two gates that
+// existed while it was the only flag — nothing that predates the split breaks.
+// It deliberately does NOT confirm the sprint envelope: that gate postdates the
+// flag, so no existing caller can be stuck behind it, and widening a flag we
+// are retiring would re-create the defect in a newer place. An envelope 409
+// names confirmOverEnvelope and that is the only thing that opens it.
+interface ConfirmFlags {
+  confirmOverBudget?: unknown;
+  confirmOverRunBudget?: unknown;
+  confirmOverAllocation?: unknown;
+  confirmOverEnvelope?: unknown;
+}
+
+function readConfirmations(body: ConfirmFlags) {
+  const legacy = body.confirmOverBudget === true;
+  return {
+    runBudget: body.confirmOverRunBudget === true || legacy,
+    allocation: body.confirmOverAllocation === true || legacy,
+    envelope: body.confirmOverEnvelope === true,
+  };
+}
+
 // marketReadGate, not readGate: the estimate is what the Authorize button
 // waits on, so a role holding only DispatchAgentRun (sme) must be able to read
 // it or the button latches off forever.
@@ -150,10 +192,11 @@ botsRouter.get('/estimate', marketReadGate, asyncHandler(async (req, res) => {
 // are never read as bot ids.
 
 botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) => {
-  const body = (req.body ?? {}) as {
+  const body = (req.body ?? {}) as ConfirmFlags & {
     workItemId?: string; model?: string; agentProjectId?: string; instruction?: string;
-    estimate?: Record<string, unknown>; budgetPerRunUsd?: unknown; confirmOverBudget?: boolean;
+    estimate?: Record<string, unknown>; budgetPerRunUsd?: unknown;
   };
+  const confirmed = readConfirmations(body);
   const workItemId = String(body.workItemId ?? '').trim();
   if (!workItemId) throw new ValidationError('workItemId is required');
   const model = String(body.model ?? '').trim();
@@ -192,12 +235,23 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
   const forecast = await loadForecast(model, pre.agentProjectId, pre.item.storyPoints);
 
   // ── 3. Per-run budget, request-supplied (no bot here carries one) ─────────
+  // The operator's own cap on this one run. First because it is the cheapest
+  // and the most personal: someone who said "not over $2" should hear about
+  // that before being told anything about other people's fences.
   if (budgetPerRunUsd != null) {
-    const gate = decideRunBudget(
-      budgetPerRunUsd, forecast.estimate.costUsdP75, body.confirmOverBudget === true,
-    );
+    const gate = decideRunBudget(budgetPerRunUsd, forecast.estimate.costUsdP75, confirmed.runBudget);
     if (gate.kind === 'confirm') {
-      res.status(409).json({ error: gate.reason, estimate: estimateBody(forecast) });
+      res.status(409).json({
+        error: gate.reason,
+        gate: 'run-budget',
+        confirmFlag: 'confirmOverRunBudget',
+        estimate: estimateBody(forecast),
+        runBudget: {
+          budgetPerRunUsd,
+          costUsdP25: forecast.estimate.costUsdP25,
+          costUsdP75: forecast.estimate.costUsdP75,
+        },
+      });
       return;
     }
   }
@@ -218,11 +272,8 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
   // zero-budget — that surfaces as a blind spot on the Budgets page, and
   // freezing an unfunded initiative here would be the wrong answer to it.
   //
-  // Note both gates read the same confirmOverBudget flag. That is unambiguous
-  // today because the portal never sends budgetPerRunUsd here (the per-run cap
-  // belongs to bots, which carry their own), so at most one gate is ever
-  // live per request. If a client starts sending both, split the flag — one
-  // confirmation should not silently answer two different limits.
+  // The gate reads its own flag, so confirming the per-run cap above says
+  // nothing here — and the 409 names the flag that would open it.
   const budgetRow = await getBudget(pre.item.projectId);
   if (budgetRow?.allocatedUsd != null) {
     const gate = decideAllocation(
@@ -232,11 +283,13 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
         costUsdP25: forecast.estimate.costUsdP25,
         confidence: forecast.confidence,
       },
-      body.confirmOverBudget === true,
+      confirmed.allocation,
     );
     if (gate.kind === 'confirm') {
       res.status(409).json({
         error: gate.reason,
+        gate: 'allocation',
+        confirmFlag: 'confirmOverAllocation',
         confidence: gate.confidence,
         estimate: estimateBody(forecast),
         allocation: {
@@ -244,6 +297,51 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
           allocatedUsd: budgetRow.allocatedUsd,
           spentUsd: budgetRow.spentThisPeriodUsd,
           remainingUsd: budgetRow.allocatedUsd - budgetRow.spentThisPeriodUsd,
+        },
+      });
+      return;
+    }
+  }
+
+  // ── 5. The caller's own sprint envelope ───────────────────────────────────
+  // The last brake, and the narrowest: a release manager granted THIS person a
+  // spend envelope for this sprint (budget_grants), and until now nothing
+  // checked it. Last on purpose — the initiative running out of money is the
+  // more fundamental fact and deserves to be said first; a person's envelope is
+  // only interesting while the initiative still has money to spend.
+  //
+  // No grant → no brake. Someone dispatching here without an envelope (a
+  // release manager, an hr-admin) is the allocation brake's business.
+  const envelope = await loadEnvelope(pre.item.projectId, actor);
+  if (envelope) {
+    const gate = decideEnvelope(
+      envelope,
+      {
+        costUsdP75: forecast.estimate.costUsdP75,
+        costUsdP25: forecast.estimate.costUsdP25,
+        confidence: forecast.confidence,
+      },
+      confirmed.envelope,
+    );
+    if (gate.kind === 'confirm') {
+      res.status(409).json({
+        error: gate.reason,
+        gate: 'envelope',
+        confirmFlag: 'confirmOverEnvelope',
+        confidence: gate.confidence,
+        estimate: estimateBody(forecast),
+        envelope: {
+          orgProjectId: pre.item.projectId,
+          grantId: envelope.grantId,
+          sprintId: envelope.sprintId,
+          sprintName: envelope.sprintName ?? null,
+          allocatedUsd: envelope.allocatedUsd,
+          // Named for what it is. Not "your spend" — only runs recorded as
+          // dispatched by this subject are counted, and none were before the
+          // attribution column existed.
+          attributedSpentUsd: envelope.attributedSpentUsd,
+          remainingUsd: envelope.allocatedUsd - envelope.attributedSpentUsd,
+          attributionAvailable: envelope.attributionAvailable,
         },
       });
       return;
@@ -389,13 +487,16 @@ botsRouter.delete('/:id', manageGate, asyncHandler(async (req, res) => {
 
 botsRouter.post('/:id/run', manageGate, asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
-  const body = (req.body ?? {}) as { instruction?: string; confirmOverBudget?: boolean };
+  const body = (req.body ?? {}) as ConfirmFlags & { instruction?: string };
   const instruction = String(body.instruction ?? '').trim();
+  // Same split as dispatch-work — the per-run gate is the same gate, so the
+  // flag that opens it must be the same word on both routes.
+  const confirmed = readConfirmations(body);
 
   // The per-run budget gate: a bot carrying budgetPerRunUsd is judged against
   // a fresh estimate (the bot's model, its repo's history) before dispatch.
-  // Over budget demands an explicit confirmOverBudget — 409 with the estimate
-  // attached so the operator sees what they are confirming.
+  // Over budget demands an explicit confirmOverRunBudget — 409 with the
+  // estimate attached so the operator sees what they are confirming.
   const bot = await getBot(id);
   if (bot?.budgetPerRunUsd != null) {
     // A bot fires a whole run, not a sized item, so points is null and the
@@ -403,16 +504,29 @@ botsRouter.post('/:id/run', manageGate, asyncHandler(async (req, res) => {
     // so a bot and a work item are never priced by two different chains.
     const forecast = await loadForecast(bot.model, bot.agentProjectId, null);
     const gate = decideRunBudget(
-      bot.budgetPerRunUsd, forecast.estimate.costUsdP75, body.confirmOverBudget === true,
+      bot.budgetPerRunUsd, forecast.estimate.costUsdP75, confirmed.runBudget,
     );
     if (gate.kind === 'confirm') {
-      res.status(409).json({ error: gate.reason, estimate: estimateBody(forecast) });
+      res.status(409).json({
+        error: gate.reason,
+        gate: 'run-budget',
+        confirmFlag: 'confirmOverRunBudget',
+        estimate: estimateBody(forecast),
+        runBudget: {
+          budgetPerRunUsd: bot.budgetPerRunUsd,
+          costUsdP25: forecast.estimate.costUsdP25,
+          costUsdP75: forecast.estimate.costUsdP75,
+        },
+      });
       return;
     }
   }
 
   const result = await fireBot(id, {
     trigger: 'manual', ...(instruction ? { instruction } : {}),
+    // A hand-driven firing has an author; a cron one does not. Recording it is
+    // what lets a sprint envelope be burned down against a person at all.
+    dispatchedBy: req.session?.sub ?? null,
   });
   if (!result.ok) { res.status(409).json({ error: result.reason }); return; }
   res.status(202).json({ run: result.run });

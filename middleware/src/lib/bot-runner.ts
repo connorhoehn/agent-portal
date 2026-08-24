@@ -21,8 +21,15 @@ import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import {
   getBot, createBotRun, finalizeBotRun, setPausedReason, markBotRan, countRunningRuns,
+  dispatchedSpendInWindow,
   type BotRun,
 } from '../providers/bots.js';
+// Read-only imports. providers/budgets.ts owns the envelope's ledger shape and
+// is not edited from here — the brake consumes listGrants exactly as the
+// Budgets page does, so the number an SME is stopped by and the number they see
+// come from one query.
+import { listGrants } from '../providers/budgets.js';
+import { getUser } from '../providers/identity.js';
 import {
   getAgentProject, listAgentProjects, buildCloneCommand, markCloned, type AgentProject,
 } from '../providers/agent-projects.js';
@@ -143,9 +150,14 @@ export type RunBudgetDecision =
 
 /**
  * Whether a firing may proceed against its per-run budget. The budget is a
- * soft cap: an estimate's p75 over it demands an explicit confirmOverBudget
+ * soft cap: an estimate's p75 over it demands an explicit confirmOverRunBudget
  * from the operator rather than refusing outright — the estimate is a
  * forecast, not a bill.
+ *
+ * The flag it names is its OWN. Three soft gates can refuse one dispatch (this
+ * one, the initiative allocation, the SME's sprint envelope) and each is a
+ * different limit set by a different person; a confirmation that answered all
+ * three would mean an operator waving through a fence they were never shown.
  */
 export function decideRunBudget(
   budgetPerRunUsd: number | null | undefined,
@@ -157,7 +169,7 @@ export function decideRunBudget(
   }
   return {
     kind: 'confirm',
-    reason: `estimated p75 cost $${costUsdP75.toFixed(2)} exceeds the per-run budget $${budgetPerRunUsd.toFixed(2)} — pass confirmOverBudget to dispatch anyway`,
+    reason: `estimated p75 cost $${costUsdP75.toFixed(2)} exceeds the per-run budget $${budgetPerRunUsd.toFixed(2)} — pass confirmOverRunBudget to dispatch anyway`,
   };
 }
 
@@ -250,7 +262,7 @@ export function decideAllocation(
   if (remaining <= 0) {
     return {
       kind: 'confirm',
-      reason: `this initiative's ${money(allocatedUsd)} allocation is exhausted (${money(spentUsd)} spent) — raise the allocation or pass confirmOverBudget`,
+      reason: `this initiative's ${money(allocatedUsd)} allocation is exhausted (${money(spentUsd)} spent) — raise the allocation or pass confirmOverAllocation`,
       confidence: f.confidence ?? 'scaled',
     };
   }
@@ -260,7 +272,7 @@ export function decideAllocation(
   if (confidence === 'scaled' || f.costUsdP25 == null) {
     return {
       kind: 'confirm',
-      reason: `estimated ${money(f.costUsdP75)} exceeds ${left} — raise it or pass confirmOverBudget`,
+      reason: `estimated ${money(f.costUsdP75)} exceeds ${left} — raise it or pass confirmOverAllocation`,
       confidence,
     };
   }
@@ -271,9 +283,208 @@ export function decideAllocation(
     : `a ${range} forecast may not fit ${left}`;
   return {
     kind: 'confirm',
-    reason: `${claim}${CONFIDENCE_NOTE[confidence]} — raise it, pick a cheaper model, or pass confirmOverBudget`,
+    reason: `${claim}${CONFIDENCE_NOTE[confidence]} — raise it, pick a cheaper model, or pass confirmOverAllocation`,
     confidence,
   };
+}
+
+// ─── The sprint envelope, pure ────────────────────────────────────────────────
+//
+// A release manager grants a named SME a spend envelope for a sprint
+// (budget_grants). Until now that envelope rendered on the Budgets page and
+// nothing checked it — the doc listed enforcement as undone. This is the check,
+// and the hard part is honesty about what the data supports.
+//
+// ── What is and is not claimed about who spent ───────────────────────────────
+// bot_runs has never recorded who dispatched a run. The Budgets page is
+// deliberate about that: GrantRow.initiativeSpendInWindowUsd is the
+// INITIATIVE's spend inside the sprint window, explicitly not called the
+// grantee's burn, because attributing initiative-wide spend to one SME would
+// be a number nobody can support. That decision stands — this brake does not
+// reuse that figure.
+//
+// Instead attribution starts going forward: bot_runs.dispatched_by records the
+// session that authorized each run (schema/agent_run_attribution_schema.sql),
+// and the envelope's burn is the sum of ONLY the runs carrying this caller's
+// subject. So the number is small and truthful rather than large and invented:
+//   - runs dispatched before the column existed count against nobody;
+//   - cron firings and other people's dispatches count against nobody's
+//     envelope, because nobody authorized them from inside one;
+//   - the reason string always says the burn counts only runs recorded as
+//     dispatched by this caller, so a small figure is never mistaken for
+//     "this SME has barely spent".
+// When the column is absent entirely the burn is UNKNOWN, not zero, and the
+// brake says so — see attributionAvailable below.
+
+export interface EnvelopeState {
+  /** The envelope the release manager granted (budget_grants.allocated_usd). */
+  allocatedUsd: number;
+  /** Spend on runs this caller is RECORDED as having dispatched, inside the
+   *  sprint window and attributed to this initiative. Never the initiative's
+   *  window spend — see the section note. */
+  attributedSpentUsd: number;
+  /** false → bot_runs carries no dispatched_by column here yet, so the burn is
+   *  unknown rather than zero. The brake then only fires on a forecast bigger
+   *  than the WHOLE envelope, and says why it cannot say more. */
+  attributionAvailable: boolean;
+  /** Names the envelope in the refusal: 'Sprint 98 — Span metrics'. */
+  sprintName?: string | null;
+}
+
+export type EnvelopeDecision =
+  | { kind: 'proceed' }
+  | { kind: 'confirm'; reason: string; confidence: ForecastConfidence };
+
+/** Said every time a burn figure appears, so a small number is never read as
+ *  "this SME has hardly spent". No em dash: the first ' — ' is the remedy
+ *  separator and clients split on it. */
+const ATTRIBUTION_NOTE = ' (counting only runs recorded as dispatched by you)';
+
+/**
+ * A sprint name, made safe to embed in a reason string.
+ *
+ * Every reason on this surface is "claim — remedy", and clients (the portal's
+ * overAllocationBody among them) split on the FIRST ' — ' to show the claim
+ * without an API flag name in it. Sprint names here really do carry em dashes —
+ * the seed's are literally 'Sprint 98 — Span metrics + decom' — so embedding
+ * one raw lets data forge the delimiter and truncates the claim mid-sentence.
+ * The em dash becomes a spaced en dash, which no client splits on and which
+ * reads identically.
+ */
+function safeSprintName(name: string): string {
+  return name.replace(/\s*—\s*/g, ' – ');
+}
+
+/**
+ * Whether a dispatch fits inside the caller's own sprint envelope.
+ *
+ * Same soft-409 shape as the allocation brake — p75 against the remainder,
+ * confidence shapes the sentence and never the verdict — but a DIFFERENT
+ * limit, set by a different person, so it carries its own confirm flag. An
+ * operator who confirmed "yes, over the initiative's allocation" has said
+ * nothing about their personal envelope, and vice versa.
+ *
+ * No grant means no brake: this fires only for someone spending inside an
+ * envelope. A release manager or hr-admin dispatching without one is the
+ * allocation brake's business, not this one's.
+ */
+export function decideEnvelope(
+  envelope: EnvelopeState,
+  forecast: number | AllocationForecast,
+  confirmed: boolean,
+): EnvelopeDecision {
+  if (confirmed) return { kind: 'proceed' };
+
+  const f: AllocationForecast = typeof forecast === 'number' ? { costUsdP75: forecast } : forecast;
+  const confidence = f.confidence ?? 'scaled';
+  const { allocatedUsd, attributedSpentUsd } = envelope;
+  const named = envelope.sprintName
+    ? `your ${money(allocatedUsd)} envelope on ${safeSprintName(envelope.sprintName)}`
+    : `your ${money(allocatedUsd)} sprint envelope`;
+
+  // Attribution not recorded here: the burn is unknown, so the only claim that
+  // survives is about the envelope's SIZE. A forecast that would not fit even
+  // an untouched envelope is worth a confirmation; anything smaller cannot be
+  // judged without a burn, and inventing one is exactly what this refuses.
+  if (!envelope.attributionAvailable) {
+    if (f.costUsdP75 <= allocatedUsd) return { kind: 'proceed' };
+    return {
+      kind: 'confirm',
+      reason: `estimated ${money(f.costUsdP75)} exceeds ${named} outright, and no run here is recorded as dispatched by anyone yet, so nothing is counted against it — ask for a larger envelope or pass confirmOverEnvelope`,
+      confidence,
+    };
+  }
+
+  const remaining = allocatedUsd - attributedSpentUsd;
+  if (f.costUsdP75 <= remaining) return { kind: 'proceed' };
+
+  // Spent out: no forecast could fit, so say nothing about the forecast.
+  if (remaining <= 0) {
+    return {
+      kind: 'confirm',
+      reason: `${named} is spent out (${money(attributedSpentUsd)} dispatched by you) — ask for a larger envelope or pass confirmOverEnvelope`,
+      confidence,
+    };
+  }
+
+  const left = `the ${money(remaining)} left of ${named}${ATTRIBUTION_NOTE}`;
+  if (confidence === 'scaled' || f.costUsdP25 == null) {
+    return {
+      kind: 'confirm',
+      reason: `estimated ${money(f.costUsdP75)} exceeds ${left} — ask for a larger envelope or pass confirmOverEnvelope`,
+      confidence,
+    };
+  }
+
+  const range = `${money(f.costUsdP25)}–${money(f.costUsdP75)}`;
+  const claim = f.costUsdP25 > remaining
+    ? `even the low end of a ${range} forecast exceeds ${left}`
+    : `a ${range} forecast may not fit ${left}`;
+  return {
+    kind: 'confirm',
+    reason: `${claim}${CONFIDENCE_NOTE[confidence]} — ask for a larger envelope, pick a cheaper model, or pass confirmOverEnvelope`,
+    confidence,
+  };
+}
+
+/** The envelope a dispatch is judged against, plus the grant it came from so
+ *  the 409 can name it. Null = no active grant for this caller here, which is
+ *  "not braked", not "zero envelope". */
+export interface ResolvedEnvelope extends EnvelopeState {
+  grantId: string;
+  sprintId: string | null;
+  granteePersonId: string;
+}
+
+/**
+ * Resolve the caller's own envelope on an initiative: session subject → person
+ * → their ACTIVE grant here → the burn of runs they dispatched in its window.
+ *
+ * Every step that cannot be answered returns null (no brake) rather than
+ * guessing: no session, a user with no person_id (a platform operator is not
+ * an SME), no grant, or a grants read that fails. A missing envelope must
+ * never masquerade as an exhausted one.
+ *
+ * A grant counts as active when its sprint is `active`, or when it has no
+ * sprint at all — an initiative-level standing grant is always in force, and
+ * its burn window is simply unbounded. listGrants orders newest sprint first,
+ * so with several the freshest window wins.
+ */
+export async function loadEnvelope(
+  orgProjectId: string,
+  sessionSub: string | undefined,
+): Promise<ResolvedEnvelope | null> {
+  if (!sessionSub) return null;
+  try {
+    const user = await getUser(sessionSub);
+    const personId = user?.personId;
+    if (!personId) return null;
+
+    const grants = await listGrants(orgProjectId);
+    const grant = grants.find(
+      (g) => g.granteePersonId === personId && (g.sprintStatus === 'active' || g.sprintId == null),
+    );
+    if (!grant) return null;
+
+    const burn = await dispatchedSpendInWindow({
+      orgProjectId, dispatchedBy: sessionSub,
+      startsOn: grant.startsOn, endsOn: grant.endsOn,
+    });
+    return {
+      grantId: grant.id,
+      sprintId: grant.sprintId,
+      sprintName: grant.sprintName,
+      granteePersonId: personId,
+      allocatedUsd: grant.allocatedUsd,
+      attributedSpentUsd: burn.spentUsd,
+      attributionAvailable: burn.attributionAvailable,
+    };
+  } catch (err) {
+    // A brake that cannot read its own inputs must not become a refusal — the
+    // allocation brake still stands behind it.
+    console.warn(`[bots] could not resolve the sprint envelope for ${orgProjectId}:`, (err as Error).message);
+    return null;
+  }
 }
 
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
@@ -330,6 +541,11 @@ export async function fireBot(botId: string, opts: {
   trigger: 'manual' | 'cron' | 'pr_watch';
   /** One-shot steering, appended to the mission for this run only. */
   instruction?: string;
+  /** The session subject that authorized this firing, recorded on the run so a
+   *  sprint envelope can be burned down against a person. Absent for cron and
+   *  pr_watch: nobody authorized those from inside an envelope, and inventing
+   *  an owner for them is exactly what the envelope brake must not do. */
+  dispatchedBy?: string | null;
 }): Promise<FireResult> {
   const bot = await getBot(botId);
   if (!bot) return { ok: false, reason: 'no such bot' };
@@ -340,6 +556,7 @@ export async function fireBot(botId: string, opts: {
     if (decision.kind === 'pause') await setPausedReason(bot.id, decision.reason);
     const run = await createBotRun({
       botId: bot.id, trigger: opts.trigger, status: 'skipped',
+      dispatchedBy: opts.dispatchedBy ?? null,
       outcome: { reason: decision.reason },
     });
     return { ok: false, reason: decision.reason, ...(run ? { run } : {}) };
@@ -352,6 +569,7 @@ export async function fireBot(botId: string, opts: {
   if (congestion.kind === 'refuse') {
     const run = await createBotRun({
       botId: bot.id, trigger: opts.trigger, status: 'skipped',
+      dispatchedBy: opts.dispatchedBy ?? null,
       outcome: { reason: congestion.reason },
     });
     return { ok: false, reason: congestion.reason, ...(run ? { run } : {}) };
@@ -373,6 +591,7 @@ export async function fireBot(botId: string, opts: {
     if (!ws.ok) {
       const run = await createBotRun({
         botId: bot.id, trigger: opts.trigger, status: 'failed',
+        dispatchedBy: opts.dispatchedBy ?? null,
         outcome: { error: ws.error },
       });
       return { ok: false, reason: ws.error, ...(run ? { run } : {}) };
@@ -384,6 +603,7 @@ export async function fireBot(botId: string, opts: {
     if (!started.ok) {
       const run = await createBotRun({
         botId: bot.id, trigger: opts.trigger, status: 'failed',
+        dispatchedBy: opts.dispatchedBy ?? null,
         outcome: { error: started.error, sessionId: ws.sessionId, boxId: ws.boxId },
       });
       return { ok: false, reason: started.error, ...(run ? { run } : {}) };
@@ -391,7 +611,7 @@ export async function fireBot(botId: string, opts: {
 
     const run = await createBotRun({
       botId: bot.id, trigger: opts.trigger, runId: started.runId,
-      ceiling: botMaxConcurrent(),
+      ceiling: botMaxConcurrent(), dispatchedBy: opts.dispatchedBy ?? null,
       outcome: { sessionId: ws.sessionId, boxId: ws.boxId },
     });
     if (!run) return { ok: false, reason: 'could not record the bot run' };
@@ -413,6 +633,7 @@ export async function fireBot(botId: string, opts: {
   if (!job) return { ok: false, reason: 'could not enqueue the job' };
   const run = await createBotRun({
     botId: bot.id, trigger: opts.trigger, jobId: job.id, ceiling: botMaxConcurrent(),
+    dispatchedBy: opts.dispatchedBy ?? null,
   });
   if (!run) return { ok: false, reason: 'could not record the bot run' };
   return { ok: true, run };
@@ -617,6 +838,9 @@ export async function dispatchWorkItem(input: {
   const run = await createBotRun({
     botId: null, trigger: 'marketplace', runId: started.runId, workItemId: item.id,
     ceiling: botMaxConcurrent(),
+    // The marketplace's actor IS the dispatcher — the envelope brake burns down
+    // against exactly this subject, so the two must be the same string.
+    dispatchedBy: input.actor ?? null,
     outcome: {
       sessionId: ws.sessionId, boxId: ws.boxId,
       ...(input.actor ? { actor: input.actor } : {}),
