@@ -19,6 +19,7 @@ import {
   markInReview, markDelivering, markDelivered, markFailed, hasNewerChangeForProject,
   setCommitSha,
 } from '../providers/sdlc.js';
+import { updateWorkItem } from '../providers/work-items.js';
 import { startRun, checkoutPath, type AgentProject } from '../providers/agent-projects.js';
 import { deliverChange } from './change-delivery.js';
 import { deliveryBlockReason } from './delivery-guard.js';
@@ -246,6 +247,20 @@ export async function deliverApprovedChange(input: {
   // guard returns a reason for each), but they narrow the types for the push.
   if (block || !change || !sessionId) return { ok: false, error: block ?? 'change not found' };
 
+  // Preconditions that mean NOTHING was attempted must not consume the
+  // change's approved state. The missing-credential case hit markFailed via
+  // the generic path during a live TPM walk: a 409 "no GitHub connection"
+  // flipped the change to failed, and the retry — after linking a credential —
+  // was refused with "change is failed, not approved". Recovering took a
+  // manual database edit. A change is failed when a delivery ATTEMPT failed,
+  // not when we declined to start one.
+  if (!input.project.connectionName) {
+    return {
+      ok: false,
+      error: 'This project has no GitHub connection, so there is no credential to push with. Link one in Knowledge → Sources — the change stays approved and can be delivered once linked.',
+    };
+  }
+
   await markDelivering(input.changeId);
   const result = await deliverChange({
     client: input.client,
@@ -263,6 +278,18 @@ export async function deliverApprovedChange(input: {
 
   if (result.ok && result.prUrl) {
     await markDelivered(input.changeId, result.branch ?? '', result.prUrl);
+    // Close the loop on the board: without the PR written back onto the work
+    // item, the story sits in in_review with no link, the PR chip never
+    // renders, and the merge-detection poller — which flips stories to done
+    // when their PR merges — has nothing to watch. Delivery without this is a
+    // PR the initiative cannot see.
+    if (change.workItemId) {
+      try {
+        await updateWorkItem(change.workItemId, { prUrl: result.prUrl, prStatus: 'open' });
+      } catch (err) {
+        console.warn('[sdlc] PR delivered but work-item writeback failed:', (err as Error).message);
+      }
+    }
     return { ok: true, prUrl: result.prUrl };
   }
   await markFailed(input.changeId, result.error ?? 'delivery failed');
