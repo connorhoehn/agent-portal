@@ -27,6 +27,13 @@ sessionsRouter.get('/', asyncHandler(async (req, res) => {
   res.json({ sessions: enriched });
 }));
 
+// The stored transcript for one conversation.
+//
+// Each ASSISTANT event carries `toolCalls` when the turn was recorded with
+// them (see providers/memory + lib/turn-tool-calls) — that is the provenance
+// the portal turns back into source chips and the "searched knowledge base ×3"
+// line. Turns written before tool-call persistence simply have no `toolCalls`
+// key and restore as text, exactly as they did.
 sessionsRouter.get('/:sessionId/events', asyncHandler(async (req, res) => {
   const sessionId = String(req.params['sessionId'] ?? '');
   const actorId = (req.query['actorId'] as string) || undefined;

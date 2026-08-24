@@ -18,6 +18,14 @@ import {
   type ListSessionsCommandOutput,
 } from '@aws-sdk/client-bedrock-agentcore';
 import { config } from '../config.js';
+import {
+  decodeToolCalls,
+  encodeToolCalls,
+  isToolCallsPayload,
+  type StoredToolCall,
+} from '../lib/turn-tool-calls.js';
+
+export type { StoredToolCall };
 
 export interface MemoryEvent {
   eventId: string;
@@ -25,6 +33,13 @@ export interface MemoryEvent {
   timestamp: string;
   role: 'USER' | 'ASSISTANT' | 'OTHER';
   text: string;
+  /**
+   * Tool calls the assistant made on this turn — the provenance the portal
+   * derives source chips and the tool summary from. Present on ASSISTANT
+   * events written after tool-call persistence landed; absent on older ones,
+   * which restore exactly as they did before (text, no chips).
+   */
+  toolCalls?: StoredToolCall[];
 }
 
 export interface MemorySession {
@@ -92,6 +107,14 @@ export async function listEvents(sessionId: string, actorId?: string): Promise<M
       );
       for (const ev of resp.events ?? []) {
         if (!ev.eventId) continue;
+        const ts = (ev.eventTimestamp instanceof Date ? ev.eventTimestamp : new Date()).toISOString();
+        // One event holds the whole turn: the user message, the assistant
+        // message, and (since tool-call persistence) a TOOL-role payload item
+        // carrying the turn's provenance envelope. Collect the envelope first,
+        // then attach it to this event's ASSISTANT message so the restored
+        // shape matches what the live stream produces.
+        const turn: MemoryEvent[] = [];
+        let turnToolCalls: StoredToolCall[] | null = null;
         for (const p of ev.payload ?? []) {
           const conv = (p as any).conversational;
           if (!conv) continue;
@@ -100,14 +123,24 @@ export async function listEvents(sessionId: string, actorId?: string): Promise<M
             conv.content?.text ??
             (typeof conv.content === 'string' ? conv.content : JSON.stringify(conv.content ?? '')) ??
             '';
-          out.push({
+          if (isToolCallsPayload(text)) {
+            turnToolCalls = decodeToolCalls(text) ?? turnToolCalls;
+            continue; // bookkeeping, not a message — never rendered as one
+          }
+          turn.push({
             eventId: ev.eventId,
             sessionId,
-            timestamp: (ev.eventTimestamp instanceof Date ? ev.eventTimestamp : new Date()).toISOString(),
+            timestamp: ts,
             role: role === 'USER' || role === 'ASSISTANT' ? role : 'OTHER',
             text,
           });
         }
+        if (turnToolCalls) {
+          for (const m of turn) {
+            if (m.role === 'ASSISTANT') m.toolCalls = turnToolCalls;
+          }
+        }
+        out.push(...turn);
       }
       nextToken = resp.nextToken;
     } while (nextToken);
@@ -124,34 +157,54 @@ export async function recordTurn(opts: {
   actorId?: string;
   userMessage: string;
   assistantMessage: string;
+  /**
+   * The turn's tool calls, as observed on the AG-UI stream. Persisted as a
+   * third TOOL-role payload item (capped — see lib/turn-tool-calls) so a
+   * restored conversation carries the same provenance the live one showed.
+   */
+  toolCalls?: StoredToolCall[];
 }): Promise<void> {
   const memoryId = config.agentcore.memoryId;
   if (!memoryId) return;
   if (!opts.userMessage.trim() || !opts.assistantMessage.trim()) return;
-  try {
-    await _client().send(
+  const toolEnvelope = encodeToolCalls(opts.toolCalls);
+
+  const conversation = [
+    { conversational: { role: 'USER', content: { text: opts.userMessage } } as any },
+    { conversational: { role: 'ASSISTANT', content: { text: opts.assistantMessage } } as any },
+  ];
+  const write = (payload: typeof conversation): Promise<unknown> =>
+    _client().send(
       new CreateEventCommand({
         memoryId,
         actorId: actorScope(opts),
         sessionId: opts.sessionId,
         eventTimestamp: new Date(),
-        payload: [
-          {
-            conversational: {
-              role: 'USER',
-              content: { text: opts.userMessage },
-            } as any,
-          },
-          {
-            conversational: {
-              role: 'ASSISTANT',
-              content: { text: opts.assistantMessage },
-            } as any,
-          },
-        ],
+        payload,
       }),
     );
+
+  try {
+    await write(
+      toolEnvelope
+        ? [...conversation, { conversational: { role: 'TOOL', content: { text: toolEnvelope } } as any }]
+        : conversation,
+    );
   } catch (err) {
+    // Provenance is an enrichment; the transcript is the thing. If the service
+    // rejects the extra TOOL payload item (an oversized envelope, a memory
+    // resource that will not take the role), retry with the conversation
+    // alone rather than letting a chip cost the user their turn.
+    if (toolEnvelope) {
+      console.warn('[memory] recordTurn with tool calls failed, retrying without:', (err as Error).message);
+      try {
+        await write(conversation);
+        return;
+      } catch (retryErr) {
+        console.warn('[memory] recordTurn retry failed:', (retryErr as Error).message);
+        return;
+      }
+    }
     // Don't fail the invocation if memory write fails — log and continue.
     console.warn('[memory] recordTurn failed:', (err as Error).message);
   }

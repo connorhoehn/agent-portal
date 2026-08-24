@@ -5,7 +5,7 @@ import { normalizeRuntimeSessionId } from '../lib/runtime-session.js';
 import { agentStreamMiddleware } from '@connorhoehnslalom/realtime-modules/agent-streaming';
 import { agentcore, aurora } from '../providers/index.js';
 import { detectIntervention, recordInvocation, snippet } from '../lib/invocations.js';
-import { listEvents, recordTurn } from '../providers/memory.js';
+import { listEvents, recordTurn, type StoredToolCall } from '../providers/memory.js';
 import { maybeGenerateTitle } from '../lib/session-titles.js';
 import { requireAction } from '../lib/authz.js';
 import { annotateToolResult } from '../lib/answer-sources.js';
@@ -156,6 +156,12 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
   // id was. The portal builds an answer's citations from these results, and
   // only a retrieval result is worth annotating with document titles.
   const toolNameById = new Map<string, string>();
+  // The same tool calls, accumulated for PERSISTENCE. Source chips and the
+  // tool-summary line are derived from a turn's tool calls, so a transcript
+  // stored as text alone reopens with the identical answer and no evidence
+  // behind it. These ride along on the Memory event (capped in
+  // lib/turn-tool-calls) and restore into the shape the live stream produces.
+  const turnToolCalls = new Map<string, StoredToolCall>();
 
   try {
     for await (const event of agentcore.invokeAgentStreaming(agentId, invokePayload)) {
@@ -193,15 +199,18 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
           const id = field(ev as Record<string, unknown>, 'toolCallId', 'tool_call_id') ?? randomUUID();
           const name = field(ev as Record<string, unknown>, 'toolCallName', 'tool_call_name') ?? 'unknown';
           toolNameById.set(id, name);
+          turnToolCalls.set(id, { id, name, args: '' });
           stream.toolCallStart(id, name);
           break;
         }
-        case 'TOOL_CALL_ARGS':
-          stream.toolCallArgs(
-            field(ev as Record<string, unknown>, 'toolCallId', 'tool_call_id') ?? '',
-            (ev as { delta?: string }).delta ?? '',
-          );
+        case 'TOOL_CALL_ARGS': {
+          const id = field(ev as Record<string, unknown>, 'toolCallId', 'tool_call_id') ?? '';
+          const delta = (ev as { delta?: string }).delta ?? '';
+          const rec = turnToolCalls.get(id);
+          if (rec) rec.args = (rec.args ?? '') + delta;
+          stream.toolCallArgs(id, delta);
           break;
+        }
         case 'TOOL_CALL_END':
           stream.toolCallEnd(field(ev as Record<string, unknown>, 'toolCallId', 'tool_call_id') ?? '');
           break;
@@ -215,6 +224,11 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
             toolNameById.get(id) ?? '',
             (ev as { content?: unknown }).content,
           );
+          // Persist the SAME (annotated) value the browser receives, converted
+          // exactly as useAgentStream converts it — `String(content ?? '')` —
+          // so a restored chip is derived from byte-identical input.
+          const rec = turnToolCalls.get(id);
+          if (rec) rec.result = String(annotated ?? '');
           stream.toolCallResult(
             field(ev as Record<string, unknown>, 'messageId', 'message_id') ?? '',
             id,
@@ -264,6 +278,7 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
         ...(actorId ? { actorId } : {}),
         userMessage,
         assistantMessage: fullText,
+        toolCalls: Array.from(turnToolCalls.values()),
       });
     }
     throw new Error(errMsg);
@@ -298,6 +313,7 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
       ...(actorId ? { actorId } : {}),
       userMessage,
       assistantMessage: fullText,
+      toolCalls: Array.from(turnToolCalls.values()),
     });
     maybeGenerateTitle(canonicalSessionId, rawUserMessage);
   }
