@@ -3,15 +3,17 @@
 // The roster of durable, mission-configured agents: create one from the
 // wizard, run it now, pause it, watch its firings.
 //
-// Gated per-route, in three tiers, because three different authorities meet
-// on this surface:
-//   reads     — operational visibility (the roster, runs, the estimator):
-//               org-leader + hr-admin, like the other read-wide surfaces.
+// Gated per-route, because several different authorities meet on this surface:
+//   reads     — operational visibility (the roster, a bot's runs): org-leader
+//               + hr-admin, like the other read-wide surfaces.
 //   bot CRUD  — creating/patching/firing a bot dispatches the same governed
 //               runs the SDLC and Codebases surfaces do: ManageDevbox.
 //   dispatch  — authorizing a sized work item into a run is a marketplace
 //               decision, not devbox administration: DispatchAgentRun, so
 //               org-leaders can dispatch without holding the devbox keys.
+//   market    — the estimator and the marketplace runs ride the dispatch
+//               authority, because an SME who may dispatch must be able to see
+//               what it will cost first.
 
 import { Router } from 'express';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
@@ -21,22 +23,27 @@ import {
   listMarketplaceRuns, runCostSamples, perPointCostSamples,
   type BotTemplate, type BotTrigger, type BotPatch,
 } from '../providers/bots.js';
-import { fireBot, dispatchWorkItem, decideRunBudget, decideAllocation } from '../lib/bot-runner.js';
-import { getWorkItem } from '../providers/work-items.js';
+import {
+  fireBot, dispatchWorkItem, preflightWorkItem, decideRunBudget, decideAllocation,
+} from '../lib/bot-runner.js';
 import { getBudget } from '../providers/budgets.js';
 import { registerBot, unregisterBot } from '../lib/bot-scheduler.js';
 import { validateCronExpr } from '../lib/ingest-scheduler.js';
-import { selectEstimate } from '../lib/bot-estimate.js';
-import { selectPerPointEstimate } from '../lib/marketplace-estimate.js';
+import { selectDispatchForecast, type ForecastSamples } from '../lib/marketplace-estimate.js';
 
 export const botsRouter: Router = Router();
 
-// The three gate tiers (see the header). readGate only fast-paths GETs, so
-// attaching it to a read route is exactly "org-leader/hr-admin/admin may look,
-// anyone else needs ManageDevbox".
+// The gate tiers (see the header). readGate only fast-paths GETs, so attaching
+// it to a read route is exactly "org-leader/hr-admin/admin may look, anyone
+// else needs ManageDevbox".
 const readGate = readForRolesElseAction(['org-leader', 'hr-admin'], 'ManageDevbox');
 const manageGate = requireAction('ManageDevbox');
 const dispatchGate = requireAction('DispatchAgentRun');
+// The work-board surface: SMEs holding DispatchAgentRun read the estimator and
+// the runs behind the initiative board they dispatch from, without holding the
+// bots-admin read roles. Declared up here with the other tiers because the
+// estimate route below is registered before the marketplace ones.
+const marketReadGate = readForRolesElseAction(['org-leader', 'hr-admin'], 'DispatchAgentRun');
 
 const TEMPLATES: readonly BotTemplate[] = ['epic', 'story', 'bug'];
 const TRIGGERS: readonly BotTrigger[] = ['manual', 'cron', 'pr_watch'];
@@ -96,30 +103,42 @@ function checkShape(bot: {
 // ─── Estimator ───────────────────────────────────────────────────────────────
 // Registered before /:id so "estimate" is never read as a bot id.
 
-botsRouter.get('/estimate', readGate, asyncHandler(async (req, res) => {
+/**
+ * Every sample the estimator can draw on, then the pure selector over them.
+ * Both the estimate the operator reads and the forecast the allocation brake
+ * judges come through here — they used to be two expressions of the same
+ * fallback chain and they disagreed exactly where it mattered (see
+ * selectDispatchForecast). Per-point samples are skipped for an unsized item
+ * because they cannot be scaled without points; everything else is fetched so
+ * the chain is decided by the selector, not by which query happened to run.
+ */
+async function loadForecast(model: string, agentProjectId: string | null, points: number | null) {
+  const sized = points != null && points > 0;
+  const samples: ForecastSamples = {
+    perPointRepo: sized && agentProjectId ? await perPointCostSamples(model, agentProjectId) : null,
+    perPointModel: sized ? await perPointCostSamples(model, null) : null,
+    runRepo: agentProjectId ? await runCostSamples(model, agentProjectId) : null,
+    runModel: await runCostSamples(model, null),
+  };
+  return selectDispatchForecast(model, points, samples);
+}
+
+/** The wire shape of an estimate: the range, plus the two labels that stop it
+ *  being read as more than it is. */
+function estimateBody(f: Awaited<ReturnType<typeof loadForecast>>) {
+  return { ...f.estimate, points: f.points, scaled: f.scaled, confidence: f.confidence };
+}
+
+// marketReadGate, not readGate: the estimate is what the Authorize button
+// waits on, so a role holding only DispatchAgentRun (sme) must be able to read
+// it or the button latches off forever.
+botsRouter.get('/estimate', marketReadGate, asyncHandler(async (req, res) => {
   const model = String(req.query['model'] ?? '').trim();
   if (!model) throw new ValidationError('model is required');
   const agentProjectId = req.query['agentProjectId'] ? String(req.query['agentProjectId']) : null;
   const pointsRaw = Number(req.query['points']);
   const points = Number.isFinite(pointsRaw) && pointsRaw > 0 ? pointsRaw : null;
-
-  // A sized request first tries the per-point basis: percentiles of $/point
-  // and minutes/point over runs bound to sized work items, multiplied by N.
-  // scaled:true tells the portal the range actually reflects the item's size.
-  if (points != null) {
-    const repoPerPoint = agentProjectId ? await perPointCostSamples(model, agentProjectId) : null;
-    const modelPerPoint = await perPointCostSamples(model, null);
-    const scaled = selectPerPointEstimate(points, repoPerPoint, modelPerPoint);
-    if (scaled) { res.json({ ...scaled, points, scaled: true }); return; }
-  }
-
-  // Fallback (and the unsized path): the run-level estimate, labeled
-  // scaled:false — the range forecasts a run, not this item's size. Both
-  // samples are fetched so the fallback chain is decided by the pure
-  // selector, not by which query happened to run.
-  const repoSample = agentProjectId ? await runCostSamples(model, agentProjectId) : null;
-  const modelSample = await runCostSamples(model, null);
-  res.json({ ...selectEstimate(model, repoSample, modelSample), points, scaled: false });
+  res.json(estimateBody(await loadForecast(model, agentProjectId, points)));
 }));
 
 // ─── Marketplace ─────────────────────────────────────────────────────────────
@@ -140,79 +159,104 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
   }
   const instruction = String(body.instruction ?? '').trim();
   const actor = req.session?.sub;
-
-  // Per-run budget, request-supplied (there is no bot here to carry one).
-  // Judged against a FRESH estimate, not the estimate echoed in body.estimate
-  // — the operator's copy may be stale or shaped by the client.
+  let budgetPerRunUsd: number | null = null;
   if (body.budgetPerRunUsd !== undefined && body.budgetPerRunUsd !== null) {
-    const budget = body.budgetPerRunUsd;
-    if (typeof budget !== 'number' || !Number.isFinite(budget) || budget < 0) {
+    if (typeof body.budgetPerRunUsd !== 'number' || !Number.isFinite(body.budgetPerRunUsd)
+        || body.budgetPerRunUsd < 0) {
       throw new ValidationError('budgetPerRunUsd must be a non-negative number');
     }
-    const repoSample = body.agentProjectId ? await runCostSamples(model, String(body.agentProjectId)) : null;
-    const fresh = selectEstimate(model, repoSample, await runCostSamples(model, null));
-    const gate = decideRunBudget(budget, fresh.costUsdP75, body.confirmOverBudget === true);
+    budgetPerRunUsd = body.budgetPerRunUsd;
+  }
+
+  // ── 1. Shape, before money ────────────────────────────────────────────────
+  // Is this thing dispatchable at all, and against which codebase? The budget
+  // gates used to run first, so a `done` item that also overran its allocation
+  // asked the operator to confirm spending over budget and only THEN told them
+  // the item was never dispatchable. Nobody should be asked to authorize spend
+  // on work that cannot run.
+  const pre = await preflightWorkItem(workItemId, body.agentProjectId ? String(body.agentProjectId) : undefined);
+  if (!pre.ok) {
+    // 400 undispatchable, 404 missing, 409 ambiguous codebase (with options).
+    res.status(pre.status).json({ error: pre.error, ...(pre.options ? { options: pre.options } : {}) });
+    return;
+  }
+
+  // ── 2. One fresh forecast, for both money gates ───────────────────────────
+  // Fresh on purpose: never the estimate echoed in body.estimate, which may be
+  // stale or shaped by the client. Priced against the codebase preflight
+  // resolved, so a server-picked repo is still priced on its own history.
+  const forecast = await loadForecast(model, pre.agentProjectId, pre.item.storyPoints);
+
+  // ── 3. Per-run budget, request-supplied (no bot here carries one) ─────────
+  if (budgetPerRunUsd != null) {
+    const gate = decideRunBudget(
+      budgetPerRunUsd, forecast.estimate.costUsdP75, body.confirmOverBudget === true,
+    );
     if (gate.kind === 'confirm') {
-      res.status(409).json({ error: gate.reason, estimate: fresh });
+      res.status(409).json({ error: gate.reason, estimate: estimateBody(forecast) });
       return;
     }
   }
 
-  // The initiative's allocation, as a brake rather than a report: dispatching
-  // work whose forecast does not fit the money left this period demands the
-  // same explicit confirmation the per-run cap does. Skipped entirely when the
-  // initiative has no allocation — unbudgeted is not zero-budget — and when
-  // the item's estimate cannot be established, since refusing on an unknown
-  // would brake every dispatch against a repo with no history.
+  // ── 4. The initiative's allocation, as a brake rather than a report ───────
+  // Dispatching work whose forecast does not fit the money left this period
+  // demands the same explicit confirmation the per-run cap does.
+  //
+  // Two things this deliberately does NOT skip any more. It no longer needs a
+  // per-point basis: with zero runs bound to sized work items in this
+  // deployment, "no per-point basis" meant the brake could not fire at all,
+  // and could never fire on a FIRST dispatch — the one with no history and the
+  // best chance of blowing a small allocation. It now judges whatever forecast
+  // exists and says how much that forecast is worth (decideAllocation). Nor
+  // does it need the item to be pointed: an unsized story still spends money.
+  //
+  // Still skipped: an initiative with NO allocation row. Unbudgeted is not
+  // zero-budget — that surfaces as a blind spot on the Budgets page, and
+  // freezing an unfunded initiative here would be the wrong answer to it.
   //
   // Note both gates read the same confirmOverBudget flag. That is unambiguous
   // today because the portal never sends budgetPerRunUsd here (the per-run cap
   // belongs to bots, which carry their own), so at most one gate is ever
   // live per request. If a client starts sending both, split the flag — one
   // confirmation should not silently answer two different limits.
-  {
-    const item = await getWorkItem(workItemId);
-    const points = item?.storyPoints ?? null;
-    if (item && points != null && points > 0) {
-      const budgetRow = await getBudget(item.projectId);
-      if (budgetRow?.allocatedUsd != null) {
-        const repoPerPoint = body.agentProjectId
-          ? await perPointCostSamples(model, String(body.agentProjectId)) : null;
-        const scaled = selectPerPointEstimate(points, repoPerPoint, await perPointCostSamples(model, null));
-        if (scaled) {
-          const gate = decideAllocation(
-            { allocatedUsd: budgetRow.allocatedUsd, spentUsd: budgetRow.spentThisPeriodUsd },
-            scaled.costUsdP75,
-            body.confirmOverBudget === true,
-          );
-          if (gate.kind === 'confirm') {
-            res.status(409).json({
-              error: gate.reason,
-              estimate: { ...scaled, points, scaled: true },
-              allocation: {
-                orgProjectId: item.projectId,
-                allocatedUsd: budgetRow.allocatedUsd,
-                spentUsd: budgetRow.spentThisPeriodUsd,
-                remainingUsd: budgetRow.allocatedUsd - budgetRow.spentThisPeriodUsd,
-              },
-            });
-            return;
-          }
-        }
-      }
+  const budgetRow = await getBudget(pre.item.projectId);
+  if (budgetRow?.allocatedUsd != null) {
+    const gate = decideAllocation(
+      { allocatedUsd: budgetRow.allocatedUsd, spentUsd: budgetRow.spentThisPeriodUsd },
+      {
+        costUsdP75: forecast.estimate.costUsdP75,
+        costUsdP25: forecast.estimate.costUsdP25,
+        confidence: forecast.confidence,
+      },
+      body.confirmOverBudget === true,
+    );
+    if (gate.kind === 'confirm') {
+      res.status(409).json({
+        error: gate.reason,
+        confidence: gate.confidence,
+        estimate: estimateBody(forecast),
+        allocation: {
+          orgProjectId: pre.item.projectId,
+          allocatedUsd: budgetRow.allocatedUsd,
+          spentUsd: budgetRow.spentThisPeriodUsd,
+          remainingUsd: budgetRow.allocatedUsd - budgetRow.spentThisPeriodUsd,
+        },
+      });
+      return;
     }
   }
 
   const result = await dispatchWorkItem({
-    workItemId, model,
+    workItemId, model, preflight: pre,
     ...(body.agentProjectId ? { agentProjectId: String(body.agentProjectId) } : {}),
     ...(instruction ? { instruction } : {}),
     ...(actor ? { actor } : {}),
     ...(body.estimate && typeof body.estimate === 'object' ? { estimate: body.estimate } : {}),
   });
   if (!result.ok) {
-    // The dispatcher decides the status: 400 undispatchable, 404 missing,
-    // 409 ambiguous codebase (with options to choose from), 503 infrastructure.
+    // Shape refusals were answered by the preflight above; what is left is the
+    // dispatcher's own: 429 concurrency, 409 already being worked, 503
+    // infrastructure (no workspace, the run would not start).
     res.status(result.status).json({
       error: result.error, ...(result.options ? { options: result.options } : {}),
     });
@@ -220,11 +264,6 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
   }
   res.status(202).json({ run: result.run });
 }));
-
-// The work-board surface: SMEs holding DispatchAgentRun read the runs behind
-// the initiative board they dispatch from, without holding the bots-admin
-// read roles.
-const marketReadGate = readForRolesElseAction(['org-leader', 'hr-admin'], 'DispatchAgentRun');
 
 botsRouter.get('/marketplace-runs', marketReadGate, asyncHandler(async (req, res) => {
   const orgProjectId = String(req.query['orgProjectId'] ?? '').trim();
@@ -355,11 +394,15 @@ botsRouter.post('/:id/run', manageGate, asyncHandler(async (req, res) => {
   // attached so the operator sees what they are confirming.
   const bot = await getBot(id);
   if (bot?.budgetPerRunUsd != null) {
-    const repoSample = bot.agentProjectId ? await runCostSamples(bot.model, bot.agentProjectId) : null;
-    const fresh = selectEstimate(bot.model, repoSample, await runCostSamples(bot.model, null));
-    const gate = decideRunBudget(bot.budgetPerRunUsd, fresh.costUsdP75, body.confirmOverBudget === true);
+    // A bot fires a whole run, not a sized item, so points is null and the
+    // forecast is run-level by construction — same loader as the marketplace,
+    // so a bot and a work item are never priced by two different chains.
+    const forecast = await loadForecast(bot.model, bot.agentProjectId, null);
+    const gate = decideRunBudget(
+      bot.budgetPerRunUsd, forecast.estimate.costUsdP75, body.confirmOverBudget === true,
+    );
     if (gate.kind === 'confirm') {
-      res.status(409).json({ error: gate.reason, estimate: fresh });
+      res.status(409).json({ error: gate.reason, estimate: estimateBody(forecast) });
       return;
     }
   }

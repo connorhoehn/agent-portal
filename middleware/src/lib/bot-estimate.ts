@@ -25,6 +25,22 @@ export interface Estimate {
   minutesP75: number;
 }
 
+/**
+ * How much a forecast is entitled to claim — the one word every consumer of an
+ * estimate needs and none of them should have to re-derive from (basis,
+ * scaled).
+ *
+ *   scaled       per-point history multiplied by this item's points. The range
+ *                reflects the item's size; the strongest thing we ever have.
+ *   run-history  real completed runs, but run-level: a 1-pt and a 13-pt item
+ *                get the same range. A bracket, not a prediction for THIS item.
+ *   prior        no history at all: a static per-tier bracket, deliberately wide.
+ *
+ * Money decisions may act on all three — a forecast you distrust is still the
+ * only forecast you have — but they must say which one they acted on.
+ */
+export type ForecastConfidence = 'scaled' | 'run-history' | 'prior';
+
 /** Repo-matched history is trusted at fewer samples than model-wide history —
  *  it is the same codebase, so three runs already say something. */
 export const REPO_MIN_SAMPLES = 3;

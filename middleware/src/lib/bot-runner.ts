@@ -33,6 +33,7 @@ import { runDevboxShell } from './project-runner.js';
 import { resolveDevboxArn, devboxDataClient } from './devbox-arn.js';
 import { registerBox, getBoxBySession } from './devbox-fleet.js';
 import { normalizeRuntimeSessionId } from './runtime-session.js';
+import type { ForecastConfidence } from './bot-estimate.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
@@ -169,6 +170,37 @@ export interface AllocationState {
   spentUsd: number;
 }
 
+/** What the brake is asked to judge. A bare number is read as a p75 it may
+ *  speak about precisely — the shape from before there was anything weaker
+ *  than a per-point forecast to hand it. */
+export interface AllocationForecast {
+  /** The figure the brake tests against the remainder: the pessimistic end. */
+  costUsdP75: number;
+  /** The optimistic end, when the range is known. Present or not, the test is
+   *  the same; it only changes how certain the refusal is allowed to sound. */
+  costUsdP25?: number;
+  /** How the forecast was made. Decides the wording, never the verdict. */
+  confidence?: ForecastConfidence;
+}
+
+/** Like RunBudgetDecision, but a refusal carries the confidence it was made
+ *  with — the route hands it to the operator so a bracket is never mistaken
+ *  for a measurement. */
+export type AllocationDecision =
+  | { kind: 'proceed' }
+  | { kind: 'confirm'; reason: string; confidence: ForecastConfidence };
+
+const money = (n: number): string => `$${n.toFixed(2)}`;
+
+/** The parenthetical that stops a weak forecast reading like a measurement.
+ *  No em dash inside — the reason's first ' — ' is the remedy separator, and
+ *  clients split on it. */
+const CONFIDENCE_NOTE: Record<ForecastConfidence, string> = {
+  scaled: '',
+  'run-history': " (run-level history, not scaled to this item's size)",
+  prior: ' (no history for this model yet: a deliberately wide prior)',
+};
+
 /**
  * Whether a dispatch fits inside the initiative's remaining allocation.
  *
@@ -182,20 +214,66 @@ export interface AllocationState {
  * The daily bot budget stays a HARD brake (it self-pauses the bot); this one
  * is soft, because it gates human-initiated work and a hard stop mid-sprint
  * with no override would strand an SME.
+ *
+ * ── Where the line sits between noisy and useless ────────────────────────────
+ * The brake tests the **p75** of the range against the remainder, whatever the
+ * confidence, and never the p25 or a midpoint. Testing p25 ("refuse only when
+ * even the cheap outcome does not fit") would have kept this brake asleep for
+ * exactly the case it exists for: a first dispatch against a $5 allocation,
+ * where a $0.15–$1.50 prior's low end always fits. Testing p75 says "there is a
+ * real chance this one run alone eats what is left", which is worth a
+ * confirmation even when it is a bracket rather than a measurement — the brake
+ * is soft, so a false alarm costs one click while a missed one costs money
+ * someone deliberately fenced.
+ *
+ * The confidence therefore shapes the SENTENCE, not the verdict:
+ *   scaled       one number, stated flatly — the range is size-aware evidence.
+ *   run-history  the range, hedged as "may not fit", plus the caveat.
+ *   prior        the same, plus "no history yet" and a cheaper-model remedy.
+ * And when even the p25 is over the remainder the wording escalates to "even
+ * the low end", because that overrun is near-certain on any basis. Exhaustion
+ * is a fact about the ledger, not a forecast, so it carries no caveat at all.
  */
 export function decideAllocation(
   allocation: AllocationState,
-  estimatedCostUsd: number,
+  forecast: number | AllocationForecast,
   confirmed: boolean,
-): RunBudgetDecision {
+): AllocationDecision {
   const { allocatedUsd, spentUsd } = allocation;
   if (allocatedUsd == null || confirmed) return { kind: 'proceed' };
+
+  const f: AllocationForecast = typeof forecast === 'number' ? { costUsdP75: forecast } : forecast;
   const remaining = allocatedUsd - spentUsd;
-  if (estimatedCostUsd <= remaining) return { kind: 'proceed' };
-  const reason = remaining <= 0
-    ? `this initiative's $${allocatedUsd.toFixed(2)} allocation is exhausted ($${spentUsd.toFixed(2)} spent) — raise the allocation or pass confirmOverBudget`
-    : `estimated $${estimatedCostUsd.toFixed(2)} exceeds the $${remaining.toFixed(2)} left of this initiative's $${allocatedUsd.toFixed(2)} allocation — raise it or pass confirmOverBudget`;
-  return { kind: 'confirm', reason };
+  if (f.costUsdP75 <= remaining) return { kind: 'proceed' };
+
+  // Exhausted: no forecast could fit, so say nothing about the forecast.
+  if (remaining <= 0) {
+    return {
+      kind: 'confirm',
+      reason: `this initiative's ${money(allocatedUsd)} allocation is exhausted (${money(spentUsd)} spent) — raise the allocation or pass confirmOverBudget`,
+      confidence: f.confidence ?? 'scaled',
+    };
+  }
+
+  const confidence = f.confidence ?? 'scaled';
+  const left = `the ${money(remaining)} left of this initiative's ${money(allocatedUsd)} allocation`;
+  if (confidence === 'scaled' || f.costUsdP25 == null) {
+    return {
+      kind: 'confirm',
+      reason: `estimated ${money(f.costUsdP75)} exceeds ${left} — raise it or pass confirmOverBudget`,
+      confidence,
+    };
+  }
+
+  const range = `${money(f.costUsdP25)}–${money(f.costUsdP75)}`;
+  const claim = f.costUsdP25 > remaining
+    ? `even the low end of a ${range} forecast exceeds ${left}`
+    : `a ${range} forecast may not fit ${left}`;
+  return {
+    kind: 'confirm',
+    reason: `${claim}${CONFIDENCE_NOTE[confidence]} — raise it, pick a cheaper model, or pass confirmOverBudget`,
+    confidence,
+  };
 }
 
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
@@ -413,6 +491,47 @@ export type DispatchWorkResult =
   | { ok: true; run: BotRun }
   | { ok: false; status: number; error: string; options?: DispatchCandidate[] };
 
+/** The item and the codebase a dispatch resolved to, or the refusal it earned. */
+export type WorkItemPreflight =
+  | { ok: true; item: WorkItem; agentProjectId: string }
+  | { ok: false; status: number; error: string; options?: DispatchCandidate[] };
+
+/**
+ * Everything that can refuse a dispatch on SHAPE — before a single question
+ * about money is asked.
+ *
+ * Split out of dispatchWorkItem so the route can run it first. The gates used
+ * to run the other way round, and the result was an interrogation nobody
+ * should sit through: a `done` work item that also overran its initiative's
+ * allocation answered "confirm you want to spend over budget", and only once
+ * the operator had confirmed did it answer "a done work item cannot be
+ * dispatched". Never ask someone to authorize spending on something that was
+ * never dispatchable.
+ *
+ * Resolving the codebase here is the second reason: the brake can then price
+ * against the repo the run will actually use, even when the caller left it to
+ * the server to pick.
+ */
+export async function preflightWorkItem(
+  workItemId: string,
+  agentProjectId?: string,
+): Promise<WorkItemPreflight> {
+  const item = await getWorkItem(workItemId);
+  if (!item) return { ok: false, status: 404, error: 'no such work item' };
+
+  const codebases = (await listAgentProjects())
+    .filter((p) => p.orgProjectId != null && p.orgProjectId === item.projectId)
+    .map((p) => ({ id: p.id, repoFullName: p.repoFullName }));
+  const decision = decideDispatch(item, codebases, agentProjectId);
+  if (decision.kind === 'error') {
+    return {
+      ok: false, status: decision.status, error: decision.error,
+      ...(decision.options ? { options: decision.options } : {}),
+    };
+  }
+  return { ok: true, item, agentProjectId: decision.agentProjectId };
+}
+
 /**
  * Authorize a story or bug into a governed run — the marketplace's dispatch.
  *
@@ -431,20 +550,19 @@ export async function dispatchWorkItem(input: {
   actor?: string;
   /** The estimate shown at authorize time, echoed onto the bot_run outcome. */
   estimate?: Record<string, unknown>;
+  /** A preflight the caller already ran (routes do, so shape refusals land
+   *  before the budget gates). Omitted → run it here, so a direct caller still
+   *  gets every refusal. */
+  preflight?: Extract<WorkItemPreflight, { ok: true }>;
 }): Promise<DispatchWorkResult> {
-  const item = await getWorkItem(input.workItemId);
-  if (!item) return { ok: false, status: 404, error: 'no such work item' };
-
-  const codebases = (await listAgentProjects())
-    .filter((p) => p.orgProjectId != null && p.orgProjectId === item.projectId)
-    .map((p) => ({ id: p.id, repoFullName: p.repoFullName }));
-  const decision = decideDispatch(item, codebases, input.agentProjectId);
-  if (decision.kind === 'error') {
+  const pre = input.preflight ?? await preflightWorkItem(input.workItemId, input.agentProjectId);
+  if (!pre.ok) {
     return {
-      ok: false, status: decision.status, error: decision.error,
-      ...(decision.options ? { options: decision.options } : {}),
+      ok: false, status: pre.status, error: pre.error,
+      ...(pre.options ? { options: pre.options } : {}),
     };
   }
+  const item = pre.item;
 
   // The global ceiling, before any workspace side effect: a refused dispatch
   // leaves the work item exactly as it was — no run row, no status flip — so
@@ -454,7 +572,7 @@ export async function dispatchWorkItem(input: {
     return { ok: false, status: 429, error: congestion.reason };
   }
 
-  const project = await getAgentProject(decision.agentProjectId);
+  const project = await getAgentProject(pre.agentProjectId);
   if (!project) return { ok: false, status: 404, error: 'the chosen codebase no longer exists' };
 
   // Claim the work item BEFORE any dispatch side effect, atomically: only an
