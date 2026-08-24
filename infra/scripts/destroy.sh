@@ -153,6 +153,84 @@ fi
 echo ""
 
 # ──────────────────────────────────────────────────────────────────
+# 3b. Pre-drain AgentCore runtimes
+#
+# AWS::BedrockAgentCore::Runtime routinely takes longer to delete than the CFN
+# resource handler will wait, which fails the resource with NotStabilized
+# ("Request timed out while deleting") and drops the whole stack into
+# DELETE_FAILED — aborting `cdk destroy --all` partway through the fleet. The
+# runtime then finishes deleting server-side anyway, so the failure is purely
+# CFN's patience running out.
+#
+# Draining here, the same way Aurora and the KB are drained, means CFN sees
+# resources that are already gone. Endpoints must go before their runtime (the
+# API rejects the runtime delete with a ConflictException otherwise), and both
+# calls are rejected while a delete is already in flight — so "already
+# deleting" is a success, not an error.
+# ──────────────────────────────────────────────────────────────────
+echo "── Pre-draining AgentCore runtimes ──"
+
+RUNTIME_IDS=$(aws bedrock-agentcore-control list-agent-runtimes --region "$REGION" \
+  --query "agentRuntimes[?starts_with(agentRuntimeName, '${PREFIX}')].agentRuntimeId" \
+  --output text 2>/dev/null | tr '\t' '\n' || true)
+
+if [[ -z "$RUNTIME_IDS" ]]; then
+  echo "  No agent runtimes found"
+else
+  # Endpoints first. DEFAULT is managed with its runtime and cannot be deleted
+  # on its own, so it is skipped.
+  for RT_ID in $RUNTIME_IDS; do
+    for EP in $(aws bedrock-agentcore-control list-agent-runtime-endpoints \
+                  --agent-runtime-id "$RT_ID" --region "$REGION" \
+                  --query "runtimeEndpoints[?name!='DEFAULT'].name" \
+                  --output text 2>/dev/null | tr '\t' '\n' || true); do
+      echo "  Deleting endpoint ${EP} (${RT_ID})"
+      aws bedrock-agentcore-control delete-agent-runtime-endpoint \
+        --agent-runtime-id "$RT_ID" --endpoint-name "$EP" \
+        --region "$REGION" > /dev/null 2>&1 || true
+    done
+  done
+
+  # Then the runtimes, once their endpoints have actually gone.
+  for i in $(seq 1 60); do
+    PENDING_EPS=0
+    for RT_ID in $RUNTIME_IDS; do
+      N=$(aws bedrock-agentcore-control list-agent-runtime-endpoints \
+            --agent-runtime-id "$RT_ID" --region "$REGION" \
+            --query "length(runtimeEndpoints[?name!='DEFAULT'])" \
+            --output text 2>/dev/null || echo 0)
+      [[ "$N" =~ ^[0-9]+$ ]] && PENDING_EPS=$((PENDING_EPS + N))
+    done
+    [[ "$PENDING_EPS" == "0" ]] && break
+    echo "    ${PENDING_EPS} endpoint(s) still deleting..."
+    sleep 10
+  done
+
+  for RT_ID in $RUNTIME_IDS; do
+    echo "  Deleting runtime ${RT_ID}"
+    aws bedrock-agentcore-control delete-agent-runtime \
+      --agent-runtime-id "$RT_ID" --region "$REGION" > /dev/null 2>&1 || true
+  done
+
+  # Wait for them to actually go, so CFN never starts a delete it cannot
+  # outlast. Report honestly on timeout rather than pressing on silently.
+  for i in $(seq 1 90); do
+    REMAINING=$(aws bedrock-agentcore-control list-agent-runtimes --region "$REGION" \
+      --query "length(agentRuntimes[?starts_with(agentRuntimeName, '${PREFIX}')])" \
+      --output text 2>/dev/null || echo "0")
+    [[ "$REMAINING" == "0" || "$REMAINING" == "None" ]] && break
+    echo "    ${REMAINING} runtime(s) still deleting..."
+    sleep 10
+  done
+  if [[ "$REMAINING" != "0" && "$REMAINING" != "None" ]]; then
+    echo "  ⚠ ${REMAINING} runtime(s) still deleting — CFN may still hit NotStabilized"
+  else
+    echo "  Agent runtimes drained"
+  fi
+fi
+echo ""
+
+# ──────────────────────────────────────────────────────────────────
 # 4. Pre-drain Bedrock Knowledge Base
 #    The KB data source can't be deleted when Aurora is stopped/unreachable.
 #    Setting dataDeletionPolicy=RETAIN and pre-deleting avoids DELETE_FAILED.
