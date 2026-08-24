@@ -115,6 +115,18 @@ export class AuthenticationStack extends cdk.Stack {
       { email: 'priya.desai@orgiq.example', name: 'Priya Desai' },
       { email: 'marcus.webb@newsroom.example', name: 'Marcus Webb' },
       { email: 'elena.ortiz@newsroom.example', name: 'Elena Ortiz' },
+      // Program operating model cast (docs/program-operating-model.md). Without
+      // these, the release manager and the SMEs — the roles the model is built
+      // around — could only reach the app through the dev-only picker, which
+      // is disabled in production. Emails match schema/identity_schema.sql, so
+      // the BFF resolves each to its existing app_user on first login rather
+      // than creating a duplicate.
+      { email: 'sienna.garcia@orgiq.example', name: 'Sienna Garcia' },
+      { email: 'rachel.kowalski@orgiq.example', name: 'Rachel Kowalski' },
+      { email: 'nora.dasilva@orgiq.example', name: 'Nora DaSilva' },
+      { email: 'eli.garcia@orgiq.example', name: 'Eli Garcia' },
+      { email: 'layla.hassan@orgiq.example', name: 'Layla Hassan' },
+      { email: 'caleb.turner@orgiq.example', name: 'Caleb Turner' },
     ];
     for (const u of seedUsers) {
       new cognito.CfnUserPoolUser(this, `SeedUser-${u.email.replace(/[^a-z0-9]/gi, '-')}`, {
