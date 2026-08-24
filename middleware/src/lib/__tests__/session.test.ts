@@ -70,6 +70,15 @@ describe('landingRole', () => {
     expect(landingRole(['admin'])).toBe('admin');
     expect(landingRole(['admin', 'member'])).toBe('member');
   });
+
+  // An SME dispatches agent work, so it outranks member but sits below the
+  // roles that allocate the money it spends.
+  it('ranks sme between member and org-leader', () => {
+    expect(landingRole(['sme'])).toBe('sme');
+    expect(landingRole(['sme', 'member'])).toBe('member');
+    expect(landingRole(['org-leader', 'sme'])).toBe('sme');
+    expect(landingRole(['hr-admin', 'sme'])).toBe('sme');
+  });
 });
 
 describe('sign/verify round trip', () => {
