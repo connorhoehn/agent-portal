@@ -29,8 +29,17 @@ INSERT INTO knowledge_bases (
   status,
   kb_service_role_arn
 ) VALUES (
-  'EJYAXQAMHQ',   -- existing Bedrock KB ID from CDK OrgIQ-KnowledgeBase stack
-  NULL,            -- bootstrap-kb-registry.ts will fill this from ListDataSources
+  -- Deliberately NULL, not a literal id.
+  --
+  -- This used to hardcode 'EJYAXQAMHQ', the KB that CDK happened to create
+  -- once. Bedrock mints a new id every time OrgIQ-KnowledgeBase is recreated,
+  -- so on any rebuilt stack the seeded row claimed a knowledge base that did
+  -- not exist, and every sync against it failed. A row that names nothing is
+  -- honest and reconcilable; a row that names the wrong thing is neither.
+  -- /admin/knowledge (providers/kb-reconcile.ts) adopts the live KB into this
+  -- row and captures its data source id.
+  NULL,
+  NULL,            -- data_source_id — filled by adoption from ListDataSources
   'OrgIQ Documents',
   'default',
   'orgiq',
@@ -41,7 +50,10 @@ INSERT INTO knowledge_bases (
   'amazon.titan-embed-text-v2:0',
   'SEMANTIC',
   512,
-  'ACTIVE',
+  -- PENDING until adoption points it at a real knowledge base. Claiming
+  -- ACTIVE while bedrock_kb_id is NULL would assert a working KB that cannot
+  -- answer a single query.
+  'PENDING',
   NULL             -- bootstrap script fills this from IAM describe-role if needed
 ) ON CONFLICT (slug) DO NOTHING;
 
