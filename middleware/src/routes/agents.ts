@@ -7,17 +7,17 @@ import { agentcore, aurora } from '../providers/index.js';
 import { detectIntervention, recordInvocation, snippet } from '../lib/invocations.js';
 import { listEvents, recordTurn, type StoredToolCall } from '../providers/memory.js';
 import { maybeGenerateTitle } from '../lib/session-titles.js';
-import { requireAction } from '../lib/authz.js';
+import { requireAction, requireTenant } from '../lib/authz.js';
 import { annotateToolResult } from '../lib/answer-sources.js';
 
 export const agentsRouter = Router();
 
-agentsRouter.get('/', asyncHandler(async (_req, res) => {
+agentsRouter.get('/', requireTenant('orgiq'), asyncHandler(async (_req, res) => {
   const runtimes = await agentcore.listRuntimes();
   res.json(runtimes);
 }));
 
-agentsRouter.get('/:agentId/metrics', asyncHandler(async (req, res) => {
+agentsRouter.get('/:agentId/metrics', requireTenant('orgiq'), asyncHandler(async (req, res) => {
   const agentId = String(req.params['agentId'] ?? '');
   const metrics = await agentcore.getRuntimeMetrics(agentId);
   if (!metrics) { res.status(404).json({ error: 'Agent not found' }); return; }

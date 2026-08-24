@@ -30,9 +30,18 @@ import { exec } from '../providers/aurora.js';
 import { processTrace, type TraceInput } from '../lib/trace-sink.js';
 import { judgeResponse } from '../lib/judge.js';
 import { executeRun, loadCasesForRun } from '../lib/harness-runner.js';
-import { requireAction, requireSession } from '../lib/authz.js';
+import { requireAction, requireSession, requireTenant } from '../lib/authz.js';
 
 export const harnessRouter = Router();
+
+// Canary/harness telemetry is an orgiq surface. Tenant-scope every route so a
+// newsroom session can't read another tenant's eval runs, cases or results —
+// EXCEPT the agent-facing `/trace` callback below, which is sessionless by
+// design and so has no tenant to check (it self-gates via requireTraceAuth).
+harnessRouter.use((req, res, next) => {
+  if (req.path === '/trace') { next(); return; }
+  requireTenant('orgiq')(req, res, next);
+});
 
 // The trace callback (`POST /trace`) is agent-facing: deployed runtimes post
 // their bundles here with no session (agents/_shared/instrumentation.py). It
