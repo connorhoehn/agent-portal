@@ -114,6 +114,10 @@ echo ""
 # ──────────────────────────────────────────────────────────────────
 echo "── Checking for orphaned ECR repositories ──"
 
+# Every repo the app owns, not just the six original agents. A repo missing
+# from this list survives a teardown, and its stack then fails to create with
+# "Resource of type 'AWS::ECR::Repository' ... already exists" — which is how
+# OrgIQ-MiddlewareService blocked a rebuild here, three stacks from the end.
 ECR_REPOS=(
   "${PREFIX}-supervisor"
   "${PREFIX}-search"
@@ -121,6 +125,12 @@ ECR_REPOS=(
   "${PREFIX}-advisor"
   "${PREFIX}-ingestion"
   "${PREFIX}-graph-builder"
+  "${PREFIX}-news-researcher"
+  "${PREFIX}-news-brief"
+  "${PREFIX}-news-headline"
+  "${PREFIX}-agent-base"
+  "${PREFIX}-devbox"
+  "${PREFIX}-middleware"
 )
 
 for repo in "${ECR_REPOS[@]}"; do
