@@ -157,6 +157,27 @@ function denyUnauthenticated(req: Request, res: Response, action: string): void 
 }
 
 /**
+ * Requires a SESSION, not a capability — the floor beneath every Cedar gate.
+ *
+ * Some surfaces are deliberately readable by every role (the work queue's
+ * overview, the agent fleet, session history). "Every role" was implemented as
+ * no guard at all, which is not the same thing: with no guard the handler never
+ * inspects the session, so an anonymous caller reads it too. In dev the demo
+ * fallback disguises that; in production, with SSO on and the fallback off,
+ * those routes served real data — conversation transcripts among them — to a
+ * request carrying no cookie.
+ *
+ * Use this wherever the intent is "any signed-in user may look". Use
+ * requireAction where a specific authority is needed.
+ */
+export function requireSession(label = 'Read') {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!resolveSession(req)) { denyUnauthenticated(req, res, label); return; }
+    next();
+  };
+}
+
+/**
  * Returns a middleware that requires Cedar permission for `action`.
  * Action ids match the Cedar schema (Search, ViewSalary, EditGuardrail, ...).
  */

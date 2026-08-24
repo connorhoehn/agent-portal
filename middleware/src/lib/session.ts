@@ -149,7 +149,21 @@ async function loadSigningKey(): Promise<string> {
   if (!arn) {
     // Dev fallback: deterministic key so restarts don't invalidate cookies.
     // CDK populates the real secret in production.
-    signingKey = process.env['SESSION_SIGNING_KEY_DEV'] ?? 'orgiq-dev-signing-key-change-me';
+    const devKey = process.env['SESSION_SIGNING_KEY_DEV'] ?? 'orgiq-dev-signing-key-change-me';
+    // Refuse to run on a key anyone can read out of this file. The fallback is
+    // fine in dev and catastrophic anywhere else: the key is the ONLY thing
+    // authenticating the session cookie, so a published constant lets anyone
+    // mint a valid `admin` session for any tenant. Losing the secret ARN in
+    // production must fail loudly at boot, not silently downgrade to a
+    // well-known key while everything appears to work.
+    if (process.env['NODE_ENV'] === 'production' && !process.env['SESSION_SIGNING_KEY_DEV']) {
+      throw new Error(
+        'SESSION_SIGNING_SECRET_ARN is unset in production — refusing to sign sessions ' +
+        'with the built-in development key. Set the secret ARN (CDK provides it) ' +
+        'or, for a deliberate non-AWS deployment, set SESSION_SIGNING_KEY_DEV.',
+      );
+    }
+    signingKey = devKey;
     return signingKey;
   }
   const sm = new SecretsManagerClient({ region: config.region });
