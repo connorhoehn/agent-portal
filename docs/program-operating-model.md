@@ -148,8 +148,15 @@ Fourteen canonical `p-*` initiatives, each with:
 - sprints with stewards, and `budget_grants` from `u-release` to those stewards;
 - a monthly `initiative_budgets` allocation;
 - a maintenance bot with ~30 days of cron `bot_runs` and their `agent_jobs`
-  (except the two planning-stage initiatives, which have no repo to maintain,
-  and the completed one, whose bot is parked with a `paused_reason`).
+  (except the two planning-stage initiatives, which have no repo to maintain).
+
+⚠️ **Seeded bots are parked, and no `queued` jobs are seeded.** Both are safety,
+not omission: `initBotScheduler` registers every *enabled* cron bot at boot, and
+the job dispatcher claims any *queued* job the moment a devbox box is idle.
+Either would run against repositories that do not exist yet — burning real money
+to fail at clone. The completed run history is what demonstrates the loop and
+the maintenance baseline. Provision the repo, then un-pause the bot from its
+page; that is the activation step.
 
 The middleware's no-Aurora fallbacks mirror this exactly — same ids, same
 people, same owner/SME shape (`providers/projects.ts`, `providers/work-items.ts`)

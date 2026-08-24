@@ -598,8 +598,15 @@ def main() -> None:
         bot = ini['bot']
         if bot:
             bid = bot_uuid(pid)
-            paused = f"'{q(bot['paused'])}'" if bot.get('paused') else 'NULL'
-            enabled = 'FALSE' if bot.get('paused') else 'TRUE'
+            # Seeded bots are parked, deliberately. The repositories they name
+            # are not provisioned yet, and initBotScheduler registers every
+            # enabled cron bot at boot — so an enabled seed bot would fire on
+            # schedule against a repo that does not exist, burning real money
+            # to fail at clone. Provision the repo, then un-pause the bot from
+            # its page: that is the activation step, and it is one click.
+            paused = (f"'{q(bot['paused'])}'" if bot.get('paused')
+                      else "'awaiting repo provisioning — un-pause once the repository exists'")
+            enabled = 'FALSE'
             emit(
                 "INSERT INTO bots (id, name, template, prompt_template, org_project_id, model, trigger, cron_expr, enabled, budget_per_run_usd, budget_per_day_usd, max_runs_per_day, requires_review, created_by, created_at, last_run_at, paused_reason) "
                 f"VALUES ('{bid}', '{q(bot['name'])}', '{bot['template']}', '{q(bot['mission'])}', "
@@ -625,16 +632,12 @@ def main() -> None:
                     f"{days(age)}, {days(age)}, '{{\"reason\": \"scheduled maintenance\"}}'::jsonb) "
                     "ON CONFLICT (id) DO NOTHING"
                 )
-            # One queued job waiting right now, so the queue shows the loop live.
-            if not bot.get('paused') and ini['tier'] == 'flagship':
-                jid = f'job-{slug}-maint-next'
-                emit(
-                    "INSERT INTO agent_jobs (id, kind, title, payload, status, priority, created_by, created_at, bot_id) "
-                    f"VALUES ('{jid}', 'devbox:task', '{q(bot['name'])}', "
-                    f"'{{\"prompt\": \"{q(bot['mission'])[:120]}\", \"requiresReview\": false, \"botId\": \"{bid}\", \"model\": \"us.amazon.nova-lite-v1:0\"}}'::jsonb, "
-                    f"'queued', 100, 'scheduler', {days(0)}, '{bid}') "
-                    "ON CONFLICT (id) DO NOTHING"
-                )
+            # No 'queued' rows are seeded. The job dispatcher claims any queued
+            # job as soon as a devbox box is idle, so a seeded queued row would
+            # not sit in the queue illustrating the loop — it would execute,
+            # against a repository that does not exist. The completed history
+            # above is what shows the loop and the maintenance baseline; the
+            # queue fills for real once a bot is un-paused.
 
     # Flagship comment threads.
     L.append('')
