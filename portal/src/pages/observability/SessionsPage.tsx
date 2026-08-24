@@ -25,10 +25,15 @@ interface SessionSummary {
 }
 
 function SessionsPage() {
-  const { data, refresh } = useFetch<{ sessions: SessionSummary[] }>('/api/sessions', 15000);
+  const { data, error, refresh } = useFetch<{ sessions: SessionSummary[] }>('/api/sessions', 15000);
   const [query, setQuery] = useState('');
 
   const sessions = data?.sessions ?? [];
+  // /api/sessions is session-guarded, so an expired cookie 401s. "No chat
+  // sessions yet" would then be the page telling the user their conversations
+  // do not exist, on the strength of a request that never succeeded.
+  const unavailable = Boolean(error) && !data;
+  const needsAuth = /\b401\b|\b403\b/.test(error ?? '');
 
   const filtered = useMemo(() => {
     if (!query.trim()) return sessions;
@@ -94,7 +99,18 @@ function SessionsPage() {
               color: 'var(--color-text-tertiary)',
             }}
           >
-            {sessions.length === 0
+            {unavailable ? (
+              <>
+                <div style={{ fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+                  Couldn’t load your chat sessions
+                </div>
+                <div style={{ marginTop: 4 }}>
+                  {needsAuth
+                    ? 'Your session expired — sign in to see them. Nothing has been deleted.'
+                    : `The session list request failed (${error}).`}
+                </div>
+              </>
+            ) : sessions.length === 0
               ? 'No chat sessions yet. Start a conversation on the Agent Tools page.'
               : 'No sessions match the current filter.'}
           </div>

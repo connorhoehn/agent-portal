@@ -12,7 +12,10 @@ import {
 import { ChatPanel } from '@connorhoehnslalom/ui-components/social';
 import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
-import { fetchSessionMessages, rememberSession, recallSession, forgetSession } from '../lib/chatSessions';
+import {
+  fetchSessionMessages, rememberSession, recallSession, forgetSession,
+  SessionHistoryError,
+} from '../lib/chatSessions';
 import {
   sortPeople, buildMentionRegexes, findMentionedPeople, generateFollowUps,
   type GraphEntities, type GraphPerson,
@@ -98,6 +101,13 @@ function InvokePage() {
   const { data: agents } = useFetch<AgentDef[]>('/api/agents');
 
   const [selectedId, setSelectedId] = useState('orgiq-supervisor');
+  // A history load that FAILED, kept apart from a conversation that is empty.
+  // Auto-resume fires on mount, so an expired cookie or a 500 used to land the
+  // user in the "send a message to start" empty state — the app quietly
+  // claiming their conversation didn't exist.
+  const [historyError, setHistoryError] = useState<
+    { sessionId: string; message: string; needsAuth: boolean } | null
+  >(null);
   const {
     messages,
     isStreaming,
@@ -112,15 +122,30 @@ function InvokePage() {
     url: `/api/agents/${selectedId}/invoke`,
     // Shared canonical fetcher (lib/chatSessions). keepThinking because this
     // page renders <thinking> blocks as collapsible ThinkingBlock sections.
-    historyFetch: (sid: string) => fetchSessionMessages(sid, { keepThinking: true }),
+    // On failure we record WHY and re-throw: re-throwing leaves whatever was
+    // on screen intact (loadHistory only replaces messages on success) and the
+    // banner below explains and offers a retry.
+    historyFetch: (sid: string) =>
+      fetchSessionMessages(sid, { keepThinking: true })
+        .then((msgs) => { setHistoryError(null); return msgs; })
+        .catch((err: unknown) => {
+          const e = err instanceof SessionHistoryError ? err : null;
+          setHistoryError({
+            sessionId: sid,
+            message: e?.message ?? 'Could not load this conversation.',
+            needsAuth: Boolean(e?.needsAuth),
+          });
+          throw err;
+        }),
   });
   const [input, setInput] = useState('');
   const [suggestionSeed, setSuggestionSeed] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const { data: sessionList, refresh: refreshSessions } = useFetch<{ sessions: SessionSummary[] }>(
-    '/api/sessions',
-    15000,
-  );
+  const {
+    data: sessionList,
+    error: sessionListError,
+    refresh: refreshSessions,
+  } = useFetch<{ sessions: SessionSummary[] }>('/api/sessions', 15000);
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Session-scoped chat sidebar (feature-flagged via VITE_ORGIQ_CHAT_ENABLED).
@@ -209,6 +234,7 @@ function InvokePage() {
 
   const handleSend = () => {
     if (!input.trim() || isStreaming) return;
+    setHistoryError(null); // a new turn supersedes a stale load failure
     void sendMessage(input.trim());
     setInput('');
   };
@@ -220,6 +246,12 @@ function InvokePage() {
   }
 
   const sessions = sessionList?.sessions ?? [];
+  // GET /api/sessions is session-guarded, so an expired cookie 401s. Rendering
+  // that as "No sessions yet" would tell the user their conversations are gone
+  // when they are simply signed out. Only claim "none" when the call SUCCEEDED
+  // and returned none.
+  const sessionsUnavailable = Boolean(sessionListError) && !sessionList;
+  const sessionsNeedAuth = /\b401\b|\b403\b/.test(sessionListError ?? '');
 
   // One supervisor turn can stream as several adjacent assistant messages
   // (the hook flushes at every TEXT_MESSAGE_END) — merge them so the role
@@ -269,6 +301,7 @@ function InvokePage() {
                 onChange={e => {
                   setSelectedId(e.target.value);
                   forgetSession('invoke'); // sessions are agent-scoped — don't resume across agents
+                  setHistoryError(null);
                   reset();
                 }}
                 aria-label="Select agent"
@@ -290,7 +323,7 @@ function InvokePage() {
               </select>
             )}
             <button
-              onClick={() => { forgetSession('invoke'); reset(); }}
+              onClick={() => { forgetSession('invoke'); setHistoryError(null); reset(); }}
               title="New session"
               style={{ fontSize: 11, padding: '4px 10px', border: '1px solid var(--color-border)', borderRadius: 4, background: 'var(--color-surface)', cursor: 'pointer', whiteSpace: 'nowrap' }}
             >
@@ -299,7 +332,28 @@ function InvokePage() {
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
-          {sessions.length === 0 && (
+          {sessionsUnavailable && (
+            <div role="status" style={{ padding: '12px 16px', fontSize: 11, color: 'var(--color-text-secondary)' }}>
+              <div style={{ fontWeight: 600, marginBottom: 2 }}>Conversations unavailable</div>
+              <div style={{ color: 'var(--color-text-tertiary)' }}>
+                {sessionsNeedAuth
+                  ? 'Your session expired — sign in to see your conversations.'
+                  : `Couldn’t load the session list (${sessionListError}).`}
+              </div>
+              <button
+                type="button"
+                onClick={() => refreshSessions()}
+                style={{
+                  marginTop: 6, fontSize: 11, padding: '2px 8px', borderRadius: 4,
+                  border: '1px solid var(--color-border)', background: 'var(--color-surface)',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          {!sessionsUnavailable && sessions.length === 0 && (
             <div style={{ padding: '12px 16px', fontSize: 11, color: 'var(--color-text-tertiary)' }}>
               No sessions yet — send a message to start one.
             </div>
@@ -344,7 +398,43 @@ function InvokePage() {
           aria-relevant="additions text"
           style={{ flex: 1, overflow: 'auto', marginBottom: 16 }}
         >
-          {messages.length === 0 && !isStreaming && (
+          {/* A transcript we could not load is not an empty conversation. Say
+              which one it is, and offer the retry — never the "start a new
+              conversation" prompt over the top of someone's history. */}
+          {historyError && (
+            <div
+              role="alert"
+              style={{
+                border: '1px solid var(--color-border)',
+                borderLeft: '3px solid var(--color-warning, #d97706)',
+                borderRadius: 4,
+                padding: '10px 14px',
+                marginBottom: 12,
+                fontSize: 13,
+                color: 'var(--color-text-secondary)',
+                display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+              }}
+            >
+              <span>
+                <strong style={{ color: 'var(--color-text-primary)' }}>
+                  Couldn’t load this conversation.
+                </strong>{' '}
+                {historyError.message} Nothing has been deleted — this is a load failure, not an empty conversation.
+              </span>
+              <button
+                type="button"
+                onClick={() => { void loadSession(historyError.sessionId); }}
+                style={{
+                  fontSize: 12, padding: '3px 10px', borderRadius: 4,
+                  border: '1px solid var(--color-border)', background: 'var(--color-surface)',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                {historyError.needsAuth ? 'Try again' : 'Retry'}
+              </button>
+            </div>
+          )}
+          {messages.length === 0 && !isStreaming && !historyError && (
             <div style={{ padding: 40, color: 'var(--color-text-tertiary)' }}>
               <div style={{ fontSize: 18, marginBottom: 4, textAlign: 'center' }}>Invoke {selectedAgent?.name ?? 'Agent'}</div>
               <div style={{ fontSize: 13, marginBottom: 24, textAlign: 'center' }}>Send a message or try a quick prompt below</div>
@@ -404,7 +494,11 @@ function InvokePage() {
               renderMarkdown={(content) => renderMessageContent(content, true)}
             />
           )}
-          {error && <div style={{ color: 'var(--color-danger)', fontSize: 13 }}>Error: {error}</div>}
+          {/* The hook mirrors a history-load throw into `error`; the banner
+              above already says it (with a retry), so don't print it twice. */}
+          {error && error !== historyError?.message && (
+            <div style={{ color: 'var(--color-danger)', fontSize: 13 }}>Error: {error}</div>
+          )}
           <div ref={bottomRef} />
         </div>
 

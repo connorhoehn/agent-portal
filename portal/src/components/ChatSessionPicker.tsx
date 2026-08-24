@@ -21,8 +21,13 @@ interface ChatSessionPickerProps {
 export function ChatSessionPicker({ activeSessionId, onPick }: ChatSessionPickerProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const { data } = useFetch<{ sessions: SessionSummary[] }>('/api/sessions', 30_000);
+  const { data, error, refresh } = useFetch<{ sessions: SessionSummary[] }>('/api/sessions', 30_000);
   const sessions = (data?.sessions ?? []).slice(0, 12);
+  // /api/sessions is session-guarded — an expired cookie 401s. Hiding the
+  // control in that case is the same lie as an empty list: it says "you have
+  // no past conversations" when the truth is "we couldn't ask".
+  const unavailable = Boolean(error) && !data;
+  const needsAuth = /\b401\b|\b403\b/.test(error ?? '');
 
   useEffect(() => {
     if (!open) return;
@@ -33,7 +38,7 @@ export function ChatSessionPicker({ activeSessionId, onPick }: ChatSessionPicker
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  if (sessions.length === 0) return null;
+  if (sessions.length === 0 && !unavailable) return null;
 
   return (
     <div ref={rootRef} style={{ position: 'relative' }}>
@@ -41,7 +46,7 @@ export function ChatSessionPicker({ activeSessionId, onPick }: ChatSessionPicker
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
         aria-haspopup="listbox"
-        title="Previous conversations"
+        title={unavailable ? 'Previous conversations could not be loaded' : 'Previous conversations'}
         style={{
           border: '1px solid var(--color-border)', borderRadius: 4,
           background: 'transparent', color: 'var(--color-text-secondary)',
@@ -49,7 +54,7 @@ export function ChatSessionPicker({ activeSessionId, onPick }: ChatSessionPicker
           whiteSpace: 'nowrap',
         }}
       >
-        History ▾
+        {unavailable ? 'History ⚠' : 'History ▾'}
       </button>
       {open && (
         <div role="listbox" style={{
@@ -60,6 +65,27 @@ export function ChatSessionPicker({ activeSessionId, onPick }: ChatSessionPicker
           borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
           padding: '4px 0',
         }}>
+          {unavailable && (
+            <div role="status" style={{ padding: '8px 12px', fontSize: 11, color: 'var(--color-text-secondary)' }}>
+              <div style={{ fontWeight: 600, marginBottom: 2 }}>Couldn’t load your conversations</div>
+              <div style={{ color: 'var(--color-text-tertiary)' }}>
+                {needsAuth
+                  ? 'Your session expired — sign in to see them.'
+                  : `The session list request failed (${error}).`}
+              </div>
+              <button
+                type="button"
+                onClick={() => refresh()}
+                style={{
+                  marginTop: 6, fontSize: 11, padding: '2px 8px', borderRadius: 4,
+                  border: '1px solid var(--color-border)', background: 'var(--color-surface)',
+                  cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                Retry
+              </button>
+            </div>
+          )}
           {sessions.map(s => {
             const active = s.sessionId === activeSessionId;
             return (
