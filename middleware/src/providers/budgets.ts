@@ -82,6 +82,60 @@ export function spendPredicateSql(projectRef: string): string {
         )`;
 }
 
+// ─── Mock fixtures (config.mock.aurora === true) ─────────────────────────────
+//
+// These used to return empty, which made the whole program surface — the
+// ledger, the maintenance floor, the sprint envelopes — look broken rather
+// than offline whenever Aurora was unavailable. The figures mirror
+// schema/seed_program.sql: allocations derived from the sprint grants they
+// fund, spend dominated by the cron maintenance floor, and one initiative
+// spending with no allocation so the blind-spot signal is demonstrable.
+
+interface MockBudget {
+  id: string; name: string; allocated: number | null; spent: number; runs: number; maintenance: number;
+}
+
+const MOCK_BUDGETS: MockBudget[] = [
+  { id: 'p-observability',     name: 'Observability Platform',   allocated: 60, spent: 4.12, runs: 14, maintenance: 2.74 },
+  { id: 'p-llm-platform',      name: 'LLM Application Platform', allocated: 45, spent: 6.38, runs: 11, maintenance: 4.10 },
+  { id: 'p-auth-migration',    name: 'Auth Migration',           allocated: 35, spent: 2.91, runs: 9,  maintenance: 1.70 },
+  { id: 'p-cost-opt',          name: 'Cost Optimization',        allocated: 30, spent: 2.05, runs: 12, maintenance: 1.83 },
+  { id: 'p-soc2',              name: 'SOC2 Compliance',          allocated: 18, spent: 0.94, runs: 8,  maintenance: 0.94 },
+  { id: 'p-feature-store',     name: 'ML Feature Store',         allocated: 18, spent: 1.55, runs: 7,  maintenance: 1.39 },
+  // Spending with no allocation — the blind spot the ledger exists to surface.
+  { id: 'p-inference-platform', name: 'Inference Platform',      allocated: null, spent: 1.82, runs: 7, maintenance: 1.82 },
+];
+
+function mockBudgetRow(m: MockBudget): BudgetRow {
+  return {
+    orgProjectId: m.id,
+    orgProjectName: m.name,
+    allocatedUsd: m.allocated,
+    period: m.allocated == null ? null : 'monthly',
+    updatedBy: m.allocated == null ? null : 'u-release',
+    updatedAt: m.allocated == null ? null : new Date(Date.now() - 6 * 86_400_000).toISOString(),
+    spentThisPeriodUsd: m.spent,
+    runCountThisPeriod: m.runs,
+    lastAgentActivityAt: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+    maintenanceUsd: m.maintenance,
+  };
+}
+
+const MOCK_GRANTS: Array<Omit<GrantRow, 'orgProjectName'>> = [
+  { id: 'bg-obs-3', orgProjectId: 'p-observability', granteePersonId: 'p-008', granteeName: 'Layla Hassan',
+    sprintId: 'spr-obs-s3', sprintName: 'Sprint 98 — Span metrics + decom', startsOn: null, endsOn: null,
+    sprintStatus: 'active', allocatedUsd: 30, grantedBy: 'u-release', initiativeSpendInWindowUsd: 2.74 },
+  { id: 'bg-llm-2', orgProjectId: 'p-llm-platform', granteePersonId: 'p-013', granteeName: 'Caleb Turner',
+    sprintId: 'spr-llm-s2', sprintName: 'Sprint 8 — Judge + evals', startsOn: null, endsOn: null,
+    sprintStatus: 'active', allocatedUsd: 35, grantedBy: 'u-release', initiativeSpendInWindowUsd: 4.10 },
+  { id: 'bg-auth-2', orgProjectId: 'p-auth-migration', granteePersonId: 'p-051', granteeName: 'Nora Chang',
+    sprintId: 'spr-auth-s2', sprintName: 'Sprint 42 — Session hygiene', startsOn: null, endsOn: null,
+    sprintStatus: 'active', allocatedUsd: 20, grantedBy: 'u-release', initiativeSpendInWindowUsd: 1.70 },
+  { id: 'bg-cost-2', orgProjectId: 'p-cost-opt', granteePersonId: 'p-017', granteeName: 'Daniel Chang',
+    sprintId: 'spr-cost-s2', sprintName: 'Sprint 24 — Attribution', startsOn: null, endsOn: null,
+    sprintStatus: 'active', allocatedUsd: 20, grantedBy: 'u-release', initiativeSpendInWindowUsd: 1.83 },
+];
+
 // ─── Read plumbing ───────────────────────────────────────────────────────────
 
 /** Reads degrade to empty until the budgets/bots schema is applied — a cluster
@@ -159,13 +213,16 @@ function budgetSelectSql(scopeToId: boolean): string {
 // ─── Provider functions ──────────────────────────────────────────────────────
 
 export async function listBudgets(): Promise<BudgetRow[]> {
-  if (config.mock.aurora) return [];
+  if (config.mock.aurora) return MOCK_BUDGETS.map(mockBudgetRow);
   const rows = await safeExec(budgetSelectSql(false));
   return rows.map(rowToBudget);
 }
 
 export async function getBudget(orgProjectId: string): Promise<BudgetRow | null> {
-  if (config.mock.aurora) return null;
+  if (config.mock.aurora) {
+    const m = MOCK_BUDGETS.find((b) => b.id === orgProjectId);
+    return m ? mockBudgetRow(m) : null;
+  }
   const rows = await safeExec(budgetSelectSql(true), [s('pid', orgProjectId)]);
   return rows[0] ? rowToBudget(rows[0]) : null;
 }
@@ -231,7 +288,13 @@ export interface GrantRow {
 
 /** Envelopes, newest sprint first. Scoped to one initiative when given. */
 export async function listGrants(orgProjectId?: string): Promise<GrantRow[]> {
-  if (config.mock.aurora) return [];
+  if (config.mock.aurora) {
+    const named = MOCK_GRANTS.map((g) => ({
+      ...g,
+      orgProjectName: MOCK_BUDGETS.find((b) => b.id === g.orgProjectId)?.name ?? null,
+    }));
+    return orgProjectId ? named.filter((g) => g.orgProjectId === orgProjectId) : named;
+  }
   const params: SqlParameter[] = [];
   let scope = '';
   if (orgProjectId) {
@@ -283,7 +346,24 @@ export async function orgSummary(): Promise<OrgBudgetSummary> {
     totalAllocatedUsd: 0, totalSpentThisPeriodUsd: 0, totalMaintenanceUsd: 0,
     byModel: [], byTrigger: [],
   };
-  if (config.mock.aurora) return empty;
+  if (config.mock.aurora) {
+    // Totals sum the same fixtures, so the tiles and the table agree.
+    const sum = (f: (b: MockBudget) => number) => MOCK_BUDGETS.reduce((n, b) => n + f(b), 0);
+    return {
+      totalAllocatedUsd: sum((b) => b.allocated ?? 0),
+      totalSpentThisPeriodUsd: Number(sum((b) => b.spent).toFixed(2)),
+      totalMaintenanceUsd: Number(sum((b) => b.maintenance).toFixed(2)),
+      byModel: [
+        { model: 'us.amazon.nova-lite-v1:0', spentUsd: 14.21, runCount: 54 },
+        { model: 'us.amazon.nova-pro-v1:0', spentUsd: 5.56, runCount: 14 },
+      ],
+      byTrigger: [
+        { trigger: 'cron', spentUsd: Number(sum((b) => b.maintenance).toFixed(2)), runCount: 52 },
+        { trigger: 'marketplace', spentUsd: 4.31, runCount: 11 },
+        { trigger: 'manual', spentUsd: 1.02, runCount: 5 },
+      ],
+    };
+  }
 
   // Totals: allocation from the ledger; spend is ALL bot_runs cost this
   // period, attributed or not — the org total must not hide spend that no
