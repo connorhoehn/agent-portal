@@ -16,7 +16,7 @@ import { config } from '../config.js';
 // The one exception to the "nothing shared" note above, and a deliberate one:
 // the budget period is a single fact and this rollup must not have its own copy
 // of it. See PERIOD_START_SQL for why the windows were unified.
-import { PERIOD_START_SQL } from './budgets.js';
+import { PERIOD_START_SQL, MOCK_BUDGETS, mockBudgetRow } from './budgets.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -229,11 +229,26 @@ export async function listProjects(opts: {
     // rest are its SMEs — same shape the real rollup returns.
     return items.slice(0, Math.min(opts.limit ?? 50, 200)).map((p) => {
       const cast = MOCK_INITIATIVES.find((m) => m.id === p.id);
+      // Spend + liveness come from the LEDGER'S OWN mock row, not a second
+      // fixture: mock mode used to default both to null here (EMPTY_ROLLUPS)
+      // while providers/budgets.ts showed real money for the same initiative
+      // ids, so `dev:mock` had Initiatives saying "no agent runs yet" beside a
+      // Budgets page reporting $19.77 spent across those very rows. An
+      // initiative absent from the ledger genuinely has no attributed runs, so
+      // it reads $0 / never — the same answer Aurora gives, not null.
+      const ledger = MOCK_BUDGETS.find((b) => b.id === p.id);
+      const row = ledger ? mockBudgetRow(ledger) : null;
       return {
         ...p, ...EMPTY_ROLLUPS,
         ownerId: cast?.owner ?? null,
         ownerName: p.topContributorNames[0] ?? null,
         smeNames: p.topContributorNames.slice(1),
+        agentSpendUsd: row ? row.spentThisPeriodUsd : 0,
+        lastAgentActivityAt: row ? row.lastAgentActivityAt : null,
+        // Aurora derives lastActivityAt as `lastAgent ?? createdAt`, so where
+        // the ledger has activity the two fields are one timestamp, not two
+        // fixtures a second apart.
+        ...(row?.lastAgentActivityAt ? { lastActivityAt: row.lastAgentActivityAt } : {}),
       };
     });
   }
