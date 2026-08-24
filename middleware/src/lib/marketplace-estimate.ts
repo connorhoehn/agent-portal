@@ -10,7 +10,7 @@
 // scaled:false — the same honesty rule as bot-estimate: never dress a blind
 // range up as a scaled forecast.
 
-import type { Estimate, RunPercentiles } from './bot-estimate.js';
+import { selectEstimate, type Estimate, type ForecastConfidence, type RunPercentiles } from './bot-estimate.js';
 
 /** Both scopes trust three samples: per-point history is already normalised by
  *  size, so repo- and model-wide need the same floor. */
@@ -42,5 +42,58 @@ export function selectPerPointEstimate(
     costUsdP75: pick.sample.costUsdP75 * points,
     minutesP25: pick.sample.minutesP25 * points,
     minutesP75: pick.sample.minutesP75 * points,
+  };
+}
+
+/** Every sample the two estimators can draw on for one (model, repo, size). */
+export interface ForecastSamples {
+  perPointRepo: RunPercentiles | null;
+  perPointModel: RunPercentiles | null;
+  runRepo: RunPercentiles | null;
+  runModel: RunPercentiles | null;
+}
+
+/** A forecast plus the two things a caller must not have to re-derive: whether
+ *  the range is size-scaled, and how much it is entitled to claim. */
+export interface DispatchForecast {
+  estimate: Estimate;
+  points: number | null;
+  scaled: boolean;
+  confidence: ForecastConfidence;
+}
+
+/**
+ * The one forecast the whole marketplace uses — what GET /api/bots/estimate
+ * shows the operator AND what the allocation brake judges at dispatch.
+ *
+ * They were separate expressions of the same fallback chain, and they diverged
+ * in the way that mattered: the estimator fell back to the run-level range for
+ * an unsized or historyless item, while the brake simply gave up and let the
+ * dispatch through. Every first dispatch against an initiative — exactly the
+ * ones with no history to brake on and the best chance of blowing a small
+ * allocation — passed unchecked, and the brake only came alive once enough
+ * sized runs existed that it was needed least. One function now, so the number
+ * shown and the number judged cannot disagree again.
+ *
+ * The chain is unchanged and still refuses to invent precision: per-point
+ * history × points when the sample floor is cleared (confidence 'scaled'),
+ * otherwise the run-level range labeled for what it is ('run-history'), and a
+ * static per-tier prior when there is no history at all ('prior').
+ */
+export function selectDispatchForecast(
+  model: string,
+  points: number | null,
+  samples: ForecastSamples,
+): DispatchForecast {
+  if (points != null && points > 0) {
+    const scaled = selectPerPointEstimate(points, samples.perPointRepo, samples.perPointModel);
+    if (scaled) return { estimate: scaled, points, scaled: true, confidence: 'scaled' };
+  }
+  const estimate = selectEstimate(model, samples.runRepo, samples.runModel);
+  return {
+    estimate,
+    points,
+    scaled: false,
+    confidence: estimate.basis === 'prior' ? 'prior' : 'run-history',
   };
 }
