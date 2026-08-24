@@ -31,6 +31,10 @@ describe('period window', () => {
   it('windows on the calendar month — the only period v1 supports', () => {
     expect(PERIOD_START_SQL).toBe(`date_trunc('month', NOW())`);
   });
+
+  // The Initiatives rollup (providers/projects.ts) imports this constant rather
+  // than declaring its own — see __tests__/projects-spend-window.test.ts, which
+  // asserts the emitted rollup SQL carries exactly this window.
 });
 
 describe('spendPredicateSql', () => {
@@ -188,7 +192,7 @@ describe('orgSummary', () => {
     }
   });
 
-  it('scopes by-model to run-backed spend via agent_project_runs', async () => {
+  it('cuts by-model and by-trigger over the same rows', async () => {
     execMock
       .mockResolvedValueOnce([{ total_allocated: 500, total_spent: 120 }])
       .mockResolvedValueOnce([{ model: 'us.amazon.nova-pro-v1:0', spent_usd: 80, run_count: 5 }])
@@ -197,18 +201,57 @@ describe('orgSummary', () => {
         { trigger: 'marketplace', spent_usd: 30, run_count: 2 },
       ]);
     const summary = await orgSummary();
-    // Jobs carry no reliable model — by-model must join through the run.
     const byModelSql = execMock.mock.calls[1][0] as string;
-    expect(byModelSql).toMatch(/JOIN agent_project_runs apr ON apr\.id = br\.run_id/);
-    expect(byModelSql).toMatch(/GROUP BY apr\.model/);
     const byTriggerSql = execMock.mock.calls[2][0] as string;
     expect(byTriggerSql).toMatch(/GROUP BY br\.trigger/);
+
+    // The card was permanently empty because this join was INNER on
+    // bot_runs.run_id and every seeded run is job-backed (run_id null). Nothing
+    // here may narrow the row set relative to by-trigger.
+    expect(byModelSql).not.toMatch(/(?<!LEFT )JOIN agent_project_runs/);
+    expect(byModelSql).toMatch(/LEFT JOIN agent_project_runs apr ON apr\.id = br\.run_id/);
+    expect(byModelSql).not.toMatch(/apr\.model IS NOT NULL/);
+
+    // The two breakdowns must cover identical rows, or the cards add up to
+    // different money for one period.
+    const rowFilter = (sql: string) =>
+      sql.slice(sql.indexOf('WHERE'), sql.indexOf('GROUP BY')).trim();
+    expect(rowFilter(byModelSql)).toBe(rowFilter(byTriggerSql));
 
     expect(summary.totalAllocatedUsd).toBe(500);
     expect(summary.totalSpentThisPeriodUsd).toBe(120);
     expect(summary.byModel).toEqual([{ model: 'us.amazon.nova-pro-v1:0', spentUsd: 80, runCount: 5 }]);
     expect(summary.byTrigger).toHaveLength(2);
     expect(summary.byTrigger[0]).toEqual({ trigger: 'cron', spentUsd: 90, runCount: 6 });
+  });
+
+  // bots.model is NOT NULL (agent_bots_schema.sql) and bot-runner.ts writes the
+  // bot's model into the enqueued job payload, so the model IS recoverable for
+  // a job-backed run — the "agent_jobs carries no reliable model" comment that
+  // justified excluding them is stale.
+  it('resolves the model from the run, the job payload, or the bot', async () => {
+    execMock.mockResolvedValue([]);
+    await orgSummary();
+    const byModelSql = execMock.mock.calls[1][0] as string;
+    expect(byModelSql).toMatch(
+      /COALESCE\(apr\.model, aj\.payload->>'model', b\.model, 'unknown'\)/,
+    );
+    expect(byModelSql).toMatch(/LEFT JOIN agent_jobs aj ON aj\.id = br\.job_id/);
+    expect(byModelSql).toMatch(/LEFT JOIN bots b ON b\.id = br\.bot_id/);
+  });
+
+  it('buckets unresolvable spend as unknown rather than dropping it', async () => {
+    execMock
+      .mockResolvedValueOnce([{ total_allocated: 0, total_spent: 10 }])
+      .mockResolvedValueOnce([
+        { model: 'us.amazon.nova-lite-v1:0', spent_usd: 7, run_count: 3 },
+        { model: 'unknown', spent_usd: 3, run_count: 1 },
+      ])
+      .mockResolvedValueOnce([{ trigger: 'cron', spent_usd: 10, run_count: 4 }]);
+    const summary = await orgSummary();
+    const byModelTotal = summary.byModel.reduce((n, m) => n + m.spentUsd, 0);
+    expect(byModelTotal).toBe(summary.totalSpentThisPeriodUsd);
+    expect(summary.byModel.map((m) => m.model)).toContain('unknown');
   });
 
   it('degrades to the zeroed shape when the bots schema is missing', async () => {

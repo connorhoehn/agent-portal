@@ -57,7 +57,18 @@ export interface OrgBudgetSummary {
 // ─── Period window + attribution (pure SQL builders, unit-tested) ────────────
 
 /** Start of the current budget period. v1 is monthly-only (the schema CHECK
- *  agrees), so every spend read windows on the calendar month. */
+ *  agrees), so every spend read windows on the calendar month.
+ *
+ *  This is the single window for agent spend across the whole app, not just
+ *  this module: providers/projects.ts imports it for the Initiatives rollup.
+ *  It used to sum lifetime cost there while the ledger summed month-to-date,
+ *  so the same initiative showed two different "agent spend" figures on two
+ *  unlabelled surfaces (p-llm-platform: $4.10 on Initiatives, $3.75 here) and
+ *  clicking between them looked like the number had moved. Lifetime spend also
+ *  answers nothing this product asks: the only ceiling that exists is
+ *  initiative_budgets.allocated_usd, which is monthly, so a monotonically
+ *  growing total can never be judged against anything. One window, everywhere,
+ *  labelled with the month on both pages. */
 export const PERIOD_START_SQL = `date_trunc('month', NOW())`;
 
 /**
@@ -347,20 +358,27 @@ export async function orgSummary(): Promise<OrgBudgetSummary> {
     byModel: [], byTrigger: [],
   };
   if (config.mock.aurora) {
-    // Totals sum the same fixtures, so the tiles and the table agree.
+    // Totals sum the same fixtures, so the tiles and the table agree. Both
+    // breakdowns sum to totalSpentThisPeriodUsd as well — they are two cuts of
+    // one set of runs, and a demo where the by-model card and the by-trigger
+    // card add up to different money is the same defect this module exists to
+    // avoid. (The by-trigger manual row absorbs the remainder for that reason.)
     const sum = (f: (b: MockBudget) => number) => MOCK_BUDGETS.reduce((n, b) => n + f(b), 0);
+    const spent = Number(sum((b) => b.spent).toFixed(2));
+    const cron = Number(sum((b) => b.maintenance).toFixed(2));
+    const marketplace = 4.31;
     return {
       totalAllocatedUsd: sum((b) => b.allocated ?? 0),
-      totalSpentThisPeriodUsd: Number(sum((b) => b.spent).toFixed(2)),
-      totalMaintenanceUsd: Number(sum((b) => b.maintenance).toFixed(2)),
+      totalSpentThisPeriodUsd: spent,
+      totalMaintenanceUsd: cron,
       byModel: [
-        { model: 'us.amazon.nova-lite-v1:0', spentUsd: 14.21, runCount: 54 },
-        { model: 'us.amazon.nova-pro-v1:0', spentUsd: 5.56, runCount: 14 },
+        { model: 'us.amazon.nova-lite-v1:0', spentUsd: Number((spent * 0.72).toFixed(2)), runCount: 54 },
+        { model: 'us.amazon.nova-pro-v1:0', spentUsd: Number((spent - Number((spent * 0.72).toFixed(2))).toFixed(2)), runCount: 14 },
       ],
       byTrigger: [
-        { trigger: 'cron', spentUsd: Number(sum((b) => b.maintenance).toFixed(2)), runCount: 52 },
-        { trigger: 'marketplace', spentUsd: 4.31, runCount: 11 },
-        { trigger: 'manual', spentUsd: 1.02, runCount: 5 },
+        { trigger: 'cron', spentUsd: cron, runCount: 52 },
+        { trigger: 'marketplace', spentUsd: marketplace, runCount: 11 },
+        { trigger: 'manual', spentUsd: Number((spent - cron - marketplace).toFixed(2)), runCount: 5 },
       ],
     };
   }
@@ -377,20 +395,38 @@ export async function orgSummary(): Promise<OrgBudgetSummary> {
          WHERE started_at >= ${PERIOD_START_SQL} AND trigger = 'cron') AS total_maintenance`,
   );
 
-  // By-model is scoped to run-backed spend (bot_runs.run_id →
-  // agent_project_runs.model). Job-backed rows are deliberately excluded:
-  // agent_jobs carries no reliable model column (the model lives, at best,
-  // inside result JSON), so a by-model split over jobs would be guesswork.
-  // byModel therefore sums ≤ totalSpentThisPeriodUsd.
+  // By-model used to INNER JOIN agent_project_runs on br.run_id, on the
+  // reasoning that "agent_jobs carries no reliable model column". That is no
+  // longer true, and the join made the card permanently empty: every seeded
+  // bot_run is a cron firing linked by job_id, so run_id was null on all of
+  // them and the query returned [] beside a fully-populated by-trigger card.
+  //
+  // The model is recoverable for a job-backed run from two places that are
+  // written, not inferred:
+  //   1. agent_jobs.payload->>'model' — bot-runner.ts enqueues the bot's model
+  //      into the payload precisely so the dispatcher cannot silently
+  //      substitute its default (lib/bot-runner.ts, `model: bot.model`);
+  //   2. bots.model — NOT NULL in agent_bots_schema.sql, so every run with a
+  //      bot behind it has one.
+  // agent_project_runs.model still wins where present: it records what the
+  // governed run actually used, rather than what it was asked to use.
+  //
+  // Every joined table is LEFT and nothing is filtered on the resolved model,
+  // so by-model now covers the same rows as by-trigger and the two cards sum
+  // to the same total. Spend whose model cannot be resolved from any of the
+  // three (a firing with no bot, no run and no job) groups as 'unknown' rather
+  // than vanishing — an unattributable dollar is a thing to show, not hide.
   const byModel = await safeExec(
-    `SELECT apr.model,
+    `SELECT COALESCE(apr.model, aj.payload->>'model', b.model, 'unknown') AS model,
             COALESCE(SUM(br.cost_usd), 0)::float8 AS spent_usd,
             COUNT(*)::int AS run_count
        FROM bot_runs br
-       JOIN agent_project_runs apr ON apr.id = br.run_id
+       LEFT JOIN agent_project_runs apr ON apr.id = br.run_id
+       LEFT JOIN agent_jobs aj ON aj.id = br.job_id
+       LEFT JOIN bots b ON b.id = br.bot_id
       WHERE br.started_at >= ${PERIOD_START_SQL}
-        AND br.cost_usd IS NOT NULL AND apr.model IS NOT NULL
-      GROUP BY apr.model
+        AND br.cost_usd IS NOT NULL
+      GROUP BY 1
       ORDER BY spent_usd DESC`,
   );
 
