@@ -52,6 +52,12 @@ const NAV_ITEMS: NavItem[] = [
   // "why are we building this" page belongs in the lifecycle group — it was
   // previously reachable only through the Explore sub-rail.
   { path: '/iq/projects',   label: 'Initiatives', tenant: 'orgiq',     group: 'Build' },
+  // The cadence the planning layer actually runs on: an SME's own sprint —
+  // their work, their envelope, their dates — and the org-wide board for a
+  // release manager. Sits next to Initiatives because a sprint is one
+  // initiative's iteration, and it is intentionally ungated: every orgiq role
+  // has sprints, and the privileged (org-wide) scope is refused by the API.
+  { path: '/iq/sprints',    label: 'Sprints',     tenant: 'orgiq',     group: 'Build' },
   { path: '/iq/invoke',     label: 'Ask',         tenant: 'orgiq',     group: 'Org' },
   { path: '/iq/explore',    label: 'Explore',     tenant: 'orgiq',     group: 'Org' },
   { path: '/iq/scores',     label: 'Scores',      tenant: 'orgiq',     group: 'Org' },

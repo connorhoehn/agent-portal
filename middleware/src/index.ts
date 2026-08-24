@@ -53,6 +53,7 @@ import { connectionsRouter } from './routes/connections.js';
 import { agentProjectsRouter } from './routes/agent-projects.js';
 import { sdlcRouter } from './routes/sdlc.js';
 import { budgetsRouter } from './routes/budgets.js';
+import { sprintsRouter } from './routes/sprints.js';
 import { botsRouter } from './routes/bots.js';
 import { requireAction, requireTenant, readForRolesElseAction, requireSession } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
@@ -168,6 +169,10 @@ app.use('/api/sdlc', requireAction('ManageDevbox'), sdlcRouter);
 // Budgets — initiative spend allocations. Gated per-route (reads open to
 // org-leader, writes require ManageBudgets).
 app.use('/api/budgets', budgetsRouter);
+// Sprints — the SME's own cadence (their work, their envelope, their dates).
+// Any signed-in orgiq session may read `scope=mine`; the org-wide `scope=all`
+// carries the same money the ledger gates and is checked inside the router.
+app.use('/api/sprints', requireTenant('orgiq'), requireSession('ViewSprints'), sprintsRouter);
 // Bots — durable mission-configured agents. Gated per-route inside the
 // router: reads are operational visibility (org-leader + hr-admin, like the
 // KB registry), bot mutations carry ManageDevbox (they dispatch the same

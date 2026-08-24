@@ -37,6 +37,7 @@ const DevboxPage = lazy(() => import('./pages/admin/DevboxPage'));
 const AgentProjectsPage = lazy(() => import('./pages/admin/AgentProjectsPage'));
 const BotsPage = lazy(() => import('./pages/bots/BotsPage'));
 const BudgetsPage = lazy(() => import('./pages/budgets/BudgetsPage'));
+const SprintsPage = lazy(() => import('./pages/sprints/SprintsPage'));
 const BotDetailPage = lazy(() => import('./pages/bots/BotDetailPage'));
 const ChangesPage = lazy(() => import('./pages/admin/ChangesPage'));
 const KBDetailPage = lazy(() => import('./pages/admin/KBDetailPage.js'));
@@ -229,6 +230,12 @@ export function App() {
           <Route path="decisions/:id" element={<Navigate to="/iq/projects" replace />} />
           <Route path="projects" element={<Page element={<ProjectsPage />} />} />
           <Route path="projects/:id" element={<Page element={<ProjectDetailPage />} />} />
+          {/* Sprints — the SME's own cadence. Deliberately NOT role-gated:
+              this is a read surface every member and SME is meant to open, and
+              the one privileged thing on it (the org-wide scope) is refused by
+              /api/sprints itself rather than by hiding the route. It sits under
+              /iq/* so it is orgiq-tenant scoped like the rest of the tree. */}
+          <Route path="sprints" element={<Page element={<SprintsPage />} />} />
           <Route path="explore" element={<Page element={<ExplorePage />} />} />
           {/* The demo page duplicated /admin/capabilities/code-interpreter
               (same execute endpoint) and had no inbound link anywhere. */}
