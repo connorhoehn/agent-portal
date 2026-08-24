@@ -34,6 +34,8 @@ export interface BudgetRow {
   updatedAt: string | null;
   spentThisPeriodUsd: number;
   runCountThisPeriod: number;
+  /** Genuinely last, not last-this-period — the only unwindowed field on this
+   *  row. Matches ProjectSummary.lastAgentActivityAt exactly. */
   lastAgentActivityAt: string | null;
   /** The cron-triggered subset of this period's spend: the recurring floor of
    *  keeping this initiative's repos alive (dependency bumps, drift checks,
@@ -102,22 +104,32 @@ export function spendPredicateSql(projectRef: string): string {
 // fund, spend dominated by the cron maintenance floor, and one initiative
 // spending with no allocation so the blind-spot signal is demonstrable.
 
-interface MockBudget {
+export interface MockBudget {
   id: string; name: string; allocated: number | null; spent: number; runs: number; maintenance: number;
+  /** Hours since this initiative's last attributed run. Per-initiative rather
+   *  than one flat stub because providers/projects.ts renders the same
+   *  timestamp as the Initiatives page's liveness — a constant here would make
+   *  every card on that page claim the identical last-activity. Mirrors
+   *  MOCK_INITIATIVES.activeHoursAgo there; the parity test pins the pair. */
+  activityHoursAgo: number;
 }
 
-const MOCK_BUDGETS: MockBudget[] = [
-  { id: 'p-observability',     name: 'Observability Platform',   allocated: 60, spent: 4.12, runs: 14, maintenance: 2.74 },
-  { id: 'p-llm-platform',      name: 'LLM Application Platform', allocated: 45, spent: 6.38, runs: 11, maintenance: 4.10 },
-  { id: 'p-auth-migration',    name: 'Auth Migration',           allocated: 35, spent: 2.91, runs: 9,  maintenance: 1.70 },
-  { id: 'p-cost-opt',          name: 'Cost Optimization',        allocated: 30, spent: 2.05, runs: 12, maintenance: 1.83 },
-  { id: 'p-soc2',              name: 'SOC2 Compliance',          allocated: 18, spent: 0.94, runs: 8,  maintenance: 0.94 },
-  { id: 'p-feature-store',     name: 'ML Feature Store',         allocated: 18, spent: 1.55, runs: 7,  maintenance: 1.39 },
+/** Exported so providers/projects.ts can render the SAME spend figure on the
+ *  Initiatives rollup that this ledger renders. Mock mode used to return
+ *  `agentSpendUsd: null` there while showing money here, so `dev:mock` said
+ *  "no agent runs yet" on one page beside $19.77 spent on the other. */
+export const MOCK_BUDGETS: MockBudget[] = [
+  { id: 'p-observability',     name: 'Observability Platform',   allocated: 60, spent: 4.12, runs: 14, maintenance: 2.74, activityHoursAgo: 1 },
+  { id: 'p-llm-platform',      name: 'LLM Application Platform', allocated: 45, spent: 6.38, runs: 11, maintenance: 4.10, activityHoursAgo: 2 },
+  { id: 'p-auth-migration',    name: 'Auth Migration',           allocated: 35, spent: 2.91, runs: 9,  maintenance: 1.70, activityHoursAgo: 3 },
+  { id: 'p-cost-opt',          name: 'Cost Optimization',        allocated: 30, spent: 2.05, runs: 12, maintenance: 1.83, activityHoursAgo: 5 },
+  { id: 'p-soc2',              name: 'SOC2 Compliance',          allocated: 18, spent: 0.94, runs: 8,  maintenance: 0.94, activityHoursAgo: 14 },
+  { id: 'p-feature-store',     name: 'ML Feature Store',         allocated: 18, spent: 1.55, runs: 7,  maintenance: 1.39, activityHoursAgo: 12 },
   // Spending with no allocation — the blind spot the ledger exists to surface.
-  { id: 'p-inference-platform', name: 'Inference Platform',      allocated: null, spent: 1.82, runs: 7, maintenance: 1.82 },
+  { id: 'p-inference-platform', name: 'Inference Platform',      allocated: null, spent: 1.82, runs: 7, maintenance: 1.82, activityHoursAgo: 7 },
 ];
 
-function mockBudgetRow(m: MockBudget): BudgetRow {
+export function mockBudgetRow(m: MockBudget): BudgetRow {
   return {
     orgProjectId: m.id,
     orgProjectName: m.name,
@@ -127,12 +139,14 @@ function mockBudgetRow(m: MockBudget): BudgetRow {
     updatedAt: m.allocated == null ? null : new Date(Date.now() - 6 * 86_400_000).toISOString(),
     spentThisPeriodUsd: m.spent,
     runCountThisPeriod: m.runs,
-    lastAgentActivityAt: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+    lastAgentActivityAt: new Date(Date.now() - m.activityHoursAgo * 3_600_000).toISOString(),
     maintenanceUsd: m.maintenance,
   };
 }
 
-const MOCK_GRANTS: Array<Omit<GrantRow, 'orgProjectName'>> = [
+/** Exported so providers/sprints.ts reads envelope figures from here rather
+ *  than restating them — one envelope, one number, on both surfaces. */
+export const MOCK_GRANTS: Array<Omit<GrantRow, 'orgProjectName'>> = [
   { id: 'bg-obs-3', orgProjectId: 'p-observability', granteePersonId: 'p-008', granteeName: 'Layla Hassan',
     sprintId: 'spr-obs-s3', sprintName: 'Sprint 98 — Span metrics + decom', startsOn: null, endsOn: null,
     sprintStatus: 'active', allocatedUsd: 30, grantedBy: 'u-release', initiativeSpendInWindowUsd: 2.74 },
@@ -188,7 +202,6 @@ function budgetSelectSql(scopeToId: boolean): string {
       SELECT p.id AS org_project_id,
              SUM(br.cost_usd)::float8 AS spent_this_period_usd,
              COUNT(*)::int AS run_count_this_period,
-             MAX(br.started_at) AS last_agent_activity_at,
              -- The cron subset: the maintenance floor, not a separate bucket.
              COALESCE(SUM(br.cost_usd) FILTER (WHERE br.trigger = 'cron'), 0)::float8
                AS maintenance_usd
@@ -211,7 +224,16 @@ function budgetSelectSql(scopeToId: boolean): string {
            ib.updated_at,
            COALESCE(ps.spent_this_period_usd, 0)::float8 AS spent_this_period_usd,
            COALESCE(ps.run_count_this_period, 0)::int AS run_count_this_period,
-           ps.last_agent_activity_at,
+           -- Liveness is UNwindowed, deliberately, and must stay that way:
+           -- "when did an agent last touch this" is not a money question, and
+           -- taking it from the month-windowed CTE above made an initiative
+           -- dormant since last month read "26d ago" here and "never" on the
+           -- Initiatives rollup (providers/projects.ts), which computes the
+           -- same fact lifetime. Same attribution predicate, no period bound —
+           -- so the two pages now answer identically. The spend columns beside
+           -- it stay month-to-date; that split is the point.
+           (SELECT MAX(br.started_at) FROM bot_runs br
+             WHERE (${spendPredicateSql('ids.org_project_id')})) AS last_agent_activity_at,
            COALESCE(ps.maintenance_usd, 0)::float8 AS maintenance_usd
       FROM ids
       LEFT JOIN initiative_budgets ib ON ib.org_project_id = ids.org_project_id
