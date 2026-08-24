@@ -65,8 +65,14 @@ for bucket in "${S3_BUCKETS[@]}"; do
       echo "  Removing empty orphan bucket: s3://${bucket}"
       aws s3 rb "s3://${bucket}" --force
     else
+      # Naming the consequence matters: this is not advisory. The bucket is
+      # orphaned (its stack is gone) but the NAME is still taken, so the
+      # Foundation create that follows will fail on it. Say so, with the
+      # command, rather than leaving a warning that reads as optional.
       echo "  ⚠️  Bucket s3://${bucket} is NOT empty — skipping deletion"
-      echo "      Remove manually if you want a clean redeploy."
+      echo "      OrgIQ-Foundation will FAIL to create this bucket while the name is taken."
+      echo "      Contents are regenerable (schema/synth). To proceed:"
+      echo "        aws s3 rb s3://${bucket} --force"
     fi
   fi
 done
