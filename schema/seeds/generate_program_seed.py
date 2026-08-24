@@ -16,6 +16,7 @@ proj-* project family that no Aurora seed ever created.
 """
 from __future__ import annotations
 
+import math
 import random
 import uuid
 from pathlib import Path
@@ -537,9 +538,20 @@ def main() -> None:
             )
 
         # Monthly allocation for the program-manager ledger.
+        #
+        # Derived, not hand-set, so the ledger cannot contradict itself: a
+        # month holds roughly two of these sprints, so the allocation must
+        # cover the grants for sprints landing inside it (plus headroom for
+        # unplanned work). Hand-setting both produced initiatives whose sprint
+        # envelopes summed to more than the month that was supposed to fund
+        # them. The configured figure acts as a floor.
+        in_month = sum(usd for (skey, _g, usd) in ini['grants']
+                       if any(s[0] == skey and s[4] >= -30 for s in ini['sprints']))
+        derived = 5 * math.ceil(in_month * 1.25 / 5)
+        allocation = max(ini['budget'], derived)
         emit(
             "INSERT INTO initiative_budgets (org_project_id, allocated_usd, period, updated_by) "
-            f"VALUES ('{pid}', {ini['budget']}, 'monthly', 'u-release') "
+            f"VALUES ('{pid}', {allocation}, 'monthly', 'u-release') "
             "ON CONFLICT (org_project_id) DO NOTHING"
         )
 
@@ -638,6 +650,21 @@ def main() -> None:
             # against a repository that does not exist. The completed history
             # above is what shows the loop and the maintenance baseline; the
             # queue fills for real once a bot is un-paused.
+
+    # Link logins to their org-graph personas.
+    #
+    # identity_schema.sql resolves app_users.person_id with a subquery against
+    # `people`, but it loads BEFORE seed.sql creates those rows — so every
+    # person_id lands NULL and stays NULL. A login with no persona cannot
+    # resolve "my initiatives", and an SME who masquerades in sees nobody's
+    # work. This seed runs after both, which makes it the right place to close
+    # the link; matching on email keeps it exact rather than name-guessing.
+    L.append('')
+    L.append('-- Backfill app_users.person_id (identity_schema loads before the people rows exist).')
+    emit(
+        "UPDATE app_users u SET person_id = p.id FROM people p "
+        "WHERE u.person_id IS NULL AND lower(p.email) = lower(u.email)"
+    )
 
     # Flagship comment threads.
     L.append('')
