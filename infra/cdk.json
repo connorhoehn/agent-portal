@@ -6,7 +6,6 @@
   },
   "context": {
     "projectPrefix": "orgiq",
-    "deployRuntimes": "true",
     "enableEval": "true",
     "deployCanary": "true"
   }
