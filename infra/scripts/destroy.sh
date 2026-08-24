@@ -170,11 +170,26 @@ echo ""
 # ──────────────────────────────────────────────────────────────────
 echo "── Pre-draining AgentCore runtimes ──"
 
+# Only worth doing while a stack still OWNS runtimes. Once those stacks are
+# gone, the leftovers are orphans finishing their deletes server-side — CFN
+# will never touch them, so waiting on them is dead time on the critical path
+# (it cost 15 minutes here, blocking the OpenSearch teardown that actually
+# bills by the hour).
+RUNTIME_STACKS=""
+for CANDIDATE in "OrgIQ-AgentCoreRuntime" "OrgIQ-Devbox"; do
+  if aws cloudformation describe-stacks --stack-name "$CANDIDATE" \
+       --region "$REGION" > /dev/null 2>&1; then
+    RUNTIME_STACKS="${RUNTIME_STACKS} ${CANDIDATE}"
+  fi
+done
+
 RUNTIME_IDS=$(aws bedrock-agentcore-control list-agent-runtimes --region "$REGION" \
   --query "agentRuntimes[?starts_with(agentRuntimeName, '${PREFIX}')].agentRuntimeId" \
   --output text 2>/dev/null | tr '\t' '\n' || true)
 
-if [[ -z "$RUNTIME_IDS" ]]; then
+if [[ -z "$RUNTIME_STACKS" ]]; then
+  echo "  No runtime-owning stacks remain — leaving $(echo "$RUNTIME_IDS" | grep -c . || echo 0) orphan runtime(s) to finish deleting"
+elif [[ -z "$RUNTIME_IDS" ]]; then
   echo "  No agent runtimes found"
 else
   # Endpoints first. DEFAULT is managed with its runtime and cannot be deleted
