@@ -174,7 +174,12 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
   res.status(202).json({ run: result.run });
 }));
 
-botsRouter.get('/marketplace-runs', readGate, asyncHandler(async (req, res) => {
+// The work-board surface: SMEs holding DispatchAgentRun read the runs behind
+// the initiative board they dispatch from, without holding the bots-admin
+// read roles.
+const marketReadGate = readForRolesElseAction(['org-leader', 'hr-admin'], 'DispatchAgentRun');
+
+botsRouter.get('/marketplace-runs', marketReadGate, asyncHandler(async (req, res) => {
   const orgProjectId = String(req.query['orgProjectId'] ?? '').trim();
   if (!orgProjectId) throw new ValidationError('orgProjectId is required');
   res.json({ runs: await listMarketplaceRuns(orgProjectId) });

@@ -58,7 +58,22 @@ INSERT INTO app_users (id, display_name, email, person_id) VALUES
      (SELECT id FROM people WHERE name = 'Vera Green' LIMIT 1)),
   ('u-hr',       'Priya Desai',       'priya.desai@orgiq.example', NULL),
   ('u-reporter', 'Marcus Webb',       'marcus.webb@newsroom.example', NULL),
-  ('u-editor',   'Elena Ortiz',       'elena.ortiz@newsroom.example', NULL)
+  ('u-editor',   'Elena Ortiz',       'elena.ortiz@newsroom.example', NULL),
+  -- Program operating model cast (docs/program-operating-model.md): a release
+  -- manager who grants SME budget envelopes, a program operator who runs the
+  -- program surfaces, and SMEs who masquerade in and assign compute to work.
+  ('u-release',  'Sienna Garcia',     'sienna.garcia@orgiq.example',
+     (SELECT id FROM people WHERE name = 'Sienna Garcia' LIMIT 1)),
+  ('u-rachel',   'Rachel Kowalski',   'rachel.kowalski@orgiq.example',
+     (SELECT id FROM people WHERE name = 'Rachel Kowalski' LIMIT 1)),
+  ('u-nora',     'Nora DaSilva',      'nora.dasilva@orgiq.example',
+     (SELECT id FROM people WHERE name = 'Nora DaSilva' LIMIT 1)),
+  ('u-eli',      'Eli Garcia',        'eli.garcia@orgiq.example',
+     (SELECT id FROM people WHERE name = 'Eli Garcia' LIMIT 1)),
+  ('u-layla',    'Layla Hassan',      'layla.hassan@orgiq.example',
+     (SELECT id FROM people WHERE name = 'Layla Hassan' LIMIT 1)),
+  ('u-caleb',    'Caleb Turner',      'caleb.turner@orgiq.example',
+     (SELECT id FROM people WHERE name = 'Caleb Turner' LIMIT 1))
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO user_tenant_roles (user_id, tenant_id, role) VALUES
@@ -73,5 +88,17 @@ INSERT INTO user_tenant_roles (user_id, tenant_id, role) VALUES
   -- Newsroom-only users. No orgiq grants — switching to orgiq must 403.
   ('u-reporter', 'newsroom', 'reporter'),
   ('u-editor',   'newsroom', 'editor'),
-  ('u-editor',   'newsroom', 'reporter')
+  ('u-editor',   'newsroom', 'reporter'),
+  -- Release manager: allocates initiative budgets and grants SME envelopes
+  -- (org-leader carries ManageBudgets + DispatchAgentRun).
+  ('u-release',  'orgiq',    'org-leader'),
+  ('u-release',  'orgiq',    'member'),
+  -- Program operator: runs bots/identity/program governance surfaces.
+  ('u-rachel',   'orgiq',    'hr-admin'),
+  ('u-rachel',   'orgiq',    'org-leader'),
+  -- SMEs: dispatch agent work against their granted envelopes.
+  ('u-nora',     'orgiq',    'sme'),
+  ('u-eli',      'orgiq',    'sme'),
+  ('u-layla',    'orgiq',    'sme'),
+  ('u-caleb',    'orgiq',    'sme')
 ON CONFLICT DO NOTHING;

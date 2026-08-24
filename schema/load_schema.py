@@ -57,6 +57,10 @@ def main():
         # Initiative budget allocations. Loads after agent_bots_schema.sql
         # (spend reads join bot_runs) and orgiq_schema.sql (FK on projects).
         'agent_budgets_schema.sql',
+        # Sprints, SME budget grants, work-item cost estimates, maintenance
+        # baseline view. Loads last: references people, projects, work_items,
+        # bots and bot_runs.
+        'program_schema.sql',
     ]
 
     for filename in schema_files:

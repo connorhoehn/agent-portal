@@ -19,6 +19,7 @@ export interface RoleDefinition {
 
 const PRESENTATION: Record<string, { label: string; summary: string }> = {
   member: { label: 'Member', summary: 'Rank-and-file IC. Search the org, see basic profile pages.' },
+  sme: { label: 'SME', summary: 'Subject-matter expert on initiatives. Dispatches agent work against a granted budget envelope.' },
   'org-leader': { label: 'Org Leader', summary: 'VPs / Directors. Full org visibility, leaderboards, and transaction approval over $10k.' },
   'hr-admin': { label: 'HR Admin', summary: 'People Ops. Sees salary + performance, edits guardrails/policies, manages users and ingest.' },
   reporter: { label: 'Reporter', summary: 'Files stories and pitches. No publish authority.' },

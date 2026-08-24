@@ -27,14 +27,14 @@ export type Tenant = typeof TENANTS[number];
 // middleware/seeds/roles/{tenant}/. 'admin' is cross-tenant: it can hold a
 // grant in any tenant and is the only role permitted to masquerade.
 export const ROLES_BY_TENANT: Record<Tenant, readonly string[]> = {
-  orgiq: ['member', 'org-leader', 'hr-admin'],
+  orgiq: ['member', 'sme', 'org-leader', 'hr-admin'],
   newsroom: ['reporter', 'editor'],
 };
 export const ADMIN_ROLE = 'admin';
 
 // Legacy export — the orgiq role list. Prefer ROLES_BY_TENANT.
-export const ROLES = ROLES_BY_TENANT.orgiq as readonly ['member', 'org-leader', 'hr-admin'];
-export type Role = 'member' | 'org-leader' | 'hr-admin' | 'reporter' | 'editor' | 'admin';
+export const ROLES = ROLES_BY_TENANT.orgiq as readonly ['member', 'sme', 'org-leader', 'hr-admin'];
+export type Role = 'member' | 'sme' | 'org-leader' | 'hr-admin' | 'reporter' | 'editor' | 'admin';
 
 export const DEFAULT_ROLE: Role = 'member';
 export const DEFAULT_TENANT: Tenant = 'orgiq';
@@ -90,7 +90,7 @@ export function hasGrant(grants: Grants, tenant: string, role: string): boolean 
 
 // Privilege rank, lower = less privileged. Used to choose a login landing role.
 const ROLE_RANK: Record<string, number> = {
-  member: 0, reporter: 0, 'org-leader': 1, editor: 1, 'hr-admin': 2, admin: 99,
+  member: 0, reporter: 0, sme: 1, 'org-leader': 2, editor: 1, 'hr-admin': 3, admin: 99,
 };
 
 /**

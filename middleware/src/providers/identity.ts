@@ -49,6 +49,19 @@ const FALLBACK_USERS: UserInfo[] = [
     grants: { newsroom: ['reporter'] } },
   { id: 'u-editor', displayName: 'Elena Ortiz', email: 'elena.ortiz@newsroom.example', personId: null,
     grants: { newsroom: ['editor', 'reporter'] } },
+  // Program operating model cast — see docs/program-operating-model.md.
+  { id: 'u-release', displayName: 'Sienna Garcia', email: 'sienna.garcia@orgiq.example', personId: 'p-005',
+    grants: { orgiq: ['org-leader', 'member'] } },
+  { id: 'u-rachel', displayName: 'Rachel Kowalski', email: 'rachel.kowalski@orgiq.example', personId: 'p-012',
+    grants: { orgiq: ['hr-admin', 'org-leader'] } },
+  { id: 'u-nora', displayName: 'Nora DaSilva', email: 'nora.dasilva@orgiq.example', personId: 'p-004',
+    grants: { orgiq: ['sme'] } },
+  { id: 'u-eli', displayName: 'Eli Garcia', email: 'eli.garcia@orgiq.example', personId: 'p-011',
+    grants: { orgiq: ['sme'] } },
+  { id: 'u-layla', displayName: 'Layla Hassan', email: 'layla.hassan@orgiq.example', personId: 'p-008',
+    grants: { orgiq: ['sme'] } },
+  { id: 'u-caleb', displayName: 'Caleb Turner', email: 'caleb.turner@orgiq.example', personId: 'p-013',
+    grants: { orgiq: ['sme'] } },
 ];
 
 // ── RDS Data API helpers (local to this module) ──────────────────────────────
