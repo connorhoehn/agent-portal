@@ -537,6 +537,9 @@ botsRouter.post('/:id/pause', manageGate, asyncHandler(async (req, res) => {
   if (!await getBot(id)) throw new NotFoundError('No such bot');
   const reason = String((req.body as { reason?: string } ?? {}).reason ?? '').trim();
   await setPausedReason(id, reason || 'paused by operator');
+  // Disarm the live cron too — a paused bot that keeps firing until the next
+  // restart is the same defect as resume, mirrored.
+  unregisterBot(id);
   res.json({ bot: await getBot(id) });
 }));
 
@@ -547,8 +550,15 @@ botsRouter.post('/:id/resume', manageGate, asyncHandler(async (req, res) => {
   // the enabled flag. Either alone would leave a bot that looks resumed but
   // still refuses to fire.
   await setPausedReason(id, null);
-  await updateBot(id, { enabled: true });
-  res.json({ bot: await getBot(id) });
+  const bot = await updateBot(id, { enabled: true });
+  // Register with the LIVE scheduler, not just the database. Without this a
+  // resumed cron bot looked armed everywhere — enabled, no paused reason —
+  // but its cron only existed in processes booted after the resume, so it
+  // silently never fired until the next middleware restart. Found resuming
+  // eleven seeded bots after repo provisioning: the roster said 11 enabled,
+  // the scheduler still said 0.
+  if (bot) registerBot(bot);
+  res.json({ bot: bot ?? await getBot(id) });
 }));
 
 botsRouter.get('/:id/runs', readGate, asyncHandler(async (req, res) => {
