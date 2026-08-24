@@ -65,8 +65,14 @@ for bucket in "${S3_BUCKETS[@]}"; do
       echo "  Removing empty orphan bucket: s3://${bucket}"
       aws s3 rb "s3://${bucket}" --force
     else
+      # Naming the consequence matters: this is not advisory. The bucket is
+      # orphaned (its stack is gone) but the NAME is still taken, so the
+      # Foundation create that follows will fail on it. Say so, with the
+      # command, rather than leaving a warning that reads as optional.
       echo "  ⚠️  Bucket s3://${bucket} is NOT empty — skipping deletion"
-      echo "      Remove manually if you want a clean redeploy."
+      echo "      OrgIQ-Foundation will FAIL to create this bucket while the name is taken."
+      echo "      Contents are regenerable (schema/synth). To proceed:"
+      echo "        aws s3 rb s3://${bucket} --force"
     fi
   fi
 done
@@ -108,6 +114,21 @@ echo ""
 # ──────────────────────────────────────────────────────────────────
 echo "── Checking for orphaned ECR repositories ──"
 
+# Every repo the app owns, not just the six original agents. A repo missing
+# from this list survives a teardown, and its stack then fails to create with
+# "Resource of type 'AWS::ECR::Repository' ... already exists" — which is how
+# OrgIQ-MiddlewareService blocked a rebuild here, three stacks from the end.
+# Repos a stack CREATES. A leftover one blocks its stack from creating with
+# "Resource of type 'AWS::ECR::Repository' ... already exists", which is how
+# OrgIQ-MiddlewareService blocked a rebuild here three stacks from the end.
+#
+# The three news-* repos are deliberately ABSENT from this list. The runtime
+# stack IMPORTS them (see EXTERNAL_AGENT_NAMES in agentcore-runtime-stack.ts) —
+# they are external by design and never CFN-owned, so they look exactly like
+# orphans and are not. Deleting them takes their images with them and leaves
+# the stack importing repositories that no longer exist. Recreate with
+# `aws ecr create-repository --repository-name orgiq-news-<agent>` if that
+# happens.
 ECR_REPOS=(
   "${PREFIX}-supervisor"
   "${PREFIX}-search"
@@ -115,19 +136,34 @@ ECR_REPOS=(
   "${PREFIX}-advisor"
   "${PREFIX}-ingestion"
   "${PREFIX}-graph-builder"
+  "${PREFIX}-agent-base"
+  "${PREFIX}-devbox"
+  "${PREFIX}-middleware"
 )
 
 for repo in "${ECR_REPOS[@]}"; do
   if aws ecr describe-repositories --repository-names "$repo" > /dev/null 2>&1; then
-    # Only delete if CFN doesn't already own it (i.e., no stack tag)
-    STACK_TAG=$(aws ecr describe-repositories --repository-names "$repo" \
-      --query 'repositories[0].tags[?Key==`aws:cloudformation:stack-name`].Value' \
-      --output text 2>/dev/null || echo "")
-    if [[ -z "$STACK_TAG" ]]; then
-      echo "  Removing orphan ECR repo (no CFN owner): ${repo}"
+    # Ownership is decided by asking CloudFormation, NOT by reading a tag.
+    #
+    # CFN does not stamp aws:cloudformation:* tags onto AWS::ECR::Repository,
+    # so the old tag check read "no owner" for every repo — orphan or not. It
+    # was harmless only because of a second bug (an empty result prints the
+    # literal "None", so the -z test never fired). Fixing that bug alone armed
+    # a check whose premise was wrong, and one deploy force-deleted seven
+    # repositories that OrgIQ-AgentCoreRuntime actively owns, taking their
+    # images and leaving the stack pointing at nothing.
+    #
+    # describe-stack-resources --physical-resource-id answers the real
+    # question: does any live stack manage this repo? Absence of an owner is
+    # then a fact, not an inference from missing metadata.
+    OWNER=$(aws cloudformation describe-stack-resources \
+      --physical-resource-id "$repo" \
+      --query 'StackResources[0].StackName' --output text 2>/dev/null || echo "")
+    if [[ -z "$OWNER" || "$OWNER" == "None" ]]; then
+      echo "  Removing orphan ECR repo (no stack manages it): ${repo}"
       aws ecr delete-repository --repository-name "$repo" --force > /dev/null
     else
-      echo "  Repo ${repo} is owned by stack '${STACK_TAG}' — skipping"
+      echo "  Repo ${repo} is owned by stack '${OWNER}' — skipping"
     fi
   fi
 done

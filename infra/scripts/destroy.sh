@@ -153,6 +153,99 @@ fi
 echo ""
 
 # ──────────────────────────────────────────────────────────────────
+# 3b. Pre-drain AgentCore runtimes
+#
+# AWS::BedrockAgentCore::Runtime routinely takes longer to delete than the CFN
+# resource handler will wait, which fails the resource with NotStabilized
+# ("Request timed out while deleting") and drops the whole stack into
+# DELETE_FAILED — aborting `cdk destroy --all` partway through the fleet. The
+# runtime then finishes deleting server-side anyway, so the failure is purely
+# CFN's patience running out.
+#
+# Draining here, the same way Aurora and the KB are drained, means CFN sees
+# resources that are already gone. Endpoints must go before their runtime (the
+# API rejects the runtime delete with a ConflictException otherwise), and both
+# calls are rejected while a delete is already in flight — so "already
+# deleting" is a success, not an error.
+# ──────────────────────────────────────────────────────────────────
+echo "── Pre-draining AgentCore runtimes ──"
+
+# Only worth doing while a stack still OWNS runtimes. Once those stacks are
+# gone, the leftovers are orphans finishing their deletes server-side — CFN
+# will never touch them, so waiting on them is dead time on the critical path
+# (it cost 15 minutes here, blocking the OpenSearch teardown that actually
+# bills by the hour).
+RUNTIME_STACKS=""
+for CANDIDATE in "OrgIQ-AgentCoreRuntime" "OrgIQ-Devbox"; do
+  if aws cloudformation describe-stacks --stack-name "$CANDIDATE" \
+       --region "$REGION" > /dev/null 2>&1; then
+    RUNTIME_STACKS="${RUNTIME_STACKS} ${CANDIDATE}"
+  fi
+done
+
+RUNTIME_IDS=$(aws bedrock-agentcore-control list-agent-runtimes --region "$REGION" \
+  --query "agentRuntimes[?starts_with(agentRuntimeName, '${PREFIX}')].agentRuntimeId" \
+  --output text 2>/dev/null | tr '\t' '\n' || true)
+
+if [[ -z "$RUNTIME_STACKS" ]]; then
+  echo "  No runtime-owning stacks remain — leaving $(echo "$RUNTIME_IDS" | grep -c . || echo 0) orphan runtime(s) to finish deleting"
+elif [[ -z "$RUNTIME_IDS" ]]; then
+  echo "  No agent runtimes found"
+else
+  # Endpoints first. DEFAULT is managed with its runtime and cannot be deleted
+  # on its own, so it is skipped.
+  for RT_ID in $RUNTIME_IDS; do
+    for EP in $(aws bedrock-agentcore-control list-agent-runtime-endpoints \
+                  --agent-runtime-id "$RT_ID" --region "$REGION" \
+                  --query "runtimeEndpoints[?name!='DEFAULT'].name" \
+                  --output text 2>/dev/null | tr '\t' '\n' || true); do
+      echo "  Deleting endpoint ${EP} (${RT_ID})"
+      aws bedrock-agentcore-control delete-agent-runtime-endpoint \
+        --agent-runtime-id "$RT_ID" --endpoint-name "$EP" \
+        --region "$REGION" > /dev/null 2>&1 || true
+    done
+  done
+
+  # Then the runtimes, once their endpoints have actually gone.
+  for i in $(seq 1 60); do
+    PENDING_EPS=0
+    for RT_ID in $RUNTIME_IDS; do
+      N=$(aws bedrock-agentcore-control list-agent-runtime-endpoints \
+            --agent-runtime-id "$RT_ID" --region "$REGION" \
+            --query "length(runtimeEndpoints[?name!='DEFAULT'])" \
+            --output text 2>/dev/null || echo 0)
+      [[ "$N" =~ ^[0-9]+$ ]] && PENDING_EPS=$((PENDING_EPS + N))
+    done
+    [[ "$PENDING_EPS" == "0" ]] && break
+    echo "    ${PENDING_EPS} endpoint(s) still deleting..."
+    sleep 10
+  done
+
+  for RT_ID in $RUNTIME_IDS; do
+    echo "  Deleting runtime ${RT_ID}"
+    aws bedrock-agentcore-control delete-agent-runtime \
+      --agent-runtime-id "$RT_ID" --region "$REGION" > /dev/null 2>&1 || true
+  done
+
+  # Wait for them to actually go, so CFN never starts a delete it cannot
+  # outlast. Report honestly on timeout rather than pressing on silently.
+  for i in $(seq 1 90); do
+    REMAINING=$(aws bedrock-agentcore-control list-agent-runtimes --region "$REGION" \
+      --query "length(agentRuntimes[?starts_with(agentRuntimeName, '${PREFIX}')])" \
+      --output text 2>/dev/null || echo "0")
+    [[ "$REMAINING" == "0" || "$REMAINING" == "None" ]] && break
+    echo "    ${REMAINING} runtime(s) still deleting..."
+    sleep 10
+  done
+  if [[ "$REMAINING" != "0" && "$REMAINING" != "None" ]]; then
+    echo "  ⚠ ${REMAINING} runtime(s) still deleting — CFN may still hit NotStabilized"
+  else
+    echo "  Agent runtimes drained"
+  fi
+fi
+echo ""
+
+# ──────────────────────────────────────────────────────────────────
 # 4. Pre-drain Bedrock Knowledge Base
 #    The KB data source can't be deleted when Aurora is stopped/unreachable.
 #    Setting dataDeletionPolicy=RETAIN and pre-deleting avoids DELETE_FAILED.
@@ -329,9 +422,30 @@ else
       aws cloudformation wait stack-delete-complete \
         --stack-name "OrgIQ-Aurora" --region "$REGION" 2>/dev/null || true
     fi
-    echo "  OrgIQ-Aurora CFN stack handled (final: $(aws cloudformation describe-stacks \
-      --stack-name "OrgIQ-Aurora" --region "$REGION" \
-      --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo deleted))"
+    # Report the FINAL state honestly. This line used to end in `|| echo
+    # deleted`, which conflated two very different failures: a stack that is
+    # genuinely gone, and a describe call that could not be made. When
+    # aws-azure-login credentials expired mid-destroy, the call failed, the
+    # fallback fired, and the script announced "final: deleted" over a stack
+    # still sitting at CREATE_COMPLETE — while its Aurora cluster HAD been
+    # physically deleted. That mismatch (CFN owning a resource that no longer
+    # exists) is what forced a full teardown to recover. Distinguish the cases:
+    # a genuine absence is a ValidationError naming the stack, anything else is
+    # unknown and must be recorded as a failure, never as success.
+    AURORA_DESCRIBE_ERR=$(mktemp)
+    if AURORA_FINAL=$(aws cloudformation describe-stacks \
+         --stack-name "OrgIQ-Aurora" --region "$REGION" \
+         --query 'Stacks[0].StackStatus' --output text 2>"$AURORA_DESCRIBE_ERR"); then
+      echo "  OrgIQ-Aurora CFN stack still present (final: ${AURORA_FINAL})"
+      FAILURES+=("OrgIQ-Aurora stack still present (${AURORA_FINAL})")
+    elif grep -q "does not exist" "$AURORA_DESCRIBE_ERR"; then
+      echo "  OrgIQ-Aurora CFN stack deleted"
+    else
+      echo "  ✗ Could not determine OrgIQ-Aurora stack state:"
+      sed 's/^/      /' "$AURORA_DESCRIBE_ERR"
+      FAILURES+=("OrgIQ-Aurora final state unknown (describe-stacks failed)")
+    fi
+    rm -f "$AURORA_DESCRIBE_ERR"
   fi
 fi
 echo ""
@@ -369,23 +483,41 @@ else
   for STACK_NAME in $FAILED_STACKS; do
     echo "  Force-deleting stuck stack: ${STACK_NAME}"
 
+    # A failed delete emits TWO kinds of DELETE_FAILED event: one per resource,
+    # plus a stack-level one whose LogicalResourceId is the STACK'S OWN NAME.
+    # Passing that name to --retain-resources makes CFN reject the whole call
+    # with a ValidationError ("resource not found in stack") — and with the
+    # error suppressed, the script printed "force-deleted" over a stack it had
+    # not touched. Exclude the stack's own name.
     FAILED_RESOURCES=$(aws cloudformation describe-stack-events \
       --stack-name "$STACK_NAME" \
       --region "$REGION" \
       --query 'StackEvents[?ResourceStatus==`DELETE_FAILED`].LogicalResourceId' \
-      --output text 2>/dev/null | tr '\t' '\n' | sort -u | tr '\n' ' ' || true)
+      --output text 2>/dev/null | tr '\t' '\n' | grep -vx "$STACK_NAME" | sort -u | tr '\n' ' ' || true)
 
-    echo "    Retaining: ${FAILED_RESOURCES}"
-    aws cloudformation delete-stack \
-      --stack-name "$STACK_NAME" \
-      --retain-resources $FAILED_RESOURCES \
-      --region "$REGION" 2>/dev/null || true
-
-    aws cloudformation wait stack-delete-complete \
-      --stack-name "$STACK_NAME" \
-      --region "$REGION" 2>/dev/null || true
-
-    echo "    ${STACK_NAME} force-deleted"
+    echo "    Retaining: ${FAILED_RESOURCES:-<none>}"
+    RETAIN_ERR=$(mktemp)
+    if aws cloudformation delete-stack \
+         --stack-name "$STACK_NAME" \
+         --retain-resources $FAILED_RESOURCES \
+         --region "$REGION" 2>"$RETAIN_ERR"; then
+      aws cloudformation wait stack-delete-complete \
+        --stack-name "$STACK_NAME" --region "$REGION" 2>/dev/null || true
+      # The waiter returns non-zero on a re-failed delete, so confirm rather
+      # than announce. Absence is the only proof of deletion.
+      if aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+           --region "$REGION" > /dev/null 2>&1; then
+        echo "    ✗ ${STACK_NAME} still present after force-delete"
+        FAILURES+=("${STACK_NAME} force-delete did not remove the stack")
+      else
+        echo "    ${STACK_NAME} force-deleted"
+      fi
+    else
+      echo "    ✗ force-delete call failed for ${STACK_NAME}:"
+      sed 's/^/        /' "$RETAIN_ERR"
+      FAILURES+=("${STACK_NAME} force-delete call failed")
+    fi
+    rm -f "$RETAIN_ERR"
   done
 fi
 
@@ -395,10 +527,21 @@ fi
 echo ""
 echo "── Verifying teardown ──"
 
-REMAINING=$(aws cloudformation list-stacks \
-  --region "$REGION" \
-  --query "StackSummaries[?starts_with(StackName, '${STACK_PREFIX}') && StackStatus != 'DELETE_COMPLETE'].[StackName, StackStatus]" \
-  --output text 2>/dev/null | sort -u || true)
+# An unreadable account is NOT an empty account. Suppressing this call's error
+# and treating "no output" as "no stacks" is how a teardown that never ran can
+# print the success banner — the same class of bug as the Aurora line above.
+VERIFY_ERR=$(mktemp)
+if ! REMAINING_RAW=$(aws cloudformation list-stacks \
+     --region "$REGION" \
+     --query "StackSummaries[?starts_with(StackName, '${STACK_PREFIX}') && StackStatus != 'DELETE_COMPLETE'].[StackName, StackStatus]" \
+     --output text 2>"$VERIFY_ERR"); then
+  echo "  ✗ Could not list stacks to verify teardown:"
+  sed 's/^/      /' "$VERIFY_ERR"
+  FAILURES+=("teardown unverified (list-stacks failed — state unknown)")
+  REMAINING_RAW=""
+fi
+rm -f "$VERIFY_ERR"
+REMAINING=$(echo "$REMAINING_RAW" | sort -u)
 
 if [[ -n "$REMAINING" ]]; then
   echo "  Stacks still present:"

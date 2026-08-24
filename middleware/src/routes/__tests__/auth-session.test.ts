@@ -38,7 +38,7 @@ import express from 'express';
 import request from 'supertest';
 import { config } from '../../config.js';
 import { sessionRouter } from '../session.js';
-import { authRouter } from '../auth.js';
+import { authRouter, resolveRedirect } from '../auth.js';
 import { resetRateLimits } from '../../lib/rate-limit.js';
 
 /** Flip the mocked Cognito config on/off — the routes read it live. */
@@ -142,5 +142,33 @@ describe('switch endpoints refuse anonymous requests once Cognito is on', () => 
     const res = await request(buildApp()).post(path).send(body);
     expect(res.status).toBe(401);
     expect(res.body).toMatchObject({ error: 'Unauthenticated', ssoRequired: true });
+  });
+});
+
+// 4. Post-login redirect. A relative path resolves against whoever serves the
+//    redirect — the middleware. Same-origin in production, but in dev the
+//    portal is on another port, so a successful SSO login used to dump the
+//    browser on a middleware 404.
+describe('resolveRedirect', () => {
+  it('leaves the path alone when the portal shares this origin', () => {
+    expect(resolveRedirect('/admin/budgets', '')).toBe('/admin/budgets');
+  });
+
+  it('absolutises against the portal origin when they differ', () => {
+    expect(resolveRedirect('/admin/budgets', 'http://localhost:5183'))
+      .toBe('http://localhost:5183/admin/budgets');
+    // A trailing slash on the origin must not double up.
+    expect(resolveRedirect('/iq/work', 'http://localhost:5183/'))
+      .toBe('http://localhost:5183/iq/work');
+  });
+
+  // The origin is configuration and the path is already validated by
+  // safeReturnTo, but prefixing must never manufacture a cross-origin jump
+  // out of something that was not a same-origin path to begin with.
+  it('never prefixes an absolute or protocol-relative target', () => {
+    expect(resolveRedirect('https://evil.example/x', 'http://localhost:5183'))
+      .toBe('https://evil.example/x');
+    expect(resolveRedirect('//evil.example/x', 'http://localhost:5183'))
+      .toBe('//evil.example/x');
   });
 });

@@ -90,6 +90,18 @@ export const config = {
     callbackUrl: env('COGNITO_CALLBACK_URL') || (env('PUBLIC_BASE_URL') ? `${env('PUBLIC_BASE_URL')}/api/auth/callback` : ''),
     // Where the BFF sends the browser after a successful login (the portal).
     postLoginUrl: env('COGNITO_POST_LOGIN_URL', '/'),
+    // The portal's origin, when it is NOT the same as this middleware's.
+    //
+    // In production both sit behind one ALB origin, so a relative redirect
+    // ('/admin/budgets') resolves to the portal and this stays empty. In local
+    // dev the portal is on :5183 and the middleware on :3001, so that same
+    // relative redirect resolved against :3001 and every SSO login landed on a
+    // middleware 404 — the login itself having succeeded. Set this and the
+    // callback absolutises its redirect against it.
+    //
+    // Never taken from the request: it is configuration, so it cannot become
+    // an open redirect the way a caller-supplied returnTo could.
+    portalOrigin: env('PORTAL_ORIGIN', ''),
     // Where Cognito sends the browser after logout (must be a registered sign-out URL).
     logoutRedirectUrl: env('COGNITO_LOGOUT_URL', '/'),
   },

@@ -110,111 +110,100 @@ export function intParam(name: string, value: number): SqlParameter {
 }
 
 // ─── Mock data (used when config.mock.aurora === true) ───────────────────────
-// IDs here intentionally match the proj-* IDs used in providers/work-items.ts
-// so that navigating from the projects list to a project detail page resolves
-// the same mock work items.
+// A faithful mirror of the curated program seed (schema/seed_program.sql, built
+// by schema/seeds/generate_program_seed.py): the same canonical p-* initiative
+// ids, the same people from schema/seed.sql, and the same operating model —
+// exactly one owner runs an initiative, and a couple of SMEs attach across
+// several. The previous fixtures described a phantom proj-* family with
+// invented people, so mock mode disagreed with every real surface.
+//
+// One cast table drives both the summary and the detail shape, so they cannot
+// drift apart as the response types grow.
 
-const MOCK_PROJECTS: Array<Omit<ProjectSummary, keyof typeof EMPTY_ROLLUPS>> = [
-  {
-    id: 'proj-k8s', name: 'Kubernetes Cluster Upgrade', status: 'active', contributorCount: 5,
-    createdAt: '2026-04-06T12:00:00Z',
-    topContributorNames: ['Alex Chen', 'Maria Santos', 'Priya Patel', 'Ahmed Hassan'],
-    lastActivityAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'proj-istio', name: 'Istio Service Mesh Migration', status: 'active', contributorCount: 4,
-    createdAt: '2026-03-22T12:00:00Z',
-    topContributorNames: ['Alex Chen', 'Sophie Turner', 'Priya Patel', "Ryan O'Brien"],
-    lastActivityAt: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'proj-cicd', name: 'CI/CD Pipeline Unification', status: 'active', contributorCount: 4,
-    createdAt: '2026-04-01T12:00:00Z',
-    topContributorNames: ['Maria Santos', 'Sophie Turner', 'James Wright', 'David Kim'],
-    lastActivityAt: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'proj-otel', name: 'Unified Observability Stack', status: 'active', contributorCount: 3,
-    createdAt: '2026-03-12T12:00:00Z',
-    topContributorNames: ['Ben Foster', 'Alex Chen', 'David Kim'],
-    lastActivityAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'proj-cedar', name: 'Cedar Auth Policy Migration', status: 'active', contributorCount: 3,
-    createdAt: '2026-03-26T12:00:00Z',
-    topContributorNames: ['Sophie Turner', 'James Wright', 'David Kim'],
-    lastActivityAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'proj-onboard', name: 'Developer Onboarding Improvements', status: 'planning', contributorCount: 3,
-    createdAt: '2026-04-21T12:00:00Z',
-    topContributorNames: ['David Kim', 'James Wright', "Ryan O'Brien"],
-    lastActivityAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-  },
+interface CastMember { personId: string; name: string; title: string }
+
+const CAST: Record<string, CastMember> = {
+  'p-001': { personId: 'p-001', name: 'Theo Chang',      title: 'Engineer' },
+  'p-002': { personId: 'p-002', name: 'Vera Green',      title: 'Principal Engineer' },
+  'p-004': { personId: 'p-004', name: 'Nora DaSilva',    title: 'Senior Engineer' },
+  'p-008': { personId: 'p-008', name: 'Layla Hassan',    title: 'SRE Lead' },
+  'p-011': { personId: 'p-011', name: 'Eli Garcia',      title: 'Senior SRE' },
+  'p-013': { personId: 'p-013', name: 'Caleb Turner',    title: 'Senior Engineer' },
+  'p-015': { personId: 'p-015', name: 'Raj Mehta',       title: 'Data Engineer' },
+  'p-017': { personId: 'p-017', name: 'Daniel Chang',    title: 'Staff Data Engineer' },
+  'p-019': { personId: 'p-019', name: 'Lena Dubois',     title: 'Senior Data Engineer' },
+  'p-024': { personId: 'p-024', name: 'Theo Williams',   title: 'Staff Engineer' },
+  'p-025': { personId: 'p-025', name: 'Aisha Mehta',     title: 'Principal Engineer' },
+  'p-026': { personId: 'p-026', name: 'Mateo Green',     title: 'Senior UX Researcher' },
+  'p-030': { personId: 'p-030', name: 'Mia Singh',       title: 'Group PM' },
+  'p-034': { personId: 'p-034', name: 'Asher Wright',    title: 'Accessibility Specialist' },
+  'p-035': { personId: 'p-035', name: 'Ben Okafor',      title: 'Staff Designer' },
+  'p-038': { personId: 'p-038', name: 'Isabel Vasquez',  title: 'Design Engineer' },
+  'p-042': { personId: 'p-042', name: 'Vera Petrov',     title: 'Staff ML Engineer' },
+  'p-043': { personId: 'p-043', name: 'Bria Petrov',     title: 'Staff ML Engineer' },
+  'p-044': { personId: 'p-044', name: 'Aisha Thompson',  title: 'Staff Engineer' },
+  'p-047': { personId: 'p-047', name: 'Nina Rivera',     title: 'Staff ML Engineer' },
+  'p-048': { personId: 'p-048', name: 'Lucas Kim',       title: 'Staff ML Engineer' },
+  'p-049': { personId: 'p-049', name: 'Hiro Mancini',    title: 'Engineering Manager' },
+  'p-051': { personId: 'p-051', name: 'Nora Chang',      title: 'Senior Security Engineer' },
+  'p-052': { personId: 'p-052', name: 'Hugo DaSilva',    title: 'Security Lead' },
+  'p-055': { personId: 'p-055', name: 'Mia Chen',        title: 'Senior Security Engineer' },
+  'p-056': { personId: 'p-056', name: 'Hugo Lee',        title: 'Security Engineer' },
+};
+
+interface MockInitiative {
+  id: string;
+  name: string;
+  status: string;
+  createdAt: string;
+  owner: string;
+  smes: string[];
+  /** Hours since the last agent run on this initiative. */
+  activeHoursAgo: number;
+}
+
+const MOCK_INITIATIVES: MockInitiative[] = [
+  { id: 'p-observability',     name: 'Observability Platform',       status: 'in_progress', createdAt: '2026-05-24T12:00:00Z', owner: 'p-004', smes: ['p-008', 'p-011'], activeHoursAgo: 1 },
+  { id: 'p-auth-migration',    name: 'Auth Migration',               status: 'in_progress', createdAt: '2026-06-05T12:00:00Z', owner: 'p-002', smes: ['p-051', 'p-004'], activeHoursAgo: 3 },
+  { id: 'p-llm-platform',      name: 'LLM Application Platform',     status: 'in_progress', createdAt: '2026-06-19T12:00:00Z', owner: 'p-047', smes: ['p-042', 'p-013'], activeHoursAgo: 2 },
+  { id: 'p-cost-opt',          name: 'Cost Optimization',            status: 'in_progress', createdAt: '2026-05-30T12:00:00Z', owner: 'p-008', smes: ['p-011', 'p-017'], activeHoursAgo: 5 },
+  { id: 'p-realtime-analytics', name: 'Real-time Analytics Pipeline', status: 'in_progress', createdAt: '2026-06-24T12:00:00Z', owner: 'p-017', smes: ['p-019', 'p-024'], activeHoursAgo: 9 },
+  { id: 'p-data-lake',         name: 'Data Lake Migration',          status: 'planning',    createdAt: '2026-08-01T12:00:00Z', owner: 'p-025', smes: ['p-017', 'p-015'], activeHoursAgo: 40 },
+  { id: 'p-feature-store',     name: 'ML Feature Store',             status: 'in_progress', createdAt: '2026-06-28T12:00:00Z', owner: 'p-042', smes: ['p-019', 'p-044'], activeHoursAgo: 12 },
+  { id: 'p-mobile-redesign',   name: 'Mobile App Redesign',          status: 'in_progress', createdAt: '2026-06-12T12:00:00Z', owner: 'p-030', smes: ['p-035', 'p-026'], activeHoursAgo: 18 },
+  { id: 'p-design-v3',         name: 'Design System v3',             status: 'in_progress', createdAt: '2026-07-03T12:00:00Z', owner: 'p-035', smes: ['p-038', 'p-034'], activeHoursAgo: 26 },
+  { id: 'p-design-system-api', name: 'Design System API',            status: 'in_progress', createdAt: '2026-07-10T12:00:00Z', owner: 'p-038', smes: ['p-035', 'p-001'], activeHoursAgo: 30 },
+  { id: 'p-inference-platform', name: 'Inference Platform',          status: 'in_progress', createdAt: '2026-06-15T12:00:00Z', owner: 'p-049', smes: ['p-013', 'p-043'], activeHoursAgo: 7 },
+  { id: 'p-rag-search',        name: 'RAG Knowledge Search',         status: 'completed',   createdAt: '2026-04-18T12:00:00Z', owner: 'p-048', smes: ['p-047'],          activeHoursAgo: 22 },
+  { id: 'p-soc2',              name: 'SOC2 Compliance',              status: 'in_progress', createdAt: '2026-06-22T12:00:00Z', owner: 'p-052', smes: ['p-055', 'p-051'], activeHoursAgo: 14 },
+  { id: 'p-zero-trust',        name: 'Zero Trust Network',           status: 'planning',    createdAt: '2026-08-08T12:00:00Z', owner: 'p-051', smes: ['p-052', 'p-056'], activeHoursAgo: 48 },
 ];
+
+const HOUR_MS = 60 * 60 * 1000;
+
+const MOCK_PROJECTS: Array<Omit<ProjectSummary, keyof typeof EMPTY_ROLLUPS>> = MOCK_INITIATIVES.map((p) => ({
+  id: p.id,
+  name: p.name,
+  status: p.status,
+  contributorCount: 1 + p.smes.length,
+  createdAt: p.createdAt,
+  topContributorNames: [p.owner, ...p.smes].map((id) => CAST[id]!.name),
+  lastActivityAt: new Date(Date.now() - p.activeHoursAgo * HOUR_MS).toISOString(),
+}));
 
 // Owner fields are defaulted at the return site so the fixtures don't need
 // per-entry churn every time the detail shape grows.
-const MOCK_PROJECT_DETAILS: Record<string, Omit<ProjectDetail, 'ownerId' | 'ownerName'>> = {
-  'proj-k8s': {
-    id: 'proj-k8s', name: 'Kubernetes Cluster Upgrade', status: 'active',
-    createdAt: '2026-04-06T12:00:00Z',
+const MOCK_PROJECT_DETAILS: Record<string, Omit<ProjectDetail, 'ownerId' | 'ownerName'>> =
+  Object.fromEntries(MOCK_INITIATIVES.map((p) => [p.id, {
+    id: p.id,
+    name: p.name,
+    status: p.status,
+    createdAt: p.createdAt,
     contributors: [
-      { personId: 'p-001', name: 'Alex Chen',    title: 'Staff Engineer',        role: 'Tech Lead',         weight: 0.40 },
-      { personId: 'p-002', name: 'Maria Santos', title: 'Senior Engineer',        role: 'Engineer',          weight: 0.25 },
-      { personId: 'p-004', name: 'Priya Patel',  title: 'Senior Engineer',        role: 'Engineer',          weight: 0.15 },
-      { personId: 'p-013', name: 'Ahmed Hassan', title: 'ML Engineer',            role: 'Stakeholder',       weight: 0.10 },
-      { personId: 'p-009', name: "Ryan O'Brien",  title: 'Technical Writer',      role: 'Documentation',     weight: 0.10 },
+      { ...CAST[p.owner]!, role: 'owner', weight: 1.0 },
+      ...p.smes.map((id) => ({ ...CAST[id]!, role: 'sme', weight: 0.8 })),
     ],
-  },
-  'proj-istio': {
-    id: 'proj-istio', name: 'Istio Service Mesh Migration', status: 'active',
-    createdAt: '2026-03-22T12:00:00Z',
-    contributors: [
-      { personId: 'p-001', name: 'Alex Chen',     title: 'Staff Engineer',  role: 'Tech Lead',  weight: 0.40 },
-      { personId: 'p-022', name: 'Sophie Turner', title: 'Security Engineer', role: 'Engineer',  weight: 0.30 },
-      { personId: 'p-004', name: 'Priya Patel',   title: 'Senior Engineer', role: 'Engineer',   weight: 0.20 },
-      { personId: 'p-009', name: "Ryan O'Brien",   title: 'Technical Writer', role: 'Docs',      weight: 0.10 },
-    ],
-  },
-  'proj-cicd': {
-    id: 'proj-cicd', name: 'CI/CD Pipeline Unification', status: 'active',
-    createdAt: '2026-04-01T12:00:00Z',
-    contributors: [
-      { personId: 'p-002', name: 'Maria Santos', title: 'Senior Engineer',  role: 'Tech Lead',  weight: 0.45 },
-      { personId: 'p-022', name: 'Sophie Turner', title: 'Security Engineer', role: 'Security', weight: 0.25 },
-      { personId: 'p-003', name: 'James Wright', title: 'Engineer',          role: 'Engineer',  weight: 0.20 },
-      { personId: 'p-005', name: 'David Kim',    title: 'Engineering Manager', role: 'PM',      weight: 0.10 },
-    ],
-  },
-  'proj-otel': {
-    id: 'proj-otel', name: 'Unified Observability Stack', status: 'active',
-    createdAt: '2026-03-12T12:00:00Z',
-    contributors: [
-      { personId: 'p-021', name: 'Ben Foster',    title: 'SRE Lead',        role: 'Tech Lead',  weight: 0.55 },
-      { personId: 'p-001', name: 'Alex Chen',     title: 'Staff Engineer',  role: 'Architect',  weight: 0.25 },
-      { personId: 'p-005', name: 'David Kim',     title: 'Eng Manager',     role: 'Sponsor',    weight: 0.20 },
-    ],
-  },
-  'proj-cedar': {
-    id: 'proj-cedar', name: 'Cedar Auth Policy Migration', status: 'active',
-    createdAt: '2026-03-26T12:00:00Z',
-    contributors: [
-      { personId: 'p-022', name: 'Sophie Turner', title: 'Security Engineer', role: 'Tech Lead', weight: 0.50 },
-      { personId: 'p-003', name: 'James Wright',  title: 'Engineer',          role: 'Engineer',  weight: 0.30 },
-      { personId: 'p-005', name: 'David Kim',     title: 'Eng Manager',       role: 'Sponsor',   weight: 0.20 },
-    ],
-  },
-  'proj-onboard': {
-    id: 'proj-onboard', name: 'Developer Onboarding Improvements', status: 'planning',
-    createdAt: '2026-04-21T12:00:00Z',
-    contributors: [
-      { personId: 'p-005', name: 'David Kim',    title: 'Eng Manager',   role: 'Sponsor',  weight: 0.40 },
-      { personId: 'p-003', name: 'James Wright', title: 'Engineer',      role: 'Engineer', weight: 0.35 },
-      { personId: 'p-009', name: "Ryan O'Brien",  title: 'Tech Writer',  role: 'Docs',     weight: 0.25 },
-    ],
-  },
-};
+  }]));
 
 // ─── Provider functions ──────────────────────────────────────────────────────
 
@@ -225,12 +214,17 @@ export async function listProjects(opts: {
   if (config.mock.aurora) {
     let items = MOCK_PROJECTS.slice();
     if (opts.status) items = items.filter((p) => p.status === opts.status);
-    // Lead contributor stands in as owner so the operating-model card layout
-    // is demonstrable in mock mode.
-    return items.slice(0, Math.min(opts.limit ?? 50, 200)).map((p) => ({
-      ...p, ...EMPTY_ROLLUPS,
-      ownerName: p.topContributorNames[0] ?? null,
-    }));
+    // The cast's first entry is the initiative owner by construction, and the
+    // rest are its SMEs — same shape the real rollup returns.
+    return items.slice(0, Math.min(opts.limit ?? 50, 200)).map((p) => {
+      const cast = MOCK_INITIATIVES.find((m) => m.id === p.id);
+      return {
+        ...p, ...EMPTY_ROLLUPS,
+        ownerId: cast?.owner ?? null,
+        ownerName: p.topContributorNames[0] ?? null,
+        smeNames: p.topContributorNames.slice(1),
+      };
+    });
   }
 
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
@@ -353,10 +347,9 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
   if (config.mock.aurora) {
     const mock = MOCK_PROJECT_DETAILS[id];
     if (!mock) return null;
-    // First contributor stands in as owner so the "Run by" surface is
-    // demonstrable in mock mode.
-    const lead = mock.contributors[0];
-    return { ...mock, ownerId: lead?.personId ?? null, ownerName: lead?.name ?? null };
+    // contributors[0] is the owner by construction (see MOCK_INITIATIVES).
+    const owner = mock.contributors[0];
+    return { ...mock, ownerId: owner?.personId ?? null, ownerName: owner?.name ?? null };
   }
 
   const projectRows = await exec(

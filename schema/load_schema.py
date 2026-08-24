@@ -12,19 +12,46 @@ def get_cluster_info():
     return outputs['ClusterArn'], outputs['CredentialsSecretArn'], outputs['DbName']
 
 def split_sql(content):
-    """Split SQL file into individual statements."""
+    """Split a SQL file into statements, respecting dollar-quoted blocks.
+
+    A ';' inside $$ ... $$ (or $tag$ ... $tag$) does NOT end a statement. The
+    original version split on any line ending in ';', which shredded every
+    PL/pgSQL body into fragments: each fragment was sent to the Data API on its
+    own and failed with a syntax error, so the CREATE FUNCTION never ran while
+    the loader reported the rest of the file as fine. That silently dropped the
+    knowledge_bases updated_at trigger function on every rebuild — the trigger
+    that depends on it then failed too, one line further down.
+    """
     statements = []
     current = []
+    dollar_tag = None  # the open tag, e.g. '$$' or '$body$', or None
+
     for line in content.split('\n'):
         stripped = line.strip()
-        if stripped.startswith('--') or not stripped:
+        # Comments and blanks are skipped only OUTSIDE a dollar-quoted body;
+        # inside one they are part of the function source.
+        if dollar_tag is None and (stripped.startswith('--') or not stripped):
             continue
         current.append(line)
-        if stripped.endswith(';'):
+
+        # Walk the line's dollar-quote markers so a tag opened and closed on
+        # the same line nets out correctly.
+        for tag in re.findall(r'\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$', line):
+            if dollar_tag is None:
+                dollar_tag = tag
+            elif tag == dollar_tag:
+                dollar_tag = None
+
+        if dollar_tag is None and stripped.endswith(';'):
             stmt = '\n'.join(current).strip()
             if stmt and not stmt.startswith('--'):
                 statements.append(stmt)
             current = []
+
+    # A trailing statement with no closing ';' is still a statement.
+    tail = '\n'.join(current).strip()
+    if tail and not tail.startswith('--'):
+        statements.append(tail)
     return statements
 
 def main():
@@ -36,6 +63,21 @@ def main():
         'identity_schema.sql',
         'observability_schema.sql',
         'observability_authz_schema.sql',
+        # The observability sprint schemas. These were never in this list, so a
+        # rebuilt cluster came up without the tables the middleware queries by
+        # name — observability.approvals, .canary_experiments, .prompt_versions
+        # and .prompt_version_meta are referenced across a dozen middleware
+        # files, and each page hitting them 500s on a fresh database. They load
+        # in sprint order because the later ones ALTER what the earlier ones
+        # create.
+        'observability_sprint1_schema.sql',
+        'observability_sprint2_schema.sql',
+        'observability_sprint3_promote_schema.sql',
+        'observability_sprint4_calibration_schema.sql',
+        'observability_sprint4_memory_schema.sql',
+        'observability_sprint5_canary_schema.sql',
+        'observability_sprint6_prompt_history_schema.sql',
+        'observability_approvals_schema.sql',
         'newsroom_schema.sql',
         'orgiq_kb_registry_schema.sql',
         'orgiq_work_items_schema.sql',
@@ -57,6 +99,10 @@ def main():
         # Initiative budget allocations. Loads after agent_bots_schema.sql
         # (spend reads join bot_runs) and orgiq_schema.sql (FK on projects).
         'agent_budgets_schema.sql',
+        # Sprints, SME budget grants, work-item cost estimates, maintenance
+        # baseline view. Loads last: references people, projects, work_items,
+        # bots and bot_runs.
+        'program_schema.sql',
     ]
 
     for filename in schema_files:

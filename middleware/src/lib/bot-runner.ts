@@ -160,6 +160,44 @@ export function decideRunBudget(
   };
 }
 
+export interface AllocationState {
+  /** The initiative's allocation for the period. Null = none set, which is
+   *  "unbudgeted", not "zero" — an initiative nobody has funded yet must not be
+   *  frozen by this brake. The Budgets page surfaces it as a blind spot. */
+  allocatedUsd: number | null;
+  /** Attributed spend so far this period. */
+  spentUsd: number;
+}
+
+/**
+ * Whether a dispatch fits inside the initiative's remaining allocation.
+ *
+ * This is what makes a program-manager's allocation a brake rather than a
+ * report. It is deliberately the SAME soft-cap shape as the per-run budget: a
+ * forecast that overruns demands an explicit confirmation instead of refusing,
+ * because the estimate is a forecast and the person dispatching may have good
+ * reason to proceed. What it must never do is let a run start over an
+ * exhausted allocation *silently*.
+ *
+ * The daily bot budget stays a HARD brake (it self-pauses the bot); this one
+ * is soft, because it gates human-initiated work and a hard stop mid-sprint
+ * with no override would strand an SME.
+ */
+export function decideAllocation(
+  allocation: AllocationState,
+  estimatedCostUsd: number,
+  confirmed: boolean,
+): RunBudgetDecision {
+  const { allocatedUsd, spentUsd } = allocation;
+  if (allocatedUsd == null || confirmed) return { kind: 'proceed' };
+  const remaining = allocatedUsd - spentUsd;
+  if (estimatedCostUsd <= remaining) return { kind: 'proceed' };
+  const reason = remaining <= 0
+    ? `this initiative's $${allocatedUsd.toFixed(2)} allocation is exhausted ($${spentUsd.toFixed(2)} spent) — raise the allocation or pass confirmOverBudget`
+    : `estimated $${estimatedCostUsd.toFixed(2)} exceeds the $${remaining.toFixed(2)} left of this initiative's $${allocatedUsd.toFixed(2)} allocation — raise it or pass confirmOverBudget`;
+  return { kind: 'confirm', reason };
+}
+
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
 
 export type FireResult =
@@ -290,6 +328,9 @@ export async function fireBot(botId: string, opts: {
   const job = await enqueueJob({
     kind: 'devbox:task', title: bot.name,
     payload: { prompt, requiresReview: bot.requiresReview, botId: bot.id, model: bot.model },
+    // Also on the column, not just in the payload: the queue joins bots on it
+    // to name the mission behind a scheduled job.
+    botId: bot.id,
   });
   if (!job) return { ok: false, reason: 'could not enqueue the job' };
   const run = await createBotRun({

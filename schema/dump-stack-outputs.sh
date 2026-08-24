@@ -39,6 +39,29 @@ account = subprocess.check_output(
     ["aws", "sts", "get-caller-identity", "--query", "Account", "--output", "text"],
     text=True).strip()
 
+
+def cognito_client_secret() -> str:
+    """The one value CloudFormation cannot give us.
+
+    Cognito never exposes an app client's secret as a stack output, so a
+    regenerated .env.aws used to come back WITHOUT it — and the middleware
+    treats a secretless Cognito config as "SSO not configured", falling back to
+    the user picker with no error anywhere. A rebuild silently turned SSO off.
+    Fetch it from the API instead, and leave it blank only when there is
+    genuinely no pool yet.
+    """
+    pool, client = vals.get("UserPoolId", ""), vals.get("UserPoolClientId", "")
+    if not pool or not client:
+        return ""
+    try:
+        return subprocess.check_output([
+            "aws", "cognito-idp", "describe-user-pool-client", "--region", region,
+            "--user-pool-id", pool, "--client-id", client,
+            "--query", "UserPoolClient.ClientSecret", "--output", "text",
+        ], text=True, stderr=subprocess.DEVNULL).strip().replace("None", "")
+    except subprocess.CalledProcessError:
+        return ""
+
 def pick(*keys: str, default: str = "") -> str:
     for k in keys:
         if k in vals:
@@ -46,6 +69,12 @@ def pick(*keys: str, default: str = "") -> str:
     return default
 
 ecr = f"{account}.dkr.ecr.{region}.amazonaws.com"
+
+client_secret = cognito_client_secret()
+# Cognito rejects non-localhost HTTP callbacks, so the local BFF URL is the
+# only one that works until the deployed middleware has an HTTPS origin.
+callback_url = "http://localhost:3001/api/auth/callback" if client_secret else ""
+portal_origin = "http://localhost:5183" if client_secret else ""
 
 env = f"""# Generated from CloudFormation stack outputs on {date.today().isoformat()}.
 # Re-run schema/dump-stack-outputs.sh to regenerate after stack changes.
@@ -113,6 +142,20 @@ CANARY_SUBJECT_A_ARN={pick('SubjectPromptAArn')}
 CANARY_SUBJECT_B_ARN={pick('SubjectPromptBArn')}
 CANARY_JUDGE_PROMPT_ARN={pick('JudgePromptArn')}
 CANARY_SCORES_LOG_GROUP={pick('ScoresLogGroupName', default='/orgiq/canary/scores')}
+
+# OrgIQ-Authentication — enterprise SSO (Cognito authenticates; mintSession
+# still owns the session). All four must be set for cognitoEnabled(); a blank
+# CLIENT_SECRET reads as "not configured" and silently falls back to the picker.
+COGNITO_USER_POOL_ID={pick('UserPoolId', 'orgiq-cognito-user-pool-id')}
+COGNITO_CLIENT_ID={pick('UserPoolClientId', 'orgiq-cognito-client-id')}
+COGNITO_CLIENT_SECRET={client_secret}
+COGNITO_DOMAIN={pick('HostedUiDomain', 'orgiq-cognito-domain')}
+COGNITO_CALLBACK_URL={callback_url}
+# Where the BFF sends the browser after a successful login. Needed only when the
+# portal is on a different origin than this middleware, which is exactly the
+# local-dev layout (portal :5183, middleware :3001) — without it a relative
+# redirect resolves against :3001 and SSO ends on a middleware 404.
+PORTAL_ORIGIN={portal_origin}
 
 # Runtime image ECR URIs
 SUPERVISOR_ECR_URI={ecr}/orgiq-supervisor

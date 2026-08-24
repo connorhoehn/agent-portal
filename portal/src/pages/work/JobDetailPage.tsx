@@ -47,6 +47,9 @@ interface Job {
   claimedAt: string | null;
   startedAt: string | null;
   finishedAt: string | null;
+  botId: string | null;
+  botName: string | null;
+  botTrigger: string | null;
 }
 
 const STATUS_TONE: Record<string, string> = {
@@ -246,6 +249,16 @@ export default function JobDetailPage() {
         <span className="text-[11px] text-text-tertiary">
           attempt {job.attempts} of {job.maxAttempts} · queued by {job.createdBy ?? 'unknown'}
         </span>
+        {/* Provenance: a standing mission put this here, not a person. */}
+        {job.botId && job.botName && (
+          <Link
+            to={`/admin/bots/${job.botId}`}
+            className="text-[12px] text-primary no-underline hover:underline"
+            title={`${job.botTrigger ?? 'manual'} trigger`}
+          >
+            {job.botTrigger === 'cron' ? 'scheduled by' : 'dispatched by'} {job.botName} →
+          </Link>
+        )}
         {/* Provenance: this job exists because a sweep found something. */}
         {typeof job.payload['findingId'] === 'string' && (
           <Link

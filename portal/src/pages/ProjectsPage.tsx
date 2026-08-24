@@ -55,13 +55,25 @@ const STATUS_COLORS: Record<string, { bg: string; border: string; text: string; 
 
 // ─── Project key derivation ───────────────────────────────────────────────────
 
+// Short keys for the canonical initiatives, where derived initials would be
+// unhelpful ('Observability Platform' → 'OP') or collide ('Design System v3'
+// and 'Design System API' both → 'DS'). Anything unlisted falls through to the
+// initials rule below.
 const KNOWN_KEYS: Record<string, string> = {
-  'proj-k8s':     'K8S',
-  'proj-istio':   'IST',
-  'proj-cicd':    'CICD',
-  'proj-otel':    'OTEL',
-  'proj-cedar':   'CDR',
-  'proj-onboard': 'OBD',
+  'p-observability':      'OBS',
+  'p-auth-migration':     'AUTH',
+  'p-llm-platform':       'LLM',
+  'p-cost-opt':           'COST',
+  'p-realtime-analytics': 'RTA',
+  'p-data-lake':          'LAKE',
+  'p-feature-store':      'FEAT',
+  'p-mobile-redesign':    'MOB',
+  'p-design-v3':          'DSV3',
+  'p-design-system-api':  'DSAP',
+  'p-inference-platform': 'INF',
+  'p-rag-search':         'RAG',
+  'p-soc2':               'SOC2',
+  'p-zero-trust':         'ZT',
 };
 
 function deriveProjectKey(projectId: string, projectName: string): string {

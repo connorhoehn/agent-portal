@@ -15,6 +15,7 @@ import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handl
 import { readForRolesElseAction, requireAction } from '../lib/authz.js';
 import {
   listBudgets, orgSummary, upsertAllocation, deleteAllocation, initiativeExists,
+  listGrants,
 } from '../providers/budgets.js';
 
 export const budgetsRouter: Router = Router();
@@ -25,6 +26,13 @@ const manageGate = requireAction('ManageBudgets');
 budgetsRouter.get('/', readGate, asyncHandler(async (_req, res) => {
   const [budgets, summary] = await Promise.all([listBudgets(), orgSummary()]);
   res.json({ budgets, summary });
+}));
+
+// Sprint envelopes: which SME holds how much, on which sprint. Declared
+// before '/:orgProjectId' so "grants" is never read as an initiative id.
+budgetsRouter.get('/grants', readGate, asyncHandler(async (req, res) => {
+  const orgProjectId = String(req.query['orgProjectId'] ?? '').trim();
+  res.json({ grants: await listGrants(orgProjectId || undefined) });
 }));
 
 budgetsRouter.put('/:orgProjectId', manageGate, asyncHandler(async (req, res) => {

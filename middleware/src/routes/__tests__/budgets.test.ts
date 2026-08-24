@@ -39,7 +39,7 @@ const deleteMock = deleteAllocation as unknown as jest.Mock;
 const existsMock = initiativeExists as unknown as jest.Mock;
 
 const BUDGET = {
-  orgProjectId: 'proj-k8s', orgProjectName: 'Kubernetes Cluster Upgrade',
+  orgProjectId: 'p-observability', orgProjectName: 'Observability Platform',
   allocatedUsd: 250, period: 'monthly', updatedBy: 'pm@example.com',
   updatedAt: '2026-08-01T00:00:00Z', spentThisPeriodUsd: 42.5,
   runCountThisPeriod: 7, lastAgentActivityAt: '2026-08-20T12:00:00Z',
@@ -84,19 +84,19 @@ describe('PUT /api/budgets/:orgProjectId', () => {
     existsMock.mockResolvedValue(true);
     upsertMock.mockResolvedValue(BUDGET);
     const res = await request(buildApp())
-      .put('/api/budgets/proj-k8s')
+      .put('/api/budgets/p-observability')
       .send({ allocatedUsd: 250 });
     expect(res.status).toBe(200);
     expect(res.body.budget).toEqual(BUDGET);
-    expect(upsertMock).toHaveBeenCalledWith('proj-k8s', 250, null);
+    expect(upsertMock).toHaveBeenCalledWith('p-observability', 250, null);
   });
 
   it('accepts zero — a real value meaning "no agent spend allowed"', async () => {
     existsMock.mockResolvedValue(true);
     upsertMock.mockResolvedValue({ ...BUDGET, allocatedUsd: 0 });
-    const res = await request(buildApp()).put('/api/budgets/proj-k8s').send({ allocatedUsd: 0 });
+    const res = await request(buildApp()).put('/api/budgets/p-observability').send({ allocatedUsd: 0 });
     expect(res.status).toBe(200);
-    expect(upsertMock).toHaveBeenCalledWith('proj-k8s', 0, null);
+    expect(upsertMock).toHaveBeenCalledWith('p-observability', 0, null);
   });
 
   it.each([
@@ -107,7 +107,7 @@ describe('PUT /api/budgets/:orgProjectId', () => {
     ['a coercible string', { allocatedUsd: '250' }],
     ['null', { allocatedUsd: null }],
   ])('rejects %s allocatedUsd with 400 before touching the provider', async (_label, body) => {
-    const res = await request(buildApp()).put('/api/budgets/proj-k8s').send(body);
+    const res = await request(buildApp()).put('/api/budgets/p-observability').send(body);
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/allocatedUsd/);
     expect(existsMock).not.toHaveBeenCalled();
@@ -124,7 +124,7 @@ describe('PUT /api/budgets/:orgProjectId', () => {
   it('503s when the provider has no Aurora behind it', async () => {
     existsMock.mockResolvedValue(true);
     upsertMock.mockResolvedValue(null);
-    const res = await request(buildApp()).put('/api/budgets/proj-k8s').send({ allocatedUsd: 10 });
+    const res = await request(buildApp()).put('/api/budgets/p-observability').send({ allocatedUsd: 10 });
     expect(res.status).toBe(503);
     expect(res.body.error).toMatch(/Aurora/);
   });
@@ -133,10 +133,10 @@ describe('PUT /api/budgets/:orgProjectId', () => {
 describe('DELETE /api/budgets/:orgProjectId', () => {
   it('deletes an allocation', async () => {
     deleteMock.mockResolvedValue(true);
-    const res = await request(buildApp()).delete('/api/budgets/proj-k8s');
+    const res = await request(buildApp()).delete('/api/budgets/p-observability');
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
-    expect(deleteMock).toHaveBeenCalledWith('proj-k8s');
+    expect(deleteMock).toHaveBeenCalledWith('p-observability');
   });
 
   it('404s when no allocation existed', async () => {

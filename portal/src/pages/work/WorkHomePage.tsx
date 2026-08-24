@@ -18,6 +18,23 @@ interface Job {
   boxId: string | null; attempts: number; maxAttempts: number;
   result: { summary?: string; turns?: number; costUsd?: number; toolCalls?: number; durationMs?: number } | null;
   error: string | null; createdAt: string; finishedAt: string | null;
+  /** The standing mission that enqueued this, when one did. */
+  botId: string | null; botName: string | null; botTrigger: string | null;
+}
+
+/** Chip naming the bot behind a queued job. Scheduled maintenance and work a
+ * person queued this morning read identically without it — and only one of
+ * them is a cost of ownership someone already agreed to. */
+function BotOrigin({ job }: { job: Job }) {
+  if (!job.botName) return null;
+  return (
+    <span
+      className="text-[10px] px-1.5 py-0.5 rounded bg-surface-hover text-text-secondary shrink-0 whitespace-nowrap"
+      title={`Enqueued by the ${job.botName} bot (${job.botTrigger ?? 'manual'} trigger)`}
+    >
+      {job.botTrigger === 'cron' ? '⏱ ' : '🤖 '}{job.botName}
+    </span>
+  );
 }
 interface Finding {
   id: string; sweep: string; severity: 'critical' | 'warning' | 'info';
@@ -436,9 +453,12 @@ export default function WorkHomePage() {
             <div key={j.id} className="px-3.5 py-3 border-b border-border last:border-b-0">
               <div className="flex items-start gap-3 min-w-0">
                 <div className="flex-1 min-w-0">
-                  <Link to={`/iq/work/${j.id}`} className="text-[13px] font-semibold text-text-primary no-underline hover:text-primary">
-                    {j.title}
-                  </Link>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Link to={`/iq/work/${j.id}`} className="text-[13px] font-semibold text-text-primary no-underline hover:text-primary truncate">
+                      {j.title}
+                    </Link>
+                    <BotOrigin job={j} />
+                  </div>
                   <div className="text-[12px] text-text-secondary mt-1 leading-snug">{j.result?.summary ?? 'No summary reported.'}</div>
                   <div className="text-[11px] text-text-tertiary mt-1">
                     {j.result?.turns ?? 0} turns · {j.result?.toolCalls ?? 0} tools · {money(j.result?.costUsd)}
@@ -545,6 +565,7 @@ export default function WorkHomePage() {
               {j.status.replace('_', ' ')}
             </span>
             <span className="text-[12.5px] text-text-primary truncate flex-1 min-w-0" title={j.title}>{j.title}</span>
+            <BotOrigin job={j} />
             {j.error && <span className="text-[11px] text-danger truncate max-w-[240px]" title={j.error}>{j.error}</span>}
             <span className="text-[11px] text-text-tertiary shrink-0 hidden md:inline">
               {j.boxId ? `worker ${j.boxId}` : `priority ${j.priority}`}

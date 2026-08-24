@@ -37,6 +37,11 @@ export interface AgentJob {
   claimedAt: string | null;
   startedAt: string | null;
   finishedAt: string | null;
+  /** The standing mission that enqueued this job, when one did. */
+  botId: string | null;
+  /** Resolved on reads that join bots; null on INSERT ... RETURNING. */
+  botName: string | null;
+  botTrigger: string | null;
 }
 
 function strParam(name: string, value: string): SqlParameter {
@@ -58,7 +63,21 @@ function toJson(v: unknown): Record<string, unknown> | null {
 const COLUMNS = `id, kind, title, payload::text AS payload, status, priority,
   box_id, session_id, attempts, max_attempts, result::text AS result, error,
   created_by, created_at::text AS created_at, claimed_at::text AS claimed_at,
-  started_at::text AS started_at, finished_at::text AS finished_at`;
+  started_at::text AS started_at, finished_at::text AS finished_at,
+  bot_id::text AS bot_id`;
+
+// Reads that want to name the enqueueing bot. Kept separate from COLUMNS
+// because INSERT ... RETURNING cannot join, and a queue row whose origin is a
+// standing mission reads very differently from one a person queued by hand:
+// scheduled maintenance is a cost of ownership, not a decision someone made
+// this morning.
+const COLUMNS_WITH_BOT = `j.id, j.kind, j.title, j.payload::text AS payload, j.status, j.priority,
+  j.box_id, j.session_id, j.attempts, j.max_attempts, j.result::text AS result, j.error,
+  j.created_by, j.created_at::text AS created_at, j.claimed_at::text AS claimed_at,
+  j.started_at::text AS started_at, j.finished_at::text AS finished_at,
+  j.bot_id::text AS bot_id, b.name AS bot_name, b.trigger AS bot_trigger`;
+
+const JOBS_WITH_BOT = 'agent_jobs j LEFT JOIN bots b ON b.id = j.bot_id';
 
 function rowToJob(r: Record<string, unknown>): AgentJob {
   return {
@@ -79,6 +98,9 @@ function rowToJob(r: Record<string, unknown>): AgentJob {
     claimedAt: r['claimed_at'] ? toStr(r['claimed_at']) : null,
     startedAt: r['started_at'] ? toStr(r['started_at']) : null,
     finishedAt: r['finished_at'] ? toStr(r['finished_at']) : null,
+    botId: r['bot_id'] ? toStr(r['bot_id']) : null,
+    botName: r['bot_name'] ? toStr(r['bot_name']) : null,
+    botTrigger: r['bot_trigger'] ? toStr(r['bot_trigger']) : null,
   };
 }
 
@@ -89,11 +111,14 @@ export async function enqueueJob(input: {
   priority?: number;
   createdBy?: string;
   maxAttempts?: number;
+  /** Set when a standing mission enqueued this, so the queue can attribute it
+   * to the bot rather than showing an anonymous scheduled task. */
+  botId?: string;
 }): Promise<AgentJob | null> {
   if (config.mock.aurora) return null;
   const rows = await exec(
-    `INSERT INTO agent_jobs (kind, title, payload, priority, created_by, max_attempts)
-     VALUES (:kind, :title, :payload::jsonb, :priority, :created_by, :max_attempts)
+    `INSERT INTO agent_jobs (kind, title, payload, priority, created_by, max_attempts, bot_id)
+     VALUES (:kind, :title, :payload::jsonb, :priority, :created_by, :max_attempts, :bot_id::uuid)
      RETURNING ${COLUMNS}`,
     [
       strParam('kind', input.kind),
@@ -102,6 +127,9 @@ export async function enqueueJob(input: {
       intParam('priority', input.priority ?? 100),
       strParam('created_by', input.createdBy ?? 'portal'),
       intParam('max_attempts', input.maxAttempts ?? 2),
+      input.botId
+        ? strParam('bot_id', input.botId)
+        : { name: 'bot_id', value: { isNull: true } },
     ],
   );
   return rows[0] ? rowToJob(rows[0]) : null;
@@ -113,15 +141,15 @@ export async function listJobs(opts: { status?: string; limit?: number } = {}): 
   const params: SqlParameter[] = [intParam('lim', limit)];
   let where = '';
   if (opts.status) {
-    where = 'WHERE status = :status';
+    where = 'WHERE j.status = :status';
     params.push(strParam('status', opts.status));
   }
   const rows = await exec(
-    `SELECT ${COLUMNS} FROM agent_jobs ${where}
-      ORDER BY CASE status
+    `SELECT ${COLUMNS_WITH_BOT} FROM ${JOBS_WITH_BOT} ${where}
+      ORDER BY CASE j.status
                  WHEN 'running' THEN 0 WHEN 'claimed' THEN 1
                  WHEN 'awaiting_review' THEN 2 WHEN 'queued' THEN 3 ELSE 4 END,
-               priority, created_at DESC
+               j.priority, j.created_at DESC
       LIMIT :lim`,
     params,
   );
@@ -130,7 +158,10 @@ export async function listJobs(opts: { status?: string; limit?: number } = {}): 
 
 export async function getJob(id: string): Promise<AgentJob | null> {
   if (config.mock.aurora) return null;
-  const rows = await exec(`SELECT ${COLUMNS} FROM agent_jobs WHERE id = :id`, [strParam('id', id)]);
+  const rows = await exec(
+    `SELECT ${COLUMNS_WITH_BOT} FROM ${JOBS_WITH_BOT} WHERE j.id = :id`,
+    [strParam('id', id)],
+  );
   return rows[0] ? rowToJob(rows[0]) : null;
 }
 

@@ -10,6 +10,7 @@ import { exec } from '../aurora.js';
 import {
   PERIOD_START_SQL, spendPredicateSql,
   listBudgets, getBudget, upsertAllocation, deleteAllocation, initiativeExists, orgSummary,
+  listGrants,
 } from '../budgets.js';
 
 const execMock = exec as unknown as jest.Mock;
@@ -17,10 +18,11 @@ const execMock = exec as unknown as jest.Mock;
 beforeEach(() => execMock.mockReset());
 
 const ROW = {
-  org_project_id: 'proj-k8s', org_project_name: 'Kubernetes Cluster Upgrade',
+  org_project_id: 'p-observability', org_project_name: 'Observability Platform',
   allocated_usd: 250, period: 'monthly', updated_by: 'pm@example.com',
   updated_at: '2026-08-01T00:00:00Z', spent_this_period_usd: 42.5,
   run_count_this_period: 7, last_agent_activity_at: '2026-08-20T12:00:00Z',
+  maintenance_usd: 12.25,
 };
 
 // ─── Pure SQL builders ───────────────────────────────────────────────────────
@@ -78,14 +80,33 @@ describe('listBudgets', () => {
     }]);
     const rows = await listBudgets();
     expect(rows[0]).toEqual({
-      orgProjectId: 'proj-k8s', orgProjectName: 'Kubernetes Cluster Upgrade',
+      orgProjectId: 'p-observability', orgProjectName: 'Observability Platform',
       allocatedUsd: 250, period: 'monthly', updatedBy: 'pm@example.com',
       updatedAt: '2026-08-01T00:00:00Z', spentThisPeriodUsd: 42.5,
       runCountThisPeriod: 7, lastAgentActivityAt: '2026-08-20T12:00:00Z',
+      maintenanceUsd: 12.25,
     });
     // The unallocated-but-spending row keeps null allocation — the signal.
     expect(rows[1]!.allocatedUsd).toBeNull();
     expect(rows[1]!.spentThisPeriodUsd).toBe(42.5);
+  });
+
+  // The maintenance floor is the cron-triggered SUBSET of spend, never an
+  // addition to it — a UI that added the two would double-count every
+  // scheduled run.
+  it('reads the maintenance floor as a cron-filtered subset of spend', async () => {
+    execMock.mockResolvedValue([ROW]);
+    const rows = await listBudgets();
+    expect(rows[0]!.maintenanceUsd).toBe(12.25);
+    expect(rows[0]!.maintenanceUsd).toBeLessThanOrEqual(rows[0]!.spentThisPeriodUsd);
+    const sql = String(execMock.mock.calls[0]?.[0] ?? '');
+    expect(sql).toContain(`FILTER (WHERE br.trigger = 'cron')`);
+  });
+
+  it('reports no floor when an initiative has no scheduled runs', async () => {
+    const { maintenance_usd: _omitted, ...noCron } = ROW;
+    execMock.mockResolvedValue([noCron]);
+    expect((await listBudgets())[0]!.maintenanceUsd).toBe(0);
   });
 
   it('degrades to empty when the schema predates the budgets tables', async () => {
@@ -102,10 +123,10 @@ describe('listBudgets', () => {
 describe('getBudget', () => {
   it('scopes the same list shape to one initiative', async () => {
     execMock.mockResolvedValue([ROW]);
-    const budget = await getBudget('proj-k8s');
+    const budget = await getBudget('p-observability');
     const sql = execMock.mock.calls[0][0] as string;
     expect(sql).toMatch(/WHERE ids\.org_project_id = :pid/);
-    expect(budget?.orgProjectId).toBe('proj-k8s');
+    expect(budget?.orgProjectId).toBe('p-observability');
   });
 
   it('returns null when nothing matches', async () => {
@@ -119,7 +140,7 @@ describe('getBudget', () => {
 describe('upsertAllocation', () => {
   it('upserts idempotently and re-reads through the list shape', async () => {
     execMock.mockResolvedValueOnce([]).mockResolvedValueOnce([ROW]);
-    const budget = await upsertAllocation('proj-k8s', 250, 'pm@example.com');
+    const budget = await upsertAllocation('p-observability', 250, 'pm@example.com');
     const insertSql = execMock.mock.calls[0][0] as string;
     expect(insertSql).toMatch(/INSERT INTO initiative_budgets/);
     expect(insertSql).toMatch(/ON CONFLICT \(org_project_id\) DO UPDATE/);
@@ -133,8 +154,8 @@ describe('upsertAllocation', () => {
 
 describe('deleteAllocation', () => {
   it('reports whether a row was actually deleted', async () => {
-    execMock.mockResolvedValueOnce([{ org_project_id: 'proj-k8s' }]).mockResolvedValueOnce([]);
-    expect(await deleteAllocation('proj-k8s')).toBe(true);
+    execMock.mockResolvedValueOnce([{ org_project_id: 'p-observability' }]).mockResolvedValueOnce([]);
+    expect(await deleteAllocation('p-observability')).toBe(true);
     expect(await deleteAllocation('proj-none')).toBe(false);
     expect(execMock.mock.calls[0][0]).toMatch(/DELETE FROM initiative_budgets WHERE org_project_id = :pid/);
   });
@@ -142,8 +163,8 @@ describe('deleteAllocation', () => {
 
 describe('initiativeExists', () => {
   it('checks the projects table', async () => {
-    execMock.mockResolvedValue([{ id: 'proj-k8s' }]);
-    expect(await initiativeExists('proj-k8s')).toBe(true);
+    execMock.mockResolvedValue([{ id: 'p-observability' }]);
+    expect(await initiativeExists('p-observability')).toBe(true);
     expect(execMock.mock.calls[0][0]).toMatch(/FROM projects WHERE id = :pid/);
   });
 });
@@ -154,7 +175,8 @@ describe('orgSummary', () => {
   it('returns the zeroed shape when nothing exists yet', async () => {
     execMock.mockResolvedValue([]);
     expect(await orgSummary()).toEqual({
-      totalAllocatedUsd: 0, totalSpentThisPeriodUsd: 0, byModel: [], byTrigger: [],
+      totalAllocatedUsd: 0, totalSpentThisPeriodUsd: 0, totalMaintenanceUsd: 0,
+      byModel: [], byTrigger: [],
     });
   });
 
@@ -192,7 +214,60 @@ describe('orgSummary', () => {
   it('degrades to the zeroed shape when the bots schema is missing', async () => {
     execMock.mockRejectedValue(new Error('relation "bot_runs" does not exist'));
     expect(await orgSummary()).toEqual({
-      totalAllocatedUsd: 0, totalSpentThisPeriodUsd: 0, byModel: [], byTrigger: [],
+      totalAllocatedUsd: 0, totalSpentThisPeriodUsd: 0, totalMaintenanceUsd: 0,
+      byModel: [], byTrigger: [],
     });
+  });
+});
+
+describe('listGrants', () => {
+  const GRANT = {
+    id: 'bg-obs-3', org_project_id: 'p-observability',
+    org_project_name: 'Observability Platform',
+    grantee_person_id: 'p-008', grantee_name: 'Layla Hassan',
+    sprint_id: 'spr-obs-s3', sprint_name: 'Sprint 98 — Span metrics + decom',
+    starts_on: '2026-08-10', ends_on: '2026-08-24', sprint_status: 'active',
+    allocated_usd: 30, granted_by: 'u-release', window_spend_usd: 2.74,
+  };
+
+  it('maps an envelope with its holder, sprint window and in-window spend', async () => {
+    execMock.mockResolvedValue([GRANT]);
+    const [g] = await listGrants();
+    expect(g).toEqual({
+      id: 'bg-obs-3', orgProjectId: 'p-observability',
+      orgProjectName: 'Observability Platform',
+      granteePersonId: 'p-008', granteeName: 'Layla Hassan',
+      sprintId: 'spr-obs-s3', sprintName: 'Sprint 98 — Span metrics + decom',
+      startsOn: '2026-08-10', endsOn: '2026-08-24', sprintStatus: 'active',
+      allocatedUsd: 30, grantedBy: 'u-release', initiativeSpendInWindowUsd: 2.74,
+    });
+  });
+
+  // The window figure is the initiative's, bounded by the sprint dates — it is
+  // NOT the grantee's personal burn, because bot_runs never record whose
+  // envelope paid. The SQL must therefore window on the sprint and attribute
+  // by initiative, using the same predicate the rest of the ledger uses.
+  it('windows spend on the sprint and attributes it by initiative', async () => {
+    execMock.mockResolvedValue([GRANT]);
+    await listGrants();
+    const sql = String(execMock.mock.calls[0]?.[0] ?? '');
+    expect(sql).toContain('br.started_at >= sp.starts_on');
+    expect(sql).toContain('br.started_at < sp.ends_on + 1');
+    expect(sql).toContain(spendPredicateSql('g.org_project_id').trim().slice(0, 40));
+    expect(sql).not.toContain('grantee_person_id = ');
+  });
+
+  it('scopes to one initiative when asked', async () => {
+    execMock.mockResolvedValue([]);
+    await listGrants('p-auth-migration');
+    expect(String(execMock.mock.calls[0]?.[0])).toContain('WHERE g.org_project_id = :pid');
+    expect(execMock.mock.calls[0]?.[1]).toEqual([
+      { name: 'pid', value: { stringValue: 'p-auth-migration' } },
+    ]);
+  });
+
+  it('degrades to empty when the program schema is missing', async () => {
+    execMock.mockRejectedValue(new Error('relation "budget_grants" does not exist'));
+    expect(await listGrants()).toEqual([]);
   });
 });

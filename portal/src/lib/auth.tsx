@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { clearContextChosen } from './contextChoice';
 
-export type Role = 'member' | 'org-leader' | 'hr-admin' | 'reporter' | 'editor';
+export type Role = 'member' | 'sme' | 'org-leader' | 'hr-admin' | 'reporter' | 'editor';
 export type SessionRole = Role | 'admin';
 export type Tenant = 'orgiq' | 'newsroom';
 

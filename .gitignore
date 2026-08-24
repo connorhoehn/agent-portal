@@ -22,3 +22,5 @@ resource_tracker.json
 .env.aws
 .claude/scheduled_tasks.lock
 .claude/worktrees
+infra/destroy-*.log
+infra/deploy-*.log

@@ -47,11 +47,14 @@ interface BudgetRow {
   spentThisPeriodUsd: number;
   runCountThisPeriod: number;
   lastAgentActivityAt: string | null;
+  /** Cron-triggered subset of spend — the maintenance floor, not extra spend. */
+  maintenanceUsd: number;
 }
 
 interface BudgetSummary {
   totalAllocatedUsd: number;
   totalSpentThisPeriodUsd: number;
+  totalMaintenanceUsd: number;
   byModel: Array<{ model: string; spentUsd: number; runCount: number }>;
   byTrigger: Array<{ trigger: string; spentUsd: number; runCount: number }>;
 }
@@ -274,6 +277,93 @@ function FirstBudgetForm({ onSaved }: { onSaved: () => void }) {
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
+interface GrantRow {
+  id: string;
+  orgProjectId: string;
+  orgProjectName: string | null;
+  granteePersonId: string;
+  granteeName: string | null;
+  sprintName: string | null;
+  startsOn: string | null;
+  endsOn: string | null;
+  sprintStatus: string | null;
+  allocatedUsd: number;
+  initiativeSpendInWindowUsd: number;
+}
+
+/**
+ * Sprint envelopes — a release manager handing an SME money for one sprint.
+ *
+ * The window figure is the INITIATIVE's spend inside the sprint dates, and is
+ * labelled as such: bot_runs record which initiative and which bot paid, never
+ * which person's envelope, so presenting it as the SME's personal burn would
+ * be a number the data cannot support.
+ */
+function SprintEnvelopes() {
+  const { data, error } = useFetch<{ grants: GrantRow[] }>('/api/budgets/grants', 60_000);
+  const grants = data?.grants ?? [];
+  if (error || grants.length === 0) return null;
+
+  const active = grants.filter((g) => g.sprintStatus === 'active');
+  const rest = grants.filter((g) => g.sprintStatus !== 'active');
+  const ordered = [...active, ...rest].slice(0, 12);
+
+  return (
+    <Card padding="none" className="overflow-x-auto mt-4">
+      <div className="px-3.5 py-3 border-b border-border">
+        <div className="text-[13px] font-semibold text-text-primary">Sprint envelopes</div>
+        <div className="text-[11.5px] text-text-secondary mt-0.5">
+          What each SME was given to see a sprint through. Spend shown is the initiative's
+          within the sprint window, not the individual's.
+        </div>
+      </div>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableTh>SME</TableTh>
+            <TableTh>Initiative</TableTh>
+            <TableTh>Sprint</TableTh>
+            <TableTh>Envelope</TableTh>
+            <TableTh>Initiative spend in window</TableTh>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {ordered.map((g) => (
+            <TableRow key={g.id}>
+              <TableTd>
+                <span className="text-[12.5px] text-text-primary">{g.granteeName ?? g.granteePersonId}</span>
+              </TableTd>
+              <TableTd>
+                <Link
+                  to={`/iq/projects/${encodeURIComponent(g.orgProjectId)}`}
+                  className="text-[12.5px] text-primary no-underline hover:underline"
+                >
+                  {g.orgProjectName ?? g.orgProjectId}
+                </Link>
+              </TableTd>
+              <TableTd>
+                <div className="flex items-center gap-2">
+                  <span className="text-[12.5px] text-text-primary">{g.sprintName ?? '—'}</span>
+                  {g.sprintStatus === 'active' && <Chip tone="success">active</Chip>}
+                </div>
+                {g.startsOn && g.endsOn && (
+                  <div className="text-[11px] text-text-tertiary mt-0.5 tabular-nums">
+                    {g.startsOn} → {g.endsOn}
+                  </div>
+                )}
+              </TableTd>
+              <TableTd><span className="tabular-nums">{usd(g.allocatedUsd)}</span></TableTd>
+              <TableTd>
+                <span className="tabular-nums text-text-secondary">{usd(g.initiativeSpendInWindowUsd)}</span>
+              </TableTd>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Card>
+  );
+}
+
 export default function BudgetsPage() {
   const { data, error, refresh } = useFetch<{ budgets: BudgetRow[]; summary: BudgetSummary }>('/api/budgets', 30_000);
   const { can, ready } = useCapabilities();
@@ -292,6 +382,7 @@ export default function BudgetsPage() {
   const totalAllocated = summary?.totalAllocatedUsd ?? 0;
   const totalSpent = summary?.totalSpentThisPeriodUsd ?? 0;
   const remaining = totalAllocated - totalSpent;
+  const totalMaintenance = summary?.totalMaintenanceUsd ?? 0;
   const totalRuns = budgets.reduce((n, b) => n + b.runCountThisPeriod, 0);
 
   async function deleteAllocation(row: BudgetRow) {
@@ -349,7 +440,16 @@ export default function BudgetsPage() {
                 hint={remaining < 0 ? 'over allocation' : 'allocated − spent'}
                 mono
               />
-              <StatCard label="Runs this period" value={totalRuns} mono />
+              {/* The recurring floor: what scheduled bots cost to keep the
+                  repos alive. Only the remainder of an allocation is available
+                  for new work, so this belongs beside the totals, not buried
+                  in the by-trigger split. */}
+              <StatCard
+                label="Maintenance floor"
+                value={usd(totalMaintenance)}
+                hint={totalSpent > 0 ? `${Math.round((totalMaintenance / totalSpent) * 100)}% of spend · scheduled bots` : 'scheduled bots'}
+                mono
+              />
             </KPIGrid>
           </div>
 
@@ -413,6 +513,14 @@ export default function BudgetsPage() {
                       </TableTd>
                       <TableTd>
                         <span className="tabular-nums">{usd(row.spentThisPeriodUsd)}</span>
+                        {row.maintenanceUsd > 0 && (
+                          <div
+                            className="text-[11px] text-text-tertiary tabular-nums mt-0.5"
+                            title="Cron-triggered bot runs — the recurring floor of keeping this initiative's repos alive"
+                          >
+                            {usd(row.maintenanceUsd)} maintenance
+                          </div>
+                        )}
                       </TableTd>
                       <TableTd>
                         {rowRemaining == null || burn == null ? (
@@ -466,6 +574,8 @@ export default function BudgetsPage() {
               </TableBody>
             </Table>
           </Card>
+
+          <SprintEnvelopes />
         </>
       )}
 

@@ -43,6 +43,22 @@ function safeReturnTo(raw: unknown): string {
   return config.cognito.postLoginUrl;
 }
 
+/**
+ * Resolve a post-login destination against the portal's origin.
+ *
+ * A relative path resolves against whoever serves the redirect — this
+ * middleware. That is right in production, where the portal shares its origin,
+ * and wrong in dev, where the portal is on another port and the browser landed
+ * on a middleware 404 after a perfectly successful login. Only a configured
+ * origin is ever prefixed, never anything from the request, so this cannot
+ * become an open redirect.
+ */
+export function resolveRedirect(target: string, portalOrigin: string): string {
+  if (!portalOrigin) return target;
+  if (!target.startsWith('/') || target.startsWith('//')) return target;
+  return `${portalOrigin.replace(/\/+$/, '')}${target}`;
+}
+
 authRouter.get('/config', (_req, res) => {
   res.json({ ssoEnabled: cognitoEnabled() });
 });
@@ -111,7 +127,7 @@ authRouter.get('/callback', loginLimit, asyncHandler(async (req, res) => {
   }
   logAuthz(eventFromSession(session, 'Login', 'ALLOW', { path: '/api/auth/callback', reason: 'sso' }));
   setSessionCookie(res, await signSession(session));
-  res.redirect(st.returnTo || config.cognito.postLoginUrl);
+  res.redirect(resolveRedirect(st.returnTo || config.cognito.postLoginUrl, config.cognito.portalOrigin));
 }));
 
 authRouter.post('/logout', asyncHandler(async (_req, res) => {
