@@ -207,6 +207,75 @@ export async function deleteAllocation(orgProjectId: string): Promise<boolean> {
   return rows.length > 0;
 }
 
+// ─── Sprint envelopes ────────────────────────────────────────────────────────
+
+export interface GrantRow {
+  id: string;
+  orgProjectId: string;
+  orgProjectName: string | null;
+  granteePersonId: string;
+  granteeName: string | null;
+  sprintId: string | null;
+  sprintName: string | null;
+  startsOn: string | null;
+  endsOn: string | null;
+  sprintStatus: string | null;
+  allocatedUsd: number;
+  grantedBy: string | null;
+  /** Spend attributed to the INITIATIVE inside this envelope's sprint window.
+   *  Deliberately not called the grantee's burn: bot_runs record which
+   *  initiative and which bot, never which person's envelope paid for them, so
+   *  attributing this to the SME would be a number we cannot support. */
+  initiativeSpendInWindowUsd: number;
+}
+
+/** Envelopes, newest sprint first. Scoped to one initiative when given. */
+export async function listGrants(orgProjectId?: string): Promise<GrantRow[]> {
+  if (config.mock.aurora) return [];
+  const params: SqlParameter[] = [];
+  let scope = '';
+  if (orgProjectId) {
+    scope = 'WHERE g.org_project_id = :pid';
+    params.push(s('pid', orgProjectId));
+  }
+  const rows = await safeExec(
+    `SELECT g.id, g.org_project_id, p.name AS org_project_name,
+            g.grantee_person_id, pe.name AS grantee_name,
+            g.sprint_id, sp.name AS sprint_name,
+            sp.starts_on::text AS starts_on, sp.ends_on::text AS ends_on,
+            sp.status AS sprint_status,
+            g.allocated_usd::float8 AS allocated_usd, g.granted_by,
+            COALESCE((
+              SELECT SUM(br.cost_usd)::float8 FROM bot_runs br
+               WHERE (${spendPredicateSql('g.org_project_id')})
+                 AND (sp.starts_on IS NULL OR br.started_at >= sp.starts_on)
+                 AND (sp.ends_on   IS NULL OR br.started_at < sp.ends_on + 1)
+            ), 0)::float8 AS window_spend_usd
+       FROM budget_grants g
+       LEFT JOIN projects p  ON p.id = g.org_project_id
+       LEFT JOIN people  pe  ON pe.id = g.grantee_person_id
+       LEFT JOIN sprints sp  ON sp.id = g.sprint_id
+       ${scope}
+      ORDER BY sp.starts_on DESC NULLS LAST, g.created_at DESC`,
+    params,
+  );
+  return rows.map((r) => ({
+    id: toStr(r['id']),
+    orgProjectId: toStr(r['org_project_id']),
+    orgProjectName: r['org_project_name'] != null ? toStr(r['org_project_name']) : null,
+    granteePersonId: toStr(r['grantee_person_id']),
+    granteeName: r['grantee_name'] != null ? toStr(r['grantee_name']) : null,
+    sprintId: r['sprint_id'] != null ? toStr(r['sprint_id']) : null,
+    sprintName: r['sprint_name'] != null ? toStr(r['sprint_name']) : null,
+    startsOn: r['starts_on'] != null ? toStr(r['starts_on']) : null,
+    endsOn: r['ends_on'] != null ? toStr(r['ends_on']) : null,
+    sprintStatus: r['sprint_status'] != null ? toStr(r['sprint_status']) : null,
+    allocatedUsd: toNum(r['allocated_usd']),
+    grantedBy: r['granted_by'] != null ? toStr(r['granted_by']) : null,
+    initiativeSpendInWindowUsd: toNum(r['window_spend_usd']),
+  }));
+}
+
 // ─── Org summary ─────────────────────────────────────────────────────────────
 
 export async function orgSummary(): Promise<OrgBudgetSummary> {

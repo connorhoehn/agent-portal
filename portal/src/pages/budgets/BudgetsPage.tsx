@@ -277,6 +277,93 @@ function FirstBudgetForm({ onSaved }: { onSaved: () => void }) {
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
+interface GrantRow {
+  id: string;
+  orgProjectId: string;
+  orgProjectName: string | null;
+  granteePersonId: string;
+  granteeName: string | null;
+  sprintName: string | null;
+  startsOn: string | null;
+  endsOn: string | null;
+  sprintStatus: string | null;
+  allocatedUsd: number;
+  initiativeSpendInWindowUsd: number;
+}
+
+/**
+ * Sprint envelopes — a release manager handing an SME money for one sprint.
+ *
+ * The window figure is the INITIATIVE's spend inside the sprint dates, and is
+ * labelled as such: bot_runs record which initiative and which bot paid, never
+ * which person's envelope, so presenting it as the SME's personal burn would
+ * be a number the data cannot support.
+ */
+function SprintEnvelopes() {
+  const { data, error } = useFetch<{ grants: GrantRow[] }>('/api/budgets/grants', 60_000);
+  const grants = data?.grants ?? [];
+  if (error || grants.length === 0) return null;
+
+  const active = grants.filter((g) => g.sprintStatus === 'active');
+  const rest = grants.filter((g) => g.sprintStatus !== 'active');
+  const ordered = [...active, ...rest].slice(0, 12);
+
+  return (
+    <Card padding="none" className="overflow-x-auto mt-4">
+      <div className="px-3.5 py-3 border-b border-border">
+        <div className="text-[13px] font-semibold text-text-primary">Sprint envelopes</div>
+        <div className="text-[11.5px] text-text-secondary mt-0.5">
+          What each SME was given to see a sprint through. Spend shown is the initiative's
+          within the sprint window, not the individual's.
+        </div>
+      </div>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableTh>SME</TableTh>
+            <TableTh>Initiative</TableTh>
+            <TableTh>Sprint</TableTh>
+            <TableTh>Envelope</TableTh>
+            <TableTh>Initiative spend in window</TableTh>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {ordered.map((g) => (
+            <TableRow key={g.id}>
+              <TableTd>
+                <span className="text-[12.5px] text-text-primary">{g.granteeName ?? g.granteePersonId}</span>
+              </TableTd>
+              <TableTd>
+                <Link
+                  to={`/iq/projects/${encodeURIComponent(g.orgProjectId)}`}
+                  className="text-[12.5px] text-primary no-underline hover:underline"
+                >
+                  {g.orgProjectName ?? g.orgProjectId}
+                </Link>
+              </TableTd>
+              <TableTd>
+                <div className="flex items-center gap-2">
+                  <span className="text-[12.5px] text-text-primary">{g.sprintName ?? '—'}</span>
+                  {g.sprintStatus === 'active' && <Chip tone="success">active</Chip>}
+                </div>
+                {g.startsOn && g.endsOn && (
+                  <div className="text-[11px] text-text-tertiary mt-0.5 tabular-nums">
+                    {g.startsOn} → {g.endsOn}
+                  </div>
+                )}
+              </TableTd>
+              <TableTd><span className="tabular-nums">{usd(g.allocatedUsd)}</span></TableTd>
+              <TableTd>
+                <span className="tabular-nums text-text-secondary">{usd(g.initiativeSpendInWindowUsd)}</span>
+              </TableTd>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Card>
+  );
+}
+
 export default function BudgetsPage() {
   const { data, error, refresh } = useFetch<{ budgets: BudgetRow[]; summary: BudgetSummary }>('/api/budgets', 30_000);
   const { can, ready } = useCapabilities();
@@ -487,6 +574,8 @@ export default function BudgetsPage() {
               </TableBody>
             </Table>
           </Card>
+
+          <SprintEnvelopes />
         </>
       )}
 
