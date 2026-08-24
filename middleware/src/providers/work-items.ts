@@ -34,6 +34,16 @@ export interface WorkItem {
   assigneeDept: string | null;
   labels: string[];
   storyPoints: number | null;
+  /**
+   * Sprint membership (`work_items.sprint_id`) and the dollar estimate
+   * (`work_items.estimated_cost_usd`) — the two axes the program operating
+   * model plans against (docs/program-operating-model.md). Both columns have
+   * existed since schema/program_schema.sql and were selected by no query and
+   * returned by no route, so every work-item surface showed the complexity
+   * estimate and hid the money and the sprint.
+   */
+  sprintId: string | null;
+  estimatedCostUsd: number | null;
   prUrl: string | null;
   prStatus: PrStatus | null;
   createdAt: string;
@@ -58,6 +68,128 @@ export interface ProjectDecision {
   workItemTitle: string | null;
 }
 
+export interface SearchWorkItemsOpts {
+  label?: string;
+  team?: string;
+  projectId?: string;
+  sprintId?: string;
+  status?: string;
+  period?: string;
+  limit?: number;
+}
+
+export interface CreateWorkItemInput {
+  projectId: string;
+  parentId?: string | null;
+  type: WorkItemType;
+  title: string;
+  description?: string | null;
+  status?: WorkItemStatus;
+  priority?: WorkItemPriority;
+  assigneeId?: string | null;
+  labels?: string[];
+  storyPoints?: number | null;
+  sprintId?: string | null;
+  estimatedCostUsd?: number | null;
+}
+
+export interface UpdateWorkItemPatch {
+  status?: WorkItemStatus;
+  priority?: WorkItemPriority;
+  title?: string;
+  description?: string | null;
+  labels?: string[];
+  parentId?: string | null;
+  storyPoints?: number | null;
+  sprintId?: string | null;
+  estimatedCostUsd?: number | null;
+  assigneeId?: string | null;
+  prUrl?: string | null;
+  prStatus?: PrStatus | null;
+  /** Compare-and-swap: the write only lands if the row still holds this status. */
+  expectStatus?: WorkItemStatus;
+}
+
+// ─── Status transitions ───────────────────────────────────────────────────────
+
+/**
+ * The board's counterpart to `bot-runner.decideDispatch` — pure, so the matrix
+ * can be read and tested without a database.
+ *
+ * The board used to accept every status → every status: `done` → `open` quietly
+ * un-completed finished work, and `in_review` → `done` declared an item
+ * delivered while its change request was still awaiting a human.
+ *
+ * The matrix is written to agree with `decideDispatch`, which dispatches only
+ * `open` and `in_progress` because `in_review` already has a change awaiting a
+ * human and `done`/`cancelled` are finished:
+ *
+ *   open        → in_progress | cancelled
+ *   in_progress → in_review | done | open | cancelled
+ *   in_review   → in_progress | done | cancelled
+ *   done        → in_progress
+ *   cancelled   → open
+ *
+ * Two shapes are deliberately closed off. Nothing enters `in_review` or `done`
+ * without having been `in_progress` first — review is a review *of* something,
+ * and an item nobody started is `cancelled`, not `done`. And a completed item
+ * reopens to `in_progress` rather than to the backlog, so "this was finished
+ * and is being revisited" never renders as "this was never started". (An item
+ * reopened for a fresh agent run takes the legal second hop
+ * `in_progress → open`, which is also how `bot-runner` hands back a failed run.)
+ */
+export type StatusTransitionDecision =
+  | { kind: 'allow' }
+  | { kind: 'refuse'; status: number; error: string };
+
+const ALLOWED_TRANSITIONS: Record<WorkItemStatus, readonly WorkItemStatus[]> = {
+  open:        ['in_progress', 'cancelled'],
+  in_progress: ['in_review', 'done', 'open', 'cancelled'],
+  in_review:   ['in_progress', 'done', 'cancelled'],
+  done:        ['in_progress'],
+  cancelled:   ['open'],
+};
+
+/** Why a particular move is refused, when the generic answer is unhelpful. */
+const TRANSITION_REASONS: Partial<Record<`${WorkItemStatus}->${WorkItemStatus}`, string>> = {
+  'open->in_review': 'an item that was never started has nothing to review — move it to in_progress first',
+  'open->done': 'an item that was never started is cancelled, not done',
+  'in_review->open': 'a review is on a change in flight — send it back to in_progress, not to the backlog',
+  'done->open': 'a completed item reopens to in_progress; returning it to the backlog erases that it was ever finished',
+  'done->cancelled': 'a completed item cannot be cancelled — reopen it to in_progress first',
+  'cancelled->in_progress': 'a cancelled item is revived to open before it can be worked again',
+  'cancelled->in_review': 'a cancelled item is revived to open before it can be worked again',
+  'cancelled->done': 'a cancelled item is revived to open before it can be worked again',
+};
+
+export function decideStatusTransition(
+  item: Pick<WorkItem, 'status'>,
+  next: WorkItemStatus,
+  ctx: { openChangeRequests?: number } = {},
+): StatusTransitionDecision {
+  const from = item.status;
+  if (from === next) return { kind: 'allow' };
+
+  if (!ALLOWED_TRANSITIONS[from].includes(next)) {
+    const reason = TRANSITION_REASONS[`${from}->${next}`]
+      ?? `a ${from} work item cannot move to ${next}`;
+    return { kind: 'refuse', status: 400, error: reason };
+  }
+
+  // Governance, not shape: the move is legal but the item is not deliverable
+  // yet. 409 because the caller is not wrong — the world is not ready.
+  if (next === 'done' && (ctx.openChangeRequests ?? 0) > 0) {
+    const n = ctx.openChangeRequests ?? 0;
+    return {
+      kind: 'refuse',
+      status: 409,
+      error: `${n} change request${n === 1 ? '' : 's'} on this item ${n === 1 ? 'is' : 'are'} still open — resolve ${n === 1 ? 'it' : 'them'} before marking it done`,
+    };
+  }
+
+  return { kind: 'allow' };
+}
+
 // ─── RDS parameter helpers ────────────────────────────────────────────────────
 
 function strParam(name: string, value: string): SqlParameter {
@@ -66,6 +198,26 @@ function strParam(name: string, value: string): SqlParameter {
 function intParam(name: string, value: number): SqlParameter {
   return { name, value: { longValue: value } };
 }
+function numParam(name: string, value: number): SqlParameter {
+  return { name, value: { doubleValue: value } };
+}
+
+/** Every read projects the same column list, including the two that were dead. */
+const ITEM_COLUMNS = `
+      wi.id, wi.project_id, p.name AS project_name,
+      wi.parent_id, wi.type, wi.title, wi.description,
+      wi.status, wi.priority, wi.labels,
+      wi.story_points, wi.sprint_id, wi.estimated_cost_usd,
+      wi.pr_url, wi.pr_status,
+      wi.created_at, wi.updated_at, wi.completed_at,
+      a.id AS assignee_id, a.name AS assignee_name, a.team AS assignee_dept,
+      (SELECT COUNT(*)::int FROM work_items c WHERE c.parent_id = wi.id) AS child_count,
+      (SELECT COUNT(*)::int FROM work_items c WHERE c.parent_id = wi.id AND c.status = 'done') AS child_done_count`;
+
+const ITEM_FROM = `
+    FROM work_items wi
+    JOIN projects p ON p.id = wi.project_id
+    LEFT JOIN people a ON a.id = wi.assignee_id`;
 
 // ─── Aurora query wrapper — degrades gracefully if work_items table is missing ─
 
@@ -87,14 +239,7 @@ async function safeExec(sql: string, params: SqlParameter[] = []): Promise<Recor
 
 // ─── Aurora queries ───────────────────────────────────────────────────────────
 
-async function dbSearchWorkItems(opts: {
-  label?: string;
-  team?: string;
-  projectId?: string;
-  status?: string;
-  period?: string;
-  limit?: number;
-}): Promise<WorkItem[]> {
+async function dbSearchWorkItems(opts: SearchWorkItemsOpts): Promise<WorkItem[]> {
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
   const params: SqlParameter[] = [intParam('lim', limit)];
   const clauses: string[] = [];
@@ -103,9 +248,21 @@ async function dbSearchWorkItems(opts: {
     clauses.push(`:label = ANY(wi.labels)`);
     params.push(strParam('label', opts.label));
   }
+  if (opts.team) {
+    // The route documented `team=` and the mock path filtered on it; the Aurora
+    // path never referenced it, so `?team=NoSuchTeam` returned the whole board.
+    // POSITION (not LIKE) so a team name containing % or _ can't turn into a
+    // wildcard, and case-insensitive substring to match the mock path exactly.
+    clauses.push(`POSITION(LOWER(:team) IN LOWER(COALESCE(a.team, ''))) > 0`);
+    params.push(strParam('team', opts.team));
+  }
   if (opts.status) {
     clauses.push(`wi.status = :status`);
     params.push(strParam('status', opts.status));
+  }
+  if (opts.sprintId) {
+    clauses.push(`wi.sprint_id = :sprint_id`);
+    params.push(strParam('sprint_id', opts.sprintId));
   }
   if (opts.projectId) {
     clauses.push(`wi.project_id = :project_id`);
@@ -120,18 +277,8 @@ async function dbSearchWorkItems(opts: {
   const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
 
   const sql = `
-    SELECT
-      wi.id, wi.project_id, p.name AS project_name,
-      wi.parent_id, wi.type, wi.title, wi.description,
-      wi.status, wi.priority, wi.labels,
-      wi.story_points, wi.pr_url, wi.pr_status,
-      wi.created_at, wi.updated_at, wi.completed_at,
-      a.id AS assignee_id, a.name AS assignee_name, a.team AS assignee_dept,
-      (SELECT COUNT(*)::int FROM work_items c WHERE c.parent_id = wi.id) AS child_count,
-      (SELECT COUNT(*)::int FROM work_items c WHERE c.parent_id = wi.id AND c.status = 'done') AS child_done_count
-    FROM work_items wi
-    JOIN projects p ON p.id = wi.project_id
-    LEFT JOIN people a ON a.id = wi.assignee_id
+    SELECT ${ITEM_COLUMNS}
+    ${ITEM_FROM}
     ${where}
     ORDER BY wi.updated_at DESC
     LIMIT :lim
@@ -142,18 +289,8 @@ async function dbSearchWorkItems(opts: {
 
 async function dbGetProjectWorkItems(projectId: string): Promise<WorkItem[]> {
   const sql = `
-    SELECT
-      wi.id, wi.project_id, p.name AS project_name,
-      wi.parent_id, wi.type, wi.title, wi.description,
-      wi.status, wi.priority, wi.labels,
-      wi.story_points, wi.pr_url, wi.pr_status,
-      wi.created_at, wi.updated_at, wi.completed_at,
-      a.id AS assignee_id, a.name AS assignee_name, a.team AS assignee_dept,
-      (SELECT COUNT(*)::int FROM work_items c WHERE c.parent_id = wi.id) AS child_count,
-      (SELECT COUNT(*)::int FROM work_items c WHERE c.parent_id = wi.id AND c.status = 'done') AS child_done_count
-    FROM work_items wi
-    JOIN projects p ON p.id = wi.project_id
-    LEFT JOIN people a ON a.id = wi.assignee_id
+    SELECT ${ITEM_COLUMNS}
+    ${ITEM_FROM}
     WHERE wi.project_id = :pid
     ORDER BY wi.type DESC, wi.created_at ASC
   `;
@@ -168,18 +305,8 @@ async function dbGetPersonWorkItems(personId: string, opts: { status?: string; l
   if (opts.status) params.push(strParam('status', opts.status));
 
   const sql = `
-    SELECT
-      wi.id, wi.project_id, p.name AS project_name,
-      wi.parent_id, wi.type, wi.title, wi.description,
-      wi.status, wi.priority, wi.labels,
-      wi.story_points, wi.pr_url, wi.pr_status,
-      wi.created_at, wi.updated_at, wi.completed_at,
-      a.id AS assignee_id, a.name AS assignee_name, a.team AS assignee_dept,
-      (SELECT COUNT(*)::int FROM work_items c WHERE c.parent_id = wi.id) AS child_count,
-      (SELECT COUNT(*)::int FROM work_items c WHERE c.parent_id = wi.id AND c.status = 'done') AS child_done_count
-    FROM work_items wi
-    JOIN projects p ON p.id = wi.project_id
-    LEFT JOIN people a ON a.id = wi.assignee_id
+    SELECT ${ITEM_COLUMNS}
+    ${ITEM_FROM}
     WHERE wi.assignee_id = :pid ${extra}
     ORDER BY wi.updated_at DESC
     LIMIT :lim
@@ -214,25 +341,19 @@ async function dbGetProjectDecisions(projectId: string): Promise<ProjectDecision
   }));
 }
 
-async function dbCreateWorkItem(data: {
-  projectId: string;
-  parentId?: string | null;
-  type: WorkItemType;
-  title: string;
-  description?: string | null;
-  status?: WorkItemStatus;
-  priority?: WorkItemPriority;
-  assigneeId?: string | null;
-  labels?: string[];
-  storyPoints?: number | null;
-}): Promise<WorkItem> {
-  const labelsLiteral = (data.labels ?? []).length > 0
-    ? `ARRAY[${(data.labels ?? []).map(l => `'${l.replace(/'/g, "''")}'`).join(',')}]`
+/** `ARRAY['a','b']` with single quotes doubled; `ARRAY[]::TEXT[]` when empty. */
+function labelsLiteral(labels: string[]): string {
+  return labels.length > 0
+    ? `ARRAY[${labels.map(l => `'${l.replace(/'/g, "''")}'`).join(',')}]`
     : 'ARRAY[]::TEXT[]';
+}
 
+async function dbCreateWorkItem(data: CreateWorkItemInput): Promise<WorkItem> {
   const parentClause = data.parentId ? `:parent_id` : 'NULL';
   const assigneeClause = data.assigneeId ? `:assignee_id` : 'NULL';
   const spClause = data.storyPoints != null ? `:story_points` : 'NULL';
+  const sprintClause = data.sprintId ? `:sprint_id` : 'NULL';
+  const costClause = data.estimatedCostUsd != null ? `:cost::numeric` : 'NULL';
 
   const params: SqlParameter[] = [
     strParam('project_id', data.projectId),
@@ -244,18 +365,20 @@ async function dbCreateWorkItem(data: {
   if (data.parentId) params.push(strParam('parent_id', data.parentId));
   if (data.assigneeId) params.push(strParam('assignee_id', data.assigneeId));
   if (data.storyPoints != null) params.push(intParam('story_points', data.storyPoints));
+  if (data.sprintId) params.push(strParam('sprint_id', data.sprintId));
+  if (data.estimatedCostUsd != null) params.push(numParam('cost', data.estimatedCostUsd));
   if (data.description) params.push(strParam('description', data.description));
 
   const descClause = data.description ? `:description` : 'NULL';
 
   const sql = `
     INSERT INTO work_items
-      (project_id, parent_id, type, title, description, status, priority, assignee_id, labels, story_points)
+      (project_id, parent_id, type, title, description, status, priority, assignee_id,
+       labels, story_points, sprint_id, estimated_cost_usd)
     VALUES
-      (:project_id, ${parentClause}, :type, :title, ${descClause}, :status, :priority, ${assigneeClause}, ${labelsLiteral}, ${spClause})
-    RETURNING id, project_id, parent_id, type, title, description, status, priority,
-              labels, story_points, pr_url, pr_status, created_at, updated_at, completed_at,
-              assignee_id
+      (:project_id, ${parentClause}, :type, :title, ${descClause}, :status, :priority, ${assigneeClause},
+       ${labelsLiteral(data.labels ?? [])}, ${spClause}, ${sprintClause}, ${costClause})
+    RETURNING id
   `;
   const rows = await safeExec(sql, params);
   // If safeExec swallowed a "table not found" error it returns []. Synthesise a
@@ -270,44 +393,20 @@ async function dbCreateWorkItem(data: {
       status: data.status ?? 'open', priority: data.priority ?? 'medium',
       assigneeId: data.assigneeId ?? null, assigneeName: null, assigneeDept: null,
       labels: data.labels ?? [], storyPoints: data.storyPoints ?? null,
+      sprintId: data.sprintId ?? null, estimatedCostUsd: data.estimatedCostUsd ?? null,
       prUrl: null, prStatus: null,
       createdAt: now, updatedAt: now, completedAt: null, childCount: 0, childDoneCount: 0,
     };
   }
-  const r = rows[0]!;
-  return {
-    id: String(r['id'] ?? ''),
-    projectId: String(r['project_id'] ?? ''),
-    projectName: '',
-    parentId: r['parent_id'] != null ? String(r['parent_id']) : null,
-    type: (r['type'] as WorkItemType) ?? 'story',
-    title: String(r['title'] ?? ''),
-    description: r['description'] != null ? String(r['description']) : null,
-    status: (r['status'] as WorkItemStatus) ?? 'open',
-    priority: (r['priority'] as WorkItemPriority) ?? 'medium',
-    assigneeId: r['assignee_id'] != null ? String(r['assignee_id']) : null,
-    assigneeName: null,
-    assigneeDept: null,
-    labels: [],
-    storyPoints: r['story_points'] != null ? Number(r['story_points']) : null,
-    prUrl: null,
-    prStatus: null,
-    createdAt: String(r['created_at'] ?? new Date().toISOString()),
-    updatedAt: String(r['updated_at'] ?? new Date().toISOString()),
-    completedAt: null,
-    childCount: 0,
-    childDoneCount: 0,
-  };
+  // Read the row back through the one projection every other read uses, so the
+  // create response carries the real projectName / assigneeName / labels rather
+  // than the '' / null / [] placeholders the hand-built RETURNING mapper faked.
+  const created = await getWorkItem(String(rows[0]!['id'] ?? ''));
+  if (created) return created;
+  throw new Error('work item was inserted but could not be read back');
 }
 
-async function dbUpdateWorkItem(id: string, patch: {
-  status?: WorkItemStatus;
-  priority?: WorkItemPriority;
-  assigneeId?: string | null;
-  prUrl?: string | null;
-  prStatus?: PrStatus | null;
-  completedAt?: string | null;
-}): Promise<WorkItem | null> {
+async function dbUpdateWorkItem(id: string, patch: UpdateWorkItemPatch): Promise<WorkItem | null> {
   const sets: string[] = ['updated_at = NOW()'];
   const params: SqlParameter[] = [];
 
@@ -320,6 +419,28 @@ async function dbUpdateWorkItem(id: string, patch: {
     if (patch.status === 'done') sets.push('completed_at = COALESCE(completed_at, NOW())');
   }
   if (patch.priority !== undefined) { sets.push('priority = :priority'); params.push(strParam('priority', patch.priority)); }
+  if (patch.title !== undefined) { sets.push('title = :title'); params.push(strParam('title', patch.title)); }
+  if (patch.description !== undefined) {
+    sets.push(patch.description ? 'description = :description' : 'description = NULL');
+    if (patch.description) params.push(strParam('description', patch.description));
+  }
+  if (patch.labels !== undefined) sets.push(`labels = ${labelsLiteral(patch.labels)}`);
+  if (patch.parentId !== undefined) {
+    sets.push(patch.parentId ? 'parent_id = :parent_id' : 'parent_id = NULL');
+    if (patch.parentId) params.push(strParam('parent_id', patch.parentId));
+  }
+  if (patch.storyPoints !== undefined) {
+    sets.push(patch.storyPoints != null ? 'story_points = :story_points' : 'story_points = NULL');
+    if (patch.storyPoints != null) params.push(intParam('story_points', patch.storyPoints));
+  }
+  if (patch.sprintId !== undefined) {
+    sets.push(patch.sprintId ? 'sprint_id = :sprint_id' : 'sprint_id = NULL');
+    if (patch.sprintId) params.push(strParam('sprint_id', patch.sprintId));
+  }
+  if (patch.estimatedCostUsd !== undefined) {
+    sets.push(patch.estimatedCostUsd != null ? 'estimated_cost_usd = :cost::numeric' : 'estimated_cost_usd = NULL');
+    if (patch.estimatedCostUsd != null) params.push(numParam('cost', patch.estimatedCostUsd));
+  }
   if (patch.assigneeId !== undefined) {
     sets.push(patch.assigneeId ? 'assignee_id = :assignee_id' : 'assignee_id = NULL');
     if (patch.assigneeId) params.push(strParam('assignee_id', patch.assigneeId));
@@ -333,39 +454,41 @@ async function dbUpdateWorkItem(id: string, patch: {
     if (patch.prStatus) params.push(strParam('pr_status', patch.prStatus));
   }
 
+  // Compare-and-swap when the caller is moving the status: the board reads the
+  // item, decides the transition is legal, then writes — and without the guard
+  // a dispatch claiming the item in between would be overwritten by a decision
+  // made against a status it no longer holds.
+  let guard = '';
+  if (patch.expectStatus !== undefined) {
+    guard = ' AND status = :expect_status';
+    params.push(strParam('expect_status', patch.expectStatus));
+  }
+
   params.push(strParam('id', id));
-  const sql = `
-    UPDATE work_items SET ${sets.join(', ')} WHERE id = :id
-    RETURNING id, project_id, parent_id, type, title, description, status, priority,
-              labels, story_points, pr_url, pr_status, created_at, updated_at, completed_at,
-              assignee_id
-  `;
+  const sql = `UPDATE work_items SET ${sets.join(', ')} WHERE id = :id${guard} RETURNING id`;
   const rows = await safeExec(sql, params);
   if (rows.length === 0) return null;
-  const r = rows[0]!;
-  return {
-    id: String(r['id'] ?? ''),
-    projectId: String(r['project_id'] ?? ''),
-    projectName: '',
-    parentId: r['parent_id'] != null ? String(r['parent_id']) : null,
-    type: (r['type'] as WorkItemType) ?? 'story',
-    title: String(r['title'] ?? ''),
-    description: r['description'] != null ? String(r['description']) : null,
-    status: (r['status'] as WorkItemStatus) ?? 'open',
-    priority: (r['priority'] as WorkItemPriority) ?? 'medium',
-    assigneeId: r['assignee_id'] != null ? String(r['assignee_id']) : null,
-    assigneeName: null,
-    assigneeDept: null,
-    labels: [],
-    storyPoints: r['story_points'] != null ? Number(r['story_points']) : null,
-    prUrl: r['pr_url'] != null ? String(r['pr_url']) : null,
-    prStatus: r['pr_status'] != null ? (r['pr_status'] as PrStatus) : null,
-    createdAt: String(r['created_at'] ?? ''),
-    updatedAt: String(r['updated_at'] ?? ''),
-    completedAt: r['completed_at'] != null ? String(r['completed_at']) : null,
-    childCount: 0,
-    childDoneCount: 0,
-  };
+  return getWorkItem(id);
+}
+
+/**
+ * Would parenting `id` under `newParentId` close a loop?
+ *
+ * A cycle is silent damage: buildWorkItemTree only ever promotes parentless
+ * nodes to roots, so a looped subtree is reachable from nothing and simply
+ * vanishes from the project tree with no error anywhere.
+ */
+async function dbWouldCreateParentCycle(id: string, newParentId: string): Promise<boolean> {
+  const rows = await safeExec(
+    `WITH RECURSIVE ancestry(id, parent_id) AS (
+       SELECT id, parent_id FROM work_items WHERE id = :new_parent
+       UNION ALL
+       SELECT w.id, w.parent_id FROM work_items w JOIN ancestry a ON w.id = a.parent_id
+     )
+     SELECT 1 FROM ancestry WHERE id = :id LIMIT 1`,
+    [strParam('new_parent', newParentId), strParam('id', id)],
+  );
+  return rows.length > 0;
 }
 
 // ─── Row mapper ───────────────────────────────────────────────────────────────
@@ -393,6 +516,10 @@ function rowToWorkItem(r: Record<string, unknown>): WorkItem {
     assigneeDept: r['assignee_dept'] != null ? String(r['assignee_dept']) : null,
     labels,
     storyPoints: r['story_points'] != null ? Number(r['story_points']) : null,
+    sprintId: r['sprint_id'] != null ? String(r['sprint_id']) : null,
+    // NUMERIC arrives from the Data API as a string; Number() is the same
+    // treatment story_points already gets.
+    estimatedCostUsd: r['estimated_cost_usd'] != null ? Number(r['estimated_cost_usd']) : null,
     prUrl: r['pr_url'] != null ? String(r['pr_url']) : null,
     prStatus: r['pr_status'] != null ? (r['pr_status'] as PrStatus) : null,
     createdAt: String(r['created_at'] ?? ''),
@@ -436,7 +563,14 @@ const D = (days: number): string => {
   return d.toISOString();
 };
 
-const MOCK_WORK_ITEMS: WorkItem[] = [
+// The fixtures predate sprint_id / estimated_cost_usd; rather than restate two
+// nulls on every row, seeds omit what they don't carry and the normaliser below
+// fills them in. Costs on the seeded rows follow the same ~$1.2/point curve the
+// program seed uses (schema/seed_program.sql).
+type MockSeed = Omit<WorkItem, 'sprintId' | 'estimatedCostUsd'>
+  & Partial<Pick<WorkItem, 'sprintId' | 'estimatedCostUsd'>>;
+
+const MOCK_WORK_ITEM_SEEDS: MockSeed[] = [
   // ── Project: Kubernetes Cluster Upgrade ────────────────────────────────────
   // Epic 1: Control Plane Upgrade
   { id: 'wi-k8s-e1', projectId: 'p-observability', projectName: 'Observability Platform', parentId: null, type: 'epic', title: 'Control Plane Upgrade to 1.29', description: 'Upgrade all control-plane components from 1.26 to 1.29 with zero-downtime SLO.', status: 'in_progress', priority: 'critical', assigneeId: 'p-001', assigneeName: 'Alex Chen', assigneeDept: 'Platform Engineering', labels: ['kubernetes', 'infra', 'backend'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(45), updatedAt: D(2), completedAt: null, childCount: 2, childDoneCount: 1 },
@@ -512,6 +646,24 @@ const MOCK_WORK_ITEMS: WorkItem[] = [
   { id: 'wi-onboard-s2', projectId: 'p-mobile-redesign', projectName: 'Developer Onboarding Improvements', parentId: 'wi-onboard-f1', type: 'story', title: 'Create ONBOARDING.md with architecture overview + runbook', description: null, status: 'open', priority: 'medium', assigneeId: 'p-009', assigneeName: "Ryan O'Brien", assigneeDept: 'Product', labels: ['onboarding', 'documentation'], storyPoints: 3, prUrl: null, prStatus: null, createdAt: D(20), updatedAt: D(7), completedAt: null, childCount: 0, childDoneCount: 0 },
 ];
 
+/** Sprint membership + dollar estimate for the seeds that carry one. */
+const MOCK_PROGRAM_FIELDS: Record<string, { sprintId?: string; estimatedCostUsd?: number }> = {
+  'wi-k8s-s1': { sprintId: 'spr-obs-s1', estimatedCostUsd: 6.15 },
+  'wi-k8s-s2': { sprintId: 'spr-obs-s1', estimatedCostUsd: 10.42 },
+  'wi-k8s-s3': { sprintId: 'spr-obs-s2', estimatedCostUsd: 16.90 },
+  'wi-k8s-s4': { sprintId: 'spr-obs-s3', estimatedCostUsd: 10.77 },
+  'wi-k8s-s5': { sprintId: 'spr-obs-s3', estimatedCostUsd: 5.77 },
+  'wi-k8s-s6': { sprintId: 'spr-obs-s3', estimatedCostUsd: 9.84 },
+  'wi-k8s-s7': { estimatedCostUsd: 3.61 },
+};
+
+const MOCK_WORK_ITEMS: WorkItem[] = MOCK_WORK_ITEM_SEEDS.map((seed) => ({
+  sprintId: null,
+  estimatedCostUsd: null,
+  ...seed,
+  ...MOCK_PROGRAM_FIELDS[seed.id],
+}));
+
 // Mirrors the decisions in schema/seed_program.sql so mock mode and a seeded
 // Aurora tell the same story.
 const MOCK_DECISIONS: ProjectDecision[] = [
@@ -531,14 +683,7 @@ const PROJECT_DECISIONS: Record<string, string[]> = {
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
-export async function searchWorkItems(opts: {
-  label?: string;
-  team?: string;
-  projectId?: string;
-  status?: string;
-  period?: string;
-  limit?: number;
-}): Promise<WorkItem[]> {
+export async function searchWorkItems(opts: SearchWorkItemsOpts): Promise<WorkItem[]> {
   if (!config.mock.aurora) {
     return dbSearchWorkItems(opts);
   }
@@ -557,6 +702,9 @@ export async function searchWorkItems(opts: {
   }
   if (opts.status) {
     items = items.filter((i) => i.status === opts.status);
+  }
+  if (opts.sprintId) {
+    items = items.filter((i) => i.sprintId === opts.sprintId);
   }
   if (opts.period === 'today') {
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -599,18 +747,7 @@ export async function getProjectDecisions(projectId: string): Promise<ProjectDec
   return MOCK_DECISIONS.filter((d) => ids.includes(d.id));
 }
 
-export async function createWorkItem(data: {
-  projectId: string;
-  parentId?: string | null;
-  type: WorkItemType;
-  title: string;
-  description?: string | null;
-  status?: WorkItemStatus;
-  priority?: WorkItemPriority;
-  assigneeId?: string | null;
-  labels?: string[];
-  storyPoints?: number | null;
-}): Promise<WorkItem> {
+export async function createWorkItem(data: CreateWorkItemInput): Promise<WorkItem> {
   if (!config.mock.aurora) {
     return dbCreateWorkItem(data);
   }
@@ -632,6 +769,8 @@ export async function createWorkItem(data: {
     assigneeDept: null,
     labels: data.labels ?? [],
     storyPoints: data.storyPoints ?? null,
+    sprintId: data.sprintId ?? null,
+    estimatedCostUsd: data.estimatedCostUsd ?? null,
     prUrl: null,
     prStatus: null,
     createdAt: now,
@@ -644,26 +783,93 @@ export async function createWorkItem(data: {
   return item;
 }
 
-export async function updateWorkItem(id: string, patch: {
-  status?: WorkItemStatus;
-  priority?: WorkItemPriority;
-  assigneeId?: string | null;
-  prUrl?: string | null;
-  prStatus?: PrStatus | null;
-}): Promise<WorkItem | null> {
+/**
+ * Apply a patch. Returns null when no row matched — either the id is unknown,
+ * or `expectStatus` was given and the item has moved on since it was read.
+ *
+ * This is the mechanical write. The board's transition rules live in
+ * `decideStatusTransition` and are applied by the route, deliberately *not*
+ * here: `bot-runner`'s reconcile settles items on the machine's authority
+ * (in_progress → in_review on capture, → open on failure) and must not be
+ * refused by a policy written for a human moving a card.
+ */
+export async function updateWorkItem(id: string, patch: UpdateWorkItemPatch): Promise<WorkItem | null> {
   if (!config.mock.aurora) {
     return dbUpdateWorkItem(id, patch);
   }
   const item = MOCK_WORK_ITEMS.find((i) => i.id === id);
   if (!item) return null;
+  if (patch.expectStatus !== undefined && item.status !== patch.expectStatus) return null;
   if (patch.status !== undefined) item.status = patch.status;
   if (patch.priority !== undefined) item.priority = patch.priority;
+  if (patch.title !== undefined) item.title = patch.title;
+  if (patch.description !== undefined) item.description = patch.description;
+  if (patch.labels !== undefined) item.labels = patch.labels;
+  if (patch.parentId !== undefined) item.parentId = patch.parentId;
+  if (patch.storyPoints !== undefined) item.storyPoints = patch.storyPoints;
+  if (patch.sprintId !== undefined) item.sprintId = patch.sprintId;
+  if (patch.estimatedCostUsd !== undefined) item.estimatedCostUsd = patch.estimatedCostUsd;
   if (patch.assigneeId !== undefined) item.assigneeId = patch.assigneeId;
   if (patch.prUrl !== undefined) item.prUrl = patch.prUrl;
   if (patch.prStatus !== undefined) item.prStatus = patch.prStatus;
   item.updatedAt = new Date().toISOString();
   if (patch.status === 'done') item.completedAt = item.completedAt ?? item.updatedAt;
   return { ...item };
+}
+
+/** Reparenting guard — see dbWouldCreateParentCycle. */
+export async function wouldCreateParentCycle(id: string, newParentId: string): Promise<boolean> {
+  if (id === newParentId) return true;
+  if (!config.mock.aurora) return dbWouldCreateParentCycle(id, newParentId);
+  const byId = new Map(MOCK_WORK_ITEMS.map((i) => [i.id, i] as const));
+  let cursor: string | null = newParentId;
+  const seen = new Set<string>();
+  while (cursor && !seen.has(cursor)) {
+    if (cursor === id) return true;
+    seen.add(cursor);
+    cursor = byId.get(cursor)?.parentId ?? null;
+  }
+  return false;
+}
+
+/**
+ * Change requests still in flight for this work item.
+ *
+ * Mirrors the open set `providers/sdlc.listChangeRequests({open:true})` uses:
+ * captured, awaiting approval, sent back for changes, or under review. A board
+ * that calls an item done while one of these is outstanding declares delivered
+ * what governance has not delivered.
+ */
+export async function countOpenChangeRequests(workItemId: string): Promise<number> {
+  if (config.mock.aurora) return 0;
+  const rows = await safeExec(
+    `SELECT COUNT(*)::int AS n FROM agent_change_requests
+      WHERE work_item_id = :wid
+        AND status IN ('captured','needs_approval','changes_requested','in_review')`,
+    [strParam('wid', workItemId)],
+  );
+  return rows[0] ? Number(rows[0]['n'] ?? 0) : 0;
+}
+
+/**
+ * Does this initiative exist? The project-scoped collections used to answer
+ * `200 []` for a typo'd id, so "wrong id" and "nothing here yet" were the same
+ * response.
+ */
+export async function projectExists(projectId: string): Promise<boolean> {
+  if (config.mock.aurora) {
+    return MOCK_WORK_ITEMS.some((i) => i.projectId === projectId)
+      || Object.hasOwn(PROJECT_DECISIONS, projectId);
+  }
+  const rows = await safeExec('SELECT 1 FROM projects WHERE id = :pid LIMIT 1', [strParam('pid', projectId)]);
+  return rows.length > 0;
+}
+
+/** Same question for `/people/:personId/work`. */
+export async function personExists(personId: string): Promise<boolean> {
+  if (config.mock.aurora) return MOCK_WORK_ITEMS.some((i) => i.assigneeId === personId);
+  const rows = await safeExec('SELECT 1 FROM people WHERE id = :pid LIMIT 1', [strParam('pid', personId)]);
+  return rows.length > 0;
 }
 
 /** One work item by id — the marketplace's dispatch precondition read. */
@@ -673,18 +879,8 @@ export async function getWorkItem(id: string): Promise<WorkItem | null> {
     return item ? { ...item } : null;
   }
   const sql = `
-    SELECT
-      wi.id, wi.project_id, p.name AS project_name,
-      wi.parent_id, wi.type, wi.title, wi.description,
-      wi.status, wi.priority, wi.labels,
-      wi.story_points, wi.pr_url, wi.pr_status,
-      wi.created_at, wi.updated_at, wi.completed_at,
-      a.id AS assignee_id, a.name AS assignee_name, a.team AS assignee_dept,
-      (SELECT COUNT(*)::int FROM work_items c WHERE c.parent_id = wi.id) AS child_count,
-      (SELECT COUNT(*)::int FROM work_items c WHERE c.parent_id = wi.id AND c.status = 'done') AS child_done_count
-    FROM work_items wi
-    JOIN projects p ON p.id = wi.project_id
-    LEFT JOIN people a ON a.id = wi.assignee_id
+    SELECT ${ITEM_COLUMNS}
+    ${ITEM_FROM}
     WHERE wi.id = :id
   `;
   const rows = await safeExec(sql, [strParam('id', id)]);
