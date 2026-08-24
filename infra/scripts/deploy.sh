@@ -61,7 +61,19 @@ S3_BUCKETS=(
 
 for bucket in "${S3_BUCKETS[@]}"; do
   if aws s3api head-bucket --bucket "$bucket" 2>/dev/null; then
-    if s3_empty "$bucket"; then
+    # Ownership FIRST, by asking CloudFormation — the same authority check the
+    # ECR section uses, for the same reason: this loop had none, so every
+    # deploy pass after OrgIQ-Foundation came up deleted its (empty) buckets
+    # while the stack went on reporting CREATE_COMPLETE. The synth corpus then
+    # failed with NoSuchBucket against a bucket CFN swore existed. An empty
+    # bucket a live stack owns is not an orphan; it is a bucket nobody has
+    # written to yet.
+    OWNER=$(aws cloudformation describe-stack-resources \
+      --physical-resource-id "$bucket" \
+      --query 'StackResources[0].StackName' --output text 2>/dev/null || echo "")
+    if [[ -n "$OWNER" && "$OWNER" != "None" ]]; then
+      echo "  Bucket ${bucket} is owned by stack '${OWNER}' — skipping"
+    elif s3_empty "$bucket"; then
       echo "  Removing empty orphan bucket: s3://${bucket}"
       aws s3 rb "s3://${bucket}" --force
     else
@@ -93,7 +105,14 @@ DYNAMO_TABLES=(
 for table in "${DYNAMO_TABLES[@]}"; do
   STATUS=$(aws dynamodb describe-table --table-name "$table" --query 'Table.TableStatus' --output text 2>/dev/null || echo "NOT_FOUND")
   if [[ "$STATUS" == "ACTIVE" ]]; then
-    if dynamo_empty "$table"; then
+    # Same ownership check as the buckets above — an empty table a live stack
+    # owns is not an orphan.
+    T_OWNER=$(aws cloudformation describe-stack-resources \
+      --physical-resource-id "$table" \
+      --query 'StackResources[0].StackName' --output text 2>/dev/null || echo "")
+    if [[ -n "$T_OWNER" && "$T_OWNER" != "None" ]]; then
+      echo "  Table ${table} is owned by stack '${T_OWNER}' — skipping"
+    elif dynamo_empty "$table"; then
       echo "  Removing empty orphan table: ${table}"
       aws dynamodb delete-table --table-name "$table" > /dev/null
     else
