@@ -103,6 +103,10 @@ def main():
         # baseline view. Loads last: references people, projects, work_items,
         # bots and bot_runs.
         'program_schema.sql',
+        # bot_runs.dispatched_by — who authorized a run, which is what lets the
+        # per-SME budget_grants envelope be enforced. Additive ALTER, so it
+        # loads after agent_bots_schema.sql creates the table.
+        'agent_run_attribution_schema.sql',
     ]
 
     for filename in schema_files:
