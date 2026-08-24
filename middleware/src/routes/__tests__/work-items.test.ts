@@ -1,0 +1,430 @@
+// Work-items route tests (routes/work-items.ts) with the provider and the
+// Cedar gate mocked.
+//
+// Every case here is an input the API used to accept and then ignore: a `team`
+// filter the Aurora path never applied, a `period` value outside the closed set
+// that silently widened the search to all time, a `storyPoints` patch dropped
+// behind a 200, a status move no matrix ever checked, and a typo'd parent id
+// answered `200 []` instead of 404.
+
+const mockGateActions: string[] = [];
+
+// Stubbed so the real provider module can be loaded for its pure helpers
+// without dragging in config.ts or an RDS client.
+jest.mock('../../config.js', () => ({ config: { mock: { aurora: false } } }));
+jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn() }));
+
+jest.mock('../../lib/authz.js', () => ({
+  requireAction: (action: string) => {
+    mockGateActions.push(action);
+    return (_req: unknown, _res: unknown, next: () => void) => next();
+  },
+}));
+
+jest.mock('../../providers/work-items.js', () => ({
+  searchWorkItems: jest.fn(),
+  getProjectWorkTree: jest.fn(),
+  getProjectActivity: jest.fn(),
+  getProjectDecisions: jest.fn(),
+  getPersonWorkItems: jest.fn(),
+  getWorkItem: jest.fn(),
+  createWorkItem: jest.fn(),
+  updateWorkItem: jest.fn(),
+  countOpenChangeRequests: jest.fn(),
+  wouldCreateParentCycle: jest.fn(),
+  projectExists: jest.fn(),
+  personExists: jest.fn(),
+  // The transition matrix is a pure function; the route gets the real one so
+  // these tests exercise the rules end to end rather than a stub of them.
+  decideStatusTransition: jest.requireActual('../../providers/work-items.js').decideStatusTransition,
+}));
+
+import express from 'express';
+import request from 'supertest';
+import { workItemsRouter } from '../work-items.js';
+import { errorHandler } from '../../lib/async-handler.js';
+import {
+  searchWorkItems, getProjectWorkTree, getProjectActivity, getProjectDecisions,
+  getPersonWorkItems, getWorkItem, createWorkItem, updateWorkItem,
+  countOpenChangeRequests, wouldCreateParentCycle, projectExists, personExists,
+  type WorkItem,
+} from '../../providers/work-items.js';
+
+const searchMock = searchWorkItems as unknown as jest.Mock;
+const treeMock = getProjectWorkTree as unknown as jest.Mock;
+const activityMock = getProjectActivity as unknown as jest.Mock;
+const decisionsMock = getProjectDecisions as unknown as jest.Mock;
+const personWorkMock = getPersonWorkItems as unknown as jest.Mock;
+const getMock = getWorkItem as unknown as jest.Mock;
+const createMock = createWorkItem as unknown as jest.Mock;
+const updateMock = updateWorkItem as unknown as jest.Mock;
+const openCrMock = countOpenChangeRequests as unknown as jest.Mock;
+const cycleMock = wouldCreateParentCycle as unknown as jest.Mock;
+const projectExistsMock = projectExists as unknown as jest.Mock;
+const personExistsMock = personExists as unknown as jest.Mock;
+
+const ITEM: WorkItem = {
+  id: 'wi-obs-e1-s1', projectId: 'p-observability', projectName: 'Observability Platform',
+  parentId: 'wi-obs-e1', type: 'story', title: 'Roll out collector fleet', description: null,
+  status: 'in_progress', priority: 'high', assigneeId: 'p-008', assigneeName: 'Dana Okafor',
+  assigneeDept: 'Platform Engineering', labels: ['otel'], storyPoints: 8,
+  sprintId: 'spr-obs-s3', estimatedCostUsd: 10.47, prUrl: null, prStatus: null,
+  createdAt: '2026-06-01T00:00:00Z', updatedAt: '2026-08-01T00:00:00Z', completedAt: null,
+  childCount: 0, childDoneCount: 0,
+};
+
+function buildApp() {
+  const app = express();
+  app.use(express.json());
+  app.use('/api/graph', workItemsRouter);
+  app.use(errorHandler);
+  return app;
+}
+
+beforeEach(() => {
+  [searchMock, treeMock, activityMock, decisionsMock, personWorkMock, getMock,
+    createMock, updateMock, openCrMock, cycleMock, projectExistsMock, personExistsMock,
+  ].forEach((m) => m.mockReset());
+  projectExistsMock.mockResolvedValue(true);
+  personExistsMock.mockResolvedValue(true);
+  openCrMock.mockResolvedValue(0);
+  cycleMock.mockResolvedValue(false);
+});
+
+describe('gating', () => {
+  it('puts both writes behind DispatchAgentRun', () => {
+    expect(mockGateActions).toEqual(['DispatchAgentRun']);
+  });
+});
+
+// ── 1. The filter that was accepted and ignored ──────────────────────────────
+
+describe('GET /api/graph/work', () => {
+  beforeEach(() => searchMock.mockResolvedValue([ITEM]));
+
+  it('forwards team to the provider instead of dropping it', async () => {
+    const res = await request(buildApp()).get('/api/graph/work?team=Platform%20Engineering');
+    expect(res.status).toBe(200);
+    expect(searchMock).toHaveBeenCalledWith(expect.objectContaining({ team: 'Platform Engineering' }));
+  });
+
+  it('forwards sprint, label and status too', async () => {
+    await request(buildApp()).get('/api/graph/work?sprint=spr-obs-s3&label=otel&status=open');
+    expect(searchMock).toHaveBeenCalledWith(expect.objectContaining({
+      sprintId: 'spr-obs-s3', label: 'otel', status: 'open',
+    }));
+  });
+
+  it.each(['today', 'week'])('accepts period=%s', async (period) => {
+    const res = await request(buildApp()).get(`/api/graph/work?period=${period}`);
+    expect(res.status).toBe(200);
+    expect(searchMock).toHaveBeenCalledWith(expect.objectContaining({ period }));
+  });
+
+  it('rejects an unknown period rather than quietly searching all time', async () => {
+    const res = await request(buildApp()).get('/api/graph/work?period=bogus');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/period must be one of/);
+    expect(searchMock).not.toHaveBeenCalled();
+  });
+
+  it('treats an omitted period as all time', async () => {
+    const res = await request(buildApp()).get('/api/graph/work');
+    expect(res.status).toBe(200);
+    expect(searchMock).toHaveBeenCalledWith(expect.objectContaining({ period: undefined }));
+  });
+
+  it('leaves an unknown status alone — it honestly matches nothing', async () => {
+    searchMock.mockResolvedValue([]);
+    const res = await request(buildApp()).get('/api/graph/work?status=bogus');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+
+  it('clamps limit to the 1..200 window', async () => {
+    await request(buildApp()).get('/api/graph/work?limit=9999');
+    expect(searchMock).toHaveBeenCalledWith(expect.objectContaining({ limit: 200 }));
+  });
+
+  it('returns the sprint and the dollar estimate on every item', async () => {
+    const res = await request(buildApp()).get('/api/graph/work');
+    expect(res.body[0]).toMatchObject({ sprintId: 'spr-obs-s3', estimatedCostUsd: 10.47 });
+  });
+});
+
+// ── 5. Not-found semantics on the collections ────────────────────────────────
+
+describe('collection endpoints under a parent that does not exist', () => {
+  it.each([
+    ['/api/graph/projects/p-nope/work', () => treeMock],
+    ['/api/graph/projects/p-nope/activity', () => activityMock],
+    ['/api/graph/projects/p-nope/decisions', () => decisionsMock],
+  ])('404s %s instead of answering 200 []', async (path, provider) => {
+    projectExistsMock.mockResolvedValue(false);
+    const res = await request(buildApp()).get(path);
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/Project not found/);
+    expect(provider()).not.toHaveBeenCalled();
+  });
+
+  it('404s a person work list for an unknown person', async () => {
+    personExistsMock.mockResolvedValue(false);
+    const res = await request(buildApp()).get('/api/graph/people/p-nope/work');
+    expect(res.status).toBe(404);
+    expect(personWorkMock).not.toHaveBeenCalled();
+  });
+
+  it('still answers 200 [] for a real project with no work yet', async () => {
+    treeMock.mockResolvedValue([]);
+    const res = await request(buildApp()).get('/api/graph/projects/p-observability/work');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+
+  it('still answers 200 [] for a real person with nothing assigned', async () => {
+    personWorkMock.mockResolvedValue([]);
+    const res = await request(buildApp()).get('/api/graph/people/p-008/work');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+});
+
+// ── 2 + 3. Create: the columns that were not settable ────────────────────────
+
+describe('POST /api/graph/work-items', () => {
+  const BASE = { projectId: 'p-observability', type: 'story', title: 'New item' };
+
+  it('forwards sprintId and estimatedCostUsd', async () => {
+    createMock.mockResolvedValue(ITEM);
+    const res = await request(buildApp())
+      .post('/api/graph/work-items')
+      .send({ ...BASE, sprintId: 'spr-obs-s3', estimatedCostUsd: 12.5 });
+    expect(res.status).toBe(201);
+    expect(createMock).toHaveBeenCalledWith(expect.objectContaining({
+      sprintId: 'spr-obs-s3', estimatedCostUsd: 12.5,
+    }));
+  });
+
+  it('accepts an estimate of zero as a real value', async () => {
+    createMock.mockResolvedValue(ITEM);
+    await request(buildApp()).post('/api/graph/work-items').send({ ...BASE, estimatedCostUsd: 0 });
+    expect(createMock).toHaveBeenCalledWith(expect.objectContaining({ estimatedCostUsd: 0 }));
+  });
+
+  it.each([
+    ['negative', -1],
+    // Infinity/NaN cannot survive JSON, so the wire-level bad values are
+    // wrong-typed ones; Number.isFinite still guards the provider-side call.
+    ['a coercible string', '12.5'],
+    ['a boolean', true],
+  ])('rejects %s estimatedCostUsd', async (_label, estimatedCostUsd) => {
+    const res = await request(buildApp()).post('/api/graph/work-items').send({ ...BASE, estimatedCostUsd });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/estimatedCostUsd/);
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unrecognised field by name', async () => {
+    const res = await request(buildApp()).post('/api/graph/work-items').send({ ...BASE, estimatedHours: 4 });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/estimatedHours/);
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it('maps a sprint foreign-key violation to a 400 naming the sprint', async () => {
+    createMock.mockRejectedValue(new Error(
+      'insert or update on table "work_items" violates foreign key constraint "work_items_sprint_id_fkey"'));
+    const res = await request(buildApp()).post('/api/graph/work-items').send({ ...BASE, sprintId: 'spr-nope' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('no such sprint');
+  });
+});
+
+// ── 3. Patch: the fields that were silently discarded ────────────────────────
+
+describe('PATCH /api/graph/work-items/:id', () => {
+  beforeEach(() => {
+    getMock.mockResolvedValue(ITEM);
+    updateMock.mockResolvedValue(ITEM);
+  });
+
+  it.each([
+    ['storyPoints', { storyPoints: 13 }],
+    ['title', { title: 'Retitled' }],
+    ['description', { description: 'why this exists' }],
+    ['labels', { labels: ['otel', 'infra'] }],
+    ['parentId', { parentId: 'wi-obs-e2' }],
+    ['sprintId', { sprintId: 'spr-obs-s2' }],
+    ['estimatedCostUsd', { estimatedCostUsd: 4.25 }],
+  ])('now writes %s instead of answering 200 with it discarded', async (_label, body) => {
+    const res = await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1').send(body);
+    expect(res.status).toBe(200);
+    expect(updateMock).toHaveBeenCalledWith('wi-obs-e1-s1', expect.objectContaining(body));
+  });
+
+  it('still writes the five fields it always forwarded', async () => {
+    await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1').send({
+      status: 'in_review', priority: 'critical', assigneeId: 'p-004',
+      prUrl: 'https://example.test/pr/1', prStatus: 'open',
+    });
+    expect(updateMock).toHaveBeenCalledWith('wi-obs-e1-s1', expect.objectContaining({
+      status: 'in_review', priority: 'critical', assigneeId: 'p-004',
+      prUrl: 'https://example.test/pr/1', prStatus: 'open',
+    }));
+  });
+
+  it('clears a nullable field when sent null, rather than ignoring it', async () => {
+    await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1')
+      .send({ sprintId: null, estimatedCostUsd: null, storyPoints: null });
+    expect(updateMock).toHaveBeenCalledWith('wi-obs-e1-s1',
+      expect.objectContaining({ sprintId: null, estimatedCostUsd: null, storyPoints: null }));
+  });
+
+  it('sends only the keys the body carried', async () => {
+    await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1').send({ storyPoints: 5 });
+    expect(Object.keys(updateMock.mock.calls[0]![1])).toEqual(['storyPoints']);
+  });
+
+  it('rejects unrecognised fields by name', async () => {
+    const res = await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1')
+      .send({ storyPoints: 5, estimatedHours: 3, owner: 'x' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/estimatedHours/);
+    expect(res.body.error).toMatch(/owner/);
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty patch instead of bumping updated_at for nothing', async () => {
+    const res = await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1').send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/no fields to update/);
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['storyPoints', { storyPoints: 0 }, /storyPoints/],
+    ['storyPoints', { storyPoints: 2.5 }, /storyPoints/],
+    ['labels', { labels: 'otel' }, /labels/],
+    ['labels', { labels: [1, 2] }, /labels/],
+    ['title', { title: '   ' }, /title/],
+    ['sprintId', { sprintId: 42 }, /sprintId/],
+  ])('rejects a malformed %s', async (_label, body, pattern) => {
+    const res = await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1').send(body);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(pattern);
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it('404s an unknown item before validating anything against it', async () => {
+    getMock.mockResolvedValue(null);
+    const res = await request(buildApp()).patch('/api/graph/work-items/wi-nope').send({ storyPoints: 5 });
+    expect(res.status).toBe(404);
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses a reparent that would close a cycle', async () => {
+    cycleMock.mockResolvedValue(true);
+    const res = await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1')
+      .send({ parentId: 'wi-child' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/subtree/);
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses an item as its own parent', async () => {
+    cycleMock.mockResolvedValue(true);
+    const res = await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1')
+      .send({ parentId: 'wi-obs-e1-s1' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/its own parent/);
+  });
+
+  it('allows detaching to a root with parentId null without a cycle check', async () => {
+    const res = await request(buildApp()).patch('/api/graph/work-items/wi-obs-e1-s1').send({ parentId: null });
+    expect(res.status).toBe(200);
+    expect(cycleMock).not.toHaveBeenCalled();
+  });
+});
+
+// ── 4. Status transitions ────────────────────────────────────────────────────
+
+describe('PATCH status transitions', () => {
+  beforeEach(() => updateMock.mockResolvedValue(ITEM));
+
+  it('allows in_progress -> in_review', async () => {
+    getMock.mockResolvedValue({ ...ITEM, status: 'in_progress' });
+    const res = await request(buildApp()).patch('/api/graph/work-items/wi-1').send({ status: 'in_review' });
+    expect(res.status).toBe(200);
+  });
+
+  it('refuses done -> open with 400', async () => {
+    getMock.mockResolvedValue({ ...ITEM, status: 'done' });
+    const res = await request(buildApp()).patch('/api/graph/work-items/wi-1').send({ status: 'open' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/in_progress/);
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses open -> done with 400', async () => {
+    getMock.mockResolvedValue({ ...ITEM, status: 'open' });
+    const res = await request(buildApp()).patch('/api/graph/work-items/wi-1').send({ status: 'done' });
+    expect(res.status).toBe(400);
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses in_review -> done with 409 while a change request is open', async () => {
+    getMock.mockResolvedValue({ ...ITEM, status: 'in_review' });
+    openCrMock.mockResolvedValue(1);
+    const res = await request(buildApp()).patch('/api/graph/work-items/wi-1').send({ status: 'done' });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/change request/);
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it('allows in_review -> done once no change request is open', async () => {
+    getMock.mockResolvedValue({ ...ITEM, status: 'in_review' });
+    openCrMock.mockResolvedValue(0);
+    const res = await request(buildApp()).patch('/api/graph/work-items/wi-1').send({ status: 'done' });
+    expect(res.status).toBe(200);
+  });
+
+  it('only pays for the change-request lookup when moving to done', async () => {
+    getMock.mockResolvedValue({ ...ITEM, status: 'in_progress' });
+    await request(buildApp()).patch('/api/graph/work-items/wi-1').send({ status: 'in_review' });
+    expect(openCrMock).not.toHaveBeenCalled();
+  });
+
+  it('treats a status equal to the current one as a no-op, not a transition', async () => {
+    getMock.mockResolvedValue({ ...ITEM, status: 'done' });
+    const res = await request(buildApp()).patch('/api/graph/work-items/wi-1').send({ status: 'done' });
+    expect(res.status).toBe(200);
+    expect(openCrMock).not.toHaveBeenCalled();
+    expect(updateMock.mock.calls[0]![1]).not.toHaveProperty('expectStatus');
+  });
+
+  it('compare-and-swaps on the status it decided against', async () => {
+    getMock.mockResolvedValue({ ...ITEM, status: 'in_progress' });
+    await request(buildApp()).patch('/api/graph/work-items/wi-1').send({ status: 'in_review' });
+    expect(updateMock).toHaveBeenCalledWith('wi-1', expect.objectContaining({ expectStatus: 'in_progress' }));
+  });
+
+  it('does not compare-and-swap a patch that leaves the status alone', async () => {
+    getMock.mockResolvedValue(ITEM);
+    await request(buildApp()).patch('/api/graph/work-items/wi-1').send({ title: 'Retitled' });
+    expect(updateMock.mock.calls[0]![1]).not.toHaveProperty('expectStatus');
+  });
+
+  it('409s when the item moved between the read and the write', async () => {
+    getMock.mockResolvedValue({ ...ITEM, status: 'in_progress' });
+    updateMock.mockResolvedValue(null);
+    const res = await request(buildApp()).patch('/api/graph/work-items/wi-1').send({ status: 'in_review' });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatch(/changed while this update was in flight/);
+  });
+
+  it('still rejects a status outside the enum before reading the item', async () => {
+    const res = await request(buildApp()).patch('/api/graph/work-items/wi-1').send({ status: 'bogus' });
+    expect(res.status).toBe(400);
+    expect(getMock).not.toHaveBeenCalled();
+  });
+});
