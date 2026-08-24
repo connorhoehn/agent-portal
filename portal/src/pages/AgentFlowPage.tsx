@@ -117,8 +117,29 @@ const WINDOWS: Array<{ label: string; hours: number }> = [
   { label: '7d', hours: 24 * 7 },
 ];
 
+// Both id shapes reach this page: the AgentCore runtime id that observability
+// records (orgiq_supervisor-UO5Xv95jsx, orgiq_news_researcher-…) and the plain
+// agent name the static catalog is keyed by (orgiq-supervisor). Both must
+// collapse to the same key or the metrics land under a key nothing looks up.
+//
+// The anchor is the runtime id's actual shape, not a bare 10-character class:
+// an AgentCore runtime *name* may not contain a hyphen — the fleet spells its
+// names with underscores — so the only hyphen in a runtime id is the one that
+// introduces the generated 10-character suffix. A plain agent name is the
+// mirror image: hyphens, never underscores.
+//
+// The old `-[A-Za-z0-9]{10}$` matched on length alone, and "supervisor" and
+// "researcher" are each exactly 10 alphanumerics, so it ate the last segment of
+// the plain names too: orgiq-supervisor → "orgiq" and orgiq-news-researcher →
+// "orgiq-news". Those keys matched no node and no edge, so the Supervisor and
+// News Researcher nodes read calls 0 / err 0 / p95 —, and all six of their
+// edges rendered grey "no traffic yet", while the header counted the raw
+// totals and said otherwise.
+const RUNTIME_ID = /^([A-Za-z0-9]+(?:_[A-Za-z0-9]+)+)-[A-Za-z0-9]{10}$/;
+
 function canonicalKey(id: string): string {
-  return id.replace(/-[A-Za-z0-9]{10}$/, '').replace(/_/g, '-');
+  const base = RUNTIME_ID.exec(id)?.[1] ?? id;
+  return base.replace(/_/g, '-');
 }
 
 function fmtMs(ms: number | null): string {
@@ -344,8 +365,12 @@ function AgentFlowPage() {
     () => Array.from(summaries.values()).filter(s => s.status === 'healthy' || s.status === 'deploying').length,
     [summaries],
   );
-  const totalCalls  = (topology?.nodes ?? []).reduce((s, n) => s + n.invocationCount, 0);
-  const totalErrors = (topology?.nodes ?? []).reduce((s, n) => s + n.errorCount, 0);
+  // Summed over the canonicalized summaries, not the raw node array: the same
+  // agent can arrive under both id shapes (and the provider can repeat a row),
+  // so the raw sum double-counts and the header disagrees with the chips below
+  // it. Summing the map means the header is exactly the total of what renders.
+  const totalCalls  = Array.from(summaries.values()).reduce((s, n) => s + n.invocationCount, 0);
+  const totalErrors = Array.from(summaries.values()).reduce((s, n) => s + n.errorCount, 0);
   const errRate = totalCalls > 0 ? `${((totalErrors / totalCalls) * 100).toFixed(1)}%` : '—';
 
   const selectedSummary = selectedId ? summaries.get(selectedId) ?? null : null;
