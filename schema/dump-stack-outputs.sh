@@ -74,6 +74,7 @@ client_secret = cognito_client_secret()
 # Cognito rejects non-localhost HTTP callbacks, so the local BFF URL is the
 # only one that works until the deployed middleware has an HTTPS origin.
 callback_url = "http://localhost:3001/api/auth/callback" if client_secret else ""
+portal_origin = "http://localhost:5183" if client_secret else ""
 
 env = f"""# Generated from CloudFormation stack outputs on {date.today().isoformat()}.
 # Re-run schema/dump-stack-outputs.sh to regenerate after stack changes.
@@ -150,6 +151,11 @@ COGNITO_CLIENT_ID={pick('UserPoolClientId', 'orgiq-cognito-client-id')}
 COGNITO_CLIENT_SECRET={client_secret}
 COGNITO_DOMAIN={pick('HostedUiDomain', 'orgiq-cognito-domain')}
 COGNITO_CALLBACK_URL={callback_url}
+# Where the BFF sends the browser after a successful login. Needed only when the
+# portal is on a different origin than this middleware, which is exactly the
+# local-dev layout (portal :5183, middleware :3001) — without it a relative
+# redirect resolves against :3001 and SSO ends on a middleware 404.
+PORTAL_ORIGIN={portal_origin}
 
 # Runtime image ECR URIs
 SUPERVISOR_ECR_URI={ecr}/orgiq-supervisor

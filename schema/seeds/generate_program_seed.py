@@ -514,10 +514,13 @@ def main() -> None:
             )
 
         # Repo link the initiative's code will live in (user provisions the repo).
+        # DO UPDATE, not DO NOTHING — see the note on the bots insert below:
+        # seed.sql deletes projects on every run and this FK is ON DELETE SET
+        # NULL, so a re-run silently detaches the repo from its initiative.
         emit(
             "INSERT INTO agent_projects (id, repo_full_name, default_branch, org_project_id, added_by) "
             f"VALUES ('{stable_uuid('repo', pid)}', 'connorhoehnslalom/{ini['repo']}', 'main', '{pid}', 'seed') "
-            "ON CONFLICT (repo_full_name) DO NOTHING"
+            f"ON CONFLICT (repo_full_name) DO UPDATE SET org_project_id = '{pid}'"
         )
 
         # Sprints + grants
@@ -624,7 +627,14 @@ def main() -> None:
                 f"VALUES ('{bid}', '{q(bot['name'])}', '{bot['template']}', '{q(bot['mission'])}', "
                 f"'{pid}', 'us.amazon.nova-lite-v1:0', 'cron', '{bot['cron']}', {enabled}, "
                 f"{bot['per_run']}, {bot['per_day']}, 4, TRUE, 'u-rachel', {days(45)}, {days(1)}, {paused}) "
-                "ON CONFLICT (id) DO NOTHING"
+                # DO UPDATE is load-bearing, not defensive. seed.sql opens with
+                # DELETE FROM projects, and bots.org_project_id is ON DELETE SET
+                # NULL — so the second time this seed runs, every bot loses its
+                # initiative link. Spend attribution keys on exactly that column,
+                # so the Budgets page then showed $16.39 spent org-wide with
+                # $0.00 against all 14 initiatives, and nothing anywhere said why.
+                # DO NOTHING cannot repair it; the row already exists.
+                f"ON CONFLICT (id) DO UPDATE SET org_project_id = '{pid}', enabled = {enabled}, paused_reason = {paused}"
             )
             for j in range(bot['runs']):
                 age = j * max(1, 30 // bot['runs']) + 1
