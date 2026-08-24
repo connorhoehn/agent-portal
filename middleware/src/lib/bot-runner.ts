@@ -865,9 +865,30 @@ export async function dispatchWorkItem(input: {
  * onto the bot_run, plus — for governed runs — the change request and PR it
  * produced, so the bot's Outcomes tab links into the review queue.
  */
+/** A governed run that has been 'running' this long is dead, not slow. Real
+ *  devbox runs finish in a minute or two, and the devbox box reaper caps a box
+ *  at 60 min — so 30 min is comfortably past any live run and safely under the
+ *  box ceiling. Env-tunable for a lab that wants a tighter or looser leash. */
+const STALE_RUN_MINUTES = parseInt(process.env['BOT_STALE_RUN_MINUTES'] ?? '30', 10);
+
 export async function reconcileBotRuns(): Promise<{ settled: number }> {
   if (config.mock.aurora) return { settled: 0 };
   let settled = 0;
+
+  // Stale-run reaper — the arm that was missing. A run-backed bot_run only
+  // settles once its agent_project_run reaches done/failed; if that run itself
+  // hangs (a devbox that never called back — the catch-up-on-boot pass did
+  // exactly this, leaving three runs 'running' for 90 minutes), nothing below
+  // could ever settle it, and each one held a slot of the global concurrency
+  // ceiling until every dispatch 429'd. Fail the hung agent_project_run first,
+  // so the run-backed arm below settles its bot_run in this same pass.
+  await exec(
+    `UPDATE agent_project_runs
+        SET status = 'failed', error = 'run exceeded the ${STALE_RUN_MINUTES}-minute ceiling — reaped as stale',
+            finished_at = NOW()
+      WHERE status = 'running'
+        AND started_at < NOW() - INTERVAL '${STALE_RUN_MINUTES} minutes'`,
+  );
 
   // Governed runs. The lateral takes the newest change request for the run —
   // a re-review appends reviews, not changes, so one run has at most one.
