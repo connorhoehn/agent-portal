@@ -285,3 +285,29 @@ portal + two additive schema files.
 | Estimation confidence theater — a precise-looking number from 2 samples. | Ranges only, basis always stated, explicit "prior — no history" label under n=3. Estimate-vs-actual recorded from day one so drift is measurable. |
 | Runaway spend from a misconfigured trigger. | Three independent brakes: max runs/day, daily $ hard cap with self-pause, global pause-all. Plus the fleet-concurrency ceiling. |
 | Queue and findings tables grow without bound (no retention exists today). | Phase 0 adds a retention sweep for terminal jobs/runs older than a window — needed regardless of bots. |
+
+---
+
+## 11 · Where this sits now
+
+The program layer above this one — who owns an initiative, which SMEs attach to
+it, who funds a sprint, and what the maintenance floor costs — is written up in
+[`program-operating-model.md`](./program-operating-model.md). Read that for the
+cast and the money path; this document remains the reference for the bot and
+marketplace mechanics underneath it.
+
+Two things that were listed as future work here have since landed and are
+described there:
+
+- **Bots as a cost of ownership.** Cron-triggered spend is now reported
+  separately per initiative and org-wide (`v_initiative_maintenance_30d`, and
+  `maintenanceUsd` on the budgets API), so an allocation can be read against
+  the floor it has to clear.
+- **The allocation as a brake.** `dispatch-work` checks an item's forecast
+  against what is left of its initiative's allocation and answers 409 with the
+  numbers, rather than only reporting overspend after the fact. It is soft by
+  design — the same `confirmOverBudget` shape as the per-run cap.
+
+Still true and still unsolved here: the per-SME envelope (`budget_grants`) is
+surfaced but not enforced — the brake reads the initiative total, not the
+grantee's share of it.
