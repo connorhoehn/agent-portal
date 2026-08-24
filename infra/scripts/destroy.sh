@@ -390,23 +390,41 @@ else
   for STACK_NAME in $FAILED_STACKS; do
     echo "  Force-deleting stuck stack: ${STACK_NAME}"
 
+    # A failed delete emits TWO kinds of DELETE_FAILED event: one per resource,
+    # plus a stack-level one whose LogicalResourceId is the STACK'S OWN NAME.
+    # Passing that name to --retain-resources makes CFN reject the whole call
+    # with a ValidationError ("resource not found in stack") — and with the
+    # error suppressed, the script printed "force-deleted" over a stack it had
+    # not touched. Exclude the stack's own name.
     FAILED_RESOURCES=$(aws cloudformation describe-stack-events \
       --stack-name "$STACK_NAME" \
       --region "$REGION" \
       --query 'StackEvents[?ResourceStatus==`DELETE_FAILED`].LogicalResourceId' \
-      --output text 2>/dev/null | tr '\t' '\n' | sort -u | tr '\n' ' ' || true)
+      --output text 2>/dev/null | tr '\t' '\n' | grep -vx "$STACK_NAME" | sort -u | tr '\n' ' ' || true)
 
-    echo "    Retaining: ${FAILED_RESOURCES}"
-    aws cloudformation delete-stack \
-      --stack-name "$STACK_NAME" \
-      --retain-resources $FAILED_RESOURCES \
-      --region "$REGION" 2>/dev/null || true
-
-    aws cloudformation wait stack-delete-complete \
-      --stack-name "$STACK_NAME" \
-      --region "$REGION" 2>/dev/null || true
-
-    echo "    ${STACK_NAME} force-deleted"
+    echo "    Retaining: ${FAILED_RESOURCES:-<none>}"
+    RETAIN_ERR=$(mktemp)
+    if aws cloudformation delete-stack \
+         --stack-name "$STACK_NAME" \
+         --retain-resources $FAILED_RESOURCES \
+         --region "$REGION" 2>"$RETAIN_ERR"; then
+      aws cloudformation wait stack-delete-complete \
+        --stack-name "$STACK_NAME" --region "$REGION" 2>/dev/null || true
+      # The waiter returns non-zero on a re-failed delete, so confirm rather
+      # than announce. Absence is the only proof of deletion.
+      if aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+           --region "$REGION" > /dev/null 2>&1; then
+        echo "    ✗ ${STACK_NAME} still present after force-delete"
+        FAILURES+=("${STACK_NAME} force-delete did not remove the stack")
+      else
+        echo "    ${STACK_NAME} force-deleted"
+      fi
+    else
+      echo "    ✗ force-delete call failed for ${STACK_NAME}:"
+      sed 's/^/        /' "$RETAIN_ERR"
+      FAILURES+=("${STACK_NAME} force-delete call failed")
+    fi
+    rm -f "$RETAIN_ERR"
   done
 fi
 
