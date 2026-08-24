@@ -1,6 +1,9 @@
 // Projects provider — reads project data from Aurora PostgreSQL via RDS Data API.
 // Tables: projects(id, name, status, created_at), project_contributions(person_id, project_id, role, weight), people(id, name, title, team)
-// Does NOT import from or modify types.ts or aurora.ts — all types and exec are local.
+// Does NOT import from or modify types.ts or aurora.ts — all types and exec are
+// local. The single exception is PERIOD_START_SQL from budgets.ts: the agent
+// spend window is one fact and duplicating it is what let the two pages
+// disagree in the first place.
 
 import {
   RDSDataClient,
@@ -10,6 +13,10 @@ import {
 } from '@aws-sdk/client-rds-data';
 
 import { config } from '../config.js';
+// The one exception to the "nothing shared" note above, and a deliberate one:
+// the budget period is a single fact and this rollup must not have its own copy
+// of it. See PERIOD_START_SQL for why the windows were unified.
+import { PERIOD_START_SQL } from './budgets.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -31,7 +38,11 @@ export interface ProjectSummary {
   openBugs: number | null;
   pointsDone: number | null;
   pointsTotal: number | null;
+  /** Agent spend MONTH-TO-DATE — the same calendar-month window the Budgets
+      ledger uses (providers/budgets.ts PERIOD_START_SQL), so the two surfaces
+      report one number for one initiative. Callers must label the month. */
   agentSpendUsd: number | null;
+  /** Genuinely last, not last-this-month — see the note in listProjects. */
   lastAgentActivityAt: string | null;
 }
 
@@ -259,7 +270,7 @@ export async function listProjects(opts: {
   // initiative through any of its three linkages: the run's work item, a bot
   // targeting the initiative directly, or a bot targeting a codebase that
   // delivers it.
-  const spendPredicate = `
+  const attributionPredicate = `
         br.cost_usd IS NOT NULL AND (
           br.work_item_id IN (SELECT w2.id FROM work_items w2 WHERE w2.project_id = p.id)
           OR br.bot_id IN (
@@ -268,6 +279,13 @@ export async function listProjects(opts: {
                 OR b.agent_project_id IN (SELECT ap.id FROM agent_projects ap WHERE ap.org_project_id = p.id)
           )
         )`;
+  // agentSpendUsd is month-to-date, on the same window the Budgets ledger uses.
+  // It was lifetime, which made the same initiative report two different
+  // "agent spend" figures on two pages that neither named a window nor agreed.
+  const spendPredicate = `br.started_at >= ${PERIOD_START_SQL} AND ${attributionPredicate}`;
+  // Last activity stays UNwindowed on purpose: "when did an agent last touch
+  // this" is a liveness question, not a money question, and windowing it would
+  // report an initiative that ran last month as never having run at all.
   const rollupSelect = `,
       p.owner_id,
       own.name AS owner_name,
@@ -287,7 +305,7 @@ export async function listProjects(opts: {
       (SELECT COALESCE(SUM(w.story_points), 0) FROM work_items w
         WHERE w.project_id = p.id AND w.type IN ('story','bug') AND w.status = 'done')::int AS points_done,
       (SELECT COALESCE(SUM(br.cost_usd), 0)::float8 FROM bot_runs br WHERE ${spendPredicate}) AS agent_spend_usd,
-      (SELECT MAX(br.started_at) FROM bot_runs br WHERE ${spendPredicate}) AS last_agent_activity_at`;
+      (SELECT MAX(br.started_at) FROM bot_runs br WHERE ${attributionPredicate}) AS last_agent_activity_at`;
 
   const buildSql = (withRollups: boolean) => `
     SELECT

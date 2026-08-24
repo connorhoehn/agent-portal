@@ -109,9 +109,13 @@ async function putAllocation(orgProjectId: string, allocatedUsd: number): Promis
 
 // ─── Breakdown card (spend by model / by trigger) ────────────────────────────
 
-function BreakdownCard({ title, rows }: {
+function BreakdownCard({ title, rows, emptyLabel }: {
   title: string;
   rows: Array<{ label: string; spentUsd: number; runCount: number }>;
+  /** What an empty card means. Both breakdowns now cut the same set of runs,
+   *  so empty means "no spend this period" and nothing else — but a card that
+   *  renders blank beside a populated one reads as broken, so it says so. */
+  emptyLabel?: string;
 }) {
   const max = Math.max(...rows.map((r) => r.spentUsd), 0.000001);
   return (
@@ -121,7 +125,7 @@ function BreakdownCard({ title, rows }: {
       </div>
       <div className="px-3.5 py-2.5 flex flex-col gap-2">
         {rows.length === 0 ? (
-          <span className="text-[11px] text-text-tertiary">no spend this period</span>
+          <span className="text-[11px] text-text-tertiary">{emptyLabel ?? 'no spend this period'}</span>
         ) : (
           rows.map((r) => (
             <div key={r.label} className="flex items-center gap-2 min-w-0">
@@ -298,20 +302,38 @@ interface GrantRow {
  * labelled as such: bot_runs record which initiative and which bot paid, never
  * which person's envelope, so presenting it as the SME's personal burn would
  * be a number the data cannot support.
+ *
+ * Nothing is hidden silently. A bare `.slice(0, 12)` under a header reading
+ * "What each SME was given" dropped 6 of 18 envelopes with no count and no
+ * paging — and because 13 were active, one live envelope was invisible. Every
+ * ACTIVE envelope now always renders; only closed sprints collapse, behind an
+ * explicit count and a toggle.
  */
+const CLOSED_PREVIEW = 4;
+
 function SprintEnvelopes() {
   const { data, error } = useFetch<{ grants: GrantRow[] }>('/api/budgets/grants', 60_000);
+  const [showAll, setShowAll] = useState(false);
   const grants = data?.grants ?? [];
   if (error || grants.length === 0) return null;
 
   const active = grants.filter((g) => g.sprintStatus === 'active');
   const rest = grants.filter((g) => g.sprintStatus !== 'active');
-  const ordered = [...active, ...rest].slice(0, 12);
+  const shownRest = showAll ? rest : rest.slice(0, CLOSED_PREVIEW);
+  const ordered = [...active, ...shownRest];
+  const hidden = rest.length - shownRest.length;
 
   return (
     <Card padding="none" className="overflow-x-auto mt-4">
       <div className="px-3.5 py-3 border-b border-border">
-        <div className="text-[13px] font-semibold text-text-primary">Sprint envelopes</div>
+        <div className="flex items-baseline justify-between gap-3 flex-wrap">
+          <div className="text-[13px] font-semibold text-text-primary">Sprint envelopes</div>
+          <div className="text-[11px] text-text-tertiary tabular-nums">
+            {ordered.length === grants.length
+              ? `${grants.length} ${grants.length === 1 ? 'envelope' : 'envelopes'} · ${active.length} active`
+              : `showing ${ordered.length} of ${grants.length} · all ${active.length} active`}
+          </div>
+        </div>
         <div className="text-[11.5px] text-text-secondary mt-0.5">
           What each SME was given to see a sprint through. Spend shown is the initiative's
           within the sprint window, not the individual's.
@@ -360,6 +382,18 @@ function SprintEnvelopes() {
           ))}
         </TableBody>
       </Table>
+      {(hidden > 0 || showAll) && (
+        <div className="px-3.5 py-2.5 border-t border-border">
+          <button
+            onClick={() => setShowAll((v) => !v)}
+            className="px-2 py-1 -mx-2 rounded border-none bg-transparent text-[11.5px] text-primary cursor-pointer hover:underline font-[inherit]"
+          >
+            {showAll
+              ? `Show fewer — collapse ${rest.length - CLOSED_PREVIEW} closed ${rest.length - CLOSED_PREVIEW === 1 ? 'sprint' : 'sprints'}`
+              : `Show ${hidden} more closed ${hidden === 1 ? 'sprint' : 'sprints'}`}
+          </button>
+        </div>
+      )}
     </Card>
   );
 }
@@ -384,6 +418,36 @@ export default function BudgetsPage() {
   const remaining = totalAllocated - totalSpent;
   const totalMaintenance = summary?.totalMaintenanceUsd ?? 0;
   const totalRuns = budgets.reduce((n, b) => n + b.runCountThisPeriod, 0);
+
+  // ── The maintenance floor, presented so it cannot be read as a claim on the
+  // allocation.
+  //
+  // The floor is a SUBSET of spend, never additional to it — the provider
+  // computes it as the cron-triggered slice and that invariant is unit-tested.
+  // But when every run so far is scheduled, the old hint read "100% of spend ·
+  // scheduled bots", which a reader parses as "100% of the budget is
+  // maintenance", directly against a Remaining tile showing $419.61 of
+  // headroom. Both were true and together they misled.
+  //
+  // So a full floor says what it actually means — every dollar spent went to
+  // keeping repos alive, and no new work has been funded — and Remaining says
+  // that the floor is already deducted from it and will recur.
+  const floorIsAllSpend = totalSpent > 0 && totalMaintenance / totalSpent >= 0.995;
+  const floorPct = totalSpent > 0 ? Math.round((totalMaintenance / totalSpent) * 100) : 0;
+
+  const maintenanceHint = totalSpent === 0
+    ? 'scheduled bots'
+    : floorIsAllSpend
+      ? 'all spend so far · no new work funded'
+      : `${floorPct}% of spend · scheduled bots`;
+  const maintenanceTitle = floorIsAllSpend
+    ? `Every dollar spent in ${monthLabel} went to scheduled bots keeping repos alive — no discretionary work has been funded yet. This is a subset of "Spent this period", not extra spend: it is already deducted from Remaining, and it recurs next period.`
+    : 'Cron-triggered runs — the recurring baseline of keeping each initiative\'s repos alive. A subset of "Spent this period", already deducted from Remaining.';
+
+  const remainingHint = remaining < 0 ? 'over allocation' : 'allocated − spent';
+  const remainingTitle = totalMaintenance > 0
+    ? `What is left of the allocation, not a forecast: ${usd(totalMaintenance)} of the ${usd(totalSpent)} spent so far is the scheduled-bot floor, and the rest of ${monthLabel}'s scheduled runs will draw on this figure too.`
+    : 'Allocated minus spend so far this period.';
 
   async function deleteAllocation(row: BudgetRow) {
     try {
@@ -437,7 +501,7 @@ export default function BudgetsPage() {
                 label="Remaining"
                 value={usd(remaining)}
                 danger={remaining < 0}
-                hint={remaining < 0 ? 'over allocation' : 'allocated − spent'}
+                hint={<span title={remainingTitle}>{remainingHint}</span>}
                 mono
               />
               {/* The recurring floor: what scheduled bots cost to keep the
@@ -447,18 +511,28 @@ export default function BudgetsPage() {
               <StatCard
                 label="Maintenance floor"
                 value={usd(totalMaintenance)}
-                hint={totalSpent > 0 ? `${Math.round((totalMaintenance / totalSpent) * 100)}% of spend · scheduled bots` : 'scheduled bots'}
+                hint={<span title={maintenanceTitle}>{maintenanceHint}</span>}
                 mono
               />
             </KPIGrid>
           </div>
 
-          {/* ── Breakdown cards ── */}
+          {/* ── Breakdown cards ──
+              Two cuts of one set of runs, so they sum to the same total. By-model
+              used to join only run-backed rows and rendered permanently empty
+              beside a populated by-trigger card; it now resolves the model from
+              the run, the job payload or the bot, and buckets the unresolvable
+              as 'unknown' rather than dropping the spend. */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
             <BreakdownCard
               title="SPEND BY MODEL"
+              emptyLabel={totalSpent > 0
+                ? 'no model recorded for this period’s runs'
+                : 'no spend this period'}
               rows={(summary?.byModel ?? []).map((m) => ({
-                label: modelLabel(m.model), spentUsd: m.spentUsd, runCount: m.runCount,
+                label: m.model === 'unknown' ? 'unattributed' : modelLabel(m.model),
+                spentUsd: m.spentUsd,
+                runCount: m.runCount,
               }))}
             />
             <BreakdownCard
@@ -513,12 +587,18 @@ export default function BudgetsPage() {
                       </TableTd>
                       <TableTd>
                         <span className="tabular-nums">{usd(row.spentThisPeriodUsd)}</span>
+                        {/* The floor is a subset. Repeating an identical figure
+                            under the total ("$3.75" / "$3.75 maintenance")
+                            reads as a second charge, so a full floor says so in
+                            words instead of restating the number. */}
                         {row.maintenanceUsd > 0 && (
                           <div
                             className="text-[11px] text-text-tertiary tabular-nums mt-0.5"
-                            title="Cron-triggered bot runs — the recurring floor of keeping this initiative's repos alive"
+                            title="Cron-triggered bot runs — the recurring floor of keeping this initiative's repos alive. Part of the figure above, not additional to it."
                           >
-                            {usd(row.maintenanceUsd)} maintenance
+                            {row.maintenanceUsd >= row.spentThisPeriodUsd
+                              ? 'all of it maintenance'
+                              : `${usd(row.maintenanceUsd)} maintenance`}
                           </div>
                         )}
                       </TableTd>
