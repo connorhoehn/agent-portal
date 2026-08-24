@@ -118,6 +118,17 @@ echo "── Checking for orphaned ECR repositories ──"
 # from this list survives a teardown, and its stack then fails to create with
 # "Resource of type 'AWS::ECR::Repository' ... already exists" — which is how
 # OrgIQ-MiddlewareService blocked a rebuild here, three stacks from the end.
+# Repos a stack CREATES. A leftover one blocks its stack from creating with
+# "Resource of type 'AWS::ECR::Repository' ... already exists", which is how
+# OrgIQ-MiddlewareService blocked a rebuild here three stacks from the end.
+#
+# The three news-* repos are deliberately ABSENT from this list. The runtime
+# stack IMPORTS them (see EXTERNAL_AGENT_NAMES in agentcore-runtime-stack.ts) —
+# they are external by design and never CFN-owned, so they look exactly like
+# orphans and are not. Deleting them takes their images with them and leaves
+# the stack importing repositories that no longer exist. Recreate with
+# `aws ecr create-repository --repository-name orgiq-news-<agent>` if that
+# happens.
 ECR_REPOS=(
   "${PREFIX}-supervisor"
   "${PREFIX}-search"
@@ -125,9 +136,6 @@ ECR_REPOS=(
   "${PREFIX}-advisor"
   "${PREFIX}-ingestion"
   "${PREFIX}-graph-builder"
-  "${PREFIX}-news-researcher"
-  "${PREFIX}-news-brief"
-  "${PREFIX}-news-headline"
   "${PREFIX}-agent-base"
   "${PREFIX}-devbox"
   "${PREFIX}-middleware"
