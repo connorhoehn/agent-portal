@@ -63,6 +63,21 @@ def main():
         'identity_schema.sql',
         'observability_schema.sql',
         'observability_authz_schema.sql',
+        # The observability sprint schemas. These were never in this list, so a
+        # rebuilt cluster came up without the tables the middleware queries by
+        # name — observability.approvals, .canary_experiments, .prompt_versions
+        # and .prompt_version_meta are referenced across a dozen middleware
+        # files, and each page hitting them 500s on a fresh database. They load
+        # in sprint order because the later ones ALTER what the earlier ones
+        # create.
+        'observability_sprint1_schema.sql',
+        'observability_sprint2_schema.sql',
+        'observability_sprint3_promote_schema.sql',
+        'observability_sprint4_calibration_schema.sql',
+        'observability_sprint4_memory_schema.sql',
+        'observability_sprint5_canary_schema.sql',
+        'observability_sprint6_prompt_history_schema.sql',
+        'observability_approvals_schema.sql',
         'newsroom_schema.sql',
         'orgiq_kb_registry_schema.sql',
         'orgiq_work_items_schema.sql',
