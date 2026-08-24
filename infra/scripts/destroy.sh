@@ -329,9 +329,30 @@ else
       aws cloudformation wait stack-delete-complete \
         --stack-name "OrgIQ-Aurora" --region "$REGION" 2>/dev/null || true
     fi
-    echo "  OrgIQ-Aurora CFN stack handled (final: $(aws cloudformation describe-stacks \
-      --stack-name "OrgIQ-Aurora" --region "$REGION" \
-      --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo deleted))"
+    # Report the FINAL state honestly. This line used to end in `|| echo
+    # deleted`, which conflated two very different failures: a stack that is
+    # genuinely gone, and a describe call that could not be made. When
+    # aws-azure-login credentials expired mid-destroy, the call failed, the
+    # fallback fired, and the script announced "final: deleted" over a stack
+    # still sitting at CREATE_COMPLETE — while its Aurora cluster HAD been
+    # physically deleted. That mismatch (CFN owning a resource that no longer
+    # exists) is what forced a full teardown to recover. Distinguish the cases:
+    # a genuine absence is a ValidationError naming the stack, anything else is
+    # unknown and must be recorded as a failure, never as success.
+    AURORA_DESCRIBE_ERR=$(mktemp)
+    if AURORA_FINAL=$(aws cloudformation describe-stacks \
+         --stack-name "OrgIQ-Aurora" --region "$REGION" \
+         --query 'Stacks[0].StackStatus' --output text 2>"$AURORA_DESCRIBE_ERR"); then
+      echo "  OrgIQ-Aurora CFN stack still present (final: ${AURORA_FINAL})"
+      FAILURES+=("OrgIQ-Aurora stack still present (${AURORA_FINAL})")
+    elif grep -q "does not exist" "$AURORA_DESCRIBE_ERR"; then
+      echo "  OrgIQ-Aurora CFN stack deleted"
+    else
+      echo "  ✗ Could not determine OrgIQ-Aurora stack state:"
+      sed 's/^/      /' "$AURORA_DESCRIBE_ERR"
+      FAILURES+=("OrgIQ-Aurora final state unknown (describe-stacks failed)")
+    fi
+    rm -f "$AURORA_DESCRIBE_ERR"
   fi
 fi
 echo ""
@@ -395,10 +416,21 @@ fi
 echo ""
 echo "── Verifying teardown ──"
 
-REMAINING=$(aws cloudformation list-stacks \
-  --region "$REGION" \
-  --query "StackSummaries[?starts_with(StackName, '${STACK_PREFIX}') && StackStatus != 'DELETE_COMPLETE'].[StackName, StackStatus]" \
-  --output text 2>/dev/null | sort -u || true)
+# An unreadable account is NOT an empty account. Suppressing this call's error
+# and treating "no output" as "no stacks" is how a teardown that never ran can
+# print the success banner — the same class of bug as the Aurora line above.
+VERIFY_ERR=$(mktemp)
+if ! REMAINING_RAW=$(aws cloudformation list-stacks \
+     --region "$REGION" \
+     --query "StackSummaries[?starts_with(StackName, '${STACK_PREFIX}') && StackStatus != 'DELETE_COMPLETE'].[StackName, StackStatus]" \
+     --output text 2>"$VERIFY_ERR"); then
+  echo "  ✗ Could not list stacks to verify teardown:"
+  sed 's/^/      /' "$VERIFY_ERR"
+  FAILURES+=("teardown unverified (list-stacks failed — state unknown)")
+  REMAINING_RAW=""
+fi
+rm -f "$VERIFY_ERR"
+REMAINING=$(echo "$REMAINING_RAW" | sort -u)
 
 if [[ -n "$REMAINING" ]]; then
   echo "  Stacks still present:"
