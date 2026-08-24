@@ -143,19 +143,27 @@ ECR_REPOS=(
 
 for repo in "${ECR_REPOS[@]}"; do
   if aws ecr describe-repositories --repository-names "$repo" > /dev/null 2>&1; then
-    # Only delete if CFN doesn't already own it (i.e., no stack tag)
-    STACK_TAG=$(aws ecr describe-repositories --repository-names "$repo" \
-      --query 'repositories[0].tags[?Key==`aws:cloudformation:stack-name`].Value' \
-      --output text 2>/dev/null || echo "")
-    # `--output text` on an empty JMESPath result prints the literal "None",
-    # not an empty string — so the -z test never fired and every genuine
-    # orphan was reported as "owned by stack 'None' — skipping", which is the
-    # exact opposite of the truth.
-    if [[ -z "$STACK_TAG" || "$STACK_TAG" == "None" ]]; then
-      echo "  Removing orphan ECR repo (no CFN owner): ${repo}"
+    # Ownership is decided by asking CloudFormation, NOT by reading a tag.
+    #
+    # CFN does not stamp aws:cloudformation:* tags onto AWS::ECR::Repository,
+    # so the old tag check read "no owner" for every repo — orphan or not. It
+    # was harmless only because of a second bug (an empty result prints the
+    # literal "None", so the -z test never fired). Fixing that bug alone armed
+    # a check whose premise was wrong, and one deploy force-deleted seven
+    # repositories that OrgIQ-AgentCoreRuntime actively owns, taking their
+    # images and leaving the stack pointing at nothing.
+    #
+    # describe-stack-resources --physical-resource-id answers the real
+    # question: does any live stack manage this repo? Absence of an owner is
+    # then a fact, not an inference from missing metadata.
+    OWNER=$(aws cloudformation describe-stack-resources \
+      --physical-resource-id "$repo" \
+      --query 'StackResources[0].StackName' --output text 2>/dev/null || echo "")
+    if [[ -z "$OWNER" || "$OWNER" == "None" ]]; then
+      echo "  Removing orphan ECR repo (no stack manages it): ${repo}"
       aws ecr delete-repository --repository-name "$repo" --force > /dev/null
     else
-      echo "  Repo ${repo} is owned by stack '${STACK_TAG}' — skipping"
+      echo "  Repo ${repo} is owned by stack '${OWNER}' — skipping"
     fi
   fi
 done
