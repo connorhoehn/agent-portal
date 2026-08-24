@@ -39,7 +39,14 @@ interface OidcState { state: string; verifier: string; returnTo: string; exp: nu
 // else falls back to the configured post-login URL, so ?returnTo= can't be an
 // open redirect to an attacker's site.
 function safeReturnTo(raw: unknown): string {
-  if (typeof raw === 'string' && raw.startsWith('/') && !raw.startsWith('//')) return raw;
+  // Must be a same-origin ABSOLUTE PATH. The check is a whitelist rather than
+  // a "not //" blacklist because browsers normalise a backslash to a slash
+  // before resolving: `/\evil.com` becomes protocol-relative `//evil.com`, and
+  // `new URL('/\\evil.com', origin)` resolves to https://evil.com/. The old
+  // `!startsWith('//')` test let that straight through, which is an open
+  // redirect out of the login flow wherever the portal shares this origin —
+  // i.e. production, where PORTAL_ORIGIN is empty and nothing else rewrites it.
+  if (typeof raw === 'string' && /^\/(?![/\\])/.test(raw)) return raw;
   return config.cognito.postLoginUrl;
 }
 

@@ -30,7 +30,10 @@ interface ProjectSummary {
   openBugs?: number | null;
   pointsDone?: number | null;
   pointsTotal?: number | null;
+  /** Month-to-date, not lifetime — see SPEND_MONTH below. */
   agentSpendUsd?: number | null;
+  /** Genuinely last, unwindowed — an initiative can have $0.00 this month and
+      still have run in June. */
   lastAgentActivityAt?: string | null;
 }
 
@@ -125,6 +128,17 @@ function usd(n: number): string {
   return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+// ─── The spend window ─────────────────────────────────────────────────────────
+// agentSpendUsd is month-to-date: providers/budgets.ts owns the window
+// (PERIOD_START_SQL = date_trunc('month', NOW())) and providers/projects.ts
+// imports it, so this rollup and the Budgets ledger report one number per
+// initiative. It used to be lifetime here and month-to-date there, both
+// unlabelled, so clicking from one page to the other looked like the figure had
+// changed. Name the window wherever the number appears.
+
+const SPEND_MONTH = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+const SPEND_TITLE = `Agent spend so far in ${SPEND_MONTH}. Same window as the Budgets ledger, which judges it against this initiative's monthly allocation.`;
+
 // ─── StatusChip ──────────────────────────────────────────────────────────────
 
 function StatusChip({ status }: { status: string | null }) {
@@ -210,9 +224,16 @@ function InitiativeCard({ project, onClick }: { project: ProjectSummary; onClick
       <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
         {work && <div style={{ fontSize: 12, color: '#6b7280' }}>{work}</div>}
         {spend > 0 ? (
-          <div style={{ fontSize: 12, color: '#374151' }}>
-            <span style={{ fontWeight: 600 }}>{usd(spend)}</span> agent spend
+          <div style={{ fontSize: 12, color: '#374151' }} title={SPEND_TITLE}>
+            <span style={{ fontWeight: 600 }}>{usd(spend)}</span> agent spend this month
             {project.lastAgentActivityAt && <> · last run {relativeTime(project.lastAgentActivityAt)}</>}
+          </div>
+        ) : project.lastAgentActivityAt ? (
+          /* Zero month-to-date is not the same claim as "never ran" — an
+             initiative that spent in June and has been quiet since must not be
+             reported as having no agent history. */
+          <div style={{ fontSize: 12, color: '#9ca3af' }} title={SPEND_TITLE}>
+            no agent spend this month · last run {relativeTime(project.lastAgentActivityAt)}
           </div>
         ) : (
           <div style={{ fontSize: 12, color: '#9ca3af' }}>no agent runs yet</div>
@@ -234,7 +255,8 @@ function InitiativeCard({ project, onClick }: { project: ProjectSummary; onClick
 
 // Shared column template — must match header exactly.
 // accent | name | status | owner | spend | updated
-const LIST_COLS = '3px 1fr 132px 176px 96px 82px';
+// The spend column carries "Spend (MTD)"; 96px clipped it, hence 110.
+const LIST_COLS = '3px 1fr 132px 176px 110px 82px';
 
 function ProjectListRow({ project, onClick }: { project: ProjectSummary; onClick: () => void }) {
   const rawStatus = (project.status ?? 'unknown').toLowerCase().replace(/ /g, '_');
@@ -299,8 +321,8 @@ function ProjectListRow({ project, onClick }: { project: ProjectSummary; onClick
         )}
       </div>
 
-      {/* Agent spend */}
-      <div style={{ fontSize: 12, textAlign: 'right', paddingRight: 12, whiteSpace: 'nowrap' }}>
+      {/* Agent spend — month-to-date, same window as the Budgets ledger */}
+      <div style={{ fontSize: 12, textAlign: 'right', paddingRight: 12, whiteSpace: 'nowrap' }} title={SPEND_TITLE}>
         {spend > 0 ? (
           <span style={{ color: '#374151', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{usd(spend)}</span>
         ) : (
@@ -394,7 +416,7 @@ function ProjectsPage() {
   return (
     <PageSection
       title="Projects"
-      description="Initiatives: who runs each one, the work in flight, and what agents have spent delivering it."
+      description={`Initiatives: who runs each one, the work in flight, and what agents have spent delivering it so far in ${SPEND_MONTH}.`}
       actions={
         <div style={{
           display: 'flex', border: '1.5px solid #e5e7eb', borderRadius: 7,
@@ -454,7 +476,7 @@ function ProjectsPage() {
             <span style={{ fontSize: 10.5, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', paddingLeft: 10 }}>Project</span>
             <span style={{ fontSize: 10.5, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Status</span>
             <span style={{ fontSize: 10.5, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Owner</span>
-            <span style={{ fontSize: 10.5, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'right', paddingRight: 12 }}>Spend</span>
+            <span title={SPEND_TITLE} style={{ fontSize: 10.5, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'right', paddingRight: 12 }}>Spend (MTD)</span>
             <span style={{ fontSize: 10.5, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'right' }}>Updated</span>
           </div>
           {filtered.map(project => (

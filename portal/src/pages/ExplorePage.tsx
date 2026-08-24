@@ -31,7 +31,7 @@ import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
 import { fetchSessionMessages, rememberSession, recallSession, forgetSession, stripThinking } from '../lib/chatSessions';
 import { ChatSessionPicker } from '../components/ChatSessionPicker';
-import { extractSources } from '../components/chat/answerSources';
+import { deriveSources, extractSources } from '../components/chat/answerSources';
 import { SourceChips } from '../components/chat/SourceChips';
 import { summarizeToolCalls } from '../components/chat/toolCallSummary';
 import { coalesceAssistantMessages } from '../components/chat/coalesceMessages';
@@ -855,11 +855,12 @@ function ExplorePage() {
               )}
               {displayMessages.map(msg => {
                 // Compose: strip <thinking> blocks (no ThinkingBlock renderer
-                // here) → extract [Source: …] citations out of the prose →
-                // resolve raw person IDs (e.g. "Person with ID p-007") to names.
-                const { cleaned, sources } = msg.role === 'assistant'
-                  ? extractSources(stripThinking(msg.content))
-                  : { cleaned: msg.content, sources: [] };
+                // here) → derive sources from the turn's tool calls and drop
+                // the model's unverifiable citations from the prose → resolve
+                // raw person IDs (e.g. "Person with ID p-007") to names.
+                const { cleaned, sources, provenance } = msg.role === 'assistant'
+                  ? deriveSources({ content: stripThinking(msg.content), toolCalls: msg.toolCalls })
+                  : { cleaned: msg.content, sources: [], provenance: undefined };
                 const resolvedContent = msg.role === 'assistant' && data
                   ? resolvePersonIds(cleaned, data.nodes)
                   : cleaned;
@@ -882,7 +883,7 @@ function ExplorePage() {
                         {toolSummary}
                       </div>
                     )}
-                    <SourceChips sources={sources} />
+                    <SourceChips sources={sources} {...(provenance ? { provenance } : {})} />
                     {mentioned.length > 0 && (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
                         {mentioned.map(p => (

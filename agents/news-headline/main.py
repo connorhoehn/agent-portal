@@ -1,14 +1,33 @@
 import json
 import logging
-from _shared.prompt_source import LiveAgent
 import os
 import re
 import sys
+import time
+from contextvars import ContextVar
 from pathlib import Path
 
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from strands import Agent, tool
 from strands.models.bedrock import BedrockModel
+
+# Shared instrumentation — pull TraceContext + post_trace from agents/_shared,
+# the same way every other agent does. This agent was the only one of the nine
+# that never emitted a trace bundle: the middleware's own write used to paper
+# over that with a row carrying no model, no tools and no token counts, and
+# once that duplicate write was removed the agent went dark entirely.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from _shared.prompt_source import LiveAgent  # noqa: E402
+from _shared.instrumentation import (  # noqa: E402
+    TraceContext,
+    post_trace,
+    reset_active_ctx,
+    set_active_ctx,
+)
+
+_current_ctx: ContextVar[TraceContext | None] = ContextVar(
+    "news_headline_trace_ctx", default=None,
+)
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -159,10 +178,40 @@ async def handle(payload: dict) -> dict:
     if not input_text:
         return {"agent": "news-headline", "error": "missing input_text/prompt/message"}
 
-    log.info("HeadlineOptimizer handling: %s", input_text[:120])
+    ctx = TraceContext.from_request_payload(payload if isinstance(payload, dict) else {})
+    token = _current_ctx.set(ctx)
+    shared_token = set_active_ctx(ctx)
 
-    result = _agent(input_text)
+    log.info(
+        "HeadlineOptimizer handling (invocation=%s, parent=%s): %s",
+        ctx.invocation_id, ctx.parent_invocation_id or "—", input_text[:120],
+    )
+
+    t0 = time.monotonic()
+    try:
+        result = _agent(input_text)
+    finally:
+        _current_ctx.reset(token)
+        reset_active_ctx(shared_token)
+    duration_ms = int((time.monotonic() - t0) * 1000)
+
     response_text = str(result)
+
+    # Emitting the bundle must never fail the request: a headline the caller
+    # asked for is worth more than the telemetry describing it.
+    try:
+        bundle = ctx.build_trace_bundle(
+            prompt=input_text,
+            response=response_text,
+            agent_id="orgiq-news-headline",
+            agent_name="HeadlineOptimizer",
+            model_id=MODEL_ID,
+            duration_ms=duration_ms,
+            prompt_version=_agent.prompt_sha,
+        )
+        post_trace(bundle)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("news-headline: trace emission failed: %s", exc)
 
     return {
         "agent": "news-headline",

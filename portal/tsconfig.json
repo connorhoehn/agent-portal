@@ -11,6 +11,10 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
+    // Tests run on `node --test`, which strips types but resolves real files —
+    // so they import `../answerSources.ts` by its actual name. Safe here
+    // because nothing is emitted: vite resolves app imports, tsc only checks.
+    "allowImportingTsExtensions": true,
     "paths": {
       "@/*": ["./src/*"]
     }

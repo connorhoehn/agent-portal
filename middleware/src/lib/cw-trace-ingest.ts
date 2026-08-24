@@ -16,8 +16,18 @@
 //
 // Idempotency: processTrace() persists rows with
 //   INSERT INTO observability.invocation_traces ... ON CONFLICT DO NOTHING
-// keyed on invocation_id, so a poll window that overlaps a prior window (or
-// re-ingests a line the HTTP path already delivered) is safe.
+// keyed on invocation_id, so a poll window that overlaps a prior window
+// re-ingests the same line harmlessly — the id in the bundle is the agent's
+// own, and it is stable across polls.
+//
+// That guarantee covers THIS path only. It never covered the middleware's
+// own `recordInvocation` write, despite an older comment here claiming it
+// did: that path keys on the SSE runId the middleware minted, which is a
+// different id for the same logical run, so the conflict never fired and
+// every user-facing invocation landed twice. See invocations.ts —
+// `shouldWriteMiddlewareTrace()` now makes the agent the sole writer
+// whenever `isAgentTraceIngestionActive()` says a pipeline is carrying its
+// bundles to Aurora.
 //
 // IAM: requires logs:DescribeLogGroups, logs:StartQuery, logs:GetQueryResults
 // on /aws/bedrock-agentcore/runtimes/*. For local dev the operator's AWS
@@ -89,6 +99,50 @@ const ORGIQ_TRACE_PREFIX = 'ORGIQ_TRACE:';
 let _lastPollTs = Math.floor(Date.now() / 1000) - INITIAL_LOOKBACK_S;
 let _client: CloudWatchLogsClient | null = null;
 let _logGroupCache: { groups: string[]; fetchedAt: number } | null = null;
+
+// ── Ingestion authority ───────────────────────────────────────────────────
+//
+// Agents emit their own trace bundle (`ORGIQ_TRACE:` on stdout, plus the
+// OpenInference spans the Span Projector reads) carrying the id THEY minted,
+// their model, token counts, tool calls and parent link. When any pipeline is
+// carrying those bundles into Aurora, the agent's row is the authoritative
+// one and nothing else should write a second row for the same run.
+//
+// These two helpers name that decision so `invocations.ts` can consult it
+// without duplicating knowledge of which env vars govern ingestion.
+
+const LEGACY_POLLER_DISABLE_VALUES = new Set(['false', '0', 'no', 'off', 'disabled']);
+
+/**
+ * True when OBS_USE_LEGACY_POLLER asks for the legacy CW Logs poller (the
+ * default). False hands the job to the OrgIQ-SpanProjector Lambda instead —
+ * still an out-of-band ingestion path, just a different one.
+ */
+function legacyPollerRequested(): boolean {
+  const flag = (process.env['OBS_USE_LEGACY_POLLER'] ?? 'true').trim().toLowerCase();
+  return !LEGACY_POLLER_DISABLE_VALUES.has(flag);
+}
+
+/**
+ * True when SOME out-of-band pipeline is expected to persist agent-emitted
+ * trace bundles into observability.invocation_traces — either this poller or
+ * the Span Projector Lambda that supersedes it.
+ *
+ * Deliberately not "is the interval handle set": the Span Projector runs in
+ * Lambda, so a middleware that never starts the poller can still be in a
+ * deployment where agents own their rows. The only configurations that mean
+ * "nothing is ingesting" are the explicit kill switch and a missing region.
+ */
+export function isAgentTraceIngestionActive(): boolean {
+  // Explicit kill switch — unit tests and offline/stub-account dev. Nothing
+  // is reading agent stdout, so nothing will write the agent's row.
+  if (process.env['OBS_TRACE_POLLER_DISABLED'] === '1') return false;
+  // No region → no CW Logs client here, and no deployed projector to speak of.
+  if (!config.region) return false;
+  // Either this poller runs, or OBS_USE_LEGACY_POLLER=false handed the job to
+  // the projector. Both end at the same table, keyed on the agent's own id.
+  return true;
+}
 
 function client(): CloudWatchLogsClient {
   if (!_client) {
@@ -317,8 +371,11 @@ export async function pollOnce(): Promise<{ ingested: number; errors: number }> 
       continue;
     }
     try {
-      // processTrace is ON CONFLICT DO NOTHING on invocation_id — re-ingesting
-      // a bundle the HTTP path already persisted is a no-op at the DB layer.
+      // processTrace is ON CONFLICT DO NOTHING on invocation_id, and this
+      // bundle carries the agent's own id — so re-polling an overlapping
+      // window is a no-op at the DB layer. (It does NOT dedupe against the
+      // middleware's `recordInvocation` write, which keys on a different id;
+      // that path is now gated off whenever this one is running.)
       // Count what actually landed: it returns sampled=false when the trace was
       // dropped by the sampling gate, and inserted=false for a duplicate. The
       // old code counted every call as "persisted", so a 10% sample rate read
@@ -372,9 +429,7 @@ export function startTracePoller(): void {
   // a redeploy. Default = true (poller runs as before).
   //
   // See: docs.ag-ui.com + OpenInference Phase 4 plan.
-  const LEGACY_POLLER_DISABLE_VALUES = new Set(['false', '0', 'no', 'off', 'disabled']);
-  const flag = (process.env['OBS_USE_LEGACY_POLLER'] ?? 'true').trim().toLowerCase();
-  if (LEGACY_POLLER_DISABLE_VALUES.has(flag)) {
+  if (!legacyPollerRequested()) {
     console.log('[cw-trace-ingest] OBS_USE_LEGACY_POLLER=false — legacy poller disabled. OI Span Projector should be producing rows instead.');
     return;
   }

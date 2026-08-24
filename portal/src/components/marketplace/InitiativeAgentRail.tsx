@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { Card, Chip } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useCapabilities } from '../../lib/capabilities';
 import { CostVsEstimate, runEstimate } from './EstimateDrawer';
 import {
   TEMPLATE_TONE,
@@ -105,19 +106,41 @@ export function useInitiativeAgentActivity(
 export function AgentsRailCard({ activity }: { activity: InitiativeAgentActivity }) {
   const { bots, botsLoading, botsError, runs } = activity;
   const runningNow = runs.filter((r) => r.status === 'running');
+  // /admin/bots and /admin/bots/:id are hr-admin routes, and their API carries
+  // ManageDevbox. Offering the links to anyone else points at a page that is
+  // absent from their nav and that redirects them home — the link claims an
+  // affordance the viewer does not have. Bot reads reach org-leader too, so a
+  // bot can be listed here by someone who still cannot open its page; that one
+  // renders as plain text rather than a link into a redirect.
+  const { can, ready } = useCapabilities();
+  const canManageBots = ready && can('ManageDevbox');
 
   return (
     <Card padding="none" className="overflow-hidden">
       <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
         <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">AGENTS</span>
         <div className="flex-1" />
-        <Link to="/admin/bots" className="text-[11px] font-semibold text-primary no-underline hover:underline">
-          + New bot
-        </Link>
+        {canManageBots && (
+          <Link to="/admin/bots" className="text-[11px] font-semibold text-primary no-underline hover:underline">
+            + New bot
+          </Link>
+        )}
       </div>
 
       {botsError ? (
-        <div className="px-3 py-2.5 text-[11px] text-danger">Failed to load bots: {botsError}</div>
+        /403|401|forbidden/i.test(botsError) ? (
+          // Not a failure — a denial. /api/bots is org-leader/hr-admin (or
+          // ManageDevbox) territory, and "Failed to load bots" read as a
+          // broken page to every SME and member who opened an initiative.
+          <div className="px-3 py-2.5 text-[11px] text-text-tertiary leading-relaxed">
+            The bot roster is not visible to this role, so this list is unknown, not empty —
+            standing missions may well be pointed at this initiative.
+          </div>
+        ) : (
+          <div className="px-3 py-2.5 text-[11px] text-danger leading-relaxed">
+            Could not load the bot roster ({botsError}) — this list is unknown, not empty.
+          </div>
+        )
       ) : bots.length === 0 ? (
         <div className="px-3 py-3 text-[11.5px] text-text-tertiary leading-relaxed">
           {botsLoading
@@ -131,12 +154,18 @@ export function AgentsRailCard({ activity }: { activity: InitiativeAgentActivity
           return (
             <div key={bot.id} className="px-3 py-2 border-b border-border last:border-b-0">
               <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                <Link
-                  to={`/admin/bots/${bot.id}`}
-                  className="text-[12px] font-semibold text-text-primary no-underline truncate hover:text-primary hover:underline"
-                >
-                  {bot.name}
-                </Link>
+                {canManageBots ? (
+                  <Link
+                    to={`/admin/bots/${bot.id}`}
+                    className="text-[12px] font-semibold text-text-primary no-underline truncate hover:text-primary hover:underline"
+                  >
+                    {bot.name}
+                  </Link>
+                ) : (
+                  <span className="text-[12px] font-semibold text-text-primary truncate" title={bot.name}>
+                    {bot.name}
+                  </span>
+                )}
                 <Chip tone={TEMPLATE_TONE[bot.template]} size="xs">{bot.template}</Chip>
                 <div className="flex-1" />
                 {paused ? (
@@ -161,7 +190,9 @@ export function AgentsRailCard({ activity }: { activity: InitiativeAgentActivity
               <Chip tone="info" size="xs" dot="pulse">running now</Chip>
               <span className="text-text-tertiary">{r.trigger}</span>
               <div className="flex-1" />
-              {r.outcome?.boxId && (
+              {/* Computers is another hr-admin route — same reasoning as the
+                  bot links above. */}
+              {canManageBots && r.outcome?.boxId && (
                 <Link
                   to={`/admin/devbox?box=${encodeURIComponent(r.outcome.boxId)}`}
                   className="text-primary no-underline hover:underline font-mono text-[10.5px]"
@@ -184,6 +215,10 @@ export function AgentsRailCard({ activity }: { activity: InitiativeAgentActivity
 export function OutcomesRailCard({ activity }: { activity: InitiativeAgentActivity }) {
   const { runs, spendUsd } = activity;
   const listed = runs.slice(0, OUTCOMES_LIMIT);
+  // /admin/changes and /admin/devbox are hr-admin routes; for anyone else the
+  // reference is shown as text rather than as a link that redirects home.
+  const { can, ready } = useCapabilities();
+  const canManageBots = ready && can('ManageDevbox');
 
   return (
     <Card padding="none" className="overflow-hidden">
@@ -215,9 +250,15 @@ export function OutcomesRailCard({ activity }: { activity: InitiativeAgentActivi
             {(r.outcome?.changeId || r.outcome?.prUrl || r.outcome?.boxId) && (
               <div className="mt-0.5 flex items-center gap-2.5 flex-wrap">
                 {r.outcome?.changeId && (
-                  <Link to="/admin/changes" className="text-primary no-underline hover:underline">
-                    change {r.outcome.changeId.slice(0, 8)}
-                  </Link>
+                  canManageBots ? (
+                    <Link to="/admin/changes" className="text-primary no-underline hover:underline">
+                      change {r.outcome.changeId.slice(0, 8)}
+                    </Link>
+                  ) : (
+                    <span className="text-text-secondary font-mono text-[10.5px]" title="The review queue needs the ManageDevbox authority">
+                      change {r.outcome.changeId.slice(0, 8)}
+                    </span>
+                  )
                 )}
                 {r.outcome?.prUrl && (
                   <a
@@ -230,12 +271,18 @@ export function OutcomesRailCard({ activity }: { activity: InitiativeAgentActivi
                   </a>
                 )}
                 {r.outcome?.boxId && (
-                  <Link
-                    to={`/admin/devbox?box=${encodeURIComponent(r.outcome.boxId)}`}
-                    className="text-text-secondary no-underline hover:text-primary hover:underline font-mono text-[10.5px]"
-                  >
-                    box {r.outcome.boxId.slice(0, 8)}
-                  </Link>
+                  canManageBots ? (
+                    <Link
+                      to={`/admin/devbox?box=${encodeURIComponent(r.outcome.boxId)}`}
+                      className="text-text-secondary no-underline hover:text-primary hover:underline font-mono text-[10.5px]"
+                    >
+                      box {r.outcome.boxId.slice(0, 8)}
+                    </Link>
+                  ) : (
+                    <span className="text-text-tertiary font-mono text-[10.5px]" title="Computers needs the ManageDevbox authority">
+                      box {r.outcome.boxId.slice(0, 8)}
+                    </span>
+                  )
                 )}
               </div>
             )}

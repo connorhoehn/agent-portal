@@ -325,7 +325,16 @@ SYSTEM_PROMPT = (
     "Tools: search_organization (people, skills, teams, projects), "
     "get_expertise_scores (rankings, influence), "
     "get_strategic_advice (gaps, mentorship, team composition).\n"
-    "Call the most relevant tool immediately. Synthesize the response concisely."
+    "Call the most relevant tool immediately. Synthesize the response concisely.\n"
+    # A live turn ended with "*Source: Scoring specialist*" — the supervisor
+    # citing its own sub-agent. That is our topology leaking into the user's
+    # citation line, not evidence. Provenance is derived from the observed tool
+    # calls and rendered as chips by the portal, so the model should not invent
+    # one; a document URI is the only citation it can add that we cannot derive.
+    "CITATIONS: never name a tool, a specialist or an agent as a source — no "
+    "'Source: Scoring specialist', no 'Sources: Relational graph'. Where the "
+    "answer came from is recorded automatically. Pass through a specialist's "
+    "[Source: s3://...] document citation unchanged; otherwise write none."
 )
 
 # Per-role guardrail IDs, populated from env at module load. Middleware passes

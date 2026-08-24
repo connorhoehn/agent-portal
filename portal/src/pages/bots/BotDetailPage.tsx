@@ -40,11 +40,26 @@ function parseTs(iso: string): number {
   return new Date(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`).getTime();
 }
 
-function runDuration(r: BotRun): string {
-  if (!r.finishedAt) return r.status === 'running' ? '…' : '—';
+/** How long the run took, or why we can't say.
+ *
+ *  A finish stamp identical to the start stamp is not a run that took no time
+ *  — it is a run whose duration was never recorded (every seeded history row
+ *  is written that way). Rendering "0ms" for it states a measurement that was
+ *  never taken, so an unrecorded duration reads as an em dash and says why on
+ *  hover. */
+function runDuration(r: BotRun): { text: string; title?: string } {
+  if (!r.finishedAt) {
+    return r.status === 'running'
+      ? { text: '…', title: 'Still running' }
+      : { text: '—', title: 'This run never recorded a finish time' };
+  }
   const ms = parseTs(r.finishedAt) - parseTs(r.startedAt);
-  if (!Number.isFinite(ms) || ms < 0) return '—';
-  return ms < 1000 ? `${ms}ms` : ms < 60_000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms / 60_000)}m`;
+  if (!Number.isFinite(ms) || ms <= 0) {
+    return { text: '—', title: 'Duration not recorded — this run’s start and finish stamps are identical' };
+  }
+  return {
+    text: ms < 1000 ? `${ms}ms` : ms < 60_000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms / 60_000)}m`,
+  };
 }
 
 function modelLabel(id: string): string {
@@ -480,7 +495,19 @@ export default function BotDetailPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {runs.map((r) => (
+              {runs.map((r) => {
+                const dur = runDuration(r);
+                // What this run left behind. The reason is rendered for every
+                // status, not just skipped: a `done` run whose only record is
+                // "scheduled maintenance" has an outcome, and gating on
+                // status === 'skipped' hid it — the whole column rendered
+                // blank for a bot with a full history of completed runs.
+                const o = r.outcome ?? {};
+                const canLinkRun = r.runId != null && bot.agentProjectId != null;
+                const hasOutcome = Boolean(
+                  o.reason || o.changeId || o.prUrl || o.filesChanged != null || r.jobId || canLinkRun,
+                );
+                return (
                 <TableRow key={r.id}>
                   <TableTd style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{r.trigger}</TableTd>
                   <TableTd>
@@ -491,45 +518,69 @@ export default function BotDetailPage() {
                   <TableTd style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
                     <CostVsEstimate costUsd={r.costUsd} estimate={runEstimate(r)} />
                   </TableTd>
-                  <TableTd style={{ fontSize: 12, color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>{runDuration(r)}</TableTd>
+                  <TableTd
+                    style={{ fontSize: 12, color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}
+                    title={dur.title}
+                  >
+                    {dur.text}
+                  </TableTd>
                   <TableTd style={{ fontSize: 12, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }} title={r.startedAt}>
                     {when(r.startedAt)}
                   </TableTd>
                   <TableTd>
-                    <div className="flex items-center gap-2 flex-wrap text-[12px]" title={r.outcome?.summary}>
-                      {r.status === 'skipped' && r.outcome?.reason && (
-                        <span className="text-text-tertiary">{r.outcome.reason}</span>
+                    <div className="flex items-center gap-2 flex-wrap text-[12px]" title={o.summary}>
+                      {o.reason && (
+                        <span className={r.status === 'failed' ? 'text-danger' : 'text-text-secondary'}>
+                          {o.reason}
+                        </span>
                       )}
-                      {r.outcome?.changeId && (
+                      {o.changeId && (
                         <Link to="/admin/changes" className="text-primary no-underline hover:underline">
-                          change {r.outcome.changeId.slice(0, 8)}
+                          change {o.changeId.slice(0, 8)}
                         </Link>
                       )}
-                      {r.outcome?.prUrl && (
+                      {o.prUrl && (
                         <a
-                          href={r.outcome.prUrl} target="_blank" rel="noopener noreferrer"
+                          href={o.prUrl} target="_blank" rel="noopener noreferrer"
                           className="text-primary no-underline hover:underline inline-flex items-center gap-1"
                         >
                           PR <span aria-hidden="true" className="text-[10px]">↗</span>
                         </a>
                       )}
-                      {r.runId && bot.agentProjectId && (
+                      {canLinkRun && (
                         <Link
                           to={`/admin/projects?project=${bot.agentProjectId}&run=${r.runId}`}
                           className="text-text-secondary no-underline hover:text-primary hover:underline font-mono text-[11px]"
                         >
-                          run {r.runId.slice(0, 8)}
+                          run {r.runId!.slice(0, 8)}
                         </Link>
                       )}
-                      {r.outcome?.filesChanged != null && (
+                      {/* The run row carries no summary — that lives on the job
+                          this firing enqueued. When there is no devbox run to
+                          open, the job is the only place the detail exists, so
+                          link it rather than leaving the cell a dead end. */}
+                      {!canLinkRun && r.jobId && (
+                        <Link
+                          to={`/iq/work/${encodeURIComponent(r.jobId)}`}
+                          title="Open the queued job this firing produced"
+                          className="text-text-secondary no-underline hover:text-primary hover:underline font-mono text-[11px]"
+                        >
+                          job →
+                        </Link>
+                      )}
+                      {o.filesChanged != null && (
                         <span className="text-text-tertiary text-[11px]">
-                          {r.outcome.filesChanged} {r.outcome.filesChanged === 1 ? 'file' : 'files'}
+                          {o.filesChanged} {o.filesChanged === 1 ? 'file' : 'files'}
                         </span>
+                      )}
+                      {!hasOutcome && (
+                        <span className="text-text-tertiary" title="This run recorded no outcome">—</span>
                       )}
                     </div>
                   </TableTd>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         )}

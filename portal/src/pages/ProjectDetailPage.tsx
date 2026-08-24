@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router';
 import { Card, Chip, CollapsibleSection, PageSection, StatusDot, type ChipTone } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { useCapabilities } from '../lib/capabilities';
+import { toastError, toastInfo } from '../lib/toastStore';
 import { EstimateDrawer } from '../components/marketplace/EstimateDrawer';
 import { OwnerEditor, RoleCycleChip } from '../components/marketplace/GovernanceEditor';
 import {
@@ -221,6 +222,59 @@ function countStories(item: WorkItemTree): { done: number; total: number } {
 /** Aurora timestamps arrive without T/Z — same normalization as the bots pages. */
 function parseTs(iso: string): number {
   return new Date(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`).getTime();
+}
+
+// ─── Optimistic-write plumbing ────────────────────────────────────────────────
+// Board edits apply locally first and are confirmed against the server. Every
+// one of them used to be `.catch(() => {})`, which only fires on a network
+// error: a 403, 404, 400 or 503 RESOLVES, so the response was thrown away and
+// the local state kept showing a change the server had refused. These helpers
+// make the confirm explicit — the caller reverts or reconciles on failure.
+
+/** Rewrite every node in a tree, children first. */
+function mapTree(nodes: WorkItemTree[], fn: (n: WorkItemTree) => WorkItemTree): WorkItemTree[] {
+  return nodes.map((n) => fn({ ...n, children: mapTree(n.children, fn) }));
+}
+
+/** Drop one node (by id) wherever it sits in the tree. */
+function dropFromTree(nodes: WorkItemTree[], id: string): WorkItemTree[] {
+  return nodes
+    .filter((n) => n.id !== id)
+    .map((n) => ({ ...n, children: dropFromTree(n.children, id) }));
+}
+
+class HttpError extends Error {
+  constructor(public status: number, message: string) { super(message); }
+}
+
+/** Send a write and insist on an answer. Non-2xx throws with the server's own
+ *  message, so a refusal can never be mistaken for success. */
+async function sendJson<T>(url: string, method: 'POST' | 'PATCH', body: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method,
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const payload = await res.json().catch(() => ({})) as { error?: string };
+  if (!res.ok) throw new HttpError(res.status, payload.error ?? `HTTP ${res.status}`);
+  return payload as T;
+}
+
+/** Say what actually went wrong. 403 is a missing authority, not a bug; a
+ *  client-minted id that never reached the server is a 404 worth naming. */
+function surfaceWriteError(err: unknown, what: string): void {
+  if (err instanceof HttpError && err.status === 403) {
+    toastInfo('Needs dispatch rights', `${what} requires the DispatchAgentRun authority on this initiative.`);
+    return;
+  }
+  toastError(null, `${what} failed`, err instanceof Error ? err.message : String(err));
+}
+
+/** True for an id this page minted for an item the server has not acknowledged
+ *  — writing against one can only 404. */
+function isPendingId(id: string): boolean {
+  return id.startsWith('wi-new-');
 }
 
 // ─── Marketplace affordances (shared by tree rows and board cards) ────────────
@@ -979,6 +1033,54 @@ function ContributorsTable({
   );
 }
 
+// ─── Agent spend header stat ──────────────────────────────────────────────────
+// One number with a clear provenance. The server-computed figure (the same one
+// the Initiatives list shows) wins; the client-side sum of visible runs is the
+// fallback, and it is only reported when the runs were actually visible. When
+// neither holds, the stat says the spend is unknown rather than printing $0.00,
+// which is the one thing it must never do — "$0.00 agent spend" on an
+// initiative that has spent money is a budget statement that is simply false.
+
+function AgentSpendStat({
+  serverSpendUsd, serverPending, clientSpendUsd, clientBlind, clientPending,
+}: {
+  serverSpendUsd: number | null;
+  serverPending: boolean;
+  clientSpendUsd: number;
+  clientBlind: boolean;
+  clientPending: boolean;
+}) {
+  let value: string;
+  let title: string;
+  if (serverSpendUsd != null) {
+    value = `$${serverSpendUsd.toFixed(2)}`;
+    title = 'Every agent run attributed to this initiative, totalled by the server — the same figure the Initiatives list shows.';
+  } else if (serverPending || clientPending) {
+    value = '…';
+    title = 'Loading agent spend.';
+  } else if (clientBlind) {
+    value = '—';
+    title = 'Agent spend is unknown to this role: the bot roster needs the ManageDevbox authority, and the server has no rollup for this initiative. Unknown, not zero.';
+  } else {
+    value = `$${clientSpendUsd.toFixed(2)}`;
+    title = 'Totalled from the agent runs visible to this session — the server reported no rollup for this initiative.';
+  }
+
+  return (
+    <div style={{ textAlign: 'center' }} title={title}>
+      <div style={{
+        fontSize: 22, fontWeight: 800,
+        color: value === '—' ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)',
+      }}>
+        {value}
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+        {value === '—' ? 'agent spend unknown' : 'agent spend'}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 // Mission control for an initiative: one owner, SMEs directing agents. The
 // work is always front and center; agents, outcomes, codebases and the
@@ -1027,8 +1129,20 @@ function ProjectDetailPage() {
   const marketplaceRuns = marketData?.runs ?? [];
 
   // Bots targeting this initiative + their runs merged with the marketplace
-  // runs — feeds the header's spend stat and the rail's Agents/Outcomes cards.
+  // runs — feeds the rail's Agents/Outcomes cards.
   const agentActivity = useInitiativeAgentActivity(id, codebases, marketplaceRuns);
+
+  // Agent spend, server-computed. The header used to sum agentActivity.runs
+  // client-side, but both of that hook's inputs (/api/bots, /api/agent-projects)
+  // are ManageDevbox-gated while /iq/projects has no role gate — so an SME or
+  // member reaching this page got 403s, summed nothing, and read "$0.00 agent
+  // spend" for an initiative that GET /api/graph/projects reports as $4.10 one
+  // click away. That list endpoint is tenant-gated only and every role that can
+  // open this page can read it, so take the number from there and let the
+  // Initiatives list and this header agree by construction.
+  const { data: projectList, isLoading: projectListLoading } =
+    useFetch<Array<{ id: string; agentSpendUsd: number | null }>>('/api/graph/projects', 60_000);
+  const serverSpendUsd = (projectList ?? []).find((p) => p.id === id)?.agentSpendUsd ?? null;
 
   // The run that speaks for each work item: a running one wins, else newest.
   const marketRuns: Record<string, BotRun> = {};
@@ -1043,24 +1157,32 @@ function ProjectDetailPage() {
 
   const workTree = localItems ?? rawTree ?? [];
 
-  // Optimistic status toggle
+  // Status toggle — optimistic, then confirmed. A failure puts the row back
+  // where it was and says why, rather than leaving a tick the server refused.
   const handleStatusToggle = useCallback((itemId: string, current: WorkItemStatus) => {
     const newStatus: WorkItemStatus = current === 'done' ? 'open' : 'done';
-    // Optimistic update
-    function patchTree(nodes: WorkItemTree[]): WorkItemTree[] {
-      return nodes.map((n) => ({
-        ...n,
-        status: n.id === itemId ? newStatus : n.status,
-        children: patchTree(n.children),
-      }));
+    const setStatus = (want: WorkItemStatus) => (nodes: WorkItemTree[]) =>
+      mapTree(nodes, (n) => (n.id === itemId ? { ...n, status: want } : n));
+
+    setLocalItems(setStatus(newStatus)(localItems ?? rawTree ?? []));
+
+    // An item this page created but the server never acknowledged has a
+    // client-side id; PATCHing it can only 404, and the row would silently
+    // stay ticked until the next reload dropped it.
+    if (isPendingId(itemId)) {
+      setLocalItems((prev) => setStatus(current)(prev ?? rawTree ?? []));
+      toastError(null, 'Not saved', 'This item has not been created on the server yet — reload and try again.');
+      return;
     }
-    setLocalItems(patchTree(localItems ?? rawTree ?? []));
-    // Fire-and-forget to API
-    fetch(`/api/graph/work-items/${encodeURIComponent(itemId)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: newStatus }),
-    }).catch(() => {/* silent — mock mode */});
+
+    void (async () => {
+      try {
+        await sendJson(`/api/graph/work-items/${encodeURIComponent(itemId)}`, 'PATCH', { status: newStatus });
+      } catch (err) {
+        setLocalItems((prev) => setStatus(current)(prev ?? rawTree ?? []));
+        surfaceWriteError(err, 'Updating this item');
+      }
+    })();
   }, [localItems, rawTree]);
 
   // Add item optimistically
@@ -1100,12 +1222,23 @@ function ProjectDetailPage() {
     }
     setLocalItems(insertInto(localItems ?? rawTree ?? []));
 
-    // Fire-and-forget
-    fetch('/api/graph/work-items', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId: id, parentId, type, title, priority, storyPoints }),
-    }).catch(() => {});
+    // Reconcile the placeholder with the row the server actually created —
+    // without this the item keeps its `wi-new-…` id forever, so the first tick
+    // on it PATCHes an id no row has and the change vanishes on reload.
+    void (async () => {
+      try {
+        const created = await sendJson<Partial<WorkItem> & { id?: string }>(
+          '/api/graph/work-items', 'POST',
+          { projectId: id, parentId, type, title, priority, storyPoints },
+        );
+        if (!created.id) throw new HttpError(502, 'the server did not return the created item');
+        setLocalItems((prev) => mapTree(prev ?? rawTree ?? [], (n) =>
+          n.id === newItem.id ? { ...n, ...created, children: n.children } : n));
+      } catch (err) {
+        setLocalItems((prev) => dropFromTree(prev ?? rawTree ?? [], newItem.id));
+        surfaceWriteError(err, `Adding this ${type}`);
+      }
+    })();
   }, [id, project, localItems, rawTree]);
 
   const [addingEpic, setAddingEpic] = useState(false);
@@ -1130,11 +1263,20 @@ function ProjectDetailPage() {
     };
     setLocalItems([...(localItems ?? rawTree ?? []), newEpic]);
     setAddingEpic(false);
-    fetch('/api/graph/work-items', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId: id, parentId: null, type, title, priority, storyPoints }),
-    }).catch(() => {});
+    void (async () => {
+      try {
+        const created = await sendJson<Partial<WorkItem> & { id?: string }>(
+          '/api/graph/work-items', 'POST',
+          { projectId: id, parentId: null, type, title, priority, storyPoints },
+        );
+        if (!created.id) throw new HttpError(502, 'the server did not return the created item');
+        setLocalItems((prev) => mapTree(prev ?? rawTree ?? [], (n) =>
+          n.id === newEpic.id ? { ...n, ...created, children: n.children } : n));
+      } catch (err) {
+        setLocalItems((prev) => dropFromTree(prev ?? rawTree ?? [], newEpic.id));
+        surfaceWriteError(err, `Adding this ${type}`);
+      }
+    })();
   }, [id, project, localItems, rawTree]);
 
   // Marketplace: the item being estimated, and the optimistic flip on 202.
@@ -1292,10 +1434,13 @@ function ProjectDetailPage() {
                 <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{totalDone}/{totalPts} pts</div>
               </div>
             )}
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--color-text-primary)' }}>${agentActivity.spendUsd.toFixed(2)}</div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>agent spend</div>
-            </div>
+            <AgentSpendStat
+              serverSpendUsd={serverSpendUsd}
+              serverPending={projectListLoading}
+              clientSpendUsd={agentActivity.spendUsd}
+              clientBlind={agentActivity.botsError != null}
+              clientPending={agentActivity.botsLoading}
+            />
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 22, fontWeight: 800, color: escalatedCount > 0 ? 'var(--color-danger)' : 'var(--color-text-primary)' }}>
                 {openDecisionCount}

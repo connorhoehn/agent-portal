@@ -101,11 +101,19 @@ function DiffView({ diff }: { diff: string }) {
 
 export default function ChangesPage() {
   const [tab, setTab] = useState<'queue' | 'policies'>('queue');
-  // Decisions and policy edits ride /api/sdlc (ManageDevbox). Without it, the
-  // queue stays readable but the decision buttons and Policies tab hide.
+  // The WHOLE surface rides /api/sdlc, which is mounted requireAction
+  // ('ManageDevbox') — the list included, not just the decisions and policy
+  // edits. Without that authority there is no readable queue: the fetch 403s
+  // and this page knows nothing about what is waiting. So ManageDevbox gates
+  // the decision buttons and the Policies tab, and a denied list is reported
+  // as a denial below rather than being rendered as an empty queue.
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageDevbox');
-  const { data, refresh } = useFetch<{ changes: Change[] }>('/api/sdlc/changes', 15_000);
+  const { data, error, isLoading, refresh } = useFetch<{ changes: Change[] }>('/api/sdlc/changes', 15_000);
+  // A denial and an outage are different facts and get different words. The
+  // one thing neither may be reported as is "no changes yet".
+  const denied = error != null && /\b(401|403)\b|forbidden|unauthor/i.test(error);
+  const unreachable = error != null && !denied;
   const [busy, setBusy] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
 
@@ -179,6 +187,16 @@ export default function ChangesPage() {
 
       {tab === 'policies' && canManage ? <PolicyEditor /> : (
         <>
+          {/* The list is stale, not gone — rows below are from the last good
+              fetch, and the queue may have moved since. */}
+          {error && changes.length > 0 && (
+            <div className="mb-3 rounded-md border border-warning/40 bg-warning-bg/40 px-3 py-2 text-[12px] text-warning">
+              {denied
+                ? 'These rows are from before your role changed — the review queue is no longer readable to this role, so nothing here is refreshing.'
+                : `Showing the last queue this page could load — refreshes are failing (${error}). Newer changes may be missing.`}
+            </div>
+          )}
+
           {needsYou.length > 0 && (
             <div className="mb-5">
               <div className="text-[10px] font-semibold uppercase tracking-wide text-warning mb-2">Needs you</div>
@@ -205,7 +223,46 @@ export default function ChangesPage() {
             </div>
           )}
 
-          {changes.length === 0 && (
+          {/* Three different facts, three different cards. An empty queue is
+              an all-clear; a denial and an outage are not, and rendering
+              either as "No changes yet" tells a reviewer their review queue is
+              clear when the truth is that this page cannot see it. */}
+          {changes.length === 0 && denied && (
+            <Card padding="md">
+              <div className="text-[13px] font-semibold text-text-primary">You cannot see the review queue</div>
+              <div className="text-[12px] text-text-secondary mt-1 leading-snug">
+                Reading change requests requires the <span className="font-mono">ManageDevbox</span> authority,
+                which this role does not hold — so this page cannot say whether anything is waiting.
+                It is not empty; it is unreadable. Dispatch rights
+                (<span className="font-mono">DispatchAgentRun</span>) let you start governed runs but not review
+                what they produce. Switch to HR Admin from the identity menu, top right, or ask an admin for the
+                grant.
+              </div>
+            </Card>
+          )}
+
+          {changes.length === 0 && unreachable && (
+            <Card padding="md">
+              <div className="text-[13px] font-semibold text-text-primary">Review queue unreachable</div>
+              <div className="text-[12px] text-text-secondary mt-1 leading-snug">
+                This list is unknown, not empty — there may be changes waiting for a decision. {error}
+              </div>
+              <button
+                onClick={refresh}
+                className="mt-2.5 px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors"
+              >
+                Try again
+              </button>
+            </Card>
+          )}
+
+          {changes.length === 0 && isLoading && !error && (
+            <Card padding="md">
+              <div className="text-[12px] text-text-tertiary">Loading the review queue…</div>
+            </Card>
+          )}
+
+          {changes.length === 0 && !isLoading && !error && (
             <Card padding="md">
               <div className="text-[13px] font-semibold text-text-primary">No changes yet</div>
               <div className="text-[12px] text-text-secondary mt-1 leading-snug">

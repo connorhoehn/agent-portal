@@ -131,6 +131,104 @@ describe('decideAllocation', () => {
   it('an explicit confirmation overrides the brake', () => {
     expect(decideAllocation({ allocatedUsd: 30, spentUsd: 30 }, 99, true)).toEqual({ kind: 'proceed' });
   });
+
+  // ── Weak forecasts still brake ────────────────────────────────────────────
+  // The brake used to be handed only a per-point (scaled) forecast, and when
+  // none existed the caller skipped it entirely. These pin the replacement
+  // rule: judge whatever forecast exists, on its p75, and let the confidence
+  // shape the sentence rather than the verdict.
+
+  it('brakes on a prior — the historyless first dispatch is the point of it', () => {
+    // p-rag-search's real numbers: $5 allocated, nothing spent, and a sonnet-
+    // tier prior of $0.15–$1.50 because nothing has ever run here.
+    const d = decideAllocation(
+      { allocatedUsd: 5, spentUsd: 4.2 },
+      { costUsdP75: 1.5, costUsdP25: 0.15, confidence: 'prior' },
+      false,
+    );
+    expect(d.kind).toBe('confirm');
+    expect(d).toMatchObject({ confidence: 'prior' });
+    expect((d as { reason: string }).reason).toMatch(/\$0\.15–\$1\.50/);
+    expect((d as { reason: string }).reason).toMatch(/\$0\.80 left/);
+    expect((d as { reason: string }).reason).toMatch(/no history for this model yet/);
+  });
+
+  it('tests p75, not p25 — a low end that fits does not excuse the range', () => {
+    // The whole failure being fixed: on p25 this proceeds and the brake sleeps
+    // through every first dispatch. On p75 it asks.
+    const d = decideAllocation(
+      { allocatedUsd: 5, spentUsd: 4 },
+      { costUsdP75: 1.5, costUsdP25: 0.15, confidence: 'prior' },
+      false,
+    );
+    expect(d.kind).toBe('confirm');
+    expect((d as { reason: string }).reason).toMatch(/may not fit/);
+  });
+
+  it('escalates the wording when even the low end overruns', () => {
+    const d = decideAllocation(
+      { allocatedUsd: 5, spentUsd: 4.95 },
+      { costUsdP75: 1.5, costUsdP25: 0.15, confidence: 'prior' },
+      false,
+    );
+    expect((d as { reason: string }).reason).toMatch(/even the low end/);
+  });
+
+  it('hedges an unscaled run-level range as a bracket, not a measurement', () => {
+    const d = decideAllocation(
+      { allocatedUsd: 30, spentUsd: 28 },
+      { costUsdP75: 4, costUsdP25: 1, confidence: 'run-history' },
+      false,
+    );
+    expect(d).toMatchObject({ confidence: 'run-history' });
+    expect((d as { reason: string }).reason).toMatch(/not scaled to this item's size/);
+    expect((d as { reason: string }).reason).toMatch(/pick a cheaper model/);
+  });
+
+  // Size-aware evidence earns a flat number. No hedging, and the wording the
+  // portal already renders stays byte-identical.
+  it('states a scaled forecast plainly', () => {
+    const d = decideAllocation(
+      { allocatedUsd: 30, spentUsd: 25 },
+      { costUsdP75: 8, costUsdP25: 3, confidence: 'scaled' },
+      false,
+    );
+    expect((d as { reason: string }).reason).toBe(
+      "estimated $8.00 exceeds the $5.00 left of this initiative's $30.00 allocation — raise it or pass confirmOverBudget",
+    );
+  });
+
+  // Exhaustion is a fact about the ledger. No forecast could fit, so the
+  // refusal must not sound like it depends on one.
+  it('never hedges an exhausted allocation, however weak the forecast', () => {
+    const d = decideAllocation(
+      { allocatedUsd: 5, spentUsd: 5 },
+      { costUsdP75: 1.5, costUsdP25: 0.15, confidence: 'prior' },
+      false,
+    );
+    expect((d as { reason: string }).reason).toBe(
+      "this initiative's $5.00 allocation is exhausted ($5.00 spent) — raise the allocation or pass confirmOverBudget",
+    );
+  });
+
+  // Clients split the reason on its first ' — ' to separate claim from remedy;
+  // an em dash inside the confidence note would truncate the claim.
+  it('keeps a single em dash in every reason', () => {
+    for (const confidence of ['scaled', 'run-history', 'prior'] as const) {
+      const d = decideAllocation(
+        { allocatedUsd: 5, spentUsd: 4 }, { costUsdP75: 3, costUsdP25: 1, confidence }, false,
+      );
+      expect((d as { reason: string }).reason.split(' — ')).toHaveLength(2);
+    }
+  });
+
+  it('still ignores a weak forecast when the initiative is unbudgeted', () => {
+    expect(decideAllocation(
+      { allocatedUsd: null, spentUsd: 500 },
+      { costUsdP75: 99, costUsdP25: 1, confidence: 'prior' },
+      false,
+    )).toEqual({ kind: 'proceed' });
+  });
 });
 
 describe('decideConcurrency', () => {

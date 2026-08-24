@@ -19,7 +19,7 @@ import {
 } from '../lib/orgMentions';
 import { usePresence, useChat } from '@connorhoehnslalom/realtime-modules/client';
 import { PresenceAvatarGroup } from '../components/shell/PresenceAvatarGroup';
-import { extractSources } from '../components/chat/answerSources';
+import { deriveSources, extractSources } from '../components/chat/answerSources';
 import { SourceChips } from '../components/chat/SourceChips';
 import { summarizeToolCalls } from '../components/chat/toolCallSummary';
 import { coalesceAssistantMessages } from '../components/chat/coalesceMessages';
@@ -359,12 +359,13 @@ function InvokePage() {
             </div>
           )}
           {displayMessages.map(msg => {
-            // Pull [Source: …] citations out of the prose (thinking blocks are
-            // kept — renderMessageContent handles those) and summarize what the
-            // turn's captured tool calls actually did.
-            const { cleaned, sources } = msg.role === 'assistant'
-              ? extractSources(msg.content)
-              : { cleaned: msg.content, sources: [] };
+            // Derive provenance from the turn's tool calls (thinking blocks are
+            // kept — renderMessageContent handles those), strip the model's own
+            // unverifiable citations out of the prose, and summarize what the
+            // turn actually did.
+            const { cleaned, sources, provenance } = msg.role === 'assistant'
+              ? deriveSources({ content: msg.content, toolCalls: msg.toolCalls })
+              : { cleaned: msg.content, sources: [], provenance: undefined };
             const toolSummary = msg.role === 'assistant' ? summarizeToolCalls(msg.toolCalls) : null;
             return (
               <div key={msg.id}>
@@ -384,7 +385,7 @@ function InvokePage() {
                     {toolSummary}
                   </div>
                 )}
-                <SourceChips sources={sources} />
+                <SourceChips sources={sources} {...(provenance ? { provenance } : {})} />
               </div>
             );
           })}

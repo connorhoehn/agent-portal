@@ -54,7 +54,7 @@ import { agentProjectsRouter } from './routes/agent-projects.js';
 import { sdlcRouter } from './routes/sdlc.js';
 import { budgetsRouter } from './routes/budgets.js';
 import { botsRouter } from './routes/bots.js';
-import { requireAction, requireTenant, readForRolesElseAction } from './lib/authz.js';
+import { requireAction, requireTenant, readForRolesElseAction, requireSession } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
 import { initBotScheduler } from './lib/bot-scheduler.js';
 import { initCrawlTargets } from './lib/crawl-targets.js';
@@ -105,8 +105,8 @@ app.use('/api/auth', authRouter);
 app.use('/api/identity', identityRouter);
 // Per-agent detail, mounted first so /:agentId there is not swallowed by
 // the fleet router's own routes.
-app.use('/api/agent-detail', agentDetailRouter);
-app.use('/api/agents', agentsRouter);
+app.use('/api/agent-detail', requireSession('ViewAgents'), agentDetailRouter);
+app.use('/api/agents', requireSession('ViewAgents'), agentsRouter);
 // Decisions + Projects mounted BEFORE graphRouter so their specific paths
 // resolve without going through the gated graph router.
 // Org-graph surfaces are orgiq-tenant data: sessions parked in another tenant
@@ -234,8 +234,8 @@ app.use('/api/iq/prompts', viewObs, promptHistoryRouter);
 // page actually governs judging (enable, model, rubric weights, sampling).
 app.use('/api/observability/evaluations', viewObs, evaluationsRouter);
 app.use('/api/observability', viewObs, observabilityRouter);
-app.use('/api/capabilities', capabilitiesRouter);
-app.use('/api/sessions', sessionsRouter);
+app.use('/api/capabilities', requireSession('ViewCapabilities'), capabilitiesRouter);
+app.use('/api/sessions', requireSession('ViewSessions'), sessionsRouter);
 // Devbox — Claude Code in an AgentCore Runtime microVM. Operator surface for
 // a future portal page (no UI ships yet). Cedar-gated: the ManageDevbox
 // action must be allowed for the caller's role (open mode when no policy
@@ -245,7 +245,7 @@ app.use('/api/devbox', requireAction('ManageDevbox'), devboxRouter);
 // that produce findings, and agent-proposed graph writes gated on approval.
 // Reads are open so the overview renders for any role; mutations are gated
 // per-route with ManageDevbox.
-app.use('/api/work', workRouter);
+app.use('/api/work', requireSession('ViewWork'), workRouter);
 // Gateway proxy — signs + forwards Wave 6 service-auth-gated endpoints so
 // the browser doesn't need to hold the HMAC secret. Reads GATEWAY_URL +
 // GATEWAY_SERVICE_AUTH_SECRET from env. No session required: the signing

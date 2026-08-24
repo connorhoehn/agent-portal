@@ -21,6 +21,12 @@ import type { BotRun } from '../../pages/bots/BotsPage';
 
 // ─── Types (the /api/bots/estimate contract) ─────────────────────────────────
 
+/** How much a forecast is entitled to claim. 'scaled' is per-point history ×
+    points; 'run-history' is real runs but not sized to this item; 'prior' is a
+    static per-tier bracket. Optional because estimates echoed onto older runs
+    predate the field. */
+export type ForecastConfidence = 'scaled' | 'run-history' | 'prior';
+
 export interface WorkEstimate {
   basis: 'repo' | 'model' | 'prior';
   sampleCount: number;
@@ -28,9 +34,10 @@ export interface WorkEstimate {
   costUsdP75: number;
   minutesP25: number;
   minutesP75: number;
-  points: number;
+  points: number | null;
   /** true → the range is per-point history × points; false → run-level history. */
   scaled: boolean;
+  confidence?: ForecastConfidence;
 }
 
 export interface EstimateItem {
@@ -95,6 +102,39 @@ export function CostVsEstimate({ costUsd, estimate }: { costUsd: number | null; 
   );
 }
 
+export interface OverAllocation {
+  reason: string;
+  confidence?: ForecastConfidence;
+  estimate?: WorkEstimate;
+  allocatedUsd: number;
+  spentUsd: number;
+  remainingUsd: number;
+}
+
+/** What the allocation brake stopped, in the operator's terms: the money
+    first, because that is the decision — then how much the forecast behind the
+    refusal is actually worth. The brake now fires on weak forecasts too (it
+    could not fire at all before, on any initiative without sized run history),
+    so a refusal built on a wide prior must not be dressed as a measurement.
+    Say "wide prior" and the next refusal still gets read. */
+export function overAllocationBody(over: OverAllocation): string {
+  const ledger = `${money(over.spentUsd)} of ${money(over.allocatedUsd)} is already spent this month, leaving ${money(over.remainingUsd)}.`;
+  const est = over.estimate;
+  if (!est) {
+    // No forecast on the wire: use the server's claim, minus the remedy half,
+    // which names an API flag rather than anything reachable from here.
+    return `${ledger} ${over.reason.split(' — ')[0]}. Dispatching anyway spends over the allocation.`;
+  }
+  const range = `${money(est.costUsdP25)}–${money(est.costUsdP75)}`;
+  const forecast =
+    over.confidence === 'prior'
+      ? `This run is forecast at ${range}, but nothing has run on this model here yet — that range is a deliberately wide prior, not a measurement.`
+      : over.confidence === 'run-history'
+        ? `This run is forecast at ${range} from ${est.sampleCount} run${est.sampleCount === 1 ? '' : 's'} of run-level history — a bracket, not a figure scaled to this item's size.`
+        : `This run is forecast at ${range}${est.points != null ? ` for ${est.points} points` : ''}, from ${est.sampleCount} comparable pointed runs.`;
+  return `${ledger} ${forecast} Dispatching anyway spends over the allocation.`;
+}
+
 /** The basis, stated plainly — exact copy per the estimate contract. */
 export function estimateLine(est: WorkEstimate): string {
   if (est.scaled) {
@@ -128,8 +168,16 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
   // The initiative's allocation refused this dispatch. Soft brake: we show
   // what is left and offer to proceed anyway, rather than dead-ending on an
   // error toast that merely names an API flag the operator cannot reach.
+  // The forecast comes with it, because the brake now fires on weak forecasts
+  // too (a run-level range, or a bare prior on an initiative with no history)
+  // and the operator has to be told which kind they are being stopped by.
   const [overAllocation, setOverAllocation] = useState<
-    { reason: string; allocatedUsd: number; spentUsd: number; remainingUsd: number } | null
+    {
+      reason: string;
+      confidence?: ForecastConfidence;
+      estimate?: WorkEstimate;
+      allocatedUsd: number; spentUsd: number; remainingUsd: number;
+    } | null
   >(null);
 
   // Reset per item — a fresh drawer for each estimate.
@@ -186,6 +234,7 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
       });
       const payload = await res.json().catch(() => ({})) as {
         run?: BotRun; error?: string; options?: CodebaseOption[];
+        confidence?: ForecastConfidence; estimate?: WorkEstimate;
         allocation?: { allocatedUsd: number; spentUsd: number; remainingUsd: number };
       };
       if (res.status === 409 && payload.options && payload.options.length > 0) {
@@ -197,7 +246,12 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
       if (res.status === 409 && payload.allocation) {
         // Over the initiative's allocation. Show the money and let the
         // operator decide — the brake is soft by design.
-        setOverAllocation({ reason: payload.error ?? 'over the allocation', ...payload.allocation });
+        setOverAllocation({
+          reason: payload.error ?? 'over the allocation',
+          ...(payload.confidence ? { confidence: payload.confidence } : {}),
+          ...(payload.estimate ? { estimate: payload.estimate } : {}),
+          ...payload.allocation,
+        });
         setConfirmOpen(false);
         return;
       }
@@ -385,13 +439,17 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
           "over budget" is a shrug, "$2.40 left of $30" is a decision. */}
       <ConfirmDialog
         open={overAllocation != null}
-        tone="destructive"
-        title="Over this initiative's budget"
-        body={
-          overAllocation
-            ? `${money(overAllocation.spentUsd)} of ${money(overAllocation.allocatedUsd)} is already spent this month, leaving ${money(overAllocation.remainingUsd)}. ${overAllocation.reason.replace(/ — .*$/, '')}. Dispatching anyway spends over the allocation.`
-            : ''
+        // A refusal built on a prior is a warning, not a verdict — reserve the
+        // loudest tone for a spent-out allocation or a size-scaled forecast,
+        // which are the two cases we can actually stand behind.
+        tone={
+          overAllocation && overAllocation.remainingUsd > 0
+            && overAllocation.confidence != null && overAllocation.confidence !== 'scaled'
+            ? 'caution'
+            : 'destructive'
         }
+        title="Over this initiative's budget"
+        body={overAllocation ? overAllocationBody(overAllocation) : ''}
         confirmLabel={dispatching ? 'Dispatching…' : 'Dispatch anyway'}
         confirmDisabled={dispatching}
         onConfirm={() => {
