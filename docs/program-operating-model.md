@@ -190,30 +190,58 @@ clone path reports a missing credential rather than failing soft.
 
 ## The allocation as a brake
 
-`POST /api/bots/dispatch-work` checks the initiative's remaining allocation
-before dispatching (`decideAllocation` in `lib/bot-runner.ts`). A forecast that
-does not fit answers **409** with the estimate and the allocation state
-attached, and proceeds only with an explicit `confirmOverBudget`.
+`POST /api/bots/dispatch-work` runs three soft brakes in order — the per-run
+cap, the initiative allocation, and the SME's sprint envelope — each pure in
+`lib/bot-runner.ts` (`decideRunBudget` / `decideAllocation` / `decideEnvelope`).
+A forecast that does not fit answers **409** carrying `gate` (`run-budget` /
+`allocation` / `envelope`) and `confirmFlag`, and proceeds only with that
+specific flag: `confirmOverRunBudget`, `confirmOverAllocation`, or
+`confirmOverEnvelope`. One click never answers two limits — the deprecated
+`confirmOverBudget` still opens the two gates that predate the split, but not
+the envelope.
 
-Three deliberate choices:
+Shared choices across all three brakes:
 
 - **Soft, not hard.** Unlike the per-day bot budget, which self-pauses the bot,
-  this gates human-initiated work. A hard stop with no override would strand an
+  these gate human-initiated work. A hard stop with no override would strand an
   SME mid-sprint, and the estimate is a forecast, not a bill.
-- **Unbudgeted is not zero-budget.** An initiative with no allocation row is not
-  braked at all; it shows up on the Budgets page as a blind spot instead.
-- **Unknown estimates do not brake.** If the item is unsized or the repo has no
-  per-point history, the dispatch proceeds — refusing on an unknown would brake
-  every first dispatch against a new repo.
+- **Unbudgeted is not zero-budget.** An initiative with no allocation row, or an
+  SME with no active grant, is not braked by that gate; the allocation blind
+  spot shows on the Budgets page instead.
+- **One forecast, three confidences.** A single fallback chain
+  (`selectDispatchForecast`) feeds both the estimate the operator reads and the
+  forecast the brakes judge, so they cannot disagree. It always returns a range
+  and a `confidence` label — `scaled` (per-point history), `run-history`
+  (run-level), or `prior` (no history). The brakes test **p75** against the
+  remainder regardless of confidence, so a first, historyless dispatch against a
+  small allocation still brakes; confidence shapes the 409's wording, not the
+  verdict.
 
-Still to do here: the same check on the bot fire path (`decideFire` knows the
-bot's own budgets but not its initiative's), and enforcement against the
-per-SME `budget_grants` envelope rather than only the initiative total.
+Envelope attribution is honest about what the data supports: a grantee's burn is
+the sum of `bot_runs` whose `dispatched_by` (taken from the session, never the
+body) is that person, inside the grant's sprint window. Runs predating the
+`dispatched_by` column, cron firings, and other people's dispatches count
+against nobody — and when attribution is unavailable the burn is treated as
+*unknown*, so only a forecast exceeding the whole envelope brakes.
+
+## Sprints
+
+`/iq/sprints` (and `GET /api/sprints?scope=mine|all`) is the SME's view: an SME
+lands on the sprints they steward, hold a grant on, or have work in — each card
+carrying dates, the work board grouped by status, points, planned cost, the
+envelope, and the initiative's spend in the window (labelled as initiative
+spend, never a personal burn). `scope=all` takes the budgets read tier; an SME
+requesting it gets a 403, not a silently narrowed answer.
 
 ## Not built yet
 
-- **Sprint surfaces in the portal.** The tables and the seed are there; there
-  is no sprint board or envelope-burn view yet.
-- **Grant-scoped dispatch.** `DispatchAgentRun` is currently role-wide. Cedar
-  can condition on the initiative, so an SME could be permitted to dispatch
-  only where they hold a grant.
+- **Bot-fire allocation brake.** `decideFire` knows a bot's own per-run/per-day
+  budgets but not its initiative's allocation, so a cron bot's spend is bounded
+  by its caps, not the initiative envelope. That looks deliberate —
+  `v_initiative_maintenance_30d` treats bot spend as the maintenance *floor* an
+  allocation is read against — but it is worth an explicit decision.
+- **Grant-scoped dispatch.** `DispatchAgentRun` is role-wide. The envelope brake
+  now enforces the *money* per grant, but any SME can still dispatch against any
+  initiative; Cedar could condition the action on holding a grant there.
+- **Sprint mutation.** The sprint surface is read-only — no creating sprints,
+  moving items between them, or granting envelopes from the UI.
