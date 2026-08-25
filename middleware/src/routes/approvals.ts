@@ -33,7 +33,7 @@ import {
   type ApprovalCreatedEvent,
   type ApprovalDecisionEvent,
 } from '../lib/approval-broker.js';
-import { isAllowed, resolveSession, requireSession } from '../lib/authz.js';
+import { isAllowed, resolveSession, requireSession, requireTenant, requireAction } from '../lib/authz.js';
 import { ssoAvailable } from '../lib/session.js';
 import { logAuthz } from '../lib/audit.js';
 import { rateLimit } from '../lib/rate-limit.js';
@@ -343,14 +343,14 @@ approvalsRouter.post('/request', requestLimit, requireServiceAuth, asyncHandler(
 }));
 
 // List approvals (optionally filtered by status). Used by the portal queue.
-approvalsRouter.get('/', requireSession('ViewObservability'), asyncHandler(async (req, res) => {
+approvalsRouter.get('/', requireTenant('orgiq'), requireAction('ViewObservability'), asyncHandler(async (req, res) => {
   const status = typeof req.query['status'] === 'string' ? (req.query['status'] as string) : undefined;
   const approvals = await fetchApprovals(status);
   res.json({ approvals });
 }));
 
 // SSE stream of approval lifecycle events. Replays the recent buffer on connect.
-approvalsRouter.get('/stream', requireSession('ViewObservability'), (req, res) => {
+approvalsRouter.get('/stream', requireTenant('orgiq'), requireAction('ViewObservability'), (req, res) => {
   initSSE(res);
   for (const ev of recentApprovalEvents(50).reverse()) {
     writeSSE(res, ev);
@@ -362,7 +362,7 @@ approvalsRouter.get('/stream', requireSession('ViewObservability'), (req, res) =
 // Single-row fetch. Used by the Strands tool to long-poll. Server-side: if a
 // PENDING row is past its 5min expiry, flip it to EXPIRED before returning so
 // stale tools don't hang.
-approvalsRouter.get('/:id', requireSession('ViewObservability'), asyncHandler(async (req, res) => {
+approvalsRouter.get('/:id', requireTenant('orgiq'), requireAction('ViewObservability'), asyncHandler(async (req, res) => {
   const id = req.params['id'] as string;
   let row = await fetchApproval(id);
   if (!row) {
