@@ -143,7 +143,7 @@ export async function listArticles(opts: {
 }): Promise<ArticleSummary[]> {
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
   const params: SqlParameter[] = [intParam('lim', limit)];
-  const whereClauses: string[] = ["d.doc_type = 'article'"];
+  const whereClauses: string[] = ["d.doc_type = 'news_article'"];
 
   if (opts.beat) {
     params.push(strParam('beat', opts.beat));
@@ -207,7 +207,7 @@ export async function getArticle(id: string): Promise<ArticleDetail | null> {
          p.name AS byline_name
        FROM documents d
        LEFT JOIN people p ON p.id = d.byline_person_id
-       WHERE d.id = :id AND d.doc_type = 'article'
+       WHERE d.id = :id AND d.doc_type = 'news_article'
        LIMIT 1`,
       [strParam('id', id)],
     );
@@ -322,7 +322,7 @@ export async function getTodayStats(): Promise<TodayStats> {
     const totalRows = await exec(
       `SELECT COUNT(*) AS cnt
        FROM documents
-       WHERE doc_type = 'article'
+       WHERE doc_type = 'news_article'
          AND published_at::date = :today::date`,
       params,
     );
@@ -331,7 +331,7 @@ export async function getTodayStats(): Promise<TodayStats> {
     const sectionRows = await exec(
       `SELECT section, COUNT(*) AS cnt
        FROM documents
-       WHERE doc_type = 'article'
+       WHERE doc_type = 'news_article'
          AND published_at::date = :today::date
          AND section IS NOT NULL
        GROUP BY section
@@ -387,7 +387,7 @@ export async function getEntity(id: string): Promise<EntityDetail | null> {
          FROM article_entities ae
          JOIN documents d ON d.id = ae.article_id
          WHERE ae.entity_id = :id
-           AND d.doc_type = 'article'
+           AND d.doc_type = 'news_article'
          ORDER BY d.published_at DESC NULLS LAST
          LIMIT 50`,
         [strParam('id', id)],
@@ -571,7 +571,7 @@ export async function updatePitchStatus(id: string, status: string): Promise<boo
 export async function publishArticle(id: string): Promise<boolean> {
   const rows = await exec(
     "UPDATE documents SET status = 'published', published_at = COALESCE(published_at, NOW()) " +
-    "WHERE id = :id AND doc_type = 'article' RETURNING id",
+    "WHERE id = :id AND doc_type = 'news_article' RETURNING id",
     [strParam('id', id)],
   );
   return rows.length > 0;

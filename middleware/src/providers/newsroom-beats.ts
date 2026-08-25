@@ -55,7 +55,7 @@ export async function getBeatCoverage(opts: { days: number }): Promise<BeatHeatm
               DATE(published_at)::text AS day,
               COUNT(*)::int            AS cnt
          FROM documents
-        WHERE doc_type    = 'article'
+        WHERE doc_type    = 'news_article'
           AND published_at > now() - make_interval(days => :d::int)
           AND section IS NOT NULL
         GROUP BY section, DATE(published_at)`,
@@ -107,7 +107,7 @@ export async function getTopBeats(limit: number): Promise<TopBeatsResponse> {
       `SELECT section,
               COUNT(*)::int AS cnt
          FROM documents
-        WHERE doc_type    = 'article'
+        WHERE doc_type    = 'news_article'
           AND published_at > now() - make_interval(days => 7)
           AND section IS NOT NULL
         GROUP BY section
