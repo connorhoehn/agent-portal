@@ -49,6 +49,14 @@ dynamo_empty() {
   [[ "$count" == "0" || "$count" == "error" ]]
 }
 
+# Terminal CloudFormation status of a stack, or NOT_FOUND if no such stack
+# exists. Used by the post-deploy reconciliation and the KB race detector — a
+# describe that fails (stack absent, or unreadable) collapses to NOT_FOUND.
+stack_status() {
+  aws cloudformation describe-stacks --stack-name "$1" --region "$REGION" \
+    --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "NOT_FOUND"
+}
+
 # ──────────────────────────────────────────────────────────────────
 # 1. Orphaned S3 buckets
 # ──────────────────────────────────────────────────────────────────
@@ -236,8 +244,141 @@ CDK_FLAGS=(
 echo "  method=${METHOD}  concurrency=5  no-rollback=true"
 echo ""
 
-if [[ ${#CDK_ARGS[@]} -eq 0 ]]; then
-  npx cdk deploy --all "${CDK_FLAGS[@]}"
-else
-  npx cdk deploy "${CDK_ARGS[@]}" "${CDK_FLAGS[@]}"
+# ──────────────────────────────────────────────────────────────────
+# Honest exit status — do NOT trust `cdk deploy` to fail loudly.
+#
+# A `cdk deploy --all` that dies mid-fleet does NOT reliably exit non-zero. When
+# OrgIQ-KnowledgeBase hit CREATE_FAILED (a fresh-cluster Data-API race in its
+# DbInitExtension custom resource), the SIX stacks that import its exports —
+# Agents, AgentCoreGateway, AgentCoreRuntime, AgentCoreTelemetry, Observability,
+# MiddlewareService — were silently skipped and the script STILL exited 0. `set
+# -e` never fired; we only learned the deploy was half-built by reading the log
+# and querying stacks by hand.
+#
+# So the cdk exit code is not the last word. After deploying we reconcile the
+# set of stacks this invocation was meant to produce against their ACTUAL
+# CloudFormation status and exit non-zero if any is not in a healthy *_COMPLETE
+# state — the same FAILURES[]-array honesty destroy.sh uses.
+# ──────────────────────────────────────────────────────────────────
+
+run_cdk_deploy() {
+  if [[ ${#CDK_ARGS[@]} -eq 0 ]]; then
+    npx cdk deploy --all "${CDK_FLAGS[@]}"
+  else
+    npx cdk deploy "${CDK_ARGS[@]}" "${CDK_FLAGS[@]}"
+  fi
+}
+
+# The stacks this invocation is expected to produce. Explicit OrgIQ-* names on
+# the command line scope the deploy to exactly those (matching cdk's own
+# selection); otherwise (`--all`, or context-only args like `--context k=v`) the
+# whole app is deployed and STACKS_TO_DEPLOY (from `cdk ls` above) is the
+# expected set. This keeps the single-stack invocation — e.g. `./deploy.sh
+# OrgIQ-AgentCoreRuntime --context deployRuntimes=true` — reconciling only
+# against OrgIQ-AgentCoreRuntime, not the whole fleet.
+EXPECTED_STACKS=()
+if [[ ${#CDK_ARGS[@]} -gt 0 ]]; then
+  for arg in "${CDK_ARGS[@]}"; do
+    [[ "$arg" == OrgIQ* ]] && EXPECTED_STACKS+=("$arg")
+  done
 fi
+if [[ ${#EXPECTED_STACKS[@]} -eq 0 ]]; then
+  while IFS= read -r stack; do
+    [[ -n "$stack" ]] && EXPECTED_STACKS+=("$stack")
+  done <<< "$STACKS_TO_DEPLOY"
+fi
+if [[ ${#EXPECTED_STACKS[@]} -eq 0 ]]; then
+  echo "  ✗ Could not determine which stacks to deploy (cdk ls returned nothing)."
+  echo "    Refusing to report success over an unknown deploy set."
+  exit 1
+fi
+
+kb_expected() {
+  local s
+  for s in "${EXPECTED_STACKS[@]}"; do
+    [[ "$s" == "OrgIQ-KnowledgeBase" ]] && return 0
+  done
+  return 1
+}
+
+# The one KB failure worth auto-retrying: on a freshly-created Aurora cluster the
+# Data API (HttpEndpoint) is not yet reachable when the KB's DbInitExtension
+# custom resource runs, so it fails with "HttpEndpoint is not enabled" and the
+# stack lands in CREATE_FAILED. It is a startup race — by a second attempt the
+# Data API endpoint is stable. A sibling change hardens the CDK side; this is
+# defense in depth so deploy.sh recovers even if the race slips through.
+kb_hit_datapi_race() {
+  [[ "$(stack_status OrgIQ-KnowledgeBase)" == "CREATE_FAILED" ]] || return 1
+  local reason
+  reason=$(aws cloudformation describe-stack-events \
+    --stack-name OrgIQ-KnowledgeBase --region "$REGION" \
+    --query "StackEvents[?ResourceStatus=='CREATE_FAILED'].ResourceStatusReason" \
+    --output text 2>/dev/null || echo "")
+  echo "$reason" | grep -qiE 'HttpEndpoint is not enabled|DbInit'
+}
+
+# Deploy. `|| DEPLOY_RC=$?` keeps `set -e` from aborting on a mid-fleet failure,
+# so we always reach the reconciliation below no matter how cdk exits.
+DEPLOY_RC=0
+run_cdk_deploy || DEPLOY_RC=$?
+
+# ── Targeted single-shot recovery for the KB Data-API race ──
+# A CREATE_FAILED stack cannot be updated — CFN accepts only a delete then a
+# fresh create — so delete the failed KB stack and re-run the deploy ONCE. The
+# retry is bounded to a single shot (KB_RETRIED) so a genuinely-broken deploy
+# cannot loop. Gated on the KB being in scope for this invocation, so a
+# single-stack run never deletes a KB it was not asked to touch. This mirrors
+# exactly the manual recovery that worked this session: delete failed KB stack →
+# redeploy → KB + all six downstream came up clean. (Safe on a first deploy: the
+# downstream importers were skipped, so nothing consumes the KB's exports yet.)
+if [[ "${KB_RETRIED:-false}" == "false" ]] && kb_expected && kb_hit_datapi_race; then
+  echo ""
+  echo "── OrgIQ-KnowledgeBase CREATE_FAILED on the Data-API race — recovering ──"
+  echo "  Deleting the failed KB stack (a CREATE_FAILED stack cannot be updated)..."
+  aws cloudformation delete-stack --stack-name OrgIQ-KnowledgeBase --region "$REGION" 2>/dev/null || true
+  aws cloudformation wait stack-delete-complete --stack-name OrgIQ-KnowledgeBase --region "$REGION" 2>/dev/null || true
+  echo "  Re-running the deploy once (Data API endpoint is stable by now)..."
+  KB_RETRIED=true
+  DEPLOY_RC=0
+  run_cdk_deploy || DEPLOY_RC=$?
+fi
+
+# ──────────────────────────────────────────────────────────────────
+# Reconcile expected stacks against their real CloudFormation status.
+# ──────────────────────────────────────────────────────────────────
+echo ""
+echo "── Reconciling deployed stacks against CloudFormation ──"
+
+FAILURES=()
+for stack in "${EXPECTED_STACKS[@]}"; do
+  st=$(stack_status "$stack")
+  case "$st" in
+    CREATE_COMPLETE|UPDATE_COMPLETE|IMPORT_COMPLETE)
+      echo "  ✓ ${stack}  ${st}" ;;
+    NOT_FOUND)
+      # No stack by this name — skipped because a dependency failed, or never
+      # deployed. This is the silent-partial-deploy case that exited 0 before.
+      echo "  ✗ ${stack}  NOT_FOUND (skipped — a dependency failed, or never created)"
+      FAILURES+=("${stack}: not created (dependency failed or skipped)") ;;
+    *)
+      # Everything else is unhealthy: CREATE_FAILED, *_FAILED, any *_IN_PROGRESS
+      # left behind, and the ROLLBACK completes. ROLLBACK_COMPLETE /
+      # UPDATE_ROLLBACK_COMPLETE end in _COMPLETE but are terminal FAILURES, so
+      # they must NOT be mistaken for health.
+      echo "  ✗ ${stack}  ${st}"
+      FAILURES+=("${stack}: ${st}") ;;
+  esac
+done
+
+echo ""
+if [[ ${#FAILURES[@]} -gt 0 ]]; then
+  echo "✗ Deploy INCOMPLETE — ${#FAILURES[@]} of ${#EXPECTED_STACKS[@]} expected stack(s) not healthy:"
+  for f in "${FAILURES[@]}"; do echo "  - $f"; done
+  echo ""
+  echo "  Note: cdk may have exited ${DEPLOY_RC} — a mid-fleet failure can skip"
+  echo "  every downstream stack and still report success, which is why this"
+  echo "  reconciliation exists. Fix the failed stack and re-run"
+  echo "  ./scripts/deploy.sh (it is idempotent — healthy stacks are no-ops)."
+  exit 1
+fi
+echo "✓ Deploy complete — all ${#EXPECTED_STACKS[@]} expected stack(s) healthy"
