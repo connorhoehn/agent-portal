@@ -1,5 +1,6 @@
 import * as cdk from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as cr from 'aws-cdk-lib/custom-resources';
 import type { Construct } from 'constructs';
@@ -102,6 +103,101 @@ export class KnowledgeBaseStack extends cdk.Stack {
     // RDS Data API accepts one statement per call, so chain three CRs.
     // -------------------------------------------------------------------
 
+    // Data API readiness gate — guards the DbInit* calls below against the
+    // endpoint-enablement race.
+    //
+    // A freshly-created Aurora Serverless v2 cluster enables its RDS Data API
+    // (HTTP endpoint) *asynchronously*: `enableHttpEndpoint: true` is accepted
+    // at create time, but propagation lags — for a window after CREATE_COMPLETE
+    // the Data API still rejects `executeStatement` with
+    // `HttpEndpointNotEnabledException` ("HttpEndpoint is not enabled for
+    // resource arn:...:cluster:orgiq-aurora"). On the FIRST KB deploy after a
+    // cold cluster, DbInitExtension's `CREATE EXTENSION vector` fired inside
+    // that window and failed, rolling back the whole stack; a later redeploy
+    // only worked because the endpoint had since stabilised. Endpoint
+    // enablement is monotonic (once live it stays live), so a single gate that
+    // proves the Data API answers is enough to make every DbInit* call safe.
+    //
+    // We mirror aurora-stack's custom-resource idiom: a Python (boto3) inline
+    // Lambda behind a cr.Provider. boto3 always ships the `rds-data` client, so
+    // this avoids depending on which SDK clients the Node Lambda runtime bundles.
+    const dataApiReadyRole = new iam.Role(this, 'DataApiReadyRole', {
+      assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
+      ],
+      inlinePolicies: {
+        DataApiProbe: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              actions: ['rds-data:ExecuteStatement'],
+              resources: [props.auroraClusterArn],
+            }),
+            new iam.PolicyStatement({
+              actions: ['secretsmanager:GetSecretValue'],
+              resources: [props.auroraCredentialsSecretArn],
+            }),
+          ],
+        }),
+      },
+    });
+
+    const dataApiReadyFn = new lambda.Function(this, 'DataApiReadyFn', {
+      runtime: lambda.Runtime.PYTHON_3_12,
+      handler: 'index.handler',
+      timeout: cdk.Duration.minutes(10),
+      role: dataApiReadyRole,
+      // Poll a trivial `SELECT 1` until the endpoint answers. We retry only the
+      // known cold-cluster transients — the endpoint still enabling, or the
+      // serverless cluster resuming/scaling from zero — and re-raise anything
+      // else (auth, missing DB) so real misconfiguration still fails loudly.
+      code: lambda.Code.fromInline(`
+import boto3, time
+
+TRANSIENT = (
+    'HttpEndpoint is not enabled',
+    'HttpEndpointNotEnabled',
+    'DatabaseResuming',
+    'is resuming',
+)
+
+def handler(event, context):
+    pid = event.get('PhysicalResourceId', 'data-api-ready')
+    if event['RequestType'] == 'Delete':
+        return {'PhysicalResourceId': pid}
+    props = event['ResourceProperties']
+    data = boto3.client('rds-data')
+    last = None
+    for _ in range(54):  # ~9 min at 10s cadence, inside the 10-min Lambda timeout
+        try:
+            data.execute_statement(
+                resourceArn=props['ClusterArn'],
+                secretArn=props['SecretArn'],
+                database=props['Database'],
+                sql='SELECT 1',
+            )
+            return {'PhysicalResourceId': pid}
+        except Exception as e:
+            last = str(e)
+            if any(m in last for m in TRANSIENT):
+                time.sleep(10)
+                continue
+            raise
+    raise Exception('Aurora Data API did not become ready in time: ' + str(last))
+`),
+    });
+
+    const dataApiReady = new cdk.CustomResource(this, 'DataApiReady', {
+      serviceToken: new cr.Provider(this, 'DataApiReadyProvider', {
+        onEventHandler: dataApiReadyFn,
+      }).serviceToken,
+      properties: {
+        ClusterArn: props.auroraClusterArn,
+        SecretArn: props.auroraCredentialsSecretArn,
+        Database: 'orgiq',
+      },
+    });
+
     const rdsCall = (id: string, sql: string): cr.AwsCustomResource =>
       new cr.AwsCustomResource(this, id, {
         onCreate: {
@@ -128,6 +224,9 @@ export class KnowledgeBaseStack extends cdk.Stack {
       });
 
     const dbExtension = rdsCall('DbInitExtension', 'CREATE EXTENSION IF NOT EXISTS vector');
+    // Gate the whole DbInit* chain: nothing runs until the Data API is proven
+    // usable, so the endpoint-enablement race can no longer fail the first call.
+    dbExtension.node.addDependency(dataApiReady);
 
     const dbTable = rdsCall(
       'DbInitTable',
