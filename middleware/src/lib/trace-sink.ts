@@ -134,6 +134,8 @@ export interface TraceResult {
   embeddingComputed: boolean;
   sampled: boolean;             // false if the sampling die rolled against us
   inserted: boolean;            // false if the Aurora INSERT failed
+  skipped: boolean;             // true if the write-side phantom guard dropped it
+                                // before any embed/judge/INSERT happened
   // M2 — token + cost. Echoed back so the harness runner can populate
   // test_results without re-computing.
   inputTokens: number | null;
@@ -628,6 +630,63 @@ async function insertGuardrailInterventions(
   await exec(sql, params);
 }
 
+// ── Phantom-trace write guard ─────────────────────────────────────────────────
+//
+// Some bundles reaching the sink carry no substance: a partial/aborted run, a
+// health-ping replay, or the middleware's own `recordInvocation` shape when it
+// wrote before the agent's real bundle arrived — model_id NULL, an empty
+// response, no tokens, no tool calls. Persisting these pollutes the drift,
+// quality and error surfaces (a NULL-model, empty-response row scores as a hard
+// failure it never was) yet adds no signal. We drop them BEFORE the embed/judge/
+// INSERT so they never reach Aurora.
+//
+// The predicate is deliberately conservative — a false-drop of a real trace is
+// worse than the occasional phantom slipping through — so EVERY one of these
+// must hold before we skip:
+//   • no model attributed          (modelId absent/blank)
+//   • response is empty/whitespace  (a real short answer has text → kept)
+//   • no token usage reported       (neither input nor output tokens finite)
+//   • no tool calls
+//   • no guardrail signal           (no action, no fired-rule rows, no PII flag —
+//                                     a blocked/anonymized run is substantive even
+//                                     with an empty response)
+//   • no memory events
+// A legitimately short answer keeps its text; a legitimately missing model still
+// carries a response, tokens, tools, or a guardrail signal. Only a bundle empty
+// on ALL of these axes is treated as a phantom. test:* templates are exempt —
+// harness writes are explicit and guaranteed a row by contract.
+
+let _phantomSkips = 0;
+
+function isFiniteNumber(v: unknown): boolean {
+  return typeof v === 'number' && Number.isFinite(v);
+}
+
+function isPhantomTrace(input: TraceInput): boolean {
+  const hasModel = typeof input.modelId === 'string' && input.modelId.trim().length > 0;
+  if (hasModel) return false;
+
+  const hasResponse = typeof input.response === 'string' && input.response.trim().length > 0;
+  if (hasResponse) return false;
+
+  const hasTokens = isFiniteNumber(input.inputTokens) || isFiniteNumber(input.outputTokens);
+  if (hasTokens) return false;
+
+  const hasToolCalls = Array.isArray(input.toolCalls) && input.toolCalls.length > 0;
+  if (hasToolCalls) return false;
+
+  const hasGuardrailSignal =
+    (typeof input.guardrailAction === 'string' && input.guardrailAction.trim().length > 0) ||
+    (Array.isArray(input.guardrailInterventions) && input.guardrailInterventions.length > 0) ||
+    input.piiDetected === true;
+  if (hasGuardrailSignal) return false;
+
+  const hasMemoryEvents = Array.isArray(input.memoryEvents) && input.memoryEvents.length > 0;
+  if (hasMemoryEvents) return false;
+
+  return true;
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 function snip(text: string, max = 500): string {
@@ -701,6 +760,7 @@ export async function processTrace(input: TraceInput): Promise<TraceResult> {
       embeddingComputed: false,
       sampled: false,
       inserted: false,
+      skipped: false,
       inputTokens: null,
       outputTokens: null,
       judgeInputTokens: null,
@@ -716,6 +776,34 @@ export async function processTrace(input: TraceInput): Promise<TraceResult> {
   const templateId = input.templateId;
   const promptSnippet = snip(input.prompt);
   const responseSnippet = snip(input.response);
+
+  // Write-side phantom guard. Drop non-substantive bundles before any embed/
+  // judge/INSERT so they never contaminate the drift/quality/error surfaces.
+  // test:* templates are exempt — the harness contract guarantees them a row.
+  if (!isTestTemplate && isPhantomTrace(input)) {
+    _phantomSkips++;
+    console.log(
+      `[trace-sink] skipped phantom trace (agent=${agentId}, invocation=${invocationId}); ` +
+      `total skipped ${_phantomSkips}`,
+    );
+    return {
+      invocationId,
+      judgeScore: null,
+      judgeRationale: null,
+      schemaValid: null,
+      embeddingComputed: false,
+      sampled: true,
+      inserted: false,
+      skipped: true,
+      inputTokens: null,
+      outputTokens: null,
+      judgeInputTokens: null,
+      judgeOutputTokens: null,
+      estCostUsd: null,
+      judgeCostUsd: null,
+      totalCostUsd: null,
+    };
+  }
 
   // 1. Embed in parallel with judge — neither depends on the other.
   const [embedding, judge] = await Promise.all([
@@ -889,6 +977,7 @@ export async function processTrace(input: TraceInput): Promise<TraceResult> {
     embeddingComputed: !!embedding,
     sampled: true,
     inserted,
+    skipped: false,
     inputTokens: agentInputTokens,
     outputTokens: agentOutputTokens,
     judgeInputTokens,
@@ -907,6 +996,12 @@ export function _resetCachesForTest(): void {
   _samplingCache.clear();
   _samplingFetchedAt = 0;
   _centroidCache.clear();
+  _phantomSkips = 0;
+}
+
+/** Exposed for unit tests — total phantom bundles the write-side guard dropped. */
+export function _phantomSkipCountForTest(): number {
+  return _phantomSkips;
 }
 
 // `config` isn't strictly needed at runtime here, but importing it eagerly

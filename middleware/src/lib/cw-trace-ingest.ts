@@ -321,6 +321,7 @@ export async function pollOnce(): Promise<{ ingested: number; errors: number }> 
   let ingested = 0;
   let errors = 0;
   let sampledOut = 0;
+  let skipped = 0;
   let duplicates = 0;
   const rows = result.results ?? [];
   let matched = 0;
@@ -384,6 +385,7 @@ export async function pollOnce(): Promise<{ ingested: number; errors: number }> 
       const result = await processTrace(bundle);
       if (result.inserted) ingested++;
       else if (result.sampled === false) sampledOut++;
+      else if (result.skipped) skipped++;
       else duplicates++;
     } catch (err) {
       errors++;
@@ -401,6 +403,7 @@ export async function pollOnce(): Promise<{ ingested: number; errors: number }> 
     const detail = [
       `persisted ${ingested}`,
       sampledOut > 0 ? `sampled-out ${sampledOut}` : '',
+      skipped > 0 ? `phantom-skipped ${skipped}` : '',
       duplicates > 0 ? `duplicate ${duplicates}` : '',
       `parse errors ${errors}`,
     ].filter(Boolean).join(', ');
