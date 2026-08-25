@@ -214,8 +214,18 @@ trafficRouter.get('/top-users', asyncHandler(async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /per-agent-summary — RPS, p50/p99 latency, error rate, cost per agent.
 //
-// Error rate = fraction of rows with judge_score < 0.3 OR guardrail_action =
-// 'BLOCKED'. Latency uses Postgres' PERCENTILE_CONT.
+// Error rate = fraction of rows that actually FAILED — a guardrail intervention
+// (guardrail_action present and not 'NONE') or non-conforming output
+// (schema_valid = false). This matches the error proxy the canary rollup view
+// uses (observability.v_canary_score_by_version_5m) — invocation_traces has no
+// dedicated error column yet, so these two are the honest stand-ins.
+//
+// A low judge score is NOT an error: it's a poor-quality *answer* to a request
+// that otherwise succeeded, so it's surfaced separately as lowQualityRate
+// (judge_score < 0.3) rather than folded into errorRate. Conflating the two
+// made a fleet look broken when it was merely giving weak answers.
+//
+// Latency uses Postgres' PERCENTILE_CONT.
 // ─────────────────────────────────────────────────────────────────────────────
 interface PerAgentSummaryRow {
   agentId: string;
@@ -224,6 +234,7 @@ interface PerAgentSummaryRow {
   p50DurationMs: number | null;
   p99DurationMs: number | null;
   errorRate: number;
+  lowQualityRate: number;
   totalCostUsd: number;
 }
 
@@ -241,9 +252,12 @@ trafficRouter.get('/per-agent-summary', asyncHandler(async (req, res) => {
            PERCENTILE_CONT(0.5)  WITHIN GROUP (ORDER BY duration_ms)::float8 AS p50,
            PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY duration_ms)::float8 AS p99,
            COUNT(*) FILTER (
-             WHERE (judge_score IS NOT NULL AND judge_score < 0.3)
-                OR guardrail_action = 'BLOCKED'
+             WHERE (guardrail_action IS NOT NULL AND guardrail_action <> 'NONE')
+                OR schema_valid = false
            )::bigint                                                  AS error_count,
+           COUNT(*) FILTER (
+             WHERE judge_score IS NOT NULL AND judge_score < 0.3
+           )::bigint                                                  AS low_quality_count,
            COALESCE(SUM(COALESCE(total_cost_usd, 0)), 0)::float8     AS total_cost_usd
       FROM observability.invocation_traces
      WHERE ts > now() - (INTERVAL '1 hour' * :hours)
@@ -262,6 +276,7 @@ trafficRouter.get('/per-agent-summary', asyncHandler(async (req, res) => {
     const byAgent: PerAgentSummaryRow[] = rows.map((r) => {
       const invocations = Number(r['invocations'] ?? 0);
       const errorCount = Number(r['error_count'] ?? 0);
+      const lowQualityCount = Number(r['low_quality_count'] ?? 0);
       return {
         agentId: String(r['agent_id'] ?? 'unknown'),
         invocations,
@@ -269,6 +284,7 @@ trafficRouter.get('/per-agent-summary', asyncHandler(async (req, res) => {
         p50DurationMs: r['p50'] == null ? null : Number(r['p50']),
         p99DurationMs: r['p99'] == null ? null : Number(r['p99']),
         errorRate: invocations > 0 ? errorCount / invocations : 0,
+        lowQualityRate: invocations > 0 ? lowQualityCount / invocations : 0,
         totalCostUsd: r['total_cost_usd'] == null ? 0 : Number(r['total_cost_usd']),
       };
     });

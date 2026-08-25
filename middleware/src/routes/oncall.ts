@@ -8,7 +8,8 @@
 // fires at 03:00, the operator wants a single timeline that aligns:
 //   - drift P95 (semantic regression)
 //   - judge P05 (worst-tail quality)
-//   - error rate (BLOCKED + judge<0.3)
+//   - error rate (real failures: guardrail intervention or schema-invalid;
+//     NOT judge quality — a weak answer is not a failed request)
 //   - HITL queue depth + decisions
 //   - cost (a sudden 10× cost spike is itself a signal)
 //   - deploy markers (prompt_versions registered just before)
@@ -300,8 +301,13 @@ oncallRouter.get('/timeline', asyncHandler(async (req, res) => {
                NULL
              ) AS drift_p95,
              PERCENTILE_CONT(0.05) WITHIN GROUP (ORDER BY w.judge_score)::float8 AS judge_p05,
-             SUM(CASE WHEN w.guardrail_action = 'BLOCKED'
-                       OR (w.judge_score IS NOT NULL AND w.judge_score < 0.3)
+             -- Real failures only: a guardrail intervention or non-conforming
+             -- output. Low judge_score is answer QUALITY (surfaced as judge_p05
+             -- in this same overlay), not a request error — folding it in here
+             -- made a healthy fleet giving mediocre answers alarm as erroring.
+             -- Mirrors the per-agent-summary error proxy in routes/traffic.ts.
+             SUM(CASE WHEN (w.guardrail_action IS NOT NULL AND w.guardrail_action <> 'NONE')
+                       OR w.schema_valid = false
                       THEN 1 ELSE 0 END)::bigint AS errors,
              COALESCE(SUM(w.total_cost_usd), 0)::float8 AS cost_usd
         FROM window_rows w
