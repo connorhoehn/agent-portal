@@ -25,7 +25,7 @@ import {
 } from '../providers/bots.js';
 import {
   fireBot, dispatchWorkItem, preflightWorkItem, decideRunBudget, decideAllocation,
-  decideEnvelope, loadEnvelope,
+  decideEnvelope, loadEnvelope, resolveActiveGrant, decideGrantScopedDispatch,
 } from '../lib/bot-runner.js';
 import { getBudget } from '../providers/budgets.js';
 import { registerBot, unregisterBot } from '../lib/bot-scheduler.js';
@@ -226,6 +226,27 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
     // 400 undispatchable, 404 missing, 409 ambiguous codebase (with options).
     res.status(pre.status).json({ error: pre.error, ...(pre.options ? { options: pre.options } : {}) });
     return;
+  }
+
+  // ── 1b. Grant-scoped authorization, before any money ──────────────────────
+  // An SME may only dispatch against an initiative they hold an ACTIVE sprint
+  // grant on — they spend inside an envelope someone else authorized. This is
+  // authorization (a hard 403), distinct from the envelope brake below, which
+  // enforces the money OF that grant. org-leader/hr-admin/admin allocate and
+  // need no grant; resolveActiveGrant returns null (→ no enforcement) for
+  // non-SME platform identities and on any grants-read failure, so an authz
+  // check never fabricates a denial it can't support.
+  const grantCtx = await resolveActiveGrant(pre.item.projectId, req.session?.sub);
+  if (grantCtx) {
+    const verdict = decideGrantScopedDispatch({
+      role: req.session?.role,
+      hasActiveGrant: grantCtx.hasActiveGrant,
+      initiativeName: grantCtx.initiativeName,
+    });
+    if (verdict.kind === 'deny') {
+      res.status(403).json({ error: verdict.reason });
+      return;
+    }
   }
 
   // ── 2. One fresh forecast, for both money gates ───────────────────────────

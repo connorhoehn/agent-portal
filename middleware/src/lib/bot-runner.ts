@@ -94,6 +94,82 @@ export function decideFire(bot: FireGuardInput): FireDecision {
   return { kind: 'fire' };
 }
 
+// ─── The bot-fire allocation brake, pure — OPT-IN, off by default ─────────────
+//
+// The doc flags this one as "worth an explicit decision", and the decision is:
+// this must NOT be a hard brake, and it is OFF unless someone asks for it.
+//
+// ── Why not a hard brake, and why off by default ─────────────────────────────
+// A cron bot IS the maintenance floor. `v_initiative_maintenance_30d` reads bot
+// spend as the baseline cost of keeping an initiative's lights on, and an
+// allocation is read *against* that floor — so a firing whose spend pushes the
+// initiative past its allocation is the floor doing exactly its job, not a bot
+// misbehaving. Braking the floor against the allocation is backwards: it would
+// strand scheduled maintenance (dependency bumps, drift checks, evidence
+// sweeps) the moment feature work ate the month's money — precisely when the
+// repo most needs its lights kept on.
+//
+// It is also a DIFFERENT shape from the three human-facing soft brakes. Those
+// answer 409 + confirmFlag, which only means anything to a human at a keyboard:
+// a cron trigger has nobody to click "confirm". So the bot-appropriate outcome
+// is not `confirm` but `skip` — the same visible, recorded skipped bot_run the
+// run-cap already produces, so the operator sees on the bot page that a firing
+// was braked and why, and the *next* trigger re-evaluates cleanly (when the
+// monthly allocation resets, firing resumes on its own with no human un-pause).
+//
+// And it is NOT `pause`. Pausing self-strands: a bot that hit its initiative's
+// allocation would stay paused for the rest of the period, killing every later
+// maintenance firing until a human intervened — the exact stranding this brake
+// exists to avoid. Skip is per-firing; pause is until-someone-notices.
+//
+// Default OFF (`enforceAllocation: false`) preserves the documented design
+// wholesale — bot spend stays the floor, unbraked. An operator who wants a
+// specific bot bounded by its initiative's allocation opts that one bot in.
+
+export interface BotFireAllocationInput {
+  /** Opt-in. False (the default firing path) → no brake, preserving the design
+   *  where bot spend is the maintenance floor an allocation is read against.
+   *  An operator turns this on per bot to bound its cron spend by the envelope. */
+  enforceAllocation: boolean;
+  /** The initiative's allocation this period. Null = unbudgeted, which is NOT
+   *  zero — an unfunded initiative's maintenance is never braked, the same
+   *  posture decideAllocation takes. */
+  allocatedUsd: number | null;
+  /** Attributed spend on the initiative so far this period. */
+  spentUsd: number;
+  /** Pessimistic (p75) projection of THIS firing's cost. */
+  projectedCostUsd: number;
+}
+
+export type BotFireAllocationDecision =
+  | { kind: 'proceed' }
+  /** Record a skipped bot_run: a live cron trigger was braked, which is visible
+   *  history on the bot page — never a self-pause, which would strand the rest
+   *  of the period's maintenance. */
+  | { kind: 'skip'; reason: string };
+
+/**
+ * Whether an OPT-IN cron firing fits inside its initiative's remaining
+ * allocation. Pure, and a no-op unless the bot opted in — see the section note
+ * for why this is a per-firing skip, never a hard stop or a self-pause, and why
+ * it is off by default.
+ */
+export function decideBotFireAllocation(i: BotFireAllocationInput): BotFireAllocationDecision {
+  if (!i.enforceAllocation || i.allocatedUsd == null) return { kind: 'proceed' };
+  const remaining = i.allocatedUsd - i.spentUsd;
+  if (i.projectedCostUsd <= remaining) return { kind: 'proceed' };
+  if (remaining <= 0) {
+    return {
+      kind: 'skip',
+      reason: `initiative allocation exhausted (${money(i.allocatedUsd)} allocated, ${money(i.spentUsd)} spent) — cron firing skipped while allocation enforcement is on for this bot`,
+    };
+  }
+  return {
+    kind: 'skip',
+    reason: `projected ${money(i.projectedCostUsd)} would exceed the ${money(remaining)} left of this initiative's ${money(i.allocatedUsd)} allocation — cron firing skipped while allocation enforcement is on for this bot`,
+  };
+}
+
 /**
  * The pipeline contract appended to EVERY dispatched mission. Capture diffs
  * the working tree (commit-per-capture commits on the agent's behalf), so an
@@ -483,6 +559,93 @@ export async function loadEnvelope(
     // A brake that cannot read its own inputs must not become a refusal — the
     // allocation brake still stands behind it.
     console.warn(`[bots] could not resolve the sprint envelope for ${orgProjectId}:`, (err as Error).message);
+    return null;
+  }
+}
+
+// ─── Grant-scoped dispatch authorization, pure ───────────────────────────────
+//
+// DispatchAgentRun is role-wide: an `sme` holding it can dispatch against ANY
+// initiative, not only the ones a release manager put them on. The envelope
+// brake above enforces the *money* of a grant, but not the *right to be here* —
+// an SME with no grant on an initiative is braked by nothing, because with no
+// grant there is no envelope to overrun. This closes that: an SME may dispatch
+// only where they hold an active grant.
+//
+// ── Why here and not in Cedar ────────────────────────────────────────────────
+// Cedar decides on the request's principal/action/resource and the policy
+// store — it cannot see budget_grants, which is live DB state keyed on
+// (person, initiative, sprint). So "condition DispatchAgentRun on holding a
+// grant" cannot be a Cedar policy; it is a DB-backed check, shaped like the
+// other decide* functions so the route calls one pure verdict.
+//
+// ── Authorization, not a soft brake ──────────────────────────────────────────
+// The three money gates are soft: a forecast is not a bill, and an operator may
+// have good reason to spend over a fence, so they answer 409 + a confirmFlag.
+// This is different in kind. "You have no grant here" is not a forecast the
+// caller can knowingly override — it is a missing authorization, and a
+// confirmFlag that waved it through would make grant-scoping cosmetic. So the
+// verdict is hard: allow or deny (the route answers 403), no override flag.
+//
+// ── Who is grant-scoped ──────────────────────────────────────────────────────
+// Only `sme`. An SME spends inside an envelope someone else authorized; the
+// grant IS that authorization. org-leader / hr-admin / admin allocate and
+// administer — they dispatch without a grant by design, so they always pass.
+// Every other role never reaches a DispatchAgentRun route at all, and an
+// unknown/absent role is not this function's to deny (open-mode demo identity,
+// tests) — so anything that is not `sme` passes.
+
+export type DispatchGrantDecision =
+  | { kind: 'allow' }
+  /** The route answers 403 — a missing grant is missing authorization, not a
+   *  forecast, so there is no confirmFlag to override it. */
+  | { kind: 'deny'; reason: string };
+
+/**
+ * Whether this principal is authorized to dispatch against THIS initiative at
+ * all — the authorization question, kept distinct from the money brakes. Only
+ * `sme` is grant-scoped; see the section note. Pure: the route resolves the
+ * role and the grant (resolveActiveGrant) and hands both here.
+ */
+export function decideGrantScopedDispatch(input: {
+  role: string | null | undefined;
+  hasActiveGrant: boolean;
+  initiativeName?: string | null;
+}): DispatchGrantDecision {
+  if (input.role !== 'sme') return { kind: 'allow' };
+  if (input.hasActiveGrant) return { kind: 'allow' };
+  const where = input.initiativeName ? ` on ${input.initiativeName}` : ' here';
+  return {
+    kind: 'deny',
+    reason: `you hold no active sprint grant${where}, so you cannot dispatch against this initiative — ask the release manager for a grant`,
+  };
+}
+
+/**
+ * Resolve, for the grant-scoped check, whether the caller holds an ACTIVE grant
+ * on an initiative: session subject → person → any active grant here. Mirrors
+ * loadEnvelope's resolution (active = the grant's sprint is `active`, or the
+ * grant is sprint-less and therefore standing), and its null-means-do-not-brake
+ * posture: no session, no person_id (a platform operator is not an SME), or a
+ * grants read that throws all return null, so the route enforces nothing rather
+ * than fabricating a denial an authz check must never invent.
+ */
+export async function resolveActiveGrant(
+  orgProjectId: string,
+  sessionSub: string | undefined,
+): Promise<{ hasActiveGrant: boolean; initiativeName: string | null } | null> {
+  if (!sessionSub) return null;
+  try {
+    const user = await getUser(sessionSub);
+    const personId = user?.personId;
+    if (!personId) return null;
+    const grants = await listGrants(orgProjectId);
+    const active = grants.some(
+      (g) => g.granteePersonId === personId && (g.sprintStatus === 'active' || g.sprintId == null),
+    );
+    return { hasActiveGrant: active, initiativeName: grants[0]?.orgProjectName ?? null };
+  } catch (err) {
+    console.warn(`[bots] could not resolve grant-scoped dispatch for ${orgProjectId}:`, (err as Error).message);
     return null;
   }
 }

@@ -11,7 +11,7 @@ jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', mock: { aur
 
 import {
   decideFire, renderPrompt, decideConcurrency, botMaxConcurrent, decideRunBudget,
-  decideAllocation, decideEnvelope,
+  decideAllocation, decideEnvelope, decideBotFireAllocation, decideGrantScopedDispatch,
   type FireGuardInput, type EnvelopeState,
 } from '../bot-runner.js';
 
@@ -392,6 +392,95 @@ describe('decideEnvelope', () => {
         expect(reason(d).split(' — ')).toHaveLength(2);
       }
     }
+  });
+});
+
+// ─── The opt-in bot-fire allocation brake ────────────────────────────────────
+//
+// Gap 2 from the operating model, decided deliberately: OFF by default (bot
+// spend is the maintenance FLOOR an allocation is read against, not a braked
+// figure), and when opted in it SKIPS a firing — the bot-appropriate visible
+// brake — rather than 409-confirming (no human to confirm a cron trigger) or
+// self-pausing (which would strand the rest of the period's maintenance).
+
+describe('decideBotFireAllocation', () => {
+  const base = {
+    enforceAllocation: true, allocatedUsd: 30, spentUsd: 10, projectedCostUsd: 5,
+  };
+
+  it('is a no-op unless the bot opted in — bot spend is the floor by default', () => {
+    // Even a firing that would blow the allocation proceeds when enforcement is off.
+    expect(decideBotFireAllocation({ ...base, enforceAllocation: false, projectedCostUsd: 999 }))
+      .toEqual({ kind: 'proceed' });
+  });
+
+  it('does not brake an unbudgeted initiative — unbudgeted is not zero', () => {
+    expect(decideBotFireAllocation({ ...base, allocatedUsd: null, projectedCostUsd: 999 }))
+      .toEqual({ kind: 'proceed' });
+  });
+
+  it('proceeds while the projection fits the remaining allocation', () => {
+    expect(decideBotFireAllocation({ ...base, projectedCostUsd: 20 })).toEqual({ kind: 'proceed' });
+    // Exactly consuming the remainder is within it.
+    expect(decideBotFireAllocation({ ...base, projectedCostUsd: 20, spentUsd: 10 }))
+      .toEqual({ kind: 'proceed' });
+  });
+
+  it('skips (never pauses) when the projection overruns the remainder', () => {
+    const d = decideBotFireAllocation({ ...base, spentUsd: 28, projectedCostUsd: 5 });
+    expect(d.kind).toBe('skip');
+    expect((d as { reason: string }).reason).toMatch(/\$2\.00 left/);
+    expect((d as { reason: string }).reason).toMatch(/skipped/);
+  });
+
+  it('reports an exhausted allocation as a fact, not a projection overrun', () => {
+    const d = decideBotFireAllocation({ ...base, spentUsd: 30, projectedCostUsd: 1 });
+    expect((d as { reason: string }).reason).toMatch(/exhausted/);
+    // Overspent past the allocation is still "exhausted", not a negative remainder.
+    expect((decideBotFireAllocation({ ...base, spentUsd: 44, projectedCostUsd: 1 }) as { reason: string }).reason)
+      .toMatch(/exhausted/);
+  });
+});
+
+// ─── Grant-scoped dispatch authorization ─────────────────────────────────────
+//
+// Gap 1: DispatchAgentRun is role-wide, so an sme could dispatch anywhere. This
+// scopes it to initiatives the sme holds an active grant on — a HARD verdict
+// (allow/deny → 403), not a soft brake: a missing grant is missing
+// authorization, not a forecast to override.
+
+describe('decideGrantScopedDispatch', () => {
+  it('allows an sme who holds an active grant here', () => {
+    expect(decideGrantScopedDispatch({ role: 'sme', hasActiveGrant: true }))
+      .toEqual({ kind: 'allow' });
+  });
+
+  it('denies an sme with no active grant, naming the initiative', () => {
+    const d = decideGrantScopedDispatch({
+      role: 'sme', hasActiveGrant: false, initiativeName: 'Observability Platform',
+    });
+    expect(d.kind).toBe('deny');
+    expect((d as { reason: string }).reason).toMatch(/no active sprint grant on Observability Platform/);
+    expect((d as { reason: string }).reason).toMatch(/ask the release manager/);
+    // Hard authorization — no confirmFlag to wave it through.
+    expect((d as { reason: string }).reason).not.toMatch(/confirmOver/);
+  });
+
+  it('falls back to a generic place when the initiative name is unknown', () => {
+    const d = decideGrantScopedDispatch({ role: 'sme', hasActiveGrant: false });
+    expect((d as { reason: string }).reason).toMatch(/no active sprint grant here/);
+  });
+
+  it('always allows the roles that allocate/administer — they need no grant', () => {
+    for (const role of ['org-leader', 'hr-admin', 'admin'] as const) {
+      expect(decideGrantScopedDispatch({ role, hasActiveGrant: false })).toEqual({ kind: 'allow' });
+    }
+  });
+
+  it('does not grant-scope an unknown or absent role — not this check\'s to deny', () => {
+    expect(decideGrantScopedDispatch({ role: undefined, hasActiveGrant: false })).toEqual({ kind: 'allow' });
+    expect(decideGrantScopedDispatch({ role: null, hasActiveGrant: false })).toEqual({ kind: 'allow' });
+    expect(decideGrantScopedDispatch({ role: 'member', hasActiveGrant: false })).toEqual({ kind: 'allow' });
   });
 });
 
