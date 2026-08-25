@@ -205,7 +205,13 @@ function readProse(text: string): ProseResult {
 
 // ── Tool-derived provenance ──────────────────────────────────────────────────
 
-const RETRIEVAL_RE = /retriev|knowledge_base|knowledgebase/i;
+// `search_organization` is the supervisor's retrieval hop: it routes to the
+// Search agent, which runs `query_knowledge_base` and hands back an answer that
+// cites the KB documents it used as inline `[Source: s3://…]`. So it IS a
+// retrieval call — the documents just arrive in prose, not a JSON result array
+// (see `documentsFromResult`). Matching it here is what makes a supervisor turn
+// chip its real documents instead of one generic A2A placeholder.
+const RETRIEVAL_RE = /retriev|knowledge_base|knowledgebase|search_organization/i;
 const GRAPH_RE = /query_graph|^graph$|_sql|sql_/i;
 const WEB_RE = /fetch_web|browse|web_page/i;
 
@@ -216,10 +222,12 @@ const WEB_RE = /fetch_web|browse|web_page/i;
  * true, is which body of data the hop consulted, so that is what the chip
  * says. Never the agent's name: "Scoring specialist" is our topology, not the
  * user's evidence.
+ *
+ * `search_organization` is NOT here — it retrieves documents and is handled by
+ * the retrieval branch, which chips the actual s3 URIs it cited.
  */
 const A2A_ORIGINS: Array<[RegExp, string, string]> = [
   [/get_expertise_scores/i, 'expertise scores', 'Ranking computed over the org graph'],
-  [/search_organization/i, 'org graph + knowledge base', 'Retrieval across the org graph and ingested documents'],
   [/get_strategic_advice/i, 'advisory analysis', 'Derived from org graph structure, not a stored document'],
 ];
 
@@ -284,6 +292,28 @@ export function retrievedDocuments(result: string | undefined): RetrievedDoc[] {
   return out;
 }
 
+/**
+ * Documents a retrieval tool call names, across both result shapes.
+ *
+ * `query_knowledge_base` returns a JSON array (`retrievedDocuments`), but the
+ * supervisor's `search_organization` hop returns the Search agent's *prose*
+ * answer, which cites its KB documents inline as `[Source: s3://…]`. When the
+ * JSON shape yields nothing, scan the raw result for those URIs so the hop
+ * still chips the documents it actually used. Deduped, JSON always preferred.
+ */
+export function documentsFromResult(result: string | undefined): RetrievedDoc[] {
+  const docs = retrievedDocuments(result);
+  if (docs.length > 0 || !result) return docs;
+  const seen = new Set<string>();
+  const out: RetrievedDoc[] = [];
+  for (const uri of result.match(URI_SCAN_RE) ?? []) {
+    if (seen.has(uri)) continue;
+    seen.add(uri);
+    out.push({ uri });
+  }
+  return out;
+}
+
 // ── Entry point ──────────────────────────────────────────────────────────────
 
 /**
@@ -316,10 +346,11 @@ export function deriveSources(input: {
 
     if (RETRIEVAL_RE.test(tc.name)) {
       provenance.retrievalCalls += 1;
-      const docs = retrievedDocuments(tc.result);
+      const docs = documentsFromResult(tc.result);
       provenance.documentsRetrieved += docs.length;
       for (const d of docs) {
-        add({ kind: 'document', uri: d.uri, label: d.title ?? labelFor(d.uri), origin: 'tool', detail: d.uri });
+        const kind: SourceKind = /^s3:/i.test(d.uri) ? 'document' : 'web';
+        add({ kind, uri: d.uri, label: d.title ?? labelFor(d.uri), origin: 'tool', detail: d.uri });
       }
       continue;
     }

@@ -170,6 +170,62 @@ test('an A2A hop chips the data it consulted, never the specialist', () => {
   assert.equal(r.provenance.toolCalls, 1);
 });
 
+test('a supervisor search hop chips the documents it cited, not a generic A2A label', () => {
+  // search_organization routes to the Search agent, which returns prose that
+  // cites its KB documents inline as [Source: s3://…] — not a JSON array.
+  const r = deriveSources({
+    content: 'Theo led two migrations.',
+    toolCalls: [
+      {
+        name: 'search_organization',
+        args: '{"query":"who knows kubernetes"}',
+        result: `Theo led two migrations. [Source: ${S3}]`,
+      },
+    ],
+  });
+  assert.equal(r.provenance.retrievalCalls, 1);
+  assert.equal(r.provenance.documentsRetrieved, 1);
+  assert.equal(r.sources.length, 1);
+  assert.equal(r.sources[0]?.uri, S3);
+  assert.equal(r.sources[0]?.kind, 'document');
+  assert.equal(r.sources[0]?.origin, 'tool');
+  assert.equal(r.sources[0]?.label, 'perf-Theo Williams');
+  // The generic placeholder must be gone.
+  assert.ok(!JSON.stringify(r.sources).includes('org graph + knowledge base'));
+  assert.equal(provenanceNote(r.sources, r.provenance), null);
+});
+
+test('a supervisor search that cited no document reads as an empty knowledge base', () => {
+  // The case a low-corpus lab actually hits: the hop ran, cited nothing.
+  const r = deriveSources({
+    content: 'I could not find anything on that.',
+    toolCalls: [
+      { name: 'search_organization', args: '{"query":"quantum"}', result: 'No matching documents were found.' },
+    ],
+  });
+  assert.deepEqual(r.sources, []);
+  assert.equal(r.provenance.retrievalCalls, 1);
+  assert.equal(r.provenance.documentsRetrieved, 0);
+  assert.equal(
+    provenanceNote(r.sources, r.provenance),
+    'knowledge base searched — no documents matched',
+  );
+});
+
+test('a search hop citing the same doc the answer repeats yields one tool chip', () => {
+  // The URI is in both the tool result and the relayed answer prose; dedup and
+  // tool-origin must win.
+  const r = deriveSources({
+    content: `Theo led two migrations. [Source: ${S3}]`,
+    toolCalls: [
+      { name: 'search_organization', args: '{}', result: `Theo led two migrations. [Source: ${S3}]` },
+    ],
+  });
+  assert.equal(r.sources.length, 1);
+  assert.equal(r.sources[0]?.origin, 'tool');
+  assert.equal(r.provenance.documentsRetrieved, 1);
+});
+
 test('observed sources are numbered ahead of model-written ones', () => {
   const r = deriveSources({
     content: `Also see [Source: https://wiki.example.com/kubernetes].`,
