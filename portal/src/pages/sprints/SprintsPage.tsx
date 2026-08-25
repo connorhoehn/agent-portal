@@ -20,10 +20,13 @@
 //    would be invented. This repeats a decision already made for the Budgets
 //    grants table rather than quietly softening it here.
 //
-// Read-only by design: nothing on this page writes. Sprint planning (moving
-// items, re-granting envelopes) belongs to the board and the ledger.
+// Planning lives here too, gated by capability. A user who holds ManageSprints
+// gets a "New sprint" control and can move a work item into or out of a sprint
+// from the board; one who holds ManageBudgets gets per-sprint grant management
+// (list, add, re-size, revoke an envelope). Everything else stays read-only,
+// and every write refetches the same data the page already loads.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { Link } from 'react-router';
 import {
   PageSection,
@@ -34,9 +37,25 @@ import {
   StatCard,
   KPIGrid,
   SegmentedControl,
+  Modal,
+  Button,
+  FormField,
+  InlineAlert,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
+import { useCapabilities } from '../../lib/capabilities';
+import { toastError, toastSuccess } from '../../lib/toastStore';
+import {
+  SPRINT_STATUSES,
+  grantsUrl,
+  sprintItemsUrl,
+  sprintItemUrl,
+  grantUrl,
+  validateNewSprint,
+  validateGrantAmount,
+  type NewSprintForm,
+} from './sprintForm';
 
 // ─── Types (the /api/sprints + /api/graph/work contracts) ────────────────────
 
@@ -89,6 +108,63 @@ interface WorkItem {
   estimatedCostUsd: number | null;
   prUrl: string | null;
 }
+
+// The GrantRow the /api/grants contract returns (a subset — the fields this
+// page renders).
+interface GrantRow {
+  id: string;
+  granteePersonId: string;
+  granteeName: string | null;
+  allocatedUsd: number;
+  grantedBy: string | null;
+}
+
+// People come from an initiative's contributor list (/api/graph/projects/:id);
+// their `personId` is the graph id the sprint/grant APIs key on.
+interface Contributor { personId: string; name: string; role: string | null }
+interface ProjectDetailLite { contributors?: Contributor[] }
+
+// The initiative options for the "New sprint" form come from the projects
+// rollup (every initiative, not only ones that already have a sprint).
+interface InitiativeOption { id: string; name: string }
+
+// One node of /api/graph/projects/:id/work, flattened for the "add item" picker.
+interface WorkTreeNode { id: string; type: string; title: string; children?: WorkTreeNode[] }
+
+// ─── Write helper ────────────────────────────────────────────────────────────
+
+interface WriteResult<T> { ok: boolean; status: number; data: T | null; error: string | null }
+
+/** One shape for every mutation: sends JSON with the session cookie, and
+ *  surfaces the backend's `{ error }` message (400/403/404) verbatim. A bare
+ *  403 with no body reads as a permission problem rather than a raw status. */
+async function writeJson<T>(url: string, method: string, body?: unknown): Promise<WriteResult<T>> {
+  try {
+    const res = await fetch(url, {
+      method,
+      credentials: 'include',
+      headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+    const json = (await res.json().catch(() => ({}))) as { error?: string } & Record<string, unknown>;
+    if (!res.ok) {
+      const fallback = res.status === 403
+        ? 'You do not have permission for this action.'
+        : `HTTP ${res.status}`;
+      return { ok: false, status: res.status, data: null, error: json.error ?? fallback };
+    }
+    return { ok: true, status: res.status, data: json as T, error: null };
+  } catch (err) {
+    return { ok: false, status: 0, data: null, error: err instanceof Error ? err.message : 'Request failed' };
+  }
+}
+
+// Shared field styling — matches the page's inline-style visual language.
+const inputStyle: CSSProperties = {
+  width: '100%', boxSizing: 'border-box', padding: '7px 9px', fontSize: 13,
+  borderRadius: 6, border: '1px solid var(--color-border)',
+  background: 'var(--color-surface)', color: 'var(--color-text-primary)', font: 'inherit',
+};
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -219,16 +295,87 @@ function SprintCard({ s, selected, onSelect }: {
 
 // ─── Work board for one sprint ───────────────────────────────────────────────
 
-function SprintBoard({ sprintId, personId }: { sprintId: string; personId: string | null }) {
-  const { data, isLoading, error } = useFetch<WorkItem[]>(
+/** Flatten /api/graph/projects/:id/work into a flat list. */
+function flattenTree(nodes: WorkTreeNode[]): WorkTreeNode[] {
+  const out: WorkTreeNode[] = [];
+  const walk = (n: WorkTreeNode) => { out.push(n); (n.children ?? []).forEach(walk); };
+  nodes.forEach(walk);
+  return out;
+}
+
+// Move an item INTO this sprint. The candidate list is the initiative's work
+// tree minus what is already here — offering an item already in the sprint
+// would be a no-op, and the PATCH allows re-homing one from another sprint.
+function AddItemControl({ sprintId, orgProjectId, presentIds, onAdded }: {
+  sprintId: string; orgProjectId: string; presentIds: Set<string>; onAdded: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const { data: tree } = useFetch<WorkTreeNode[]>(
+    open ? `/api/graph/projects/${encodeURIComponent(orgProjectId)}/work` : null,
+  );
+  const [choice, setChoice] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const candidates = useMemo(
+    () => flattenTree(tree ?? []).filter((n) => !presentIds.has(n.id) && n.type !== 'epic'),
+    [tree, presentIds],
+  );
+
+  async function add() {
+    if (!choice) return;
+    setBusy(true);
+    const res = await writeJson<{ workItem: WorkItem }>(sprintItemsUrl(sprintId), 'PATCH', { workItemId: choice });
+    setBusy(false);
+    if (!res.ok) { toastError(null, 'Could not add item', res.error ?? ''); return; }
+    toastSuccess(null, 'Item added to sprint');
+    setChoice(''); setOpen(false);
+    onAdded();
+  }
+
+  if (!open) {
+    return (
+      <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>+ Add work item</Button>
+    );
+  }
+  return (
+    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+      <select style={{ ...inputStyle, width: 'auto', minWidth: 220 }} value={choice} onChange={(e) => setChoice(e.target.value)}>
+        <option value="">{candidates.length ? 'Select an item to add…' : 'No addable items in this initiative'}</option>
+        {candidates.map((c) => <option key={c.id} value={c.id}>{c.type} · {c.title}</option>)}
+      </select>
+      <Button size="sm" variant="primary" disabled={busy || !choice} onClick={() => void add()}>Add</Button>
+      <Button size="sm" variant="ghost" disabled={busy} onClick={() => { setOpen(false); setChoice(''); }}>Cancel</Button>
+    </div>
+  );
+}
+
+function SprintBoard({ sprintId, orgProjectId, personId, canManageSprints, onChanged }: {
+  sprintId: string; orgProjectId: string; personId: string | null;
+  canManageSprints: boolean; onChanged: () => void;
+}) {
+  const { data, isLoading, error, refresh } = useFetch<WorkItem[]>(
     `/api/graph/work?sprint=${encodeURIComponent(sprintId)}&limit=200`,
   );
   const [mineOnly, setMineOnly] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   const items = useMemo(() => {
     const all = data ?? [];
     return mineOnly && personId ? all.filter((i) => i.assigneeId === personId) : all;
   }, [data, mineOnly, personId]);
+
+  const presentIds = useMemo(() => new Set((data ?? []).map((i) => i.id)), [data]);
+
+  const afterChange = () => { refresh(); onChanged(); };
+
+  async function removeItem(id: string) {
+    setRemovingId(id);
+    const res = await writeJson<{ workItem: WorkItem }>(sprintItemUrl(sprintId, id), 'DELETE');
+    setRemovingId(null);
+    if (!res.ok) { toastError(null, 'Could not remove item', res.error ?? ''); return; }
+    toastSuccess(null, 'Item removed from sprint');
+    afterChange();
+  }
 
   const columns = BOARD_COLUMNS
     .map((c) => ({ ...c, items: items.filter((i) => i.status === c.status) }))
@@ -247,15 +394,27 @@ function SprintBoard({ sprintId, personId }: { sprintId: string; personId: strin
   }
   if ((data ?? []).length === 0) {
     return (
-      <EmptyState
-        title="No work items in this sprint"
-        body="Items carry sprint membership on the board — assign one to this sprint from the initiative's work items."
-      />
+      <div>
+        <EmptyState
+          title="No work items in this sprint"
+          body="Items carry sprint membership on the board — assign one to this sprint from the initiative's work items."
+        />
+        {canManageSprints ? (
+          <div style={{ marginTop: 10 }}>
+            <AddItemControl sprintId={sprintId} orgProjectId={orgProjectId} presentIds={presentIds} onAdded={afterChange} />
+          </div>
+        ) : null}
+      </div>
     );
   }
 
   return (
     <div>
+      {canManageSprints ? (
+        <div style={{ marginBottom: 10 }}>
+          <AddItemControl sprintId={sprintId} orgProjectId={orgProjectId} presentIds={presentIds} onAdded={afterChange} />
+        </div>
+      ) : null}
       {personId ? (
         <label style={{
           display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -311,6 +470,20 @@ function SprintBoard({ sprintId, personId }: { sprintId: string; personId: strin
                       {i.prUrl
                         ? <a href={i.prUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--color-primary)' }}>PR</a>
                         : null}
+                      {canManageSprints ? (
+                        <button
+                          type="button"
+                          title="Remove from this sprint"
+                          disabled={removingId === i.id}
+                          onClick={() => void removeItem(i.id)}
+                          style={{
+                            marginLeft: 'auto', border: 'none', background: 'none', padding: 0,
+                            cursor: 'pointer', color: 'var(--color-text-tertiary)', fontSize: 11,
+                          }}
+                        >
+                          {removingId === i.id ? 'Removing…' : '✕ Remove'}
+                        </button>
+                      ) : null}
                     </div>
                   </div>
                 ))}
@@ -324,7 +497,10 @@ function SprintBoard({ sprintId, personId }: { sprintId: string; personId: strin
 
 // ─── Sprint detail ───────────────────────────────────────────────────────────
 
-function SprintDetail({ s, personId }: { s: Sprint; personId: string | null }) {
+function SprintDetail({ s, personId, canManageSprints, canManageBudgets, onChanged }: {
+  s: Sprint; personId: string | null;
+  canManageSprints: boolean; canManageBudgets: boolean; onChanged: () => void;
+}) {
   const progress = windowProgress(s);
   const left = daysUntil(s.endsOn);
   const overEnvelope = s.grantedUsd > 0 && s.initiativeSpendInWindowUsd > s.grantedUsd;
@@ -420,9 +596,314 @@ function SprintDetail({ s, personId }: { s: Sprint; personId: string | null }) {
 
       <div style={{ marginTop: 18 }}>
         <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>Work in this sprint</h3>
-        <SprintBoard sprintId={s.id} personId={personId} />
+        <SprintBoard
+          sprintId={s.id}
+          orgProjectId={s.orgProjectId}
+          personId={personId}
+          canManageSprints={canManageSprints}
+          onChanged={onChanged}
+        />
       </div>
+
+      {canManageBudgets ? <GrantsPanel sprint={s} onChanged={onChanged} /> : null}
     </Card>
+  );
+}
+
+// ─── New sprint (ManageSprints) ──────────────────────────────────────────────
+
+const EMPTY_FORM: NewSprintForm = {
+  initiativeId: '', name: '', startsOn: '', endsOn: '', stewardPersonId: '', goal: '', status: 'planned',
+};
+
+function NewSprintModal({ open, onClose, onCreated }: {
+  open: boolean; onClose: () => void; onCreated: () => void;
+}) {
+  const [form, setForm] = useState<NewSprintForm>(EMPTY_FORM);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // Every initiative — not only ones that already have a sprint — so a first
+  // sprint can be created. Only fetched while the modal is open.
+  const { data: initiatives } = useFetch<InitiativeOption[]>(open ? '/api/graph/projects?limit=100' : null);
+  // Steward options are the chosen initiative's contributors (their personId is
+  // the graph id the API keys on). Fetched once an initiative is picked.
+  const { data: project } = useFetch<ProjectDetailLite>(
+    open && form.initiativeId ? `/api/graph/projects/${encodeURIComponent(form.initiativeId)}` : null,
+  );
+
+  useEffect(() => { if (open) { setForm(EMPTY_FORM); setError(null); } }, [open]);
+
+  const set = (patch: Partial<NewSprintForm>) => setForm((f) => ({ ...f, ...patch }));
+
+  async function submit() {
+    const check = validateNewSprint(form);
+    if (!check.ok) { setError(check.error); return; }
+    setBusy(true);
+    setError(null);
+    const res = await writeJson<{ sprint: Sprint }>('/api/sprints', 'POST', check.value);
+    setBusy(false);
+    if (!res.ok) {
+      setError(res.error);
+      // A 403 is shown inline (above) AND toasted so it isn't missed if the
+      // modal is dismissed; other failures stay inline next to the form.
+      if (res.status === 403) toastError(null, 'Not permitted', res.error ?? '');
+      return;
+    }
+    toastSuccess(null, 'Sprint created', `${check.value.name} is ready to plan.`);
+    onCreated();
+    onClose();
+  }
+
+  const contributors = project?.contributors ?? [];
+
+  return (
+    <Modal open={open} onClose={onClose} title="New sprint" maxWidth={520}
+      footer={
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button variant="primary" onClick={() => void submit()} disabled={busy}>
+            {busy ? 'Creating…' : 'Create sprint'}
+          </Button>
+        </div>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {error ? <InlineAlert tone="error" onDismiss={() => setError(null)}>{error}</InlineAlert> : null}
+
+        <FormField label="Initiative" required>
+          {({ id }) => (
+            <select
+              id={id}
+              style={inputStyle}
+              value={form.initiativeId}
+              onChange={(e) => set({ initiativeId: e.target.value, stewardPersonId: '' })}
+            >
+              <option value="">Select an initiative…</option>
+              {(initiatives ?? []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
+        </FormField>
+
+        <FormField label="Name" required>
+          {({ id }) => (
+            <input
+              id={id}
+              style={inputStyle}
+              value={form.name}
+              placeholder="e.g. Sprint 7 — auth hardening"
+              onChange={(e) => set({ name: e.target.value })}
+            />
+          )}
+        </FormField>
+
+        <div style={{ display: 'flex', gap: 12 }}>
+          <FormField label="Starts" required style={{ flex: 1 }}>
+            {({ id }) => (
+              <input id={id} type="date" style={inputStyle} value={form.startsOn}
+                onChange={(e) => set({ startsOn: e.target.value })} />
+            )}
+          </FormField>
+          <FormField label="Ends" required style={{ flex: 1 }}>
+            {({ id }) => (
+              <input id={id} type="date" style={inputStyle} value={form.endsOn}
+                onChange={(e) => set({ endsOn: e.target.value })} />
+            )}
+          </FormField>
+        </div>
+
+        <div style={{ display: 'flex', gap: 12 }}>
+          <FormField label="Steward" hint="The SME accountable for the sprint" style={{ flex: 1 }}>
+            {({ id }) => (
+              <select
+                id={id}
+                style={inputStyle}
+                value={form.stewardPersonId ?? ''}
+                disabled={!form.initiativeId}
+                onChange={(e) => set({ stewardPersonId: e.target.value })}
+              >
+                <option value="">Unassigned</option>
+                {contributors.map((c) => (
+                  <option key={c.personId} value={c.personId}>
+                    {c.name}{c.role ? ` · ${c.role}` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
+          </FormField>
+          <FormField label="Status" style={{ flex: 1 }}>
+            {({ id }) => (
+              <select id={id} style={inputStyle} value={form.status} onChange={(e) => set({ status: e.target.value })}>
+                {SPRINT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            )}
+          </FormField>
+        </div>
+
+        <FormField label="Goal" hint="Optional — one line on what this sprint is for">
+          {({ id }) => (
+            <textarea
+              id={id}
+              style={{ ...inputStyle, resize: 'vertical', minHeight: 56 }}
+              value={form.goal ?? ''}
+              onChange={(e) => set({ goal: e.target.value })}
+            />
+          )}
+        </FormField>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Grant management (ManageBudgets) ────────────────────────────────────────
+
+function GrantsPanel({ sprint, onChanged }: { sprint: Sprint; onChanged: () => void }) {
+  const { data, isLoading, error, refresh } = useFetch<{ grants: GrantRow[] }>(grantsUrl(sprint.id));
+  // Grantee options are the initiative's contributors, same source as the
+  // steward picker.
+  const { data: project } = useFetch<ProjectDetailLite>(
+    `/api/graph/projects/${encodeURIComponent(sprint.orgProjectId)}`,
+  );
+  const grants = data?.grants ?? [];
+  const contributors = project?.contributors ?? [];
+
+  const [adding, setAdding] = useState(false);
+  const [grantee, setGrantee] = useState('');
+  const [amount, setAmount] = useState('');
+  const [note, setNote] = useState('');
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editAmount, setEditAmount] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  function reload() { refresh(); onChanged(); }
+
+  async function addGrant() {
+    if (!grantee) { setFormError('Pick who the envelope is granted to.'); return; }
+    const amt = validateGrantAmount(amount);
+    if (!amt.ok) { setFormError(amt.error); return; }
+    setBusy(true); setFormError(null);
+    const res = await writeJson<{ grant: GrantRow }>('/api/grants', 'POST', {
+      initiativeId: sprint.orgProjectId,
+      sprintId: sprint.id,
+      granteePersonId: grantee,
+      amountUsd: amt.value,
+      ...(note.trim() ? { note: note.trim() } : {}),
+    });
+    setBusy(false);
+    if (!res.ok) { setFormError(res.error); return; }
+    toastSuccess(null, 'Envelope granted', usd(amt.value));
+    setAdding(false); setGrantee(''); setAmount(''); setNote('');
+    reload();
+  }
+
+  async function saveEdit(id: string) {
+    const amt = validateGrantAmount(editAmount);
+    if (!amt.ok) { setFormError(amt.error); return; }
+    setBusy(true); setFormError(null);
+    const res = await writeJson<{ grant: GrantRow }>(grantUrl(id), 'PATCH', { amountUsd: amt.value });
+    setBusy(false);
+    if (!res.ok) { toastError(null, 'Could not update grant', res.error ?? ''); return; }
+    toastSuccess(null, 'Envelope updated', usd(amt.value));
+    setEditId(null);
+    reload();
+  }
+
+  async function revoke(g: GrantRow) {
+    setBusy(true);
+    const res = await writeJson<{ ok: true }>(grantUrl(g.id), 'DELETE');
+    setBusy(false);
+    if (!res.ok) { toastError(null, 'Could not revoke grant', res.error ?? ''); return; }
+    toastSuccess(null, 'Envelope revoked', `${g.granteeName ?? 'grantee'}'s grant removed.`);
+    reload();
+  }
+
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+        <h3 style={{ margin: '0 0 8px', fontSize: 14 }}>Envelope grants</h3>
+        {!adding ? (
+          <Button size="sm" variant="secondary" onClick={() => { setAdding(true); setFormError(null); }}>
+            + Grant envelope
+          </Button>
+        ) : null}
+      </div>
+
+      {formError ? (
+        <div style={{ marginBottom: 8 }}>
+          <InlineAlert tone="error" onDismiss={() => setFormError(null)}>{formError}</InlineAlert>
+        </div>
+      ) : null}
+
+      {adding ? (
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end',
+          border: '1px solid var(--color-border)', borderRadius: 8, padding: 12, marginBottom: 10,
+        }}>
+          <FormField label="Grantee" style={{ flex: '1 1 180px' }}>
+            {({ id }) => (
+              <select id={id} style={inputStyle} value={grantee} onChange={(e) => setGrantee(e.target.value)}>
+                <option value="">Select…</option>
+                {contributors.map((c) => <option key={c.personId} value={c.personId}>{c.name}</option>)}
+              </select>
+            )}
+          </FormField>
+          <FormField label="Amount (USD)" style={{ flex: '0 1 140px' }}>
+            {({ id }) => (
+              <input id={id} style={inputStyle} inputMode="decimal" placeholder="0.00"
+                value={amount} onChange={(e) => setAmount(e.target.value)} />
+            )}
+          </FormField>
+          <FormField label="Note" style={{ flex: '1 1 180px' }}>
+            {({ id }) => (
+              <input id={id} style={inputStyle} value={note} placeholder="Optional"
+                onChange={(e) => setNote(e.target.value)} />
+            )}
+          </FormField>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Button size="sm" variant="primary" disabled={busy} onClick={() => void addGrant()}>Grant</Button>
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => { setAdding(false); setFormError(null); }}>Cancel</Button>
+          </div>
+        </div>
+      ) : null}
+
+      {error ? (
+        <div style={{ fontSize: 12, color: 'var(--color-danger)' }}>Could not load grants: {error}</div>
+      ) : isLoading && !data ? (
+        <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>Loading grants…</div>
+      ) : grants.length === 0 ? (
+        <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+          No envelope is granted to this sprint yet.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {grants.map((g) => (
+            <div key={g.id} style={{
+              display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+              border: '1px solid var(--color-border)', borderRadius: 6, padding: '8px 10px',
+            }}>
+              <span style={{ fontSize: 13, fontWeight: 600, flex: '1 1 140px', minWidth: 0 }}>
+                {g.granteeName ?? g.granteePersonId}
+              </span>
+              {editId === g.id ? (
+                <>
+                  <input style={{ ...inputStyle, width: 120 }} inputMode="decimal"
+                    value={editAmount} onChange={(e) => setEditAmount(e.target.value)} />
+                  <Button size="sm" variant="primary" disabled={busy} onClick={() => void saveEdit(g.id)}>Save</Button>
+                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditId(null)}>Cancel</Button>
+                </>
+              ) : (
+                <>
+                  <span style={{ fontSize: 13 }}>{usd(g.allocatedUsd)}</span>
+                  <Button size="sm" variant="ghost" onClick={() => { setEditId(g.id); setEditAmount(String(g.allocatedUsd)); setFormError(null); }}>Edit</Button>
+                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => void revoke(g)}>Revoke</Button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -437,12 +918,17 @@ export default function SprintsPage() {
     || session?.role === 'hr-admin'
     || session?.role === 'admin';
 
+  const { can } = useCapabilities();
+  const canManageSprints = can('ManageSprints');
+  const canManageBudgets = can('ManageBudgets');
+
   const [scope, setScope] = useState<'mine' | 'all'>(canRequestAll ? 'all' : 'mine');
   const [activeOnly, setActiveOnly] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [newSprintOpen, setNewSprintOpen] = useState(false);
 
   const url = `/api/sprints?scope=${scope}${activeOnly ? '&status=active' : ''}`;
-  const { data, isLoading, error } = useFetch<SprintsResponse>(url, 60_000);
+  const { data, isLoading, error, refresh } = useFetch<SprintsResponse>(url, 60_000);
 
   const sprints = useMemo(() => data?.sprints ?? [], [data]);
 
@@ -494,9 +980,13 @@ export default function SprintsPage() {
               { label: 'All time', value: 'any' },
             ]}
           />
+          {canManageSprints ? (
+            <Button size="sm" variant="primary" onClick={() => setNewSprintOpen(true)}>+ New sprint</Button>
+          ) : null}
         </div>
       }
     >
+      <NewSprintModal open={newSprintOpen} onClose={() => setNewSprintOpen(false)} onCreated={refresh} />
       {error ? (
         <EmptyState
           title="Could not load sprints"
@@ -574,7 +1064,15 @@ export default function SprintsPage() {
             ))}
           </div>
 
-          {selected ? <SprintDetail s={selected} personId={personId} /> : null}
+          {selected ? (
+            <SprintDetail
+              s={selected}
+              personId={personId}
+              canManageSprints={canManageSprints}
+              canManageBudgets={canManageBudgets}
+              onChanged={refresh}
+            />
+          ) : null}
         </div>
       )}
     </PageSection>

@@ -32,7 +32,8 @@ export type Action =
   | 'ManagePitches'
   | 'PublishArticle'
   | 'Masquerade'
-  | 'ManageBudgets';
+  | 'ManageBudgets'
+  | 'ManageSprints';
 
 interface CapabilitiesPayload {
   role: string;
