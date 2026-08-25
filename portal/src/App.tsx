@@ -184,9 +184,9 @@ export function App() {
         <Route index element={<RootRedirect />} />
         <Route path="settings" element={<Page element={<SettingsPage />} />} />
 
-        {/* ── /newsroom/* — archived tenant. Feature-flagged off: the pages stay in
-             the repo but leave the route tree entirely, so deep links land home
-             instead of rendering a surface backed by empty tables. ── */}
+        {/* ── /newsroom/* — the second tenant, the flagship multi-tenant demo
+             surface. Feature-flagged ON by default (NEWSROOM_ENABLED); set
+             VITE_ENABLE_NEWSROOM=false to park the route tree. ── */}
         {NEWSROOM_ENABLED ? (
           <Route path="newsroom" element={<Page element={<NewsroomLayout />} />}>
             <Route index element={<Navigate to="home" replace />} />

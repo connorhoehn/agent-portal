@@ -1,9 +1,6 @@
 // newsroom-beats route — beat coverage heatmap endpoints.
-//
-// TODO(N4): wire post-merge —
-//   middleware/src/index.ts: import { newsroomBeatsRouter } from './routes/newsroom-beats.js'
-//   Mount it BEFORE /api/newsroom so /api/newsroom/beats isn't swallowed:
-//     app.use('/api/newsroom/beats', newsroomBeatsRouter);
+// Mounted at /api/newsroom/beats in index.ts, BEFORE the /api/newsroom
+// catch-all so the beats path isn't swallowed.
 
 import { Router } from 'express';
 import { asyncHandler } from '../lib/async-handler.js';

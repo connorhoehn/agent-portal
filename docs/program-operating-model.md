@@ -233,15 +233,30 @@ envelope, and the initiative's spend in the window (labelled as initiative
 spend, never a personal burn). `scope=all` takes the budgets read tier; an SME
 requesting it gets a 403, not a silently narrowed answer.
 
+## Recently built
+
+- **Grant-scoped dispatch.** `POST /api/bots/dispatch-work` now blocks an `sme`
+  who holds no active sprint grant on the target initiative (hard 403 via
+  `decideGrantScopedDispatch`), before the money gates; org-leader/hr-admin/admin
+  bypass. ⚠️ The block is currently enforced only at dispatch time and only by
+  *money*-holding — the `ManageSprints` write routes and the check are **not yet
+  scoped to the SME's own initiatives** (the `sme.cedar` comment overstates
+  this): any SME can still create/move sprints on any initiative. Route-layer
+  ownership scoping is the open follow-up.
+- **Sprint mutation.** `POST /api/sprints`, `PATCH/DELETE /api/sprints/:id/items`
+  (gated `ManageSprints`) and grant CRUD `POST/PATCH/DELETE /api/grants` (gated
+  `ManageBudgets`) are built, with a portal UI on `/iq/sprints`.
+
 ## Not built yet
 
 - **Bot-fire allocation brake.** `decideFire` knows a bot's own per-run/per-day
   budgets but not its initiative's allocation, so a cron bot's spend is bounded
   by its caps, not the initiative envelope. That looks deliberate —
   `v_initiative_maintenance_30d` treats bot spend as the maintenance *floor* an
-  allocation is read against — but it is worth an explicit decision.
-- **Grant-scoped dispatch.** `DispatchAgentRun` is role-wide. The envelope brake
-  now enforces the *money* per grant, but any SME can still dispatch against any
-  initiative; Cedar could condition the action on holding a grant there.
-- **Sprint mutation.** The sprint surface is read-only — no creating sprints,
-  moving items between them, or granting envelopes from the UI.
+  allocation is read against. A pure, opt-in `decideBotFireAllocation` skip now
+  exists (OFF by default) for when a `bots.enforce_allocation` flag is added.
+- **Initiative-scoped sprint writes.** `ManageSprints` is role-wide; the routes
+  do not check the caller stewards or contributes to the target initiative.
+- **Grant-held-initiative discovery.** An SME learns they can't dispatch against
+  an initiative only at Authorize time (the 403); there is no pre-dispatch cue
+  of where they hold grants.
