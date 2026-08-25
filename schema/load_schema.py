@@ -2,8 +2,110 @@
 """Load schema files into Aurora using RDS Data API."""
 import os
 import re
+import time
 import boto3
 import sys
+
+# --- The cold-cluster scale-up race ---------------------------------------
+# A freshly created Aurora Serverless v2 cluster sits cold at its 0.5-ACU
+# minimum. The FIRST Data API call after idle triggers a scale-up, and while
+# that scale-up is in flight the endpoint rejects the call with
+# `HttpEndpointNotEnabledException: HttpEndpoint is not enabled for resource`
+# — even though the HTTP endpoint IS enabled (verified HttpEndpointEnabled=True).
+# The very next call, once the cluster has warmed, succeeds. We proved this with
+# a warm-up probe that failed on attempt 1 (HttpEndpoint) then succeeded on 2.
+#
+# The old loop caught every exception and moved on, silently dropping that one
+# statement. When the dropped statement was a CREATE TABLE / ADD COLUMN, a later
+# dependent statement then failed on the now-missing object (e.g. `column
+# "doc_type" does not exist`), so the hiccup cascaded — and a DIFFERENT
+# statement caught the scale race on each re-run, so no single run ever
+# completed the load. It still printed `✓ Schema loaded` regardless.
+#
+# The fix: retry ONLY the transient scale-up/resume/connection-reset errors with
+# a short backoff, warm the cluster with a retried `SELECT 1` before any DDL,
+# and let genuine SQL errors (syntax, real constraint violations) surface.
+
+# Substrings that identify a transient scale-up / resume / connection-reset
+# error that a retry will clear. Matched case-insensitively against str(e).
+TRANSIENT_MARKERS = (
+    'httpendpoint is not enabled',   # cold cluster, endpoint IS enabled
+    'is not currently available',    # cluster resuming/scaling
+    'cluster is scaling',
+    'resuming',
+    'is paused',
+    'connection reset',
+    'connection was closed',
+    'timed out',
+    'try again',
+)
+# Exception CLASS names the Data API raises for these transients. We match on
+# name (not import) because botocore models them as dynamic client exceptions.
+TRANSIENT_EXC_NAMES = (
+    'HttpEndpointNotEnabledException',
+    'DatabaseErrorException',
+    'BadRequestException',
+    'DatabaseResumingException',
+    'StatementTimeoutException',
+    'ServiceUnavailableError',
+    'InternalServerErrorException',
+)
+
+# Retry policy: a fresh cluster typically needs one or two retries to warm; more
+# headroom costs nothing on the happy path (no retry = no sleep) and covers a
+# slow scale-up. 6 attempts with a 3s gap caps worst-case wait per statement at
+# ~15s of sleeping — bounded, not a hang.
+MAX_ATTEMPTS = 6
+RETRY_SLEEP_S = 3
+
+def is_transient(e):
+    """True if `e` looks like the cold-cluster scale-up race, not a real error."""
+    name = type(e).__name__
+    if name in TRANSIENT_EXC_NAMES:
+        # DatabaseError/BadRequest are also raised for genuine SQL errors, so
+        # for those two we still require a transient marker in the message. The
+        # dedicated scale-up exceptions (HttpEndpointNotEnabled, *Resuming) are
+        # transient by definition.
+        if name in ('DatabaseErrorException', 'BadRequestException'):
+            return any(m in str(e).lower() for m in TRANSIENT_MARKERS)
+        return True
+    return any(m in str(e).lower() for m in TRANSIENT_MARKERS)
+
+def execute_with_retry(rds, cluster_arn, secret_arn, db_name, sql):
+    """execute_statement with backoff for the scale-up race.
+
+    Retries only transient scale-up/resume/reset errors. `already exists` and
+    genuine SQL errors are raised to the caller unchanged — the loop treats the
+    former as success (↻) and the latter as a real failure.
+    """
+    last = None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            return rds.execute_statement(
+                resourceArn=cluster_arn,
+                secretArn=secret_arn,
+                database=db_name,
+                sql=sql,
+            )
+        except Exception as e:
+            # 'already exists' is idempotent success; never retry, let the caller
+            # classify it. Genuine SQL errors also surface immediately.
+            if 'already exists' in str(e) or not is_transient(e):
+                raise
+            last = e
+            if attempt < MAX_ATTEMPTS:
+                time.sleep(RETRY_SLEEP_S)
+    raise last
+
+def warm_up(rds, cluster_arn, secret_arn, db_name):
+    """Scale the cluster up before real DDL with a retried `SELECT 1`.
+
+    The first Data API call after idle eats the scale-up race (see the comment
+    above), so we spend it on a throwaway probe instead of the first CREATE.
+    """
+    print("Warming up cluster (SELECT 1)...")
+    execute_with_retry(rds, cluster_arn, secret_arn, db_name, 'SELECT 1')
+    print("  ✓ cluster is warm")
 
 def get_cluster_info():
     cf = boto3.client('cloudformation', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
@@ -58,6 +160,10 @@ def main():
     cluster_arn, secret_arn, db_name = get_cluster_info()
     rds = boto3.client('rds-data', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
 
+    # Scale the cluster up before touching real DDL so the first CREATE doesn't
+    # eat the cold-cluster scale-up race.
+    warm_up(rds, cluster_arn, secret_arn, db_name)
+
     schema_files = [
         'orgiq_schema.sql',
         'identity_schema.sql',
@@ -109,6 +215,12 @@ def main():
         'agent_run_attribution_schema.sql',
     ]
 
+    # Track genuine failures — statements that erred for a non-transient reason
+    # and never succeeded after exhausting retries. These, and only these,
+    # decide the exit status. Transient scale-up hiccups that a retry cleared
+    # are NOT failures.
+    failures = []  # list of (filename, index, total, error)
+
     for filename in schema_files:
         path = f'schema/{filename}'
         if not os.path.exists(path):
@@ -122,18 +234,23 @@ def main():
         statements = split_sql(content)
         for i, stmt in enumerate(statements, 1):
             try:
-                rds.execute_statement(
-                    resourceArn=cluster_arn,
-                    secretArn=secret_arn,
-                    database=db_name,
-                    sql=stmt
-                )
+                execute_with_retry(rds, cluster_arn, secret_arn, db_name, stmt)
                 print(f"  ✓ {i}/{len(statements)}")
             except Exception as e:
                 if 'already exists' in str(e):
                     print(f"  ↻ {i}/{len(statements)} (already exists)")
                 else:
+                    # A real, non-transient error (or a transient one that
+                    # survived every retry). Record it — the load did NOT
+                    # fully apply, so we must not claim success.
                     print(f"  ✗ {i}/{len(statements)}: {e}")
+                    failures.append((filename, i, len(statements), e))
+
+    if failures:
+        print(f"\n✗ Schema load INCOMPLETE — {len(failures)} statement(s) failed:")
+        for filename, i, total, e in failures:
+            print(f"  - {filename} [{i}/{total}]: {e}")
+        sys.exit(1)
 
     print("\n✓ Schema loaded")
 
