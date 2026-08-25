@@ -23,7 +23,7 @@ function BriefsPage() {
 
   const { isStreaming, streamingText, activeToolCalls, error, sendMessage, reset } =
     useAgentStream({
-      url: '/api/agents/news-brief/invoke',
+      url: '/api/agents/orgiq-news-brief/invoke',
       // Preserve the old hook's wire shape: always include an (empty)
       // selection envelope so backend handlers that branch on the field's
       // presence don't see a regression.

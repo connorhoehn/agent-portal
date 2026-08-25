@@ -212,7 +212,7 @@ function HeadlinesPage() {
     let accumulated = '';
 
     try {
-      const res = await fetch('/api/agents/news-headline/invoke', {
+      const res = await fetch('/api/agents/orgiq-news-headline/invoke', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message }),

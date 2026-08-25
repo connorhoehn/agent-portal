@@ -101,9 +101,12 @@ const TENANT_LABELS: Record<Tenant, string> = {
 };
 
 export function Layout() {
-  const { data: health } = useFetch<Health>('/api/health', 30_000);
-  const { data: work } = useFetch<WorkSummary>('/api/work/summary', 15_000);
   const { session } = useSession();
+  const { data: health } = useFetch<Health>('/api/health', 30_000);
+  // /api/work is orgiq-only (requireTenant('orgiq')); polling it from a
+  // newsroom session logged a DENY in the authz audit every 15s. Only in orgiq.
+  const { data: work } = useFetch<WorkSummary>(
+    session?.tenant === 'orgiq' ? '/api/work/summary' : null, 15_000);
   const { pathname } = useLocation();
 
   // Routes that render their own SubNavLayout (iq/admin/newsroom) go
