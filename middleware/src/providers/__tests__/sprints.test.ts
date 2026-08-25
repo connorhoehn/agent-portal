@@ -13,7 +13,10 @@ import { exec } from '../aurora.js';
 import { config } from '../../config.js';
 import { spendPredicateSql, MOCK_GRANTS } from '../budgets.js';
 import { searchWorkItems } from '../work-items.js';
-import { listSprints, isMine, SPRINT_STATUSES, type SprintRow } from '../sprints.js';
+import {
+  listSprints, isMine, SPRINT_STATUSES, createSprint, getSprint, personExists,
+  _resetMockSprints, type SprintRow,
+} from '../sprints.js';
 
 const execMock = exec as unknown as jest.Mock;
 
@@ -249,5 +252,104 @@ describe('schema tolerance', () => {
   it('still throws on a real failure', async () => {
     execMock.mockRejectedValue(new Error('connection reset'));
     await expect(listSprints()).rejects.toThrow('connection reset');
+  });
+});
+
+// ─── Writes ───────────────────────────────────────────────────────────────────
+
+describe('createSprint (real)', () => {
+  it('inserts with parameters and casts the dates, then reads back through getSprint', async () => {
+    execMock
+      .mockResolvedValueOnce([{ id: 'spr-new' }]) // INSERT ... RETURNING id
+      .mockResolvedValueOnce([{ id: 'spr-new', org_project_id: 'p-observability', name: 'Sprint 99',
+        status: 'planned', starts_on: '2026-09-01', ends_on: '2026-09-14' }]); // read-back
+
+    const row = await createSprint({
+      orgProjectId: 'p-observability', name: 'Sprint 99',
+      startsOn: '2026-09-01', endsOn: '2026-09-14', stewardPersonId: 'p-008', goal: 'ship it',
+    });
+
+    const [sql, params] = execMock.mock.calls[0]!;
+    expect(String(sql)).toMatch(/INSERT INTO sprints/);
+    expect(String(sql)).toContain(':starts::date');
+    expect(String(sql)).toContain(':ends::date');
+    expect(params).toEqual(expect.arrayContaining([
+      { name: 'pid', value: { stringValue: 'p-observability' } },
+      { name: 'name', value: { stringValue: 'Sprint 99' } },
+      { name: 'goal', value: { stringValue: 'ship it' } },
+      { name: 'steward', value: { stringValue: 'p-008' } },
+      { name: 'starts', value: { stringValue: '2026-09-01' } },
+      { name: 'ends', value: { stringValue: '2026-09-14' } },
+      { name: 'status', value: { stringValue: 'planned' } },
+    ]));
+    // The read-back is scoped to the new id.
+    expect(String(execMock.mock.calls[1]![0])).toContain('sp.id = :sid');
+    expect(row.id).toBe('spr-new');
+  });
+
+  it('nulls an omitted steward/goal instead of an empty string', async () => {
+    execMock.mockResolvedValueOnce([{ id: 'spr-new' }]).mockResolvedValueOnce([{ id: 'spr-new' }]);
+    await createSprint({ orgProjectId: 'p-x', name: 'S', startsOn: '2026-09-01', endsOn: '2026-09-14' });
+    const params = execMock.mock.calls[0]![1] as Array<{ name: string; value: unknown }>;
+    expect(params.find((p) => p.name === 'steward')!.value).toEqual({ isNull: true });
+    expect(params.find((p) => p.name === 'goal')!.value).toEqual({ isNull: true });
+  });
+
+  it('throws loudly (not safeExec-swallowed) if the row cannot be read back', async () => {
+    execMock.mockResolvedValueOnce([{ id: 'spr-new' }]).mockResolvedValueOnce([]);
+    await expect(createSprint({ orgProjectId: 'p-x', name: 'S', startsOn: '2026-09-01', endsOn: '2026-09-14' }))
+      .rejects.toThrow(/could not be read back/);
+  });
+});
+
+describe('getSprint (real)', () => {
+  it('scopes the board query to a single id', async () => {
+    await getSprint('spr-obs-s3');
+    expect(String(execMock.mock.calls.at(-1)![0])).toContain('sp.id = :sid');
+    expect(execMock.mock.calls.at(-1)![1]).toEqual(
+      expect.arrayContaining([{ name: 'sid', value: { stringValue: 'spr-obs-s3' } }]),
+    );
+  });
+});
+
+describe('personExists (real)', () => {
+  it('is true when the people row exists, false otherwise', async () => {
+    execMock.mockResolvedValueOnce([{ id: 'p-008' }]);
+    expect(await personExists('p-008')).toBe(true);
+    execMock.mockResolvedValueOnce([]);
+    expect(await personExists('p-nope')).toBe(false);
+  });
+});
+
+describe('createSprint (mock mode)', () => {
+  beforeAll(() => { (config as { mock: { aurora: boolean } }).mock.aurora = true; });
+  afterAll(() => { (config as { mock: { aurora: boolean } }).mock.aurora = false; });
+  beforeEach(() => { _resetMockSprints(); });
+
+  it('never touches Aurora and answers existence permissively', async () => {
+    expect(await personExists('anyone')).toBe(true);
+    await createSprint({ orgProjectId: 'p-observability', name: 'New', startsOn: '2026-09-01', endsOn: '2026-09-14' });
+    expect(execMock).not.toHaveBeenCalled();
+  });
+
+  it('creates a sprint that then appears on the board and reads back by id', async () => {
+    const created = await createSprint({
+      orgProjectId: 'p-observability', name: 'Sprint 99', startsOn: '2026-09-01', endsOn: '2026-09-14',
+      stewardPersonId: 'p-008',
+    });
+    expect(created.status).toBe('planned');
+    expect(created.startsOn).toBe('2026-09-01');
+    const board = await listSprints();
+    expect(board.some((s) => s.id === created.id)).toBe(true);
+    expect((await getSprint(created.id))!.name).toBe('Sprint 99');
+  });
+
+  it('marks a created sprint as the steward\'s own via mineOnly', async () => {
+    const created = await createSprint({
+      orgProjectId: 'p-observability', name: 'Steered', startsOn: '2026-09-01', endsOn: '2026-09-14',
+      stewardPersonId: 'p-008',
+    });
+    const mine = await listSprints({ personId: 'p-008', mineOnly: true });
+    expect(mine.some((s) => s.id === created.id && s.isSteward)).toBe(true);
   });
 });

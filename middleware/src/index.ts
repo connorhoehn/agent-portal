@@ -54,6 +54,7 @@ import { agentProjectsRouter } from './routes/agent-projects.js';
 import { sdlcRouter } from './routes/sdlc.js';
 import { budgetsRouter } from './routes/budgets.js';
 import { sprintsRouter } from './routes/sprints.js';
+import { grantsRouter } from './routes/grants.js';
 import { botsRouter } from './routes/bots.js';
 import { requireAction, requireTenant, readForRolesElseAction, requireSession } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
@@ -178,6 +179,10 @@ app.use('/api/budgets', budgetsRouter);
 // Any signed-in orgiq session may read `scope=mine`; the org-wide `scope=all`
 // carries the same money the ledger gates and is checked inside the router.
 app.use('/api/sprints', requireTenant('orgiq'), requireSession('ViewSprints'), sprintsRouter);
+// Grants — the write side of sprint envelopes (budget_grants). orgiq-tenant;
+// reads open to org-leader/hr-admin, writes require ManageBudgets (the release
+// manager's action), gated per-route inside the router. See routes/grants.ts.
+app.use('/api/grants', requireTenant('orgiq'), grantsRouter);
 // Bots — durable mission-configured agents. Gated per-route inside the
 // router: reads are operational visibility (org-leader + hr-admin, like the
 // KB registry), bot mutations carry ManageDevbox (they dispatch the same

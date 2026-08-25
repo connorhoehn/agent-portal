@@ -41,6 +41,10 @@ import { spendPredicateSql, MOCK_GRANTS } from './budgets.js';
 import { searchWorkItems } from './work-items.js';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
+function nul(name: string): SqlParameter { return { name, value: { isNull: true } }; }
+function maybe(name: string, v: string | null | undefined): SqlParameter {
+  return v ? s(name, v) : nul(name);
+}
 function toStr(v: unknown, f = ''): string { return typeof v === 'string' ? v : v == null ? f : String(v); }
 function toNum(v: unknown): number { const n = Number(v); return Number.isFinite(n) ? n : 0; }
 function toBool(v: unknown): boolean { return v === true || v === 'true' || v === 1; }
@@ -92,7 +96,21 @@ export interface ListSprintsOpts {
   mineOnly?: boolean;
   status?: string;
   orgProjectId?: string;
+  /** One sprint by id — the read-back path for a create/mutation. */
+  sprintId?: string;
   limit?: number;
+}
+
+/** A sprint the release manager/SME asked to create. */
+export interface CreateSprintInput {
+  orgProjectId: string;
+  name: string;
+  /** ISO calendar dates (YYYY-MM-DD); the route validates format + ordering. */
+  startsOn: string;
+  endsOn: string;
+  stewardPersonId?: string | null;
+  goal?: string | null;
+  status?: SprintStatus;
 }
 
 // ─── Mock fixtures (config.mock.aurora === true) ─────────────────────────────
@@ -149,7 +167,32 @@ function dateDaysAgo(days: number): string {
   return new Date(Date.now() - days * DAY_MS).toISOString().slice(0, 10);
 }
 
-async function mockSprintRow(m: MockSprint, personId: string | null): Promise<SprintRow> {
+/** The normalized shape both the dated seed fixtures and the in-memory
+ *  created-sprint store resolve to before rollups are computed. */
+interface MockSprintBase {
+  id: string;
+  orgProjectId: string;
+  orgProjectName: string | null;
+  name: string;
+  goal: string | null;
+  stewardPersonId: string | null;
+  stewardName: string | null;
+  startsOn: string | null;
+  endsOn: string | null;
+  status: SprintStatus;
+}
+
+// Sprints created in mock mode (dev:mock) live here so the same process that
+// created one also lists it — the in-memory analogue of the sprints table.
+// Grant rollups stay sourced from MOCK_GRANTS (the seed envelopes), so a
+// freshly created sprint reads with a $0 envelope until one is granted; the
+// grant overlay itself lives in providers/grants.ts to avoid an import cycle.
+const MOCK_CREATED_SPRINTS: MockSprintBase[] = [];
+
+/** Test-only: drop the in-memory created-sprint store between cases. */
+export function _resetMockSprints(): void { MOCK_CREATED_SPRINTS.length = 0; }
+
+async function buildMockSprintRow(m: MockSprintBase, personId: string | null): Promise<SprintRow> {
   const items = await searchWorkItems({ sprintId: m.id, limit: 200 });
   const grants = MOCK_GRANTS.filter((g) => g.sprintId === m.id);
   const mine = personId ? items.filter((i) => i.assigneeId === personId) : [];
@@ -161,8 +204,8 @@ async function mockSprintRow(m: MockSprint, personId: string | null): Promise<Sp
     goal: m.goal,
     stewardPersonId: m.stewardPersonId,
     stewardName: m.stewardName,
-    startsOn: dateDaysAgo(m.startDaysAgo),
-    endsOn: dateDaysAgo(m.endDaysAgo),
+    startsOn: m.startsOn,
+    endsOn: m.endsOn,
     status: m.status,
     itemCount: items.length,
     doneItemCount: items.filter((i) => i.status === 'done').length,
@@ -177,6 +220,21 @@ async function mockSprintRow(m: MockSprint, personId: string | null): Promise<Sp
     myItemCount: mine.length,
     myOpenItemCount: mine.filter((i) => i.status !== 'done' && i.status !== 'cancelled').length,
   };
+}
+
+function mockSprintRow(m: MockSprint, personId: string | null): Promise<SprintRow> {
+  return buildMockSprintRow({
+    id: m.id,
+    orgProjectId: m.orgProjectId,
+    orgProjectName: m.orgProjectName,
+    name: m.name,
+    goal: m.goal,
+    stewardPersonId: m.stewardPersonId,
+    stewardName: m.stewardName,
+    startsOn: dateDaysAgo(m.startDaysAgo),
+    endsOn: dateDaysAgo(m.endDaysAgo),
+    status: m.status,
+  }, personId);
 }
 
 // ─── Read plumbing ───────────────────────────────────────────────────────────
@@ -233,7 +291,11 @@ export async function listSprints(opts: ListSprintsOpts = {}): Promise<SprintRow
   const limit = Math.min(Math.max(opts.limit ?? 100, 1), 300);
 
   if (config.mock.aurora) {
-    let rows = await Promise.all(MOCK_SPRINTS.map((m) => mockSprintRow(m, personId)));
+    let rows = await Promise.all([
+      ...MOCK_SPRINTS.map((m) => mockSprintRow(m, personId)),
+      ...MOCK_CREATED_SPRINTS.map((m) => buildMockSprintRow(m, personId)),
+    ]);
+    if (opts.sprintId) rows = rows.filter((r) => r.id === opts.sprintId);
     if (opts.status) rows = rows.filter((r) => r.status === opts.status);
     if (opts.orgProjectId) rows = rows.filter((r) => r.orgProjectId === opts.orgProjectId);
     if (opts.mineOnly) rows = rows.filter(isMine);
@@ -247,6 +309,7 @@ export async function listSprints(opts: ListSprintsOpts = {}): Promise<SprintRow
   const where: string[] = [];
   if (opts.status) { where.push('sp.status = :status'); params.push(s('status', opts.status)); }
   if (opts.orgProjectId) { where.push('sp.org_project_id = :pid'); params.push(s('pid', opts.orgProjectId)); }
+  if (opts.sprintId) { where.push('sp.id = :sid'); params.push(s('sid', opts.sprintId)); }
 
   // With no linked person there is no "mine" to compute, so the markers are
   // literals rather than a parameter compared against NULL (which would make
@@ -328,4 +391,78 @@ export async function listSprints(opts: ListSprintsOpts = {}): Promise<SprintRow
  *  have work assigned in it. Exported so the route and its tests agree. */
 export function isMine(r: SprintRow): boolean {
   return r.isSteward || r.isGrantee || r.myItemCount > 0;
+}
+
+// ─── One sprint (read-back for a create/mutation) ────────────────────────────
+
+/** A single sprint by id, projected through the same rollup query the board
+ *  uses — so a create/move response carries the same shape a list row would. */
+export async function getSprint(id: string, personId: string | null = null): Promise<SprintRow | null> {
+  const rows = await listSprints({ sprintId: id, personId, limit: 1 });
+  return rows[0] ?? null;
+}
+
+// ─── Existence checks (write-path validation) ────────────────────────────────
+//
+// Mirror the discipline in providers/budgets.ts: mock mode answers `true` and
+// lets the in-memory write proceed, so dev:mock creates a real (in-memory)
+// sprint rather than 503-ing. Real mode asks Aurora.
+
+/** Does this person exist? Steward/grantee ids must resolve to a real people
+ *  row before a sprint or envelope can point at them. */
+export async function personExists(personId: string): Promise<boolean> {
+  if (config.mock.aurora) return true;
+  const rows = await exec('SELECT id FROM people WHERE id = :pid LIMIT 1', [s('pid', personId)]);
+  return rows.length > 0;
+}
+
+// ─── Create ──────────────────────────────────────────────────────────────────
+
+/**
+ * Create a sprint. The schema defaults the id (`spr-…`) and CHECKs
+ * `ends_on > starts_on`; the route validates dates and referenced ids before we
+ * get here, so a failure at this layer is a real DB error, not a bad request.
+ * Writes use `exec` (not the read path's `safeExec`) so inserting against a
+ * cluster that predates program_schema.sql is loud, never a silent no-op.
+ */
+export async function createSprint(input: CreateSprintInput): Promise<SprintRow> {
+  const status: SprintStatus = input.status ?? 'planned';
+  if (config.mock.aurora) {
+    const id = `spr-mock-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    const base: MockSprintBase = {
+      id,
+      orgProjectId: input.orgProjectId,
+      orgProjectName: null,
+      name: input.name,
+      goal: input.goal ?? null,
+      stewardPersonId: input.stewardPersonId ?? null,
+      stewardName: null,
+      startsOn: input.startsOn,
+      endsOn: input.endsOn,
+      status,
+    };
+    MOCK_CREATED_SPRINTS.push(base);
+    return buildMockSprintRow(base, null);
+  }
+
+  const rows = await exec(
+    `INSERT INTO sprints (org_project_id, name, goal, steward_person_id, starts_on, ends_on, status)
+     VALUES (:pid, :name, :goal, :steward, :starts::date, :ends::date, :status)
+     RETURNING id`,
+    [
+      s('pid', input.orgProjectId),
+      s('name', input.name),
+      maybe('goal', input.goal),
+      maybe('steward', input.stewardPersonId),
+      s('starts', input.startsOn),
+      s('ends', input.endsOn),
+      s('status', status),
+    ],
+  );
+  const id = toStr(rows[0]?.['id']);
+  // Read back through the list projection so the response carries the joined
+  // initiative/steward names and the (zeroed) rollups a list row would show.
+  const created = await getSprint(id);
+  if (created) return created;
+  throw new Error('sprint was inserted but could not be read back');
 }

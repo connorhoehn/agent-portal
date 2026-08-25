@@ -18,12 +18,27 @@
 // board, everyone else on their own sprints.
 
 import { Router } from 'express';
-import { asyncHandler, ValidationError } from '../lib/async-handler.js';
-import { resolveSession, isAllowed } from '../lib/authz.js';
-import { listSprints, SPRINT_STATUSES } from '../providers/sprints.js';
+import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
+import { resolveSession, isAllowed, requireAction } from '../lib/authz.js';
+import {
+  listSprints, SPRINT_STATUSES, createSprint, getSprint, personExists,
+  type SprintStatus,
+} from '../providers/sprints.js';
+import { initiativeExists } from '../providers/budgets.js';
+import { getWorkItem, updateWorkItem } from '../providers/work-items.js';
 import { getUser } from '../providers/identity.js';
 
 export const sprintsRouter: Router = Router();
+
+/** Sprint mutation (create, move work in/out) is a program-execution action —
+ *  the release manager or an SME steering a sprint. A sibling agent is adding
+ *  `ManageSprints` to those Cedar roles; this router only names the action. */
+const manageSprints = requireAction('ManageSprints');
+
+/** A calendar date the schema stores as DATE — 'YYYY-MM-DD', nothing looser. */
+function isIsoDate(v: unknown): v is string {
+  return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
+}
 
 /** The roles that read the money-bearing org-wide board directly (mirrors the
  *  readForRolesElseAction list on /api/budgets); anyone else needs the Cedar
@@ -76,4 +91,104 @@ sprintsRouter.get('/', asyncHandler(async (req, res) => {
   });
 
   res.json({ scope, personId, canSeeAll: wide, sprints });
+}));
+
+// ─── Create a sprint ──────────────────────────────────────────────────────────
+//
+//   POST /api/sprints
+//     { initiativeId, name, startsOn, endsOn, stewardPersonId?, goal?, status? }
+//   → 201 { sprint }   (the full board row shape, rollups zeroed)
+//
+// ManageSprints. The release manager or a steering SME opens a new iteration on
+// an initiative. Dates are DATE-typed in the schema (ends_on > starts_on), so we
+// reject anything but ordered ISO dates before the write.
+
+sprintsRouter.post('/', manageSprints, asyncHandler(async (req, res) => {
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const initiativeId = String(body['initiativeId'] ?? '').trim();
+  const name = String(body['name'] ?? '').trim();
+  const startsOn = body['startsOn'];
+  const endsOn = body['endsOn'];
+  const stewardPersonId = body['stewardPersonId'] != null ? String(body['stewardPersonId']).trim() : null;
+  const goal = body['goal'] != null ? String(body['goal']) : null;
+
+  if (!initiativeId) throw new ValidationError('initiativeId is required');
+  if (!name) throw new ValidationError('name is required');
+  if (!isIsoDate(startsOn) || !isIsoDate(endsOn)) {
+    throw new ValidationError('startsOn and endsOn must be calendar dates (YYYY-MM-DD)');
+  }
+  if (Date.parse(endsOn) <= Date.parse(startsOn)) {
+    throw new ValidationError('endsOn must be after startsOn');
+  }
+  let status: SprintStatus | undefined;
+  if (body['status'] != null) {
+    const raw = String(body['status']);
+    if (!SPRINT_STATUSES.includes(raw as SprintStatus)) {
+      throw new ValidationError(`status must be one of: ${SPRINT_STATUSES.join(', ')}`);
+    }
+    status = raw as SprintStatus;
+  }
+
+  if (!await initiativeExists(initiativeId)) throw new NotFoundError('No such initiative');
+  if (stewardPersonId && !await personExists(stewardPersonId)) {
+    throw new NotFoundError('No such steward');
+  }
+
+  const sprint = await createSprint({
+    orgProjectId: initiativeId,
+    name,
+    startsOn,
+    endsOn,
+    stewardPersonId,
+    goal,
+    ...(status ? { status } : {}),
+  });
+  res.status(201).json({ sprint });
+}));
+
+// ─── Move a work item into / out of a sprint ──────────────────────────────────
+//
+//   PATCH  /api/sprints/:sprintId/items          { workItemId }   → adds
+//   DELETE /api/sprints/:sprintId/items/:itemId                   → removes
+//
+// ManageSprints. A sprint scopes work for one initiative, so an item can only be
+// pulled into a sprint on the SAME initiative — moving p-auth work into a
+// p-observability sprint would put it under the wrong envelope and steward.
+
+sprintsRouter.patch('/:sprintId/items', manageSprints, asyncHandler(async (req, res) => {
+  const sprintId = String(req.params['sprintId'] ?? '').trim();
+  const workItemId = String((req.body as { workItemId?: unknown })?.workItemId ?? '').trim();
+  if (!workItemId) throw new ValidationError('workItemId is required');
+
+  const sprint = await getSprint(sprintId);
+  if (!sprint) throw new NotFoundError('No such sprint');
+  const item = await getWorkItem(workItemId);
+  if (!item) throw new NotFoundError('No such work item');
+  if (item.projectId !== sprint.orgProjectId) {
+    throw new ValidationError(
+      'a work item can only join a sprint on its own initiative — ' +
+      `item is on ${item.projectId}, sprint is on ${sprint.orgProjectId}`,
+    );
+  }
+
+  const updated = await updateWorkItem(workItemId, { sprintId });
+  if (!updated) throw new NotFoundError('No such work item');
+  res.json({ workItem: updated });
+}));
+
+sprintsRouter.delete('/:sprintId/items/:itemId', manageSprints, asyncHandler(async (req, res) => {
+  const sprintId = String(req.params['sprintId'] ?? '').trim();
+  const workItemId = String(req.params['itemId'] ?? '').trim();
+
+  const sprint = await getSprint(sprintId);
+  if (!sprint) throw new NotFoundError('No such sprint');
+  const item = await getWorkItem(workItemId);
+  if (!item) throw new NotFoundError('No such work item');
+  // Removing an item that isn't in this sprint is a 404 on the membership, not a
+  // silent success — the caller's model of the board is wrong.
+  if (item.sprintId !== sprintId) throw new NotFoundError('work item is not in this sprint');
+
+  const updated = await updateWorkItem(workItemId, { sprintId: null });
+  if (!updated) throw new NotFoundError('No such work item');
+  res.json({ workItem: updated });
 }));

@@ -5,16 +5,33 @@
 // and the query-string validation.
 
 const cedarAllow = { value: false };
+// The ManageSprints Cedar gate on the write routes. Flip to false to prove a
+// write is refused before the provider is touched.
+const manageAllow = { value: true };
 
 jest.mock('../../lib/authz.js', () => ({
   resolveSession: (req: { session?: unknown }) => req.session ?? null,
   isAllowed: jest.fn(async () => cedarAllow.value),
+  requireAction: (action: string) =>
+    (_req: unknown, res: { status: (n: number) => { json: (b: unknown) => void } }, next: () => void) => {
+      if (action === 'ManageSprints' && !manageAllow.value) {
+        res.status(403).json({ error: 'Forbidden', action });
+        return;
+      }
+      next();
+    },
 }));
 
 jest.mock('../../providers/sprints.js', () => ({
   listSprints: jest.fn(),
+  createSprint: jest.fn(),
+  getSprint: jest.fn(),
+  personExists: jest.fn(),
   SPRINT_STATUSES: ['planned', 'active', 'done'],
 }));
+
+jest.mock('../../providers/budgets.js', () => ({ initiativeExists: jest.fn() }));
+jest.mock('../../providers/work-items.js', () => ({ getWorkItem: jest.fn(), updateWorkItem: jest.fn() }));
 
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 
@@ -22,10 +39,18 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import request from 'supertest';
 import { sprintsRouter } from '../sprints.js';
 import { errorHandler } from '../../lib/async-handler.js';
-import { listSprints } from '../../providers/sprints.js';
+import { listSprints, createSprint, getSprint, personExists } from '../../providers/sprints.js';
+import { initiativeExists } from '../../providers/budgets.js';
+import { getWorkItem, updateWorkItem } from '../../providers/work-items.js';
 import { getUser } from '../../providers/identity.js';
 
 const listMock = listSprints as unknown as jest.Mock;
+const createSprintMock = createSprint as unknown as jest.Mock;
+const getSprintMock = getSprint as unknown as jest.Mock;
+const personExistsMock = personExists as unknown as jest.Mock;
+const initiativeExistsMock = initiativeExists as unknown as jest.Mock;
+const getWorkItemMock = getWorkItem as unknown as jest.Mock;
+const updateWorkItemMock = updateWorkItem as unknown as jest.Mock;
 const getUserMock = getUser as unknown as jest.Mock;
 
 const SPRINT = {
@@ -55,8 +80,19 @@ const leader = { sub: 'u-vera', role: 'org-leader', tenant: 'orgiq' };
 
 beforeEach(() => {
   cedarAllow.value = false;
+  manageAllow.value = true;
   listMock.mockReset();
   listMock.mockResolvedValue([SPRINT]);
+  createSprintMock.mockReset();
+  createSprintMock.mockResolvedValue(SPRINT);
+  getSprintMock.mockReset();
+  getSprintMock.mockResolvedValue(SPRINT);
+  personExistsMock.mockReset();
+  personExistsMock.mockResolvedValue(true);
+  initiativeExistsMock.mockReset();
+  initiativeExistsMock.mockResolvedValue(true);
+  getWorkItemMock.mockReset();
+  updateWorkItemMock.mockReset();
   getUserMock.mockReset();
   getUserMock.mockResolvedValue({ id: 'u-nora', personId: 'p-004' });
 });
@@ -181,5 +217,156 @@ describe('response', () => {
   it('401s an anonymous request even though the mount already guards it', async () => {
     const res = await request(buildApp(null)).get('/api/sprints');
     expect(res.status).toBe(401);
+  });
+});
+
+// ─── Write: create a sprint ───────────────────────────────────────────────────
+
+const validCreate = {
+  initiativeId: 'p-observability', name: 'Sprint 99 — Rollout',
+  startsOn: '2026-09-01', endsOn: '2026-09-14', stewardPersonId: 'p-008',
+};
+
+describe('POST /api/sprints', () => {
+  it('creates a sprint and returns 201 with the board row', async () => {
+    const res = await request(buildApp(leader)).post('/api/sprints').send(validCreate);
+    expect(res.status).toBe(201);
+    expect(res.body.sprint).toEqual(SPRINT);
+    expect(createSprintMock).toHaveBeenCalledWith(expect.objectContaining({
+      orgProjectId: 'p-observability', name: 'Sprint 99 — Rollout',
+      startsOn: '2026-09-01', endsOn: '2026-09-14', stewardPersonId: 'p-008',
+    }));
+  });
+
+  it('allows an optional steward and goal to be omitted', async () => {
+    const res = await request(buildApp(leader)).post('/api/sprints')
+      .send({ initiativeId: 'p-observability', name: 'S', startsOn: '2026-09-01', endsOn: '2026-09-14' });
+    expect(res.status).toBe(201);
+    expect(createSprintMock.mock.calls[0]![0].stewardPersonId).toBeNull();
+    expect(personExistsMock).not.toHaveBeenCalled();
+  });
+
+  it('is gated on ManageSprints — refuses before the provider is touched', async () => {
+    manageAllow.value = false;
+    const res = await request(buildApp(sme)).post('/api/sprints').send(validCreate);
+    expect(res.status).toBe(403);
+    expect(res.body.action).toBe('ManageSprints');
+    expect(createSprintMock).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['missing initiativeId', { ...validCreate, initiativeId: '' }, /initiativeId/],
+    ['missing name', { ...validCreate, name: '   ' }, /name/],
+    ['non-ISO startsOn', { ...validCreate, startsOn: '09/01/2026' }, /YYYY-MM-DD/],
+    ['non-ISO endsOn', { ...validCreate, endsOn: 'soon' }, /YYYY-MM-DD/],
+    ['end before start', { ...validCreate, startsOn: '2026-09-14', endsOn: '2026-09-01' }, /after startsOn/],
+    ['equal dates', { ...validCreate, startsOn: '2026-09-01', endsOn: '2026-09-01' }, /after startsOn/],
+    ['bad status', { ...validCreate, status: 'archived' }, /planned, active, done/],
+  ])('rejects %s with 400 before the write', async (_label, body, re) => {
+    const res = await request(buildApp(leader)).post('/api/sprints').send(body);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(re as RegExp);
+    expect(createSprintMock).not.toHaveBeenCalled();
+  });
+
+  it('404s when the initiative does not exist', async () => {
+    initiativeExistsMock.mockResolvedValue(false);
+    const res = await request(buildApp(leader)).post('/api/sprints').send(validCreate);
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/initiative/);
+    expect(createSprintMock).not.toHaveBeenCalled();
+  });
+
+  it('404s when the named steward is not a real person', async () => {
+    personExistsMock.mockResolvedValue(false);
+    const res = await request(buildApp(leader)).post('/api/sprints').send(validCreate);
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/steward/);
+    expect(createSprintMock).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Write: move work items in/out of a sprint ─────────────────────────────────
+
+const SPRINT_OBS = { ...SPRINT, id: 'spr-obs-s3', orgProjectId: 'p-observability' };
+const ITEM = { id: 'wi-k8s-s5', projectId: 'p-observability', sprintId: null as string | null };
+
+describe('PATCH /api/sprints/:sprintId/items', () => {
+  beforeEach(() => {
+    getSprintMock.mockResolvedValue(SPRINT_OBS);
+    getWorkItemMock.mockResolvedValue({ ...ITEM });
+    updateWorkItemMock.mockResolvedValue({ ...ITEM, sprintId: 'spr-obs-s3' });
+  });
+
+  it('adds an item on the same initiative and returns the updated item', async () => {
+    const res = await request(buildApp(sme)).patch('/api/sprints/spr-obs-s3/items').send({ workItemId: 'wi-k8s-s5' });
+    expect(res.status).toBe(200);
+    expect(res.body.workItem.sprintId).toBe('spr-obs-s3');
+    expect(updateWorkItemMock).toHaveBeenCalledWith('wi-k8s-s5', { sprintId: 'spr-obs-s3' });
+  });
+
+  it('refuses an item from a different initiative with 400', async () => {
+    getWorkItemMock.mockResolvedValue({ id: 'wi-auth-1', projectId: 'p-auth-migration', sprintId: null });
+    const res = await request(buildApp(sme)).patch('/api/sprints/spr-obs-s3/items').send({ workItemId: 'wi-auth-1' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/its own initiative/);
+    expect(updateWorkItemMock).not.toHaveBeenCalled();
+  });
+
+  it('400s a missing workItemId', async () => {
+    const res = await request(buildApp(sme)).patch('/api/sprints/spr-obs-s3/items').send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/workItemId/);
+  });
+
+  it('404s an unknown sprint', async () => {
+    getSprintMock.mockResolvedValue(null);
+    const res = await request(buildApp(sme)).patch('/api/sprints/spr-ghost/items').send({ workItemId: 'wi-k8s-s5' });
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/sprint/);
+  });
+
+  it('404s an unknown work item', async () => {
+    getWorkItemMock.mockResolvedValue(null);
+    const res = await request(buildApp(sme)).patch('/api/sprints/spr-obs-s3/items').send({ workItemId: 'wi-ghost' });
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/work item/);
+  });
+
+  it('is gated on ManageSprints', async () => {
+    manageAllow.value = false;
+    const res = await request(buildApp(sme)).patch('/api/sprints/spr-obs-s3/items').send({ workItemId: 'wi-k8s-s5' });
+    expect(res.status).toBe(403);
+    expect(updateWorkItemMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('DELETE /api/sprints/:sprintId/items/:itemId', () => {
+  beforeEach(() => {
+    getSprintMock.mockResolvedValue(SPRINT_OBS);
+    getWorkItemMock.mockResolvedValue({ ...ITEM, sprintId: 'spr-obs-s3' });
+    updateWorkItemMock.mockResolvedValue({ ...ITEM, sprintId: null });
+  });
+
+  it('removes an item that is in the sprint and nulls its sprint_id', async () => {
+    const res = await request(buildApp(sme)).delete('/api/sprints/spr-obs-s3/items/wi-k8s-s5');
+    expect(res.status).toBe(200);
+    expect(res.body.workItem.sprintId).toBeNull();
+    expect(updateWorkItemMock).toHaveBeenCalledWith('wi-k8s-s5', { sprintId: null });
+  });
+
+  it('404s an item that is not in this sprint', async () => {
+    getWorkItemMock.mockResolvedValue({ ...ITEM, sprintId: 'spr-other' });
+    const res = await request(buildApp(sme)).delete('/api/sprints/spr-obs-s3/items/wi-k8s-s5');
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/not in this sprint/);
+    expect(updateWorkItemMock).not.toHaveBeenCalled();
+  });
+
+  it('is gated on ManageSprints', async () => {
+    manageAllow.value = false;
+    const res = await request(buildApp(sme)).delete('/api/sprints/spr-obs-s3/items/wi-k8s-s5');
+    expect(res.status).toBe(403);
+    expect(updateWorkItemMock).not.toHaveBeenCalled();
   });
 });
