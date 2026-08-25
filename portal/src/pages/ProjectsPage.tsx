@@ -7,6 +7,7 @@ import {
   SkeletonCard,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
+import { githubRepoUrl } from '../lib/repoLink';
 
 // The operating model: one person runs each initiative, a few SMEs cut across
 // them directing agents. The cards show that — owner + SMEs + real work
@@ -35,6 +36,8 @@ interface ProjectSummary {
   /** Genuinely last, unwindowed — an initiative can have $0.00 this month and
       still have run in June. */
   lastAgentActivityAt?: string | null;
+  /** `owner/repo` (Mission-2). Rendered as a GitHub link, no capability gate. */
+  repoFullName?: string | null;
 }
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -173,10 +176,17 @@ function InitiativeCard({ project, onClick }: { project: ProjectSummary; onClick
   const smes = project.smeNames ?? [];
   const work = workLine(project);
   const spend = project.agentSpendUsd ?? 0;
+  const repoUrl = githubRepoUrl(project.repoFullName);
   return (
-    <button
-      type="button"
+    // role="button" rather than a real <button>: the footer carries a repo
+    // <a>, and an anchor nested in a button is invalid HTML (hydration warning).
+    // A div with keyboard handling keeps the card fully operable and lets the
+    // link nest legally.
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
       style={{
         display: 'flex', flexDirection: 'column', gap: 10,
         padding: '14px 16px', minHeight: 150,
@@ -240,14 +250,32 @@ function InitiativeCard({ project, onClick }: { project: ProjectSummary; onClick
         )}
       </div>
 
-      {/* Footer: freshness */}
+      {/* Footer: freshness + codebase link */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, borderTop: '1px solid #f3f4f6', paddingTop: 8 }}>
         <span style={{ width: 6, height: 6, borderRadius: '50%', background: presenceColor(project.lastActivityAt), flexShrink: 0 }} />
         <span style={{ fontSize: 11, color: '#9ca3af' }}>
           {relativeTime(project.lastActivityAt ?? project.createdAt)}
         </span>
+        {repoUrl ? (
+          <a
+            href={repoUrl}
+            target="_blank"
+            rel="noreferrer"
+            // The card is itself a button that navigates to the detail page, so
+            // clicking the repo link must not also open the initiative.
+            onClick={(e) => e.stopPropagation()}
+            title={project.repoFullName ?? undefined}
+            style={{
+              marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 3,
+              fontSize: 11, color: '#3b82f6', textDecoration: 'none',
+              maxWidth: '55%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}
+          >
+            ↗ {project.repoFullName}
+          </a>
+        ) : null}
       </div>
-    </button>
+    </div>
   );
 }
 

@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router';
 import { Card, Chip, CollapsibleSection, Modal, PageSection, StatusDot, type ChipTone } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { useCapabilities } from '../lib/capabilities';
+import { githubRepoUrl } from '../lib/repoLink';
 import { toastError, toastInfo } from '../lib/toastStore';
 import { EstimateDrawer } from '../components/marketplace/EstimateDrawer';
 import { OwnerEditor, RoleCycleChip } from '../components/marketplace/GovernanceEditor';
@@ -1251,8 +1252,11 @@ function ProjectDetailPage() {
   // open this page can read it, so take the number from there and let the
   // Initiatives list and this header agree by construction.
   const { data: projectList, isLoading: projectListLoading } =
-    useFetch<Array<{ id: string; agentSpendUsd: number | null }>>('/api/graph/projects', 60_000);
-  const serverSpendUsd = (projectList ?? []).find((p) => p.id === id)?.agentSpendUsd ?? null;
+    useFetch<Array<{ id: string; agentSpendUsd: number | null; repoFullName?: string | null }>>('/api/graph/projects', 60_000);
+  const projectRollup = (projectList ?? []).find((p) => p.id === id);
+  const serverSpendUsd = projectRollup?.agentSpendUsd ?? null;
+  // Mission-2 codebase link — the initiative's repo, from the same rollup.
+  const repoUrl = githubRepoUrl(projectRollup?.repoFullName);
 
   // The run that speaks for each work item: a running one wins, else newest.
   const marketRuns: Record<string, BotRun> = {};
@@ -1557,13 +1561,23 @@ function ProjectDetailPage() {
               </div>
               <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>open decisions</div>
             </div>
-            {project.githubUrl && (
+            {/* Codebase link (Mission-2). Prefer the repo slug from the rollup —
+                it names the actual repo — and fall back to the detail's
+                githubUrl only when the rollup carries no repo. */}
+            {repoUrl ? (
+              <a href={repoUrl} target="_blank" rel="noreferrer"
+                title={projectRollup?.repoFullName ?? undefined}
+                style={{ display: 'flex', alignItems: 'center', gap: 4,
+                  fontSize: 12, color: 'var(--color-primary)', textDecoration: 'none', alignSelf: 'center' }}>
+                ↗ {projectRollup?.repoFullName}
+              </a>
+            ) : project.githubUrl ? (
               <a href={project.githubUrl} target="_blank" rel="noreferrer"
                 style={{ display: 'flex', alignItems: 'center', gap: 4,
                   fontSize: 12, color: 'var(--color-primary)', textDecoration: 'none', alignSelf: 'center' }}>
                 ↗ GitHub
               </a>
-            )}
+            ) : null}
           </div>
         </div>
 
