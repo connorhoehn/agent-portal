@@ -6,12 +6,17 @@
 #   - Orphan gateways (not CFN-managed)
 #   - Secrets scheduled for deletion (block re-deploy after quick redeploy)
 #   - Bedrock KB data sources (can't delete if vector store unreachable)
-#   - Aurora cluster/instances (AuroraFastDeleter custom resource is fragile —
-#     proactively force-deletes the OrgIQ-Aurora CFN stack after pre-drain to
-#     avoid the physical-ID-change DELETE_FAILED on every destroy)
+#   - Aurora cluster/instances (the RDS *cluster* is the billing resource, and
+#     the AuroraFastDeleter custom resource is fragile — pre-draining the
+#     cluster via the RDS API means CDK just sees it as already gone)
 #
-# After cdk destroy, any stacks still in DELETE_FAILED are force-deleted by
-# retaining their failed resources (orphaned AWS resources that are already gone).
+# The OrgIQ-Aurora *CFN stack* is deliberately NOT pre-deleted here. Its exports
+# (cluster ARN etc.) are still imported by downstream stacks at this point, so a
+# stack delete is cancelled by CloudFormation and never reaches DELETE_COMPLETE —
+# see the note in the Aurora section below. `cdk destroy --all` deletes stacks in
+# the correct dependency order (consumers first, Aurora last), and any stack left
+# in DELETE_FAILED afterward is force-deleted by retaining its failed resources
+# (orphaned AWS resources that are already gone).
 #
 # Usage:
 #   ./scripts/destroy.sh              # destroy all stacks
@@ -393,60 +398,26 @@ else
     fi
   fi
 
-  # Proactively delete the OrgIQ-Aurora CFN stack once the cluster is gone.
-  # The AuroraFastDeleter custom resource has a physical-ID-change bug that
-  # causes DELETE_FAILED when CDK manages the deletion. NOTE: --retain-resources
-  # is only valid on stacks already in DELETE_FAILED — so delete plainly first,
-  # and only retry with retained resources if it lands in DELETE_FAILED.
-  AURORA_STACK_STATUS=$(aws cloudformation describe-stacks \
-    --stack-name "OrgIQ-Aurora" --region "$REGION" \
-    --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "not-found")
-
-  if [[ "$AURORA_STACK_STATUS" != "not-found" && "$AURORA_STACK_STATUS" != "None" && ${#FAILURES[@]} -eq 0 ]]; then
-    echo "  Pre-deleting OrgIQ-Aurora CFN stack..."
-    aws cloudformation delete-stack --stack-name "OrgIQ-Aurora" --region "$REGION" 2>/dev/null || true
-    aws cloudformation wait stack-delete-complete \
-      --stack-name "OrgIQ-Aurora" --region "$REGION" 2>/dev/null || true
-
-    AURORA_STACK_STATUS=$(aws cloudformation describe-stacks \
-      --stack-name "OrgIQ-Aurora" --region "$REGION" \
-      --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "not-found")
-    if [[ "$AURORA_STACK_STATUS" == "DELETE_FAILED" ]]; then
-      echo "  Retrying with failed resources retained (AuroraFastDeleter bug)..."
-      RETAIN=$(aws cloudformation describe-stack-events \
-        --stack-name "OrgIQ-Aurora" --region "$REGION" \
-        --query 'StackEvents[?ResourceStatus==`DELETE_FAILED`].LogicalResourceId' \
-        --output text 2>/dev/null | tr '\t' '\n' | sort -u | tr '\n' ' ' || true)
-      aws cloudformation delete-stack --stack-name "OrgIQ-Aurora" \
-        --retain-resources $RETAIN --region "$REGION" 2>/dev/null || true
-      aws cloudformation wait stack-delete-complete \
-        --stack-name "OrgIQ-Aurora" --region "$REGION" 2>/dev/null || true
-    fi
-    # Report the FINAL state honestly. This line used to end in `|| echo
-    # deleted`, which conflated two very different failures: a stack that is
-    # genuinely gone, and a describe call that could not be made. When
-    # aws-azure-login credentials expired mid-destroy, the call failed, the
-    # fallback fired, and the script announced "final: deleted" over a stack
-    # still sitting at CREATE_COMPLETE — while its Aurora cluster HAD been
-    # physically deleted. That mismatch (CFN owning a resource that no longer
-    # exists) is what forced a full teardown to recover. Distinguish the cases:
-    # a genuine absence is a ValidationError naming the stack, anything else is
-    # unknown and must be recorded as a failure, never as success.
-    AURORA_DESCRIBE_ERR=$(mktemp)
-    if AURORA_FINAL=$(aws cloudformation describe-stacks \
-         --stack-name "OrgIQ-Aurora" --region "$REGION" \
-         --query 'Stacks[0].StackStatus' --output text 2>"$AURORA_DESCRIBE_ERR"); then
-      echo "  OrgIQ-Aurora CFN stack still present (final: ${AURORA_FINAL})"
-      FAILURES+=("OrgIQ-Aurora stack still present (${AURORA_FINAL})")
-    elif grep -q "does not exist" "$AURORA_DESCRIBE_ERR"; then
-      echo "  OrgIQ-Aurora CFN stack deleted"
-    else
-      echo "  ✗ Could not determine OrgIQ-Aurora stack state:"
-      sed 's/^/      /' "$AURORA_DESCRIBE_ERR"
-      FAILURES+=("OrgIQ-Aurora final state unknown (describe-stacks failed)")
-    fi
-    rm -f "$AURORA_DESCRIBE_ERR"
-  fi
+  # NOTE: we do NOT pre-delete the OrgIQ-Aurora *CFN stack* here — only the RDS
+  # cluster above, which is the resource that actually bills.
+  #
+  # This block used to `delete-stack OrgIQ-Aurora` + `wait stack-delete-complete`
+  # at this point, and it HUNG the whole destroy for the waiter's full ~60-minute
+  # ceiling. Root cause: OrgIQ-Aurora's exports (the cluster ARN
+  # `orgiq-aurora-cluster-arn` etc.) are still IMPORTED by downstream stacks
+  # (AgentCoreRuntime, MiddlewareService, PromptCanary, KnowledgeBase, Agents,
+  # AgentCoreGateway) at this stage — cdk destroy has not run yet. CloudFormation
+  # therefore CANCELS the delete: the stack goes DELETE_IN_PROGRESS then bounces
+  # straight back to CREATE_COMPLETE with reason "Delete canceled. Cannot delete
+  # export ... as it is in use by ...". It never reaches DELETE_COMPLETE nor
+  # DELETE_FAILED, so `wait stack-delete-complete` polls until its own timeout.
+  #
+  # The pre-delete was also redundant: `cdk destroy --all` below deletes stacks
+  # in dependency order (consumers first, Aurora last, so the exports are free by
+  # the time Aurora is deleted), and the DELETE_FAILED handler after it already
+  # force-deletes Aurora with --retain-resources for the fragile
+  # AuroraFastDeleter custom resource. Stack deletion is owned entirely by those
+  # two phases now.
 fi
 echo ""
 
@@ -547,6 +518,98 @@ if [[ -n "$REMAINING" ]]; then
   echo "  Stacks still present:"
   echo "$REMAINING" | sed 's/^/    /'
   FAILURES+=("$(echo "$REMAINING" | wc -l | tr -d ' ') stack(s) still present")
+fi
+
+# ──────────────────────────────────────────────────────────────────
+# 8b. Billing-resource sweep — "no CFN stacks remain" is necessary but
+#     NOT sufficient. Expensive physical resources can outlive their stack:
+#     a KB deleted out-of-band orphans its OpenSearch collection; a stack
+#     force-deleted with --retain-resources keeps whatever it retained; an
+#     S3 bucket with objects blocks its own CFN delete. This session I had to
+#     confirm by hand that the real money resources were gone — so verify them
+#     here via their own APIs. Read-only: report each survivor into FAILURES[],
+#     never delete (the force-deletes above already own destruction).
+# ──────────────────────────────────────────────────────────────────
+echo ""
+echo "── Sweeping for surviving billing resources ──"
+
+# An unreadable account is not an empty account (same trap as list-stacks
+# above). If we cannot authenticate, record the sweep as unverified rather than
+# letting every "|| true" below silently report a clean account.
+if ! aws sts get-caller-identity > /dev/null 2>&1; then
+  echo "  ✗ Credentials unavailable — cannot verify billing resources"
+  FAILURES+=("billing-resource sweep unverified (credentials unavailable)")
+else
+  SWEEP_CLEAN=1
+  sweep_survivor() {
+    echo "  ✗ $1"
+    FAILURES+=("$1")
+    SWEEP_CLEAN=0
+  }
+
+  # Aurora clusters + instances (the ~\$45/mo idle floor).
+  for c in $(aws rds describe-db-clusters --region "$REGION" \
+      --query "DBClusters[?starts_with(DBClusterIdentifier, '${PREFIX}')].DBClusterIdentifier" \
+      --output text 2>/dev/null || true); do
+    sweep_survivor "Aurora cluster still present: ${c}"
+  done
+  for i in $(aws rds describe-db-instances --region "$REGION" \
+      --query "DBInstances[?starts_with(DBInstanceIdentifier, '${PREFIX}')].DBInstanceIdentifier" \
+      --output text 2>/dev/null || true); do
+    sweep_survivor "Aurora DB instance still present: ${i}"
+  done
+
+  # OpenSearch Serverless collections (2-OCU minimum, ~\$0.48/hr even idle).
+  for c in $(aws opensearchserverless list-collections --region "$REGION" \
+      --query "collectionSummaries[?starts_with(name, '${PREFIX}')].name" \
+      --output text 2>/dev/null || true); do
+    sweep_survivor "OpenSearch Serverless collection still present: ${c} (~\$0.48/hr)"
+  done
+
+  # AgentCore runtimes. A runtime in DELETING is an orphan finishing its delete
+  # server-side (section 3b leaves those on purpose) — not a survivor. Anything
+  # else (READY/CREATE_FAILED/etc.) is still real, so flag it.
+  RT_ROWS=$(aws bedrock-agentcore-control list-agent-runtimes --region "$REGION" \
+    --query "agentRuntimes[?starts_with(agentRuntimeName, '${PREFIX}')].[agentRuntimeName,status]" \
+    --output text 2>/dev/null || true)
+  while IFS=$'\t' read -r RT_NAME RT_STATUS; do
+    [[ -z "$RT_NAME" ]] && continue
+    if [[ "$RT_STATUS" == "DELETING" ]]; then
+      echo "  … runtime ${RT_NAME} still DELETING (orphan finishing server-side)"
+    else
+      sweep_survivor "AgentCore runtime still present: ${RT_NAME} (${RT_STATUS:-unknown})"
+    fi
+  done <<< "$RT_ROWS"
+
+  # AgentCore memories (id is <name>-<suffix>, so it carries the prefix).
+  for m in $(aws bedrock-agentcore-control list-memories --region "$REGION" \
+      --query "memories[?starts_with(id, '${PREFIX}')].id" \
+      --output text 2>/dev/null || true); do
+    sweep_survivor "AgentCore memory still present: ${m}"
+  done
+
+  # AgentCore browsers + code interpreters. Prefix filtering skips the
+  # AWS-managed defaults (aws.browser.v1 / aws.codeinterpreter.v1).
+  for b in $(aws bedrock-agentcore-control list-browsers --region "$REGION" \
+      --query "browserSummaries[?starts_with(name, '${PREFIX}')].name" \
+      --output text 2>/dev/null || true); do
+    sweep_survivor "AgentCore browser still present: ${b}"
+  done
+  for ci in $(aws bedrock-agentcore-control list-code-interpreters --region "$REGION" \
+      --query "codeInterpreterSummaries[?starts_with(name, '${PREFIX}')].name" \
+      --output text 2>/dev/null || true); do
+    sweep_survivor "AgentCore code interpreter still present: ${ci}"
+  done
+
+  # orgiq S3 buckets (list-buckets is global, so no --region). A bucket that
+  # still holds objects is exactly the case that blocks its stack's CFN delete.
+  for bkt in $(aws s3api list-buckets \
+      --query "Buckets[?starts_with(Name, '${PREFIX}-')].Name" \
+      --output text 2>/dev/null || true); do
+    sweep_survivor "S3 bucket still present: ${bkt}"
+  done
+
+  [[ "$SWEEP_CLEAN" == "1" ]] && echo "  No surviving billing resources found"
 fi
 
 echo ""
