@@ -258,6 +258,16 @@
             "Application"
           ]
         }
+      },
+      "ManageSprints": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
       }
     }
   }

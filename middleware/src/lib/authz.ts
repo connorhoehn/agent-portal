@@ -52,6 +52,7 @@ export const CAPABILITY_ACTIONS = [
   'PublishArticle',      // newsroom-articles.ts
   'Masquerade',          // session.ts
   'ManageBudgets',       // budgets.ts — initiative allocations (program management)
+  'ManageSprints',       // sprints.ts — create sprints, move work between them (org-leader + sme)
 ] as const;
 
 export type CapabilityAction = (typeof CAPABILITY_ACTIONS)[number];

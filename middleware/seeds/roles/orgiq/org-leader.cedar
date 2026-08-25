@@ -15,7 +15,10 @@ permit (
     // spend it represents.
     OrgIQ::Action::"DispatchAgentRun",
     // Program management — allocating agent spend per initiative.
-    OrgIQ::Action::"ManageBudgets"
+    OrgIQ::Action::"ManageBudgets",
+    // Run the program cadence — create sprints and move work between them.
+    // The release manager owns the iteration calendar for the initiative.
+    OrgIQ::Action::"ManageSprints"
   ],
   resource
 )

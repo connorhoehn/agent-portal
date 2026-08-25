@@ -12,7 +12,10 @@ permit (
     OrgIQ::Action::"ViewObservability",
     OrgIQ::Action::"LabelFeedback",
     // The point of the role: assign computers to do the work.
-    OrgIQ::Action::"DispatchAgentRun"
+    OrgIQ::Action::"DispatchAgentRun",
+    // Sprints have a steward — the SME accountable for that iteration creates
+    // it and moves work into it. Scoped to their initiatives at the route layer.
+    OrgIQ::Action::"ManageSprints"
   ],
   resource
 )
