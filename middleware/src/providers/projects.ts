@@ -44,15 +44,22 @@ export interface ProjectSummary {
   agentSpendUsd: number | null;
   /** Genuinely last, not last-this-month — see the note in listProjects. */
   lastAgentActivityAt: string | null;
+  /** The `owner/repo` this initiative's code lives in (agent_projects.repo_full_name,
+      joined on agent_projects.org_project_id = projects.id), null when no repo is
+      linked yet. This is the ONLY read path a release manager (org-leader) has to
+      the codebase link — /api/agent-projects is gated on ManageDevbox, which
+      org-leader does not hold (see docs/program-operating-model.md's role table).
+      This rollup carries no dispatch or clone capability, only the repo name. */
+  repoFullName: string | null;
 }
 
 /** The rollup fields defaulted for mock mode and the legacy fallback. */
 const EMPTY_ROLLUPS: Pick<ProjectSummary,
   'ownerId' | 'ownerName' | 'smeNames' | 'openStories' | 'openBugs'
-  | 'pointsDone' | 'pointsTotal' | 'agentSpendUsd' | 'lastAgentActivityAt'> = {
+  | 'pointsDone' | 'pointsTotal' | 'agentSpendUsd' | 'lastAgentActivityAt' | 'repoFullName'> = {
   ownerId: null, ownerName: null, smeNames: [],
   openStories: null, openBugs: null, pointsDone: null, pointsTotal: null,
-  agentSpendUsd: null, lastAgentActivityAt: null,
+  agentSpendUsd: null, lastAgentActivityAt: null, repoFullName: null,
 };
 
 export interface ProjectDetail {
@@ -171,23 +178,27 @@ interface MockInitiative {
   smes: string[];
   /** Hours since the last agent run on this initiative. */
   activeHoursAgo: number;
+  /** `owner/repo` under connorhoehnslalom/ — mirrors the agent_projects rows
+      schema/seeds/generate_program_seed.py links via org_project_id, so mock
+      mode reports the same codebase link Aurora does. */
+  repo: string;
 }
 
 const MOCK_INITIATIVES: MockInitiative[] = [
-  { id: 'p-observability',     name: 'Observability Platform',       status: 'in_progress', createdAt: '2026-05-24T12:00:00Z', owner: 'p-004', smes: ['p-008', 'p-011'], activeHoursAgo: 1 },
-  { id: 'p-auth-migration',    name: 'Auth Migration',               status: 'in_progress', createdAt: '2026-06-05T12:00:00Z', owner: 'p-002', smes: ['p-051', 'p-004'], activeHoursAgo: 3 },
-  { id: 'p-llm-platform',      name: 'LLM Application Platform',     status: 'in_progress', createdAt: '2026-06-19T12:00:00Z', owner: 'p-047', smes: ['p-042', 'p-013'], activeHoursAgo: 2 },
-  { id: 'p-cost-opt',          name: 'Cost Optimization',            status: 'in_progress', createdAt: '2026-05-30T12:00:00Z', owner: 'p-008', smes: ['p-011', 'p-017'], activeHoursAgo: 5 },
-  { id: 'p-realtime-analytics', name: 'Real-time Analytics Pipeline', status: 'in_progress', createdAt: '2026-06-24T12:00:00Z', owner: 'p-017', smes: ['p-019', 'p-024'], activeHoursAgo: 9 },
-  { id: 'p-data-lake',         name: 'Data Lake Migration',          status: 'planning',    createdAt: '2026-08-01T12:00:00Z', owner: 'p-025', smes: ['p-017', 'p-015'], activeHoursAgo: 40 },
-  { id: 'p-feature-store',     name: 'ML Feature Store',             status: 'in_progress', createdAt: '2026-06-28T12:00:00Z', owner: 'p-042', smes: ['p-019', 'p-044'], activeHoursAgo: 12 },
-  { id: 'p-mobile-redesign',   name: 'Mobile App Redesign',          status: 'in_progress', createdAt: '2026-06-12T12:00:00Z', owner: 'p-030', smes: ['p-035', 'p-026'], activeHoursAgo: 18 },
-  { id: 'p-design-v3',         name: 'Design System v3',             status: 'in_progress', createdAt: '2026-07-03T12:00:00Z', owner: 'p-035', smes: ['p-038', 'p-034'], activeHoursAgo: 26 },
-  { id: 'p-design-system-api', name: 'Design System API',            status: 'in_progress', createdAt: '2026-07-10T12:00:00Z', owner: 'p-038', smes: ['p-035', 'p-001'], activeHoursAgo: 30 },
-  { id: 'p-inference-platform', name: 'Inference Platform',          status: 'in_progress', createdAt: '2026-06-15T12:00:00Z', owner: 'p-049', smes: ['p-013', 'p-043'], activeHoursAgo: 7 },
-  { id: 'p-rag-search',        name: 'RAG Knowledge Search',         status: 'completed',   createdAt: '2026-04-18T12:00:00Z', owner: 'p-048', smes: ['p-047'],          activeHoursAgo: 22 },
-  { id: 'p-soc2',              name: 'SOC2 Compliance',              status: 'in_progress', createdAt: '2026-06-22T12:00:00Z', owner: 'p-052', smes: ['p-055', 'p-051'], activeHoursAgo: 14 },
-  { id: 'p-zero-trust',        name: 'Zero Trust Network',           status: 'planning',    createdAt: '2026-08-08T12:00:00Z', owner: 'p-051', smes: ['p-052', 'p-056'], activeHoursAgo: 48 },
+  { id: 'p-observability',     name: 'Observability Platform',       status: 'in_progress', createdAt: '2026-05-24T12:00:00Z', owner: 'p-004', smes: ['p-008', 'p-011'], activeHoursAgo: 1,  repo: 'connorhoehnslalom/orgiq-observability' },
+  { id: 'p-auth-migration',    name: 'Auth Migration',               status: 'in_progress', createdAt: '2026-06-05T12:00:00Z', owner: 'p-002', smes: ['p-051', 'p-004'], activeHoursAgo: 3,  repo: 'connorhoehnslalom/orgiq-auth-service' },
+  { id: 'p-llm-platform',      name: 'LLM Application Platform',     status: 'in_progress', createdAt: '2026-06-19T12:00:00Z', owner: 'p-047', smes: ['p-042', 'p-013'], activeHoursAgo: 2,  repo: 'connorhoehnslalom/orgiq-llm-platform' },
+  { id: 'p-cost-opt',          name: 'Cost Optimization',            status: 'in_progress', createdAt: '2026-05-30T12:00:00Z', owner: 'p-008', smes: ['p-011', 'p-017'], activeHoursAgo: 5,  repo: 'connorhoehnslalom/orgiq-finops' },
+  { id: 'p-realtime-analytics', name: 'Real-time Analytics Pipeline', status: 'in_progress', createdAt: '2026-06-24T12:00:00Z', owner: 'p-017', smes: ['p-019', 'p-024'], activeHoursAgo: 9,  repo: 'connorhoehnslalom/orgiq-stream-analytics' },
+  { id: 'p-data-lake',         name: 'Data Lake Migration',          status: 'planning',    createdAt: '2026-08-01T12:00:00Z', owner: 'p-025', smes: ['p-017', 'p-015'], activeHoursAgo: 40, repo: 'connorhoehnslalom/orgiq-data-lake' },
+  { id: 'p-feature-store',     name: 'ML Feature Store',             status: 'in_progress', createdAt: '2026-06-28T12:00:00Z', owner: 'p-042', smes: ['p-019', 'p-044'], activeHoursAgo: 12, repo: 'connorhoehnslalom/orgiq-feature-store' },
+  { id: 'p-mobile-redesign',   name: 'Mobile App Redesign',          status: 'in_progress', createdAt: '2026-06-12T12:00:00Z', owner: 'p-030', smes: ['p-035', 'p-026'], activeHoursAgo: 18, repo: 'connorhoehnslalom/orgiq-mobile-app' },
+  { id: 'p-design-v3',         name: 'Design System v3',             status: 'in_progress', createdAt: '2026-07-03T12:00:00Z', owner: 'p-035', smes: ['p-038', 'p-034'], activeHoursAgo: 26, repo: 'connorhoehnslalom/orgiq-design-system' },
+  { id: 'p-design-system-api', name: 'Design System API',            status: 'in_progress', createdAt: '2026-07-10T12:00:00Z', owner: 'p-038', smes: ['p-035', 'p-001'], activeHoursAgo: 30, repo: 'connorhoehnslalom/orgiq-design-system-api' },
+  { id: 'p-inference-platform', name: 'Inference Platform',          status: 'in_progress', createdAt: '2026-06-15T12:00:00Z', owner: 'p-049', smes: ['p-013', 'p-043'], activeHoursAgo: 7,  repo: 'connorhoehnslalom/orgiq-inference-platform' },
+  { id: 'p-rag-search',        name: 'RAG Knowledge Search',         status: 'completed',   createdAt: '2026-04-18T12:00:00Z', owner: 'p-048', smes: ['p-047'],          activeHoursAgo: 22, repo: 'connorhoehnslalom/orgiq-rag-search' },
+  { id: 'p-soc2',              name: 'SOC2 Compliance',              status: 'in_progress', createdAt: '2026-06-22T12:00:00Z', owner: 'p-052', smes: ['p-055', 'p-051'], activeHoursAgo: 14, repo: 'connorhoehnslalom/orgiq-compliance' },
+  { id: 'p-zero-trust',        name: 'Zero Trust Network',           status: 'planning',    createdAt: '2026-08-08T12:00:00Z', owner: 'p-051', smes: ['p-052', 'p-056'], activeHoursAgo: 48, repo: 'connorhoehnslalom/orgiq-zero-trust' },
 ];
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -243,6 +254,7 @@ export async function listProjects(opts: {
         ownerId: cast?.owner ?? null,
         ownerName: p.topContributorNames[0] ?? null,
         smeNames: p.topContributorNames.slice(1),
+        repoFullName: cast?.repo ?? null,
         agentSpendUsd: row ? row.spentThisPeriodUsd : 0,
         lastAgentActivityAt: row ? row.lastAgentActivityAt : null,
         // Aurora derives lastActivityAt as `lastAgent ?? createdAt`, so where
@@ -320,7 +332,10 @@ export async function listProjects(opts: {
       (SELECT COALESCE(SUM(w.story_points), 0) FROM work_items w
         WHERE w.project_id = p.id AND w.type IN ('story','bug') AND w.status = 'done')::int AS points_done,
       (SELECT COALESCE(SUM(br.cost_usd), 0)::float8 FROM bot_runs br WHERE ${spendPredicate}) AS agent_spend_usd,
-      (SELECT MAX(br.started_at) FROM bot_runs br WHERE ${attributionPredicate}) AS last_agent_activity_at`;
+      (SELECT MAX(br.started_at) FROM bot_runs br WHERE ${attributionPredicate}) AS last_agent_activity_at,
+      (SELECT ap.repo_full_name FROM agent_projects ap
+        WHERE ap.org_project_id = p.id
+        ORDER BY ap.created_at ASC LIMIT 1) AS repo_full_name`;
 
   const buildSql = (withRollups: boolean) => `
     SELECT
@@ -371,6 +386,7 @@ export async function listProjects(opts: {
         pointsTotal: Number(r['points_total'] ?? 0),
         agentSpendUsd: Number(r['agent_spend_usd'] ?? 0),
         lastAgentActivityAt: lastAgent,
+        repoFullName: r['repo_full_name'] != null ? String(r['repo_full_name']) : null,
       } : EMPTY_ROLLUPS),
     };
   });
