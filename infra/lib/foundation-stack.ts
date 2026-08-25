@@ -2,6 +2,8 @@ import * as cdk from 'aws-cdk-lib';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as cr from 'aws-cdk-lib/custom-resources';
 import type { Construct } from 'constructs';
 
 export interface FoundationStackProps extends cdk.StackProps {
@@ -25,6 +27,10 @@ export class FoundationStack extends cdk.Stack {
   public readonly leaderboardsTable: dynamodb.Table;
   /** Base execution role for AgentCore Runtime agents */
   public readonly agentBaseRole: iam.Role;
+
+  /** Lazily-built custodian-resistant bucket emptier (see emptyBucketOnDestroy). */
+  private emptierFn?: lambda.Function;
+  private emptierProvider?: cr.Provider;
 
   constructor(scope: Construct, id: string, props?: FoundationStackProps) {
     super(scope, id, props);
@@ -51,7 +57,12 @@ export class FoundationStack extends cdk.Stack {
           ],
         },
       ],
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      // Was RETAIN: on teardown that orphaned the bucket (203 live versions had
+      // to be emptied and deleted by hand). Foundation is meant to tear down
+      // cleanly, so both buckets are DESTROY and emptied by emptyBucketOnDestroy
+      // below. This bucket is versioned, so the emptier removes every version
+      // AND delete marker (a plain object delete only adds a marker).
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
     this.artifactsBucket = new s3.Bucket(this, 'ArtifactsBucket', {
@@ -65,9 +76,28 @@ export class FoundationStack extends cdk.Stack {
           expiration: cdk.Duration.days(365),
         },
       ],
+      // NB: no `autoDeleteObjects: true`. The CDK auto-delete custom resource
+      // failed to destroy this stack in account 647757222309 with:
+      //   AccessDenied ... not authorized to perform: s3:GetBucketTagging
+      //   because no identity-based policy allows the s3:GetBucketTagging action
+      // CDK grants the auto-delete provider role its S3 permissions ONLY through
+      // a bucket *resource* policy (s3:GetBucket*/s3:List*/s3:DeleteObject*); the
+      // role has no identity-based S3 access. This account's Cloud Custodian /
+      // SCP layer trims bucket policies (it also silently revokes open SG
+      // ingress), so that grant is gone by teardown and the provider is denied
+      // on its very first call (getBucketTagging) -> bucket can't empty -> the
+      // whole Foundation stack wedges in DELETE_FAILED. The provider also gates
+      // on the `aws-cdk:auto-delete-objects` tag and rewrites the bucket policy
+      // mid-teardown -- two more custodian-fragile dependencies. We instead empty
+      // on delete via a role we own whose permissions are identity-based.
       removalPolicy: cdk.RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
     });
+
+    // Custodian-resistant teardown: empty both buckets on stack delete using an
+    // emptier Lambda whose S3 permissions live on its own IAM role (identity-
+    // based), not on a per-bucket resource policy the custodian layer strips.
+    this.emptyBucketOnDestroy(this.documentsBucket);
+    this.emptyBucketOnDestroy(this.artifactsBucket);
 
     // -------------------------------------------------------------------
     // DynamoDB Tables
@@ -195,5 +225,86 @@ export class FoundationStack extends cdk.Stack {
       value: this.agentBaseRole.roleArn,
       exportName: `${prefix}-agent-base-role-arn`,
     });
+  }
+
+  /**
+   * Empty a bucket (all object versions AND delete markers) when the stack is
+   * destroyed, then let CloudFormation delete the now-empty bucket.
+   *
+   * This replaces `autoDeleteObjects: true`. The stock CDK provider is denied at
+   * teardown in this account because it depends on grants the Cloud Custodian /
+   * SCP layer removes (see the comment on the artifacts bucket). Here every
+   * permission is an INLINE policy on the emptier Lambda's own role — the
+   * durable, identity-based grant path — so nothing the custodian does to a
+   * bucket *resource* policy or a bucket *tag* can stop teardown. There is also
+   * no tag gate and no mid-teardown bucket-policy rewrite.
+   *
+   * A single Lambda + Provider is shared across buckets; each bucket gets its
+   * own custom resource that depends on the bucket, so on delete the emptier
+   * runs first (CloudFormation deletes in reverse dependency order) and the
+   * bucket delete then finds it empty.
+   */
+  private emptyBucketOnDestroy(bucket: s3.Bucket): void {
+    if (!this.emptierFn) {
+      this.emptierFn = new lambda.Function(this, 'BucketEmptierFn', {
+        description: 'Empties OrgIQ-Foundation S3 buckets on stack destroy (versions + delete markers).',
+        runtime: lambda.Runtime.NODEJS_20_X,
+        handler: 'index.handler',
+        timeout: cdk.Duration.minutes(15),
+        memorySize: 256,
+        // AWS SDK v3 (@aws-sdk/client-s3) ships in the Node.js 20 Lambda runtime,
+        // so this needs no bundling. Only runs on the custom resource's Delete.
+        code: lambda.Code.fromInline([
+          "const { S3Client, ListObjectVersionsCommand, DeleteObjectsCommand } = require('@aws-sdk/client-s3');",
+          'const s3 = new S3Client({});',
+          'exports.handler = async (event) => {',
+          "  if (event.RequestType !== 'Delete') return {};",
+          '  const Bucket = event.ResourceProperties.BucketName;',
+          '  try {',
+          '    let KeyMarker, VersionIdMarker;',
+          '    do {',
+          '      const page = await s3.send(new ListObjectVersionsCommand({ Bucket, KeyMarker, VersionIdMarker }));',
+          '      const objects = [...(page.Versions || []), ...(page.DeleteMarkers || [])]',
+          '        .map((o) => ({ Key: o.Key, VersionId: o.VersionId }));',
+          '      if (objects.length > 0) {',
+          '        await s3.send(new DeleteObjectsCommand({ Bucket, Delete: { Objects: objects, Quiet: true } }));',
+          '      }',
+          '      KeyMarker = page.NextKeyMarker;',
+          '      VersionIdMarker = page.NextVersionIdMarker;',
+          '    } while (KeyMarker || VersionIdMarker);',
+          '  } catch (err) {',
+          "    if (err && err.name === 'NoSuchBucket') return {};",
+          '    throw err;',
+          '  }',
+          '  return {};',
+          '};',
+        ].join('\n')),
+      });
+      this.emptierProvider = new cr.Provider(this, 'BucketEmptierProvider', {
+        onEventHandler: this.emptierFn,
+      });
+    }
+
+    // Identity-based grants, scoped to this bucket. ListBucketVersions backs the
+    // paginated listObjectVersions loop; DeleteObjectVersion is required to purge
+    // a versioned bucket (plain DeleteObject only writes a delete marker).
+    this.emptierFn.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ['s3:ListBucket', 's3:ListBucketVersions'],
+      resources: [bucket.bucketArn],
+    }));
+    this.emptierFn.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ['s3:DeleteObject', 's3:DeleteObjectVersion'],
+      resources: [bucket.arnForObjects('*')],
+    }));
+
+    const cleaner = new cdk.CustomResource(this, `${bucket.node.id}Emptier`, {
+      serviceToken: this.emptierProvider!.serviceToken,
+      resourceType: 'Custom::EmptyBucketOnDestroy',
+      properties: { BucketName: bucket.bucketName },
+    });
+    // Force the emptier's Delete to run before the bucket's Delete.
+    cleaner.node.addDependency(bucket);
   }
 }
