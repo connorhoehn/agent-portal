@@ -282,7 +282,7 @@ describe('listGrants', () => {
       granteePersonId: 'p-008', granteeName: 'Layla Hassan',
       sprintId: 'spr-obs-s3', sprintName: 'Sprint 98 — Span metrics + decom',
       startsOn: '2026-08-10', endsOn: '2026-08-24', sprintStatus: 'active',
-      allocatedUsd: 30, grantedBy: 'u-release', initiativeSpendInWindowUsd: 2.74,
+      allocatedUsd: 30, grantedBy: 'u-release', note: null, initiativeSpendInWindowUsd: 2.74,
     });
   });
 

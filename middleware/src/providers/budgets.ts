@@ -312,6 +312,10 @@ export interface GrantRow {
   sprintStatus: string | null;
   allocatedUsd: number;
   grantedBy: string | null;
+  /** Optional free-text note on the grant (why this envelope). Optional so the
+   *  many GrantRow literals (mocks) need not carry it; surfaced on read so the
+   *  UI can display and correct it. */
+  note?: string | null;
   /** Spend attributed to the INITIATIVE inside this envelope's sprint window.
    *  Deliberately not called the grantee's burn: bot_runs record which
    *  initiative and which bot, never which person's envelope paid for them, so
@@ -340,7 +344,7 @@ export async function listGrants(orgProjectId?: string): Promise<GrantRow[]> {
             g.sprint_id, sp.name AS sprint_name,
             sp.starts_on::text AS starts_on, sp.ends_on::text AS ends_on,
             sp.status AS sprint_status,
-            g.allocated_usd::float8 AS allocated_usd, g.granted_by,
+            g.allocated_usd::float8 AS allocated_usd, g.granted_by, g.note,
             COALESCE((
               SELECT SUM(br.cost_usd)::float8 FROM bot_runs br
                WHERE (${spendPredicateSql('g.org_project_id')})
@@ -368,6 +372,7 @@ export async function listGrants(orgProjectId?: string): Promise<GrantRow[]> {
     sprintStatus: r['sprint_status'] != null ? toStr(r['sprint_status']) : null,
     allocatedUsd: toNum(r['allocated_usd']),
     grantedBy: r['granted_by'] != null ? toStr(r['granted_by']) : null,
+    note: r['note'] != null ? toStr(r['note']) : null,
     initiativeSpendInWindowUsd: toNum(r['window_spend_usd']),
   }));
 }

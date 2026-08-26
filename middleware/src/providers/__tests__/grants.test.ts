@@ -10,7 +10,7 @@ import { exec } from '../aurora.js';
 import { config } from '../../config.js';
 import { MOCK_GRANTS } from '../budgets.js';
 import {
-  createGrant, updateGrantAmount, revokeGrant, listGrantsForSprint, getGrant, _resetMockGrants,
+  createGrant, updateGrant, updateGrantAmount, revokeGrant, listGrantsForSprint, getGrant, _resetMockGrants,
 } from '../grants.js';
 
 const execMock = exec as unknown as jest.Mock;
@@ -68,6 +68,49 @@ describe('real mode — parameterized writes', () => {
     expect(await updateGrantAmount('bg-ghost', 10)).toBeNull();
   });
 
+  it('updateGrant sets only the note, binding it as a parameter', async () => {
+    execMock.mockResolvedValue([{ id: 'bg-obs-3' }]);
+    await updateGrant('bg-obs-3', { note: 'fixed typo' });
+    const [sql, params] = execMock.mock.calls[0]!;
+    expect(String(sql)).toMatch(/UPDATE budget_grants SET note = :note/);
+    expect(String(sql)).not.toMatch(/allocated_usd/); // amount left untouched
+    expect(String(sql)).toContain('updated_at = NOW()');
+    expect(params).toEqual([
+      { name: 'note', value: { stringValue: 'fixed typo' } },
+      { name: 'id', value: { stringValue: 'bg-obs-3' } },
+    ]);
+  });
+
+  it('updateGrant sets amount and note together, amount first then note then id', async () => {
+    execMock.mockResolvedValue([{ id: 'bg-obs-3' }]);
+    await updateGrant('bg-obs-3', { amountUsd: 45, note: 'raised for scope creep' });
+    const [sql, params] = execMock.mock.calls[0]!;
+    expect(String(sql)).toMatch(/allocated_usd = :amt, note = :note, updated_at = NOW\(\)/);
+    expect(params).toEqual([
+      { name: 'amt', value: { doubleValue: 45 } },
+      { name: 'note', value: { stringValue: 'raised for scope creep' } },
+      { name: 'id', value: { stringValue: 'bg-obs-3' } },
+    ]);
+  });
+
+  it('updateGrant clears the note when passed null', async () => {
+    execMock.mockResolvedValue([{ id: 'bg-obs-3' }]);
+    await updateGrant('bg-obs-3', { note: null });
+    const params = execMock.mock.calls[0]![1] as Array<{ name: string; value: unknown }>;
+    expect(params.find((p) => p.name === 'note')!.value).toEqual({ isNull: true });
+  });
+
+  it('updateGrant with an empty patch reads the row back without touching the DB', async () => {
+    // No SET fields → no UPDATE; getGrant reads unscoped and picks the id out.
+    execMock.mockResolvedValue([]); // listGrants returns nothing → null row
+    const row = await updateGrant('bg-obs-3', {});
+    // The one exec call is the read-back (SELECT via budgetsListGrants), never an UPDATE.
+    for (const call of execMock.mock.calls) {
+      expect(String(call[0])).not.toMatch(/UPDATE budget_grants/);
+    }
+    expect(row).toBeNull();
+  });
+
   it('deletes by id and reports whether a row was removed', async () => {
     execMock.mockResolvedValueOnce([{ id: 'bg-obs-3' }]);
     expect(await revokeGrant('bg-obs-3')).toBe(true);
@@ -112,6 +155,23 @@ describe('mock mode', () => {
     const patched = await updateGrantAmount(grant.id, 40);
     expect(patched!.allocatedUsd).toBe(40);
     expect((await getGrant(grant.id))!.allocatedUsd).toBe(40);
+  });
+
+  it('updateGrant applies amount and accepts a note in mock mode', async () => {
+    const grant = await createGrant({ orgProjectId: 'p-observability', sprintId: 'spr-obs-s3', granteePersonId: 'p-008', amountUsd: 12 });
+    // Amount + note together: amount updates, note is accepted (GrantRow carries
+    // no note, so it is not surfaced — parity with real mode's read shape).
+    const both = await updateGrant(grant.id, { amountUsd: 40, note: 'raised' });
+    expect(both!.allocatedUsd).toBe(40);
+    // Note-only patch does not disturb the amount and still returns the row.
+    const noteOnly = await updateGrant(grant.id, { note: 'corrected' });
+    expect(noteOnly!.allocatedUsd).toBe(40);
+    expect((await getGrant(grant.id))!.allocatedUsd).toBe(40);
+    expect(execMock).not.toHaveBeenCalled();
+  });
+
+  it('updateGrant on an unknown id returns null in mock mode', async () => {
+    expect(await updateGrant('bg-nope', { note: 'x' })).toBeNull();
   });
 
   it('patches a seed grant through the overlay without touching MOCK_GRANTS', async () => {

@@ -24,7 +24,7 @@ jest.mock('../../lib/authz.js', () => ({
 jest.mock('../../providers/budgets.js', () => ({ initiativeExists: jest.fn() }));
 jest.mock('../../providers/sprints.js', () => ({ getSprint: jest.fn(), personExists: jest.fn() }));
 jest.mock('../../providers/grants.js', () => ({
-  createGrant: jest.fn(), updateGrantAmount: jest.fn(), revokeGrant: jest.fn(), listGrantsForSprint: jest.fn(),
+  createGrant: jest.fn(), updateGrant: jest.fn(), revokeGrant: jest.fn(), listGrantsForSprint: jest.fn(),
 }));
 
 import express, { type Request, type Response, type NextFunction } from 'express';
@@ -34,14 +34,14 @@ import { errorHandler } from '../../lib/async-handler.js';
 import { initiativeExists } from '../../providers/budgets.js';
 import { getSprint, personExists } from '../../providers/sprints.js';
 import {
-  createGrant, updateGrantAmount, revokeGrant, listGrantsForSprint,
+  createGrant, updateGrant, revokeGrant, listGrantsForSprint,
 } from '../../providers/grants.js';
 
 const initiativeExistsMock = initiativeExists as unknown as jest.Mock;
 const getSprintMock = getSprint as unknown as jest.Mock;
 const personExistsMock = personExists as unknown as jest.Mock;
 const createGrantMock = createGrant as unknown as jest.Mock;
-const updateGrantMock = updateGrantAmount as unknown as jest.Mock;
+const updateGrantMock = updateGrant as unknown as jest.Mock;
 const revokeGrantMock = revokeGrant as unknown as jest.Mock;
 const listForSprintMock = listGrantsForSprint as unknown as jest.Mock;
 
@@ -180,16 +180,57 @@ describe('POST /api/grants', () => {
 });
 
 describe('PATCH /api/grants/:id', () => {
-  it('re-allocates the envelope', async () => {
+  it('re-allocates the envelope (amount only)', async () => {
     const res = await request(buildApp(release)).patch('/api/grants/bg-obs-3').send({ amountUsd: 45 });
     expect(res.status).toBe(200);
     expect(res.body.grant).toEqual(GRANT);
-    expect(updateGrantMock).toHaveBeenCalledWith('bg-obs-3', 45);
+    expect(updateGrantMock).toHaveBeenCalledWith('bg-obs-3', { amountUsd: 45 });
+  });
+
+  it('corrects only the note, leaving the amount alone', async () => {
+    const res = await request(buildApp(release)).patch('/api/grants/bg-obs-3').send({ note: 'fixed typo' });
+    expect(res.status).toBe(200);
+    // No amountUsd in the patch — the amount column is untouched.
+    expect(updateGrantMock).toHaveBeenCalledWith('bg-obs-3', { note: 'fixed typo' });
+  });
+
+  it('patches amount and note together', async () => {
+    const res = await request(buildApp(release)).patch('/api/grants/bg-obs-3')
+      .send({ amountUsd: 45, note: 'raised for scope creep' });
+    expect(res.status).toBe(200);
+    expect(updateGrantMock).toHaveBeenCalledWith('bg-obs-3', { amountUsd: 45, note: 'raised for scope creep' });
+  });
+
+  it('accepts an empty-string note to clear it', async () => {
+    const res = await request(buildApp(release)).patch('/api/grants/bg-obs-3').send({ note: '' });
+    expect(res.status).toBe(200);
+    expect(updateGrantMock).toHaveBeenCalledWith('bg-obs-3', { note: '' });
+  });
+
+  it('400s an empty patch with neither field', async () => {
+    const res = await request(buildApp(release)).patch('/api/grants/bg-obs-3').send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/amountUsd and\/or note/);
+    expect(updateGrantMock).not.toHaveBeenCalled();
   });
 
   it('rejects a bad amount with 400', async () => {
     const res = await request(buildApp(release)).patch('/api/grants/bg-obs-3').send({ amountUsd: -1 });
     expect(res.status).toBe(400);
+    expect(updateGrantMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-string note with 400', async () => {
+    const res = await request(buildApp(release)).patch('/api/grants/bg-obs-3').send({ note: 42 });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/note must be a string/);
+    expect(updateGrantMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects an over-long note with 400', async () => {
+    const res = await request(buildApp(release)).patch('/api/grants/bg-obs-3').send({ note: 'x'.repeat(501) });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/at most 500 characters/);
     expect(updateGrantMock).not.toHaveBeenCalled();
   });
 

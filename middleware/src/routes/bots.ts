@@ -241,6 +241,7 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
     const verdict = decideGrantScopedDispatch({
       role: req.session?.role,
       hasActiveGrant: grantCtx.hasActiveGrant,
+      hasAnyGrant: grantCtx.hasAnyGrant,
       initiativeName: grantCtx.initiativeName,
     });
     if (verdict.kind === 'deny') {

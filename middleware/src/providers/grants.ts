@@ -147,25 +147,66 @@ export async function createGrant(input: CreateGrantInput): Promise<GrantRow> {
   throw new Error('grant was inserted but could not be read back');
 }
 
-// ─── Update (re-allocate the envelope) ───────────────────────────────────────
+// ─── Update (re-allocate the envelope, and/or re-note it) ────────────────────
 
-/** Change a grant's dollar amount. Returns null when the id is unknown. */
-export async function updateGrantAmount(id: string, amountUsd: number): Promise<GrantRow | null> {
+/** A grant patch: change the dollar amount, the note, or both. Each field is
+ *  independently optional — `undefined` means "leave this column alone", so the
+ *  amount editor and a note fix don't clobber each other. `note: null` clears a
+ *  note; `note: ''` is treated the same by the route's validation. */
+export interface UpdateGrantInput {
+  amountUsd?: number;
+  note?: string | null;
+}
+
+/**
+ * Patch a grant's amount and/or note. Returns null when the id is unknown.
+ *
+ * Whichever fields are present are written; a patch with neither is a no-op read
+ * (so the route still gets the current row back rather than a spurious NULL).
+ * The SET clause is built from the provided fields — amount first, then note,
+ * then updated_at, then the id bind last — so an amount-only patch produces
+ * exactly the historical statement and binding order.
+ *
+ * NOTE: GrantRow (owned by providers/budgets.ts) does not carry `note`, so the
+ * returned row never surfaces it — in either real or mock mode. The note is
+ * write-through to the DB in real mode; in mock mode there is nowhere on the
+ * read shape to hold it, so a note-only mock patch updates nothing observable
+ * but still succeeds (parity: no read path exposes note anywhere).
+ */
+export async function updateGrant(id: string, patch: UpdateGrantInput): Promise<GrantRow | null> {
+  const setAmount = patch.amountUsd !== undefined;
+  const setNote = patch.note !== undefined;
+  if (!setAmount && !setNote) return getGrant(id);
+
   if (config.mock.aurora) {
     const current = mergedMockGrants().find((g) => g.id === id);
     if (!current) return null;
-    const updated: GrantRow = { ...current, allocatedUsd: amountUsd };
+    const updated: GrantRow = { ...current, ...(setAmount ? { allocatedUsd: patch.amountUsd! } : {}) };
     MOCK_OVERLAY.set(id, updated);
     return updated;
   }
+
+  const sets: string[] = [];
+  const params: SqlParameter[] = [];
+  if (setAmount) { sets.push('allocated_usd = :amt'); params.push(num('amt', patch.amountUsd!)); }
+  if (setNote) { sets.push('note = :note'); params.push(maybe('note', patch.note)); }
+  sets.push('updated_at = NOW()');
+  params.push(s('id', id));
+
   const rows = await exec(
-    `UPDATE budget_grants SET allocated_usd = :amt, updated_at = NOW()
+    `UPDATE budget_grants SET ${sets.join(', ')}
       WHERE id = :id
       RETURNING id`,
-    [num('amt', amountUsd), s('id', id)],
+    params,
   );
   if (rows.length === 0) return null;
   return getGrant(id);
+}
+
+/** Change a grant's dollar amount. Returns null when the id is unknown.
+ *  Thin wrapper over updateGrant, kept for existing callers. */
+export async function updateGrantAmount(id: string, amountUsd: number): Promise<GrantRow | null> {
+  return updateGrant(id, { amountUsd });
 }
 
 // ─── Revoke ───────────────────────────────────────────────────────────────────

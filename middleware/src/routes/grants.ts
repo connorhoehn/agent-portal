@@ -17,7 +17,7 @@ import { readForRolesElseAction, requireAction, resolveSession } from '../lib/au
 import { initiativeExists } from '../providers/budgets.js';
 import { getSprint, personExists } from '../providers/sprints.js';
 import {
-  createGrant, updateGrantAmount, revokeGrant, listGrantsForSprint,
+  createGrant, updateGrant, revokeGrant, listGrantsForSprint,
 } from '../providers/grants.js';
 
 export const grantsRouter: Router = Router();
@@ -33,6 +33,15 @@ function validAmount(raw: unknown): number {
     throw new ValidationError('amountUsd must be a finite number >= 0');
   }
   return amount;
+}
+
+/** The free-text note on an envelope. A string within a sane bound; an empty
+ *  string is allowed and clears the note. */
+const NOTE_MAX = 500;
+function validNote(raw: unknown): string {
+  if (typeof raw !== 'string') throw new ValidationError('note must be a string');
+  if (raw.length > NOTE_MAX) throw new ValidationError(`note must be at most ${NOTE_MAX} characters`);
+  return raw;
 }
 
 // ─── Read: a sprint's envelopes ───────────────────────────────────────────────
@@ -76,14 +85,25 @@ grantsRouter.post('/', manageGate, asyncHandler(async (req, res) => {
   res.status(201).json({ grant });
 }));
 
-// ─── Re-allocate ───────────────────────────────────────────────────────────────
-//   PATCH /api/grants/:id { amountUsd }  → { grant }
+// ─── Re-allocate and/or re-note ─────────────────────────────────────────────────
+//   PATCH /api/grants/:id { amountUsd?, note? }  → { grant }
+// Both fields are independently optional so the amount editor and a note fix do
+// not clobber each other: send only amountUsd to re-allocate, only note to
+// correct a mistyped note (no revoke+recreate), or both. At least one is
+// required — an empty patch has nothing to do.
 grantsRouter.patch('/:id', manageGate, asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '').trim();
   if (!id) throw new ValidationError('grant id is required');
-  const amountUsd = validAmount((req.body as { amountUsd?: unknown })?.amountUsd);
+  const body = (req.body ?? {}) as { amountUsd?: unknown; note?: unknown };
 
-  const grant = await updateGrantAmount(id, amountUsd);
+  const patch: { amountUsd?: number; note?: string } = {};
+  if (body.amountUsd !== undefined) patch.amountUsd = validAmount(body.amountUsd);
+  if (body.note !== undefined) patch.note = validNote(body.note);
+  if (patch.amountUsd === undefined && patch.note === undefined) {
+    throw new ValidationError('provide amountUsd and/or note to update');
+  }
+
+  const grant = await updateGrant(id, patch);
   if (!grant) throw new NotFoundError('No such grant');
   res.json({ grant });
 }));

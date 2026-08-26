@@ -455,9 +455,9 @@ describe('decideGrantScopedDispatch', () => {
       .toEqual({ kind: 'allow' });
   });
 
-  it('denies an sme with no active grant, naming the initiative', () => {
+  it('denies an sme with no grant at all here, naming the initiative', () => {
     const d = decideGrantScopedDispatch({
-      role: 'sme', hasActiveGrant: false, initiativeName: 'Observability Platform',
+      role: 'sme', hasActiveGrant: false, hasAnyGrant: false, initiativeName: 'Observability Platform',
     });
     expect(d.kind).toBe('deny');
     expect((d as { reason: string }).reason).toMatch(/no active sprint grant on Observability Platform/);
@@ -466,9 +466,36 @@ describe('decideGrantScopedDispatch', () => {
     expect((d as { reason: string }).reason).not.toMatch(/confirmOver/);
   });
 
+  // The bug: an SME who DOES hold a grant, but on a not-yet-active (planned)
+  // sprint, was told "you hold no active sprint grant — ask the release manager
+  // for a grant" — sent to request something they already have. The reword must
+  // say the grant exists and its sprint hasn't started, and must NOT tell them
+  // to ask for a grant.
+  it('denies an sme whose grant is on a not-yet-active sprint with the right words', () => {
+    const d = decideGrantScopedDispatch({
+      role: 'sme', hasActiveGrant: false, hasAnyGrant: true, initiativeName: 'Observability Platform',
+    });
+    expect(d.kind).toBe('deny');
+    const reason = (d as { reason: string }).reason;
+    expect(reason).toMatch(/you hold a sprint grant on Observability Platform/);
+    expect(reason).toMatch(/sprint has not started yet/);
+    // Do not send them to request a grant they already hold.
+    expect(reason).not.toMatch(/ask the release manager for a grant/);
+    // Still a hard authorization deny — no override flag.
+    expect(reason).not.toMatch(/confirmOver/);
+  });
+
   it('falls back to a generic place when the initiative name is unknown', () => {
+    const noGrant = decideGrantScopedDispatch({ role: 'sme', hasActiveGrant: false, hasAnyGrant: false });
+    expect((noGrant as { reason: string }).reason).toMatch(/no active sprint grant here/);
+    const planned = decideGrantScopedDispatch({ role: 'sme', hasActiveGrant: false, hasAnyGrant: true });
+    expect((planned as { reason: string }).reason).toMatch(/you hold a sprint grant here/);
+  });
+
+  it('treats an omitted hasAnyGrant as no-grant-at-all — the safe fallback wording', () => {
     const d = decideGrantScopedDispatch({ role: 'sme', hasActiveGrant: false });
-    expect((d as { reason: string }).reason).toMatch(/no active sprint grant here/);
+    expect((d as { reason: string }).reason).toMatch(/no active sprint grant/);
+    expect((d as { reason: string }).reason).toMatch(/ask the release manager/);
   });
 
   it('always allows the roles that allocate/administer — they need no grant', () => {

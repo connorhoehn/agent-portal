@@ -610,11 +610,26 @@ export type DispatchGrantDecision =
 export function decideGrantScopedDispatch(input: {
   role: string | null | undefined;
   hasActiveGrant: boolean;
+  /** Whether the caller holds ANY grant on this initiative, active or not. A
+   *  grant on a `planned` (not-yet-started) sprint is not active, but it exists
+   *  — so the deny reason must say the grant is there and its sprint has not
+   *  started, NOT tell them to request a grant they already hold. Optional so a
+   *  caller that has not resolved it (or an older route) falls back to the
+   *  no-grant-at-all wording rather than misreporting. */
+  hasAnyGrant?: boolean;
   initiativeName?: string | null;
 }): DispatchGrantDecision {
   if (input.role !== 'sme') return { kind: 'allow' };
   if (input.hasActiveGrant) return { kind: 'allow' };
   const where = input.initiativeName ? ` on ${input.initiativeName}` : ' here';
+  // A grant exists but its sprint isn't active yet: don't send them to ask for
+  // a grant they already hold — tell them the sprint hasn't started.
+  if (input.hasAnyGrant) {
+    return {
+      kind: 'deny',
+      reason: `you hold a sprint grant${where}, but its sprint has not started yet, so you cannot dispatch against this initiative — wait for the sprint to become active`,
+    };
+  }
   return {
     kind: 'deny',
     reason: `you hold no active sprint grant${where}, so you cannot dispatch against this initiative — ask the release manager for a grant`,
@@ -629,21 +644,30 @@ export function decideGrantScopedDispatch(input: {
  * posture: no session, no person_id (a platform operator is not an SME), or a
  * grants read that throws all return null, so the route enforces nothing rather
  * than fabricating a denial an authz check must never invent.
+ *
+ * `hasAnyGrant` is the second signal decideGrantScopedDispatch needs: whether
+ * the caller holds ANY grant here at all (active or not). An SME whose only
+ * grant is on a not-yet-active sprint has `hasActiveGrant: false` but
+ * `hasAnyGrant: true`, so the deny reason can say the grant exists rather than
+ * tell them to request one they already hold.
  */
 export async function resolveActiveGrant(
   orgProjectId: string,
   sessionSub: string | undefined,
-): Promise<{ hasActiveGrant: boolean; initiativeName: string | null } | null> {
+): Promise<{ hasActiveGrant: boolean; hasAnyGrant: boolean; initiativeName: string | null } | null> {
   if (!sessionSub) return null;
   try {
     const user = await getUser(sessionSub);
     const personId = user?.personId;
     if (!personId) return null;
     const grants = await listGrants(orgProjectId);
-    const active = grants.some(
-      (g) => g.granteePersonId === personId && (g.sprintStatus === 'active' || g.sprintId == null),
-    );
-    return { hasActiveGrant: active, initiativeName: grants[0]?.orgProjectName ?? null };
+    const mine = grants.filter((g) => g.granteePersonId === personId);
+    const active = mine.some((g) => g.sprintStatus === 'active' || g.sprintId == null);
+    return {
+      hasActiveGrant: active,
+      hasAnyGrant: mine.length > 0,
+      initiativeName: grants[0]?.orgProjectName ?? null,
+    };
   } catch (err) {
     console.warn(`[bots] could not resolve grant-scoped dispatch for ${orgProjectId}:`, (err as Error).message);
     return null;
