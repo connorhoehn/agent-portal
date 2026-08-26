@@ -132,8 +132,8 @@ function ArticlesPage() {
 
       {!isLoading && error && (
         <Card padding="md">
-          <div style={{ color: 'var(--color-error, #dc2626)', fontSize: 13 }}>
-            Failed to load articles. Backend endpoint may not be mounted yet.
+          <div role="alert" style={{ color: 'var(--color-error, #dc2626)', fontSize: 13 }}>
+            Failed to load articles: {error}
           </div>
         </Card>
       )}
@@ -270,7 +270,7 @@ const tableWrapStyle: CSSProperties = {
   background: 'var(--color-surface, #fff)',
   border: '1px solid var(--color-border, #e5e7eb)',
   borderRadius: 10,
-  overflow: 'hidden',
+  overflowX: 'auto',
 };
 
 const tableStyle: CSSProperties = {

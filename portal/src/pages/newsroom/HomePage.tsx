@@ -50,12 +50,29 @@ function EmptyHint({ text }: { text: string }) {
   );
 }
 
+function LoadingHint() {
+  return (
+    <div style={loadingHintStyle} aria-live="polite">
+      Loading…
+    </div>
+  );
+}
+
+function ErrorHint({ text }: { text: string }) {
+  return (
+    <div style={errorHintStyle} role="alert">
+      Couldn’t load — {text}
+    </div>
+  );
+}
+
 // ── Card 1: Today ─────────────────────────────────────────────────────────────
 
 function TodayCard() {
-  const { data, error } = useFetch<TodayResponse>('/api/newsroom/articles/today', 60_000);
+  const { data, isLoading, error } = useFetch<TodayResponse>('/api/newsroom/articles/today', 60_000);
 
-  const isEmpty = error !== null || data === null;
+  const loading = isLoading && data === null;
+  const hasData = data !== null && error === null;
   const sections = data?.sections ?? [];
 
   return (
@@ -64,10 +81,12 @@ function TodayCard() {
         <span style={cardTitleStyle}>Today</span>
         <ViewAllLink to="articles" />
       </div>
-      <StatNumber value={isEmpty ? null : data.total} />
+      <StatNumber value={hasData ? data.total : null} />
       <div style={cardDetailStyle}>articles published today</div>
-      {isEmpty ? (
-        <EmptyHint text="No articles loaded yet — extend the ingest pipeline" />
+      {error ? (
+        <ErrorHint text={error} />
+      ) : loading ? (
+        <LoadingHint />
       ) : sections.length > 0 ? (
         <ul style={listStyle}>
           {sections.slice(0, 4).map((s) => (
@@ -87,9 +106,10 @@ function TodayCard() {
 // ── Card 2: Active beats ──────────────────────────────────────────────────────
 
 function BeatsCard() {
-  const { data, error } = useFetch<BeatsTopResponse>('/api/newsroom/beats/top', 60_000);
+  const { data, isLoading, error } = useFetch<BeatsTopResponse>('/api/newsroom/beats/top', 60_000);
 
-  const isEmpty = error !== null || data === null;
+  const loading = isLoading && data === null;
+  const hasData = data !== null && error === null;
   const beats = data?.beats ?? [];
 
   return (
@@ -98,10 +118,12 @@ function BeatsCard() {
         <span style={cardTitleStyle}>Active beats</span>
         <ViewAllLink to="beats" />
       </div>
-      <StatNumber value={isEmpty ? null : beats.length} />
+      <StatNumber value={hasData ? beats.length : null} />
       <div style={cardDetailStyle}>top beats this week</div>
-      {isEmpty ? (
-        <EmptyHint text="No beat data yet — the synth corpus pipeline seeds beats" />
+      {error ? (
+        <ErrorHint text={error} />
+      ) : loading ? (
+        <LoadingHint />
       ) : beats.length > 0 ? (
         <ul style={listStyle}>
           {beats.slice(0, 5).map((b) => (
@@ -121,12 +143,13 @@ function BeatsCard() {
 // ── Card 3: Story clusters ────────────────────────────────────────────────────
 
 function ClustersCard() {
-  const { data, error } = useFetch<ClustersResponse>(
+  const { data, isLoading, error } = useFetch<ClustersResponse>(
     '/api/newsroom/clusters?status=active',
     60_000,
   );
 
-  const isEmpty = error !== null || data === null;
+  const loading = isLoading && data === null;
+  const hasData = data !== null && error === null;
   const clusters = data?.active ?? [];
 
   return (
@@ -135,10 +158,12 @@ function ClustersCard() {
         <span style={cardTitleStyle}>Story clusters</span>
         <ViewAllLink to="articles" />
       </div>
-      <StatNumber value={isEmpty ? null : data.total} />
+      <StatNumber value={hasData ? data.total : null} />
       <div style={cardDetailStyle}>active clusters</div>
-      {isEmpty ? (
-        <EmptyHint text="No cluster data yet — clusters come from the synth corpus pipeline" />
+      {error ? (
+        <ErrorHint text={error} />
+      ) : loading ? (
+        <LoadingHint />
       ) : clusters.length > 0 ? (
         <ul style={listStyle}>
           {clusters.slice(0, 3).map((c) => (
@@ -158,12 +183,13 @@ function ClustersCard() {
 // ── Card 4: Open pitches ──────────────────────────────────────────────────────
 
 function PitchesCard() {
-  const { data, error } = useFetch<PitchesResponse>(
+  const { data, isLoading, error } = useFetch<PitchesResponse>(
     '/api/newsroom/pitches?status=open',
     60_000,
   );
 
-  const isEmpty = error !== null || data === null;
+  const loading = isLoading && data === null;
+  const hasData = data !== null && error === null;
   const pitches = data?.open ?? [];
 
   return (
@@ -172,10 +198,12 @@ function PitchesCard() {
         <span style={cardTitleStyle}>Open pitches</span>
         <ViewAllLink to="pitches" />
       </div>
-      <StatNumber value={isEmpty ? null : data.total} />
+      <StatNumber value={hasData ? data.total : null} />
       <div style={cardDetailStyle}>open pitches</div>
-      {isEmpty ? (
-        <EmptyHint text="No pitches yet — the desk backlog starts empty" />
+      {error ? (
+        <ErrorHint text={error} />
+      ) : loading ? (
+        <LoadingHint />
       ) : pitches.length > 0 ? (
         <ul style={listStyle}>
           {pitches.slice(0, 3).map((p) => (
@@ -264,6 +292,18 @@ const emptyHintStyle: CSSProperties = {
   fontSize: 12,
   color: 'var(--color-text-tertiary)',
   fontStyle: 'italic',
+  marginTop: 8,
+};
+
+const loadingHintStyle: CSSProperties = {
+  fontSize: 12,
+  color: 'var(--color-text-secondary)',
+  marginTop: 8,
+};
+
+const errorHintStyle: CSSProperties = {
+  fontSize: 12,
+  color: 'var(--color-error, #dc2626)',
   marginTop: 8,
 };
 
