@@ -165,10 +165,12 @@ app.use('/api/connections', requireAction('ManageIngest'), connectionsRouter);
 // Repositories that agents work on. Distinct from /api/graph/projects, which
 // is the org graph's own notion of a project.
 // Codebases — linking a repo and dispatching a governed agent run against it is
-// the same authority as the SDLC/devbox surfaces, so it carries the same gate.
-// Previously ungated: any role (member included) could link a repo and dispatch
-// runs, bypassing ManageDevbox entirely.
-app.use('/api/agent-projects', requireAction('ManageDevbox'), agentProjectsRouter);
+// the same authority as the SDLC/devbox surfaces, so mutations still carry that
+// gate. Reads are gated per-route inside the router: org-leader/hr-admin can
+// see the codebase list feeding the Authorize drawer (same tier as bots.ts'
+// marketReadGate) without holding ManageDevbox. The mount is just the floor —
+// tenant scope + a real session.
+app.use('/api/agent-projects', requireTenant('orgiq'), requireSession('ViewAgentProjects'), agentProjectsRouter);
 // AI SDLC governance — change requests, reviews, gates, policies. Gated as a
 // devbox-management action.
 app.use('/api/sdlc', requireAction('ManageDevbox'), sdlcRouter);

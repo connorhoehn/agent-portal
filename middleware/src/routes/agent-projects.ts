@@ -7,6 +7,7 @@
 
 import { Router } from 'express';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
+import { readForRolesElseAction, requireAction } from '../lib/authz.js';
 import {
   listAgentProjects, getAgentProject, linkAgentProject, unlinkAgentProject,
   buildCloneCommand, markCloned, checkoutPath, finishRun, listRuns,
@@ -15,7 +16,15 @@ import { dispatchGovernedRun } from '../lib/sdlc-pipeline.js';
 
 export const agentProjectsRouter: Router = Router();
 
-agentProjectsRouter.get('/', asyncHandler(async (_req, res) => {
+// Reading the codebase list/runs is the same authority as authorizing a run
+// from the marketplace drawer (bots.ts' marketReadGate) — org-leader/hr-admin
+// need to see which repos deliver an initiative without holding the devbox
+// keys. Every mutation (link/unlink/clone/dispatch/finish) stays on
+// ManageDevbox exactly as the router-wide mount previously enforced.
+const readGate = readForRolesElseAction(['org-leader', 'hr-admin'], 'DispatchAgentRun');
+const writeGate = requireAction('ManageDevbox');
+
+agentProjectsRouter.get('/', readGate, asyncHandler(async (_req, res) => {
   const projects = await listAgentProjects();
   // Recent runs alongside each project — the list is about activity, and a
   // list of repositories with no sign of what happened to them is a directory,
@@ -28,7 +37,7 @@ agentProjectsRouter.get('/', asyncHandler(async (_req, res) => {
   res.json({ projects: withRuns });
 }));
 
-agentProjectsRouter.post('/', asyncHandler(async (req, res) => {
+agentProjectsRouter.post('/', writeGate, asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as {
     repoFullName?: string; defaultBranch?: string; connectionName?: string | null;
     orgProjectId?: string | null;
@@ -47,13 +56,13 @@ agentProjectsRouter.post('/', asyncHandler(async (req, res) => {
   res.status(201).json({ project });
 }));
 
-agentProjectsRouter.delete('/:id', asyncHandler(async (req, res) => {
+agentProjectsRouter.delete('/:id', writeGate, asyncHandler(async (req, res) => {
   const ok = await unlinkAgentProject(String(req.params['id'] ?? ''));
   if (!ok) throw new NotFoundError('No such project');
   res.json({ ok: true });
 }));
 
-agentProjectsRouter.get('/:id/runs', asyncHandler(async (req, res) => {
+agentProjectsRouter.get('/:id/runs', readGate, asyncHandler(async (req, res) => {
   res.json({ runs: await listRuns(String(req.params['id'] ?? ''), 50) });
 }));
 
@@ -68,7 +77,7 @@ agentProjectsRouter.get('/:id/runs', asyncHandler(async (req, res) => {
  * caller is the portal, over an authenticated session. The redacted form is
  * what anything else should record.
  */
-agentProjectsRouter.post('/:id/clone-command', asyncHandler(async (req, res) => {
+agentProjectsRouter.post('/:id/clone-command', writeGate, asyncHandler(async (req, res) => {
   const project = await getAgentProject(String(req.params['id'] ?? ''));
   if (!project) throw new NotFoundError('No such project');
 
@@ -86,7 +95,7 @@ agentProjectsRouter.post('/:id/clone-command', asyncHandler(async (req, res) => 
 
 // Confirm a successful clone. The portal calls this after the clone command
 // exits 0 in the devbox — only then is the project actually in a workspace.
-agentProjectsRouter.post('/:id/cloned', asyncHandler(async (req, res) => {
+agentProjectsRouter.post('/:id/cloned', writeGate, asyncHandler(async (req, res) => {
   const project = await getAgentProject(String(req.params['id'] ?? ''));
   if (!project) throw new NotFoundError('No such project');
   const sessionId = String((req.body as { sessionId?: string } ?? {}).sessionId ?? '').trim();
@@ -97,7 +106,7 @@ agentProjectsRouter.post('/:id/cloned', asyncHandler(async (req, res) => {
 
 // ─── Runs ────────────────────────────────────────────────────────────────────
 
-agentProjectsRouter.post('/:id/runs', asyncHandler(async (req, res) => {
+agentProjectsRouter.post('/:id/runs', writeGate, asyncHandler(async (req, res) => {
   const project = await getAgentProject(String(req.params['id'] ?? ''));
   if (!project) throw new NotFoundError('No such project');
 
@@ -120,7 +129,7 @@ agentProjectsRouter.post('/:id/runs', asyncHandler(async (req, res) => {
   res.status(202).json({ run: { id: started.runId }, checkout: started.checkout });
 }));
 
-agentProjectsRouter.post('/runs/:runId/finish', asyncHandler(async (req, res) => {
+agentProjectsRouter.post('/runs/:runId/finish', writeGate, asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as {
     status?: string; filesChanged?: number; diffSummary?: string; error?: string;
   };
