@@ -38,6 +38,7 @@ export function MasqueradeMenu() {
   const [users, setUsers] = useState<DirectoryUser[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
@@ -48,6 +49,18 @@ export function MasqueradeMenu() {
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, [open]);
+
+  // Move focus into the panel when it opens so keyboard users land inside it.
+  useEffect(() => {
+    if (open) panelRef.current?.focus();
+  }, [open]);
+
+  // Escape closes the panel and returns focus to the trigger. Bound on the
+  // wrapper so it fires wherever focus sits within the disclosure.
+  const closeAndRefocus = () => {
+    setOpen(false);
+    triggerRef.current?.focus();
+  };
 
   // Load the user directory lazily, the first time the menu opens.
   useEffect(() => {
@@ -82,12 +95,16 @@ export function MasqueradeMenu() {
   };
 
   return (
-    <div ref={menuRef} style={{ position: 'relative' }}>
+    <div
+      ref={menuRef}
+      style={{ position: 'relative' }}
+      onKeyDown={e => { if (e.key === 'Escape' && open) { e.stopPropagation(); closeAndRefocus(); } }}
+    >
       <button
         ref={triggerRef}
         onClick={() => setOpen(o => !o)}
         disabled={busy}
-        aria-haspopup="menu"
+        aria-haspopup="true"
         aria-expanded={open}
         style={{
           display: 'flex',
@@ -113,7 +130,7 @@ export function MasqueradeMenu() {
       </button>
 
       {open && (
-        <div role="menu" style={{
+        <div ref={panelRef} tabIndex={-1} style={{
           position: 'absolute',
           top: 'calc(100% + 6px)',
           right: 0,
@@ -126,6 +143,7 @@ export function MasqueradeMenu() {
           boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
           padding: 6,
           zIndex: 100,
+          outline: 'none',
         }}>
           {/* Current identity — always visible so "who/what am I now" is unambiguous. */}
           <div style={{ padding: '8px 10px 10px', borderBottom: '1px solid var(--color-border)', marginBottom: 4 }}>
@@ -316,7 +334,6 @@ function MenuItem({ active, busy, onClick, title, hint, dotColor }: {
     <button
       onClick={onClick}
       disabled={busy}
-      role="menuitem"
       style={{
         width: '100%',
         textAlign: 'left',

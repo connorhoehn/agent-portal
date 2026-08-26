@@ -196,6 +196,8 @@ function ExplorePage() {
   const [presenceFilter, setPresenceFilter] = useState<'office' | 'remote' | 'away' | null>(null);
   const [presenceOpen, setPresenceOpen] = useState(false);
   const presenceRef = useRef<HTMLDivElement>(null);
+  const presenceTriggerRef = useRef<HTMLButtonElement>(null);
+  const presenceListRef = useRef<HTMLDivElement>(null);
 
   // Close presence dropdown on outside click
   useEffect(() => {
@@ -208,6 +210,17 @@ function ExplorePage() {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [presenceOpen]);
+
+  // Move focus into the listbox when it opens so keyboard users land inside it.
+  useEffect(() => {
+    if (presenceOpen) presenceListRef.current?.focus();
+  }, [presenceOpen]);
+
+  // Escape closes the listbox and returns focus to its trigger.
+  const closePresence = () => {
+    setPresenceOpen(false);
+    presenceTriggerRef.current?.focus();
+  };
 
   // ?layout= and ?entities= params driven by the sub-nav catalog
   const rawLayout = searchParams.get('layout');
@@ -590,8 +603,13 @@ function ExplorePage() {
           ];
           const activeFacet = FACETS.find(f => f.key === presenceFilter);
           return (
-            <div ref={presenceRef} style={{ position: 'relative' }}>
+            <div
+              ref={presenceRef}
+              style={{ position: 'relative' }}
+              onKeyDown={e => { if (e.key === 'Escape' && presenceOpen) { e.stopPropagation(); closePresence(); } }}
+            >
               <button
+                ref={presenceTriggerRef}
                 onClick={() => setPresenceOpen(o => !o)}
                 aria-expanded={presenceOpen}
                 aria-haspopup="listbox"
@@ -615,12 +633,12 @@ function ExplorePage() {
               </button>
 
               {presenceOpen && (
-                <div role="listbox" style={{
+                <div ref={presenceListRef} role="listbox" tabIndex={-1} aria-label="Filter by presence" style={{
                   position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 100,
                   background: 'var(--color-surface, #fff)',
                   border: '1px solid var(--color-border, #e2e8f0)',
                   borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-                  padding: '6px 0', minWidth: 160,
+                  padding: '6px 0', minWidth: 160, outline: 'none',
                 }}>
                   {FACETS.map(({ key, label, dot }) => {
                     const count = data?.nodes.filter(n => {
@@ -847,7 +865,7 @@ function ExplorePage() {
             </div>
 
             {/* Messages */}
-            <div style={chatMessagesStyle}>
+            <div role="log" aria-live="polite" aria-relevant="additions text" style={chatMessagesStyle}>
               {!hasMessages && (
                 <div style={chatEmptyStyle}>
                   Ask anything about your org — people, skills, connections, decisions.

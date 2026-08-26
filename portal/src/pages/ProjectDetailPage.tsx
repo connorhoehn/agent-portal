@@ -500,6 +500,7 @@ function ItemRow({
         <input
           type="checkbox"
           checked={isDone}
+          aria-label={`Mark "${item.title}" done`}
           onChange={() => onStatusToggle(item.id, item.status)}
           style={{ cursor: 'pointer', accentColor: 'var(--color-primary)', width: 15, height: 15, flexShrink: 0 }}
         />
@@ -1101,6 +1102,9 @@ function ContributorsTable({
   }
   return (
     <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 10, overflow: 'hidden' }}>
+      {/* Inline style objects can't carry :focus-visible, so the keyboard focus
+          ring for the name triggers lives here, scoped by className. */}
+      <style>{`.contrib-name-trigger:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; border-radius: 4px; }`}</style>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr style={{ background: 'var(--color-bg)', borderBottom: '1px solid var(--color-border)' }}>
@@ -1129,7 +1133,15 @@ function ContributorsTable({
               onMouseLeave={(e) => (e.currentTarget as HTMLElement).style.background = 'var(--color-surface)'}
             >
               <td style={{ padding: '11px 16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div
+                  className="contrib-name-trigger"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`View ${c.name}`}
+                  onClick={(e) => { e.stopPropagation(); onOpenPerson(c.personId, c.role); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenPerson(c.personId, c.role); } }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
+                >
                   <Avatar name={c.name} size={28} />
                   <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text-primary)' }}>{c.name}</span>
                 </div>
