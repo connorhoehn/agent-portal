@@ -1,10 +1,13 @@
 // One article in depth — body, entities, sources, and its story cluster.
 
 import type { CSSProperties } from 'react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { PageSection } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useCapabilities } from '../../lib/capabilities';
 import { useReactions } from '@connorhoehnslalom/realtime-modules/client';
+import { canShowPublishControl } from './publishControl';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -67,6 +70,63 @@ function StatusChip({ status }: { status: string | null }) {
     <span style={{ display: 'inline-block', padding: '3px 12px', borderRadius: 9999, fontSize: 12, fontWeight: 600, background: colors.bg, color: colors.text, textTransform: 'capitalize' }}>
       {label}
     </span>
+  );
+}
+
+// ─── Publish control (M5) ──────────────────────────────────────────────────────
+//
+// POST /api/newsroom/articles/:id/publish is gated on the PublishArticle
+// capability — editors hold it, reporters don't (see capabilities.tsx).
+// Gating predicate lives in ./publishControl.ts so it's unit-testable
+// without React/JSX/DOM.
+
+function PublishControl({
+  articleId,
+  onPublished,
+}: {
+  articleId: string;
+  onPublished: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handlePublish() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/newsroom/articles/${encodeURIComponent(articleId)}/publish`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (res.status === 403) {
+        throw new Error('Your role cannot publish articles — only editors hold PublishArticle.');
+      }
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error ?? `${res.status} ${res.statusText}`);
+      }
+      onPublished();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={publishRowStyle}>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void handlePublish()}
+        style={busy ? { ...publishButtonStyle, opacity: 0.6, cursor: 'default' } : publishButtonStyle}
+      >
+        {busy ? 'Publishing…' : 'Publish'}
+      </button>
+      {error && (
+        <span role="alert" style={publishErrorStyle}>{error}</span>
+      )}
+    </div>
   );
 }
 
@@ -169,9 +229,13 @@ function ArticleReactions({ articleId }: { articleId: string }) {
 
 function ArticleDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { data, isLoading, error } = useFetch<ArticleDetail>(
+  const { data, isLoading, error, refresh } = useFetch<ArticleDetail>(
     id ? `/api/newsroom/articles/${encodeURIComponent(id)}` : '',
   );
+  // PublishArticle: editor-only (see capabilities.tsx). A reporter sees the
+  // status chip but never the button.
+  const { can, ready } = useCapabilities();
+  const canPublish = ready && can('PublishArticle');
 
   const backLink = (
     <Link to="/newsroom/articles" style={backLinkStyle}>
@@ -223,6 +287,9 @@ function ArticleDetailPage() {
             <span style={{ fontSize: 12, color: 'var(--color-text-tertiary, #9ca3af)', alignSelf: 'center' }}>
               Cluster: {data.cluster.title}
             </span>
+          )}
+          {canShowPublishControl(data.status, canPublish) && (
+            <PublishControl articleId={data.id} onPublished={refresh} />
           )}
         </div>
 
@@ -373,6 +440,31 @@ const publishedStyle: CSSProperties = {
 const wordCountStyle: CSSProperties = {
   fontSize: 12,
   color: 'var(--color-text-tertiary, #9ca3af)',
+};
+
+// ─── Publish control styles ───────────────────────────────────────────────────
+
+const publishRowStyle: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 10,
+  marginLeft: 'auto',
+};
+
+const publishButtonStyle: CSSProperties = {
+  fontSize: 12,
+  fontWeight: 600,
+  padding: '5px 14px',
+  borderRadius: 6,
+  border: '1px solid var(--color-accent, #3b82f6)',
+  background: 'var(--color-accent, #3b82f6)',
+  color: '#fff',
+  cursor: 'pointer',
+};
+
+const publishErrorStyle: CSSProperties = {
+  fontSize: 12,
+  color: '#991b1b',
 };
 
 const twoColStyle: CSSProperties = {
