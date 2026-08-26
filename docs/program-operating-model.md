@@ -246,11 +246,33 @@ requesting it gets a 403, not a silently narrowed answer.
   hr-admin/admin are org-wide.
 - **Sprint mutation.** `POST /api/sprints`, `PATCH/DELETE /api/sprints/:id/items`
   (gated `ManageSprints`) and grant CRUD `POST/PATCH/DELETE /api/grants` (gated
-  `ManageBudgets`) are built, with a portal UI on `/iq/sprints`. The SME sees a
-  pre-dispatch cue on the initiative page when they hold no active grant there.
+  `ManageBudgets`) are built, with a portal UI on `/iq/sprints`. Grants carry a
+  correctable free-text `note` (validated, empty clears) that `PATCH` treats as
+  separately optional from the amount, so a note fix doesn't clobber the
+  envelope. The SME sees a pre-dispatch cue on the initiative page when they
+  hold no active grant there.
 - **Direct-invoke authorization.** `POST /api/agents/:id/invoke` gates the write
   agents (graph-builder, ingestion, scoring) on `ManageIngest`, so a member
   can't drive graph/KB/score writes directly; read + newsroom agents unchanged.
+- **Roster-sourced pickers.** `GET /api/roster` (people + `isSme`, tenant+session
+  gated) backs the New Sprint steward and grant-grantee pickers, which list an
+  initiative's own contributors first, then everyone else with SMEs tagged — so a
+  cross-initiative SME (the operating model's whole point) can be made steward or
+  granted an envelope from the UI, matching what the APIs already accepted.
+- **Person↔account linking.** `PUT /api/identity/users/:id/person`
+  (`ManageUsers`-gated, validates the person exists, `null` clears) plus an inline
+  Link/Relink affordance on `/admin/identity/users`. Previously `personId` was
+  settable only at user creation, so the Sprints "link it from Identity → Users"
+  remediation was a dead end.
+- **Editor publish (built).** The `PublishArticle` capability now has a portal
+  surface: a `PublishArticle`-gated Publish button on the newsroom article page
+  (`POST /api/newsroom/articles/:id/publish`) that refetches on success, hides
+  once published, and never renders for a reporter.
+- **Agent-projects read tier.** The `/api/agent-projects` list + `/:id/runs` are
+  now read-tiered via `readForRolesElseAction(['org-leader','hr-admin'],
+  'DispatchAgentRun')` (`routes/agent-projects.ts`) instead of gating reads on
+  `ManageDevbox` — so a TPM/release manager can see the initiative codebases and
+  their run history without dispatch rights; writes keep the stricter gate.
 
 ## Not built yet
 
@@ -260,6 +282,10 @@ requesting it gets a 403, not a silently narrowed answer.
   `v_initiative_maintenance_30d` treats bot spend as the maintenance *floor* an
   allocation is read against. A pure, opt-in `decideBotFireAllocation` skip now
   exists (OFF by default) for when a `bots.enforce_allocation` flag is added.
-- **Editor publish + member feedback UI.** The `PublishArticle` (newsroom editor)
-  and `LabelFeedback` (member) capabilities are granted in Cedar but have no
-  reachable portal surface yet.
+- **Member feedback threading.** The `LabelFeedback` control is built and tested —
+  a capability-gated 👍/👎 on each Ask answer that POSTs
+  `{invocationId, label}` to `/api/observability/quality/feedback` — but renders
+  only when an answer carries a real observability `invocationId`, which the
+  *streaming* Ask path does not yet thread through (the AG-UI `run_id` is disjoint
+  from the server-side trace uuid). So it is forward-compatible and inert until
+  `invocationId` is plumbed supervisor → middleware → stream hook.
