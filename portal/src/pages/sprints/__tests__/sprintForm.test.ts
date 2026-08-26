@@ -99,8 +99,19 @@ test('grant amount accepts positive numbers and rounds to cents', () => {
   assert.deepEqual(validateGrantAmount(' 99.005 '), { ok: true, value: 99.01 });
 });
 
-test('grant amount rejects blank, non-numeric, zero, and negative', () => {
+test('grant amount rejects blank, non-numeric, zero, and negative on the create path', () => {
   for (const raw of ['', '   ', 'abc', '0', '-5']) {
     assert.equal(validateGrantAmount(raw).ok, false, `expected ${JSON.stringify(raw)} to fail`);
+  }
+});
+
+test('allowZero accepts $0 (freeze an envelope) but still rejects negatives and non-numbers', () => {
+  // Zeroing an existing grant is a legitimate edit — the backend takes >= 0.
+  assert.deepEqual(validateGrantAmount('0', { allowZero: true }), { ok: true, value: 0 });
+  assert.deepEqual(validateGrantAmount(' 0.00 ', { allowZero: true }), { ok: true, value: 0 });
+  assert.deepEqual(validateGrantAmount('250', { allowZero: true }), { ok: true, value: 250 });
+  // Still fails closed on the genuinely invalid cases.
+  for (const raw of ['', '   ', 'abc', '-1']) {
+    assert.equal(validateGrantAmount(raw, { allowZero: true }).ok, false, `expected ${JSON.stringify(raw)} to fail`);
   }
 });

@@ -117,6 +117,9 @@ interface GrantRow {
   granteeName: string | null;
   allocatedUsd: number;
   grantedBy: string | null;
+  /** Why the envelope was granted. Editable so a mistyped note can be fixed;
+   *  optional so the page still works before the backend returns it. */
+  note?: string | null;
 }
 
 // People come from an initiative's contributor list (/api/graph/projects/:id);
@@ -129,7 +132,13 @@ interface ProjectDetailLite { contributors?: Contributor[] }
 interface InitiativeOption { id: string; name: string }
 
 // One node of /api/graph/projects/:id/work, flattened for the "add item" picker.
-interface WorkTreeNode { id: string; type: string; title: string; children?: WorkTreeNode[] }
+// `status` carries the item's board state so terminal items can be kept out of
+// the picker (adding a done/cancelled item only muddies the sprint's rollups).
+interface WorkTreeNode { id: string; type: string; title: string; status?: string; children?: WorkTreeNode[] }
+
+// Items that have left the board — adding them to a sprint would fold closed
+// work into its point/cost totals, so the picker omits them.
+const TERMINAL_STATUSES = new Set(['done', 'cancelled']);
 
 // ─── Write helper ────────────────────────────────────────────────────────────
 
@@ -317,7 +326,9 @@ function AddItemControl({ sprintId, orgProjectId, presentIds, onAdded }: {
   const [busy, setBusy] = useState(false);
 
   const candidates = useMemo(
-    () => flattenTree(tree ?? []).filter((n) => !presentIds.has(n.id) && n.type !== 'epic'),
+    () => flattenTree(tree ?? []).filter(
+      (n) => !presentIds.has(n.id) && n.type !== 'epic' && !TERMINAL_STATUSES.has(n.status ?? ''),
+    ),
     [tree, presentIds],
   );
 
@@ -617,7 +628,7 @@ const EMPTY_FORM: NewSprintForm = {
 };
 
 function NewSprintModal({ open, onClose, onCreated }: {
-  open: boolean; onClose: () => void; onCreated: () => void;
+  open: boolean; onClose: () => void; onCreated: (created: Sprint) => void;
 }) {
   const [form, setForm] = useState<NewSprintForm>(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
@@ -651,7 +662,9 @@ function NewSprintModal({ open, onClose, onCreated }: {
       return;
     }
     toastSuccess(null, 'Sprint created', `${check.value.name} is ready to plan.`);
-    onCreated();
+    // Hand the created row up so the page can drop a filter that would hide it
+    // (a new sprint defaults to 'planned', which the active-only list omits).
+    if (res.data?.sprint) onCreated(res.data.sprint);
     onClose();
   }
 
@@ -773,6 +786,7 @@ function GrantsPanel({ sprint, onChanged }: { sprint: Sprint; onChanged: () => v
   const [note, setNote] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState('');
+  const [editNote, setEditNote] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -798,10 +812,17 @@ function GrantsPanel({ sprint, onChanged }: { sprint: Sprint; onChanged: () => v
   }
 
   async function saveEdit(id: string) {
-    const amt = validateGrantAmount(editAmount);
+    // Edit allows $0 — zeroing an envelope freezes its spend without deleting
+    // the row (the backend accepts amountUsd >= 0). Create still forbids $0.
+    const amt = validateGrantAmount(editAmount, { allowZero: true });
     if (!amt.ok) { setFormError(amt.error); return; }
     setBusy(true); setFormError(null);
-    const res = await writeJson<{ grant: GrantRow }>(grantUrl(id), 'PATCH', { amountUsd: amt.value });
+    // Send the note alongside the amount so a mistyped note can be corrected
+    // (or cleared). Trimmed empty string clears it per the PATCH contract.
+    const res = await writeJson<{ grant: GrantRow }>(grantUrl(id), 'PATCH', {
+      amountUsd: amt.value,
+      note: editNote.trim(),
+    });
     setBusy(false);
     if (!res.ok) { toastError(null, 'Could not update grant', res.error ?? ''); return; }
     toastSuccess(null, 'Envelope updated', usd(amt.value));
@@ -887,15 +908,24 @@ function GrantsPanel({ sprint, onChanged }: { sprint: Sprint; onChanged: () => v
               </span>
               {editId === g.id ? (
                 <>
-                  <input style={{ ...inputStyle, width: 120 }} inputMode="decimal"
+                  <input style={{ ...inputStyle, width: 110 }} inputMode="decimal"
+                    aria-label="Envelope amount (USD)"
                     value={editAmount} onChange={(e) => setEditAmount(e.target.value)} />
+                  <input style={{ ...inputStyle, flex: '1 1 160px', minWidth: 120 }}
+                    aria-label="Grant note" placeholder="Note (optional)"
+                    value={editNote} onChange={(e) => setEditNote(e.target.value)} />
                   <Button size="sm" variant="primary" disabled={busy} onClick={() => void saveEdit(g.id)}>Save</Button>
                   <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditId(null)}>Cancel</Button>
                 </>
               ) : (
                 <>
                   <span style={{ fontSize: 13 }}>{usd(g.allocatedUsd)}</span>
-                  <Button size="sm" variant="ghost" onClick={() => { setEditId(g.id); setEditAmount(String(g.allocatedUsd)); setFormError(null); }}>Edit</Button>
+                  {g.note ? (
+                    <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)', flex: '1 1 140px', minWidth: 0 }}>
+                      {g.note}
+                    </span>
+                  ) : null}
+                  <Button size="sm" variant="ghost" onClick={() => { setEditId(g.id); setEditAmount(String(g.allocatedUsd)); setEditNote(g.note ?? ''); setFormError(null); }}>Edit</Button>
                   <Button size="sm" variant="ghost" disabled={busy} onClick={() => void revoke(g)}>Revoke</Button>
                 </>
               )}
@@ -942,6 +972,18 @@ export default function SprintsPage() {
   const selected = sprints.find((s) => s.id === selectedId) ?? null;
   const personId = data?.personId ?? null;
 
+  // A freshly-created sprint would otherwise vanish: the list defaults to
+  // active-only and the New Sprint form defaults to 'planned'. If the created
+  // sprint wouldn't survive the current filter, drop the filter and select it
+  // so the user lands on exactly what they just made. Changing `activeOnly`
+  // repoints the fetch URL (useFetch refetches on url change); when it is
+  // already off, refresh() picks up the new row.
+  const handleCreated = (created: Sprint) => {
+    if (activeOnly && created.status !== 'active') setActiveOnly(false);
+    setSelectedId(created.id);
+    refresh();
+  };
+
   const totals = useMemo(() => ({
     granted: sprints.reduce((n, s) => n + s.grantedUsd, 0),
     spend: sprints.reduce((n, s) => n + s.initiativeSpendInWindowUsd, 0),
@@ -986,7 +1028,7 @@ export default function SprintsPage() {
         </div>
       }
     >
-      <NewSprintModal open={newSprintOpen} onClose={() => setNewSprintOpen(false)} onCreated={refresh} />
+      <NewSprintModal open={newSprintOpen} onClose={() => setNewSprintOpen(false)} onCreated={handleCreated} />
       {error ? (
         <EmptyState
           title="Could not load sprints"
@@ -1032,15 +1074,23 @@ export default function SprintsPage() {
               value={`${totals.pointsDone} / ${totals.pointsTotal}`}
               hint="Complexity delivered against committed"
             />
+            {/* These totals sum only the sprints currently loaded, so under the
+                default active-only filter they are an active-sprint subtotal,
+                not an org-wide figure — the hint says which, mirroring the
+                "My sprints" tile above. */}
             <StatCard
               label="Envelopes granted"
               value={usd(totals.granted)}
-              hint="Sum of the budget grants scoped to these sprints"
+              hint={activeOnly
+                ? 'Budget grants on the active sprints only'
+                : 'Sum of the budget grants scoped to these sprints'}
             />
             <StatCard
               label="Initiative spend in windows"
               value={usd(totals.spend)}
-              hint="Attributed to the initiatives, not to people"
+              hint={activeOnly
+                ? 'Attributed to initiatives — active sprints only'
+                : 'Attributed to the initiatives, not to people'}
             />
           </KPIGrid>
 

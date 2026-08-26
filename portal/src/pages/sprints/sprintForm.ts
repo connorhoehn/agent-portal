@@ -108,14 +108,24 @@ export function validateNewSprint(form: NewSprintForm): Validated<NewSprintBody>
 
 /**
  * Parse a dollar amount from a text field. The API takes `amountUsd` as a
- * finite number >= 0; the UI is stricter — a grant of $0 is a mistake to catch
- * before it is written, not an envelope. Result is rounded to whole cents.
+ * finite number >= 0; the UI is stricter — creating a $0 envelope is a mistake
+ * to catch before it is written. But zeroing an EXISTING envelope (freeze the
+ * spend without losing the row and its history) is a legitimate edit the
+ * backend accepts, so the edit path passes `allowZero`. Result is rounded to
+ * whole cents.
  */
-export function validateGrantAmount(raw: string): Validated<number> {
+export function validateGrantAmount(
+  raw: string,
+  opts?: { allowZero?: boolean },
+): Validated<number> {
   const t = raw.trim();
   if (!t) return { ok: false, error: 'Enter an amount in dollars.' };
   const n = Number(t);
   if (!Number.isFinite(n)) return { ok: false, error: 'Amount must be a number.' };
-  if (n <= 0) return { ok: false, error: 'Amount must be greater than zero.' };
+  if (opts?.allowZero) {
+    if (n < 0) return { ok: false, error: 'Amount cannot be negative.' };
+  } else if (n <= 0) {
+    return { ok: false, error: 'Amount must be greater than zero.' };
+  }
   return { ok: true, value: Math.round(n * 100) / 100 };
 }
