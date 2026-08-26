@@ -1,7 +1,13 @@
 import { Router } from 'express';
 import { asyncHandler } from '../lib/async-handler.js';
 import { listSessions, listEvents } from '../providers/memory.js';
-import { getSessionTitle, maybeGenerateTitle } from '../lib/session-titles.js';
+import {
+  getSessionTitle,
+  beginBackfill,
+  generateTitleReserved,
+  markUntitleable,
+  releaseBackfill,
+} from '../lib/session-titles.js';
 
 export const sessionsRouter = Router();
 
@@ -14,14 +20,23 @@ sessionsRouter.get('/', asyncHandler(async (req, res) => {
   const enriched = await Promise.all(sessions.map(async (s) => {
     const cached = getSessionTitle(s.sessionId);
     if (cached) return { ...s, title: cached };
-    // Fire backfill async so we don't slow the response.
-    void (async () => {
-      try {
-        const evs = await listEvents(s.sessionId, actorId);
-        const firstUser = evs.find((e) => e.role === 'USER');
-        if (firstUser?.text) maybeGenerateTitle(s.sessionId, firstUser.text);
-      } catch {}
-    })();
+    // Reserve the attempt BEFORE reading events. A session that's already
+    // titled, in-flight, or negative-cached as untitleable (no USER message /
+    // blank generation) returns false here, so we issue no read and no Nova
+    // call on subsequent polls — the settled cases used to re-query forever.
+    if (beginBackfill(s.sessionId)) {
+      // Fire backfill async so we don't slow the response.
+      void (async () => {
+        try {
+          const evs = await listEvents(s.sessionId, actorId);
+          const firstUser = evs.find((e) => e.role === 'USER');
+          if (firstUser?.text) generateTitleReserved(s.sessionId, firstUser.text);
+          else markUntitleable(s.sessionId); // no USER message → never titleable
+        } catch {
+          releaseBackfill(s.sessionId); // transient read failure → retry later
+        }
+      })();
+    }
     return { ...s, title: '' };
   }));
   res.json({ sessions: enriched });
