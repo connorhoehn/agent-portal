@@ -307,6 +307,33 @@ function mapXRayTrace(xt: XRayTrace): Trace | null {
 const TRACE_PAGE_LIMIT = 10;
 const TRACE_COUNT_ENOUGH = 25;
 
+// ── Summary / traces TTL cache ────────────────────────────────────────────────
+//
+// /api/observability/summary polls getSummary on every dashboard tick, and each
+// call bills a GetMetricData (listRuntimes) + two GetMetricStatistics (tokens) +
+// a GetTraceSummaries against CloudWatch/X-Ray — all charged per request. The
+// window is a fixed 24h, so ~15s of staleness is irrelevant. listTraces is polled
+// the same way and is cached per-limit.
+//
+// Blind results are NOT pinned for the full TTL: getSummary returns the shared
+// ZERO_SUMMARY sentinel both when the account is genuinely empty AND when a
+// credential/CloudWatch outage swallows every inner call, and listTraces returns
+// [] on error. Caching those would mask a later recovery, so we only cache a real
+// (non-sentinel / non-empty) result.
+const SUMMARY_TTL_MS = (() => {
+  const n = Number.parseInt(process.env['OBS_SUMMARY_TTL_MS'] ?? '', 10);
+  return Number.isFinite(n) && n >= 0 ? n : 15_000;
+})();
+
+let summaryCache: { value: ObservabilitySummary; fetchedAt: number } | null = null;
+const tracesCache = new Map<number, { value: Trace[]; fetchedAt: number }>();
+
+/** Test hook: drop the cached summary + traces so a fresh call re-hits the API. */
+export function __resetObservabilityCache(): void {
+  summaryCache = null;
+  tracesCache.clear();
+}
+
 async function countTraces(): Promise<number> {
   const end = new Date();
   const start = new Date(end.getTime() - ONE_DAY_MS);
@@ -332,20 +359,23 @@ async function countTraces(): Promise<number> {
   return seen;
 }
 
-export const realCloudWatch: CloudWatchProvider = {
-  /**
-   * Fleet health over the last 24h.
-   *
-   * Invocations, errors, and latency are summed over OrgIQ's own deployed
-   * runtimes rather than the account-wide AggregateOperation roll-up. This
-   * account hosts other teams' agents too, so the roll-up would attribute
-   * their traffic to us; it also guarantees this endpoint and /api/agents
-   * agree, which they did not when each computed its own totals.
-   *
-   * Tokens remain account-wide — Bedrock publishes InputTokenCount without a
-   * per-runtime dimension, so there is nothing to scope it by.
-   */
-  async getSummary(): Promise<ObservabilitySummary> {
+/**
+ * Fleet health over the last 24h.
+ *
+ * Invocations, errors, and latency are summed over OrgIQ's own deployed
+ * runtimes rather than the account-wide AggregateOperation roll-up. This
+ * account hosts other teams' agents too, so the roll-up would attribute
+ * their traffic to us; it also guarantees this endpoint and /api/agents
+ * agree, which they did not when each computed its own totals.
+ *
+ * Tokens remain account-wide — Bedrock publishes InputTokenCount without a
+ * per-runtime dimension, so there is nothing to scope it by.
+ *
+ * Returns the shared ZERO_SUMMARY sentinel (by reference) for both the
+ * genuinely-empty and the everything-failed cases, so the caching wrapper can
+ * tell a real result from a blind one.
+ */
+async function computeSummary(): Promise<ObservabilitySummary> {
     try {
       const [runtimes, tokens, traceCount] = await Promise.all([
         realAgentCore.listRuntimes().catch(() => [] as AgentRuntimeSummary[]),
@@ -385,9 +415,9 @@ export const realCloudWatch: CloudWatchProvider = {
     } catch {
       return ZERO_SUMMARY;
     }
-  },
+}
 
-  async listTraces(limit: number): Promise<Trace[]> {
+async function computeListTraces(limit: number): Promise<Trace[]> {
     try {
       const end = new Date();
       const start = new Date(end.getTime() - ONE_DAY_MS);
@@ -415,6 +445,31 @@ export const realCloudWatch: CloudWatchProvider = {
     } catch {
       return [];
     }
+}
+
+export const realCloudWatch: CloudWatchProvider = {
+  async getSummary(): Promise<ObservabilitySummary> {
+    const now = Date.now();
+    if (summaryCache && now - summaryCache.fetchedAt < SUMMARY_TTL_MS) {
+      return summaryCache.value;
+    }
+    const value = await computeSummary();
+    // ZERO_SUMMARY (by reference) means empty-or-blind — don't pin it, so a
+    // credential/CloudWatch recovery isn't masked by a stale zero.
+    if (value !== ZERO_SUMMARY) {
+      summaryCache = { value, fetchedAt: now };
+    }
+    return value;
+  },
+
+  async listTraces(limit: number): Promise<Trace[]> {
+    const now = Date.now();
+    const hit = tracesCache.get(limit);
+    if (hit && now - hit.fetchedAt < SUMMARY_TTL_MS) return hit.value;
+    const value = await computeListTraces(limit);
+    // An empty list is also what an X-Ray outage returns — cache only a real hit.
+    if (value.length > 0) tracesCache.set(limit, { value, fetchedAt: now });
+    return value;
   },
 
   async getTrace(traceId: string): Promise<Trace | null> {

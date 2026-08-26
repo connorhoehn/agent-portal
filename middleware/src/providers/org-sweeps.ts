@@ -285,11 +285,30 @@ export async function runSweep(name: SweepName): Promise<{
   let created = 0;
   let updated = 0;
 
-  for (const d of drafts) {
+  // One multi-row upsert instead of a write per finding (N+1 on a scheduled
+  // interval). Each draft gets its own positional parameter set (:sev_0, …);
+  // sweep is shared across every row. RETURNING (xmax = 0) still distinguishes
+  // an inserted row from an updated one per row, so created/updated stay exact.
+  // Fingerprints are unique within a sweep (entity id per row), so no row is
+  // touched twice in one statement.
+  if (drafts.length > 0) {
+    const valueClauses: string[] = [];
+    const params: SqlParameter[] = [s('sweep', name)];
+    for (let i = 0; i < drafts.length; i++) {
+      const d = drafts[i]!;
+      valueClauses.push(
+        `(:sweep, :sev_${i}, :title_${i}, :detail_${i}, :etype_${i}, :eid_${i}, :evidence_${i}::jsonb, :fp_${i})`,
+      );
+      params.push(
+        s(`sev_${i}`, d.severity), s(`title_${i}`, d.title), s(`detail_${i}`, d.detail),
+        s(`etype_${i}`, d.entityType), s(`eid_${i}`, d.entityId),
+        s(`evidence_${i}`, JSON.stringify(d.evidence)), s(`fp_${i}`, d.fingerprint),
+      );
+    }
     const rows = await exec(
       `INSERT INTO agent_findings
          (sweep, severity, title, detail, entity_type, entity_id, evidence, fingerprint)
-       VALUES (:sweep, :sev, :title, :detail, :etype, :eid, :evidence::jsonb, :fp)
+       VALUES ${valueClauses.join(', ')}
        ON CONFLICT (sweep, fingerprint) DO UPDATE
          SET severity = EXCLUDED.severity,
              title    = EXCLUDED.title,
@@ -300,13 +319,11 @@ export async function runSweep(name: SweepName): Promise<{
              status = CASE WHEN agent_findings.status = 'resolved' THEN 'open'
                            ELSE agent_findings.status END
        RETURNING (xmax = 0) AS inserted`,
-      [
-        s('sweep', name), s('sev', d.severity), s('title', d.title), s('detail', d.detail),
-        s('etype', d.entityType), s('eid', d.entityId),
-        s('evidence', JSON.stringify(d.evidence)), s('fp', d.fingerprint),
-      ],
+      params,
     );
-    if (rows[0]?.['inserted'] === true) created++; else updated++;
+    for (const r of rows) {
+      if (r['inserted'] === true) created++; else updated++;
+    }
   }
 
   // Anything this sweep previously reported but did not see this run is fixed.
