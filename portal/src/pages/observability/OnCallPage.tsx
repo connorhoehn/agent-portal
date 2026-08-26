@@ -254,7 +254,8 @@ function OnCallPage() {
           <h3 style={h3}>
             Incident Timeline{' '}
             <span style={hint}>
-              drift · judge · cost · errors · deploys · bucket {win.bucket}m · {win.label}
+              errors = real failures (guardrail / schema-invalid) · judge P05 = answer-quality floor ·
+              drift · cost · deploys · bucket {win.bucket}m · {win.label}
             </span>
           </h3>
           {deployLines.length > 0 && (
@@ -301,11 +302,16 @@ function OnCallPage() {
                 <Tooltip
                   contentStyle={{ fontSize: 12, border: '1px solid var(--color-border)' }}
                   formatter={(value, name) => {
+                    const label = String(name ?? '');
                     const n = typeof value === 'number' ? value : Number(value);
-                    if (!Number.isFinite(n)) return [String(value ?? '—'), String(name ?? '')];
-                    if (name === 'cost ($)') return [n.toFixed(4), String(name)];
-                    if (name === 'errors') return [String(n), String(name)];
-                    return [n.toFixed(3), String(name)];
+                    // A missing signal (e.g. no judge score in the bucket) reads
+                    // as an em dash, never NaN — quality and failures are
+                    // distinct stories and neither is fabricated when absent.
+                    if (!Number.isFinite(n)) return ['—', label];
+                    if (label.startsWith('cost')) return [n.toFixed(4), label];
+                    if (label.startsWith('errors')) return [String(n), label];
+                    // drift P95 / judge P05 are 0..1 scores.
+                    return [n.toFixed(3), label];
                   }}
                 />
                 <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} iconType="circle" />
@@ -313,7 +319,7 @@ function OnCallPage() {
                 <Bar
                   yAxisId="right"
                   dataKey="errors"
-                  name="errors"
+                  name="errors (failures)"
                   fill="var(--color-danger, #ef4444)"
                   opacity={0.35}
                   isAnimationActive={false}
@@ -322,7 +328,7 @@ function OnCallPage() {
                   yAxisId="left"
                   type="monotone"
                   dataKey="judgeP05"
-                  name="judge P05"
+                  name="judge P05 (quality)"
                   stroke="#10b981"
                   strokeWidth={1.5}
                   dot={false}

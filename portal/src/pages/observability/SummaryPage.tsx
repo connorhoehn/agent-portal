@@ -212,7 +212,10 @@ function SummaryPage() {
         </Card>
 
         <Card padding="md">
-          <div className="text-xs uppercase tracking-wide text-[var(--color-text-tertiary)]">
+          <div
+            className="text-xs uppercase tracking-wide text-[var(--color-text-tertiary)]"
+            title="Real system errors from AgentCore runtimes (CloudWatch SystemErrors). This is a failure count, not answer quality — a low judge score is a weak answer to a request that still succeeded and is tracked separately on Quality / On-Call."
+          >
             Errors (24h)
           </div>
           <div className="mt-1 flex items-baseline gap-2">
@@ -224,6 +227,9 @@ function SummaryPage() {
             <span className="text-sm text-[var(--color-text-secondary)]">
               {blind ? 'no data' : `of ${summary?.totalInvocations24h ?? 0} runs`}
             </span>
+          </div>
+          <div className="mt-1 text-xs text-[var(--color-text-tertiary)]">
+            System failures, not answer quality.
           </div>
           <Link
             to="/admin/observability/invocations"
@@ -271,6 +277,7 @@ function SummaryPage() {
         <StatCard
           label="Errors (24h)"
           value={blind ? '—' : String(summary?.totalErrors24h ?? 0)}
+          hint="System errors, not answer quality"
           danger={!blind && !!summary && summary.totalErrors24h > 0}
         />
       </div>
