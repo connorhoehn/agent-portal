@@ -26,6 +26,7 @@ jest.mock('../../providers/agent-projects.js', () => ({
   listAgentProjects: jest.fn(), getAgentProject: jest.fn(), linkAgentProject: jest.fn(),
   unlinkAgentProject: jest.fn(), buildCloneCommand: jest.fn(), markCloned: jest.fn(),
   checkoutPath: jest.fn(() => '/workspace/checkout'), finishRun: jest.fn(), listRuns: jest.fn(),
+  listRecentRunsForProjects: jest.fn(),
 }));
 
 jest.mock('../../lib/sdlc-pipeline.js', () => ({ dispatchGovernedRun: jest.fn() }));
@@ -36,6 +37,7 @@ import { agentProjectsRouter } from '../agent-projects.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import {
   listAgentProjects, getAgentProject, linkAgentProject, unlinkAgentProject, listRuns,
+  listRecentRunsForProjects,
 } from '../../providers/agent-projects.js';
 import { dispatchGovernedRun } from '../../lib/sdlc-pipeline.js';
 
@@ -44,9 +46,11 @@ const getMock = getAgentProject as unknown as jest.Mock;
 const linkMock = linkAgentProject as unknown as jest.Mock;
 const unlinkMock = unlinkAgentProject as unknown as jest.Mock;
 const listRunsMock = listRuns as unknown as jest.Mock;
+const recentRunsMock = listRecentRunsForProjects as unknown as jest.Mock;
 const dispatchMock = dispatchGovernedRun as unknown as jest.Mock;
 
 const PROJECT = { id: 'p-1', repoFullName: 'org/rag-search', orgProjectId: 'p-rag-search', sessionId: null };
+const RUN = { id: 'run-1', projectId: 'p-1', status: 'done', startedAt: '2026-08-20T00:00:00Z' };
 
 const leader = { sub: 'u-vera', role: 'org-leader', tenant: 'orgiq' };
 
@@ -69,6 +73,7 @@ beforeEach(() => {
   linkMock.mockReset(); linkMock.mockResolvedValue(PROJECT);
   unlinkMock.mockReset(); unlinkMock.mockResolvedValue(true);
   listRunsMock.mockReset(); listRunsMock.mockResolvedValue([]);
+  recentRunsMock.mockReset(); recentRunsMock.mockResolvedValue(new Map([['p-1', [RUN]]]));
   dispatchMock.mockReset(); dispatchMock.mockResolvedValue({ ok: true, runId: 'run-1', checkout: '/workspace' });
 });
 
@@ -87,6 +92,30 @@ describe('GET /api/agent-projects', () => {
     expect(res.status).toBe(200);
     expect(res.body.projects).toHaveLength(1);
     expect(res.body.projects[0]!.id).toBe('p-1');
+  });
+
+  it('attaches recent runs via ONE grouped query, never listRuns per project (N+1 fix)', async () => {
+    listMock.mockResolvedValue([PROJECT, { ...PROJECT, id: 'p-2', repoFullName: 'org/scoring' }]);
+    recentRunsMock.mockResolvedValue(new Map([['p-1', [RUN]], ['p-2', []]]));
+
+    const res = await request(buildApp(leader)).get('/api/agent-projects');
+    expect(res.status).toBe(200);
+    // Exactly one fan-out call, with every project id and a per-project cap of 5.
+    expect(recentRunsMock).toHaveBeenCalledTimes(1);
+    expect(recentRunsMock).toHaveBeenCalledWith(['p-1', 'p-2'], 5);
+    // The list path must NOT round-trip per project.
+    expect(listRunsMock).not.toHaveBeenCalled();
+    // Response shape unchanged: each project keeps its `runs` array (grouped by id).
+    expect(res.body.projects[0]!.runs).toEqual([RUN]);
+    expect(res.body.projects[1]!.runs).toEqual([]);
+    expect(res.body.projects[0]!.checkout).toBe('/workspace/checkout');
+  });
+
+  it('defaults a project with no runs in the map to an empty array', async () => {
+    recentRunsMock.mockResolvedValue(new Map());
+    const res = await request(buildApp(leader)).get('/api/agent-projects');
+    expect(res.status).toBe(200);
+    expect(res.body.projects[0]!.runs).toEqual([]);
   });
 });
 

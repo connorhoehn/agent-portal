@@ -11,6 +11,7 @@ import { readForRolesElseAction, requireAction } from '../lib/authz.js';
 import {
   listAgentProjects, getAgentProject, linkAgentProject, unlinkAgentProject,
   buildCloneCommand, markCloned, checkoutPath, finishRun, listRuns,
+  listRecentRunsForProjects,
 } from '../providers/agent-projects.js';
 import { dispatchGovernedRun } from '../lib/sdlc-pipeline.js';
 
@@ -28,12 +29,15 @@ agentProjectsRouter.get('/', readGate, asyncHandler(async (_req, res) => {
   const projects = await listAgentProjects();
   // Recent runs alongside each project — the list is about activity, and a
   // list of repositories with no sign of what happened to them is a directory,
-  // not a console.
-  const withRuns = await Promise.all(projects.map(async (p) => ({
+  // not a console. One windowed query returns the latest runs for every repo at
+  // once (grouped by project id), rather than a round-trip per repository that
+  // grew linearly with the fleet on this polled surface.
+  const runsByProject = await listRecentRunsForProjects(projects.map((p) => p.id), 5);
+  const withRuns = projects.map((p) => ({
     ...p,
     checkout: checkoutPath(p),
-    runs: await listRuns(p.id, 5),
-  })));
+    runs: runsByProject.get(p.id) ?? [],
+  }));
   res.json({ projects: withRuns });
 }));
 

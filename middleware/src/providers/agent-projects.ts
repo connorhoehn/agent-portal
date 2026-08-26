@@ -291,9 +291,54 @@ export async function finishRun(id: string, outcome: {
 export async function listRuns(projectId: string, limit = 25): Promise<ProjectRun[]> {
   if (!isUuid(projectId)) return [];
   const rows = await exec(
-    `SELECT * FROM agent_project_runs WHERE project_id = :pid::uuid
+    `SELECT id, project_id, prompt, model, status, started_at, finished_at,
+            duration_ms, files_changed, diff_summary, error, cost_usd
+       FROM agent_project_runs WHERE project_id = :pid::uuid
       ORDER BY started_at DESC LIMIT ${Math.min(Math.max(limit, 1), 100)}`,
     [s('pid', projectId)],
   );
   return rows.map(rowToRun);
+}
+
+/**
+ * The latest `perProject` runs for each of several projects, in ONE round-trip.
+ *
+ * The list surface (GET /api/agent-projects) is polled and shows recent
+ * activity per repo. Fetching runs a project at a time cost one RDS Data API
+ * call per linked repository — N round-trips growing linearly with the fleet.
+ * A window function partitions by project so a single statement returns the
+ * top-N runs per project, grouped in memory here. Selects only the columns
+ * `rowToRun` reads — the same IN-list bind style as the owners fan-out above —
+ * rather than every column of a table whose prompt/diff payloads are large and
+ * never rendered in full on the list.
+ */
+export async function listRecentRunsForProjects(
+  ids: string[], perProject = 5,
+): Promise<Map<string, ProjectRun[]>> {
+  const grouped = new Map<string, ProjectRun[]>();
+  if (config.mock.aurora) return grouped;
+  const valid = ids.filter(isUuid);
+  if (valid.length === 0) return grouped;
+  const n = Math.min(Math.max(perProject, 1), 100);
+  const rows = await exec(
+    `SELECT id, project_id, prompt, model, status, started_at, finished_at,
+            duration_ms, files_changed, diff_summary, error, cost_usd
+       FROM (
+         SELECT id, project_id, prompt, model, status, started_at, finished_at,
+                duration_ms, files_changed, diff_summary, error, cost_usd,
+                ROW_NUMBER() OVER (PARTITION BY project_id ORDER BY started_at DESC) AS rn
+           FROM agent_project_runs
+          WHERE project_id IN (${valid.map((_, i) => `:p${i}::uuid`).join(', ')})
+       ) t
+      WHERE t.rn <= ${n}
+      ORDER BY t.project_id, t.started_at DESC`,
+    valid.map((v, i) => s(`p${i}`, v)),
+  );
+  for (const r of rows) {
+    const run = rowToRun(r);
+    const list = grouped.get(run.projectId);
+    if (list) list.push(run);
+    else grouped.set(run.projectId, [run]);
+  }
+  return grouped;
 }
