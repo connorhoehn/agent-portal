@@ -48,6 +48,11 @@ interface SessionContextValue {
   signInWithSso: () => void;
   /** Clear the session; bounce through Cognito logout when SSO is on. */
   logout: () => Promise<void>;
+  /** Bump the server-side session epoch so every OTHER cookie for this user is
+   * invalidated (within ≤120s), while this session's cookie is re-issued and
+   * survives. No navigation. Throws the server's `{ error }` on failure —
+   * including a 409 while masquerading. */
+  revokeOtherSessions: () => Promise<void>;
   listUsers: () => Promise<DirectoryUser[]>;
   refresh: () => Promise<void>;
 }
@@ -232,6 +237,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     window.location.assign('/');
   }, []);
 
+  // Revoke this user's OTHER sessions. Deliberately does NOT navigate: the
+  // server re-issues the current cookie, so this tab stays signed in. The POST
+  // throws the server's error (e.g. 409 while masquerading) for the caller to
+  // surface.
+  const revokeOtherSessions = useCallback(async () => {
+    await post('/api/session/revoke-others', {});
+  }, []);
+
   const listUsers = useCallback(async (): Promise<DirectoryUser[]> => {
     const res = await fetch('/api/session/users', { credentials: 'include' });
     if (!res.ok) return [];
@@ -239,8 +252,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const ctxValue = useMemo(
-    () => ({ session, isLoading, ssoEnabled, ssoRequired, setRole, enterContext, login, masquerade, stopMasquerade, signInWithSso, logout, listUsers, refresh }),
-    [session, isLoading, ssoEnabled, ssoRequired, setRole, enterContext, login, masquerade, stopMasquerade, signInWithSso, logout, listUsers, refresh],
+    () => ({ session, isLoading, ssoEnabled, ssoRequired, setRole, enterContext, login, masquerade, stopMasquerade, signInWithSso, logout, revokeOtherSessions, listUsers, refresh }),
+    [session, isLoading, ssoEnabled, ssoRequired, setRole, enterContext, login, masquerade, stopMasquerade, signInWithSso, logout, revokeOtherSessions, listUsers, refresh],
   );
 
   // Unauthenticated + a real IdP required: replace the app with a sign-in

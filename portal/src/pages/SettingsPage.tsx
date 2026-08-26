@@ -5,6 +5,7 @@ import { loadPreferences, savePreferences, DEFAULTS } from '../lib/preferences';
 import type { Theme, Preferences } from '../lib/preferences';
 import { useFetch } from '../hooks/useFetch';
 import { useGatewayInfo } from '../hooks/useGatewayInfo';
+import { useSession } from '../lib/auth';
 
 const MASQUERADE_HISTORY_KEY = 'orgiq:masquerade:history';
 
@@ -38,6 +39,27 @@ export function SettingsPage() {
   const [masqHistory, setMasqHistory] = useState<string[]>([]);
   const { data: health } = useFetch<Health>('/api/health');
   const gateway = useGatewayInfo();
+  const { session, revokeOtherSessions } = useSession();
+
+  // Sign-out-other-sessions control. `masquerading` disables it (the server
+  // refuses to revoke another user's sessions from an impersonation, 409).
+  const masquerading = !!session?.masquerading;
+  const [revokeState, setRevokeState] = useState<'idle' | 'pending' | 'success'>('idle');
+  const [revokeError, setRevokeError] = useState<string | null>(null);
+
+  async function handleRevokeOthers() {
+    setRevokeState('pending');
+    setRevokeError(null);
+    try {
+      await revokeOtherSessions();
+      setRevokeState('success');
+    } catch (e) {
+      setRevokeState('idle');
+      const msg = e instanceof Error ? e.message : 'Could not sign out other sessions.';
+      // A 409 comes back while masquerading; make it actionable.
+      setRevokeError(/^409/.test(msg) ? 'Stop masquerading first.' : msg);
+    }
+  }
 
   useEffect(() => {
     setMasqHistory(loadMasqueradeHistory());
@@ -169,7 +191,57 @@ export function SettingsPage() {
           />
         </Card>
 
-        {/* 4. Masquerade history */}
+        {/* 4. Security */}
+        <Card padding="md">
+          <div style={sectionHeaderStyle}>Security</div>
+          <div style={dividerStyle} />
+          <SettingRow
+            title="This session"
+            description="The session you're using right now — it stays signed in."
+            control={
+              <span style={readOnlyValueStyle}>
+                {session ? `${session.tenant} · ${session.role}` : '—'}
+              </span>
+            }
+          />
+          <div style={intraCardDivider} />
+          <SettingRow
+            title="Sign out my other sessions"
+            description="Ends your sessions on other devices and browser tabs. They stop within about 2 minutes — sessions re-check every couple of minutes. This session is unaffected."
+            control={
+              masquerading ? (
+                <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }}>
+                  Stop masquerading first
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleRevokeOthers}
+                  disabled={revokeState === 'pending'}
+                  style={{
+                    ...revokeButtonStyle,
+                    cursor: revokeState === 'pending' ? 'default' : 'pointer',
+                    opacity: revokeState === 'pending' ? 0.6 : 1,
+                  }}
+                >
+                  {revokeState === 'pending' ? 'Signing out…' : 'Sign out other sessions'}
+                </button>
+              )
+            }
+          />
+          {revokeState === 'success' && (
+            <div style={{ fontSize: 12, color: 'var(--color-success, #10b981)', paddingTop: 6 }}>
+              Your other sessions will end within ~2 minutes.
+            </div>
+          )}
+          {revokeError && (
+            <div style={{ fontSize: 12, color: 'var(--color-danger, #ef4444)', paddingTop: 6 }}>
+              {revokeError}
+            </div>
+          )}
+        </Card>
+
+        {/* 5. Masquerade history */}
         <Card padding="md">
           <div style={sectionHeaderStyle}>Masquerade history</div>
           <div style={dividerStyle} />
@@ -188,7 +260,7 @@ export function SettingsPage() {
           )}
         </Card>
 
-        {/* 5. About */}
+        {/* 6. About */}
         <Card padding="md">
           <div style={sectionHeaderStyle}>About</div>
           <div style={dividerStyle} />
@@ -220,7 +292,7 @@ export function SettingsPage() {
           />
         </Card>
 
-        {/* 6. Gateway (websocket-gateway via @connorhoehnslalom/realtime-modules) */}
+        {/* 7. Gateway (websocket-gateway via @connorhoehnslalom/realtime-modules) */}
         <Card padding="md">
           <div style={sectionHeaderStyle}>Gateway</div>
           <div style={dividerStyle} />
@@ -347,6 +419,17 @@ const readOnlyValueStyle: React.CSSProperties = {
   fontSize: 13,
   color: 'var(--color-text-secondary)',
   fontFamily: 'monospace',
+};
+
+const revokeButtonStyle: React.CSSProperties = {
+  fontSize: 13,
+  fontWeight: 600,
+  padding: '7px 14px',
+  borderRadius: 8,
+  border: '1px solid var(--color-border, #334155)',
+  background: 'var(--color-surface, transparent)',
+  color: 'var(--color-text-primary)',
+  whiteSpace: 'nowrap',
 };
 
 const resetButtonStyle: React.CSSProperties = {
