@@ -84,6 +84,9 @@ interface PerAgentSummaryRow {
   p50DurationMs: number | null;
   p99DurationMs: number | null;
   errorRate: number;
+  // Fraction of answers the judge scored below 0.3 — weak answers, NOT request
+  // failures. Optional so older payloads (pre-field) render gracefully.
+  lowQualityRate?: number;
   totalCostUsd: number;
 }
 interface PerAgentSummaryResponse {
@@ -169,6 +172,13 @@ const rpsTone = (rps: number): 'success' | 'warning' | 'danger' | 'neutral' => {
 const errorTone = (r: number): 'success' | 'warning' | 'danger' => {
   if (r >= 0.05) return 'danger';
   if (r >= 0.01) return 'warning';
+  return 'success';
+};
+// Answer-quality signal, not a failure rate — weak answers are naturally more
+// common than hard failures, so the thresholds sit higher than errorTone's.
+const lowQualityTone = (r: number): 'success' | 'warning' | 'danger' => {
+  if (r >= 0.2) return 'danger';
+  if (r >= 0.05) return 'warning';
   return 'success';
 };
 const costTone = (c: number): 'success' | 'warning' | 'danger' => {
@@ -475,7 +485,7 @@ function TrafficPage() {
           <h2 style={h2}>
             Per-Agent Summary{' '}
             <span style={hint}>
-              RPS / latency / error rate / cost · window {win.label}
+              RPS / latency / error rate / low-quality rate / cost · window {win.label}
             </span>
           </h2>
         </div>
@@ -490,7 +500,16 @@ function TrafficPage() {
                 <TableTh>RPS</TableTh>
                 <TableTh>P50 latency</TableTh>
                 <TableTh>P99 latency</TableTh>
-                <TableTh>Error rate</TableTh>
+                <TableTh>
+                  <span title="Guardrail interventions or schema-invalid outputs — real request failures.">
+                    Error rate
+                  </span>
+                </TableTh>
+                <TableTh>
+                  <span title="Share of answers the judge scored below 0.3 — weak answers, not request failures.">
+                    Low-quality rate
+                  </span>
+                </TableTh>
                 <TableTh>Cost</TableTh>
               </TableRow>
             </TableHead>
@@ -508,6 +527,15 @@ function TrafficPage() {
                     <Chip tone={errorTone(a.errorRate)} size="xs">
                       {fmtPct(a.errorRate)}
                     </Chip>
+                  </TableTd>
+                  <TableTd>
+                    {a.lowQualityRate == null || !Number.isFinite(a.lowQualityRate) ? (
+                      <span style={numCell}>—</span>
+                    ) : (
+                      <Chip tone={lowQualityTone(a.lowQualityRate)} size="xs">
+                        {fmtPct(a.lowQualityRate)}
+                      </Chip>
+                    )}
                   </TableTd>
                   <TableTd>
                     <Chip tone={costTone(a.totalCostUsd)} size="xs">
