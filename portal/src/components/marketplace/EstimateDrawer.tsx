@@ -244,6 +244,12 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
   const [pickerOptions, setPickerOptions] = useState<CodebaseOption[] | null>(null);
   /** Set from a 429 — the platform's agent-run concurrency ceiling is full. */
   const [concurrencyMsg, setConcurrencyMsg] = useState<string | null>(null);
+  // Set from a 403 — the SME holds no active sprint grant on this initiative
+  // (grant-scoped dispatch). Unlike the four money gates this is NOT confirmable:
+  // there is no flag that waves a missing grant through, so it gets a calm
+  // authorization panel that shows the server's guidance verbatim, never the
+  // "Dispatch failed" error toast that reads as infra breakage.
+  const [grantGapMsg, setGrantGapMsg] = useState<string | null>(null);
   // The initiative's allocation refused this dispatch. Soft brake: we show
   // what is left and offer to proceed anyway, rather than dead-ending on an
   // error toast that merely names an API flag the operator cannot reach.
@@ -280,6 +286,7 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
     setCapText('');
     setPickerOptions(null);
     setConcurrencyMsg(null);
+    setGrantGapMsg(null);
     setConfirmOpen(false);
     setOverAllocation(null);
     setOverRunBudget(null);
@@ -323,6 +330,7 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
     if (!item || dispatching) return;
     setDispatching(true);
     setConcurrencyMsg(null);
+    setGrantGapMsg(null);
     try {
       const target = overrideAgentProjectId ?? agentProjectId;
       const body: Record<string, unknown> = { workItemId: item.id, model };
@@ -396,6 +404,16 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
       if (res.status === 429) {
         // Concurrency ceiling — no picker, just say so plainly inline.
         setConcurrencyMsg(payload.error ?? 'Agent runs already in flight are at the concurrency ceiling');
+        setConfirmOpen(false);
+        return;
+      }
+      if (res.status === 403) {
+        // Grant-scoped dispatch: the SME holds no active sprint grant on this
+        // initiative. This is not a failed run and it is not confirmable —
+        // there is no flag to wave a missing grant through — so it gets a calm
+        // authorization panel, not the "Dispatch failed" error toast, and no
+        // retry affordance. Show the server's guidance verbatim.
+        setGrantGapMsg(payload.error ?? 'You hold no active sprint grant on this initiative.');
         setConfirmOpen(false);
         return;
       }
@@ -564,6 +582,23 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
               <div className="text-[12px] text-text-primary leading-relaxed">
                 {concurrencyMsg} — raise <code className="font-mono text-[11px]">BOT_MAX_CONCURRENT</code> or
                 wait for a run to finish, then authorize again.
+              </div>
+            </div>
+          )}
+
+          {/* 403 — grant-scoped dispatch: no active sprint grant on this
+              initiative. A calm authorization gap, not a run failure and not a
+              money gate: nothing to confirm or retry here, so no button —
+              just the server's guidance and who to ask. */}
+          {grantGapMsg && (
+            <div className="px-3 py-2.5 rounded-md border border-warning/50 bg-warning-bg/40">
+              <div className="text-[12px] font-semibold text-text-primary mb-0.5">No sprint grant on this initiative</div>
+              <div className="text-[12px] text-text-primary leading-relaxed">
+                {grantGapMsg}
+              </div>
+              <div className="mt-1.5 text-[11px] text-text-tertiary">
+                This isn't a failed run — the run was never started. Ask the release
+                manager for a sprint grant on this initiative, then authorize again.
               </div>
             </div>
           )}
