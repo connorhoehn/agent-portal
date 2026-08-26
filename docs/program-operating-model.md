@@ -235,17 +235,22 @@ requesting it gets a 403, not a silently narrowed answer.
 
 ## Recently built
 
-- **Grant-scoped dispatch.** `POST /api/bots/dispatch-work` now blocks an `sme`
+- **Grant-scoped dispatch.** `POST /api/bots/dispatch-work` blocks an `sme`
   who holds no active sprint grant on the target initiative (hard 403 via
   `decideGrantScopedDispatch`), before the money gates; org-leader/hr-admin/admin
-  bypass. ⚠️ The block is currently enforced only at dispatch time and only by
-  *money*-holding — the `ManageSprints` write routes and the check are **not yet
-  scoped to the SME's own initiatives** (the `sme.cedar` comment overstates
-  this): any SME can still create/move sprints on any initiative. Route-layer
-  ownership scoping is the open follow-up.
+  bypass. The deny text now distinguishes "no grant here" from "your grant's
+  sprint isn't active yet."
+- **Initiative-scoped sprint writes.** Cedar grants `ManageSprints` role-wide,
+  but the route layer (`requireInitiativeSteward` in `routes/sprints.ts`) scopes
+  an SME's create/move to initiatives they own or contribute to; org-leader/
+  hr-admin/admin are org-wide.
 - **Sprint mutation.** `POST /api/sprints`, `PATCH/DELETE /api/sprints/:id/items`
   (gated `ManageSprints`) and grant CRUD `POST/PATCH/DELETE /api/grants` (gated
-  `ManageBudgets`) are built, with a portal UI on `/iq/sprints`.
+  `ManageBudgets`) are built, with a portal UI on `/iq/sprints`. The SME sees a
+  pre-dispatch cue on the initiative page when they hold no active grant there.
+- **Direct-invoke authorization.** `POST /api/agents/:id/invoke` gates the write
+  agents (graph-builder, ingestion, scoring) on `ManageIngest`, so a member
+  can't drive graph/KB/score writes directly; read + newsroom agents unchanged.
 
 ## Not built yet
 
@@ -255,8 +260,6 @@ requesting it gets a 403, not a silently narrowed answer.
   `v_initiative_maintenance_30d` treats bot spend as the maintenance *floor* an
   allocation is read against. A pure, opt-in `decideBotFireAllocation` skip now
   exists (OFF by default) for when a `bots.enforce_allocation` flag is added.
-- **Initiative-scoped sprint writes.** `ManageSprints` is role-wide; the routes
-  do not check the caller stewards or contributes to the target initiative.
-- **Grant-held-initiative discovery.** An SME learns they can't dispatch against
-  an initiative only at Authorize time (the 403); there is no pre-dispatch cue
-  of where they hold grants.
+- **Editor publish + member feedback UI.** The `PublishArticle` (newsroom editor)
+  and `LabelFeedback` (member) capabilities are granted in Cedar but have no
+  reachable portal surface yet.

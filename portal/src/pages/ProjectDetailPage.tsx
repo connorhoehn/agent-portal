@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router';
 import { Card, Chip, CollapsibleSection, Modal, PageSection, StatusDot, type ChipTone } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { useCapabilities } from '../lib/capabilities';
+import { useSession } from '../lib/auth';
 import { githubRepoUrl } from '../lib/repoLink';
 import { toastError, toastInfo } from '../lib/toastStore';
 import { EstimateDrawer } from '../components/marketplace/EstimateDrawer';
@@ -81,6 +82,18 @@ interface ProjectDetail {
     role: string | null;
     weight: number;
   }>;
+}
+
+// The slice of the `/api/sprints?scope=mine` contract this page needs — same
+// fields SprintsPage keys its "Your envelope" badge on (Sprint.orgProjectId,
+// Sprint.status, Sprint.isGrantee in pages/sprints/SprintsPage.tsx).
+interface MyScopedSprint {
+  orgProjectId: string;
+  status: string;
+  isGrantee: boolean;
+}
+interface MyScopedSprintsResponse {
+  sprints: MyScopedSprint[];
 }
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -223,6 +236,18 @@ function countStories(item: WorkItemTree): { done: number; total: number } {
 /** Aurora timestamps arrive without T/Z — same normalization as the bots pages. */
 function parseTs(iso: string): number {
   return new Date(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`).getTime();
+}
+
+/** True iff at least one of the SME's `scope=mine` sprints is an active
+ *  grant on this initiative. Pure and exported so the pre-dispatch grant cue
+ *  (audit finding M2 follow-up) can be unit tested without the fetch
+ *  plumbing — grant-scoped dispatch 403s an sme with no active grant here,
+ *  and this only tells the caller whether to warn *before* that happens. */
+export function hasActiveGrantOnInitiative(
+  sprints: MyScopedSprint[],
+  initiativeId: string,
+): boolean {
+  return sprints.some((s) => s.isGrantee && s.status === 'active' && s.orgProjectId === initiativeId);
 }
 
 // ─── Optimistic-write plumbing ────────────────────────────────────────────────
@@ -1202,6 +1227,25 @@ function ProjectDetailPage() {
   const { can: canDo, ready: capsReady } = useCapabilities();
   const canDispatch = capsReady && canDo('DispatchAgentRun');
 
+  // Pre-dispatch grant cue (audit finding M2 follow-up). Grant-scoped dispatch
+  // hard-403s an sme with no active sprint grant on this initiative, but only
+  // at Authorize time — this page only gates the Estimate/Authorize
+  // affordance on the role-wide DispatchAgentRun capability, so an sme could
+  // walk into a guaranteed 403 with no warning. No new endpoint: reuse the
+  // same `scope=mine` sprints SprintsPage already fetches for its own
+  // "Your envelope" badge (isGrantee + orgProjectId). Only fetched for sme —
+  // every other role gets no cue, and member has no dispatch affordance here
+  // at all.
+  const { session } = useSession();
+  const isSme = session?.role === 'sme';
+  const { data: mySprints } = useFetch<MyScopedSprintsResponse>(
+    isSme && id ? '/api/sprints?scope=mine' : null,
+  );
+  // Absent data (still loading, fetch failed, or not an sme) means "say
+  // nothing" rather than guess — a wrong cue is worse than none.
+  const showGrantCue = canDispatch && isSme && mySprints != null
+    && !hasActiveGrantOnInitiative(mySprints.sprints, id ?? '');
+
   // Governance edits are optimistic: overrides sit on top of the fetched
   // project until the next reload; the editors revert them on PATCH failure.
   const [ownerOverride, setOwnerOverride] = useState<{ ownerId: string | null; ownerName: string | null } | null>(null);
@@ -1623,6 +1667,20 @@ function ProjectDetailPage() {
               ))}
             </div>
           </div>
+
+          {/* Pre-dispatch grant cue — sme-only, subtle, non-blocking. The
+              Estimate chip below still renders and still opens the drawer:
+              authorization is enforced server-side and a grant could exist
+              out-of-band, so this warns without presuming. */}
+          {showGrantCue && (
+            <div style={{
+              marginBottom: 14, padding: '7px 12px', borderRadius: 6,
+              background: 'var(--color-surface-inset)', border: '1px dashed var(--color-border)',
+              fontSize: 12, color: 'var(--color-text-tertiary)',
+            }}>
+              You hold no active sprint grant on this initiative — ask the release manager for a grant before dispatching.
+            </div>
+          )}
 
           {workLoading && (
             <div style={{ color: 'var(--color-text-tertiary)', fontSize: 13, marginBottom: 16 }}>Loading work items…</div>
