@@ -3,6 +3,10 @@ module.exports = {
   testEnvironment: 'node',
   maxWorkers: '25%',
   workerIdleMemoryLimit: '512MB',
+  // Disables HTTP keep-alive so supertest never reuses a pooled socket across
+  // its per-request listen/close port churn — see jest.setup.cjs for the full
+  // root cause. Runs once per test file, before the framework loads.
+  setupFiles: ['<rootDir>/jest.setup.cjs'],
   roots: ['<rootDir>/src'],
   testMatch: ['**/__tests__/**/*.test.ts'],
   transform: {

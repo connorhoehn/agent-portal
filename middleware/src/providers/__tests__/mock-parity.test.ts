@@ -19,6 +19,24 @@ jest.mock('../../config.js', () => ({ config: { mock: { aurora: true }, region: 
 import { listProjects } from '../projects.js';
 import { listBudgets, listGrants } from '../budgets.js';
 
+// The mock fixtures derive `lastAgentActivityAt`/`updatedAt` from `Date.now()`
+// at CALL time (providers/budgets.ts `mockBudgetRow`). listProjects() and
+// listBudgets() therefore sample the clock at two different instants, and when
+// those straddle a millisecond boundary — likely under parallel-worker CPU
+// contention — the two ISO strings differ by 1ms and the exact-equality
+// assertions below flake (observed: "…580Z" vs "…579Z"). These surfaces are
+// meant to read ONE stable ledger row, so freeze the clock for the whole file:
+// every call in the process now samples the same instant, making the fixtures
+// deterministic without weakening the equality the test exists to guard.
+// Restored in afterAll so the spy never leaks into another suite in the worker.
+let nowSpy: jest.SpyInstance<number, []>;
+beforeAll(() => {
+  nowSpy = jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-20T12:00:00.000Z'));
+});
+afterAll(() => {
+  nowSpy.mockRestore();
+});
+
 describe('mock Initiatives vs mock Budgets', () => {
   it('reports the same agent spend for every initiative both pages know', async () => {
     const projects = await listProjects({ limit: 200 });
