@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { PageSection, Card, FilterChip } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
@@ -70,7 +70,16 @@ const SECTION_OPTIONS = ['All', 'Tech', 'Business', 'Science', 'Politics', 'Cult
 const STATUS_OPTIONS = ['All', 'published', 'draft', 'review', 'archived'];
 
 function ArticlesPage() {
-  const [sectionFilter, setSectionFilter] = useState<string>('All');
+  // The beat heatmap (BeatsPage) deep-links here as
+  // `/newsroom/articles?section=<beat>&since=<day>` when a cell is clicked.
+  // Honor `section` as the initial filter so the click lands on a filtered
+  // view instead of silently resetting to "All". `since` has no matching
+  // filter on this page (there's no date/recency control) — it's deferred,
+  // not honored.
+  const [searchParams] = useSearchParams();
+  const initialSection = searchParams.get('section');
+
+  const [sectionFilter, setSectionFilter] = useState<string>(initialSection || 'All');
   const [statusFilter, setStatusFilter] = useState<string>('All');
 
   const params = new URLSearchParams({ limit: '100' });
