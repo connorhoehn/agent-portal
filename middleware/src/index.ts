@@ -8,6 +8,7 @@ import { sessionMiddleware, setGrantsResolver } from './lib/session.js';
 import { getUser as getIdentityUser } from './providers/identity.js';
 import { agentsRouter } from './routes/agents.js';
 import { graphRouter } from './routes/graph.js';
+import { rosterRouter } from './routes/roster.js';
 import { scoresRouter } from './routes/scores.js';
 import { decisionsRouter } from './routes/decisions.js';
 import { projectsRouter } from './routes/projects.js';
@@ -130,6 +131,11 @@ app.use('/api/graph', requireTenant('orgiq'), workItemsRouter);
 // AND gated on ViewOrgChart (every orgiq role holds it; a grantless anonymous
 // production session does not — closing the roster leak).
 app.use('/api/graph', requireTenant('orgiq'), requireAction('ViewOrgChart'), graphRouter);
+// The eligible-people pick-list for the sprint steward + grant grantee selectors
+// (audit RM-5). Not org-chart-privileged: any signed-in orgiq member may read it
+// (requireSession floor), since that is exactly the set the sprint/grant APIs
+// will accept — the org roster surfaces above need ViewOrgChart, this does not.
+app.use('/api/roster', requireTenant('orgiq'), requireSession('Roster'), rosterRouter);
 // Ranked people-intelligence (leaderboard, cohorts, radar, contributions) is
 // leadership data: ViewLeaderboard, held only by org-leader / hr-admin / admin.
 // Tenant guard alone previously let any orgiq member — and any anonymous

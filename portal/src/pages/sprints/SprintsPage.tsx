@@ -122,10 +122,55 @@ interface GrantRow {
   note?: string | null;
 }
 
-// People come from an initiative's contributor list (/api/graph/projects/:id);
-// their `personId` is the graph id the sprint/grant APIs key on.
+// An initiative's contributor list (/api/graph/projects/:id); their `personId`
+// is the graph id the sprint/grant APIs key on. These are the common case for a
+// sprint's steward/grantee, so they are surfaced first — but not the only
+// eligible set (audit RM-5): a cross-initiative SME who does not contribute here
+// must still be pickable, so both selects also read the org roster below.
 interface Contributor { personId: string; name: string; role: string | null }
 interface ProjectDetailLite { contributors?: Contributor[] }
+
+// The full set of people the sprint/grant APIs will accept — /api/roster.
+// `isSme` flags the SMEs the operating model spreads across initiatives.
+interface RosterPerson { id: string; name: string; title?: string | null; isSme?: boolean }
+interface RosterResponse { people: RosterPerson[] }
+
+// Options for a steward/grantee <select>: the initiative's own contributors
+// first (labelled with their role), then everyone else from the roster. This is
+// the RM-5 fix — anyone the backend accepts is selectable, with the common case
+// (this initiative's people) prioritised. `loading` shows a placeholder until
+// the roster arrives; contributors render immediately either way.
+function PeopleSelectOptions({ contributors, roster, loading }: {
+  contributors: Contributor[]; roster: RosterPerson[]; loading: boolean;
+}) {
+  const contribIds = new Set(contributors.map((c) => c.personId));
+  const others = roster.filter((p) => !contribIds.has(p.id));
+  if (contributors.length === 0 && others.length === 0) {
+    return <option value="" disabled>{loading ? 'Loading people…' : 'No people available'}</option>;
+  }
+  return (
+    <>
+      {contributors.length > 0 ? (
+        <optgroup label="On this initiative">
+          {contributors.map((c) => (
+            <option key={c.personId} value={c.personId}>
+              {c.name}{c.role ? ` · ${c.role}` : ''}
+            </option>
+          ))}
+        </optgroup>
+      ) : null}
+      {others.length > 0 ? (
+        <optgroup label={contributors.length > 0 ? 'Everyone else' : 'People'}>
+          {others.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}{p.isSme ? ' · SME' : ''}
+            </option>
+          ))}
+        </optgroup>
+      ) : null}
+    </>
+  );
+}
 
 // The initiative options for the "New sprint" form come from the projects
 // rollup (every initiative, not only ones that already have a sprint).
@@ -637,11 +682,13 @@ function NewSprintModal({ open, onClose, onCreated }: {
   // Every initiative — not only ones that already have a sprint — so a first
   // sprint can be created. Only fetched while the modal is open.
   const { data: initiatives } = useFetch<InitiativeOption[]>(open ? '/api/graph/projects?limit=100' : null);
-  // Steward options are the chosen initiative's contributors (their personId is
-  // the graph id the API keys on). Fetched once an initiative is picked.
+  // Steward options: the chosen initiative's contributors (fetched once an
+  // initiative is picked) surfaced first, plus the whole org roster so a
+  // cross-initiative SME who doesn't contribute here is still pickable (RM-5).
   const { data: project } = useFetch<ProjectDetailLite>(
     open && form.initiativeId ? `/api/graph/projects/${encodeURIComponent(form.initiativeId)}` : null,
   );
+  const { data: roster, isLoading: rosterLoading } = useFetch<RosterResponse>(open ? '/api/roster' : null);
 
   useEffect(() => { if (open) { setForm(EMPTY_FORM); setError(null); } }, [open]);
 
@@ -669,6 +716,7 @@ function NewSprintModal({ open, onClose, onCreated }: {
   }
 
   const contributors = project?.contributors ?? [];
+  const rosterPeople = roster?.people ?? [];
 
   return (
     <Modal open={open} onClose={onClose} title="New sprint" maxWidth={520}
@@ -726,21 +774,16 @@ function NewSprintModal({ open, onClose, onCreated }: {
         </div>
 
         <div style={{ display: 'flex', gap: 12 }}>
-          <FormField label="Steward" hint="The SME accountable for the sprint" style={{ flex: 1 }}>
+          <FormField label="Steward" hint="The SME accountable — anyone in the org, not only this initiative's contributors" style={{ flex: 1 }}>
             {({ id }) => (
               <select
                 id={id}
                 style={inputStyle}
                 value={form.stewardPersonId ?? ''}
-                disabled={!form.initiativeId}
                 onChange={(e) => set({ stewardPersonId: e.target.value })}
               >
                 <option value="">Unassigned</option>
-                {contributors.map((c) => (
-                  <option key={c.personId} value={c.personId}>
-                    {c.name}{c.role ? ` · ${c.role}` : ''}
-                  </option>
-                ))}
+                <PeopleSelectOptions contributors={contributors} roster={rosterPeople} loading={rosterLoading} />
               </select>
             )}
           </FormField>
@@ -772,13 +815,16 @@ function NewSprintModal({ open, onClose, onCreated }: {
 
 function GrantsPanel({ sprint, onChanged }: { sprint: Sprint; onChanged: () => void }) {
   const { data, isLoading, error, refresh } = useFetch<{ grants: GrantRow[] }>(grantsUrl(sprint.id));
-  // Grantee options are the initiative's contributors, same source as the
-  // steward picker.
+  // Grantee options: the initiative's contributors first, plus the whole org
+  // roster — same source as the steward picker — so a cross-initiative SME can
+  // be granted an envelope even though they don't contribute here (RM-5).
   const { data: project } = useFetch<ProjectDetailLite>(
     `/api/graph/projects/${encodeURIComponent(sprint.orgProjectId)}`,
   );
+  const { data: roster, isLoading: rosterLoading } = useFetch<RosterResponse>('/api/roster');
   const grants = data?.grants ?? [];
   const contributors = project?.contributors ?? [];
+  const rosterPeople = roster?.people ?? [];
 
   const [adding, setAdding] = useState(false);
   const [grantee, setGrantee] = useState('');
@@ -865,7 +911,7 @@ function GrantsPanel({ sprint, onChanged }: { sprint: Sprint; onChanged: () => v
             {({ id }) => (
               <select id={id} style={inputStyle} value={grantee} onChange={(e) => setGrantee(e.target.value)}>
                 <option value="">Select…</option>
-                {contributors.map((c) => <option key={c.personId} value={c.personId}>{c.name}</option>)}
+                <PeopleSelectOptions contributors={contributors} roster={rosterPeople} loading={rosterLoading} />
               </select>
             )}
           </FormField>
