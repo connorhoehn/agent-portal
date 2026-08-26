@@ -14,7 +14,10 @@ permit (
     // The point of the role: assign computers to do the work.
     OrgIQ::Action::"DispatchAgentRun",
     // Sprints have a steward — the SME accountable for that iteration creates
-    // it and moves work into it. Scoped to their initiatives at the route layer.
+    // it and moves work into it. Cedar grants the capability role-wide; the
+    // route layer (routes/sprints.ts requireInitiativeSteward) then scopes an
+    // SME's writes to initiatives they own or contribute to, so an SME cannot
+    // create/move sprints on an initiative they have nothing to do with.
     OrgIQ::Action::"ManageSprints"
   ],
   resource

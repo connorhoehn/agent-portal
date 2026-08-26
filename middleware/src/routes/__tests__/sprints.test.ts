@@ -34,6 +34,7 @@ jest.mock('../../providers/budgets.js', () => ({ initiativeExists: jest.fn() }))
 jest.mock('../../providers/work-items.js', () => ({ getWorkItem: jest.fn(), updateWorkItem: jest.fn() }));
 
 jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
+jest.mock('../../providers/projects.js', () => ({ getProject: jest.fn() }));
 
 import express, { type Request, type Response, type NextFunction } from 'express';
 import request from 'supertest';
@@ -43,6 +44,7 @@ import { listSprints, createSprint, getSprint, personExists } from '../../provid
 import { initiativeExists } from '../../providers/budgets.js';
 import { getWorkItem, updateWorkItem } from '../../providers/work-items.js';
 import { getUser } from '../../providers/identity.js';
+import { getProject } from '../../providers/projects.js';
 
 const listMock = listSprints as unknown as jest.Mock;
 const createSprintMock = createSprint as unknown as jest.Mock;
@@ -52,6 +54,22 @@ const initiativeExistsMock = initiativeExists as unknown as jest.Mock;
 const getWorkItemMock = getWorkItem as unknown as jest.Mock;
 const updateWorkItemMock = updateWorkItem as unknown as jest.Mock;
 const getUserMock = getUser as unknown as jest.Mock;
+const getProjectMock = getProject as unknown as jest.Mock;
+
+/** A project detail (providers/projects.ts getProject shape) whose owner +
+ *  contributors decide whether an SME may manage its sprints. p-004 (Nora, the
+ *  SME the tests log in as) owns p-observability in the seed, so she stewards
+ *  it; on an initiative she neither owns nor contributes to she is 403'd. */
+function projectOwnedBy(ownerId: string, smeIds: string[] = []) {
+  return {
+    id: 'p-observability', name: 'Observability Platform', status: 'in_progress', createdAt: null,
+    ownerId, ownerName: 'Owner',
+    contributors: [
+      { personId: ownerId, name: 'Owner', title: null, role: 'owner', weight: 1 },
+      ...smeIds.map((id) => ({ personId: id, name: id, title: null, role: 'sme', weight: 0.8 })),
+    ],
+  };
+}
 
 const SPRINT = {
   id: 'spr-obs-s3', orgProjectId: 'p-observability', orgProjectName: 'Observability Platform',
@@ -95,6 +113,10 @@ beforeEach(() => {
   updateWorkItemMock.mockReset();
   getUserMock.mockReset();
   getUserMock.mockResolvedValue({ id: 'u-nora', personId: 'p-004' });
+  getProjectMock.mockReset();
+  // Default: the target initiative is owned by p-004 (the SME under test), so
+  // the ownership gate passes and the existing write assertions still hold.
+  getProjectMock.mockResolvedValue(projectOwnedBy('p-004'));
 });
 
 describe('scope', () => {
@@ -286,6 +308,67 @@ describe('POST /api/sprints', () => {
   });
 });
 
+// ─── Write scoping: an SME writes only on their own initiatives ────────────────
+//
+// M3: ManageSprints is role-wide, but an SME must not create/move sprints on
+// initiatives they neither own nor contribute to. The org-wide roles run the
+// cadence everywhere and bypass.
+
+describe('POST /api/sprints — initiative ownership scoping', () => {
+  it('lets an SME create a sprint on an initiative they own', async () => {
+    getProjectMock.mockResolvedValue(projectOwnedBy('p-004'));
+    const res = await request(buildApp(sme)).post('/api/sprints').send(validCreate);
+    expect(res.status).toBe(201);
+    expect(createSprintMock).toHaveBeenCalled();
+  });
+
+  it('lets an SME create a sprint on an initiative they contribute to', async () => {
+    getProjectMock.mockResolvedValue(projectOwnedBy('p-999', ['p-004']));
+    const res = await request(buildApp(sme)).post('/api/sprints').send(validCreate);
+    expect(res.status).toBe(201);
+    expect(createSprintMock).toHaveBeenCalled();
+  });
+
+  it('403s an SME on an initiative they neither own nor contribute to', async () => {
+    getProjectMock.mockResolvedValue(projectOwnedBy('p-999', ['p-888']));
+    const res = await request(buildApp(sme)).post('/api/sprints').send(validCreate);
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/own or contribute to/);
+    expect(createSprintMock).not.toHaveBeenCalled();
+  });
+
+  it('403s an SME whose account resolves to no person', async () => {
+    // Conservative like resolveActiveGrant, but as an authz gate: unresolvable
+    // → not-owned → 403, never a silent allow.
+    getUserMock.mockResolvedValue({ id: 'u-nora', personId: null });
+    const res = await request(buildApp(sme)).post('/api/sprints').send(validCreate);
+    expect(res.status).toBe(403);
+    expect(createSprintMock).not.toHaveBeenCalled();
+  });
+
+  it('403s an SME when the initiative lookup fails, never a silent allow', async () => {
+    getProjectMock.mockRejectedValue(new Error('aurora down'));
+    const res = await request(buildApp(sme)).post('/api/sprints').send(validCreate);
+    expect(res.status).toBe(403);
+    expect(createSprintMock).not.toHaveBeenCalled();
+  });
+
+  it('lets an org-leader create on any initiative without an ownership lookup', async () => {
+    getProjectMock.mockResolvedValue(projectOwnedBy('p-999', ['p-888']));
+    const res = await request(buildApp(leader)).post('/api/sprints').send(validCreate);
+    expect(res.status).toBe(201);
+    expect(getProjectMock).not.toHaveBeenCalled();
+  });
+
+  it('lets an hr-admin create on an initiative they do not contribute to', async () => {
+    getProjectMock.mockResolvedValue(projectOwnedBy('p-999', ['p-888']));
+    const res = await request(buildApp({ sub: 'u-rachel', role: 'hr-admin', tenant: 'orgiq' }))
+      .post('/api/sprints').send(validCreate);
+    expect(res.status).toBe(201);
+    expect(getProjectMock).not.toHaveBeenCalled();
+  });
+});
+
 // ─── Write: move work items in/out of a sprint ─────────────────────────────────
 
 const SPRINT_OBS = { ...SPRINT, id: 'spr-obs-s3', orgProjectId: 'p-observability' };
@@ -368,5 +451,47 @@ describe('DELETE /api/sprints/:sprintId/items/:itemId', () => {
     const res = await request(buildApp(sme)).delete('/api/sprints/spr-obs-s3/items/wi-k8s-s5');
     expect(res.status).toBe(403);
     expect(updateWorkItemMock).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Item scoping: the initiative comes from the sprint, not the caller ────────
+
+describe('item routes — initiative ownership scoping', () => {
+  beforeEach(() => {
+    getSprintMock.mockResolvedValue(SPRINT_OBS);
+    getWorkItemMock.mockResolvedValue({ ...ITEM });
+    updateWorkItemMock.mockResolvedValue({ ...ITEM, sprintId: 'spr-obs-s3' });
+  });
+
+  it('403s an SME moving work into a sprint on an initiative they do not touch', async () => {
+    getProjectMock.mockResolvedValue(projectOwnedBy('p-999', ['p-888']));
+    const res = await request(buildApp(sme)).patch('/api/sprints/spr-obs-s3/items').send({ workItemId: 'wi-k8s-s5' });
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/own or contribute to/);
+    // Scoped before the work item is even looked up.
+    expect(getWorkItemMock).not.toHaveBeenCalled();
+    expect(updateWorkItemMock).not.toHaveBeenCalled();
+  });
+
+  it('403s an SME removing work from a sprint they do not steward', async () => {
+    getProjectMock.mockResolvedValue(projectOwnedBy('p-999', ['p-888']));
+    getWorkItemMock.mockResolvedValue({ ...ITEM, sprintId: 'spr-obs-s3' });
+    const res = await request(buildApp(sme)).delete('/api/sprints/spr-obs-s3/items/wi-k8s-s5');
+    expect(res.status).toBe(403);
+    expect(updateWorkItemMock).not.toHaveBeenCalled();
+  });
+
+  it('lets an SME who contributes to the sprint\'s initiative move work in', async () => {
+    getProjectMock.mockResolvedValue(projectOwnedBy('p-999', ['p-004']));
+    const res = await request(buildApp(sme)).patch('/api/sprints/spr-obs-s3/items').send({ workItemId: 'wi-k8s-s5' });
+    expect(res.status).toBe(200);
+    expect(updateWorkItemMock).toHaveBeenCalled();
+  });
+
+  it('lets an org-leader move work on any sprint without an ownership lookup', async () => {
+    getProjectMock.mockResolvedValue(projectOwnedBy('p-999', ['p-888']));
+    const res = await request(buildApp(leader)).patch('/api/sprints/spr-obs-s3/items').send({ workItemId: 'wi-k8s-s5' });
+    expect(res.status).toBe(200);
+    expect(getProjectMock).not.toHaveBeenCalled();
   });
 });
