@@ -15,7 +15,7 @@ compute.
 
 | Persona | Role (Cedar) | What they do | Key capability |
 |---|---|---|---|
-| Program operator | `hr-admin` | Runs the platform: bots, identity, policies, the governance queue | `ManageDevbox`, `ManageUsers`, `EditPolicy` |
+| Program operator | `hr-admin` | Runs the platform: bots, identity, policies, the governance queue | `ManageDevbox`, `ManageUsers`, `EditPolicy`, `ManageBudgets` (co-allocates spend with the release manager) |
 | Release manager | `org-leader` | Allocates initiative budgets and grants SMEs sprint envelopes | `ManageBudgets`, `DispatchAgentRun`, `ApproveTransaction` |
 | Initiative owner | `org-leader` or `sme` | Accountable for one initiative end to end ("Run by" on the card) | varies by grant |
 | SME | `sme` | Attached to several initiatives; assigns compute to work inside their envelope | `DispatchAgentRun` |

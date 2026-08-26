@@ -210,10 +210,13 @@ app.use('/api/observability/harness', harnessRouter);
 // Mounted ungated (no session) like approvals/harness.
 app.use('/api/observability/prompt-versions', ...viewObs, promptVersionsRouter);
 // Every observability aggregate below carries the ViewObservability gate AND a
-// tenant scope. Platform telemetry (traces, cost, topology, per-user traffic)
-// is not partitioned by tenant, so it belongs to the orgiq home tenant's
-// privileged roles plus admin — a newsroom editor holding ViewObservability
-// must not read orgiq agent telemetry. Admin bypasses the tenant guard.
+// tenant scope. ViewObservability is an ALL-HANDS read within orgiq (member and
+// sme hold it too, deliberately — a member labels answer quality), so the gate
+// is really the tenant scope: a newsroom editor holding ViewObservability must
+// not read orgiq agent telemetry. Admin bypasses the tenant guard. Note the
+// telemetry is not partitioned by tenant, which is why the tenant scope matters.
+// Mutations that would otherwise ride this read tier (invocation replay,
+// calibration CRUD/runs, memory writes) are gated higher on ManageCanary.
 // (In dev the cookie-less demo session is orgiq and holds every grant, so
 // these render without login; in production a newsroom or anonymous session
 // is denied.)
