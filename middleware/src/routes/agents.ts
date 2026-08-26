@@ -2,12 +2,13 @@ import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import { asyncHandler } from '../lib/async-handler.js';
 import { normalizeRuntimeSessionId } from '../lib/runtime-session.js';
-import { agentStreamMiddleware } from '@connorhoehnslalom/realtime-modules/agent-streaming';
+import { agentStreamMiddleware, type AgentStream } from '@connorhoehnslalom/realtime-modules/agent-streaming';
+import type { Request as ExpressRequest } from 'express';
 import { agentcore, aurora } from '../providers/index.js';
 import { detectIntervention, recordInvocation, snippet } from '../lib/invocations.js';
 import { listEvents, recordTurn, type StoredToolCall } from '../providers/memory.js';
 import { maybeGenerateTitle } from '../lib/session-titles.js';
-import { requireAction, requireTenant } from '../lib/authz.js';
+import { requireAction, requireTenant, isAllowed, resolveSession } from '../lib/authz.js';
 import { annotateToolResult } from '../lib/answer-sources.js';
 
 export const agentsRouter = Router();
@@ -77,7 +78,56 @@ function requireAgentTenant(req: import('express').Request, res: import('express
   next();
 }
 
-agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenant, agentStreamMiddleware(async (req, stream, signal) => {
+// Write/pipeline agents mutate durable state: graph-builder runs the merge_*
+// Aurora upserts, ingestion runs sync_knowledge_base, and scoring runs
+// compute_expertise_scores (UPDATE people SET ...). Search's Cedar capability
+// is enough to READ through the fleet, but DIRECT invocation of a write agent
+// bypasses the supervisor's role guardrail — so it additionally requires the
+// data-plane ManageIngest capability. Read agents (supervisor/search/advisor)
+// and the newsroom agents keep their existing Search + tenant gating: news-*
+// are the newsroom tenant's own tools, authorized by requireAgentTenant.
+//
+// The id is matched on the normalized form because the runtime cache registers
+// several spellings (graph-builder / orgiq-graph-builder / orgiq_graph_builder),
+// mirroring how agentTenant() normalizes.
+const WRITE_AGENT_RE = /(graph[-_]builder|ingestion|scoring)/;
+
+function isWriteAgent(agentId: string): boolean {
+  return WRITE_AGENT_RE.test(agentId.toLowerCase());
+}
+
+// Runs AFTER requireAgentTenant and BEFORE the SSE stream opens, so a blocked
+// caller gets a plain 403 instead of a mid-stream error event.
+async function requireAgentCapability(
+  req: import('express').Request,
+  res: import('express').Response,
+  next: import('express').NextFunction,
+): Promise<void> {
+  const agentId = String(req.params['agentId'] ?? '');
+  if (!isWriteAgent(agentId)) { next(); return; }
+  const session = resolveSession(req);
+  if (!session) {
+    // requireAction('Search') runs first and 401s an anonymous caller, so this
+    // is belt-and-suspenders for a write agent reached without a session.
+    res.status(401).json({ error: 'Unauthenticated' });
+    return;
+  }
+  try {
+    if (await isAllowed(session, 'ManageIngest')) { next(); return; }
+    res.status(403).json({
+      error: 'Forbidden',
+      action: 'ManageIngest',
+      agentId,
+      message: 'this agent performs data writes; you need the ManageIngest capability to invoke it directly',
+    });
+  } catch {
+    // Authorization infrastructure failure (AVP unreachable/throttled) — 503,
+    // matching requireAction's distinction between a DENY and an outage.
+    res.status(503).json({ error: 'authorization unavailable', action: 'ManageIngest' });
+  }
+}
+
+agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenant, requireAgentCapability, agentStreamMiddleware(async (req: ExpressRequest, stream: AgentStream, signal: AbortSignal) => {
   const agentId = String(req.params['agentId'] ?? '');
   const { message, sessionId, actorId, selection } = req.body as {
     message?: string;
@@ -320,5 +370,5 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
 
   stream.runFinished();
 }, {
-  deriveSessionId: (req) => deriveSessionId(req),
+  deriveSessionId: (req: ExpressRequest) => deriveSessionId(req),
 }));

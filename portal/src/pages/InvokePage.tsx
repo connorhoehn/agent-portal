@@ -23,6 +23,7 @@ import {
 import { usePresence, useChat } from '@connorhoehnslalom/realtime-modules/client';
 import { PresenceAvatarGroup } from '../components/shell/PresenceAvatarGroup';
 import { deriveSources, extractSources } from '../components/chat/answerSources';
+import { useCapabilities } from '../lib/capabilities';
 import { SourceChips } from '../components/chat/SourceChips';
 import { summarizeToolCalls } from '../components/chat/toolCallSummary';
 import { coalesceAssistantMessages } from '../components/chat/coalesceMessages';
@@ -96,9 +97,29 @@ interface SessionSummary {
   title?: string;
 }
 
+// Write/pipeline agents mutate durable state (graph-builder → merge_* Aurora
+// upserts, ingestion → sync_knowledge_base, scoring → compute_expertise_scores).
+// The backend gates DIRECT invocation of these on the ManageIngest capability
+// (routes/agents.ts requireAgentCapability); mirror that here so a caller who
+// lacks ManageIngest never sees them as selectable chat targets. Matches the
+// several id spellings the runtime cache registers.
+const WRITE_AGENT_RE = /(graph[-_]builder|ingestion|scoring)/;
+const isWriteAgent = (agentId: string): boolean => WRITE_AGENT_RE.test(agentId.toLowerCase());
+
 function InvokePage() {
   const { roster: peers } = usePresence('invoke');
   const { data: agents } = useFetch<AgentDef[]>('/api/agents');
+  const { can } = useCapabilities();
+
+  // Hide the write agents from the selector unless the caller holds
+  // ManageIngest. While capabilities are still loading, can() is false, so the
+  // conservative default hides them (better than flashing an option the server
+  // will 403). Read + newsroom agents always stay listed.
+  const canIngest = can('ManageIngest');
+  const visibleAgents = useMemo(
+    () => (canIngest ? agents : agents?.filter((a) => !isWriteAgent(a.id))),
+    [agents, canIngest],
+  );
 
   const [selectedId, setSelectedId] = useState('orgiq-supervisor');
   // A history load that FAILED, kept apart from a conversation that is empty.
@@ -295,7 +316,7 @@ function InvokePage() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {/* Agent selector — only shown when multiple agents are available */}
-            {agents && agents.length > 1 && (
+            {visibleAgents && visibleAgents.length > 1 && (
               <select
                 value={selectedId}
                 onChange={e => {
@@ -317,7 +338,7 @@ function InvokePage() {
                   minWidth: 0,
                 }}
               >
-                {agents.map(a => (
+                {visibleAgents.map(a => (
                   <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
               </select>
