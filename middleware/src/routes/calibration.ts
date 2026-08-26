@@ -24,6 +24,7 @@
 //   GET    /runs/:id          run + results + joined case data
 
 import { Router } from 'express';
+import { requireAction } from '../lib/authz.js';
 import { randomUUID } from 'node:crypto';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
@@ -218,7 +219,7 @@ interface UpsertCaseBody {
   notes?: string | null;
 }
 
-calibrationRouter.post('/cases', asyncHandler(async (req, res) => {
+calibrationRouter.post('/cases', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as UpsertCaseBody;
   const agentId = typeof body.agentId === 'string' ? body.agentId.trim() : '';
   const prompt = typeof body.prompt === 'string' ? body.prompt : '';
@@ -259,7 +260,7 @@ calibrationRouter.post('/cases', asyncHandler(async (req, res) => {
 
 // ─── PATCH /cases/:id ───────────────────────────────────────────────────────
 
-calibrationRouter.patch('/cases/:id', asyncHandler(async (req, res) => {
+calibrationRouter.patch('/cases/:id', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
   const body = (req.body ?? {}) as UpsertCaseBody;
   const sets: string[] = [];
@@ -313,7 +314,7 @@ calibrationRouter.patch('/cases/:id', asyncHandler(async (req, res) => {
 
 // ─── DELETE /cases/:id — soft delete ────────────────────────────────────────
 
-calibrationRouter.delete('/cases/:id', asyncHandler(async (req, res) => {
+calibrationRouter.delete('/cases/:id', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
   const rows = await exec(
     `UPDATE observability.calibration_set
@@ -340,7 +341,7 @@ interface CreateRunBody {
   notes?: string | null;
 }
 
-calibrationRouter.post('/runs', asyncHandler(async (req, res) => {
+calibrationRouter.post('/runs', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as CreateRunBody;
   const label = typeof body.label === 'string' && body.label.trim()
     ? body.label.trim()

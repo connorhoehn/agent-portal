@@ -16,6 +16,7 @@
 // the portal never sees a 5xx from this surface.
 
 import { Router } from 'express';
+import { requireAction } from '../lib/authz.js';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { asyncHandler } from '../lib/async-handler.js';
 import { exec } from '../providers/aurora.js';
@@ -241,7 +242,7 @@ memoryRouter.get('/stats', asyncHandler(async (req, res) => {
 // bundle path is preferred (see trace-sink.insertMemoryEvents) but this gives
 // us a safe surface for one-off injection without going through trace-sink.
 
-memoryRouter.post('/events', asyncHandler(async (req, res) => {
+memoryRouter.post('/events', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
 
   const agentId = typeof body['agentId'] === 'string' ? body['agentId'].trim() : '';

@@ -164,7 +164,7 @@ app.use('/api/newsroom', requireTenant('newsroom'), newsroomArticlesRouter);
 // Ingest — reading jobs/storage/crawl status is operational visibility that the
 // Knowledge page surfaces to org-leaders; starting crawls, editing schedules and
 // other mutations still require ManageIngest (hr-admin).
-app.use('/api/ingest', readForRolesElseAction(['org-leader', 'hr-admin'], 'ManageIngest'), ingestRouter);
+app.use('/api/ingest', requireTenant('orgiq'), readForRolesElseAction(['org-leader', 'hr-admin'], 'ManageIngest'), ingestRouter);
 // Connected sources — credentials for Confluence/Jira/GitHub. Gated as an
 // ingestion decision, because that is what connecting a source is.
 app.use('/api/connections', requireAction('ManageIngest'), connectionsRouter);
@@ -182,7 +182,7 @@ app.use('/api/agent-projects', requireTenant('orgiq'), requireSession('ViewAgent
 app.use('/api/sdlc', requireAction('ManageDevbox'), sdlcRouter);
 // Budgets — initiative spend allocations. Gated per-route (reads open to
 // org-leader, writes require ManageBudgets).
-app.use('/api/budgets', budgetsRouter);
+app.use('/api/budgets', requireTenant('orgiq'), budgetsRouter);
 // Sprints — the SME's own cadence (their work, their envelope, their dates).
 // Any signed-in orgiq session may read `scope=mine`; the org-wide `scope=all`
 // carries the same money the ledger gates and is checked inside the router.
@@ -197,7 +197,7 @@ app.use('/api/grants', requireTenant('orgiq'), grantsRouter);
 // governed runs the SDLC surface reviews), and the marketplace's
 // dispatch-work carries the seeded DispatchAgentRun action so org-leaders
 // can authorize work without holding the devbox keys.
-app.use('/api/bots', botsRouter);
+app.use('/api/bots', requireTenant('orgiq'), botsRouter);
 // Approvals are mounted BEFORE the gated observability router so that the
 // agent-facing POST /approvals/request endpoint doesn't require ViewObservability
 // (the agent's identity is captured as `agentId` in the request body instead).

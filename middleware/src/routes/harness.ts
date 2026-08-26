@@ -30,7 +30,7 @@ import { exec } from '../providers/aurora.js';
 import { processTrace, type TraceInput } from '../lib/trace-sink.js';
 import { judgeResponse } from '../lib/judge.js';
 import { executeRun, loadCasesForRun } from '../lib/harness-runner.js';
-import { requireAction, requireSession, requireTenant } from '../lib/authz.js';
+import { requireAction, requireTenant } from '../lib/authz.js';
 
 export const harnessRouter = Router();
 
@@ -357,7 +357,7 @@ harnessRouter.post('/trace', requireTraceAuth, asyncHandler(async (req, res) => 
 
 // ── GET /cases ─────────────────────────────────────────────────────────────
 
-harnessRouter.get('/cases', requireSession('ViewObservability'), asyncHandler(async (req, res) => {
+harnessRouter.get('/cases', requireAction('ViewObservability'), asyncHandler(async (req, res) => {
   const includeInactive = req.query['includeInactive'] === '1'
     || req.query['includeInactive'] === 'true';
   const sql = `
@@ -376,7 +376,7 @@ harnessRouter.get('/cases', requireSession('ViewObservability'), asyncHandler(as
 
 // ── GET /cases/:id ─────────────────────────────────────────────────────────
 
-harnessRouter.get('/cases/:id', requireSession('ViewObservability'), asyncHandler(async (req, res) => {
+harnessRouter.get('/cases/:id', requireAction('ViewObservability'), asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
   const rows = await exec(
     `SELECT test_id, agent_id, template_id, prompt, reference_output,
@@ -639,7 +639,7 @@ harnessRouter.post('/runs/:id/execute', requireAction('ManageCanary'), asyncHand
 
 // ── GET /runs — recent runs ────────────────────────────────────────────────
 
-harnessRouter.get('/runs', requireSession('ViewObservability'), asyncHandler(async (req, res) => {
+harnessRouter.get('/runs', requireAction('ViewObservability'), asyncHandler(async (req, res) => {
   const rawLimit = parseInt((req.query['limit'] as string) ?? '14', 10);
   const limit = Number.isFinite(rawLimit) && rawLimit > 0
     ? Math.min(rawLimit, 100)
@@ -661,7 +661,7 @@ harnessRouter.get('/runs', requireSession('ViewObservability'), asyncHandler(asy
 
 // ── GET /runs/:id — run + joined results ───────────────────────────────────
 
-harnessRouter.get('/runs/:id', requireSession('ViewObservability'), asyncHandler(async (req, res) => {
+harnessRouter.get('/runs/:id', requireAction('ViewObservability'), asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
   const runRows = await exec(
     `SELECT run_id::text AS run_id, label, git_sha, judge_model_id,
@@ -713,7 +713,7 @@ harnessRouter.get('/runs/:id', requireSession('ViewObservability'), asyncHandler
 
 // ── GET /runs/:id/status — live counters ───────────────────────────────────
 
-harnessRouter.get('/runs/:id/status', requireSession('ViewObservability'), asyncHandler(async (req, res) => {
+harnessRouter.get('/runs/:id/status', requireAction('ViewObservability'), asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
   const rows = await exec(
     `SELECT status, total_cases, completed, passed, failed, pass_rate
@@ -944,7 +944,7 @@ interface CoverageRow {
   lastRunAt?: string;
 }
 
-harnessRouter.get('/coverage', requireSession('ViewObservability'), asyncHandler(async (_req, res) => {
+harnessRouter.get('/coverage', requireAction('ViewObservability'), asyncHandler(async (_req, res) => {
   // Count active cases per agent + join the most-recent run's pass numbers.
   // We compute the latest run per agent by looking at when its results last
   // landed in test_results. This is approximate (a run touches multiple
@@ -1163,7 +1163,7 @@ function diffPromptVersions(
   return out;
 }
 
-harnessRouter.get('/runs/:runIdA/compare/:runIdB', requireSession('ViewObservability'), asyncHandler(async (req, res) => {
+harnessRouter.get('/runs/:runIdA/compare/:runIdB', requireAction('ViewObservability'), asyncHandler(async (req, res) => {
   const runIdA = String(req.params['runIdA'] ?? '');
   const runIdB = String(req.params['runIdB'] ?? '');
   if (!runIdA || !runIdB) {
@@ -1382,7 +1382,7 @@ function rowToPromotedVersion(r: Record<string, unknown>): PromotedPromptVersion
   };
 }
 
-harnessRouter.get('/promoted-versions', requireSession('ViewObservability'), asyncHandler(async (_req, res) => {
+harnessRouter.get('/promoted-versions', requireAction('ViewObservability'), asyncHandler(async (_req, res) => {
   const rows = await exec(
     `SELECT prompt_version, agent_id, content, content_sha256,
             registered_at::text AS registered_at,

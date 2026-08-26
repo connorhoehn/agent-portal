@@ -20,6 +20,7 @@
 // detail view — clicking into a test row should still work.
 
 import { Router } from 'express';
+import { requireAction } from '../lib/authz.js';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import {
   BedrockAgentCoreClient,
@@ -623,7 +624,10 @@ function parseAgentResponse(text: string): string {
   return raw;
 }
 
-invocationsRouter.post('/:invocationId/replay', asyncHandler(async (req, res) => {
+// Replay RE-INVOKES the deployed agent (real Bedrock spend + side effects, and
+// can target a write agent), so it must not ride the observability read tier
+// that member/sme hold — that would bypass the ManageIngest direct-invoke gate.
+invocationsRouter.post('/:invocationId/replay', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
   const id = String(req.params['invocationId'] ?? '').trim();
   if (!isUuid(id)) {
     res.status(404).json({ error: 'invocation_not_found', invocationId: id });
