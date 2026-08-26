@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { clearContextChosen } from './contextChoice';
+import { clearTenantScopedCaches } from './tenantCaches';
 
 export type Role = 'member' | 'sme' | 'org-leader' | 'hr-admin' | 'reporter' | 'editor';
 export type SessionRole = Role | 'admin';
@@ -175,6 +176,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     } catch { /* cookie may already be gone — still hard-redirect below */ }
     // Forget the chooser decision so the next login re-drives through /select.
     clearContextChosen();
+    // Scrub tenant/user-scoped caches so a different identity signing in on this
+    // (possibly shared) browser inherits none of the previous session's data.
+    clearTenantScopedCaches();
     // Hard redirect: through the Cognito hosted logout when SSO is on (clears
     // the IdP session too), else to the root so the app remounts signed-out.
     window.location.href = ssoLogoutUrl ?? '/';
@@ -200,6 +204,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const enterContext = useCallback(async (tenant: Tenant, role: string) => {
     await post('/api/session/tenant', { tenant });
     await post('/api/session/role', { role });
+    // Crossing the tenant boundary: drop the previous workspace's cached data
+    // before the new tenant re-drives from its freshly re-minted cookie.
+    clearTenantScopedCaches();
     window.location.assign(TENANT_HOME[tenant] ?? '/');
   }, []);
 
@@ -207,6 +214,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     await post('/api/session/login', { userId });
     // A different identity must make its own chooser decision.
     clearContextChosen();
+    // Same threat as logout: this swaps identity outright, so the incoming user
+    // must not inherit the previous one's tenant/user-scoped caches.
+    clearTenantScopedCaches();
     window.location.assign('/');
   }, []);
 
