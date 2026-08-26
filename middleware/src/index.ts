@@ -75,7 +75,7 @@ app.use(express.json());
 app.use(cookieParser());
 setGrantsResolver(async (id) => {
   const u = await getIdentityUser(id);
-  return u ? { displayName: u.displayName, grants: u.grants } : null;
+  return u ? { displayName: u.displayName, grants: u.grants, epoch: u.epoch } : null;
 });
 app.use(sessionMiddleware());
 

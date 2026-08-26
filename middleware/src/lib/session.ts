@@ -58,6 +58,11 @@ export interface Actor {
   role: Role;
   tenant: Tenant;
   grants: Grants;
+  /** The real identity's session epoch, frozen at masquerade start (an actor
+   * can't bump while impersonating), so masquerade/stop restores the actor at
+   * their current epoch instead of 0 — which would self-invalidate an operator
+   * who had switched roles before impersonating. */
+  epoch?: number;
 }
 
 export interface Session {
@@ -69,6 +74,12 @@ export interface Session {
   /** Present only while masquerading: the real (authenticated) identity. */
   act?: Actor;
   iat: number;
+  /** Session-invalidation generation for this user. A tenant/role switch or an
+   * explicit "sign out other sessions" bumps app_users.session_epoch; the
+   * grants-refresh block rejects any cookie whose epoch is below the current
+   * one, shrinking the stateless-cookie replay window to ≤ GRANTS_REFRESH_S.
+   * Optional for backward-compat with cookies minted before this field. */
+  epoch?: number;
 }
 
 /** Grants used for the cookie-less demo identity and legacy cookies: every role
@@ -115,7 +126,7 @@ export function landingRole(held: readonly string[]): Role {
  * ones when they're actually held. Returns null if the user holds no grants.
  */
 export function mintSession(
-  user: { id: string; displayName?: string },
+  user: { id: string; displayName?: string; epoch?: number },
   grants: Grants,
   prefer?: { tenant?: string; role?: string },
   act?: Actor,
@@ -138,6 +149,7 @@ export function mintSession(
   };
   if (user.displayName) session.name = user.displayName;
   if (act) session.act = act;
+  if (user.epoch !== undefined) session.epoch = user.epoch;
   return session;
 }
 
@@ -261,10 +273,12 @@ export async function verifySession(cookieValue: string): Promise<Session | null
     };
     if (typeof raw['name'] === 'string') session.name = raw['name'];
     if (raw['act'] && typeof raw['act'] === 'object') session.act = raw['act'] as Actor;
+    if (typeof raw['epoch'] === 'number') session.epoch = raw['epoch'];
     // Enforce the invariant even against a stale-but-validly-signed cookie:
     // the active role must be held in the active tenant.
     if (!hasGrant(session.grants, session.tenant, session.role)) {
-      const repaired = mintSession({ id: session.sub, displayName: session.name }, session.grants,
+      const repaired = mintSession(
+        { id: session.sub, displayName: session.name, epoch: session.epoch }, session.grants,
         { tenant: session.tenant }, session.act);
       return repaired;
     }
@@ -347,7 +361,7 @@ const GRANTS_REFRESH_S = parseInt(process.env['GRANTS_REFRESH_S'] ?? '120', 10);
 
 /** Injected by index.ts at boot to avoid a static import cycle
  * (providers/identity imports types from this module). */
-type GrantsResolver = (userId: string) => Promise<{ displayName: string; grants: Grants } | null>;
+type GrantsResolver = (userId: string) => Promise<{ displayName: string; grants: Grants; epoch: number } | null>;
 let grantsResolver: GrantsResolver | null = null;
 export function setGrantsResolver(fn: GrantsResolver): void {
   grantsResolver = fn;
@@ -387,8 +401,21 @@ export function sessionMiddleware() {
               next();
               return;
             }
+            // Epoch check: a tenant/role switch or "sign out other sessions"
+            // bumped this user's epoch. Any cookie minted before that bump is
+            // superseded — treat it exactly like the "user no longer exists"
+            // path (drop the cookie, fall back to anonymous). A cookie minted
+            // before this field existed carries epoch 0, matching a user that
+            // has never bumped.
+            const cookieEpoch = verified.epoch ?? 0;
+            if (cookieEpoch < fresh.epoch) {
+              clearSessionCookie(res);
+              if (demoFallbackAllowed()) req.session = demoSession();
+              next();
+              return;
+            }
             const reminted = mintSession(
-              { id: verified.sub, displayName: fresh.displayName },
+              { id: verified.sub, displayName: fresh.displayName, epoch: fresh.epoch },
               fresh.grants,
               { tenant: verified.tenant, role: verified.role },
               verified.act,

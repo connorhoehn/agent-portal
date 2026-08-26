@@ -12,6 +12,8 @@ import {
   hasGrant,
   permissiveGrants,
   rolesForTenant,
+  sessionMiddleware,
+  setGrantsResolver,
   type Grants,
   type Session,
 } from '../session.js';
@@ -127,6 +129,80 @@ describe('sign/verify round trip', () => {
       grants: { orgiq: ['member'] }, iat: 1,
     };
     expect(await verifySession(await signSession(ancient))).toBeNull();
+  });
+});
+
+describe('session_epoch', () => {
+  it('round-trips the epoch through mint → sign → verify', async () => {
+    const session = mintSession({ id: 'u-e', displayName: 'E', epoch: 7 }, { orgiq: ['member'] })!;
+    expect(session.epoch).toBe(7);
+    const verified = await verifySession(await signSession(session));
+    expect(verified!.epoch).toBe(7);
+  });
+
+  it('omits epoch when the user has none (backward-compat)', async () => {
+    const session = mintSession({ id: 'u-e' }, { orgiq: ['member'] })!;
+    expect('epoch' in session).toBe(false);
+    const verified = await verifySession(await signSession(session));
+    expect(verified!.epoch).toBeUndefined();
+  });
+
+  it('preserves the cookie epoch through the stale-role REPAIR branch', async () => {
+    // Role not held in its tenant → verifySession re-mints; the epoch must survive.
+    const stale: Session = {
+      sub: 'u-x', role: 'hr-admin', tenant: 'newsroom',
+      grants: { newsroom: ['reporter'] }, iat: Math.floor(Date.now() / 1000), epoch: 4,
+    };
+    const verified = await verifySession(await signSession(stale));
+    expect(verified).toMatchObject({ tenant: 'newsroom', role: 'reporter', epoch: 4 });
+  });
+
+  describe('grants-refresh epoch enforcement', () => {
+    // A cookie old enough to trigger the grants-refresh block (age > 120s) but
+    // still within the session TTL.
+    const staleIat = () => Math.floor(Date.now() / 1000) - 200;
+    function fakeReqRes(cookie: string) {
+      const req = { cookies: { 'orgiq.session': cookie } } as unknown as import('express').Request;
+      const res = { cookie: jest.fn(), clearCookie: jest.fn() } as unknown as import('express').Response;
+      return { req, res };
+    }
+
+    it('REJECTS a cookie whose epoch is below the user current epoch', async () => {
+      setGrantsResolver(async () => ({ displayName: 'E', grants: { orgiq: ['member'] }, epoch: 5 }));
+      const cookie = await signSession({
+        sub: 'u-e', role: 'member', tenant: 'orgiq',
+        grants: { orgiq: ['member'] }, iat: staleIat(), epoch: 2,
+      });
+      const { req, res } = fakeReqRes(cookie);
+      await sessionMiddleware()(req, res, () => {});
+      // Superseded → cookie cleared, dropped to the anonymous demo identity.
+      expect((res.clearCookie as jest.Mock)).toHaveBeenCalled();
+      expect(req.session?.sub).toBe('demo-user');
+    });
+
+    it('ACCEPTS a cookie whose epoch matches, re-minting at the current epoch', async () => {
+      setGrantsResolver(async () => ({ displayName: 'E', grants: { orgiq: ['member'] }, epoch: 2 }));
+      const cookie = await signSession({
+        sub: 'u-e', role: 'member', tenant: 'orgiq',
+        grants: { orgiq: ['member'] }, iat: staleIat(), epoch: 2,
+      });
+      const { req, res } = fakeReqRes(cookie);
+      await sessionMiddleware()(req, res, () => {});
+      expect(req.session?.sub).toBe('u-e');
+      expect(req.session?.epoch).toBe(2);
+      expect((res.cookie as jest.Mock)).toHaveBeenCalled();
+    });
+
+    it('treats a pre-epoch cookie (undefined → 0) as valid when the user has never bumped', async () => {
+      setGrantsResolver(async () => ({ displayName: 'E', grants: { orgiq: ['member'] }, epoch: 0 }));
+      const cookie = await signSession({
+        sub: 'u-e', role: 'member', tenant: 'orgiq',
+        grants: { orgiq: ['member'] }, iat: staleIat(),
+      });
+      const { req, res } = fakeReqRes(cookie);
+      await sessionMiddleware()(req, res, () => {});
+      expect(req.session?.sub).toBe('u-e');
+    });
   });
 });
 

@@ -23,8 +23,12 @@ CREATE TABLE IF NOT EXISTS app_users (
   email        TEXT,
   person_id    TEXT REFERENCES people(id) ON DELETE SET NULL,
   external_sub TEXT,                      -- future IdP subject (Cognito etc.); NULL for picker-login users
+  session_epoch INTEGER NOT NULL DEFAULT 0,  -- bumped on tenant/role switch + sign-out-others; cookies below the current epoch are rejected at grants-refresh (≤120s replay window)
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Idempotent add for clusters created before session_epoch existed.
+ALTER TABLE app_users ADD COLUMN IF NOT EXISTS session_epoch INTEGER NOT NULL DEFAULT 0;
 
 CREATE UNIQUE INDEX IF NOT EXISTS app_users_external_sub_idx
   ON app_users (external_sub) WHERE external_sub IS NOT NULL;

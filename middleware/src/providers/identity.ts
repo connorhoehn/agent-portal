@@ -27,6 +27,9 @@ export interface UserInfo {
   email: string | null;
   personId: string | null;
   grants: Grants;
+  /** Session-invalidation generation (app_users.session_epoch), default 0.
+   * Bumped by bumpSessionEpoch on a tenant/role switch or sign-out-others. */
+  epoch: number;
 }
 
 // ── Fallback seed mirror (matches schema/identity_schema.sql) ────────────────
@@ -36,32 +39,34 @@ const FALLBACK_TENANTS: TenantInfo[] = [
   { id: 'newsroom', displayName: 'Newsroom', status: 'ACTIVE' },
 ];
 
+// Mutable epoch: bumpSessionEpoch increments in place so dev:mock exercises the
+// same sign-out-others / switch-invalidation semantics as Aurora.
 const FALLBACK_USERS: UserInfo[] = [
   { id: 'u-operator', displayName: 'Platform Operator', email: 'operator@orgiq.example', personId: null,
-    grants: { orgiq: ['admin'], newsroom: ['admin'] } },
+    grants: { orgiq: ['admin'], newsroom: ['admin'] }, epoch: 0 },
   { id: 'u-theo', displayName: 'Theo Chang', email: 'theo.chang@orgiq.example', personId: 'p-001',
-    grants: { orgiq: ['member'] } },
+    grants: { orgiq: ['member'] }, epoch: 0 },
   { id: 'u-vera', displayName: 'Vera Green', email: 'vera.green@orgiq.example', personId: 'p-002',
-    grants: { orgiq: ['org-leader', 'member'] } },
+    grants: { orgiq: ['org-leader', 'member'] }, epoch: 0 },
   { id: 'u-hr', displayName: 'Priya Desai', email: 'priya.desai@orgiq.example', personId: null,
-    grants: { orgiq: ['hr-admin'] } },
+    grants: { orgiq: ['hr-admin'] }, epoch: 0 },
   { id: 'u-reporter', displayName: 'Marcus Webb', email: 'marcus.webb@newsroom.example', personId: null,
-    grants: { newsroom: ['reporter'] } },
+    grants: { newsroom: ['reporter'] }, epoch: 0 },
   { id: 'u-editor', displayName: 'Elena Ortiz', email: 'elena.ortiz@newsroom.example', personId: null,
-    grants: { newsroom: ['editor', 'reporter'] } },
+    grants: { newsroom: ['editor', 'reporter'] }, epoch: 0 },
   // Program operating model cast — see docs/program-operating-model.md.
   { id: 'u-release', displayName: 'Sienna Garcia', email: 'sienna.garcia@orgiq.example', personId: 'p-005',
-    grants: { orgiq: ['org-leader', 'member'] } },
+    grants: { orgiq: ['org-leader', 'member'] }, epoch: 0 },
   { id: 'u-rachel', displayName: 'Rachel Kowalski', email: 'rachel.kowalski@orgiq.example', personId: 'p-012',
-    grants: { orgiq: ['hr-admin', 'org-leader'] } },
+    grants: { orgiq: ['hr-admin', 'org-leader'] }, epoch: 0 },
   { id: 'u-nora', displayName: 'Nora DaSilva', email: 'nora.dasilva@orgiq.example', personId: 'p-004',
-    grants: { orgiq: ['sme'] } },
+    grants: { orgiq: ['sme'] }, epoch: 0 },
   { id: 'u-eli', displayName: 'Eli Garcia', email: 'eli.garcia@orgiq.example', personId: 'p-011',
-    grants: { orgiq: ['sme'] } },
+    grants: { orgiq: ['sme'] }, epoch: 0 },
   { id: 'u-layla', displayName: 'Layla Hassan', email: 'layla.hassan@orgiq.example', personId: 'p-008',
-    grants: { orgiq: ['sme'] } },
+    grants: { orgiq: ['sme'] }, epoch: 0 },
   { id: 'u-caleb', displayName: 'Caleb Turner', email: 'caleb.turner@orgiq.example', personId: 'p-013',
-    grants: { orgiq: ['sme'] } },
+    grants: { orgiq: ['sme'] }, epoch: 0 },
 ];
 
 // ── RDS Data API helpers (local to this module) ──────────────────────────────
@@ -130,19 +135,20 @@ export async function listUsers(): Promise<UserInfo[]> {
   if (!auroraConfigured()) return FALLBACK_USERS;
   try {
     const users = await exec(
-      `SELECT id, display_name, email, person_id FROM app_users ORDER BY display_name`);
+      `SELECT id, display_name, email, person_id, session_epoch FROM app_users ORDER BY display_name`);
     if (users.length === 0) return FALLBACK_USERS;
     const grants = groupGrants(await exec(
       // tenant_id, role tie-break granted_at so the ordering is total and
       // deterministic — seed rows share a granted_at timestamp, so ordering by
       // it alone left multi-role users' landing role unstable.
       `SELECT user_id, tenant_id, role FROM user_tenant_roles ORDER BY granted_at, tenant_id, role`));
-    return users.map(([id, displayName, email, personId]) => ({
+    return users.map(([id, displayName, email, personId, epoch]) => ({
       id: id as string,
       displayName: displayName as string,
       email: (email as string | null) ?? null,
       personId: (personId as string | null) ?? null,
       grants: grants.get(id as string) ?? {},
+      epoch: (epoch as number | null) ?? 0,
     }));
   } catch {
     return FALLBACK_USERS;
@@ -153,10 +159,10 @@ export async function getUser(userId: string): Promise<UserInfo | null> {
   if (!auroraConfigured()) return FALLBACK_USERS.find(u => u.id === userId) ?? null;
   try {
     const rows = await exec(
-      `SELECT id, display_name, email, person_id FROM app_users WHERE id = :id`,
+      `SELECT id, display_name, email, person_id, session_epoch FROM app_users WHERE id = :id`,
       [str('id', userId)]);
     if (rows.length === 0) return FALLBACK_USERS.find(u => u.id === userId) ?? null;
-    const [id, displayName, email, personId] = rows[0]!;
+    const [id, displayName, email, personId, epoch] = rows[0]!;
     const grantRows = await exec(
       `SELECT user_id, tenant_id, role FROM user_tenant_roles WHERE user_id = :id ORDER BY granted_at, tenant_id, role`,
       [str('id', userId)]);
@@ -166,6 +172,7 @@ export async function getUser(userId: string): Promise<UserInfo | null> {
       email: (email as string | null) ?? null,
       personId: (personId as string | null) ?? null,
       grants: groupGrants(grantRows).get(id as string) ?? {},
+      epoch: (epoch as number | null) ?? 0,
     };
   } catch {
     return FALLBACK_USERS.find(u => u.id === userId) ?? null;
@@ -177,11 +184,11 @@ export async function getUser(userId: string): Promise<UserInfo | null> {
 // external subject (app_users.external_sub), falling back to an email match the
 // first time a user signs in (then linking the sub so later logins are direct).
 
-async function hydrate(id: string, displayName: string, email: string | null, personId: string | null): Promise<UserInfo> {
+async function hydrate(id: string, displayName: string, email: string | null, personId: string | null, epoch = 0): Promise<UserInfo> {
   const grantRows = await exec(
     `SELECT user_id, tenant_id, role FROM user_tenant_roles WHERE user_id = :id ORDER BY granted_at, tenant_id, role`,
     [str('id', id)]);
-  return { id, displayName, email, personId, grants: groupGrants(grantRows).get(id) ?? {} };
+  return { id, displayName, email, personId, grants: groupGrants(grantRows).get(id) ?? {}, epoch };
 }
 
 /** Resolve an OrgIQ user by the IdP subject stored in app_users.external_sub. */
@@ -190,11 +197,11 @@ export async function getUserByExternalSub(sub: string): Promise<UserInfo | null
   if (!auroraConfigured()) return null; // fallback users have no external_sub
   try {
     const rows = await exec(
-      `SELECT id, display_name, email, person_id FROM app_users WHERE external_sub = :sub`,
+      `SELECT id, display_name, email, person_id, session_epoch FROM app_users WHERE external_sub = :sub`,
       [str('sub', sub)]);
     if (rows.length === 0) return null;
-    const [id, displayName, email, personId] = rows[0]!;
-    return hydrate(id as string, displayName as string, (email as string | null) ?? null, (personId as string | null) ?? null);
+    const [id, displayName, email, personId, epoch] = rows[0]!;
+    return hydrate(id as string, displayName as string, (email as string | null) ?? null, (personId as string | null) ?? null, (epoch as number | null) ?? 0);
   } catch {
     return null;
   }
@@ -209,13 +216,13 @@ export async function getUserByEmail(email: string): Promise<UserInfo | null> {
   }
   try {
     const rows = await exec(
-      `SELECT id, display_name, email, person_id FROM app_users WHERE lower(email) = :email`,
+      `SELECT id, display_name, email, person_id, session_epoch FROM app_users WHERE lower(email) = :email`,
       [str('email', needle)]);
     if (rows.length === 0) {
       return FALLBACK_USERS.find(u => (u.email ?? '').toLowerCase() === needle) ?? null;
     }
-    const [id, displayName, mail, personId] = rows[0]!;
-    return hydrate(id as string, displayName as string, (mail as string | null) ?? null, (personId as string | null) ?? null);
+    const [id, displayName, mail, personId, epoch] = rows[0]!;
+    return hydrate(id as string, displayName as string, (mail as string | null) ?? null, (personId as string | null) ?? null, (epoch as number | null) ?? 0);
   } catch {
     return FALLBACK_USERS.find(u => (u.email ?? '').toLowerCase() === needle) ?? null;
   }
@@ -233,6 +240,29 @@ export async function linkExternalSub(userId: string, sub: string): Promise<void
   } catch {
     // non-fatal — see doc comment
   }
+}
+
+/**
+ * Bump a user's session_epoch, invalidating every previously-minted cookie for
+ * them at the next grants-refresh (≤ GRANTS_REFRESH_S). Returns the new epoch so
+ * the caller can re-issue the surviving cookie at the current generation.
+ *
+ * Mock path (Aurora unconfigured): increments the in-memory epoch so dev:mock
+ * exercises the same invalidation. If the user isn't known even in the mock,
+ * returns a best-effort 1 (a bump from the implicit epoch 0) rather than
+ * throwing — matching linkExternalSub's swallow-when-unconfigured stance so a
+ * switch never hard-fails on the epoch write.
+ */
+export async function bumpSessionEpoch(userId: string): Promise<number> {
+  if (!auroraConfigured()) {
+    const u = FALLBACK_USERS.find(x => x.id === userId);
+    if (u) return (u.epoch = (u.epoch ?? 0) + 1);
+    return 1;
+  }
+  const rows = await exec(
+    `UPDATE app_users SET session_epoch = session_epoch + 1 WHERE id = :id RETURNING session_epoch`,
+    [str('id', userId)]);
+  return (rows[0]?.[0] as number | undefined) ?? 1;
 }
 
 // ── Provisioning (admin UI) ──────────────────────────────────────────────────

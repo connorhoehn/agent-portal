@@ -27,7 +27,7 @@ import { eventFromSession, logAuthz } from '../lib/audit.js';
 import { rateLimit } from '../lib/rate-limit.js';
 import { cognitoEnabled } from '../lib/oidc.js';
 import { demoModeEnabled, ssoAvailable } from '../lib/session.js';
-import { listUsers, getUser } from '../providers/identity.js';
+import { listUsers, getUser, bumpSessionEpoch } from '../providers/identity.js';
 
 export const sessionRouter = Router();
 
@@ -52,6 +52,24 @@ function publicView(session: Session) {
 async function issue(res: import('express').Response, session: Session) {
   setSessionCookie(res, await signSession(session));
   res.json(publicView(session));
+}
+
+/**
+ * The epoch to stamp on a session-switch's re-minted cookie. A real (non-
+ * masquerade) switch bumps app_users.session_epoch, which invalidates every
+ * OTHER cookie this user holds at the next grants-refresh. Masquerade must NOT
+ * bump: an operator switching tenant/role inside an impersonation must not kill
+ * the impersonated user's real sessions. A switch must never hard-fail on the
+ * epoch write, so an Aurora blip falls back to the cookie's current epoch.
+ */
+async function nextEpochForSwitch(session: Session): Promise<number | undefined> {
+  if (session.act) return session.epoch;
+  try {
+    return await bumpSessionEpoch(session.sub);
+  } catch (err) {
+    console.warn(`[session] epoch bump failed for ${session.sub}, keeping current epoch: ${(err as Error).message}`);
+    return session.epoch;
+  }
 }
 
 /** The caller's session, or the demo fallback while it's still allowed. Null
@@ -133,7 +151,9 @@ sessionRouter.post('/login', loginLimit, asyncHandler(async (req, res) => {
   if (!userId) { res.status(400).json({ error: 'userId is required' }); return; }
   const user = await getUser(userId);
   if (!user) { res.status(404).json({ error: `unknown user ${userId}` }); return; }
-  const session = mintSession({ id: user.id, displayName: user.displayName }, user.grants);
+  // Mint at the user's CURRENT epoch, not 0 — a user who has ever switched has
+  // epoch > 0, and a fresh login below it would be rejected at grants-refresh.
+  const session = mintSession({ id: user.id, displayName: user.displayName, epoch: user.epoch }, user.grants);
   if (!session) { res.status(403).json({ error: `${userId} holds no tenant grants` }); return; }
   logAuthz(eventFromSession(session, 'Login', 'ALLOW', { path: '/api/session/login' }));
   // Defense in depth: drop any prior identity's cookie before minting the new
@@ -157,7 +177,8 @@ sessionRouter.post('/role', switchLimit, asyncHandler(async (req, res) => {
     });
     return;
   }
-  await issue(res, { ...session, role: role as Role, iat: Math.floor(Date.now() / 1000) });
+  const epoch = await nextEpochForSwitch(session);
+  await issue(res, { ...session, role: role as Role, iat: Math.floor(Date.now() / 1000), epoch });
 }));
 
 sessionRouter.post('/tenant', switchLimit, asyncHandler(async (req, res) => {
@@ -182,9 +203,28 @@ sessionRouter.post('/tenant', switchLimit, asyncHandler(async (req, res) => {
   const role = held.includes(session.role)
     ? session.role
     : (held.find(r => r !== ADMIN_ROLE) ?? held[0]!) as Role;
+  const epoch = await nextEpochForSwitch(session);
   await issue(res, {
-    ...session, tenant: tenant as Tenant, role, iat: Math.floor(Date.now() / 1000),
+    ...session, tenant: tenant as Tenant, role, iat: Math.floor(Date.now() / 1000), epoch,
   });
+}));
+
+// "Sign out my other sessions": bump this user's epoch so every OTHER cookie
+// they hold is rejected at its next grants-refresh, then re-issue THIS cookie at
+// the new epoch so the caller survives. The bound is ≤ GRANTS_REFRESH_S (120s):
+// other sessions only re-check the epoch when their cached grants next refresh.
+// Refused while masquerading — an operator can't sign out the impersonated
+// user's real sessions from inside an impersonation.
+sessionRouter.post('/revoke-others', switchLimit, asyncHandler(async (req, res) => {
+  const session = sessionOrNull(req);
+  if (!session) { unauthenticated(res); return; }
+  if (session.act) {
+    res.status(409).json({ error: 'cannot revoke other sessions while masquerading — stop first' });
+    return;
+  }
+  const epoch = await bumpSessionEpoch(session.sub);
+  logAuthz(eventFromSession(session, 'RevokeOtherSessions', 'ALLOW', { path: req.path }));
+  await issue(res, { ...session, iat: Math.floor(Date.now() / 1000), epoch });
 }));
 
 // Masquerade: adopt another user's identity + grants, keeping the real
@@ -218,7 +258,10 @@ sessionRouter.post('/masquerade', loginLimit, asyncHandler(async (req, res) => {
   const target = await getUser(userId);
   if (!target) { res.status(404).json({ error: `unknown user ${userId}` }); return; }
   const masqueraded = mintSession(
-    { id: target.id, displayName: target.displayName },
+    // The impersonated session carries the TARGET's epoch — a target who has
+    // switched has epoch > 0, and a masquerade cookie below it would be
+    // rejected at grants-refresh.
+    { id: target.id, displayName: target.displayName, epoch: target.epoch },
     target.grants,
     { tenant: session.tenant },
     {
@@ -227,6 +270,8 @@ sessionRouter.post('/masquerade', loginLimit, asyncHandler(async (req, res) => {
       role: session.role,
       tenant: session.tenant,
       grants: session.grants,
+      // Freeze the operator's epoch so masquerade/stop restores it, not 0.
+      ...(session.epoch !== undefined ? { epoch: session.epoch } : {}),
     },
   );
   if (!masqueraded) { res.status(403).json({ error: `${userId} holds no tenant grants` }); return; }
@@ -243,6 +288,8 @@ sessionRouter.post('/masquerade/stop', asyncHandler(async (req, res) => {
     tenant: session.act.tenant,
     grants: session.act.grants,
     iat: Math.floor(Date.now() / 1000),
+    // Restore the operator at their frozen epoch, not 0.
+    ...(session.act.epoch !== undefined ? { epoch: session.act.epoch } : {}),
   };
   logAuthz(eventFromSession(restored, 'MasqueradeStop', 'ALLOW', { path: req.path }));
   await issue(res, restored);
