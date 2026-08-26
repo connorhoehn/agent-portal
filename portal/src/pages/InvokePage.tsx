@@ -27,6 +27,7 @@ import { useCapabilities } from '../lib/capabilities';
 import { SourceChips } from '../components/chat/SourceChips';
 import { summarizeToolCalls } from '../components/chat/toolCallSummary';
 import { coalesceAssistantMessages } from '../components/chat/coalesceMessages';
+import { FeedbackControl } from '../components/chat/FeedbackControl';
 
 // Feature flag: set VITE_ORGIQ_CHAT_ENABLED=true to show the session chat sidebar.
 // We avoid import.meta.env typing concerns (no vite-env.d.ts in this repo) by
@@ -79,6 +80,18 @@ function renderMessageContent(content: string, streaming: boolean): ReactNode {
       })}
     </>
   );
+}
+
+// The AG-UI streaming path (useAgentStream) does not currently thread the
+// agent's real observability invocation id (ctx.invocation_id — the id
+// observability.invocation_traces rows, and therefore /feedback, key on) onto
+// a Message. RUN_STARTED.runId is a different, middleware-minted id the hook
+// doesn't even expose. Reading `invocationId` off the message defensively
+// here means FeedbackControl lights up for free the moment a future event
+// carries the real id — see FeedbackControl.tsx for the full trace.
+function answerInvocationId(msg: unknown): string | undefined {
+  const id = (msg as { invocationId?: unknown } | null)?.invocationId;
+  return typeof id === 'string' && id ? id : undefined;
 }
 
 interface AgentDef {
@@ -497,6 +510,9 @@ function InvokePage() {
                   </div>
                 )}
                 <SourceChips sources={sources} {...(provenance ? { provenance } : {})} />
+                {msg.role === 'assistant' && (
+                  <FeedbackControl invocationId={answerInvocationId(msg)} />
+                )}
               </div>
             );
           })}
