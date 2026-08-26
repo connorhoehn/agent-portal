@@ -66,6 +66,14 @@ function modelLabel(id: string): string {
   return DEVBOX_MODELS.find((m) => m.id === id)?.label ?? id;
 }
 
+/** Opt-in bot-fire allocation brake, read defensively: the field is carried on
+ *  the wire (providers/bots.ts) but the shared Bot type may predate it, and a
+ *  bot from a cluster without the column reports it absent — either way the
+ *  brake is off unless it is explicitly true. */
+function botEnforceAllocation(b: Bot): boolean {
+  return (b as { enforceAllocation?: boolean }).enforceAllocation === true;
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function BotDetailPage() {
@@ -106,6 +114,7 @@ export default function BotDetailPage() {
   const [gPerDay, setGPerDay] = useState('');
   const [gMaxRuns, setGMaxRuns] = useState(4);
   const [gReview, setGReview] = useState(true);
+  const [gEnforceAlloc, setGEnforceAlloc] = useState(false);
 
   // Mission edit
   const [editMission, setEditMission] = useState(false);
@@ -196,6 +205,7 @@ export default function BotDetailPage() {
     setGPerDay(bot.budgetPerDayUsd != null ? String(bot.budgetPerDayUsd) : '');
     setGMaxRuns(bot.maxRunsPerDay);
     setGReview(bot.requiresReview);
+    setGEnforceAlloc(botEnforceAllocation(bot));
     setEditGuards(true);
   }
 
@@ -207,6 +217,7 @@ export default function BotDetailPage() {
       budgetPerDayUsd: gPerDay.trim() === '' ? null : Number(gPerDay),
       maxRunsPerDay: gMaxRuns,
       requiresReview: gReview,
+      enforceAllocation: gEnforceAlloc,
     });
     setBusy(null);
     if (ok) setEditGuards(false);
@@ -403,6 +414,21 @@ export default function BotDetailPage() {
                 <span className="w-32 shrink-0">Requires review</span>
                 <input type="checkbox" checked={gReview} onChange={(e) => setGReview(e.target.checked)} />
               </label>
+              <label className="flex items-start gap-2 text-[12px] text-text-secondary cursor-pointer select-none">
+                <span className="w-32 shrink-0 pt-0.5">Enforce initiative allocation</span>
+                <span className="flex flex-col gap-1">
+                  <input
+                    type="checkbox"
+                    className="self-start"
+                    checked={gEnforceAlloc}
+                    onChange={(e) => setGEnforceAlloc(e.target.checked)}
+                  />
+                  <span className="text-[11px] text-text-tertiary leading-snug">
+                    A cron fire that would push this initiative past its monthly allocation is skipped and retried
+                    next cycle. Off by default — a bot is the maintenance floor.
+                  </span>
+                </span>
+              </label>
               <div className="flex justify-end">
                 <button
                   onClick={() => void saveGuards()}
@@ -434,6 +460,12 @@ export default function BotDetailPage() {
               <div className="px-3.5 py-2 flex items-center gap-2">
                 <span className="text-text-tertiary w-32 shrink-0">Requires review</span>
                 <span className="text-text-primary">{bot.requiresReview ? 'yes' : 'no'}</span>
+              </div>
+              <div className="px-3.5 py-2 flex items-center gap-2">
+                <span className="text-text-tertiary w-32 shrink-0">Enforce allocation</span>
+                <span className="text-text-primary" title="When on, a cron fire that would push this initiative past its monthly allocation is skipped and retried next cycle.">
+                  {botEnforceAllocation(bot) ? 'on — cron fires braked by allocation' : 'off (bot spend is the maintenance floor)'}
+                </span>
               </div>
               <div className="px-3.5 py-2.5">
                 <div className="text-[11px] text-text-tertiary mb-1">

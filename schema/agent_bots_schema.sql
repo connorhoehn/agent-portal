@@ -43,6 +43,17 @@ CREATE TABLE IF NOT EXISTS bots (
   max_runs_per_day    INTEGER     NOT NULL DEFAULT 4,
   requires_review     BOOLEAN     NOT NULL DEFAULT TRUE,
 
+  -- Opt-in initiative-allocation brake, OFF by default. A cron bot IS the
+  -- maintenance floor an initiative's allocation is read against
+  -- (v_initiative_maintenance_30d), so braking bot spend against that
+  -- allocation is deliberately not the default. When an operator turns this on
+  -- for a specific bot, a cron firing whose p75 projection would push the
+  -- initiative past its remaining monthly allocation records a *skipped*
+  -- bot_run and does not dispatch (decideBotFireAllocation, lib/bot-runner.ts);
+  -- the next cycle re-evaluates cleanly once the allocation resets. Never a
+  -- self-pause — that would strand the rest of the period's maintenance.
+  enforce_allocation  BOOLEAN     NOT NULL DEFAULT FALSE,
+
   -- Last PR number seen, for pr_watch bots (the poller is a later phase; the
   -- column exists now so stored bots survive that phase landing).
   pr_watermark        TEXT,
@@ -94,3 +105,8 @@ ALTER TABLE bot_runs ALTER COLUMN bot_id DROP NOT NULL;
 ALTER TABLE agent_project_runs    ADD COLUMN IF NOT EXISTS work_item_id TEXT;
 ALTER TABLE agent_change_requests ADD COLUMN IF NOT EXISTS work_item_id TEXT;
 ALTER TABLE agent_jobs            ADD COLUMN IF NOT EXISTS bot_id UUID;
+
+-- Opt-in bot-fire allocation brake, for clusters that created `bots` before
+-- this column existed. Idempotent, and safe on a live table: the default is
+-- FALSE, so every existing bot keeps its current unbraked behaviour.
+ALTER TABLE bots ADD COLUMN IF NOT EXISTS enforce_allocation BOOLEAN NOT NULL DEFAULT FALSE;

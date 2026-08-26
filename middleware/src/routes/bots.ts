@@ -476,7 +476,8 @@ botsRouter.patch('/:id', manageGate, asyncHandler(async (req, res) => {
     patch.trigger = body.trigger;
   }
   for (const key of ['cronExpr', 'agentProjectId', 'orgProjectId', 'enabled',
-    'budgetPerRunUsd', 'budgetPerDayUsd', 'maxRunsPerDay', 'requiresReview'] as const) {
+    'budgetPerRunUsd', 'budgetPerDayUsd', 'maxRunsPerDay', 'requiresReview',
+    'enforceAllocation'] as const) {
     if (body[key] !== undefined) (patch as Record<string, unknown>)[key] = body[key];
   }
   // Validate the shape the bot will have after the patch, not the patch alone —

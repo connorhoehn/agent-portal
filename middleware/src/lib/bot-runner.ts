@@ -21,14 +21,14 @@ import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import {
   getBot, createBotRun, finalizeBotRun, setPausedReason, markBotRan, countRunningRuns,
-  dispatchedSpendInWindow,
-  type BotRun,
+  dispatchedSpendInWindow, runCostSamples,
+  type BotRun, type Bot,
 } from '../providers/bots.js';
 // Read-only imports. providers/budgets.ts owns the envelope's ledger shape and
 // is not edited from here — the brake consumes listGrants exactly as the
 // Budgets page does, so the number an SME is stopped by and the number they see
 // come from one query.
-import { listGrants } from '../providers/budgets.js';
+import { listGrants, getBudget } from '../providers/budgets.js';
 import { getUser } from '../providers/identity.js';
 import {
   getAgentProject, listAgentProjects, buildCloneCommand, markCloned, type AgentProject,
@@ -41,6 +41,7 @@ import { resolveDevboxArn, devboxDataClient } from './devbox-arn.js';
 import { registerBox, getBoxBySession } from './devbox-fleet.js';
 import { normalizeRuntimeSessionId } from './runtime-session.js';
 import type { ForecastConfidence } from './bot-estimate.js';
+import { selectDispatchForecast, type ForecastSamples } from './marketplace-estimate.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
@@ -723,6 +724,41 @@ async function ensureWorkspace(project: AgentProject): Promise<
   return { ok: true, sessionId, boxId: box.id };
 }
 
+/**
+ * The initiative a bot spends against, for the opt-in allocation brake: an
+ * initiative-target bot names it directly (org_project_id); a repo-target bot
+ * inherits it from the codebase it maintains (agent_projects.org_project_id).
+ * Null when neither resolves — an untargeted or unlinked bot has no allocation
+ * to be braked by, which the brake reads as "unbudgeted", never "zero".
+ */
+async function resolveBotInitiativeId(bot: Bot): Promise<string | null> {
+  if (bot.orgProjectId) return bot.orgProjectId;
+  if (bot.agentProjectId) {
+    const project = await getAgentProject(bot.agentProjectId);
+    return project?.orgProjectId ?? null;
+  }
+  return null;
+}
+
+/**
+ * The pessimistic (p75) projection of this firing's cost, through the SAME
+ * forecast selector the marketplace money gates use (selectDispatchForecast) —
+ * so the number that brakes a bot fire and the number that brakes a hand
+ * dispatch come from one chain. A bot carries no story points, so this is the
+ * run-level forecast (scoped to the bot's repo when it has one, else
+ * model-wide), falling back to the model's static prior when there is no
+ * history yet.
+ */
+async function botFireProjectionP75(model: string, agentProjectId: string | null): Promise<number> {
+  const samples: ForecastSamples = {
+    perPointRepo: null,
+    perPointModel: null,
+    runRepo: agentProjectId ? await runCostSamples(model, agentProjectId) : null,
+    runModel: await runCostSamples(model, null),
+  };
+  return selectDispatchForecast(model, null, samples).estimate.costUsdP75;
+}
+
 /** Dispatch one run of a bot. The single entry point for every trigger. */
 export async function fireBot(botId: string, opts: {
   trigger: 'manual' | 'cron' | 'pr_watch';
@@ -747,6 +783,37 @@ export async function fireBot(botId: string, opts: {
       outcome: { reason: decision.reason },
     });
     return { ok: false, reason: decision.reason, ...(run ? { run } : {}) };
+  }
+
+  // The opt-in bot-fire allocation brake — CRON only, OFF by default. When a
+  // bot has NOT opted in (bot.enforceAllocation false, the default), this whole
+  // block is skipped: no budget read, no forecast, no run row — a pure no-op
+  // that preserves the documented design where a cron bot's spend is the
+  // maintenance floor an allocation is read against. When an operator opts a bot
+  // in, a cron firing whose p75 projection would push the initiative past its
+  // remaining monthly allocation records a *skipped* bot_run (the same visible
+  // brake the run cap uses — never a self-pause, which would strand the rest of
+  // the period's maintenance) and does not dispatch; the next cycle re-evaluates
+  // cleanly once the allocation resets. Hand-driven fires (manual/pr_watch) are
+  // untouched — this gates only scheduled maintenance the operator chose to cap.
+  if (opts.trigger === 'cron' && bot.enforceAllocation) {
+    const orgProjectId = await resolveBotInitiativeId(bot);
+    const budget = orgProjectId ? await getBudget(orgProjectId) : null;
+    const projectedCostUsd = await botFireProjectionP75(bot.model, bot.agentProjectId);
+    const verdict = decideBotFireAllocation({
+      enforceAllocation: true,
+      allocatedUsd: budget?.allocatedUsd ?? null,
+      spentUsd: budget?.spentThisPeriodUsd ?? 0,
+      projectedCostUsd,
+    });
+    if (verdict.kind === 'skip') {
+      const run = await createBotRun({
+        botId: bot.id, trigger: opts.trigger, status: 'skipped',
+        dispatchedBy: opts.dispatchedBy ?? null,
+        outcome: { reason: verdict.reason },
+      });
+      return { ok: false, reason: verdict.reason, ...(run ? { run } : {}) };
+    }
   }
 
   // The global ceiling, after the bot's own brakes: a capped or paused bot

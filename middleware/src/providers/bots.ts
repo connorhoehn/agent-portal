@@ -61,6 +61,11 @@ export interface Bot {
   budgetPerDayUsd: number | null;
   maxRunsPerDay: number;
   requiresReview: boolean;
+  /** Opt-in initiative-allocation brake, OFF by default. When true, a CRON
+   *  firing whose p75 projection would push the initiative past its remaining
+   *  monthly allocation is skipped (decideBotFireAllocation). False preserves
+   *  the documented design where a bot's spend is the maintenance floor. */
+  enforceAllocation: boolean;
   createdBy: string | null;
   createdAt: string;
   lastRunAt: string | null;
@@ -109,6 +114,9 @@ function rowToBot(r: Record<string, unknown>): Bot {
     // default of 4 applies only when the column itself is NULL.
     maxRunsPerDay: r['max_runs_per_day'] == null ? 4 : toNum(r['max_runs_per_day']),
     requiresReview: toBool(r['requires_review']),
+    // Absent on a pre-migration cluster (SELECT * has no such key) → false, the
+    // column's own default, so the brake stays off until it is really set.
+    enforceAllocation: toBool(r['enforce_allocation']),
     createdBy: r['created_by'] ? toStr(r['created_by']) : null,
     createdAt: toStr(r['created_at']),
     lastRunAt: r['last_run_at'] ? toStr(r['last_run_at']) : null,
@@ -280,16 +288,18 @@ export async function createBot(input: {
   name: string; template: BotTemplate; prompt: string; model: string; trigger: BotTrigger;
   cronExpr?: string | null; agentProjectId?: string | null; orgProjectId?: string | null;
   enabled?: boolean; budgetPerRunUsd?: number | null; budgetPerDayUsd?: number | null;
-  maxRunsPerDay?: number; requiresReview?: boolean; createdBy?: string | null;
+  maxRunsPerDay?: number; requiresReview?: boolean; enforceAllocation?: boolean;
+  createdBy?: string | null;
 }): Promise<Bot | null> {
   if (config.mock.aurora) return null;
   const rows = await exec(
     `INSERT INTO bots (name, template, prompt_template, model, trigger, cron_expr,
                        agent_project_id, org_project_id, enabled, budget_per_run_usd,
-                       budget_per_day_usd, max_runs_per_day, requires_review, created_by)
+                       budget_per_day_usd, max_runs_per_day, requires_review,
+                       enforce_allocation, created_by)
      VALUES (:name, :template, :prompt, :model, :trigger, :cron,
              :agent_project::uuid, :org_project, :enabled, :budget_run,
-             :budget_day, :max_runs, :review, :by)
+             :budget_day, :max_runs, :review, :enforce_alloc, :by)
      RETURNING id`,
     [
       s('name', input.name), s('template', input.template), s('prompt', input.prompt),
@@ -298,6 +308,8 @@ export async function createBot(input: {
       bool('enabled', input.enabled !== false),
       num('budget_run', input.budgetPerRunUsd ?? null), num('budget_day', input.budgetPerDayUsd ?? null),
       int('max_runs', input.maxRunsPerDay ?? 4), bool('review', input.requiresReview !== false),
+      // Default-off unless explicitly opted in — matches the column default.
+      bool('enforce_alloc', input.enforceAllocation === true),
       maybe('by', input.createdBy ?? null),
     ],
   );
@@ -311,7 +323,7 @@ export interface BotPatch {
   name?: string; template?: BotTemplate; prompt?: string; model?: string; trigger?: BotTrigger;
   cronExpr?: string | null; agentProjectId?: string | null; orgProjectId?: string | null;
   enabled?: boolean; budgetPerRunUsd?: number | null; budgetPerDayUsd?: number | null;
-  maxRunsPerDay?: number; requiresReview?: boolean;
+  maxRunsPerDay?: number; requiresReview?: boolean; enforceAllocation?: boolean;
 }
 
 export async function updateBot(id: string, patch: BotPatch): Promise<Bot | null> {
@@ -336,6 +348,7 @@ export async function updateBot(id: string, patch: BotPatch): Promise<Bot | null
   if (patch.budgetPerDayUsd !== undefined) set('budget_per_day_usd = :bday', num('bday', patch.budgetPerDayUsd));
   if (patch.maxRunsPerDay !== undefined) set('max_runs_per_day = :mruns', int('mruns', patch.maxRunsPerDay));
   if (patch.requiresReview !== undefined) set('requires_review = :review', bool('review', patch.requiresReview));
+  if (patch.enforceAllocation !== undefined) set('enforce_allocation = :enfalloc', bool('enfalloc', patch.enforceAllocation));
 
   if (sets.length > 0) {
     const rows = await exec(

@@ -9,11 +9,38 @@
 jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn() }));
 jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', mock: { aurora: false } } }));
 
+// fireBot's wiring tests drive the DB-touching edges through mocks; the rest of
+// each provider stays real (requireActual) so no other loaded module loses an
+// export it imports at load time. Only the functions the fire path reaches are
+// overridden.
+jest.mock('../../providers/bots.js', () => ({
+  ...jest.requireActual('../../providers/bots.js'),
+  getBot: jest.fn(),
+  createBotRun: jest.fn(),
+  markBotRan: jest.fn(),
+  countRunningRuns: jest.fn(),
+  runCostSamples: jest.fn(),
+}));
+jest.mock('../../providers/budgets.js', () => ({
+  ...jest.requireActual('../../providers/budgets.js'),
+  getBudget: jest.fn(),
+}));
+jest.mock('../../providers/agent-jobs.js', () => ({
+  ...jest.requireActual('../../providers/agent-jobs.js'),
+  enqueueJob: jest.fn(),
+}));
+
 import {
   decideFire, renderPrompt, decideConcurrency, botMaxConcurrent, decideRunBudget,
   decideAllocation, decideEnvelope, decideBotFireAllocation, decideGrantScopedDispatch,
+  fireBot,
   type FireGuardInput, type EnvelopeState,
 } from '../bot-runner.js';
+import {
+  getBot, createBotRun, markBotRan, countRunningRuns, runCostSamples, type Bot,
+} from '../../providers/bots.js';
+import { getBudget } from '../../providers/budgets.js';
+import { enqueueJob } from '../../providers/agent-jobs.js';
 
 function bot(over: Partial<FireGuardInput> = {}): FireGuardInput {
   return {
@@ -563,5 +590,113 @@ describe('renderPrompt', () => {
     expect(p).toContain('Hunt tech debt.');
     expect(p).toContain('do not run git commit');
     expect(p).toContain('UNCOMMITTED');
+  });
+});
+
+// ─── fireBot: the opt-in allocation brake, wired ─────────────────────────────
+//
+// The pure decideBotFireAllocation is proven above; these pin the WIRING inside
+// fireBot: default-off is a genuine no-op (no budget read, no forecast, fires
+// normally), and when a bot opts in a cron firing over its initiative's
+// remaining allocation records a *skipped* bot_run (the run cap's path, reused —
+// not a new terminal state) and does not enqueue. An initiative-target bot is
+// used throughout so the fire path is markBotRan → enqueueJob → createBotRun,
+// with no devbox workspace to stand up.
+
+const mGetBot = getBot as jest.Mock;
+const mCreateBotRun = createBotRun as jest.Mock;
+const mMarkBotRan = markBotRan as jest.Mock;
+const mCountRunning = countRunningRuns as jest.Mock;
+const mRunSamples = runCostSamples as jest.Mock;
+const mGetBudget = getBudget as jest.Mock;
+const mEnqueueJob = enqueueJob as jest.Mock;
+
+/** A fireable initiative-target bot; `sonnet`'s static prior (no history) puts
+ *  the p75 projection at $1.50, so a test picks whether it fits by the budget. */
+function fireableBot(over: Partial<Bot> = {}): Bot {
+  return {
+    id: 'b-1', name: 'Dep bumps', template: 'story', prompt: 'Bump deps.',
+    agentProjectId: null, agentProjectRepo: null,
+    orgProjectId: 'p-observability', orgProjectName: 'Observability Platform',
+    model: 'sonnet', trigger: 'cron', cronExpr: '0 6 * * *', enabled: true,
+    budgetPerRunUsd: null, budgetPerDayUsd: null, maxRunsPerDay: 4, requiresReview: true,
+    enforceAllocation: false, createdBy: null, createdAt: '2026-08-01T00:00:00Z',
+    lastRunAt: null, pausedReason: null, todaySpendUsd: 0, todayRunCount: 0,
+    ...over,
+  };
+}
+
+describe('fireBot — opt-in allocation brake', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mCountRunning.mockResolvedValue(0);
+    mMarkBotRan.mockResolvedValue(undefined);
+    mRunSamples.mockResolvedValue(null); // no history → the model's static prior
+    mEnqueueJob.mockResolvedValue({ id: 'job-1' });
+    mCreateBotRun.mockResolvedValue({ id: 'run-1' });
+  });
+
+  it('default-off is a pure no-op — no budget read, no forecast, fires normally', async () => {
+    mGetBot.mockResolvedValue(fireableBot({ enforceAllocation: false }));
+
+    const res = await fireBot('b-1', { trigger: 'cron' });
+
+    expect(res.ok).toBe(true);
+    // The brake never ran: it read neither the allocation nor a forecast.
+    expect(mGetBudget).not.toHaveBeenCalled();
+    expect(mRunSamples).not.toHaveBeenCalled();
+    // And the firing dispatched for real (queued a job), not a skipped row.
+    expect(mEnqueueJob).toHaveBeenCalledTimes(1);
+    expect(mCreateBotRun).toHaveBeenCalledWith(expect.objectContaining({ jobId: 'job-1' }));
+    expect(mCreateBotRun).not.toHaveBeenCalledWith(expect.objectContaining({ status: 'skipped' }));
+  });
+
+  it('opted-in + projection over the remainder records a skipped run and does NOT dispatch', async () => {
+    mGetBot.mockResolvedValue(fireableBot({ enforceAllocation: true }));
+    // $2 allocated, $1.50 spent → $0.50 left; the sonnet prior p75 ($1.50) overruns it.
+    mGetBudget.mockResolvedValue({ allocatedUsd: 2, spentThisPeriodUsd: 1.5 });
+
+    const res = await fireBot('b-1', { trigger: 'cron' });
+
+    expect(res.ok).toBe(false);
+    expect((res as { reason: string }).reason).toMatch(/skipped/);
+    expect(mCreateBotRun).toHaveBeenCalledWith(expect.objectContaining({ status: 'skipped' }));
+    // Braked before dispatch: no job queued.
+    expect(mEnqueueJob).not.toHaveBeenCalled();
+  });
+
+  it('opted-in + projection fits the remainder fires normally', async () => {
+    mGetBot.mockResolvedValue(fireableBot({ enforceAllocation: true }));
+    mGetBudget.mockResolvedValue({ allocatedUsd: 30, spentThisPeriodUsd: 0 });
+
+    const res = await fireBot('b-1', { trigger: 'cron' });
+
+    expect(res.ok).toBe(true);
+    expect(mEnqueueJob).toHaveBeenCalledTimes(1);
+    expect(mCreateBotRun).not.toHaveBeenCalledWith(expect.objectContaining({ status: 'skipped' }));
+  });
+
+  it('opted-in but the initiative is unbudgeted does NOT skip — unbudgeted is not zero', async () => {
+    mGetBot.mockResolvedValue(fireableBot({ enforceAllocation: true }));
+    mGetBudget.mockResolvedValue(null); // no allocation row for this initiative
+
+    const res = await fireBot('b-1', { trigger: 'cron' });
+
+    expect(res.ok).toBe(true);
+    expect(mEnqueueJob).toHaveBeenCalledTimes(1);
+    expect(mCreateBotRun).not.toHaveBeenCalledWith(expect.objectContaining({ status: 'skipped' }));
+  });
+
+  it('leaves a hand-driven (manual) fire untouched even when opted in', async () => {
+    mGetBot.mockResolvedValue(fireableBot({ enforceAllocation: true, trigger: 'manual' }));
+    // A budget tight enough to skip a cron fire — but this is manual, so the
+    // brake must not even look at it.
+    mGetBudget.mockResolvedValue({ allocatedUsd: 2, spentThisPeriodUsd: 1.5 });
+
+    const res = await fireBot('b-1', { trigger: 'manual' });
+
+    expect(res.ok).toBe(true);
+    expect(mGetBudget).not.toHaveBeenCalled();
+    expect(mEnqueueJob).toHaveBeenCalledTimes(1);
   });
 });
