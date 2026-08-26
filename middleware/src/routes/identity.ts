@@ -23,6 +23,13 @@ import { logAuthz } from '../lib/audit.js';
 import { config } from '../config.js';
 import { roleRegistry } from '../lib/role-registry.js';
 import { listTenants, listUsers, getUser, createTenant, createUser, setGrants } from '../providers/identity.js';
+// providers/identity.ts (not owned by this route file) has no write for
+// person_id on an *existing* user — createUser's upsert only sets it on
+// INSERT, never on the ON CONFLICT branch. Rather than add a write to that
+// file, PUT /users/:id/person below reaches Aurora through the same generic
+// executor other routes already use (see providers/aurora.ts, imported the
+// same way by providers/sprints.ts) and keeps the write local to this file.
+import { exec } from '../providers/aurora.js';
 import type { Grants } from '../lib/session.js';
 
 export const identityRouter = Router();
@@ -90,6 +97,59 @@ identityRouter.put('/users/:id/grants', requireAction('ManageUsers'), asyncHandl
   }
   const userId = String(req.params['id']);
   await setGrants(userId, grants);
+  res.json(await getUser(userId));
+}));
+
+// Link (or clear) the org-graph person behind an *existing* user. The create
+// form (POST /users) only ever set person_id at creation — an operator whose
+// account was provisioned without one, or who needs to relink it, had no
+// route to reach (audit finding m6: the Sprints "unlinked account" empty
+// state told them to fix this from here, and there was nothing here to do it
+// with).
+identityRouter.put('/users/:id/person', requireAction('ManageUsers'), asyncHandler(async (req, res) => {
+  const userId = String(req.params['id']);
+  const { personId } = req.body as { personId?: string | null };
+  if (personId === undefined) {
+    res.status(400).json({ error: 'personId is required (string, or null to unlink)' });
+    return;
+  }
+  if (personId !== null && typeof personId !== 'string') {
+    res.status(400).json({ error: 'personId must be a string, or null to unlink' });
+    return;
+  }
+  const trimmed = personId === null ? null : personId.trim();
+  if (personId !== null && !trimmed) {
+    res.status(400).json({ error: 'personId must not be blank — pass null to unlink' });
+    return;
+  }
+
+  const user = await getUser(userId);
+  if (!user) {
+    res.status(404).json({ error: `user '${userId}' not found` });
+    return;
+  }
+
+  if (!config.aurora.clusterArn || !config.aurora.secretArn) {
+    res.status(503).json({ error: 'Aurora not configured — cannot link person' });
+    return;
+  }
+
+  if (trimmed) {
+    const rows = await exec('SELECT id FROM people WHERE id = :id', [{ name: 'id', value: { stringValue: trimmed } }]);
+    if (rows.length === 0) {
+      res.status(404).json({ error: `person '${trimmed}' not found` });
+      return;
+    }
+  }
+
+  await exec(
+    `UPDATE app_users SET person_id = ${trimmed ? ':person' : 'NULL'} WHERE id = :id`,
+    [
+      { name: 'id', value: { stringValue: userId } },
+      ...(trimmed ? [{ name: 'person', value: { stringValue: trimmed } }] : []),
+    ],
+  );
+  logAuthz({ decision: 'ALLOW', action: 'ManageUsers.LinkPerson', sub: req.session!.sub, role: req.session!.role, path: req.path });
   res.json(await getUser(userId));
 }));
 

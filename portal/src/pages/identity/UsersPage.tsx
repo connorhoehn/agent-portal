@@ -107,6 +107,17 @@ function UsersPage() {
     if (session?.sub === userId) await refresh();
   });
 
+  // Link (or clear) the org-graph person behind an already-provisioned user —
+  // the create form only sets this at creation, so this is the only route an
+  // operator with an unlinked account (or anyone else's) can use to fix it.
+  const linkPerson = (userId: string, personId: string | null) => run(async () => {
+    await api(`/api/identity/users/${userId}/person`, {
+      method: 'PUT',
+      body: JSON.stringify({ personId }),
+    });
+    await load();
+  });
+
   if (loading) return <div style={{ color: 'var(--color-text-tertiary)' }}>Loading users…</div>;
 
   return (
@@ -197,6 +208,7 @@ function UsersPage() {
                 onCancel={() => setEditing(null)}
                 onToggle={toggleGrant}
                 onSave={() => void saveGrants(u.id)}
+                onLinkPerson={personId => void linkPerson(u.id, personId)}
               />
             ))}
           </tbody>
@@ -206,7 +218,7 @@ function UsersPage() {
   );
 }
 
-function UserRow({ user, isSelf, isEditing, draftGrants, tenants, rolesForTenant, busy, canEdit, onEdit, onCancel, onToggle, onSave }: {
+function UserRow({ user, isSelf, isEditing, draftGrants, tenants, rolesForTenant, busy, canEdit, onEdit, onCancel, onToggle, onSave, onLinkPerson }: {
   user: UserInfo;
   isSelf: boolean;
   isEditing: boolean;
@@ -220,7 +232,11 @@ function UserRow({ user, isSelf, isEditing, draftGrants, tenants, rolesForTenant
   onCancel: () => void;
   onToggle: (tenant: string, role: string) => void;
   onSave: () => void;
+  /** Link/relink/clear the org-graph person (null clears it). */
+  onLinkPerson: (personId: string | null) => void;
 }) {
+  const [editingPerson, setEditingPerson] = useState(false);
+  const [personDraft, setPersonDraft] = useState(user.personId ?? '');
   return (
     <>
       <tr style={{ borderTop: '1px solid var(--color-border)' }}>
@@ -229,7 +245,43 @@ function UserRow({ user, isSelf, isEditing, draftGrants, tenants, rolesForTenant
           <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontFamily: 'ui-monospace, monospace' }}>{user.id}</div>
         </td>
         <td style={{ ...td, color: 'var(--color-text-secondary)' }}>{user.email ?? '—'}</td>
-        <td style={{ ...td, fontFamily: 'ui-monospace, monospace', color: 'var(--color-text-secondary)' }}>{user.personId ?? '—'}</td>
+        <td style={{ ...td, fontFamily: 'ui-monospace, monospace', color: 'var(--color-text-secondary)' }}>
+          {editingPerson ? (
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <input
+                style={{ ...inputStyle, width: 90 }}
+                placeholder="person id"
+                value={personDraft}
+                onChange={e => setPersonDraft(e.target.value)}
+                disabled={busy}
+                autoFocus
+              />
+              <button
+                style={btnPrimary}
+                disabled={busy}
+                onClick={() => { onLinkPerson(personDraft.trim() || null); setEditingPerson(false); }}
+              >
+                Save
+              </button>
+              <button
+                style={btnSecondary}
+                disabled={busy}
+                onClick={() => { setPersonDraft(user.personId ?? ''); setEditingPerson(false); }}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <span>{user.personId ?? '—'}</span>
+              {canEdit && (
+                <button style={btnSecondary} disabled={busy} onClick={() => { setPersonDraft(user.personId ?? ''); setEditingPerson(true); }}>
+                  {user.personId ? 'Relink' : 'Link'}
+                </button>
+              )}
+            </div>
+          )}
+        </td>
         <td style={td}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
             {Object.entries(user.grants).flatMap(([tenant, roleIds]) =>
