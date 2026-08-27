@@ -18,11 +18,34 @@ permit (
     // route layer (routes/sprints.ts requireInitiativeSteward) then scopes an
     // SME's writes to initiatives they own or contribute to, so an SME cannot
     // create/move sprints on an initiative they have nothing to do with.
-    OrgIQ::Action::"ManageSprints"
+    OrgIQ::Action::"ManageSprints",
+    // Reaching an environment. This is the role the environments domain exists
+    // for: an SME spans several initiatives and is the person who has to get
+    // into a cluster from a devbox and run a command against it. Every tier —
+    // an SME who can only reach dev cannot do the job they are on call for.
+    //
+    // The grant is reachability only. Getting in still means assuming the
+    // environment's access_role_arn, and IAM decides what that role may do.
+    OrgIQ::Action::"EnterEnvironment"
   ],
   resource
 )
 when { principal.role == "sme" && principal has tenant && principal.tenant == "orgiq" };
+
+// A retired environment is not reachable. It is recorded so a postmortem can
+// ask where something used to run, not so somebody can shell into it.
+//
+// This is the attribute escape hatch in use: the environment's properties ride
+// on the singleton resource (lib/authz.ts environmentAttrs), the same mechanism
+// ApproveTransaction uses for `resource.amount > 10000`. A check that carries
+// no attributes — the portal's capability probe, asking "could this role ever
+// reach an environment" — does not match, and stays allowed.
+forbid (
+  principal,
+  action == OrgIQ::Action::"EnterEnvironment",
+  resource
+)
+when { principal.role == "sme" && resource has envStatus && resource.envStatus == "retired" };
 
 // SMEs spend inside a granted envelope; they never approve transactions.
 // Explicit forbid wins under Cedar evaluation.

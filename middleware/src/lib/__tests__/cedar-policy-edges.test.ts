@@ -167,16 +167,24 @@ describe('threshold: org-leader ApproveTransaction is gated on resource.amount >
 describe('explicit forbid-wins on ApproveTransaction (separation of duties)', () => {
   const DENIERS = ['orgiq/member', 'orgiq/sme', 'orgiq/hr-admin'];
 
-  test.each(DENIERS)('%s has exactly one forbid, targeting ApproveTransaction by equality', (key) => {
-    const fs = forbids(role(key));
+  // These roles carry other forbids now (EnterEnvironment), so select the
+  // ApproveTransaction one by target rather than assuming it is the only one —
+  // the assertion that matters is its SHAPE, not its position in the file.
+  const approvalForbid = (key: string): string => {
+    const fs = forbids(role(key)).filter((s) => /ApproveTransaction/.test(s));
     expect(fs).toHaveLength(1);
-    expect(fs[0]!).toMatch(/action\s*==\s*OrgIQ::Action::"ApproveTransaction"/);
+    return fs[0]!;
+  };
+
+  test.each(DENIERS)('%s has exactly one forbid targeting ApproveTransaction, by equality', (key) => {
+    const f = approvalForbid(key);
+    expect(f).toMatch(/action\s*==\s*OrgIQ::Action::"ApproveTransaction"/);
     // Not a list target — a single, unambiguous action equality.
-    expect(fs[0]!).not.toMatch(/action\s+in\s*\[/);
+    expect(f).not.toMatch(/action\s+in\s*\[/);
   });
 
   test.each(DENIERS)('%s forbid keys only on principal.role, so it survives masquerade and tenant switch', (key) => {
-    const cond = whenBody(forbids(role(key))[0]!);
+    const cond = whenBody(approvalForbid(key));
     const roleId = key.split('/')[1];
     expect(cond).toBe(`principal.role == "${roleId}"`);
     // A tenant condition on the forbid would let an admin masquerading in a

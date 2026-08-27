@@ -139,7 +139,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
     tenant: 'orgiq',
     granted: [
       'Search', 'ViewOrgChart', 'ViewObservability', 'LabelFeedback',
-      'DispatchAgentRun', 'ManageSprints',
+      'DispatchAgentRun', 'ManageSprints', 'EnterEnvironment',
     ],
   },
   'orgiq/org-leader': {
@@ -147,6 +147,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
     granted: [
       'Search', 'ViewOrgChart', 'ViewLeaderboard', 'ViewObservability', 'LabelFeedback',
       'ManageCanary', 'DispatchAgentRun', 'ManageBudgets', 'ManageSprints', 'ApproveTransaction',
+      'EnterEnvironment', 'ManageEnvironments',
     ],
   },
   'orgiq/hr-admin': {
@@ -155,7 +156,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       'Search', 'ViewOrgChart', 'ViewLeaderboard', 'ViewSalary', 'ViewPerformance',
       'EditGuardrail', 'EditPolicy', 'EditSchema', 'ViewIdentityAdmin', 'ViewObservability',
       'LabelFeedback', 'ManageIngest', 'ManageCanary', 'ManageKB', 'ManageDevbox',
-      'ManageUsers', 'DispatchAgentRun', 'ManageBudgets',
+      'ManageUsers', 'DispatchAgentRun', 'ManageBudgets', 'ManageEnvironments',
     ],
   },
   'newsroom/reporter': {
@@ -203,6 +204,7 @@ describe('capability boundaries that must not regress', () => {
     for (const cap of [
       'DispatchAgentRun', 'ManageBudgets', 'ManageSprints', 'ManageIngest',
       'ApproveTransaction', 'Masquerade', 'ManageUsers', 'ViewLeaderboard',
+      'EnterEnvironment', 'ManageEnvironments',
     ]) {
       expect(m).not.toContain(cap);
     }
@@ -214,6 +216,10 @@ describe('capability boundaries that must not regress', () => {
     for (const cap of ['ManageBudgets', 'ManageIngest', 'ApproveTransaction', 'Masquerade', 'ManageUsers']) {
       expect(has('orgiq/sme', cap)).toBe(false);
     }
+    // The SME reaches environments but does not curate the record of them —
+    // getting into a cluster and describing the estate are separate authorities.
+    expect(has('orgiq/sme', 'EnterEnvironment')).toBe(true);
+    expect(has('orgiq/sme', 'ManageEnvironments')).toBe(false);
   });
 
   test('org-leader holds budgets/sprints/dispatch/approval; not ingest, users, masquerade', () => {
@@ -280,6 +286,94 @@ describe('explicit ApproveTransaction forbids (separation of duties)', () => {
     expect(role('orgiq/org-leader').forbidden).not.toContain('ApproveTransaction');
     // The approval permit is threshold-scoped, not blanket.
     expect(role('orgiq/org-leader').cedar).toMatch(/resource\.amount\s*>\s*10000/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// WHO MAY REACH AN ENVIRONMENT.
+//
+// The environments domain's one security-critical question, and the one most
+// likely to be widened by accident: `EnterEnvironment` authorizes assuming an
+// IAM role against live infrastructure, while its neighbour
+// `ManageEnvironments` only authorizes editing a row that describes it. They
+// look similar in a policy file and are not remotely the same authority, so
+// this block pins both halves and the split between them.
+//
+// Reading is deliberately absent from this matrix: an environment row is a map
+// (account, region, cluster, role NAME), not a key, so the read side is gated
+// at the route by readForRolesElseAction for every signed-in tenant role and
+// intentionally has no Cedar action of its own.
+// ---------------------------------------------------------------------------
+describe('environment access (EnterEnvironment)', () => {
+  const ENTER = 'EnterEnvironment';
+  const MANAGE = 'ManageEnvironments';
+
+  test('exactly sme and org-leader may reach an environment', () => {
+    const grantees = [...roles.entries()]
+      .filter(([key, r]) => key !== '*/admin' && r.granted.includes(ENTER))
+      .map(([key]) => key);
+    expect(sorted(grantees)).toEqual(['orgiq/org-leader', 'orgiq/sme']);
+  });
+
+  test('member is explicitly forbidden, not merely ungranted', () => {
+    // Absence of a permit would already deny. The explicit forbid is stronger:
+    // it survives any future broadening permit, the way the ApproveTransaction
+    // forbids do.
+    const m = role('orgiq/member');
+    expect(m.granted).not.toContain(ENTER);
+    expect(m.forbidden).toContain(ENTER);
+  });
+
+  test('hr-admin curates the record but is forbidden from entering', () => {
+    // Separation of duties: being able to correct a cluster ARN in a table is
+    // not the authority to assume a role against that cluster.
+    const hr = role('orgiq/hr-admin');
+    expect(hr.granted).toContain(MANAGE);
+    expect(hr.granted).not.toContain(ENTER);
+    expect(hr.forbidden).toContain(ENTER);
+  });
+
+  test('newsroom roles have no environment authority at all', () => {
+    for (const key of ['newsroom/reporter', 'newsroom/editor']) {
+      expect(role(key).granted).not.toContain(ENTER);
+      expect(role(key).granted).not.toContain(MANAGE);
+    }
+  });
+
+  test('every grantee also carries a retired-environment forbid', () => {
+    // A retired environment is recorded so a postmortem can ask where
+    // something used to run — not so somebody can shell into it. This is the
+    // attribute escape hatch (resource.envStatus) doing the per-environment
+    // work that the singleton resource otherwise cannot express.
+    for (const key of ['orgiq/sme', 'orgiq/org-leader']) {
+      const r = role(key);
+      expect(r.forbidden).toContain(ENTER);
+      expect(r.cedar).toMatch(/resource\.envStatus\s*==\s*"retired"/);
+    }
+  });
+
+  test('the environment condition uses resource attributes, never an environment id', () => {
+    // Guards the design decision recorded in lib/authz.ts environmentAttrs:
+    // decisions are keyed on environment PROPERTIES so the AVP decision cache
+    // stays low-cardinality. A policy naming a specific environment id would
+    // mean per-row entities are needed, which is a different (and larger)
+    // change than sneaking an id into a condition here.
+    for (const r of roles.values()) {
+      expect(r.cedar).not.toMatch(/resource\.environmentId/);
+      expect(r.cedar).not.toMatch(/OrgIQ::Environment::/);
+    }
+  });
+
+  test('both environment actions are declared in the Cedar schema', () => {
+    const schema = JSON.parse(readFileSync(join(seedsDir(), 'schema.json'), 'utf8'));
+    for (const action of [ENTER, MANAGE]) {
+      expect(Object.keys(schema.OrgIQ.actions)).toContain(action);
+    }
+    // The attributes the forbids condition on must exist on the resource shape,
+    // or AVP rejects the policy at CreatePolicy time.
+    const app = schema.OrgIQ.entityTypes.Application.shape.attributes;
+    expect(app.envStatus.type).toBe('String');
+    expect(app.envRank.type).toBe('Long');
   });
 });
 

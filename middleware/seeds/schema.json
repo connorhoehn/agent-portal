@@ -23,6 +23,22 @@
             "amount": {
               "type": "Long",
               "required": false
+            },
+            "envName": {
+              "type": "String",
+              "required": false
+            },
+            "envKind": {
+              "type": "String",
+              "required": false
+            },
+            "envRank": {
+              "type": "Long",
+              "required": false
+            },
+            "envStatus": {
+              "type": "String",
+              "required": false
             }
           }
         }
@@ -260,6 +276,26 @@
         }
       },
       "ManageSprints": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "EnterEnvironment": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ManageEnvironments": {
         "appliesTo": {
           "principalTypes": [
             "User"

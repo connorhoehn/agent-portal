@@ -53,6 +53,8 @@ export const CAPABILITY_ACTIONS = [
   'Masquerade',          // session.ts
   'ManageBudgets',       // budgets.ts — initiative allocations (program management)
   'ManageSprints',       // sprints.ts — create sprints, move work between them (org-leader + sme)
+  'EnterEnvironment',    // environments.ts — reach a deployed environment from a devbox
+  'ManageEnvironments',  // environments.ts — describe/edit/remove an environment
 ] as const;
 
 export type CapabilityAction = (typeof CAPABILITY_ACTIONS)[number];
@@ -72,7 +74,59 @@ export interface PrincipalRef {
 /** Optional resource attributes — used by Cedar `when { resource.amount > N }` policies. */
 export interface ResourceAttrs {
   amount?: number;
+  /** Environment tier ordering: dev(0) → staging(10) → prod(30). */
+  envRank?: number;
+  envName?: string;
+  envKind?: string;
+  envStatus?: string;
   [k: string]: unknown;
+}
+
+/**
+ * "May this principal reach THIS environment?" — the environments domain's
+ * central authorization question, and a design decision worth stating.
+ *
+ * Cedar here authorizes a SINGLETON: every decision targets
+ * OrgIQ::Application::"app", and the principal carries only role + tenant. The
+ * two honest ways to express a per-environment answer were:
+ *
+ *   (a) a real, non-singleton OrgIQ::Environment entity type, one Cedar entity
+ *       per row, with policies naming environments (or groups of them); or
+ *   (b) the attribute escape hatch already proven by ApproveTransaction, which
+ *       conditions on `resource.amount > 10000` — pass the environment's
+ *       *properties* on the singleton resource and let policies condition on
+ *       them.
+ *
+ * (b), because the real rule is about environment PROPERTIES, not identities:
+ * an SME may reach environments; a member may reach none; nobody reaches a
+ * retired one. None of those sentences names an environment. Modelling one
+ * entity per row would let Cedar express what no policy actually says, and
+ * would mean the entity store has to be kept in sync with a table that humans
+ * edit — a second source of truth, and a stale one is a security bug.
+ *
+ * THE TRADEOFF, stated plainly: this cannot express a per-environment ACL.
+ * "Priya may reach the auth prod cluster but not the LLM one" is unsayable
+ * here — the grain of the decision is (role, tier, kind, status), not (person,
+ * environment). The day that grain is genuinely needed, (a) is the move:
+ * declare OrgIQ::Environment in seeds/schema.json, project each row into the
+ * entity list, and change `evaluate()` to send the environment as the resource
+ * instead of the singleton. Until then (a) buys nothing and costs a sync loop.
+ *
+ * A second, quieter reason (b) fits: the AVP decision cache keys on
+ * tenant|role|action|attrs. These attributes are low-cardinality (a handful of
+ * tiers and kinds), so caching still works. Passing the environment ID would
+ * make every row its own cache entry and every check a fresh billed
+ * evaluation — which is also the honest signal that per-ID rules belong in (a),
+ * not smuggled through here.
+ *
+ * Note this decides REACHABILITY only. Actually getting in still requires
+ * assuming `access_role_arn`, and IAM decides what that role may do. Two
+ * independent gates; neither is sufficient alone.
+ */
+export function environmentAttrs(env: {
+  name: string; kind: string; rank: number; status: string;
+}): ResourceAttrs {
+  return { envName: env.name, envKind: env.kind, envRank: env.rank, envStatus: env.status };
 }
 
 function attrsToAvp(attrs: ResourceAttrs): Record<string, AttributeValue> {

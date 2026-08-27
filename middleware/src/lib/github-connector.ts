@@ -61,7 +61,11 @@ async function gh<T>({ token, path, params }: FetchOpts): Promise<T> {
 
   const res = await fetch(url, {
     headers: {
-      Authorization: `Bearer ${token}`,
+      // Omitted rather than sent empty when there is no credential: the
+      // read-only endpoints on a public repo (workflow runs, notably) answer
+      // fine unauthenticated, but `Bearer ` with nothing after it is a
+      // malformed credential and GitHub 401s it.
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       Accept: 'application/vnd.github+json',
       'X-GitHub-Api-Version': '2022-11-28',
       'User-Agent': 'OrgIQ-Connector/1.0',
@@ -293,6 +297,95 @@ export async function getPullStatus(
     mergedAt: pr.merged_at ?? null,
     url: pr.html_url ?? '',
   };
+}
+
+export interface WorkflowRun {
+  id: number;
+  /** The workflow's name ("Deploy", "CI"), not the run's title. */
+  name: string;
+  /** queued | in_progress | completed — where the run is, not how it went. */
+  status: string;
+  /** success | failure | cancelled | skipped | … ; null while still running. */
+  conclusion: string | null;
+  branch: string | null;
+  sha: string | null;
+  /** Who triggered it. A GitHub login, not an OrgIQ person. */
+  actor: string | null;
+  createdAt: string;
+  url: string;
+  /** Wall-clock from start to last update. Null while the run is unfinished. */
+  durationMs: number | null;
+}
+
+/**
+ * The latest GitHub Actions runs for a repository. READ ONLY, on purpose.
+ *
+ * This product does not do CI and should not grow into it. The repositories
+ * linked to an initiative already have Actions deploying them, and the only
+ * thing worth adding here is a window onto what those runs did — so an
+ * environment page can say "the last deploy of this thing failed" without
+ * anyone leaving for GitHub. There is deliberately no counterpart to this
+ * function: no re-run, no workflow_dispatch, no webhook receiver. A "Deploy"
+ * button here would be a second, worse CI system arguing with the real one
+ * about what shipped, and a webhook would make this a system of record for
+ * state it does not own.
+ *
+ * Polled on demand rather than cached: a page that shows a run's status is
+ * only useful if it is current, and Actions history is small and cheap.
+ *
+ * `connectionName` is optional because a public repository's runs are readable
+ * with no credential at all, and a repo that needs no secret should not be
+ * made to carry one (the same rule agent_projects.connection_name follows).
+ *
+ * `durationMs` is derived from run_started_at → updated_at rather than fetched
+ * from /timing, which costs a second round-trip per run to report billable
+ * minutes — a different question from "how long did this take".
+ */
+export async function listWorkflowRuns(
+  repoFullName: string,
+  limit = 10,
+  opts: { token?: string; connectionName?: string | null } = {},
+): Promise<WorkflowRun[]> {
+  const token = opts.token
+    ?? (opts.connectionName ? await borrowApiKey(opts.connectionName) : '');
+  const per = Math.min(Math.max(limit, 1), 50);
+
+  const body = await gh<{
+    workflow_runs?: Array<{
+      id?: number; name?: string | null; status?: string | null; conclusion?: string | null;
+      head_branch?: string | null; head_sha?: string | null;
+      actor?: { login?: string } | null; triggering_actor?: { login?: string } | null;
+      created_at?: string; run_started_at?: string | null; updated_at?: string | null;
+      html_url?: string;
+    }>;
+  }>({
+    token,
+    path: `/repos/${repoFullName}/actions/runs`,
+    // Newest first is the API default here; per_page bounds it.
+    params: { per_page: String(per) },
+  });
+
+  return (body.workflow_runs ?? []).slice(0, per).map((r) => {
+    const started = r.run_started_at ?? r.created_at ?? '';
+    const ended = r.updated_at ?? '';
+    // Only a finished run has a meaningful duration — `updated_at` on a run
+    // still in progress is just the last heartbeat, and reporting it as an
+    // elapsed time would show a number that shrinks and grows at random.
+    const done = (r.status ?? '') === 'completed';
+    const ms = done && started && ended ? Date.parse(ended) - Date.parse(started) : NaN;
+    return {
+      id: r.id ?? 0,
+      name: r.name ?? '',
+      status: r.status ?? '',
+      conclusion: r.conclusion ?? null,
+      branch: r.head_branch ?? null,
+      sha: r.head_sha ?? null,
+      actor: r.triggering_actor?.login ?? r.actor?.login ?? null,
+      createdAt: r.created_at ?? '',
+      url: r.html_url ?? '',
+      durationMs: Number.isFinite(ms) && ms >= 0 ? ms : null,
+    };
+  });
 }
 
 /**

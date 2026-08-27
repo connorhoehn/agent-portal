@@ -53,6 +53,7 @@ import { agentDetailRouter } from './routes/agent-detail.js';
 import { connectionsRouter } from './routes/connections.js';
 import { agentProjectsRouter } from './routes/agent-projects.js';
 import { sdlcRouter } from './routes/sdlc.js';
+import { environmentsRouter } from './routes/environments.js';
 import { budgetsRouter } from './routes/budgets.js';
 import { sprintsRouter } from './routes/sprints.js';
 import { grantsRouter } from './routes/grants.js';
@@ -180,6 +181,12 @@ app.use('/api/agent-projects', requireTenant('orgiq'), requireSession('ViewAgent
 // AI SDLC governance — change requests, reviews, gates, policies. Gated as a
 // devbox-management action.
 app.use('/api/sdlc', requireAction('ManageDevbox'), sdlcRouter);
+// Environments — where each initiative's code runs. Mount is the floor only
+// (tenant scope + a real session): reading the estate is open to every orgiq
+// role, editing it needs ManageEnvironments, and reaching a specific
+// environment is a per-environment Cedar check inside the router. See
+// routes/environments.ts.
+app.use('/api/environments', requireTenant('orgiq'), requireSession('ViewEnvironments'), environmentsRouter);
 // Budgets — initiative spend allocations. Gated per-route (reads open to
 // org-leader, writes require ManageBudgets).
 app.use('/api/budgets', requireTenant('orgiq'), budgetsRouter);
