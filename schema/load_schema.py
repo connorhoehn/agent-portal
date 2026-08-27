@@ -213,6 +213,10 @@ def main():
         # per-SME budget_grants envelope be enforced. Additive ALTER, so it
         # loads after agent_bots_schema.sql creates the table.
         'agent_run_attribution_schema.sql',
+        # Where each initiative's code runs. FK on projects, and its seed rows
+        # name the same p-* cast as program_schema/seed_program, so it loads
+        # after both.
+        'environments_schema.sql',
     ]
 
     # Track genuine failures — statements that erred for a non-transient reason

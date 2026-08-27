@@ -31,11 +31,27 @@ permit (
     // honors initiative-scoped owner/SME membership at the route layer.
     OrgIQ::Action::"DispatchAgentRun",
     // Program management — allocating agent spend per initiative.
-    OrgIQ::Action::"ManageBudgets"
+    OrgIQ::Action::"ManageBudgets",
+    // Keep the environment record straight — this is the administrative half of
+    // the domain, and hr-admin already holds every other registry-editing
+    // authority here. Note it is the RECORD, not the environment.
+    OrgIQ::Action::"ManageEnvironments"
   ],
   resource
 )
 when { principal.role == "hr-admin" && principal has tenant && principal.tenant == "orgiq" };
+
+// ...and explicitly not inside one. Being able to correct a cluster ARN in a
+// table is not the same authority as assuming a role against that cluster, and
+// People Ops has no reason to hold the second. Same separation-of-duties shape
+// as the ApproveTransaction forbid below: whoever curates the record is not
+// automatically whoever may act on what it describes.
+forbid (
+  principal,
+  action == OrgIQ::Action::"EnterEnvironment",
+  resource
+)
+when { principal.role == "hr-admin" };
 
 // HR is explicitly NOT a transaction approver. Separation of duties.
 forbid (

@@ -26,3 +26,17 @@ forbid (
   resource
 )
 when { principal.role == "member" };
+
+// A member may SEE the environments an initiative runs on — the rows describe
+// accounts, regions and role names, none of which are secret, and hiding the
+// map from the people who work on the initiative buys nothing. A member may
+// not REACH one: getting inside means assuming an IAM role against live
+// infrastructure, and that authority belongs to the SMEs and leaders who are
+// accountable for the initiative. Unconditional on the environment's tier —
+// this is not "members get dev", it is "members get none".
+forbid (
+  principal,
+  action == OrgIQ::Action::"EnterEnvironment",
+  resource
+)
+when { principal.role == "member" };
