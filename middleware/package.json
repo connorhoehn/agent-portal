@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "dev:mock": "MOCK_AURORA=true MOCK_AGENTCORE=true MOCK_GUARDRAILS=true MOCK_CLOUDWATCH=true POLICY_STORE_ID= COGNITO_USER_POOL_ID= COGNITO_CLIENT_ID= COGNITO_CLIENT_SECRET= COGNITO_DOMAIN= COGNITO_CALLBACK_URL= NODE_ENV=development AUTH_DEMO_MODE=true tsx watch src/index.ts",
+    "dev:mock": "MOCK_AURORA=true MOCK_AGENTCORE=true MOCK_GUARDRAILS=true MOCK_CLOUDWATCH=true POLICY_STORE_ID= SESSION_SIGNING_SECRET_ARN= COGNITO_USER_POOL_ID= COGNITO_CLIENT_ID= COGNITO_CLIENT_SECRET= COGNITO_DOMAIN= COGNITO_CALLBACK_URL= NODE_ENV=development AUTH_DEMO_MODE=true tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
