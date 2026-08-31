@@ -33,7 +33,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 function UsersPage() {
-  const { session, refresh } = useSession();
+  const { session, refresh, login, ssoRequired } = useSession();
   // Tenant/user creation and grant edits ride /api/identity (ManageUsers).
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageUsers');
@@ -204,6 +204,9 @@ function UsersPage() {
                 rolesForTenant={rolesForTenant}
                 busy={busy}
                 canEdit={canManage}
+                // Dev-only identity switch — see the note on the button.
+                canSignInAs={!ssoRequired}
+                onSignInAs={() => void login(u.id)}
                 onEdit={() => openEditor(u)}
                 onCancel={() => setEditing(null)}
                 onToggle={toggleGrant}
@@ -218,7 +221,7 @@ function UsersPage() {
   );
 }
 
-function UserRow({ user, isSelf, isEditing, draftGrants, tenants, rolesForTenant, busy, canEdit, onEdit, onCancel, onToggle, onSave, onLinkPerson }: {
+function UserRow({ user, isSelf, isEditing, draftGrants, tenants, rolesForTenant, busy, canEdit, canSignInAs, onSignInAs, onEdit, onCancel, onToggle, onSave, onLinkPerson }: {
   user: UserInfo;
   isSelf: boolean;
   isEditing: boolean;
@@ -228,6 +231,9 @@ function UserRow({ user, isSelf, isEditing, draftGrants, tenants, rolesForTenant
   busy: boolean;
   /** ManageUsers — grant edits hide without it. */
   canEdit: boolean;
+  /** Dev builds only (no SSO requirement) — see the button. */
+  canSignInAs: boolean;
+  onSignInAs: () => void;
   onEdit: () => void;
   onCancel: () => void;
   onToggle: (tenant: string, role: string) => void;
@@ -297,11 +303,22 @@ function UserRow({ user, isSelf, isEditing, draftGrants, tenants, rolesForTenant
           </div>
         </td>
         <td style={{ ...td, textAlign: 'right' }}>
-          {canEdit && (
-            <button style={btnSecondary} disabled={busy} onClick={isEditing ? onCancel : onEdit}>
-              {isEditing ? 'Cancel' : 'Edit grants'}
-            </button>
-          )}
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+            {/* Become this user. Deliberately here and not in the header menu:
+                it is a rare administrative act, not a thing to trip over while
+                working. Hidden when a real sign-in is required, where the
+                underlying POST would 403 anyway. */}
+            {canSignInAs && !isSelf && (
+              <button style={btnSecondary} disabled={busy} onClick={onSignInAs} title="Reload the app as this user (dev only)">
+                Sign in as
+              </button>
+            )}
+            {canEdit && (
+              <button style={btnSecondary} disabled={busy} onClick={isEditing ? onCancel : onEdit}>
+                {isEditing ? 'Cancel' : 'Edit grants'}
+              </button>
+            )}
+          </div>
         </td>
       </tr>
       {isEditing && (
