@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { useSession, type DirectoryUser, type SessionRole } from '../../lib/auth';
-import { useCapabilities } from '../../lib/capabilities';
 
 const ROLE_LABELS: Record<string, string> = {
   member: 'Member',
+  sme: 'SME',
   'org-leader': 'Org Leader',
   'hr-admin': 'HR Admin',
   reporter: 'Reporter',
@@ -13,11 +13,12 @@ const ROLE_LABELS: Record<string, string> = {
 
 const ROLE_HINTS: Record<string, string> = {
   member: 'IC. Search + org chart.',
+  sme: 'Dispatches agent runs against a sprint envelope.',
   'org-leader': 'VP / Director. + leaderboards, approvals.',
   'hr-admin': 'Sees salary + perf. Edits guardrails.',
   reporter: 'Files stories + pitches.',
   editor: 'Publishes. Manages newsroom KB.',
-  admin: 'Cross-tenant operator. Can masquerade.',
+  admin: 'Cross-tenant operator. Every role, both accounts.',
 };
 
 const TENANT_LABELS: Record<string, string> = { orgiq: 'Org', newsroom: 'Newsroom' };
@@ -30,9 +31,8 @@ function tenantLabel(t: string): string {
 }
 
 export function MasqueradeMenu() {
-  const { session, setRole, login, masquerade, stopMasquerade, listUsers, isLoading,
-    ssoEnabled, signInWithSso, logout } = useSession();
-  const { can, ready } = useCapabilities();
+  const { session, setRole, login, stopMasquerade, listUsers, isLoading,
+    ssoEnabled, ssoRequired, signInWithSso, logout } = useSession();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [users, setUsers] = useState<DirectoryUser[] | null>(null);
@@ -62,24 +62,20 @@ export function MasqueradeMenu() {
     triggerRef.current?.focus();
   };
 
-  // Load the user directory lazily, the first time the menu opens.
+  // Load the user directory lazily, the first time the menu opens — and only
+  // where the picker actually renders, so a real SSO deployment never fetches
+  // a directory it has no control to show.
   useEffect(() => {
-    if (open && users === null) {
+    if (open && !ssoRequired && users === null) {
       void listUsers().then(setUsers).catch(() => setUsers([]));
     }
-  }, [open, users, listUsers]);
+  }, [open, ssoRequired, users, listUsers]);
 
   useEffect(() => {
     if (!open) setError(null);
   }, [open]);
 
   if (isLoading || !session) return null;
-
-  // Masquerade is Cedar's Masquerade action (admin-only in the seeds) — the
-  // capability probe replaces the old hardcoded admin-role check. While
-  // already masquerading, the section stays so the operator can hop identities
-  // (the server re-validates against the REAL actor on every call).
-  const canMasquerade = (ready && can('Masquerade')) || !!session.masquerading;
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -232,33 +228,52 @@ export function MasqueradeMenu() {
             );
           })}
 
-          <SectionLabel>{canMasquerade ? 'Masquerade as' : (ssoEnabled ? 'Sign in as · dev' : 'Sign in as')}</SectionLabel>
-          {users === null && (
-            <div style={{ padding: '6px 10px', fontSize: 12, color: 'var(--color-text-tertiary)' }}>Loading users…</div>
-          )}
-          {users?.map(u => {
-            const active = u.id === session.sub;
-            const tenantSummary = u.tenants
-              .map(t => `${t.tenant}: ${t.roles.map(roleLabel).join(', ')}`)
-              .join(' · ');
-            return (
-              <MenuItem
-                key={u.id}
-                active={active}
-                busy={busy}
-                onClick={() => active
-                  ? setOpen(false)
-                  : void run(() => (canMasquerade && !active ? masquerade(u.id) : login(u.id)))}
-                title={u.displayName}
-                hint={tenantSummary}
-                dotColor="var(--color-text-tertiary)"
-              />
-            );
-          })}
-          {users !== null && users.length === 0 && (
-            <div style={{ padding: '6px 10px', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
-              No users provisioned.
-            </div>
+          {/* PEOPLE — the dev sign-in picker, and nothing more.
+
+              This list used to double as "masquerade as <person>", which put a
+              directory of names in front of an operator whose actual question
+              is "what does this look like to an org-leader". Role is the axis
+              that matters and it is already above; person-level view-as needs
+              per-person data (their sprints, their grants, their inbox) that
+              the models do not carry yet, so offering it here promised a
+              fidelity the app cannot deliver.
+
+              Masquerade itself is untouched server-side — the banner above
+              still exits a live masquerade, and Cedar still gates the action.
+              Only the entry point is gone, so it can come back deliberately.
+
+              Gated on ssoRequired rather than ssoEnabled: with SSO on but
+              AUTH_DEMO_MODE=true the picker still works and is still the way
+              in. When a real sign-in is required, login() would 403 anyway. */}
+          {!ssoRequired && (
+            <>
+              <SectionLabel>{ssoEnabled ? 'Sign in as · dev' : 'Sign in as'}</SectionLabel>
+              {users === null && (
+                <div style={{ padding: '6px 10px', fontSize: 12, color: 'var(--color-text-tertiary)' }}>Loading users…</div>
+              )}
+              {users?.map(u => {
+                const active = u.id === session.sub;
+                const tenantSummary = u.tenants
+                  .map(t => `${t.tenant}: ${t.roles.map(roleLabel).join(', ')}`)
+                  .join(' · ');
+                return (
+                  <MenuItem
+                    key={u.id}
+                    active={active}
+                    busy={busy}
+                    onClick={() => active ? setOpen(false) : void run(() => login(u.id))}
+                    title={u.displayName}
+                    hint={tenantSummary}
+                    dotColor="var(--color-text-tertiary)"
+                  />
+                );
+              })}
+              {users !== null && users.length === 0 && (
+                <div style={{ padding: '6px 10px', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+                  No users provisioned.
+                </div>
+              )}
+            </>
           )}
 
           <div style={{ borderTop: '1px solid var(--color-border)', marginTop: 6, paddingTop: 6 }}>

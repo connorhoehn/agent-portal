@@ -28,7 +28,7 @@ const ROLE_META: Record<string, { label: string; hint: string }> = {
   sme: { label: 'SME', hint: 'Dispatch agent runs against a sprint envelope' },
   'org-leader': { label: 'Org Leader', hint: 'Leaderboards + transaction approvals' },
   'hr-admin': { label: 'HR Admin', hint: 'People ops, guardrails, identity admin' },
-  admin: { label: 'Admin', hint: 'Cross-tenant operator — can masquerade' },
+  admin: { label: 'Admin', hint: 'Cross-tenant operator — every role, both accounts' },
   reporter: { label: 'Reporter', hint: 'File stories and pitches' },
   editor: { label: 'Editor', hint: 'Publish + desk-lead the newsroom' },
 };
