@@ -49,25 +49,34 @@
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.12);
   --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.18);
-}
 
-:root {
-  /* Added: previously-undefined tokens referenced by CommandPalette, ingest, and tenant-scoped overrides */
+  /* Relocated from :root so Tailwind v4 GENERATES UTILITIES for them.
+     Only tokens declared in @theme produce classes; a token in :root gives you
+     a working var(--color-x) and a class name that silently renders NOTHING.
+     Two sites were already hitting that: a Leaderboard rank pill (bg-primary-soft)
+     and the DropPage page wrapper (bg-bg), both painting no colour at all while
+     typechecking and looking like ordinary Tailwind.
+     @theme still emits these to :root, so the ~60 var(--color-x) consumers
+     (including imported ui-components) are unaffected. */
   --color-bg: #f8fafc;              /* page background, slightly off-white */
   --color-surface-raised: #ffffff;  /* elevated card / panel surface */
   --color-text-disabled: #cbd5e1;   /* tertiary text for disabled controls */
   --color-primary-soft: #eef2ff;    /* primary-tinted soft fill (already in [data-tenant] selectors; needed at root for fallback) */
-
-  /* Upstream ui-components token family — define here so imported components render correctly */
   --color-success-border: #34d399;
   --color-warning-border: #fbbf24;
   --color-danger-border:  #f87171;
   --color-info-border:    #60a5fa;
+  --color-optimize: #7c3aed;         /* canary / optimize feature identity */
+  --color-optimize-hover: #5b21b6;   /* darker hover/pressed state */
+}
+
+:root {
+  /* Added: previously-undefined tokens referenced by CommandPalette, ingest, and tenant-scoped overrides */
+
+  /* Upstream ui-components token family — define here so imported components render correctly */
   --color-border-field:   var(--color-border, #e2e8f0);
 
   /* Feature identity colors */
-  --color-optimize: #7c3aed;         /* canary / optimize feature identity */
-  --color-optimize-hover: #5b21b6;   /* darker hover/pressed state */
 }
 
 body {
