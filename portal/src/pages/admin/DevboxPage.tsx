@@ -11,12 +11,19 @@
 // App.tsx, so a shell survives navigating away from this page and every other
 // consumer of the fleet reads the same list.
 
+import { useSearchParams } from 'react-router';
 import { ErrorState } from '@connorhoehnslalom/ui-components/shared';
 import { ComputerLab } from '@connorhoehnslalom/ui-components/compute';
 import { useCapabilities } from '../../lib/capabilities';
 
 export default function DevboxPage() {
   const { can, ready } = useCapabilities();
+  // `?box=` is the deep link the rest of the app already writes — the "agent
+  // working" chip on a work item, for one. The name is the old registry's and
+  // stays: changing it would break links already rendered elsewhere for the
+  // sake of a word only this file reads.
+  const [params] = useSearchParams();
+  const focusComputerId = params.get('box');
 
   if (ready && !can('ManageDevbox')) {
     return (
@@ -30,7 +37,19 @@ export default function DevboxPage() {
   // The lab IS the page, not a mode you enter from it. The old page put a fleet
   // list in front of the work and made the terminal the thing you opened
   // afterwards, which is backwards for a surface whose whole purpose is having
-  // several shells open at once. `onClose` is a no-op for the same reason:
-  // there is nothing behind it to return to.
-  return <ComputerLab open onClose={() => {}} />;
+  // several shells open at once.
+  //
+  // `inline` rather than the default overlay: the lab fills the content column
+  // and the portal keeps its rail, header and breadcrumbs, so Computers is a
+  // place in the app instead of a thing that swallows it. The variant also
+  // drops the modal semantics and the ✕ — see the prop's docs. `onClose` is a
+  // no-op because inline never calls it.
+  return (
+    <ComputerLab
+      open
+      variant="inline"
+      onClose={() => {}}
+      focusComputerId={focusComputerId}
+    />
+  );
 }
