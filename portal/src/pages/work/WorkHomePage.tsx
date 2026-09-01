@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
-  PageSection, Card, TaskComposer, type ComposerSuggestion,
+  PageSection, Card, ConsultCard, TaskComposer, type ComposerSuggestion,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
@@ -130,9 +130,23 @@ const SUGGESTION_LABEL: Record<WorkSuggestion['kind'], string> = {
 interface Summary {
   jobs: Record<string, number>;
   proposals: Record<string, number>;
+  consults?: { pending: number };
   findings: { open: number; critical: number; warning: number };
   busyBoxes: string[];
   sweeps: string[];
+}
+
+interface LabConsult {
+  id: string;
+  question: string;
+  context: string | null;
+  repo: string | null;
+  boxId: string | null;
+  sessionId: string | null;
+  status: 'pending' | 'answered' | 'expired' | 'withdrawn';
+  answer: string | null;
+  answeredBy: string | null;
+  createdAt: string;
 }
 
 const STATUS_TONE: Record<string, string> = {
@@ -169,6 +183,18 @@ const SEVERITY_TONE: Record<string, string> = {
   info: 'bg-surface-hover text-text-tertiary',
 };
 
+/** "4m ago" — a consult's age is its urgency, so say it in human units. */
+function relTime(iso: string): string {
+  const ms = Date.now() - Date.parse(iso);
+  if (!Number.isFinite(ms) || ms < 0) return 'just now';
+  const m = Math.floor(ms / 60_000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
 function money(n: number | undefined): string {
   return typeof n === 'number' ? `$${n.toFixed(4)}` : '—';
 }
@@ -182,6 +208,26 @@ export default function WorkHomePage() {
   const [findingStatus, setFindingStatus] = useState<'open' | 'promoted' | 'resolved' | 'dismissed'>('open');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const { data: summary, error: summaryError, refresh: refreshSummary } = useFetch<Summary>('/api/work/summary', 8_000);
+  // Pending consults poll on the same cadence as the summary: each one is a
+  // RUNNING agent blocked on a human, which outranks everything else here.
+  const { data: consultData, refresh: refreshConsults } =
+    useFetch<{ consults: LabConsult[] }>('/api/lab/consults?status=pending', 8_000);
+  const pendingConsults = consultData?.consults ?? [];
+  const [answeringId, setAnsweringId] = useState<string | null>(null);
+
+  async function answerConsult(id: string, answer: string) {
+    setAnsweringId(id);
+    try {
+      const res = await post(`/api/lab/consults/${id}/answer`, { answer });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toastSuccess(null, 'Answer sent', 'The agent picks it up on its next poll (≤2s).');
+      refreshConsults(); refreshSummary();
+    } catch (err) {
+      toastError(null, 'Could not send the answer', (err as Error).message);
+    } finally {
+      setAnsweringId(null);
+    }
+  }
   const { data: jobsData, refresh: refreshJobs } = useFetch<{ jobs: Job[] }>('/api/work/jobs?limit=25', 8_000);
   const { data: findingsData, refresh: refreshFindings } = useFetch<{ findings: Finding[] }>(
     `/api/work/findings?status=${findingStatus}&limit=200`, 20_000);
@@ -442,6 +488,7 @@ export default function WorkHomePage() {
   const active = (s?.jobs['running'] ?? 0) + (s?.jobs['claimed'] ?? 0);
   const needsReview = s?.jobs['awaiting_review'] ?? 0;
   const pendingProposals = s?.proposals['pending'] ?? 0;
+  const consultCount = pendingConsults.length || (s?.consults?.pending ?? 0);
 
   return (
     <PageSection title="Work">
@@ -487,13 +534,13 @@ export default function WorkHomePage() {
         <Card padding="md" className="flex flex-col">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Needs you</div>
           <div className="flex items-baseline gap-2 mt-1">
-            <span className={`text-[24px] font-bold leading-none ${!summaryError && needsReview + pendingProposals > 0 ? 'text-warning' : 'text-text-primary'}`}>
-              {summaryError ? '—' : needsReview + pendingProposals}
+            <span className={`text-[24px] font-bold leading-none ${!summaryError && needsReview + pendingProposals + consultCount > 0 ? 'text-warning' : 'text-text-primary'}`}>
+              {summaryError ? '—' : needsReview + pendingProposals + consultCount}
             </span>
             <span className="text-[12px] text-text-secondary">
               {summaryError
                 ? 'unknown'
-                : `${needsReview} artifact${needsReview === 1 ? '' : 's'} · ${pendingProposals} graph change${pendingProposals === 1 ? '' : 's'}`}
+                : `${needsReview} artifact${needsReview === 1 ? '' : 's'} · ${pendingProposals} graph change${pendingProposals === 1 ? '' : 's'}${consultCount > 0 ? ` · ${consultCount} agent question${consultCount === 1 ? '' : 's'}` : ''}`}
             </span>
           </div>
           <div className="text-[11px] text-text-tertiary mt-2 leading-snug">
@@ -563,6 +610,31 @@ export default function WorkHomePage() {
           busy={busy}
           onSubmit={({ title, prompt, suggestionId }) => void enqueue(title, prompt, suggestionId)}
         />
+      )}
+
+      {/* ── Agent questions first: a pending consult is a RUNNING computer
+          blocked on a person — finished work waiting for review can wait a
+          minute longer; a worker burning its budget on hold cannot. ── */}
+      {pendingConsults.length > 0 && (
+        <Card padding="none" className="mb-5 overflow-hidden border-warning/40">
+          <div className="px-3.5 py-3 border-b border-border flex items-center gap-2">
+            <span className="text-xs font-semibold text-warning tracking-wide select-none">AGENTS WAITING ON YOU</span>
+          </div>
+          <div className="p-3.5 flex flex-col gap-3">
+            {pendingConsults.map((c) => (
+              <ConsultCard
+                key={c.id}
+                question={c.question}
+                {...(c.context ? { context: c.context } : {})}
+                origin={[c.repo, c.boxId].filter((x): x is string => !!x)}
+                askedAt={`asked ${relTime(c.createdAt)}`}
+                status={c.status}
+                busy={answeringId === c.id}
+                {...(canManage ? { onAnswer: (answer: string) => void answerConsult(c.id, answer) } : {})}
+              />
+            ))}
+          </div>
+        </Card>
       )}
 
       {/* ── Needs review first: it is the only thing blocking progress ── */}

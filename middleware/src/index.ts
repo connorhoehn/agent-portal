@@ -19,6 +19,7 @@ import { ingestRouter } from './routes/ingest.js';
 import { observabilityRouter } from './routes/observability.js';
 import { approvalsRouter } from './routes/approvals.js';
 import { harnessRouter } from './routes/harness.js';
+import { labRouter } from './routes/lab.js';
 import { promptVersionsRouter } from './routes/prompt-versions.js';
 import { costRouter } from './routes/cost.js';
 import { calibrationRouter } from './routes/calibration.js';
@@ -214,6 +215,11 @@ app.use('/api/observability/approvals', approvalsRouter);
 // Harness routes — mounted ungated so the test runner (infra/scripts/harness.py)
 // can POST results without a session cookie. Same rationale as approvals.
 app.use('/api/observability/harness', harnessRouter);
+// The lab loop: computer-lab agents filing signals, recording experiences and
+// opening human consults. Agent-facing routes are sessionless (per-route
+// optional service auth INSIDE the router — no blanket session mount here,
+// same rule as approvals/harness above).
+app.use('/api/lab', labRouter);
 // Prompt-versions registry — populated at run start by the harness runner.
 // Mounted ungated (no session) like approvals/harness.
 app.use('/api/observability/prompt-versions', ...viewObs, promptVersionsRouter);

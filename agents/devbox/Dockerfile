@@ -48,6 +48,15 @@ RUN useradd -m -u 1000 bedrock_agentcore
 WORKDIR /app
 COPY --chown=bedrock_agentcore:bedrock_agentcore main.py /app/
 
+# The lab loop: `lab` (signal | remember | recall | consult) is how a session
+# reaches the platform surfaces that outlive it, and the managed SessionStart
+# hook injects the fleet's memory for the repo into every new session. Both
+# are inert until the runtime sets LAB_API_BASE (the CLI soft-exits without
+# it), so local `agentcore dev` behaves exactly as before.
+COPY lab /usr/local/bin/lab
+COPY managed-settings.json /etc/claude-code/managed-settings.json
+RUN chmod 755 /usr/local/bin/lab
+
 # Claude Code environment. ANTHROPIC_MODEL / ANTHROPIC_SMALL_FAST_MODEL are
 # injected by the OrgIQ-Devbox CDK stack (overridable via context) — the values
 # here are only local-dev fallbacks. DISABLE_AUTOUPDATER: the image is

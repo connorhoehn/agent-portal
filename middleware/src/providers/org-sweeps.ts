@@ -393,8 +393,109 @@ export async function runAllSweeps(): Promise<SweepRunReport> {
   return { results: out, released };
 }
 
+// ── Lab signals — findings filed by computer-lab agents ─────────────────────
+//
+// A lab session that notices something outside its task files it HERE, as a
+// finding with sweep='lab-signal' — not into some parallel inbox. Everything
+// downstream (the Work page list, the open/critical counts, promote → job,
+// abandoned-job release) applies to a lab signal for free, because it is not
+// a new kind of thing; it is a finding from a new source.
+//
+// Mock mode gets a real in-memory store (unlike the scheduled sweeps, which
+// read Aurora and honestly no-op without it): the whole point of a signal is
+// an agent ASSERTING it, and that works fine against memory in dev:mock.
+
+export const LAB_SWEEP = 'lab-signal';
+
+const MOCK_FINDINGS: Finding[] = [];
+let mockFindingSeq = 0;
+
+export interface LabSignalInput {
+  severity: 'critical' | 'warning' | 'info';
+  title: string;
+  detail?: string;
+  /** Stable identity: refiling the same issue updates last_seen, not a dup. */
+  fingerprint: string;
+  sessionId?: string;
+  boxId?: string;
+  repo?: string;
+  initiativeId?: string;
+}
+
+export async function fileLabSignal(input: LabSignalInput): Promise<Finding> {
+  const evidence: Record<string, unknown> = {
+    ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+    ...(input.boxId ? { boxId: input.boxId } : {}),
+    ...(input.repo ? { repo: input.repo } : {}),
+    ...(input.initiativeId ? { initiativeId: input.initiativeId } : {}),
+  };
+  const now = new Date().toISOString();
+
+  if (config.mock.aurora) {
+    const existing = MOCK_FINDINGS.find(
+      (f) => f.sweep === LAB_SWEEP && f.fingerprint === input.fingerprint,
+    );
+    if (existing) {
+      existing.severity = input.severity;
+      existing.title = input.title;
+      existing.detail = input.detail ?? existing.detail;
+      existing.evidence = { ...existing.evidence, ...evidence };
+      existing.lastSeenAt = now;
+      if (existing.status === 'resolved') existing.status = 'open';
+      return existing;
+    }
+    const finding: Finding = {
+      id: `find-mock-${++mockFindingSeq}`,
+      sweep: LAB_SWEEP,
+      severity: input.severity,
+      title: input.title,
+      detail: input.detail ?? null,
+      entityType: input.repo ? 'repo' : null,
+      entityId: input.repo ?? null,
+      evidence,
+      status: 'open',
+      jobId: null,
+      firstSeenAt: now,
+      lastSeenAt: now,
+      fingerprint: input.fingerprint,
+    };
+    MOCK_FINDINGS.push(finding);
+    return finding;
+  }
+
+  const rows = await exec(
+    `INSERT INTO agent_findings (sweep, severity, title, detail, entity_type, entity_id, evidence, fingerprint)
+     VALUES (:sweep, :sev, :title, :detail, :etype, :eid, :evidence::jsonb, :fp)
+     ON CONFLICT (sweep, fingerprint) DO UPDATE
+        SET severity = EXCLUDED.severity,
+            title = EXCLUDED.title,
+            detail = EXCLUDED.detail,
+            evidence = agent_findings.evidence || EXCLUDED.evidence,
+            last_seen_at = NOW(),
+            status = CASE WHEN agent_findings.status = 'resolved' THEN 'open' ELSE agent_findings.status END
+     RETURNING id`,
+    [
+      s('sweep', LAB_SWEEP), s('sev', input.severity), s('title', input.title),
+      s('detail', input.detail ?? ''), s('etype', input.repo ? 'repo' : ''),
+      s('eid', input.repo ?? ''), s('evidence', JSON.stringify(evidence)),
+      s('fp', input.fingerprint),
+    ],
+  );
+  const filed = await getFinding(toStr(rows[0]?.['id']));
+  if (!filed) throw new Error('lab signal insert returned no row');
+  return filed;
+}
+
 export async function listFindings(opts: { status?: string; sweep?: string; limit?: number } = {}): Promise<Finding[]> {
-  if (config.mock.aurora) return [];
+  if (config.mock.aurora) {
+    const sevRank = { critical: 0, warning: 1, info: 2 } as const;
+    return MOCK_FINDINGS
+      .filter((f) => (!opts.status || f.status === opts.status) && (!opts.sweep || f.sweep === opts.sweep))
+      .sort((a, b) =>
+        (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3) ||
+        b.lastSeenAt.localeCompare(a.lastSeenAt))
+      .slice(0, Math.min(Math.max(opts.limit ?? 100, 1), 300));
+  }
   const limit = Math.min(Math.max(opts.limit ?? 100, 1), 300);
   const where: string[] = [];
   const params: SqlParameter[] = [{ name: 'lim', value: { longValue: limit } }];
@@ -430,7 +531,7 @@ export async function listFindings(opts: { status?: string; sweep?: string; limi
 
 /** One finding by id, or null. */
 export async function getFinding(id: string): Promise<Finding | null> {
-  if (config.mock.aurora) return null;
+  if (config.mock.aurora) return MOCK_FINDINGS.find((f) => f.id === id) ?? null;
   const rows = await exec(
     `SELECT id, sweep, severity, title, detail, entity_type, entity_id,
             evidence::text AS evidence, status, job_id,
@@ -495,7 +596,13 @@ export async function reopenFindingForJob(jobId: string): Promise<number> {
 }
 
 export async function setFindingStatus(id: string, status: 'open' | 'dismissed' | 'promoted' | 'resolved', jobId?: string): Promise<boolean> {
-  if (config.mock.aurora) return false;
+  if (config.mock.aurora) {
+    const f = MOCK_FINDINGS.find((x) => x.id === id);
+    if (!f) return false;
+    f.status = status;
+    if (jobId) f.jobId = jobId;
+    return true;
+  }
   const rows = await exec(
     `UPDATE agent_findings
         SET status = :status, job_id = COALESCE(NULLIF(:job, ''), job_id)

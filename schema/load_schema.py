@@ -198,6 +198,8 @@ def main():
         # requests reference agent_project_runs.
         'agent_projects_schema.sql',
         'agent_sdlc_schema.sql',
+        # The lab loop: fleet memory + human consults for computer-lab agents.
+        'lab_loop_schema.sql',
         # Bots + bot_runs. Loads last: it references agent_projects,
         # agent_project_runs, agent_jobs and projects, and its ALTERs add
         # linkage columns to tables the files above create.

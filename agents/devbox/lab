@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+# lab — the devbox agent's line to the outside world.
+#
+# Claude Code sessions in this microVM are ephemeral (the workspace is a
+# cache). This CLI is how a run reaches the parts of the platform that
+# OUTLIVE it, over the middleware's sessionless lab callbacks:
+#
+#   lab signal <critical|warning|info> "<title>" ["detail"]
+#       File an issue you noticed OUTSIDE your task — it lands on the org's
+#       findings board (Work page), where a person can promote it into a job.
+#
+#   lab remember <worked|failed|gotcha|decision|convention> "<title>" ["body"]
+#       Record a learning for the fleet. Future sessions on this repo recall
+#       it before starting work.
+#
+#   lab recall
+#       Print the fleet's memory for this repo. Run at session start.
+#
+#   lab consult "<question>" ["context"]
+#       Ask a human and WAIT (poll ≤10min). Prints the answer, or times out.
+#       Use when genuinely blocked on a judgment call — a consult holds a
+#       person's attention and your own runtime budget.
+#
+# Config (set by the runtime / CDK stack):
+#   LAB_API_BASE        middleware origin, e.g. https://orgiq.example.com
+#   LAB_CALLBACK_SECRET optional; sent as x-lab-auth when set
+#   LAB_SESSION_ID / LAB_BOX_ID / LAB_REPO / LAB_INITIATIVE_ID  attribution
+set -euo pipefail
+
+BASE="${LAB_API_BASE:-}"
+if [ -z "$BASE" ]; then
+  echo "lab: LAB_API_BASE is not set — the lab loop is not wired in this environment." >&2
+  exit 0   # soft: a missing loop must never fail an agent's bash step
+fi
+
+auth=()
+[ -n "${LAB_CALLBACK_SECRET:-}" ] && auth=(-H "x-lab-auth: ${LAB_CALLBACK_SECRET}")
+
+repo="${LAB_REPO:-$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")}"
+
+json_escape() { python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"; }
+
+post() { # $1=path $2=json-body
+  curl -sS --max-time 15 -X POST "$BASE$1" -H 'content-type: application/json' ${auth[@]+"${auth[@]}"} -d "$2"
+}
+
+common_fields() {
+  printf '"sessionId":%s,"boxId":%s,"repo":%s,"initiativeId":%s' \
+    "$(json_escape "${LAB_SESSION_ID:-}")" "$(json_escape "${LAB_BOX_ID:-}")" \
+    "$(json_escape "$repo")" "$(json_escape "${LAB_INITIATIVE_ID:-}")"
+}
+
+cmd="${1:-}"; shift || true
+case "$cmd" in
+  signal)
+    sev="${1:?usage: lab signal <critical|warning|info> \"title\" [detail]}"
+    title="${2:?title required}"; detail="${3:-}"
+    post /api/lab/signals "{\"severity\":$(json_escape "$sev"),\"title\":$(json_escape "$title"),\"detail\":$(json_escape "$detail"),$(common_fields)}" \
+      | python3 -c 'import json,sys; f=json.load(sys.stdin).get("finding",{}); print(f"filed: {f.get(chr(105)+chr(100))} → Work page findings")'
+    ;;
+  remember)
+    kind="${1:?usage: lab remember <worked|failed|gotcha|decision|convention> \"title\" [body]}"
+    title="${2:?title required}"; body="${3:-}"
+    post /api/lab/experiences "{\"kind\":$(json_escape "$kind"),\"title\":$(json_escape "$title"),\"body\":$(json_escape "$body"),$(common_fields)}" >/dev/null \
+      && echo "remembered for $repo"
+    ;;
+  recall)
+    curl -sS --max-time 15 ${auth[@]+"${auth[@]}"} "$BASE/api/lab/experiences?repo=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))' "$repo")&limit=20" \
+      | python3 -c '
+import json, sys
+exps = json.load(sys.stdin).get("experiences", [])
+if not exps:
+    print("No fleet memory for this repo yet.")
+else:
+    print(f"Fleet memory for this repo ({len(exps)} entries, newest first):")
+    for e in exps:
+        line = "- [" + e["kind"] + "] " + e["title"]
+        if e.get("body"): line += " — " + e["body"]
+        print(line)
+'
+    ;;
+  consult)
+    q="${1:?usage: lab consult \"question\" [context]}"; ctx="${2:-}"
+    cid=$(post /api/lab/consults "{\"question\":$(json_escape "$q"),\"context\":$(json_escape "$ctx"),$(common_fields)}" \
+      | python3 -c 'import json,sys; print(json.load(sys.stdin)["consult"]["id"])')
+    echo "consult $cid opened — waiting for a human (up to 10 min)…" >&2
+    deadline=$(( $(date +%s) + 600 ))
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+      sleep 5
+      out=$(curl -sS --max-time 15 ${auth[@]+"${auth[@]}"} "$BASE/api/lab/consults/$cid" || true)
+      status=$(printf '%s' "$out" | python3 -c 'import json,sys
+try: print(json.load(sys.stdin)["consult"]["status"])
+except Exception: print("pending")')
+      if [ "$status" = "answered" ]; then
+        printf '%s' "$out" | python3 -c 'import json,sys; c=json.load(sys.stdin)["consult"]; print("ANSWER (from " + (c.get("answeredBy") or "a human") + "): " + c["answer"])'
+        exit 0
+      fi
+      if [ "$status" = "expired" ] || [ "$status" = "withdrawn" ]; then break; fi
+    done
+    echo "No answer within the wait window. Proceed with your best judgment, note the assumption, and file it: lab remember decision \"...\"" >&2
+    exit 0   # soft: an unanswered consult must not fail the run
+    ;;
+  *)
+    sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'
+    exit 2
+    ;;
+esac

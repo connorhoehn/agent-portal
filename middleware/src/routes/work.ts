@@ -28,20 +28,25 @@ import {
 } from '../providers/graph-proposals.js';
 import { dispatcherEvents, dispatchOnce, busyBoxes } from '../lib/job-dispatcher.js';
 import { analyzeDocumentLinks, analyzeDocumentFindings } from '../providers/doc-linker.js';
+import { listConsults } from '../providers/lab.js';
 
 export const workRouter = Router();
 
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 workRouter.get('/summary', asyncHandler(async (_req, res) => {
-  const [jobs, proposals, findings] = await Promise.all([
+  const [jobs, proposals, findings, pendingConsults] = await Promise.all([
     queueStats(),
     proposalStats(),
     listFindings({ status: 'open', limit: 300 }),
+    // A waiting consult is a blocked AGENT — the most urgent kind of
+    // "needs you" the queue has, since a computer is sitting on it.
+    listConsults({ status: 'pending' }),
   ]);
   res.json({
     jobs,
     proposals,
+    consults: { pending: pendingConsults.length },
     findings: {
       open: findings.length,
       critical: findings.filter((f) => f.severity === 'critical').length,

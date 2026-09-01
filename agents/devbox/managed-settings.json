@@ -1,0 +1,12 @@
+{
+  "//": "Baked into /etc/claude-code/managed-settings.json in the devbox image. SessionStart injects the fleet's memory for the current repo (lab recall) so every session starts with what previous sessions learned — the read half of the lab loop; `lab` (signal|remember|consult) is the write half, documented in the CLI itself.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "lab recall" }
+        ]
+      }
+    ]
+  }
+}
