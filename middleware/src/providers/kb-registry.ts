@@ -23,6 +23,7 @@ import { initLandingZone } from './landing-zones.js';
 import { provisioningBroker } from '../lib/provisioning-broker.js';
 import { config } from '../config.js';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
+import { mockKbRegistry } from '../mock/kb-registry.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -109,6 +110,9 @@ function rowToEntry(r: Record<string, unknown>): KbRegistryEntry {
 
 /** List all KB registry entries, optionally filtered by tenant. */
 export async function listKbs(tenant?: string): Promise<KbRegistryEntry[]> {
+  if (config.mock.aurora) {
+    return tenant ? mockKbRegistry.filter((k) => k.tenant === tenant) : mockKbRegistry.slice();
+  }
   const sql = tenant
     ? `SELECT * FROM knowledge_bases WHERE tenant = :tenant ORDER BY created_at DESC`
     : `SELECT * FROM knowledge_bases ORDER BY created_at DESC`;
@@ -127,6 +131,7 @@ export async function getKb(id: string): Promise<KbRegistryEntry | null> {
   // server error for what is plainly a bad request — and every route here
   // treats a null return as 404 already.
   if (!UUID_RE.test(id)) return null;
+  if (config.mock.aurora) return mockKbRegistry.find((k) => k.id === id) ?? null;
 
   const rows = await exec(
     `SELECT * FROM knowledge_bases WHERE id = :id::uuid`,
@@ -137,6 +142,7 @@ export async function getKb(id: string): Promise<KbRegistryEntry | null> {
 
 /** Get a KB registry entry by slug. */
 export async function getKbBySlug(slug: string): Promise<KbRegistryEntry | null> {
+  if (config.mock.aurora) return mockKbRegistry.find((k) => k.slug === slug) ?? null;
   const rows = await exec(
     `SELECT * FROM knowledge_bases WHERE slug = :slug`,
     [strParam('slug', slug)],

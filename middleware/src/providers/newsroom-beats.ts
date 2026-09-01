@@ -3,6 +3,8 @@
 // All queries are wrapped defensively; missing schema returns empty defaults.
 
 import { exec } from './aurora.js';
+import { config } from '../config.js';
+import { mockArticles } from '../mock/newsroom.js';
 
 // ─── Public types ────────────────────────────────────────────────────────────
 
@@ -48,6 +50,22 @@ function buildDayLabels(days: number): string[] {
 
 export async function getBeatCoverage(opts: { days: number }): Promise<BeatHeatmapResponse> {
   const empty: BeatHeatmapResponse = { beats: [], days: buildDayLabels(opts.days), matrix: [] };
+
+  if (config.mock.aurora) {
+    const dayLabels = buildDayLabels(opts.days);
+    const dayIndex = new Map(dayLabels.map((d, i) => [d, i]));
+    const published = mockArticles.filter((a) => a.status === 'published' && a.publishedAt != null);
+    const beats = Array.from(new Set(published.map((a) => a.section))).sort();
+    const beatIndex = new Map(beats.map((b, i) => [b, i]));
+    const matrix: number[][] = beats.map(() => dayLabels.map(() => 0));
+    for (const a of published) {
+      const day = a.publishedAt!.slice(0, 10);
+      const bi = beatIndex.get(a.section);
+      const di = dayIndex.get(day);
+      if (bi !== undefined && di !== undefined) matrix[bi]![di] += 1;
+    }
+    return { beats, days: dayLabels, matrix };
+  }
 
   try {
     const rows = await exec(
@@ -101,6 +119,21 @@ export async function getBeatCoverage(opts: { days: number }): Promise<BeatHeatm
 
 export async function getTopBeats(limit: number): Promise<TopBeatsResponse> {
   const empty: TopBeatsResponse = { beats: [] };
+
+  if (config.mock.aurora) {
+    const sevenDaysAgoMs = Date.now() - 7 * 86_400_000;
+    const counts = new Map<string, number>();
+    for (const a of mockArticles) {
+      if (a.status !== 'published' || a.publishedAt == null) continue;
+      if (Date.parse(a.publishedAt) <= sevenDaysAgoMs) continue;
+      counts.set(a.section, (counts.get(a.section) ?? 0) + 1);
+    }
+    const beats = Array.from(counts.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, limit);
+    return { beats };
+  }
 
   try {
     const rows = await exec(

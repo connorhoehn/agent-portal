@@ -96,6 +96,39 @@ kbAdminRouter.get('/check', asyncHandler(async (req, res) => {
 
 kbAdminRouter.get('/health', asyncHandler(async (_req, res) => {
   const kbs = await listKbs();
+
+  // Offline: listKbs() already served the mock registry (three rows, one —
+  // KBMOCK-GONE — deliberately drifted). Report that drift synthetically
+  // instead of constructing a real BedrockAgentClient and making network
+  // calls that would hang or fail under fake credentials; the reconcile
+  // surface is a demo highlight, so it should show a plausible
+  // healthy-with-one-drift picture every time, not a slow timeout.
+  if (config.mock.aurora) {
+    const summary = kbs.map((kb) => {
+      const gone = kb.bedrockKbId === 'KBMOCK-GONE';
+      return {
+        id: kb.id,
+        slug: kb.slug,
+        tenant: kb.tenant,
+        status: kb.status,
+        reachable: !gone,
+        awsStatus: gone ? null : 'ACTIVE',
+        dataSourceCount: gone ? null : 1,
+        lastSyncStatus: gone ? null : 'COMPLETE',
+        lastSyncAt: gone ? null : new Date(Date.now() - 3 * 3_600_000).toISOString(),
+        problem: gone
+          ? `knowledge base ${kb.bedrockKbId} no longer exists in AWS — registered here but deleted upstream; agents will fail KB retrieval`
+          : null,
+      };
+    });
+    const broken = summary.filter((s) => s.reachable === false && s.status !== 'PENDING').length;
+    const healthy = summary.filter((s) => s.reachable && !s.problem).length;
+    const degraded = summary.filter((s) => s.reachable && Boolean(s.problem)).length;
+    const pending = summary.filter((s) => s.status === 'PENDING').length;
+    res.json({ healthy, degraded, broken, pending, kbs: summary });
+    return;
+  }
+
   const client = new BedrockAgentClient({ region: config.region });
 
   // Health must be a real probe of AWS, not an echo of the registry's own
@@ -356,8 +389,10 @@ kbAdminRouter.get('/:id', asyncHandler(async (req, res) => {
   const entry = await getKb(String(req.params['id'] ?? ''));
   if (!entry) throw new NotFoundError('Knowledge base not found');
 
-  // If we have a Bedrock KB ID and the DB says ACTIVE/UPDATING, merge live status
-  if (entry.bedrockKbId && (entry.status === 'ACTIVE' || entry.status === 'UPDATING')) {
+  // If we have a Bedrock KB ID and the DB says ACTIVE/UPDATING, merge live status.
+  // Skipped entirely under mock — the fixture's own status is already the
+  // "live" answer, and there is no real Bedrock account to ask.
+  if (!config.mock.aurora && entry.bedrockKbId && (entry.status === 'ACTIVE' || entry.status === 'UPDATING')) {
     try {
       const resp = await agentClient().send(
         new GetKnowledgeBaseCommand({ knowledgeBaseId: entry.bedrockKbId }),
