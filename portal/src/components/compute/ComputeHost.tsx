@@ -10,12 +10,17 @@
 // mutate, the model catalogue, where a notice goes, and which initiatives a
 // computer can be charged to.
 
-import { useMemo, type ReactNode } from 'react';
-import { ComputeProvider, type ComputeNotice, type ComputeProject } from '@connorhoehnslalom/ui-components/compute';
+import { useEffect, useMemo, type ReactNode } from 'react';
+import {
+  ComputeProvider, installMockShellSocket,
+  type ComputeNotice, type ComputeProject,
+} from '@connorhoehnslalom/ui-components/compute';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { DEVBOX_MODELS } from '../../lib/devboxModels';
 import { toastError, toastInfo, toastSuccess } from '../../lib/toastStore';
+
+const IS_DEV = !!(import.meta as unknown as { env?: Record<string, unknown> }).env?.['DEV'];
 
 /** /api/graph/projects, narrowed to what a cost centre needs. */
 interface OrgProject {
@@ -32,6 +37,27 @@ function notify(notice: ComputeNotice): void {
 export function ComputeHost({ children }: { children: ReactNode }) {
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageDevbox');
+
+  // Route `mock-shell:` sockets to the library's PTY simulator, in dev only.
+  //
+  // `npm run dev:mock` makes the middleware hand back a `mock-shell://` URL
+  // rather than a presigned one, and without a simulator the browser just
+  // fails to open it. Together they are what makes the Computers page
+  // developable with no AWS: it is 80% terminal, and before this the terminal
+  // was the one panel with no mock behind it — a 503 and a black rectangle
+  // where the thing you were working on should have been.
+  //
+  // Guarded on DEV, so a production bundle never patches the global
+  // WebSocket. The uninstall is refcounted by the library; returning it
+  // matters because swapping the global and not putting it back would break
+  // every other live surface on the page.
+  //
+  // Read through a cast for the same reason as GatewayStatusBadge: this repo
+  // has no vite-env.d.ts, so `import.meta.env` is untyped.
+  useEffect(() => {
+    if (!IS_DEV) return;
+    return installMockShellSocket();
+  }, []);
 
   // Initiatives double as cost centres, and charging a computer to one shares
   // it with everyone attached to that initiative (middleware

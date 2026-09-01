@@ -70,6 +70,10 @@ let _control: BedrockAgentCoreControlClient | null = null;
 // gateway-proxy.ts.
 const region = (): string => process.env['AWS_REGION'] ?? 'us-east-1';
 
+/** Read straight off the environment, like every other flag in this file —
+ *  importing config.ts drags import.meta into a CommonJS test build. */
+const mockAgentCore = (): boolean => process.env['MOCK_AGENTCORE'] === 'true';
+
 function dataClient(): BedrockAgentCoreClient {
   if (!_data) _data = new BedrockAgentCoreClient({ region: region() });
   return _data;
@@ -606,8 +610,6 @@ devboxRouter.post('/:sessionId/shell-url', asyncHandler(async (req, res) => {
   const sessionId = requireSessionId(String(req.params['sessionId'] ?? ''), res);
   if (!sessionId) return;
   if (!await requireBoxAccess(req, res, sessionId)) return;
-  const arn = await requireArn(res);
-  if (!arn) return;
 
   const body = (req.body ?? {}) as { shellId?: string; expiresIn?: number };
   // A stable default per session means a plain reload reattaches instead of
@@ -617,6 +619,33 @@ devboxRouter.post('/:sessionId/shell-url', asyncHandler(async (req, res) => {
     res.status(400).json({ error: `invalid shellId '${shellId}' — 1-128 chars of [A-Za-z0-9_-]` });
     return;
   }
+
+  // MOCK_AGENTCORE: hand back a mock-shell: URL instead of a presigned one.
+  //
+  // Without this the terminal is the one thing in the whole surface that can
+  // never render offline — every other panel has a mock provider, and the lab
+  // is 80% terminal. It made the Computers page undevelopable without a
+  // deployed runtime: you got a 503, an error line, and 600px of black where
+  // the thing you were working on should have been.
+  //
+  // The scheme is the client's contract (ui-components/compute
+  // `MOCK_SHELL_SCHEME`), and the portal only routes it to a simulated socket
+  // in dev. A real deployment never emits this because MOCK_AGENTCORE is off,
+  // and a browser asked to open `mock-shell://…` with no simulator installed
+  // fails immediately rather than reaching anything.
+  if (mockAgentCore()) {
+    res.json({
+      url: `mock-shell://${sessionId}?shell=${encodeURIComponent(shellId)}`,
+      shellId,
+      expiresIn: 900,
+      maxFrameBytes: MAX_FRAME_BYTES,
+      mock: true,
+    });
+    return;
+  }
+
+  const arn = await requireArn(res);
+  if (!arn) return;
 
   try {
     const minted = await presignShellUrl(arn, {
