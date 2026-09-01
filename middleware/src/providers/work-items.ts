@@ -7,6 +7,7 @@
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 import { exec } from './aurora.js';
 import { config } from '../config.js';
+import { mockProjectExists } from './projects.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -898,7 +899,16 @@ export async function countOpenChangeRequests(workItemId: string): Promise<numbe
  */
 export async function projectExists(projectId: string): Promise<boolean> {
   if (config.mock.aurora) {
-    return MOCK_WORK_ITEMS.some((i) => i.projectId === projectId)
+    // The initiative list is the authority — the same one GET /api/graph/projects
+    // serves. Asking "does it have work or decisions?" instead made an existing
+    // but empty initiative 404 as "Project not found", which is the confusion the
+    // sub-collection 404s exist to prevent, inverted.
+    //
+    // The work/decision fallbacks stay: they can only widen the answer, and a
+    // project referenced only by a work item should still resolve rather than
+    // vanish.
+    return mockProjectExists(projectId)
+      || MOCK_WORK_ITEMS.some((i) => i.projectId === projectId)
       || Object.hasOwn(PROJECT_DECISIONS, projectId);
   }
   const rows = await safeExec('SELECT 1 FROM projects WHERE id = :pid LIMIT 1', [strParam('pid', projectId)]);

@@ -44,6 +44,16 @@ export interface ProjectSummary {
   agentSpendUsd: number | null;
   /** Genuinely last, not last-this-month — see the note in listProjects. */
   lastAgentActivityAt: string | null;
+  /** bot_runs currently 'running' attributed to this initiative (24h guard,
+      mirroring countRunningRuns in providers/bots.ts). The dashboard's "agents
+      active now" signal. */
+  activeAgentRuns: number | null;
+  /** Highest open work-item priority ('critical' > 'high' > 'medium' > 'low'),
+      null when nothing is open. */
+  priority: string | null;
+  /** initiative_budgets.allocated_usd — the monthly allocation the MTD spend
+      reads against. Null when no allocation exists. */
+  allocatedUsd: number | null;
   /** The `owner/repo` this initiative's code lives in (agent_projects.repo_full_name,
       joined on agent_projects.org_project_id = projects.id), null when no repo is
       linked yet. This is the ONLY read path a release manager (org-leader) has to
@@ -56,10 +66,12 @@ export interface ProjectSummary {
 /** The rollup fields defaulted for mock mode and the legacy fallback. */
 const EMPTY_ROLLUPS: Pick<ProjectSummary,
   'ownerId' | 'ownerName' | 'smeNames' | 'openStories' | 'openBugs'
-  | 'pointsDone' | 'pointsTotal' | 'agentSpendUsd' | 'lastAgentActivityAt' | 'repoFullName'> = {
+  | 'pointsDone' | 'pointsTotal' | 'agentSpendUsd' | 'lastAgentActivityAt' | 'repoFullName'
+  | 'activeAgentRuns' | 'priority' | 'allocatedUsd'> = {
   ownerId: null, ownerName: null, smeNames: [],
   openStories: null, openBugs: null, pointsDone: null, pointsTotal: null,
   agentSpendUsd: null, lastAgentActivityAt: null, repoFullName: null,
+  activeAgentRuns: null, priority: null, allocatedUsd: null,
 };
 
 export interface ProjectDetail {
@@ -182,26 +194,57 @@ interface MockInitiative {
       schema/seeds/generate_program_seed.py links via org_project_id, so mock
       mode reports the same codebase link Aurora does. */
   repo: string;
+  /** Highest open work-item priority, mirroring the seed's open epics/stories.
+      Null for initiatives with nothing open (completed ones). */
+  priority: string | null;
+  /** bot_runs 'running' right now. Only initiatives with recent activity
+      (activeHoursAgo ≲ a working morning) carry live runs, so the mock's live
+      signal agrees with its own freshness stamps. */
+  activeAgents: number;
+  /** Work rollups, plausible against schema/seed_program.sql's volumes, so the
+      dashboard's progress bars and open-work counts render in dev:mock. */
+  openStories: number;
+  openBugs: number;
+  pointsDone: number;
+  pointsTotal: number;
 }
 
 const MOCK_INITIATIVES: MockInitiative[] = [
-  { id: 'p-observability',     name: 'Observability Platform',       status: 'in_progress', createdAt: '2026-05-24T12:00:00Z', owner: 'p-004', smes: ['p-008', 'p-011'], activeHoursAgo: 1,  repo: 'connorhoehnslalom/orgiq-observability' },
-  { id: 'p-auth-migration',    name: 'Auth Migration',               status: 'in_progress', createdAt: '2026-06-05T12:00:00Z', owner: 'p-002', smes: ['p-051', 'p-004'], activeHoursAgo: 3,  repo: 'connorhoehnslalom/orgiq-auth-service' },
-  { id: 'p-llm-platform',      name: 'LLM Application Platform',     status: 'in_progress', createdAt: '2026-06-19T12:00:00Z', owner: 'p-047', smes: ['p-042', 'p-013'], activeHoursAgo: 2,  repo: 'connorhoehnslalom/orgiq-llm-platform' },
-  { id: 'p-cost-opt',          name: 'Cost Optimization',            status: 'in_progress', createdAt: '2026-05-30T12:00:00Z', owner: 'p-008', smes: ['p-011', 'p-017'], activeHoursAgo: 5,  repo: 'connorhoehnslalom/orgiq-finops' },
-  { id: 'p-realtime-analytics', name: 'Real-time Analytics Pipeline', status: 'in_progress', createdAt: '2026-06-24T12:00:00Z', owner: 'p-017', smes: ['p-019', 'p-024'], activeHoursAgo: 9,  repo: 'connorhoehnslalom/orgiq-stream-analytics' },
-  { id: 'p-data-lake',         name: 'Data Lake Migration',          status: 'planning',    createdAt: '2026-08-01T12:00:00Z', owner: 'p-025', smes: ['p-017', 'p-015'], activeHoursAgo: 40, repo: 'connorhoehnslalom/orgiq-data-lake' },
-  { id: 'p-feature-store',     name: 'ML Feature Store',             status: 'in_progress', createdAt: '2026-06-28T12:00:00Z', owner: 'p-042', smes: ['p-019', 'p-044'], activeHoursAgo: 12, repo: 'connorhoehnslalom/orgiq-feature-store' },
-  { id: 'p-mobile-redesign',   name: 'Mobile App Redesign',          status: 'in_progress', createdAt: '2026-06-12T12:00:00Z', owner: 'p-030', smes: ['p-035', 'p-026'], activeHoursAgo: 18, repo: 'connorhoehnslalom/orgiq-mobile-app' },
-  { id: 'p-design-v3',         name: 'Design System v3',             status: 'in_progress', createdAt: '2026-07-03T12:00:00Z', owner: 'p-035', smes: ['p-038', 'p-034'], activeHoursAgo: 26, repo: 'connorhoehnslalom/orgiq-design-system' },
-  { id: 'p-design-system-api', name: 'Design System API',            status: 'in_progress', createdAt: '2026-07-10T12:00:00Z', owner: 'p-038', smes: ['p-035', 'p-001'], activeHoursAgo: 30, repo: 'connorhoehnslalom/orgiq-design-system-api' },
-  { id: 'p-inference-platform', name: 'Inference Platform',          status: 'in_progress', createdAt: '2026-06-15T12:00:00Z', owner: 'p-049', smes: ['p-013', 'p-043'], activeHoursAgo: 7,  repo: 'connorhoehnslalom/orgiq-inference-platform' },
-  { id: 'p-rag-search',        name: 'RAG Knowledge Search',         status: 'completed',   createdAt: '2026-04-18T12:00:00Z', owner: 'p-048', smes: ['p-047'],          activeHoursAgo: 22, repo: 'connorhoehnslalom/orgiq-rag-search' },
-  { id: 'p-soc2',              name: 'SOC2 Compliance',              status: 'in_progress', createdAt: '2026-06-22T12:00:00Z', owner: 'p-052', smes: ['p-055', 'p-051'], activeHoursAgo: 14, repo: 'connorhoehnslalom/orgiq-compliance' },
-  { id: 'p-zero-trust',        name: 'Zero Trust Network',           status: 'planning',    createdAt: '2026-08-08T12:00:00Z', owner: 'p-051', smes: ['p-052', 'p-056'], activeHoursAgo: 48, repo: 'connorhoehnslalom/orgiq-zero-trust' },
+  { id: 'p-observability',     name: 'Observability Platform',       status: 'in_progress', createdAt: '2026-05-24T12:00:00Z', owner: 'p-004', smes: ['p-008', 'p-011'], activeHoursAgo: 1,  repo: 'connorhoehnslalom/orgiq-observability' , priority: 'critical', activeAgents: 2, openStories: 6, openBugs: 2, pointsDone: 34, pointsTotal: 72 },
+  { id: 'p-auth-migration',    name: 'Auth Migration',               status: 'in_progress', createdAt: '2026-06-05T12:00:00Z', owner: 'p-002', smes: ['p-051', 'p-004'], activeHoursAgo: 3,  repo: 'connorhoehnslalom/orgiq-auth-service' , priority: 'critical', activeAgents: 1, openStories: 4, openBugs: 3, pointsDone: 21, pointsTotal: 55 },
+  { id: 'p-llm-platform',      name: 'LLM Application Platform',     status: 'in_progress', createdAt: '2026-06-19T12:00:00Z', owner: 'p-047', smes: ['p-042', 'p-013'], activeHoursAgo: 2,  repo: 'connorhoehnslalom/orgiq-llm-platform' , priority: 'high', activeAgents: 2, openStories: 7, openBugs: 1, pointsDone: 18, pointsTotal: 64 },
+  { id: 'p-cost-opt',          name: 'Cost Optimization',            status: 'in_progress', createdAt: '2026-05-30T12:00:00Z', owner: 'p-008', smes: ['p-011', 'p-017'], activeHoursAgo: 5,  repo: 'connorhoehnslalom/orgiq-finops' , priority: 'high', activeAgents: 1, openStories: 3, openBugs: 2, pointsDone: 26, pointsTotal: 48 },
+  { id: 'p-realtime-analytics', name: 'Real-time Analytics Pipeline', status: 'in_progress', createdAt: '2026-06-24T12:00:00Z', owner: 'p-017', smes: ['p-019', 'p-024'], activeHoursAgo: 9,  repo: 'connorhoehnslalom/orgiq-stream-analytics' , priority: 'high', activeAgents: 1, openStories: 5, openBugs: 1, pointsDone: 15, pointsTotal: 46 },
+  { id: 'p-data-lake',         name: 'Data Lake Migration',          status: 'planning',    createdAt: '2026-08-01T12:00:00Z', owner: 'p-025', smes: ['p-017', 'p-015'], activeHoursAgo: 40, repo: 'connorhoehnslalom/orgiq-data-lake' , priority: 'medium', activeAgents: 0, openStories: 6, openBugs: 0, pointsDone: 0, pointsTotal: 38 },
+  { id: 'p-feature-store',     name: 'ML Feature Store',             status: 'in_progress', createdAt: '2026-06-28T12:00:00Z', owner: 'p-042', smes: ['p-019', 'p-044'], activeHoursAgo: 12, repo: 'connorhoehnslalom/orgiq-feature-store' , priority: 'high', activeAgents: 0, openStories: 4, openBugs: 1, pointsDone: 19, pointsTotal: 42 },
+  { id: 'p-mobile-redesign',   name: 'Mobile App Redesign',          status: 'in_progress', createdAt: '2026-06-12T12:00:00Z', owner: 'p-030', smes: ['p-035', 'p-026'], activeHoursAgo: 18, repo: 'connorhoehnslalom/orgiq-mobile-app' , priority: 'medium', activeAgents: 0, openStories: 5, openBugs: 2, pointsDone: 23, pointsTotal: 51 },
+  { id: 'p-design-v3',         name: 'Design System v3',             status: 'in_progress', createdAt: '2026-07-03T12:00:00Z', owner: 'p-035', smes: ['p-038', 'p-034'], activeHoursAgo: 26, repo: 'connorhoehnslalom/orgiq-design-system' , priority: 'medium', activeAgents: 0, openStories: 3, openBugs: 1, pointsDone: 28, pointsTotal: 44 },
+  { id: 'p-design-system-api', name: 'Design System API',            status: 'in_progress', createdAt: '2026-07-10T12:00:00Z', owner: 'p-038', smes: ['p-035', 'p-001'], activeHoursAgo: 30, repo: 'connorhoehnslalom/orgiq-design-system-api' , priority: 'low', activeAgents: 0, openStories: 2, openBugs: 0, pointsDone: 12, pointsTotal: 26 },
+  { id: 'p-inference-platform', name: 'Inference Platform',          status: 'in_progress', createdAt: '2026-06-15T12:00:00Z', owner: 'p-049', smes: ['p-013', 'p-043'], activeHoursAgo: 7,  repo: 'connorhoehnslalom/orgiq-inference-platform' , priority: 'high', activeAgents: 1, openStories: 5, openBugs: 2, pointsDone: 20, pointsTotal: 58 },
+  { id: 'p-rag-search',        name: 'RAG Knowledge Search',         status: 'completed',   createdAt: '2026-04-18T12:00:00Z', owner: 'p-048', smes: ['p-047'],          activeHoursAgo: 22, repo: 'connorhoehnslalom/orgiq-rag-search' , priority: null, activeAgents: 0, openStories: 0, openBugs: 0, pointsDone: 40, pointsTotal: 40 },
+  { id: 'p-soc2',              name: 'SOC2 Compliance',              status: 'in_progress', createdAt: '2026-06-22T12:00:00Z', owner: 'p-052', smes: ['p-055', 'p-051'], activeHoursAgo: 14, repo: 'connorhoehnslalom/orgiq-compliance' , priority: 'high', activeAgents: 0, openStories: 4, openBugs: 1, pointsDone: 17, pointsTotal: 36 },
+  { id: 'p-zero-trust',        name: 'Zero Trust Network',           status: 'planning',    createdAt: '2026-08-08T12:00:00Z', owner: 'p-051', smes: ['p-052', 'p-056'], activeHoursAgo: 48, repo: 'connorhoehnslalom/orgiq-zero-trust' , priority: 'medium', activeAgents: 0, openStories: 5, openBugs: 0, pointsDone: 2, pointsTotal: 30 },
 ];
 
 const HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * Does this initiative exist, in mock mode?
+ *
+ * Exported so `work-items.ts` can answer "is this a real id" from the SAME list
+ * that GET /api/graph/projects serves. It previously answered that question with
+ * "does it have any work items or decisions?", so an initiative that genuinely
+ * exists but has no work yet (p-realtime-analytics) 404'd as "Project not
+ * found" — the exact confusion the sub-collection 404s were introduced to
+ * prevent, inverted: instead of a typo reading as empty, an empty initiative
+ * read as a typo.
+ *
+ * Safe direction: this can only widen what is considered to exist, and the
+ * failure being fixed is a false 404.
+ */
+export function mockProjectExists(projectId: string): boolean {
+  return MOCK_INITIATIVES.some((p) => p.id === projectId);
+}
 
 const MOCK_PROJECTS: Array<Omit<ProjectSummary, keyof typeof EMPTY_ROLLUPS>> = MOCK_INITIATIVES.map((p) => ({
   id: p.id,
@@ -232,10 +275,23 @@ const MOCK_PROJECT_DETAILS: Record<string, Omit<ProjectDetail, 'ownerId' | 'owne
 export async function listProjects(opts: {
   status?: string;
   limit?: number;
+  /** When true, only initiatives `personId` owns or contributes to — the
+      dashboard's "Mine" scope (same person-keyed framing as /api/sprints). */
+  mineOnly?: boolean;
+  personId?: string | null;
 }): Promise<ProjectSummary[]> {
   if (config.mock.aurora) {
     let items = MOCK_PROJECTS.slice();
     if (opts.status) items = items.filter((p) => p.status === opts.status);
+    if (opts.mineOnly) {
+      const me = opts.personId ?? null;
+      items = me
+        ? items.filter((p) => {
+            const cast = MOCK_INITIATIVES.find((m) => m.id === p.id);
+            return cast != null && (cast.owner === me || cast.smes.includes(me));
+          })
+        : [];
+    }
     // The cast's first entry is the initiative owner by construction, and the
     // rest are its SMEs — same shape the real rollup returns.
     return items.slice(0, Math.min(opts.limit ?? 50, 200)).map((p) => {
@@ -257,6 +313,13 @@ export async function listProjects(opts: {
         repoFullName: cast?.repo ?? null,
         agentSpendUsd: row ? row.spentThisPeriodUsd : 0,
         lastAgentActivityAt: row ? row.lastAgentActivityAt : null,
+        activeAgentRuns: cast?.activeAgents ?? 0,
+        priority: cast?.priority ?? null,
+        allocatedUsd: row ? row.allocatedUsd : null,
+        openStories: cast?.openStories ?? null,
+        openBugs: cast?.openBugs ?? null,
+        pointsDone: cast?.pointsDone ?? null,
+        pointsTotal: cast?.pointsTotal ?? null,
         // Aurora derives lastActivityAt as `lastAgent ?? createdAt`, so where
         // the ledger has activity the two fields are one timestamp, not two
         // fixtures a second apart.
@@ -265,12 +328,28 @@ export async function listProjects(opts: {
     });
   }
 
+  // "Mine" without a linked person resolves to nothing — the route says why.
+  if (opts.mineOnly && !opts.personId) return [];
+
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
 
   const params: SqlParameter[] = [intParam('lim', limit)];
-  const whereClause = opts.status
-    ? (params.push(strParam('status', opts.status)), 'WHERE p.status = :status')
-    : '';
+  const conds: string[] = [];
+  if (opts.status) {
+    params.push(strParam('status', opts.status));
+    conds.push('p.status = :status');
+  }
+  if (opts.mineOnly && opts.personId) {
+    params.push(strParam('me', opts.personId));
+    // Ownership OR contribution — an SME attached across initiatives sees each
+    // of them under "Mine", same relationship set /api/sprints uses. Only the
+    // contributions half of the test so the clause also survives the legacy
+    // (pre-owner_id) fallback SQL below; seeds always give the owner a
+    // contribution row.
+    conds.push(`EXISTS (SELECT 1 FROM project_contributions pcm
+        WHERE pcm.project_id = p.id AND pcm.person_id = :me)`);
+  }
+  const whereClause = conds.length > 0 ? `WHERE ${conds.join(' AND ')}` : '';
 
   // Note: projects table has (id, name, status, created_at) — no updated_at.
   // Top contributor names are fetched via a correlated subquery to avoid
@@ -297,8 +376,9 @@ export async function listProjects(opts: {
   // initiative through any of its three linkages: the run's work item, a bot
   // targeting the initiative directly, or a bot targeting a codebase that
   // delivers it.
-  const attributionPredicate = `
-        br.cost_usd IS NOT NULL AND (
+  // The linkage alone (no cost filter): a run still 'running' has no cost yet,
+  // and the live-agents count below must see it.
+  const linkPredicate = `(
           br.work_item_id IN (SELECT w2.id FROM work_items w2 WHERE w2.project_id = p.id)
           OR br.bot_id IN (
             SELECT b.id FROM bots b
@@ -306,6 +386,8 @@ export async function listProjects(opts: {
                 OR b.agent_project_id IN (SELECT ap.id FROM agent_projects ap WHERE ap.org_project_id = p.id)
           )
         )`;
+  const attributionPredicate = `
+        br.cost_usd IS NOT NULL AND ${linkPredicate}`;
   // agentSpendUsd is month-to-date, on the same window the Budgets ledger uses.
   // It was lifetime, which made the same initiative report two different
   // "agent spend" figures on two pages that neither named a window nor agreed.
@@ -335,7 +417,18 @@ export async function listProjects(opts: {
       (SELECT MAX(br.started_at) FROM bot_runs br WHERE ${attributionPredicate}) AS last_agent_activity_at,
       (SELECT ap.repo_full_name FROM agent_projects ap
         WHERE ap.org_project_id = p.id
-        ORDER BY ap.created_at ASC LIMIT 1) AS repo_full_name`;
+        ORDER BY ap.created_at ASC LIMIT 1) AS repo_full_name,
+      (SELECT COUNT(*)::int FROM bot_runs br
+        WHERE br.status = 'running' AND br.started_at > NOW() - INTERVAL '24 hours'
+          AND ${linkPredicate}) AS active_agent_runs,
+      (SELECT w.priority FROM work_items w
+        WHERE w.project_id = p.id AND w.type IN ('story','bug')
+          AND w.status IN ('open','in_progress','in_review')
+        ORDER BY CASE w.priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1
+                                 WHEN 'medium' THEN 2 ELSE 3 END
+        LIMIT 1) AS top_priority,
+      (SELECT ib.allocated_usd::float8 FROM initiative_budgets ib
+        WHERE ib.org_project_id = p.id LIMIT 1) AS allocated_usd`;
 
   const buildSql = (withRollups: boolean) => `
     SELECT
@@ -387,6 +480,9 @@ export async function listProjects(opts: {
         agentSpendUsd: Number(r['agent_spend_usd'] ?? 0),
         lastAgentActivityAt: lastAgent,
         repoFullName: r['repo_full_name'] != null ? String(r['repo_full_name']) : null,
+        activeAgentRuns: Number(r['active_agent_runs'] ?? 0),
+        priority: r['top_priority'] != null ? String(r['top_priority']) : null,
+        allocatedUsd: r['allocated_usd'] != null ? Number(r['allocated_usd']) : null,
       } : EMPTY_ROLLUPS),
     };
   });
