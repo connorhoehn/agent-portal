@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router';
 import { PageSection } from '@connorhoehnslalom/ui-components/shared';
 import { ScoreAnalysisPanel } from '../components/scores/ScoreAnalysisPanel';
 import { useFetch } from '../hooks/useFetch';
+import { useCapabilities } from '../lib/capabilities';
 import { ScoreEntry, PersonDetail, DEPT_COLORS } from '../components/scores/types';
 import { StatCards } from '../components/scores/StatCards';
 import { DepartmentFilter } from '../components/scores/DepartmentFilter';
@@ -18,7 +19,20 @@ function ScoresPage() {
   const leaderboardUrl = skillFilter
     ? `/api/scores/by-skill?skill=${encodeURIComponent(skillFilter)}&limit=100`
     : '/api/scores/leaderboard?limit=100';
-  const { data, isLoading, error, refresh } = useFetch<{ entries: ScoreEntry[]; total: number; mostRecentScoredAt: string | null }>(leaderboardUrl);
+  // The access message below used to be derived from the ERROR STRING
+  // (/403|forbidden/), which meant the page had to be REFUSED before it could
+  // explain itself — a guaranteed console error on every load for every role
+  // without the grant. The capability answers the same question without asking
+  // the server, so ask it first and skip the request entirely.
+  //
+  // The error-string check stays as a fallback: the server can deny for reasons
+  // the client cannot predict (tenant scope, a policy condition), and those must
+  // still land on this message rather than a raw failure.
+  const { can, ready: capsReady } = useCapabilities();
+  const mayViewLeaderboard = capsReady && can('ViewLeaderboard');
+  const { data, isLoading, error, refresh } = useFetch<{ entries: ScoreEntry[]; total: number; mostRecentScoredAt: string | null }>(
+    mayViewLeaderboard ? leaderboardUrl : null,
+  );
   const [deptFilter, setDeptFilter] = useState<string>('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [comparisonIds, setComparisonIds] = useState<Set<string>>(new Set());
@@ -90,9 +104,12 @@ function ScoresPage() {
     navigate(`/iq/scores/compare${query}`);
   }, [comparisonIds, searchParams, navigate]);
 
-  if (isLoading) return <div style={{ padding: 24, color: 'var(--color-text-tertiary)' }}>Loading scores…</div>;
-  if (error) {
-    const denied = /403|forbidden/i.test(error);
+  // Capabilities not resolved yet is LOADING, not denied — rendering "access
+  // needed" during the probe would accuse the user of lacking a permission we
+  // have not finished checking.
+  if (!capsReady || isLoading) return <div style={{ padding: 24, color: 'var(--color-text-tertiary)' }}>Loading scores…</div>;
+  if (!mayViewLeaderboard || error) {
+    const denied = !mayViewLeaderboard || /403|forbidden/i.test(error ?? '');
     return (
       <div style={{ padding: 40, maxWidth: 560 }}>
         <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>
