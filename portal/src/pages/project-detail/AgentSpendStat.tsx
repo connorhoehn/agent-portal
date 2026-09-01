@@ -1,0 +1,56 @@
+// One number with a clear provenance.
+//
+// The server-computed figure (the same one the Initiatives list shows) wins;
+// the client-side sum of visible runs is the fallback, and it is only reported
+// when the runs were actually visible. When neither holds, the stat says the
+// spend is unknown rather than printing $0.00 — which is the one thing it must
+// never do. "$0.00 agent spend" on an initiative that has spent money is a
+// budget statement that is simply false.
+
+import { StatCard } from '@connorhoehnslalom/ui-components/shared';
+
+export interface AgentSpendInputs {
+  serverSpendUsd: number | null;
+  serverPending: boolean;
+  clientSpendUsd: number;
+  clientBlind: boolean;
+  clientPending: boolean;
+}
+
+/** Pure: the figure, its caption and the provenance tooltip. */
+export function resolveAgentSpend(
+  { serverSpendUsd, serverPending, clientSpendUsd, clientBlind, clientPending }: AgentSpendInputs,
+): { value: string; label: string; title: string; unknown: boolean } {
+  if (serverSpendUsd != null) {
+    return {
+      value: `$${serverSpendUsd.toFixed(2)}`,
+      label: 'agent spend',
+      title: 'Every agent run attributed to this initiative, totalled by the server — the same figure the Initiatives list shows.',
+      unknown: false,
+    };
+  }
+  if (serverPending || clientPending) {
+    return { value: '…', label: 'agent spend', title: 'Loading agent spend.', unknown: false };
+  }
+  if (clientBlind) {
+    return {
+      value: '—',
+      label: 'agent spend unknown',
+      title: 'Agent spend is unknown to this role: the bot roster needs the ManageDevbox authority, and the server has no rollup for this initiative. Unknown, not zero.',
+      unknown: true,
+    };
+  }
+  return {
+    value: `$${clientSpendUsd.toFixed(2)}`,
+    label: 'agent spend',
+    title: 'Totalled from the agent runs visible to this session — the server reported no rollup for this initiative.',
+    unknown: false,
+  };
+}
+
+export function AgentSpendStat(inputs: AgentSpendInputs) {
+  const { value, label, title } = resolveAgentSpend(inputs);
+  // StatCard has no tooltip prop, but `label` takes a ReactNode — so the
+  // provenance rides on the caption rather than on a wrapper element.
+  return <StatCard label={<span title={title}>{label}</span>} value={value} />;
+}

@@ -1,0 +1,93 @@
+// Org-graph attribution for this initiative.
+//
+// Previously a hand-built <table> with inline cell padding, JS mouseenter/leave
+// row hovering, and a <style> tag injected into the body to give the name cell
+// a focus ring — because an inline style object can't carry :focus-visible.
+// DataTable owns the chrome and the name is a real <Button>, so the ring comes
+// from the design system and the row stays reachable from the keyboard.
+
+import { Avatar, Button, DataTable, Inline, InlinePlaceholder, ProgressBar } from '@connorhoehnslalom/ui-components/shared';
+import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
+import { RoleCycleChip } from '../../components/marketplace/GovernanceEditor';
+import type { ProjectContributor } from './types';
+
+export function ContributorsTable({
+  contributors,
+  projectId,
+  onRole,
+  onOpenPerson,
+}: {
+  contributors: ProjectContributor[];
+  projectId: string;
+  /** Optimistic apply / revert of one contributor's role. */
+  onRole: (personId: string, role: string | null) => void;
+  /** Open the shared, page-level person card (keeps the breadcrumb). */
+  onOpenPerson: (personId: string, role: string | null) => void;
+}) {
+  if (contributors.length === 0) {
+    return <InlinePlaceholder>No contributors recorded.</InlinePlaceholder>;
+  }
+
+  const columns: DataTableColumn<ProjectContributor>[] = [
+    {
+      key: 'name', header: 'Name', sortable: true,
+      render: (c) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="px-0 font-medium"
+          aria-label={`View ${c.name}`}
+          onClick={(e) => { e.stopPropagation(); onOpenPerson(c.personId, c.role); }}
+        >
+          <Inline gap="xs" align="center" wrap={false}>
+            <Avatar name={c.name} size={24} />
+            <span className="text-[13px]">{c.name}</span>
+          </Inline>
+        </Button>
+      ),
+    },
+    {
+      key: 'title', header: 'Title', sortable: true,
+      render: (c) => <span className="text-text-secondary">{c.title ?? '—'}</span>,
+    },
+    {
+      key: 'role', header: 'Role',
+      // Reserved roles get chips — owner runs the initiative, SMEs direct
+      // agents across the initiatives they're attached to. The cell is a
+      // compact cycle control ('—' → sme → owner) that PATCHes the role
+      // optimistically; a 403 reverts with a quiet toast.
+      render: (c) => (
+        <span onClick={(e) => e.stopPropagation()}>
+          <RoleCycleChip projectId={projectId} personId={c.personId} role={c.role} onRole={onRole} />
+        </span>
+      ),
+    },
+    {
+      key: 'weight', header: 'Weight', align: 'right', sortable: true,
+      render: (c) => (
+        <Inline gap="xs" align="center" justify="end" wrap={false}>
+          <ProgressBar
+            className="w-[60px]"
+            value={Math.min(c.weight * 100, 100)}
+            max={100}
+            size="sm"
+            showRatio={false}
+            aria-label={`${(c.weight * 100).toFixed(0)}% attribution`}
+          />
+          <span className="min-w-[36px] text-right text-[13px] font-medium text-text-secondary tabular-nums">
+            {(c.weight * 100).toFixed(0)}%
+          </span>
+        </Inline>
+      ),
+    },
+  ];
+
+  return (
+    <DataTable
+      data={contributors}
+      columns={columns}
+      keyField={(c) => c.personId}
+      onRowClick={(c) => onOpenPerson(c.personId, c.role)}
+    />
+  );
+}
