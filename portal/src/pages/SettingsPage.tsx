@@ -90,7 +90,7 @@ export function SettingsPage() {
           <div style={dividerStyle} />
           <SettingRow
             title="Theme"
-            description="Controls colour scheme. No live preview — takes effect when applied by the app shell."
+            description="Day or night, applied immediately — terminals included. System follows the OS."
             control={
               <div style={{ display: 'flex', gap: 8 }}>
                 {THEME_OPTIONS.map(opt => {
