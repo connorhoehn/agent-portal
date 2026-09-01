@@ -1,0 +1,200 @@
+import { useState } from 'react';
+import {
+  Button,
+  Card,
+  Chip,
+  Inline,
+  InlinePlaceholder,
+  Input,
+  MetaLine,
+  Stack,
+  Table,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableTd,
+  TableTh,
+} from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../../lib/capabilities';
+import { useFetch } from '../../../hooks/useFetch';
+import { relativeTimeSeconds } from '../../../lib/relativeTime';
+import { SESSIONS_URL, closeSession, launchSession } from './browserApi';
+import { closedSessions, isBlankUrl, openSessions, sessionTone } from './browserFormat';
+import type { BrowserSession } from './types';
+
+const MAX_PAST_ROWS = 20;
+
+/**
+ * The raw open + closed session lists — the admin power-user view.
+ * Launching and closing mutate /api/capabilities (ManageDevbox); the lists
+ * themselves are readable by anyone.
+ */
+export function SessionsTab() {
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageDevbox');
+  const { data, refresh } = useFetch<{ sessions: BrowserSession[] }>(SESSIONS_URL, 10000);
+
+  const sessions = data?.sessions ?? [];
+  const open = openSessions(sessions);
+  const closed = closedSessions(sessions);
+
+  return (
+    <Stack gap="lg">
+      {canManage && <LaunchSessionCard onLaunched={refresh} />}
+
+      <Card padding="md">
+        <Stack gap="md">
+          <Inline gap="sm" justify="between">
+            <h2 className="text-[14px] font-semibold text-text-primary">Open sessions</h2>
+            <MetaLine items={[`${open.length} open`]} />
+          </Inline>
+          {open.length === 0 ? (
+            <InlinePlaceholder align="center" size="sm">No open browser sessions.</InlinePlaceholder>
+          ) : (
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableTh>Label</TableTh>
+                  <TableTh>Status</TableTh>
+                  <TableTh>Current URL</TableTh>
+                  <TableTh className="text-right">Requests</TableTh>
+                  <TableTh>Last active</TableTh>
+                  <TableTh><span className="sr-only">Actions</span></TableTh>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {open.map(session => (
+                  <TableRow key={session.sessionId}>
+                    <TableTd className="font-medium">{session.agentName}</TableTd>
+                    <TableTd>
+                      <Chip tone={sessionTone(session.status)} size="xs">{session.status}</Chip>
+                    </TableTd>
+                    <TableTd className="max-w-[260px] truncate text-[11px]">
+                      {isBlankUrl(session.currentUrl) ? (
+                        <span className="text-text-tertiary">—</span>
+                      ) : (
+                        <a
+                          href={session.currentUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary no-underline hover:underline"
+                        >
+                          {session.currentUrl}
+                        </a>
+                      )}
+                    </TableTd>
+                    <TableTd className="text-right tabular-nums whitespace-nowrap">{session.requestCount}</TableTd>
+                    <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
+                      {relativeTimeSeconds(session.lastActivityAt)}
+                    </TableTd>
+                    <TableTd>
+                      {canManage && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => { void closeSession(session.sessionId).then(refresh); }}
+                        >
+                          Close
+                        </Button>
+                      )}
+                    </TableTd>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </Stack>
+      </Card>
+
+      <Card padding="md">
+        <Stack gap="md">
+          <Inline gap="sm" justify="between">
+            <h2 className="text-[14px] font-semibold text-text-primary">Past sessions</h2>
+            <MetaLine items={['from AgentCore Data Plane', `${closed.length} closed`]} />
+          </Inline>
+          {closed.length === 0 ? (
+            <InlinePlaceholder align="center" size="sm">
+              No past sessions yet. Launch one above, or invoke the search agent with a
+              browse-the-web prompt.
+            </InlinePlaceholder>
+          ) : (
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableTh>Started</TableTh>
+                  <TableTh>Agent</TableTh>
+                  <TableTh>Last URL</TableTh>
+                  <TableTh className="text-right">Requests</TableTh>
+                  <TableTh>Status</TableTh>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {closed.slice(0, MAX_PAST_ROWS).map(s => (
+                  <TableRow key={s.sessionId}>
+                    <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
+                      {new Date(s.startedAt).toLocaleString()}
+                    </TableTd>
+                    <TableTd className="text-[12px]">{s.agentName}</TableTd>
+                    <TableTd className="max-w-[320px] truncate text-[11px]" title={s.currentUrl}>
+                      {isBlankUrl(s.currentUrl) ? <span className="text-text-tertiary">—</span> : s.currentUrl}
+                    </TableTd>
+                    <TableTd className="text-right tabular-nums whitespace-nowrap text-[11px] text-text-tertiary">
+                      {s.requestCount}
+                    </TableTd>
+                    <TableTd><Chip tone="neutral" size="xs">{s.status}</Chip></TableTd>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </Stack>
+      </Card>
+    </Stack>
+  );
+}
+
+function LaunchSessionCard({ onLaunched }: { onLaunched: () => void }) {
+  const [agentName, setAgentName] = useState('portal');
+  const [url, setUrl] = useState('');
+  const [launching, setLaunching] = useState(false);
+
+  async function launch() {
+    if (!agentName) return;
+    setLaunching(true);
+    try {
+      await launchSession(agentName, url);
+      setUrl('');
+      onLaunched();
+    } finally {
+      setLaunching(false);
+    }
+  }
+
+  return (
+    <Card padding="md">
+      <Stack gap="md">
+        <h2 className="text-[14px] font-semibold text-text-primary">Launch browser session</h2>
+        <Inline gap="sm" wrap={false}>
+          <Input
+            value={agentName}
+            onChange={e => setAgentName(e.target.value)}
+            placeholder="Session label (any text)"
+            aria-label="Session label"
+            className="w-40 flex-none"
+          />
+          <Input
+            type="url"
+            value={url}
+            onChange={e => setUrl(e.target.value)}
+            placeholder="Starting URL (optional)"
+            aria-label="Starting URL"
+            className="flex-1"
+          />
+          <Button variant="primary" onClick={() => { void launch(); }} disabled={!agentName || launching}>
+            {launching ? 'Launching…' : 'Launch'}
+          </Button>
+        </Inline>
+      </Stack>
+    </Card>
+  );
+}
