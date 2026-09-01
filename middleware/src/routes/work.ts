@@ -9,7 +9,11 @@
 
 import { Router } from 'express';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
-import { requireAction } from '../lib/authz.js';
+import { requireAction, requireSession } from '../lib/authz.js';
+import { getUser } from '../providers/identity.js';
+import { searchWorkItems } from '../providers/work-items.js';
+import { stewardsInitiative } from '../lib/initiative-scope.js';
+import { rankSuggestions, seesEveryInitiative } from '../lib/work-suggestions.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 import {
   enqueueJob, listJobs, getJob, reviewJob, cancelJob, queueStats,
@@ -48,6 +52,59 @@ workRouter.get('/summary', asyncHandler(async (_req, res) => {
 }));
 
 // ─── Jobs ────────────────────────────────────────────────────────────────────
+
+/**
+ * What agent work is worth suggesting to this person, right now.
+ *
+ * The composer below it takes a free-typed prompt, which is the right primitive
+ * and a poor starting point: dispatching an agent meant facing an empty box and
+ * already knowing what to type, with nothing on the page connecting it to your
+ * initiatives or your sprint. These are two or three concrete things a computer
+ * could do next, with the prompt already written — a way in, not a queue.
+ *
+ * Scoped like everything else: org-wide roles see the whole program, an `sme`
+ * sees the initiatives they own or contribute to. Read-only and cheap, so it
+ * sits behind the session floor rather than ManageDevbox — seeing what could be
+ * done is not dispatching it, and the composer is already gated.
+ */
+workRouter.get('/suggestions', requireSession('WorkSuggestions'), asyncHandler(async (req, res) => {
+  const session = req.session ?? null;
+  const personId = session?.sub ? (await getUser(session.sub))?.personId ?? null : null;
+
+  // One query, then filter in memory: the candidate set is the open work on a
+  // handful of initiatives, not the whole backlog, and a per-initiative query
+  // would be N round trips to rank four cards.
+  const items = await searchWorkItems({ limit: 200 });
+
+  let candidates = items;
+  if (!seesEveryInitiative(session)) {
+    const attached = new Set<string>();
+    await Promise.all([...new Set(items.map((i) => i.projectId))].map(async (id) => {
+      if (await stewardsInitiative(session, id)) attached.add(id);
+    }));
+    candidates = items.filter((i) => attached.has(i.projectId));
+  }
+
+  res.json({
+    suggestions: rankSuggestions(
+      candidates.map((i) => ({
+        id: i.id,
+        projectId: i.projectId,
+        projectName: i.projectName,
+        type: i.type,
+        title: i.title,
+        description: i.description,
+        status: i.status,
+        priority: i.priority,
+        assigneeId: i.assigneeId,
+        storyPoints: i.storyPoints,
+        estimatedCostUsd: i.estimatedCostUsd ?? null,
+        sprintId: i.sprintId ?? null,
+      })),
+      { personId },
+    ),
+  });
+}));
 
 workRouter.get('/jobs', asyncHandler(async (req, res) => {
   const status = typeof req.query['status'] === 'string' ? req.query['status'] : undefined;

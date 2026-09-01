@@ -8,7 +8,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
+import {
+  PageSection, Card, TaskComposer, type ComposerSuggestion,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
@@ -47,6 +49,35 @@ interface Proposal {
   evidence: Record<string, unknown> | null;
   status: string; applyError: string | null; createdAt: string;
 }
+/** GET /api/work/suggestions — see middleware lib/work-suggestions.ts. */
+interface WorkSuggestion {
+  id: string;
+  kind: 'blocked' | 'in-review' | 'next-up' | 'maintenance';
+  title: string;
+  reason: string;
+  prompt: string;
+  initiativeId: string;
+  initiativeName: string;
+  workItemId: string;
+  storyPoints: number | null;
+  estimatedCostUsd: number | null;
+}
+
+/** Tone per kind, mirroring the server's ranking: stalled is the loudest. */
+const SUGGESTION_TONE: Record<WorkSuggestion['kind'], 'danger' | 'warning' | 'info' | 'neutral'> = {
+  blocked: 'danger',
+  'in-review': 'warning',
+  'next-up': 'info',
+  maintenance: 'neutral',
+};
+
+const SUGGESTION_LABEL: Record<WorkSuggestion['kind'], string> = {
+  blocked: 'blocked',
+  'in-review': 'in review',
+  'next-up': 'next up',
+  maintenance: 'upkeep',
+};
+
 interface Summary {
   jobs: Record<string, number>;
   proposals: Record<string, number>;
@@ -106,9 +137,33 @@ export default function WorkHomePage() {
   const { data: findingsData, refresh: refreshFindings } = useFetch<{ findings: Finding[] }>(
     `/api/work/findings?status=${findingStatus}&limit=200`, 20_000);
   const { data: proposalsData, refresh: refreshProposals } = useFetch<{ proposals: Proposal[] }>('/api/work/proposals?status=pending', 20_000);
+  // What a computer could usefully do next, drawn from the work actually in
+  // flight on this person's initiatives. Only fetched for someone who can
+  // dispatch — offering work to a reader who cannot queue it is a tease.
+  const { data: suggestionsData, error: suggestionsError } =
+    useFetch<{ suggestions: WorkSuggestion[] }>(canManage ? '/api/work/suggestions' : null, 60_000);
+  const suggestions = suggestionsData?.suggestions ?? null;
+  const suggestionCards = useMemo<ComposerSuggestion[]>(
+    () => (suggestions ?? []).map((s) => ({
+      id: s.id,
+      reason: s.reason,
+      title: s.title,
+      prompt: s.prompt,
+      label: SUGGESTION_LABEL[s.kind],
+      tone: SUGGESTION_TONE[s.kind],
+      context: s.initiativeName,
+      // Both estimates, because that is what the operating model plans against
+      // — complexity and money, never hours.
+      meta: (
+        <span className="tabular-nums">
+          {s.storyPoints != null ? `${s.storyPoints} pts` : '—'}
+          {s.estimatedCostUsd != null ? ` · $${s.estimatedCostUsd.toFixed(2)}` : ''}
+        </span>
+      ),
+    })),
+    [suggestions],
+  );
 
-  const [newTitle, setNewTitle] = useState('');
-  const [newPrompt, setNewPrompt] = useState('');
   const [busy, setBusy] = useState(false);
 
   const jobs = jobsData?.jobs ?? [];
@@ -163,16 +218,15 @@ export default function WorkHomePage() {
     });
   }
 
-  async function enqueue() {
-    if (!newTitle.trim() || !newPrompt.trim() || busy) return;
+  async function enqueue(title: string, prompt: string) {
+    if (!title.trim() || !prompt.trim() || busy) return;
     setBusy(true);
-    const tid = toastPending('Queueing job', newTitle.trim());
+    const tid = toastPending('Queueing job', title.trim());
     try {
-      const res = await post('/api/work/jobs', { title: newTitle.trim(), prompt: newPrompt.trim() });
+      const res = await post('/api/work/jobs', { title: title.trim(), prompt: prompt.trim() });
       if (!res.ok) throw new Error((await res.json() as { error?: string }).error ?? `HTTP ${res.status}`);
       const job = await res.json() as Job;
       toastSuccess(tid, 'Job queued', 'an idle worker picks it up within ~10s');
-      setNewTitle(''); setNewPrompt('');
       refreshAll();
       navigate(`/iq/work/${job.id}`);
     } catch (err) {
@@ -405,42 +459,36 @@ export default function WorkHomePage() {
         </Card>
       </div>
 
-      {/* ── Queue a job — POST /api/work/jobs (ManageDevbox) ── */}
+      {/* ── Queue a job — POST /api/work/jobs (ManageDevbox) ──
+
+           The composer is `TaskComposer` from ui-components rather than a
+           hand-rolled input + textarea + button, and the suggestions above it
+           are the reason it was worth moving: a bare prompt box asks you to
+           already know what to type, on a page whose whole subject is the work
+           you have in flight. What to suggest is this app's question (whose
+           sprint, which initiative, what is blocked) and is answered by
+           /api/work/suggestions; laying them out and wiring "use this" is the
+           library's. ── */}
       {canManage && (
-      <Card padding="none" className="mb-5 overflow-hidden">
-        <div className="px-3.5 pt-3 pb-1 text-xs font-semibold text-text-secondary tracking-wide select-none">
-          QUEUE A JOB
-        </div>
-        <div className="px-3.5 pb-2 flex flex-col gap-2">
-          <input
-            className="w-full text-[13px] bg-transparent text-text-primary border border-border rounded-md px-3 py-2 outline-none"
-            placeholder="Title — e.g. 'Document the Cedar policy migration'"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-          />
-          <textarea
-            className="w-full min-h-[70px] text-[13px] leading-relaxed bg-transparent text-text-primary border border-border rounded-md px-3 py-2 resize-y outline-none"
-            placeholder="What should the worker do? It runs as Claude Code in a microVM with a persistent workspace and git."
-            value={newPrompt}
-            onChange={(e) => setNewPrompt(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void enqueue(); }}
-          />
-        </div>
-        <div className="px-3.5 py-2.5 border-t border-border flex items-center gap-3 bg-surface-hover/40">
-          <span className="text-[11px] text-text-tertiary select-none">Runs on the first idle computer · ⌘⏎</span>
-          <div className="flex-1" />
-          <button
-            onClick={() => void enqueue()}
-            disabled={busy || !!summaryError || !newTitle.trim() || !newPrompt.trim()}
-            className={`px-[18px] py-1.5 rounded-md border-none text-[13px] font-semibold transition-colors ${
-              busy || summaryError || !newTitle.trim() || !newPrompt.trim()
-                ? 'bg-surface-hover text-text-secondary cursor-not-allowed'
-                : 'bg-primary text-white cursor-pointer hover:opacity-90'}`}
-          >
-            Queue job
-          </button>
-        </div>
-      </Card>
+        <TaskComposer
+          className="mb-5"
+          title="Queue a job"
+          description="An idle computer picks it up within ~10 seconds and works in a microVM with a persistent workspace and git."
+          titlePlaceholder="Title — e.g. 'Document the Cedar policy migration'"
+          promptPlaceholder="What should the worker do?"
+          suggestions={suggestionCards}
+          suggestionsTitle="From your work"
+          suggestionsLoading={suggestions === null && !suggestionsError}
+          suggestionsEmpty={
+            suggestionsError
+              ? 'Could not read your work items, so there is nothing to suggest — the box below still works.'
+              : 'Nothing blocked, in review, or waiting to start on your initiatives.'
+          }
+          hint="Runs on the first idle computer · ⌘⏎"
+          submitLabel="Queue job"
+          busy={busy}
+          onSubmit={({ title, prompt }) => void enqueue(title, prompt)}
+        />
       )}
 
       {/* ── Needs review first: it is the only thing blocking progress ── */}
