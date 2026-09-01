@@ -95,6 +95,10 @@ export function EpicCard({
                 item={child}
                 onStatusToggle={onStatusToggle}
                 run={marketRuns[child.id]}
+                // Descendants are discovered by the row itself as it expands, so
+                // it needs a lookup rather than a value — this card only knows
+                // its own direct children and cannot enumerate deeper ids.
+                runFor={(id) => marketRuns[id]}
                 onEstimate={onEstimate}
               />
             ))}
