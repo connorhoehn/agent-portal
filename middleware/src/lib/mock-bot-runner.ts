@@ -42,6 +42,21 @@ const uses = (name: string, input: Record<string, unknown>): Record<string, unkn
   type: 'assistant', message: { content: [{ type: 'tool_use', name, input }] },
 });
 
+/**
+ * Model these scripted bot runs resolve to — the cheapest allowlisted model
+ * (devboxModels.ts DEFAULT_DEVBOX_MODEL), since a maintenance cron bot has no
+ * reason to reach for anything pricier. Kept as a literal here rather than
+ * importing the portal's list: this file is middleware-only and the two are
+ * already required to agree by the runtime's own allowlist.
+ */
+const MOCK_RUN_MODEL = 'us.anthropic.claude-haiku-4-5-20251001-v1:0';
+
+/** Plausible input/output token counts for a scripted result — enough to
+ *  move `tokensUsed`/`contextUsed` visibly without pretending to be exact. */
+const usage = (inputTokens: number, outputTokens: number): { input_tokens: number; output_tokens: number } => ({
+  input_tokens: inputTokens, output_tokens: outputTokens,
+});
+
 const JOBS: { title: string; prompt: string; steps: Step[] }[] = [
   {
     title: 'nightly-dependency-audit',
@@ -53,7 +68,7 @@ const JOBS: { title: string; prompt: string; steps: Step[] }[] = [
       { afterMs: 1800, event: uses('Grep', { pattern: 'serialize-javascript' }) },
       { afterMs: 2600, event: says('Reachable from the report renderer only. Bumping it and pinning the transitive.') },
       { afterMs: 1500, event: uses('Edit', { file: 'package.json' }) },
-      { afterMs: 2400, event: { type: 'result', subtype: 'success', num_turns: 6, duration_ms: 12800, total_cost_usd: 0.0412, result: 'Bumped serialize-javascript to 6.0.2; the two moderates are dev-only and left alone.' } },
+      { afterMs: 2400, event: { type: 'result', subtype: 'success', num_turns: 6, duration_ms: 12800, total_cost_usd: 0.0412, usage: usage(8400, 620), result: 'Bumped serialize-javascript to 6.0.2; the two moderates are dev-only and left alone.' } },
       { afterMs: 300, event: { type: 'devbox_end' } },
     ],
   },
@@ -66,7 +81,7 @@ const JOBS: { title: string; prompt: string; steps: Step[] }[] = [
       { afterMs: 2400, event: says('Two suites flap: session-epoch and the canary rollup. Both look time-dependent.') },
       { afterMs: 2000, event: uses('Read', { file: 'src/lib/__tests__/session-epoch.test.ts' }) },
       { afterMs: 2800, event: says('session-epoch compares in whole seconds and the fixture straddles a boundary.') },
-      { afterMs: 1900, event: { type: 'result', subtype: 'success', num_turns: 5, duration_ms: 11200, total_cost_usd: 0.0298, result: 'Both flakes are clock-boundary, not ordering. Wrote it up — want me to pin the clock in the fixtures?' } },
+      { afterMs: 1900, event: { type: 'result', subtype: 'success', num_turns: 5, duration_ms: 11200, total_cost_usd: 0.0298, usage: usage(6100, 480), result: 'Both flakes are clock-boundary, not ordering. Wrote it up — want me to pin the clock in the fixtures?' } },
       { afterMs: 300, event: { type: 'devbox_end' } },
     ],
   },
@@ -116,7 +131,12 @@ async function play(box: FleetBox): Promise<void> {
     type: 'job_started', jobId: `mock-${Date.now().toString(36)}`,
     title: job.title, kind: 'devbox:task', ts: new Date().toISOString(), mock: true,
   });
-  appendEvent(box.id, { type: 'task_started', prompt: job.prompt, ts: new Date().toISOString() });
+  // Model announcement lives on task_started (rather than a separate
+  // devbox_start event) because that is already the run-start event this
+  // mock emits — devbox-fleet.ts's appendEvent reads `model` off either.
+  appendEvent(box.id, {
+    type: 'task_started', prompt: job.prompt, model: MOCK_RUN_MODEL, ts: new Date().toISOString(),
+  });
 
   for (const step of job.steps) {
     await new Promise((r) => setTimeout(r, step.afterMs));
