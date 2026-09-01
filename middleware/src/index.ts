@@ -40,6 +40,7 @@ import { canaryLibraryRouter } from './routes/canary-library.js';
 import { evaluationsRouter } from './routes/evaluations.js';
 import { workRouter } from './routes/work.js';
 import { startJobDispatcher } from './lib/job-dispatcher.js';
+import { startMockBotRunner } from './lib/mock-bot-runner.js';
 import { runAllSweeps } from './providers/org-sweeps.js';
 import { checkAwsCredentials } from './lib/aws-creds-probe.js';
 import { checkDatastore } from './lib/datastore-probe.js';
@@ -321,6 +322,9 @@ startLocalController();
 // SWEEP_INTERVAL_MIN=0 disables scheduled sweeps (they remain runnable
 // on demand from the Work surface).
 startJobDispatcher();
+// Offline only: gives the Computer Lab's tail pane and activity list something
+// real to show without a deployed runtime. No-op unless MOCK_AGENTCORE.
+startMockBotRunner();
 const sweepIntervalMin = Number(process.env['SWEEP_INTERVAL_MIN'] ?? 360);
 if (sweepIntervalMin > 0) {
   console.log(`[sweeps] scheduling org sweeps every ${sweepIntervalMin} min`);

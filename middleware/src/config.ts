@@ -4,9 +4,26 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Load .env.aws (CloudFormation-derived resource IDs) on import. Process env wins.
+/**
+ * Load .env.aws (CloudFormation-derived resource IDs) on import. Process env
+ * wins — except that "process env wins" is only true for a var that is SET,
+ * and the offline scripts were trying to unset by blanking:
+ * `SESSION_SIGNING_SECRET_ARN= npm run …`. An empty assignment does not
+ * survive every shell/npm path reliably, and when it is dropped the var is
+ * `undefined`, so the loader below helpfully supplies the deployed ARN and the
+ * offline server tries to reach Secrets Manager. Sessions then 500 with
+ * `UnrecognizedClientException` — an AWS error, in the mode whose whole point
+ * is not needing AWS.
+ *
+ * DEV_OFFLINE skips the file outright. That is what the offline scripts
+ * actually mean, and it covers the whole family at once rather than one var at
+ * a time: the policy store, the signing key, Cognito, and the capability ids
+ * (BROWSER_ID, MEMORY_ID, CODE_INTERPRETER_ID) that CLAUDE.md records as
+ * silently rotting across rebuilds.
+ */
 const envPath = resolve(__dirname, '../.env.aws');
 try {
+  if (process.env['DEV_OFFLINE'] === 'true') throw new Error('offline');
   const text = readFileSync(envPath, 'utf8');
   for (const line of text.split('\n')) {
     const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
@@ -15,7 +32,8 @@ try {
     }
   }
 } catch {
-  // .env.aws is optional — middleware can run in pure mock mode without it.
+  // .env.aws is optional — middleware runs in pure mock mode without it, and
+  // DEV_OFFLINE takes this path deliberately.
 }
 
 const env = (key: string, fallback = ''): string => process.env[key] ?? fallback;
