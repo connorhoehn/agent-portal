@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, useMemo, useCallback, type ReactNode } from 'react';
-import { useSearchParams, Link } from 'react-router';
+import { useSearchParams, useNavigate, Link } from 'react-router';
 import { useAgentStream } from '@connorhoehnslalom/realtime-modules/agent-streaming/client';
 import type { Message as AgentMessage } from '@connorhoehnslalom/realtime-modules/agent-streaming/client';
 import {
   ChatComposer,
+  ExpertCard,
   MessageBubble,
   QuickPromptGrid,
   FollowUpChips,
+  SuggestionCard,
   ThinkingBlock,
 } from '@connorhoehnslalom/ui-components/shared';
 import { ChatPanel } from '@connorhoehnslalom/ui-components/social';
@@ -181,6 +183,7 @@ function InvokePage() {
     refresh: refreshSessions,
   } = useFetch<{ sessions: SessionSummary[] }>('/api/sessions', 15000);
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   // Session-scoped chat sidebar (feature-flagged via VITE_ORGIQ_CHAT_ENABLED).
   // Channel is `orgiq:session:<sessionId>` when a session is active, otherwise
@@ -298,6 +301,31 @@ function InvokePage() {
   // answer" panel and the follow-ups are accurate — unlike guessing at any two
   // capitalized words. Harvested from the retired dedicated search page.
   const { data: graph } = useFetch<GraphEntities>('/api/graph/entities');
+
+  // ── The Find-Help merge: Ask IS the org search ────────────────────────────
+  //
+  // Two data sources fold the retired /iq/help surface into this chat:
+  //
+  //  - ask-suggestions: the caller's own ranked work, re-voiced as questions
+  //    ("who can unblock X?"). They fill the empty state, so starting a
+  //    conversation never means facing a blank box disconnected from your
+  //    sprint. Supervisor-only — it is the agent that searches the org.
+  //
+  //  - graph/help: evidence-ranked people for the LAST question asked. The
+  //    chat answers in prose; the rail beside it shows the same people as
+  //    evidence — matched skills, documents, initiatives — with no scores.
+  const { data: askSuggData } = useFetch<{ suggestions: AskSuggestion[] }>(
+    selectedId.endsWith('supervisor') ? '/api/work/ask-suggestions' : null,
+  );
+  const askSuggestions = askSuggData?.suggestions ?? [];
+  const lastAsked = useMemo(
+    () => [...messages].reverse().find((m) => m.role === 'user')?.content ?? '',
+    [messages],
+  );
+  const { data: helpData } = useFetch<HelpPeopleResponse>(
+    lastAsked ? `/api/graph/help?q=${encodeURIComponent(lastAsked)}` : null,
+  );
+  const helpPeople = (lastAsked ? helpData?.people ?? [] : []).slice(0, 3);
   const sortedPeople = useMemo(() => sortPeople(graph?.nodes), [graph]);
   const mentionRegexes = useMemo(() => buildMentionRegexes(sortedPeople), [sortedPeople]);
   const lastAssistant = useMemo(
@@ -470,15 +498,40 @@ function InvokePage() {
           )}
           {messages.length === 0 && !isStreaming && !historyError && (
             <div style={{ padding: 40, color: 'var(--color-text-tertiary)' }}>
-              <div style={{ fontSize: 18, marginBottom: 4, textAlign: 'center' }}>Invoke {selectedAgent?.name ?? 'Agent'}</div>
-              <div style={{ fontSize: 13, marginBottom: 24, textAlign: 'center' }}>Send a message or try a quick prompt below</div>
+              <div style={{ fontSize: 18, marginBottom: 4, textAlign: 'center' }}>Ask {selectedAgent?.name ?? 'Agent'}</div>
+              <div style={{ fontSize: 13, marginBottom: 24, textAlign: 'center' }}>
+                Ask the org anything — who can help, who knows what, what's been decided.
+              </div>
+              {/* The caller's own board, re-voiced as questions. Clicking sends
+                  immediately — this is chat, and a suggested question you still
+                  have to re-submit is a form pretending to be a conversation. */}
+              {askSuggestions.length > 0 && (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 8 }}>
+                    From your work
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
+                    {askSuggestions.slice(0, 4).map((sg) => (
+                      <SuggestionCard
+                        key={sg.id}
+                        reason={sg.reason}
+                        title={sg.title}
+                        label={sg.kind}
+                        tone={sg.kind === 'blocked' ? 'danger' : sg.kind === 'in-review' ? 'warning' : 'neutral'}
+                        actionLabel="Ask"
+                        onSelect={() => sendMessage(sg.prompt)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
               <QuickPromptGrid
                 prompts={quickPromptsFor(selectedId).map(p => ({ label: p.label, hint: p.prompt }))}
                 onSelect={(label) => {
                   const found = quickPromptsFor(selectedId).find(p => p.label === label);
                   if (found) sendMessage(found.prompt);
                 }}
-                title="Try asking:"
+                title={askSuggestions.length > 0 ? 'Or try:' : 'Try asking:'}
               />
             </div>
           )}
@@ -585,6 +638,46 @@ function InvokePage() {
         />
       </div>
 
+      {/* People with evidence — the Find-Help view, folded into the chat.
+          The answer names people in prose; this rail shows WHY them, from the
+          org graph: matched skills, the documents behind them, where they
+          spend their time. Score-free by design (ViewOrgChart tier). Only
+          rendered when the last question actually matched someone. */}
+      {helpPeople.length > 0 && (
+        <aside
+          aria-label="People with evidence"
+          style={{
+            width: 280, flexShrink: 0, borderLeft: '1px solid var(--color-border)',
+            padding: '16px 14px', overflowY: 'auto',
+            display: 'flex', flexDirection: 'column', gap: 10,
+          }}
+        >
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            People with evidence
+          </div>
+          {helpPeople.map((p) => (
+            <ExpertCard
+              key={p.id}
+              name={p.name}
+              title={p.title}
+              subtitle={p.department}
+              matchedSkills={p.matchedSkills}
+              otherSkills={p.otherSkills}
+              contexts={p.contexts}
+              evidence={p.documents.map((d) => ({
+                id: d.id,
+                title: d.title,
+                source: d.source,
+                ...(d.sourceUri ? { href: d.sourceUri } : {}),
+              }))}
+              askLabel="Ask about them"
+              onAsk={() => sendMessage(`Tell me about ${p.name}'s work related to "${lastAsked}" — what they've done, and whether they're the right person to approach.`)}
+              onOpen={() => navigate(`/iq/explore?focus=${encodeURIComponent(p.id)}`)}
+            />
+          ))}
+        </aside>
+      )}
+
       {/* Session chat sidebar — shown when VITE_ORGIQ_CHAT_ENABLED=true and a session is active */}
       {CHAT_ENABLED && sessionId && (
         <aside style={{
@@ -628,6 +721,28 @@ interface QuickPrompt {
   prompt: string;
   badge?: string;
   badgeColor?: string;
+}
+
+interface AskSuggestion {
+  id: string;
+  kind: string;
+  reason: string;
+  title: string;
+  prompt: string;
+  initiativeName: string;
+}
+
+interface HelpPeopleResponse {
+  people: Array<{
+    id: string;
+    name: string;
+    title: string;
+    department: string;
+    matchedSkills: Array<{ name: string; strength: number }>;
+    otherSkills: string[];
+    contexts: string[];
+    documents: Array<{ id: string; title: string; source: string; sourceUri: string | null }>;
+  }>;
 }
 
 // Deep-link prompt slugs — the subnav "Suggested" searches link here as

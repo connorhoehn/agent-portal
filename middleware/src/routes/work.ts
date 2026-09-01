@@ -10,10 +10,11 @@
 import { Router } from 'express';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { requireAction, requireSession } from '../lib/authz.js';
+import { type Session } from '../lib/session.js';
 import { getUser } from '../providers/identity.js';
 import { searchWorkItems, getWorkItem } from '../providers/work-items.js';
 import { stewardsInitiative } from '../lib/initiative-scope.js';
-import { rankSuggestions, seesEveryInitiative } from '../lib/work-suggestions.js';
+import { rankSuggestions, askSuggestionsFrom, seesEveryInitiative } from '../lib/work-suggestions.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 import {
   enqueueJob, listJobs, getJob, reviewJob, cancelJob, queueStats,
@@ -67,13 +68,15 @@ workRouter.get('/summary', asyncHandler(async (_req, res) => {
  * sits behind the session floor rather than ManageDevbox — seeing what could be
  * done is not dispatching it, and the composer is already gated.
  */
-workRouter.get('/suggestions', requireSession('WorkSuggestions'), asyncHandler(async (req, res) => {
-  const session = req.session ?? null;
+/**
+ * The scoped, ranked work for this caller — shared by /suggestions (dispatch
+ * cards on Work) and /ask-suggestions (question cards on Ask). One query,
+ * then filter in memory: the candidate set is the open work on a handful of
+ * initiatives, and a per-initiative query would be N round trips to rank
+ * four cards.
+ */
+async function rankedWorkFor(session: Session | null) {
   const personId = session?.sub ? (await getUser(session.sub))?.personId ?? null : null;
-
-  // One query, then filter in memory: the candidate set is the open work on a
-  // handful of initiatives, not the whole backlog, and a per-initiative query
-  // would be N round trips to rank four cards.
   const items = await searchWorkItems({ limit: 200 });
 
   let candidates = items;
@@ -85,26 +88,39 @@ workRouter.get('/suggestions', requireSession('WorkSuggestions'), asyncHandler(a
     candidates = items.filter((i) => attached.has(i.projectId));
   }
 
-  res.json({
-    suggestions: rankSuggestions(
-      candidates.map((i) => ({
-        id: i.id,
-        projectId: i.projectId,
-        projectName: i.projectName,
-        type: i.type,
-        title: i.title,
-        description: i.description,
-        status: i.status,
-        priority: i.priority,
-        assigneeId: i.assigneeId,
-        storyPoints: i.storyPoints,
-        estimatedCostUsd: i.estimatedCostUsd ?? null,
-        sprintId: i.sprintId ?? null,
-        labels: i.labels ?? [],
-      })),
-      { personId },
-    ),
-  });
+  return rankSuggestions(
+    candidates.map((i) => ({
+      id: i.id,
+      projectId: i.projectId,
+      projectName: i.projectName,
+      type: i.type,
+      title: i.title,
+      description: i.description,
+      status: i.status,
+      priority: i.priority,
+      assigneeId: i.assigneeId,
+      storyPoints: i.storyPoints,
+      estimatedCostUsd: i.estimatedCostUsd ?? null,
+      sprintId: i.sprintId ?? null,
+      labels: i.labels ?? [],
+    })),
+    { personId },
+  );
+}
+
+workRouter.get('/suggestions', requireSession('WorkSuggestions'), asyncHandler(async (req, res) => {
+  res.json({ suggestions: await rankedWorkFor(req.session ?? null) });
+}));
+
+/**
+ * The same ranked work, re-voiced as QUESTIONS for the Ask surface — "who can
+ * unblock X?", not "go investigate X". Ask's empty state was four static demo
+ * prompts connected to nothing the caller was doing; these come from their
+ * own board. Same session floor as /suggestions: seeing what to ask is not
+ * dispatching anything.
+ */
+workRouter.get('/ask-suggestions', requireSession('WorkSuggestions'), asyncHandler(async (req, res) => {
+  res.json({ suggestions: askSuggestionsFrom(await rankedWorkFor(req.session ?? null)) });
 }));
 
 /** `sg-<workItemId>` — the only place that shape is known outside the ranker. */

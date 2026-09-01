@@ -11,7 +11,6 @@ import { ComputeHost } from './components/compute/ComputeHost';
 const AgentFlowPage = lazy(() => import('./pages/AgentFlowPage'));
 const AgentDetailPage = lazy(() => import('./pages/iq/AgentDetailPage'));
 const ScoresPage = lazy(() => import('./pages/ScoresPage'));
-const FindHelpPage = lazy(() => import('./pages/FindHelpPage'));
 const ScoresCohortPage = lazy(() => import('./pages/ScoresCohortPage'));
 const ScoresComparePage = lazy(() => import('./pages/ScoresComparePage'));
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
@@ -230,7 +229,8 @@ export function App() {
           } />
           <Route path="search" element={<Navigate to="/iq/invoke" replace />} />
           <Route path="invoke" element={<Page element={<InvokePage />} />} />
-          <Route path="help" element={<Page element={<FindHelpPage />} />} />
+          {/* Find Help folded into Ask — the chat is the org search. */}
+          <Route path="help" element={<Navigate to="/iq/invoke" replace />} />
           <Route path="scores" element={<Page element={<ScoresPage />} />} />
           <Route path="scores/cohorts" element={<Page element={<ScoresCohortPage />} />} />
           <Route path="scores/compare" element={<Page element={<ScoresComparePage />} />} />

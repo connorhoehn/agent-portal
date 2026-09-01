@@ -219,3 +219,53 @@ export function seesEveryInitiative(session: Session | null): boolean {
   const role = session?.role;
   return !!role && ORG_WIDE_INITIATIVE_ROLES.includes(role);
 }
+
+// ─── Ask-shaped suggestions ─────────────────────────────────────────────────
+//
+// The same ranked work, re-voiced for the chat surface. A work suggestion is
+// an instruction to an agent ("investigate why X is blocked"); an ask
+// suggestion is a question to the org ("who can help unblock X?"). The Ask
+// page's empty state was four static prompts about Kubernetes — correct for a
+// demo, connected to nothing the caller is actually doing. These are the two
+// or three questions their own board is already asking.
+
+export interface AskSuggestion {
+  id: string;
+  kind: SuggestionKind;
+  /** Why this question is being offered — the card's reason line. */
+  reason: string;
+  /** Short card title. */
+  title: string;
+  /** The question, ready to send to the supervisor. */
+  prompt: string;
+  initiativeName: string;
+}
+
+function askPromptFor(s: WorkSuggestion): string {
+  const where = `on ${s.initiativeName}`;
+  switch (s.kind) {
+    case 'blocked':
+      return `"${s.title}" ${where} is blocked. Who in the org has real evidence in what it touches, and what have they worked on that could help unblock it?`;
+    case 'in-review':
+      return `Who is the right reviewer for "${s.title}" ${where}? Look for people with evidence in the areas it touches, not just seniority.`;
+    case 'next-up':
+      return `I'm about to start "${s.title}" ${where}. Who has context or prior work I should talk to before I begin?`;
+    case 'maintenance':
+      return `Who knows the maintenance setup ${where}? "${s.title}" is scheduled and I want to sanity-check its assumptions with someone.`;
+  }
+}
+
+/** Re-voice ranked work suggestions as questions for the chat surface. */
+export function askSuggestionsFrom(suggestions: readonly WorkSuggestion[]): AskSuggestion[] {
+  return suggestions.map((s) => ({
+    id: `ask-${s.workItemId}`,
+    kind: s.kind,
+    reason: s.reason,
+    title: s.kind === 'blocked' ? `Who can unblock "${s.title}"?`
+      : s.kind === 'in-review' ? `Who should review "${s.title}"?`
+      : s.kind === 'maintenance' ? `Who knows "${s.title}"?`
+      : `Who has context on "${s.title}"?`,
+    prompt: askPromptFor(s),
+    initiativeName: s.initiativeName,
+  }));
+}

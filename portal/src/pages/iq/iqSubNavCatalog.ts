@@ -48,7 +48,7 @@ const SCORES_ITEMS: SubNavItem[] = [
 // hold ViewLeaderboard — for everyone else the rail offered a door straight
 // into a 403'd leaderboard.
 const EXPLORE_ITEMS: SubNavItem[] = [
-  { path: '/iq/help',     label: 'Find Help',   hint: 'Who can help with a domain',   group: 'Other views' },
+  { path: '/iq/invoke',   label: 'Ask',         hint: 'Chat + who can help with what', group: 'Other views' },
   { path: '/iq/projects', label: 'Initiatives', hint: 'Contributions + status',       group: 'Other views' },
   { path: 'explore?entities=people',    label: 'People',   group: 'Show' },
   { path: 'explore?entities=skills',    label: 'Skills',   group: 'Show' },
