@@ -14,6 +14,7 @@ import {
   OutcomesRailCard,
 } from '../components/marketplace/InitiativeAgentRail';
 import { ComputersRailCard } from '../components/marketplace/InitiativeComputeRail';
+import { EnvironmentsRailCard } from '../components/marketplace/InitiativeEnvironmentsRail';
 import type { BotRun } from './bots/BotsPage';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -1768,6 +1769,7 @@ function ProjectDetailPage() {
         }}>
           <AgentsRailCard activity={agentActivity} />
           <ComputersRailCard initiativeId={id} />
+          <EnvironmentsRailCard initiativeId={id} />
           <OutcomesRailCard activity={agentActivity} />
 
           {/* The code that delivers this initiative — the other half of the
