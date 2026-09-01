@@ -644,6 +644,39 @@ const MOCK_WORK_ITEM_SEEDS: MockSeed[] = [
   { id: 'wi-onboard-f1', projectId: 'p-mobile-redesign', projectName: 'Developer Onboarding Improvements', parentId: 'wi-onboard-e1', type: 'story', title: 'Automated dev toolchain bootstrap script', description: null, status: 'open', priority: 'high', assigneeId: 'p-003', assigneeName: 'James Wright', assigneeDept: 'Platform Engineering', labels: ['onboarding', 'devex'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(28), updatedAt: D(7), completedAt: null, childCount: 2, childDoneCount: 0 },
   { id: 'wi-onboard-s1', projectId: 'p-mobile-redesign', projectName: 'Developer Onboarding Improvements', parentId: 'wi-onboard-f1', type: 'story', title: 'Write bootstrap.sh to install all required tools via brew/mise', description: null, status: 'open', priority: 'high', assigneeId: 'p-003', assigneeName: 'James Wright', assigneeDept: 'Platform Engineering', labels: ['onboarding', 'devex'], storyPoints: 5, prUrl: null, prStatus: null, createdAt: D(25), updatedAt: D(7), completedAt: null, childCount: 0, childDoneCount: 0 },
   { id: 'wi-onboard-s2', projectId: 'p-mobile-redesign', projectName: 'Developer Onboarding Improvements', parentId: 'wi-onboard-f1', type: 'story', title: 'Create ONBOARDING.md with architecture overview + runbook', description: null, status: 'open', priority: 'medium', assigneeId: 'p-009', assigneeName: "Ryan O'Brien", assigneeDept: 'Product', labels: ['onboarding', 'documentation'], storyPoints: 3, prUrl: null, prStatus: null, createdAt: D(20), updatedAt: D(7), completedAt: null, childCount: 0, childDoneCount: 0 },
+
+  // ── The SME's own board ────────────────────────────────────────────────────
+  //
+  // Everything above predates the program operating model: it is a fixture
+  // about Kubernetes and Istio that was later re-pointed at `p-*` initiative
+  // ids, so an initiative's name and its items' subject matter disagree, and
+  // the cast is the older one (p-004 reads as "Priya Patel" up there, and as
+  // Nora DaSilva everywhere the identity provider is involved).
+  //
+  // These rows are lifted straight from `schema/seed_program.sql`, ids and
+  // all, so mock mode and a seeded Aurora tell the same story about the two
+  // initiatives Nora DaSilva (p-004, `u-nora`, role `sme`) is attached to —
+  // she owns Observability Platform and is an SME on Auth Migration. Without
+  // them the Work page's suggestion strip was empty for her and there was
+  // nothing on the page to explain why: the mock board carried no `in_review`
+  // work and nothing blocked on either initiative, so the ranker had nothing
+  // to rank. They also give the page its narrative — one thing waiting on
+  // *her* review, one thing stalled on someone else's decision.
+  //
+  // `blocked` is a label, not a status: see kindOf in lib/work-suggestions.ts.
+
+  // ── p-observability — SLOs and error budgets (Nora owns this initiative) ──
+  { id: 'wi-obs-e2', projectId: 'p-observability', projectName: 'Observability Platform', parentId: null, type: 'epic', title: 'SLOs and error budgets', description: 'Every tier-1 service has an SLO, a burn-rate alert, and an owner.', status: 'in_progress', priority: 'high', assigneeId: 'p-004', assigneeName: 'Nora DaSilva', assigneeDept: 'Platform Engineering', labels: ['slo'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(75), updatedAt: D(5), completedAt: null, childCount: 3, childDoneCount: 0 },
+  { id: 'wi-obs-e2-s2', projectId: 'p-observability', projectName: 'Observability Platform', parentId: 'wi-obs-e2', type: 'story', title: 'Multi-window burn-rate alerts (fast + slow burn)', description: 'Fast burn pages, slow burn tickets. Thresholds derived from the SLO, not hand-picked.', status: 'in_review', priority: 'high', assigneeId: 'p-008', assigneeName: 'Layla Hassan', assigneeDept: 'Platform Engineering', labels: ['slo', 'alerting'], storyPoints: 5, prUrl: 'https://github.com/connorhoehnslalom/orgiq-observability/pull/38', prStatus: 'open', createdAt: D(21), updatedAt: D(6), completedAt: null, childCount: 0, childDoneCount: 0 },
+  { id: 'wi-obs-e2-s3', projectId: 'p-observability', projectName: 'Observability Platform', parentId: 'wi-obs-e2', type: 'story', title: 'Error-budget dashboard per team', description: 'One panel per team: budget remaining, burn over the window, and who owns the service.', status: 'open', priority: 'medium', assigneeId: 'p-004', assigneeName: 'Nora DaSilva', assigneeDept: 'Platform Engineering', labels: ['slo', 'dashboards'], storyPoints: 3, prUrl: null, prStatus: null, createdAt: D(33), updatedAt: D(2), completedAt: null, childCount: 0, childDoneCount: 0 },
+  { id: 'wi-obs-e2-b4', projectId: 'p-observability', projectName: 'Observability Platform', parentId: 'wi-obs-e2', type: 'bug', title: 'Alert dedup storm when a shared dependency degrades', description: 'One degraded dependency fans out to forty pages. Waiting on the dependency map before dedup keys can be chosen.', status: 'open', priority: 'high', assigneeId: 'p-011', assigneeName: 'Eli Garcia', assigneeDept: 'Platform Engineering', labels: ['alerting', 'blocked'], storyPoints: 2, prUrl: null, prStatus: null, createdAt: D(75), updatedAt: D(4), completedAt: null, childCount: 0, childDoneCount: 0 },
+
+  // ── p-auth-migration — Nora is an SME here, not the owner ────────────────
+  { id: 'wi-auth-e1', projectId: 'p-auth-migration', projectName: 'Auth Migration', parentId: null, type: 'epic', title: 'Cognito consolidation', description: 'One IdP, one session mint path, verified JWKS everywhere.', status: 'in_progress', priority: 'critical', assigneeId: 'p-002', assigneeName: 'Vera Green', assigneeDept: 'Platform Engineering', labels: ['oidc'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(75), updatedAt: D(3), completedAt: null, childCount: 1, childDoneCount: 0 },
+  { id: 'wi-auth-e1-s3', projectId: 'p-auth-migration', projectName: 'Auth Migration', parentId: 'wi-auth-e1', type: 'story', title: 'Session cookie hardening: max-age, rotation on switch', description: 'Re-mint on every tenant and role switch; the pre-switch cookie stops working within the refresh window.', status: 'in_review', priority: 'high', assigneeId: 'p-004', assigneeName: 'Nora DaSilva', assigneeDept: 'Platform Engineering', labels: ['session'], storyPoints: 5, prUrl: 'https://github.com/connorhoehnslalom/orgiq-auth-service/pull/44', prStatus: 'open', createdAt: D(30), updatedAt: D(5), completedAt: null, childCount: 0, childDoneCount: 0 },
+  { id: 'wi-auth-e2', projectId: 'p-auth-migration', projectName: 'Auth Migration', parentId: null, type: 'epic', title: 'Legacy SSO decommission', description: 'The SAML shim serves zero tenants and is deleted, not paused.', status: 'open', priority: 'high', assigneeId: 'p-002', assigneeName: 'Vera Green', assigneeDept: 'Platform Engineering', labels: ['decom'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(75), updatedAt: D(6), completedAt: null, childCount: 2, childDoneCount: 0 },
+  { id: 'wi-auth-e2-s2', projectId: 'p-auth-migration', projectName: 'Auth Migration', parentId: 'wi-auth-e2', type: 'story', title: 'Tenant-by-tenant cutover runbook with rollback', description: 'Cannot be written until the cutover order is settled — smallest tenant first or riskiest first is still escalated.', status: 'open', priority: 'high', assigneeId: 'p-051', assigneeName: 'Nora Chang', assigneeDept: 'Security', labels: ['decom', 'runbook', 'blocked'], storyPoints: 5, prUrl: null, prStatus: null, createdAt: D(44), updatedAt: D(9), completedAt: null, childCount: 0, childDoneCount: 0 },
+  { id: 'wi-auth-e2-b3', projectId: 'p-auth-migration', projectName: 'Auth Migration', parentId: 'wi-auth-e2', type: 'bug', title: 'Logout leaves the legacy shim cookie alive', description: 'Signing out clears the OrgIQ session and not the SAML shim cookie, so the next visit silently re-authenticates.', status: 'open', priority: 'medium', assigneeId: 'p-002', assigneeName: 'Vera Green', assigneeDept: 'Platform Engineering', labels: ['session', 'decom'], storyPoints: 2, prUrl: null, prStatus: null, createdAt: D(39), updatedAt: D(4), completedAt: null, childCount: 0, childDoneCount: 0 },
 ];
 
 /** Sprint membership + dollar estimate for the seeds that carry one. */
@@ -655,6 +688,13 @@ const MOCK_PROGRAM_FIELDS: Record<string, { sprintId?: string; estimatedCostUsd?
   'wi-k8s-s5': { sprintId: 'spr-obs-s3', estimatedCostUsd: 5.77 },
   'wi-k8s-s6': { sprintId: 'spr-obs-s3', estimatedCostUsd: 9.84 },
   'wi-k8s-s7': { estimatedCostUsd: 3.61 },
+  // The SME's board, matching schema/seed_program.sql row for row.
+  'wi-obs-e2-s2': { sprintId: 'spr-obs-s2', estimatedCostUsd: 6.32 },
+  'wi-obs-e2-s3': { sprintId: 'spr-obs-s3', estimatedCostUsd: 2.67 },
+  'wi-obs-e2-b4': { sprintId: 'spr-obs-s3', estimatedCostUsd: 1.82 },
+  'wi-auth-e1-s3': { sprintId: 'spr-auth-s2', estimatedCostUsd: 5.33 },
+  'wi-auth-e2-s2': { sprintId: 'spr-auth-s2', estimatedCostUsd: 4.85 },
+  'wi-auth-e2-b3': { sprintId: 'spr-auth-s2', estimatedCostUsd: 1.74 },
 };
 
 const MOCK_WORK_ITEMS: WorkItem[] = MOCK_WORK_ITEM_SEEDS.map((seed) => ({

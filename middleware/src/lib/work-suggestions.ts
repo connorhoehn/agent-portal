@@ -60,6 +60,8 @@ export interface SuggestibleItem {
   estimatedCostUsd: number | null;
   sprintId: string | null;
   updatedAt?: string | null;
+  /** How "blocked" is actually carried — see kindOf. */
+  labels?: readonly string[];
 }
 
 const PRIORITY_RANK: Record<string, number> = {
@@ -114,10 +116,31 @@ function reasonFor(kind: SuggestionKind, item: SuggestibleItem): string {
   }
 }
 
+/**
+ * Which kind of suggestion an item is, or none.
+ *
+ * This has to speak the board's real vocabulary, and the first cut did not.
+ * `work_items.status` is `open | in_progress | in_review | done | cancelled`
+ * (schema/orgiq_work_items_schema.sql) — there is no `blocked` and no `todo`
+ * in it, so a ranker written against those two names matched `in_review` and
+ * nothing else. On an initiative with no open change request that is zero
+ * cards, which is exactly what an SME saw: a suggestion strip that was empty
+ * for reasons no one could see from the page.
+ *
+ * So: not-started is `open`, and blocked is carried as a **label**, because
+ * the board has no status for it and inventing one would mean a migration,
+ * a new transition matrix row, and a second way to say "in flight". A label
+ * is what the seed already uses to annotate an item without moving it.
+ *
+ * `blocked`/`todo` stay accepted as statuses so a future board that grows
+ * them keeps working, and so the policy reads as the policy rather than as a
+ * mapping table for one storage decision.
+ */
 function kindOf(item: SuggestibleItem): SuggestionKind | null {
-  if (item.status === 'blocked') return 'blocked';
+  if (item.status === 'done' || item.status === 'cancelled') return null;
+  if (item.status === 'blocked' || item.labels?.includes('blocked')) return 'blocked';
   if (item.status === 'in_review') return 'in-review';
-  if (item.status === 'todo') return 'next-up';
+  if (item.status === 'open' || item.status === 'todo') return 'next-up';
   return null;
 }
 
