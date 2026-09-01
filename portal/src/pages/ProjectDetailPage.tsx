@@ -340,7 +340,7 @@ function RunStateChips({ item, run }: { item: WorkItemTree; run: BotRun | undefi
             to={`/admin/devbox?box=${encodeURIComponent(run.outcome.boxId)}`}
             className="no-underline"
             onClick={(e) => e.stopPropagation()}
-            title="An agent is working this item — open its Computers box"
+            title="An agent is working this item — open its computer"
           >
             <Chip tone="info" size="xs" dot="pulse">agent working</Chip>
           </Link>

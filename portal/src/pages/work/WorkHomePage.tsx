@@ -357,8 +357,8 @@ export default function WorkHomePage() {
             {summaryError
               ? 'Cannot tell what the workers are doing.'
               : active > 0
-                ? `Boxes busy: ${(s?.busyBoxes ?? []).join(', ') || '—'}`
-                : 'All boxes idle — the next queued job dispatches within ~10s.'}
+                ? `Busy: ${(s?.busyBoxes ?? []).join(', ') || '—'}`
+                : 'All computers idle — the next queued job dispatches within ~10s.'}
           </div>
         </Card>
 
@@ -427,7 +427,7 @@ export default function WorkHomePage() {
           />
         </div>
         <div className="px-3.5 py-2.5 border-t border-border flex items-center gap-3 bg-surface-hover/40">
-          <span className="text-[11px] text-text-tertiary select-none">Runs on the first idle box · ⌘⏎</span>
+          <span className="text-[11px] text-text-tertiary select-none">Runs on the first idle computer · ⌘⏎</span>
           <div className="flex-1" />
           <button
             onClick={() => void enqueue()}
