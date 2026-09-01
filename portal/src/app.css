@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/* The component library's classes must be part of THIS build's source scan.
+   Tailwind v4 ignores node_modules, so a ui-components composite using a
+   utility the portal never uses itself (KPIGrid's sm:grid-cols-4, say) got no
+   rule from us — and the library's own stylesheet loses the cascade to our
+   later-loaded build, so the layout silently collapsed (stat grids rendering
+   as a stack). Scanning the dist keeps every library class real here. */
+@source "../node_modules/@connorhoehnslalom/ui-components/dist";
+
 @theme {
   --color-primary: #646cff;
   --color-primary-hover: #4f55ff;

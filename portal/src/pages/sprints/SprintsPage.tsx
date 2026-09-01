@@ -39,9 +39,11 @@ import {
   SegmentedControl,
   Modal,
   Button,
+  DataTable,
   FormField,
   InlineAlert,
 } from '@connorhoehnslalom/ui-components/shared';
+import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { useCapabilities } from '../../lib/capabilities';
@@ -666,6 +668,81 @@ function SprintDetail({ s, personId, canManageSprints, canManageBudgets, onChang
   );
 }
 
+// ─── Table view ──────────────────────────────────────────────────────────────
+//
+// The same sprints as the cards, scannable by column. With the org-wide scope
+// a release manager reads every initiative's sprints at once; sorting by
+// spend-vs-envelope or by window is a table job the card grid can't do.
+// Row click selects, same as a card — the detail below is shared.
+
+const SPRINT_TABLE_COLUMNS: DataTableColumn<Sprint>[] = [
+  {
+    key: 'name', header: 'Sprint', sortable: true,
+    render: (s) => (
+      <span style={{ fontWeight: 600 }}>
+        {s.name}
+        {' '}
+        <Chip tone={STATUS_TONE[s.status] ?? 'neutral'} size="sm">{s.status}</Chip>
+      </span>
+    ),
+  },
+  {
+    key: 'orgProjectName', header: 'Initiative', sortable: true,
+    render: (s) => <span>{s.orgProjectName ?? '—'}</span>,
+  },
+  {
+    key: 'stewardName', header: 'Steward', sortable: true,
+    render: (s) => <span>{s.stewardName ?? '—'}</span>,
+  },
+  {
+    key: 'startsOn', header: 'Window', sortable: true,
+    compare: (a, b) => String(a.startsOn ?? '').localeCompare(String(b.startsOn ?? '')),
+    render: (s) => <span style={{ whiteSpace: 'nowrap' }}>{dateRange(s)}</span>,
+  },
+  {
+    key: 'pointsDone', header: 'Points', align: 'right', sortable: true,
+    compare: (a, b) => (a.pointsDone / Math.max(a.pointsTotal, 1)) - (b.pointsDone / Math.max(b.pointsTotal, 1)),
+    render: (s) => <span style={{ fontVariantNumeric: 'tabular-nums' }}>{s.pointsDone} / {s.pointsTotal}</span>,
+  },
+  {
+    key: 'estimatedCostUsd', header: 'Planned', align: 'right', sortable: true,
+    render: (s) => <span style={{ fontVariantNumeric: 'tabular-nums' }}>{usd(s.estimatedCostUsd)}</span>,
+  },
+  {
+    key: 'grantedUsd', header: 'Envelope', align: 'right', sortable: true,
+    render: (s) => <span style={{ fontVariantNumeric: 'tabular-nums' }}>{s.grantCount > 0 ? usd(s.grantedUsd) : '—'}</span>,
+  },
+  {
+    key: 'initiativeSpendInWindowUsd', header: 'Spend in window', align: 'right', sortable: true,
+    render: (s) => (
+      <span style={{
+        fontVariantNumeric: 'tabular-nums',
+        color: s.grantCount > 0 && s.initiativeSpendInWindowUsd > s.grantedUsd
+          ? 'var(--color-danger)' : undefined,
+      }}>
+        {usd(s.initiativeSpendInWindowUsd)}
+      </span>
+    ),
+  },
+];
+
+function SprintTable({ sprints, onSelect }: {
+  sprints: Sprint[]; onSelect: (id: string) => void;
+}) {
+  return (
+    <DataTable<Sprint>
+      data={sprints}
+      columns={SPRINT_TABLE_COLUMNS}
+      keyField={(s) => s.id}
+      onRowClick={(s) => onSelect(s.id)}
+      searchable={sprints.length > 8}
+      searchPlaceholder="Filter sprints…"
+      pageSize={25}
+      emptyMessage="No sprints"
+    />
+  );
+}
+
 // ─── New sprint (ManageSprints) ──────────────────────────────────────────────
 
 const EMPTY_FORM: NewSprintForm = {
@@ -1002,6 +1079,16 @@ export default function SprintsPage() {
   const [activeOnly, setActiveOnly] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [newSprintOpen, setNewSprintOpen] = useState(false);
+  // Cards scan by shape, the table scans by column — with the org-wide scope a
+  // release manager is reading 14 initiatives' sprints, and that is a table
+  // job. Device pref, preserved across tenant switches like projects-view.
+  const [view, setView] = useState<'cards' | 'table'>(() => {
+    try { return (localStorage.getItem('sprints-view') as 'cards' | 'table') ?? 'cards'; } catch { return 'cards'; }
+  });
+  const setViewPref = (v: 'cards' | 'table') => {
+    setView(v);
+    try { localStorage.setItem('sprints-view', v); } catch { /* ignore */ }
+  };
 
   const url = `/api/sprints?scope=${scope}${activeOnly ? '&status=active' : ''}`;
   const { data, isLoading, error, refresh } = useFetch<SprintsResponse>(url, 60_000);
@@ -1059,6 +1146,15 @@ export default function SprintsPage() {
               ]}
             />
           ) : null}
+          <SegmentedControl
+            size="sm"
+            value={view}
+            onChange={(v) => setViewPref(v as 'cards' | 'table')}
+            options={[
+              { label: 'Cards', value: 'cards' },
+              { label: 'Table', value: 'table' },
+            ]}
+          />
           <SegmentedControl
             size="sm"
             value={activeOnly ? 'active' : 'any'}
@@ -1146,19 +1242,23 @@ export default function SprintsPage() {
             </div>
           ) : null}
 
-          <div style={{
-            display: 'grid', gap: 10,
-            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-          }}>
-            {sprints.map((s) => (
-              <SprintCard
-                key={s.id}
-                s={s}
-                selected={s.id === selectedId}
-                onSelect={() => setSelectedId(s.id)}
-              />
-            ))}
-          </div>
+          {view === 'cards' ? (
+            <div style={{
+              display: 'grid', gap: 10,
+              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+            }}>
+              {sprints.map((s) => (
+                <SprintCard
+                  key={s.id}
+                  s={s}
+                  selected={s.id === selectedId}
+                  onSelect={() => setSelectedId(s.id)}
+                />
+              ))}
+            </div>
+          ) : (
+            <SprintTable sprints={sprints} onSelect={setSelectedId} />
+          )}
 
           {selected ? (
             <SprintDetail
