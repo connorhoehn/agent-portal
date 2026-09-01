@@ -25,17 +25,34 @@ interface Step {
   event: Record<string, unknown>;
 }
 
+/**
+ * The agent CLI's own shape for a spoken line and a tool call.
+ *
+ * Helpers rather than hand-written objects because the shape is nested and
+ * easy to approximate: an `assistant` event carries `message.content[]`, and a
+ * flatter `{ type: 'assistant', text }` parses to NOTHING in the portal's tail
+ * pane. The bot then appears to run in silence — the fixture looks right in
+ * this file and the surface it feeds shows an empty pane. The library's
+ * mockTail fixture had exactly that bug; a render test caught it there.
+ */
+const says = (text: string): Record<string, unknown> => ({
+  type: 'assistant', message: { content: [{ type: 'text', text }] },
+});
+const uses = (name: string, input: Record<string, unknown>): Record<string, unknown> => ({
+  type: 'assistant', message: { content: [{ type: 'tool_use', name, input }] },
+});
+
 const JOBS: { title: string; prompt: string; steps: Step[] }[] = [
   {
     title: 'nightly-dependency-audit',
     prompt: 'Audit dependencies for advisories and open a change request for anything critical.',
     steps: [
-      { afterMs: 900, event: { type: 'assistant', text: 'Reading the lockfile and resolving the dependency graph.' } },
-      { afterMs: 1400, event: { type: 'tool_use', name: 'Bash', input: { command: 'npm audit --json' } } },
-      { afterMs: 2200, event: { type: 'assistant', text: '3 advisories: 1 high, 2 moderate. Checking whether the high one is reachable.' } },
-      { afterMs: 1800, event: { type: 'tool_use', name: 'Grep', input: { pattern: 'serialize-javascript' } } },
-      { afterMs: 2600, event: { type: 'assistant', text: 'Reachable from the report renderer only. Bumping it and pinning the transitive.' } },
-      { afterMs: 1500, event: { type: 'tool_use', name: 'Edit', input: { file: 'package.json' } } },
+      { afterMs: 900, event: says('Reading the lockfile and resolving the dependency graph.') },
+      { afterMs: 1400, event: uses('Bash', { command: 'npm audit --json' }) },
+      { afterMs: 2200, event: says('3 advisories: 1 high, 2 moderate. Checking whether the high one is reachable.') },
+      { afterMs: 1800, event: uses('Grep', { pattern: 'serialize-javascript' }) },
+      { afterMs: 2600, event: says('Reachable from the report renderer only. Bumping it and pinning the transitive.') },
+      { afterMs: 1500, event: uses('Edit', { file: 'package.json' }) },
       { afterMs: 2400, event: { type: 'result', subtype: 'success', num_turns: 6, duration_ms: 12800, total_cost_usd: 0.0412, result: 'Bumped serialize-javascript to 6.0.2; the two moderates are dev-only and left alone.' } },
       { afterMs: 300, event: { type: 'devbox_end' } },
     ],
@@ -44,11 +61,11 @@ const JOBS: { title: string; prompt: string; steps: Step[] }[] = [
     title: 'flaky-test-triage',
     prompt: 'Find tests that failed intermittently this week and say why.',
     steps: [
-      { afterMs: 800, event: { type: 'assistant', text: 'Pulling the last 40 CI runs.' } },
-      { afterMs: 1600, event: { type: 'tool_use', name: 'Bash', input: { command: 'gh run list --limit 40 --json conclusion,name' } } },
-      { afterMs: 2400, event: { type: 'assistant', text: 'Two suites flap: session-epoch and the canary rollup. Both look time-dependent.' } },
-      { afterMs: 2000, event: { type: 'tool_use', name: 'Read', input: { file: 'src/lib/__tests__/session-epoch.test.ts' } } },
-      { afterMs: 2800, event: { type: 'assertion', text: 'session-epoch compares in whole seconds and the fixture straddles a boundary.' } },
+      { afterMs: 800, event: says('Pulling the last 40 CI runs.') },
+      { afterMs: 1600, event: uses('Bash', { command: 'gh run list --limit 40 --json conclusion,name' }) },
+      { afterMs: 2400, event: says('Two suites flap: session-epoch and the canary rollup. Both look time-dependent.') },
+      { afterMs: 2000, event: uses('Read', { file: 'src/lib/__tests__/session-epoch.test.ts' }) },
+      { afterMs: 2800, event: says('session-epoch compares in whole seconds and the fixture straddles a boundary.') },
       { afterMs: 1900, event: { type: 'result', subtype: 'success', num_turns: 5, duration_ms: 11200, total_cost_usd: 0.0298, result: 'Both flakes are clock-boundary, not ordering. Wrote it up — want me to pin the clock in the fixtures?' } },
       { afterMs: 300, event: { type: 'devbox_end' } },
     ],
@@ -57,9 +74,9 @@ const JOBS: { title: string; prompt: string; steps: Step[] }[] = [
     title: 'schema-drift-check',
     prompt: 'Compare the deployed Aurora schema against schema/*.sql and report drift.',
     steps: [
-      { afterMs: 900, event: { type: 'assistant', text: 'Dumping the live schema.' } },
-      { afterMs: 1700, event: { type: 'tool_use', name: 'Bash', input: { command: 'psql -c "\\\\d+ public.*"' } } },
-      { afterMs: 2500, event: { type: 'assistant', text: 'One table differs: environments has a column the checked-in DDL does not.' } },
+      { afterMs: 900, event: says('Dumping the live schema.') },
+      { afterMs: 1700, event: uses('Bash', { command: 'psql -c "\\\\d+ public.*"' }) },
+      { afterMs: 2500, event: says('One table differs: environments has a column the checked-in DDL does not.') },
       { afterMs: 2100, event: { type: 'devbox_error', error: 'connection reset while reading pg_catalog — the cluster scaled down mid-query' } },
     ],
   },
@@ -74,8 +91,18 @@ let running = false;
 let lastFinishedAt = 0;
 let jobIndex = 0;
 
+/**
+ * Next idle box, round-robin rather than always the first.
+ *
+ * Always taking `[0]` meant every run landed on the same computer — and if
+ * that one belongs to a session other than the person watching, the per-box
+ * visibility rules hide it and the fixture looks broken while working
+ * perfectly. Rotating means whoever is looking sees a run before long.
+ */
 function claimable(): FleetBox | null {
-  return listBoxes().find((b) => b.status === 'idle') ?? null;
+  const idle = listBoxes().filter((b) => b.status === 'idle');
+  if (idle.length === 0) return null;
+  return idle[jobIndex % idle.length] ?? null;
 }
 
 /** Play one scripted run against `box`, pacing the events like a real stream. */
@@ -105,6 +132,11 @@ async function play(box: FleetBox): Promise<void> {
 }
 
 async function tick(): Promise<void> {
+  // MOCK_BOT_DEBUG=1 prints what the tick sees — the fastest way to tell
+  // "no idle box" apart from "ran on one you cannot see".
+  if (process.env['MOCK_BOT_DEBUG'] === '1') {
+    console.log('[mock-bot] tick — boxes:', listBoxes().map((b) => `${b.id}:${b.status}`).join(',') || '(none)');
+  }
   if (running) return;
   if (Date.now() - lastFinishedAt < COOLDOWN_MS) return;
   const box = claimable();
