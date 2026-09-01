@@ -42,6 +42,7 @@ export const CAPABILITY_ACTIONS = [
   'EditSchema',          // identity.ts — Cedar schema
   'EditGuardrail',       // capabilities.ts — guardrail config
   'ManageDevbox',        // index.ts, work.ts, bots.ts, capabilities.ts
+  'ManageBots',          // bots.ts — create/edit standing missions (sme, program-owner, leaders)
   'DispatchAgentRun',    // projects.ts, bots.ts
   'ManageIngest',        // index.ts — ingest + connections
   'ManageKB',            // index.ts kb-registry, knowledge-base.ts
@@ -143,13 +144,69 @@ function attrsToAvp(attrs: ResourceAttrs): Record<string, AttributeValue> {
   return out;
 }
 
+/**
+ * The local, no-policy-store decision: does this role hold this action in the
+ * seed Cedar policies?
+ *
+ * Loaded LAZILY and cached. role-registry.ts reads `import.meta.url` at module
+ * scope, which ts-jest's CommonJS transform cannot handle — every existing test
+ * that touches it mocks it out. A static import here would drag that breakage
+ * into every test that imports authz.ts, so the import happens only on the
+ * branch that needs it, which no AVP-configured run and no production run
+ * reaches.
+ *
+ * FIDELITY LIMIT, stated rather than hidden: this is a flat role -> action
+ * matrix, so Cedar's ATTRIBUTE CONDITIONS are not applied. `ApproveTransaction`
+ * gated on `resource.amount > 10000`, or a grant-scoped `DispatchAgentRun`,
+ * resolve here on the role grant alone. So local dev can still be more
+ * permissive than production for conditioned actions — but only for those,
+ * instead of for everything.
+ *
+ * If the seeds cannot be read we return false (deny) rather than falling back
+ * to allow: a dev environment that silently reverts to "everyone is an admin"
+ * is exactly the state this replaced, and a visible denial is easier to
+ * diagnose than an invisible grant.
+ */
+let seedMatrix: Map<string, ReadonlySet<string>> | null = null;
+let seedMatrixFailed = false;
+
+async function seedPolicyDecision(role: string, action: string): Promise<boolean> {
+  if (!seedMatrix && !seedMatrixFailed) {
+    try {
+      const { roleRegistry } = await import('./role-registry.js');
+      seedMatrix = new Map(roleRegistry().map((r) => [r.id, new Set(r.capabilities)]));
+    } catch (err) {
+      seedMatrixFailed = true;
+      // Named explicitly — a bare "failed" with no cause is how the platform's
+      // tracing shutdown bug hid itself for weeks.
+      console.error(
+        '[authz] no policy store AND the Cedar seeds could not be read; denying every action.',
+        err instanceof Error ? `${err.name}: ${err.message}` : String(err),
+      );
+    }
+  }
+  return seedMatrix?.get(role)?.has(action) ?? false;
+}
+
 async function evaluate(principal: PrincipalRef, action: string, resourceAttrs?: ResourceAttrs): Promise<'ALLOW' | 'DENY'> {
   if (!config.auth.policyStoreId) {
-    // No policy store wired up. Open mode is a local-dev convenience only —
-    // in production a missing POLICY_STORE_ID is a misconfiguration, and
+    // No policy store wired up. In production that is a misconfiguration, and
     // silently disabling every tenant/role boundary is the worst failure mode.
     if (process.env['NODE_ENV'] === 'production') return 'DENY';
-    return 'ALLOW';
+    // Locally, fall back to the SEED POLICIES rather than blanket ALLOW.
+    //
+    // Blanket ALLOW made every role look like an admin: GET
+    // /api/session/capabilities returned all 24 actions true for `member`, the
+    // portal rendered every control for everyone, and /api/identity/users
+    // answered 200 to a rank-and-file member. Nothing was insecure — production
+    // denies — but it made every permission-dependent journey IMPOSSIBLE to
+    // exercise or demo locally, and it made the masquerade menu meaningless
+    // because every role rendered the same UI.
+    //
+    // role-registry.ts derives the role -> action matrix from the same .cedar
+    // seed files AVP is loaded from, so this is the real policy rather than a
+    // second hand-maintained list that could drift from it.
+    return (await seedPolicyDecision(principal.role, action)) ? 'ALLOW' : 'DENY';
   }
   // Attribute-bearing checks (e.g. ApproveTransaction when amount > N) cache
   // under a key that includes the attributes (sorted, so ordering can't split
