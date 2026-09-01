@@ -3,29 +3,21 @@
 // microVM + persistent workspace), jumps to one, or provisions a new one.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { useCapabilities } from '../../lib/capabilities';
-import { createBox, loadBoxes, onBoxesChanged, type DevboxBox } from '../../lib/devboxRegistry';
+import { useCompute, type Computer } from '@connorhoehnslalom/ui-components/compute';
 
 const mono = 'font-["Fira_Code","Cascadia_Code","JetBrains_Mono",monospace]';
 
 export function DevboxQuickSwitch() {
   const navigate = useNavigate();
-  // Provisioning a computer POSTs /api/devbox (ManageDevbox).
-  const { can, ready } = useCapabilities();
-  const canManage = ready && can('ManageDevbox');
+  // The fleet, and whether this session may add to it, both come from the
+  // app-wide ComputeHost — one list, one answer, no localStorage mirror to
+  // drift out of step with the dock.
+  const { computers: boxes, create, canManage } = useCompute();
   const [open, setOpen] = useState(false);
-  const [boxes, setBoxes] = useState<DevboxBox[]>([]);
   const [highlight, setHighlight] = useState(0);
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState('');
   const overlayRef = useRef<HTMLDivElement>(null);
-
-  const refresh = useCallback(() => setBoxes(loadBoxes()), []);
-
-  useEffect(() => {
-    refresh();
-    return onBoxesChanged(refresh);
-  }, [refresh]);
 
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -37,7 +29,7 @@ export function DevboxQuickSwitch() {
   // Rows: matching boxes + the "new devbox" action (ManageDevbox only).
   const rows = useMemo(() => matches.length + (canManage ? 1 : 0), [matches, canManage]);
 
-  const go = useCallback((box: DevboxBox) => {
+  const go = useCallback((box: Computer) => {
     setOpen(false);
     navigate(`/admin/devbox?box=${box.id}`);
   }, [navigate]);
@@ -46,12 +38,12 @@ export function DevboxQuickSwitch() {
     if (busy) return;
     setBusy(true);
     try {
-      const box = await createBox(`computer-${loadBoxes().length + 1}`);
+      const box = await create({ label: `computer-${boxes.length + 1}` });
       go(box);
     } finally {
       setBusy(false);
     }
-  }, [busy, go]);
+  }, [busy, go, create, boxes.length]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

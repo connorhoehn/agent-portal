@@ -21,8 +21,7 @@ import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
-import { loadBoxes, createBox, type DevboxBox } from '../../lib/devboxRegistry';
-import { openShell } from '../../lib/terminalDock';
+import { openShell, useCompute, type Computer } from '@connorhoehnslalom/ui-components/compute';
 import { DEVBOX_MODELS, DEFAULT_DEVBOX_MODEL } from '../../lib/devboxModels';
 import { ConnectionSetup } from '../../components/codebases/ConnectionSetup';
 import { RepoDiscovery } from '../../components/codebases/RepoDiscovery';
@@ -125,8 +124,11 @@ export default function AgentProjectsPage() {
   const { data: changesData } = useFetch<{ changes: Array<{ projectId: string; status: string }> }>(
     '/api/sdlc/changes?open=true', 15_000);
 
-  const [boxes, setBoxes] = useState<DevboxBox[]>([]);
-  useEffect(() => { try { setBoxes(loadBoxes()); } catch { setBoxes([]); } }, [data]);
+  // The fleet comes from the app-wide ComputeHost, not a local copy. The old
+  // localStorage mirror let this page and the dock disagree about which
+  // computers existed, which showed up as a "clone into a workspace" that
+  // landed in a box the terminal could not find.
+  const { computers: boxes, create: createComputer, refresh: refreshFleet } = useCompute();
 
   const [linking, setLinking] = useState(false);
   // GitHub setup + discovery live on this page now — no detour to Knowledge →
@@ -211,7 +213,7 @@ export default function AgentProjectsPage() {
     const tid = toastPending('Cloning into a workspace', p.repoFullName);
     try {
       let box = boxes.find((b) => b.sessionId === p.sessionId) ?? boxes[boxes.length - 1];
-      if (!box) box = await createBox();
+      if (!box) box = await createComputer();
 
       const res = await fetch(`/api/agent-projects/${p.id}/clone-command`, {
         method: 'POST', credentials: 'include',
@@ -276,12 +278,12 @@ export default function AgentProjectsPage() {
         body: JSON.stringify({ sessionId: box.sessionId }),
       });
       toastSuccess(tid, 'Cloned', `${p.repoFullName} is in ${box.label}.`);
-      setBoxes(loadBoxes());
+      void refreshFleet();
       refresh();
     } catch (err) {
       toastError(tid, 'Could not clone', (err as Error).message);
     } finally { setBusy(null); }
-  }, [boxes, refresh]);
+  }, [boxes, createComputer, refreshFleet, refresh]);
 
   /** Send a task to Claude Code inside the project's workspace. */
   const run = useCallback(async () => {

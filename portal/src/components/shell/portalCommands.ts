@@ -17,8 +17,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { Command } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../../lib/auth';
-import { openShell } from '../../lib/terminalDock';
-import { loadBoxes } from '../../lib/devboxRegistry';
+import { openShell, useComputeOptional } from '@connorhoehnslalom/ui-components/compute';
 
 type PageTenant = 'orgiq' | 'newsroom' | 'admin' | 'universal';
 
@@ -195,6 +194,11 @@ export function usePortalCommands(): Command[] {
  */
 export function usePortalDynamicCommands(): (query: string) => Command[] {
   const navigate = useNavigate();
+  // Optional: the palette is mounted inside ComputeHost, but a test or a
+  // story may render the shell without it, and losing the terminal commands is
+  // better than throwing on a missing provider.
+  const compute = useComputeOptional();
+  const boxes = compute?.computers ?? [];
 
   return useCallback((query: string): Command[] => {
     const q = query.trim();
@@ -204,7 +208,6 @@ export function usePortalDynamicCommands(): (query: string) => Command[] {
     // app already puts "do a thing without navigating".
     const wantsShell = /^(term|shell|tty|ssh|console)/i.test(q);
     if (wantsShell || q === '') {
-      const boxes = loadBoxes();
       const shellCommands: Command[] = boxes.map((b) => ({
         id: `shell:${b.id}`,
         label: `Terminal → ${b.label}`,
@@ -240,5 +243,5 @@ export function usePortalDynamicCommands(): (query: string) => Command[] {
         run: () => { navigate(`/admin/observability/invocations/${q}`); },
       },
     ];
-  }, [navigate]);
+  }, [navigate, boxes]);
 }

@@ -25,9 +25,19 @@ import { clearContextChosen } from './contextChoice.ts';
 /** Exact localStorage keys that cache tenant/user-scoped data. */
 const LOCAL_KEYS: readonly string[] = [
   'iq-judge-config',          // pages/iq/EvaluationsPage.tsx STORAGE_KEY — judge-config display cache
-  'devbox.boxes.v1',          // lib/devboxRegistry.ts KEY — devbox fleet mirror
-  'devbox.sessionId',         // lib/devboxRegistry.ts LEGACY_SESSION_KEY — legacy single-box session
-  'orgiq.terminalDock.v1',    // lib/terminalDock.ts STORAGE_KEY — open shells / dock geometry
+  // The compute surface's keys, restated rather than imported from
+  // ui-components/compute. Importing the barrel drags in ShellTerminal and so
+  // @xterm/xterm, which the plain node:test runner cannot load — and a
+  // literal list is what the test below pins anyway. Mirrors
+  // COMPUTE_STORAGE_KEYS; the test is the thing that catches a drift.
+  'ui-components.computeFleet.v1',  // compute lib/storage.ts FLEET_STORAGE_KEY — fleet mirror
+  'ui-components.computeDock.v1',   // compute lib/storage.ts DOCK_STORAGE_KEY — open shells + geometry
+  'ui-components.computerLab.v1',   // compute lib/storage.ts LAB_LAYOUT_STORAGE_KEY — pane tree
+  // Retired portal keys, kept so a browser still holding them from before the
+  // migration is scrubbed once.
+  'devbox.boxes.v1',          // RETIRED lib/devboxRegistry.ts — pre-migration fleet mirror
+  'devbox.sessionId',         // RETIRED lib/devboxRegistry.ts — legacy single-box session
+  'orgiq.terminalDock.v1',    // RETIRED lib/terminalDock.ts — pre-migration dock state
   'orgiq:masquerade:history', // pages/SettingsPage.tsx MASQUERADE_HISTORY_KEY — admin masquerade history
 ];
 

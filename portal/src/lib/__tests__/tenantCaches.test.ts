@@ -44,9 +44,17 @@ function installStorage(): MemoryStorage {
 
 const DATA_KEYS = [
   'iq-judge-config',
+  // Retired portal keys — still cleared so a browser holding them from before
+  // the ui-components/compute migration is scrubbed once.
   'devbox.boxes.v1',
   'devbox.sessionId',
   'orgiq.terminalDock.v1',
+  // The library's keys, which replaced them. Listed literally on purpose: the
+  // point of this test is that a rename in ui-components is caught here rather
+  // than silently leaving one tenant's terminals on a shared browser.
+  'ui-components.computeFleet.v1',
+  'ui-components.computeDock.v1',
+  'ui-components.computerLab.v1',
   'orgiq:masquerade:history',
   'chat.session.invoke',
   'chat.session.explore',

@@ -15,7 +15,7 @@ import { GatewayStatusBadge } from './GatewayStatusBadge';
 import { usePortalCommands, usePortalDynamicCommands } from './portalCommands';
 import { DevboxQuickSwitch } from './DevboxQuickSwitch';
 import { ToastHost } from './ToastHost';
-import { TerminalDock } from '../devbox/TerminalDock';
+import { ComputeDock } from '@connorhoehnslalom/ui-components/compute';
 import { NEWSROOM_ENABLED } from '../../lib/features';
 
 interface Health {
@@ -137,17 +137,28 @@ export function Layout() {
   // Platform surfaces (Build tooling, Operate, Identity) are org-tenant
   // scoped: a session parked on the newsroom tenant gets the newsroom nav,
   // not the org platform's — switching workspace brings it back.
-  const showPlatform =
-    (session?.tenant ?? 'orgiq') === 'orgiq' &&
-    (session?.role === 'hr-admin' ||
-      session?.role === 'org-leader' ||
-      session?.role === 'admin');
+  // Platform surfaces are orgiq-only. Within that, the gate is PER ITEM rather
+  // than a second role list in front of the first.
+  //
+  // It used to be both: a broad `showPlatform` (hr-admin / org-leader / admin)
+  // and then each item's `requireRoles`. Naming a role on an item therefore did
+  // nothing unless that role was also in the outer list — which is how `sme`
+  // stayed locked out of Computers after being added to its requireRoles. Two
+  // gates for one question is a gate you will forget to open.
+  //
+  // An item with no `requireRoles` is unrestricted among the platform roles, so
+  // it still needs the broad check; an item that names roles is authoritative.
+  const onOrgiq = (session?.tenant ?? 'orgiq') === 'orgiq';
+  const isPlatformRole =
+    session?.role === 'hr-admin' || session?.role === 'org-leader' || session?.role === 'admin';
 
-  const platformItems = showPlatform
+  const platformItems = onOrgiq
     ? PLATFORM_ITEMS.filter((item) => {
-        if (!item.requireRoles) return true;
+        if (!session) return false;
         // The cross-tenant admin role passes every role gate.
-        return session && (session.role === 'admin' || item.requireRoles.includes(session.role ?? ''));
+        if (session.role === 'admin') return true;
+        if (!item.requireRoles) return isPlatformRole;
+        return item.requireRoles.includes(session.role ?? '');
       })
     : [];
 
@@ -239,7 +250,7 @@ export function Layout() {
         <CommandPalette placeholder="Jump to a page, paste an invocation id, search runs…" />
         <DevboxQuickSwitch />
         <ToastHost />
-        <TerminalDock />
+        <ComputeDock />
       </div>
     </CommandPaletteProvider>
   );

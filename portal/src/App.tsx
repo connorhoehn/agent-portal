@@ -6,6 +6,7 @@ import { useSession } from './lib/auth';
 import { NEWSROOM_ENABLED } from './lib/features';
 import { hasChosenContext } from './lib/contextChoice';
 import { GatewaySocketProvider } from '@connorhoehnslalom/realtime-modules/client/ws';
+import { ComputeHost } from './components/compute/ComputeHost';
 
 const AgentFlowPage = lazy(() => import('./pages/AgentFlowPage'));
 const AgentDetailPage = lazy(() => import('./pages/iq/AgentDetailPage'));
@@ -149,6 +150,11 @@ function RootRedirect() {
 export function App() {
   return (
     <GatewaySocketProvider url={GATEWAY_WS_URL}>
+    {/* One fleet for the whole app. Above the router because a shell must
+        survive navigation, and because the Computers page, the ⌘K palette, the
+        ⌘I switcher and Codebases all have to agree about which computers
+        exist — the localStorage mirror this replaces let them disagree. */}
+    <ComputeHost>
     <Routes>
       {/* ── Backwards-compat redirects (outside Layout so they catch bare paths) ── */}
       <Route path="agents" element={<Navigate to="/iq/agents" replace />} />
@@ -418,6 +424,7 @@ export function App() {
         <Route path="*" element={<Page element={<NotFoundPage />} />} />
       </Route>
     </Routes>
+    </ComputeHost>
     </GatewaySocketProvider>
   );
 }
