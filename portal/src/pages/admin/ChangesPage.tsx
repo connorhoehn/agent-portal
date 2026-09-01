@@ -80,24 +80,6 @@ function when(iso: string): string {
   return `${Math.round(mins / 1440)}d ago`;
 }
 
-/** Colour a unified diff by line. The diff is real git output, so no parsing
- *  beyond the leading character is needed. */
-function DiffView({ diff }: { diff: string }) {
-  const lines = diff.split('\n').slice(0, 600);
-  return (
-    <pre className="text-[11px] font-mono leading-relaxed overflow-x-auto max-h-[420px] overflow-y-auto bg-[#0d1117] rounded-md p-3">
-      {lines.map((l, i) => {
-        const c = l[0];
-        const tone = l.startsWith('@@') ? 'text-[#a5a5ff]'
-          : c === '+' && !l.startsWith('+++') ? 'text-[#7ee787]'
-          : c === '-' && !l.startsWith('---') ? 'text-[#f85149]'
-          : l.startsWith('diff ') || l.startsWith('index ') || l.startsWith('+++') || l.startsWith('---')
-            ? 'text-[#8b949e]' : 'text-[#c9d1d9]';
-        return <div key={i} className={tone}>{l || ' '}</div>;
-      })}
-    </pre>
-  );
-}
 
 export default function ChangesPage() {
   const [tab, setTab] = useState<'queue' | 'policies'>('queue');
@@ -115,7 +97,6 @@ export default function ChangesPage() {
   const denied = error != null && /\b(401|403)\b|forbidden|unauthor/i.test(error);
   const unreachable = error != null && !denied;
   const [busy, setBusy] = useState<string | null>(null);
-  const [openId, setOpenId] = useState<string | null>(null);
 
   const act = useCallback(async (
     id: string, path: string, verb: string, body: Record<string, unknown>,
@@ -202,8 +183,7 @@ export default function ChangesPage() {
               <div className="text-[10px] font-semibold uppercase tracking-wide text-warning mb-2">Needs you</div>
               <div className="flex flex-col gap-3">
                 {needsYou.map((c) => (
-                  <ChangeCard key={c.id} change={c} open={openId === c.id}
-                    onToggle={() => setOpenId(openId === c.id ? null : c.id)}
+                  <ChangeCard key={c.id} change={c}
                     busy={busy === c.id} act={act} superseded={supersededIds.has(c.id)} />
                 ))}
               </div>
@@ -215,8 +195,7 @@ export default function ChangesPage() {
               <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-2">Recent</div>
               <div className="flex flex-col gap-3">
                 {rest.map((c) => (
-                  <ChangeCard key={c.id} change={c} open={openId === c.id}
-                    onToggle={() => setOpenId(openId === c.id ? null : c.id)}
+                  <ChangeCard key={c.id} change={c}
                     busy={busy === c.id} act={act} superseded={supersededIds.has(c.id)} />
                 ))}
               </div>
@@ -278,8 +257,8 @@ export default function ChangesPage() {
   );
 }
 
-function ChangeCard({ change: c, open, onToggle, busy, act, superseded }: {
-  change: Change; open: boolean; onToggle: () => void; busy: boolean;
+function ChangeCard({ change: c, busy, act, superseded }: {
+  change: Change; busy: boolean;
   act: (id: string, path: string, verb: string, body: Record<string, unknown>) => void;
   superseded: boolean;
 }) {
@@ -442,21 +421,15 @@ function ChangeCard({ change: c, open, onToggle, busy, act, superseded }: {
             </>
           )}
           {c.diff && (
-            <button onClick={onToggle}
-              className="px-2.5 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors">
-              {open ? 'Hide diff' : 'View diff'}
-            </button>
+            <Link
+              to={`/admin/changes/${c.id}`}
+              className="px-2.5 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-secondary no-underline cursor-pointer hover:border-primary hover:text-primary transition-colors"
+              title="Per-file diff with the reviewer's findings pinned to lines"
+            >
+              Review diff →
+            </Link>
           )}
         </div>
-
-        {open && c.diff && (
-          <div className="mt-3">
-            {c.diffTruncated && (
-              <div className="text-[11px] text-warning mb-1">Diff truncated for size — the full change is in the branch once delivered.</div>
-            )}
-            <DiffView diff={c.diff} />
-          </div>
-        )}
       </div>
     </Card>
   );

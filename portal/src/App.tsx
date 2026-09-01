@@ -41,6 +41,7 @@ const BudgetsPage = lazy(() => import('./pages/budgets/BudgetsPage'));
 const SprintsPage = lazy(() => import('./pages/sprints/SprintsPage'));
 const BotDetailPage = lazy(() => import('./pages/bots/BotDetailPage'));
 const ChangesPage = lazy(() => import('./pages/admin/ChangesPage'));
+const ChangeReviewPage = lazy(() => import('./pages/admin/ChangeReviewPage'));
 const KBDetailPage = lazy(() => import('./pages/admin/KBDetailPage.js'));
 const InvokePage = lazy(() => import('./pages/InvokePage'));
 const ExplorePage = lazy(() => import('./pages/ExplorePage'));
@@ -323,6 +324,13 @@ export function App() {
           <Route path="changes" element={
             <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
               <Page element={<ChangesPage />} />
+            </RequireRole>
+          } />
+          {/* One change, reviewed properly: the diff with findings pinned to
+              lines, authorship, gates, and the decision. */}
+          <Route path="changes/:id" element={
+            <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
+              <Page element={<ChangeReviewPage />} />
             </RequireRole>
           } />
           {/* Computers is also an `sme` surface: the role spends a sprint

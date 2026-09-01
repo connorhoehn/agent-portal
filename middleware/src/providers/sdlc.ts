@@ -231,7 +231,140 @@ export async function setCommitSha(id: string, sha: string): Promise<void> {
   );
 }
 
+
+// ── Mock change requests ────────────────────────────────────────────────────
+//
+// dev:mock previously returned an empty queue, which made the review surface
+// undemoable offline — and unreviewable in tests. These fixtures are shaped
+// exactly like real captures: genuine unified diffs, reviewer findings that
+// point at real file:line targets inside them (the reviewer UI pins notes to
+// diff lines, so a finding aimed at a line the diff lacks would silently
+// exercise nothing), and gate rows. Decisions mutate them in memory.
+
+const MOCK_DEDUP_DIFF = `diff --git a/src/alerts/dedup.ts b/src/alerts/dedup.ts
+index 3f1a2b4..9c8d7e6 100644
+--- a/src/alerts/dedup.ts
++++ b/src/alerts/dedup.ts
+@@ -12,9 +12,12 @@ export interface AlertGroup {
+ export function groupKey(alert: Alert): string {
+-  return alert.name;
++  // Collapse per team, not per fleet: a storm on a shared dependency is
++  // handled by the inhibition rule, not by hiding real per-team pages.
++  return \`\${alert.name}:\${alert.namespace}\`;
+ }
+ 
+ export function dedupe(alerts: Alert[]): AlertGroup[] {
+   const groups = new Map<string, Alert[]>();
++  const seen = new Set<string>();
+   for (const a of alerts) {
+     const key = groupKey(a);
+@@ -30,6 +33,7 @@ export function dedupe(alerts: Alert[]): AlertGroup[] {
+   return [...groups.entries()].map(([key, list]) => ({
+     key,
+     count: list.length,
++    namespaces: [...new Set(list.map((a) => a.namespace))],
+   }));
+ }
+diff --git a/src/alerts/dedup.test.ts b/src/alerts/dedup.test.ts
+new file mode 100644
+index 0000000..1a2b3c4
+--- /dev/null
++++ b/src/alerts/dedup.test.ts
+@@ -0,0 +1,9 @@
++import { groupKey } from './dedup';
++
++describe('groupKey', () => {
++  it('separates namespaces', () => {
++    expect(groupKey({ name: 'HighErrorRate', namespace: 'payments' }))
++      .not.toBe(groupKey({ name: 'HighErrorRate', namespace: 'search' }));
++  });
++});
++
+`;
+
+const MOCK_DASH_DIFF = `diff --git a/dashboards/red.jsonnet b/dashboards/red.jsonnet
+index aaa111..bbb222 100644
+--- a/dashboards/red.jsonnet
++++ b/dashboards/red.jsonnet
+@@ -4,6 +4,8 @@ local grafana = import 'grafonnet/grafana.libsonnet';
+ {
+   red_dashboard(service):: {
+     title: 'RED — ' + service,
++    // Span metrics are the primary source; StatsD stays as the fallback
++    // panel behind the $source variable (span metrics lag ~3min).
+     panels: [
+@@ -22,7 +24,7 @@ local grafana = import 'grafonnet/grafana.libsonnet';
+       rate_panel(service):: {
+-        expr: 'sum(rate(statsd_requests_total{service="' + service + '"}[5m]))',
++        expr: 'sum(rate(traces_span_metrics_calls_total{service="' + service + '"}[5m]))',
+       },
+`;
+
+function mockChange(over: Partial<ChangeRequest> & Pick<ChangeRequest, 'id' | 'title' | 'status' | 'diff'>): ChangeRequest {
+  const files = parseFilesOf(over.diff ?? '');
+  return {
+    runId: null, projectId: 'mock-proj-obs', repoFullName: 'connorhoehn/observability-platform',
+    orgProjectId: 'p-observability', orgProjectName: 'Observability Platform',
+    workItemId: null, diffTruncated: false, files, filesChanged: files.length,
+    model: 'us.anthropic.claude-sonnet-5', commitSha: 'c0ffee1', branchName: null, prUrl: null,
+    decidedBy: null, decidedAt: null, decisionNote: null, error: null,
+    createdAt: new Date(Date.now() - 40 * 60_000).toISOString(),
+    reviews: [], gates: [], ...over,
+  };
+}
+
+function parseFilesOf(diff: string): string[] {
+  return [...diff.matchAll(/^diff --git a\/.* b\/(.*)$/gm)].map((m) => m[1]!);
+}
+
+const MOCK_CHANGES: ChangeRequest[] = [
+  mockChange({
+    id: 'chg-mock-1',
+    title: 'Alert dedup: collapse by alertname+namespace',
+    status: 'needs_approval',
+    diff: MOCK_DEDUP_DIFF,
+    branchName: 'agent/alert-dedup-namespace',
+    reviews: [{
+      id: 'rev-1', reviewer: 'model', model: 'amazon.nova-pro-v1:0', verdict: 'approve',
+      summary: 'Correct approach and a pinning test. One latent collision risk and one leftover variable worth a look before shipping.',
+      findings: [
+        { severity: 'warning', file: 'src/alerts/dedup.ts', line: 16, note: 'Template-literal key means a namespace containing ":" collides with another alert — consider a tuple key or escaping.' },
+        { severity: 'info', file: 'src/alerts/dedup.ts', line: 20, note: 'The new `seen` set is never read — leftover from an earlier approach?' },
+        { severity: 'info', file: 'src/alerts/dedup.test.ts', line: 5, note: 'Good: this test pins the collapse-per-namespace decision.' },
+      ],
+      createdAt: new Date(Date.now() - 35 * 60_000).toISOString(),
+    }],
+    gates: [
+      { policyName: 'sensitive-paths', kind: 'path', outcome: 'pass', detail: 'No sensitive path touched' },
+      { policyName: 'max-diff-size', kind: 'size', outcome: 'pass', detail: '46 lines changed (limit 1500)' },
+      { policyName: 'human-approval', kind: 'approval', outcome: 'hold', detail: 'Alerting config always needs a person' },
+    ],
+  }),
+  mockChange({
+    id: 'chg-mock-2',
+    title: 'RED dashboards: span metrics primary, StatsD fallback',
+    status: 'delivered',
+    diff: MOCK_DASH_DIFF,
+    branchName: 'agent/red-span-metrics',
+    prUrl: 'https://github.com/connorhoehn/observability-platform/pull/41',
+    decidedBy: 'u-nora', decidedAt: new Date(Date.now() - 3 * 3600_000).toISOString(),
+    decisionNote: 'Matches the consult decision — span metrics primary.',
+    createdAt: new Date(Date.now() - 4 * 3600_000).toISOString(),
+    reviews: [{
+      id: 'rev-2', reviewer: 'model', model: 'amazon.nova-pro-v1:0', verdict: 'approve',
+      summary: 'Source swap is scoped to the rate panel and documented.',
+      findings: [],
+      createdAt: new Date(Date.now() - 4 * 3600_000).toISOString(),
+    }],
+    gates: [
+      { policyName: 'sensitive-paths', kind: 'path', outcome: 'pass', detail: 'No sensitive path touched' },
+      { policyName: 'max-diff-size', kind: 'size', outcome: 'pass', detail: '12 lines changed (limit 1500)' },
+    ],
+  }),
+];
+
 export async function getChangeRequest(id: string): Promise<ChangeRequest | null> {
+  if (config.mock.aurora) return MOCK_CHANGES.find((c) => c.id === id) ?? null;
   if (!isUuid(id)) return null;
   const rows = await exec(
     `SELECT cr.*, ap.repo_full_name, ap.org_project_id, op.name AS org_project_name
@@ -249,7 +382,11 @@ export async function getChangeRequest(id: string): Promise<ChangeRequest | null
 }
 
 export async function listChangeRequests(opts: { projectId?: string; open?: boolean } = {}): Promise<ChangeRequest[]> {
-  if (config.mock.aurora) return [];
+  if (config.mock.aurora) {
+    return MOCK_CHANGES.filter((c) =>
+      (!opts.projectId || c.projectId === opts.projectId) &&
+      (!opts.open || ['needs_approval', 'changes_requested', 'in_review', 'captured'].includes(c.status)));
+  }
   const where: string[] = [];
   const params: SqlParameter[] = [];
   if (opts.projectId && isUuid(opts.projectId)) { where.push('cr.project_id = :pid::uuid'); params.push(s('pid', opts.projectId)); }
@@ -470,6 +607,13 @@ export async function decideChange(id: string, decision: 'approve' | 'reject', i
     return { ok: false, error: `change is ${change.status}, not awaiting a decision` };
   }
   const status = decision === 'approve' ? 'approved' : 'rejected';
+  if (config.mock.aurora) {
+    change.status = status;
+    change.decidedBy = input.by ?? null;
+    change.decidedAt = new Date().toISOString();
+    change.decisionNote = input.note ?? null;
+    return { ok: true, status };
+  }
   await setStatus(id, status,
     [maybe('by', input.by ?? null), maybe('note', input.note ?? null)],
     'decided_by = :by, decided_at = NOW(), decision_note = :note');
