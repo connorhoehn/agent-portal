@@ -11,7 +11,7 @@ import { Router } from 'express';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { requireAction, requireSession } from '../lib/authz.js';
 import { getUser } from '../providers/identity.js';
-import { searchWorkItems } from '../providers/work-items.js';
+import { searchWorkItems, getWorkItem } from '../providers/work-items.js';
 import { stewardsInitiative } from '../lib/initiative-scope.js';
 import { rankSuggestions, seesEveryInitiative } from '../lib/work-suggestions.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
@@ -100,11 +100,48 @@ workRouter.get('/suggestions', requireSession('WorkSuggestions'), asyncHandler(a
         storyPoints: i.storyPoints,
         estimatedCostUsd: i.estimatedCostUsd ?? null,
         sprintId: i.sprintId ?? null,
+        labels: i.labels ?? [],
       })),
       { personId },
     ),
   });
 }));
+
+/** `sg-<workItemId>` — the only place that shape is known outside the ranker. */
+function decodeSuggestionId(id: string): string | null {
+  return id.startsWith('sg-') && id.length > 3 ? id.slice(3) : null;
+}
+
+/**
+ * What this job is for, resolved from the board.
+ *
+ * Returns the payload fragment the queue row renders as its chip: the item,
+ * its title, and the initiative it belongs to. The initiative comes from the
+ * item rather than the request because the whole point of the chip is to be
+ * trustworthy — "Serving X · Auth Migration" is only worth showing if the
+ * board agrees that X is on Auth Migration.
+ */
+async function servedWorkItem(body: { workItemId?: string; suggestionId?: string }): Promise<{
+  workItemId?: string; workItemTitle?: string; initiativeId?: string; initiativeName?: string;
+}> {
+  const id = (body.workItemId ?? '').trim()
+    || (body.suggestionId ? decodeSuggestionId(body.suggestionId.trim()) ?? '' : '');
+  if (!id) return {};
+  try {
+    const item = await getWorkItem(id);
+    if (!item) return {};
+    return {
+      workItemId: item.id,
+      workItemTitle: item.title,
+      initiativeId: item.projectId,
+      initiativeName: item.projectName,
+    };
+  } catch (err) {
+    // Attribution is a nicety; dispatching the work is not.
+    console.warn(`[work] could not resolve work item ${id} for a queued job:`, (err as Error).message);
+    return {};
+  }
+}
 
 workRouter.get('/jobs', asyncHandler(async (req, res) => {
   const status = typeof req.query['status'] === 'string' ? req.query['status'] : undefined;
@@ -118,10 +155,41 @@ workRouter.get('/jobs/:id', asyncHandler(async (req, res) => {
   res.json(job);
 }));
 
+/**
+ * Queue a job — and record what it serves.
+ *
+ * The complaint this answers: "it's not intuitive what queue a job means in
+ * regards to the projects the user is working on." A queued job used to be an
+ * orphan. You picked a suggestion drawn from your sprint, the composer filled
+ * in a prompt, and the moment you pressed the button every trace of *why* was
+ * gone — the queue row was a title and a status, indistinguishable from
+ * something typed from scratch, and nothing on the page tied the run back to
+ * the item it was meant to move.
+ *
+ * The contract, and why it is this way:
+ *
+ *   - `workItemId` is the canonical field. A work item is a durable row other
+ *     surfaces already know how to talk about; it is the fact worth storing.
+ *   - `suggestionId` is accepted as a convenience and **decoded here**, not on
+ *     the client. Suggestion ids are `sg-<workItemId>` (lib/work-suggestions),
+ *     which makes them the ranker's handle for a card — a UI-facing id whose
+ *     shape is ours to change. Teaching the browser to slice a prefix off it
+ *     would hard-code that shape into the portal and make it a public format;
+ *     decoding server-side keeps the id space where it is minted.
+ *   - Either way the item is **looked up before it is stored**. A caller
+ *     cannot assert a link to an item that does not exist, and the lookup is
+ *     what supplies the initiative — so the chip on the queue row names the
+ *     initiative from the board, not from whatever the client believed.
+ *
+ * An unknown or non-existent id is dropped rather than fatal: the job is still
+ * worth running, and refusing to dispatch real work over a stale attribution
+ * would be the wrong trade.
+ */
 workRouter.post('/jobs', requireAction('ManageDevbox'), asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as {
     title?: string; prompt?: string; kind?: string; priority?: number;
     requiresReview?: boolean; findingId?: string;
+    workItemId?: string; suggestionId?: string;
   };
   const title = (body.title ?? '').trim();
   const prompt = (body.prompt ?? '').trim();
@@ -131,7 +199,11 @@ workRouter.post('/jobs', requireAction('ManageDevbox'), asyncHandler(async (req,
   const job = await enqueueJob({
     kind: body.kind ?? 'devbox:task',
     title,
-    payload: { prompt, requiresReview: body.requiresReview !== false },
+    payload: {
+      prompt,
+      requiresReview: body.requiresReview !== false,
+      ...(await servedWorkItem(body)),
+    },
     ...(body.priority !== undefined ? { priority: body.priority } : {}),
     createdBy: (req as { session?: { sub?: string } }).session?.sub ?? 'portal',
   });

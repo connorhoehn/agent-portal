@@ -22,6 +22,20 @@ interface Job {
   error: string | null; createdAt: string; finishedAt: string | null;
   /** The standing mission that enqueued this, when one did. */
   botId: string | null; botName: string | null; botTrigger: string | null;
+  /** What the job was queued to move, resolved server-side from the work item
+   * — see the POST /jobs contract in middleware routes/work.ts. Absent on a
+   * job typed from scratch, which is a real answer, not a missing one. */
+  payload?: {
+    workItemId?: string; workItemTitle?: string;
+    initiativeId?: string; initiativeName?: string;
+  } | null;
+}
+
+/** What a job is for, in the words the board uses. */
+function serves(job: Job): { itemTitle: string; initiativeId: string; initiativeName: string } | null {
+  const p = job.payload;
+  if (!p?.workItemTitle || !p.initiativeId || !p.initiativeName) return null;
+  return { itemTitle: p.workItemTitle, initiativeId: p.initiativeId, initiativeName: p.initiativeName };
 }
 
 /** Chip naming the bot behind a queued job. Scheduled maintenance and work a
@@ -35,6 +49,41 @@ function BotOrigin({ job }: { job: Job }) {
       title={`Enqueued by the ${job.botName} bot (${job.botTrigger ?? 'manual'} trigger)`}
     >
       {job.botTrigger === 'cron' ? '⏱ ' : '🤖 '}{job.botName}
+    </span>
+  );
+}
+
+/**
+ * Chip naming the work item a job serves, and the initiative it moves.
+ *
+ * The gap this closes: you pick a suggestion drawn from your sprint, the
+ * composer fills itself in, and then the queue shows a title with no thread
+ * back to anything — "what does queueing a job mean for the projects I am
+ * working on" had no answer anywhere on the page. Now the row says which item
+ * it is for and the initiative is one click away.
+ *
+ * The chip lives inside the row's own link, so it navigates by hand rather
+ * than nesting a second anchor: clicking the initiative goes to the
+ * initiative, clicking anywhere else on the row still opens the job.
+ */
+function ServesItem({ job, onOpenInitiative }: { job: Job; onOpenInitiative: (id: string) => void }) {
+  const s = serves(job);
+  if (!s) return null;
+  const go = (e: { preventDefault: () => void; stopPropagation: () => void }) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onOpenInitiative(s.initiativeId);
+  };
+  return (
+    <span
+      role="link"
+      tabIndex={0}
+      onClick={go}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') go(e); }}
+      title={`Serving “${s.itemTitle}” on ${s.initiativeName} — open the initiative`}
+      className="text-[10px] px-1.5 py-0.5 rounded bg-surface-hover text-text-secondary shrink-0 max-w-[220px] truncate cursor-pointer hover:text-primary"
+    >
+      ↳ {s.itemTitle} · {s.initiativeName}
     </span>
   );
 }
@@ -165,6 +214,8 @@ export default function WorkHomePage() {
   );
 
   const [busy, setBusy] = useState(false);
+  /** The card currently filling the composer, so the hint can name it. */
+  const [chosen, setChosen] = useState<WorkSuggestion | null>(null);
 
   const jobs = jobsData?.jobs ?? [];
   const findings = findingsData?.findings ?? [];
@@ -218,20 +269,37 @@ export default function WorkHomePage() {
     });
   }
 
-  async function enqueue(title: string, prompt: string) {
+  /**
+   * Queue a job, carrying the suggestion it came from.
+   *
+   * `suggestionId` is passed straight through rather than unpacked here: its
+   * `sg-<workItemId>` shape belongs to the ranker that mints it, and the
+   * server resolves the item from the board so the chip and the toast name
+   * what the board actually says. A prompt typed from scratch sends nothing
+   * and reads as before.
+   */
+  async function enqueue(title: string, prompt: string, suggestionId?: string) {
     if (!title.trim() || !prompt.trim() || busy) return;
     setBusy(true);
     const tid = toastPending('Queueing job', title.trim());
     try {
-      const res = await post('/api/work/jobs', { title: title.trim(), prompt: prompt.trim() });
+      const res = await post('/api/work/jobs', {
+        title: title.trim(), prompt: prompt.trim(),
+        ...(suggestionId ? { suggestionId } : {}),
+      });
       if (!res.ok) throw new Error((await res.json() as { error?: string }).error ?? `HTTP ${res.status}`);
       const job = await res.json() as Job;
-      toastSuccess(tid, 'Job queued', 'an idle worker picks it up within ~10s');
+      const s = serves(job);
+      // Say what it will move, not just that it was accepted — the whole
+      // complaint was that queueing a job read as unrelated to your work.
+      toastSuccess(tid, 'Job queued', s
+        ? `Serving “${s.itemTitle}” · ${s.initiativeName} — the first idle computer picks it up within ~10s`
+        : 'an idle worker picks it up within ~10s');
       refreshAll();
       navigate(`/iq/work/${job.id}`);
     } catch (err) {
       toastError(tid, 'Could not queue job', (err as Error).message);
-    } finally { setBusy(false); }
+    } finally { setBusy(false); setChosen(null); }
   }
 
   async function promote(f: Finding) {
@@ -484,10 +552,16 @@ export default function WorkHomePage() {
               ? 'Could not read your work items, so there is nothing to suggest — the box below still works.'
               : 'Nothing blocked, in review, or waiting to start on your initiatives.'
           }
-          hint="Runs on the first idle computer · ⌘⏎"
+          // Once a card fills the fields, say what pressing the button will
+          // move. The prompt is long enough that "what was this for again?"
+          // is a real question by the time you reach the button.
+          onChooseSuggestion={(c) => setChosen(suggestions?.find((s) => s.id === c.id) ?? null)}
+          hint={chosen
+            ? `Runs on the first idle computer, serving “${chosen.title}” · ${chosen.initiativeName} · ⌘⏎`
+            : 'Runs on the first idle computer · ⌘⏎'}
           submitLabel="Queue job"
           busy={busy}
-          onSubmit={({ title, prompt }) => void enqueue(title, prompt)}
+          onSubmit={({ title, prompt, suggestionId }) => void enqueue(title, prompt, suggestionId)}
         />
       )}
 
@@ -505,6 +579,7 @@ export default function WorkHomePage() {
                     <Link to={`/iq/work/${j.id}`} className="text-[13px] font-semibold text-text-primary no-underline hover:text-primary truncate">
                       {j.title}
                     </Link>
+                    <ServesItem job={j} onOpenInitiative={(id) => navigate(`/iq/projects/${id}`)} />
                     <BotOrigin job={j} />
                   </div>
                   <div className="text-[12px] text-text-secondary mt-1 leading-snug">{j.result?.summary ?? 'No summary reported.'}</div>
@@ -613,6 +688,7 @@ export default function WorkHomePage() {
               {j.status.replace('_', ' ')}
             </span>
             <span className="text-[12.5px] text-text-primary truncate flex-1 min-w-0" title={j.title}>{j.title}</span>
+            <ServesItem job={j} onOpenInitiative={(id) => navigate(`/iq/projects/${id}`)} />
             <BotOrigin job={j} />
             {j.error && <span className="text-[11px] text-danger truncate max-w-[240px]" title={j.error}>{j.error}</span>}
             <span className="text-[11px] text-text-tertiary shrink-0 hidden md:inline">

@@ -104,6 +104,34 @@ function rowToJob(r: Record<string, unknown>): AgentJob {
   };
 }
 
+// ─── Mock queue ──────────────────────────────────────────────────────────────
+//
+// Without Aurora every queue call used to answer "no": enqueue returned null,
+// which the route reports as 503 "queue unavailable", and the list came back
+// empty. So in `dev:mock` the Work page could offer you a suggestion, fill the
+// composer with a runnable prompt, and then refuse the one action the page
+// exists for — with an error that reads like an outage. The interesting half
+// of the journey (suggestion → job → what it serves) was untestable by hand.
+//
+// This is a queue, not a fake: the same states, the same ordering, the same
+// claim-once guarantee (single-process, so a plain splice is the whole of the
+// concurrency story). Nothing dispatches it unless a devbox worker registers,
+// which in mock mode leaves rows sitting visibly `queued` — the honest answer,
+// and the one the page renders.
+const MOCK_JOBS: AgentJob[] = [];
+let mockSeq = 0;
+
+const MOCK_STATUS_RANK: Record<string, number> = {
+  running: 0, claimed: 1, awaiting_review: 2, queued: 3,
+};
+
+function mockOrder(a: AgentJob, b: AgentJob): number {
+  const s = (MOCK_STATUS_RANK[a.status] ?? 4) - (MOCK_STATUS_RANK[b.status] ?? 4);
+  if (s !== 0) return s;
+  if (a.priority !== b.priority) return a.priority - b.priority;
+  return b.createdAt.localeCompare(a.createdAt);
+}
+
 export async function enqueueJob(input: {
   kind: string;
   title: string;
@@ -115,7 +143,32 @@ export async function enqueueJob(input: {
    * to the bot rather than showing an anonymous scheduled task. */
   botId?: string;
 }): Promise<AgentJob | null> {
-  if (config.mock.aurora) return null;
+  if (config.mock.aurora) {
+    const job: AgentJob = {
+      id: `job-mock-${++mockSeq}`,
+      kind: input.kind,
+      title: input.title,
+      payload: input.payload ?? {},
+      status: 'queued',
+      priority: input.priority ?? 100,
+      boxId: null,
+      sessionId: null,
+      attempts: 0,
+      maxAttempts: input.maxAttempts ?? 2,
+      result: null,
+      error: null,
+      createdBy: input.createdBy ?? 'portal',
+      createdAt: new Date().toISOString(),
+      claimedAt: null,
+      startedAt: null,
+      finishedAt: null,
+      botId: input.botId ?? null,
+      botName: null,
+      botTrigger: null,
+    };
+    MOCK_JOBS.push(job);
+    return job;
+  }
   const rows = await exec(
     `INSERT INTO agent_jobs (kind, title, payload, priority, created_by, max_attempts, bot_id)
      VALUES (:kind, :title, :payload::jsonb, :priority, :created_by, :max_attempts, :bot_id::uuid)
@@ -136,7 +189,13 @@ export async function enqueueJob(input: {
 }
 
 export async function listJobs(opts: { status?: string; limit?: number } = {}): Promise<AgentJob[]> {
-  if (config.mock.aurora) return [];
+  if (config.mock.aurora) {
+    return MOCK_JOBS
+      .filter((j) => !opts.status || j.status === opts.status)
+      .sort(mockOrder)
+      .slice(0, Math.min(Math.max(opts.limit ?? 50, 1), 200))
+      .map((j) => ({ ...j }));
+  }
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
   const params: SqlParameter[] = [intParam('lim', limit)];
   let where = '';
@@ -157,7 +216,10 @@ export async function listJobs(opts: { status?: string; limit?: number } = {}): 
 }
 
 export async function getJob(id: string): Promise<AgentJob | null> {
-  if (config.mock.aurora) return null;
+  if (config.mock.aurora) {
+    const job = MOCK_JOBS.find((j) => j.id === id);
+    return job ? { ...job } : null;
+  }
   const rows = await exec(
     `SELECT ${COLUMNS_WITH_BOT} FROM ${JOBS_WITH_BOT} WHERE j.id = :id`,
     [strParam('id', id)],
@@ -173,7 +235,18 @@ export async function getJob(id: string): Promise<AgentJob | null> {
  * blocking on it or — worse — reading it as available.
  */
 export async function claimNextJob(boxId: string, sessionId: string): Promise<AgentJob | null> {
-  if (config.mock.aurora) return null;
+  if (config.mock.aurora) {
+    const next = MOCK_JOBS
+      .filter((j) => j.status === 'queued')
+      .sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt))[0];
+    if (!next) return null;
+    next.status = 'claimed';
+    next.boxId = boxId;
+    next.sessionId = sessionId;
+    next.claimedAt = new Date().toISOString();
+    next.attempts += 1;
+    return { ...next };
+  }
   const rows = await exec(
     `UPDATE agent_jobs
         SET status = 'claimed', box_id = :box, session_id = :session,
@@ -191,7 +264,11 @@ export async function claimNextJob(boxId: string, sessionId: string): Promise<Ag
 }
 
 export async function markRunning(id: string): Promise<void> {
-  if (config.mock.aurora) return;
+  if (config.mock.aurora) {
+    const job = MOCK_JOBS.find((j) => j.id === id);
+    if (job) { job.status = 'running'; job.startedAt = new Date().toISOString(); }
+    return;
+  }
   await exec(
     `UPDATE agent_jobs SET status='running', started_at=NOW(), updated_at=NOW() WHERE id=:id`,
     [strParam('id', id)],
@@ -203,7 +280,16 @@ export async function completeJob(id: string, opts: {
   result?: Record<string, unknown>;
   error?: string;
 }): Promise<void> {
-  if (config.mock.aurora) return;
+  if (config.mock.aurora) {
+    const job = MOCK_JOBS.find((j) => j.id === id);
+    if (job) {
+      job.status = opts.status;
+      if (opts.result) job.result = opts.result;
+      job.error = opts.error ?? null;
+      job.finishedAt = new Date().toISOString();
+    }
+    return;
+  }
   await exec(
     `UPDATE agent_jobs
         SET status = :status,
@@ -222,7 +308,13 @@ export async function completeJob(id: string, opts: {
 
 /** Human accepted or rejected the artifact an awaiting_review job produced. */
 export async function reviewJob(id: string, decision: 'accept' | 'reject', note?: string): Promise<AgentJob | null> {
-  if (config.mock.aurora) return null;
+  if (config.mock.aurora) {
+    const job = MOCK_JOBS.find((j) => j.id === id && j.status === 'awaiting_review');
+    if (!job) return null;
+    job.status = decision === 'accept' ? 'done' : 'failed';
+    job.result = { ...(job.result ?? {}), reviewNote: note ?? '' };
+    return { ...job };
+  }
   const rows = await exec(
     `UPDATE agent_jobs
         SET status = :status,
@@ -240,7 +332,13 @@ export async function reviewJob(id: string, decision: 'accept' | 'reject', note?
 }
 
 export async function cancelJob(id: string): Promise<boolean> {
-  if (config.mock.aurora) return false;
+  if (config.mock.aurora) {
+    const job = MOCK_JOBS.find((j) => j.id === id && (j.status === 'queued' || j.status === 'claimed'));
+    if (!job) return false;
+    job.status = 'cancelled';
+    job.finishedAt = new Date().toISOString();
+    return true;
+  }
   const rows = await exec(
     `UPDATE agent_jobs SET status='cancelled', finished_at=NOW(), updated_at=NOW()
       WHERE id=:id AND status IN ('queued','claimed') RETURNING id`,
@@ -283,7 +381,10 @@ export async function queueStats(): Promise<Record<JobStatus | 'total', number>>
     queued: 0, claimed: 0, running: 0, awaiting_review: 0,
     done: 0, failed: 0, cancelled: 0, total: 0,
   } as Record<JobStatus | 'total', number>;
-  if (config.mock.aurora) return base;
+  if (config.mock.aurora) {
+    for (const j of MOCK_JOBS) { base[j.status] += 1; base.total += 1; }
+    return base;
+  }
   const rows = await exec(`SELECT status, count(*)::int AS n FROM agent_jobs GROUP BY status`);
   for (const r of rows) {
     const s = toStr(r['status']) as JobStatus;
