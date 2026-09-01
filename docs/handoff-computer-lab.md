@@ -1,5 +1,19 @@
 # Handoff — Computer Lab and the environments domain
 
+> **Updated after the nine-agent integration (2026-09-01).** The "What is
+> left" list below is largely CLOSED: the portal adopted ComputerLab (inline,
+> host-themed, ⌘⇧U rail focus, ?box= deep links), LabRail groups by project
+> with budget quick-lines, the tail pane is a real activity feed (job banners,
+> cost chips, follow affordance), cost/token attribution flows in mock mode,
+> `dev:mock` serves every page without 500s (DEV_OFFLINE=true skips .env.aws
+> outright), the SME journey closes offline end to end (suggestions from your
+> initiatives → TaskComposer → queue → simulated dispatched run → awaiting
+> review), initiative pages show their charged computers, and the dev sign-in
+> picker lives on /select. Storybook covers the dock, tail, chooser, summary
+> and status line. Start from `git log` on both repos rather than the sections
+> below for current state; what follows is kept for the design reasoning,
+> which still holds.
+
 Two pieces of work, in two repos, that have not yet met each other.
 
 1. **`@connorhoehnslalom/ui-components/compute`** — a new surface package: a
