@@ -1,4 +1,5 @@
 import type { GraphNode, GraphDepartment } from './types';
+import { useSession } from '../../lib/auth';
 
 interface OrgGraphTooltipProps {
   node: GraphNode;
@@ -7,6 +8,11 @@ interface OrgGraphTooltipProps {
 }
 
 export function OrgGraphTooltip({ node, departments, containerRect }: OrgGraphTooltipProps) {
+  // Influence is leadership analytics (the ViewLeaderboard tier) — the hover
+  // card was quietly giving every role the HR read on each node.
+  const { session } = useSession();
+  const showAnalytics =
+    session?.role === 'org-leader' || session?.role === 'hr-admin' || session?.role === 'admin';
   const dept = departments.find(d => d.name === node.department);
   if (!containerRect) return null;
 
@@ -28,10 +34,12 @@ export function OrgGraphTooltip({ node, departments, containerRect }: OrgGraphTo
           </span>
         ))}
       </div>
-      <div className="mt-2 flex justify-between text-[11px]">
-        <span className="text-text-tertiary">Influence</span>
-        <span className="font-semibold">{Math.round(node.influenceScore * 100)}/100</span>
-      </div>
+      {showAnalytics && (
+        <div className="mt-2 flex justify-between text-[11px]">
+          <span className="text-text-tertiary">Influence</span>
+          <span className="font-semibold">{Math.round(node.influenceScore * 100)}/100</span>
+        </div>
+      )}
     </div>
   );
 }

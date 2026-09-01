@@ -12,6 +12,7 @@
 
 import type { SubNavItem } from '@connorhoehnslalom/ui-components/shared';
 import { useCanaryNavItems } from '../../components/canary/canaryNavItems';
+import { useSession } from '../../lib/auth';
 import { useCanaryStore } from '../../components/canary/canaryStore';
 
 export interface IqSubNavSpec {
@@ -42,9 +43,12 @@ const SCORES_ITEMS: SubNavItem[] = [
   { path: '/iq/projects',        label: 'Initiatives', hint: 'Contributions + status',     group: 'Other views' },
 ];
 
-// Explore is the "look at the org" surface, so the other org views hang off it.
+// Explore is the "look at the org" surface, so the other org views hang off
+// it. Scores is appended in the hook, and only for the leadership roles that
+// hold ViewLeaderboard — for everyone else the rail offered a door straight
+// into a 403'd leaderboard.
 const EXPLORE_ITEMS: SubNavItem[] = [
-  { path: '/iq/scores',   label: 'Scores',      hint: 'Ranked influence + expertise', group: 'Other views' },
+  { path: '/iq/help',     label: 'Find Help',   hint: 'Who can help with a domain',   group: 'Other views' },
   { path: '/iq/projects', label: 'Initiatives', hint: 'Contributions + status',       group: 'Other views' },
   { path: 'explore?entities=people',    label: 'People',   group: 'Show' },
   { path: 'explore?entities=skills',    label: 'Skills',   group: 'Show' },
@@ -82,6 +86,15 @@ export function useIqSubNav(pathname: string): IqSubNavSpec | null {
   // All hooks must be called unconditionally (rules of hooks).
   const canaryItems = useCanaryNavItems();
   const experimentState = useCanaryStore((s) => s.experimentState);
+  const { session } = useSession();
+  const seesScores =
+    session?.role === 'org-leader' || session?.role === 'hr-admin' || session?.role === 'admin';
+  const exploreItems = seesScores
+    ? [
+        { path: '/iq/scores', label: 'Scores', hint: 'Ranked influence + expertise', group: 'Other views' },
+        ...EXPLORE_ITEMS,
+      ]
+    : EXPLORE_ITEMS;
 
   if (pathname.startsWith('/iq/work')) {
     return { title: 'Work', items: WORK_ITEMS, storageKey: 'iq-work-subnav' };
@@ -126,13 +139,13 @@ export function useIqSubNav(pathname: string): IqSubNavSpec | null {
   if (pathname === '/iq/projects' || pathname.startsWith('/iq/projects?')) {
     // Projects is an Explore view, so it keeps the Explore rail — an empty
     // rail of its own was a dead 200px column with no way back.
-    return { title: 'Explore', items: EXPLORE_ITEMS, storageKey: 'iq-explore-subnav' };
+    return { title: 'Explore', items: exploreItems, storageKey: 'iq-explore-subnav' };
   }
   if (pathname.startsWith('/iq/projects/')) {
     return null; // detail page is full-width
   }
   if (pathname.startsWith('/iq/explore')) {
-    return { title: 'Explore', items: EXPLORE_ITEMS, storageKey: 'iq-explore-subnav' };
+    return { title: 'Explore', items: exploreItems, storageKey: 'iq-explore-subnav' };
   }
   return null;
 }

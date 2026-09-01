@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { aurora } from '../providers/index.js';
 import { asyncHandler } from '../lib/async-handler.js';
+import { findHelp } from '../lib/help-search.js';
 
 export const graphRouter = Router();
 
@@ -17,6 +18,29 @@ graphRouter.get('/skills-graph', asyncHandler(async (_req, res) => {
 graphRouter.get('/projects-graph', asyncHandler(async (_req, res) => {
   const snapshot = await aurora.fetchProjectsGraph();
   res.json(snapshot);
+}));
+
+// Who can help with a domain — the SME-tier lookup. Evidence-ranked and
+// score-free on purpose: this router's ViewOrgChart gate is held by every
+// orgiq role, unlike /api/scores' ViewLeaderboard, so nothing here may leak
+// the analytics view. Docs are fetched only for the people actually returned.
+graphRouter.get('/help', asyncHandler(async (req, res) => {
+  const q = typeof req.query['q'] === 'string' ? req.query['q'].trim() : '';
+  if (!q) {
+    res.status(400).json({ error: '`q` query param is required' });
+    return;
+  }
+  const [graph, skillsGraph, projectsGraph] = await Promise.all([
+    aurora.fetchGraph(),
+    aurora.fetchSkillsGraph(),
+    aurora.fetchProjectsGraph(),
+  ]);
+  const matches = findHelp(q, { graph, skillsGraph, projectsGraph });
+  const people = await Promise.all(matches.map(async (m) => ({
+    ...m,
+    documents: (await aurora.fetchPersonEvidence(m.id)).slice(0, 3),
+  })));
+  res.json({ query: q, people });
 }));
 
 graphRouter.get('/people/:personId', asyncHandler(async (req, res) => {

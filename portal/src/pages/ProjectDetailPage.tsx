@@ -1008,6 +1008,11 @@ function ContributorModal({
   onClose: () => void;
 }) {
   const navigate = useNavigate();
+  // Influence is ViewLeaderboard-tier analytics; this modal opens for every
+  // role that can view an initiative's contributors.
+  const { session } = useSession();
+  const showAnalytics =
+    session?.role === 'org-leader' || session?.role === 'hr-admin' || session?.role === 'admin';
   const { data, error } = useFetch<PersonDetail>(`/api/graph/people/${encodeURIComponent(personId)}`);
   const person = data;
   const topCollaborators = (person?.connections ?? [])
@@ -1047,7 +1052,7 @@ function ContributorModal({
             </div>
           )}
 
-          {person.influenceScore != null && (
+          {showAnalytics && person.influenceScore != null && (
             <div style={{ marginBottom: 14, fontSize: 13, color: 'var(--color-text-secondary)' }}>
               Influence score <strong style={{ color: 'var(--color-text-primary)' }}>{person.influenceScore}</strong>
             </div>

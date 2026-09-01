@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useFetch } from '../../hooks/useFetch';
+import { useSession } from '../../lib/auth';
 import type { GraphPerson, GraphRelationship, GraphDepartment } from './types';
 
 // ── GraphSearchBox ───────────────────────────────────────────────────────────
@@ -219,6 +220,14 @@ interface EvidenceResponse {
 }
 
 export function PersonDetailCard({ personId, onClose, onFocusPerson, onAsk }: PersonDetailCardProps) {
+  // Influence/scored-at are people-analytics numbers — the same data class the
+  // ViewLeaderboard gate keeps behind /iq/scores. The graph roster endpoint
+  // happens to carry them, but printing an influence figure on every person
+  // card gave the whole org the HR read on each other; an SME looking for help
+  // gets the person's skills, connections and evidence instead.
+  const { session } = useSession();
+  const showAnalytics =
+    session?.role === 'org-leader' || session?.role === 'hr-admin' || session?.role === 'admin';
   const { data, isLoading, error } = useFetch<PersonDetailResponse>(
     `/api/graph/people/${encodeURIComponent(personId)}`,
   );
@@ -268,15 +277,17 @@ export function PersonDetailCard({ personId, onClose, onFocusPerson, onAsk }: Pe
       {data && (
         <>
           <div style={{ marginTop: 10, display: 'flex', gap: 14 }}>
-            <div>
-              <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--color-text-tertiary)' }}>Influence</div>
-              <div style={{ fontWeight: 700, fontSize: 15 }}>{data.influenceScore.toFixed(2)}</div>
-            </div>
+            {showAnalytics && (
+              <div>
+                <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--color-text-tertiary)' }}>Influence</div>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>{data.influenceScore.toFixed(2)}</div>
+              </div>
+            )}
             <div>
               <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--color-text-tertiary)' }}>Connections</div>
               <div style={{ fontWeight: 700, fontSize: 15 }}>{data.connections.length}</div>
             </div>
-            {data.scoredAt && (
+            {showAnalytics && data.scoredAt && (
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4, color: 'var(--color-text-tertiary)' }}>Scored</div>
                 <div style={{ fontWeight: 600, fontSize: 11, marginTop: 3 }}>{data.scoredAt.slice(0, 10)}</div>

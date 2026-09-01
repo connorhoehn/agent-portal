@@ -60,7 +60,14 @@ const NAV_ITEMS: NavItem[] = [
   { path: '/iq/sprints',    label: 'Sprints',     tenant: 'orgiq',     group: 'Build' },
   { path: '/iq/invoke',     label: 'Ask',         tenant: 'orgiq',     group: 'Org' },
   { path: '/iq/explore',    label: 'Explore',     tenant: 'orgiq',     group: 'Org' },
-  { path: '/iq/scores',     label: 'Scores',      tenant: 'orgiq',     group: 'Org' },
+  // The split the org view needed: every role can SEARCH the org for help
+  // (evidence-ranked, score-free — /api/graph/help, ViewOrgChart tier), but
+  // the HR analytics view — leaderboards, composites, cohorts — is
+  // leadership data. The API already gated Scores on ViewLeaderboard
+  // (org-leader / hr-admin); an ungated nav item just handed every SME a
+  // 403'd leaderboard.
+  { path: '/iq/help',       label: 'Find Help',   tenant: 'orgiq',     group: 'Org' },
+  { path: '/iq/scores',     label: 'Scores',      tenant: 'orgiq',     group: 'Org', requireRoles: ['org-leader', 'hr-admin'] },
   { path: '/iq/prompt-ops', label: 'Prompts',     tenant: 'orgiq',     group: 'Operate' },
   { path: '/newsroom',      label: 'Newsroom',    tenant: 'newsroom' },
   { path: '/settings',      label: 'Settings',    tenant: 'universal', group: 'System' },
