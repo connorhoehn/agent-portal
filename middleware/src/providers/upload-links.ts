@@ -11,6 +11,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import { exec } from './aurora.js';
 import { uploadToLandingZone } from './landing-zones.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
+import { config } from '../config.js';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
 function n(name: string, value: number): SqlParameter { return { name, value: { longValue: value } }; }
@@ -113,6 +114,13 @@ export async function createUploadLink(input: {
 }
 
 export async function listUploadLinks(kbSlug?: string): Promise<UploadLink[]> {
+  // GET /api/admin/kb-registry/upload-links has no try/catch and, unlike most
+  // of this provider, is a genuine page-load path — ShareLinks.tsx fetches it
+  // as soon as KnowledgeHomePage picks a real kbSlug, which it now can since
+  // the KB registry itself is mocked (see mock/kb-registry.ts). No upload
+  // links have ever been minted for a fixture KB, so honest fixture data here
+  // is simply none — the page's own empty state ("no links yet") covers it.
+  if (config.mock.aurora) return [];
   const rows = kbSlug
     ? await exec(
         `SELECT * FROM kb_upload_links WHERE kb_slug = :slug ORDER BY created_at DESC LIMIT 100`,

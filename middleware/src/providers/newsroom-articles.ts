@@ -12,6 +12,11 @@ import {
 } from '@aws-sdk/client-rds-data';
 
 import { config } from '../config.js';
+import {
+  mockArticles, mockEntities, mockClusters, mockPitches,
+  mockUpdatePitchStatus, mockPublishArticle,
+  type MockArticle,
+} from '../mock/newsroom.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -136,12 +141,41 @@ function numOrNull(v: unknown): number | null {
 
 // ─── Provider functions ───────────────────────────────────────────────────────
 
+function mockToSummary(a: MockArticle): ArticleSummary {
+  return {
+    id: a.id,
+    headline: a.headline,
+    section: a.section,
+    status: a.status,
+    publishedAt: a.publishedAt,
+    byline: a.byline,
+    wordCount: a.wordCount,
+    entityCount: a.entityIds.length,
+  };
+}
+
 export async function listArticles(opts: {
   beat?: string;
   since?: string;
   limit?: number;
 }): Promise<ArticleSummary[]> {
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
+
+  if (config.mock.aurora) {
+    let rows = mockArticles.slice();
+    if (opts.beat) rows = rows.filter((a) => a.section === opts.beat);
+    if (opts.since) {
+      const sinceMs = Date.parse(opts.since);
+      rows = rows.filter((a) => a.publishedAt != null && Date.parse(a.publishedAt) >= sinceMs);
+    }
+    rows.sort((a, b) => {
+      if (a.publishedAt == null) return 1;
+      if (b.publishedAt == null) return -1;
+      return Date.parse(b.publishedAt) - Date.parse(a.publishedAt);
+    });
+    return rows.slice(0, limit).map(mockToSummary);
+  }
+
   const params: SqlParameter[] = [intParam('lim', limit)];
   const whereClauses: string[] = ["d.doc_type = 'news_article'"];
 
@@ -198,6 +232,28 @@ export async function listArticles(opts: {
 }
 
 export async function getArticle(id: string): Promise<ArticleDetail | null> {
+  if (config.mock.aurora) {
+    const a = mockArticles.find((x) => x.id === id);
+    if (!a) return null;
+    const cluster = mockClusters.find((c) => c.id === a.clusterId) ?? null;
+    return {
+      ...mockToSummary(a),
+      subheadline: a.subheadline,
+      body: a.body,
+      entities: a.entityIds.map((e) => {
+        const ent = mockEntities.find((m) => m.id === e.id);
+        return {
+          id: e.id,
+          name: ent?.name ?? e.id,
+          entityType: ent?.entityType ?? 'unknown',
+          salience: e.salience,
+          role: e.role,
+        };
+      }),
+      sources: [],
+      cluster: cluster ? { id: cluster.id, title: cluster.title } : null,
+    };
+  }
   try {
     const articleRows = await exec(
       `SELECT
@@ -315,6 +371,20 @@ export async function getArticle(id: string): Promise<ArticleDetail | null> {
 }
 
 export async function getTodayStats(): Promise<TodayStats> {
+  if (config.mock.aurora) {
+    const today = new Date().toISOString().slice(0, 10);
+    const todays = mockArticles.filter(
+      (a) => a.status === 'published' && a.publishedAt != null && a.publishedAt.slice(0, 10) === today,
+    );
+    const bySection = new Map<string, number>();
+    for (const a of todays) bySection.set(a.section, (bySection.get(a.section) ?? 0) + 1);
+    return {
+      total: todays.length,
+      sections: Array.from(bySection.entries())
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count),
+    };
+  }
   try {
     const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
     const params = [strParam('today', today)];
@@ -352,6 +422,39 @@ export async function getTodayStats(): Promise<TodayStats> {
 }
 
 export async function getEntity(id: string): Promise<EntityDetail | null> {
+  if (config.mock.aurora) {
+    const e = mockEntities.find((x) => x.id === id);
+    if (!e) return null;
+    const appearances = mockArticles
+      .filter((a) => a.entityIds.some((m) => m.id === id))
+      .map((a) => ({
+        articleId: a.id,
+        headline: a.headline,
+        publishedAt: a.publishedAt,
+        salience: a.entityIds.find((m) => m.id === id)?.salience ?? 0,
+      }));
+    const sharedArticleIds = new Set(appearances.map((a) => a.articleId));
+    const coMentionCounts = new Map<string, number>();
+    for (const a of mockArticles) {
+      if (!sharedArticleIds.has(a.id)) continue;
+      for (const m of a.entityIds) {
+        if (m.id === id) continue;
+        coMentionCounts.set(m.id, (coMentionCounts.get(m.id) ?? 0) + 1);
+      }
+    }
+    const coMentions = Array.from(coMentionCounts.entries())
+      .map(([entId, count]) => {
+        const ent = mockEntities.find((x) => x.id === entId);
+        return {
+          entityId: entId,
+          entityName: ent?.name ?? entId,
+          entityType: ent?.entityType ?? 'unknown',
+          sharedArticleCount: count,
+        };
+      })
+      .sort((a, b) => b.sharedArticleCount - a.sharedArticleCount);
+    return { id: e.id, name: e.name, entityType: e.entityType, aliases: e.aliases, appearances, coMentions };
+  }
   try {
     const entityRows = await exec(
       `SELECT id, name, entity_type, aliases FROM entities WHERE id = :id LIMIT 1`,
@@ -458,6 +561,18 @@ export interface PitchesSummary {
 }
 
 export async function getClusters(): Promise<ClustersSummary> {
+  if (config.mock.aurora) {
+    const fourteenDaysAgoMs = Date.now() - 14 * 86_400_000;
+    const active = mockClusters
+      .filter((c) => Date.parse(c.lastUpdated) > fourteenDaysAgoMs)
+      .map((c) => ({
+        id: c.id,
+        headline: c.title,
+        size: mockArticles.filter((a) => a.clusterId === c.id).length,
+      }))
+      .sort((a, b) => b.size - a.size);
+    return { total: mockClusters.length, active };
+  }
   const totalRows = await exec('SELECT count(*)::int AS n FROM story_clusters');
   const rows = await exec(`
     SELECT sc.id, sc.title, count(ca.article_id)::int AS size
@@ -479,6 +594,16 @@ export async function getClusters(): Promise<ClustersSummary> {
 }
 
 export async function getPitches(status = 'open'): Promise<PitchesSummary> {
+  if (config.mock.aurora) {
+    const all = mockPitches();
+    const filtered = all
+      .filter((p) => p.status === status)
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    return {
+      total: all.length,
+      open: filtered.map((p) => ({ id: p.id, headline: p.title, createdAt: p.createdAt })),
+    };
+  }
   const totalRows = await exec('SELECT count(*)::int AS n FROM pitches');
   const rows = await exec(
     'SELECT id, title, created_at FROM pitches WHERE status = :status ORDER BY created_at DESC LIMIT 20',
@@ -518,6 +643,32 @@ export interface PitchBoard {
 }
 
 export async function getPitchBoard(): Promise<PitchBoard> {
+  if (config.mock.aurora) {
+    const all = mockPitches();
+    const counts: Record<string, number> = {};
+    for (const p of all) counts[p.status] = (counts[p.status] ?? 0) + 1;
+    const byId = new Map(mockClusters.map((c) => [c.id, c]));
+    return {
+      counts,
+      pitches: all
+        .slice()
+        .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+        .map((p) => ({
+          id: p.id,
+          title: p.title,
+          body: p.body,
+          beat: p.beat,
+          status: p.status,
+          proposedBy: p.proposedBy,
+          assignedTo: p.assignedTo,
+          cluster: p.clusterId && byId.has(p.clusterId)
+            ? { id: p.clusterId, title: byId.get(p.clusterId)!.title }
+            : null,
+          createdAt: p.createdAt,
+          updatedAt: p.updatedAt,
+        })),
+    };
+  }
   const countRows = await exec('SELECT status, count(*)::int AS n FROM pitches GROUP BY status');
   const rows = await exec(`
     SELECT p.id, p.title, p.body, p.beat, p.status, p.created_at, p.updated_at,
@@ -561,6 +712,7 @@ export async function getPitchBoard(): Promise<PitchBoard> {
 export const PITCH_STATUSES = ['open', 'assigned', 'approved', 'killed', 'filed'] as const;
 
 export async function updatePitchStatus(id: string, status: string): Promise<boolean> {
+  if (config.mock.aurora) return mockUpdatePitchStatus(id, status);
   const rows = await exec(
     'UPDATE pitches SET status = :status, updated_at = NOW() WHERE id = :id RETURNING id',
     [strParam('status', status), strParam('id', id)],
@@ -569,6 +721,7 @@ export async function updatePitchStatus(id: string, status: string): Promise<boo
 }
 
 export async function publishArticle(id: string): Promise<boolean> {
+  if (config.mock.aurora) return mockPublishArticle(id);
   const rows = await exec(
     "UPDATE documents SET status = 'published', published_at = COALESCE(published_at, NOW()) " +
     "WHERE id = :id AND doc_type = 'news_article' RETURNING id",

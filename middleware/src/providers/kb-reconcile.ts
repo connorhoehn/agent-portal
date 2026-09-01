@@ -24,6 +24,7 @@ import {
 import { exec } from './aurora.js';
 import { config } from '../config.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
+import { mockKbRegistry } from '../mock/kb-registry.js';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
 function toStr(v: unknown, f = ''): string { return typeof v === 'string' ? v : v == null ? f : String(v); }
@@ -93,6 +94,14 @@ async function syncState(kbId: string): Promise<{
   dataSourceCount: number | null; lastSyncStatus: string | null; lastSyncAt: string | null;
   lastSyncScanned: number | null;
 }> {
+  if (config.mock.aurora) {
+    return {
+      dataSourceCount: 1,
+      lastSyncStatus: 'COMPLETE',
+      lastSyncAt: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+      lastSyncScanned: 6,
+    };
+  }
   try {
     const ds = await client().send(new ListDataSourcesCommand({ knowledgeBaseId: kbId, maxResults: 20 }));
     const sources = ds.dataSourceSummaries ?? [];
@@ -154,32 +163,50 @@ export async function reconcileKnowledgeBases(): Promise<{
 }> {
   let rows: Array<Record<string, unknown>> = [];
   try {
-    rows = config.mock.aurora ? [] : await exec(
-      `SELECT id, slug, name, tenant, bedrock_kb_id, status FROM knowledge_bases ORDER BY slug`,
-    );
+    rows = config.mock.aurora
+      ? mockKbRegistry
+          .slice()
+          .sort((a, b) => a.slug.localeCompare(b.slug))
+          .map((k) => ({
+            id: k.id, slug: k.slug, name: k.name, tenant: k.tenant,
+            bedrock_kb_id: k.bedrockKbId, status: k.status,
+          }))
+      : await exec(
+        `SELECT id, slug, name, tenant, bedrock_kb_id, status FROM knowledge_bases ORDER BY slug`,
+      );
   } catch (err) {
     return { entries: [], problem: `registry unreadable: ${(err as Error).message}` };
   }
 
+  // Offline: skip the real Bedrock call (no credentials to make it mean
+  // anything) and synthesize what the live account would report — every
+  // mock KB except the deliberately-drifted KBMOCK-GONE row, which is the
+  // whole point of the reconcile page's fixture.
   let live: Array<{ id: string; name: string; status: string }>;
-  try {
-    live = await liveKnowledgeBases();
-  } catch (err) {
-    // Report the registry as-is rather than marking every row "missing" —
-    // we cannot see AWS, which is not the same as AWS being empty.
-    return {
-      entries: rows.map((r) => ({
-        id: toStr(r['id']) || null,
-        slug: toStr(r['slug']), name: toStr(r['name']), tenant: toStr(r['tenant']) || null,
-        registryKbId: r['bedrock_kb_id'] ? toStr(r['bedrock_kb_id']) : null,
-        registryStatus: toStr(r['status']) || null,
-        liveKbId: null, liveStatus: null, dataSourceCount: null,
-        lastSyncStatus: null, lastSyncAt: null, lastSyncScanned: null, documentCount: null,
-        drift: 'ok' as DriftKind,
-        detail: 'Could not read the account to compare.',
-      })),
-      problem: `could not list knowledge bases: ${(err as Error).message}`,
-    };
+  if (config.mock.aurora) {
+    live = mockKbRegistry
+      .filter((k) => k.bedrockKbId && k.bedrockKbId !== 'KBMOCK-GONE')
+      .map((k) => ({ id: k.bedrockKbId!, name: k.name, status: 'ACTIVE' }));
+  } else {
+    try {
+      live = await liveKnowledgeBases();
+    } catch (err) {
+      // Report the registry as-is rather than marking every row "missing" —
+      // we cannot see AWS, which is not the same as AWS being empty.
+      return {
+        entries: rows.map((r) => ({
+          id: toStr(r['id']) || null,
+          slug: toStr(r['slug']), name: toStr(r['name']), tenant: toStr(r['tenant']) || null,
+          registryKbId: r['bedrock_kb_id'] ? toStr(r['bedrock_kb_id']) : null,
+          registryStatus: toStr(r['status']) || null,
+          liveKbId: null, liveStatus: null, dataSourceCount: null,
+          lastSyncStatus: null, lastSyncAt: null, lastSyncScanned: null, documentCount: null,
+          drift: 'ok' as DriftKind,
+          detail: 'Could not read the account to compare.',
+        })),
+        problem: `could not list knowledge bases: ${(err as Error).message}`,
+      };
+    }
   }
 
   const docs = await documentCounts();

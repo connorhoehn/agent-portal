@@ -31,6 +31,11 @@ import { processTrace, type TraceInput } from '../lib/trace-sink.js';
 import { judgeResponse } from '../lib/judge.js';
 import { executeRun, loadCasesForRun } from '../lib/harness-runner.js';
 import { requireAction, requireTenant } from '../lib/authz.js';
+import { config } from '../config.js';
+import {
+  mockListCases, mockGetCase, mockUpsertCase, mockPatchCase, mockDeleteCase,
+  mockListRuns, mockGetRun, mockGetResults, mockCreateRun, mockCoverage,
+} from '../mock/harness.js';
 
 export const harnessRouter = Router();
 
@@ -360,6 +365,7 @@ harnessRouter.post('/trace', requireTraceAuth, asyncHandler(async (req, res) => 
 harnessRouter.get('/cases', requireAction('ViewObservability'), asyncHandler(async (req, res) => {
   const includeInactive = req.query['includeInactive'] === '1'
     || req.query['includeInactive'] === 'true';
+  if (config.mock.aurora) { res.json({ cases: mockListCases(includeInactive) }); return; }
   const sql = `
     SELECT test_id, agent_id, template_id, prompt, reference_output,
            expected_tags::text AS expected_tags,
@@ -378,6 +384,12 @@ harnessRouter.get('/cases', requireAction('ViewObservability'), asyncHandler(asy
 
 harnessRouter.get('/cases/:id', requireAction('ViewObservability'), asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
+  if (config.mock.aurora) {
+    const found = mockGetCase(id);
+    if (!found) { res.status(404).json({ error: 'test case not found' }); return; }
+    res.json({ case: found });
+    return;
+  }
   const rows = await exec(
     `SELECT test_id, agent_id, template_id, prompt, reference_output,
             expected_tags::text AS expected_tags,
@@ -430,6 +442,23 @@ harnessRouter.post('/cases', requireAction('ManageCanary'), asyncHandler(async (
     : 0.7;
   const active = typeof body.active === 'boolean' ? body.active : true;
 
+  if (config.mock.aurora) {
+    mockUpsertCase({
+      testId,
+      agentId,
+      templateId: body.templateId ?? null,
+      prompt,
+      referenceOutput: body.referenceOutput ?? null,
+      expectedTags,
+      rubricOverride: body.rubricOverride ?? null,
+      passThreshold,
+      active,
+      notes: body.notes ?? null,
+    });
+    res.status(201).json({ testId });
+    return;
+  }
+
   await exec(
     `INSERT INTO observability.test_cases
        (test_id, agent_id, template_id, prompt, reference_output,
@@ -472,6 +501,28 @@ harnessRouter.post('/cases', requireAction('ManageCanary'), asyncHandler(async (
 harnessRouter.patch('/cases/:id', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
   const body = (req.body ?? {}) as UpsertCaseBody;
+
+  if (config.mock.aurora) {
+    const patch: Partial<import('../mock/harness.js').MockTestCase> = {};
+    if (typeof body.agentId === 'string') patch.agentId = body.agentId;
+    if ('templateId' in body) patch.templateId = body.templateId ?? null;
+    if (typeof body.prompt === 'string') patch.prompt = body.prompt;
+    if ('referenceOutput' in body) patch.referenceOutput = body.referenceOutput ?? null;
+    if (Array.isArray(body.expectedTags)) {
+      patch.expectedTags = (body.expectedTags as unknown[]).filter((t): t is string => typeof t === 'string');
+    }
+    if ('rubricOverride' in body) patch.rubricOverride = body.rubricOverride ?? null;
+    if (typeof body.passThreshold === 'number' && Number.isFinite(body.passThreshold)) {
+      patch.passThreshold = Math.max(0, Math.min(1, body.passThreshold));
+    }
+    if (typeof body.active === 'boolean') patch.active = body.active;
+    if ('notes' in body) patch.notes = body.notes ?? null;
+    const ok = mockPatchCase(id, patch);
+    if (!ok) throw new NotFoundError('test case not found');
+    res.json({ ok: true });
+    return;
+  }
+
   const sets: string[] = [];
   const params: SqlParameter[] = [strParam('id', id)];
 
@@ -531,6 +582,11 @@ harnessRouter.patch('/cases/:id', requireAction('ManageCanary'), asyncHandler(as
 
 harnessRouter.delete('/cases/:id', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
+  if (config.mock.aurora) {
+    if (!mockDeleteCase(id)) throw new NotFoundError('test case not found');
+    res.json({ ok: true });
+    return;
+  }
   const rows = await exec(
     `UPDATE observability.test_cases
         SET active = false, updated_at = now()
@@ -572,6 +628,12 @@ harnessRouter.post('/runs', requireAction('ManageCanary'), asyncHandler(async (r
   // live mode still produce well-formed rows. Any value other than the
   // exact string 'live' collapses to 'sim'.
   const mode: 'live' | 'sim' = body.mode === 'live' ? 'live' : 'sim';
+
+  if (config.mock.aurora) {
+    const created = mockCreateRun({ label, gitSha: body.gitSha ?? null, judgeModelId, agentVersions, notes: body.notes ?? null, totalCases, mode });
+    res.status(201).json(created);
+    return;
+  }
 
   const runId = randomUUID();
   await exec(
@@ -644,6 +706,7 @@ harnessRouter.get('/runs', requireAction('ViewObservability'), asyncHandler(asyn
   const limit = Number.isFinite(rawLimit) && rawLimit > 0
     ? Math.min(rawLimit, 100)
     : 14;
+  if (config.mock.aurora) { res.json({ runs: mockListRuns(limit) }); return; }
   const rows = await exec(
     `SELECT run_id::text AS run_id, label, git_sha, judge_model_id,
             agent_versions::text AS agent_versions,
@@ -663,6 +726,12 @@ harnessRouter.get('/runs', requireAction('ViewObservability'), asyncHandler(asyn
 
 harnessRouter.get('/runs/:id', requireAction('ViewObservability'), asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
+  if (config.mock.aurora) {
+    const run = mockGetRun(id);
+    if (!run) { res.status(404).json({ error: 'run not found' }); return; }
+    res.json({ run, results: mockGetResults(id) });
+    return;
+  }
   const runRows = await exec(
     `SELECT run_id::text AS run_id, label, git_sha, judge_model_id,
             agent_versions::text AS agent_versions,
@@ -715,6 +784,16 @@ harnessRouter.get('/runs/:id', requireAction('ViewObservability'), asyncHandler(
 
 harnessRouter.get('/runs/:id/status', requireAction('ViewObservability'), asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
+  if (config.mock.aurora) {
+    const run = mockGetRun(id);
+    if (!run) { res.status(404).json({ error: 'run not found' }); return; }
+    res.json({
+      status: run.status, total: run.totalCases, completed: run.completed,
+      passed: run.passed, failed: run.failed,
+      passRate: run.passRate ?? (run.completed > 0 ? run.passed / run.completed : null),
+    });
+    return;
+  }
   const rows = await exec(
     `SELECT status, total_cases, completed, passed, failed, pass_rate
        FROM observability.test_runs
@@ -945,6 +1024,7 @@ interface CoverageRow {
 }
 
 harnessRouter.get('/coverage', requireAction('ViewObservability'), asyncHandler(async (_req, res) => {
+  if (config.mock.aurora) { res.json({ byAgent: mockCoverage() }); return; }
   // Count active cases per agent + join the most-recent run's pass numbers.
   // We compute the latest run per agent by looking at when its results last
   // landed in test_results. This is approximate (a run touches multiple
@@ -1056,6 +1136,7 @@ export interface CompareRunsSummary {
 const NEUTRAL_BAND = 0.05;
 
 async function fetchRunRow(id: string): Promise<TestRun | null> {
+  if (config.mock.aurora) return mockGetRun(id);
   const rows = await exec(
     `SELECT run_id::text AS run_id, label, git_sha, judge_model_id,
             agent_versions::text AS agent_versions,
@@ -1082,6 +1163,17 @@ interface JoinedResultRow {
 }
 
 async function fetchJoinedResults(runId: string): Promise<JoinedResultRow[]> {
+  if (config.mock.aurora) {
+    return mockGetResults(runId).map((r) => ({
+      test_id: r.testId,
+      agent_id: r.agentId ?? null,
+      judge_score: r.judgeScore,
+      passed: r.passed,
+      est_cost_usd: r.estCostUsd,
+      duration_ms: r.durationMs,
+      response_snippet: r.responseSnippet,
+    }));
+  }
   const rows = await exec(
     `SELECT r.test_id AS test_id,
             COALESCE(c.agent_id, '') AS agent_id,
