@@ -97,6 +97,62 @@ const JOBS: { title: string; prompt: string; steps: Step[] }[] = [
   },
 ];
 
+/**
+ * Play a scripted run for a DISPATCHED job, in the same vocabulary the cron
+ * simulation uses — one fake-run dialect, not two.
+ *
+ * This exists because the dispatcher runs queue work through the exact path
+ * the portal uses (`runDevboxTask`), and that path dead-ends offline with
+ * "devbox runtime not deployed". Which meant the one journey the Work page is
+ * FOR — pick a suggested card, queue it, watch it run — ended in a red
+ * "job failed" banner on every offline machine. A journey that cannot ever
+ * succeed in the environment people develop in reads as designed to fail.
+ *
+ * The steps are generic on purpose: this is a demo of the pipeline, not of
+ * the task, so it narrates picking the work up and landing it rather than
+ * pretending to know what the prompt means. The prompt's first line is
+ * echoed so a tail reads coherently next to the job banner above it.
+ */
+export async function playDispatchedRun(opts: {
+  title: string;
+  prompt: string;
+  onEvent?: (event: Record<string, unknown>) => void;
+}): Promise<{ summary: string; turns: number; durationMs: number; costUsd: number; toolCalls: number }> {
+  const emit = (ev: Record<string, unknown>) =>
+    opts.onEvent?.({ ...ev, ts: new Date().toISOString() });
+  const firstLine = opts.prompt.split('\n')[0] ?? opts.title;
+  const startedAt = Date.now();
+
+  const steps: { afterMs: number; event: Record<string, unknown> }[] = [
+    { afterMs: 400, event: { type: 'devbox_start', model: 'us.anthropic.claude-haiku-4-5-20251001-v1:0' } },
+    { afterMs: 900, event: says(`Picking up: ${firstLine.slice(0, 140)}`) },
+    { afterMs: 1200, event: uses('Bash', { command: 'git status --short' }) },
+    { afterMs: 1600, event: says('Workspace is clean. Reading the code this touches before changing anything.') },
+    { afterMs: 1400, event: uses('Grep', { pattern: opts.title.split(' ')[0] ?? 'TODO' }) },
+    { afterMs: 1800, event: uses('Read', { file: 'src/' }) },
+    { afterMs: 2200, event: says('Found the relevant surface. Making the change and running the tests.') },
+    { afterMs: 1500, event: uses('Edit', { file: 'src/' }) },
+    { afterMs: 2000, event: uses('Bash', { command: 'npm test' }) },
+  ];
+  for (const step of steps) {
+    await new Promise((r) => setTimeout(r, step.afterMs));
+    emit(step.event);
+  }
+
+  const durationMs = Date.now() - startedAt;
+  const summary = `Done (simulated): ${opts.title}. The change is in the workspace with tests green; review the diff and open a change request if it holds.`;
+  const result = {
+    type: 'result', subtype: 'success', num_turns: 6,
+    duration_ms: durationMs, total_cost_usd: 0.0341,
+    usage: { input_tokens: 6200, output_tokens: 1900 },
+    result: summary,
+  };
+  await new Promise((r) => setTimeout(r, 1800));
+  emit(result);
+  emit({ type: 'devbox_end' });
+  return { summary, turns: 6, durationMs, costUsd: 0.0341, toolCalls: 5 };
+}
+
 const TICK_MS = 15_000;
 /** Leave a gap after a run so a box is not permanently seized. */
 const COOLDOWN_MS = 45_000;

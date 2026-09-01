@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Chip, PageSection } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../../lib/auth';
 import { useCapabilities } from '../../lib/capabilities';
+import { toastError } from '../../lib/toastStore';
 
 interface TenantInfo { id: string; displayName: string; status: string }
 interface RoleInfo { id: string; tenant: string | null; label: string; summary: string; capabilities: string[] }
@@ -206,7 +207,14 @@ function UsersPage() {
                 canEdit={canManage}
                 // Dev-only identity switch — see the note on the button.
                 canSignInAs={!ssoRequired}
-                onSignInAs={() => void login(u.id)}
+                // Not a bare `void login(...)`: login hard-navigates on
+                // success, so the ONLY observable outcome of a failure is
+                // nothing happening — a button that sometimes silently does
+                // nothing reads as broken twice over.
+                onSignInAs={() => {
+                  login(u.id).catch((err: unknown) =>
+                    toastError(null, `Could not sign in as ${u.displayName}`, (err as Error).message));
+                }}
                 onEdit={() => openEditor(u)}
                 onCancel={() => setEditing(null)}
                 onToggle={toggleGrant}

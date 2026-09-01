@@ -699,6 +699,27 @@ export async function runDevboxTask(opts: {
   model?: string;
   onEvent?: (event: Record<string, unknown>) => void;
 }): Promise<DevboxRunOutcome> {
+  // Offline, a dispatched job plays a scripted run instead of dead-ending.
+  // Without this the one journey the Work page exists for — pick a suggested
+  // card, queue it, watch it run — ended in a red "job failed" on every
+  // machine without a deployed runtime, which is every machine anyone
+  // develops on. One fake-run dialect: the same helpers the cron simulation
+  // uses, so a tail cannot tell scheduled and dispatched work apart.
+  if (mockAgentCore()) {
+    const { playDispatchedRun } = await import('../lib/mock-bot-runner.js');
+    const firstLine = opts.prompt.split('\n')[0] ?? '';
+    const played = await playDispatchedRun({
+      title: firstLine.slice(0, 120) || 'queued job',
+      prompt: opts.prompt,
+      ...(opts.onEvent ? { onEvent: opts.onEvent } : {}),
+    });
+    return {
+      ok: true, summary: played.summary, turns: played.turns,
+      durationMs: played.durationMs, costUsd: played.costUsd,
+      toolCalls: played.toolCalls, exitCode: 0, transcript: [],
+    };
+  }
+
   const arn = await resolveDevboxArn();
   if (!arn) {
     return {
