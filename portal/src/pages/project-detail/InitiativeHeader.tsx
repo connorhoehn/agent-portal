@@ -14,13 +14,12 @@ import {
   Inline,
   KPIGrid,
   PageHeader,
-  ProgressBar,
   Stack,
   StatCard,
 } from '@connorhoehnslalom/ui-components/shared';
 import { OwnerEditor } from '../../components/marketplace/GovernanceEditor';
 import { AgentSpendStat, type AgentSpendInputs } from './AgentSpendStat';
-import { PROJECT_STATUS_TONE, progressColor } from './projectFormat';
+import { PROJECT_STATUS_TONE } from './projectFormat';
 import type { ProjectContributor, ProjectDetail } from './types';
 
 /** Who runs the initiative and who directs agents on it. The edit affordance
@@ -151,6 +150,9 @@ export function InitiativeHeader({
 
           <KPIGrid columns={3} dense>
             {points.total > 0 && (
+              // The bare full-width progress track that used to sit under this
+              // grid said nothing the tile doesn't; the sparkline-free tile
+              // plus its ratio hint is the whole story.
               <StatCard
                 accent
                 label="points done"
@@ -166,16 +168,6 @@ export function InitiativeHeader({
               hint={escalatedCount > 0 ? `${escalatedCount} escalated` : undefined}
             />
           </KPIGrid>
-
-          {points.total > 0 && (
-            <ProgressBar
-              value={points.done}
-              max={points.total}
-              color={progressColor(points.pct)}
-              showRatio={false}
-              aria-label={`${points.pct}% of story points complete`}
-            />
-          )}
         </Stack>
       </Card>
     </Stack>

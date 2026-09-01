@@ -38,16 +38,20 @@ function EpicSummary({ item }: { item: WorkItemTree }) {
         </span>
       )}
       {pts.total > 0 && (
-        <ProgressBar
-          className="w-[88px] shrink-0"
-          value={pts.done}
-          max={pts.total}
-          size="sm"
-          color={progressColor(pct)}
-          showRatio={false}
-          label={`${pct}%`}
-          aria-label={`${pct}% of points done`}
-        />
+        // No `label`: ProgressBar prints its own percentage beside a label, so
+        // passing "58%" as the label rendered "58% ▬▬▬ 58%".
+        <>
+          <ProgressBar
+            className="w-[72px] shrink-0"
+            value={pts.done}
+            max={pts.total}
+            size="sm"
+            color={progressColor(pct)}
+            showRatio={false}
+            aria-label={`${pct}% of points done`}
+          />
+          <span className="shrink-0 text-[11px] text-text-secondary tabular-nums">{pct}%</span>
+        </>
       )}
       {item.assigneeName && <Avatar name={item.assigneeName} size={24} title={item.assigneeName} />}
       <StatusChip status={item.status} />

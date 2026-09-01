@@ -8,6 +8,7 @@ import {
   Avatar,
   Button,
   Chip,
+  DetailHeader,
   Inline,
   InlineAlert,
   LoadingState,
@@ -63,14 +64,17 @@ export function ContributorModal({
       {!error && !person && <LoadingState label="Loading…" />}
       {person && (
         <Stack gap="md">
-          <Inline gap="md" align="center" wrap={false}>
-            <Avatar name={person.name} size={44} />
-            <Stack gap="none" className="min-w-0 flex-1">
-              <span className="text-[17px] font-semibold text-text-primary">{person.name}</span>
-              <MetaLine size="sm" items={[person.title, person.department]} />
-            </Stack>
-            {roleLabel && <Chip tone="info">{roleLabel}</Chip>}
-          </Inline>
+          <DetailHeader
+            as="h2"
+            title={(
+              <Inline gap="sm" align="center" wrap={false}>
+                <Avatar name={person.name} size={44} />
+                <span>{person.name}</span>
+              </Inline>
+            )}
+            badge={roleLabel ? <Chip tone="info">{roleLabel}</Chip> : undefined}
+            meta={<MetaLine size="sm" items={[person.title, person.department]} />}
+          />
 
           {person.skills.length > 0 && (
             <Stack gap="xs">

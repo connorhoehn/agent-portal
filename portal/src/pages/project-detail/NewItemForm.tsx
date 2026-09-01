@@ -2,7 +2,7 @@
 // new story/bug inside an epic.
 
 import { useState } from 'react';
-import { Button, Card, Inline, Input, NumberInput, Select, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, FormRow, Inline, Input, NumberInput, Select, Stack } from '@connorhoehnslalom/ui-components/shared';
 import type { WorkItemPriority, WorkItemType } from './types';
 
 const ALL_TYPES: WorkItemType[] = ['epic', 'story', 'bug'];
@@ -66,7 +66,9 @@ export function NewItemForm({
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
-        <Inline gap="sm" align="center">
+        {/* FormRow stacks the controls below 640px instead of squashing three
+            of them plus a button pair onto one line. */}
+        <FormRow gap="sm">
           <Select
             size="sm"
             aria-label="Type"
@@ -96,10 +98,10 @@ export function NewItemForm({
               />
             </Inline>
           )}
-          <Inline gap="xs" className="ml-auto">
-            <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
-            <Button size="sm" variant="primary" disabled={!canSave} onClick={save}>Create</Button>
-          </Inline>
+        </FormRow>
+        <Inline gap="xs" justify="end">
+          <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
+          <Button size="sm" variant="primary" disabled={!canSave} onClick={save}>Create</Button>
         </Inline>
       </Stack>
     </Card>

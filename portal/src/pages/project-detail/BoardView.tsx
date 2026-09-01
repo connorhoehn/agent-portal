@@ -7,7 +7,7 @@
 // page. It is now one Card per epic holding four real lanes, so an empty lane
 // says so once instead of drawing a placeholder per cell.
 
-import { Avatar, BoardColumn, Card, CatalogGrid, Chip, EmptyState, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Avatar, BoardColumn, Card, CatalogGrid, Chip, DetailHeader, EmptyState, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
 import type { BotRun } from '../bots/BotsPage';
 import { EstimateChip, PrBadge, RunStateChips, StatusChip } from './WorkItemChips';
 import {
@@ -75,14 +75,22 @@ function EpicSwimlane({
   return (
     <Card padding="sm">
       <Stack gap="sm">
-        <Inline gap="sm" align="center" wrap={false}>
-          <Chip tone="neutral" size="xs" uppercase>Epic</Chip>
-          <span className="min-w-0 flex-1 text-[13px] font-semibold text-text-primary">
-            {epic.title}
-          </span>
-          {epic.assigneeName && <Avatar name={epic.assigneeName} size={18} title={epic.assigneeName} />}
-          <StatusChip status={epic.status} />
-        </Inline>
+        <DetailHeader
+          as="h3"
+          title={epic.title}
+          badge={<StatusChip status={epic.status} />}
+          meta={(
+            <Inline gap="xs" align="center">
+              <Chip tone="neutral" size="xs" uppercase>Epic</Chip>
+              {epic.assigneeName && (
+                <Inline gap="xs" align="center" wrap={false}>
+                  <Avatar name={epic.assigneeName} size={18} title={epic.assigneeName} />
+                  <span>{epic.assigneeName}</span>
+                </Inline>
+              )}
+            </Inline>
+          )}
+        />
         <CatalogGrid columns={4} dense>
           {BOARD_STATUSES.map((status) => {
             const items = byStatus.get(status) ?? [];
