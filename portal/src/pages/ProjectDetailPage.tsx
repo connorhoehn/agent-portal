@@ -152,15 +152,30 @@ function ProjectDetailPage() {
     useFetch<ProjectDecision[]>(id ? `/api/graph/projects/${encodeURIComponent(id)}/decisions` : '');
 
   // The codebases that deliver this initiative — the Build side of the join.
-  // The endpoint is hr-admin-gated (ManageDevbox); for anyone else the fetch
-  // 403s and the strip simply doesn't render.
-  const { data: codebasesData } = useFetch<{ projects: Codebase[] }>('/api/agent-projects', 60_000);
+  //
+  // GATED CLIENT-SIDE, because "the fetch 403s and the strip doesn't render" is
+  // not free: it put four red 403s in the console on every load for any role
+  // without the capability, which buries real errors and reads as a broken page.
+  //
+  // The server gate is readForRolesElseAction(['org-leader','hr-admin'],
+  // 'DispatchAgentRun'). We cannot see the role short-circuit from here, but we
+  // do not need to — both of those roles HOLD DispatchAgentRun in the seed
+  // matrix, so the capability is a faithful proxy for the whole gate and cannot
+  // hide the strip from someone the server would have served.
+  //
+  // (An earlier comment here said these were ManageDevbox-gated. They are not,
+  // and acting on that would have gated the wrong capability.)
+  const mayReadAgentWork = capsReady && canDo('DispatchAgentRun');
+  const { data: codebasesData } = useFetch<{ projects: Codebase[] }>(
+    mayReadAgentWork ? '/api/agent-projects' : null,
+    60_000,
+  );
   const codebases = (codebasesData?.projects ?? []).filter((p) => p.orgProjectId === id);
 
   // Bot-less marketplace runs for this initiative — polled while the page is
   // open so "agent working" chips appear/disappear live.
   const { data: marketData } = useFetch<{ runs: BotRun[] }>(
-    id ? `/api/bots/marketplace-runs?orgProjectId=${encodeURIComponent(id)}` : null,
+    id && mayReadAgentWork ? `/api/bots/marketplace-runs?orgProjectId=${encodeURIComponent(id)}` : null,
     10_000,
   );
   const marketplaceRuns = marketData?.runs ?? [];

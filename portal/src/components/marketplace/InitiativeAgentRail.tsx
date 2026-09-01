@@ -57,7 +57,20 @@ export function useInitiativeAgentActivity(
   codebases: Array<{ id: string; repoFullName: string }>,
   marketplaceRuns: BotRun[],
 ): InitiativeAgentActivity {
-  const { data: botsData, isLoading, error } = useFetch<{ bots: Bot[] }>('/api/bots', 30_000);
+  // GET /api/bots is readForRolesElseAction(['org-leader','hr-admin',
+  // 'program-owner'], 'ManageBots'). All three of those roles hold ManageBots in
+  // the seed matrix, so the capability covers the role short-circuit too and
+  // this cannot hide the rail from someone the server would have served.
+  //
+  // Gated rather than left to 403: an unconditional fetch logged a console error
+  // on every page load for every role without the capability. The rail already
+  // renders nothing in that case — this just stops it being noisy about it.
+  const { can, ready } = useCapabilities();
+  const mayReadBots = ready && can('ManageBots');
+  const { data: botsData, isLoading, error } = useFetch<{ bots: Bot[] }>(
+    mayReadBots ? '/api/bots' : null,
+    30_000,
+  );
 
   const codebaseIds = new Set(codebases.map((c) => c.id));
   const bots = orgProjectId
