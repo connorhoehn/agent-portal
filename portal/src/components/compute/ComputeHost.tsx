@@ -28,6 +28,27 @@ interface OrgProject {
   name: string;
 }
 
+/**
+ * /api/budgets response, narrowed to the rollup fields a cost centre needs.
+ * Mirrors middleware's `BudgetRow` (providers/budgets.ts) — see that file for
+ * the full shape and the "allocatedUsd: null means spending with no
+ * allocation" note. `runCountThisPeriod` stands in for `botCount`: budgets
+ * has no per-initiative automation count of its own, and a run count is the
+ * closest honest proxy already riding this same response, rather than
+ * standing up a second endpoint just for a number this page treats as
+ * decoration.
+ */
+interface BudgetRow {
+  orgProjectId: string;
+  allocatedUsd: number | null;
+  spentThisPeriodUsd: number;
+  maintenanceUsd: number;
+  runCountThisPeriod: number;
+}
+interface BudgetsResponse {
+  budgets: BudgetRow[];
+}
+
 function notify(notice: ComputeNotice): void {
   if (notice.tone === 'error') { toastError(null, notice.title, notice.detail); return; }
   if (notice.tone === 'success') { toastSuccess(null, notice.title, notice.detail); return; }
@@ -67,9 +88,40 @@ export function ComputeHost({ children }: { children: ReactNode }) {
   // Skipped entirely without the capability: the whole /api/devbox router is
   // ManageDevbox-gated, so there is nothing to charge and no reason to ask.
   const { data: orgProjects } = useFetch<OrgProject[]>(canManage ? '/api/graph/projects' : null);
+
+  // Budgets ride a SEPARATE fetch rather than joining server-side, on purpose:
+  // /api/graph/projects and /api/budgets are gated differently (budgets reads
+  // are org-leader/hr-admin/ManageBudgets, not ManageDevbox), so a caller who
+  // can see the fleet may legitimately get nothing back here — the fetch just
+  // 403s, `data` stays null, and the merge below no-ops instead of the whole
+  // project list failing to load over one field it didn't have permission
+  // for anyway. Gating this fetch on canManage rather than a budgets-specific
+  // check keeps the Computer Lab's ask simple ("give me what you have"); the
+  // server, not this component, is the enforcement point.
+  const { data: budgetsRes } = useFetch<BudgetsResponse>(canManage ? '/api/budgets' : null);
+  const budgetsById = useMemo(() => {
+    const m = new Map<string, BudgetRow>();
+    for (const b of budgetsRes?.budgets ?? []) m.set(b.orgProjectId, b);
+    return m;
+  }, [budgetsRes]);
+
   const projects = useMemo<ComputeProject[]>(
-    () => (orgProjects ?? []).map((p) => ({ id: p.id, name: p.name })),
-    [orgProjects],
+    () => (orgProjects ?? []).map((p) => {
+      const b = budgetsById.get(p.id);
+      if (!b) return { id: p.id, name: p.name };
+      return {
+        id: p.id,
+        name: p.name,
+        // null allocatedUsd (spending with no allocation) stays absent here
+        // too — a confident 0 would read as "budgeted to nothing" instead of
+        // "nobody set a budget".
+        ...(b.allocatedUsd != null ? { budgetUsd: b.allocatedUsd } : {}),
+        spentUsd: b.spentThisPeriodUsd,
+        maintenanceUsd: b.maintenanceUsd,
+        botCount: b.runCountThisPeriod,
+      };
+    }),
+    [orgProjects, budgetsById],
   );
 
   return (

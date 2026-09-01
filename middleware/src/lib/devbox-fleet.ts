@@ -48,6 +48,42 @@ export interface FleetBox {
   /** Prompt of the current/last task (truncated). */
   currentTask?: string;
   lastResult?: { subtype: string; turns: number; durationMs: number; costUsd: number };
+  /**
+   * Dollars charged to this box, summed across every `result` event it has
+   * ever produced — lifetime, not per-task, because that is what a cost
+   * centre bills against. In a real deployment this is the runtime's own
+   * reported `total_cost_usd`; the mock accrues the same field so the
+   * Computer Lab's spend column is exercised without a live runtime.
+   */
+  spendUsd?: number;
+  /**
+   * Tokens burned on this box, lifetime, summed the same way as `spendUsd`
+   * from whichever event actually carries a usage block (a `result` event
+   * inline, or an `assistant` event nested under `message.usage` — the two
+   * shapes the real CLI stream uses). Real deployments get this from the
+   * runtime's own token accounting; the mock sums the scripted runs' usage
+   * fields so the same accrual path is exercised offline.
+   */
+  tokensUsed?: number;
+  /**
+   * Fraction (0-1) of the model's context window in use on the CURRENT
+   * task — unlike `spendUsd`/`tokensUsed` this resets at `task_started`,
+   * because a new task is a new conversation from the model's point of view
+   * even though lifetime spend keeps accumulating. Derived here from tokens
+   * burned this task against a nominal 200k-token window (Claude's window);
+   * a real runtime would report its own usage against its own window
+   * directly, but the derivation keeps the mock's number in the same
+   * ballpark without inventing a second protocol just for this field.
+   */
+  contextUsed?: number;
+  /**
+   * Model the last (or current) run resolved to. Set from a `model` field on
+   * a run-start event (`devbox_start`, or `task_started`/`job_started` when
+   * that is what announces it) — the same place a real runtime reports back
+   * which model it actually used, since a caller's requested model can be
+   * downgraded server-side (see devboxModels.ts).
+   */
+  activeModel?: string;
 }
 
 export type FleetEvent = Record<string, unknown>;
@@ -55,12 +91,22 @@ export type FleetEvent = Record<string, unknown>;
 const EVENT_BUFFER_CAP = 500;
 const TASK_SNIPPET_LEN = 140;
 
+/** Nominal context window (tokens) used to derive `contextUsed`. Claude's. */
+const NOMINAL_CONTEXT_WINDOW = 200_000;
+
 interface BoxState {
   box: FleetBox;
   events: FleetEvent[];
   subscribers: Set<(ev: FleetEvent) => void>;
   /** Final assistant text of the last run — drives the `waiting` heuristic. */
   lastResultText: string;
+  /**
+   * Tokens burned in the box's CURRENT task, separate from the lifetime
+   * `box.tokensUsed` counter — this is the numerator behind `contextUsed`
+   * and gets zeroed at `task_started` while the lifetime counter keeps
+   * climbing.
+   */
+  contextTokens: number;
 }
 
 const boxes = new Map<string, BoxState>();
@@ -87,7 +133,7 @@ export function registerBox(opts: {
     status: 'idle',
     lastActivityAt: now(),
   };
-  boxes.set(id, { box, events: [], subscribers: new Set(), lastResultText: '' });
+  boxes.set(id, { box, events: [], subscribers: new Set(), lastResultText: '', contextTokens: 0 });
   bySession.set(opts.sessionId, id);
   return box;
 }
@@ -139,10 +185,37 @@ export function subscribe(id: string, cb: (ev: FleetEvent) => void): () => void 
 }
 
 /**
+ * Tokens carried by an event, from whichever shape the CLI stream actually
+ * uses: a `result` event carries `usage` inline; an `assistant` event nests
+ * it under `message.usage` (same nested shape `says()`/`uses()` in
+ * mock-bot-runner.ts model). Sums input+output — both burn against cost and
+ * the context window alike. Returns 0 for an event with no usage block at
+ * all, which is most of them (tool calls, status events).
+ */
+function extractUsageTokens(ev: FleetEvent): number {
+  const direct = ev['usage'] as { input_tokens?: unknown; output_tokens?: unknown } | undefined;
+  const nested = (ev['message'] as { usage?: { input_tokens?: unknown; output_tokens?: unknown } } | undefined)
+    ?.usage;
+  const usage = direct ?? nested;
+  if (!usage) return 0;
+  const input = Number(usage.input_tokens ?? 0);
+  const output = Number(usage.output_tokens ?? 0);
+  return (Number.isFinite(input) ? input : 0) + (Number.isFinite(output) ? output : 0);
+}
+
+/**
  * Tee a task event into the box's log and drive the status machine.
  * Synthetic `task_started` events (emitted by the route before invoking the
  * runtime) flip the box to running; `devbox_end` settles it back to idle — or
  * `waiting` when the run's final answer ends with a question for the operator.
+ *
+ * Also drives the cost-centre fields (`spendUsd`, `tokensUsed`,
+ * `contextUsed`, `activeModel`). These exist so the Computer Lab's per-box
+ * cost story renders in mock mode exactly as it would against a real
+ * runtime — in production every one of these numbers comes from the
+ * runtime's own telemetry (Bedrock's `total_cost_usd`/`usage`, the model it
+ * actually resolved to); this function's job is only to accrue them onto the
+ * box the same way regardless of who is producing the events.
  */
 export function appendEvent(id: string, ev: FleetEvent): void {
   const s = boxes.get(id);
@@ -153,10 +226,37 @@ export function appendEvent(id: string, ev: FleetEvent): void {
   s.box.lastActivityAt = now();
 
   const type = ev['type'];
+
+  // Tokens accrue from ANY event carrying a usage block, not just `result` —
+  // a long run's intermediate `assistant` turns burn context too, and
+  // waiting for the final result would make contextUsed jump from 0 to its
+  // true value instead of climbing as the run progresses.
+  const usageTokens = extractUsageTokens(ev);
+  if (usageTokens > 0) {
+    s.box.tokensUsed = (s.box.tokensUsed ?? 0) + usageTokens;
+    s.contextTokens += usageTokens;
+    s.box.contextUsed = Math.min(0.99, s.contextTokens / NOMINAL_CONTEXT_WINDOW);
+  }
+
+  // Model announcement: whichever run-start event carries one. `devbox_start`
+  // is the runtime's own announcement; `task_started`/`job_started` cover the
+  // mock and any caller that folds the model into the kickoff event instead.
+  const model = ev['model'];
+  if (
+    (type === 'devbox_start' || type === 'task_started' || type === 'job_started') &&
+    typeof model === 'string' && model
+  ) {
+    s.box.activeModel = model;
+  }
+
   if (type === 'task_started') {
     s.box.status = 'running';
     s.box.currentTask = String(ev['prompt'] ?? '').slice(0, TASK_SNIPPET_LEN);
     s.lastResultText = '';
+    // A new task is a new conversation from the model's point of view, even
+    // though lifetime spend/tokensUsed on the box keep climbing across tasks.
+    s.contextTokens = 0;
+    s.box.contextUsed = 0;
   } else if (type === 'result') {
     s.box.lastResult = {
       subtype: String(ev['subtype'] ?? ''),
@@ -164,6 +264,13 @@ export function appendEvent(id: string, ev: FleetEvent): void {
       durationMs: Number(ev['duration_ms'] ?? 0),
       costUsd: Number(ev['total_cost_usd'] ?? 0),
     };
+    // Lifetime spend, summed rather than replaced — a box racks up cost
+    // across every run it has ever played, which is the whole point of a
+    // cost centre: it bills against the box's life, not its last task.
+    const cost = Number(ev['total_cost_usd'] ?? 0);
+    if (Number.isFinite(cost) && cost > 0) {
+      s.box.spendUsd = (s.box.spendUsd ?? 0) + cost;
+    }
     if (typeof ev['result'] === 'string') s.lastResultText = ev['result'];
   } else if (type === 'devbox_end') {
     if (s.box.status === 'running') {

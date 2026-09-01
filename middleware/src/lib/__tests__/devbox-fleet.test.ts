@@ -86,6 +86,71 @@ describe('status machine', () => {
   });
 });
 
+describe('cost-centre accrual', () => {
+  it('result accrues spend and tokens (lifetime, summed across runs)', () => {
+    const box = registerBox({ sessionId: SID });
+    appendEvent(box.id, { type: 'task_started', prompt: 'p1' });
+    appendEvent(box.id, {
+      type: 'result', total_cost_usd: 0.04, usage: { input_tokens: 8000, output_tokens: 600 }, result: 'done',
+    });
+    expect(getBox(box.id)?.spendUsd).toBeCloseTo(0.04);
+    expect(getBox(box.id)?.tokensUsed).toBe(8600);
+    appendEvent(box.id, { type: 'devbox_end' });
+
+    // A second run adds onto the lifetime totals rather than replacing them.
+    appendEvent(box.id, { type: 'task_started', prompt: 'p2' });
+    appendEvent(box.id, {
+      type: 'result', total_cost_usd: 0.02, usage: { input_tokens: 2000, output_tokens: 400 }, result: 'done',
+    });
+    expect(getBox(box.id)?.spendUsd).toBeCloseTo(0.06);
+    expect(getBox(box.id)?.tokensUsed).toBe(11000);
+  });
+
+  it('token usage also accrues from an assistant event nested under message.usage', () => {
+    const box = registerBox({ sessionId: SID });
+    appendEvent(box.id, { type: 'task_started', prompt: 'p' });
+    appendEvent(box.id, { type: 'assistant', message: { usage: { input_tokens: 500, output_tokens: 100 } } });
+    expect(getBox(box.id)?.tokensUsed).toBe(600);
+    expect(getBox(box.id)?.contextUsed).toBeCloseTo(600 / 200_000);
+  });
+
+  it('task_started resets contextUsed (a new task is a new conversation) but not lifetime tokensUsed', () => {
+    const box = registerBox({ sessionId: SID });
+    appendEvent(box.id, { type: 'task_started', prompt: 'p1' });
+    appendEvent(box.id, { type: 'result', usage: { input_tokens: 50_000, output_tokens: 0 }, result: 'done' });
+    expect(getBox(box.id)?.contextUsed).toBeCloseTo(0.25);
+    appendEvent(box.id, { type: 'devbox_end' });
+
+    appendEvent(box.id, { type: 'task_started', prompt: 'p2' });
+    expect(getBox(box.id)?.contextUsed).toBe(0);
+    expect(getBox(box.id)?.tokensUsed).toBe(50_000); // lifetime counter untouched by the reset
+  });
+
+  it('contextUsed clamps below 1 even past the nominal window', () => {
+    const box = registerBox({ sessionId: SID });
+    appendEvent(box.id, { type: 'task_started', prompt: 'p' });
+    appendEvent(box.id, { type: 'result', usage: { input_tokens: 500_000, output_tokens: 0 }, result: 'done' });
+    expect(getBox(box.id)?.contextUsed).toBeLessThan(1);
+  });
+
+  it('a model on task_started sets activeModel', () => {
+    const box = registerBox({ sessionId: SID });
+    expect(getBox(box.id)?.activeModel).toBeUndefined();
+    appendEvent(box.id, { type: 'task_started', prompt: 'p', model: 'us.anthropic.claude-haiku-4-5-20251001-v1:0' });
+    expect(getBox(box.id)?.activeModel).toBe('us.anthropic.claude-haiku-4-5-20251001-v1:0');
+  });
+
+  it('an unknown event type accrues nothing', () => {
+    const box = registerBox({ sessionId: SID });
+    appendEvent(box.id, { type: 'ping', ts: 'now' });
+    const b = getBox(box.id);
+    expect(b?.spendUsd).toBeUndefined();
+    expect(b?.tokensUsed).toBeUndefined();
+    expect(b?.contextUsed).toBeUndefined();
+    expect(b?.activeModel).toBeUndefined();
+  });
+});
+
 describe('event log + pub/sub', () => {
   it('ring buffer caps at 500', () => {
     const box = registerBox({ sessionId: SID });
