@@ -13,6 +13,14 @@ permit (
     OrgIQ::Action::"LabelFeedback",
     // The point of the role: assign computers to do the work.
     OrgIQ::Action::"DispatchAgentRun",
+    // Reaching the Computers surface at all. Role-wide, like ManageSprints and
+    // for the same reason: Cedar answers "may an SME ever use a computer", and
+    // the route layer (lib/devbox-visibility.ts) then answers "which ones" —
+    // their own, plus the ones shared on initiatives they own or contribute
+    // to. Without this the role could dispatch agent runs but never open the
+    // shell those runs happen in, which is the contradiction this grant
+    // removes.
+    OrgIQ::Action::"ManageDevbox",
     // Sprints have a steward — the SME accountable for that iteration creates
     // it and moves work into it. Cedar grants the capability role-wide; the
     // route layer (routes/sprints.ts requireInitiativeSteward) then scopes an

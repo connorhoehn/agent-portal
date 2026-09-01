@@ -25,6 +25,26 @@ export interface FleetBox {
   createdAt: string;
   status: BoxStatus;
   lastActivityAt: string;
+  /**
+   * Who provisioned it, as a session sub. Taken from the session, never the
+   * request body — same rule as bot_runs.dispatched_by, and for the same
+   * reason: an attribution a caller can set is not an attribution.
+   *
+   * Absent on boxes the fleet made for itself (the job dispatcher, a bot run)
+   * and on boxes that predate the field. Those are nobody's personal computer,
+   * so they fall to the project rule below, and to admin when there is no
+   * project either.
+   */
+  ownerId?: string;
+  /**
+   * The initiative this computer is charged to and shared across.
+   *
+   * A computer with a project is visible to everyone attached to that
+   * initiative — the owner and its SMEs — because that is what makes it a
+   * shared work surface rather than one person's shell. A computer without one
+   * is personal to its owner.
+   */
+  projectId?: string;
   /** Prompt of the current/last task (truncated). */
   currentTask?: string;
   lastResult?: { subtype: string; turns: number; durationMs: number; costUsd: number };
@@ -50,7 +70,10 @@ function now(): string {
   return new Date().toISOString();
 }
 
-export function registerBox(opts: { sessionId: string; label?: string; id?: string; createdAt?: string }): FleetBox {
+export function registerBox(opts: {
+  sessionId: string; label?: string; id?: string; createdAt?: string;
+  ownerId?: string; projectId?: string;
+}): FleetBox {
   const id = opts.id ?? opts.sessionId.slice(-8);
   const existing = boxes.get(id);
   if (existing) return existing.box;
@@ -59,6 +82,8 @@ export function registerBox(opts: { sessionId: string; label?: string; id?: stri
     label: opts.label ?? `computer-${boxes.size + 1}`,
     sessionId: opts.sessionId,
     createdAt: opts.createdAt ?? now(),
+    ...(opts.ownerId ? { ownerId: opts.ownerId } : {}),
+    ...(opts.projectId ? { projectId: opts.projectId } : {}),
     status: 'idle',
     lastActivityAt: now(),
   };

@@ -17,7 +17,7 @@
 // `RunRuntimeCommand` so the two can never be confused at a call site.
 
 import { Router } from 'express';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import {
   BedrockAgentCoreClient,
   InvokeAgentRuntimeCommand as InvokeRuntime,
@@ -30,6 +30,8 @@ import {
   ListAgentRuntimesCommand,
 } from '@aws-sdk/client-bedrock-agentcore-control';
 
+import { canSee, visibleBoxes, FLEET_WIDE_ROLES } from '../lib/devbox-visibility.js';
+import { stewardsInitiative } from '../lib/initiative-scope.js';
 import { asyncHandler } from '../lib/async-handler.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 import {
@@ -243,6 +245,36 @@ function requireSessionId(raw: string, res: Response): string | null {
   return raw;
 }
 
+/**
+ * 403 a caller who may not touch this computer.
+ *
+ * `ManageDevbox` got them onto the surface; this decides which computers on it
+ * are theirs (lib/devbox-visibility.ts). Resolves by runtime session id, which
+ * is what the /:sessionId routes carry.
+ *
+ * An UNREGISTERED session id is refused for anyone but a fleet-wide role. The
+ * routes accept a session id straight from the path, so letting an unknown one
+ * through would make the whole check optional — you would just pass an id the
+ * registry has never seen. A fleet-wide role keeps the escape hatch, because
+ * adopting a session the registry lost is a real operator move.
+ */
+async function requireBoxAccess(req: Request, res: Response, sessionId: string): Promise<boolean> {
+  const box = getBoxBySession(sessionId);
+  const session = req.session ?? null;
+  if (!box) {
+    if (session?.role && FLEET_WIDE_ROLES.includes(session.role)) return true;
+    res.status(403).json({ error: 'no computer here you can reach', sessionId });
+    return false;
+  }
+  if (await canSee(session, box)) return true;
+  res.status(403).json({
+    error: 'that computer belongs to someone else, or to an initiative you are not on',
+    ...(box.projectId ? { projectId: box.projectId } : {}),
+    ...(session?.role ? { role: session.role } : {}),
+  });
+  return false;
+}
+
 async function requireArn(res: Response): Promise<string | null> {
   const arn = await resolveDevboxArn();
   if (!arn) {
@@ -317,20 +349,41 @@ devboxRouter.post('/sessions', asyncHandler(async (req, res) => {
 // sessionId. Boxes carry live status (idle/running/waiting/stopped/error)
 // derived from the task-event tee below, and any client can tail any box.
 
-devboxRouter.get('/boxes', asyncHandler(async (_req, res) => {
+devboxRouter.get('/boxes', asyncHandler(async (req, res) => {
   // Each box carries how long it has left. A workspace that disappears is
   // fine; a workspace that disappears without warning is not, and the client
   // should not have to re-derive the policy to say so.
-  res.json({
-    boxes: listBoxes().map((b) => ({ ...b, ...timeLeft(b) })),
-  });
+  //
+  // Filtered to what this caller may see, so an SME's fleet is their own
+  // computers plus the ones shared on initiatives they are attached to. The
+  // filter is here rather than in the client because a fleet the client has to
+  // trim is a fleet the client was already sent.
+  const mine = await visibleBoxes(req.session ?? null, listBoxes());
+  res.json({ boxes: mine.map((b) => ({ ...b, ...timeLeft(b) })) });
 }));
 
 devboxRouter.post('/boxes', asyncHandler(async (req, res) => {
-  const body = (req.body ?? {}) as { label?: string; sessionId?: string; createdAt?: string };
+  const body = (req.body ?? {}) as {
+    label?: string; sessionId?: string; createdAt?: string; projectId?: string;
+  };
   const sessionId = normalizeRuntimeSessionId(body.sessionId);
+  // Charging a computer to an initiative shares it with everyone on that
+  // initiative, so it is a claim about access as much as about cost: check the
+  // caller is actually on it rather than taking the body's word.
+  const projectId = String(body.projectId ?? '').trim();
+  if (projectId && !await stewardsInitiative(req.session ?? null, projectId)) {
+    res.status(403).json({
+      error: 'you can only charge a computer to an initiative you own or contribute to',
+      projectId,
+    });
+    return;
+  }
   const box = registerBox({
     sessionId,
+    // From the session, never the body — an attribution a caller can set is
+    // not an attribution.
+    ...(req.session?.sub ? { ownerId: req.session.sub } : {}),
+    ...(projectId ? { projectId } : {}),
     ...(body.label ? { label: body.label } : {}),
     ...(body.createdAt ? { createdAt: body.createdAt } : {}),
   });
@@ -340,15 +393,24 @@ devboxRouter.post('/boxes', asyncHandler(async (req, res) => {
 devboxRouter.patch('/boxes/:boxId', asyncHandler(async (req, res) => {
   const label = String((req.body as { label?: string } | undefined)?.label ?? '').trim();
   if (!label) { res.status(400).json({ error: 'label is required' }); return; }
-  const box = renameBox(String(req.params['boxId'] ?? ''), label);
-  if (!box) { res.status(404).json({ error: 'box not found' }); return; }
+  const existing = getBox(String(req.params['boxId'] ?? ''));
+  if (!existing) { res.status(404).json({ error: 'computer not found' }); return; }
+  if (!await canSee(req.session ?? null, existing)) {
+    res.status(403).json({ error: 'that computer is not yours to rename' });
+    return;
+  }
+  const box = renameBox(existing.id, label);
   res.json(box);
 }));
 
 devboxRouter.delete('/boxes/:boxId', asyncHandler(async (req, res) => {
   const boxId = String(req.params['boxId'] ?? '');
   const box = getBox(boxId);
-  if (!box) { res.status(404).json({ error: 'box not found' }); return; }
+  if (!box) { res.status(404).json({ error: 'computer not found' }); return; }
+  if (!await canSee(req.session ?? null, box)) {
+    res.status(403).json({ error: 'that computer is not yours to remove' });
+    return;
+  }
   // Best-effort session stop — the workspace persists server-side regardless.
   const arn = await resolveDevboxArn();
   if (arn) {
@@ -369,14 +431,23 @@ devboxRouter.delete('/boxes/:boxId', asyncHandler(async (req, res) => {
 // Read-only live tail: replay the box's event buffer, then stream new events
 // as they land. This is what lets a second browser (or an operator who
 // reloaded) watch a run some other actor started.
-devboxRouter.get('/boxes/:boxId/tail', (req, res) => {
+// Tailing is reading someone's work, so it is scoped like everything else —
+// asyncHandler is deliberately NOT used: its error path writes a JSON body,
+// which is the wrong thing to do once the SSE head has gone out. The access
+// check therefore runs entirely before initSSE.
+devboxRouter.get('/boxes/:boxId/tail', asyncHandler(async (req, res) => {
   const boxId = String(req.params['boxId'] ?? '');
-  if (!getBox(boxId)) { res.status(404).json({ error: 'box not found' }); return; }
+  const box = getBox(boxId);
+  if (!box) { res.status(404).json({ error: 'computer not found' }); return; }
+  if (!await canSee(req.session ?? null, box)) {
+    res.status(403).json({ error: 'that computer is not yours to watch' });
+    return;
+  }
   initSSE(res);
   for (const ev of replayEvents(boxId)) writeSSE(res, ev);
   const unsubscribe = subscribeFleet(boxId, (ev) => writeSSE(res, ev));
   req.on('close', () => { unsubscribe(); endSSE(res); });
-});
+}));
 
 // Task mode: Claude Code headless run in /mnt/workspace, stream-json events
 // forwarded as SSE. The devbox wrapper emits devbox_start/devbox_end envelope
@@ -384,6 +455,7 @@ devboxRouter.get('/boxes/:boxId/tail', (req, res) => {
 devboxRouter.post('/:sessionId/task', asyncHandler(async (req, res) => {
   const sessionId = requireSessionId(String(req.params['sessionId'] ?? ''), res);
   if (!sessionId) return;
+  if (!await requireBoxAccess(req, res, sessionId)) return;
   const arn = await requireArn(res);
   if (!arn) return;
 
@@ -456,6 +528,7 @@ devboxRouter.post('/:sessionId/task', asyncHandler(async (req, res) => {
 devboxRouter.post('/:sessionId/command', asyncHandler(async (req, res) => {
   const sessionId = requireSessionId(String(req.params['sessionId'] ?? ''), res);
   if (!sessionId) return;
+  if (!await requireBoxAccess(req, res, sessionId)) return;
 
   const body = (req.body ?? {}) as { command?: string; mode?: string; cwd?: string };
   const command = String(body.command ?? '').trim();
@@ -532,6 +605,7 @@ devboxRouter.post('/:sessionId/command', asyncHandler(async (req, res) => {
 devboxRouter.post('/:sessionId/shell-url', asyncHandler(async (req, res) => {
   const sessionId = requireSessionId(String(req.params['sessionId'] ?? ''), res);
   if (!sessionId) return;
+  if (!await requireBoxAccess(req, res, sessionId)) return;
   const arn = await requireArn(res);
   if (!arn) return;
 
@@ -560,6 +634,7 @@ devboxRouter.post('/:sessionId/shell-url', asyncHandler(async (req, res) => {
 devboxRouter.delete('/:sessionId', asyncHandler(async (req, res) => {
   const sessionId = requireSessionId(String(req.params['sessionId'] ?? ''), res);
   if (!sessionId) return;
+  if (!await requireBoxAccess(req, res, sessionId)) return;
   const arn = await requireArn(res);
   if (!arn) return;
 

@@ -9,17 +9,39 @@
 //   5. Task requires a prompt
 //   6. Task happy path: upstream SSE body re-framed as SSE data frames
 //   7. DELETE stops the runtime session with the right parameters
+//   8. Per-computer scoping: an SME reaches their own and their initiative's,
+//      and nothing else (lib/devbox-visibility.ts)
 
 import express from 'express';
 import request from 'supertest';
 import { devboxRouter, _internal, validateCommand, buildContainerCommand, validateCwd, CWD_MARKER } from '../devbox.js';
+import { type Session } from '../../lib/session.js';
+import { registerBox, _resetFleet } from '../../lib/devbox-fleet.js';
 
 const SESSION = 'devbox-0123456789abcdef0123456789abcdef';
 const ARN = 'arn:aws:bedrock-agentcore:us-east-1:111122223333:runtime/orgiq_devbox-abc123';
 
-function buildApp() {
+/**
+ * The router is mounted behind requireAction('ManageDevbox') in index.ts, so a
+ * request that reaches it always carries a session. The harness has to supply
+ * one or every per-computer check reads as "no session" and denies — which is
+ * correct behaviour against an unfaithful setup.
+ *
+ * Defaults to hr-admin: fleet-wide, so the tests that predate scoping keep
+ * asking what they were asking. Pass a session to scope a request down.
+ */
+function buildApp(session: Partial<Session> | null = { role: 'hr-admin' }) {
   const app = express();
   app.use(express.json());
+  if (session) {
+    app.use((req, _res, next) => {
+      req.session = {
+        sub: 'u-test', role: 'hr-admin', tenant: 'orgiq', grants: {}, iat: 0,
+        ...session,
+      } as Session;
+      next();
+    });
+  }
   app.use('/api/devbox', devboxRouter);
   return app;
 }
@@ -310,5 +332,106 @@ describe('validateCwd', () => {
 
   it('rejects control characters that could forge a second marker line', () => {
     expect(validateCwd('/mnt/workspace\nrm -rf /')).toMatch(/control character/);
+  });
+});
+
+// ─── 8. Per-computer scoping ─────────────────────────────────────────────────
+//
+// Cedar's ManageDevbox got the caller onto the surface. These cover the other
+// half — which computers on it are theirs — at the route, where the pure rule
+// in lib/__tests__/devbox-visibility.test.ts meets real requests.
+//
+// `sme` is the interesting principal: it holds ManageDevbox role-wide but is
+// scoped per initiative. stewardsInitiative is mocked because the real one
+// resolves through identity + projects; what is under test here is that the
+// routes consult it and honour the answer, not how attachment is computed.
+
+jest.mock('../../lib/initiative-scope.js', () => ({
+  ORG_WIDE_INITIATIVE_ROLES: ['org-leader', 'hr-admin', 'admin'],
+  stewardsInitiative: jest.fn(async (_session: unknown, id: string) => id === 'p-mine'),
+}));
+
+describe('per-computer scoping', () => {
+  const SME = { sub: 'u-nora', role: 'sme' as const };
+  const OTHER_SESSION = 'devbox-fedcba9876543210fedcba9876543210';
+
+  beforeEach(() => {
+    _resetFleet();
+    registerBox({ id: 'own',    sessionId: SESSION,       ownerId: 'u-nora' });
+    registerBox({ id: 'shared', sessionId: OTHER_SESSION, ownerId: 'u-eli', projectId: 'p-mine' });
+    registerBox({ id: 'theirs', sessionId: 'devbox-1111111111111111111111111111', ownerId: 'u-eli' });
+    registerBox({ id: 'orphan', sessionId: 'devbox-2222222222222222222222222222' });
+  });
+
+  afterEach(() => _resetFleet());
+
+  it('GET /boxes returns an SME their own and their initiative\'s, nothing else', async () => {
+    const res = await request(buildApp(SME)).get('/api/devbox/boxes');
+    expect(res.status).toBe(200);
+    expect((res.body.boxes as { id: string }[]).map((b) => b.id).sort())
+      .toEqual(['own', 'shared']);
+  });
+
+  it('GET /boxes returns everything to a fleet-wide role', async () => {
+    const res = await request(buildApp({ role: 'hr-admin' })).get('/api/devbox/boxes');
+    expect((res.body.boxes as { id: string }[]).map((b) => b.id).sort())
+      .toEqual(['orphan', 'own', 'shared', 'theirs']);
+  });
+
+  it('403s an SME tailing a computer that is not theirs', async () => {
+    const res = await request(buildApp(SME)).get('/api/devbox/boxes/theirs/tail');
+    expect(res.status).toBe(403);
+  });
+
+  it('403s an SME renaming a computer that is not theirs', async () => {
+    const res = await request(buildApp(SME))
+      .patch('/api/devbox/boxes/theirs').send({ label: 'mine now' });
+    expect(res.status).toBe(403);
+  });
+
+  it('403s an SME running a command on someone else\'s computer', async () => {
+    const res = await request(buildApp(SME))
+      .post('/api/devbox/devbox-1111111111111111111111111111/command')
+      .send({ command: 'ls' });
+    expect(res.status).toBe(403);
+  });
+
+  it('403s an SME on a session id the registry has never seen', async () => {
+    // The bypass this closes: /:sessionId routes take the id straight from the
+    // path, so an unregistered one would skip the check entirely.
+    const res = await request(buildApp(SME))
+      .post('/api/devbox/devbox-9999999999999999999999999999/command')
+      .send({ command: 'ls' });
+    expect(res.status).toBe(403);
+  });
+
+  it('lets a fleet-wide role adopt an unregistered session id', async () => {
+    const res = await request(buildApp({ role: 'hr-admin' }))
+      .post('/api/devbox/devbox-9999999999999999999999999999/command')
+      .send({ command: 'rm -rf /' });
+    // Refused on the allowlist, not on ownership — it got past the access gate.
+    expect(res.status).toBe(400);
+  });
+
+  it('refuses to charge a new computer to an initiative the SME is not on', async () => {
+    const res = await request(buildApp(SME))
+      .post('/api/devbox/boxes')
+      .send({ sessionId: 'devbox-3333333333333333333333333333', projectId: 'p-not-mine' });
+    expect(res.status).toBe(403);
+  });
+
+  it('charges a new computer to an initiative the SME is on, and stamps the owner', async () => {
+    const res = await request(buildApp(SME))
+      .post('/api/devbox/boxes')
+      .send({ sessionId: 'devbox-3333333333333333333333333333', projectId: 'p-mine' });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ projectId: 'p-mine', ownerId: 'u-nora' });
+  });
+
+  it('takes the owner from the session, never the body', async () => {
+    const res = await request(buildApp(SME))
+      .post('/api/devbox/boxes')
+      .send({ sessionId: 'devbox-4444444444444444444444444444', ownerId: 'u-someone-else' });
+    expect(res.body.ownerId).toBe('u-nora');
   });
 });

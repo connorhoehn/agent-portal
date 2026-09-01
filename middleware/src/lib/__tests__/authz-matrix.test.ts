@@ -139,7 +139,11 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
     tenant: 'orgiq',
     granted: [
       'Search', 'ViewOrgChart', 'ViewObservability', 'LabelFeedback',
-      'DispatchAgentRun', 'ManageSprints', 'EnterEnvironment',
+      // ManageDevbox is role-wide on purpose: it opens the Computers surface,
+      // and lib/devbox-visibility.ts then scopes the fleet to this SME's own
+      // computers plus the ones shared on initiatives they are attached to.
+      // Granting the capability is not granting the fleet.
+      'DispatchAgentRun', 'ManageSprints', 'ManageDevbox', 'EnterEnvironment',
     ],
   },
   'orgiq/org-leader': {
@@ -213,6 +217,8 @@ describe('capability boundaries that must not regress', () => {
   test('sme adds dispatch + sprints only; never budgets, ingest, approval, masquerade', () => {
     expect(has('orgiq/sme', 'DispatchAgentRun')).toBe(true);
     expect(has('orgiq/sme', 'ManageSprints')).toBe(true);
+    // The role that spends an envelope by assigning computers can open one.
+    expect(has('orgiq/sme', 'ManageDevbox')).toBe(true);
     for (const cap of ['ManageBudgets', 'ManageIngest', 'ApproveTransaction', 'Masquerade', 'ManageUsers']) {
       expect(has('orgiq/sme', cap)).toBe(false);
     }

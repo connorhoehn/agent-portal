@@ -81,7 +81,13 @@ const PLATFORM_ITEMS: NavItem[] = [
   { path: '/admin/changes',         label: 'Changes',         tenant: 'admin', requireRoles: ['hr-admin'], group: 'Build' },
   // 'Computers', not 'Devbox': the page is a fleet of microVMs agents work in,
   // and the top-level menu reads as a place, not a single box.
-  { path: '/admin/devbox',          label: 'Computers',       tenant: 'admin', requireRoles: ['hr-admin'], group: 'Build' },
+  //
+  // Open to `sme` as well: the role exists to spend a sprint envelope by
+  // assigning computers to work, and it is the role that has to get into a
+  // cluster and run a command. The fleet an SME sees is scoped server-side to
+  // their own computers plus the ones shared on their initiatives
+  // (middleware lib/devbox-visibility.ts), so this is a door, not a key.
+  { path: '/admin/devbox',          label: 'Computers',       tenant: 'admin', requireRoles: ['hr-admin', 'sme'], group: 'Build' },
   // OPERATE — platform + ops.
   { path: '/admin/observability',   label: 'Health',          tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'], group: 'Operate' },
   { path: '/iq/agents',             label: 'Architecture',    tenant: 'admin', group: 'Operate' },

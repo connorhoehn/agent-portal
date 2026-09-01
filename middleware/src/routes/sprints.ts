@@ -28,7 +28,7 @@ import {
 import { initiativeExists } from '../providers/budgets.js';
 import { getWorkItem, updateWorkItem } from '../providers/work-items.js';
 import { getUser } from '../providers/identity.js';
-import { getProject } from '../providers/projects.js';
+import { stewardsInitiative } from '../lib/initiative-scope.js';
 
 export const sprintsRouter: Router = Router();
 
@@ -38,48 +38,6 @@ export const sprintsRouter: Router = Router();
  *  `requireInitiativeSteward` below scopes an SME's write to their own
  *  initiatives (the scoping the sme.cedar comment promises). */
 const manageSprints = requireAction('ManageSprints');
-
-/** Org-wide roles run the cadence across every initiative and are not scoped to
- *  one: the release manager (`org-leader`) allocates and grants across the whole
- *  program, the program operator (`hr-admin`) runs the platform, and `admin` is
- *  cross-tenant. They bypass the per-initiative ownership check. Mirrors the
- *  bypass in decideGrantScopedDispatch (lib/bot-runner.ts). */
-const ORG_WIDE_SPRINT_ROLES = ['org-leader', 'hr-admin', 'admin'];
-
-/**
- * Whether this caller may create/steer sprints on `initiativeId` — the
- * authorization question the ManageSprints Cedar action only half-answers.
- *
- * Org-wide roles pass unconditionally. Everyone else (an `sme`) is scoped to
- * initiatives they steward or contribute to: the operating model gives each
- * initiative one owner + two `sme` contributions (project_contributions), so
- * "mine" is `projects.owner_id == me` OR I hold a contribution row on it.
- *
- * Conservative like resolveActiveGrant, but pointing the other way: this is an
- * authorization gate, so an unresolvable caller (no session, no linked person)
- * or a lookup failure is treated as NOT owning the initiative — an SME is 403'd
- * rather than let through. An org-wide role is never blocked by a lookup that
- * failed, because it returns before any lookup runs.
- */
-async function stewardsInitiative(
-  session: Session | null,
-  initiativeId: string,
-): Promise<boolean> {
-  const role = session?.role;
-  if (role && ORG_WIDE_SPRINT_ROLES.includes(role)) return true;
-  if (!session?.sub) return false;
-  try {
-    const personId = (await getUser(session.sub))?.personId ?? null;
-    if (!personId) return false;
-    const project = await getProject(initiativeId);
-    if (!project) return false;
-    if (project.ownerId === personId) return true;
-    return project.contributors.some((c) => c.personId === personId);
-  } catch (err) {
-    console.warn(`[sprints] could not resolve steward for ${initiativeId}:`, (err as Error).message);
-    return false;
-  }
-}
 
 /** 403 an SME writing to an initiative they neither own nor contribute to. The
  *  message names the rule the sme.cedar comment now enforces at the route. */
