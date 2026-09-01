@@ -37,7 +37,8 @@ import { type SqlParameter } from '@aws-sdk/client-rds-data';
 // The attribution model of record for "what did this initiative spend" — one
 // predicate, shared with the ledger, so a sprint's window spend and the Budgets
 // page's window spend can never be computed two different ways.
-import { spendPredicateSql, MOCK_GRANTS } from './budgets.js';
+import { spendPredicateSql } from './budgets.js';
+import { mergedMockGrants } from './grantOverlay.js';
 import { searchWorkItems } from './work-items.js';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
@@ -184,9 +185,14 @@ interface MockSprintBase {
 
 // Sprints created in mock mode (dev:mock) live here so the same process that
 // created one also lists it — the in-memory analogue of the sprints table.
-// Grant rollups stay sourced from MOCK_GRANTS (the seed envelopes), so a
-// freshly created sprint reads with a $0 envelope until one is granted; the
-// grant overlay itself lives in providers/grants.ts to avoid an import cycle.
+// Grant rollups read `mergedMockGrants()` — the seed WITH the mutation overlay
+// applied — so a sprint's envelope reflects grants created or patched in this
+// process. It used to read the raw seed, because the overlay lived in
+// providers/grants.ts and this module cannot import that (grants.ts imports
+// getSprint from here, so it would close a cycle). The visible symptom was a
+// grant PATCH that /api/grants reported and /api/sprints did not. The overlay
+// now lives in providers/grantOverlay.ts, which imports neither of us.
+// A freshly created sprint still reads with a $0 envelope until one is granted.
 const MOCK_CREATED_SPRINTS: MockSprintBase[] = [];
 
 /** Test-only: drop the in-memory created-sprint store between cases. */
@@ -194,7 +200,7 @@ export function _resetMockSprints(): void { MOCK_CREATED_SPRINTS.length = 0; }
 
 async function buildMockSprintRow(m: MockSprintBase, personId: string | null): Promise<SprintRow> {
   const items = await searchWorkItems({ sprintId: m.id, limit: 200 });
-  const grants = MOCK_GRANTS.filter((g) => g.sprintId === m.id);
+  const grants = mergedMockGrants().filter((g) => g.sprintId === m.id);
   const mine = personId ? items.filter((i) => i.assigneeId === personId) : [];
   return {
     id: m.id,

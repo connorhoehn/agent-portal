@@ -14,9 +14,18 @@
 import { exec } from './aurora.js';
 import { config } from '../config.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
-import { type GrantRow, listGrants as budgetsListGrants, MOCK_GRANTS } from './budgets.js';
-import { MOCK_BUDGETS } from './budgets.js';
+import { type GrantRow, listGrants as budgetsListGrants, MOCK_BUDGETS } from './budgets.js';
+import {
+  mergedMockGrants,
+  setMockGrant,
+  tombstoneMockGrant,
+  _resetMockGrants,
+} from './grantOverlay.js';
 import { getSprint } from './sprints.js';
+
+// Re-exported so existing test imports (`_resetMockGrants` from this module)
+// keep working now that the overlay itself lives next door.
+export { _resetMockGrants };
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
 function nul(name: string): SqlParameter { return { name, value: { isNull: true } }; }
@@ -37,43 +46,11 @@ export interface CreateGrantInput {
 
 // ─── Mock overlay (config.mock.aurora === true) ──────────────────────────────
 //
-// The seed envelopes are budgets.MOCK_GRANTS (read-only). This overlay records
-// mutations on top of them so dev:mock can create/patch/revoke in-memory:
-//   id → updated row   (a create, or a patched seed/created grant)
-//   id → null          (a tombstone: the grant was revoked)
-// Reads merge the seed with the overlay; the seed is never mutated in place.
-
-const MOCK_OVERLAY = new Map<string, GrantRow | null>();
-
-/** Test-only: clear the in-memory grant overlay between cases. */
-export function _resetMockGrants(): void { MOCK_OVERLAY.clear(); }
-
-function seedGrantRows(): GrantRow[] {
-  // Same name-join budgets.listGrants does in mock, kept local so this module
-  // does not depend on that path's filtering.
-  return MOCK_GRANTS.map((g) => ({
-    ...g,
-    orgProjectName: MOCK_BUDGETS.find((b) => b.id === g.orgProjectId)?.name ?? null,
-  }));
-}
-
-function mergedMockGrants(): GrantRow[] {
-  const seed = seedGrantRows();
-  const seedIds = new Set(seed.map((g) => g.id));
-  const out: GrantRow[] = [];
-  for (const g of seed) {
-    if (MOCK_OVERLAY.has(g.id)) {
-      const v = MOCK_OVERLAY.get(g.id);
-      if (v) out.push(v); // patched; a tombstone (null) drops it
-    } else {
-      out.push(g);
-    }
-  }
-  for (const [id, v] of MOCK_OVERLAY) {
-    if (!seedIds.has(id) && v) out.push(v);
-  }
-  return out;
-}
+// The overlay itself lives in providers/grantOverlay.ts. It was moved there so
+// sprints.ts can read it too: this module imports getSprint from sprints.ts, so
+// sprints.ts importing THIS module would close a cycle. While the overlay lived
+// here, sprints.ts read the raw seed instead and reported a stale envelope after
+// every grant PATCH. See that file's header for the full reasoning.
 
 async function mockGrantRowFor(input: CreateGrantInput, id: string): Promise<GrantRow> {
   // Pull the sprint's initiative/date labels through getSprint so a created
@@ -125,7 +102,7 @@ export async function createGrant(input: CreateGrantInput): Promise<GrantRow> {
   if (config.mock.aurora) {
     const id = `bg-mock-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
     const row = await mockGrantRowFor(input, id);
-    MOCK_OVERLAY.set(id, row);
+    setMockGrant(id, row);
     return row;
   }
   const rows = await exec(
@@ -167,11 +144,9 @@ export interface UpdateGrantInput {
  * then updated_at, then the id bind last — so an amount-only patch produces
  * exactly the historical statement and binding order.
  *
- * NOTE: GrantRow (owned by providers/budgets.ts) does not carry `note`, so the
- * returned row never surfaces it — in either real or mock mode. The note is
- * write-through to the DB in real mode; in mock mode there is nowhere on the
- * read shape to hold it, so a note-only mock patch updates nothing observable
- * but still succeeds (parity: no read path exposes note anywhere).
+ * `note` is carried on GrantRow and surfaced on read, so a note-only patch is
+ * observable in both modes. (It was not always: while GrantRow had no `note`,
+ * a saved note read back as `—` because no read path could express it.)
  */
 export async function updateGrant(id: string, patch: UpdateGrantInput): Promise<GrantRow | null> {
   const setAmount = patch.amountUsd !== undefined;
@@ -181,8 +156,14 @@ export async function updateGrant(id: string, patch: UpdateGrantInput): Promise<
   if (config.mock.aurora) {
     const current = mergedMockGrants().find((g) => g.id === id);
     if (!current) return null;
-    const updated: GrantRow = { ...current, ...(setAmount ? { allocatedUsd: patch.amountUsd! } : {}) };
-    MOCK_OVERLAY.set(id, updated);
+    const updated: GrantRow = {
+      ...current,
+      ...(setAmount ? { allocatedUsd: patch.amountUsd! } : {}),
+      // Mirrors the real SET clause: only a provided field is written, so a
+      // note-only patch leaves the amount alone and vice versa.
+      ...(setNote ? { note: patch.note ?? null } : {}),
+    };
+    setMockGrant(id, updated);
     return updated;
   }
 
@@ -216,7 +197,7 @@ export async function revokeGrant(id: string): Promise<boolean> {
   if (config.mock.aurora) {
     const exists = mergedMockGrants().some((g) => g.id === id);
     if (!exists) return false;
-    MOCK_OVERLAY.set(id, null); // tombstone; the seed array is never mutated
+    tombstoneMockGrant(id); // the seed array is never mutated
     return true;
   }
   const rows = await exec(
