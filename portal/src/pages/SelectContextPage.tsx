@@ -12,9 +12,10 @@
 // of the security story: a switch is a deliberate act that leaves the current
 // workspace behind, not a soft in-place toggle.
 
-import { useMemo, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { Chip } from '@connorhoehnslalom/ui-components/shared';
-import { useSession, type Tenant } from '../lib/auth';
+import { useSession, type DirectoryUser, type Tenant } from '../lib/auth';
+import { toastError } from '../lib/toastStore';
 import { NEWSROOM_ENABLED } from '../lib/features';
 import { markContextChosen } from '../lib/contextChoice';
 
@@ -72,7 +73,22 @@ function TenantMark({ tenant, size = 34 }: { tenant: Tenant; size?: number }) {
 }
 
 export default function SelectContextPage() {
-  const { session, enterContext, logout, ssoEnabled, signInWithSso } = useSession();
+  const { session, enterContext, logout, ssoEnabled, signInWithSso, listUsers, login } = useSession();
+
+  // The dev sign-in list. This page is the pre-app boundary, which makes it
+  // the right — and now only — home for the user picker: the header menu
+  // stopped listing people deliberately, and Identity → Users needs a role
+  // most identities do not hold. Without this, signing out in dev stranded
+  // you on a chooser whose Enter buttons cannot work (the cookie-less demo
+  // identity has grants to render but no session to re-scope) and no way to
+  // become anyone. SSO deployments never see it — the real IdP is the way in.
+  const [directory, setDirectory] = useState<DirectoryUser[] | null>(null);
+  useEffect(() => {
+    if (ssoEnabled) return;
+    let cancelled = false;
+    listUsers().then((users) => { if (!cancelled) setDirectory(users); }).catch(() => setDirectory([]));
+    return () => { cancelled = true; };
+  }, [ssoEnabled, listUsers]);
 
   // Build the account → roles structure from grants, newsroom filter applied.
   const accounts = useMemo(() => {
@@ -87,7 +103,17 @@ export default function SelectContextPage() {
     // Mark chosen before entering, since enterContext hard-redirects into the
     // workspace (re-driving the layout from the re-minted cookie).
     markContextChosen(session?.sub ?? '');
-    await enterContext(tenant, role);
+    try {
+      await enterContext(tenant, role);
+    } catch (err) {
+      // enterContext hard-navigates on success, so a swallowed failure has NO
+      // observable outcome — a chooser full of buttons that sometimes do
+      // nothing. The cookie-less fallback identity hits exactly this: the
+      // permissive demo grants render every workspace, but there is no real
+      // session to re-scope, so every Enter fails. Say so, and the sign-in
+      // list below is the way forward.
+      toastError(null, 'Could not enter that workspace', (err as Error).message);
+    }
   }
 
   const name = session?.name ?? session?.sub ?? 'you';
@@ -191,6 +217,31 @@ export default function SelectContextPage() {
         )}
       </div>
 
+      {!ssoEnabled && (directory?.length ?? 0) > 0 && (
+        <section aria-label="Sign in as" style={styles.devUsers}>
+          <div style={styles.devUsersHead}>Sign in as · dev</div>
+          <div style={styles.devUsersList}>
+            {directory!.map((u) => (
+              <button
+                key={u.id}
+                type="button"
+                className="selctx-role"
+                style={styles.devUserBtn}
+                onClick={() => {
+                  login(u.id).catch((err: unknown) =>
+                    toastError(null, `Could not sign in as ${u.displayName}`, (err as Error).message));
+                }}
+              >
+                <span style={styles.roleName}>{u.displayName}</span>
+                <span style={styles.roleHint}>
+                  {u.tenants.map((t) => `${t.tenant}: ${t.roles.map(roleLabel).join(', ')}`).join(' · ')}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
       {accounts.length > 0 && (
         <button type="button" onClick={() => void logout()} style={styles.signOutLink}>
           Sign out
@@ -283,6 +334,37 @@ const styles: Record<string, CSSProperties> = {
   ssoBtn: {
     padding: '10px 20px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
     borderRadius: 8, border: 'none', background: 'var(--color-primary)', color: '#fff',
+  },
+  devUsers: {
+    marginTop: 28,
+    width: '100%',
+  },
+  devUsersHead: {
+    fontSize: 10,
+    fontWeight: 600,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase' as const,
+    color: 'var(--color-text-tertiary)',
+    marginBottom: 8,
+  },
+  devUsersList: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    border: '1px solid var(--color-border)',
+    borderRadius: 10,
+    overflow: 'hidden',
+    background: 'var(--color-surface)',
+  },
+  devUserBtn: {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: 10,
+    padding: '10px 14px',
+    background: 'transparent',
+    border: 'none',
+    borderTop: '1px solid var(--color-border)',
+    textAlign: 'left' as const,
+    cursor: 'pointer',
   },
   signOutLink: {
     display: 'block', marginTop: 20, padding: 0, fontSize: 13, cursor: 'pointer',
