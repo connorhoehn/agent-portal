@@ -1,825 +1,95 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
-import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
-import { openShell } from '../../lib/terminalDock';
-import { DEVBOX_MODELS } from '../../lib/devboxModels';
-import { useFetch } from '../../hooks/useFetch';
+// Computers — the fleet of microVMs agents work in.
+//
+// This page was 825 lines of hand-rolled fleet list, task composer, workspace
+// tree and terminal chrome. All of it now lives in
+// `@connorhoehnslalom/ui-components/compute`, which is where it belongs: a pane
+// tree with geometry-based focus, the xterm lifecycle, the AgentCore shell
+// framing, expiry meters and broadcast are library problems, and the library is
+// the thing that gets tested and storybooked.
+//
+// What is left is what only this app can answer:
+//
+//   - the transport (`/api/devbox`, cookie-authenticated),
+//   - who may mutate (`ManageDevbox`),
+//   - the model catalogue this deployment actually runs,
+//   - where a notice goes (the portal's toast store),
+//   - which initiatives a computer can be charged to.
+//
+// Everything else is a prop.
+
+import { useMemo } from 'react';
+import { ErrorState } from '@connorhoehnslalom/ui-components/shared';
+import {
+  ComputeProvider,
+  ComputerLab,
+  type ComputeNotice,
+  type ComputeProject,
+} from '@connorhoehnslalom/ui-components/compute';
 import { useCapabilities } from '../../lib/capabilities';
-import { RunTimeline, toolSummary, type RunTimelineHandle } from '../../components/runs/RunTimeline';
-import {
-  createBox,
-  loadBoxes,
-  syncBoxes,
-  onBoxesChanged,
-  removeBox,
-  type DevboxBox,
-  type BoxStatus,
-} from '../../lib/devboxRegistry';
-import {
-  toastPending,
-  toastUpdate,
-  toastSuccess,
-  toastError,
-} from '../../lib/toastStore';
+import { useFetch } from '../../hooks/useFetch';
+import { DEVBOX_MODELS } from '../../lib/devboxModels';
+import { toastError, toastInfo, toastSuccess } from '../../lib/toastStore';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface DevboxStatus {
-  deployed: boolean;
-  runtimeArn: string | null;
-  runtimeName: string;
-  commandAllowlist: string[];
-  fullExecEnabled?: boolean;
-  /** True only when the DEPLOYED image understands a per-task model. */
-  perTaskModel?: boolean;
-  defaultModel?: string | null;
-  allowedModels?: string[];
-}
-
-/** What the rest of the SDLC loop knows about a computer (THIS COMPUTER card). */
-interface WorkJobRef {
-  id: string; title: string; status: string; boxId: string | null; finishedAt: string | null;
-}
-interface AgentProjectRef {
-  id: string; repoFullName: string; sessionId: string | null;
-  orgProjectId: string | null; orgProjectName: string | null;
-}
-
-// ─── SSE helper (POST + fetch/ReadableStream, per repo convention) ───────────
-
-async function readSse(
-  url: string,
-  body: unknown,
-  onEvent: (ev: Record<string, unknown>) => void,
-  signal?: AbortSignal,
-): Promise<void> {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify(body),
-    signal,
-  });
-  if (!res.ok) {
-    let msg = `HTTP ${res.status}`;
-    try { msg = ((await res.json()) as { error?: string }).error ?? msg; } catch { /* keep status */ }
-    throw new Error(msg);
-  }
-  if (!res.body) throw new Error('empty response body');
-  const reader = res.body.getReader();
-  const dec = new TextDecoder();
-  let buf = '';
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += dec.decode(value, { stream: true });
-    const parts = buf.split('\n\n');
-    buf = parts.pop() ?? '';
-    for (const part of parts) {
-      const line = part.trim();
-      if (!line.startsWith('data:')) continue;
-      try {
-        const ev = JSON.parse(line.slice(5).trim()) as Record<string, unknown>;
-        onEvent(ev);
-      } catch { /* partial / non-JSON frame — skip */ }
-    }
-  }
-}
-
-// ─── Rendering helpers ───────────────────────────────────────────────────────
-
-const mono = 'font-["Fira_Code","Cascadia_Code","JetBrains_Mono",monospace]';
-
-// ─── Workspace tree ──────────────────────────────────────────────────────────
-// The glance rail's file view is a collapsible tree, not a flat ls: once a
-// repository is cloned, the top level says almost nothing and the structure is
-// the interesting part. Fed by one bounded `find` (depth 3, noise dirs pruned),
-// so expanding a directory is instant — its contents are already here.
-
-interface WsNode {
+/** /api/graph/projects, narrowed to what a cost centre needs. */
+interface OrgProject {
+  id: string;
   name: string;
-  path: string;
-  kind: 'dir' | 'file';
-  /** Directory whose contents were deliberately not listed (.git, node_modules…). */
-  pruned?: boolean;
-  children: WsNode[];
 }
 
-/** Parse `find -printf "%y %p"` lines ("d src", "f src/main.py", "p node_modules"). */
-function buildWsTree(lines: string[]): WsNode[] {
-  const roots: WsNode[] = [];
-  const byPath = new Map<string, WsNode>();
-  const ensureDir = (path: string): WsNode | null => {
-    if (!path) return null;
-    const existing = byPath.get(path);
-    if (existing) return existing;
-    const idx = path.lastIndexOf('/');
-    const node: WsNode = { name: path.slice(idx + 1), path, kind: 'dir', children: [] };
-    byPath.set(path, node);
-    const parent = idx >= 0 ? ensureDir(path.slice(0, idx)) : null;
-    (parent ? parent.children : roots).push(node);
-    return node;
-  };
-  for (const line of lines) {
-    const sp = line.indexOf(' ');
-    if (sp < 1) continue;
-    const marker = line.slice(0, sp);
-    let p = line.slice(sp + 1);
-    if (p.startsWith('./')) p = p.slice(2);
-    if (!p || p === '.') continue;
-    if (marker === 'd' || marker === 'p') {
-      const node = ensureDir(p);
-      if (node && marker === 'p') node.pruned = true;
-    } else {
-      const idx = p.lastIndexOf('/');
-      const parent = idx >= 0 ? ensureDir(p.slice(0, idx)) : null;
-      const node: WsNode = { name: p.slice(idx + 1), path: p, kind: 'file', children: [] };
-      byPath.set(p, node);
-      (parent ? parent.children : roots).push(node);
-    }
-  }
-  const sortRec = (nodes: WsNode[]) => {
-    nodes.sort((a, b) =>
-      a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'dir' ? -1 : 1);
-    for (const n of nodes) sortRec(n.children);
-  };
-  sortRec(roots);
-  return roots;
+function notify(notice: ComputeNotice): void {
+  if (notice.tone === 'error') { toastError(null, notice.title, notice.detail); return; }
+  if (notice.tone === 'success') { toastSuccess(null, notice.title, notice.detail); return; }
+  toastInfo(notice.title, notice.detail);
 }
-
-function countRec(node: WsNode): number {
-  return node.children.reduce((n, c) => n + 1 + countRec(c), 0);
-}
-
-function WsTreeRows({ nodes, depth, expanded, onToggle }: {
-  nodes: WsNode[]; depth: number; expanded: Set<string>; onToggle: (path: string) => void;
-}) {
-  return (
-    <>
-      {nodes.map((n) => {
-        const isOpen = expanded.has(n.path);
-        const pad = 4 + depth * 12;
-        if (n.kind === 'file') {
-          return (
-            <div key={n.path} className={`text-[12px] text-text-secondary truncate ${mono}`}
-              style={{ paddingLeft: pad + 12 }} title={n.path}>
-              {n.name}
-            </div>
-          );
-        }
-        return (
-          <div key={n.path}>
-            <div
-              onClick={() => { if (!n.pruned) onToggle(n.path); }}
-              title={n.pruned ? `${n.path} — contents not listed` : n.path}
-              className={`flex items-center gap-1 text-[12px] truncate ${mono} ${
-                n.pruned ? 'text-text-tertiary' : 'text-primary cursor-pointer hover:underline'}`}
-              style={{ paddingLeft: pad }}
-            >
-              <span aria-hidden="true" className="text-[9px] w-2 shrink-0 no-underline">
-                {n.pruned ? '·' : isOpen ? '▾' : '▸'}
-              </span>
-              <span className="truncate">{n.name}/</span>
-              {!n.pruned && !isOpen && n.children.length > 0 && (
-                <span className="text-[10px] text-text-tertiary no-underline shrink-0">{countRec(n)}</span>
-              )}
-            </div>
-            {isOpen && !n.pruned && (
-              <WsTreeRows nodes={n.children} depth={depth + 1} expanded={expanded} onToggle={onToggle} />
-            )}
-          </div>
-        );
-      })}
-    </>
-  );
-}
-
-
-// Herd status → dot color. `waiting` = the last run ended by asking the
-// operator a question; `running` pulses.
-const STATUS_DOT: Record<BoxStatus, string> = {
-  idle: 'bg-success',
-  running: 'bg-primary',
-  waiting: 'bg-warning',
-  stopped: 'bg-text-tertiary',
-  error: 'bg-danger',
-};
-
-const STATUS_LABEL: Record<BoxStatus, string> = {
-  idle: 'idle',
-  running: 'running',
-  waiting: 'waiting for feedback',
-  stopped: 'stopped',
-  error: 'error',
-};
-
-// Commands that read stdin forever when given no file argument — inside the
-// microVM there is no interactive stdin, so a bare `cat` just hangs until the
-// server times out and the console looks dead. Catch them client-side.
-const STDIN_WAITERS = new Set(['cat', 'head', 'tail', 'wc', 'tee']);
-
-
-// ─── Page ─────────────────────────────────────────────────────────────────────
-
-/** Models the container will accept — the shared list, mirroring DEVBOX_ALLOWED_MODELS. */
-const TASK_MODELS = DEVBOX_MODELS;
 
 export default function DevboxPage() {
-  const { data: status, error: statusError } = useFetch<DevboxStatus>('/api/devbox/status');
-  const [searchParams, setSearchParams] = useSearchParams();
-  // The route is already hr-admin-gated; mirror the /api/devbox ManageDevbox
-  // gate on the mutating affordances anyway so one source of truth decides.
+  // Provisioning, renaming, removing and running all POST to /api/devbox, which
+  // index.ts gates on ManageDevbox. Passed through so the library never renders
+  // a mutating control on a guess.
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageDevbox');
 
-  // ── Box registry — server fleet is the source of truth ─────────────────────
-  // Mirror renders instantly; syncBoxes reconciles with the middleware (and
-  // re-adopts boxes after a middleware restart). Poll keeps status dots live.
-  const [boxes, setBoxes] = useState<DevboxBox[]>(() => loadBoxes());
-  useEffect(() => onBoxesChanged(() => setBoxes(loadBoxes())), []);
-  useEffect(() => {
-    let cancelled = false;
-    const sync = () => void syncBoxes().then((b) => { if (!cancelled) setBoxes(b); }).catch(() => { /* offline — mirror stands */ });
-    sync();
-    const interval = setInterval(sync, 5000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, []);
-
-  const boxParam = searchParams.get('box');
-  const activeBox = boxes.find((b) => b.id === boxParam) ?? boxes[0] ?? null;
-
-  // What this machine is doing and for whom — the reverse links of the SDLC
-  // loop. Jobs record the computer that ran them; codebases record the
-  // workspace session they were cloned into. A machine page that can't say
-  // either is a dead end.
-  const { data: jobsData } = useFetch<{ jobs: WorkJobRef[] }>('/api/work/jobs?limit=50', 15_000);
-  const { data: projectsData } = useFetch<{ projects: AgentProjectRef[] }>('/api/agent-projects', 30_000);
-  const boxJobs = (jobsData?.jobs ?? []).filter((j) => j.boxId === activeBox?.id);
-  const liveJob = boxJobs.find((j) => j.status === 'running' || j.status === 'claimed') ?? null;
-  const recentJobs = boxJobs.filter((j) => j !== liveJob).slice(0, 3);
-  const boxProjects = (projectsData?.projects ?? []).filter(
-    (p) => p.sessionId && p.sessionId === activeBox?.sessionId,
+  // Initiatives double as cost centres, and charging a computer to one shares
+  // it with everyone attached to that initiative (middleware
+  // lib/devbox-visibility.ts) — so this list is both "what can I bill" and
+  // "who else will see this".
+  const { data: orgProjects } = useFetch<OrgProject[]>('/api/graph/projects');
+  const projects = useMemo<ComputeProject[]>(
+    () => (orgProjects ?? []).map((p) => ({ id: p.id, name: p.name })),
+    [orgProjects],
   );
 
-  const selectBox = useCallback((id: string) => {
-    setSearchParams((prev) => { prev.set('box', id); return prev; }, { replace: true });
-  }, [setSearchParams]);
-
-  // ── Per-box streams — owned by the shared RunTimeline component ────────────
-  const [taskModel, setTaskModel] = useState<string>(TASK_MODELS[0]!.id);
-  const timelineRef = useRef<RunTimelineHandle>(null);
-
-  const [prompt, setPrompt] = useState('');
-  const [resume, setResume] = useState(true);
-  const [taskRunning, setTaskRunning] = useState(false);
-
-  const [provisioning, setProvisioning] = useState(false);
-
-  /** Mint a session with live toast feedback — shared by + new and auto-provision. */
-  async function provisionBox(): Promise<DevboxBox> {
-    const label = `computer-${loadBoxes().length + 1}`;
-    setProvisioning(true);
-    const tid = toastPending(`Provisioning ${label}`, 'minting microVM runtime session…');
-    try {
-      const box = await createBox(label);
-      toastUpdate(tid, { detail: `session …${box.sessionId.slice(-8)} · mounting /mnt/workspace` });
-      toastSuccess(tid, `${box.label} ready`, `microVM session live · workspace persists across restarts`);
-      selectBox(box.id);
-      return box;
-    } catch (err) {
-      toastError(tid, `Provisioning failed`, (err as Error).message);
-      throw err;
-    } finally {
-      setProvisioning(false);
-    }
+  if (ready && !canManage) {
+    return (
+      <ErrorState
+        title="No computers here"
+        body="Reaching a computer needs the ManageDevbox capability. An SME gets their own and their initiatives'; ask a platform operator if you expected one."
+      />
+    );
   }
-
-  async function ensureBox(): Promise<DevboxBox> {
-    if (activeBox) return activeBox;
-    return provisionBox();
-  }
-
-  function forgetBox(id: string) {
-    void removeBox(id).then(() => {
-      if (activeBox?.id === id) {
-        const rest = loadBoxes();
-        if (rest[0]) selectBox(rest[0].id);
-      }
-    });
-  }
-
-  async function stopSession() {
-    if (!activeBox) return;
-    const tid = toastPending(`Stopping ${activeBox.label}`, 'sending StopRuntimeSession…');
-    try {
-      const res = await fetch(`/api/devbox/${activeBox.sessionId}`, { method: 'DELETE', credentials: 'include' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      toastSuccess(tid, `${activeBox.label} stopped`, 'workspace persists — next task or command resumes it');
-      timelineRef.current?.push({ kind: 'meta', text: 'session stopped — workspace persists; next invoke resumes it' });
-    } catch (err) {
-      toastError(tid, `Stop failed`, (err as Error).message);
-    }
-  }
-
-  // ── Task mode: Claude Code run, rendered as an execution timeline ──────────
-
-  // Live progress for the task toast: tool-call count + last tool, updated on
-  // every stream event so the toast reads like a heartbeat.
-  const taskProgressRef = useRef<{ toastId: string; tools: number; startedAt: number; result?: { turns: number; durationMs: number; costUsd: number } } | null>(null);
-
-  // Task-runner concern kept OUT of the shared RunTimeline: heartbeat the task
-  // toast with live tool activity as raw tail frames arrive.
-  const handleTailEvent = useCallback((ev: Record<string, unknown>) => {
-    const type = ev['type'];
-    if (type === 'assistant') {
-      const content = ((ev['message'] as { content?: unknown[] })?.content ?? []) as Record<string, unknown>[];
-      for (const block of content) {
-        if (block['type'] !== 'tool_use') continue;
-        const p = taskProgressRef.current;
-        if (!p) continue;
-        const name = String(block['name'] ?? 'tool');
-        const { summary } = toolSummary(name, (block['input'] ?? {}) as Record<string, unknown>);
-        p.tools += 1;
-        const elapsed = Math.round((Date.now() - p.startedAt) / 1000);
-        toastUpdate(p.toastId, { detail: `${p.tools} tool ${p.tools === 1 ? 'call' : 'calls'} · ${elapsed}s · ${name}: ${summary.slice(0, 48)}` });
-      }
-    } else if (type === 'result' && taskProgressRef.current) {
-      taskProgressRef.current.result = {
-        turns: Number(ev['num_turns'] ?? 0),
-        durationMs: Number(ev['duration_ms'] ?? 0),
-        costUsd: Number(ev['total_cost_usd'] ?? 0),
-      };
-    }
-  }, []);
-
-  // Workspace snapshot. Uses the same read-only command API the job dispatcher
-  // runs on, but renders the result as data — a file list and a git summary —
-  // rather than as terminal output. The distinction matters: this pane is for
-  // glancing, and anything you would want to type into belongs in a real PTY.
-  const [wsTree, setWsTree] = useState<WsNode[]>([]);
-  const [wsTruncated, setWsTruncated] = useState(false);
-  const [wsExpanded, setWsExpanded] = useState<Set<string>>(new Set());
-  const [wsGit, setWsGit] = useState<string[]>([]);
-  const [wsLoading, setWsLoading] = useState(false);
-  const [wsError, setWsError] = useState<string | null>(null);
-
-  const toggleWsDir = useCallback((path: string) => {
-    setWsExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(path)) next.delete(path); else next.add(path);
-      return next;
-    });
-  }, []);
-
-  const refreshWorkspace = useCallback(async () => {
-    const box = activeBox;
-    if (!box || wsLoading) return;
-    setWsLoading(true);
-    setWsError(null);
-    const collect = async (command: string): Promise<string[]> => {
-      const lines: string[] = [];
-      await readSse(`/api/devbox/${box.sessionId}/command`,
-        { command, mode: 'full', cwd: '/mnt/workspace' },
-        (ev) => {
-          if (ev['type'] === 'stdout' || ev['type'] === 'stderr') {
-            lines.push(...String(ev['text']).split('\n'));
-          }
-        });
-      return lines.map((l) => l.trim()).filter(Boolean);
-    };
-    try {
-      // One bounded find feeds the whole tree: %y = type (d/f), noise dirs are
-      // pruned but still printed (marker "p") so they show as unexpandable
-      // stubs rather than silently vanishing. Depth 3 keeps the payload small
-      // while making every expand instant — no follow-up reads.
-      const [files, git] = await Promise.all([
-        collect(
-          String.raw`find . -maxdepth 3 \( -name .git -o -name node_modules -o -name .venv -o -name __pycache__ -o -name dist \) -prune -printf "p %p\n" -o -printf "%y %p\n" 2>/dev/null | head -400`,
-        ),
-        collect('git log --oneline -3 2>/dev/null; git status --short 2>/dev/null | head -5'),
-      ]);
-      setWsTree(buildWsTree(files));
-      setWsTruncated(files.length >= 400);
-      setWsGit(git);
-    } catch (err) {
-      setWsError((err as Error).message);
-    } finally {
-      setWsLoading(false);
-    }
-  }, [activeBox, wsLoading]);
-
-  // Read once per box rather than polling: a workspace changes when something
-  // acts on it, and the dock is where you watch that happen live.
-  useEffect(() => {
-    setWsTree([]); setWsExpanded(new Set()); setWsGit([]); setWsError(null);
-    if (activeBox) void refreshWorkspace();
-    // refreshWorkspace is deliberately omitted — including it would re-read on
-    // every keystroke that changes unrelated state.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeBox?.id]);
-
-  async function runTask() {
-    const text = prompt.trim();
-    if (!text || taskRunning) return;
-    setTaskRunning(true);
-    let toastId: string | null = null;
-    try {
-      const box = await ensureBox();
-      toastId = toastPending(`Claude Code working in ${box.label}`, 'starting task in the microVM…');
-      taskProgressRef.current = { toastId, tools: 0, startedAt: Date.now() };
-      // Timeline rendering comes from the server tail subscription (single
-      // source of truth) — this POST stream only anchors the completion toast.
-      await readSse(`/api/devbox/${box.sessionId}/task`, { prompt: text, resume, model: taskModel }, (ev) => {
-        if (ev['type'] === 'result' && taskProgressRef.current) {
-          taskProgressRef.current.result = {
-            turns: Number(ev['num_turns'] ?? 0),
-            durationMs: Number(ev['duration_ms'] ?? 0),
-            costUsd: Number(ev['total_cost_usd'] ?? 0),
-          };
-        }
-      });
-      const r = taskProgressRef.current?.result;
-      toastSuccess(
-        toastId,
-        `Task complete in ${box.label}`,
-        r ? `${r.turns} turns · ${(r.durationMs / 1000).toFixed(0)}s · $${r.costUsd.toFixed(4)}` : undefined,
-      );
-      setPrompt('');
-    } catch (err) {
-      if (toastId) toastError(toastId, 'Task failed', (err as Error).message);
-      if (activeBox) timelineRef.current?.push({ kind: 'error', text: (err as Error).message });
-    } finally {
-      taskProgressRef.current = null;
-      setTaskRunning(false);
-    }
-  }
-
-
-  // ── Render ─────────────────────────────────────────────────────────────────
-
-  const computerCount = boxes.length;
-  const activeStatus: BoxStatus = activeBox?.status ?? 'idle';
 
   return (
-    <PageSection title="Computers — Claude Code in a microVM">
-      <style>{`
-        @keyframes devbox-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
-        @keyframes devbox-spin { to { transform: rotate(360deg); } }
-      `}</style>
-
-      {/* ── Slim runtime bar — global state only; per-computer controls moved
-             into each computer's header, below. ── */}
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">RUNTIME</span>
-        {status ? (
-          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold ${status.deployed ? 'bg-success-bg text-success' : 'bg-danger-bg text-danger'}`}>
-            <span aria-hidden="true" className={`w-1.5 h-1.5 rounded-full ${status.deployed ? 'bg-success' : 'bg-danger'}`} />
-            {status.deployed ? `${status.runtimeName} · deployed` : 'not deployed'}
-          </span>
-        ) : (
-          <span className={`inline-flex items-center gap-1.5 text-[11px] ${statusError ? 'text-danger font-semibold' : 'text-text-tertiary'}`}>
-            {!statusError && (
-              <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-text-tertiary" style={{ animation: 'devbox-pulse 1.2s ease-in-out infinite' }} />
-            )}
-            {statusError
-              ? (/403|Forbidden/i.test(statusError)
-                  ? 'access denied — Computers requires the HR Admin role (masquerade menu, top right)'
-                  : `status failed: ${statusError}`)
-              : 'checking runtime…'}
-          </span>
-        )}
-        <span
-          className="inline-flex items-center justify-center w-[18px] h-[18px] rounded-full border border-border text-[10px] text-text-tertiary cursor-help select-none shrink-0 hover:text-text-secondary hover:border-text-tertiary transition-colors"
-          title={'Each computer is its own runtime session — its own microVM + persistent /mnt/workspace.\nSurvives stop/resume · wiped on image redeploys and after 14 idle days · 1 GB cap.'}
-        >
-          i
-        </span>
-        <div className="flex-1" />
-        <span className="text-[10px] text-text-tertiary whitespace-nowrap select-none">
-          {computerCount} {computerCount === 1 ? 'computer' : 'computers'}
-          <span className="hidden sm:inline"> · ⌘I quick-switch</span>
-        </span>
-      </div>
-
-      {/* ── Three panes: computer list · work · workspace glance ──
-           The computer list is a vertical nav so the fleet scales past what a
-           chip bar can hold (assume up to ~20). Work — the composer and the
-           execution timeline — is the hero and takes the room. The workspace is
-           a narrow at-a-glance rail: files and git as data, with the real, only
-           interactive thing (a PTY) promoted into the computer's own header. */}
-      <div className="grid grid-cols-1 xl:grid-cols-[230px_minmax(0,1fr)_270px] gap-4 items-start">
-
-        {/* ── Col 1: COMPUTERS vertical nav ── */}
-        <Card className="!p-0 overflow-hidden xl:sticky xl:top-4">
-          <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
-            <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">COMPUTERS</span>
-            <span className="text-[10px] text-text-tertiary">{computerCount}</span>
-            <div className="flex-1" />
-            {canManage && (
-              <button
-                onClick={() => void provisionBox().catch(() => { /* toast already shown */ })}
-                disabled={provisioning}
-                title="Provision a fresh microVM computer"
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border border-dashed border-border text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors disabled:opacity-60 disabled:cursor-wait"
-              >
-                {provisioning && (
-                  <span aria-hidden="true" className="inline-block w-3 h-3 rounded-full border-[1.5px] border-primary border-t-transparent" style={{ animation: 'devbox-spin 0.8s linear infinite' }} />
-                )}
-                {provisioning ? '…' : '+ New'}
-              </button>
-            )}
-          </div>
-
-          {boxes.length === 0 ? (
-            <div className="px-3 py-8 text-[12px] text-text-tertiary text-center leading-relaxed">
-              No computers yet.<br />Create one to get a workspace.
-            </div>
-          ) : (
-            <div className="max-h-[72vh] overflow-y-auto py-1">
-              {boxes.map((box) => {
-                const st = box.status ?? 'idle';
-                const isActive = activeBox?.id === box.id;
-                const sub = (st === 'running' || st === 'waiting') && box.currentTask ? box.currentTask : STATUS_LABEL[st];
-                return (
-                  <div
-                    key={box.id}
-                    onClick={() => selectBox(box.id)}
-                    title={`${STATUS_LABEL[st]}${box.currentTask ? ` — ${box.currentTask}` : ''} · session …${box.sessionId.slice(-12)}`}
-                    className={`group relative flex items-start gap-2 px-3 py-2 cursor-pointer border-l-2 transition-colors ${isActive ? 'border-primary bg-primary/5' : 'border-transparent hover:bg-surface-hover'}`}
-                  >
-                    <span
-                      aria-hidden="true"
-                      className={`mt-[5px] w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[st]}`}
-                      style={st === 'running' ? { animation: 'devbox-pulse 1s ease-in-out infinite' } : undefined}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className={`text-[13px] font-semibold truncate ${isActive ? 'text-primary' : 'text-text-primary'}`}>{box.label}</div>
-                      <div className="text-[10.5px] text-text-tertiary truncate">{sub}</div>
-                    </div>
-                    <span
-                      onClick={(e) => { e.stopPropagation(); forgetBox(box.id); }}
-                      title="Forget this computer (workspace persists server-side until idle expiry)"
-                      className="opacity-0 group-hover:opacity-60 hover:!opacity-100 text-text-tertiary text-sm leading-none shrink-0 px-1 transition-opacity"
-                    >
-                      ×
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </Card>
-
-        {/* ── Col 2: WORK — computer header · composer · execution timeline ── */}
-        {!activeBox ? (
-          <Card className="py-16 text-center">
-            <div className="text-[13px] font-semibold text-text-secondary">No computer selected</div>
-            <div className="text-[12px] text-text-tertiary mt-1">
-              Create a computer in the list to the left, then describe a task for Claude Code.
-            </div>
-          </Card>
-        ) : (
-        <div className="flex flex-col gap-3 min-w-0">
-          {/* Computer header: identity + the per-computer actions (terminal, stop) */}
-          <Card padding="sm">
-            <div className="flex items-center gap-2.5 min-w-0 flex-wrap">
-              <span
-                aria-hidden="true"
-                className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOT[activeStatus]}`}
-                style={activeStatus === 'running' ? { animation: 'devbox-pulse 1s ease-in-out infinite' } : undefined}
-              />
-              <span className="text-sm font-semibold text-text-primary">{activeBox.label}</span>
-              <span className="text-[10px] font-semibold text-text-secondary px-1.5 py-0.5 rounded bg-surface-hover">{STATUS_LABEL[activeStatus]}</span>
-              <span className={`text-[10px] text-text-tertiary ${mono}`}>session …{activeBox.sessionId.slice(-8)}</span>
-              {activeBox.stopsInMs != null && (
-                <span
-                  className={`text-[10px] whitespace-nowrap ${activeBox.stopsInMs < 5 * 60_000 ? 'text-warning' : 'text-text-tertiary'}`}
-                  title={'This computer stops on its own after idle time and at a hard ceiling.\nThe workspace is a cache — the repository and its run history survive.'}
-                >
-                  stops in {Math.max(0, Math.round(activeBox.stopsInMs / 60_000))}m
-                </span>
-              )}
-              <div className="flex-1" />
-              {canManage && (
-                <>
-                  <button
-                    onClick={() => openShell({ id: activeBox.id, label: activeBox.label, sessionId: activeBox.sessionId })}
-                    title="Open a real PTY — ⌘' toggles the dock"
-                    className="text-[11px] px-2.5 py-1 rounded-md border border-primary/50 bg-surface font-semibold text-primary cursor-pointer hover:bg-primary hover:text-white transition-colors"
-                  >
-                    Terminal ⌘&apos;
-                  </button>
-                  <button
-                    onClick={() => void stopSession()}
-                    className="text-[11px] px-2.5 py-1 rounded-md border border-border bg-surface text-text-secondary cursor-pointer hover:text-danger hover:border-danger/50 transition-colors"
-                  >
-                    Stop
-                  </button>
-                </>
-              )}
-            </div>
-          </Card>
-
-          {/* Composer: textarea + toolbar in one frame, like a chat input.
-              Dispatching a task rides /api/devbox (ManageDevbox). */}
-          {canManage && (
-          <Card className="!p-0 overflow-hidden">
-            <div className="px-3.5 pt-3 pb-1 flex items-center gap-2">
-              <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">TASK</span>
-              <span className={`text-[10px] text-text-tertiary ${mono}`}>→ {activeBox.label}</span>
-            </div>
-            <textarea
-              className="w-full min-h-[84px] text-[13px] leading-relaxed bg-transparent text-text-primary border-none px-3.5 py-2 resize-y outline-none box-border"
-              placeholder="What should Claude Code do in the workspace? e.g. 'Scaffold a FastAPI service with tests and commit it.'"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void runTask(); }}
-            />
-            <div className="px-3.5 py-2.5 border-t border-border flex items-center gap-3 bg-surface-hover/40">
-              <label className="flex items-center gap-1.5 text-[11px] text-text-tertiary cursor-pointer select-none">
-                <input type="checkbox" checked={resume} onChange={(e) => setResume(e.target.checked)} />
-                resume conversation
-              </label>
-              {/* Offered only when the deployed runtime can honour it. A
-                  picker that silently does nothing because the image predates
-                  the feature is worse than no picker. */}
-              {status?.perTaskModel ? (
-                <select
-                  value={taskModel}
-                  onChange={(e) => setTaskModel(e.target.value)}
-                  title={TASK_MODELS.find((m) => m.id === taskModel)?.hint}
-                  className="text-[11px] bg-surface text-text-secondary border border-border rounded px-1.5 py-0.5 cursor-pointer outline-none"
-                >
-                  {TASK_MODELS
-                    .filter((m) => (status.allowedModels ?? []).includes(m.id))
-                    .map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-                </select>
-              ) : status?.defaultModel ? (
-                <span
-                  className={`text-[10px] text-text-tertiary ${mono}`}
-                  title="This runtime was deployed before per-task model selection. Redeploy the devbox image to choose a model per task."
-                >
-                  {status.defaultModel.replace(/^us\.anthropic\.claude-/, '').replace(/-\d{8}-v1:0$/, '')}
-                </span>
-              ) : null}
-              <div className="flex-1" />
-              <span className="text-[10px] text-text-tertiary select-none hidden sm:inline">⌘⏎ to run</span>
-              <button
-                onClick={() => void runTask()}
-                disabled={taskRunning || !prompt.trim()}
-                className={`inline-flex items-center gap-2 px-[18px] py-1.5 border-none rounded-md font-semibold text-[13px] whitespace-nowrap transition-colors ${taskRunning || !prompt.trim() ? 'bg-surface-hover text-text-secondary cursor-not-allowed' : 'bg-primary text-white cursor-pointer hover:opacity-90'}`}
-              >
-                {taskRunning && (
-                  <span aria-hidden="true" className="inline-block w-3.5 h-3.5 rounded-full border-2 border-white/70 border-t-transparent" style={{ animation: 'devbox-spin 0.8s linear infinite' }} />
-                )}
-                {taskRunning ? 'Running…' : '▶ Run task'}
-              </button>
-            </div>
-          </Card>
-          )}
-
-          <RunTimeline
-            ref={timelineRef}
-            boxId={activeBox.id}
-            onEvent={handleTailEvent}
-            emptyHint={<>Describe a task above and hit <b>▶ Run task</b> — every tool call Claude Code makes streams here live.</>}
-            headerExtra={
-              <>
-                <span className={`text-[10px] text-text-tertiary ${mono}`}>{activeBox.label}</span>
-                {(taskRunning || activeBox.status === 'running') && (
-                  <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-primary ml-auto">
-                    <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-primary" style={{ animation: 'devbox-pulse 1s ease-in-out infinite' }} />
-                    {taskRunning ? 'live' : 'tailing remote run (read-only)'}
-                  </span>
-                )}
-                {activeBox.status === 'waiting' && !taskRunning && (
-                  <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-warning ml-auto">
-                    <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-warning" />
-                    waiting for your feedback — reply via a new task with resume on
-                  </span>
-                )}
-              </>
-            }
-          />
-        </div>
-        )}
-
-        {/* ── Col 3: WORKSPACE glance rail ──────────────────────────────────
-             A narrow, data-only view of the computer's /mnt/workspace — the
-             file tree and git state at a glance. Deliberately not a terminal
-             look-alike: the one interactive thing (a real PTY) lives in the
-             computer header, one click away. This used to be half the page for
-             a static file list; here it is a rail, and the timeline gets the
-             room. Above it: what this computer is doing in the SDLC loop — the
-             job it's running, recent jobs, and the codebases checked out here,
-             each a link back into the surface that owns it. */}
-        <div className="flex flex-col gap-4 min-w-0 xl:sticky xl:top-4">
-        {activeBox && (liveJob || recentJobs.length > 0 || boxProjects.length > 0) && (
-          <Card className="!p-0 overflow-hidden">
-            <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
-              <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">THIS COMPUTER</span>
-            </div>
-            <div className="divide-y divide-border">
-              {liveJob && (
-                <div className="px-3 py-2 flex items-center gap-2 min-w-0">
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" style={{ animation: 'devbox-pulse 1s ease-in-out infinite' }} />
-                  <span className="text-[11px] text-text-tertiary shrink-0">running</span>
-                  <Link to={`/iq/work/${liveJob.id}`} className="text-[12px] text-primary no-underline hover:underline truncate">
-                    {liveJob.title}
-                  </Link>
-                </div>
-              )}
-              {recentJobs.map((j) => (
-                <div key={j.id} className="px-3 py-2 flex items-center gap-2 min-w-0">
-                  <span className="text-[11px] text-text-tertiary shrink-0">{j.status.replace('_', ' ')}</span>
-                  <Link to={`/iq/work/${j.id}`} className="text-[12px] text-text-secondary no-underline hover:text-primary hover:underline truncate">
-                    {j.title}
-                  </Link>
-                </div>
-              ))}
-              {boxProjects.map((p) => (
-                <div key={p.id} className="px-3 py-2 flex items-center gap-2 min-w-0 flex-wrap">
-                  <span className="text-[11px] text-text-tertiary shrink-0">checked out</span>
-                  <Link
-                    to={`/admin/projects?project=${p.id}`}
-                    className={`text-[12px] text-text-secondary no-underline hover:text-primary hover:underline truncate ${mono}`}
-                  >
-                    {p.repoFullName}
-                  </Link>
-                  {p.orgProjectId && p.orgProjectName && (
-                    <Link
-                      to={`/iq/projects/${p.orgProjectId}`}
-                      title={`Delivers: ${p.orgProjectName}`}
-                      className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary no-underline hover:underline truncate shrink-0 max-w-full"
-                    >
-                      {p.orgProjectName}
-                    </Link>
-                  )}
-                </div>
-              ))}
-            </div>
-          </Card>
-        )}
-        <Card className="!p-0 overflow-hidden">
-          <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
-            <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">WORKSPACE</span>
-            <div className="flex-1" />
-            <button
-              onClick={() => void refreshWorkspace()}
-              disabled={!activeBox || wsLoading}
-              className="text-[11px] px-2 py-0.5 rounded border border-border bg-surface text-text-secondary cursor-pointer hover:text-primary disabled:opacity-40"
-            >
-              {wsLoading ? 'reading…' : 'refresh'}
-            </button>
-          </div>
-
-          {!activeBox ? (
-            <div className="px-3 py-6 text-[12px] text-text-tertiary text-center">
-              Select a computer to see its workspace.
-            </div>
-          ) : wsError ? (
-            <div className="px-3 py-4 text-[12px] text-danger">{wsError}</div>
-          ) : (
-            <div className="divide-y divide-border">
-              <div className="px-3 py-1.5 text-[10px] text-text-tertiary flex items-center gap-1.5">
-                <span className={mono}>/mnt/workspace</span>
-                <span className="text-text-tertiary/60">· cache — push work out via git</span>
-              </div>
-              <div className="px-3 py-2.5">
-                <div className="text-[10px] uppercase tracking-wide text-text-tertiary mb-1.5">Files</div>
-                {wsTree.length === 0 ? (
-                  <div className="text-[12px] text-text-tertiary">
-                    {wsLoading ? 'reading…' : 'Empty — nothing written yet.'}
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-0.5 max-h-[46vh] overflow-y-auto">
-                    <WsTreeRows nodes={wsTree} depth={0} expanded={wsExpanded} onToggle={toggleWsDir} />
-                  </div>
-                )}
-                {wsTruncated && (
-                  <div className="text-[11px] text-text-tertiary mt-1">listing capped at 400 entries — open a terminal for the rest</div>
-                )}
-              </div>
-
-              <div className="px-3 py-2.5">
-                <div className="text-[10px] uppercase tracking-wide text-text-tertiary mb-1.5">Git</div>
-                {wsGit.length === 0 ? (
-                  <div className="text-[12px] text-text-tertiary">
-                    {wsLoading ? 'reading…' : 'Not a git repository.'}
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-0.5">
-                    {wsGit.map((l, i) => (
-                      <span key={i} className={`text-[12px] text-text-secondary truncate ${mono}`} title={l}>{l}</span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </Card>
-        </div>
-      </div>
-    </PageSection>
+    <ComputeProvider
+      clientOptions={{ baseUrl: '/api/devbox', credentials: 'include' }}
+      canManage={canManage}
+      // The whole router is ManageDevbox-gated, so a viewer without it would
+      // poll a 403 every five seconds. Off rather than noisy.
+      enabled={canManage}
+      // Real fleet only. Fixtures are for stories; a sample computer here would
+      // be indistinguishable from a real one you simply could not connect to.
+      useFixtures={false}
+      models={DEVBOX_MODELS}
+      projects={projects}
+      onNotify={notify}
+    >
+      {/*
+        The lab IS the page, not a mode you enter from it. The old page put a
+        fleet list in front of the work and made the terminal the thing you
+        opened afterwards, which is backwards for a surface whose entire purpose
+        is having several shells open at once. `onClose` is a no-op here for the
+        same reason: there is nothing behind it to return to.
+      */}
+      <ComputerLab open onClose={() => {}} />
+    </ComputeProvider>
   );
 }

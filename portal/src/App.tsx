@@ -317,8 +317,14 @@ export function App() {
               <Page element={<ChangesPage />} />
             </RequireRole>
           } />
+          {/* Computers is also an `sme` surface: the role spends a sprint
+              envelope by assigning computers to work, and is the one that has
+              to get into a cluster and run a command. The fleet an SME sees is
+              scoped server-side to their own computers plus the ones shared on
+              their initiatives (middleware lib/devbox-visibility.ts), so this
+              opens a door rather than handing over a key. */}
           <Route path="devbox" element={
-            <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
+            <RequireRole roles={['hr-admin', 'sme']} fallback={<Navigate to="/" replace />}>
               <Page element={<DevboxPage />} />
             </RequireRole>
           } />
