@@ -11,7 +11,7 @@
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1045.0",
     "@connorhoehnslalom/realtime-modules": "github:connorhoehnslalom/realtime-modules#045a56fdedbbec108ec6f1607823ddcb0f10ab8e",
-    "@connorhoehnslalom/ui-components": "github:connorhoehnslalom/ui-components#932f444a9eefe3f4a1c93c4950bc8aef8ed0650a",
+    "@connorhoehnslalom/ui-components": "github:connorhoehnslalom/ui-components#a8cab307774fc7f96bc01cc92efcdf4c884f3b96",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "@xyflow/react": "^12.10.0",
