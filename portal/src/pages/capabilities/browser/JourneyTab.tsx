@@ -1,18 +1,7 @@
 import { useState } from 'react';
-import {
-  Button,
-  Card,
-  Inline,
-  InlineAlert,
-  InlinePlaceholder,
-  Input,
-  MetaLine,
-  SegmentedControl,
-  Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, Inline, InlineAlert, InlinePlaceholder, Input, MetaLine, SectionLabel, SegmentedControl, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../../lib/capabilities';
 import { useFetch } from '../../../hooks/useFetch';
-import { SectionLabel } from '../_shared/SectionLabel';
 import { JourneyCarousel } from './JourneyCarousel';
 import { JourneyTimeline } from './JourneyTimeline';
 import { SESSIONS_URL, closeSession, journeyUrl, launchSession, navigateSession } from './browserApi';

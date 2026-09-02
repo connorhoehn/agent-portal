@@ -1,19 +1,5 @@
 import { useState } from 'react';
-import {
-  Button,
-  Card,
-  Chip,
-  DetailHeader,
-  FilterChip,
-  FormField,
-  FormRow,
-  Inline,
-  InlineAlert,
-  Input,
-  Stack,
-  Textarea,
-} from '@connorhoehnslalom/ui-components/shared';
-import { SectionLabel } from '../_shared/SectionLabel';
+import { Button, Card, Chip, DetailHeader, FilterChip, FormField, FormRow, Inline, InlineAlert, Input, SectionLabel, Stack, Textarea } from '@connorhoehnslalom/ui-components/shared';
 import { InferenceSettings, type InferenceSettingsValue } from './InferenceSettings';
 import { STARTER_TEMPLATES } from './starterTemplates';
 import {

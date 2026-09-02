@@ -1,17 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  Button,
-  Card,
-  Chip,
-  DetailHeader,
-  FormField,
-  Inline,
-  InlineAlert,
-  Input,
-  SkeletonCard,
-  Stack,
-} from '@connorhoehnslalom/ui-components/shared';
-import { SectionLabel } from '../_shared/SectionLabel';
+import { Button, Card, Chip, DetailHeader, FormField, Inline, InlineAlert, Input, SectionLabel, SkeletonCard, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { InferenceSettings, type InferenceSettingsValue } from './InferenceSettings';
 import { LineNumberedTextarea } from './LineNumberedTextarea';
 import { TemplateHighlighted } from './TemplateHighlighted';

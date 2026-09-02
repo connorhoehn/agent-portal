@@ -1,5 +1,4 @@
-import { Card, FormField, FormRow, Input, Select, Stack } from '@connorhoehnslalom/ui-components/shared';
-import { SectionLabel } from '../_shared/SectionLabel';
+import { Card, FormField, FormRow, Input, SectionLabel, Select, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { DEFAULT_TEMPERATURE, MAX_TOKEN_OPTIONS } from './promptFormat';
 
 /**

@@ -1,12 +1,5 @@
 import { useState } from 'react';
-import {
-  Button,
-  DetailHeader,
-  InlineAlert,
-  SkeletonCard,
-  Stack,
-} from '@connorhoehnslalom/ui-components/shared';
-import { SectionLabel } from '../_shared/SectionLabel';
+import { Button, DetailHeader, InlineAlert, SectionLabel, SkeletonCard, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { AssistPanel } from './AssistPanel';
 import { GuardrailBanner, GuardrailSelect } from './GuardrailControls';
 import { VariableInput } from './VariableInput';

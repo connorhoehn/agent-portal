@@ -1,16 +1,5 @@
-import {
-  Button,
-  Chip,
-  DetailHeader,
-  Inline,
-  InlineAlert,
-  InlinePlaceholder,
-  MetaLine,
-  SkeletonCard,
-  Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+import { Button, Chip, DetailHeader, Inline, InlineAlert, InlinePlaceholder, MetaLine, SectionLabel, SkeletonCard, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { relativeTime } from '../../../lib/relativeTime';
-import { SectionLabel } from '../_shared/SectionLabel';
 import { TemplateHighlighted } from './TemplateHighlighted';
 import { VersionSelect } from './VersionSelect';
 import { extractVariables } from './promptFormat';

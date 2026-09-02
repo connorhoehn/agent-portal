@@ -1,16 +1,6 @@
 import { useState } from 'react';
-import {
-  Button,
-  CatalogGrid,
-  Card,
-  Inline,
-  InlineAlert,
-  InlinePlaceholder,
-  Input,
-  Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, CatalogGrid, Inline, InlineAlert, InlinePlaceholder, Input, SectionLabel, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../../lib/capabilities';
-import { SectionLabel } from '../_shared/SectionLabel';
 import { askPage } from './browserApi';
 import type { WebQAResult } from './types';
 
