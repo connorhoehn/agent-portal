@@ -50,7 +50,9 @@ export function resolveAgentSpend(
 
 export function AgentSpendStat(inputs: AgentSpendInputs) {
   const { value, label, title } = resolveAgentSpend(inputs);
-  // StatCard has no tooltip prop, but `label` takes a ReactNode — so the
-  // provenance rides on the caption rather than on a wrapper element.
-  return <StatCard label={<span title={title}>{label}</span>} value={value} />;
+  // StatCard now carries the tooltip itself. It used to ride on a <span> inside
+  // `label`, which meant the provenance — including the load-bearing "unknown,
+  // not zero" — only appeared while hovering four words of uppercase caption,
+  // and not over the $0.00 that prompts the question.
+  return <StatCard label={label} value={value} title={title} />;
 }
