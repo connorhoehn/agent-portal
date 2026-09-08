@@ -4,6 +4,7 @@ import os
 import sys
 import time
 from contextvars import ContextVar
+from typing import AsyncIterator
 from pathlib import Path
 
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
@@ -14,6 +15,11 @@ from strands.models.bedrock import BedrockModel
 # the same way every other agent does.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.prompt_source import LiveAgent  # noqa: E402
+from _shared.agui_stream import (  # noqa: E402
+    agui_events_for_text,
+    run_error_event,
+    wants_stream,
+)
 from _shared.tenant_guard import reject_wrong_tenant  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
     TraceContext,
@@ -253,7 +259,38 @@ def _validate_payload(payload: dict) -> str | None:
 
 
 @app.entrypoint
-async def handle(payload: dict) -> dict:
+async def handle(payload: dict) -> AsyncIterator | dict:
+    """AG-UI stream when asked for one, dict for A2A callers.
+
+    Unlike the other agents this does NOT stream the model's tokens. Every path
+    through ``_handle_sync`` ends in a deterministic backstop —
+    ``scrub_forbidden_promises`` for a story, ``validate_context_facts`` (which
+    fails closed) for context — and those exist precisely to keep certain text
+    from reaching the caller. Emitting deltas as the model produced them would
+    hand over the unscrubbed, unvalidated draft first and leave the backstops
+    with nothing left to protect. So the run completes, the backstops apply, and
+    the validated answer is emitted as AG-UI events: same protocol and same
+    consumers, one content event instead of many.
+    """
+    result = await _handle_sync(payload)
+    if wants_stream(payload):
+        return _stream_result(result)
+    return result
+
+
+async def _stream_result(result: dict) -> AsyncIterator:
+    """The dict from ``_handle_sync`` as AG-UI events."""
+    error = result.get("error")
+    if error:
+        # The agents' error envelope becomes a terminal AG-UI event, so the
+        # middleware marks the run failed instead of rendering a blank answer.
+        yield run_error_event(str(error), code="assessment_drafter_stream_error")
+        return
+    for event in agui_events_for_text(result.get("response") or ""):
+        yield event
+
+
+async def _handle_sync(payload: dict) -> dict:
     if not isinstance(payload, dict):
         payload = {}
 
