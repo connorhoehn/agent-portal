@@ -63,6 +63,8 @@ import {
 } from 'recharts';
 import { useFetch } from '../../hooks/useFetch';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { firstDegraded } from '../../lib/degraded';
 import { T } from './Text';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -142,7 +144,9 @@ function defaultLabel(): string {
 
 function CalibrationPage() {
   const { toast } = useToast();
-  const { data: casesData, refresh: refreshCases } = useFetch<CasesResp>(
+  const {
+    data: casesData, error: casesError, refresh: refreshCases,
+  } = useFetch<CasesResp>(
     '/api/observability/calibration/cases',
     30_000,
   );
@@ -150,6 +154,11 @@ function CalibrationPage() {
     '/api/observability/calibration/runs?limit=14',
     30_000,
   );
+
+  // "No calibration runs" is advice to go seed some. When the read failed, the
+  // cases may well already be there — and "+ Run calibration" is disabled off
+  // `cases.length`, so a broken read also silently removes the way out.
+  const calibrationDegraded = firstDegraded(casesData, runsData);
 
   const cases = useMemo(() => casesData?.cases ?? [], [casesData]);
   const runs = useMemo(() => runsData?.runs ?? [], [runsData]);
@@ -263,6 +272,16 @@ function CalibrationPage() {
         </Button>
       }
     >
+      {(casesError || calibrationDegraded) && (
+        <UnavailableNotice
+          error={casesError ?? calibrationDegraded ?? 'the calibration query failed'}
+          what="calibration cases and runs"
+          source="Cases and runs live in the Aurora observability tables"
+          onRetry={() => { refreshCases(); refreshRuns(); }}
+          className="mb-4"
+        />
+      )}
+
       {/* Header */}
       <Card padding="md">
         <Inline gap="sm" align="center" className="text-[12px] text-text-secondary">
@@ -293,6 +312,10 @@ function CalibrationPage() {
           <SmartEmptyState
             title="No calibration runs"
             detail="A calibration run scores the active test cases with the LLM-as-judge and compares them against human-labelled ground truth."
+            degraded={calibrationDegraded}
+            degradedWhat="the calibration run history"
+            degradedSource="Cases and runs live in the Aurora observability tables"
+            onRetry={() => { refreshCases(); refreshRuns(); }}
             actions={[
               {
                 label: 'Seed cases + kick off a calibration run',
@@ -376,7 +399,7 @@ function CalibrationPage() {
           subtitle={`latest run · diagonal = perfect agreement · above = judge over-rates · below = judge under-rates${latestRun?.run.label ? ` · ${latestRun.run.label}` : ''}`}
         />
         {scatterPoints.length === 0 ? (
-          <EmptyState text="No paired scores in the latest run." />
+          <EmptyState text="No paired scores in the latest run." degraded={calibrationDegraded} />
         ) : (
           <Stack className="w-full h-[320px]">
             <ResponsiveContainer>
@@ -436,7 +459,7 @@ function CalibrationPage() {
           subtitle={`top ${worstResults.length} cases by |judge − human| · click to expand response`}
         />
         {worstResults.length === 0 ? (
-          <EmptyState text="No disagreements yet — run a calibration first." />
+          <EmptyState text="No disagreements yet — run a calibration first." degraded={calibrationDegraded} />
         ) : (
           <Table>
             <TableHead>
@@ -523,7 +546,10 @@ function CalibrationPage() {
           }
         />
         {cases.length === 0 ? (
-          <EmptyState text="No active calibration cases. Add one above or run infra/scripts/seed_calibration_cases.py." />
+          <EmptyState
+            text="No active calibration cases. Add one above or run infra/scripts/seed_calibration_cases.py."
+            degraded={calibrationDegraded}
+          />
         ) : (
           <Table>
             <TableHead>
@@ -828,7 +854,15 @@ function CaseEditor({
   );
 }
 
-function EmptyState({ text }: { text: string }) {
+// Row-level "nothing here" that will not say so when it does not know.
+function EmptyState({ text, degraded }: { text: string; degraded?: string | null }) {
+  if (degraded) {
+    return (
+      <T as="div" className="p-6 text-center text-[12px] text-danger">
+        Unknown — this read failed ({degraded}).
+      </T>
+    );
+  }
   return (
     <T as="div" className="p-6 text-center text-[12px] text-text-tertiary">
       {text}

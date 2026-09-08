@@ -3,7 +3,7 @@ role: hr-admin
 user: u-rachel (Rachel Kowalski) — verified via GET /api/session/me on this surface (sub u-rachel, role hr-admin, tenant orgiq)
 url: /admin/projects
 pages: portal/src/pages/admin
-audited: 2026-09-06 08:08 local, Chrome 1552px, middleware dev:mock
+audited: 2026-09-08 03:30 local, Chrome 1552px (innerWidth 1552), middleware dev:mock (re-audit: shares portal/src/pages/admin with the KB tabs, which changed)
 screenshot: codebases.jpg
 verdict: pass
 console errors: 0
@@ -11,4 +11,4 @@ layout: pass — content col left 224px w 1304px; breadcrumb "Build › Codebase
 keyboard: pass — 73 controls counted, 73 reached by a 76-press Tab sweep (rail → + Link a repository → Connections → Add one here → per card the repo `<a href="https://github.com/…">`, unlink, Clone into workspace → wraps); Enter on the focused "+ Link a repository" opens an inline form (Credential select "none (public repo)", "Paste a GitHub URL (https:// or git@…) or owner/name" input, Initiative select, Link button, Cancel) with focus on Cancel; Enter on Cancel closes it and returns focus to "+ Link a repository" (nothing submitted)
 empty-state: n/a — no search or filter on this registry; each card carries its own honest empty lines ("Not in a workspace yet." with a Clone into workspace action, "Nothing has been run against this yet.")
 role-gating: hr-admin-only surface (App.tsx RequireRole hr-admin); the rail entry "Codebases" exists only for this role, and every card exposes unlink + Clone into workspace, both write actions (not pressed — cloning provisions a workspace)
-notes: the registry now holds the 14 `p-*` initiative repos (one per initiative, all public), matching the repo links shown on Initiatives; Discover stays disabled until a GitHub connection exists and says so inline rather than failing on click. The first-card measurement was taken with the link form closed; with it open the grid starts at 429px.
+notes: the registry now holds the 14 `p-*` initiative repos (one per initiative, all public), matching the repo links shown on Initiatives; Discover stays disabled until a GitHub connection exists and says so inline rather than failing on click. The first-card measurement was taken with the link form closed; with it open the grid starts at 429px. Re-audit 2026-09-08: renders from `pages/admin`, where the KB detail's Documents and Ingestion-jobs tabs learned to render a degraded listing (`{documents: [], total: 0, degraded, error}` / `{jobs: [], degraded, error}`) instead of "No documents ingested yet." and "No ingestion jobs found." Codebases reads neither endpoint and is unchanged. Re-measured: content col left 224px w 1304px, first repository card row top 282px, no horizontal scroll (scrollWidth 1552 = innerWidth), 74 tabbable controls, no failure notice in the DOM, console errors 0; every repo card still reads the honest "Not in a workspace yet." / "Nothing has been run against this yet."

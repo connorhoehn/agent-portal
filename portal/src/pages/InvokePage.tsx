@@ -170,7 +170,12 @@ const isWriteAgent = (agentId: string): boolean => WRITE_AGENT_RE.test(agentId.t
 
 function InvokePage() {
   const { roster: peers } = usePresence('invoke');
-  const { data: agents } = useFetch<AgentDef[]>('/api/agents');
+  // `/api/agents` answers `{ agents, degraded?, error? }` — an object, not a
+  // bare array, so that a failed ListAgentRuntimes can say so instead of
+  // arriving as an empty fleet. Here the fleet only fills a selector; the
+  // stream's own error surface covers a broken invoke.
+  const { data: agentsResp } = useFetch<{ agents: AgentDef[] }>('/api/agents');
+  const agents = agentsResp?.agents;
   const { can } = useCapabilities();
 
   // Hide the write agents from the selector unless the caller holds

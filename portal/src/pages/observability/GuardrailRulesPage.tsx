@@ -28,6 +28,8 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { GuardrailRuleBadge } from '../../components/observability/GuardrailRuleBadge';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { firstDegraded } from '../../lib/degraded';
 import { T } from './Text';
 
 // ── Types (mirrored from middleware/src/routes/guardrails-detail.ts) ───────
@@ -81,7 +83,7 @@ function GuardrailRulesPage() {
   const [windowIdx, setWindowIdx] = useState(2); // 24h
   const win = WINDOW_OPTIONS[windowIdx];
 
-  const { data } = useFetch<ByRuleResponse>(
+  const { data, error, refresh } = useFetch<ByRuleResponse>(
     `/api/observability/guardrails-detail/by-rule?windowHours=${win.hours}`,
     30_000,
   );
@@ -101,17 +103,36 @@ function GuardrailRulesPage() {
     [intData],
   );
 
+  // "No interventions yet" is a RELIEF on this page — it says the guardrails
+  // are quiet. That makes it exactly the wrong thing to render when the query
+  // that would have found them failed.
+  const guardrailsDegraded = firstDegraded(data, intData);
+
   return (
     <PageSection
       title="Guardrail Rules"
       description={`${totalFires} intervention${totalFires === 1 ? '' : 's'} across ${rules.length} rule${rules.length === 1 ? '' : 's'} · last ${win.label}`}
       actions={<WindowPicker value={windowIdx} onChange={(i) => { setWindowIdx(i); setSelectedRule(null); }} />}
     >
+      {(error || guardrailsDegraded) && (
+        <UnavailableNotice
+          error={error ?? guardrailsDegraded ?? 'the guardrail query failed'}
+          what="guardrail interventions"
+          source="Interventions are read from the Aurora observability tables"
+          onRetry={refresh}
+          className="mb-4"
+        />
+      )}
+
       <Card padding="md">
         {rules.length === 0 ? (
           <SmartEmptyState
             title="No interventions yet"
             detail="Rules surface here as soon as Bedrock Guardrails fires a block or anonymize action."
+            degraded={guardrailsDegraded}
+            degradedWhat="the guardrail rule rollup"
+            degradedSource="Interventions are read from the Aurora observability tables"
+            onRetry={refresh}
             actions={[
               {
                 label: 'Seed synthetic guardrail interventions',
@@ -183,7 +204,7 @@ function GuardrailRulesPage() {
             }
           />
           {interventions.length === 0 ? (
-            <EmptyState text="No interventions captured for this rule yet." />
+            <EmptyState text="No interventions captured for this rule yet." degraded={guardrailsDegraded} />
           ) : (
             <Table>
               <TableHead>
@@ -267,7 +288,15 @@ function WindowPicker({ value, onChange }: { value: number; onChange: (i: number
   );
 }
 
-function EmptyState({ text }: { text: string }) {
+// Row-level "nothing here" that will not say so when it does not know.
+function EmptyState({ text, degraded }: { text: string; degraded?: string | null }) {
+  if (degraded) {
+    return (
+      <T as="div" className="p-6 text-center text-[12px] text-danger">
+        Unknown — this read failed ({degraded}).
+      </T>
+    );
+  }
   return (
     <T as="div" className="p-6 text-center text-[12px] text-text-tertiary">
       {text}

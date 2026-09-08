@@ -15,6 +15,7 @@
 //   GET  /api/observability/approvals/:id          APPROVALS_REQUEST_SECRET       x-approvals-auth
 //   POST /api/observability/harness/trace          HARNESS_TRACE_SECRET           x-harness-auth
 //   POST /api/assessment/runs/:runId/complete      ASSESSMENT_RUN_COMPLETE_SECRET x-assessment-run-auth
+//   the harness runner's control plane (below)     HARNESS_RUNNER_SECRET          x-harness-runner-auth
 //
 // TWO GUARD SHAPES, and the difference matters:
 //
@@ -72,6 +73,34 @@ export const HARNESS_TRACE_SERVICE_AUTH: ServiceAuthSpec = {
 export const ASSESSMENT_RUN_COMPLETE_SERVICE_AUTH: ServiceAuthSpec = {
   envVar: 'ASSESSMENT_RUN_COMPLETE_SECRET',
   header: 'x-assessment-run-auth',
+};
+
+/**
+ * The harness RUNNER's identity — `infra/scripts/harness.py`.
+ *
+ * WHY A SECOND HARNESS SECRET. `HARNESS_TRACE_SECRET` unlocks exactly one
+ * write-only sink (`POST /harness/trace`) that agents also post to. The runner
+ * needs something else: it creates a run row, registers a prompt version,
+ * records results, patches the run to `done` and reads runs back — all of them
+ * session-gated routes that a human portal user also uses. Handing the fleet's
+ * trace secret those authorities would widen a credential that is deployed to
+ * nine agent runtimes into one that can write the harness control plane; and
+ * handing the runner an operator's *session cookie* is worse still — a signed
+ * cookie carries a real person's grants (masquerade among them), expires under
+ * `session_epoch` within 120s of any role switch, and cannot be rotated without
+ * that person losing their session. A scoped machine credential is the honest
+ * shape: it names the runner, not a person, and it opens only the routes it is
+ * attached to.
+ *
+ * ALWAYS `serviceAuthOr`, NEVER `requireServiceAuth`. These routes are read and
+ * written by humans in the portal, so they must keep their session + Cedar
+ * gates for everyone who is not the runner — and with `HARNESS_RUNNER_SECRET`
+ * unset they behave exactly as they did before this spec existed. That is what
+ * makes wiring it a no-op until an operator mints the secret.
+ */
+export const HARNESS_RUNNER_SERVICE_AUTH: ServiceAuthSpec = {
+  envVar: 'HARNESS_RUNNER_SECRET',
+  header: 'x-harness-runner-auth',
 };
 
 export const LAB_CALLBACK_SERVICE_AUTH: ServiceAuthSpec = {

@@ -39,6 +39,8 @@ import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { CostChip } from '../../components/observability/CostChip';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { firstDegraded } from '../../lib/degraded';
 import { T } from './Text';
 
 interface QualityScore {
@@ -81,7 +83,13 @@ function QualityPage() {
   // Reuse the drift summary endpoint just to populate the agent picker — both
   // pages share the same set of sampled agents. If it 404s, fall back to an
   // empty list; user can still pick once the endpoint returns data.
-  const { data: agentsSummary } = useFetch<DriftSummaryRow[]>(
+  // Healthy: a bare array. Failed: `{ agents: [], degraded, error }` — an
+  // array cannot carry a marker, so the failure changes shape. The
+  // `Array.isArray` guard below is exactly what used to swallow it: a broken
+  // drift query left the agent picker reading "(no agents)".
+  const { data: agentsSummary } = useFetch<
+    DriftSummaryRow[] | { agents?: DriftSummaryRow[]; degraded?: boolean; error?: string }
+  >(
     '/api/observability/drift/summary?windowHours=1',
     30_000,
   );
@@ -103,7 +111,11 @@ function QualityPage() {
   const scoresUrl = selectedAgent
     ? `/api/observability/quality/scores?agentId=${encodeURIComponent(selectedAgent)}&since=${encodeURIComponent(since)}`
     : '';
-  const { data: scoresData, refresh } = useFetch<{ points?: QualityScore[] } | QualityScore[]>(scoresUrl, 30_000);
+  const {
+    data: scoresData, error: scoresError, refresh,
+  } = useFetch<{ points?: QualityScore[] } | QualityScore[]>(scoresUrl, 30_000);
+  // Either read can fail: the picker's agent list, or this agent's scores.
+  const qualityDegraded = firstDegraded(agentsSummary, scoresData);
   const scores = useMemo<QualityScore[]>(
     () => Array.isArray(scoresData) ? scoresData : (scoresData?.points ?? []),
     [scoresData],
@@ -201,12 +213,26 @@ function QualityPage() {
         />
       }
     >
+      {(scoresError || qualityDegraded) && (
+        <UnavailableNotice
+          error={scoresError ?? qualityDegraded ?? 'the judge-score query failed'}
+          what="judge scores"
+          source="Scores are read from the sampled invocation traces in Aurora"
+          onRetry={refresh}
+          className="mb-4"
+        />
+      )}
+
       <Card padding="md">
 
         {chartData.length === 0 ? (
           <SmartEmptyState
             title="No judge scores yet"
             detail="Quality charts populate once invocations are sampled and scored by the LLM-as-judge."
+            degraded={qualityDegraded}
+            degradedWhat="the judge-score chart"
+            degradedSource="Scores are read from the sampled invocation traces in Aurora"
+            onRetry={refresh}
             actions={[
               {
                 label: 'Run the test harness',
@@ -314,7 +340,7 @@ function QualityPage() {
         </Inline>
 
         {tableRows.length === 0 ? (
-          <EmptyState text="No invocations to review yet." />
+          <EmptyState text="No invocations to review yet." degraded={qualityDegraded} />
         ) : (
           <Table>
             <TableHead>
@@ -436,7 +462,15 @@ function FeedbackBtn({
   );
 }
 
-function EmptyState({ text }: { text: string }) {
+// Row-level "nothing here" that will not say so when it does not know.
+function EmptyState({ text, degraded }: { text: string; degraded?: string | null }) {
+  if (degraded) {
+    return (
+      <Inline as="div" justify="center" className="p-6 text-[12px] text-danger">
+        Unknown — this read failed ({degraded}).
+      </Inline>
+    );
+  }
   return (
     <Inline as="div" justify="center" className="p-6 text-[12px] text-[var(--color-text-tertiary)]">
       {text}

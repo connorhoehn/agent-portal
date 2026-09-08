@@ -15,6 +15,10 @@ from strands.models.bedrock import BedrockModel
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.prompt_source import LiveAgent
 from _shared.sql_guard import read_only_error  # noqa: E402
+from _shared.db_credentials import (  # noqa: E402
+    credential_diagnosis,
+    read_secret_arn as _read_secret_arn,
+)
 from _shared.instrumentation import (  # noqa: E402
     TraceContext,
     install_bedrock_usage_capture,
@@ -47,6 +51,12 @@ from _shared.kb_resolver import resolve_kb_id as _resolve_kb_id
 KB_ID: str = _resolve_kb_id("orgiq", "default") or ""
 AURORA_CLUSTER_ARN = os.environ.get("AURORA_CLUSTER_ARN", "")
 AURORA_SECRET_ARN = os.environ.get("AURORA_SECRET_ARN", "")
+# Reads go through `orgiq_graph_reader` when it is configured — a role
+# PostgreSQL will not let write. Falls back to the admin credential when it
+# is not, which is every environment that has not yet applied
+# schema/graph_readonly_role.sql. See _shared/db_credentials.py.
+GRAPH_READ_SECRET_ARN = _read_secret_arn()
+log.info("orgiq.db: %s", credential_diagnosis())
 DB_NAME = os.environ.get("PROJECT_PREFIX", "orgiq")
 MODEL_ID = os.environ.get("MODEL_ID", "amazon.nova-pro-v1:0")
 
@@ -110,6 +120,10 @@ def query_graph(sql: str) -> str:
         JOIN people pb ON pb.id = c.person_b_id
         ORDER BY c.weight DESC LIMIT 10
 
+    Only the node/edge tables listed above are readable — the query runs under a
+    SELECT-only database role whose grant covers exactly them, so a query against
+    any other table is refused by PostgreSQL. Writes of any kind are refused too.
+
     Args:
         sql: PostgreSQL SELECT (or WITH ... SELECT) statement.
 
@@ -124,9 +138,17 @@ def query_graph(sql: str) -> str:
     if _err:
         return json.dumps({"error": _err})
 
+    # Braces, not just belt: when AURORA_READONLY_SECRET_ARN is set this runs
+    # as `orgiq_graph_reader`, which holds SELECT on the graph tables and
+    # nothing else, in a session pinned to default_transaction_read_only. A
+    # write that somehow slipped past the guard above is refused by the engine.
+    # NOTE the absence of a retry on the admin credential: a permission error
+    # here means the grant was never applied, and falling back to a writable
+    # login on an error an attacker can provoke would give away the boundary.
+
     resp = _rds.execute_statement(
         resourceArn=AURORA_CLUSTER_ARN,
-        secretArn=AURORA_SECRET_ARN,
+        secretArn=GRAPH_READ_SECRET_ARN,
         database=DB_NAME,
         sql=sql,
         includeResultMetadata=True,

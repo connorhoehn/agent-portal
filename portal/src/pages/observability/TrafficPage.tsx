@@ -43,6 +43,8 @@ import {
 } from 'recharts';
 import { useFetch } from '../../hooks/useFetch';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { firstDegraded } from '../../lib/degraded';
 import { TrafficHeatmapFrame } from './TrafficHeatmapFrame';
 import { T } from './Text';
 
@@ -207,7 +209,7 @@ function TrafficPage() {
   const [windowIdx, setWindowIdx] = useState(1); // 24h default
   const win = WINDOW_OPTIONS[windowIdx];
 
-  const { data: rpsData } = useFetch<RpsResponse>(
+  const { data: rpsData, error: rpsError, refresh: refreshRps } = useFetch<RpsResponse>(
     `/api/observability/traffic/rps?windowHours=${win.hours}&bucketMin=${win.bucket}`,
     30_000,
   );
@@ -223,6 +225,11 @@ function TrafficPage() {
     `/api/observability/traffic/per-agent-summary?windowHours=${win.hours}`,
     30_000,
   );
+
+  // All four panels read the same trace tables. When that read fails these
+  // endpoints still answer 200 with empty collections, which draws as a
+  // perfectly quiet system — so say it once, at the top, with the reason.
+  const trafficDegraded = firstDegraded(rpsData, heatmapData, topUsersData, perAgentData);
 
   const rpsPoints = useMemo(() => rpsData?.points ?? [], [rpsData]);
   const heatmapCells = useMemo(() => heatmapData?.cells ?? [], [heatmapData]);
@@ -292,6 +299,16 @@ function TrafficPage() {
       description={headerSubline}
       actions={<WindowPicker value={windowIdx} onChange={setWindowIdx} />}
     >
+      {(rpsError || trafficDegraded) && (
+        <UnavailableNotice
+          error={rpsError ?? trafficDegraded ?? 'the traffic query failed'}
+          what="traffic data"
+          source="Requests are counted from the invocation traces in Aurora"
+          onRetry={refreshRps}
+          className="mb-4"
+        />
+      )}
+
       <Card padding="md">
         <StatStrip
           frameless
@@ -325,6 +342,10 @@ function TrafficPage() {
           <SmartEmptyState
             title="No traffic"
             detail="RPS, heatmap, and top-user panels populate once traces land. Backfill user_id columns afterward so the top-user table is non-empty."
+            degraded={trafficDegraded}
+            degradedWhat="the traffic chart"
+            degradedSource="Requests are counted from the invocation traces in Aurora"
+            onRetry={refreshRps}
             actions={[
               {
                 label: 'Run the test harness',
@@ -382,7 +403,7 @@ function TrafficPage() {
           subtitle={`last 7 days · cell = invocations in that hour · peak ${fmtInt(heatmapGrid.max)}`}
         />
         {heatmapGrid.max === 0 ? (
-          <EmptyState text="No traffic recorded over the last 7 days." />
+          <EmptyState text="No traffic recorded over the last 7 days." degraded={trafficDegraded} />
         ) : (
           <TrafficHeatmapFrame grid={heatmapGrid.grid} max={heatmapGrid.max} />
         )}
@@ -395,7 +416,10 @@ function TrafficPage() {
           subtitle="by invocation count · click to drill into per-user search"
         />
         {topUsers.length === 0 ? (
-          <EmptyState text="No user_id stamped traffic in this window — backfill with infra/scripts/seed_user_ids_on_traces.py." />
+          <EmptyState
+            text="No user_id stamped traffic in this window — backfill with infra/scripts/seed_user_ids_on_traces.py."
+            degraded={trafficDegraded}
+          />
         ) : (
           <Table>
             <TableHead>
@@ -442,7 +466,7 @@ function TrafficPage() {
           subtitle={`RPS / latency / error rate / low-quality rate / cost · window ${win.label}`}
         />
         {perAgent.length === 0 ? (
-          <EmptyState text="No agents observed in this window." />
+          <EmptyState text="No agents observed in this window." degraded={trafficDegraded} />
         ) : (
           <Table>
             <TableHead>
@@ -529,7 +553,18 @@ function WindowPicker({
   );
 }
 
-function EmptyState({ text }: { text: string }) {
+// A row-level "nothing here" that refuses to say so when it does not know.
+// The page-level notice above already carries the error and the retry; this
+// only has to stop CONTRADICTING it, which a reassuring "No agents observed"
+// under a red banner very much does.
+function EmptyState({ text, degraded }: { text: string; degraded?: string | null }) {
+  if (degraded) {
+    return (
+      <T as="div" className="p-6 text-center text-[12px] text-danger">
+        Unknown — this read failed ({degraded}).
+      </T>
+    );
+  }
   return (
     <T as="div" className="p-6 text-center text-[12px] text-text-tertiary">
       {text}

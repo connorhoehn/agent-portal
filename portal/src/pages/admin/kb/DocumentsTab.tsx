@@ -14,14 +14,19 @@ import {
   TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch.js';
+import { UnavailableNotice } from '../../../components/UnavailableNotice';
 import { docCountLabel, formatDate } from './kbFormat';
 import type { KbDocsResponse, KbRegistryEntry } from './types';
 
 export function DocumentsTab({ kb }: { kb: KbRegistryEntry }) {
-  const { data } = useFetch<KbDocsResponse>(
+  // "No documents ingested yet." is the sentence that sends someone off to
+  // re-run an ingestion they do not need. The listing is a live Bedrock call
+  // and fails for ordinary reasons; say which one.
+  const { data, error, degraded, refresh } = useFetch<KbDocsResponse>(
     kb.bedrockKbId ? `/api/admin/kb-registry/${kb.id}/docs?limit=50` : null,
   );
   const docs = data?.documents ?? [];
+  const failure = error ?? degraded;
 
   return (
     <Card padding="md">
@@ -32,7 +37,14 @@ export function DocumentsTab({ kb }: { kb: KbRegistryEntry }) {
             ? undefined
             : `${docCountLabel(kb.docCount)} documents ingested`}
         />
-        {docs.length === 0 ? (
+        {failure ? (
+          <UnavailableNotice
+            error={failure}
+            what="the document listing"
+            source="Documents are listed live from the Bedrock knowledge base"
+            onRetry={refresh}
+          />
+        ) : docs.length === 0 ? (
           <InlinePlaceholder size="sm">
             {kb.bedrockKbId ? 'No documents ingested yet.' : 'KB not yet provisioned.'}
           </InlinePlaceholder>

@@ -55,7 +55,7 @@ function emptyDimensionScore(dimensionId: string): M.MockDimensionScore {
 // ─── Teams ──────────────────────────────────────────────────────────────────
 
 const TEAM_COLUMNS = `id, name, cohort, status, workflow_step, assessment_lead, contacts, repos, contributors,
-       archetype, created_at::text AS created_at, updated_at::text AS updated_at`;
+       archetype, rubric_version, created_at::text AS created_at, updated_at::text AS updated_at`;
 
 function rowToException(r: Record<string, unknown>): M.TeamException {
   return {
@@ -80,6 +80,10 @@ function rowToTeam(r: Record<string, unknown>, exceptions: M.TeamException[]): M
     contacts: toStrArr(r['contacts']),
     repos: parseJson<M.RepoRef[]>(r['repos'], []),
     archetype: toStrOrNull(r['archetype']),
+    // The column is NOT NULL DEFAULT 'v1', so a real row always has one; the
+    // fallback is for a row read back from a database patched before the
+    // column existed, which must not silently become an empty rubric name.
+    rubric_version: r['rubric_version'] == null ? M.DEFAULT_RUBRIC_VERSION : toStr(r['rubric_version']),
     exceptions,
     created_at: toStr(r['created_at']),
     updated_at: toStr(r['updated_at']),
@@ -243,7 +247,7 @@ function rowToEvidence(r: Record<string, unknown>): M.Evidence {
     source_type: toStr(r['source_type']) as M.EvidenceSourceType, excerpt: toStr(r['excerpt']),
     supports_level: r['supports_level'] == null ? null : toNum(r['supports_level']),
     captured_at: toStr(r['captured_at']), source_ref: toStr(r['source_ref']),
-    scored: toBool(r['scored']), status: toStr(r['status']),
+    scored: toBool(r['scored']), status: toStr(r['status']) as M.EvidenceStatus,
   };
 }
 
@@ -253,7 +257,7 @@ function rowToEvidenceLogItem(r: Record<string, unknown>): M.EvidenceLogItem {
     source_type: toStr(r['source_type']) as M.EvidenceSourceType, excerpt: toStr(r['excerpt']),
     supports_level: r['supports_level'] == null ? null : toNum(r['supports_level']),
     captured_at: toStr(r['captured_at']), source_ref: toStr(r['source_ref']),
-    scored: toBool(r['scored']), status: toStr(r['status']),
+    scored: toBool(r['scored']), status: toStr(r['status']) as M.EvidenceStatus,
     title: r['title'] == null ? undefined : toStr(r['title']),
     captured_by: r['captured_by'] == null ? undefined : toStr(r['captured_by']),
   };

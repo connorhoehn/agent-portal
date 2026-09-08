@@ -12,12 +12,18 @@
 // render "prompt v3 of orgiq-search" and let researchers diff prompt
 // versions across regressions.
 //
-// Mounted UNGATED (before the /api/observability Cedar gate) so the runner
-// — which has no session cookie — can register prompts. Same rationale as
-// the /harness and /approvals routers.
+// AUTH. The mount comment used to say "ungated"; it has not been for some
+// time — index.ts mounts this router behind `viewObs` (tenant + Cedar) and the
+// POST carries `ManageCanary` on top. The runner reached it anyway only via
+// the dev demo-user fallback, which is off wherever Cognito is configured. It
+// now carries the harness runner's own machine identity (`serviceAuthOr` +
+// HARNESS_RUNNER_SERVICE_AUTH), applied BOTH here and at the mount, since a
+// mount guard runs first. Human callers are unaffected: with the secret unset
+// this is exactly the gate it was.
 
 import { Router } from 'express';
 import { requireAction } from '../lib/authz.js';
+import { HARNESS_RUNNER_SERVICE_AUTH, serviceAuthOr } from '../lib/service-auth.js';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { exec } from '../providers/aurora.js';
@@ -77,7 +83,7 @@ interface RegisterBody {
   notes?: string | null;
 }
 
-promptVersionsRouter.post('/', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
+promptVersionsRouter.post('/', serviceAuthOr(HARNESS_RUNNER_SERVICE_AUTH, requireAction('ManageCanary')), asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as RegisterBody;
   const agentId = typeof body.agentId === 'string' ? body.agentId.trim() : '';
   const content = typeof body.content === 'string' ? body.content : '';

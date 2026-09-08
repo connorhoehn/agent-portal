@@ -44,7 +44,7 @@ export function PersonDetailCard({ detail, compositeScore, influenceScore, deptC
   const { data: radar } = useFetch<RadarResponse>(
     detail.id ? `/api/scores/${encodeURIComponent(detail.id)}/radar` : '',
   );
-  const { data: history } = useFetch<HistoryResponse>(
+  const { data: history, degraded: historyDegraded } = useFetch<HistoryResponse>(
     detail.id ? `/api/scores/${encodeURIComponent(detail.id)}/history?days=30` : '',
   );
   // Fetched as soon as the panel is up, same as `radar`/`history` above, not
@@ -85,7 +85,7 @@ export function PersonDetailCard({ detail, compositeScore, influenceScore, deptC
       <RadarChart radar={radar} />
 
       <div className={SECTION_HEADER}>Trend</div>
-      <TrendLine history={history} />
+      <TrendLine history={history} degraded={historyDegraded} />
 
       <div className={SECTION_HEADER}>Top Connections ({detail.connections.length} total)</div>
       <div className="flex flex-col gap-1 max-h-[280px] overflow-y-auto">

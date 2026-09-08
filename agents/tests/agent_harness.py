@@ -47,12 +47,26 @@ def _install_strands() -> None:
         return fn
 
     class Agent:
+        """Records how it was built and how it was called.
+
+        The supervisor calls ``agent(text, messages=[...])`` on its sync path,
+        so the stub has to accept kwargs. ``respond`` lets a test script the
+        answer (or raise, to exercise the modelStreamError retry).
+        """
+
         def __init__(self, **kwargs):
             self.kwargs = kwargs
             self.system_prompt = kwargs.get("system_prompt")
             self.tools = kwargs.get("tools", [])
+            self.model = kwargs.get("model")
+            self.calls: list[tuple] = []
+            #: Optional callable(prompt, **kwargs) -> answer. Default echoes.
+            self.respond = None
 
-        def __call__(self, prompt):  # pragma: no cover — agents aren't run here
+        def __call__(self, prompt=None, **kwargs):
+            self.calls.append((prompt, kwargs))
+            if self.respond is not None:
+                return self.respond(prompt, **kwargs)
             return f"stub-answer::{prompt}"
 
     strands.tool = tool
@@ -162,16 +176,29 @@ def load_agent(agent_dir: str, *, env: dict | None = None):
     if str(AGENTS_DIR) not in sys.path:
         sys.path.insert(0, str(AGENTS_DIR))
 
-    path = AGENTS_DIR / agent_dir / "main.py"
+    agent_path = AGENTS_DIR / agent_dir
+    path = agent_path / "main.py"
     mod_name = f"orgiq_agent_{agent_dir.replace('-', '_')}"
 
     env = {"AWS_REGION": "us-east-1", **(env or {})}
-    with mock.patch.dict("os.environ", env, clear=False), \
-            mock.patch("boto3.client", side_effect=lambda *a, **k: mock.Mock()):
-        spec = importlib.util.spec_from_file_location(mod_name, path)
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[mod_name] = module
-        spec.loader.exec_module(module)
+    # The assessment agents keep their deterministic logic in a sibling
+    # module (`scoring_logic` / `drafting_logic`) and import it by bare name,
+    # so the agent's own directory has to be importable for the duration of
+    # the import. Removed again afterwards to keep sys.path honest — the
+    # sibling is already in sys.modules by then.
+    sys.path.insert(0, str(agent_path))
+    try:
+        with mock.patch.dict("os.environ", env, clear=False), \
+                mock.patch("boto3.client", side_effect=lambda *a, **k: mock.Mock()):
+            spec = importlib.util.spec_from_file_location(mod_name, path)
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[mod_name] = module
+            spec.loader.exec_module(module)
+    finally:
+        try:
+            sys.path.remove(str(agent_path))
+        except ValueError:  # pragma: no cover — another loader already removed it
+            pass
     return module
 
 

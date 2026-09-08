@@ -317,12 +317,12 @@ export interface AgentCoreProvider {
   /**
    * The fleet, with the failure discarded.
    *
-   * Kept because `GET /api/agents` answers a BARE ARRAY that five portal call
-   * sites read as `AgentDef[]`, so there is nowhere in that response to put a
-   * marker without a coordinated portal change. Every caller that has an
-   * object to mark should use `listRuntimesResult` instead — an empty array
-   * from here means "the fleet is empty OR we could not ask", and nothing
-   * downstream can tell which.
+   * `GET /api/agents` no longer uses it — that route now answers
+   * `{ agents, degraded?, error? }` off `listRuntimesResult`. What is left is
+   * providers/cloudwatch.ts, which catches for itself. An empty array from
+   * here means "the fleet is empty OR we could not ask" and nothing downstream
+   * can tell which, so any NEW caller wants `listRuntimesResult`; this one
+   * survives for the callers that genuinely have nowhere to put a marker.
    */
   listRuntimes(): Promise<AgentRuntimeSummary[]>;
   /**

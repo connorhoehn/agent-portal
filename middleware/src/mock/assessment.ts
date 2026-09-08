@@ -64,13 +64,40 @@ export interface RubricLevel {
 }
 
 export interface RubricDimensionDef {
+  /**
+   * Which rubric this dimension belongs to. `assessment_rubric_dimensions`
+   * keys on `(rubric_version, id)` precisely because dimension `'7'` under one
+   * rubric and dimension `'7'` under the next are different questions — so an
+   * id alone does not identify a dimension, and a score that names only a
+   * level is unreadable once the rubric is edited.
+   */
+  rubric_version: string;
   id: string;
   title: string;
   definition: string;
   na_description: string;
   levels: RubricLevel[];
 }
-export const RUBRIC_DIMENSIONS: RubricDimensionDef[] = [
+
+/**
+ * The rubric a team is scored against unless it says otherwise — and the value
+ * `assessment_teams.rubric_version` DEFAULTs to, so a row written by either
+ * path lands on the same rubric.
+ */
+export const DEFAULT_RUBRIC_VERSION = 'v1';
+
+/**
+ * The version is a property of the SET, not of each of its seventeen rows, so
+ * it is stamped from the registry key below rather than typed seventeen times.
+ * A second rubric is then a second entry in `RUBRICS` — data, not a code change
+ * — which is the shape the composite primary key exists to allow.
+ */
+type RubricDimensionBody = Omit<RubricDimensionDef, 'rubric_version'>;
+
+const stampRubric = (version: string, dims: RubricDimensionBody[]): RubricDimensionDef[] =>
+  dims.map((d) => ({ rubric_version: version, ...d }));
+
+const RUBRIC_V1_DIMENSIONS: RubricDimensionBody[] = [
  {
   "id": "1",
   "title": "Continuous Integration (CI)",
@@ -1994,15 +2021,33 @@ export const RUBRIC_DIMENSIONS: RubricDimensionDef[] = [
  }
 ];
 
+/**
+ * Every rubric the mock knows, by version — one row per `(rubric_version, id)`
+ * the table would hold. There is one today; a second is added here and nowhere
+ * else, and `assessment_teams.rubric_version` is how a team picks between them.
+ */
+export const RUBRICS: Record<string, RubricDimensionDef[]> = {
+  [DEFAULT_RUBRIC_VERSION]: stampRubric(DEFAULT_RUBRIC_VERSION, RUBRIC_V1_DIMENSIONS),
+};
+
+/** The current rubric's seventeen dimensions — what an un-versioned read means. */
+export const RUBRIC_DIMENSIONS: RubricDimensionDef[] = RUBRICS[DEFAULT_RUBRIC_VERSION]!;
+
+/** One rubric's dimensions, or none — an unknown version is not the default. */
+export const rubricDimensions = (version: string): RubricDimensionDef[] => RUBRICS[version] ?? [];
+
+/** Every row of `assessment_rubric_dimensions`, across every version. */
+export const allRubricDimensions = (): RubricDimensionDef[] => Object.values(RUBRICS).flat();
+
 export const DIMENSION_IDS: string[] = RUBRIC_DIMENSIONS.map((d) => d.id);
 
-export function rubricDimension(id: string): RubricDimensionDef | undefined {
-  return RUBRIC_DIMENSIONS.find((d) => d.id === id);
+export function rubricDimension(id: string, version: string = DEFAULT_RUBRIC_VERSION): RubricDimensionDef | undefined {
+  return rubricDimensions(version).find((d) => d.id === id);
 }
 
-export function levelName(dimensionId: string, level: number | null): string | null {
+export function levelName(dimensionId: string, level: number | null, version: string = DEFAULT_RUBRIC_VERSION): string | null {
   if (level === null) return null;
-  const dim = rubricDimension(dimensionId);
+  const dim = rubricDimension(dimensionId, version);
   return dim?.levels.find((l) => l.level === level)?.name ?? null;
 }
 
@@ -2018,6 +2063,16 @@ export interface Provenance {
 export type EvidenceSourceType = 'survey' | 'transcript' | 'document' | 'artifact' | 'touchpoint';
 export type EvidenceClass = 'attested' | 'documented' | 'observed';
 
+/**
+ * The vocabulary `assessment_evidence.status` CHECKs, spelled once here so the
+ * TYPE refuses what the column would refuse. It was `string` on both evidence
+ * interfaces, which is how the unreachable lowercase `'pending'` default sat in
+ * the DDL for as long as it did: nothing in TypeScript could tell the two
+ * spellings apart, and the parity harness only sees the values a fixture row
+ * happens to hold — never the ones a future writer could type.
+ */
+export type EvidenceStatus = 'PENDING' | 'CLASSIFIED' | 'SCORED';
+
 export interface Evidence {
   evidence_id: string;
   dimension_id: string;
@@ -2027,7 +2082,7 @@ export interface Evidence {
   captured_at: string;
   source_ref: string;
   scored: boolean;
-  status: string;
+  status: EvidenceStatus;
 }
 
 export type FollowUpStatus = 'OPEN' | 'ANSWERED' | 'DROPPED';
@@ -2081,7 +2136,7 @@ export interface EvidenceLogItem {
   captured_at: string;
   source_ref: string;
   scored: boolean;
-  status: string;
+  status: EvidenceStatus;
   /** Optional intake metadata — carried through from the intake form
    *  (title of the note/document, who captured it) so the provenance
    *  ledger has something better than the raw excerpt to show. */
@@ -2168,6 +2223,15 @@ export interface MockTeam {
   contacts: string[];
   repos: RepoRef[];
   archetype: string | null;
+  /**
+   * The rubric this team's scores are expressed against — a key of `RUBRICS`,
+   * and the whole reason `assessment_rubric_dimensions` is keyed on
+   * `(rubric_version, id)`. Without it a stored level is a number with no
+   * question attached, and editing the rubric silently reinterprets every score
+   * already taken. Required, because a team scored against "whichever rubric
+   * happens to be compiled in" is the defect, not a default.
+   */
+  rubric_version: string;
   exceptions: TeamException[];
   created_at: string;
   updated_at: string;
@@ -2211,6 +2275,7 @@ const seedTeams = (): MockTeam[] => [
    }
   ],
   "archetype": "internal-tooling-no-deploy",
+  "rubric_version": "v1",
   "exceptions": [
    {
     "dimension_id": "6",
@@ -2258,6 +2323,7 @@ const seedTeams = (): MockTeam[] => [
    }
   ],
   "archetype": null,
+  "rubric_version": "v1",
   "exceptions": [],
   "created_at": daysAgo(60),
   "updated_at": hoursAgo(5),
@@ -2288,6 +2354,7 @@ const seedTeams = (): MockTeam[] => [
    }
   ],
   "archetype": null,
+  "rubric_version": "v1",
   "exceptions": [],
   "created_at": daysAgo(20),
   "updated_at": daysAgo(3),
@@ -2315,6 +2382,7 @@ const seedTeams = (): MockTeam[] => [
    }
   ],
   "archetype": null,
+  "rubric_version": "v1",
   "exceptions": [],
   "created_at": daysAgo(15),
   "updated_at": daysAgo(6),
@@ -2340,6 +2408,7 @@ const seedTeams = (): MockTeam[] => [
   ],
   "repos": [],
   "archetype": null,
+  "rubric_version": "v1",
   "exceptions": [],
   "created_at": daysAgo(10),
   "updated_at": daysAgo(4),
@@ -2359,6 +2428,7 @@ const seedTeams = (): MockTeam[] => [
   "contacts": [],
   "repos": [],
   "archetype": null,
+  "rubric_version": "v1",
   "exceptions": [],
   "created_at": daysAgo(2),
   "updated_at": daysAgo(2),
@@ -2373,6 +2443,7 @@ const seedTeams = (): MockTeam[] => [
   "contacts": [],
   "repos": [],
   "archetype": null,
+  "rubric_version": "v1",
   "exceptions": [],
   "created_at": daysAgo(1),
   "updated_at": daysAgo(1),

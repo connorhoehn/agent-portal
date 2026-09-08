@@ -306,11 +306,27 @@ async def handle(payload: dict) -> dict:
         document_text = (payload.get("document") or {}).get("text", "")
         try:
             parsed = json.loads(response_text)
-            if isinstance(parsed, dict) and isinstance(parsed.get("facts"), list):
-                parsed["facts"] = validate_context_facts(parsed["facts"], document_text)
-                response_text = json.dumps(parsed, ensure_ascii=False)
         except (json.JSONDecodeError, TypeError, ValueError) as exc:
-            log.warning("assessment-drafter: could not re-validate facts JSON: %s", exc)
+            # Not JSON at all — there is no facts array to re-validate, and
+            # the caller will fail to parse this the same way we did.
+            log.warning("assessment-drafter: response was not JSON, left as-is: %s", exc)
+        else:
+            if isinstance(parsed, dict) and isinstance(parsed.get("facts"), list):
+                try:
+                    validated = validate_context_facts(parsed["facts"], document_text)
+                except Exception as exc:  # noqa: BLE001
+                    # Fail CLOSED. This backstop's whole job is to drop facts
+                    # whose source_span isn't in the document; if it cannot
+                    # run, passing the model's own list through unchecked is
+                    # the one outcome worse than returning nothing.
+                    log.error(
+                        "assessment-drafter: fact validation failed (%s) — dropping all "
+                        "%d candidate fact(s) rather than returning unvalidated ones",
+                        exc, len(parsed["facts"]),
+                    )
+                    validated = []
+                parsed["facts"] = validated
+                response_text = json.dumps(parsed, ensure_ascii=False)
 
     try:
         bundle = ctx.build_trace_bundle(

@@ -22,6 +22,35 @@ ones that can be enforced mechanically:
 * rationale text has team-side participant names (heuristically, from
   transcript "Speaker:" labels) replaced with a role-neutral label before it
   leaves this function, per the source's PII-scrubbing rule
+
+Envelope discipline
+-------------------
+This agent never persists; the middleware's ``applyScores``
+(``middleware/src/providers/assessment.ts``) is the real persistence gate and
+it *refuses* a malformed entry outright. Everything that gate rejects is
+refused here too, at the source, so the agent never emits an envelope that
+cannot be applied:
+
+* ``dimension_id`` outside "1".."17"
+* ``proposed_level`` that is not an integer 0..5 (a fractional level is
+  almost always a confidence score passed by mistake — it is refused, never
+  truncated into a plausible-looking level)
+* ``self_claimed_level`` outside 0..5 (an unbounded claim rendered
+  "Claimed Level 99" downstream)
+* a blank/missing ``rationale`` — a score with no stated reason has no audit
+  trail, and emitting one is exactly the "plausible score it did not derive"
+  failure this module exists to prevent
+* ``follow_up_questions`` entries that are not non-empty strings (these used
+  to 500 the run-completion callback downstream)
+
+and two honesty rules that have no downstream equivalent because only this
+side can see the evidence array:
+
+* a dimension with **no resolvable evidence at all** can never be emitted
+  above ``low`` confidence, no matter what the model asked for
+* citing an ``evidence_id`` that is not in ``evidence_items`` costs one
+  confidence band, the same as a fabricated excerpt, and the dangling ids are
+  reported in ``unverified_evidence_ids`` rather than silently ignored
 """
 
 from __future__ import annotations
@@ -88,6 +117,10 @@ _SOURCE_TYPE_CLASS: dict[str, str] = {
 
 _CONFIDENCE_BANDS = ("low", "moderate", "high")
 
+#: The rubric has six levels, 0..5 (docs/assessment-tenant.md). Mirrors
+#: RUBRIC_MAX_LEVEL in middleware/src/providers/assessment.ts.
+RUBRIC_MAX_LEVEL = 5
+
 _SPEAKER_LABEL_RE = re.compile(r"^([A-Z][A-Za-z.'-]+(?: [A-Z][A-Za-z.'-]+){0,2}):\s", re.MULTILINE)
 _ROLE_WORDS = {
     "Interviewer", "Facilitator", "Note", "Summary", "Q", "A", "Team",
@@ -114,6 +147,51 @@ def normalize_confidence(raw: Any) -> str:
 def _lower_band(confidence: str) -> str:
     idx = _CONFIDENCE_BANDS.index(confidence) if confidence in _CONFIDENCE_BANDS else 0
     return _CONFIDENCE_BANDS[max(0, idx - 1)]
+
+
+def coerce_rubric_level(value: Any) -> int | None:
+    """``value`` as a rubric level 0..5, or None when it is not one.
+
+    Accepts an ``int``, an integral ``float`` (``4.0``) and a string spelling
+    of either (``"4"``, ``"4.0"``) — models routinely produce all three for a
+    field typed ``int``, and normalising them is reading what was written, not
+    inventing it. Everything else is None: a *fractional* level (``3.7``, the
+    classic "confidence passed into the level field" slip), a bool, a bare
+    word, or anything outside 0..5. None is a refusal signal, never a level.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        level = value
+    elif isinstance(value, float):
+        if not value.is_integer():
+            return None
+        level = int(value)
+    elif isinstance(value, str):
+        try:
+            parsed = float(value.strip())
+        except (TypeError, ValueError):
+            return None
+        if not parsed.is_integer():
+            return None
+        level = int(parsed)
+    else:
+        return None
+    return level if 0 <= level <= RUBRIC_MAX_LEVEL else None
+
+
+def valid_follow_up_questions(questions: Any) -> list[str]:
+    """Keep only the non-empty strings.
+
+    A follow-up question becomes a wire-shaped string on the scorecard;
+    downstream, a non-string one used to raise inside the idempotency key
+    (``normalizeQuestion(...).toLowerCase()``) and 500 the run-completion
+    callback, leaving the run `running` forever. Dropping the malformed entry
+    keeps the score — which may be perfectly well derived — applicable.
+    """
+    if not isinstance(questions, (list, tuple)):
+        return []
+    return [q for q in questions if isinstance(q, str) and q.strip()]
 
 
 def evidence_class_for(source_type: Any) -> str:
@@ -229,32 +307,61 @@ def score_dimension_impl(
     """
     dimension_id = str(dimension_id)
     evidence_excerpts = list(evidence_excerpts or [])
-    follow_up_questions = list(follow_up_questions or [])
     evidence_items = evidence_items or []
 
+    def _refuse(reason: str) -> dict:
+        return {"dimension_id": dimension_id, "refused": True, "refusal_reason": reason}
+
+    # ── Refusals: an envelope the persistence gate would reject is not worth
+    # emitting, and a score the agent cannot justify is not worth emitting
+    # either. Both are refused here rather than downstream.
+    if dimension_id not in DIMENSION_TITLES:
+        return _refuse(
+            f'unknown dimension id "{dimension_id}" — the rubric has 17 dimensions, "1".."17"'
+        )
+
     if relevant_dimension_ids is not None and dimension_id not in {str(d) for d in relevant_dimension_ids}:
-        return {
-            "dimension_id": dimension_id,
-            "refused": True,
-            "refusal_reason": (
-                f"dimension {dimension_id} is not in relevant_dimension_ids "
-                f"({sorted(relevant_dimension_ids, key=str)}) — refusing to score it"
-            ),
-        }
+        return _refuse(
+            f"dimension {dimension_id} is not in relevant_dimension_ids "
+            f"({sorted(relevant_dimension_ids, key=str)}) — refusing to score it"
+        )
+
+    level = coerce_rubric_level(proposed_level)
+    if level is None:
+        return _refuse(
+            f"proposed_level {proposed_level!r} is not a whole rubric level 0..{RUBRIC_MAX_LEVEL} "
+            "— refusing to guess which level was meant"
+        )
+
+    if self_claimed_level is not None:
+        claimed = coerce_rubric_level(self_claimed_level)
+        if claimed is None:
+            return _refuse(
+                f"self_claimed_level {self_claimed_level!r} is not a whole rubric level "
+                f"0..{RUBRIC_MAX_LEVEL} — refusing to report a claim it cannot read"
+            )
+        self_claimed_level = claimed
+
+    if not isinstance(rationale, str) or not rationale.strip():
+        return _refuse(
+            "rationale is required — a score with no stated reason has no audit trail"
+        )
+
+    follow_up_questions = valid_follow_up_questions(follow_up_questions)
 
     by_id = {str(item.get("id")): item for item in evidence_items if isinstance(item, dict)}
-    referenced = [by_id[str(eid)] for eid in (evidence_ids or []) if str(eid) in by_id]
+    cited_ids = [str(eid) for eid in (evidence_ids or [])]
+    referenced = [by_id[eid] for eid in cited_ids if eid in by_id]
     referenced_texts = [item.get("text", "") for item in referenced]
+    # Ids the model cited that are not in the evidence array it was handed.
+    # Reported, not silently ignored — a citation to nothing is the cheapest
+    # way to make an unsupported level look supported.
+    unverified_evidence_ids = [eid for eid in cited_ids if eid not in by_id]
 
     classes_present = {evidence_class_for(item.get("source_type")) for item in referenced}
     if not classes_present:
         classes_present = {"attested"}
     strongest_class = max(classes_present, key=lambda c: CLASS_ANCHOR[c])
-
-    try:
-        level = int(proposed_level)
-    except (TypeError, ValueError):
-        level = 0
 
     cap_applied = False
     # Level 4+ requires Observed evidence — this is also the mechanical form
@@ -276,9 +383,17 @@ def score_dimension_impl(
             excerpt_dropped = True
     if excerpt_dropped:
         normalized_confidence = _lower_band(normalized_confidence)
+    # A citation to an id that isn't in the evidence array is the same class
+    # of unverifiable claim as a quote that isn't in the text.
+    if unverified_evidence_ids:
+        normalized_confidence = _lower_band(normalized_confidence)
+    # Nothing resolved at all: whatever the level, it rests on no evidence
+    # this function can see, so it cannot be reported above "low".
+    if not referenced:
+        normalized_confidence = "low"
 
     participant_names = extract_participant_names(referenced_texts)
-    scrubbed_rationale = scrub_names(rationale or "", participant_names)
+    scrubbed_rationale = scrub_names(rationale, participant_names)
 
     return {
         "dimension_id": dimension_id,
@@ -291,4 +406,5 @@ def score_dimension_impl(
         "evidence_excerpts": valid_excerpts,
         "follow_up_questions": follow_up_questions,
         "self_claimed_level": self_claimed_level,
+        "unverified_evidence_ids": unverified_evidence_ids,
     }

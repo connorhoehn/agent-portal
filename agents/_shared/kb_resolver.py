@@ -31,10 +31,17 @@ import logging
 import threading
 from typing import Optional
 
+from _shared.db_credentials import read_secret_arn
+
 logger = logging.getLogger(__name__)
 
 _REGION = os.environ.get("AWS_REGION", "us-east-1")
 _CLUSTER_ARN = os.environ.get("AURORA_CLUSTER_ARN", "")
+# The registry lookup is a single SELECT, so it runs on the read-only role
+# (`orgiq_graph_reader`, granted SELECT on `knowledge_bases`) wherever that is
+# configured, and on the admin credential everywhere else. Read at call time,
+# not pinned here: agents resolve their KB at module import, and a constant
+# captured before the environment is fully set would freeze the wrong answer.
 _SECRET_ARN = os.environ.get("AURORA_SECRET_ARN", "")
 _DATABASE = os.environ.get("AURORA_DB_NAME", "orgiq")
 
@@ -61,7 +68,8 @@ def _query_registry(sql: str, parameters: list) -> Optional[str]:
     the env fallback exists precisely so a cold or missing Aurora degrades to
     "use the id the runtime was deployed with" rather than to a crash loop.
     """
-    if not (_CLUSTER_ARN and _SECRET_ARN):
+    secret_arn = read_secret_arn() or _SECRET_ARN
+    if not (_CLUSTER_ARN and secret_arn):
         return None
     try:
         import boto3
@@ -69,7 +77,7 @@ def _query_registry(sql: str, parameters: list) -> Optional[str]:
         rds = boto3.client("rds-data", region_name=_REGION)
         resp = rds.execute_statement(
             resourceArn=_CLUSTER_ARN,
-            secretArn=_SECRET_ARN,
+            secretArn=secret_arn,
             database=_DATABASE,
             sql=sql,
             parameters=parameters,

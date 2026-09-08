@@ -86,6 +86,31 @@ export interface MockTestResult {
   prompt?: string;
 }
 
+/**
+ * What `POST /runs/:runId/results` may write.
+ *
+ * `runId` and `ts` are not here: the first is the path parameter and the second
+ * is `now()` in the statement, so neither is ever the caller's to supply. The
+ * joined `agentId`/`prompt` are not here either — they belong to the case, and
+ * `mockGetResults` joins them on the way out.
+ */
+export interface MockResultInput {
+  testId: string;
+  invocationId?: string | null;
+  passed?: boolean | null;
+  judgeScore?: number | null;
+  judgeRationale?: string | null;
+  schemaValid?: boolean | null;
+  tagHits?: Record<string, boolean> | null;
+  referenceSimilarity?: number | null;
+  responseSnippet?: string | null;
+  failReasons?: string[] | null;
+  durationMs?: number | null;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  estCostUsd?: number | null;
+}
+
 const RUN_A = 'a0000000-0000-4000-8000-00000000a001';
 const RUN_B = 'b0000000-0000-4000-8000-00000000b002';
 
@@ -440,6 +465,87 @@ export function mockCreateRun(input: {
     mode,
   });
   return { runId, mode };
+}
+
+/**
+ * `POST /runs/:runId/results` — upsert one result row.
+ *
+ * The real statement is an `INSERT … ON CONFLICT (run_id, test_id) DO UPDATE`
+ * that assigns EVERY column from `EXCLUDED`, so a field the caller omits
+ * becomes NULL rather than keeping whatever the previous attempt wrote. This
+ * replaces the row for exactly that reason: a merge here would make a retried
+ * case silently inherit the first attempt's judge rationale, and the offline
+ * result would then disagree with the Aurora one in the one case — a retry —
+ * where the two most need to agree.
+ *
+ * `run_id` carries no foreign key in `schema/observability_schema.sql`, so a
+ * result for a run this process has never seen is accepted here exactly as
+ * Aurora accepts it. That is not an oversight being copied: the runner creates
+ * its run through a different process than the one that records results in
+ * some deployments, and a mock that 404'd would reject a sequence production
+ * allows.
+ */
+export function mockUpsertResult(runId: string, input: MockResultInput): MockTestResult {
+  const row: MockTestResult = {
+    runId,
+    testId: input.testId,
+    invocationId: input.invocationId ?? null,
+    passed: input.passed ?? null,
+    judgeScore: input.judgeScore ?? null,
+    judgeRationale: input.judgeRationale ?? null,
+    schemaValid: input.schemaValid ?? null,
+    tagHits: input.tagHits ?? null,
+    referenceSimilarity: input.referenceSimilarity ?? null,
+    responseSnippet: input.responseSnippet ?? null,
+    failReasons: input.failReasons ?? null,
+    durationMs: input.durationMs ?? null,
+    ts: clock.nowIso(),
+    inputTokens: input.inputTokens ?? null,
+    outputTokens: input.outputTokens ?? null,
+    estCostUsd: input.estCostUsd ?? null,
+  };
+  const rows = testResults.rows();
+  const at = rows.findIndex((r) => r.runId === runId && r.testId === input.testId);
+  if (at >= 0) rows[at] = row;
+  else rows.push(row);
+  return row;
+}
+
+/**
+ * `PATCH /runs/:id` — the storable half of a run patch.
+ *
+ * `completed`, `passed`, `failed`, `passRate` and `totalCases` are deliberately
+ * ABSENT from this type even though the route accepts all five. They are
+ * selectors over `harness-results` (see `withCounts`), and storing what the
+ * caller sent would recreate precisely the defect this fixture was built to
+ * lose: a run claiming 3/4 above four rows that say otherwise.
+ *
+ * Nothing is lost by dropping them. The runner posts every result *before* it
+ * patches the run — `infra/scripts/harness.py` records the case, then updates
+ * the counters — so by the time the patch arrives the rows it counted are
+ * already here and `withCounts` computes the same five numbers from them. A
+ * caller that patches counters it never backed with results is asserting a
+ * total it cannot support, and offline it does not get to.
+ */
+export interface MockRunPatch {
+  status?: MockTestRunSeed['status'];
+  /** `'now'` is the route's no-value case (`finishedAt: true`), which SQL spells `now()`. */
+  finishedAt?: string | null | 'now';
+  notes?: string | null;
+  agentVersions?: Record<string, string>;
+}
+
+/** Applies the storable fields; returns false when no such run exists (the route's 404). */
+export function mockPatchRun(runId: string, patch: MockRunPatch): boolean {
+  const seed = testRuns.rows().find((r) => r.runId === runId);
+  if (!seed) return false;
+  if (patch.status !== undefined) seed.status = patch.status;
+  if (patch.finishedAt !== undefined) {
+    seed.finishedAt = patch.finishedAt === 'now' ? clock.nowIso() : patch.finishedAt;
+  }
+  if (patch.notes !== undefined) seed.notes = patch.notes;
+  if (patch.agentVersions !== undefined) seed.agentVersions = patch.agentVersions;
+  return true;
 }
 
 export function mockCoverage(): Array<{

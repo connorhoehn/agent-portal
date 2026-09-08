@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { Card, Chip } from '@connorhoehnslalom/ui-components/shared';
+import { readDegraded } from '../../lib/degraded';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { CostVsEstimate, runEstimate } from './EstimateDrawer';
@@ -45,9 +46,20 @@ const OUTCOMES_LIMIT = 10;
 export interface InitiativeAgentActivity {
   bots: Bot[];
   botsLoading: boolean;
+  /**
+   * Why the roster is missing: a transport failure, a 403, OR the route's own
+   * `degraded` marker (it answers `{ bots: [], degraded, error }` when the
+   * Aurora read fails). All three mean "unknown", never "none".
+   */
   botsError: string | null;
   /** Marketplace runs + targeting bots' runs, deduped, newest first. */
   runs: BotRun[];
+  /**
+   * Set when at least one bot's run history could not be read, so `runs` is a
+   * floor and `spendUsd` is an UNDERCOUNT rather than a total. Money is the
+   * one number on this rail where a silent floor is worse than no number.
+   */
+  runsError: string | null;
   /** Sum of costUsd over `runs` — the initiative's listed agent spend. */
   spendUsd: number;
 }
@@ -67,10 +79,13 @@ export function useInitiativeAgentActivity(
   // renders nothing in that case — this just stops it being noisy about it.
   const { can, ready } = useCapabilities();
   const mayReadBots = ready && can('ManageBots');
-  const { data: botsData, isLoading, error } = useFetch<{ bots: Bot[] }>(
+  const { data: botsData, isLoading, error, degraded } = useFetch<{ bots: Bot[] }>(
     mayReadBots ? '/api/bots' : null,
     30_000,
   );
+  // A degraded roster is exactly as blinding as a 403 or a dead socket, and
+  // the card below already knows how to say "unknown, not empty".
+  const botsError = error ?? degraded;
 
   const codebaseIds = new Set(codebases.map((c) => c.id));
   const bots = orgProjectId
@@ -81,6 +96,7 @@ export function useInitiativeAgentActivity(
 
   // Lazily fetch each targeting bot's runs, once per bot.
   const [botRuns, setBotRuns] = useState<Record<string, BotRun[]>>({});
+  const [runsError, setRunsError] = useState<string | null>(null);
   const botIdsKey = bots.map((b) => b.id).sort().join(',');
   useEffect(() => {
     if (!botIdsKey) return;
@@ -88,12 +104,21 @@ export function useInitiativeAgentActivity(
     for (const botId of botIdsKey.split(',')) {
       if (botRuns[botId]) continue;
       fetch(`/api/bots/${encodeURIComponent(botId)}/runs`, { credentials: 'include' })
-        .then((res) => (res.ok ? (res.json() as Promise<{ runs: BotRun[] }>) : { runs: [] as BotRun[] }))
-        .then((body) => {
-          if (!cancelled) setBotRuns((prev) => (prev[botId] ? prev : { ...prev, [botId]: body.runs ?? [] }));
+        .then(async (res) => {
+          if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+          return (await res.json()) as { runs?: BotRun[] };
         })
-        .catch(() => {
-          if (!cancelled) setBotRuns((prev) => (prev[botId] ? prev : { ...prev, [botId]: [] }));
+        .then((body) => {
+          if (cancelled) return;
+          // 200 with `{ runs: [] }` and a marker is not "this bot never ran".
+          const d = readDegraded(body);
+          if (d) setRunsError(d);
+          setBotRuns((prev) => (prev[botId] ? prev : { ...prev, [botId]: body.runs ?? [] }));
+        })
+        .catch((e: unknown) => {
+          if (cancelled) return;
+          setRunsError(e instanceof Error ? e.message : 'a run history could not be read');
+          setBotRuns((prev) => (prev[botId] ? prev : { ...prev, [botId]: [] }));
         });
     }
     return () => { cancelled = true; };
@@ -110,7 +135,7 @@ export function useInitiativeAgentActivity(
   runs.sort((a, b) => parseTs(b.startedAt) - parseTs(a.startedAt));
   const spendUsd = runs.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
 
-  return { bots, botsLoading: isLoading, botsError: error, runs, spendUsd };
+  return { bots, botsLoading: isLoading, botsError, runs, runsError, spendUsd };
 }
 
 // ─── AGENTS rail card ────────────────────────────────────────────────────────
@@ -226,7 +251,7 @@ export function AgentsRailCard({ activity }: { activity: InitiativeAgentActivity
 // Recent agent activity, newest first, with what it produced and cost.
 
 export function OutcomesRailCard({ activity }: { activity: InitiativeAgentActivity }) {
-  const { runs, spendUsd } = activity;
+  const { runs, runsError, spendUsd } = activity;
   const listed = runs.slice(0, OUTCOMES_LIMIT);
   // /admin/changes and /admin/devbox are hr-admin routes; for anyone else the
   // reference is shown as text rather than as a link that redirects home.
@@ -240,9 +265,16 @@ export function OutcomesRailCard({ activity }: { activity: InitiativeAgentActivi
         <div className="flex-1" />
         <span className="text-[10.5px] text-text-tertiary whitespace-nowrap">
           ${spendUsd.toFixed(2)} agent spend (listed runs)
+          {runsError ? ' — at least' : ''}
         </span>
       </div>
-      {listed.length === 0 ? (
+      {runsError && (
+        <div className="px-3 py-2 text-[11px] text-danger leading-relaxed border-b border-border">
+          A run history could not be read ({runsError}) — this list and the spend
+          above are a floor, not a total.
+        </div>
+      )}
+      {listed.length === 0 && !runsError ? (
         <div className="px-3 py-3 text-[11.5px] text-text-tertiary leading-relaxed">
           No agent runs yet — authorize one from an open story or bug, or let a targeting bot fire.
         </div>

@@ -6,7 +6,9 @@
     "build": "tsc",
     "synth": "cdk synth",
     "deploy": "cdk deploy",
-    "diff": "cdk diff"
+    "diff": "cdk diff",
+    "test": "node --require ts-node/register --test \"test/**/*.test.ts\"",
+    "test:watch": "node --require ts-node/register --test --watch \"test/**/*.test.ts\""
   },
   "dependencies": {
     "aws-cdk-lib": "^2.253.1",

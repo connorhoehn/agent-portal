@@ -9,6 +9,7 @@ import { MarkerType, type Node, type Edge } from '@xyflow/react';
 import { Link, useSearchParams } from 'react-router';
 import { Button, Card, Chip, Drawer, Inline, InlineAlert, Stack, StatusDot } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
+import { UnavailableNotice } from '../components/UnavailableNotice';
 import { AgentFlowFrame, NODE_HEIGHT, NODE_WIDTH, STATUS_COLORS, fmtCount, fmtMs } from './AgentFlowFrame';
 import { T } from './Text';
 
@@ -186,7 +187,17 @@ function AgentFlowPage() {
   const { data: topology, error: topologyError } = useFetch<TopologyResponse>(
     `/api/topology/a2a?windowHours=${windowHours}`, 30_000,
   );
-  const { data: agents } = useFetch<AgentDef[]>('/api/agents', 30_000);
+  // `/api/agents` answers `{ agents, degraded?, error? }`. It used to be a bare
+  // array, which had nowhere to put a marker — so a failed ListAgentRuntimes
+  // arrived here as an empty fleet and this page drew "0 / 9 online" over a
+  // static architecture, which is a statement about the deployment rather than
+  // an admission that we could not ask. That exact confusion has an incident
+  // in CLAUDE.md.
+  const {
+    data: agentsResp, error: agentsError, degraded: agentsDegraded, refresh: refreshAgents,
+  } = useFetch<{ agents: AgentDef[] }>('/api/agents', 30_000);
+  const agents = agentsResp?.agents;
+  const fleetFailure = agentsError ?? agentsDegraded;
 
   useEffect(() => setSelectedId(null), [windowHours]);
 
@@ -288,6 +299,19 @@ function AgentFlowPage() {
 
   return (
     <Stack gap="none" className="h-full w-full">
+      {fleetFailure && (
+        // The page is full-bleed with no content column, so the shared notice
+        // is squared off into the same strip the topology alert uses. Same
+        // component, same three things said: what failed, the server's own
+        // error, and a retry.
+        <UnavailableNotice
+          error={fleetFailure}
+          what="the agent fleet"
+          source="Runtimes are listed from the AgentCore control plane"
+          onRetry={refreshAgents}
+          className="shrink-0 rounded-none border-x-0 border-t-0"
+        />
+      )}
       {topologyError && (
         <InlineAlert tone="error" className="shrink-0 rounded-none border-b py-2 text-[12px]">
           Live metrics unavailable — {topologyError}. Showing the static architecture; the call/error overlay needs the observability permission (org-leader or HR Admin).
@@ -296,7 +320,10 @@ function AgentFlowPage() {
       {/* ── Summary bar ── */}
       <Inline align="center" justify="between" gap="md" className="shrink-0 border-b border-border bg-surface px-4 py-2.5">
         <Inline align="center" gap="lg">
-          <SummaryKV label="Agents" value={`${onlineCount} / ${Object.keys(AGENTS).length} online`} />
+          <SummaryKV
+            label="Agents"
+            value={fleetFailure ? '— online' : `${onlineCount} / ${Object.keys(AGENTS).length} online`}
+          />
           <SummaryKV label={`Calls (${windowHours < 24 ? windowHours + 'h' : windowHours === 24 ? '24h' : '7d'})`} value={topologyError ? '—' : fmtCount(totalCalls)} />
           <SummaryKV label="Errors" value={topologyError ? '—' : fmtCount(totalErrors)} accent={!topologyError && totalErrors > 0 ? 'warn' : undefined} />
           <SummaryKV label="Err rate" value={topologyError ? '—' : errRate} accent={!topologyError && totalErrors > 0 ? 'warn' : undefined} />

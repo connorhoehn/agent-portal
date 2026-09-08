@@ -31,6 +31,8 @@ import { useFetch } from '../../hooks/useFetch';
 import { CostChip } from '../../components/observability/CostChip';
 import { PromptVersionChip } from '../../components/observability/PromptVersionChip';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { readDegraded } from '../../lib/degraded';
 import { T } from './Text';
 
 interface InvocationSearchResult {
@@ -193,10 +195,17 @@ function InvocationSearchPage() {
   const totalCount = data?.count ?? rows.length;
 
   // Agent options derived from drift summary endpoint (same as QualityPage).
-  const { data: agentsSummary } = useFetch<DriftSummaryRow[]>(
+  // Healthy: a bare array. Failed: `{ agents: [], degraded, error }`, because
+  // an array cannot carry a marker. Without reading that, a broken drift query
+  // just narrows the filter to "(all agents)" and the reader never learns the
+  // list they are filtering against is missing.
+  const { data: agentsSummary, refresh: refreshAgents } = useFetch<
+    DriftSummaryRow[] | { agents?: DriftSummaryRow[]; degraded?: boolean; error?: string }
+  >(
     '/api/observability/drift/summary?windowHours=24',
     30_000,
   );
+  const agentsDegraded = readDegraded(agentsSummary);
   const agentOptions = useMemo(
     () =>
       Array.isArray(agentsSummary) ? agentsSummary.map((a) => a.agentId).sort() : [],
@@ -235,6 +244,16 @@ function InvocationSearchPage() {
         </Link>
       }
     >
+      {agentsDegraded && (
+        <UnavailableNotice
+          error={agentsDegraded}
+          what="the agent filter list"
+          source="The agent list comes from the drift rollup in Aurora"
+          onRetry={refreshAgents}
+          className="mb-4"
+        />
+      )}
+
       <Card padding="md">
         <form onSubmit={onSubmit}>
           <Stack gap="md">

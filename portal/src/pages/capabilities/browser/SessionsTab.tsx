@@ -18,6 +18,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../../lib/capabilities';
 import { useFetch } from '../../../hooks/useFetch';
+import { UnavailableNotice } from '../../../components/UnavailableNotice';
 import { relativeTimeSeconds } from '../../../lib/relativeTime';
 import { SESSIONS_URL, closeSession, launchSession } from './browserApi';
 import { closedSessions, isBlankUrl, openSessions, sessionTone } from './browserFormat';
@@ -35,7 +36,13 @@ const MAX_PAST_ROWS = 20;
 export function SessionsTab() {
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageDevbox');
-  const { data, refresh } = useFetch<{ sessions: BrowserSession[] }>(SESSIONS_URL, 10000);
+  // A dead BROWSER_ID fails SOFT here — CLAUDE.md records exactly this: the
+  // browser call is indistinguishable from "there are no sessions" unless the
+  // route's `degraded` marker is read. It is, now.
+  const {
+    data, error, degraded, refresh,
+  } = useFetch<{ sessions: BrowserSession[] }>(SESSIONS_URL, 10000);
+  const failure = error ?? degraded;
 
   const sessions = data?.sessions ?? [];
   const open = openSessions(sessions);
@@ -43,12 +50,25 @@ export function SessionsTab() {
 
   return (
     <Stack gap="lg">
+      {failure && (
+        <UnavailableNotice
+          error={failure}
+          what="the browser session list"
+          source="Sessions are listed live from the AgentCore Data Plane"
+          onRetry={refresh}
+        />
+      )}
+
       {canManage && <LaunchSessionCard onLaunched={refresh} />}
 
       <Card padding="none" className="overflow-hidden">
         <CardHeader title="Open sessions" action={<MetaLine items={[`${open.length} open`]} />} />
         <Stack gap="md" className="px-3.5 py-3">
-          {open.length === 0 ? (
+          {failure ? (
+            <InlinePlaceholder align="center" size="sm" tone="surface">
+              Unknown — this read failed. See the notice above.
+            </InlinePlaceholder>
+          ) : open.length === 0 ? (
             <InlinePlaceholder align="center" size="sm">No open browser sessions.</InlinePlaceholder>
           ) : (
             <Table>
@@ -105,7 +125,11 @@ export function SessionsTab() {
           action={<MetaLine items={['from AgentCore Data Plane', `${closed.length} closed`]} />}
         />
         <Stack gap="md" className="px-3.5 py-3">
-          {closed.length === 0 ? (
+          {failure ? (
+            <InlinePlaceholder align="center" size="sm" tone="surface">
+              Unknown — this read failed. See the notice above.
+            </InlinePlaceholder>
+          ) : closed.length === 0 ? (
             <InlinePlaceholder align="center" size="sm">
               No past sessions yet. Launch one above, or invoke the search agent with a
               browse-the-web prompt.

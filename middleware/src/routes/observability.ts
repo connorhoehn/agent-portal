@@ -7,12 +7,49 @@ import { recentAuthzEvents, subscribeAuthz, type AuthzQuery } from '../lib/audit
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 import { driftRouter } from './drift.js';
 import { qualityRouter } from './quality.js';
+import { prWatchHealth } from '../lib/pr-watch-poller.js';
 
 export const observabilityRouter = Router();
 
 // Drift + quality data plane (Aurora-backed; see lib/trace-sink.ts).
 observabilityRouter.use('/drift', driftRouter);
 observabilityRouter.use('/quality', qualityRouter);
+
+// ── Background poller health ─────────────────────────────────────────────────
+
+/**
+ * Whether the PR-watch poller is actually running, and how it has been going.
+ *
+ * WHY A ROUTE. `lib/pr-watch-poller.ts` records its own health — last tick,
+ * ok/not, the failure streak, the last error — but nothing exposed it, so the
+ * only way to learn that no PR had been dispatched for forty minutes was to
+ * tail the process logs. Worse, the poller is quiet by design: it logs the
+ * FIRST failure and then only every FAILURE_STREAK_ALERT-th one, so a reader
+ * arriving late finds nothing recent even though it is still broken. This
+ * route is the "sayable" half of that record.
+ *
+ * THE AUTH FLOOR IS THE MOUNT, and it is a read, not a session-only surface.
+ * `index.ts` mounts this router behind `viewObs` = requireTenant('orgiq') +
+ * requireAction('ViewObservability'), which is where every other operational
+ * aggregate on this router already sits. That is deliberately NOT the bare
+ * `requireSession` floor used for all-hands surfaces: poller health names
+ * repositories and carries upstream error text (a GitHub message, a borrowed
+ * credential's failure), so it belongs on the observability read the tenant
+ * gate scopes — not on "any signed-in user, in any tenant". No extra per-route
+ * gate is added here; a second one would only be a place for the two to drift.
+ *
+ * NOTHING IS INVENTED. A process that has never ticked answers
+ * `running: false, lastTickOk: null` — not a zero that reads as healthy. The
+ * response carries `checkedAt` so a stale `lastTickAt` is measurable against
+ * something rather than against the reader's clock, and `failingSince` gives
+ * the duration directly. No "healthy" verdict is computed here — that judgment
+ * belongs to whoever knows what this deployment's poll interval is, and
+ * inventing a threshold on its behalf is how a green light comes to mean
+ * nothing.
+ */
+observabilityRouter.get('/pr-watch-health', (_req, res) => {
+  res.json({ poller: 'pr-watch', checkedAt: new Date().toISOString(), ...prWatchHealth() });
+});
 
 // ── Authorization decision audit log ─────────────────────────────────────────
 

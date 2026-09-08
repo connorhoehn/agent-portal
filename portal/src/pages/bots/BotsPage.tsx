@@ -24,6 +24,7 @@ import {
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
 import { BotCreateWizard } from './BotCreateWizard';
 import { botListLastRanText, botsSummaryLine, filterBots, type BotStatusFilter } from './botsFormat';
@@ -125,7 +126,12 @@ const STATUS_OPTIONS: Array<{ value: BotStatusFilter; label: string }> = [
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function BotsPage() {
-  const { data, error, refresh } = useFetch<{ bots: Bot[] }>('/api/bots', 15_000);
+  // `GET /api/bots` answers `{ bots: [], degraded, error }` when the roster
+  // read fails (lib/upstream.ts). Without reading that marker the page draws
+  // its "No bots yet" onboarding card — an invitation to create a second copy
+  // of every bot that already exists.
+  const { data, error, degraded, refresh } = useFetch<{ bots: Bot[] }>('/api/bots', 15_000);
+  const failure = error ?? degraded;
   const [wizardOpen, setWizardOpen] = useState(false);
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageBots');
@@ -254,9 +260,17 @@ export default function BotsPage() {
         <Button variant="primary" size="sm" onClick={() => setWizardOpen(true)}>+ New bot</Button>
       ) : undefined}
     >
-      {error && <Banner variant="error" className="mb-4">Failed to load bots: {error}</Banner>}
+      {failure && (
+        <UnavailableNotice
+          error={failure}
+          what="the bot roster"
+          source="Bots are read from Aurora"
+          onRetry={refresh}
+          className="mb-4"
+        />
+      )}
 
-      {!error && bots.length === 0 ? (
+      {!failure && bots.length === 0 ? (
         <EmptyState
           title="No bots yet"
           description="A bot is a durable, mission-configured agent — a written mission with budget guardrails and a trigger, whose every change still passes review and policy gates."

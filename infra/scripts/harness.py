@@ -46,6 +46,16 @@ Env:
                           `requireTraceAuth` in middleware/src/routes/harness.ts
                           and agents/_shared/callbacks.py, which is the agent
                           half of the same contract.
+    HARNESS_RUNNER_SECRET service-auth secret for every OTHER middleware call
+                          this runner makes (prompt-versions, runs, results,
+                          promote — all session-gated routes). Unset is the
+                          local default and sends no header, which is what the
+                          middleware expects while it too is unconfigured. Set
+                          it from `orgiq-harness-runner-secret` when running
+                          against a deployment with SSO on — without it the
+                          runner has no identity at all and every one of those
+                          calls 401s. See `runnerOr` in
+                          middleware/src/routes/harness.ts.
     AWS credentials       via boto3 default chain (SSO profile is fine)
 """
 from __future__ import annotations
@@ -247,10 +257,18 @@ def fetch_active_cases(
 
 
 class HttpError(RuntimeError):
-    def __init__(self, method: str, url: str, status: int, body: str) -> None:
-        super().__init__(f"{method} {url} -> {status}: {body[:300]}")
+    def __init__(
+        self, method: str, url: str, status: int, body: str, hint: str = ""
+    ) -> None:
+        # The hint rides on the message so EVERY call site prints it, including
+        # the several that only `print(f"...: {e}")`. A 401 whose text is just
+        # `{"error":"Unauthenticated"}` tells an operator nothing about which
+        # of two secrets is missing from their shell.
+        msg = f"{method} {url} -> {status}: {body[:300]}"
+        super().__init__(f"{msg}\n  {hint}" if hint else msg)
         self.status = status
         self.body = body
+        self.hint = hint
 
 
 # ── Service auth for the trace callback ──────────────────────────────────────
@@ -270,27 +288,74 @@ _TRACE_AUTH_HEADER = "x-harness-auth"
 _TRACE_AUTH_ENV = "HARNESS_TRACE_SECRET"
 _announced_trace_auth = False
 
+# ── Service auth for the runner's CONTROL PLANE ──────────────────────────────
+#
+# The trace secret above unlocks exactly one route. Everything else this runner
+# calls — POST /prompt-versions, POST /harness/runs, POST
+# /harness/runs/{id}/results, PATCH /harness/runs/{id}, GET /harness/runs[/id],
+# POST /harness/promote — is SESSION-GATED (tenant + Cedar). The runner sends no
+# cookie, so it reached them only through the middleware's dev demo-user
+# fallback, and that fallback is off wherever Cognito is configured. Result: the
+# runner worked on a laptop and 401'd wholesale in the deployment it exists for
+# — and it failed *asymmetrically*, since the trace POST had its own credential.
+#
+# The fix is a scoped machine identity, not an operator's cookie: a cookie
+# carries a real person's grants, dies with `session_epoch` on their next role
+# switch, and cannot be rotated without logging them out. `HARNESS_RUNNER_SECRET`
+# names the runner. The middleware half is `serviceAuthOr(
+# HARNESS_RUNNER_SERVICE_AUTH, ...)` in routes/harness.ts + routes/
+# prompt-versions.ts, which NEVER opens on an unset secret — so leaving this
+# unset changes nothing anywhere.
+_RUNNER_AUTH_HEADER = "x-harness-runner-auth"
+_RUNNER_AUTH_ENV = "HARNESS_RUNNER_SECRET"
+_announced_runner_auth = False
+
 
 def _trace_secret() -> str:
     """The configured trace secret, or '' when unset/blank."""
     return (os.environ.get(_TRACE_AUTH_ENV) or "").strip()
 
 
+def _runner_secret() -> str:
+    """The configured runner secret, or '' when unset/blank."""
+    return (os.environ.get(_RUNNER_AUTH_ENV) or "").strip()
+
+
 def _service_auth_headers(url: str) -> dict[str, str]:
-    """Header dict for `url` — empty unless it's the trace callback AND a
-    secret is configured, so every other request goes out unchanged."""
-    global _announced_trace_auth
-    if not url.split("?", 1)[0].endswith(_TRACE_PATH):
-        return {}
-    secret = _trace_secret()
-    if not _announced_trace_auth:
-        _announced_trace_auth = True
+    """Header dict for `url`.
+
+    The runner credential goes on EVERY middleware call (the whole control
+    plane is gated); the trace credential goes only on the trace callback. Both
+    are omitted when unset, so an unconfigured shell sends exactly what this
+    runner sent before either secret existed.
+    """
+    global _announced_trace_auth, _announced_runner_auth
+    headers: dict[str, str] = {}
+
+    runner = _runner_secret()
+    if not _announced_runner_auth:
+        _announced_runner_auth = True
         print(
-            f"  trace callback: {'sending' if secret else 'no'} service auth "
-            f"({_TRACE_AUTH_ENV} {'set' if secret else 'unset'})",
+            f"  middleware calls: {'sending' if runner else 'no'} service auth "
+            f"({_RUNNER_AUTH_ENV} {'set' if runner else 'unset'})",
             file=sys.stderr,
         )
-    return {_TRACE_AUTH_HEADER: secret} if secret else {}
+    if runner:
+        headers[_RUNNER_AUTH_HEADER] = runner
+
+    if url.split("?", 1)[0].endswith(_TRACE_PATH):
+        secret = _trace_secret()
+        if not _announced_trace_auth:
+            _announced_trace_auth = True
+            print(
+                f"  trace callback: {'sending' if secret else 'no'} service auth "
+                f"({_TRACE_AUTH_ENV} {'set' if secret else 'unset'})",
+                file=sys.stderr,
+            )
+        if secret:
+            headers[_TRACE_AUTH_HEADER] = secret
+
+    return headers
 
 
 def trace_auth_hint(status: int) -> str:
@@ -313,6 +378,38 @@ def trace_auth_hint(status: int) -> str:
     )
 
 
+def runner_auth_hint(status: int) -> str:
+    """One actionable sentence for a CONTROL-PLANE call the middleware rejected.
+
+    Same two mistakes to tell apart as the trace hint, plus a third this one
+    alone can hit: the deployment may not have the runner secret wired at all,
+    in which case the route is still asking for a session and the runner has
+    none. Say that explicitly rather than letting an operator read
+    `{"error":"Unauthenticated"}` and conclude their credentials expired.
+    """
+    if _runner_secret():
+        return (
+            f"middleware rejected {_RUNNER_AUTH_HEADER} (HTTP {status}): the "
+            f"{_RUNNER_AUTH_ENV} in this shell does not match the middleware's "
+            "secret, or that deployment has no HARNESS_RUNNER_SECRET wired and "
+            "is still asking for a session cookie"
+        )
+    return (
+        f"middleware requires a session or a runner credential (HTTP {status}) "
+        f"and {_RUNNER_AUTH_ENV} is unset in this shell — export it from the "
+        "orgiq-harness-runner-secret Secrets Manager secret. (This runner sends "
+        "no cookie; it only reached these routes via the dev demo-user "
+        "fallback, which is off wherever Cognito is configured.)"
+    )
+
+
+def auth_hint(url: str, status: int) -> str:
+    """Which of the two credentials `url` needed."""
+    if url.split("?", 1)[0].endswith(_TRACE_PATH):
+        return trace_auth_hint(status)
+    return runner_auth_hint(status)
+
+
 def _http(method: str, url: str, body: dict | None = None, timeout: int = 60) -> dict:
     data = None
     headers = {"Accept": "application/json"}
@@ -332,7 +429,8 @@ def _http(method: str, url: str, body: dict | None = None, timeout: int = 60) ->
                 return {"_raw": raw}
     except urllib.error.HTTPError as e:
         body_text = e.read().decode("utf-8", errors="replace") if e.fp else ""
-        raise HttpError(method, url, e.code, body_text) from None
+        hint = auth_hint(url, e.code) if e.code in (401, 403) else ""
+        raise HttpError(method, url, e.code, body_text, hint) from None
     except urllib.error.URLError as e:
         raise RuntimeError(f"{method} {url} failed: {e.reason}") from None
 
@@ -822,6 +920,11 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(f"git_sha={git_sha} label={label!r}")
 
     passed_n, failed_n = 0, 0
+    # A result the middleware never accepted is a verdict nobody can read
+    # back. The run used to print its pass-rate and exit 0 regardless, which
+    # is the same 'unattended success it did not earn' the auth fix is about
+    # — an auth mismatch here loses every row while the console looks clean.
+    unrecorded: list[str] = []
     started = time.perf_counter()
 
     for i, case in enumerate(cases, start=1):
@@ -975,6 +1078,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                 },
             )
         except (HttpError, RuntimeError) as e:
+            unrecorded.append(test_id)
             print(f"  warn: failed to record result for {test_id}: {e}", file=sys.stderr)
 
         # 6. Live progress.
@@ -1015,6 +1119,13 @@ def cmd_run(args: argparse.Namespace) -> int:
     print()
     print(f"run {run_id} done in {total_elapsed:.1f}s")
     print(f"  pass-rate: {pass_rate:.0%}  ({passed_n} pass / {failed_n} fail / {completed} total)")
+    if unrecorded:
+        print(
+            f"  WARNING: {len(unrecorded)} of {completed} result(s) were NOT recorded "
+            f"in the middleware — this run is incomplete on the portal "
+            f"({', '.join(unrecorded[:5])}{' ...' if len(unrecorded) > 5 else ''})",
+            file=sys.stderr,
+        )
 
     portal = os.environ.get("PORTAL_URL", "http://localhost:5183")
 
@@ -1041,6 +1152,8 @@ def cmd_run(args: argparse.Namespace) -> int:
         pass
 
     print(f"  portal: {portal}/observability/harness/runs/{run_id}")
+    if unrecorded:
+        return 4
     return 0 if completed == len(cases) else 4
 
 
@@ -1516,6 +1629,12 @@ def main(argv: list[str] | None = None) -> int:
     }[args.cmd]
     try:
         return handler(args)
+    except HttpError as e:
+        # `status` and `diff` call the middleware directly with no try/except,
+        # so a 401 used to surface as a urllib traceback with the actionable
+        # sentence buried under six frames of stdlib. The hint is the message.
+        print(f"error: {e}", file=sys.stderr)
+        return 2
     except KeyboardInterrupt:
         print("\ninterrupted", file=sys.stderr)
         return 130

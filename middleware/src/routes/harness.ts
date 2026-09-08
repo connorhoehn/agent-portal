@@ -21,6 +21,25 @@
 //   GET    /coverage                  — per-agent test coverage
 //
 // All Aurora I/O uses the RDS Data API via providers/aurora.ts exec().
+//
+// OFFLINE. Every route above that a harness run touches now branches on
+// `config.mock.aurora` into `mock/harness.ts` / `mock/prompt-versions.ts`. The
+// three that did not — `POST /runs/:runId/results`, `PATCH /runs/:id` and
+// `POST /promote` — called `exec` unconditionally and so 500'd in `dev:mock`
+// with `UnrecognizedClientException`, which meant a run could be created
+// offline, could never record a verdict, and reported every case unrecorded.
+//
+// Note why no check caught that: rule 4's write-half scan
+// (`mock/core/wire/mock-branches.ts`) only names an unmocked leaf in
+// `src/lib/**` or `src/providers/**`, and `exec` is excluded everywhere as
+// transport — so a route handler calling `exec` directly, which is what all
+// three did, is structurally invisible to it. THREE ROUTES ARE STILL LIKE THAT
+// HERE and are on that scan's list for the libraries below them rather than for
+// their own `exec` calls: `POST /trace` (lib/trace-sink.ts), `POST
+// /runs/:id/execute` (lib/harness-runner.ts) and `POST
+// /results/:invocationId/rejudge` (lib/judge.ts). Each wants a mock branch in
+// the library it calls — the transport, where every caller gets it — not a
+// second pipeline behind a branch in this file.
 
 import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
@@ -31,25 +50,20 @@ import { processTrace, type TraceInput } from '../lib/trace-sink.js';
 import { judgeResponse } from '../lib/judge.js';
 import { executeRun, loadCasesForRun } from '../lib/harness-runner.js';
 import { requireAction, requireTenant } from '../lib/authz.js';
-import { HARNESS_TRACE_SERVICE_AUTH, requireServiceAuth } from '../lib/service-auth.js';
+import {
+  HARNESS_TRACE_SERVICE_AUTH, HARNESS_RUNNER_SERVICE_AUTH,
+  requireServiceAuth, serviceAuthOr,
+} from '../lib/service-auth.js';
+import type { RequestHandler } from 'express';
 import { config } from '../config.js';
 import {
   mockListCases, mockGetCase, mockUpsertCase, mockPatchCase, mockDeleteCase,
   mockListRuns, mockGetRun, mockGetResults, mockCreateRun, mockCoverage,
+  mockUpsertResult, mockPatchRun, type MockRunPatch,
 } from '../mock/harness.js';
-import { mockListPromotedVersions } from '../mock/prompt-versions.js';
+import { mockListPromotedVersions, mockPromotePromptVersion } from '../mock/prompt-versions.js';
 
 export const harnessRouter = Router();
-
-// Canary/harness telemetry is an orgiq surface. Tenant-scope every route so
-// an assessment-tenant session can't read another tenant's eval runs, cases
-// or results — EXCEPT the agent-facing `/trace` callback below, which is
-// sessionless by design and so has no tenant to check (it self-gates via
-// requireTraceAuth).
-harnessRouter.use((req, res, next) => {
-  if (req.path === '/trace') { next(); return; }
-  requireTenant('orgiq')(req, res, next);
-});
 
 // The trace callback (`POST /trace`) is agent-facing: deployed runtimes post
 // their bundles here with no session (agents/_shared/instrumentation.py). It
@@ -64,6 +78,49 @@ harnessRouter.use((req, res, next) => {
 // COMPARE, ONE PLACE". Still applied PER ROUTE, never at the mount: a blanket
 // guard over this router 401s the fleet's trace emission.
 const requireTraceAuth = requireServiceAuth(HARNESS_TRACE_SERVICE_AUTH);
+
+/**
+ * The harness RUNNER's control plane — the routes `infra/scripts/harness.py`
+ * calls that are not `/trace`.
+ *
+ * The runner had no credential for any of them. It worked in dev only because
+ * `demoFallbackAllowed()` hands a cookie-less request the demo session — which
+ * is off the moment Cognito is configured, so the runner "worked locally and
+ * 401'd wholesale in the environment it was built for", and did so *midway
+ * through a run*: the trace POST succeeded (it had its own secret) while the
+ * result POST that records the verdict did not.
+ *
+ * `serviceAuthOr`, never `requireServiceAuth`: the portal reads and writes
+ * every one of these routes with a real session, and that must keep working
+ * unchanged. A valid `x-harness-runner-auth` passes; anything else — including
+ * a request with no header at all, and every request while
+ * HARNESS_RUNNER_SECRET is unset — runs the same Cedar gate it ran before.
+ *
+ * NOT applied to the case CRUD (`POST/PATCH/DELETE /cases`): the runner reads
+ * cases straight from Aurora over the Data API and never edits them, so
+ * authoring a test case stays a human decision.
+ */
+const runnerOr = (...human: RequestHandler[]): RequestHandler =>
+  serviceAuthOr(HARNESS_RUNNER_SERVICE_AUTH, ...human);
+
+/** The router-level tenant gate, or the runner's credential. Built once. */
+const runnerOrTenant = serviceAuthOr(HARNESS_RUNNER_SERVICE_AUTH, requireTenant('orgiq'));
+
+// Canary/harness telemetry is an orgiq surface. Tenant-scope every route so
+// an assessment-tenant session can't read another tenant's eval runs, cases
+// or results — EXCEPT the agent-facing `/trace` callback below, which is
+// sessionless by design and so has no tenant to check (it self-gates via
+// requireTraceAuth).
+harnessRouter.use((req, res, next) => {
+  if (req.path === '/trace') { next(); return; }
+  // …and except the harness RUNNER, which has a machine identity rather than a
+  // tenant (see `runnerOr` above). `serviceAuthOr` falls through to
+  // requireTenant for everyone else, and with HARNESS_RUNNER_SECRET unset it
+  // falls through always — so this line is a no-op until an operator mints the
+  // secret.
+  runnerOrTenant(req, res, next);
+});
+
 
 // ── Shared types ───────────────────────────────────────────────────────────
 
@@ -610,7 +667,7 @@ interface CreateRunBody {
   mode?: 'live' | 'sim';
 }
 
-harnessRouter.post('/runs', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
+harnessRouter.post('/runs', runnerOr(requireAction('ManageCanary')), asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as CreateRunBody;
   const label = typeof body.label === 'string' && body.label.trim()
     ? body.label.trim()
@@ -701,7 +758,7 @@ harnessRouter.post('/runs/:id/execute', requireAction('ManageCanary'), asyncHand
 
 // ── GET /runs — recent runs ────────────────────────────────────────────────
 
-harnessRouter.get('/runs', requireAction('ViewObservability'), asyncHandler(async (req, res) => {
+harnessRouter.get('/runs', runnerOr(requireAction('ViewObservability')), asyncHandler(async (req, res) => {
   const rawLimit = parseInt((req.query['limit'] as string) ?? '14', 10);
   const limit = Number.isFinite(rawLimit) && rawLimit > 0
     ? Math.min(rawLimit, 100)
@@ -724,7 +781,7 @@ harnessRouter.get('/runs', requireAction('ViewObservability'), asyncHandler(asyn
 
 // ── GET /runs/:id — run + joined results ───────────────────────────────────
 
-harnessRouter.get('/runs/:id', requireAction('ViewObservability'), asyncHandler(async (req, res) => {
+harnessRouter.get('/runs/:id', runnerOr(requireAction('ViewObservability')), asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
   if (config.mock.aurora) {
     const run = mockGetRun(id);
@@ -843,7 +900,7 @@ interface UpsertResultBody {
   estCostUsd?: number | null;
 }
 
-harnessRouter.post('/runs/:runId/results', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
+harnessRouter.post('/runs/:runId/results', runnerOr(requireAction('ManageCanary')), asyncHandler(async (req, res) => {
   const runId = String(req.params['runId'] ?? '');
   const body = (req.body ?? {}) as UpsertResultBody;
   const testId = typeof body.testId === 'string' ? body.testId : '';
@@ -852,6 +909,30 @@ harnessRouter.post('/runs/:runId/results', requireAction('ManageCanary'), asyncH
   const invocationId = (typeof body.invocationId === 'string' && /^[0-9a-f-]{36}$/i.test(body.invocationId))
     ? body.invocationId
     : null;
+
+  // The runner's verdict for one case. Without this branch a `dev:mock` run
+  // reached the Data API and every result came back unrecorded — and since the
+  // runner started checking, loudly so.
+  if (config.mock.aurora) {
+    mockUpsertResult(runId, {
+      testId,
+      invocationId,
+      passed: body.passed ?? null,
+      judgeScore: body.judgeScore ?? null,
+      judgeRationale: body.judgeRationale ?? null,
+      schemaValid: body.schemaValid ?? null,
+      tagHits: body.tagHits ?? null,
+      referenceSimilarity: body.referenceSimilarity ?? null,
+      responseSnippet: body.responseSnippet ?? null,
+      failReasons: body.failReasons ?? null,
+      durationMs: body.durationMs ?? null,
+      inputTokens: body.inputTokens ?? null,
+      outputTokens: body.outputTokens ?? null,
+      estCostUsd: body.estCostUsd ?? null,
+    });
+    res.json({ ok: true });
+    return;
+  }
 
   await exec(
     `INSERT INTO observability.test_results
@@ -921,7 +1002,7 @@ interface PatchRunBody {
   agentVersions?: Record<string, string>;
 }
 
-harnessRouter.patch('/runs/:id', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
+harnessRouter.patch('/runs/:id', runnerOr(requireAction('ManageCanary')), asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
   const body = (req.body ?? {}) as PatchRunBody;
   const sets: string[] = [];
@@ -968,6 +1049,32 @@ harnessRouter.patch('/runs/:id', requireAction('ManageCanary'), asyncHandler(asy
 
   if (sets.length === 0) {
     res.json({ ok: true, changed: 0 });
+    return;
+  }
+
+  // Placed AFTER the `sets` build so both paths share one definition of "the
+  // body carried something we recognise" — a second list of field names here
+  // would drift from the SQL one the first time a column was added.
+  //
+  // Only the four storable fields are handed on. The five counters the body may
+  // also carry are selectors over the result rows offline (see
+  // `mock/harness.ts` `MockRunPatch`), and the runner posts those rows before
+  // it patches, so the numbers a reader gets back are the ones the caller meant
+  // — counted rather than asserted.
+  if (config.mock.aurora) {
+    const patch: MockRunPatch = {};
+    if (typeof body.status === 'string') patch.status = body.status;
+    if ('finishedAt' in body) {
+      patch.finishedAt = body.finishedAt === null ? null
+        : typeof body.finishedAt === 'string' ? body.finishedAt
+        : 'now';
+    }
+    if ('notes' in body) patch.notes = body.notes ?? null;
+    if (body.agentVersions && typeof body.agentVersions === 'object' && !Array.isArray(body.agentVersions)) {
+      patch.agentVersions = body.agentVersions;
+    }
+    if (!mockPatchRun(id, patch)) throw new NotFoundError('run not found');
+    res.json({ ok: true });
     return;
   }
 
@@ -1390,12 +1497,42 @@ interface PromoteBody {
   promotedBy?: string | null;
 }
 
-harnessRouter.post('/promote', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
+harnessRouter.post('/promote', runnerOr(requireAction('ManageCanary')), asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as PromoteBody;
   const promptVersion = typeof body.promptVersion === 'string' ? body.promptVersion.trim() : '';
   const agentId = typeof body.agentId === 'string' ? body.agentId.trim() : '';
   if (!promptVersion) throw new ValidationError('promptVersion is required');
   if (!agentId) throw new ValidationError('agentId is required');
+
+  const promotedBy = (typeof body.promotedBy === 'string' && body.promotedBy.trim())
+    ? body.promotedBy.trim()
+    : 'harness-runner';
+
+  // Offline the registry is `mock/prompt-versions.ts`, which is also what the
+  // POST that registered the SHA wrote to — so a prompt registered in this
+  // process can be promoted in it, and the promote list (which already had a
+  // mock branch) shows the result. Both the 404 and the 409 are real decisions
+  // taken against that registry, not softened into a 200.
+  if (config.mock.aurora) {
+    const outcome = mockPromotePromptVersion({
+      promptVersion, agentId, promotedBy, notes: body.notes ?? null,
+    });
+    if (!outcome.ok && outcome.reason === 'not_found') {
+      res.status(404).json({ error: 'prompt_version not found', promptVersion });
+      return;
+    }
+    if (!outcome.ok) {
+      res.status(409).json({
+        error: 'agentId mismatch — this prompt_version belongs to a different agent',
+        promptVersion,
+        expectedAgentId: outcome.expectedAgentId,
+        gotAgentId: agentId,
+      });
+      return;
+    }
+    res.json({ ok: true, promotedAt: outcome.promotedAt });
+    return;
+  }
 
   // Verify the SHA exists AND matches the claimed agent. Surfaces a 404 when
   // the version is unknown (mistyped) and a 409 when it belongs to a
@@ -1419,10 +1556,6 @@ harnessRouter.post('/promote', requireAction('ManageCanary'), asyncHandler(async
     });
     return;
   }
-
-  const promotedBy = (typeof body.promotedBy === 'string' && body.promotedBy.trim())
-    ? body.promotedBy.trim()
-    : 'harness-runner';
 
   const updated = await exec(
     `UPDATE observability.prompt_versions

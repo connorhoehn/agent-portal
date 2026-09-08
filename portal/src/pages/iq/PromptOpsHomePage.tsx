@@ -52,7 +52,8 @@ export default function PromptOpsHomePage() {
   const { data: weight } = useFetch<WeightResponse>('/api/observability/canary/weight', 10_000);
   const { data: prompts } = useFetch<PromptsResponse>('/api/observability/canary/prompts', 30_000);
   const { data: experiments, error: experimentsError } = useFetch<ExperimentsResponse>('/api/iq/prompts/experiments', 60_000);
-  const { data: runtimes } = useFetch<AgentRuntime[]>('/api/agents', 30_000);
+  const { data: runtimesResp } = useFetch<{ agents: AgentRuntime[] }>('/api/agents', 30_000);
+  const runtimes = runtimesResp?.agents;
 
   const allPrompts = library?.prompts ?? [];
   const promptNames = new Map(allPrompts.map((p) => [p.id, p.name]));

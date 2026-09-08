@@ -39,7 +39,140 @@ FILES = [
     # targeted a proj-* project family no seed ever created.)
     'schema/seed_program.sql',
     'schema/seed_kb_registry.sql',
+    # LAST, and it has to be: it GRANTs SELECT on an explicit allow-list of
+    # tables, so every one of them must already exist. This is the database
+    # half of the read-only boundary for the agents' `query_graph(sql)` tool —
+    # `agents/_shared/sql_guard.py` is the regex belt, this is the braces.
+    # Idempotent (revoke-then-grant), and it skips any table that is missing.
+    # See docs/readonly-graph-role.md.
+    'schema/graph_readonly_role.sql',
 ]
+
+# The role created by graph_readonly_role.sql, and the Secrets Manager secret
+# OrgIQ-Aurora mints for it. The SQL file deliberately creates the role with no
+# password — the credential lives only in Secrets Manager, never in git — so
+# the one `ALTER ROLE ... PASSWORD` statement is issued here, from the secret.
+READONLY_ROLE = 'orgiq_graph_reader'
+READONLY_SECRET_NAME = 'orgiq-aurora-readonly-credentials'
+
+# Characters the generated password must not contain. The CDK secret generator
+# excludes these (see infra/lib/aurora-stack.ts); we re-check rather than trust,
+# because the only safe way to inline a password into ALTER ROLE is to know it
+# holds no quote or backslash to escape.
+_PASSWORD_FORBIDDEN = set("'\"\\`$;\n\r")
+
+
+def _load_readonly_password(region: str) -> str | None:
+    """Fetch the read-only role's password from Secrets Manager, or None.
+
+    Returns None — quietly, and without failing the run — when the secret does
+    not exist. That is the pre-`OrgIQ-Aurora`-redeploy state: the grants still
+    apply, the role still exists, it simply cannot log in yet, and the agents
+    keep using the admin secret via their documented fallback. A seed run must
+    not start failing because a stack has not been redeployed.
+    """
+    import boto3
+    sm = boto3.client('secretsmanager', region_name=region)
+    name = os.environ.get('AURORA_READONLY_SECRET_ARN') or READONLY_SECRET_NAME
+    try:
+        raw = sm.get_secret_value(SecretId=name)['SecretString']
+    except Exception as e:  # noqa: BLE001
+        if 'ResourceNotFound' in type(e).__name__ or 'ResourceNotFound' in str(e):
+            print(f'  ⊘ {name} not found — role left without a password '
+                  '(deploy OrgIQ-Aurora, then re-run)')
+            return None
+        print(f'  ✗ could not read {name}: {str(e)[:160]}')
+        return None
+
+    import json
+    try:
+        password = json.loads(raw).get('password')
+    except ValueError:
+        password = None
+    if not password:
+        print(f'  ✗ {name} has no "password" field')
+        return None
+    if set(password) & _PASSWORD_FORBIDDEN:
+        # Fail loud rather than escape-and-hope. A password we cannot inline
+        # safely is a generator bug, not something to work around here.
+        print(f'  ✗ {name} password contains a character that cannot be '
+              'safely inlined into ALTER ROLE — regenerate the secret')
+        return None
+    return password
+
+
+def set_readonly_password(rds, arn: str, sec: str, db: str, region: str) -> int:
+    """Give `orgiq_graph_reader` the password from Secrets Manager.
+
+    Returns a failure count (0 or 1) so it folds into main()'s exit status.
+    """
+    print(f'{READONLY_SECRET_NAME}: setting {READONLY_ROLE} password')
+    password = _load_readonly_password(region)
+    if password is None:
+        return 0  # not configured yet — see the docstring above
+
+    sql = f"ALTER ROLE {READONLY_ROLE} WITH LOGIN PASSWORD '{password}'"
+    for attempt in range(6):
+        try:
+            rds.execute_statement(resourceArn=arn, secretArn=sec, database=db, sql=sql)
+            print(f'  ✓ {READONLY_ROLE} can now authenticate')
+            return 0
+        except Exception as e:  # noqa: BLE001
+            msg = str(e)
+            if any(r in msg for r in RETRYABLE) and attempt < 5:
+                time.sleep(2 * (attempt + 1))
+                continue
+            # Never echo the statement: it carries the password.
+            print(f'  FAIL [ALTER ROLE {READONLY_ROLE} PASSWORD] -> {msg[:160]}')
+            return 1
+    return 1
+
+
+def verify_readonly_role(rds, arn: str, sec: str, db: str) -> int:
+    """Print what the role can actually do, straight from the engine.
+
+    This is the only part of the proof that needs a live cluster — the offline
+    tests can assert what the SQL *says*, but only PostgreSQL can say what it
+    granted. Returns a failure count.
+    """
+    probe = f"""
+        SELECT
+          has_table_privilege('{READONLY_ROLE}', 'people', 'SELECT') AS can_select,
+          has_table_privilege('{READONLY_ROLE}', 'people', 'INSERT') AS can_insert,
+          has_table_privilege('{READONLY_ROLE}', 'people', 'UPDATE') AS can_update,
+          has_table_privilege('{READONLY_ROLE}', 'people', 'DELETE') AS can_delete,
+          has_schema_privilege('{READONLY_ROLE}', 'public', 'CREATE') AS can_create,
+          (SELECT count(*) FROM pg_class c JOIN pg_roles r ON r.oid = c.relowner
+             WHERE r.rolname = '{READONLY_ROLE}') AS owned_objects
+    """
+    try:
+        resp = rds.execute_statement(resourceArn=arn, secretArn=sec, database=db, sql=probe)
+    except Exception as e:  # noqa: BLE001
+        print(f'  ✗ verification query failed: {str(e)[:160]}')
+        return 1
+
+    row = resp.get('records', [[]])[0]
+    values = [list(cell.values())[0] if cell and not cell.get('isNull') else None for cell in row]
+    names = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'CREATE on schema', 'owned objects']
+    for name, value in zip(names, values):
+        print(f'    {name:<16} {value}')
+
+    can_select, can_insert, can_update, can_delete, can_create, owned = values
+    problems = []
+    if not can_select:
+        problems.append('cannot SELECT (grants did not apply)')
+    for label, flag in (('INSERT', can_insert), ('UPDATE', can_update),
+                        ('DELETE', can_delete), ('CREATE', can_create)):
+        if flag:
+            problems.append(f'CAN {label} — the role is not read-only')
+    if owned:
+        problems.append(f'owns {owned} object(s) — an owner can always write')
+    if problems:
+        for p in problems:
+            print(f'  ✗ {p}')
+        return 1
+    print('  ✓ read-only boundary confirmed by the engine')
+    return 0
 
 
 def main() -> int:
@@ -69,6 +202,12 @@ def main() -> int:
                     break
         print(f'{path}: {ok} ok, {skipped} skipped, {failed} failed / {len(stmts)}')
         total_fail += failed
+
+    # The read-only role's password (from Secrets Manager, never from a file)
+    # and the engine's own answer about what that role can do.
+    region = os.environ.get('AWS_REGION', 'us-east-1')
+    total_fail += set_readonly_password(rds, arn, sec, db, region)
+    total_fail += verify_readonly_role(rds, arn, sec, db)
 
     return 1 if total_fail else 0
 

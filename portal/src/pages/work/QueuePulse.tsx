@@ -56,9 +56,13 @@ export function QueuePulse({ summary, jobs, degraded }: {
   degraded: boolean;
 }) {
   const { session } = useSession();
-  // /api/bots is role/capability gated; a member simply gets no roster.
-  const { data, error } = useFetch<{ bots: PulseBot[] }>('/api/bots', 15_000);
-  const bots = error ? [] : data?.bots ?? [];
+  // /api/bots is role/capability gated; a member simply gets no roster. That
+  // is a THIRD state next to "no bots" and "we could not read the roster" —
+  // the route marks the last one `degraded`, and the hint below names which
+  // of the three the reader is looking at.
+  const { data, error, degraded: botsDegraded } = useFetch<{ bots: PulseBot[] }>('/api/bots', 15_000);
+  const botsFailure = error ?? botsDegraded;
+  const bots = botsFailure ? [] : data?.bots ?? [];
 
   const queued = summary?.jobs['queued'] ?? 0;
   const processing = (summary?.jobs['running'] ?? 0) + (summary?.jobs['claimed'] ?? 0);
@@ -104,10 +108,12 @@ export function QueuePulse({ summary, jobs, degraded }: {
           },
           {
             label: 'Bots on this queue',
-            value: error ? '—' : roster.length,
-            hint: error
-              ? 'roster not visible to this role'
-              : `${pausedBotCount(roster)} paused · every run passes review gates`,
+            value: botsFailure ? '—' : roster.length,
+            hint: botsDegraded
+              ? `roster unreadable — ${botsDegraded}`
+              : error
+                ? 'roster not visible to this role'
+                : `${pausedBotCount(roster)} paused · every run passes review gates`,
           },
         ]}
       />

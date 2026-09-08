@@ -3,10 +3,11 @@
 Why this exists
 ---------------
 ``search`` and ``advisor`` expose a ``query_graph(sql)`` tool: the *model*
-writes the SQL and the agent executes it verbatim through the RDS Data API,
-against a role that can write. The only thing standing between a prompt
-injection in an ingested document and ``DELETE FROM people`` is this check, so
-it is a security boundary, not a style rule.
+writes the SQL and the agent executes it verbatim through the RDS Data API.
+When this module was written that call ran as a role that could write, and
+this check was the only thing standing between a prompt injection in an
+ingested document and ``DELETE FROM people`` — so it is a security boundary,
+not a style rule.
 
 Both agents used to carry their own copy of::
 
@@ -34,10 +35,34 @@ The guard here therefore does three things the regex could not:
 3. **Rejects write verbs anywhere in the statement**, not just at the front —
    which is what closes the CTE hole.
 
-Deliberately NOT here: a real SQL parser. The correct long-term fix is a
-database role with no write grants (``GRANT SELECT`` only) so the engine, not
-a regex, is the authority. This module is the belt to that braces and says so
-loudly rather than pretending to be complete.
+Deliberately NOT here: a real SQL parser.
+
+The braces have shipped
+-----------------------
+This module used to end by saying the correct fix was a database role with no
+write grants, and that it was the belt to a missing braces. That role now
+exists: ``orgiq_graph_reader`` (``schema/graph_readonly_role.sql``) holds
+``SELECT`` on the org-graph tables and nothing else, owns nothing, carries no
+escalation attribute, and runs pinned to
+``default_transaction_read_only = on``. ``_shared/db_credentials.py`` selects
+its credential for every ``query_graph`` call in an environment that has
+applied the grant, so a write is refused by PostgreSQL rather than by a regex.
+Runbook: ``docs/readonly-graph-role.md``.
+
+This module stays exactly as it is, and is still the first line, for three
+reasons:
+
+*   An environment that has not applied the grant yet — a fresh cluster, a
+    local ``agentcore dev``, a rebuild mid-runbook — falls back to the admin
+    credential, and there this check is once again the whole boundary.
+*   It rejects at the door, before a statement reaches Aurora, so a probing
+    injection costs no round trip and no ACU.
+*   It returns a reason the *model* can act on. ``permission denied for table
+    people`` reads to a model as a bug to route around; "disallowed keyword
+    'DELETE' in a read-only query" reads as a rule.
+
+Defence in depth means both, not the newer one. Do not delete this because the
+role exists.
 
 Stdlib only, no boto3 — so it can be unit tested anywhere.
 """

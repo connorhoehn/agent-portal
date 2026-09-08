@@ -496,6 +496,12 @@ export interface PrWatchHealth {
   lastErrorAt: string | null;
   /** Consecutive whole-tick failures. 0 means the last tick completed. */
   consecutiveFailures: number;
+  /** When the CURRENT failure streak started, null when the last tick was ok.
+   *  This is the field that answers "has it been broken for 40 minutes?"
+   *  without reading logs — `consecutiveFailures` alone cannot, because the
+   *  interval is tunable (BOT_PR_POLL_INTERVAL_MS) and a reader would have to
+   *  multiply by a number the wire never carries. */
+  failingSince: string | null;
   /** Per-item failures inside the last completed tick — an unreachable repo or
    *  a borrow that failed. Distinct from a tick that threw. */
   lastTickItemErrors: number;
@@ -510,6 +516,7 @@ const health: PrWatchHealth = {
   lastError: null,
   lastErrorAt: null,
   consecutiveFailures: 0,
+  failingSince: null,
   lastTickItemErrors: 0,
   dispatchedLastTick: 0,
   settledLastTick: 0,
@@ -519,9 +526,16 @@ const health: PrWatchHealth = {
  * What the poller has actually been doing. A copy, so a reader cannot mutate
  * the record it is reading.
  *
- * Not wired to a route here on purpose: adding one changes the HTTP surface
- * and the wire snapshot, which is a separate decision from making the state
- * exist. The state is the part that was missing.
+ * IN MEMORY, DELIBERATELY. The likeliest thing to break this poller is Aurora
+ * being unreachable, and a durable record would have to be written to the one
+ * place it cannot reach when it matters. The cost is that the record dies with
+ * the process — which is correct: a fresh process has genuinely never ticked,
+ * and `running: false, lastTickOk: null` says exactly that rather than
+ * inventing a healthy-looking zero.
+ *
+ * Now read by `GET /api/observability/pr-watch-health` (routes/
+ * observability.ts), which is the whole point: an operator can see a poller
+ * that has been failing for 40 minutes without tailing logs.
  */
 export function prWatchHealth(): PrWatchHealth {
   return { ...health };
@@ -531,9 +545,10 @@ export function prWatchHealth(): PrWatchHealth {
 export function resetPrWatchHealth(): void {
   Object.assign(health, {
     running: false, lastTickAt: null, lastTickOk: null, lastError: null,
-    lastErrorAt: null, consecutiveFailures: 0, lastTickItemErrors: 0,
-    dispatchedLastTick: 0, settledLastTick: 0,
+    lastErrorAt: null, consecutiveFailures: 0, failingSince: null,
+    lastTickItemErrors: 0, dispatchedLastTick: 0, settledLastTick: 0,
   });
+  _firstFailureAtMs = null;
 }
 
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
@@ -557,6 +572,7 @@ export async function runPollTick(): Promise<void> {
       lastTickAt: new Date().toISOString(),
       lastTickOk: true,
       consecutiveFailures: 0,
+      failingSince: null,
       lastTickItemErrors: r.errors,
       dispatchedLastTick: r.dispatched,
       settledLastTick: r.settled,
@@ -598,7 +614,10 @@ function noteTickFailure(err: unknown): void {
   const message = firstLine(err, 'poll failed');
   const now = new Date();
   health.consecutiveFailures++;
-  if (health.consecutiveFailures === 1) _firstFailureAtMs = now.getTime();
+  if (health.consecutiveFailures === 1) {
+    _firstFailureAtMs = now.getTime();
+    health.failingSince = now.toISOString();
+  }
   Object.assign(health, {
     lastTickAt: now.toISOString(),
     lastTickOk: false,

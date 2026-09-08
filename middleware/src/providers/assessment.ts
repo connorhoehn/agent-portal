@@ -411,6 +411,9 @@ export async function createTeam(input: { name: string; cohort: Cohort; assessme
     const team: M.MockTeam = {
       id, name: input.name, cohort: input.cohort, workflow_step: 1,
       assessment_lead: input.assessment_lead ?? '', contacts: [], repos: [], archetype: null,
+      // Matches `assessment_teams.rubric_version`'s own DEFAULT, so a team
+      // created here and one created by the Aurora INSERT name the same rubric.
+      rubric_version: M.DEFAULT_RUBRIC_VERSION,
       exceptions: [], created_at: now, updated_at: now, contributors: [],
     };
     M.teams().push(team);

@@ -30,6 +30,8 @@ import type { TraceNode } from '../../components/observability/TraceTree';
 import { ToolWaterfall } from '../../components/observability/ToolWaterfall';
 import type { ToolCall } from '../../components/observability/ToolWaterfall';
 import { GuardrailRuleBadge } from '../../components/observability/GuardrailRuleBadge';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { readDegraded } from '../../lib/degraded';
 import { SaveAsTestCaseModal } from '../../components/observability/SaveAsTestCaseModal';
 import { T } from './Text';
 
@@ -450,20 +452,35 @@ interface MemoryEventRow {
 
 function MemoryOperationsCard({ invocationId }: { invocationId: string }) {
   const [events, setEvents] = useState<MemoryEventRow[] | null>(null);
+  // Both ways of being blind, kept apart from the honest zero. This card used
+  // to `.catch(() => setEvents([]))`, so a dead endpoint and an agent that
+  // never touched memory rendered the identical sentence.
+  const [failure, setFailure] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     let cancelled = false;
     setEvents(null);
+    setFailure(null);
     fetch(
       `/api/observability/memory/events?invocationId=${encodeURIComponent(invocationId)}&limit=50`,
       { credentials: 'include' },
     )
-      .then((r) => (r.ok ? r.json() : { events: [] }))
-      .then((j: { events?: MemoryEventRow[] }) => {
-        if (!cancelled) setEvents(j.events ?? []);
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+        return (await r.json()) as { events?: MemoryEventRow[] };
       })
-      .catch(() => { if (!cancelled) setEvents([]); });
+      .then((j) => {
+        if (cancelled) return;
+        setFailure(readDegraded(j));
+        setEvents(j.events ?? []);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setFailure(e instanceof Error ? e.message : 'the request failed');
+        setEvents([]);
+      });
     return () => { cancelled = true; };
-  }, [invocationId]);
+  }, [invocationId, reloadKey]);
 
   const count = events?.length ?? 0;
   return (
@@ -474,7 +491,14 @@ function MemoryOperationsCard({ invocationId }: { invocationId: string }) {
           {events == null ? 'loading…' : `${count} op${count === 1 ? '' : 's'}`}
         </T>
       </SectionLabel>
-      {events == null ? (
+      {failure ? (
+        <UnavailableNotice
+          error={failure}
+          what="this invocation's memory operations"
+          source="Memory events are projected into the Aurora observability tables"
+          onRetry={() => setReloadKey((k) => k + 1)}
+        />
+      ) : events == null ? (
         <InlinePlaceholder align="center" size="sm">Loading…</InlinePlaceholder>
       ) : events.length === 0 ? (
         <InlinePlaceholder align="center" size="sm">
@@ -552,20 +576,35 @@ interface GuardrailInterventionRow {
 
 function GuardrailTraceCard({ invocationId }: { invocationId: string }) {
   const [rows, setRows] = useState<GuardrailInterventionRow[] | null>(null);
+  // This card is only rendered for an invocation that WAS intervened on, so
+  // "no rule-level breakdown was captured" is already an odd answer — reading
+  // it when the query merely failed makes it a wrong one.
+  const [failure, setFailure] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => {
     let cancelled = false;
     setRows(null);
+    setFailure(null);
     fetch(
       `/api/observability/guardrails-detail/interventions?invocationId=${encodeURIComponent(invocationId)}&limit=50`,
       { credentials: 'include' },
     )
-      .then((r) => (r.ok ? r.json() : { interventions: [] }))
-      .then((j: { interventions?: GuardrailInterventionRow[] }) => {
-        if (!cancelled) setRows(j.interventions ?? []);
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+        return (await r.json()) as { interventions?: GuardrailInterventionRow[] };
       })
-      .catch(() => { if (!cancelled) setRows([]); });
+      .then((j) => {
+        if (cancelled) return;
+        setFailure(readDegraded(j));
+        setRows(j.interventions ?? []);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setFailure(e instanceof Error ? e.message : 'the request failed');
+        setRows([]);
+      });
     return () => { cancelled = true; };
-  }, [invocationId]);
+  }, [invocationId, reloadKey]);
 
   return (
     <Card padding="md">
@@ -575,7 +614,14 @@ function GuardrailTraceCard({ invocationId }: { invocationId: string }) {
           {rows == null ? 'loading…' : `${rows.length} rule${rows.length === 1 ? '' : 's'} fired`}
         </T>
       </SectionLabel>
-      {rows == null ? (
+      {failure ? (
+        <UnavailableNotice
+          error={failure}
+          what="this invocation's guardrail breakdown"
+          source="Interventions are read from the Aurora observability tables"
+          onRetry={() => setReloadKey((k) => k + 1)}
+        />
+      ) : rows == null ? (
         <InlinePlaceholder align="center" size="sm">Loading…</InlinePlaceholder>
       ) : rows.length === 0 ? (
         <InlinePlaceholder align="center" size="sm">

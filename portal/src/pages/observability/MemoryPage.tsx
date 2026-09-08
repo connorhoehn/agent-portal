@@ -32,6 +32,8 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { firstDegraded } from '../../lib/degraded';
 import { T } from './Text';
 
 // ── Types (mirrored from middleware/src/routes/memory.ts) ──────────────────
@@ -125,7 +127,9 @@ function MemoryPage() {
   const [agentFilter, setAgentFilter] = useState<string>('');
   const [kindFilter, setKindFilter] = useState<string>('');
 
-  const { data: statsData } = useFetch<MemoryStatsResponse>(
+  const {
+    data: statsData, error: statsError, refresh: refreshStats,
+  } = useFetch<MemoryStatsResponse>(
     `/api/observability/memory/stats?windowHours=${win.hours}`,
     30_000,
   );
@@ -154,6 +158,11 @@ function MemoryPage() {
     [stats],
   );
 
+  // Both reads hit the same observability tables; when the read fails they
+  // answer 200 with `{ byAgent: [] }` / `{ events: [] }`, which draws as an
+  // agent fleet that has simply never touched memory.
+  const memoryDegraded = firstDegraded(statsData, eventsData);
+
   const [expanded, setExpanded] = useState<string | null>(null);
 
   return (
@@ -162,11 +171,25 @@ function MemoryPage() {
       description={`${totalEvents} event${totalEvents === 1 ? '' : 's'} in last ${win.label} · ${totalColdSessions} cold session${totalColdSessions === 1 ? '' : 's'}`}
       actions={<WindowPicker value={windowIdx} onChange={setWindowIdx} />}
     >
+      {(statsError || memoryDegraded) && (
+        <UnavailableNotice
+          error={statsError ?? memoryDegraded ?? 'the memory query failed'}
+          what="memory activity"
+          source="Memory events are projected into the Aurora observability tables"
+          onRetry={refreshStats}
+          className="mb-4"
+        />
+      )}
+
       <Card padding="md">
         {stats.length === 0 ? (
           <SmartEmptyState
             title="No memory operations recorded"
             detail="Memory events surface once an agent emits retrieve/write spans inside its trace bundle."
+            degraded={memoryDegraded}
+            degradedWhat="the per-agent memory rollup"
+            degradedSource="Memory events are projected into the Aurora observability tables"
+            onRetry={refreshStats}
             actions={[
               {
                 label: 'Seed synthetic memory events',
@@ -246,7 +269,7 @@ function MemoryPage() {
           }
         />
         {events.length === 0 ? (
-          <EmptyState text="No matching memory events in this window." />
+          <EmptyState text="No matching memory events in this window." degraded={memoryDegraded} />
         ) : (
           <Table>
             <TableHead>
@@ -365,7 +388,15 @@ function WindowPicker({ value, onChange }: { value: number; onChange: (i: number
   );
 }
 
-function EmptyState({ text }: { text: string }) {
+// Row-level "nothing here" that will not say so when it does not know.
+function EmptyState({ text, degraded }: { text: string; degraded?: string | null }) {
+  if (degraded) {
+    return (
+      <T as="div" className="p-6 text-center text-[12px] text-danger">
+        Unknown — this read failed ({degraded}).
+      </T>
+    );
+  }
   return (
     <T as="div" className="p-6 text-center text-[12px] text-text-tertiary">
       {text}

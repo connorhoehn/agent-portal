@@ -23,6 +23,7 @@ import {
   Textarea,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
+import { UnavailableNotice, orUnknown } from '../../components/UnavailableNotice';
 import { useFetch } from '../../hooks/useFetch';
 import { T } from './Text';
 
@@ -76,7 +77,15 @@ function CodeInterpreterPage() {
   // — sandboxes spend real AWS resources). Reads stay open.
   const { can, ready } = useCapabilities();
   const canManage = ready && can('ManageDevbox');
-  const { data, refresh } = useFetch<{ sessions: CodeSession[] }>('/api/capabilities/code-sessions', 10000);
+  // The session list is a live AgentCore Data-Plane call. When it fails the
+  // route answers `{ sessions: [], degraded, error }` — the stat strip then
+  // reads "0 active / 0 lifetime", which is a claim about the fleet rather
+  // than an admission that we could not ask it. (A stale CODE_INTERPRETER_ID
+  // in .env.aws is the documented way to land here.)
+  const {
+    data, error: sessionsError, degraded: sessionsDegraded, refresh,
+  } = useFetch<{ sessions: CodeSession[] }>('/api/capabilities/code-sessions', 10000);
+  const sessionsFailure = sessionsError ?? sessionsDegraded;
   const { data: eventsData } = useFetch<{ events: CodeCapabilityEvent[] }>(
     '/api/observability/capability-events?kind=code_execute&limit=50',
     10000,
@@ -150,12 +159,24 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
       title="Code Interpreter"
       description="Run Python in isolated AgentCore sandboxes. Every execution is captured for replay."
     >
+      {sessionsFailure && (
+        <UnavailableNotice
+          error={sessionsFailure}
+          what="the sandbox session list"
+          source="Sessions are listed live from the AgentCore Data Plane"
+          onRetry={refresh}
+          className="mb-4"
+        />
+      )}
+
       <StatStrip
         className="mb-4"
         items={[
-          { label: 'Active Sessions', value: active.length, tone: 'accent' },
-          { label: 'Sessions (lifetime)', value: sessions.length },
-          { label: 'Last Activity', value: lastEverActive ? formatAge(lastEverActive.lastActivityAt) : '—' },
+          // An em dash, not a zero: "0 active sessions" and "we could not ask
+          // how many sessions are active" must not read the same.
+          { label: 'Active Sessions', value: orUnknown(active.length, !!sessionsFailure), tone: 'accent' },
+          { label: 'Sessions (lifetime)', value: orUnknown(sessions.length, !!sessionsFailure) },
+          { label: 'Last Activity', value: sessionsFailure ? '—' : lastEverActive ? formatAge(lastEverActive.lastActivityAt) : '—' },
         ]}
       />
 
@@ -399,7 +420,15 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
           subtitle="from AgentCore Data Plane · code interpreter sessions auto-terminate after execution"
           action={<T className="text-[11px] text-text-tertiary">{terminated.length} terminated</T>}
         />
-        {terminated.length === 0 ? (
+        {sessionsFailure ? (
+          <UnavailableNotice
+            error={sessionsFailure}
+            what="the past sessions"
+            source="Sessions are listed live from the AgentCore Data Plane"
+            onRetry={refresh}
+            className="m-3.5"
+          />
+        ) : terminated.length === 0 ? (
           <InlinePlaceholder size="sm" align="center" className="px-3.5 py-6">
             No past sessions yet. Run code above or invoke the scoring agent to trigger one.
           </InlinePlaceholder>

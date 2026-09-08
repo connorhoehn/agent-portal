@@ -12,6 +12,7 @@ jest.mock('../aurora.js', () => ({ exec: jest.fn() }));
 
 import { exec } from '../aurora.js';
 import * as A from '../assessment-aurora.js';
+import * as M from '../../mock/assessment.js';
 
 const execMock = exec as unknown as jest.Mock;
 
@@ -30,6 +31,10 @@ describe('teams', () => {
     assessment_lead: 'lee@example.com', contacts: ['lee@example.com', 'kim@example.com'],
     repos: '[{"name":"payments-api","gitlab_url":"https://gitlab/payments-api"}]',
     contributors: '[{"initials":"LK","name":"Lee Kim"}]', archetype: null,
+    // Deliberately NOT the 'v1' default: a mapper that hard-codes the default
+    // and one that reads the column are indistinguishable on a 'v1' row, and
+    // naming the rubric a team was scored against is the column's whole job.
+    rubric_version: 'v2',
     created_at: '2026-01-01T00:00:00Z', updated_at: '2026-02-01T00:00:00Z',
   };
   const EXC_ROW = {
@@ -54,12 +59,20 @@ describe('teams', () => {
       repos: [{ name: 'payments-api', gitlab_url: 'https://gitlab/payments-api' }],
       contributors: [{ initials: 'LK', name: 'Lee Kim' }],
       archetype: null,
+      rubric_version: 'v2',
       exceptions: [{
         dimension_id: '6', status: 'approved', source: 'archetype', reason: 'no prod service',
         approved_by: 'lead@example.com', approved_at: '2026-01-05T00:00:00Z',
       }],
       created_at: '2026-01-01T00:00:00Z', updated_at: '2026-02-01T00:00:00Z',
     });
+  });
+
+  it('a row from before rubric_version existed reads as the default, never as an empty rubric name', async () => {
+    const { rubric_version: _dropped, ...legacy } = TEAM_ROW;
+    execMock.mockResolvedValueOnce([legacy]).mockResolvedValueOnce([]);
+    const team = await A.fetchTeam('TEAM-001');
+    expect(team?.rubric_version).toBe(M.DEFAULT_RUBRIC_VERSION);
   });
 
   it('fetchTeam returns null for a missing team without a second round trip', async () => {

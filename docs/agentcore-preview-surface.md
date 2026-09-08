@@ -526,13 +526,65 @@ put the new value in Secrets Manager, redeploy `OrgIQ-MiddlewareService`, then
 redeploy the runtimes with the new context value. The same window applies, with
 the same per-callback costs.
 
-**One caller is still unpatched: `infra/scripts/harness.py`.** The regression
-harness runner POSTs its own bundles to `/api/observability/harness/trace`
-(`_http(...)` around line 848) with a hand-built header dict and no service
-auth, so it 401s as soon as `HARNESS_TRACE_SECRET` is set. It runs on an
-operator's laptop, not in a runtime, so the fix is the same three lines against
-`os.environ['HARNESS_TRACE_SECRET']` — tracked here rather than done, since it
-lives under `infra/`.
+**A fourth credential: `HARNESS_RUNNER_SECRET`, the harness runner's own
+identity.** `infra/scripts/harness.py` now sends `x-harness-auth` on the trace
+POST — but the trace POST is one of *seven* middleware calls it makes, and the
+other six (`POST /api/observability/prompt-versions`, `POST|GET
+/api/observability/harness/runs`, `GET|PATCH .../runs/{id}`, `POST
+.../runs/{id}/results`, `POST .../harness/promote`) are session-gated: tenant
+scope plus a Cedar action. The runner carries no cookie, so it reached them only
+through the middleware's **dev demo-user fallback**, which `demoFallbackAllowed()`
+turns off the moment Cognito is configured. Against the deployment this runbook
+describes, the runner therefore worked *asymmetrically*: the trace POST
+succeeded and the result POST that records the verdict 401'd.
+
+The runner now presents `x-harness-runner-auth` (`HARNESS_RUNNER_SECRET`) on
+every middleware call. The middleware half is `serviceAuthOr(
+HARNESS_RUNNER_SERVICE_AUTH, …)` in `routes/harness.ts`, `routes/
+prompt-versions.ts` and that router's `index.ts` mount — the *dual-caller* guard
+shape, not the open-when-unset one, because the portal reads and writes these
+same routes with a real session. Consequences worth stating plainly:
+
+* **Nothing changes until the secret exists.** `serviceAuthOr` never opens on an
+  unset secret, so with `HARNESS_RUNNER_SECRET` unconfigured every one of these
+  routes is byte-for-byte the gate it was, for humans and for the runner alike.
+* **No image roll, no window.** Unlike the three callbacks above, this one has no
+  agent-runtime half. The credential is read from the shell that runs
+  `harness.py`, so steps 1–4 of the ordering above do not apply to it.
+* **Minted.** `OrgIQ-MiddlewareService` now mints four secrets:
+  `orgiq-harness-runner-secret` sits beside the other three
+  (`HarnessRunnerSecret` in `infra/lib/middleware-service-stack.ts`), is granted
+  to the task role, is wired into the container as `HARNESS_RUNNER_SECRET`, and
+  is exported as `orgiq-harness-runner-secret-arn`. A runner without it still
+  fails loudly and with the fix named: `runner_auth_hint()` distinguishes "unset
+  in this shell" from "does not match the middleware's / the middleware has none
+  wired".
+
+**What a deployer does for the fourth secret** — and, more usefully, what they
+*don't*:
+
+```bash
+cd infra && ./scripts/deploy.sh OrgIQ-MiddlewareService --context deployMiddlewareService=true
+export HARNESS_RUNNER_SECRET=$(aws secretsmanager get-secret-value \
+  --secret-id orgiq-harness-runner-secret --query SecretString --output text)
+python infra/scripts/harness.py run --middleware https://<alb-or-cf-origin>
+```
+
+That is the whole procedure. None of steps 1–4 of the ordering above apply:
+
+| Step of the coordinated dance | Applies to the fourth secret? |
+|---|---|
+| Patch `agents/_shared/*` to send the header, rebuild + push images | **No.** Nothing in `agents/` reads `HARNESS_RUNNER_SECRET`; the only client is `infra/scripts/harness.py`, run by a human. |
+| Redeploy `OrgIQ-AgentCoreRuntime` with the value hand-copied as `--context` | **No.** No `CfnRuntime` needs it, so the `EnvironmentVariables`-is-a-bare-string-map limitation never comes up. |
+| Accept a blackout window between the two stacks | **No.** The guard is `serviceAuthOr`, not `requireServiceAuth`: a request with no header (or a wrong one) falls through to the same tenant + Cedar gate it ran before. Wiring the secret only *adds* a way in, so there is no interval in which anything that worked stops working. The portal is unaffected in both directions. |
+| Rotation is a two-stack, two-window operation | **No.** Rotate the secret, redeploy `OrgIQ-MiddlewareService`, re-export in the operator's shell. One stack, and only the runner notices. |
+
+What *does* still apply is the ordering *within* the middleware stack: the
+secret exists only after `OrgIQ-MiddlewareService` deploys, and the ECS task
+picks it up on its next task start — so a runner that exports the value before
+the new task is running will 401 until the rollout finishes, which
+`runner_auth_hint()` reports as "does not match the middleware's / the
+middleware has none wired".
 
 Diagnosing a 401 after all this: each runtime logs once per process, at INFO,
 whether it is sending service auth for each callback (`callbacks: POST … →

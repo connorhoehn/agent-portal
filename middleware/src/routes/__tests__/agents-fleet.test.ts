@@ -12,8 +12,12 @@
 //     tools, guardrails, endpoint and both latency percentiles. These are
 //     rendered field-by-field, so a rename is invisible until a card goes
 //     blank,
-//   * that a fleet with nothing deployed is an EMPTY LIST, not an error — the
-//     state a fresh account is genuinely in,
+//   * that the listing is an ENVELOPE, `{ agents, degraded?, error? }`, not a
+//     bare array. The bare array had nowhere to put a marker, so "nothing is
+//     deployed" and "the control-plane call failed" were the same three bytes,
+//   * that a fleet with nothing deployed is an EMPTY LIST and NO marker — the
+//     state a fresh account is genuinely in — while a listing the provider
+//     could not read carries `degraded` + `error` and still answers 200,
 //   * 404 for metrics on an agent that is not deployed, so the page can say
 //     "not deployed" rather than drawing a chart of zeroes.
 
@@ -53,7 +57,8 @@ jest.mock('@connorhoehnslalom/realtime-modules/agent-streaming', () => ({
 }));
 jest.mock('../../providers/index.js', () => ({
   agentcore: {
-    listRuntimes: jest.fn(), getRuntimeMetrics: jest.fn(), invokeAgentStreaming: jest.fn(),
+    listRuntimes: jest.fn(), listRuntimesResult: jest.fn(),
+    getRuntimeMetrics: jest.fn(), invokeAgentStreaming: jest.fn(),
   },
   aurora: { fetchGraph: jest.fn(async () => ({ nodes: [] })) },
 }));
@@ -100,26 +105,57 @@ describe('auth floor', () => {
 });
 
 describe('GET /api/agents', () => {
-  it('ships every field a fleet card renders', async () => {
-    ac['listRuntimes']!.mockResolvedValue([RUNTIME]);
+  it('ships every field a fleet card renders, under `agents`', async () => {
+    ac['listRuntimesResult']!.mockResolvedValue({ items: [RUNTIME] });
     const res = await request(buildApp()).get('/api/agents');
     expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-    expect(Object.keys(res.body[0]).sort()).toEqual([
+    expect(Array.isArray(res.body.agents)).toBe(true);
+    expect(Object.keys(res.body.agents[0]).sort()).toEqual([
       'endpoint', 'guardrails', 'id', 'latencyP50Ms', 'latencyP99Ms',
       'model', 'name', 'protocol', 'status', 'tools',
     ]);
-    expect(res.body[0].tools).toEqual(['kb_query', 'graph_read']);
+    expect(res.body.agents[0].tools).toEqual(['kb_query', 'graph_read']);
     // p50 <= p99 or the latency pair is telling the card a nonsense story.
-    expect(res.body[0].latencyP50Ms).toBeLessThanOrEqual(res.body[0].latencyP99Ms);
+    expect(res.body.agents[0].latencyP50Ms).toBeLessThanOrEqual(res.body.agents[0].latencyP99Ms);
   });
 
-  it('answers a bare ARRAY, and an empty one when nothing is deployed', async () => {
-    // The state a fresh account is genuinely in — not an error.
-    ac['listRuntimes']!.mockResolvedValue([]);
+  it('marks NOTHING when the listing succeeded — a healthy answer is agents alone', async () => {
+    // The property that lets a reader treat `degraded` as news: it is absent,
+    // not `false`, whenever the fleet was actually read.
+    ac['listRuntimesResult']!.mockResolvedValue({ items: [RUNTIME] });
+    const res = await request(buildApp()).get('/api/agents');
+    expect(Object.keys(res.body).sort()).toEqual(['agents']);
+  });
+
+  it('answers an EMPTY list and no marker when nothing is deployed', async () => {
+    // The state a fresh account is genuinely in — not an error, and not degraded.
+    ac['listRuntimesResult']!.mockResolvedValue({ items: [] });
     const res = await request(buildApp()).get('/api/agents');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual([]);
+    expect(res.body).toEqual({ agents: [] });
+  });
+
+  it('says so, at 200, when the fleet could not be READ', async () => {
+    // The bug this shape exists for: an unreadable control plane used to be
+    // indistinguishable from an empty one. The page still renders the (empty)
+    // list — a degraded read is extra information about the answer, never a
+    // replacement for it — so this must not become a 5xx.
+    ac['listRuntimesResult']!.mockResolvedValue({
+      items: [], degraded: true, error: 'ListAgentRuntimes failed: AccessDeniedException',
+    });
+    const res = await request(buildApp()).get('/api/agents');
+    expect(res.status).toBe(200);
+    expect(res.body.agents).toEqual([]);
+    expect(res.body.degraded).toBe(true);
+    expect(res.body.error).toContain('ListAgentRuntimes failed');
+  });
+
+  it('reads the RESULT view, not the lossy one', async () => {
+    // Reaching for listRuntimes() here is what made the marker impossible.
+    ac['listRuntimesResult']!.mockResolvedValue({ items: [] });
+    await request(buildApp()).get('/api/agents');
+    expect(ac['listRuntimesResult']).toHaveBeenCalled();
+    expect(ac['listRuntimes']).not.toHaveBeenCalled();
   });
 });
 

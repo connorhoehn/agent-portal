@@ -69,6 +69,7 @@ import { grantsRouter } from './routes/grants.js';
 import { botsRouter } from './routes/bots.js';
 import { mockControlRouter } from './routes/mock-control.js';
 import { requireAction, requireTenant, readForRolesElseAction, requireSession } from './lib/authz.js';
+import { HARNESS_RUNNER_SERVICE_AUTH, serviceAuthOr } from './lib/service-auth.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
 import { initBotScheduler } from './lib/bot-scheduler.js';
 import { initCrawlTargets } from './lib/crawl-targets.js';
@@ -258,8 +259,15 @@ app.use('/api/observability/harness', harnessRouter);
 // same rule as approvals/harness above).
 app.use('/api/lab', labRouter);
 // Prompt-versions registry — populated at run start by the harness runner.
-// Mounted ungated (no session) like approvals/harness.
-app.use('/api/observability/prompt-versions', ...viewObs, promptVersionsRouter);
+// NOT ungated (the old comment here said so and was wrong): tenant + Cedar,
+// with the harness runner's machine identity as the alternative to a session.
+// `serviceAuthOr` never opens on an unset secret, so with HARNESS_RUNNER_SECRET
+// unconfigured this is byte-for-byte the `viewObs` mount it was.
+app.use(
+  '/api/observability/prompt-versions',
+  serviceAuthOr(HARNESS_RUNNER_SERVICE_AUTH, ...viewObs),
+  promptVersionsRouter,
+);
 // Every observability aggregate below carries the ViewObservability gate AND a
 // tenant scope. ViewObservability is an ALL-HANDS read within orgiq (member and
 // sme hold it too, deliberately — a member labels answer quality), so the gate

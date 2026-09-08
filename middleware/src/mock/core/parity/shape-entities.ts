@@ -141,8 +141,6 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     unmodelledColumns: {
       status:
         'Deliberately never stored. A team\'s status is `deriveTeamStatus(dimensions)` at read time — typing it beside the scores is how a team shipped reading "New · 17/17 assessed". The column\'s own default is `\'active\'`, which is not even one of the three values the portal can render, so the fixture carrying it would be worse than carrying nothing.',
-      rubric_version:
-        'DEFECT: the table versions a team\'s rubric so a scored assessment can name what it was scored against, and the fixture models no such field at all — every mock team is implicitly on whatever `RUBRIC_DIMENSIONS` currently is. The Aurora path fills the column\'s `\'v1\'` default, so a mock team and an Aurora team disagree about a value the mock cannot even express. Fix belongs in mock/assessment.ts (MockTeam), which this harness does not own.',
     },
     extraKeys: {
       exceptions:
@@ -417,11 +415,11 @@ export const SHAPE_ENTITIES: Array<ShapeEntity<any>> = [
     describes: 'The 17-dimension rubric every score is expressed against — static reference data, versioned so a score can name what it was scored against.',
     sqlFile: 'assessment_schema.sql',
     table: 'assessment_rubric_dimensions',
-    mockRows: async () => (await assessment()).RUBRIC_DIMENSIONS,
-    mockId: (d: { id: string }) => d.id,
-    unmodelledColumns: {
-      rubric_version:
-        'DEFECT: the table makes (rubric_version, id) the primary key so a scored assessment can name the rubric it was scored against, and `RUBRIC_DIMENSIONS` carries no version at all — there is exactly one rubric in the mock and it is implicitly whichever one is currently compiled in. The same gap as `assessment_teams.rubric_version`, at the other end of the same reference. Fix belongs in mock/assessment.ts (RubricDimensionDef), which this harness does not own.',
-    },
+    // Every version's rows, not just the current one: the table holds them all
+    // side by side, which is what `PRIMARY KEY (rubric_version, id)` is for.
+    // `RUBRIC_DIMENSIONS` is the current version alone — the right answer for a
+    // caller scoring a team, and a subset of this table.
+    mockRows: async () => (await assessment()).allRubricDimensions(),
+    mockId: (d: { rubric_version: string; id: string }) => `${d.rubric_version}/${d.id}`,
   },
 ];

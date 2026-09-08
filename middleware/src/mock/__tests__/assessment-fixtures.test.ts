@@ -160,7 +160,8 @@ describe('mutation and reset', () => {
     const before = M.teams().length;
     M.teams().push({
       id: 'TEAM-ZZZ', name: 'Scratch', cohort: 'general', workflow_step: 1,
-      assessment_lead: '', contacts: [], repos: [], archetype: null, exceptions: [],
+      assessment_lead: '', contacts: [], repos: [], archetype: null,
+      rubric_version: M.DEFAULT_RUBRIC_VERSION, exceptions: [],
       created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z', contributors: [],
     });
     expect(M.findTeam('TEAM-ZZZ')).toBeDefined();

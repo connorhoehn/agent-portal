@@ -610,6 +610,17 @@ problem.
 
 Say it out loud so nobody over-trusts it.
 
+- **Rule 4's write half cannot see a route that calls `exec` itself.** The scan
+  reports a leaf in `src/lib/**` or `src/providers/**`, and `exec` is excluded
+  everywhere as transport — so a handler that reaches the Data API *directly*,
+  with no provider between, is structurally invisible to it. That is not
+  hypothetical: `POST /harness/runs/:runId/results`, `PATCH /harness/runs/:id`
+  and `POST /harness/promote` all 500'd offline while the budget reported them
+  as fine, because none of the three was ever on the list. Note the shape of the
+  trap for anyone tempted to "fix" a number: hoisting a `config.mock`-mentioning
+  named function into the route makes the pairs disappear, because the scan
+  stops at a guarded function — which is suppression unless a real offline path
+  is behind it.
 - **Rule 1 matches a shape, not a bug.** `documentCount: 1247` on a line of its
   own is what it looks for. It cannot tell a *drifting* aggregate (the rows are
   right there in the same fixture — `mock/traces.ts`'s `totalDurationMs` beside

@@ -168,17 +168,17 @@
     {
       "method": "GET",
       "path": "/api/agents",
-      "source": "src/routes/agents.ts:16"
+      "source": "src/routes/agents.ts:40"
     },
     {
       "method": "POST",
       "path": "/api/agents/:agentId/invoke",
-      "source": "src/routes/agents.ts:156"
+      "source": "src/routes/agents.ts:180"
     },
     {
       "method": "GET",
       "path": "/api/agents/:agentId/metrics",
-      "source": "src/routes/agents.ts:21"
+      "source": "src/routes/agents.ts:45"
     },
     {
       "method": "GET",
@@ -1028,7 +1028,7 @@
     {
       "method": "GET",
       "path": "/api/health",
-      "source": "src/index.ts:119"
+      "source": "src/index.ts:120"
     },
     {
       "method": "GET",
@@ -1443,17 +1443,17 @@
     {
       "method": "GET",
       "path": "/api/observability/authz",
-      "source": "src/routes/observability.ts:19"
+      "source": "src/routes/observability.ts:56"
     },
     {
       "method": "GET",
       "path": "/api/observability/authz/stream",
-      "source": "src/routes/observability.ts:34"
+      "source": "src/routes/observability.ts:71"
     },
     {
       "method": "GET",
       "path": "/api/observability/bedrock-invocations",
-      "source": "src/routes/observability.ts:55"
+      "source": "src/routes/observability.ts:92"
     },
     {
       "method": "GET",
@@ -1578,7 +1578,7 @@
     {
       "method": "GET",
       "path": "/api/observability/capability-events",
-      "source": "src/routes/observability.ts:49"
+      "source": "src/routes/observability.ts:86"
     },
     {
       "method": "GET",
@@ -1673,92 +1673,92 @@
     {
       "method": "GET",
       "path": "/api/observability/harness/cases",
-      "source": "src/routes/harness.ts:365"
+      "source": "src/routes/harness.ts:422"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/cases",
-      "source": "src/routes/harness.ts:426"
+      "source": "src/routes/harness.ts:483"
     },
     {
       "method": "DELETE",
       "path": "/api/observability/harness/cases/:id",
-      "source": "src/routes/harness.ts:583"
+      "source": "src/routes/harness.ts:640"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/cases/:id",
-      "source": "src/routes/harness.ts:385"
+      "source": "src/routes/harness.ts:442"
     },
     {
       "method": "PATCH",
       "path": "/api/observability/harness/cases/:id",
-      "source": "src/routes/harness.ts:501"
+      "source": "src/routes/harness.ts:558"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/coverage",
-      "source": "src/routes/harness.ts:1026"
+      "source": "src/routes/harness.ts:1133"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/promote",
-      "source": "src/routes/harness.ts:1393"
+      "source": "src/routes/harness.ts:1500"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/promoted-versions",
-      "source": "src/routes/harness.ts:1477"
+      "source": "src/routes/harness.ts:1610"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/results/:invocationId/rejudge",
-      "source": "src/routes/harness.ts:987"
+      "source": "src/routes/harness.ts:1094"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs",
-      "source": "src/routes/harness.ts:704"
+      "source": "src/routes/harness.ts:761"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/runs",
-      "source": "src/routes/harness.ts:613"
+      "source": "src/routes/harness.ts:670"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs/:id",
-      "source": "src/routes/harness.ts:727"
+      "source": "src/routes/harness.ts:784"
     },
     {
       "method": "PATCH",
       "path": "/api/observability/harness/runs/:id",
-      "source": "src/routes/harness.ts:924"
+      "source": "src/routes/harness.ts:1005"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/runs/:id/execute",
-      "source": "src/routes/harness.ts:672"
+      "source": "src/routes/harness.ts:729"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs/:id/status",
-      "source": "src/routes/harness.ts:785"
+      "source": "src/routes/harness.ts:842"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/runs/:runId/results",
-      "source": "src/routes/harness.ts:846"
+      "source": "src/routes/harness.ts:903"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs/:runIdA/compare/:runIdB",
-      "source": "src/routes/harness.ts:1258"
+      "source": "src/routes/harness.ts:1365"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/trace",
-      "source": "src/routes/harness.ts:270"
+      "source": "src/routes/harness.ts:327"
     },
     {
       "method": "GET",
@@ -1812,18 +1812,23 @@
     },
     {
       "method": "GET",
+      "path": "/api/observability/pr-watch-health",
+      "source": "src/routes/observability.ts:50"
+    },
+    {
+      "method": "GET",
       "path": "/api/observability/prompt-versions",
-      "source": "src/routes/prompt-versions.ts:144"
+      "source": "src/routes/prompt-versions.ts:150"
     },
     {
       "method": "POST",
       "path": "/api/observability/prompt-versions",
-      "source": "src/routes/prompt-versions.ts:80"
+      "source": "src/routes/prompt-versions.ts:86"
     },
     {
       "method": "GET",
       "path": "/api/observability/prompt-versions/:promptVersion",
-      "source": "src/routes/prompt-versions.ts:167"
+      "source": "src/routes/prompt-versions.ts:173"
     },
     {
       "method": "POST",
@@ -1838,12 +1843,12 @@
     {
       "method": "GET",
       "path": "/api/observability/recent-invocations",
-      "source": "src/routes/observability.ts:44"
+      "source": "src/routes/observability.ts:81"
     },
     {
       "method": "GET",
       "path": "/api/observability/summary",
-      "source": "src/routes/observability.ts:65"
+      "source": "src/routes/observability.ts:102"
     },
     {
       "method": "POST",
@@ -1873,12 +1878,12 @@
     {
       "method": "GET",
       "path": "/api/observability/traces",
-      "source": "src/routes/observability.ts:73"
+      "source": "src/routes/observability.ts:110"
     },
     {
       "method": "GET",
       "path": "/api/observability/traces/:traceId",
-      "source": "src/routes/observability.ts:82"
+      "source": "src/routes/observability.ts:119"
     },
     {
       "method": "GET",
@@ -2253,7 +2258,7 @@
     {
       "method": "GET",
       "path": "/health",
-      "source": "src/index.ts:118"
+      "source": "src/index.ts:119"
     }
   ],
   "unresolved": []

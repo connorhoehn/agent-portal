@@ -352,7 +352,9 @@ function ProjectDetailPage() {
           serverSpendUsd,
           serverPending: projectListLoading,
           clientSpendUsd: agentActivity.spendUsd,
-          clientBlind: agentActivity.botsError != null,
+          // Blind if we could not read the roster OR could not read a bot's
+          // run history — either way the client sum is a floor, not a total.
+          clientBlind: agentActivity.botsError != null || agentActivity.runsError != null,
           clientPending: agentActivity.botsLoading,
         }}
         repoUrl={repoUrl ?? project.githubUrl ?? null}

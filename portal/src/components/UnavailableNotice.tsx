@@ -9,11 +9,25 @@
 // The `source` prop matters more than it looks. "Could not load" tells someone
 // nothing they can act on; "Cost history lives in Aurora" tells them to go
 // look at the database rather than at the cost page.
+//
+// TWO WAYS TO BE BLIND, ONE TREATMENT. There is a second failure that looks
+// identical from the reader's seat: the request SUCCEEDS and the server hands
+// back a well-formed empty answer it does not itself believe, marked
+// `degraded: true` with the first line of the query error. `useFetch` unwraps
+// that into `degraded` (see lib/degraded.ts) and it renders here, in the same
+// block, because to a person "we could not fetch it" and "we fetched a number
+// we could not compute" are one fact: this page is not a reading of the world.
+// What must NOT share a treatment is the honest empty — a page with no notice
+// and its ordinary empty state is saying "there is genuinely nothing here",
+// and that distinction is the entire point of the marker.
 
-import { Card } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Button } from '@connorhoehnslalom/ui-components/shared';
 
 interface Props {
-  /** The error text from useFetch. Rendered verbatim — it names the status. */
+  /**
+   * The error text. Either `useFetch`'s transport `error` or its `degraded`
+   * line — rendered verbatim, because both name the actual failure.
+   */
   error: string;
   /** What could not be loaded, as a noun phrase: "the cost history". */
   what: string;
@@ -21,23 +35,31 @@ interface Props {
   source?: string;
   onRetry?: () => void;
   className?: string;
+  'data-testid'?: string;
 }
 
-export function UnavailableNotice({ error, what, source, onRetry, className }: Props) {
+export function UnavailableNotice({
+  error, what, source, onRetry, className, 'data-testid': testId,
+}: Props) {
   return (
-    <Card padding="md" className={`border-danger/40 ${className ?? ''}`}>
+    <Card
+      padding="md"
+      className={`border-danger/40 ${className ?? ''}`}
+      data-testid={testId ?? 'unavailable-notice'}
+      role="alert"
+    >
       <div className="text-[13px] font-semibold text-danger">Could not load {what}</div>
       <div className="text-[12px] text-text-secondary mt-1 leading-snug">
-        {error}
+        {/* Server error lines sometimes end in a period of their own
+            ("…request is invalid."), and appending ours produced "invalid.. Score
+            history lives in Aurora". Trim one before joining. */}
+        {error.replace(/\.\s*$/, '')}
         {source ? `. ${source}, so this is unknown rather than empty.` : '.'}
       </div>
       {onRetry && (
-        <button
-          onClick={onRetry}
-          className="mt-3 px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] font-semibold text-text-secondary cursor-pointer hover:text-primary hover:border-primary/50 transition-colors"
-        >
-          Try again
-        </button>
+        <div className="mt-3">
+          <Button variant="secondary" size="sm" onClick={onRetry}>Try again</Button>
+        </div>
       )}
     </Card>
   );

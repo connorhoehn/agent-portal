@@ -11,8 +11,10 @@ dependencies = [
     "ag-ui-strands>=0.1.8",
 ]
 
-[project.optional-dependencies]
-test = ["pytest>=8"]
+# No test extra: the suite in tests/ is stdlib `unittest` only, run with
+#   cd agents/assessment-scorer && ../../.venv-synth/bin/python -m unittest discover -s . -p 'test_*.py'
+# It declared `test = ["pytest>=8"]` until 2026-09, which is why those tests
+# sat unrun: pytest is not in the synth venv and the box is offline.
 
 [build-system]
 requires = ["hatchling"]

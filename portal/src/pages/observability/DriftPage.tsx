@@ -45,6 +45,8 @@ import { CostChip } from '../../components/observability/CostChip';
 import { PromptVersionChip } from '../../components/observability/PromptVersionChip';
 import { SaveAsTestCaseModal } from '../../components/observability/SaveAsTestCaseModal';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { firstDegraded } from '../../lib/degraded';
 import { T } from './Text';
 
 interface DriftSummary {
@@ -143,7 +145,14 @@ function DriftPage() {
   const [windowIdx, setWindowIdx] = useState(2); // 24h default
   const win = WINDOW_OPTIONS[windowIdx];
 
-  const { data: summary } = useFetch<DriftSummary[]>(
+  // NOTE THE TYPE. /drift/summary answers a BARE ARRAY when healthy and the
+  // object form `{ agents: [], degraded, error }` only on failure — an array
+  // has nowhere to carry a marker. `Array.isArray(...) ? ... : []` below is
+  // what silently ate that failure; `readDegraded` (via useFetch) is what
+  // makes it visible, and it returns null for every array by rule.
+  const {
+    data: summary, error: summaryError, refresh: refreshSummary,
+  } = useFetch<DriftSummary[] | { agents?: DriftSummary[]; degraded?: boolean; error?: string }>(
     `/api/observability/drift/summary?windowHours=${win.hours}`,
     30_000,
   );
@@ -177,6 +186,9 @@ function DriftPage() {
     [outliersData],
   );
 
+  // Four reads over the same sampled-trace tables; one sentence when they go.
+  const driftDegraded = firstDegraded(summary, tsData, tplData, outliersData);
+
   const [expanded, setExpanded] = useState<string | null>(null);
 
   // Modal state for "+ Save as test case" launched from the outlier panel.
@@ -207,11 +219,25 @@ function DriftPage() {
       description={`Per-agent · ${rows.length} agent${rows.length === 1 ? '' : 's'} · 30s refresh`}
       actions={<WindowPicker value={windowIdx} onChange={setWindowIdx} />}
     >
+      {(summaryError || driftDegraded) && (
+        <UnavailableNotice
+          error={summaryError ?? driftDegraded ?? 'the drift query failed'}
+          what="drift data"
+          source="Drift is computed from node_embeddings and the sampled traces in Aurora"
+          onRetry={refreshSummary}
+          className="mb-4"
+        />
+      )}
+
       <Card padding="md">
         {rows.length === 0 ? (
           <SmartEmptyState
             title="No invocations sampled yet"
             detail="Drift detection activates after the first sampled invocation. Live-mode harness produces ~10 sampled traces with embeddings."
+            degraded={driftDegraded}
+            degradedWhat="the per-agent drift rollup"
+            degradedSource="Drift is computed from node_embeddings and the sampled traces in Aurora"
+            onRetry={refreshSummary}
             actions={[
               {
                 label: 'Run the test harness',
@@ -270,7 +296,7 @@ function DriftPage() {
           </Inline>
         </Inline>
         {chartData.length === 0 ? (
-          <EmptyState text="Not enough samples in this window to plot a series yet." />
+          <EmptyState text="Not enough samples in this window to plot a series yet." degraded={driftDegraded} />
         ) : (
           <Stack className="w-full h-[260px]">
             <ResponsiveContainer>
@@ -315,7 +341,7 @@ function DriftPage() {
           </Inline>
         </Inline>
         {templates.length === 0 ? (
-          <EmptyState text="No template groups have enough samples to compare yet." />
+          <EmptyState text="No template groups have enough samples to compare yet." degraded={driftDegraded} />
         ) : (
           <Table>
             <TableHead>
@@ -392,7 +418,7 @@ function DriftPage() {
         {!selectedAgent ? (
           <EmptyState text="Pick an agent above to see outliers." />
         ) : outlierRows.length === 0 ? (
-          <EmptyState text="No outliers for this agent in the current window." />
+          <EmptyState text="No outliers for this agent in the current window." degraded={driftDegraded} />
         ) : (
           <Table>
             <TableHead>
@@ -620,7 +646,18 @@ function shortTime(iso: string, hours: number): string {
          d.toLocaleTimeString([], { hour: '2-digit' });
 }
 
-function EmptyState({ text }: { text: string }) {
+// The row-level "nothing here". When the read is degraded the page-level
+// notice above already carries the error and the retry, so this only has to
+// stop contradicting it — "No outliers for this agent" under a red banner is
+// the exact reassurance the marker exists to kill.
+function EmptyState({ text, degraded }: { text: string; degraded?: string | null }) {
+  if (degraded) {
+    return (
+      <Inline as="div" justify="center" className="p-6 text-[12px] text-danger">
+        Unknown — this read failed ({degraded}).
+      </Inline>
+    );
+  }
   return (
     <Inline as="div" justify="center" className="p-6 text-[12px] text-[var(--color-text-tertiary)]">
       {text}

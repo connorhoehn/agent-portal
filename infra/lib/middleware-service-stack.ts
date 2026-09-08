@@ -90,14 +90,19 @@ export class MiddlewareServiceStack extends cdk.Stack {
   /** ALB DNS name (use this as CNAME in Route 53 or as origin in CloudFront) */
   public readonly loadBalancerDnsName: string;
   /**
-   * ARNs of the three machine-callback auth secrets minted by this stack.
+   * ARNs of the four machine-identity auth secrets minted by this stack.
    * Exposed for completeness (e.g. an operator script resolving by stack
-   * output); NOT consumable by AgentCoreRuntimeStack at synth time — see the
-   * ⚠️ comment above where these secrets are created.
+   * output); the first three are NOT consumable by AgentCoreRuntimeStack at
+   * synth time — see the ⚠️ comment above where these secrets are created.
    */
   public readonly approvalsRequestSecretArn!: string;
   public readonly harnessTraceSecretArn!: string;
   public readonly assessmentRunCompleteSecretArn!: string;
+  /**
+   * The harness runner's credential. Unlike the three above this has no
+   * agent-runtime half — see the ⚠️ note beside `HarnessRunnerSecret`.
+   */
+  public readonly harnessRunnerSecretArn!: string;
 
   constructor(scope: Construct, id: string, props: MiddlewareServiceStackProps) {
     super(scope, id, props);
@@ -241,9 +246,43 @@ export class MiddlewareServiceStack extends cdk.Stack {
     });
     assessmentRunCompleteSecret.grantRead(taskRole);
 
+    // Secrets Manager — the harness runner's own machine identity
+    // (HARNESS_RUNNER_SECRET / x-harness-runner-auth, lib/service-auth.ts).
+    //
+    // WHY A FOURTH. infra/scripts/harness.py drives the whole evaluation loop
+    // over HTTP — register a prompt version, create a run, post a trace, record
+    // each result, patch the run's counters, promote a blessed SHA — and every
+    // one of those calls except POST /harness/trace is session-gated (tenant +
+    // Cedar). The runner has no session. It worked locally only because
+    // `demoFallbackAllowed()` hands a cookie-less request the demo identity,
+    // which is off the moment Cognito is configured — so the runner "worked on
+    // a laptop and 401'd wholesale in the environment it was built for", and
+    // did so MIDWAY THROUGH A RUN: the trace POST carried its own secret and
+    // succeeded, while the result POST that records the verdict did not.
+    //
+    // ⚠️ DIFFERENT FROM THE THREE ABOVE, in the way that matters for deploying
+    // it. Those three gate SESSIONLESS AGENT CALLBACKS, so wiring them here
+    // flips a guard that deployed agent runtimes must then satisfy — and
+    // nothing in agents/ sends any of the headers yet, which is why they carry
+    // a blackout window and a hand-copied `--context` value on the runtime
+    // side. This one has NO agent-runtime half: nothing in agents/ reads
+    // HARNESS_RUNNER_SECRET, no CfnRuntime needs it, and there is no image to
+    // roll. Its only client is a script an operator runs, which reads the value
+    // from Secrets Manager itself. So minting it costs no coordination — and
+    // note the guard is `serviceAuthOr`, not `requireServiceAuth`: a request
+    // without the header falls through to the Cedar gate exactly as before, so
+    // the portal (and a human with a session) is unaffected either way.
+    const harnessRunnerSecret = new secretsmanager.Secret(this, 'HarnessRunnerSecret', {
+      secretName: `${prefix}-harness-runner-secret`,
+      description: 'Shared secret for x-harness-runner-auth on the harness runner\'s control plane — POST /api/observability/prompt-versions, POST/PATCH /api/observability/harness/runs[/:id][/results], POST /api/observability/harness/promote (serviceAuthOr)',
+      generateSecretString: { excludePunctuation: true, passwordLength: 40 },
+    });
+    harnessRunnerSecret.grantRead(taskRole);
+
     this.approvalsRequestSecretArn = approvalsRequestSecret.secretArn;
     this.harnessTraceSecretArn = harnessTraceSecret.secretArn;
     this.assessmentRunCompleteSecretArn = assessmentRunCompleteSecret.secretArn;
+    this.harnessRunnerSecretArn = harnessRunnerSecret.secretArn;
 
     // Exported so a future stack (or an operator script) can look these up
     // by stable name instead of hunting through the console. NOTE: these
@@ -263,6 +302,14 @@ export class MiddlewareServiceStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'AssessmentRunCompleteSecretArnOutput', {
       value: assessmentRunCompleteSecret.secretArn,
       exportName: `${prefix}-assessment-run-complete-secret-arn`,
+    });
+    // This one an operator genuinely does look up by hand on every harness
+    // run: `aws secretsmanager get-secret-value --secret-id
+    // orgiq-harness-runner-secret` → `HARNESS_RUNNER_SECRET=… python
+    // infra/scripts/harness.py …`.
+    new cdk.CfnOutput(this, 'HarnessRunnerSecretArnOutput', {
+      value: harnessRunnerSecret.secretArn,
+      exportName: `${prefix}-harness-runner-secret-arn`,
     });
 
     // DynamoDB — scores + sessions tables
@@ -525,6 +572,10 @@ export class MiddlewareServiceStack extends cdk.Stack {
       APPROVALS_REQUEST_SECRET: ecs.Secret.fromSecretsManager(approvalsRequestSecret),
       HARNESS_TRACE_SECRET: ecs.Secret.fromSecretsManager(harnessTraceSecret),
       ASSESSMENT_RUN_COMPLETE_SECRET: ecs.Secret.fromSecretsManager(assessmentRunCompleteSecret),
+      // The runner's credential. No blackout window: `serviceAuthOr` accepts a
+      // valid header and otherwise runs the Cedar gate unchanged, so setting
+      // this only ADDS a way in — see the ⚠️ beside HarnessRunnerSecret.
+      HARNESS_RUNNER_SECRET: ecs.Secret.fromSecretsManager(harnessRunnerSecret),
     };
     if (props.cognitoClientSecretArn) {
       const cognitoSecretRef = secretsmanager.Secret.fromSecretCompleteArn(

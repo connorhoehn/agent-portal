@@ -35,6 +35,8 @@ import {
   StatStrip,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { readDegraded } from '../../lib/degraded';
 import { T } from './Text';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -185,10 +187,14 @@ function ModelComparePage() {
     : '';
   const { data: compare, isLoading, error } = useFetch<CompareResp>(compareUrl);
 
-  const { data: calData } = useFetch<CalibrationRunsResp>(
+  const { data: calData, refresh: refreshCal } = useFetch<CalibrationRunsResp>(
     '/api/observability/calibration/runs?limit=14',
     60_000,
   );
+  // Only feeds the "did this judge calibrate?" chip — but a missing chip is
+  // read as "this judge has never been calibrated", which is a stronger claim
+  // than the failed query supports.
+  const calDegraded = readDegraded(calData);
   const calibrationRuns = useMemo(() => calData?.runs ?? [], [calData]);
 
   // For each judge model present in calibration runs, take the most-recent MAE.
@@ -319,6 +325,16 @@ function ModelComparePage() {
       title="Model Compare"
       description="Compare two harness runs side-by-side. Re-run the harness with --model amazon.nova-lite-v1:0 (sim mode) and amazon.nova-pro-v1:0 to populate runs."
     >
+      {calDegraded && (
+        <UnavailableNotice
+          error={calDegraded}
+          what="the judge calibration history"
+          source="Calibration runs live in the Aurora observability tables"
+          onRetry={refreshCal}
+          className="mb-4"
+        />
+      )}
+
       {/* Pickers */}
       <Card padding="md">
         <Inline gap="md" align="end" wrap>

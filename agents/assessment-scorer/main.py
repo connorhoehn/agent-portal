@@ -102,6 +102,16 @@ def score_dimension(
     of the cited evidence_items' text (lowering confidence one band when it
     does), and scrubs team-side participant names out of the rationale.
 
+    It also REFUSES outright — returning {refused: true, refusal_reason} and
+    no level at all — when the proposal is not something that could honestly
+    be applied: a dimension_id outside "1".."17", a proposed_level or
+    self_claimed_level that is not a whole number 0..5, or a blank rationale.
+    Do not retry a refusal with a made-up value; fix the input or leave the
+    dimension unscored and say why. Any evidence_id you cite that is not in
+    evidence_items comes back in unverified_evidence_ids and costs one
+    confidence band, and a dimension where none of your cited ids resolve is
+    reported at "low" confidence no matter what you proposed.
+
     Args:
         dimension_id: Plain rubric dimension id, "1".."17".
         evidence_ids: Ids (from evidence_items) actually cited for this level.
@@ -124,7 +134,8 @@ def score_dimension(
     Returns:
         JSON object: {dimension_id, refused, [refusal_reason] |
         current_level, confidence, evidence_class, cap_applied, rationale,
-        evidence_excerpts, follow_up_questions, self_claimed_level}.
+        evidence_excerpts, follow_up_questions, self_claimed_level,
+        unverified_evidence_ids}.
     """
     return json.dumps(
         score_dimension_impl(
@@ -185,6 +196,11 @@ WORKFLOW:
    cited evidence, and scrub team-side participant names from the rationale.
    Trust its output over your own draft — if it caps or drops something,
    report that in your final rationale rather than re-asserting your draft.
+   If it REFUSES a dimension (refused: true), do not retry with an invented
+   value to get past it: omit that dimension from "scores" and record the
+   refusal_reason in reasoning_log. A refusal means the proposal could not be
+   applied honestly (unknown dimension id, a level that is not a whole 0-5,
+   a self-rating claim outside 0-5, or a rationale you did not write).
 
 SCORING STANCE (do not deviate):
 - Never fabricate. Every rationale must cite specific evidence content; a

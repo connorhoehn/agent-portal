@@ -71,11 +71,11 @@ describe('the lossy listRuntimes is deliberately still lossy — and still loud'
   });
 
   it('THROWS on a mock failure rather than degrading to a silent empty', async () => {
-    // GET /api/agents answers a bare array that five portal call sites read as
-    // `AgentDef[]`, so it has nowhere to put a marker. Routing it through the
-    // catch would have turned today's visible 500 into `200 []` — trading a
-    // loud failure for exactly the invisible one this change removes. It keeps
-    // throwing until that route's shape can change.
+    // GET /api/agents has since been converted to the envelope, so this is no
+    // longer the route's path — but the lossy read must STILL throw rather than
+    // degrade to a silent empty. Swallowing here would re-create, one layer
+    // down, exactly the "empty list, no reason" this change removed, for
+    // whichever caller reaches for it next.
     world('error');
     await expect(mockAgentCore.listRuntimes()).rejects.toThrow(/control plane unreachable/);
   });

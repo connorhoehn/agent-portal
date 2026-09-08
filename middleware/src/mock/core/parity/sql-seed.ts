@@ -176,6 +176,14 @@ function stripLineComments(sql: string): string {
   return out;
 }
 
+/** The raw (comment-stripped) text of `schema/<fileName>`, cached.
+ *  Exported so a caller that needs statements `seedRows` does not model —
+ *  a `DELETE` that decides which seed actually wins — reads the same text
+ *  through the same cache rather than opening the file a second way. */
+export function seedText(fileName: string): string {
+  return readSchemaFile(fileName);
+}
+
 function readSchemaFile(fileName: string): string {
   const cached = fileCache.get(fileName);
   if (cached !== undefined) return cached;

@@ -2,6 +2,7 @@ import type React from 'react';
 import { Link } from 'react-router';
 import { Card, Inline, PageSection, Stack, StatCard, StatStrip } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { T } from './Text';
 
 interface ObsSummary {
@@ -56,8 +57,24 @@ function deriveNextSteps(
   agents: AgentRuntime[],
   summary: ObsSummary | null,
   health: Health | null,
+  /** The fleet read failed, so `agents` is an empty floor, not a reading. */
+  fleetFailure?: string | null,
 ): NextStep[] {
   const steps: NextStep[] = [];
+
+  // Say this first and let it stand alone. Every other step below is derived
+  // from a runtime list, and with a failed read that list is empty — which
+  // would otherwise produce the single worst sentence on this page: "Nothing
+  // needs you. All 0 deployed agents are healthy."
+  if (fleetFailure) {
+    return [{
+      label: 'Find out why the agent fleet cannot be listed',
+      detail: `${fleetFailure}. Until this read succeeds, "deployed", "healthy" and "idle" `
+        + 'on this page are unknown rather than zero.',
+      to: '/iq/agents',
+      urgent: true,
+    }];
+  }
 
   if (health?.datastore?.ok === false && health?.awsCredentials?.ok !== false) {
     // Only when credentials are fine — an expired session explains a dead
@@ -152,7 +169,15 @@ function SummaryPage() {
     '/api/capabilities/guardrail/metrics?hours=6',
     60000,
   );
-  const { data: agents } = useFetch<AgentRuntime[]>('/api/agents', 60000);
+  // `{ agents, degraded?, error? }` — an object since a bare array could not
+  // carry the marker. This is the page that most needs it: "Deployed agents 0"
+  // and a green "Nothing needs you / All 0 deployed agents are healthy" is the
+  // quiet-system illusion in its purest form.
+  const {
+    data: agentsResp, error: agentsError, degraded: agentsDegraded, refresh: refreshAgents,
+  } = useFetch<{ agents: AgentRuntime[] }>('/api/agents', 60000);
+  const agents = agentsResp?.agents;
+  const fleetFailure = agentsError ?? agentsDegraded;
   const { data: alarmData } = useFetch<{ alarms: Alarm[] }>(
     '/api/observability/oncall/alarms',
     30000,
@@ -163,14 +188,19 @@ function SummaryPage() {
   const alarms = alarmData?.alarms ?? [];
   const healthy = runtimes.filter((a) => a.status === 'healthy').length;
   const firing = alarms.filter((a) => a.severity !== 'ok');
-  const steps = deriveNextSteps(alarms, runtimes, summary ?? null, health ?? null);
+  const steps = deriveNextSteps(alarms, runtimes, summary ?? null, health ?? null, fleetFailure);
 
   // With no usable credentials every AWS-backed panel comes back empty, and an
   // empty result is indistinguishable from a healthy one unless we say so. A
   // green "0 firing / all signals within thresholds" during an outage is worse
   // than no panel at all — it actively tells you not to look.
   // Blind covers both ways of not knowing: no credentials, or no database.
-  const blind = health?.awsCredentials?.ok === false || health?.datastore?.ok === false;
+  // A degraded fleet read is a third way of not knowing, alongside no
+  // credentials and no database — and it must dash the same numbers, or the
+  // page derives "Nothing needs you" from a runtime list it never got.
+  const blind = health?.awsCredentials?.ok === false
+    || health?.datastore?.ok === false
+    || fleetFailure != null;
   const dash = (v: React.ReactNode): React.ReactNode => (blind ? '—' : v);
 
   return (
@@ -178,6 +208,16 @@ function SummaryPage() {
       title="Health"
       description="What is deployed, whether it is working, and what needs you next."
     >
+      {fleetFailure && (
+        <UnavailableNotice
+          error={fleetFailure}
+          what="the agent fleet"
+          source="Runtimes are listed live from the AgentCore control plane"
+          onRetry={refreshAgents}
+          className="mb-4"
+        />
+      )}
+
       {/* ── Right now ─────────────────────────────────────────────────── */}
       <Inline gap="md" wrap={false} className="items-stretch [&>*]:flex-1">
         <StatCard

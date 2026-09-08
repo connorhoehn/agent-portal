@@ -293,6 +293,57 @@ export const SURFACE_INVARIANTS: SurfaceInvariant[] = [
       return out;
     },
   },
+  {
+    name: 'a person\'s skills are listed in the seed\'s weight order',
+    replaces: 'new — the half of person_skills a per-row parity check structurally cannot see',
+    lesson:
+      '`person_skills.weight` is how strongly the seed says someone knows something, and mock/people.ts carries it only as the ORDER of a name list — so "Nora\'s top skill" is a claim the mock makes with no column to check it against, and a reordered list moves an expert from first to last with nothing failing.',
+    async check() {
+      const { mockPeople } = await import('../../people.js');
+      const { seedRows } = await import('./sql-seed.js');
+      const { idByName } = await import('./joins.js');
+
+      const skillNameById = new Map(
+        [...idByName('seed.sql', 'skills')].map(([name, id]) => [id, name]),
+      );
+      const weights = new Map<string, number>();
+      for (const row of seedRows('seed.sql', 'person_skills')) {
+        const name = skillNameById.get(String(row.values['skill_id']));
+        const weight = row.values['weight'];
+        if (name !== undefined && typeof weight === 'number') {
+          weights.set(`${String(row.values['person_id'])}@${name}`, weight);
+        }
+      }
+
+      const out: string[] = [];
+      // Vacuity guard, and it reads exactly what the check below reads: an
+      // empty cast, an empty seed join, or a cast where nobody holds two
+      // skills makes "non-increasing" true for free.
+      if (weights.size === 0) {
+        out.push('schema/seed.sql yielded no person_skills weights — the join is broken, not the order');
+      }
+      const comparable = mockPeople.filter((p) => p.skills.length >= 2).length;
+      if (comparable === 0) {
+        out.push(`no person in mock/people.ts holds two skills (${mockPeople.length} people), so ordering is vacuous`);
+      }
+
+      for (const person of mockPeople) {
+        let previous: { name: string; weight: number } | null = null;
+        for (const name of person.skills) {
+          const weight = weights.get(`${person.id}@${name}`);
+          if (weight === undefined) continue; // an unseeded pair is person_skills' finding, not this one
+          if (previous && weight > previous.weight) {
+            out.push(
+              `${person.id}: lists '${previous.name}' (seed weight ${previous.weight}) before `
+              + `'${name}' (seed weight ${weight}) — the seed ranks ${name} higher`,
+            );
+          }
+          previous = { name, weight };
+        }
+      }
+      return out;
+    },
+  },
 
   // ── money ──────────────────────────────────────────────────────────────────
   {
@@ -783,6 +834,72 @@ export const SURFACE_INVARIANTS: SurfaceInvariant[] = [
           `near-vacuous: ${teamIds.size} teams, ${dimensionIds.size} rubric dimensions, ${docIds.size} docs, ` +
           `${resolved} references resolved — the seeded corpus is 7 / 17 / 18 and resolves hundreds, so this rule ` +
           `is not actually exercising the joins it claims to check`,
+        );
+      }
+      return out;
+    },
+  },
+  {
+    name: 'a team is scored against the rubric it names',
+    replaces: 'new — the other end of the `assessment_teams.rubric_version` / `assessment_rubric_dimensions` DEFECT pair',
+    lesson:
+      'A stored level is a number with no question attached unless the row names the rubric it was taken under, which is why `assessment_rubric_dimensions` is keyed on `(rubric_version, id)` and every team carries a `rubric_version`. The reference has to resolve BOTH ways: a team naming a rubric nothing carries scores against nothing, and a dimension id that is not in THAT team\'s rubric is a level recorded against a question the team was never asked. Both read as ordinary rows today because there is exactly one rubric — the day a second is added they are the failures nobody would be looking for.',
+    async check() {
+      const A = await import('../../assessment.js');
+      const out: string[] = [];
+      const versions = Object.keys(A.RUBRICS);
+
+      // Each rubric's rows agree with the key they are filed under, and the
+      // composite primary key really is unique within a version.
+      for (const version of versions) {
+        const seen = new Set<string>();
+        for (const d of A.rubricDimensions(version)) {
+          if (d.rubric_version !== version) {
+            out.push(`RUBRICS['${version}'] holds dimension '${d.id}' whose own rubric_version says '${d.rubric_version}'`);
+          }
+          if (seen.has(d.id)) {
+            out.push(`RUBRICS['${version}'] carries dimension '${d.id}' twice — PRIMARY KEY (rubric_version, id) would refuse the second`);
+          }
+          seen.add(d.id);
+        }
+      }
+
+      // Every team names a rubric that exists, and scores only dimensions that
+      // rubric has. Per team, not against DIMENSION_IDS: the default rubric is
+      // the right answer only for a team that happens to be on the default.
+      let resolved = 0;
+      for (const t of A.teamsFixture.rows('default')) {
+        const dims = A.rubricDimensions(t.rubric_version);
+        if (dims.length === 0) {
+          out.push(
+            `assessment-teams ${t.id}: rubric_version '${t.rubric_version}' names a rubric the mock does not carry ` +
+            `(RUBRICS has ${versions.map((v) => `'${v}'`).join(', ')})`,
+          );
+          continue;
+        }
+        const ids = new Set(dims.map((d) => d.id));
+        const score = A.scoresFixture.rows('default').find((s) => s.team_id === t.id);
+        for (const dimensionId of Object.keys(score?.dimensions ?? {})) {
+          resolved += 1;
+          if (!ids.has(dimensionId)) {
+            out.push(
+              `assessment-scores ${t.id}: scores dimension '${dimensionId}', which rubric ` +
+              `'${t.rubric_version}' does not define`,
+            );
+          }
+        }
+        for (const e of t.exceptions) {
+          resolved += 1;
+          if (!ids.has(e.dimension_id)) {
+            out.push(`assessment-teams ${t.id}: N/A exception on dimension '${e.dimension_id}', which rubric '${t.rubric_version}' does not define`);
+          }
+        }
+      }
+
+      if (versions.length < 1 || resolved < 100) {
+        out.push(
+          `near-vacuous: ${versions.length} rubric(s), ${resolved} (team, dimension) references resolved — ` +
+          `the seeded corpus is 7 teams on a 17-dimension rubric, so this rule is not exercising the reference it claims to check`,
         );
       }
       return out;

@@ -13,9 +13,31 @@ export interface HistoryResponse {
 
 export interface TrendLineProps {
   history: HistoryResponse | null | undefined;
+  /**
+   * The server's error line when `GET /api/scores/:id/history` answered 200
+   * with `{ samples: [], degraded, error }`. "No trend data — run the scoring
+   * agent" is a chore handed to someone whose query merely failed, and the
+   * scoring agent is `ManageIngest`-gated, so for most readers it is a chore
+   * they cannot even do.
+   */
+  degraded?: string | null;
 }
 
-export function TrendLine({ history }: TrendLineProps) {
+export function TrendLine({ history, degraded }: TrendLineProps) {
+  if (degraded) {
+    return (
+      <div className="py-3 rounded-md">
+        <div className="text-[13px] font-semibold text-danger mb-1">
+          Could not load the score trend
+        </div>
+        <div className="text-xs text-text-secondary leading-relaxed">
+          {degraded.replace(/\.\s*$/, '')}. Score history lives in Aurora, so this
+          is unknown rather than empty — the trend may be perfectly healthy.
+        </div>
+      </div>
+    );
+  }
+
   if (history === undefined) {
     return (
       <div className="text-xs text-text-tertiary py-2">

@@ -3,7 +3,7 @@ role: hr-admin
 user: u-rachel (Rachel Kowalski) — verified via GET /api/session/me on this surface (sub u-rachel, role hr-admin, tenant orgiq)
 url: /iq/work/findings
 pages: portal/src/pages/work
-audited: 2026-09-06 00:20 local, Chrome 1552px, middleware dev:mock
+audited: 2026-09-08 03:30 local, Chrome 1552px (innerWidth 1552), middleware dev:mock (re-audit: shares portal/src/pages/work with QueuePulse, which changed)
 screenshot: automate-findings.jpg
 verdict: pass
 console errors: 0
@@ -11,4 +11,4 @@ layout: pass — content col left 224px w 1304px; breadcrumb "Build › Automate
 keyboard: pass — 46 controls counted, 46 reached by a 49-press Tab sweep (rail → nested rail → Run sweeps now → the 4 status pills → the 3 group rows, each a real `<button>` → "Find links in 1 of these" → wraps). Focusing the Bus factor group and pressing Enter expands it in place (row flips ▸→▾ and "show"→"hide", the two findings appear with their own "Put a worker on it" / "Dismiss" buttons) and focus stays on the group row
 empty-state: pass — the dead-letter queue reads "Nothing dead-lettered. Failed jobs land here with their error and a requeue button." with no fake table; every status pill toggles `aria-pressed` and re-filters (open → Bus factor 2 + Orphan decisions 1 + Stale docs 1; promoted → Stale docs 1; resolved → Orphan decisions 1; dismissed → Lab signals 1), so this seed has no filter that yields zero findings — the pill set itself is the zero-check and each one lands on real rows
 role-gating: hr-admin gets "Run sweeps now" in the header (not pressed — it enqueues real sweep jobs) plus per-finding "Put a worker on it" and "Dismiss" actions and the "Find links in 1 of these" action on Stale docs; the 4 open findings match the "4 open findings · 0 dead-lettered jobs" tile on the Automate overview, so the count and the list agree
-notes: the finding groups are the page — no summary strip sits above them. The dead-letter panel sits above the findings rather than below; at 4 findings it costs ~100px and the first group is still at 416px, so it stays inside the budget, but on a page with a long dead-letter list it would push findings down (nothing to fail today).
+notes: the finding groups are the page — no summary strip sits above them. The dead-letter panel sits above the findings rather than below; at 4 findings it costs ~100px and the first group is still at 416px, so it stays inside the budget, but on a page with a long dead-letter list it would push findings down (nothing to fail today). Re-audit 2026-09-08: renders from the same `pages/work` directory as the Automate overview, where QueuePulse learned to tell a degraded bot roster from a denied one; Findings reads none of those endpoints and is unchanged. Re-measured: content col left 224px w 1304px, first-row-top 406px, no horizontal scroll (scrollWidth 1552 = innerWidth), 46 tabbable controls, console errors 0; DLQ still "Nothing dead-lettered…".

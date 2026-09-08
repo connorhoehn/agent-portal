@@ -1,18 +1,31 @@
-"""Service auth for the harness runner's trace callback — stdlib unittest, no network.
+"""Service auth for the harness runner — stdlib unittest, no network.
 
 Run:  cd infra/scripts && python3 -m unittest test_harness_auth
 
-POST /api/observability/harness/trace is a sessionless machine callback: the
-middleware's `requireTraceAuth` is open while HARNESS_TRACE_SECRET is unset and
-does a constant-time compare of `x-harness-auth` once it is set. This runner
-used to send no header at all, so setting the secret would have 401'd every
-trace POST in the run. These tests pin the contract the fix implements, which is
-the same one agents/_shared/callbacks.py implements for the fleet:
+TWO CREDENTIALS, TWO SCOPES.
+
+`POST /api/observability/harness/trace` is a sessionless machine callback shared
+with the agent fleet: the middleware's `requireTraceAuth` is open while
+HARNESS_TRACE_SECRET is unset and does a constant-time compare of
+`x-harness-auth` once it is set. This runner used to send no header at all, so
+setting the secret would have 401'd every trace POST in the run.
+
+Everything ELSE the runner calls — prompt-versions, harness runs, results, the
+final PATCH, promote — is session-gated (tenant + Cedar) and the runner carries
+no cookie. It reached those only through the middleware's dev demo-user
+fallback, which is off wherever Cognito is configured, so the runner worked on a
+laptop and 401'd wholesale in the deployment it exists for. HARNESS_RUNNER_SECRET
+(`x-harness-runner-auth`) is the runner's own identity for those; the middleware
+half is `serviceAuthOr(HARNESS_RUNNER_SERVICE_AUTH, ...)`, which never opens on
+an unset secret.
+
+What these tests pin, for both:
 
   * secret unset  → no header, request unchanged
-  * secret set    → header on the TRACE call only; the session-gated harness
-                    routes are not the thing this secret unlocks
-  * a 401 is named as a config error, not reported as a flaky sink
+  * secret set    → the trace credential goes on the TRACE call only, the
+                    runner credential on every middleware call
+  * a 401 is named as a config error — and names WHICH credential — instead of
+    being reported as a flaky sink or a lapsed login
 """
 
 from __future__ import annotations
@@ -50,11 +63,14 @@ class TraceAuthHeaderTests(unittest.TestCase):
         self._env = mock.patch.dict("os.environ", {}, clear=False)
         self._env.start()
         harness.os.environ.pop("HARNESS_TRACE_SECRET", None)
+        harness.os.environ.pop("HARNESS_RUNNER_SECRET", None)
         harness._announced_trace_auth = False
+        harness._announced_runner_auth = False
 
     def tearDown(self):
         self._env.stop()
         harness._announced_trace_auth = False
+        harness._announced_runner_auth = False
 
     def _post(self, url: str):
         opener = _ok_urlopen()
@@ -104,14 +120,136 @@ class TraceAuthHeaderTests(unittest.TestCase):
         self.assertEqual(json.loads(req.data.decode()), {"agentId": "orgiq-search"})
 
 
+class RunnerAuthHeaderTests(unittest.TestCase):
+    """The control-plane credential — every middleware call, not just one."""
+
+    def setUp(self):
+        self._env = mock.patch.dict("os.environ", {}, clear=False)
+        self._env.start()
+        harness.os.environ.pop("HARNESS_TRACE_SECRET", None)
+        harness.os.environ.pop("HARNESS_RUNNER_SECRET", None)
+        harness._announced_trace_auth = False
+        harness._announced_runner_auth = False
+
+    def tearDown(self):
+        self._env.stop()
+        harness._announced_trace_auth = False
+        harness._announced_runner_auth = False
+
+    def _post(self, url: str):
+        opener = _ok_urlopen()
+        with mock.patch("urllib.request.urlopen", opener), redirect_stderr(io.StringIO()):
+            harness._http("POST", url, {"label": "nightly"})
+        return opener.call_args[0][0]
+
+    def test_no_header_when_the_secret_is_unset(self):
+        # The middleware guard is closed-but-falls-through when unconfigured,
+        # so sending nothing is exactly right: the request is what it was.
+        self.assertIsNone(_header(self._post(RUNS_URL), "x-harness-runner-auth"))
+
+    def test_header_on_a_control_plane_call_when_the_secret_is_set(self):
+        harness.os.environ["HARNESS_RUNNER_SECRET"] = "runner-secret"
+        self.assertEqual(
+            _header(self._post(RUNS_URL), "x-harness-runner-auth"), "runner-secret"
+        )
+
+    def test_header_name_matches_the_middleware_guard(self):
+        # serviceAuthOr reads req.headers['x-harness-runner-auth']; drift here
+        # 401s the whole run with no other symptom.
+        self.assertEqual(harness._RUNNER_AUTH_HEADER, "x-harness-runner-auth")
+        self.assertEqual(harness._RUNNER_AUTH_ENV, "HARNESS_RUNNER_SECRET")
+
+    def test_the_trace_call_carries_BOTH_credentials(self):
+        # /trace is gated by the trace secret, but it is still reached through
+        # the same runner. Sending only one of the two is how the previous fix
+        # left the run half-authenticated.
+        harness.os.environ["HARNESS_RUNNER_SECRET"] = "runner-secret"
+        harness.os.environ["HARNESS_TRACE_SECRET"] = "trace-secret"
+        req = self._post(TRACE_URL)
+        self.assertEqual(_header(req, "x-harness-runner-auth"), "runner-secret")
+        self.assertEqual(_header(req, "x-harness-auth"), "trace-secret")
+
+    def test_the_trace_secret_is_never_sent_as_the_runner_credential(self):
+        # Two scopes: the trace secret is deployed to nine agent runtimes and
+        # must not double as write access to the harness control plane.
+        harness.os.environ["HARNESS_TRACE_SECRET"] = "trace-secret"
+        self.assertEqual(harness._service_auth_headers(RUNS_URL), {})
+
+    def test_a_pasted_trailing_newline_is_stripped(self):
+        harness.os.environ["HARNESS_RUNNER_SECRET"] = " runner-secret\n"
+        self.assertEqual(
+            _header(self._post(RUNS_URL), "x-harness-runner-auth"), "runner-secret"
+        )
+
+    def test_a_blank_secret_reads_as_unset(self):
+        harness.os.environ["HARNESS_RUNNER_SECRET"] = "   "
+        self.assertEqual(harness._service_auth_headers(RUNS_URL), {})
+
+    def test_a_query_string_does_not_hide_a_control_plane_route(self):
+        harness.os.environ["HARNESS_RUNNER_SECRET"] = "runner-secret"
+        self.assertEqual(
+            harness._service_auth_headers(RUNS_URL + "?limit=5"),
+            {"x-harness-runner-auth": "runner-secret"},
+        )
+
+
+class RunnerAuthDiagnosticTests(unittest.TestCase):
+    """A 401 has to name the fix, not the symptom."""
+
+    def setUp(self):
+        harness.os.environ.pop("HARNESS_RUNNER_SECRET", None)
+        harness._announced_runner_auth = True  # silence the announce line
+
+    def tearDown(self):
+        harness.os.environ.pop("HARNESS_RUNNER_SECRET", None)
+        harness._announced_runner_auth = False
+
+    def test_unset_secret_says_to_export_it_and_why_it_used_to_work(self):
+        note = harness.runner_auth_hint(401)
+        self.assertIn("HARNESS_RUNNER_SECRET is unset", note)
+        self.assertIn("demo-user", note)
+
+    def test_set_secret_says_it_may_not_match_or_may_not_be_wired(self):
+        harness.os.environ["HARNESS_RUNNER_SECRET"] = "wrong"
+        note = harness.runner_auth_hint(401)
+        self.assertIn("does not match", note)
+        self.assertIn("no HARNESS_RUNNER_SECRET wired", note)
+
+    def test_the_hint_dispatches_on_the_url(self):
+        # A 401 on /trace is a different missing secret from a 401 on /runs;
+        # naming the wrong one sends the operator to the wrong vault entry.
+        self.assertIn("HARNESS_TRACE_SECRET", harness.auth_hint(TRACE_URL, 401))
+        self.assertIn("HARNESS_RUNNER_SECRET", harness.auth_hint(RUNS_URL, 401))
+
+    def test_a_401_carries_the_hint_in_the_error_TEXT(self):
+        # Most call sites only `print(f"...: {e}")`, so a hint that lives on an
+        # attribute nobody reads is a hint nobody sees.
+        err = urllib.error.HTTPError(RUNS_URL, 401, "Unauthorized", hdrs=None, fp=None)
+        with mock.patch("urllib.request.urlopen", side_effect=err):
+            with self.assertRaises(harness.HttpError) as caught:
+                harness._http("POST", RUNS_URL, {})
+        self.assertIn("HARNESS_RUNNER_SECRET", str(caught.exception))
+        self.assertEqual(caught.exception.status, 401)
+
+    def test_a_non_auth_error_carries_no_hint(self):
+        err = urllib.error.HTTPError(RUNS_URL, 500, "boom", hdrs=None, fp=None)
+        with mock.patch("urllib.request.urlopen", side_effect=err):
+            with self.assertRaises(harness.HttpError) as caught:
+                harness._http("POST", RUNS_URL, {})
+        self.assertEqual(caught.exception.hint, "")
+
+
 class TraceAuthDiagnosticTests(unittest.TestCase):
     def setUp(self):
         harness.os.environ.pop("HARNESS_TRACE_SECRET", None)
+        harness.os.environ.pop("HARNESS_RUNNER_SECRET", None)
         harness._announced_trace_auth = True  # silence the announce line
+        harness._announced_runner_auth = True
 
     def tearDown(self):
         harness.os.environ.pop("HARNESS_TRACE_SECRET", None)
         harness._announced_trace_auth = False
+        harness._announced_runner_auth = False
 
     def test_unset_secret_says_to_export_it(self):
         note = harness.trace_auth_hint(401)

@@ -1084,12 +1084,15 @@ export const mockAgentCore: AgentCoreProvider = {
   /**
    * Deliberately NOT `(await listRuntimesResult()).items`.
    *
-   * The lossy read has one caller left, `GET /api/agents`, whose bare-array
-   * wire has nowhere to put a marker. Routing it through the catch above would
-   * turn today's loud `500` under the `error` scenario into a silent
-   * `200 []` — trading a visible failure for exactly the invisible one this
-   * whole change exists to remove. So it keeps reading the fixture directly
-   * and keeps throwing until that route's shape can change.
+   * That route's shape HAS now changed: `GET /api/agents` answers
+   * `{ agents, degraded?, error? }` and reads `listRuntimesResult`, so the
+   * `error` scenario reaches it as a 200 that says the fleet could not be read
+   * rather than as a 500. This lossy variant is kept because the interface
+   * declares it and `providers/cloudwatch.ts` still uses the real provider's
+   * copy — and it keeps THROWING rather than swallowing, so any future caller
+   * that reaches for the lossy read gets a loud failure instead of an empty
+   * list with no explanation. Swallowing here would re-create, one layer down,
+   * exactly the silence this whole change removed.
    */
   async listRuntimes(): Promise<AgentRuntimeSummary[]> {
     return mockAgents.map((a) => ({ ...a }));

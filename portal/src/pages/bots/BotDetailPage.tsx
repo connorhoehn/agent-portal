@@ -31,6 +31,7 @@ import {
   Textarea,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { CostVsEstimate, runEstimate } from '../../components/marketplace/EstimateDrawer';
@@ -108,8 +109,12 @@ export default function BotDetailPage() {
 
   // Runs poll fast while one is in flight, lazily otherwise.
   const [anyRunning, setAnyRunning] = useState(false);
-  const { data: runsData, refresh: refreshRuns } =
+  // "This bot has never fired" is a claim about the bot. When the run-history
+  // read fails the route says so (`degraded`), and repeating the claim would
+  // send someone to press ▶ Run now on a bot that may be running already.
+  const { data: runsData, error: runsError, degraded: runsDegraded, refresh: refreshRuns } =
     useFetch<{ runs: BotRun[] }>(id ? `/api/bots/${id}/runs` : null, anyRunning ? 5_000 : 15_000);
+  const runsFailure = runsError ?? runsDegraded;
   const runs = [...(runsData?.runs ?? [])].sort((a, b) => parseTs(b.startedAt) - parseTs(a.startedAt));
   const running = runs.some((r) => r.status === 'running');
   if (running !== anyRunning) setAnyRunning(running);
@@ -496,7 +501,14 @@ export default function BotDetailPage() {
       {/* ── Runs ── */}
       <Card padding="md">
         <strong className="block text-xs font-semibold text-text-secondary tracking-wide select-none mb-2">RUNS</strong>
-        {runs.length === 0 ? (
+        {runsFailure ? (
+          <UnavailableNotice
+            error={runsFailure}
+            what="this bot's run history"
+            source="Runs are read from Aurora"
+            onRetry={refreshRuns}
+          />
+        ) : runs.length === 0 ? (
           <MetaLine size="sm" tone="tertiary" items={['This bot has never fired. Use ▶ Run now, or wait for its trigger.']} />
         ) : (
           <Table>

@@ -49,6 +49,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { useFetch } from '../../hooks/useFetch';
+import { firstDegraded } from '../../lib/degraded';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { CostChip } from '../../components/observability/CostChip';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
@@ -245,7 +246,9 @@ function CostPage() {
   const [windowIdx, setWindowIdx] = useState(1); // 24h default
   const win = WINDOW_OPTIONS[windowIdx];
 
-  const { data: total, error: totalError, refresh: refreshTotal } = useFetch<CostTotalResponse>(
+  const {
+    data: total, error: totalError, refresh: refreshTotal,
+  } = useFetch<CostTotalResponse>(
     `/api/observability/cost/total?windowHours=${win.hours}`,
     30_000,
   );
@@ -280,6 +283,11 @@ function CostPage() {
     60_000,
   );
 
+  // All eight panels read the same cost tables, so when that read breaks they
+  // break together — one sentence at the top, not eight stacked banners.
+  const costDegraded = firstDegraded(
+    total, a2a, valueRatio, perAgent, timeseries, top, byModel, deployMarkers,
+  );
   const totalCostUsd = total?.totalCostUsd ?? 0;
   const invocations = total?.invocations ?? 0;
 
@@ -378,12 +386,13 @@ function CostPage() {
     >
       {/* Every panel below reads from the same cost tables. Saying it once at
           the top beats seven cards each quietly showing $0.00. */}
-      {/* These endpoints answer 200 with zeros when their query fails, so a
+      {/* All eight endpoints answer 200 with zeros when their query fails, so a
           transport error is not the only way to be blind here — `degraded`
-          is the server saying it could not read the numbers. */}
-      {(totalError || total?.degraded) && (
+          is the server saying it could not read the numbers, and it can come
+          from any of the eight, not just /total. */}
+      {(totalError || costDegraded) && (
         <UnavailableNotice
-          error={totalError ?? total?.error ?? 'the cost query failed'}
+          error={totalError ?? costDegraded ?? 'the cost query failed'}
           what="cost data"
           source="Spend is aggregated from Aurora and CloudWatch"
           onRetry={refreshTotal}
@@ -452,6 +461,10 @@ function CostPage() {
           <SmartEmptyState
             title="No cost data"
             detail="Cost rows arrive on the trace bundle, alongside input/output token counts."
+            degraded={costDegraded}
+            degradedWhat="the cost chart"
+            degradedSource="Spend is aggregated from Aurora and CloudWatch"
+            onRetry={refreshTotal}
             actions={[
               {
                 label: 'Run the test harness',

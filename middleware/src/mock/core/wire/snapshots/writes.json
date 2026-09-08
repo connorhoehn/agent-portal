@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-08T06:29:25.001Z",
-  "serverHandlerSha": "a576ea8c40ec6915462f91f77f69260fd0a1e2b45ccab13f961e9cd6f11fc6cb",
-  "baseUrl": "http://127.0.0.1:3043",
+  "capturedAt": "2026-09-08T08:03:11.796Z",
+  "serverHandlerSha": "1b74cc8152512bba7723313cc8859cf6da28a0455659d99fc52c44dd061a124f",
+  "baseUrl": "http://127.0.0.1:3050",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -212,6 +212,7 @@
         "repos[]": "object",
         "repos[].gitlab_url": "string",
         "repos[].name": "string",
+        "rubric_version": "string",
         "status": "string",
         "updated_at": "string",
         "workflow_step": "number"
@@ -958,6 +959,7 @@
         "id": "string",
         "name": "string",
         "repos": "array",
+        "rubric_version": "string",
         "status": "string",
         "updated_at": "string",
         "workflow_step": "number"

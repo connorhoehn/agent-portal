@@ -88,6 +88,29 @@ describe('a value the column could not hold fails, naming both', () => {
     expect(broken).toContain('assessment_schema.sql:');
   });
 
+  it('catches the same status on the SCORED half of assessment_evidence', async () => {
+    // One table, two fixtures. The intake log is the half the vocabulary was
+    // corrected for, so proving the check there proves only that the check runs
+    // where somebody already looked — and a scored row is the one whose status
+    // a reader takes as the record of how the score was reached.
+    const scored = entityNamed('assessment_evidence (scored)');
+    const broken = await fail(withRows(scored, (rows) => rows.map((r, i) => (i === 0 ? { ...r, status: 'scored' } : r))));
+    expect(broken).toContain('[vocabulary]');
+    expect(broken).toContain("'scored'");
+    expect(broken).toContain("'PENDING', 'CLASSIFIED', 'SCORED'");
+  });
+
+  it('catches a team naming a rubric version the column could store but no rubric is', async () => {
+    // `rubric_version` is plain TEXT with no CHECK, so the DDL alone cannot
+    // refuse 'v9' — which is why the reference is an invariant below and this
+    // case only proves the column is really read off the row.
+    const teams = entityNamed('assessment_teams');
+    const broken = await fail(withRows(teams, (rows) => rows.map((r, i) => (i === 0 ? { ...r, rubric_version: 7 } : r))));
+    expect(broken).toContain('[type]');
+    expect(broken).toContain('rubric_version');
+    expect(broken).toContain('is not a string');
+  });
+
   it('catches a NOT NULL column holding null', async () => {
     const teams = entityNamed('assessment_teams');
     const broken = await fail(withRows(teams, (rows) => rows.map((r, i) => (i === 0 ? { ...r, name: null } : r))));
@@ -234,6 +257,17 @@ describe('the assessment foreign-key invariant fails when a fixture invents an i
     }
   });
 
+  it('models the rubric on its composite key, so two versions of a dimension are two rows', async () => {
+    // `PRIMARY KEY (rubric_version, id)`: addressing a rubric row by id alone
+    // would collapse dimension '1' of every version into one, and the shape
+    // check would then compare a v2 row against a v1 one and call it agreement.
+    const rubric = entityNamed('assessment_rubric_dimensions');
+    const rows = await rubric.mockRows();
+    const ids = rows.map((r: any) => rubric.mockId(r));
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toContain('v1/1');
+  });
+
   it('refuses to pass vacuously over an empty corpus', async () => {
     // The most convincing false green there is: a cross-surface rule that
     // holds because it had nothing to check, and reads in the report exactly
@@ -254,6 +288,48 @@ describe('the assessment foreign-key invariant fails when a fixture invents an i
       expect(violations.join('\n')).toContain('0 teams');
     } finally {
       fixtureRegistry.resetAll();
+    }
+  });
+});
+
+describe('the rubric-version invariant fails when a team names a rubric that is not there', () => {
+  const invariant = SURFACE_INVARIANTS.find((i) => i.name === 'a team is scored against the rubric it names')!;
+  const ctx = { app: async () => { throw new Error('this invariant needs no express app'); } } as never;
+
+  it('catches a team pointing at a rubric version RUBRICS does not carry', async () => {
+    const { teamsFixture } = await import('../../../assessment.js');
+    teamsFixture.rows('default')[0]!.rubric_version = 'v9';
+    try {
+      const violations = await invariant.check(ctx);
+      expect(violations.join('\n')).toContain("rubric_version 'v9' names a rubric the mock does not carry");
+      expect(violations.join('\n')).toContain("'v1'");
+    } finally {
+      teamsFixture.reset('default');
+    }
+  });
+
+  it('catches a score on a dimension that team\'s own rubric does not define', async () => {
+    // The failure a second rubric would actually produce: the id is a perfectly
+    // real dimension of SOME rubric, just not of the one this team was scored
+    // against — which no id-only check could tell from a correct row.
+    const { scoresFixture } = await import('../../../assessment.js');
+    const sheet = scoresFixture.rows('default')[0]!;
+    sheet.dimensions['18'] = { ...Object.values(sheet.dimensions)[0]!, dimension_id: '18' };
+    try {
+      const violations = await invariant.check(ctx);
+      expect(violations.join('\n')).toContain("scores dimension '18', which rubric 'v1' does not define");
+    } finally {
+      scoresFixture.reset('default');
+    }
+  });
+
+  it('refuses to pass vacuously when there are no teams to resolve', async () => {
+    const { teamsFixture } = await import('../../../assessment.js');
+    try {
+      teamsFixture.rows('default').splice(0);
+      expect((await invariant.check(ctx)).join('\n')).toContain('near-vacuous');
+    } finally {
+      teamsFixture.reset('default');
     }
   });
 });

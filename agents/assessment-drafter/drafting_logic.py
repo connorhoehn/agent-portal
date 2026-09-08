@@ -29,15 +29,29 @@ from typing import Any
 # deliberately narrower than "confirm Level N", which the source explicitly
 # allows ("this is what we would need to confirm Level 3").
 _LEVEL_PROMISE_RE = re.compile(
-    r"\b(?:moves?|move[sd]?|advances?|elevates?|upgrades?|brings?|guarantees?|ensures?|achieves?|will\s+reach|gets?\s+(?:you|the\s+team)\s+to)\b"
+    r"\b(?:moves?|move[sd]?|advances?|elevates?|upgrades?|brings?|guarantees?|ensures?|achieves?"
+    r"|unlocks?|results?\s+in|will\s+reach|gets?\s+(?:you|the\s+team)\s+to)\b"
     r"[^.\n]{0,60}?\bLevel\s*\d\b",
     re.IGNORECASE,
 )
 
+# Spelled-out counts matter as much as digits: "about two weeks" is the same
+# forbidden estimate as "2 weeks", and is the spelling a model reaches for
+# when it is being conversational. Only counted when a duration/points unit
+# follows, so ordinary prose ("one pipeline", "a few criteria") is untouched.
+# The bare articles "a"/"an" are deliberately NOT counts here — "a day-to-day
+# process" and "an hourly job" are descriptions, not estimates, and matching
+# them would redact perfectly good sentences.
+_COUNT = (
+    r"(?:\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten"
+    r"|a\s+few|a\s+couple\s+of|several)"
+)
+
 _EFFORT_ESTIMATE_RE = re.compile(
-    r"\b\d+(?:\.\d+)?\s*(?:story\s*points?|sp|pts?)\b"
-    r"|\b\d+(?:\.\d+)?\s*(?:hours?|hrs?|days?|weeks?)\b"
+    rf"\b{_COUNT}\s*(?:story\s*points?|sp|pts?)\b"
+    rf"|\b{_COUNT}\s*(?:hours?|hrs?|days?|weeks?|sprints?)\b"
     r"|\bquick\s*win\b"
+    r"|\blow[-\s]hanging\s+fruit\b"
     r"|\btarget\s*sprint\b",
     re.IGNORECASE,
 )
@@ -79,6 +93,20 @@ _VALID_SCOPES = {"shared", "team"}
 _VALID_FACT_TYPES = {"observed", "gap", "recommendation"}
 
 
+def _normalize_term(value: Any) -> str | None:
+    """Lowercase + strip a controlled-vocabulary term; None for anything else.
+
+    Collapsing every non-string to None matters beyond tidiness: the checks
+    below are ``in`` tests against sets, and an *unhashable* value (a model
+    that emitted ``"scope": ["shared"]``) raised TypeError out of this
+    function instead of dropping the fact. main.py's context path catches
+    TypeError around the whole re-validation block, so that one malformed
+    fact made the backstop bail and return the model's UNVALIDATED facts —
+    the exact fabrication this module exists to stop.
+    """
+    return value.strip().lower() if isinstance(value, str) else None
+
+
 def validate_context_fact(fact: dict, source_text: str) -> dict | None:
     """Validate + normalise one extracted fact against the source document.
 
@@ -91,9 +119,14 @@ def validate_context_fact(fact: dict, source_text: str) -> dict | None:
     if not isinstance(fact, dict):
         return None
 
-    category = fact.get("category")
-    scope = fact.get("scope")
-    fact_type = fact.get("fact_type")
+    # Vocabulary normalisation, as the docstring says: "Process" and
+    # " tooling " are the same word as "process" and "tooling", and dropping
+    # a well-sourced fact over letter case discards real signal for no
+    # reason. Normalising a *known* spelling is reading what was written;
+    # everything genuinely outside the enum is still dropped below.
+    category = _normalize_term(fact.get("category"))
+    scope = _normalize_term(fact.get("scope"))
+    fact_type = _normalize_term(fact.get("fact_type"))
     source_span = fact.get("source_span")
     text = fact.get("text")
 

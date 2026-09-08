@@ -1,0 +1,114 @@
+/**
+ * Deploy/teardown configuration — SOURCE-LEVEL assertions.
+ *
+ * The first suite is a genuine config check with a template consequence: what
+ * cdk.json puts in `context` is what every plain `cdk deploy` sees.
+ *
+ * The rest are greps over shell scripts, and this file does not pretend they
+ * are anything better. They are here because each pins a specific regression
+ * that was expensive to diagnose, in code no type system or template assertion
+ * can reach. A grep will not catch a rewrite that keeps the string and loses
+ * the behaviour — but it does catch the specific undo, which is the failure
+ * mode these have actually had.
+ */
+import { test, describe } from 'node:test';
+import assert from 'node:assert/strict';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+
+const INFRA = path.join(__dirname, '..');
+const cdkJson = JSON.parse(fs.readFileSync(path.join(INFRA, 'cdk.json'), 'utf8'));
+const destroySh = fs.readFileSync(path.join(INFRA, 'scripts', 'destroy.sh'), 'utf8');
+const deploySh = fs.readFileSync(path.join(INFRA, 'scripts', 'deploy.sh'), 'utf8');
+
+/** Script text with comment lines stripped, so a comment cannot satisfy a grep. */
+function code(script: string): string {
+  return script
+    .split('\n')
+    .filter((line) => !/^\s*#/.test(line))
+    .join('\n');
+}
+
+describe('cdk.json must not pre-enable a second-phase gate', () => {
+  test('deployRuntimes is NOT set in cdk.json context', () => {
+    // This is the regression, verbatim: cdk.json used to carry
+    // "deployRuntimes": "true", so the first deploy after any teardown created
+    // the ECR repos and the CfnRuntimes that pin images from them in one pass,
+    // and every runtime failed with an invalid-image error against the empty
+    // repo the same stack had just created. The documented order is: deploy
+    // (repos + roles) → agents/base/build.sh → agents/build-all.sh → redeploy
+    // with --context deployRuntimes=true.
+    assert.equal(
+      cdkJson.context?.deployRuntimes,
+      undefined,
+      'deployRuntimes in cdk.json makes the chicken-and-egg failure the default',
+    );
+  });
+
+  test('the other artifact-dependent gates are not pre-enabled either', () => {
+    for (const gate of ['deployDevbox', 'deployMiddlewareService']) {
+      assert.equal(
+        cdkJson.context?.[gate],
+        undefined,
+        `${gate} requires a pushed image; enabling it by default guarantees a failed first deploy`,
+      );
+    }
+  });
+});
+
+describe('destroy.sh: the wedges it exists to avoid', () => {
+  test('it does NOT CFN-pre-delete OrgIQ-Aurora', () => {
+    // Aurora's exports are still imported by KnowledgeBase / Agents /
+    // AgentCoreRuntime / AgentCoreGateway at that point, so CloudFormation
+    // cancels the delete ("Cannot delete export ... as it is in use by ...")
+    // and `wait stack-delete-complete` polls to its ~60-minute ceiling.
+    // `cdk destroy --all` deletes in dependency order and does it correctly.
+    assert.ok(
+      !/delete-stack[^\n]*OrgIQ-Aurora/.test(code(destroySh)),
+      'pre-deleting the Aurora stack cancels on an in-use export and hangs for an hour',
+    );
+  });
+
+  test('it pre-drains AgentCore runtimes before cdk destroy', () => {
+    // AWS::BedrockAgentCore::Runtime regularly exceeds the resource handler's
+    // delete timeout and fails with NotStabilized, dropping the stack into
+    // DELETE_FAILED and aborting `cdk destroy --all` partway through the fleet
+    // — even though the runtime finishes deleting server-side anyway.
+    const script = code(destroySh);
+    const drainAt = script.indexOf('delete-agent-runtime');
+    const destroyAt = script.indexOf('cdk destroy --all');
+    assert.ok(drainAt > -1, 'no runtime pre-drain found');
+    assert.ok(destroyAt > -1, 'no cdk destroy --all found');
+    assert.ok(drainAt < destroyAt, 'the pre-drain must run BEFORE cdk destroy');
+  });
+
+  test('endpoints are deleted before their runtime', () => {
+    // The API rejects a runtime delete with ConflictException while any
+    // endpoint remains, and DEFAULT cannot be deleted on its own.
+    const script = code(destroySh);
+    const endpointAt = script.indexOf('delete-agent-runtime-endpoint');
+    const runtimeAt = script.indexOf('delete-agent-runtime --agent-runtime-id');
+    assert.ok(endpointAt > -1, 'no endpoint drain found');
+    assert.ok(
+      runtimeAt === -1 || endpointAt < runtimeAt,
+      'a runtime delete with a live endpoint returns ConflictException',
+    );
+    assert.match(destroySh, /DEFAULT/, 'the DEFAULT endpoint must be skipped explicitly');
+  });
+});
+
+describe('deploy.sh: a half-built fleet must not exit 0', () => {
+  test('it reconciles real CloudFormation status after cdk deploy', () => {
+    // `cdk deploy --all` does not reliably exit non-zero when a stack mid-fleet
+    // fails; six stacks were silently skipped and the script still exited 0.
+    const script = code(deploySh);
+    assert.match(script, /describe-stacks/, 'no post-deploy status reconciliation found');
+    assert.match(script, /FAILURES/, 'no failure accumulator found');
+  });
+
+  test('the KB Data-API race auto-recovery is bounded to one attempt', () => {
+    // An unbounded retry turns a genuinely-broken deploy into an infinite loop
+    // that keeps recreating a knowledge base.
+    assert.match(code(deploySh), /KB_RETRIED/);
+  });
+});

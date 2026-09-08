@@ -24,6 +24,8 @@
 //    domain was built for.
 
 import { useEffect, useState } from 'react';
+
+import { readDegraded } from '../../lib/degraded';
 import { Link } from 'react-router';
 import { Card, Chip, CodeBlock } from '@connorhoehnslalom/ui-components/shared';
 
@@ -88,6 +90,11 @@ function EnvironmentRow({ env }: { env: Environment }) {
   const [open, setOpen] = useState(false);
   const [access, setAccess] = useState<AccessDecision | null>(null);
   const [runs, setRuns] = useState<WorkflowRun[] | null>(null);
+  // routes/environments.ts states this contract outright: `{ runs: [], repo,
+  // degraded, error }` means "we could not ask GitHub", and is never to be
+  // rendered as "this environment has no runs". Until now the rail did
+  // exactly that — the Latest-runs block simply vanished.
+  const [runsError, setRunsError] = useState<string | null>(null);
   const retired = env.status === 'retired';
 
   // Fetched on first expand, once — the answer does not change mid-visit, and
@@ -104,9 +111,20 @@ function EnvironmentRow({ env }: { env: Environment }) {
       })
       .catch(() => { if (!cancelled) setAccess({ allowed: false, reason: 'could not reach the API' }); });
     fetch(`/api/environments/${env.id}/runs`, { credentials: 'include' })
-      .then(async (r) => (r.ok ? ((await r.json()) as { runs?: WorkflowRun[] }) : { runs: [] }))
-      .then((body) => { if (!cancelled) setRuns((body.runs ?? []).slice(0, 3)); })
-      .catch(() => { if (!cancelled) setRuns([]); });
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return (await r.json()) as { runs?: WorkflowRun[] };
+      })
+      .then((body) => {
+        if (cancelled) return;
+        setRunsError(readDegraded(body));
+        setRuns((body.runs ?? []).slice(0, 3));
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setRunsError(e instanceof Error ? e.message : 'could not reach the API');
+        setRuns([]);
+      });
     return () => { cancelled = true; };
   }, [open, access, env.id]);
 
@@ -165,7 +183,13 @@ function EnvironmentRow({ env }: { env: Environment }) {
             </div>
           )}
 
-          {runs && runs.length > 0 && (
+          {runsError && (
+            <div className="text-[11px] text-danger leading-relaxed">
+              Latest runs unknown — {runsError}. This environment may well be building.
+            </div>
+          )}
+
+          {!runsError && runs && runs.length > 0 && (
             <div className="flex flex-col gap-1">
               <span className="text-[10px] font-semibold text-text-tertiary tracking-wide uppercase">Latest runs</span>
               {runs.map((r) => (

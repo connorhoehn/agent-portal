@@ -45,6 +45,16 @@ export interface AgentCoreRuntimeStackProps extends cdk.StackProps {
   readonly guardrailIdHrAdmin?: string;
   readonly auroraClusterArn: string;
   readonly auroraCredentialsSecretArn: string;
+  /**
+   * ARN of the `orgiq_graph_reader` credential minted by `OrgIQ-Aurora`.
+   *
+   * Optional, and left undefined by default — see READ_AGENTS below for the
+   * whole story. When omitted the stack resolves the CFN export
+   * `<prefix>-aurora-readonly-secret-arn` instead, but ONLY if the
+   * `readOnlyGraphRole` context flag is set, because importing an export that
+   * does not exist yet fails the deploy outright.
+   */
+  readonly auroraReadOnlySecretArn?: string;
   readonly knowledgeBaseId: string;
   readonly modelId?: string;
   readonly codeInterpreterId?: string;
@@ -76,6 +86,23 @@ const AGENT_NAMES = [
 ] as const;
 
 const ALL_AGENT_NAMES = AGENT_NAMES;
+
+/**
+ * The two agents that hand *model-authored* SQL to the RDS Data API.
+ *
+ * `search` and `advisor` expose `query_graph(sql)`: the model writes the
+ * statement, the agent runs it verbatim. `agents/_shared/sql_guard.py`
+ * inspects it first and stays in place, but a regex over SQL a prompt
+ * injection can influence is an argument about parsing — and the attacker
+ * picks the argument. `schema/graph_readonly_role.sql` creates
+ * `orgiq_graph_reader`, which holds SELECT on the org-graph tables and nothing
+ * else; these two runtimes read as that role.
+ *
+ * Only these two. Every other agent writes (ingestion syncs the KB,
+ * graph-builder upserts the graph, scoring updates score columns) and keeps
+ * the admin credential.
+ */
+const READ_AGENTS = new Set<(typeof ALL_AGENT_NAMES)[number]>(['search', 'advisor']);
 
 // Explicit session lifecycle per agent. The service defaults are 900s idle /
 // 28800s max — set explicitly so the numbers live in source rather than being
@@ -125,6 +152,40 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
     const onlyAgents = onlyAgentsCtx
       ? new Set(onlyAgentsCtx.split(',').map(s => s.trim()).filter(Boolean))
       : null;
+
+    // ── The read-only graph role ────────────────────────────────────────────
+    //
+    // OPT-IN, on purpose. Flipping this on without `OrgIQ-Aurora` having been
+    // redeployed would make `Fn.importValue` fail the whole deploy on a
+    // missing export, and flipping it on without
+    // `schema/graph_readonly_role.sql` having been applied would leave the two
+    // read agents authenticating as a role with no password. Both are
+    // recoverable, neither is a nice surprise mid-rebuild, so the operator
+    // says when the prerequisites are done:
+    //
+    //   cdk deploy OrgIQ-AgentCoreRuntime \
+    //     --context deployRuntimes=true --context readOnlyGraphRole=true
+    //
+    // Until then search and advisor keep the admin credential and
+    // `sql_guard.py` remains the only boundary — which is exactly the state
+    // every environment was in before this existed. Full order of operations:
+    // docs/readonly-graph-role.md.
+    const readOnlyGraphRole = this.node.tryGetContext('readOnlyGraphRole') === 'true';
+    const readOnlySecretArn = readOnlyGraphRole
+      ? (props.auroraReadOnlySecretArn ?? cdk.Fn.importValue(`${prefix}-aurora-readonly-secret-arn`))
+      : undefined;
+
+    if (deployRuntimes && !readOnlyGraphRole) {
+      // Same spirit as MiddlewareServiceStack's albAllowCidr warning: a
+      // security posture that is off by default has to say so out loud, or
+      // "off" quietly becomes "forever".
+      cdk.Annotations.of(this).addWarning(
+        'search/advisor will run model-authored SQL as the Aurora admin user. ' +
+        'agents/_shared/sql_guard.py is then the only thing refusing a write. ' +
+        'Apply schema/graph_readonly_role.sql and redeploy with ' +
+        '--context readOnlyGraphRole=true (docs/readonly-graph-role.md).',
+      );
+    }
 
     // Shared base image for every internally-managed agent. Built once via agents/base/build.sh
     // and pre-loaded with strands-agents + bedrock-agentcore + ag-ui deps, so
@@ -264,10 +325,21 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
         ],
         resources: [props.auroraClusterArn],
       }));
+      // Which Aurora credential this runtime may read.
+      //
+      // For the two read agents with the read-only role turned on, this is an
+      // EXCLUSIVE swap, not an addition: they get `orgiq_graph_reader` and
+      // lose GetSecretValue on the admin secret entirely. That is the point —
+      // a boundary the agent could step around by fetching the other secret is
+      // a suggestion. `search` and `advisor` touch Aurora in exactly two
+      // places (`query_graph` and the `knowledge_bases` lookup in
+      // `_shared/kb_resolver.py`), both pure SELECTs, so neither has any
+      // remaining use for a writable login.
+      const useReadOnlySecret = readOnlySecretArn !== undefined && READ_AGENTS.has(agentName);
       executionRole.addToPolicy(new iam.PolicyStatement({
         sid: 'AuroraSecret',
         actions: ['secretsmanager:GetSecretValue'],
-        resources: [props.auroraCredentialsSecretArn],
+        resources: [useReadOnlySecret ? readOnlySecretArn! : props.auroraCredentialsSecretArn],
       }));
       // Wildcard over all KBs in this account — covers the default orgiq KB and
       // any new KBs provisioned via the portal registry wizard (Wave 1+).
@@ -387,6 +459,14 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
           MODEL_ID: modelId,
           AURORA_CLUSTER_ARN: props.auroraClusterArn,
           AURORA_SECRET_ARN: props.auroraCredentialsSecretArn,
+          // Set only for search/advisor, and only with --context
+          // readOnlyGraphRole=true. `agents/_shared/db_credentials.py` prefers
+          // it and falls back to AURORA_SECRET_ARN when it is absent, so a
+          // runtime deployed without it behaves exactly as it did before the
+          // role existed. The fallback is on *absence* only — never on a
+          // permission error, which would hand an attacker the writable path
+          // by way of a failure they can cause deliberately.
+          ...(useReadOnlySecret && { AURORA_READONLY_SECRET_ARN: readOnlySecretArn! }),
           KB_ID: props.knowledgeBaseId,
           PROJECT_PREFIX: prefix,
           ...(props.codeInterpreterId && { CODE_INTERPRETER_ID: props.codeInterpreterId }),

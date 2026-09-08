@@ -46,7 +46,8 @@ function makeTeam(id: string): M.MockTeam {
   const now = new Date().toISOString();
   return {
     id, name: id, cohort: 'general', status: 'NEW', workflow_step: 1, assessment_lead: '',
-    contacts: [], repos: [], archetype: null, exceptions: [], created_at: now, updated_at: now,
+    contacts: [], repos: [], archetype: null, rubric_version: M.DEFAULT_RUBRIC_VERSION,
+    exceptions: [], created_at: now, updated_at: now,
     contributors: [],
   };
 }

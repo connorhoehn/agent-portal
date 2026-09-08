@@ -99,7 +99,11 @@ function InvocationsPage() {
   // The fleet registry, not the tail: on a fresh dev:mock boot (or any
   // moment with no traffic yet) the tail is empty, but the "All agents"
   // filter should still list every deployed agent (DEFECTS.md #7).
-  const { data: registry } = useFetch<AgentRegistryEntry[]>('/api/agents', 60000);
+  // Object-shaped since /api/agents gained a `degraded` marker (a bare array
+  // has nowhere to carry one). This read only populates the "All agents"
+  // filter, so a failure narrows the filter rather than emptying the page.
+  const { data: registryResp } = useFetch<{ agents: AgentRegistryEntry[] }>('/api/agents', 60000);
+  const registry = registryResp?.agents;
 
   // Both filters live in the URL, not local state — a link that already
   // knows what it wants to show (Health's "Read the failures on …", the

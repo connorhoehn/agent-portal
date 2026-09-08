@@ -10,12 +10,36 @@ import { listEvents, recordTurn, type StoredToolCall } from '../providers/memory
 import { maybeGenerateTitle } from '../lib/session-titles.js';
 import { requireAction, requireTenant, isAllowed, resolveSession } from '../lib/authz.js';
 import { annotateToolResult } from '../lib/answer-sources.js';
+import { degradedFields } from '../lib/upstream.js';
 
 export const agentsRouter = Router();
 
+/**
+ * The fleet listing.
+ *
+ * THE SHAPE CHANGED, AND THAT IS THE FIX. This answered a BARE ARRAY, so an
+ * empty fleet and a control-plane call that failed were the same three bytes
+ * on the wire — `[]` — with nowhere to put a marker saying which. The provider
+ * has carried the distinction since `listRuntimesResult` (lib/upstream.ts), and
+ * this was the last caller still reading the lossy view; it was left that way
+ * on purpose, because converting it under a bare array would have turned a
+ * loud `500` into a silent `200 []` — the exact bug being removed.
+ *
+ * `{ agents, degraded?, error? }` is the same vocabulary routes/cost.ts and
+ * routes/environments.ts already put on the wire: `degraded` and `error` appear
+ * ONLY when the listing failed, so a healthy response is the old array under
+ * one key and nothing else. A failure is now a 200 that says so, rather than
+ * either a lie or a 500 — the page still renders, and it can tell the reader
+ * the fleet could not be read.
+ *
+ * BREAKING for the five portal readers (AgentFlowPage, InvokePage,
+ * InvocationsPage, SummaryPage, PromptOpsHomePage), which each `await
+ * res.json()` as an array. That is a handover, not an oversight — see the
+ * report accompanying this change.
+ */
 agentsRouter.get('/', requireTenant('orgiq'), asyncHandler(async (_req, res) => {
-  const runtimes = await agentcore.listRuntimes();
-  res.json(runtimes);
+  const listing = await agentcore.listRuntimesResult();
+  res.json({ agents: listing.items, ...degradedFields(listing) });
 }));
 
 agentsRouter.get('/:agentId/metrics', requireTenant('orgiq'), asyncHandler(async (req, res) => {

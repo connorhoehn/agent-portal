@@ -27,7 +27,14 @@ export function ProcessFlow({ height = 400 }: { height?: number }) {
   const { data: artifactsData } = useFetch<ArtifactsResponse>('/api/distillation/artifacts?status=published', 60_000);
   const { data: findingsData } = useFetch<FindingsResponse>('/api/work/findings?status=open', 60_000);
   const { data: bundle } = useFetch<LiveBundleResponse>('/api/session-bundle/live', 60_000);
-  const { data: botsData, error: botsError } = useFetch<BotsResponse>('/api/bots', 60_000);
+  // `degraded` counts as a failure here for the same reason `botsError` does
+  // (see below): the route answers 200 with `{ bots: [] }` when the roster
+  // read fails, and folding that into the run-count would report a confident
+  // zero for a number nobody managed to read.
+  const {
+    data: botsData, error: botsTransportError, degraded: botsDegraded,
+  } = useFetch<BotsResponse>('/api/bots', 60_000);
+  const botsError = botsTransportError ?? botsDegraded;
   const { data: promotionsData } = useFetch<PromotionsResponse>('/api/promotions', 60_000);
   const { data: samplingData } = useFetch<SamplingLite>('/api/distillation/sampling', 60_000);
 

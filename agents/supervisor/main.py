@@ -473,6 +473,40 @@ _BAKED_PROMPT_SHA = short_prompt_hash(SYSTEM_PROMPT)
 AG_UI_STREAMING = os.environ.get("AG_UI_STREAMING", "true").lower() == "true"
 
 
+def _event_type(event) -> str:
+    """AG-UI event type as a plain string.
+
+    Tolerates the three shapes an event can arrive in: a pydantic event whose
+    ``type`` is an ``EventType`` enum member, one where it is already a string,
+    and a bare dict (some adapters/versions hand back plain dicts).
+    """
+    if isinstance(event, dict):
+        raw = event.get("type")
+    else:
+        raw = getattr(event, "type", None)
+    return str(getattr(raw, "value", raw) or "")
+
+
+def _run_error_event(message: str, code: str = "supervisor_stream_error"):
+    """Terminal AG-UI event for a stream that died partway through.
+
+    A stream that just stops is indistinguishable, at the portal, from a short
+    answer: the middleware only marks a run failed when it *sees* RUN_ERROR
+    (`middleware/src/routes/agents.ts`), and nothing downstream reconstructs
+    that from a truncated SSE body. So we say so explicitly before the
+    exception leaves the generator.
+
+    Falls back to a plain dict if the SDK ever renames the class — an
+    unrecognised-but-present terminal event is still better than silence.
+    """
+    try:
+        from ag_ui.core import EventType, RunErrorEvent
+
+        return RunErrorEvent(type=EventType.RUN_ERROR, message=message, code=code)
+    except Exception:  # noqa: BLE001
+        return {"type": "RUN_ERROR", "message": message, "code": code}
+
+
 @app.entrypoint
 async def handle(payload: dict) -> AsyncIterator | dict:
     if isinstance(payload, dict):
@@ -517,46 +551,56 @@ async def _handle_streaming(payload: dict, input_text: str, role: str, tenant: s
     shared_token = set_active_ctx(ctx)
     t0 = time.monotonic()
     streamed_text: list[str] = []
+    stream_error: str | None = None
 
-    # Build AG-UI RunAgentInput from the middleware payload.
-    thread_id = payload.get("sessionId", "default")
-    run_id = payload.get("invocationId", f"run-{time.time_ns()}")
-
-    # Convert history to AG-UI message format.
-    # ag-ui-protocol >= 0.1.x requires an explicit `id` on every Message —
-    # omitting it is a pydantic ValidationError that kills the invocation
-    # (found live after the 2026-08 base-image rebuild pulled the newer SDK).
-    messages = []
-    for i, turn in enumerate(payload.get("history", [])):
-        if isinstance(turn, dict) and turn.get("role") and turn.get("content"):
-            if turn["role"] == "user":
-                messages.append(UserMessage(id=f"hist-{i}", role="user", content=turn["content"]))
-            else:
-                from ag_ui.core import AssistantMessage
-                messages.append(AssistantMessage(id=f"hist-{i}", role="assistant", content=turn["content"]))
-
-    # Add the current user message.
-    messages.append(UserMessage(id=f"msg-{time.time_ns()}", role="user", content=input_text))
-
-    # ag-ui-protocol >= 0.1.x: state/tools/context/forwarded_props are all
-    # required fields on RunAgentInput (same 2026-08 SDK drift as the Message
-    # `id` requirement above). Empty values are valid.
-    run_input = RunAgentInput(
-        thread_id=thread_id,
-        run_id=run_id,
-        messages=messages,
-        state=None,
-        tools=[],
-        context=[],
-        forwarded_props=None,
-    )
-
-    log.info(
-        "Supervisor AG-UI streaming (tenant=%s, role=%s, thread=%s, run=%s, invocation=%s): %s",
-        tenant, role, thread_id, run_id, ctx.invocation_id, input_text[:120],
-    )
-
+    # Everything from here on lives inside the try, so that *building* the
+    # RunAgentInput is covered too: a ValidationError there used to escape
+    # before the finally existed, leaving `_current_ctx` set to a dead context
+    # and emitting neither a RUN_ERROR nor a trace. That is precisely the
+    # failure mode the 2026-08 SDK drift produced.
     try:
+        # Build AG-UI RunAgentInput from the middleware payload.
+        # `or` rather than a .get() default: the middleware can send an explicit
+        # null for either field, and `.get(k, default)` returns that null —
+        # which is not a str, so RunAgentInput's pydantic model rejects the
+        # entire run. Absent and null have to behave identically here.
+        thread_id = payload.get("sessionId") or "default"
+        run_id = payload.get("invocationId") or f"run-{time.time_ns()}"
+
+        # Convert history to AG-UI message format.
+        # ag-ui-protocol >= 0.1.x requires an explicit `id` on every Message —
+        # omitting it is a pydantic ValidationError that kills the invocation
+        # (found live after the 2026-08 base-image rebuild pulled the newer SDK).
+        messages = []
+        for i, turn in enumerate(payload.get("history", [])):
+            if isinstance(turn, dict) and turn.get("role") and turn.get("content"):
+                if turn["role"] == "user":
+                    messages.append(UserMessage(id=f"hist-{i}", role="user", content=turn["content"]))
+                else:
+                    from ag_ui.core import AssistantMessage
+                    messages.append(AssistantMessage(id=f"hist-{i}", role="assistant", content=turn["content"]))
+
+        # Add the current user message.
+        messages.append(UserMessage(id=f"msg-{time.time_ns()}", role="user", content=input_text))
+
+        # ag-ui-protocol >= 0.1.x: state/tools/context/forwarded_props are all
+        # required fields on RunAgentInput (same 2026-08 SDK drift as the
+        # Message `id` requirement above). Empty values are valid.
+        run_input = RunAgentInput(
+            thread_id=thread_id,
+            run_id=run_id,
+            messages=messages,
+            state=None,
+            tools=[],
+            context=[],
+            forwarded_props=None,
+        )
+
+        log.info(
+            "Supervisor AG-UI streaming (tenant=%s, role=%s, thread=%s, run=%s, invocation=%s): %s",
+            tenant, role, thread_id, run_id, ctx.invocation_id, input_text[:120],
+        )
+
         with with_orgiq_root(
             ctx,
             agent_id="orgiq-supervisor",
@@ -564,24 +608,56 @@ async def _handle_streaming(payload: dict, input_text: str, role: str, tenant: s
             prompt_version=_prompt_sha,
         ) as oi_span:
             async for event in ag_ui_agent.run(run_input):
-                # Accumulate assistant text so the persisted trace carries a
-                # real response snippet instead of an empty string.
-                delta = getattr(event, "delta", None)
-                if isinstance(delta, str) and delta:
-                    streamed_text.append(delta)
+                # Accumulate assistant text so the persisted trace carries
+                # a real response snippet instead of an empty string.
+                #
+                # Only TEXT_MESSAGE_CONTENT. TOOL_CALL_ARGS carries a
+                # `delta` too, so accumulating everything that merely *has*
+                # one splices a tool's JSON arguments into the text stored
+                # as the assistant's answer — and the transcript, the judge
+                # and the canary then all score a reply the user never saw.
+                if _event_type(event) == "TEXT_MESSAGE_CONTENT":
+                    delta = event.get("delta") if isinstance(event, dict) else getattr(event, "delta", None)
+                    if isinstance(delta, str) and delta:
+                        streamed_text.append(delta)
                 yield event
             record_guardrail_action(oi_span, action=None, pii_detected=None)
+    except Exception as exc:  # noqa: BLE001
+        # Say it failed, then let it fail. The event is for the portal — a
+        # stream that just stops reads there as a short answer, not an error;
+        # the re-raise keeps the runtime's own error accounting honest.
+        stream_error = str(exc) or type(exc).__name__
+        log.exception("supervisor: AG-UI stream failed: %s", stream_error)
+        yield _run_error_event(stream_error)
+        raise
     finally:
         duration_ms = int((time.monotonic() - t0) * 1000)
-        _current_ctx.reset(token)
+        try:
+            _current_ctx.reset(token)
+        except ValueError:
+            # Token minted in a different Context — possible if an async
+            # generator is resumed from another task. Clearing outright still
+            # stops a later tool call inheriting a finished invocation, which
+            # is the property that matters.
+            _current_ctx.set(None)
         reset_active_ctx(shared_token)
         # Persist the root trace for the streamed run. Sub-agent traces carry
         # parent_invocation_id == ctx.invocation_id, so this row is what the
         # A2A topology joins them to.
+        # A failed run whose response, tokens, tools and guardrail signal are
+        # all empty is dropped at the sink as a phantom row — the failure would
+        # be invisible in observability. The error text is the substance that
+        # keeps the row, and it names the reason.
+        response_text = "".join(streamed_text)
+        if stream_error:
+            response_text = (
+                f"{response_text}\n[stream error] {stream_error}"
+                if response_text else f"[stream error] {stream_error}"
+            )
         try:
             bundle = ctx.build_trace_bundle(
                 prompt=input_text,
-                response="".join(streamed_text),
+                response=response_text,
                 agent_id="orgiq-supervisor",
                 agent_name="Supervisor",
                 model_id=MODEL_ID,

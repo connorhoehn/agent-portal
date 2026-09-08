@@ -5,10 +5,23 @@
 //
 // Visually consistent across observability pages: same max width, same
 // padding, same spacing. Use this in place of generic "no data yet" copy.
+//
+// …UNLESS THE EMPTY IS A LIE. Every advice this component gives — "run the
+// harness", "seed the calibration cases" — is advice about a system that is
+// working and simply has nothing in it yet. When the server has told us it
+// could NOT read (`degraded: true` on the wire, unwrapped by useFetch), that
+// advice is wrong twice over: it blames the reader for an absence they did not
+// cause, and it hides a broken query behind a chore. So this component is also
+// the gate for the opposite treatment. Pass `degraded` and it renders
+// `UnavailableNotice` instead — solid danger border, the server's own error
+// line, a retry — leaving the dashed neutral card to mean exactly one thing:
+// we looked, and there is genuinely nothing here.
 
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Link } from 'react-router';
+
+import { UnavailableNotice } from '../UnavailableNotice';
 
 export interface SmartEmptyAction {
   label: string;
@@ -24,6 +37,21 @@ export interface SmartEmptyStateProps {
   // Optional override slot — researchers sometimes need extra context (e.g. a
   // chart that already explains the empty state).
   children?: ReactNode;
+  /**
+   * The server's own error line when this region's read was `degraded` — i.e.
+   * the emptiness below is not a reading of the world. `null`/absent is the
+   * healthy path and renders the ordinary empty state.
+   */
+  degraded?: string | null;
+  /**
+   * What could not be read, as a noun phrase — "the cost chart", "the tool
+   * error list". Defaults to the region's own title lower-cased, which is
+   * usually a "No …" sentence and reads badly, so pass it.
+   */
+  degradedWhat?: string;
+  /** Where the data comes from, so the reader knows where to go look. */
+  degradedSource?: string;
+  onRetry?: () => void;
 }
 
 export function SmartEmptyState({
@@ -31,7 +59,21 @@ export function SmartEmptyState({
   detail,
   actions = [],
   children,
+  degraded,
+  degradedWhat,
+  degradedSource,
+  onRetry,
 }: SmartEmptyStateProps) {
+  if (degraded) {
+    return (
+      <UnavailableNotice
+        error={degraded}
+        what={degradedWhat ?? title.replace(/^No /i, 'the ')}
+        source={degradedSource}
+        onRetry={onRetry}
+      />
+    );
+  }
   return (
     <div style={wrapperStyle}>
       <div style={cardStyle}>

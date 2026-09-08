@@ -46,7 +46,8 @@ function hint(overrides: Partial<M.DimensionHint> & { dimension_id: string }): M
 
 const emptyTeam = (id: string): M.MockTeam => ({
   id, name: id, cohort: 'general', status: 'NEW', workflow_step: 1, assessment_lead: '',
-  contacts: [], repos: [], archetype: null, exceptions: [], created_at: new Date().toISOString(),
+  contacts: [], repos: [], archetype: null, rubric_version: M.DEFAULT_RUBRIC_VERSION,
+  exceptions: [], created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(), contributors: [],
 });
 

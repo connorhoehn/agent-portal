@@ -197,6 +197,51 @@ export function mockListPromotedVersions(limit = 200): PromotedPromptVersionRow[
 }
 
 /**
+ * The three answers `POST /harness/promote` can give, as data rather than as a
+ * status code.
+ *
+ * The route owns the HTTP shape (404 for an unknown SHA, 409 for one that
+ * belongs to another agent, 200 with the stamp otherwise). Returning a code
+ * from here would put half the route's contract in the fixture, and the two
+ * halves would drift the first time either moved.
+ */
+export type MockPromoteOutcome =
+  | { ok: true; promotedAt: string }
+  | { ok: false; reason: 'not_found' }
+  | { ok: false; reason: 'agent_mismatch'; expectedAgentId: string };
+
+/**
+ * `POST /harness/promote` — bless a registered SHA.
+ *
+ * Idempotent in the same way the real `UPDATE` is: re-promoting a row already
+ * promoted refreshes `promoted_at` rather than refusing. The agent check is the
+ * route's, mirrored here because the fixture is the only thing that knows which
+ * agent owns a SHA offline — a mis-click promoting another agent's prompt is
+ * the failure the check exists for, and a mock that let it through would make
+ * the guard look absent exactly where it is most load-bearing.
+ *
+ * Note what is NOT stored: nothing recomputes `promptVersion`. It stays the
+ * short SHA of `content` (see the header), so promoting cannot make a row's id
+ * disagree with its own text.
+ */
+export function mockPromotePromptVersion(input: {
+  promptVersion: string;
+  agentId: string;
+  promotedBy: string;
+  notes: string | null;
+}): MockPromoteOutcome {
+  const row = promptVersions.rows().find((r) => shortHash(r.content) === input.promptVersion);
+  if (!row) return { ok: false, reason: 'not_found' };
+  if (row.agentId && row.agentId !== input.agentId) {
+    return { ok: false, reason: 'agent_mismatch', expectedAgentId: row.agentId };
+  }
+  row.promotedAt = clock.nowIso();
+  row.promotedBy = input.promotedBy;
+  row.promoteNotes = input.notes;
+  return { ok: true, promotedAt: row.promotedAt };
+}
+
+/**
  * `POST /` — the runner's idempotent register. `rows()` hands back the live
  * array, so a registration made in dev:mock is visible to the list and to the
  * chip's lookup for the rest of the process, exactly as the real UPSERT is.
