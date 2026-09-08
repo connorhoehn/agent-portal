@@ -38,6 +38,12 @@ FILES = [
     # rather than hand-editing. (Replaced seed_work_items_rich.sql, which
     # targeted a proj-* project family no seed ever created.)
     'schema/seed_program.sql',
+    # Where each initiative's code runs. Creates its own tables (IF NOT
+    # EXISTS) and then seeds one row per environment tier for the p-* cast, so
+    # it MUST follow seed_program.sql — those project ids are its FK parents.
+    # It used to sit in load_schema.py, which runs before any seed exists and
+    # so could only fail.
+    'schema/environments_schema.sql',
     'schema/seed_kb_registry.sql',
     # LAST, and it has to be: it GRANTs SELECT on an explicit allow-list of
     # tables, so every one of them must already exist. This is the database

@@ -183,6 +183,15 @@ def main():
         'observability_sprint4_memory_schema.sql',
         'observability_sprint5_canary_schema.sql',
         'observability_sprint6_prompt_history_schema.sql',
+        # The prompt CONTRACT columns (kind/tier/contract/owner_email/
+        # eval_pass_rate) that sprint6's prompt_version_meta does not create.
+        # Same bug class as the sprint schemas above, but failing softer and so
+        # harder to spot: providers/prompt-library.ts `fetchAuroraMeta` SELECTs
+        # all five by name and swallows the error, so a cluster missing this
+        # ALTER does not 500 — the prompt library just silently degrades to
+        # "Bedrock defaults" with every tier and contract blank. Loads directly
+        # after the file that creates the table it alters.
+        'prompt_contract_schema.sql',
         'observability_approvals_schema.sql',
         'orgiq_kb_registry_schema.sql',
         'orgiq_work_items_schema.sql',
@@ -223,10 +232,21 @@ def main():
         # per-SME budget_grants envelope be enforced. Additive ALTER, so it
         # loads after agent_bots_schema.sql creates the table.
         'agent_run_attribution_schema.sql',
-        # Where each initiative's code runs. FK on projects, and its seed rows
-        # name the same p-* cast as program_schema/seed_program, so it loads
-        # after both.
-        'environments_schema.sql',
+        # NOTE: environments_schema.sql is deliberately NOT here. Its last
+        # statement seeds environments for the p-* cast, and those ids are
+        # created by seed_program.sql — which apply_all_seed.py applies, AFTER
+        # this script. So on a from-scratch cluster the INSERT could only ever
+        # fail its FK on projects ("violates foreign key constraint
+        # environments_org_project_id_fkey"), taking this whole loader to
+        # exit 1 with every other file already applied. A file whose tail
+        # depends on seed rows belongs in the seed script, so that is where it
+        # now loads.
+        # Paired developer machines (compute_nodes, compute_pairing_codes).
+        # No FK into the graph — owner_id is a bare app_users sub — so it can
+        # load anywhere. providers/local-compute.ts queries both tables by name
+        # with no fallback, so a rebuilt cluster without them 500s every
+        # pairing and presence call.
+        'local_compute_schema.sql',
     ]
 
     # Track genuine failures — statements that erred for a non-transient reason
