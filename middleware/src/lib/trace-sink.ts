@@ -30,7 +30,7 @@ import {
 } from './embedding.js';
 import { judgeResponse, NOVA_PRO_MODEL_ID } from './judge.js';
 import { validate, tryParseJson } from './schema-validator.js';
-import { estimateCost } from './pricing.js';
+import { estimateCost, estimateCostOrNull } from './pricing.js';
 import { config } from '../config.js';
 
 // ── Public input shape ─────────────────────────────────────────────────────────
@@ -831,8 +831,14 @@ export async function processTrace(input: TraceInput): Promise<TraceResult> {
     && Number.isFinite(input.outputTokens);
   const agentInputTokens = hasAgentTokens ? (input.inputTokens as number) : null;
   const agentOutputTokens = hasAgentTokens ? (input.outputTokens as number) : null;
+  // `estimateCostOrNull`, not `estimateCost`: an unpriced model must record
+  // NULL, not 0. The devbox runs Bedrock Claude inference profiles, which
+  // BEDROCK_PRICING does not cover, so the old call stamped every computer-lab
+  // run — the expensive kind — with `cost_usd = 0` beside a real token count.
+  // A confident zero reads as free and silently spends no initiative envelope;
+  // NULL is excluded from SUMs and reads as unknown, which is the truth.
   const estCostUsd = hasAgentTokens
-    ? estimateCost(agentModelId, {
+    ? estimateCostOrNull(agentModelId, {
         inputTokens: input.inputTokens as number,
         outputTokens: input.outputTokens as number,
       })
