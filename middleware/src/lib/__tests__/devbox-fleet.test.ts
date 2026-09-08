@@ -13,6 +13,7 @@ import {
   appendEvent,
   _resetFleet,
 } from '../devbox-fleet.js';
+import { decideReaping, MAX_LIFETIME_MS } from '../devbox-reaper.js';
 
 const SID = 'a'.repeat(40);
 
@@ -177,5 +178,42 @@ describe('event log + pub/sub', () => {
     subscribe(box.id, (ev) => seen.push(ev['type']));
     appendEvent(box.id, { type: 'assistant' });
     expect(seen).toEqual(['assistant']);
+  });
+});
+
+// ─── createdAt is caller-supplied, so it is not trusted ─────────────────────
+//
+// `POST /api/devbox/boxes` accepts `createdAt` so a client can re-adopt a box
+// after a middleware restart without resetting its age. The reaper's
+// max-lifetime ceiling is measured from that age, so a future or unparseable
+// value silently makes a box immortal — which is the one thing the ceiling
+// exists to prevent (a box that keeps itself busy is never idle, so the idle
+// timer will not catch it). These assert the consequence via `decideReaping`,
+// not just the stored string.
+describe('createdAt is clamped, so the max-lifetime ceiling always applies', () => {
+  const wayPast = new Date(Date.now() - 10 * MAX_LIFETIME_MS).toISOString();
+
+  it('keeps a past createdAt — that is what re-adoption is for', () => {
+    const box = registerBox({ sessionId: 'p'.repeat(40), createdAt: wayPast });
+    expect(box.createdAt).toBe(wayPast);
+    // And it is still reapable: an old box hits the ceiling immediately.
+    expect(decideReaping([box]).map((d) => d.reason)).toContain('max-lifetime');
+  });
+
+  it('clamps a future createdAt to now', () => {
+    const future = new Date(Date.now() + 10 * 365 * 24 * 3600_000).toISOString();
+    const box = registerBox({ sessionId: 'f'.repeat(40), createdAt: future });
+    expect(new Date(box.createdAt).getTime()).toBeLessThanOrEqual(Date.now() + 1000);
+    // The box is young now, not immortal — it will reach the ceiling on time.
+    const later = Date.now() + MAX_LIFETIME_MS + 1000;
+    expect(decideReaping([box], later).map((d) => d.reason)).toContain('max-lifetime');
+  });
+
+  it('treats an unparseable createdAt as now rather than NaN', () => {
+    const box = registerBox({ sessionId: 'g'.repeat(40), createdAt: 'not-a-date' });
+    expect(Number.isFinite(new Date(box.createdAt).getTime())).toBe(true);
+    // NaN would have been skipped by decideReaping's isFinite guard.
+    const later = Date.now() + MAX_LIFETIME_MS + 1000;
+    expect(decideReaping([box], later).map((d) => d.reason)).toContain('max-lifetime');
   });
 });
