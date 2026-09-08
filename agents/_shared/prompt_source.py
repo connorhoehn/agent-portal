@@ -278,6 +278,12 @@ class PromptedAgent:
         self._agent = None
         self._sha: str | None = None
         self._resolved: ResolvedPrompt | None = None
+        # The AG-UI adapter wrapping ``_agent``, built on first streaming use
+        # and discarded whenever the agent is rebuilt — an adapter holds a
+        # reference to the Agent it wraps, so keeping a stale one would serve
+        # the OLD system prompt to every streaming caller while the sync path
+        # had already moved to the new one.
+        self._ag_ui = None
 
     def get(self):
         """Return (agent, ResolvedPrompt) with the freshest prompt available."""
@@ -288,6 +294,7 @@ class PromptedAgent:
             if self._agent is None or self._sha != resolved.sha:
                 previous = self._sha
                 self._agent = self._build(resolved.text)
+                self._ag_ui = None
                 self._sha = resolved.sha
                 self._resolved = resolved
                 if previous is not None:
@@ -296,6 +303,33 @@ class PromptedAgent:
                         previous, resolved.sha, resolved.source,
                     )
             return self._agent, resolved
+
+    def get_ag_ui(self, *, name: str):
+        """Return (ag_ui_adapter, ResolvedPrompt) for streaming invocations.
+
+        The adapter is cached beside the agent and invalidated with it, so a
+        managed-prompt edit reaches the streaming path on the same refresh cycle
+        as the synchronous one.
+
+        ``ag_ui_strands`` is imported lazily and on purpose: this module is
+        imported by the agent unit tests, which run in an environment that has
+        botocore but not the AG-UI SDK, and a top-level import would make every
+        one of them fail collection.
+        """
+        agent, resolved = self.get()
+        with self._lock:
+            if self._ag_ui is None:
+                from ag_ui_strands import StrandsAgent, StrandsAgentConfig
+
+                self._ag_ui = StrandsAgent(
+                    agent=agent,
+                    name=name,
+                    config=StrandsAgentConfig(
+                        emit_messages_snapshot=False,
+                        replay_history_into_strands=True,
+                    ),
+                )
+            return self._ag_ui, resolved
 
 
 class LiveAgent:
@@ -337,6 +371,16 @@ class LiveAgent:
         return self.resolved.source
 
     # ── agent behavior ─────────────────────────────────────────────────────
+    def ag_ui(self, *, name: str):
+        """The AG-UI adapter for this agent, tracking the live system prompt.
+
+        Used by ``_shared/agui_stream.stream_agui`` so every agent emits the
+        same token-by-token AG-UI event stream the supervisor does, instead of
+        returning one JSON envelope the transport then has to guess at.
+        """
+        adapter, _ = self._prompted.get_ag_ui(name=name)
+        return adapter
+
     def __call__(self, *args, **kwargs):
         agent, _ = self._prompted.get()
         return agent(*args, **kwargs)

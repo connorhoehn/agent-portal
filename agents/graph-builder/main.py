@@ -5,6 +5,7 @@ import re
 import sys
 import time
 from contextvars import ContextVar
+from typing import AsyncIterator
 from pathlib import Path
 
 import boto3
@@ -15,6 +16,7 @@ from strands.models.bedrock import BedrockModel
 # Shared instrumentation — pull TraceContext + decorator from agents/_shared.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.prompt_source import LiveAgent
+from _shared.agui_stream import stream_agui, wants_stream  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
     TraceContext,
     install_bedrock_usage_capture,
@@ -562,7 +564,7 @@ _agent = LiveAgent(
 
 
 @app.entrypoint
-async def handle(payload: dict) -> dict:
+async def handle(payload: dict) -> AsyncIterator | dict:
     token = _sandbox_log.set([])
     try:
         if isinstance(payload, dict):
@@ -577,6 +579,25 @@ async def handle(payload: dict) -> dict:
 
         if not input_text:
             return {"agent": "graph-builder", "error": "missing input_text/prompt/message"}
+
+        # Genuine AG-UI streaming when the caller asked for it — the middleware
+        # sets "stream": true for user-facing invocations. A2A sub-agent calls
+        # from the supervisor do not, and keep the synchronous dict path below,
+        # which is what they expect to receive.
+        # ``scoped_vars`` re-establishes _sandbox_log inside the generator: the
+        # ``finally`` below resets it the moment this returns, which is before
+        # the stream has run a single tool.
+        if wants_stream(payload):
+            return stream_agui(
+                payload=payload,
+                input_text=input_text,
+                live_agent=_agent,
+                agent_id="orgiq-graph-builder",
+                agent_name="Graph Builder",
+                model_id=MODEL_ID,
+                ctx_var=_current_ctx,
+                scoped_vars=[(_sandbox_log, [])],
+            )
 
         # ── Sprint 2 instrumentation ─────────────────────────────────────────
         # Picks up ``parentInvocationId`` when the supervisor invoked us via A2A.

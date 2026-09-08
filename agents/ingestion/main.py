@@ -3,6 +3,7 @@ import logging
 import os
 import time
 from contextvars import ContextVar
+from typing import AsyncIterator
 
 import boto3
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
@@ -16,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.approval_tool import request_approval  # noqa: E402
 from _shared.kb_resolver import resolve_kb_id_by_slug as _resolve_kb_id_by_slug  # noqa: E402
 from _shared.prompt_source import LiveAgent
+from _shared.agui_stream import stream_agui, wants_stream  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
     TraceContext,
     install_bedrock_usage_capture,
@@ -322,7 +324,7 @@ _agent = LiveAgent(
 
 
 @app.entrypoint
-async def handle(payload: dict) -> dict:
+async def handle(payload: dict) -> AsyncIterator | dict:
     if isinstance(payload, dict):
         input_text = (
             payload.get("input_text")
@@ -335,6 +337,21 @@ async def handle(payload: dict) -> dict:
 
     if not input_text:
         return {"agent": "ingestion", "error": "missing input_text/prompt/message"}
+
+    # Genuine AG-UI streaming when the caller asked for it — the middleware
+    # sets "stream": true for user-facing invocations. A2A sub-agent calls
+    # from the supervisor do not, and keep the synchronous dict path below,
+    # which is what they expect to receive.
+    if wants_stream(payload):
+        return stream_agui(
+            payload=payload,
+            input_text=input_text,
+            live_agent=_agent,
+            agent_id="orgiq-ingestion",
+            agent_name="Ingestion",
+            model_id=MODEL_ID,
+            ctx_var=_current_ctx,
+        )
 
     # ── Sprint 2 instrumentation ─────────────────────────────────────────────
     # Picks up ``parentInvocationId`` when the supervisor invoked us via A2A.

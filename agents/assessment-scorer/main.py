@@ -4,6 +4,7 @@ import os
 import sys
 import time
 from contextvars import ContextVar
+from typing import AsyncIterator
 from pathlib import Path
 
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
@@ -14,6 +15,7 @@ from strands.models.bedrock import BedrockModel
 # the same way every other agent does.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.prompt_source import LiveAgent  # noqa: E402
+from _shared.agui_stream import stream_agui, wants_stream  # noqa: E402
 from _shared.tenant_guard import reject_wrong_tenant  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
     TraceContext,
@@ -258,7 +260,7 @@ _agent = LiveAgent(
 
 
 @app.entrypoint
-async def handle(payload: dict) -> dict:
+async def handle(payload: dict) -> AsyncIterator | dict:
     if not isinstance(payload, dict):
         payload = {}
 
@@ -276,10 +278,9 @@ async def handle(payload: dict) -> dict:
     team_id = payload.get("team_id") or ""
     mode = payload.get("mode") or "transcript"
 
-    ctx = TraceContext.from_request_payload(payload)
-    token = _current_ctx.set(ctx)
-    shared_token = set_active_ctx(ctx)
-
+    # Built before the trace context on purpose: the streaming branch below
+    # returns a generator that establishes its OWN context, so setting one here
+    # first would leak a context this call never resets.
     input_text = json.dumps(
         {
             "team_id": team_id,
@@ -291,6 +292,24 @@ async def handle(payload: dict) -> dict:
         ensure_ascii=False,
         default=str,
     )
+
+    # Genuine AG-UI streaming when the caller asked for it. Nothing
+    # post-processes this agent's output, so its tokens can go out as they
+    # arrive (contrast assessment-drafter, whose backstops forbid that).
+    if wants_stream(payload):
+        return stream_agui(
+            payload=payload,
+            input_text=input_text,
+            live_agent=_agent,
+            agent_id="orgiq-assessment-scorer",
+            agent_name="AssessmentScorer",
+            model_id=MODEL_ID,
+            ctx_var=_current_ctx,
+        )
+
+    ctx = TraceContext.from_request_payload(payload)
+    token = _current_ctx.set(ctx)
+    shared_token = set_active_ctx(ctx)
 
     log.info(
         "AssessmentScorer handling (invocation=%s, parent=%s, team=%s, mode=%s): %d evidence item(s)",
