@@ -12,6 +12,7 @@ import { useSession } from '../../lib/auth';
 import { Breadcrumbs } from './Breadcrumbs';
 import { MasqueradeMenu } from './MasqueradeMenu';
 import { GatewayStatusBadge } from './GatewayStatusBadge';
+import { LocalComputeBadge } from './LocalComputeBadge';
 import { usePortalCommands, usePortalDynamicCommands } from './portalCommands';
 import { DevboxQuickSwitch } from './DevboxQuickSwitch';
 import { ToastHost } from './ToastHost';
@@ -218,6 +219,9 @@ export function Layout() {
           actions={
             <div className="flex items-center gap-3">
               <CommandPaletteHint />
+              {/* The user's own machine in the fleet — renders nothing until
+                  a machine is paired, so most sessions never see it. */}
+              <LocalComputeBadge />
               <GatewayStatusBadge />
               <MasqueradeMenu />
             </div>

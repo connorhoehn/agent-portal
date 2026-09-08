@@ -25,7 +25,10 @@ permit (
     // the narrow write half of the domain — the read half is open to any
     // signed-in member, since an environment row holds no secret.
     OrgIQ::Action::"EnterEnvironment",
-    OrgIQ::Action::"ManageEnvironments"
+    OrgIQ::Action::"ManageEnvironments",
+    // Pair their own machine as a local presence node (see member.cedar for
+    // why this is personal, not fleet, authority).
+    OrgIQ::Action::"ConnectLocalCompute"
   ],
   resource
 )

@@ -56,6 +56,7 @@ export const CAPABILITY_ACTIONS = [
   'ManageSprints',       // sprints.ts — create sprints, move work between them (org-leader + sme)
   'EnterEnvironment',    // environments.ts — reach a deployed environment from a devbox
   'ManageEnvironments',  // environments.ts — describe/edit/remove an environment
+  'ConnectLocalCompute', // local-compute.ts — pair/manage your own machine as a fleet node
 ] as const;
 
 export type CapabilityAction = (typeof CAPABILITY_ACTIONS)[number];

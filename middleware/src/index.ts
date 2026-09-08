@@ -50,6 +50,7 @@ import { workItemsRouter } from './routes/work-items.js';
 import { kbAdminRouter } from './routes/kb-admin.js';
 import { gatewayProxyRouter } from './routes/gateway-proxy.js';
 import { devboxRouter } from './routes/devbox.js';
+import { localComputeRouter } from './routes/local-compute.js';
 import { dropRouter } from './routes/drop.js';
 import { agentDetailRouter } from './routes/agent-detail.js';
 import { connectionsRouter } from './routes/connections.js';
@@ -280,6 +281,12 @@ app.use('/api/sessions', requireTenant('orgiq'), requireSession('ViewSessions'),
 // action must be allowed for the caller's role (open mode when no policy
 // store is configured, matching every other requireAction guard).
 app.use('/api/devbox', requireAction('ManageDevbox'), devboxRouter);
+// Local compute — developers' own machines announcing presence (and later,
+// claiming work). Mounted UNGATED: the machine routes authenticate with a
+// node token (no session — a blanket session mount would 401 every laptop's
+// presence writes, the same trap as approvals/harness), and the browser
+// routes carry their own requireSession/ConnectLocalCompute gates per-route.
+app.use('/api/local-compute', localComputeRouter);
 // Work — the agentic loop: queue → devbox workers → review, scheduled sweeps
 // that produce findings, and agent-proposed graph writes gated on approval.
 // Reads are open so the overview renders for any role; mutations are gated

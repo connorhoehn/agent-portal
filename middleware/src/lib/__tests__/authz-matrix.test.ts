@@ -133,7 +133,10 @@ function role(key: string): Role {
 const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
   'orgiq/member': {
     tenant: 'orgiq',
-    granted: ['Search', 'ViewOrgChart', 'ViewObservability', 'LabelFeedback'],
+    // ConnectLocalCompute is personal, not fleet, authority: every node a
+    // member pairs is bound to their own sub, and dispatching work TO a
+    // machine stays behind DispatchAgentRun.
+    granted: ['Search', 'ViewOrgChart', 'ViewObservability', 'LabelFeedback', 'ConnectLocalCompute'],
   },
   'orgiq/sme': {
     tenant: 'orgiq',
@@ -144,6 +147,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       // computers plus the ones shared on initiatives they are attached to.
       // Granting the capability is not granting the fleet.
       'DispatchAgentRun', 'ManageSprints', 'ManageDevbox', 'EnterEnvironment',
+      'ConnectLocalCompute',
     ],
   },
   'orgiq/org-leader': {
@@ -151,7 +155,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
     granted: [
       'Search', 'ViewOrgChart', 'ViewLeaderboard', 'ViewObservability', 'LabelFeedback',
       'ManageCanary', 'DispatchAgentRun', 'ManageBudgets', 'ManageSprints', 'ApproveTransaction',
-      'EnterEnvironment', 'ManageEnvironments',
+      'EnterEnvironment', 'ManageEnvironments', 'ConnectLocalCompute',
     ],
   },
   'orgiq/hr-admin': {
@@ -161,6 +165,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       'EditGuardrail', 'EditPolicy', 'EditSchema', 'ViewIdentityAdmin', 'ViewObservability',
       'LabelFeedback', 'ManageIngest', 'ManageCanary', 'ManageKB', 'ManageDevbox',
       'ManageUsers', 'DispatchAgentRun', 'ManageBudgets', 'ManageEnvironments',
+      'ConnectLocalCompute',
     ],
   },
   'newsroom/reporter': {

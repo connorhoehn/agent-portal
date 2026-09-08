@@ -33,7 +33,8 @@ export type Action =
   | 'PublishArticle'
   | 'Masquerade'
   | 'ManageBudgets'
-  | 'ManageSprints';
+  | 'ManageSprints'
+  | 'ConnectLocalCompute';
 
 interface CapabilitiesPayload {
   role: string;
