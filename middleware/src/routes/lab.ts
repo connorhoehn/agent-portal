@@ -4,7 +4,7 @@
 //   POST /api/lab/experiences      agent: record a learning
 //   GET  /api/lab/experiences      agent OR human: recall learnings
 //   POST /api/lab/consults         agent: ask a human, get an id to poll
-//   GET  /api/lab/consults/:id     agent: poll for the answer (sessionless)
+//   GET  /api/lab/consults/:id     agent OR human: poll for the answer
 //   GET  /api/lab/consults         human: list (Work page "Needs you")
 //   POST /api/lab/consults/:id/answer  human: answer (DispatchAgentRun)
 //
@@ -139,7 +139,18 @@ labRouter.get('/consults', requireSession('LabConsults'), asyncHandler(async (re
 // The agent's poll. Sessionless: knowing the id IS the capability, exactly as
 // approvals' GET /:id — the id is minted server-side and returned only to the
 // caller that opened the consult.
-labRouter.get('/consults/:id', callbackLimit, asyncHandler(async (req, res) => {
+// `sessionOrLabAuth`, not bare `callbackLimit`. This route is sessionless by
+// design — a headless run polls it for its answer — but sessionless was
+// implemented as *unauthenticated*, which is not the same thing and is not what
+// the contract at the top of this file says. It carried the rate limit and not
+// the service-auth brake, so with LAB_CALLBACK_SECRET set (the posture that
+// makes every sibling here safe) an anonymous caller could still read any
+// consult by id: the question, the repo and initiative it came from, and once
+// answered, the answer and the name of the human who gave it. Verified live —
+// its sibling `GET /consults` 401s while this returned 200 with the full row.
+// Session OR service header keeps both real callers working (the fleet polling,
+// the portal rendering a detail) and closes the third one.
+labRouter.get('/consults/:id', callbackLimit, sessionOrLabAuth, asyncHandler(async (req, res) => {
   const consult = await getConsult(String(req.params['id']));
   if (!consult) { res.status(404).json({ error: 'consult not found' }); return; }
   res.json({ consult });
