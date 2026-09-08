@@ -216,7 +216,7 @@ describe('reviewDiff in real mode', () => {
     const { config } = require('../../config.js') as { config: { mock: { agentcore: boolean } } };
     const send = jest
       .spyOn(BedrockRuntimeClient.prototype, 'send')
-      .mockRejectedValue(new Error('simulated Bedrock outage'));
+      .mockRejectedValue(new Error('simulated Bedrock outage') as never);
     config.mock.agentcore = false;
     try {
       const out = await reviewDiff({

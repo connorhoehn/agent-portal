@@ -43,6 +43,47 @@ export function estimateCost(modelId: string, usage: TokenUsage): number {
   return (input / 1000) * p.input + (output / 1000) * p.output;
 }
 
+/** Whether this map can price `modelId` at all. */
+export function hasPricing(modelId: string): boolean {
+  return modelId in BEDROCK_PRICING;
+}
+
+/**
+ * Cost, or `null` when the model has no entry above.
+ *
+ * The distinction matters more than it looks. `estimateCost` returns 0 for an
+ * unknown model, and a 0 with real token counts beside it does not read as
+ * "unpriced" — it reads as *free*. The devbox is exactly that case: the
+ * computer lab runs Claude Code on Bedrock Claude inference profiles
+ * (`us.anthropic.claude-*`, the deliberate devbox-only exception to the
+ * AWS-native model rule), and this map holds only the Nova/Titan models the
+ * nine agents use. So every lab run — the expensive kind, a Claude model in a
+ * microVM — was recording `cost_usd = 0` with a full token count.
+ *
+ * That is not a rounding problem, it is a governance one: the program
+ * operating model meters initiatives in dollars (`initiative_budgets`,
+ * `budget_grants`, `estimated_cost_usd`), so a lab run priced at zero spends
+ * nobody's envelope and trips none of the three brakes in `bot-runner`. Zero
+ * is the one value that is both wrong and invisible.
+ *
+ * `null` propagates honestly instead: SQL `SUM` skips it, so an unpriced run
+ * is *excluded* from a total rather than counted as free, and the cost surface
+ * can say "unknown" where it means unknown.
+ *
+ * The fix for the underlying gap is to add the Claude inference-profile rates
+ * to BEDROCK_PRICING. They are deliberately NOT guessed here: Bedrock is
+ * partner-operated with its own price list, distinct from Anthropic's
+ * first-party rates, and neither the AWS pricing page nor the Price List API
+ * publishes current-generation Anthropic models (the API carries only Claude 2
+ * and Claude 3 entries). Sourcing them from the account's own bill or the
+ * Bedrock console is the honest way to fill this in — an invented number here
+ * would be worse than the null, because it would look authoritative.
+ */
+export function estimateCostOrNull(modelId: string, usage: TokenUsage): number | null {
+  if (!hasPricing(modelId)) return null;
+  return estimateCost(modelId, usage);
+}
+
 /**
  * Short content-addressed hash for prompt version stamps. 12 hex chars of
  * SHA-256 ≈ 48 bits of namespace — collision-resistant across the ~1k prompts
