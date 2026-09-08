@@ -22,6 +22,7 @@ import {
   PageSection, Select, SectionLabel, Stack, Textarea,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { redactUrlCredentials } from '../../lib/redactCredentials.ts';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
 import { openShell, useCompute, type Computer } from '@connorhoehnslalom/ui-components/compute';
@@ -29,6 +30,7 @@ import { DEVBOX_MODELS, DEFAULT_DEVBOX_MODEL } from '../../lib/devboxModels';
 import { ConnectionSetup } from '../../components/codebases/ConnectionSetup';
 import { RepoDiscovery } from '../../components/codebases/RepoDiscovery';
 import { ExternalLink } from './ExternalLinkFrame';
+
 
 interface Run {
   id: string; prompt: string; model: string | null;
@@ -239,7 +241,17 @@ export default function AgentProjectsPage() {
       // repo, auth, private without a credential) still returns 200 with the
       // failure in the stream. Reporting that as "Cloned" sends the user on to a
       // run against an empty checkout, so inspect the output and the exit event.
-      const out = await run.text();
+      // Redact before anything reads it. The clone command carries a GitHub
+      // token in the URL userinfo for a private repo, and git echoes the URL
+      // back *verbatim* in `fatal: unable to access '<url>': ...` — it redacts
+      // nothing there. The access-failure and network branches below replace
+      // the text with hand-written messages, but the generic `fatal:` fallback
+      // throws the matched git line straight into a toast, and a TLS, proxy or
+      // curl error takes exactly that path: the token would be rendered in the
+      // UI (and into any screenshot or copied error text). Scrubbing the whole
+      // buffer at the source keeps every later reader safe by construction
+      // rather than relying on each branch to remember.
+      const out = redactUrlCredentials(await run.text());
       // The command's exit code is authoritative — the stream ends with an
       // {type:'exit', exitCode} event. Trust it over scanning for "fatal:":
       // a *successful* clone's verification step can still print a benign
