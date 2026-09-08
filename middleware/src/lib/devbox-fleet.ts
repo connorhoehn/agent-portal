@@ -116,6 +116,37 @@ function now(): string {
   return new Date().toISOString();
 }
 
+/**
+ * A trustworthy `createdAt` for a box.
+ *
+ * `POST /api/devbox/boxes` lets a caller supply this so a client can re-adopt
+ * a box it already knows about after a middleware restart without resetting
+ * the box's age — the age is what the reaper's max-lifetime ceiling is measured
+ * from, so preserving a *past* timestamp is the point of the parameter.
+ *
+ * A future or unparseable one has no such meaning, and both defeat the
+ * ceiling: `decideReaping` computes `age = now - createdAt` and reaps at
+ * `age >= MAX_LIFETIME_MS`, so a future date makes `age` negative and an
+ * unparseable one makes it `NaN` — and the `Number.isFinite` guard then skips
+ * the box. Either way the 60-minute ceiling never fires again. That ceiling is
+ * not a tidiness feature: it is there for the box that keeps itself busy, which
+ * the idle timer by design will not catch, so evading it means paying for a
+ * microVM indefinitely. Verified against the running middleware before this
+ * fix — `createdAt` ten years ahead was accepted verbatim and reported
+ * `lifetimeMsLeft` of ~10 years.
+ *
+ * So: accept the past, clamp the future to now, and treat garbage as now.
+ * Clamping rather than rejecting keeps re-adoption working — the caller is
+ * usually a browser whose clock is merely skewed, not an attacker — while
+ * making the ceiling unconditional.
+ */
+function trustedCreatedAt(supplied: string | undefined): string {
+  if (!supplied) return now();
+  const t = new Date(supplied).getTime();
+  if (!Number.isFinite(t)) return now();
+  return t > Date.now() ? now() : new Date(t).toISOString();
+}
+
 export function registerBox(opts: {
   sessionId: string; label?: string; id?: string; createdAt?: string;
   ownerId?: string; projectId?: string;
@@ -127,7 +158,7 @@ export function registerBox(opts: {
     id,
     label: opts.label ?? `computer-${boxes.size + 1}`,
     sessionId: opts.sessionId,
-    createdAt: opts.createdAt ?? now(),
+    createdAt: trustedCreatedAt(opts.createdAt),
     ...(opts.ownerId ? { ownerId: opts.ownerId } : {}),
     ...(opts.projectId ? { projectId: opts.projectId } : {}),
     status: 'idle',
