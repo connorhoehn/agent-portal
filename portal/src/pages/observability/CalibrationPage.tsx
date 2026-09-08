@@ -23,9 +23,9 @@
 //   DELETE /api/observability/calibration/cases/:id
 
 import { useEffect, useMemo, useState } from 'react';
-import type { CSSProperties } from 'react';
 import {
   Card,
+  CardHeader,
   Table,
   TableHead,
   TableBody,
@@ -33,11 +33,19 @@ import {
   TableTh,
   TableTd,
   Chip,
+  CodeBlock,
+  Inline,
+  InlineAlert,
   Modal as UIModal,
   CodeEditor,
   FormField,
+  Input,
+  NumberInput,
+  Select,
+  Textarea,
   Button,
   PageSection,
+  Stack,
   useToast,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
@@ -55,6 +63,7 @@ import {
 } from 'recharts';
 import { useFetch } from '../../hooks/useFetch';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
+import { T } from './Text';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -184,7 +193,7 @@ function CalibrationPage() {
       }));
   }, [runs]);
   const anyDangerRun = maeTrend.some((p) => p.mae != null && p.mae > DANGER_MAE);
-  const lineColor = anyDangerRun ? 'var(--color-danger, #ef4444)' : 'var(--color-primary, #6366f1)';
+  const lineColor = anyDangerRun ? 'var(--color-danger)' : 'var(--color-primary)';
 
   // Scatter data — human vs judge for the most recent run.
   const scatterPoints = useMemo(() => {
@@ -244,48 +253,42 @@ function CalibrationPage() {
       title="Judge Calibration"
       description={`Judge drift means our historical quality scores have lost their anchor. Target MAE < ${WARN_MAE.toFixed(2)}; investigate above ${DANGER_MAE.toFixed(2)}.`}
       actions={
-        <button
-          type="button"
+        <Button
+          variant="primary"
           onClick={() => { setRunLabel(defaultLabel()); setRunDialog({ open: true, busy: false, err: null }); }}
-          style={primaryBtn}
           disabled={cases.length === 0}
           title={cases.length === 0 ? 'Add calibration cases first' : 'Run the judge over all active cases'}
         >
           + Run calibration
-        </button>
+        </Button>
       }
     >
       {/* Header */}
       <Card padding="md">
-        <div style={subline}>
-          <strong>{cases.length}</strong> active case{cases.length === 1 ? '' : 's'}
-          <span style={dot}>·</span>
-          judge <span style={monoInline}>{judgeModelId}</span>
-          <span style={dot}>·</span>
-          last MAE&nbsp;
+        <Inline gap="sm" align="center" className="text-[12px] text-text-secondary">
+          <T><strong>{cases.length}</strong> active case{cases.length === 1 ? '' : 's'}</T>
+          <T className="text-text-tertiary">·</T>
+          <T>judge <T className="font-mono text-[11.5px]">{judgeModelId}</T></T>
+          <T className="text-text-tertiary">·</T>
+          <T>last MAE</T>
           <Chip tone={maeTone(lastMae)} size="xs">{fmt(lastMae)}</Chip>
           {runs[0]?.startedAt ? (
             <>
-              <span style={dot}>·</span>
-              <span style={hint}>
+              <T className="text-text-tertiary">·</T>
+              <T className="text-[11px] text-text-tertiary">
                 {new Date(runs[0].startedAt.replace(' ', 'T')).toLocaleString()}
-              </span>
+              </T>
             </>
           ) : null}
-        </div>
+        </Inline>
       </Card>
 
       {/* MAE trend */}
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
-            MAE Trend{' '}
-            <span style={hint}>
-              mean absolute error vs human score · last {maeTrend.length} run
-              {maeTrend.length === 1 ? '' : 's'} · oldest left
-            </span>
-          </h2>
-        </div>
+        <CardHeader
+          title="MAE Trend"
+          subtitle={`mean absolute error vs human score · last ${maeTrend.length} run${maeTrend.length === 1 ? '' : 's'} · oldest left`}
+        />
         {maeTrend.length === 0 ? (
           <SmartEmptyState
             title="No calibration runs"
@@ -299,7 +302,7 @@ function CalibrationPage() {
             ]}
           />
         ) : (
-          <div style={{ width: '100%', height: 220 }}>
+          <Stack className="w-full h-[220px]">
             <ResponsiveContainer>
               <LineChart data={maeTrend} margin={{ top: 12, right: 16, bottom: 4, left: 0 }}>
                 <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
@@ -319,23 +322,23 @@ function CalibrationPage() {
                 <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} iconType="circle" />
                 <ReferenceLine
                   y={WARN_MAE}
-                  stroke="var(--color-warning, #f59e0b)"
+                  stroke="var(--color-warning)"
                   strokeDasharray="4 2"
                   label={{
                     value: `warn ${WARN_MAE.toFixed(2)}`,
                     fontSize: 10,
-                    fill: 'var(--color-warning, #f59e0b)',
+                    fill: 'var(--color-warning)',
                     position: 'right',
                   }}
                 />
                 <ReferenceLine
                   y={DANGER_MAE}
-                  stroke="var(--color-danger, #ef4444)"
+                  stroke="var(--color-danger)"
                   strokeDasharray="4 2"
                   label={{
                     value: `danger ${DANGER_MAE.toFixed(2)}`,
                     fontSize: 10,
-                    fill: 'var(--color-danger, #ef4444)',
+                    fill: 'var(--color-danger)',
                     position: 'right',
                   }}
                 />
@@ -353,7 +356,7 @@ function CalibrationPage() {
                   type="monotone"
                   dataKey="maxAbs"
                   name="max |Δ|"
-                  stroke="var(--color-text-tertiary, #94a3b8)"
+                  stroke="var(--color-text-tertiary)"
                   strokeWidth={1}
                   strokeDasharray="3 3"
                   dot={false}
@@ -362,26 +365,20 @@ function CalibrationPage() {
                 />
               </LineChart>
             </ResponsiveContainer>
-          </div>
+          </Stack>
         )}
       </Card>
 
       {/* Scatter */}
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
-            Judge vs Human Score{' '}
-            <span style={hint}>
-              latest run · diagonal = perfect agreement · above = judge over-rates ·
-              below = judge under-rates
-              {latestRun?.run.label ? ` · ${latestRun.run.label}` : ''}
-            </span>
-          </h2>
-        </div>
+        <CardHeader
+          title="Judge vs Human Score"
+          subtitle={`latest run · diagonal = perfect agreement · above = judge over-rates · below = judge under-rates${latestRun?.run.label ? ` · ${latestRun.run.label}` : ''}`}
+        />
         {scatterPoints.length === 0 ? (
           <EmptyState text="No paired scores in the latest run." />
         ) : (
-          <div style={{ width: '100%', height: 320 }}>
+          <Stack className="w-full h-[320px]">
             <ResponsiveContainer>
               <ScatterChart margin={{ top: 12, right: 24, bottom: 24, left: 8 }}>
                 <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
@@ -418,30 +415,26 @@ function CalibrationPage() {
                     { x: 0, y: 0 },
                     { x: 1, y: 1 },
                   ]}
-                  stroke="var(--color-text-tertiary, #94a3b8)"
+                  stroke="var(--color-text-tertiary)"
                   strokeDasharray="4 2"
                 />
                 <Scatter
                   data={scatterPoints}
-                  fill="var(--color-primary, #6366f1)"
+                  fill="var(--color-primary)"
                   isAnimationActive={false}
                 />
               </ScatterChart>
             </ResponsiveContainer>
-          </div>
+          </Stack>
         )}
       </Card>
 
       {/* Worst disagreements */}
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
-            Worst Disagreements{' '}
-            <span style={hint}>
-              top {worstResults.length} cases by |judge − human| · click to expand response
-            </span>
-          </h2>
-        </div>
+        <CardHeader
+          title="Worst Disagreements"
+          subtitle={`top ${worstResults.length} cases by |judge − human| · click to expand response`}
+        />
         {worstResults.length === 0 ? (
           <EmptyState text="No disagreements yet — run a calibration first." />
         ) : (
@@ -466,48 +459,44 @@ function CalibrationPage() {
                       onClick={() =>
                         setExpandedResult((cur) => (cur === r.calibrationId ? null : r.calibrationId))
                       }
-                      style={{ cursor: 'pointer' }}
+                      className="cursor-pointer"
                     >
-                      <TableTd style={agentCell}>{r.agentId ?? '—'}</TableTd>
-                      <TableTd style={snippetCell} title={r.prompt}>
+                      <TableTd className="text-[12px] font-medium whitespace-nowrap">{r.agentId ?? '—'}</TableTd>
+                      <TableTd className="text-[12px] max-w-[320px] truncate" title={r.prompt}>
                         {snip(r.prompt, 80) || '(empty)'}
                       </TableTd>
-                      <TableTd style={numCell}>{fmt2(r.humanScore)}</TableTd>
-                      <TableTd style={numCell}>{fmt2(r.judgeScore)}</TableTd>
+                      <TableTd className="text-[12px] text-text-secondary tabular-nums">{fmt2(r.humanScore)}</TableTd>
+                      <TableTd className="text-[12px] text-text-secondary tabular-nums">{fmt2(r.judgeScore)}</TableTd>
                       <TableTd>
                         <Chip tone={maeTone(r.absError)} size="xs">{fmt(r.absError)}</Chip>
                       </TableTd>
-                      <TableTd style={snippetCell} title={r.judgeRationale ?? ''}>
+                      <TableTd className="text-[12px] max-w-[320px] truncate" title={r.judgeRationale ?? ''}>
                         {snip(r.judgeRationale, 60) || '—'}
                       </TableTd>
                     </TableRow>
                     {isOpen && (
                       <TableRow key={`${r.calibrationId}-detail`}>
-                        <TableTd colSpan={6} style={detailRowCell}>
-                          <div style={diffGrid}>
-                            <div>
-                              <div style={detailLabel}>
+                        <TableTd colSpan={6} className="p-3 bg-bg">
+                          <Inline gap="md" align="start">
+                            <Stack gap="xs" className="flex-1 min-w-0">
+                              <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">
                                 PROMPT · agent={r.agentId ?? '—'}
-                              </div>
-                              <pre style={detailPre}>{r.prompt ?? '(no prompt)'}</pre>
-                              <div style={{ ...detailLabel, marginTop: 12 }}>RESPONSE</div>
-                              <pre style={detailPre}>{r.response ?? '(no response)'}</pre>
-                            </div>
-                            <div>
-                              <div style={detailLabel}>
-                                HUMAN <span style={monoInline}>{fmt2(r.humanScore)}</span>
-                              </div>
-                              <pre style={detailPre}>
-                                {r.humanRationale ?? '(no rationale recorded)'}
-                              </pre>
-                              <div style={{ ...detailLabel, marginTop: 12 }}>
-                                JUDGE <span style={monoInline}>{fmt2(r.judgeScore)}</span>
-                              </div>
-                              <pre style={detailPre}>
-                                {r.judgeRationale ?? '(no rationale returned)'}
-                              </pre>
-                            </div>
-                          </div>
+                              </T>
+                              <CodeBlock code={r.prompt ?? '(no prompt)'} language="text" />
+                              <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide mt-3">RESPONSE</T>
+                              <CodeBlock code={r.response ?? '(no response)'} language="text" />
+                            </Stack>
+                            <Stack gap="xs" className="flex-1 min-w-0">
+                              <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">
+                                HUMAN <T className="font-mono text-[11.5px]">{fmt2(r.humanScore)}</T>
+                              </T>
+                              <CodeBlock code={r.humanRationale ?? '(no rationale recorded)'} language="text" />
+                              <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide mt-3">
+                                JUDGE <T className="font-mono text-[11.5px]">{fmt2(r.judgeScore)}</T>
+                              </T>
+                              <CodeBlock code={r.judgeRationale ?? '(no rationale returned)'} language="text" />
+                            </Stack>
+                          </Inline>
                         </TableTd>
                       </TableRow>
                     )}
@@ -521,21 +510,18 @@ function CalibrationPage() {
 
       {/* Manage cases */}
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
-            Manage Cases{' '}
-            <span style={hint}>
-              {cases.length} active · curate the corpus the judge gets tested against
-            </span>
-          </h2>
-          <button
-            type="button"
-            onClick={() => setCaseDialog({ open: true, busy: false, err: null, editing: null })}
-            style={secondaryBtn}
-          >
-            + Add case
-          </button>
-        </div>
+        <CardHeader
+          title="Manage Cases"
+          subtitle={`${cases.length} active · curate the corpus the judge gets tested against`}
+          action={
+            <Button
+              variant="secondary"
+              onClick={() => setCaseDialog({ open: true, busy: false, err: null, editing: null })}
+            >
+              + Add case
+            </Button>
+          }
+        />
         {cases.length === 0 ? (
           <EmptyState text="No active calibration cases. Add one above or run infra/scripts/seed_calibration_cases.py." />
         ) : (
@@ -552,32 +538,32 @@ function CalibrationPage() {
             <TableBody>
               {cases.map((c) => (
                 <TableRow key={c.calibrationId}>
-                  <TableTd style={agentCell}>{c.agentId}</TableTd>
-                  <TableTd style={snippetCell} title={c.prompt}>{snip(c.prompt, 100)}</TableTd>
-                  <TableTd style={numCell}>{fmt2(c.humanScore)}</TableTd>
-                  <TableTd style={tsCell}>
+                  <TableTd className="text-[12px] font-medium whitespace-nowrap">{c.agentId}</TableTd>
+                  <TableTd className="text-[12px] max-w-[320px] truncate" title={c.prompt}>{snip(c.prompt, 100)}</TableTd>
+                  <TableTd className="text-[12px] text-text-secondary tabular-nums">{fmt2(c.humanScore)}</TableTd>
+                  <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
                     {c.updatedAt
                       ? new Date(c.updatedAt.replace(' ', 'T')).toLocaleDateString()
                       : '—'}
                   </TableTd>
-                  <TableTd style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
-                    <button
-                      type="button"
+                  <TableTd className="whitespace-nowrap text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() =>
                         setCaseDialog({ open: true, busy: false, err: null, editing: c })
                       }
-                      style={inlineBtn}
                     >
                       Edit
-                    </button>
-                    <span style={{ ...dot, margin: '0 6px' }}>·</span>
-                    <button
-                      type="button"
+                    </Button>
+                    <T className="text-text-tertiary mx-1.5">·</T>
+                    <Button
+                      variant="danger"
+                      size="sm"
                       onClick={() => archiveCase(c)}
-                      style={inlineBtnDanger}
                     >
                       Archive
-                    </button>
+                    </Button>
                   </TableTd>
                 </TableRow>
               ))}
@@ -592,44 +578,43 @@ function CalibrationPage() {
         onClose={() => { if (!runDialog.busy) setRunDialog({ open: false, busy: false, err: null }); }}
         title="Run calibration"
       >
-        <div style={modalForm}>
-          <label style={formLabel}>
-            Label
-            <input
-              type="text"
-              value={runLabel}
-              onChange={(e) => setRunLabel(e.target.value)}
-              disabled={runDialog.busy}
-              style={textInput}
-            />
-          </label>
-          <div style={hint}>
+        <Stack gap="md">
+          <FormField label="Label">
+            {({ labelId: _labelId, ...field }) => (
+              <Input
+                {...field}
+                type="text"
+                value={runLabel}
+                onChange={(e) => setRunLabel(e.target.value)}
+                disabled={runDialog.busy}
+              />
+            )}
+          </FormField>
+          <T as="div" className="text-[11px] text-text-tertiary">
             The judge will be re-run over all {cases.length} active case
             {cases.length === 1 ? '' : 's'}. ~1 second per case. Cost is one
             Nova-Pro call per case (≈ $0.001 / 20 cases).
-          </div>
+          </T>
           {runDialog.err && (
-            <div style={errBlock}>Error: {runDialog.err}</div>
+            <InlineAlert tone="error">Error: {runDialog.err}</InlineAlert>
           )}
-          <div style={modalActions}>
-            <button
-              type="button"
+          <Inline justify="end" gap="sm">
+            <Button
+              variant="secondary"
               onClick={() => setRunDialog({ open: false, busy: false, err: null })}
-              style={secondaryBtn}
               disabled={runDialog.busy}
             >
               Cancel
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="primary"
               onClick={handleRunCalibration}
-              style={primaryBtn}
               disabled={runDialog.busy}
             >
               {runDialog.busy ? 'Running…' : 'Run'}
-            </button>
-          </div>
-        </div>
+            </Button>
+          </Inline>
+        </Stack>
       </UIModal>
 
       {/* Add / edit case dialog */}
@@ -733,7 +718,7 @@ function CaseEditor({
   const canSubmit = !!agentId.trim() && !!prompt.trim() && Number.isFinite(humanScore);
 
   const footer = (
-    <div style={modalActions} data-testid="case-editor-footer">
+    <Inline justify="end" gap="sm" data-testid="case-editor-footer">
       <Button
         variant="secondary"
         onClick={onClose}
@@ -750,7 +735,7 @@ function CaseEditor({
       >
         {busy ? 'Saving…' : editing ? 'Save' : 'Add'}
       </Button>
-    </div>
+    </Inline>
   );
 
   return (
@@ -761,23 +746,21 @@ function CaseEditor({
       maxWidth={720}
       footer={footer}
     >
-      <div style={modalForm} data-testid="case-editor">
-        <label style={formLabel}>
-          Agent
-          <select
-            value={agentId}
-            onChange={(e) => setAgentId(e.target.value)}
-            disabled={busy}
-            style={textInput}
-            data-testid="case-editor-agent"
-          >
-            {AGENT_OPTIONS.map((a) => (
-              <option key={a} value={a}>{a}</option>
-            ))}
-          </select>
-        </label>
-        <div style={formLabel} data-testid="case-editor-prompt-wrap">
-          <span>Prompt</span>
+      <Stack gap="md" data-testid="case-editor">
+        <FormField label="Agent">
+          {({ labelId: _labelId, ...field }) => (
+            <Select
+              {...field}
+              value={agentId}
+              onChange={(e) => setAgentId(e.target.value)}
+              disabled={busy}
+              data-testid="case-editor-agent"
+              options={AGENT_OPTIONS.map((a) => ({ value: a, label: a }))}
+            />
+          )}
+        </FormField>
+        <Stack gap="xs" data-testid="case-editor-prompt-wrap">
+          <T as="div" className="text-[11px] font-semibold text-text-secondary tracking-[0.3px]">Prompt</T>
           <CodeEditor
             language="template"
             value={prompt}
@@ -788,9 +771,9 @@ function CaseEditor({
             readOnly={busy}
             aria-label="Prompt"
           />
-        </div>
-        <div style={formLabel} data-testid="case-editor-response-wrap">
-          <span>Response</span>
+        </Stack>
+        <Stack gap="xs" data-testid="case-editor-response-wrap">
+          <T as="div" className="text-[11px] font-semibold text-text-secondary tracking-[0.3px]">Response</T>
           <CodeEditor
             language="plain"
             value={response}
@@ -801,83 +784,55 @@ function CaseEditor({
             readOnly={busy}
             aria-label="Response"
           />
-        </div>
+        </Stack>
         <FormField label="Human score" hint="0.0 - 1.0">
-          {(wiring) => (
-            <div
-              style={{ display: 'flex', gap: 8, alignItems: 'center' }}
+          {({ labelId: _labelId, ...field }) => (
+            <NumberInput
+              {...field}
+              value={humanScore}
+              onChange={(v) => setHumanScore(Math.max(0, Math.min(1, v)))}
+              min={0}
+              max={1}
+              step={0.01}
+              disabled={busy}
               data-testid="case-editor-score"
-            >
-              <input
-                {...wiring}
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={humanScore}
-                onChange={(e) => setHumanScore(Number(e.target.value))}
-                disabled={busy}
-                style={{ flex: 1 }}
-              />
-              <input
-                type="number"
-                min={0}
-                max={1}
-                step={0.01}
-                value={humanScore}
-                onChange={(e) => {
-                  const v = Number(e.target.value);
-                  if (Number.isFinite(v)) setHumanScore(Math.max(0, Math.min(1, v)));
-                }}
-                disabled={busy}
-                style={{ ...textInput, width: 80 }}
-                aria-label="Human score numeric"
-              />
-              <strong style={{ fontVariantNumeric: 'tabular-nums', minWidth: 36 }}>
-                {humanScore.toFixed(2)}
-              </strong>
-            </div>
+            />
           )}
         </FormField>
-        <label style={formLabel}>
-          Human rationale (optional)
-          <textarea
-            value={humanRationale}
-            onChange={(e) => setHumanRationale(e.target.value)}
-            rows={2}
-            disabled={busy}
-            style={textArea}
-            placeholder="Why this score? Helps the next researcher recalibrate."
-          />
-        </label>
-        <label style={formLabel}>
-          Notes (optional)
-          <input
-            type="text"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            disabled={busy}
-            style={textInput}
-          />
-        </label>
-        {err && <div style={errBlock} data-testid="case-editor-error">Error: {err}</div>}
-      </div>
+        <FormField label="Human rationale (optional)">
+          {({ labelId: _labelId, ...field }) => (
+            <Textarea
+              {...field}
+              value={humanRationale}
+              onChange={(e) => setHumanRationale(e.target.value)}
+              rows={2}
+              disabled={busy}
+              placeholder="Why this score? Helps the next researcher recalibrate."
+            />
+          )}
+        </FormField>
+        <FormField label="Notes (optional)">
+          {({ labelId: _labelId, ...field }) => (
+            <Input
+              {...field}
+              type="text"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              disabled={busy}
+            />
+          )}
+        </FormField>
+        {err && <InlineAlert tone="error">Error: {err}</InlineAlert>}
+      </Stack>
     </UIModal>
   );
 }
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div
-      style={{
-        padding: 24,
-        textAlign: 'center',
-        fontSize: 12,
-        color: 'var(--color-text-tertiary)',
-      }}
-    >
+    <T as="div" className="p-6 text-center text-[12px] text-text-tertiary">
       {text}
-    </div>
+    </T>
   );
 }
 
@@ -890,173 +845,5 @@ const AGENT_OPTIONS = [
   'orgiq-ingestion',
   'orgiq-graph-builder',
 ];
-
-// ─── Styles ─────────────────────────────────────────────────────────────────
-
-const headerRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'flex-start',
-  justifyContent: 'space-between',
-  marginBottom: 12,
-  gap: 12,
-  flexWrap: 'wrap',
-};
-const h2: CSSProperties = { fontSize: 14, fontWeight: 600, margin: 0 };
-const h2title: CSSProperties = { fontSize: 16, fontWeight: 600, margin: 0 };
-const subline: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary)',
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  flexWrap: 'wrap',
-  marginTop: 4,
-};
-const dot: CSSProperties = { color: 'var(--color-text-tertiary)' };
-const hint: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  fontWeight: 400,
-};
-const monoInline: CSSProperties = {
-  fontFamily: 'ui-monospace, monospace',
-  fontSize: 11.5,
-};
-const agentCell: CSSProperties = {
-  fontSize: 12,
-  fontWeight: 500,
-  whiteSpace: 'nowrap',
-};
-const numCell: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary)',
-  fontVariantNumeric: 'tabular-nums',
-};
-const tsCell: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  whiteSpace: 'nowrap',
-};
-const snippetCell: CSSProperties = {
-  fontSize: 12,
-  maxWidth: 320,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-};
-const detailRowCell: CSSProperties = {
-  padding: 12,
-  background: 'var(--color-bg)',
-};
-const diffGrid: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '1fr 1fr',
-  gap: 12,
-};
-const detailLabel: CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
-  color: 'var(--color-text-tertiary)',
-  marginBottom: 4,
-  letterSpacing: 0.5,
-};
-const detailPre: CSSProperties = {
-  fontFamily: '"Fira Code", "Cascadia Code", monospace',
-  fontSize: 11.5,
-  lineHeight: 1.55,
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
-  margin: 0,
-  padding: '10px 12px',
-  borderRadius: 4,
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  maxHeight: 200,
-  overflowY: 'auto',
-};
-const primaryBtn: CSSProperties = {
-  padding: '6px 14px',
-  fontSize: 12,
-  fontWeight: 600,
-  color: 'white',
-  background: 'var(--color-primary, #6366f1)',
-  border: '1px solid transparent',
-  borderRadius: 4,
-  cursor: 'pointer',
-};
-const secondaryBtn: CSSProperties = {
-  padding: '6px 14px',
-  fontSize: 12,
-  fontWeight: 500,
-  color: 'var(--color-text-primary)',
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 4,
-  cursor: 'pointer',
-};
-const inlineBtn: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-primary, #6366f1)',
-  background: 'transparent',
-  border: 'none',
-  padding: 0,
-  cursor: 'pointer',
-};
-const inlineBtnDanger: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-danger, #ef4444)',
-  background: 'transparent',
-  border: 'none',
-  padding: 0,
-  cursor: 'pointer',
-};
-const modalForm: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 12,
-};
-const modalActions: CSSProperties = {
-  display: 'flex',
-  justifyContent: 'flex-end',
-  gap: 8,
-  marginTop: 4,
-};
-const formLabel: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 4,
-  fontSize: 11,
-  fontWeight: 600,
-  color: 'var(--color-text-secondary)',
-  letterSpacing: 0.3,
-};
-const textInput: CSSProperties = {
-  padding: '6px 10px',
-  fontSize: 12,
-  border: '1px solid var(--color-border)',
-  borderRadius: 4,
-  background: 'var(--color-surface)',
-  color: 'var(--color-text-primary)',
-  fontWeight: 400,
-};
-const textArea: CSSProperties = {
-  padding: '6px 10px',
-  fontSize: 12,
-  border: '1px solid var(--color-border)',
-  borderRadius: 4,
-  background: 'var(--color-surface)',
-  color: 'var(--color-text-primary)',
-  fontWeight: 400,
-  fontFamily: 'inherit',
-  resize: 'vertical',
-};
-const errBlock: CSSProperties = {
-  padding: '8px 12px',
-  fontSize: 12,
-  background: 'rgba(239, 68, 68, 0.08)',
-  border: '1px solid var(--color-danger, #ef4444)',
-  borderRadius: 4,
-  color: 'var(--color-danger, #ef4444)',
-};
 
 export default CalibrationPage;

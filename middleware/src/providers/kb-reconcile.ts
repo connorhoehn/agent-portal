@@ -25,6 +25,7 @@ import { exec } from './aurora.js';
 import { config } from '../config.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 import { mockKbRegistry } from '../mock/kb-registry.js';
+import { clock } from '../mock/core/index.js';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
 function toStr(v: unknown, f = ''): string { return typeof v === 'string' ? v : v == null ? f : String(v); }
@@ -98,7 +99,12 @@ async function syncState(kbId: string): Promise<{
     return {
       dataSourceCount: 1,
       lastSyncStatus: 'COMPLETE',
-      lastSyncAt: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+      // "synced this morning" — the claim is the DAY, not the age, because
+      // that is what the reconcile page reads it as ("last sync: today,
+      // COMPLETE" versus a stale index). `keepWithinToday` clamps the three
+      // hours to the elapsed part of the UTC day, so a page opened at 00:20
+      // UTC does not report the last sync as yesterday's; the age is flavor.
+      lastSyncAt: clock.hoursAgo(3, { keepWithinToday: true }),
       lastSyncScanned: 6,
     };
   }

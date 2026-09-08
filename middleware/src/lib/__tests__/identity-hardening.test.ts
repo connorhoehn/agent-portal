@@ -94,9 +94,9 @@ describe('requireTenant', () => {
   }) as unknown as Request;
 
   it('passes matching tenant, rejects mismatched tenant', () => {
-    const guard = requireTenant('newsroom');
+    const guard = requireTenant('assessment');
     const next = jest.fn();
-    guard(mk('newsroom', 'reporter'), fakeRes(), next);
+    guard(mk('assessment', 'assessor'), fakeRes(), next);
     expect(next).toHaveBeenCalled();
 
     const res = fakeRes();
@@ -108,7 +108,7 @@ describe('requireTenant', () => {
 
   it('lets the cross-tenant admin through any guard', () => {
     const next = jest.fn();
-    requireTenant('newsroom')(mk('orgiq', 'admin'), fakeRes(), next);
+    requireTenant('assessment')(mk('orgiq', 'admin'), fakeRes(), next);
     expect(next).toHaveBeenCalled();
   });
 });

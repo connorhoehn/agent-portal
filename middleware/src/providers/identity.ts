@@ -1,6 +1,6 @@
 // Identity provider — tenants, login-able users, and per-tenant role grants
-// from Aurora via the RDS Data API (schema/identity_schema.sql). Self-contained
-// like newsroom-articles.ts: no imports from aurora.ts/types.ts.
+// from Aurora via the RDS Data API (schema/identity_schema.sql). Self-contained:
+// no imports from aurora.ts/types.ts.
 //
 // When Aurora is unreachable or the identity tables don't exist yet, falls back
 // to an in-memory mirror of the seed data so local dev works with no database.
@@ -36,29 +36,33 @@ export interface UserInfo {
 
 const FALLBACK_TENANTS: TenantInfo[] = [
   { id: 'orgiq', displayName: 'OrgIQ', status: 'ACTIVE' },
-  { id: 'newsroom', displayName: 'Newsroom', status: 'ACTIVE' },
+  { id: 'assessment', displayName: 'Assessment', status: 'ACTIVE' },
 ];
 
 // Mutable epoch: bumpSessionEpoch increments in place so dev:mock exercises the
 // same sign-out-others / switch-invalidation semantics as Aurora.
 const FALLBACK_USERS: UserInfo[] = [
   { id: 'u-operator', displayName: 'Platform Operator', email: 'operator@orgiq.example', personId: null,
-    grants: { orgiq: ['admin'], newsroom: ['admin'] }, epoch: 0 },
+    grants: { orgiq: ['admin'], assessment: ['admin'] }, epoch: 0 },
   { id: 'u-theo', displayName: 'Theo Chang', email: 'theo.chang@orgiq.example', personId: 'p-001',
     grants: { orgiq: ['member'] }, epoch: 0 },
   { id: 'u-vera', displayName: 'Vera Green', email: 'vera.green@orgiq.example', personId: 'p-002',
     grants: { orgiq: ['org-leader', 'member'] }, epoch: 0 },
   { id: 'u-hr', displayName: 'Priya Desai', email: 'priya.desai@orgiq.example', personId: null,
     grants: { orgiq: ['hr-admin'] }, epoch: 0 },
-  { id: 'u-reporter', displayName: 'Marcus Webb', email: 'marcus.webb@newsroom.example', personId: null,
-    grants: { newsroom: ['reporter'] }, epoch: 0 },
-  { id: 'u-editor', displayName: 'Elena Ortiz', email: 'elena.ortiz@newsroom.example', personId: null,
-    grants: { newsroom: ['editor', 'reporter'] }, epoch: 0 },
   // Program operating model cast — see docs/program-operating-model.md.
   { id: 'u-release', displayName: 'Sienna Garcia', email: 'sienna.garcia@orgiq.example', personId: 'p-005',
     grants: { orgiq: ['org-leader', 'member'] }, epoch: 0 },
   { id: 'u-rachel', displayName: 'Rachel Kowalski', email: 'rachel.kowalski@orgiq.example', personId: 'p-012',
     grants: { orgiq: ['hr-admin', 'org-leader'] }, epoch: 0 },
+  // The program owner — runs the delivery program (sprints, bots, the board)
+  // AND holds ManageBudgets on it: allocates the monthly budget and grants
+  // sprint envelopes on the initiatives they own, the same allocation
+  // authority hr-admin and org-leader hold. No leaderboard, no identity
+  // admin, and ApproveTransaction stays forbidden — allocating is not
+  // approving. See seeds/roles/orgiq/program-owner.cedar.
+  { id: 'u-mia', displayName: 'Mia Singh', email: 'mia.singh@orgiq.example', personId: 'p-030',
+    grants: { orgiq: ['program-owner', 'member'] }, epoch: 0 },
   { id: 'u-nora', displayName: 'Nora DaSilva', email: 'nora.dasilva@orgiq.example', personId: 'p-004',
     grants: { orgiq: ['sme'] }, epoch: 0 },
   { id: 'u-eli', displayName: 'Eli Garcia', email: 'eli.garcia@orgiq.example', personId: 'p-011',
@@ -67,6 +71,13 @@ const FALLBACK_USERS: UserInfo[] = [
     grants: { orgiq: ['sme'] }, epoch: 0 },
   { id: 'u-caleb', displayName: 'Caleb Turner', email: 'caleb.turner@orgiq.example', personId: 'p-013',
     grants: { orgiq: ['sme'] }, epoch: 0 },
+  // Assessment tenant cast — see docs/assessment-tenant.md Roles (Cedar).
+  { id: 'u-asha', displayName: 'Asha Nair', email: 'asha.nair@assessment.example', personId: null,
+    grants: { assessment: ['assessor'] }, epoch: 0 },
+  { id: 'u-jonas', displayName: 'Jonas Lindqvist', email: 'jonas.lindqvist@assessment.example', personId: null,
+    grants: { assessment: ['lead-assessor', 'assessor'] }, epoch: 0 },
+  { id: 'u-farah', displayName: 'Farah Osei', email: 'farah.osei@assessment.example', personId: null,
+    grants: { assessment: ['program-lead', 'lead-assessor'] }, epoch: 0 },
 ];
 
 // ── RDS Data API helpers (local to this module) ──────────────────────────────

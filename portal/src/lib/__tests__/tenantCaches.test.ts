@@ -98,6 +98,21 @@ test('clears the sessionStorage context-chosen marker', () => {
   );
 });
 
+// DEFECTS #5 (assessor) / #8 (lead-assessor) / #7 (program-lead, admin):
+// u-jonas's six confirmed own-save timestamps were still present in a tab
+// after signing in as u-operator, because this sessionStorage key was never
+// cleared on a user switch. Additive coverage alongside the pre-existing
+// context-chosen-marker test above.
+test('clears the assessment knowledge own-save-timestamps sessionStorage key (a user switch must not inherit the previous user\'s own-save set)', () => {
+  installStorage();
+  const session = (globalThis as { sessionStorage: MemoryStorage }).sessionStorage;
+  session.setItem('assessment.knowledge.ownSaveTimestamps', JSON.stringify(['2026-09-06T12:00:00.000Z']));
+
+  clearTenantScopedCaches();
+
+  assert.equal(session.getItem('assessment.knowledge.ownSaveTimestamps'), null);
+});
+
 test('does not throw when a key is simply absent', () => {
   installStorage(); // empty storage
   assert.doesNotThrow(() => clearTenantScopedCaches());

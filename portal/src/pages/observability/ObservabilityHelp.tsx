@@ -4,8 +4,15 @@
 // it + WHAT to look at. Short form — this is a refresher, not docs.
 
 import { useState } from 'react';
-import type { CSSProperties } from 'react';
-import { Modal } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Card,
+  IconButton,
+  Inline,
+  Modal,
+  SectionLabel,
+  Stack,
+} from '@connorhoehnslalom/ui-components/shared';
+import { T } from './Text';
 
 interface HelpEntry {
   group: 'Health' | 'Runs' | 'Cost';
@@ -83,6 +90,15 @@ const GROUP_BLURB: Record<HelpEntry['group'], string> = {
   Cost: 'What did it cost? Spend, traffic shape, and per-agent burn.',
 };
 
+function HelpRow({ label, text }: { label: string; text: string }) {
+  return (
+    <Inline gap="sm" align="start">
+      <T className="text-[9.5px] font-bold text-text-tertiary uppercase tracking-wide shrink-0 pt-px">{label}</T>
+      <T as="div" className="text-[12px] text-text-secondary leading-snug flex-1 min-w-0">{text}</T>
+    </Inline>
+  );
+}
+
 /**
  * Small "?" button — placed in the rail header. Clicking opens the modal.
  * Renders nothing visible to the rail beyond a 22px circular button.
@@ -92,50 +108,48 @@ export function ObservabilityHelpButton() {
 
   return (
     <>
-      <button
-        type="button"
+      <IconButton
         onClick={() => setOpen(true)}
         aria-label="What are these tabs?"
         title="What are these tabs?"
-        style={triggerBtn}
+        variant="ghost"
+        size="sm"
       >
         ?
-      </button>
+      </IconButton>
       <Modal
         open={open}
         onClose={() => setOpen(false)}
         title="Observability guide"
         maxWidth={960}
       >
-        <p style={modalSub}>
+        <T as="div" className="text-[12px] text-text-tertiary mb-3">
           Eighteen observability surfaces, grouped by what you're trying to do.
-        </p>
-        <div style={modalBody}>
+        </T>
+        <Stack gap="md" className="overflow-y-auto">
           {GROUP_ORDER.map((g) => {
             const entries = ENTRIES.filter((e) => e.group === g);
             return (
-              <section key={g} style={section}>
-                <header style={sectionHead}>
-                  <span style={sectionLabel}>{g}</span>
-                  <span style={sectionBlurb}>{GROUP_BLURB[g]}</span>
-                </header>
-                <div style={grid}>
+              <Stack key={g} gap="sm" as="section">
+                <Inline gap="sm" align="baseline">
+                  <SectionLabel>{g}</SectionLabel>
+                  <T className="text-[11.5px] text-text-tertiary italic">{GROUP_BLURB[g]}</T>
+                </Inline>
+                <Inline gap="sm" wrap align="start">
                   {entries.map((e) => (
-                    <div key={e.path} style={card}>
-                      <div style={cardTitle}>{e.label}</div>
-                      <div style={cardBody}>
-                        <div style={rowLabel}>When</div>
-                        <div style={rowText}>{e.when}</div>
-                        <div style={rowLabel}>Look at</div>
-                        <div style={rowText}>{e.look}</div>
-                      </div>
-                    </div>
+                    <Card key={e.path} padding="sm" className="flex-1 min-w-[280px] bg-bg">
+                      <T as="div" className="text-[13px] font-semibold text-text-primary mb-1">{e.label}</T>
+                      <Stack gap="xs">
+                        <HelpRow label="When" text={e.when} />
+                        <HelpRow label="Look at" text={e.look} />
+                      </Stack>
+                    </Card>
                   ))}
-                </div>
-              </section>
+                </Inline>
+              </Stack>
             );
           })}
-        </div>
+        </Stack>
       </Modal>
     </>
   );
@@ -148,96 +162,3 @@ export function ObservabilityHelpButton() {
 export function ObservabilityHelp() {
   return <ObservabilityHelpButton />;
 }
-
-const triggerBtn: CSSProperties = {
-  width: 22,
-  height: 22,
-  padding: 0,
-  borderRadius: '50%',
-  border: '1px solid var(--color-border)',
-  background: 'var(--color-bg)',
-  color: 'var(--color-text-secondary)',
-  fontSize: 11,
-  fontWeight: 700,
-  cursor: 'pointer',
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-};
-
-const modalSub: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-tertiary)',
-  margin: '0 0 12px 0',
-};
-
-const modalBody: CSSProperties = {
-  overflowY: 'auto',
-};
-
-const section: CSSProperties = {
-  marginBottom: 16,
-};
-
-const sectionHead: CSSProperties = {
-  display: 'flex',
-  alignItems: 'baseline',
-  gap: 10,
-  marginBottom: 8,
-};
-
-const sectionLabel: CSSProperties = {
-  fontSize: 11,
-  fontWeight: 700,
-  color: 'var(--color-text-tertiary)',
-  letterSpacing: '0.05em',
-  textTransform: 'uppercase',
-};
-
-const sectionBlurb: CSSProperties = {
-  fontSize: 11.5,
-  color: 'var(--color-text-tertiary)',
-  fontStyle: 'italic',
-};
-
-const grid: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-  gap: 10,
-};
-
-const card: CSSProperties = {
-  background: 'var(--color-bg)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm)',
-  padding: '10px 12px',
-};
-
-const cardTitle: CSSProperties = {
-  fontSize: 13,
-  fontWeight: 600,
-  color: 'var(--color-text-primary)',
-  marginBottom: 4,
-};
-
-const cardBody: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'auto 1fr',
-  rowGap: 3,
-  columnGap: 8,
-};
-
-const rowLabel: CSSProperties = {
-  fontSize: 9.5,
-  fontWeight: 700,
-  color: 'var(--color-text-tertiary)',
-  letterSpacing: '0.05em',
-  textTransform: 'uppercase',
-  paddingTop: 1,
-};
-
-const rowText: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary)',
-  lineHeight: 1.45,
-};

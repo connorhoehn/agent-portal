@@ -9,10 +9,61 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Button, FilterChip, FormField, Modal } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Banner,
+  Button,
+  Card,
+  CatalogGrid,
+  Checkbox,
+  Chip,
+  FilterChip,
+  FormField,
+  Inline,
+  Input,
+  MetaLine,
+  Modal,
+  RadioGroup,
+  Select,
+  SelectableCard,
+  Stack,
+  Table,
+  TableBody,
+  TableRow,
+  TableTd,
+  Textarea,
+  WorkflowStepper,
+  type WorkflowStep,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { BOT_STARTERS, type BotStarter } from './botTemplates';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { DEVBOX_MODELS, DEFAULT_DEVBOX_MODEL } from '../../lib/devboxModels';
+import {
+  budgetsSummaryText,
+  estimateSummaryText,
+  inputWiring,
+  resolveModelLabel,
+  resolveTargetLabel,
+  reviewTriggerText,
+  type Estimate,
+} from './botsFormat';
+import {
+  CRON_PRESETS,
+  STEP_LABELS,
+  TEMPLATES,
+  validateStep1,
+  validateStep2,
+  validateStep3,
+  validateStep4,
+  type Step1Errors,
+  type Step1State,
+  type Step2Errors,
+  type Step2State,
+  type Step3Errors,
+  type Step3State,
+  type Step4Errors,
+  type Step4State,
+} from './botWizardLogic';
 import type { Bot } from './BotsPage';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -33,102 +84,8 @@ interface AgentProjectOpt {
 }
 interface OrgProjectOpt { id: string; name: string; status: string | null }
 interface DevboxStatus { allowedModels?: string[]; defaultModel?: string | null }
-interface Estimate {
-  basis: 'repo' | 'model' | 'prior';
-  sampleCount: number;
-  costUsdP25: number;
-  costUsdP75: number;
-  minutesP25: number;
-  minutesP75: number;
-}
-
-// ─── Step 1 — Template & mission ─────────────────────────────────────────────
-
-const TEMPLATES: Array<{ id: 'epic' | 'story' | 'bug'; label: string; blurb: string }> = [
-  { id: 'epic',  label: 'Epic',  blurb: 'container — groups stories and bugs; never dispatched itself' },
-  { id: 'story', label: 'Story', blurb: 'a sized change' },
-  { id: 'bug',   label: 'Bug',   blurb: 'a defect with a repro' },
-];
-
-interface Step1State { name: string; template: 'epic' | 'story' | 'bug' | null; prompt: string }
-interface Step1Errors { name?: string; template?: string; prompt?: string }
-
-function validateStep1(s: Step1State): Step1Errors {
-  const errors: Step1Errors = {};
-  if (!s.name.trim()) errors.name = 'Name is required.';
-  else if (s.name.trim().length > 100) errors.name = 'Name must be 100 characters or fewer.';
-  if (!s.template) errors.template = 'Pick a template.';
-  if (!s.prompt.trim()) errors.prompt = 'The mission is required — a bot without one has nothing to do.';
-  return errors;
-}
-
-// ─── Step 2 — Target ─────────────────────────────────────────────────────────
-
-interface Step2State { targetKind: 'codebase' | 'initiative'; agentProjectId: string; orgProjectId: string }
-interface Step2Errors { target?: string }
-
-function validateStep2(s: Step2State): Step2Errors {
-  const errors: Step2Errors = {};
-  if (s.targetKind === 'codebase' && !s.agentProjectId) errors.target = 'Pick a codebase.';
-  if (s.targetKind === 'initiative' && !s.orgProjectId) errors.target = 'Pick an initiative.';
-  return errors;
-}
-
-// ─── Step 3 — Guardrails ─────────────────────────────────────────────────────
-
-interface Step3State {
-  model: string;
-  budgetPerRunUsd: string;
-  budgetPerDayUsd: string;
-  maxRunsPerDay: number;
-  requiresReview: boolean;
-}
-interface Step3Errors { budgetPerRunUsd?: string; budgetPerDayUsd?: string; maxRunsPerDay?: string }
-
-function validateStep3(s: Step3State): Step3Errors {
-  const errors: Step3Errors = {};
-  const perRun = s.budgetPerRunUsd.trim();
-  const perDay = s.budgetPerDayUsd.trim();
-  if (perRun !== '' && (!Number.isFinite(Number(perRun)) || Number(perRun) <= 0)) {
-    errors.budgetPerRunUsd = 'Must be a positive dollar amount, or empty for no cap.';
-  }
-  if (perDay !== '' && (!Number.isFinite(Number(perDay)) || Number(perDay) <= 0)) {
-    errors.budgetPerDayUsd = 'Must be a positive dollar amount, or empty for no cap.';
-  }
-  if (!Number.isInteger(s.maxRunsPerDay) || s.maxRunsPerDay < 1) {
-    errors.maxRunsPerDay = 'At least 1 run per day.';
-  }
-  return errors;
-}
-
-// ─── Step 4 — Trigger ────────────────────────────────────────────────────────
-
-const CRON_PRESETS: Array<{ label: string; expr: string }> = [
-  { label: 'hourly', expr: '0 * * * *' },
-  { label: 'daily 9am', expr: '0 9 * * *' },
-  { label: 'weekly Mon 9am', expr: '0 9 * * 1' },
-];
-
-interface Step4State { trigger: 'manual' | 'cron' | 'pr_watch'; cronExpr: string }
-interface Step4Errors { cronExpr?: string; trigger?: string }
-
-function validateStep4(s: Step4State, step2: Step2State): Step4Errors {
-  const errors: Step4Errors = {};
-  if (s.trigger === 'cron') {
-    if (!s.cronExpr.trim()) errors.cronExpr = 'A cron expression is required.';
-    else if (!/^\S+\s+\S+\s+\S+\s+\S+\s+\S+$/.test(s.cronExpr.trim())) {
-      errors.cronExpr = 'Five space-separated fields (min hour dom month dow).';
-    }
-  }
-  if (s.trigger === 'pr_watch' && (step2.targetKind !== 'codebase' || !step2.agentProjectId)) {
-    errors.trigger = 'On-new-PRs needs a codebase target — go back to step 2 and pick one.';
-  }
-  return errors;
-}
 
 // ─── Wizard ──────────────────────────────────────────────────────────────────
-
-const STEP_LABELS = ['Template', 'Target', 'Guardrails', 'Trigger', 'Review & launch'] as const;
 
 export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
   const navigate = useNavigate();
@@ -140,6 +97,23 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
     model: DEFAULT_DEVBOX_MODEL, budgetPerRunUsd: '', budgetPerDayUsd: '', maxRunsPerDay: 4, requiresReview: true,
   });
   const [step4, setStep4] = useState<Step4State>({ trigger: 'manual', cronExpr: '' });
+
+  // Which predefined starter seeded the form (display state only — the form
+  // fields are the source of truth once edited).
+  const [starterId, setStarterId] = useState<string | null>(null);
+
+  function applyStarter(t: BotStarter) {
+    setStarterId(t.id);
+    setStep1({ name: t.label, template: t.template, prompt: t.mission });
+    setStep3((prev) => ({
+      ...prev,
+      budgetPerRunUsd: String(t.budgetPerRunUsd),
+      budgetPerDayUsd: String(t.budgetPerDayUsd),
+      maxRunsPerDay: t.maxRunsPerDay,
+    }));
+    setStep4({ trigger: t.trigger, cronExpr: t.cronExpr ?? '' });
+    setStep1Touched(new Set());
+  }
 
   const [step1Touched, setStep1Touched] = useState<Set<keyof Step1Errors>>(new Set());
   const [step2Touched, setStep2Touched] = useState<Set<keyof Step2Errors>>(new Set());
@@ -193,6 +167,7 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
       resetTimerRef.current = setTimeout(() => {
         setStep(1);
         setStep1({ name: '', template: null, prompt: '' });
+        setStarterId(null);
         setStep2({ targetKind: 'codebase', agentProjectId: '', orgProjectId: '' });
         setStep3({ model: DEFAULT_DEVBOX_MODEL, budgetPerRunUsd: '', budgetPerDayUsd: '', maxRunsPerDay: 4, requiresReview: true });
         setStep4({ trigger: 'manual', cronExpr: '' });
@@ -307,17 +282,18 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
 
   // ── Small shared bits ───────────────────────────────────────────────────────
 
-  // App-wide input convention (matches admin/AgentProjectsPage). Every
-  // input/textarea/select in the wizard uses this — FormField's render props
-  // carry no styling of their own, so an unclassed control renders as a raw
-  // browser default.
-  const inputCls = 'w-full px-2.5 py-2 rounded-md border border-border bg-surface text-[13px] text-text-primary box-border placeholder:text-text-tertiary';
-  const selectedRepo = projects.find((p) => p.id === step2.agentProjectId);
-  const selectedInitiative = (orgProjects ?? []).find((p) => p.id === step2.orgProjectId);
-  const targetLabel = step2.targetKind === 'codebase'
-    ? (selectedRepo?.repoFullName ?? '—')
-    : (selectedInitiative?.name ?? '—');
-  const modelLabel = models.find((m) => m.id === step3.model)?.label ?? step3.model;
+  const targetLabel = resolveTargetLabel({
+    targetKind: step2.targetKind,
+    agentProjectId: step2.agentProjectId,
+    orgProjectId: step2.orgProjectId,
+    projects,
+    orgProjects: orgProjects ?? [],
+  });
+  const modelLabel = resolveModelLabel(step3.model, models);
+
+  const stepperSteps: WorkflowStep[] = STEP_LABELS.map((label, i) => ({
+    step: i + 1, label, done: i + 1 < step, active: i + 1 === step,
+  }));
 
   // ─── Layout ──────────────────────────────────────────────────────────────────
 
@@ -359,47 +335,61 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
       title={createdBot ? `${createdBot.name} is live` : `New bot — Step ${step} of 5 — ${STEP_LABELS[step - 1]}`}
       maxWidth={560}
       // maxWidth alone doesn't constrain the library card (and its default is
-      // hard-coded bg-white) — cardStyle merges over the card container, so
+      // hard-coded white) — cardStyle merges over the card container, so
       // this is what actually makes the modal ~560px and theme-correct.
       cardStyle={{ maxWidth: 560, width: '100%', background: 'var(--color-surface)' }}
       footer={footer}
     >
-      {/* Step indicator bar */}
-      <div style={{ display: 'flex', height: 3, marginBottom: 16 }}>
-        {([1, 2, 3, 4, 5] as const).map((n) => (
-          <div
-            key={n}
-            style={{
-              flex: 1,
-              background: n <= step ? 'var(--color-primary)' : 'var(--color-border)',
-              transition: 'background 0.3s',
-            }}
-          />
-        ))}
-      </div>
+      <WorkflowStepper steps={stepperSteps} size="sm" />
 
       {createdBot ? (
-        <div className="text-[12.5px] text-text-secondary leading-relaxed">
-          <p className="m-0">
-            <b className="text-text-primary">{createdBot.name}</b> is created
+        <Stack gap="sm" className="mt-3">
+          <Stack gap="none">
+            <strong className="text-text-primary">{createdBot.name}</strong> is created
             {step4.trigger === 'cron' ? ` and will fire on ${step4.cronExpr}` : ''}
             {step4.trigger === 'pr_watch' ? ' — the PR trigger is stored and activates with the PR poller' : ''}.
-          </p>
-          <p className="mt-2 mb-0">
+          </Stack>
+          <Stack gap="none">
             Fire the first run now to watch it work live, or open the bot page — every change it makes
             still lands in the Changes review queue.
-          </p>
-        </div>
+          </Stack>
+        </Stack>
       ) : (
-        <>
+        <Stack gap="md" className="mt-3">
           {/* ── Step 1 — Template & mission ── */}
           {step === 1 && (
-            <div className="flex flex-col gap-4">
+            <>
+              {/* Predefined starters — the mundane-work automations (PR
+                  analysis, dependency watch, loop crons) prefilled so an SME
+                  or program owner ships one in a minute. Everything below
+                  stays editable; a starter is a head start, not a lock. */}
+              <FormField
+                label="Start from a predefined bot"
+                hint="Prefills the mission, trigger and budgets — edit anything before launch."
+              >
+                {() => (
+                  <CatalogGrid columns={3} dense>
+                    {BOT_STARTERS.map((t) => {
+                      const active = starterId === t.id;
+                      return (
+                        <SelectableCard key={t.id} selected={active} onSelect={() => applyStarter(t)} padding="sm" className="text-left">
+                          <Stack gap="xs">
+                            <strong className={active ? 'text-[12px] font-semibold text-primary' : 'text-[12px] font-semibold text-text-primary'}>
+                              {t.label}
+                            </strong>
+                            <MetaLine size="xs" tone="tertiary" items={[t.blurb]} />
+                          </Stack>
+                        </SelectableCard>
+                      );
+                    })}
+                  </CatalogGrid>
+                )}
+              </FormField>
+
               <FormField label="Name" required error={step1Touched.has('name') ? step1Errors.name : undefined}>
-                {(p) => (
-                  <input
-                    {...p}
-                    className={inputCls}
+                {(wiring) => (
+                  <Input
+                    {...inputWiring(wiring)}
                     value={step1.name}
                     onChange={(e) => setStep1((prev) => ({ ...prev, name: e.target.value }))}
                     onBlur={() => setStep1Touched((prev) => new Set([...prev, 'name']))}
@@ -416,27 +406,30 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
                 hint="The template shapes the outcome contract — the mission below says what to do."
               >
                 {() => (
-                  <div className="grid grid-cols-3 gap-2 items-stretch">
+                  <CatalogGrid columns={3} dense>
                     {TEMPLATES.map((t) => {
                       const active = step1.template === t.id;
                       return (
-                        <button
+                        <SelectableCard
                           key={t.id}
-                          type="button"
-                          onClick={() => {
+                          selected={active}
+                          padding="sm"
+                          className="text-left"
+                          onSelect={() => {
                             setStep1((prev) => ({ ...prev, template: t.id }));
                             setStep1Touched((prev) => new Set([...prev, 'template']));
                           }}
-                          className={`text-left px-2.5 py-2 rounded-md border cursor-pointer transition-colors bg-surface ${
-                            active ? 'border-primary ring-1 ring-primary/40 bg-primary/5' : 'border-border hover:border-primary/50'
-                          }`}
                         >
-                          <div className={`text-[12px] font-semibold ${active ? 'text-primary' : 'text-text-primary'}`}>{t.label}</div>
-                          <div className="text-[10.5px] text-text-tertiary leading-snug mt-0.5">{t.blurb}</div>
-                        </button>
+                          <Stack gap="xs">
+                            <strong className={active ? 'text-[12px] font-semibold text-primary' : 'text-[12px] font-semibold text-text-primary'}>
+                              {t.label}
+                            </strong>
+                            <MetaLine size="xs" tone="tertiary" items={[t.blurb]} />
+                          </Stack>
+                        </SelectableCard>
                       );
                     })}
-                  </div>
+                  </CatalogGrid>
                 )}
               </FormField>
 
@@ -446,10 +439,11 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
                 error={step1Touched.has('prompt') ? step1Errors.prompt : undefined}
                 hint="What should this bot do? Written, not picked."
               >
-                {(p) => (
-                  <textarea
-                    {...p}
-                    className={`${inputCls} leading-relaxed min-h-[120px] resize-y`}
+                {(wiring) => (
+                  <Textarea
+                    {...inputWiring(wiring)}
+                    minRows={5}
+                    autoResize
                     value={step1.prompt}
                     onChange={(e) => setStep1((prev) => ({ ...prev, prompt: e.target.value }))}
                     onBlur={() => setStep1Touched((prev) => new Set([...prev, 'prompt']))}
@@ -457,109 +451,75 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
                   />
                 )}
               </FormField>
-            </div>
+            </>
           )}
 
           {/* ── Step 2 — Target ── */}
           {step === 2 && (
-            <div className="flex flex-col gap-4">
+            <>
               <FormField
                 label="What does it work on?"
                 required
                 error={step2Touched.has('target') ? step2Errors.target : undefined}
               >
                 {() => (
-                  <div className="flex flex-col gap-2.5">
-                    <label className="flex items-start gap-2 text-[12px] text-text-primary cursor-pointer">
-                      <input
-                        type="radio"
-                        name="bot-target-kind"
-                        checked={step2.targetKind === 'codebase'}
-                        onChange={() => setStep2((prev) => ({ ...prev, targetKind: 'codebase' }))}
-                        className="mt-0.5"
-                      />
-                      <span className="flex-1">
-                        <span className="font-semibold">Codebase</span>
-                        <span className="text-text-tertiary"> — a linked repository the bot changes directly</span>
-                        {step2.targetKind === 'codebase' && (
-                          <span className="block mt-1.5">
-                            <select
-                              value={step2.agentProjectId}
-                              onChange={(e) => {
-                                setStep2((prev) => ({ ...prev, agentProjectId: e.target.value }));
-                                setStep2Touched((prev) => new Set([...prev, 'target']));
-                              }}
-                              className={inputCls}
-                            >
-                              <option value="">— pick a codebase —</option>
-                              {projects.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.repoFullName}{p.orgProjectName ? ` · ${p.orgProjectName}` : ''}
-                                </option>
-                              ))}
-                            </select>
-                            {projects.length === 0 && (
-                              <span className="block text-[11px] text-text-tertiary mt-1">
-                                No codebases linked yet — link a repository in Codebases first.
-                              </span>
-                            )}
-                          </span>
+                  <Stack gap="sm">
+                    <RadioGroup
+                      name="bot-target-kind"
+                      value={step2.targetKind}
+                      onChange={(v) => setStep2((prev) => ({ ...prev, targetKind: v }))}
+                      options={[
+                        { value: 'codebase', label: 'Codebase', description: 'a linked repository the bot changes directly' },
+                        { value: 'initiative', label: 'Initiative', description: 'an org initiative the bot serves' },
+                      ]}
+                    />
+                    {step2.targetKind === 'codebase' ? (
+                      <Stack gap="xs">
+                        <Select
+                          value={step2.agentProjectId}
+                          onChange={(e) => {
+                            setStep2((prev) => ({ ...prev, agentProjectId: e.target.value }));
+                            setStep2Touched((prev) => new Set([...prev, 'target']));
+                          }}
+                          placeholder="— pick a codebase —"
+                          options={projects.map((p) => ({
+                            value: p.id,
+                            label: `${p.repoFullName}${p.orgProjectName ? ` · ${p.orgProjectName}` : ''}`,
+                          }))}
+                        />
+                        {projects.length === 0 && (
+                          <MetaLine size="xs" tone="tertiary" items={['No codebases linked yet — link a repository in Codebases first.']} />
                         )}
-                      </span>
-                    </label>
-
-                    <label className="flex items-start gap-2 text-[12px] text-text-primary cursor-pointer">
-                      <input
-                        type="radio"
-                        name="bot-target-kind"
-                        checked={step2.targetKind === 'initiative'}
-                        onChange={() => setStep2((prev) => ({ ...prev, targetKind: 'initiative' }))}
-                        className="mt-0.5"
+                      </Stack>
+                    ) : (
+                      <Select
+                        value={step2.orgProjectId}
+                        onChange={(e) => {
+                          setStep2((prev) => ({ ...prev, orgProjectId: e.target.value }));
+                          setStep2Touched((prev) => new Set([...prev, 'target']));
+                        }}
+                        placeholder="— pick an initiative —"
+                        options={(orgProjects ?? []).map((op) => ({ value: op.id, label: op.name }))}
                       />
-                      <span className="flex-1">
-                        <span className="font-semibold">Initiative</span>
-                        <span className="text-text-tertiary"> — an org initiative the bot serves</span>
-                        {step2.targetKind === 'initiative' && (
-                          <span className="block mt-1.5">
-                            <select
-                              value={step2.orgProjectId}
-                              onChange={(e) => {
-                                setStep2((prev) => ({ ...prev, orgProjectId: e.target.value }));
-                                setStep2Touched((prev) => new Set([...prev, 'target']));
-                              }}
-                              className={inputCls}
-                            >
-                              <option value="">— pick an initiative —</option>
-                              {(orgProjects ?? []).map((op) => (
-                                <option key={op.id} value={op.id}>{op.name}</option>
-                              ))}
-                            </select>
-                          </span>
-                        )}
-                      </span>
-                    </label>
-                  </div>
+                    )}
+                  </Stack>
                 )}
               </FormField>
-              <div className="text-[11px] text-text-tertiary">
-                The on-new-PRs trigger (step 4) requires a codebase target.
-              </div>
-            </div>
+              <MetaLine size="xs" tone="tertiary" items={['The on-new-PRs trigger (step 4) requires a codebase target.']} />
+            </>
           )}
 
           {/* ── Step 3 — Guardrails ── */}
           {step === 3 && (
-            <div className="flex flex-col gap-4">
+            <>
               <FormField label="Model" hint={models.find((m) => m.id === step3.model)?.hint}>
-                {(p) => (
-                  <select
-                    {...p}
-                    className={inputCls}
+                {(wiring) => (
+                  <Select
+                    {...inputWiring(wiring)}
                     value={step3.model}
                     onChange={(e) => setStep3((prev) => ({ ...prev, model: e.target.value }))}
-                  >
-                    {models.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-                  </select>
+                    options={models.map((m) => ({ value: m.id, label: m.label }))}
+                  />
                 )}
               </FormField>
 
@@ -568,10 +528,9 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
                 error={step3Touched.has('budgetPerRunUsd') ? step3Errors.budgetPerRunUsd : undefined}
                 hint="Soft cap — a run that exceeds it is flagged. Empty for none."
               >
-                {(p) => (
-                  <input
-                    {...p}
-                    className={inputCls}
+                {(wiring) => (
+                  <Input
+                    {...inputWiring(wiring)}
                     type="number" min={0} step="0.01" placeholder="none"
                     value={step3.budgetPerRunUsd}
                     onChange={(e) => setStep3((prev) => ({ ...prev, budgetPerRunUsd: e.target.value }))}
@@ -585,10 +544,9 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
                 error={step3Touched.has('budgetPerDayUsd') ? step3Errors.budgetPerDayUsd : undefined}
                 hint="Hard cap — the bot pauses itself when today's spend would exceed it. Empty for none."
               >
-                {(p) => (
-                  <input
-                    {...p}
-                    className={inputCls}
+                {(wiring) => (
+                  <Input
+                    {...inputWiring(wiring)}
                     type="number" min={0} step="0.01" placeholder="none"
                     value={step3.budgetPerDayUsd}
                     onChange={(e) => setStep3((prev) => ({ ...prev, budgetPerDayUsd: e.target.value }))}
@@ -602,10 +560,9 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
                 error={step3Touched.has('maxRunsPerDay') ? step3Errors.maxRunsPerDay : undefined}
                 hint="Backstops a runaway trigger independently of cost."
               >
-                {(p) => (
-                  <input
-                    {...p}
-                    className={inputCls}
+                {(wiring) => (
+                  <Input
+                    {...inputWiring(wiring)}
                     type="number" min={1}
                     value={step3.maxRunsPerDay}
                     onChange={(e) => setStep3((prev) => ({ ...prev, maxRunsPerDay: Number(e.target.value) }))}
@@ -614,182 +571,139 @@ export function BotCreateWizard({ open, onClose }: BotCreateWizardProps) {
                 )}
               </FormField>
 
-              <div>
-                <label className="flex items-center gap-2 text-[12px] text-text-primary cursor-pointer select-none">
-                  <input
-                    type="checkbox"
+              <Stack gap="xs">
+                <Inline gap="sm" align="center">
+                  <Checkbox
                     checked={step3.requiresReview}
-                    onChange={(e) => setStep3((prev) => ({ ...prev, requiresReview: e.target.checked }))}
+                    onChange={(checked) => setStep3((prev) => ({ ...prev, requiresReview: checked }))}
+                    aria-label="Requires review"
                   />
                   Requires review
-                </label>
-                <div className="text-[11px] text-text-tertiary mt-1">
-                  Every change still passes independent review and policy gates either way — this adds an explicit human approval.
-                </div>
-              </div>
-            </div>
+                </Inline>
+                <MetaLine
+                  size="xs" tone="tertiary"
+                  items={['Every change still passes independent review and policy gates either way — this adds an explicit human approval.']}
+                />
+              </Stack>
+            </>
           )}
 
           {/* ── Step 4 — Trigger ── */}
           {step === 4 && (
-            <div className="flex flex-col gap-4">
-              <FormField
-                label="When does it fire?"
-                error={step4Touched.has('trigger') ? step4Errors.trigger : undefined}
-              >
-                {() => (
-                  <div className="flex flex-col gap-2.5">
-                    <label className="flex items-start gap-2 text-[12px] text-text-primary cursor-pointer">
-                      <input
-                        type="radio" name="bot-trigger" className="mt-0.5"
-                        checked={step4.trigger === 'manual'}
-                        onChange={() => setStep4((prev) => ({ ...prev, trigger: 'manual' }))}
+            <FormField
+              label="When does it fire?"
+              error={step4Touched.has('trigger') ? step4Errors.trigger : undefined}
+            >
+              {() => (
+                <Stack gap="sm">
+                  <RadioGroup
+                    name="bot-trigger"
+                    value={step4.trigger}
+                    onChange={(v) => setStep4((prev) => ({ ...prev, trigger: v }))}
+                    options={[
+                      { value: 'manual', label: 'Manual', description: 'fires only when you press Run now' },
+                      { value: 'cron', label: 'Cron', description: 'on a schedule' },
+                      { value: 'pr_watch', label: 'On new PRs', description: 'stored now, activates with the PR poller' },
+                    ]}
+                  />
+                  {step4.trigger === 'cron' && (
+                    <FormField
+                      label="Cron expression"
+                      error={step4Touched.has('cronExpr') ? step4Errors.cronExpr : undefined}
+                    >
+                      {(wiring) => (
+                        <Stack gap="xs">
+                          <Inline gap="xs" wrap>
+                            {CRON_PRESETS.map((c) => (
+                              <FilterChip
+                                key={c.expr}
+                                size="sm"
+                                active={step4.cronExpr === c.expr}
+                                onClick={() => {
+                                  setStep4((prev) => ({ ...prev, cronExpr: c.expr }));
+                                  setStep4Touched((prev) => new Set([...prev, 'cronExpr']));
+                                }}
+                              >
+                                {c.label}
+                              </FilterChip>
+                            ))}
+                          </Inline>
+                          <Input
+                            {...inputWiring(wiring)}
+                            mono
+                            value={step4.cronExpr}
+                            onChange={(e) => setStep4((prev) => ({ ...prev, cronExpr: e.target.value }))}
+                            onBlur={() => setStep4Touched((prev) => new Set([...prev, 'cronExpr']))}
+                            placeholder="0 9 * * *"
+                          />
+                        </Stack>
+                      )}
+                    </FormField>
+                  )}
+                  {step4.trigger === 'pr_watch' && (
+                    <Stack gap="xs">
+                      <Chip size="xs">stored now, activates with the PR poller</Chip>
+                      <MetaLine
+                        size="xs" tone="tertiary"
+                        items={[
+                          'Honestly: there are no webhooks here — firing is via polling, so a new PR is seen with ~2 minutes of latency. The poller arrives in a later phase; the trigger is saved today and activates when it lands. Requires a codebase target.',
+                        ]}
                       />
-                      <span><span className="font-semibold">Manual</span><span className="text-text-tertiary"> — fires only when you press Run now</span></span>
-                    </label>
-
-                    <label className="flex items-start gap-2 text-[12px] text-text-primary cursor-pointer">
-                      <input
-                        type="radio" name="bot-trigger" className="mt-0.5"
-                        checked={step4.trigger === 'cron'}
-                        onChange={() => setStep4((prev) => ({ ...prev, trigger: 'cron' }))}
-                      />
-                      <span className="flex-1">
-                        <span className="font-semibold">Cron</span>
-                        <span className="text-text-tertiary"> — on a schedule</span>
-                        {step4.trigger === 'cron' && (
-                          <span className="block mt-1.5">
-                            <span className="flex items-center gap-1.5 mb-1.5">
-                              {CRON_PRESETS.map((c) => (
-                                <FilterChip
-                                  key={c.expr}
-                                  size="sm"
-                                  active={step4.cronExpr === c.expr}
-                                  onClick={() => {
-                                    setStep4((prev) => ({ ...prev, cronExpr: c.expr }));
-                                    setStep4Touched((prev) => new Set([...prev, 'cronExpr']));
-                                  }}
-                                >
-                                  {c.label}
-                                </FilterChip>
-                              ))}
-                            </span>
-                            <input
-                              value={step4.cronExpr}
-                              onChange={(e) => setStep4((prev) => ({ ...prev, cronExpr: e.target.value }))}
-                              onBlur={() => setStep4Touched((prev) => new Set([...prev, 'cronExpr']))}
-                              placeholder="0 9 * * *"
-                              className={`${inputCls} font-mono`}
-                            />
-                            {step4Touched.has('cronExpr') && step4Errors.cronExpr && (
-                              <span className="block text-[11px] text-danger mt-1">{step4Errors.cronExpr}</span>
-                            )}
-                          </span>
-                        )}
-                      </span>
-                    </label>
-
-                    <label className="flex items-start gap-2 text-[12px] text-text-primary cursor-pointer">
-                      <input
-                        type="radio" name="bot-trigger" className="mt-0.5"
-                        checked={step4.trigger === 'pr_watch'}
-                        onChange={() => setStep4((prev) => ({ ...prev, trigger: 'pr_watch' }))}
-                      />
-                      <span className="flex-1">
-                        <span className="font-semibold">On new PRs</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-hover text-text-tertiary ml-1.5">
-                          stored now, activates with the PR poller
-                        </span>
-                        {step4.trigger === 'pr_watch' && (
-                          <span className="block text-[11px] text-text-tertiary mt-1 leading-snug">
-                            Honestly: there are no webhooks here — firing is via polling, so a new PR is seen with
-                            ~2 minutes of latency. The poller arrives in a later phase; the trigger is saved today
-                            and activates when it lands. Requires a codebase target.
-                          </span>
-                        )}
-                      </span>
-                    </label>
-                  </div>
-                )}
-              </FormField>
-            </div>
+                    </Stack>
+                  )}
+                </Stack>
+              )}
+            </FormField>
           )}
 
           {/* ── Step 5 — Review & launch ── */}
           {step === 5 && (
-            <div className="flex flex-col gap-3">
-              <div className="px-3.5 py-3 rounded-md border border-border bg-surface-hover/40">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-text-secondary mb-2">
+            <>
+              <Card padding="md">
+                <strong className="block text-[11px] font-semibold uppercase tracking-wide text-text-secondary mb-2">
                   {step1.name.trim() || 'Unnamed bot'}
-                </div>
-                <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[12px]">
-                  <span className="text-text-tertiary">Template</span>
-                  <span className="text-text-primary">{step1.template ?? '—'}</span>
-                  <span className="text-text-tertiary">Target</span>
-                  <span className={`text-text-primary ${step2.targetKind === 'codebase' ? 'font-mono' : ''}`}>{targetLabel}</span>
-                  <span className="text-text-tertiary">Model</span>
-                  <span className="text-text-primary">{modelLabel}</span>
-                  <span className="text-text-tertiary">Trigger</span>
-                  <span className="text-text-primary">
-                    {step4.trigger === 'cron' ? `cron: ${step4.cronExpr}` : step4.trigger === 'pr_watch' ? 'on new PRs (stored now, activates with the PR poller)' : 'manual'}
-                  </span>
-                  <span className="text-text-tertiary">Budgets</span>
-                  <span className="text-text-primary">
-                    {step3.budgetPerRunUsd.trim() ? `$${Number(step3.budgetPerRunUsd).toFixed(2)}/run` : 'no per-run cap'}
-                    {' · '}
-                    {step3.budgetPerDayUsd.trim() ? `$${Number(step3.budgetPerDayUsd).toFixed(2)}/day` : 'no daily cap'}
-                    {' · '}max {step3.maxRunsPerDay}/day
-                  </span>
-                  <span className="text-text-tertiary">Review</span>
-                  <span className="text-text-primary">{step3.requiresReview ? 'human approval required' : 'auto — gates still apply'}</span>
-                </div>
-                <div className="mt-2.5 text-[12px] text-text-secondary leading-snug border-t border-border pt-2 whitespace-pre-wrap">
+                </strong>
+                <Table>
+                  <TableBody>
+                    <TableRow><TableTd className="text-text-tertiary">Template</TableTd><TableTd>{step1.template ?? '—'}</TableTd></TableRow>
+                    <TableRow>
+                      <TableTd className="text-text-tertiary">Target</TableTd>
+                      <TableTd className={step2.targetKind === 'codebase' ? 'font-mono' : ''}>{targetLabel}</TableTd>
+                    </TableRow>
+                    <TableRow><TableTd className="text-text-tertiary">Model</TableTd><TableTd>{modelLabel}</TableTd></TableRow>
+                    <TableRow><TableTd className="text-text-tertiary">Trigger</TableTd><TableTd>{reviewTriggerText(step4)}</TableTd></TableRow>
+                    <TableRow>
+                      <TableTd className="text-text-tertiary">Budgets</TableTd>
+                      <TableTd>{budgetsSummaryText(step3)}</TableTd>
+                    </TableRow>
+                    <TableRow>
+                      <TableTd className="text-text-tertiary">Review</TableTd>
+                      <TableTd>{step3.requiresReview ? 'human approval required' : 'auto — gates still apply'}</TableTd>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+                <Stack gap="none" className="mt-2.5 text-[12px] text-text-secondary leading-snug border-t border-border pt-2 whitespace-pre-wrap">
                   {step1.prompt.trim()}
-                </div>
-              </div>
+                </Stack>
+              </Card>
 
               {/* Estimate panel — ranges only, basis always stated. */}
-              <div className="px-3.5 py-2.5 rounded-md border border-border bg-surface text-[12px]">
-                <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">What a run costs</div>
-                {estimateLoading ? (
-                  <span className="text-text-tertiary">estimating…</span>
-                ) : estimateError ? (
-                  <span className="text-text-tertiary">No estimate available ({estimateError}).</span>
-                ) : estimate ? (
-                  <span className="text-text-primary">
-                    {estimate.basis === 'prior' ? (
-                      <>No history yet — prior for this model tier, wide range: ${estimate.costUsdP25.toFixed(2)}–${estimate.costUsdP75.toFixed(2)} · {Math.round(estimate.minutesP25)}–{Math.round(estimate.minutesP75)} min</>
-                    ) : (
-                      <>
-                        Similar runs: ${estimate.costUsdP25.toFixed(2)}–${estimate.costUsdP75.toFixed(2)} · {Math.round(estimate.minutesP25)}–{Math.round(estimate.minutesP75)} min
-                        {' · '}based on {estimate.sampleCount} {estimate.sampleCount === 1 ? 'run' : 'runs'}{' '}
-                        {estimate.basis === 'repo' ? 'on this repo' : 'with this model'}
-                      </>
-                    )}
-                  </span>
-                ) : (
-                  <span className="text-text-tertiary">—</span>
-                )}
-              </div>
-            </div>
+              <Card padding="sm">
+                <strong className="block text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">
+                  What a run costs
+                </strong>
+                <MetaLine
+                  size="sm"
+                  items={[estimateSummaryText({ loading: estimateLoading, error: estimateError, estimate: estimate ?? null })]}
+                />
+              </Card>
+            </>
           )}
-        </>
+        </Stack>
       )}
 
       {submitError && (
-        <div
-          style={{
-            margin: '10px 0',
-            padding: '8px 12px',
-            background: 'var(--color-danger-bg)',
-            border: '1px solid var(--color-danger-border)',
-            borderRadius: 6,
-            fontSize: 12,
-            color: 'var(--color-danger)',
-          }}
-        >
-          {submitError}
-        </div>
+        <Banner variant="error" className="mt-2.5">{submitError}</Banner>
       )}
     </Modal>
   );

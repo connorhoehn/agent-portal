@@ -20,28 +20,33 @@ Requires AWS credentials — run `aws-azure-login --mode gui` first. The `defaul
 
 ## Demo Portal
 
-The portal (http://localhost:5183) is organized into two tenants — the IQ
-workspace (analyst-facing) and Admin (operator-facing) — plus a Newsroom demo
-surface. Headline pages:
+The portal (http://localhost:5183) serves two tenants — OrgIQ (the IQ
+workspace, analyst-facing, plus Admin for operators) and Assessment (its own
+shell-rail hierarchy at `/assessment/*`). Headline pages:
 
 | Area | Path | Description |
 |------|------|-------------|
-| Agent Flow | `/agents` | Multi-agent orchestration visualizer |
-| Org Graph | `/graph` (Explore) | Interactive Aurora graph explorer |
-| Search | `/search` | Conversational expertise search (AG-UI streaming) |
-| Scores | `/scores`, `/scores/cohort`, `/scores/compare` | Expertise leaderboards + cohort/compare views |
-| Projects | `/projects`, `/projects/:id` | Project portfolio + drill-down |
-| Decisions | `/decisions`, `/decisions/:id` | ADR/decision log |
-| Knowledge Base | `/knowledge-base` | KB sources, sync status, retrieval test |
-| Invoke | `/invoke` | Direct agent invocation |
-| Code Interpreter | `/code-interpreter` | Sandboxed Python demo |
-| Capabilities | `/capabilities/*` | AgentCore primitives: Browser, Code Interpreter, Guardrails, Memory |
-| Identity | `/identity/*` | Cedar policies, role assignment, schema, policy testing |
-| Ingest | `/ingest/*` | Sources, schedules, crawl targets, run history, storage |
-| Newsroom | `/newsroom/*` | News researcher/brief/headline demo: articles, briefs, beats, entities |
-| Observability | `/observability/*` | Invocations, traces, sessions, cost, drift, calibration, on-call, traffic, quality, model compare, approval queue, harness |
+| Agent Flow | `/iq/agents` | Multi-agent orchestration visualizer |
+| Org Graph | `/iq/explore` (Explore) | Interactive Aurora graph explorer |
+| Ask | `/iq/invoke` | Conversational expertise search + direct agent invocation (AG-UI streaming) |
+| Scores | `/iq/scores`, `/iq/scores/cohorts`, `/iq/scores/compare` | Expertise leaderboards + cohort/compare views |
+| Projects | `/iq/projects`, `/iq/projects/:id` | Project portfolio + drill-down (includes a per-project Decisions tab) |
+| Knowledge Base | `/admin/knowledge` | KB sources, sync status, retrieval test |
+| Code Interpreter | `/admin/capabilities/code-interpreter` | Sandboxed Python demo |
+| Capabilities | `/admin/capabilities/*` | AgentCore primitives: Browser, Code Interpreter, Guardrails, Memory |
+| Identity | `/admin/identity/*` | Cedar policies, role assignment, schema, policy testing |
+| Ingest | `/admin/ingest/*` | Sources, schedules, crawl targets, run history, storage |
+| Assessment | `/assessment/*` | Second tenant: Assess / Analyze / Informatics / System |
+| Observability | `/admin/observability/*` | Invocations, traces, sessions, cost, drift, calibration, on-call, traffic, quality, model compare, approval queue, harness |
 | Admin | `/admin/*` | Tenant + role configuration |
 | Settings | `/settings` | Local dev settings |
+
+Older bare paths (`/agents`, `/graph`, `/search`, `/scores`, `/projects`,
+`/decisions`, `/knowledge-base`, `/code-interpreter`, `/capabilities/*`,
+`/identity/*`, `/ingest/*`, `/observability/*`) still work as redirects to the
+routes above — see `portal/src/App.tsx`. `/decisions` and `/decisions/:id`
+redirect to `/iq/projects`; there is no standalone decisions page, only the
+Decisions tab on a project's detail page.
 
 ## Notebooks
 

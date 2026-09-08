@@ -65,7 +65,7 @@ jest.mock('../../lib/bot-runner.js', () => ({
 }));
 
 import express from 'express';
-import request from 'supertest';
+import request from '../../test-support/http.js';
 import { botsRouter } from '../bots.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { runCostSamples, perPointCostSamples } from '../../providers/bots.js';
@@ -88,7 +88,7 @@ const burn = dispatchedSpendInWindow as unknown as jest.Mock;
 
 /** The signed-in caller for a request. The envelope brake resolves the person
  *  from here, so tests that care about envelopes set it. */
-let session: { sub: string } | null = null;
+let session: { sub: string; role?: string } | null = null;
 
 const REPO = { id: '11111111-2222-3333-4444-555555555555', repoFullName: 'org/rag-search', orgProjectId: 'p-rag-search' };
 const OTHER = { id: '66666666-7777-8888-9999-000000000000', repoFullName: 'org/rag-index', orgProjectId: 'p-rag-search' };
@@ -500,5 +500,65 @@ describe('the sprint envelope brake', () => {
     // allocation brake is still standing behind it.
     grants.mockRejectedValue(new Error('relation "budget_grants" does not exist'));
     expect((await post(BODY)).status).toBe(202);
+  });
+});
+
+// ─── 7. Grant-scoped authorization runs before shape (sme.md defect #3) ──────
+//
+// The gates used to run the other way round: preflightWorkItem (shape +
+// codebase resolution) answered first, so an SME with no grant here heard "no
+// codebase delivers this initiative — link one in Codebases" (a refusal for a
+// reason they cannot act on, and pointing them at a page — /admin/projects —
+// that redirects every non-hr-admin role away) instead of the actual reason
+// they were refused. Grant-scoped authorization now runs first, and the
+// no-codebase message itself is role-aware.
+
+describe('grant-scoped authorization runs before the codebase preflight', () => {
+  beforeEach(() => {
+    projects.mockResolvedValue([]); // no codebase delivers this initiative
+  });
+
+  it('403s an ungranted sme instead of answering the codebase 400', async () => {
+    session = { sub: 'u-layla', role: 'sme' };
+    grants.mockResolvedValue([]); // no grant at all
+    const res = await post(BODY);
+    expect(res.status).toBe(403);
+    expect(res.body.error).toMatch(/no active sprint grant/);
+    expect(res.body.error).not.toMatch(/codebase/);
+  });
+
+  it('lets a granted sme through to the (still role-aware) codebase refusal', async () => {
+    session = { sub: 'u-layla', role: 'sme' };
+    grants.mockResolvedValue([grant()]); // active grant on this initiative
+    const res = await post(BODY);
+    expect(res.status).toBe(400);
+    // sme cannot open /admin/projects (hr-admin only) — do not send them there.
+    expect(res.body.error).toBe(
+      'no codebase delivers this initiative — ask a program owner to link a codebase in Codebases',
+    );
+  });
+
+  it('org-leader needs no grant, but still hears the role-aware codebase message', async () => {
+    session = { sub: 'u-release', role: 'org-leader' };
+    const res = await post(BODY);
+    expect(res.status).toBe(400);
+    // org-leader cannot open /admin/projects either (hr-admin only).
+    expect(res.body.error).toBe(
+      'no codebase delivers this initiative — ask a program owner to link a codebase in Codebases',
+    );
+  });
+
+  it('hr-admin — who CAN open Codebases — gets the original, actionable message', async () => {
+    session = { sub: 'u-rachel', role: 'hr-admin' };
+    const res = await post(BODY);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('no codebase delivers this initiative — link one in Codebases');
+  });
+
+  it('a request with no role at all (unknown/absent) keeps the original message', async () => {
+    session = { sub: 'u-layla' };
+    const res = await post(BODY);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('no codebase delivers this initiative — link one in Codebases');
   });
 });

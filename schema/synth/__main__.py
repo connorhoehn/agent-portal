@@ -57,7 +57,7 @@ def _load_graph(snapshot: str | None) -> dict:
     return aurora.fetch_seed_graph()
 
 
-DOC_TYPES = ["adr", "postmortem", "perf_review", "slack_thread", "all_hands", "news_article"]
+DOC_TYPES = ["adr", "postmortem", "perf_review", "slack_thread", "all_hands"]
 
 
 def cmd_docs(args) -> int:
@@ -72,7 +72,6 @@ def cmd_docs(args) -> int:
         "perf_review":  generate.plan_perf_reviews,
         "slack_thread": generate.plan_slack_threads,
         "all_hands":    generate.plan_all_hands,
-        "news_article": generate.plan_news_articles,
     }
     tasks: list = []
     for t in selected:
@@ -118,7 +117,7 @@ def cmd_stats(_args) -> int:
 
     # Side files.
     print("  side files:")
-    for name in ["personas.json", "clusters.json", "pitches.json", "seed-graph.json"]:
+    for name in ["personas.json", "seed-graph.json"]:
         p = SYNTH_DIR / name
         if p.exists():
             try:
@@ -138,7 +137,7 @@ def cmd_clean(args) -> int:
     from .generate import STAGE_DIR
 
     targets = [CACHE_DIR, STAGE_DIR]
-    side_files = [SYNTH_DIR / n for n in ("personas.json", "clusters.json", "pitches.json", "seed-graph.json")]
+    side_files = [SYNTH_DIR / n for n in ("personas.json", "seed-graph.json")]
 
     print("This will remove:")
     for t in targets:
@@ -169,62 +168,6 @@ def cmd_dedupe(args) -> int:
     return 0
 
 
-def cmd_ner(_args) -> int:
-    from . import ner
-    results = ner.extract_all()
-    print(f"NER produced {len(results)} article results", file=sys.stderr)
-    return 0
-
-
-def cmd_cluster(args) -> int:
-    from . import cluster as cluster_mod
-    clusters = cluster_mod.cluster_articles(threshold=args.threshold)
-    print(f"Built {len(clusters)} cluster(s)", file=sys.stderr)
-    # Persist a summary so `load` and `pitches` can rerun without re-embedding.
-    import json
-    from .config import SYNTH_DIR
-    out = SYNTH_DIR / "clusters.json"
-    out.write_text(json.dumps([
-        {
-            "id": c.id,
-            "article_ids": c.article_ids,
-            "title": c.meta.title if c.meta else "",
-            "description": c.meta.description if c.meta else "",
-            "primary_beat": c.meta.primary_beat if c.meta else "",
-            "headlines": c.headlines,
-        } for c in clusters
-    ], indent=2))
-    return 0
-
-
-def cmd_pitches(_args) -> int:
-    import json
-    from .config import SYNTH_DIR
-    from . import cluster as cluster_mod, pitches as pitch_mod
-    cl_file = SYNTH_DIR / "clusters.json"
-    if not cl_file.exists():
-        print("clusters.json missing — run `cluster` first.", file=sys.stderr)
-        return 1
-    raw = json.loads(cl_file.read_text())
-    # Reconstruct Cluster objects with meta.
-    from .schemas import ClusterMeta
-    clusters = [
-        cluster_mod.Cluster(
-            id=r["id"],
-            article_ids=r["article_ids"],
-            headlines=r["headlines"],
-            meta=ClusterMeta(title=r["title"], description=r["description"], primary_beat=r["primary_beat"]),
-        )
-        for r in raw
-    ]
-    pitches = pitch_mod.generate_pitches(clusters)
-    print(f"Generated {len(pitches)} pitches", file=sys.stderr)
-    # Stash pitches alongside clusters for the load step.
-    out = SYNTH_DIR / "pitches.json"
-    out.write_text(json.dumps([p.model_dump() for p in pitches], indent=2))
-    return 0
-
-
 def cmd_embed(args) -> int:
     from . import embed
     graph = _load_graph(args.snapshot)
@@ -234,9 +177,7 @@ def cmd_embed(args) -> int:
 
 
 def cmd_load(args) -> int:
-    import json
-    from . import generate, load, ner as ner_mod, embed
-    from .config import SYNTH_DIR
+    from . import generate, load, embed
 
     docs = generate.load_staged()
     if not docs:
@@ -247,45 +188,12 @@ def cmd_load(args) -> int:
     for d in docs:
         load.load_one(d)
 
-    # 2. Newsroom: article_entities, story_clusters, pitches.
-    news_doc_ids = {d.id for d in docs if d.source == "news_article"}
-    if news_doc_ids:
-        # NER results from cache (re-extract any missing).
-        ner_results = ner_mod.extract_all()
-        entities_by_id: dict[str, dict] = {}
-        article_entity_rows: list[dict] = []
-        for article_id, res in ner_results.items():
-            for ent in res.entities:
-                eid = ner_mod.entity_id(ent.name, ent.entity_type)
-                entities_by_id[eid] = {"id": eid, "name": ent.name, "entity_type": ent.entity_type}
-                article_entity_rows.append({"article_id": article_id, "entity_id": eid, "salience": 1.0})
-        load.upsert_entities(list(entities_by_id.values()))
-        load.upsert_article_entities(article_entity_rows)
-
-        cl_file = SYNTH_DIR / "clusters.json"
-        if cl_file.exists():
-            clusters_raw = json.loads(cl_file.read_text())
-            load.upsert_clusters(clusters_raw)
-
-        pitches_file = SYNTH_DIR / "pitches.json"
-        if pitches_file.exists():
-            raw = json.loads(pitches_file.read_text())
-            load.upsert_pitches([
-                {
-                    "id": f"pitch-{p['cluster_id']}",
-                    "title": p["angle"][:200],
-                    "body": p["body_markdown"],
-                    "beat": p.get("target_outcome", ""),
-                    "cluster_id": p["cluster_id"],
-                } for p in raw
-            ])
-
-    # 3. Node embeddings.
+    # 2. Node embeddings.
     graph = _load_graph(args.snapshot)
     node_rows = embed.embed_all_nodes(graph)
     load.upsert_node_embeddings(node_rows)
 
-    # 4. KB ingestion job.
+    # 3. KB ingestion job.
     if not args.skip_kb_sync:
         load.trigger_kb_sync()
 
@@ -294,34 +202,25 @@ def cmd_load(args) -> int:
 
 
 def cmd_all(args) -> int:
-    """Run the full pipeline: personas → docs → ner → cluster → pitches → embed → load."""
+    """Run the full pipeline: personas → docs → dedupe → embed → load."""
     from types import SimpleNamespace
     snap = args.snapshot
-    print("[1/7] personas", file=sys.stderr)
+    print("[1/5] personas", file=sys.stderr)
     if cmd_personas(SimpleNamespace(snapshot=snap)) != 0:
         return 1
-    print("[2/8] docs", file=sys.stderr)
+    print("[2/5] docs", file=sys.stderr)
     if cmd_docs(SimpleNamespace(type="all", snapshot=snap)) != 0:
         return 1
-    print("[3/8] dedupe", file=sys.stderr)
+    print("[3/5] dedupe", file=sys.stderr)
     if cmd_dedupe(SimpleNamespace(threshold=None)) != 0:
         return 1
-    print("[4/8] ner", file=sys.stderr)
-    if cmd_ner(SimpleNamespace()) != 0:
-        return 1
-    print("[5/8] cluster", file=sys.stderr)
-    if cmd_cluster(SimpleNamespace(threshold=0.55)) != 0:
-        return 1
-    print("[6/8] pitches", file=sys.stderr)
-    if cmd_pitches(SimpleNamespace()) != 0:
-        return 1
-    print("[7/8] embed", file=sys.stderr)
+    print("[4/5] embed", file=sys.stderr)
     if cmd_embed(SimpleNamespace(snapshot=snap)) != 0:
         return 1
     if args.skip_load:
-        print("[8/8] load — SKIPPED (--skip-load)", file=sys.stderr)
+        print("[5/5] load — SKIPPED (--skip-load)", file=sys.stderr)
         return 0
-    print("[8/8] load", file=sys.stderr)
+    print("[5/5] load", file=sys.stderr)
     rc = cmd_load(SimpleNamespace(snapshot=snap, skip_kb_sync=args.skip_kb_sync))
     return rc
 
@@ -337,9 +236,6 @@ SUBCOMMANDS = {
     "stats":    (cmd_stats,    lambda p: None),
     "clean":    (cmd_clean,    lambda p: p.add_argument("--force", action="store_true")),
     "dedupe":   (cmd_dedupe,   lambda p: p.add_argument("--threshold", type=float, default=None)),
-    "ner":      (cmd_ner,      lambda p: None),
-    "cluster":  (cmd_cluster,  lambda p: p.add_argument("--threshold", type=float, default=0.55)),
-    "pitches":  (cmd_pitches,  lambda p: None),
     "embed":    (cmd_embed,    lambda p: p.add_argument("--snapshot", help="Read seed graph from this JSON")),
     "load":     (cmd_load,     lambda p: (
         p.add_argument("--snapshot", help="Read seed graph from this JSON"),

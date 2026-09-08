@@ -6,7 +6,6 @@
 // Optimistic UI: feedback rows flip immediately on click and revert on error.
 
 import { useEffect, useMemo, useState } from 'react';
-import type { CSSProperties } from 'react';
 import { useNavigate } from 'react-router';
 import {
   BarChart,
@@ -20,20 +19,27 @@ import {
   YAxis,
 } from 'recharts';
 import {
+  Button,
   Card,
+  Chip,
+  IconButton,
+  Inline,
+  Input,
+  PageSection,
+  Select,
+  Stack,
   Table,
   TableHead,
   TableBody,
   TableRow,
   TableTh,
   TableTd,
-  Chip,
-  PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { CostChip } from '../../components/observability/CostChip';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
+import { T } from './Text';
 
 interface QualityScore {
   invocationId: string;
@@ -183,19 +189,16 @@ function QualityPage() {
       title="Judge Scores"
       description={`Last 24h · 30s refresh · ${scores.length} sample${scores.length === 1 ? '' : 's'}`}
       actions={
-        <select
+        <Select
           value={selectedAgent}
           onChange={(e) => setSelectedAgent(e.target.value)}
-          style={selectStyle}
           disabled={agentOptions.length === 0}
-        >
-          {agentOptions.length === 0 && <option value="">(no agents)</option>}
-          {agentOptions.map((a) => (
-            <option key={a} value={a}>
-              {a}
-            </option>
-          ))}
-        </select>
+          options={
+            agentOptions.length === 0
+              ? [{ value: '', label: '(no agents)' }]
+              : agentOptions.map((a) => ({ value: a, label: a }))
+          }
+        />
       }
     >
       <Card padding="md">
@@ -217,9 +220,17 @@ function QualityPage() {
             ]}
           />
         ) : (
-          <div style={chartGrid}>
-            <div style={chartBox}>
-              <div style={chartTitle}>Time series</div>
+          <Inline as="div" align="start" gap="lg">
+            <Stack
+              gap="none"
+              className="flex-1 border border-[var(--color-border)] rounded-[var(--radius-md)] p-3 bg-[var(--color-surface)]"
+            >
+              <T
+                as="div"
+                className="text-[11px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-[0.5px] mb-2"
+              >
+                Time series
+              </T>
               <ResponsiveContainer width="100%" height={220}>
                 <LineChart
                   data={chartData}
@@ -247,16 +258,24 @@ function QualityPage() {
                   <Line
                     type="monotone"
                     dataKey="judgeScore"
-                    stroke="var(--color-primary, #6366f1)"
+                    stroke="var(--color-primary)"
                     dot={false}
                     strokeWidth={2}
                     isAnimationActive={false}
                   />
                 </LineChart>
               </ResponsiveContainer>
-            </div>
-            <div style={chartBox}>
-              <div style={chartTitle}>Histogram (10 bins)</div>
+            </Stack>
+            <Stack
+              gap="none"
+              className="flex-1 border border-[var(--color-border)] rounded-[var(--radius-md)] p-3 bg-[var(--color-surface)]"
+            >
+              <T
+                as="div"
+                className="text-[11px] font-semibold text-[var(--color-text-tertiary)] uppercase tracking-[0.5px] mb-2"
+              >
+                Histogram (10 bins)
+              </T>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart
                   data={histogram}
@@ -274,23 +293,25 @@ function QualityPage() {
                   />
                   <Bar
                     dataKey="count"
-                    fill="var(--color-primary, #6366f1)"
+                    fill="var(--color-primary)"
                     isAnimationActive={false}
                   />
                 </BarChart>
               </ResponsiveContainer>
-            </div>
-          </div>
+            </Stack>
+          </Inline>
         )}
       </Card>
 
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
+        <Inline as="div" align="center" justify="between" wrap gap="md" className="mb-3">
+          <Inline as="h2" gap="xs" wrap className="text-[14px] font-semibold m-0">
             Recent Invocations{' '}
-            <span style={hint}>click a feedback button to label · ✎ adds a note</span>
-          </h2>
-        </div>
+            <T className="text-[11px] text-[var(--color-text-tertiary)] font-normal">
+              click a feedback button to label · ✎ adds a note
+            </T>
+          </Inline>
+        </Inline>
 
         {tableRows.length === 0 ? (
           <EmptyState text="No invocations to review yet." />
@@ -311,7 +332,7 @@ function QualityPage() {
                 const isNoting = noteFor === r.invocationId;
                 return (
                   <TableRow key={r.invocationId}>
-                    <TableTd style={tsCell}>
+                    <TableTd className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap">
                       {new Date(r.ts).toLocaleTimeString()}
                     </TableTd>
                     <TableTd>
@@ -320,10 +341,7 @@ function QualityPage() {
                       </Chip>
                     </TableTd>
                     <TableTd
-                      style={{
-                        ...rationaleCell,
-                        cursor: r.invocationId ? 'pointer' : undefined,
-                      }}
+                      className={`text-[12px] max-w-[480px] overflow-hidden text-ellipsis whitespace-nowrap text-[var(--color-text-secondary)] ${r.invocationId ? 'cursor-pointer' : ''}`}
                       title={
                         r.invocationId
                           ? `${r.judgeRationale} — click to open invocation`
@@ -337,32 +355,32 @@ function QualityPage() {
                     >
                       {r.judgeRationale}
                     </TableTd>
-                    <TableTd style={{ whiteSpace: 'nowrap' }}>
+                    <TableTd className="whitespace-nowrap">
                       <CostChip cost={r.totalCostUsd} />
                     </TableTd>
                     <TableTd>
                       {isNoting ? (
-                        <div style={noteRow}>
-                          <input
+                        <Inline as="div" align="center" gap="xs">
+                          <Input
                             autoFocus
                             value={noteText}
                             onChange={(e) => setNoteText(e.target.value)}
                             placeholder="note…"
-                            style={{ ...selectStyle, minWidth: 160 }}
+                            className="min-w-[160px]"
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') commitNote();
                               if (e.key === 'Escape') cancelNote();
                             }}
                           />
-                          <button style={btnSecondary} onClick={commitNote}>
+                          <Button variant="secondary" size="sm" onClick={commitNote}>
                             save
-                          </button>
-                          <button style={btnSecondary} onClick={cancelNote}>
+                          </Button>
+                          <Button variant="secondary" size="sm" onClick={cancelNote}>
                             cancel
-                          </button>
-                        </div>
+                          </Button>
+                        </Inline>
                       ) : !canLabel ? null : (
-                        <div style={fbBtnRow}>
+                        <Inline as="div" gap="xs">
                           <FeedbackBtn
                             label="good"
                             symbol="✓"
@@ -381,7 +399,7 @@ function QualityPage() {
                             active={currentLabel === 'fixed'}
                             onClick={() => startNote(r.invocationId)}
                           />
-                        </div>
+                        </Inline>
                       )}
                     </TableTd>
                   </TableRow>
@@ -407,129 +425,23 @@ function FeedbackBtn({
   onClick: () => void;
 }) {
   return (
-    <button
-      title={label}
+    <IconButton
       aria-label={label}
+      title={label}
+      icon={symbol}
+      variant={active ? 'primary' : 'ghost'}
+      size="sm"
       onClick={onClick}
-      style={{
-        ...fbBtn,
-        background: active ? 'var(--color-primary, #6366f1)' : 'var(--color-surface)',
-        color: active ? '#fff' : 'var(--color-text-secondary)',
-        borderColor: active ? 'var(--color-primary, #6366f1)' : 'var(--color-border)',
-      }}
-    >
-      {symbol}
-    </button>
+    />
   );
 }
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div
-      style={{
-        padding: 24,
-        textAlign: 'center',
-        fontSize: 12,
-        color: 'var(--color-text-tertiary)',
-      }}
-    >
+    <Inline as="div" justify="center" className="p-6 text-[12px] text-[var(--color-text-tertiary)]">
       {text}
-    </div>
+    </Inline>
   );
 }
-
-const headerRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  marginBottom: 12,
-  gap: 12,
-  flexWrap: 'wrap',
-};
-
-const h2: CSSProperties = { fontSize: 14, fontWeight: 600, margin: 0 };
-
-const hint: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  fontWeight: 400,
-};
-
-const selectStyle: CSSProperties = {
-  fontSize: 12,
-  padding: '4px 8px',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm)',
-  background: 'var(--color-surface)',
-  color: 'var(--color-text-primary)',
-};
-
-const btnSecondary: CSSProperties = {
-  padding: '4px 10px',
-  fontSize: 12,
-  background: 'var(--color-surface-hover)',
-  color: 'var(--color-text-primary)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm, 4px)',
-  cursor: 'pointer',
-};
-
-const chartGrid: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '1fr 1fr',
-  gap: 16,
-};
-
-const chartBox: CSSProperties = {
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-md)',
-  padding: 12,
-  background: 'var(--color-surface)',
-};
-
-const chartTitle: CSSProperties = {
-  fontSize: 11,
-  fontWeight: 600,
-  color: 'var(--color-text-tertiary)',
-  textTransform: 'uppercase',
-  letterSpacing: 0.5,
-  marginBottom: 8,
-};
-
-const tsCell: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  whiteSpace: 'nowrap',
-};
-
-const rationaleCell: CSSProperties = {
-  fontSize: 12,
-  maxWidth: 480,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-  color: 'var(--color-text-secondary)',
-};
-
-const fbBtnRow: CSSProperties = { display: 'flex', gap: 4 };
-
-const fbBtn: CSSProperties = {
-  width: 28,
-  height: 24,
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  fontSize: 12,
-  fontWeight: 700,
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm, 4px)',
-  cursor: 'pointer',
-};
-
-const noteRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-};
 
 export default QualityPage;

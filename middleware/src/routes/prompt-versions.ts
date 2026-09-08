@@ -21,6 +21,12 @@ import { requireAction } from '../lib/authz.js';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { exec } from '../providers/aurora.js';
+import { config } from '../config.js';
+import {
+  mockGetPromptVersion,
+  mockListPromptVersions,
+  mockRegisterPromptVersion,
+} from '../mock/prompt-versions.js';
 import { shortHash, fullSha256 } from '../lib/pricing.js';
 
 export const promptVersionsRouter = Router();
@@ -81,6 +87,14 @@ promptVersionsRouter.post('/', requireAction('ManageCanary'), asyncHandler(async
   const promptVersion = shortHash(content);
   const contentSha256 = fullSha256(content);
 
+  // The registry is the lookup table behind every prompt-version chip, so a
+  // prompt registered offline has to be readable back offline — otherwise the
+  // POST succeeds and the GET that follows it 404s.
+  if (config.mock.aurora) {
+    res.status(201).json({ promptVersion: mockRegisterPromptVersion({ agentId, content, notes: body.notes ?? null }) });
+    return;
+  }
+
   // ON CONFLICT DO NOTHING — once a SHA is registered we don't overwrite the
   // canonical text. (If two different contents collided to the same short
   // SHA we'd see content_sha256 mismatch; surface that as a 409 below.)
@@ -128,6 +142,13 @@ promptVersionsRouter.post('/', requireAction('ManageCanary'), asyncHandler(async
 // shouldn't grow much larger than n_agents × n_recent_prompt_revisions.
 
 promptVersionsRouter.get('/', asyncHandler(async (_req, res) => {
+  // A raw exec() reaches the RDS Data API whatever config.mock.aurora says, so
+  // without this the whole registry 500'd offline.
+  if (config.mock.aurora) {
+    const versions: PromptVersion[] = mockListPromptVersions(200);
+    res.json({ versions });
+    return;
+  }
   const rows = await exec(
     `SELECT prompt_version, agent_id, content, content_sha256,
             registered_at::text AS registered_at, notes
@@ -146,6 +167,15 @@ promptVersionsRouter.get('/', asyncHandler(async (_req, res) => {
 promptVersionsRouter.get('/:promptVersion', asyncHandler(async (req, res) => {
   const pv = String(req.params['promptVersion'] ?? '').trim();
   if (!pv) throw new ValidationError('promptVersion is required');
+  if (config.mock.aurora) {
+    const version: PromptVersion | null = mockGetPromptVersion(pv);
+    if (!version) {
+      res.status(404).json({ error: 'prompt_version not found' });
+      return;
+    }
+    res.json({ version });
+    return;
+  }
   const rows = await exec(
     `SELECT prompt_version, agent_id, content, content_sha256,
             registered_at::text AS registered_at, notes

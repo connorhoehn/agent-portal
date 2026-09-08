@@ -1,4 +1,4 @@
-import { StatCard } from '@connorhoehnslalom/ui-components/shared';
+import { StatStrip } from '@connorhoehnslalom/ui-components/shared';
 import { formatRelativeTime } from './types';
 
 interface Props {
@@ -7,25 +7,27 @@ interface Props {
   topScore: number;
   departmentCount: number;
   mostRecentScoredAt: string | null;
-  weight?: number;
 }
 
-export function StatCards({ peopleScored, avgComposite, topScore, departmentCount, mostRecentScoredAt, weight: _weight = 0.55 }: Props) {
-  const freshnessLabel = mostRecentScoredAt === null
-    ? 'Scores updated never — run the scoring agent'
-    : `Scores updated ${formatRelativeTime(mostRecentScoredAt)}`;
-
+// A single-row StatStrip, not a 4-tile grid plus its own freshness caption —
+// that used to be two stacked blocks above the table (see DEFECTS.md #3).
+// Freshness folds into the strip as one more item instead of a line of its
+// own.
+export function StatCards({ peopleScored, avgComposite, topScore, departmentCount, mostRecentScoredAt }: Props) {
   return (
-    <div className="mb-4">
-      <div className="text-[11px] text-text-tertiary mb-2 text-right">
-        {freshnessLabel}
-      </div>
-      <div className="grid grid-cols-4 gap-4">
-        <StatCard label="People Scored" value={String(peopleScored)} />
-        <StatCard label="Avg Composite" value={String(avgComposite)} />
-        <StatCard label="Top Score" value={String(topScore)} />
-        <StatCard label="Departments" value={String(departmentCount)} />
-      </div>
-    </div>
+    <StatStrip
+      aria-label="Scoring summary"
+      items={[
+        { label: 'People Scored', value: String(peopleScored) },
+        { label: 'Avg Composite', value: String(avgComposite) },
+        { label: 'Top Score', value: String(topScore) },
+        { label: 'Departments', value: String(departmentCount) },
+        {
+          label: 'Updated',
+          value: formatRelativeTime(mostRecentScoredAt),
+          hint: mostRecentScoredAt === null ? 'run the scoring agent' : undefined,
+        },
+      ]}
+    />
   );
 }

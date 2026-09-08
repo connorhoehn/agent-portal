@@ -3,7 +3,24 @@
 // buffered + streamed events.
 
 import { useEffect, useMemo, useState } from 'react';
-import { Chip, PageSection } from '@connorhoehnslalom/ui-components/shared';
+import type { ReactNode } from 'react';
+import {
+  Button,
+  Card,
+  Chip,
+  Inline,
+  Input,
+  PageSection,
+  Select,
+  StatusDot,
+  Table,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableTd,
+  TableTh,
+} from '@connorhoehnslalom/ui-components/shared';
+import { T } from './Text';
 
 interface AuthzEvent {
   decision: 'ALLOW' | 'DENY';
@@ -18,8 +35,8 @@ interface AuthzEvent {
   ts: string;
 }
 
-const ROLE_FILTERS = ['', 'member', 'org-leader', 'hr-admin', 'reporter', 'editor', 'admin'] as const;
-const TENANT_FILTERS = ['', 'orgiq', 'newsroom'] as const;
+const ROLE_FILTERS = ['', 'member', 'sme', 'program-owner', 'org-leader', 'hr-admin', 'admin'] as const;
+const TENANT_FILTERS = ['', 'orgiq', 'assessment'] as const;
 const DECISION_FILTERS = ['', 'ALLOW', 'DENY'] as const;
 const MAX_EVENTS = 500;
 
@@ -70,154 +87,129 @@ function AuthzLogPage() {
       title="Authorization Log"
       description={`Live AVP decisions. Updates over SSE. Buffer holds last ${MAX_EVENTS} events; restart middleware to reset.`}
       actions={
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11 }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: streaming ? 'var(--color-success, #10b981)' : 'var(--color-text-tertiary)' }} />
-            {streaming ? 'live' : 'reconnecting…'}
-          </span>
-          <span style={{ color: 'var(--color-text-tertiary)' }}>·</span>
-          <span><strong style={{ color: '#10b981' }}>{allowCount}</strong> allow</span>
-          <span><strong style={{ color: '#ef4444' }}>{denyCount}</strong> deny</span>
-        </div>
+        <Inline gap="sm" align="center" className="text-[11px]">
+          <StatusDot
+            color={streaming ? 'var(--color-success)' : 'var(--color-text-tertiary)'}
+            label={streaming ? 'live' : 'reconnecting…'}
+            size="sm"
+          />
+          <T className="text-text-tertiary">·</T>
+          <T><strong className="text-success">{allowCount}</strong> allow</T>
+          <T><strong className="text-danger">{denyCount}</strong> deny</T>
+        </Inline>
       }
     >
-      <div style={filterBar}>
-        <FilterField label="Decision">
-          <select value={decision} onChange={e => setDecision(e.target.value as typeof DECISION_FILTERS[number])} style={selectStyle}>
-            {DECISION_FILTERS.map(d => <option key={d || 'any'} value={d}>{d || 'Any'}</option>)}
-          </select>
-        </FilterField>
-        <FilterField label="Role">
-          <select value={role} onChange={e => setRole(e.target.value as typeof ROLE_FILTERS[number])} style={selectStyle}>
-            {ROLE_FILTERS.map(r => <option key={r || 'any'} value={r}>{r || 'Any'}</option>)}
-          </select>
-        </FilterField>
-        <FilterField label="Tenant">
-          <select value={tenant} onChange={e => setTenant(e.target.value as typeof TENANT_FILTERS[number])} style={selectStyle}>
-            {TENANT_FILTERS.map(t => <option key={t || 'any'} value={t}>{t || 'Any'}</option>)}
-          </select>
-        </FilterField>
-        <FilterField label="Action">
-          <input
-            type="text"
-            value={actionQ}
-            onChange={e => setActionQ(e.target.value)}
-            placeholder="search action…"
-            style={{ ...selectStyle, minWidth: 180 }}
-          />
-        </FilterField>
-        {(decision || role || tenant || actionQ) && (
-          <button onClick={() => { setDecision(''); setRole(''); setTenant(''); setActionQ(''); }} style={btnSecondary}>Clear</button>
-        )}
-        <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
-          showing {filtered.length} of {events.length}
-        </span>
-      </div>
+      <Card padding="sm">
+        <Inline gap="md" align="center" wrap>
+          <FilterField label="Decision">
+            <Select
+              size="sm"
+              value={decision}
+              onChange={e => setDecision(e.target.value as typeof DECISION_FILTERS[number])}
+              options={DECISION_FILTERS.map(d => ({ value: d, label: d || 'Any' }))}
+            />
+          </FilterField>
+          <FilterField label="Role">
+            <Select
+              size="sm"
+              value={role}
+              onChange={e => setRole(e.target.value as typeof ROLE_FILTERS[number])}
+              options={ROLE_FILTERS.map(r => ({ value: r, label: r || 'Any' }))}
+            />
+          </FilterField>
+          <FilterField label="Tenant">
+            <Select
+              size="sm"
+              value={tenant}
+              onChange={e => setTenant(e.target.value as typeof TENANT_FILTERS[number])}
+              options={TENANT_FILTERS.map(t => ({ value: t, label: t || 'Any' }))}
+            />
+          </FilterField>
+          <FilterField label="Action">
+            <Input
+              size="sm"
+              type="text"
+              value={actionQ}
+              onChange={e => setActionQ(e.target.value)}
+              placeholder="search action…"
+              className="min-w-[180px]"
+            />
+          </FilterField>
+          {(decision || role || tenant || actionQ) && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => { setDecision(''); setRole(''); setTenant(''); setActionQ(''); }}
+            >
+              Clear
+            </Button>
+          )}
+          <T className="ml-auto text-[12px] text-text-tertiary">
+            showing {filtered.length} of {events.length}
+          </T>
+        </Inline>
+      </Card>
 
-      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-          <thead>
-            <tr style={{ background: 'var(--color-surface-hover)' }}>
-              <th style={th}>Time</th>
-              <th style={th}>Decision</th>
-              <th style={th}>Identity</th>
-              <th style={th}>Tenant</th>
-              <th style={th}>Role</th>
-              <th style={th}>Action</th>
-              <th style={th}>Path</th>
-              <th style={th}>Reason</th>
-            </tr>
-          </thead>
-          <tbody>
+      <Card padding="md">
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableTh>Time</TableTh>
+              <TableTh>Decision</TableTh>
+              <TableTh>Identity</TableTh>
+              <TableTh>Tenant</TableTh>
+              <TableTh>Role</TableTh>
+              <TableTh>Action</TableTh>
+              <TableTh>Path</TableTh>
+              <TableTh>Reason</TableTh>
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {filtered.length === 0 && (
-              <tr>
-                <td colSpan={8} style={{ padding: 16, textAlign: 'center', color: 'var(--color-text-tertiary)' }}>
+              <TableRow>
+                <TableTd colSpan={8} className="p-4 text-center text-text-tertiary">
                   {events.length === 0 ? 'Waiting for events… try clicking around the app.' : 'No events match the filters.'}
-                </td>
-              </tr>
+                </TableTd>
+              </TableRow>
             )}
             {filtered.map((e, i) => (
-              <tr key={i} style={{ borderTop: '1px solid var(--color-border)' }}>
-                <td style={{ ...td, color: 'var(--color-text-tertiary)', fontFamily: 'ui-monospace, monospace', whiteSpace: 'nowrap' }}>
+              <TableRow key={i}>
+                <TableTd className="text-text-tertiary font-mono whitespace-nowrap">
                   {new Date(e.ts).toLocaleTimeString()}
-                </td>
-                <td style={td}>
+                </TableTd>
+                <TableTd>
                   <Chip tone={e.decision === 'ALLOW' ? 'success' : 'danger'} size="xs">
                     {e.decision}
                   </Chip>
-                </td>
-                <td style={{ ...td, fontFamily: 'ui-monospace, monospace' }}>
+                </TableTd>
+                <TableTd className="font-mono">
                   {e.sub}
                   {e.actor && (
-                    <span title={`Masquerade — real identity: ${e.actor}`} style={{ marginLeft: 6, fontSize: 10, color: 'var(--color-warning, #d97706)' }}>
+                    <T title={`Masquerade — real identity: ${e.actor}`} className="ml-1.5 text-[10px] text-warning">
                       via {e.actor}
-                    </span>
+                    </T>
                   )}
-                </td>
-                <td style={{ ...td, fontFamily: 'ui-monospace, monospace', color: 'var(--color-text-secondary)' }}>{e.tenant ?? ''}</td>
-                <td style={{ ...td, fontFamily: 'ui-monospace, monospace' }}>{e.role}</td>
-                <td style={{ ...td, fontWeight: 500 }}>{e.action}</td>
-                <td style={{ ...td, color: 'var(--color-text-secondary)', fontFamily: 'ui-monospace, monospace' }}>{e.path ?? ''}</td>
-                <td style={{ ...td, color: 'var(--color-text-tertiary)', fontSize: 11 }}>{e.reason ?? ''}</td>
-              </tr>
+                </TableTd>
+                <TableTd className="font-mono text-text-secondary">{e.tenant ?? ''}</TableTd>
+                <TableTd className="font-mono">{e.role}</TableTd>
+                <TableTd className="font-medium">{e.action}</TableTd>
+                <TableTd className="font-mono text-text-secondary">{e.path ?? ''}</TableTd>
+                <TableTd className="text-text-tertiary text-[11px]">{e.reason ?? ''}</TableTd>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </TableBody>
+        </Table>
+      </Card>
     </PageSection>
   );
 }
 
-function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
+function FilterField({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+    <Inline as="label" gap="xs" align="center" className="text-[11px] text-text-tertiary uppercase tracking-[0.5px]">
       {label} {children}
-    </label>
+    </Inline>
   );
 }
-
-const filterBar: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 12,
-  padding: 12,
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-md)',
-};
-
-const selectStyle: React.CSSProperties = {
-  padding: '4px 8px',
-  fontSize: 12,
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm, 4px)',
-  background: 'var(--color-surface)',
-  color: 'var(--color-text-primary)',
-};
-
-const btnSecondary: React.CSSProperties = {
-  padding: '4px 10px',
-  fontSize: 12,
-  background: 'var(--color-surface-hover)',
-  color: 'var(--color-text-primary)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm, 4px)',
-  cursor: 'pointer',
-};
-
-const th: React.CSSProperties = {
-  textAlign: 'left',
-  padding: '8px 12px',
-  fontWeight: 600,
-  fontSize: 11,
-  color: 'var(--color-text-secondary)',
-  textTransform: 'uppercase',
-  letterSpacing: 0.5,
-};
-
-const td: React.CSSProperties = {
-  padding: '6px 12px',
-  verticalAlign: 'top',
-};
 
 export default AuthzLogPage;

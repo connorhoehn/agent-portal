@@ -34,16 +34,12 @@ export default function KnowledgeLayout() {
     <SubNavLayout
       title="Knowledge"
       items={items}
-      renderNavItem={(item, children, baseStyle) => (
+      renderNavItem={(item, children) => (
         <NavLink
           to={item.path}
           // Overview must match exactly, or it stays active on /registry too.
           end={item.path === '/admin/knowledge'}
-          style={({ isActive }) =>
-            isActive
-              ? { ...baseStyle, borderLeft: '3px solid var(--color-primary)', background: 'var(--color-surface-hover)', color: 'var(--color-text-primary)' }
-              : baseStyle
-          }
+          className={({ isActive }) => navItemClassName(isActive)}
         >
           {children}
         </NavLink>
@@ -52,4 +48,15 @@ export default function KnowledgeLayout() {
       <Outlet />
     </SubNavLayout>
   );
+}
+
+// Reproduces SubNavLayout's own default active/inactive nav-item look
+// (see the library's `renderNavItem` doc comment) as Tailwind classes on
+// NavLink's `className` prop instead of a computed `style` object — a real
+// router integration still needs `renderNavItem`, but nothing here needs an
+// inline style to get it.
+function navItemClassName(isActive: boolean): string {
+  return isActive
+    ? 'block px-[14px] py-2 border-l-[3px] border-l-primary bg-surface-hover text-text-primary no-underline cursor-pointer'
+    : 'block px-[14px] py-2 border-l-[3px] border-transparent text-text-secondary no-underline cursor-pointer';
 }

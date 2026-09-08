@@ -13,6 +13,7 @@ import {
   ListAgentRuntimesCommand,
 } from '@aws-sdk/client-bedrock-agentcore-control';
 import { config } from '../config.js';
+import { mockDevboxClient } from '../mock/devbox-shell.js';
 
 export const DEVBOX_RUNTIME_NAME = process.env['DEVBOX_RUNTIME_NAME'] ?? 'orgiq_devbox';
 
@@ -23,8 +24,33 @@ let _data: BedrockAgentCoreClient | null = null;
 let _control: BedrockAgentCoreControlClient | null = null;
 let _arnCache: { ts: number; arn: string | null } | null = null;
 
+/**
+ * The offline runtime's ARN.
+ *
+ * Built from the same region and account the real one would carry, with an
+ * account of all zeroes when none is configured, and a runtime id that says
+ * what it is. Nothing dereferences it offline — `mockDevboxClient` ignores the
+ * ARN entirely — so the only job it has is to be recognisable in a log line as
+ * a runtime that was never deployed.
+ */
+function mockDevboxArn(): string {
+  const account = config.accountId || '000000000000';
+  return `arn:aws:bedrock-agentcore:${config.region}:${account}:runtime/${DEVBOX_RUNTIME_NAME}-MOCK`;
+}
+
+/**
+ * The client every devbox caller uses.
+ *
+ * Offline this is `mockDevboxClient()` — a fake microVM (see
+ * `mock/devbox-shell.ts`) rather than a mock branch in each caller, so
+ * `project-runner.ts` and `sdlc-pipeline.ts` run their real sequencing and
+ * their real failure handling against it and only the sandbox is imaginary.
+ */
 export function devboxDataClient(): BedrockAgentCoreClient {
-  return (_data ??= new BedrockAgentCoreClient({ region: config.region }));
+  if (_data) return _data;
+  return (_data = config.mock.agentcore
+    ? mockDevboxClient()
+    : new BedrockAgentCoreClient({ region: config.region }));
 }
 
 function controlClient(): BedrockAgentCoreControlClient {
@@ -41,6 +67,14 @@ function controlClient(): BedrockAgentCoreControlClient {
 export async function resolveDevboxArn(): Promise<string | null> {
   const fromEnv = process.env['DEVBOX_RUNTIME_ARN'];
   if (fromEnv) return fromEnv;
+
+  // Offline the answer is "yes, there is a runtime" and it is a fake one.
+  // Returning null here instead was the single blocker that made the whole
+  // governed-run and delivery surface 503 in `dev:mock` — every caller of this
+  // says "the devbox runtime is not deployed" and stops, before any provider
+  // (mocked or not) is reached. Not cached: the cache exists to bound a live
+  // ListAgentRuntimes call, and there is none to bound.
+  if (config.mock.agentcore) return mockDevboxArn();
 
   const now = Date.now();
   if (_arnCache && now - _arnCache.ts < ARN_CACHE_TTL_MS) return _arnCache.arn;

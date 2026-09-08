@@ -122,7 +122,7 @@ class ResolveTests(unittest.TestCase):
 
     def test_default_name_derivation(self):
         self.assertEqual(ps.default_prompt_name("graph-builder"), "orgiq-graph-builder-system-prompt")
-        self.assertEqual(ps.default_prompt_name("news_brief"), "orgiq-news-brief-system-prompt")
+        self.assertEqual(ps.default_prompt_name("graph_builder"), "orgiq-graph-builder-system-prompt")
 
     def test_explicit_name_env_wins(self):
         os.environ["SYSTEM_PROMPT_NAME"] = "custom-prompt"

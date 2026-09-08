@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# Shared agent Dockerfile. All 6 OrgIQ Strands agents use this.
+# Shared agent Dockerfile. Every OrgIQ Strands agent uses this.
 #
 # Build context is `agents/` (the parent of each agent dir + _shared/).
 # AGENT_NAME picks the per-agent source. _shared/ is always copied so the

@@ -14,10 +14,15 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router';
-import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button, Card, Chip, EmptyState, ErrorState, Inline, PageSection, SectionLabel, Stack, Toolbar,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
+import { JobStatusPill, LIVE_STATUSES, T, money } from './workShared';
+import { ActivityScroll } from './ActivityFrame';
+import { isNotFoundFetchError } from './jobFetchStatus';
 
 interface ActivityEntry {
   t: 'text' | 'tool' | 'error';
@@ -52,21 +57,6 @@ interface Job {
   botTrigger: string | null;
 }
 
-const STATUS_TONE: Record<string, string> = {
-  running: 'bg-primary text-white',
-  claimed: 'bg-primary/15 text-primary',
-  queued: 'bg-surface-hover text-text-secondary',
-  awaiting_review: 'bg-warning-bg text-warning',
-  done: 'bg-success-bg text-success',
-  failed: 'bg-danger-bg text-danger',
-  cancelled: 'bg-surface-hover text-text-tertiary',
-};
-
-const LIVE_STATUSES = new Set(['claimed', 'running']);
-
-function money(n: number | undefined): string {
-  return typeof n === 'number' ? `$${n.toFixed(4)}` : '—';
-}
 function duration(ms: number | undefined): string {
   if (typeof ms !== 'number' || ms <= 0) return '—';
   return ms < 1000 ? `${ms}ms` : ms < 60_000 ? `${(ms / 1000).toFixed(1)}s`
@@ -120,7 +110,7 @@ export default function JobDetailPage() {
 
   // Poll fast while the job is live so status transitions land quickly; the
   // SSE tail carries the activity, this carries the state machine.
-  const { data: job, refresh } = useFetch<Job>(jobId ? `/api/work/jobs/${jobId}` : null, 5_000);
+  const { data: job, error, refresh } = useFetch<Job>(jobId ? `/api/work/jobs/${jobId}` : null, 5_000);
 
   // What this job produced downstream: graph proposals carry the jobId that
   // raised them, so the job page can point at its own output instead of
@@ -217,9 +207,39 @@ export default function JobDetailPage() {
   }
 
   if (!job) {
+    // useFetch never clears stale data on a poll error, so reaching here with
+    // `error` set means the very first fetch for this id failed — not a
+    // transient hiccup mid-poll. A 404 gets its own explained state (this is
+    // exactly the "job → " link from a bot's run history landing on an id
+    // nothing ever minted); anything else is a real fetch failure, not an
+    // infinite spinner.
+    if (error && isNotFoundFetchError(error)) {
+      return (
+        <PageSection title="Job">
+          <EmptyState
+            title="Job not found"
+            description={<>No job with id <code>{jobId}</code> — it may have been pruned.</>}
+            actionLabel="← Back to queue"
+            onAction={() => navigate('/iq/work')}
+          />
+        </PageSection>
+      );
+    }
+    if (error) {
+      return (
+        <PageSection title="Job">
+          <ErrorState
+            title="Failed to load job"
+            body={error}
+            actionLabel="Retry"
+            onAction={refresh}
+          />
+        </PageSection>
+      );
+    }
     return (
       <PageSection title="Job">
-        <div className="text-[13px] text-text-tertiary">Loading job {jobId}…</div>
+        <T className="text-[13px] text-text-tertiary">Loading job {jobId}…</T>
       </PageSection>
     );
   }
@@ -228,113 +248,99 @@ export default function JobDetailPage() {
 
   return (
     <PageSection title={job.title}>
-      <div className="flex items-center gap-3 mb-5 flex-wrap">
-        <button
-          onClick={() => navigate('/iq/work')}
-          className="text-[12px] text-text-secondary bg-transparent border-none cursor-pointer hover:text-primary p-0"
-        >
-          ← Work
-        </button>
-        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${STATUS_TONE[job.status] ?? 'bg-surface-hover text-text-secondary'}`}>
-          {job.status.replace('_', ' ')}
-        </span>
-        {job.boxId && (
-          <Link
-            to={`/admin/devbox?box=${encodeURIComponent(job.boxId)}`}
-            className="text-[12px] text-primary no-underline hover:underline"
-          >
-            worker {job.boxId} →
-          </Link>
-        )}
-        <span className="text-[11px] text-text-tertiary">
-          attempt {job.attempts} of {job.maxAttempts} · queued by {job.createdBy ?? 'unknown'}
-        </span>
-        {/* Provenance: a standing mission put this here, not a person. */}
-        {job.botId && job.botName && (
-          <Link
-            to={`/admin/bots/${job.botId}`}
-            className="text-[12px] text-primary no-underline hover:underline"
-            title={`${job.botTrigger ?? 'manual'} trigger`}
-          >
-            {job.botTrigger === 'cron' ? 'scheduled by' : 'dispatched by'} {job.botName} →
-          </Link>
-        )}
-        {/* Provenance: this job exists because a sweep found something. */}
-        {typeof job.payload['findingId'] === 'string' && (
-          <Link
-            to="/iq/work"
-            title="This job was promoted from a sweep finding"
-            className="text-[11px] text-text-tertiary no-underline hover:text-primary hover:underline"
-          >
-            from a finding
-          </Link>
-        )}
-        {proposalCount > 0 && (
-          <Link
-            to={`/iq/work/changes?job=${job.id}`}
-            className="text-[12px] text-primary no-underline hover:underline"
-          >
-            {proposalCount} graph proposal{proposalCount === 1 ? '' : 's'} →
-          </Link>
-        )}
-        <div className="flex-1" />
-        {canManage && (job.status === 'queued' || job.status === 'claimed') && (
-          <button
-            onClick={() => void cancel()}
-            className="px-3 py-1 rounded-md border border-border bg-surface text-text-secondary text-[12px] font-semibold cursor-pointer hover:text-danger"
-          >
-            Cancel
-          </button>
-        )}
-        {canManage && job.status === 'awaiting_review' && (
-          <div className="flex gap-2">
-            <button onClick={() => void review('accept')}
-              className="px-3 py-1 rounded-md border-none bg-success text-white text-[12px] font-semibold cursor-pointer">Accept</button>
-            <button onClick={() => void review('reject')}
-              className="px-3 py-1 rounded-md border border-border bg-surface text-text-secondary text-[12px] font-semibold cursor-pointer hover:text-danger">Reject</button>
-          </div>
-        )}
-      </div>
+      <Inline align="center" justify="between" wrap gap="sm" className="mb-5">
+        <Inline align="center" wrap gap="sm">
+          <Button variant="ghost" size="sm" onClick={() => navigate('/iq/work')}>← Work</Button>
+          <JobStatusPill status={job.status} />
+          {job.boxId && (
+            <Link
+              to={`/admin/devbox?box=${encodeURIComponent(job.boxId)}`}
+              className="text-[12px] text-primary no-underline hover:underline"
+            >
+              worker {job.boxId} →
+            </Link>
+          )}
+          <T className="text-[11px] text-text-tertiary">
+            attempt {job.attempts} of {job.maxAttempts} · queued by {job.createdBy ?? 'unknown'}
+          </T>
+          {/* Provenance: a standing mission put this here, not a person. */}
+          {job.botId && job.botName && (
+            <Link
+              to={`/admin/bots/${job.botId}`}
+              className="text-[12px] text-primary no-underline hover:underline"
+              title={`${job.botTrigger ?? 'manual'} trigger`}
+            >
+              {job.botTrigger === 'cron' ? 'scheduled by' : 'dispatched by'} {job.botName} →
+            </Link>
+          )}
+          {/* Provenance: this job exists because a sweep found something. */}
+          {typeof job.payload['findingId'] === 'string' && (
+            <Link
+              to="/iq/work"
+              title="This job was promoted from a sweep finding"
+              className="text-[11px] text-text-tertiary no-underline hover:text-primary hover:underline"
+            >
+              from a finding
+            </Link>
+          )}
+          {proposalCount > 0 && (
+            <Link
+              to={`/iq/work/changes?job=${job.id}`}
+              className="text-[12px] text-primary no-underline hover:underline"
+            >
+              {proposalCount} graph proposal{proposalCount === 1 ? '' : 's'} →
+            </Link>
+          )}
+        </Inline>
+        <Inline gap="sm">
+          {canManage && (job.status === 'queued' || job.status === 'claimed') && (
+            <Button variant="secondary" size="sm" onClick={() => void cancel()}>Cancel</Button>
+          )}
+          {canManage && job.status === 'awaiting_review' && (
+            <>
+              <Button variant="primary" size="sm" onClick={() => void review('accept')}>Accept</Button>
+              <Button variant="secondary" size="sm" onClick={() => void review('reject')}>Reject</Button>
+            </>
+          )}
+        </Inline>
+      </Inline>
 
       {/* ── The ask ── */}
       <Card padding="none" className="mb-5 overflow-hidden">
-        <div className="px-3.5 py-2.5 border-b border-border text-xs font-semibold text-text-secondary tracking-wide select-none">
-          THE ASK
-        </div>
-        <pre className="px-3.5 py-3 m-0 text-[12.5px] leading-relaxed text-text-secondary whitespace-pre-wrap font-sans">
+        <Toolbar size="sm"><SectionLabel>The ask</SectionLabel></Toolbar>
+        <T as="div" wrap className="px-3.5 py-3 text-[12.5px] leading-relaxed text-text-secondary whitespace-pre-wrap">
           {prompt || 'No prompt recorded.'}
-        </pre>
+        </T>
       </Card>
 
       {/* ── Activity ── */}
       <Card padding="none" className="mb-5 overflow-hidden">
-        <div className="px-3.5 py-2.5 border-b border-border flex items-center gap-2">
-          <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">ACTIVITY</span>
+        <Toolbar
+          size="sm"
+          end={activity.length > 0 ? <T className="text-[11px] text-text-tertiary">{activity.length} entries</T> : undefined}
+        >
+          <SectionLabel>Activity</SectionLabel>
           {isLive ? (
             tailState === 'unavailable' ? (
-              <span className="text-[11px] text-warning">
+              <T className="text-[11px] text-warning">
                 worker log unavailable — this box is no longer registered
-              </span>
+              </T>
             ) : (
-              <span className="flex items-center gap-1.5 text-[11px] text-primary">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              <Inline gap="xs" align="center" className="text-[11px] text-primary">
+                <T className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
                 {tailState === 'retrying' ? 'reconnecting…' : 'live'}
-              </span>
+              </Inline>
             )
           ) : (
-            <span className="text-[11px] text-text-tertiary">
+            <T className="text-[11px] text-text-tertiary">
               {activity.length > 0 ? 'recorded transcript' : 'no activity recorded'}
-            </span>
+            </T>
           )}
-          <div className="flex-1" />
-          {activity.length > 0 && (
-            <span className="text-[11px] text-text-tertiary">{activity.length} entries</span>
-          )}
-        </div>
+        </Toolbar>
 
-        <div ref={scrollRef} className="max-h-[420px] overflow-auto">
+        <ActivityScroll ref={scrollRef} className="max-h-[420px] overflow-auto">
           {activity.length === 0 ? (
-            <div className="px-3.5 py-8 text-center text-[12.5px] text-text-tertiary">
+            <T as="div" wrap className="px-3.5 py-8 text-center text-[12.5px] text-text-tertiary">
               {job.status === 'queued'
                 ? 'Waiting for an idle worker — dispatch runs every ~10s.'
                 : isLive && tailState === 'unavailable'
@@ -342,68 +348,66 @@ export default function JobDetailPage() {
                   : isLive
                     ? 'Worker has started; first output usually lands within a few seconds.'
                     : 'This run predates activity recording, or its worker log has rolled.'}
-            </div>
+            </T>
           ) : activity.map((e, i) => (
-            <div key={`${e.ts}-${i}`} className="px-3.5 py-2 border-b border-border last:border-b-0 flex gap-3 min-w-0">
+            <Inline key={`${e.ts}-${i}`} gap="sm" className="px-3.5 py-2 border-b border-border last:border-b-0 min-w-0">
               {e.t === 'tool' ? (
                 <>
-                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0 h-fit">
-                    {e.name}
-                  </span>
-                  <code className="text-[11.5px] text-text-secondary font-mono break-all min-w-0 flex-1">
+                  <Chip tone="accent" size="xs" className="shrink-0 h-fit">{e.name}</Chip>
+                  <T as="div" className="text-[11.5px] text-text-secondary font-mono break-all min-w-0 flex-1">
                     {e.detail}
-                  </code>
+                  </T>
                 </>
               ) : e.t === 'error' ? (
                 <>
-                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-danger-bg text-danger shrink-0 h-fit">error</span>
-                  <span className="text-[12px] text-danger min-w-0 flex-1">{e.detail}</span>
+                  <Chip tone="danger" size="xs" className="shrink-0 h-fit">error</Chip>
+                  <T as="div" className="text-[12px] text-danger min-w-0 flex-1">{e.detail}</T>
                 </>
               ) : (
                 <>
-                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-surface-hover text-text-tertiary shrink-0 h-fit">says</span>
-                  <span className="text-[12.5px] text-text-primary leading-relaxed whitespace-pre-wrap min-w-0 flex-1">
+                  <Chip tone="neutral" size="xs" className="shrink-0 h-fit">says</Chip>
+                  <T as="div" wrap className="text-[12.5px] text-text-primary leading-relaxed whitespace-pre-wrap min-w-0 flex-1">
                     {e.detail}
-                  </span>
+                  </T>
                 </>
               )}
-            </div>
+            </Inline>
           ))}
-        </div>
+        </ActivityScroll>
       </Card>
 
       {/* ── Outcome ── */}
       {(job.result || job.error) && (
         <Card padding="none" className="mb-5 overflow-hidden">
-          <div className="px-3.5 py-2.5 border-b border-border text-xs font-semibold text-text-secondary tracking-wide select-none">
-            OUTCOME
-          </div>
+          <Toolbar size="sm"><SectionLabel>Outcome</SectionLabel></Toolbar>
           {job.error && (
-            <div className="px-3.5 py-3 border-b border-border text-[12.5px] text-danger">{job.error}</div>
+            <T as="div" wrap className="px-3.5 py-3 border-b border-border text-[12.5px] text-danger">{job.error}</T>
           )}
           {job.result?.summary && (
-            <div className="px-3.5 py-3 border-b border-border text-[12.5px] text-text-primary leading-relaxed whitespace-pre-wrap">
+            <T as="div" wrap className="px-3.5 py-3 border-b border-border text-[12.5px] text-text-primary leading-relaxed whitespace-pre-wrap">
               {job.result.summary}
-            </div>
+            </T>
           )}
-          <div className="px-3.5 py-2.5 flex gap-5 flex-wrap text-[11px] text-text-tertiary">
+          <Inline gap="lg" wrap className="px-3.5 py-2.5 text-[11px] text-text-tertiary">
             <span>{job.result?.turns ?? 0} turns</span>
             <span>{job.result?.toolCalls ?? 0} tool calls</span>
             <span>{duration(job.result?.durationMs)}</span>
             <span>{money(job.result?.costUsd)}</span>
-          </div>
+          </Inline>
         </Card>
       )}
 
       {/* ── Timeline ── */}
       <Card padding="md">
-        <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-2">Timeline</div>
-        <div className="grid gap-x-6 gap-y-1 text-[12px] grid-cols-[auto_1fr] max-w-md">
-          <span className="text-text-tertiary">Queued</span><span className="text-text-secondary">{clock(job.createdAt)}</span>
-          <span className="text-text-tertiary">Claimed</span><span className="text-text-secondary">{clock(job.claimedAt)}</span>
-          <span className="text-text-tertiary">Started</span><span className="text-text-secondary">{clock(job.startedAt)}</span>
-          <span className="text-text-tertiary">Finished</span><span className="text-text-secondary">{clock(job.finishedAt)}</span>
-        </div>
+        <SectionLabel as="div" className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-2">
+          Timeline
+        </SectionLabel>
+        <Stack as="dl" gap="xs" className="grid gap-x-6 gap-y-1 text-[12px] grid-cols-[auto_1fr] max-w-md">
+          <T as="div" className="text-text-tertiary">Queued</T><T as="div" className="text-text-secondary">{clock(job.createdAt)}</T>
+          <T as="div" className="text-text-tertiary">Claimed</T><T as="div" className="text-text-secondary">{clock(job.claimedAt)}</T>
+          <T as="div" className="text-text-tertiary">Started</T><T as="div" className="text-text-secondary">{clock(job.startedAt)}</T>
+          <T as="div" className="text-text-tertiary">Finished</T><T as="div" className="text-text-secondary">{clock(job.finishedAt)}</T>
+        </Stack>
       </Card>
     </PageSection>
   );

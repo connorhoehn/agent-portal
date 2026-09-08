@@ -1,0 +1,14 @@
+surface: automate-findings
+role: sme
+user: u-nora (Nora DaSilva) — GET /api/session/me on this sign-in: sub u-nora, tenant orgiq, role sme
+url: /iq/work/findings
+pages: portal/src/pages/work
+audited: 2026-09-06 11:06 local, Chrome 1552×789, middleware dev:mock
+screenshot: automate-findings.jpg
+verdict: pass
+console errors: 0
+layout: pass — content col left 224px w 1304px; breadcrumb "Build › Automate › Findings"; nested Automate rail flush with the content box (aside right edge 444px, inner content at 468px w 1060px); no table — first-row-top: 406px for the first severity group row ("critical · Bus factor · 2 findings"); above it the H1 with "Run sweeps now", the Dead-letter queue heading + caption + empty panel, and one status-pill row; no horizontal scroll (scrollWidth 1552 = innerWidth)
+keyboard: pass — 35 tabbable controls, none with tabIndex −1, all reached in a 40-press Tab sweep (focus-log diff: missing none): "Run sweeps now", the four status pills, the three group headers, "Find links in 1 of these", then shell and rail. Return on the focused "Bus factor" header expanded it (▸ → ▾, "show" → "hide") to its two findings, each with its own "Put a worker on it" and "Dismiss" buttons; the header still carries no `aria-expanded` (null before and after), so a screen reader hears a button with no state
+empty-state: pass — DLQ: "Nothing dead-lettered. Failed jobs land here with their error and a requeue button."; "dismissed" presses its pill and swaps the list to the single "warning · Lab signals · 1 finding" group; every status has a seeded group so the list's own empty panel could not be driven
+role-gating: sme holds ManageDevbox and DispatchAgentRun, so she gets "Run sweeps now", "Put a worker on it" + "Dismiss" per finding and the bulk "Find links in 1 of these"; none of those was pressed this pass — "Put a worker on it" enqueues an agent job where a grant exists (`POST /api/work/findings/:id/promote`, DispatchAgentRun then the grant-scoped gate), and the 403-explained path on p-observability was already recorded on 2026-09-05 ("you hold no active sprint grant on Observability Platform … ask the release manager for a grant"); the read side — which controls render and for whom — matches that record
+notes: the ▸/▾ glyph-only disclosure with "show/hide" on the far right of a 1040px row is still easy to miss, and the denied "Put a worker on it" is only explained after the click — nothing on a p-observability finding row hints that Nora holds no envelope there while the initiative page does carry the banner. The dismissed group now reads "Lab signals" (org-leader #7's `sweepLabel()`), not a raw id.

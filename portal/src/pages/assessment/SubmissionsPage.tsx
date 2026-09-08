@@ -1,0 +1,397 @@
+// Submissions — the daily intake surface. One row per submission (its current
+// revision carries the status; earlier revisions are kept for history behind it), plus
+// the add-wizard: Drop -> Preview & match -> Fetch links -> Run prompt.
+//
+// Structure mirrors the source app's SubmissionsList.tsx / SubmissionsWizard.tsx
+// (`agentic-assessment-accelerator/ui/src/components/submissions/`), re-expressed on
+// this library's DataTable/Drawer/Wizard rather than a hand-rolled table and stepper.
+// See docs/assessment-tenant.md "SubmissionsPage.tsx" for the exact contract.
+
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
+import {
+  Button,
+  Card,
+  Checkbox,
+  ConfirmDialog,
+  DataTable,
+  Drawer,
+  EmptyState,
+  Inline,
+  InlinePlaceholder,
+  LoadingState,
+  MetaLine,
+  PageHeader,
+  Stack,
+  StatStrip,
+  StatusPill,
+  Wizard,
+} from '@connorhoehnslalom/ui-components/shared';
+import { useCapabilities } from '../../lib/capabilities';
+import { toastError, toastSuccess } from '../../lib/toastStore';
+import { useTeams } from './dashboard/useTeams';
+import { envelopesToListItems, formatRelativeTime, groupSubmissions, revisionLabel } from './secondaryFormat';
+import type { CommitResponse, ParseResponse, SubmissionRevisionGroup, SubmissionsListResponse } from './secondaryTypes';
+import DropStep from './submissions/DropStep';
+import PreviewStep from './submissions/PreviewStep';
+import FetchLinksStep from './submissions/FetchLinksStep';
+import RunPromptStep from './submissions/RunPromptStep';
+
+type WizardStepKey = 'drop' | 'preview' | 'fetch' | 'run';
+
+function AddWizard({ onDone }: { onDone: () => void }) {
+  const [step, setStep] = useState<WizardStepKey>('drop');
+  const [parse, setParse] = useState<ParseResponse | null>(null);
+  const [commit, setCommit] = useState<CommitResponse | null>(null);
+  // Mirrors FetchLinksStep's own "every link fetched or skipped" check (both
+  // read `linksStepComplete`) so the wizard shell's bottom Next button can
+  // never advance past an unresolved link set that the step's own Continue
+  // button would still block. Defaults true so a commit with no links at all
+  // never starts the step artificially disabled.
+  const [fetchStepComplete, setFetchStepComplete] = useState(true);
+
+  const steps = [
+    {
+      key: 'drop',
+      label: 'Drop file',
+      canAdvance: parse !== null,
+      content: <DropStep onParsed={(p) => { setParse(p); setStep('preview'); }} />,
+    },
+    {
+      key: 'preview',
+      label: 'Preview & match',
+      canAdvance: commit !== null,
+      content: parse ? (
+        <PreviewStep
+          parse={parse}
+          onCommitted={(c) => { setCommit(c); setStep('fetch'); }}
+          onBack={() => setStep('drop')}
+        />
+      ) : (
+        <InlinePlaceholder>Drop a file first.</InlinePlaceholder>
+      ),
+    },
+    {
+      key: 'fetch',
+      label: 'Fetch links',
+      canAdvance: fetchStepComplete,
+      content: commit ? (
+        <FetchLinksStep
+          commit={commit}
+          onContinue={() => setStep('run')}
+          onBack={() => setStep('preview')}
+          onCompletionChange={setFetchStepComplete}
+        />
+      ) : (
+        <InlinePlaceholder>Commit submissions first.</InlinePlaceholder>
+      ),
+    },
+    {
+      key: 'run',
+      label: 'Run prompt',
+      content: commit ? (
+        <RunPromptStep commit={commit} onStartOver={() => { setParse(null); setCommit(null); setStep('drop'); }} />
+      ) : (
+        <InlinePlaceholder>Commit submissions first.</InlinePlaceholder>
+      ),
+    },
+  ];
+
+  return (
+    <Wizard
+      steps={steps}
+      activeKey={step}
+      onStep={(k: string) => setStep(k as WizardStepKey)}
+      onFinish={onDone}
+      finishLabel="Back to submissions"
+    />
+  );
+}
+
+export default function SubmissionsPage() {
+  const { can, ready } = useCapabilities();
+  const canManage = ready && can('ManageSubmissions');
+  const [params, setParams] = useSearchParams();
+  const adding = params.get('view') === 'add';
+
+  const [data, setData] = useState<SubmissionsListResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmingDelete, setConfirmingDelete] = useState<SubmissionRevisionGroup | null>(null);
+  const [confirmingClear, setConfirmingClear] = useState(false);
+  const [historyGroup, setHistoryGroup] = useState<SubmissionRevisionGroup | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // Roster names for `resolveTeamName` — a hand-matched row's team_id must
+  // render the matched team's real name, not the submitter's own typed text.
+  const { teams } = useTeams();
+  const teamsById = useMemo(() => new Map(teams.map((t) => [t.id, t.name])), [teams]);
+
+  function load() {
+    setLoading(true);
+    fetch('/api/assessment/submissions', { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
+      .then((body: SubmissionsListResponse) => {
+        setData(body);
+        setError(null);
+      })
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    if (!adding) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adding]);
+
+  const groups = useMemo(
+    () => groupSubmissions(envelopesToListItems(data?.envelopes ?? []), undefined, teamsById),
+    [data, teamsById],
+  );
+  // The strip's numbers are derived from the grouped rows — the listing sends
+  // no summary block, and reading one that wasn't there hid the strip entirely.
+  const summary = useMemo(() => ({
+    distinct_submissions: groups.length,
+    teams: new Set(groups.map((g) => g.teamId)).size,
+    distinct_unprocessed: groups.filter((g) => !g.processed).length,
+    links_pending_total: groups.reduce((n, g) => n + (g.current.links_pending ?? 0), 0),
+  }), [groups]);
+
+  function goToAdd() {
+    setParams((p) => { p.set('view', 'add'); return p; });
+  }
+  function backToList() {
+    setParams((p) => { p.delete('view'); return p; });
+  }
+
+  async function deleteGroup(group: SubmissionRevisionGroup) {
+    setBusy(true);
+    try {
+      const res = await fetch(
+        `/api/assessment/submissions/${encodeURIComponent(group.teamId)}/${encodeURIComponent(group.current.envelope_id)}`,
+        { method: 'DELETE', credentials: 'include' },
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      toastSuccess(null, 'Submission deleted');
+      load();
+    } catch (err) {
+      toastError(null, 'Could not delete', (err as Error).message);
+    } finally {
+      setBusy(false);
+      setConfirmingDelete(null);
+    }
+  }
+
+  async function clearSelected() {
+    const targets = groups
+      .filter((g) => selected.has(g.key))
+      .map((g) => ({ team_id: g.teamId, envelope_id: g.current.envelope_id }));
+    if (targets.length === 0) return;
+    setBusy(true);
+    try {
+      const res = await fetch('/api/assessment/submissions/clear', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: targets, reset_assessments: true }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      toastSuccess(null, `Cleared ${targets.length} submission${targets.length === 1 ? '' : 's'}`);
+      setSelected(new Set());
+      load();
+    } catch (err) {
+      toastError(null, 'Could not clear', (err as Error).message);
+    } finally {
+      setBusy(false);
+      setConfirmingClear(false);
+    }
+  }
+
+  if (adding) {
+    return (
+      <Stack gap="lg">
+        <PageHeader
+          title="Add submissions"
+          description="Upload a Microsoft Forms export, match each row to a team, then collect the linked evidence and process it."
+          back={{ label: '← All submissions', to: '/assessment/submissions' }}
+        />
+        <AddWizard onDone={backToList} />
+      </Stack>
+    );
+  }
+
+  return (
+    <Stack gap="lg">
+      <PageHeader
+        title="Submissions"
+        description="One row per submission — the latest revision carries the status; earlier revisions are kept for history."
+        actions={canManage ? <Button size="sm" onClick={goToAdd}>Add submissions →</Button> : undefined}
+      />
+
+      {groups.length > 0 && (
+        <StatStrip
+          items={[
+            { label: 'Submissions', value: summary.distinct_submissions },
+            { label: 'Teams', value: summary.teams },
+            { label: 'Unprocessed', value: summary.distinct_unprocessed, tone: 'accent' },
+            { label: 'Links pending', value: summary.links_pending_total },
+          ]}
+        />
+      )}
+
+      {canManage && selected.size > 0 && (
+        <Inline align="center" gap="sm" className="rounded-md bg-surface-secondary px-4 py-2">
+          <strong className="text-sm font-semibold">{selected.size} selected</strong>
+          <Button variant="danger" size="sm" onClick={() => setConfirmingClear(true)} disabled={busy}>
+            Clear selected
+          </Button>
+        </Inline>
+      )}
+
+      {loading ? (
+        <LoadingState label="Loading submissions…" />
+      ) : error ? (
+        <EmptyState title="Couldn't load submissions" body={error} actionLabel="Retry" onAction={load} />
+      ) : groups.length === 0 ? (
+        <EmptyState
+          title="No submissions ingested yet"
+          body="Add a Microsoft Forms export to get started."
+          actionLabel={canManage ? 'Add submissions →' : undefined}
+          onAction={canManage ? goToAdd : undefined}
+        />
+      ) : (
+        <DataTable<SubmissionRevisionGroup>
+          data={groups}
+          keyField={(g) => g.key}
+          striped
+          searchable
+          columns={[
+            ...(canManage
+              ? [{
+                  key: 'select',
+                  header: '',
+                  width: '40px',
+                  render: (g: SubmissionRevisionGroup) => (
+                    <Checkbox
+                      checked={selected.has(g.key)}
+                      onChange={() => setSelected((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(g.key)) next.delete(g.key); else next.add(g.key);
+                        return next;
+                      })}
+                      aria-label={`Select ${g.key}`}
+                    />
+                  ),
+                }]
+              : []),
+            {
+              key: 'team',
+              header: 'Team',
+              // The rows are revision groups, not flat records — without an
+              // accessor the search box filters `String(row.team)`, which is
+              // "undefined" for every row, so nothing ever matched.
+              getFilterText: (g) => `${g.teamId} ${g.teamName} ${g.submittedTeamName ?? ''}`,
+              render: (g) => (
+                <Stack gap="none">
+                  <strong className="font-semibold">{g.teamId}</strong>
+                  {/* teamName is the matched team's real name (resolveTeamName in
+                      secondaryFormat.ts); submittedTeamName only appears when a
+                      hand-matched row's submitted text actually differs from it. */}
+                  <MetaLine
+                    size="xs"
+                    items={g.submittedTeamName ? [g.teamName, `submitted as "${g.submittedTeamName}"`] : [g.teamName]}
+                  />
+                </Stack>
+              ),
+            },
+            {
+              key: 'submission',
+              header: 'Submission',
+              getFilterText: (g) => `${g.formId ? `Form #${g.formId}` : 'Manual submission'} ${g.current.envelope_id}`,
+              render: (g) => (
+                <Stack gap="xs">
+                  {g.formId ? `Form #${g.formId}` : 'Manual submission'}
+                  {g.revisionCount > 1 && (
+                    <Button variant="ghost" size="sm" onClick={() => setHistoryGroup(g)}>
+                      {g.revisionCount} revisions — latest {revisionLabel(g.current.envelope_id)}
+                    </Button>
+                  )}
+                </Stack>
+              ),
+            },
+            { key: 'submitter', header: 'Submitter', getFilterText: (g) => g.current.submitter_name ?? '', render: (g) => g.current.submitter_name || '—' },
+            { key: 'received', header: 'Received', render: (g) => formatRelativeTime(g.current.submitted_at) },
+            {
+              key: 'status',
+              header: 'Status',
+              getFilterText: (g) => (g.processed ? 'Processed' : 'Unprocessed'),
+              render: (g) => (
+                <StatusPill state={g.processed ? 'success' : 'warning'} label={g.processed ? 'Processed' : 'Unprocessed'} size="sm" />
+              ),
+            },
+            {
+              key: 'links',
+              header: 'Links',
+              render: (g) => `${g.current.links_total - g.current.links_pending}/${g.current.links_total}`,
+            },
+            ...(canManage
+              ? [{
+                  key: 'actions',
+                  header: '',
+                  render: (g: SubmissionRevisionGroup) => (
+                    <Button size="sm" variant="secondary" onClick={() => setConfirmingDelete(g)}>
+                      Delete
+                    </Button>
+                  ),
+                }]
+              : []),
+          ]}
+        />
+      )}
+
+      <ConfirmDialog
+        open={confirmingDelete !== null}
+        onCancel={() => setConfirmingDelete(null)}
+        onConfirm={() => confirmingDelete && void deleteGroup(confirmingDelete)}
+        title="Delete this submission?"
+        body={confirmingDelete ? `Removes ${confirmingDelete.current.envelope_id} and its intake record.` : undefined}
+        confirmLabel="Delete"
+        tone="destructive"
+        confirmDisabled={busy}
+      />
+      <ConfirmDialog
+        open={confirmingClear}
+        onCancel={() => setConfirmingClear(false)}
+        onConfirm={() => void clearSelected()}
+        title="Clear selected submissions?"
+        body={`Removes ${selected.size} submission${selected.size === 1 ? '' : 's'} and resets those teams' results & follow-ups.`}
+        confirmLabel="Clear"
+        tone="destructive"
+        confirmDisabled={busy}
+      />
+      <Drawer open={historyGroup !== null} onClose={() => setHistoryGroup(null)} title="Revision history">
+        {historyGroup && (
+          <Stack gap="sm">
+            {[historyGroup.current, ...historyGroup.superseded].map((rev, i) => (
+              <Card key={rev.envelope_id} padding="sm" className="bg-surface-secondary text-sm">
+                <Inline justify="between" align="center">
+                  <strong className="font-semibold">{revisionLabel(rev.envelope_id)}</strong>
+                  {i === 0 && <StatusPill state="info" label="Current" size="sm" />}
+                </Inline>
+                <MetaLine size="xs" items={[rev.envelope_id]} className="mt-1" />
+                <MetaLine size="xs" items={[`Ingested ${formatRelativeTime(rev.ingested_at)}`]} className="mt-1" />
+              </Card>
+            ))}
+          </Stack>
+        )}
+      </Drawer>
+    </Stack>
+  );
+}

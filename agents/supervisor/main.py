@@ -339,26 +339,18 @@ SYSTEM_PROMPT = (
 
 # Per-role guardrail IDs, populated from env at module load. Middleware passes
 # the caller's role in the invoke payload; we map it here to one of these.
-# Newsroom roles (reporter/editor) get their own guardrails when
-# GUARDRAIL_ID_REPORTER / GUARDRAIL_ID_EDITOR are set; unset, they fall back to
-# the member guardrail via GUARDRAIL_ROLE_FALLBACK below (unchanged default).
 ROLE_GUARDRAIL_IDS: dict[str, str] = {
     "member": os.environ.get("GUARDRAIL_ID_MEMBER", ""),
     "org-leader": os.environ.get("GUARDRAIL_ID_ORG_LEADER", ""),
     "hr-admin": os.environ.get("GUARDRAIL_ID_HR_ADMIN", ""),
-    "reporter": os.environ.get("GUARDRAIL_ID_REPORTER", ""),
-    "editor": os.environ.get("GUARDRAIL_ID_EDITOR", ""),
 }
 DEFAULT_ROLE = "member"
 DEFAULT_TENANT = "orgiq"
-KNOWN_TENANTS = frozenset({"orgiq", "newsroom"})
+KNOWN_TENANTS = frozenset({"orgiq"})
 
-# Roles without a guardrail of their own borrow one: newsroom roles ride on the
-# strictest (member) guardrail; the cross-tenant admin gets hr-admin's (the
-# least restrictive — denies only Health topics).
+# Roles without a guardrail of their own borrow one: the cross-tenant admin
+# gets hr-admin's (the least restrictive — denies only Health topics).
 GUARDRAIL_ROLE_FALLBACK: dict[str, str] = {
-    "reporter": "member",
-    "editor": "member",
     "admin": "hr-admin",
 }
 

@@ -20,11 +20,13 @@ export function VarCombobox({
   onChange,
   options,
   placeholder,
+  autoFocus,
 }: {
   value: string;
   onChange: (v: string) => void;
   options: string[];
   placeholder: string;
+  autoFocus?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
@@ -72,8 +74,12 @@ export function VarCombobox({
   }, [open]);
 
   return (
+    // Raw div, not `Stack`/`Inline`: this needs a real DOM ref for the
+    // outside-click check below, and neither is `forwardRef` (see
+    // docs/ui-components-queue.md, the `Stack`/`Card`/`Inline` ref row).
     <div ref={containerRef} className="relative">
       <Input
+          autoFocus={autoFocus}
         value={value}
         onChange={e => { onChange(e.target.value); setOpen(true); setHighlighted(0); }}
         onFocus={() => { setOpen(true); setHighlighted(0); }}

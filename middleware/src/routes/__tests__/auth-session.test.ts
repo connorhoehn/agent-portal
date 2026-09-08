@@ -26,7 +26,7 @@ jest.mock('aws-jwt-verify', () => ({
   CognitoJwtVerifier: { create: () => ({ verify: async () => ({}) }) },
 }));
 jest.mock('../../providers/identity.js', () => ({
-  listUsers: jest.fn(async () => []),
+  listUsers: jest.fn(async () => [] as unknown[]),
   getUser: jest.fn(async (id: string) =>
     id === 'u-alice' ? { id: 'u-alice', displayName: 'Alice', email: null, grants: { orgiq: ['member'] } } : null),
   getUserByExternalSub: jest.fn(async () => null),
@@ -35,11 +35,12 @@ jest.mock('../../providers/identity.js', () => ({
 }));
 
 import express from 'express';
-import request from 'supertest';
+import request from '../../test-support/http.js';
 import { config } from '../../config.js';
 import { sessionRouter } from '../session.js';
 import { authRouter, resolveRedirect } from '../auth.js';
 import { resetRateLimits } from '../../lib/rate-limit.js';
+import { listUsers } from '../../providers/identity.js';
 
 /** Flip the mocked Cognito config on/off — the routes read it live. */
 function setCognito(on: boolean) {
@@ -135,7 +136,7 @@ describe('POST /api/session/login', () => {
 describe('switch endpoints refuse anonymous requests once Cognito is on', () => {
   it.each([
     ['/api/session/role', { role: 'member' }],
-    ['/api/session/tenant', { tenant: 'newsroom' }],
+    ['/api/session/tenant', { tenant: 'assessment' }],
     ['/api/session/masquerade', { userId: 'u-alice' }],
   ])('%s → 401 ssoRequired', async (path, body) => {
     setCognito(true);
@@ -170,5 +171,73 @@ describe('resolveRedirect', () => {
       .toBe('https://evil.example/x');
     expect(resolveRedirect('//evil.example/x', 'http://localhost:5183'))
       .toBe('//evil.example/x');
+  });
+});
+
+// The picker's user list and the session-cookie logout — two routes on the
+// same router that the cases above never touch.
+describe('GET /api/session/users — the picker list', () => {
+  const listUsersMock = listUsers as unknown as jest.Mock;
+
+  afterEach(() => { listUsersMock.mockReset(); listUsersMock.mockResolvedValue([]); });
+
+  it('reshapes grants into a tenant/roles list, and leaks no credential material', async () => {
+    listUsersMock.mockResolvedValue([{
+      id: 'u-nora', displayName: 'Nora Vance', email: 'nora@example.com',
+      personId: 'p-004', externalSub: 'cognito-1', sessionEpoch: 3,
+      grants: { orgiq: ['sme'], assessment: ['assessor', 'lead-assessor'] },
+    }]);
+    const res = await request(buildApp()).get('/api/session/users');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    // Exactly four keys: the picker needs a name and where they can go, and
+    // nothing else about the account travels to an unauthenticated caller.
+    expect(Object.keys(res.body[0]).sort()).toEqual(['displayName', 'email', 'id', 'tenants']);
+    expect(res.body[0].tenants).toEqual([
+      { tenant: 'orgiq', roles: ['sme'] },
+      { tenant: 'assessment', roles: ['assessor', 'lead-assessor'] },
+    ]);
+    const serialized = JSON.stringify(res.body);
+    for (const forbidden of ['externalSub', 'sessionEpoch', 'personId']) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
+
+  it('lists a user with no grants as an empty tenant list rather than dropping them', async () => {
+    listUsersMock.mockResolvedValue([
+      { id: 'u-new', displayName: 'New Hire', email: null, grants: {} },
+    ]);
+    const res = await request(buildApp()).get('/api/session/users');
+    expect(res.body).toHaveLength(1);
+    expect(res.body[0].tenants).toEqual([]);
+    expect(res.body[0].email).toBeNull();
+  });
+
+  it('answers an empty array when nobody is provisioned', async () => {
+    listUsersMock.mockResolvedValue([]);
+    const res = await request(buildApp()).get('/api/session/users');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+});
+
+describe('POST /api/session/logout', () => {
+  it('CLEARS the session cookie and says so, with or without one to clear', async () => {
+    const app = buildApp();
+    const anonymous = await request(app).post('/api/session/logout');
+    expect(anonymous.status).toBe(200);
+    expect(anonymous.body).toEqual({ ok: true });
+    expect(sessionCookies(anonymous).every(isClearing)).toBe(true);
+    expect(sessionCookies(anonymous)).toHaveLength(1);
+  });
+
+  it('clears even when Cognito is on — the app cookie is ours either way', async () => {
+    // The Cognito hosted-UI logout lives on POST /api/auth/logout; this route
+    // is only about the cookie the browser actually holds.
+    setCognito(true);
+    const res = await request(buildApp()).post('/api/session/logout');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+    expect(sessionCookies(res).every(isClearing)).toBe(true);
   });
 });

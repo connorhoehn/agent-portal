@@ -37,7 +37,7 @@ jest.mock('../../providers/identity.js', () => ({ getUser: jest.fn() }));
 jest.mock('../../providers/projects.js', () => ({ getProject: jest.fn() }));
 
 import express, { type Request, type Response, type NextFunction } from 'express';
-import request from 'supertest';
+import request from '../../test-support/http.js';
 import { sprintsRouter } from '../sprints.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { listSprints, createSprint, getSprint, personExists } from '../../providers/sprints.js';

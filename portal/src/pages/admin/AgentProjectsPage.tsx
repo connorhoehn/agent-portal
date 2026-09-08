@@ -17,7 +17,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button, CatalogGrid, Card, Chip, EmptyState, Inline, Input, MetaLine, Modal,
+  PageSection, Select, SectionLabel, Stack, Textarea,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
@@ -25,6 +28,7 @@ import { openShell, useCompute, type Computer } from '@connorhoehnslalom/ui-comp
 import { DEVBOX_MODELS, DEFAULT_DEVBOX_MODEL } from '../../lib/devboxModels';
 import { ConnectionSetup } from '../../components/codebases/ConnectionSetup';
 import { RepoDiscovery } from '../../components/codebases/RepoDiscovery';
+import { ExternalLink } from './ExternalLinkFrame';
 
 interface Run {
   id: string; prompt: string; model: string | null;
@@ -44,10 +48,8 @@ interface OrgProject { id: string; name: string; status: string | null }
 interface ConnectedSource { name: string; kind: string }
 interface RepoRef { fullName: string }
 
-const STATUS_TONE: Record<Run['status'], string> = {
-  running: 'bg-warning-bg text-warning',
-  done: 'bg-success-bg text-success',
-  failed: 'bg-danger-bg text-danger',
+const STATUS_TONE: Record<Run['status'], 'warning' | 'success' | 'danger'> = {
+  running: 'warning', done: 'success', failed: 'danger',
 };
 
 function when(iso: string | null): string {
@@ -325,46 +327,35 @@ export default function AgentProjectsPage() {
       title="Codebases"
       description="Repositories that agents work on, and the initiatives they deliver. What matters here is what the bots did — not the human collaboration furniture."
     >
-      <div className="flex items-center gap-2 mb-4 flex-wrap">
+      <Inline align="center" gap="sm" wrap className="mb-4">
         {canDevbox && (
           <>
-            <button
-              onClick={() => setLinking((v) => !v)}
-              className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer"
-            >
+            <Button variant="primary" size="sm" onClick={() => setLinking((v) => !v)}>
               {linking ? 'Cancel' : '+ Link a repository'}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="secondary" size="sm"
               disabled={githubConnections.length === 0}
               title={githubConnections.length === 0
                 ? 'Connect GitHub first — discovery browses what a credential can see.'
                 : 'Browse repositories by connection and organization'}
               onClick={() => setDiscovering(true)}
-              className="px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors disabled:opacity-40 disabled:cursor-default"
             >
               Discover
-            </button>
+            </Button>
           </>
         )}
-        <button
-          onClick={() => setShowConnections((v) => !v)}
-          className="px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors"
-        >
+        <Button variant="secondary" size="sm" onClick={() => setShowConnections((v) => !v)}>
           {showConnections ? 'Hide connections' : 'Connections'}
-        </button>
+        </Button>
         {githubConnections.length === 0 && canIngest && (
-          <span className="text-[11px] text-text-tertiary inline-flex items-center gap-1.5">
-            No GitHub connection yet
-            <button
-              onClick={() => setShowConnections(true)}
-              className="px-2 py-0.5 rounded-md border border-border bg-surface text-[11px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors"
-            >
-              Add one here
-            </button>
-            <span>— Knowledge → Sources also manages these; ingest shares the vault.</span>
-          </span>
+          <Inline align="center" gap="xs">
+            <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">No GitHub connection yet</Inline>
+            <Button variant="ghost" size="sm" onClick={() => setShowConnections(true)}>Add one here</Button>
+            <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">— Knowledge → Sources also manages these; ingest shares the vault.</Inline>
+          </Inline>
         )}
-      </div>
+      </Inline>
 
       {showConnections && (
         <ConnectionSetup
@@ -375,77 +366,64 @@ export default function AgentProjectsPage() {
 
       {linking && (
         <Card padding="md" className="mb-4">
-          <div className="flex flex-wrap items-end gap-2.5">
-            <label>
-              <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">
-                Credential
-              </span>
-              <select
-                value={connection}
-                onChange={(e) => setConnection(e.target.value)}
-                className="px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary"
-              >
-                <option value="">none (public repo)</option>
-                {githubConnections.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
-              </select>
-            </label>
-            <label className="flex-1 min-w-[240px]">
-              <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">
-                Repository
-              </span>
-              <input
-                list="repo-options"
-                value={repo}
-                onChange={(e) => setRepo(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') void link(); }}
-                placeholder="Paste a GitHub URL (https:// or git@…) or owner/name"
-                className="w-full px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary font-mono"
-              />
-              <datalist id="repo-options">
-                {repoOptions.map((r) => <option key={r.fullName} value={r.fullName} />)}
-              </datalist>
-            </label>
-            <label>
-              <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">
-                Initiative
-              </span>
-              <select
-                value={orgProject}
-                onChange={(e) => setOrgProject(e.target.value)}
-                className="px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary"
-              >
-                <option value="">unattached</option>
-                {(orgProjects ?? []).map((op) => (
-                  <option key={op.id} value={op.id}>{op.name}</option>
-                ))}
-              </select>
-            </label>
-            <button
-              disabled={busy === 'link' || !repo.trim()}
-              onClick={() => void link()}
-              className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-40"
-            >
-              {busy === 'link' ? 'linking…' : 'Link'}
-            </button>
-          </div>
-          {connection && repoOptions.length > 0 && (
-            <div className="text-[11px] text-text-tertiary mt-2">
-              {repoOptions.length} repositories visible to this credential.
-            </div>
-          )}
+          <Stack gap="sm">
+            <Inline gap="sm" align="end" wrap>
+              <Stack as="label" gap="xs">
+                <SectionLabel>Credential</SectionLabel>
+                <Select
+                  value={connection}
+                  onChange={(e) => setConnection(e.target.value)}
+                  options={[
+                    { value: '', label: 'none (public repo)' },
+                    ...githubConnections.map((c) => ({ value: c.name, label: c.name })),
+                  ]}
+                />
+              </Stack>
+              <Stack as="label" gap="xs" className="min-w-[240px] flex-1">
+                <SectionLabel>Repository</SectionLabel>
+                <Input
+                  list="repo-options"
+                  value={repo}
+                  onChange={(e) => setRepo(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') void link(); }}
+                  placeholder="Paste a GitHub URL (https:// or git@…) or owner/name"
+                  mono
+                />
+                <datalist id="repo-options">
+                  {repoOptions.map((r) => <option key={r.fullName} value={r.fullName} />)}
+                </datalist>
+              </Stack>
+              <Stack as="label" gap="xs">
+                <SectionLabel>Initiative</SectionLabel>
+                <Select
+                  value={orgProject}
+                  onChange={(e) => setOrgProject(e.target.value)}
+                  options={[
+                    { value: '', label: 'unattached' },
+                    ...(orgProjects ?? []).map((op) => ({ value: op.id, label: op.name })),
+                  ]}
+                />
+              </Stack>
+              <Button variant="primary" size="sm" disabled={busy === 'link' || !repo.trim()} onClick={() => void link()}>
+                {busy === 'link' ? 'linking…' : 'Link'}
+              </Button>
+            </Inline>
+            {connection && repoOptions.length > 0 && (
+              <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">
+                {repoOptions.length} repositories visible to this credential.
+              </Inline>
+            )}
+          </Stack>
         </Card>
       )}
 
       {projects.length === 0 ? (
-        <Card padding="md">
-          <div className="text-[13px] font-semibold text-text-primary">No projects linked</div>
-          <div className="text-[12px] text-text-secondary mt-1 leading-snug">
-            Link a repository to clone it into a workspace and run agents against it. Public repositories
-            need no credential.
-          </div>
-        </Card>
+        <EmptyState
+          title="No projects linked"
+          body="Link a repository to clone it into a workspace and run agents against it. Public repositories need no credential."
+        />
       ) : (
-        <div className="grid gap-4 grid-cols-1 xl:grid-cols-2">
+        <CatalogGrid columns={2}>
           {projects.map((p) => {
             const box = boxes.find((b) => b.sessionId === p.sessionId);
             const inWorkspace = Boolean(p.clonedAt && box);
@@ -458,147 +436,133 @@ export default function AgentProjectsPage() {
                 key={p.id}
                 id={`project-${p.id}`}
                 padding="none"
-                className={`overflow-hidden ${focused ? 'ring-2 ring-primary/60' : ''}`}
+                className={focused ? 'ring-2 ring-primary/60' : undefined}
               >
-                <div className="px-3.5 py-2.5 border-b border-border flex items-center gap-2">
-                  <a
-                    href={`https://github.com/${p.repoFullName}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={`Open ${p.repoFullName} on GitHub`}
-                    className="text-[13px] font-semibold font-mono text-text-primary truncate hover:text-primary hover:underline inline-flex items-center gap-1"
-                  >
-                    {p.repoFullName}
-                    <span aria-hidden="true" className="text-[10px] text-text-tertiary">↗</span>
-                  </a>
-                  {!p.connectionName && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-hover text-text-tertiary shrink-0">
-                      public
-                    </span>
-                  )}
-                  {p.orgProjectName && (
-                    p.orgProjectId ? (
-                      <Link
-                        to={`/iq/projects/${p.orgProjectId}`}
-                        title={`Open the initiative this codebase delivers: ${p.orgProjectName}`}
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0 truncate max-w-[40%] no-underline hover:underline"
-                      >
-                        {p.orgProjectName}
-                      </Link>
-                    ) : (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0 truncate max-w-[40%]"
-                            title={`Delivers: ${p.orgProjectName}`}>
-                        {p.orgProjectName}
-                      </span>
-                    )
-                  )}
-                  <div className="flex-1" />
-                  {canDevbox && (
-                    <button
-                      onClick={() => void unlink(p)}
-                      className="text-[11px] text-text-tertiary hover:text-danger bg-transparent border-none cursor-pointer"
+                <Inline align="center" gap="sm" wrap justify="between" className="border-b border-border px-3.5 py-2.5">
+                  <Inline align="center" gap="sm" wrap>
+                    <ExternalLink
+                      href={`https://github.com/${p.repoFullName}`}
+                      title={`Open ${p.repoFullName} on GitHub`}
+                      className="inline-flex items-center gap-1 truncate font-mono text-[13px] font-semibold text-text-primary hover:text-primary hover:underline"
                     >
-                      unlink
-                    </button>
+                      {p.repoFullName}
+                      <Inline as="span" gap="none" className="text-[10px] text-text-tertiary" aria-hidden="true">↗</Inline>
+                    </ExternalLink>
+                    {!p.connectionName && <Chip size="xs">public</Chip>}
+                    {p.orgProjectName && (
+                      p.orgProjectId ? (
+                        <Link
+                          to={`/iq/projects/${p.orgProjectId}`}
+                          title={`Open the initiative this codebase delivers: ${p.orgProjectName}`}
+                          className="max-w-[40%] shrink-0 truncate rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary no-underline hover:underline"
+                        >
+                          {p.orgProjectName}
+                        </Link>
+                      ) : (
+                        <Chip size="xs" tone="accent" title={`Delivers: ${p.orgProjectName}`}>{p.orgProjectName}</Chip>
+                      )
+                    )}
+                  </Inline>
+                  {canDevbox && (
+                    <Button variant="ghost" size="sm" onClick={() => void unlink(p)}>unlink</Button>
                   )}
-                </div>
+                </Inline>
 
-                <div className="px-3.5 py-2.5 flex items-center gap-2 flex-wrap border-b border-border">
+                <Inline align="center" gap="sm" wrap justify="between" className="border-b border-border px-3.5 py-2.5">
                   {inWorkspace ? (
                     <>
-                      <span className="text-[11px] text-success">in {box?.label}</span>
-                      <span className="text-[11px] text-text-tertiary font-mono truncate">{p.checkout}</span>
-                      <div className="flex-1" />
+                      <Inline align="center" gap="sm" wrap>
+                        <Inline as="span" gap="none" className="text-[11px] text-success">in {box?.label}</Inline>
+                        <Inline as="span" gap="none" className="truncate font-mono text-[11px] text-text-tertiary">{p.checkout}</Inline>
+                      </Inline>
                       {canDevbox && (
-                        <>
-                          <button
-                            onClick={() => { setRunFor(p); setPrompt(''); }}
-                            className="px-2.5 py-1 rounded-md border-none bg-primary text-white text-[11px] font-semibold cursor-pointer"
-                          >
+                        <Inline gap="xs">
+                          <Button variant="primary" size="sm" onClick={() => { setRunFor(p); setPrompt(''); }}>
                             Run a task
-                          </button>
-                          <button
+                          </Button>
+                          <Button
+                            variant="secondary" size="sm"
                             onClick={() => box && openShell({ id: box.id, label: box.label, sessionId: box.sessionId, cwd: p.checkout })}
-                            className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors"
                           >
                             Open shell
-                          </button>
-                        </>
+                          </Button>
+                        </Inline>
                       )}
                     </>
                   ) : (
                     <>
-                      <span className="text-[11px] text-text-tertiary">
+                      <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">
                         {p.clonedAt
                           // A workspace is disposable; the project is not.
                           ? 'Its workspace is gone — microVMs are wiped by image pushes and expire when idle.'
                           : 'Not in a workspace yet.'}
-                      </span>
-                      <div className="flex-1" />
+                      </Inline>
                       {canDevbox && (
-                        <button
-                          disabled={busy === `clone:${p.id}`}
-                          onClick={() => void clone(p)}
-                          className="px-2.5 py-1 rounded-md border-none bg-primary text-white text-[11px] font-semibold cursor-pointer disabled:opacity-50"
-                        >
+                        <Button variant="primary" size="sm" disabled={busy === `clone:${p.id}`} onClick={() => void clone(p)}>
                           {busy === `clone:${p.id}` ? 'cloning…' : p.clonedAt ? 'Re-clone' : 'Clone into workspace'}
-                        </button>
+                        </Button>
                       )}
                     </>
                   )}
-                </div>
+                </Inline>
 
                 {p.owners.length > 0 && (
-                  <div className="px-3.5 py-2 border-b border-border text-[11px] text-text-tertiary">
+                  <Inline as="span" gap="none" className="border-b border-border px-3.5 py-2 text-[11px] text-text-tertiary">
                     Accountable: {p.owners.map((o) => o.name + (o.role ? ` (${o.role})` : '')).join(', ')}
-                  </div>
+                  </Inline>
                 )}
 
                 {runs.length === 0 ? (
-                  <div className="px-3.5 py-3 text-[11px] text-text-tertiary">
+                  <Inline as="span" gap="none" className="px-3.5 py-3 text-[11px] text-text-tertiary">
                     Nothing has been run against this yet.
-                  </div>
+                  </Inline>
                 ) : (
-                  runs.map((r) => (
-                    <div
-                      key={r.id}
-                      className={`px-3.5 py-2 border-b border-border last:border-b-0 flex items-start gap-2.5 ${
-                        r.id === focusRun ? 'bg-primary/5 border-l-2 border-l-primary' : ''}`}
-                    >
-                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${STATUS_TONE[r.status]}`}>
-                        {r.status}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[12px] text-text-primary truncate" title={r.prompt}>{r.prompt}</div>
-                        <div className="text-[11px] text-text-tertiary">
-                          {when(r.startedAt)}
-                          {r.model ? ` · ${r.model}` : ''}
-                          {r.durationMs != null ? ` · ${dur(r.durationMs)}` : ''}
-                          {r.filesChanged != null ? ` · ${r.filesChanged} ${r.filesChanged === 1 ? 'file' : 'files'} changed` : ''}
-                          {r.costUsd != null ? ` · $${r.costUsd.toFixed(4)}` : ''}
-                        </div>
-                        {r.diffSummary && (
-                          <div className="text-[11px] text-text-secondary mt-0.5 truncate" title={r.diffSummary}>
-                            {r.diffSummary}
-                          </div>
-                        )}
-                        {r.error && <div className="text-[11px] text-danger mt-0.5 truncate">{r.error}</div>}
-                      </div>
-                    </div>
-                  ))
+                  <Stack gap="none">
+                    {runs.map((r) => (
+                      <Inline
+                        key={r.id}
+                        align="start" gap="sm"
+                        className={`border-b border-border px-3.5 py-2 last:border-b-0 ${
+                          r.id === focusRun ? 'border-l-2 border-l-primary bg-primary/5' : ''}`}
+                      >
+                        <Chip tone={STATUS_TONE[r.status]} size="xs">{r.status}</Chip>
+                        <Stack gap="none" className="min-w-0 flex-1">
+                          <Inline as="span" gap="none" className="truncate text-[12px] text-text-primary" title={r.prompt}>{r.prompt}</Inline>
+                          <MetaLine
+                            size="xs"
+                            items={[
+                              when(r.startedAt),
+                              r.model,
+                              r.durationMs != null ? dur(r.durationMs) : null,
+                              r.filesChanged != null ? `${r.filesChanged} ${r.filesChanged === 1 ? 'file' : 'files'} changed` : null,
+                              r.costUsd != null ? `$${r.costUsd.toFixed(4)}` : null,
+                            ]}
+                          />
+                          {r.diffSummary && (
+                            <Inline as="span" gap="none" className="mt-0.5 truncate text-[11px] text-text-secondary" title={r.diffSummary}>
+                              {r.diffSummary}
+                            </Inline>
+                          )}
+                          {r.error && (
+                            <Inline as="span" gap="none" className="mt-0.5 truncate text-[11px] text-danger">{r.error}</Inline>
+                          )}
+                        </Stack>
+                      </Inline>
+                    ))}
+                  </Stack>
                 )}
 
                 {(openChangesByProject[p.id] ?? 0) > 0 && (
-                  <div className="px-3.5 py-2 border-t border-border bg-warning-bg/40">
+                  <Inline className="border-t border-border bg-warning-bg/40 px-3.5 py-2">
                     <Link to="/admin/changes" className="text-[11px] font-semibold text-warning no-underline hover:underline">
                       {openChangesByProject[p.id]} change{openChangesByProject[p.id] === 1 ? '' : 's'} awaiting review →
                     </Link>
-                  </div>
+                  </Inline>
                 )}
               </Card>
             );
           })}
-        </div>
+        </CatalogGrid>
       )}
 
       <RepoDiscovery
@@ -611,55 +575,38 @@ export default function AgentProjectsPage() {
       />
 
       {/* The run box. One prompt, one project — the thing you reach for. */}
-      {runFor && (
-        <div
-          className="fixed inset-0 z-[150] bg-black/40 flex items-start justify-center pt-[18vh]"
-          onClick={() => setRunFor(null)}
-        >
-          <div
-            className="w-[560px] max-w-[92vw] rounded-lg border border-border bg-surface shadow-xl overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
-              <span className="text-xs font-semibold text-text-secondary">RUN ON</span>
-              <span className="text-[12px] font-mono text-text-primary">{runFor.repoFullName}</span>
-            </div>
-            <div className="p-4">
-              <textarea
-                autoFocus
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void run();
-                  if (e.key === 'Escape') setRunFor(null);
-                }}
-                rows={4}
-                placeholder="Add a health check endpoint and a test for it. Commit on a branch."
-                className="w-full px-2.5 py-2 rounded-md border border-border bg-surface text-[12px] text-text-primary resize-y"
-              />
-              <div className="flex items-center gap-2 mt-2.5">
-                <select
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  className="px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary"
-                >
-                  {DEVBOX_MODELS.map((m) => (
-                    <option key={m.id} value={m.id} title={m.hint}>{m.label}</option>
-                  ))}
-                </select>
-                <span className="text-[11px] text-text-tertiary flex-1">⌘⏎ to run · esc to close</span>
-                <button
-                  disabled={busy === 'run' || !prompt.trim()}
-                  onClick={() => void run()}
-                  className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-40"
-                >
-                  {busy === 'run' ? 'starting…' : 'Run'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        open={runFor != null}
+        onClose={() => setRunFor(null)}
+        title={runFor ? `Run on ${runFor.repoFullName}` : 'Run'}
+        footer={
+          <Inline align="center" justify="between" gap="sm" className="w-full">
+            <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">⌘⏎ to run · esc to close</Inline>
+            <Button variant="primary" size="sm" disabled={busy === 'run' || !prompt.trim()} onClick={() => void run()}>
+              {busy === 'run' ? 'starting…' : 'Run'}
+            </Button>
+          </Inline>
+        }
+      >
+        <Stack gap="sm">
+          <Textarea
+            autoFocus
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void run();
+              if (e.key === 'Escape') setRunFor(null);
+            }}
+            rows={4}
+            placeholder="Add a health check endpoint and a test for it. Commit on a branch."
+          />
+          <Select
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            options={DEVBOX_MODELS.map((m) => ({ value: m.id, label: `${m.label} — ${m.hint}` }))}
+          />
+        </Stack>
+      </Modal>
     </PageSection>
   );
 }

@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Card, ConfirmDialog, PageSection } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button, Card, ConfirmDialog, EmptyState, Inline, InlineAlert, PageSection,
+  Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { SiteSurveyPanel } from '../../components/ingest/SiteSurveyPanel';
 import { ConnectedSources } from '../../components/ingest/ConnectedSources';
@@ -10,7 +13,8 @@ import { ActiveRunsStrip } from '../../components/ingest/ActiveRunsStrip';
 import { RunDetailDrawer } from '../../components/ingest/RunDetailDrawer';
 import { NewTargetModal } from '../../components/ingest/NewTargetModal';
 import type { TargetDraft } from '../../components/ingest/NewTargetModal';
-import { Button, EmptyState, PulseDot } from '../../components/ingest/ui';
+import { PulseDot } from '../../components/ingest/ui';
+import { T } from './Text';
 
 function CrawlTargetsPage() {
   // Target CRUD, runs and cancels all ride /api/ingest (ManageIngest).
@@ -133,94 +137,88 @@ function CrawlTargetsPage() {
       title="1 · Sources"
       description="What content gets pulled in. Each target is a site the crawler reads and turns into documents."
     >
-      {actionMessage && (
-        <div style={{
-          padding: 10, marginBottom: 12, borderRadius: 4, fontSize: 12,
-          background: actionMessage.tone === 'ok' ? '#ecfdf5' : '#fef2f2',
-          color: actionMessage.tone === 'ok' ? '#065f46' : '#991b1b',
-        }}>
-          {actionMessage.text}
-        </div>
-      )}
-
-      <ConnectedSources />
-
-      <SiteSurveyPanel onTargetCreated={refreshTargets} />
-
-      {/* Crawl Targets */}
-      <Card padding="md" style={{ marginBottom: 16 }}>
-        {canManage && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <Button variant="primary" onClick={() => setShowNewTarget(true)}>
-              + New Target
-            </Button>
-          </div>
+      <Stack gap="md">
+        {actionMessage && (
+          <InlineAlert tone={actionMessage.tone === 'ok' ? 'success' : 'error'}>
+            {actionMessage.text}
+          </InlineAlert>
         )}
-        {targets.length === 0 ? (
-          <EmptyState title="No crawl targets yet" body="Define a target to start ingesting public web content with vision-LLM extraction." />
-        ) : (
-          <TargetsTable
-            targets={targets}
-            busyId={targetBusy}
-            readOnly={!canManage}
-            onRun={runTarget}
-            onEdit={(t) => setEditTarget(t)}
-            onDelete={(t) => setDeleteTarget(t)}
-            onToggle={toggleTarget}
-          />
-        )}
-      </Card>
 
-      {/* Active Crawls — only when something is running */}
-      {activeCrawls.length > 0 && (
-        <Card padding="md" style={{ marginBottom: 16, borderLeft: '3px solid var(--color-warning)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-            <PulseDot active color="var(--color-warning)" />
-            <h2 style={{ fontSize: 14, fontWeight: 600 }}>
-              Active Crawls{' '}
-              <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 400 }}>
-                · {activeCrawls.length} running
-              </span>
-            </h2>
-          </div>
-          <ActiveRunsStrip
-            sessions={activeCrawls}
-            onCancel={cancelCrawl}
-            onOpen={openCrawl}
-          />
+        <ConnectedSources />
+
+        <SiteSurveyPanel onTargetCreated={refreshTargets} />
+
+        {/* Crawl Targets */}
+        <Card padding="md">
+          {canManage && (
+            <Inline justify="end" className="mb-3">
+              <Button variant="primary" onClick={() => setShowNewTarget(true)}>
+                + New Target
+              </Button>
+            </Inline>
+          )}
+          {targets.length === 0 ? (
+            <EmptyState title="No crawl targets yet" body="Define a target to start ingesting public web content with vision-LLM extraction." />
+          ) : (
+            <TargetsTable
+              targets={targets}
+              busyId={targetBusy}
+              readOnly={!canManage}
+              onRun={runTarget}
+              onEdit={(t) => setEditTarget(t)}
+              onDelete={(t) => setDeleteTarget(t)}
+              onToggle={toggleTarget}
+            />
+          )}
         </Card>
-      )}
 
-      {/* Right-side drawer for crawl run details (uses PageDetailModal internally) */}
-      <RunDetailDrawer
-        crawlId={drawerCrawlId}
-        initialSession={drawerInitial}
-        onClose={() => { setDrawerCrawlId(null); setDrawerInitial(null); }}
-      />
+        {/* Active Crawls — only when something is running */}
+        {activeCrawls.length > 0 && (
+          <Card padding="md" className="border-l-[3px] border-l-warning">
+            <Inline gap="sm" align="baseline" className="mb-3">
+              <PulseDot active color="var(--color-warning)" />
+              <T className="text-[14px] font-semibold">Active Crawls</T>
+              <T className="text-[11px] font-normal text-text-tertiary">· {activeCrawls.length} running</T>
+            </Inline>
+            <ActiveRunsStrip
+              sessions={activeCrawls}
+              onCancel={cancelCrawl}
+              onOpen={openCrawl}
+            />
+          </Card>
+        )}
 
-      {/* Target create/edit modal */}
-      {(showNewTarget || editTarget) && (
-        <NewTargetModal
-          existing={editTarget}
-          onSave={saveTarget}
-          onCancel={() => { setShowNewTarget(false); setEditTarget(null); }}
+        {/* Right-side drawer for crawl run details (uses PageDetailModal internally) */}
+        <RunDetailDrawer
+          crawlId={drawerCrawlId}
+          initialSession={drawerInitial}
+          onClose={() => { setDrawerCrawlId(null); setDrawerInitial(null); }}
         />
-      )}
 
-      <ConfirmDialog
-        open={!!deleteTarget}
-        onConfirm={() => {
-          if (deleteTarget) {
-            const t = deleteTarget;
-            setDeleteTarget(null);
-            void runDeleteTarget(t);
-          }
-        }}
-        onCancel={() => setDeleteTarget(null)}
-        tone="destructive"
-        title={deleteTarget ? `Delete "${deleteTarget.label}"?` : 'Delete target?'}
-        body="Run history is preserved. This cannot be undone."
-      />
+        {/* Target create/edit modal */}
+        {(showNewTarget || editTarget) && (
+          <NewTargetModal
+            existing={editTarget}
+            onSave={saveTarget}
+            onCancel={() => { setShowNewTarget(false); setEditTarget(null); }}
+          />
+        )}
+
+        <ConfirmDialog
+          open={!!deleteTarget}
+          onConfirm={() => {
+            if (deleteTarget) {
+              const t = deleteTarget;
+              setDeleteTarget(null);
+              void runDeleteTarget(t);
+            }
+          }}
+          onCancel={() => setDeleteTarget(null)}
+          tone="destructive"
+          title={deleteTarget ? `Delete "${deleteTarget.label}"?` : 'Delete target?'}
+          body="Run history is preserved. This cannot be undone."
+        />
+      </Stack>
     </PageSection>
   );
 }

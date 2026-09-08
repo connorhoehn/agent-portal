@@ -2,9 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { clearContextChosen } from './contextChoice';
 import { clearTenantScopedCaches } from './tenantCaches';
 
-export type Role = 'member' | 'sme' | 'org-leader' | 'hr-admin' | 'reporter' | 'editor';
+export type Role = 'member' | 'sme' | 'program-owner' | 'org-leader' | 'hr-admin';
 export type SessionRole = Role | 'admin';
-export type Tenant = 'orgiq' | 'newsroom';
+export type Tenant = 'orgiq' | 'assessment';
 
 /** tenant id → roles held there (from user_tenant_roles via the session cookie). */
 export type Grants = Record<string, string[]>;
@@ -15,6 +15,10 @@ export interface Session {
   role: SessionRole;
   tenant: Tenant;
   grants: Grants;
+  /** What the identity may still switch to — equals `grants` for a real
+   *  user; wider for the demo persona, whose session is narrowed to the one
+   *  role it picked while the picker keeps offering every persona. */
+  switchable: Grants;
   availableRoles: string[];
   availableTenants: Tenant[];
   masquerading: { asUser: string; actor: string } | null;
@@ -61,7 +65,7 @@ const SessionContext = createContext<SessionContextValue | null>(null);
 
 // A tenant's landing route. Switching account redirects here so the whole app
 // re-drives from the freshly re-minted session cookie.
-const TENANT_HOME: Record<string, string> = { orgiq: '/iq/work', newsroom: '/newsroom/home' };
+const TENANT_HOME: Record<string, string> = { orgiq: '/iq/work', assessment: '/assessment/teams' };
 
 // Fail closed. When /api/session/me is unreachable we do NOT know who the user
 // is, so we grant nothing: an empty grants map, no switchable roles/tenants.
@@ -75,6 +79,7 @@ const UNAVAILABLE_SESSION: Session = {
   role: 'member',
   tenant: 'orgiq',
   grants: {},
+  switchable: {},
   availableRoles: [],
   availableTenants: ['orgiq'],
   masquerading: null,
@@ -131,6 +136,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         role: (raw.role as SessionRole) ?? 'member',
         tenant: (raw.tenant as Tenant) ?? 'orgiq',
         grants: raw.grants ?? {},
+        switchable: raw.switchable ?? raw.grants ?? {},
         availableRoles: raw.availableRoles ?? [],
         availableTenants: raw.availableTenants ?? ['orgiq'],
         masquerading: raw.masquerading ?? null,
@@ -308,6 +314,24 @@ export function useSession(): SessionContextValue {
   const ctx = useContext(SessionContext);
   if (!ctx) throw new Error('useSession must be used inside <SessionProvider>');
   return ctx;
+}
+
+/**
+ * Gate a whole route tree on the session's TENANT. The rail already hides
+ * another tenant's entries, but hiding a door is not locking it: an orgiq SME
+ * who typed /assessment/teams got the assessment shell and a page of
+ * "Couldn't load" 403s — they could see the pages. This is the client half of
+ * requireTenant(); the API gate stays the truth. `admin` is cross-tenant.
+ */
+export function RequireTenant({ tenant, children, fallback = null }: {
+  tenant: Tenant;
+  children: ReactNode;
+  fallback?: ReactNode;
+}) {
+  const { session, isLoading } = useSession();
+  if (isLoading) return null;
+  if (!session || (session.role !== 'admin' && session.tenant !== tenant)) return <>{fallback}</>;
+  return <>{children}</>;
 }
 
 export function RequireRole({ roles, children, fallback = null }: {

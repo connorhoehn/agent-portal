@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Button, Card, CatalogGrid, Inline, InlineAlert, InlinePlaceholder, Input, SectionLabel, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, CardHeader, CatalogGrid, Inline, InlineAlert, InlinePlaceholder, Input, SectionLabel, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../../lib/capabilities';
 import { askPage } from './browserApi';
 import type { WebQAResult } from './types';
+import { T } from '../Text';
 
 /**
  * Web Q&A: URL + question → screenshot + Nova Lite answer.
@@ -37,16 +38,12 @@ export function WebQATab() {
   }
 
   return (
-    <Card padding="md">
-      <Stack gap="md">
-        <Stack gap="xs">
-          <h2 className="text-[14px] font-semibold text-text-primary">Ask a webpage</h2>
-          <p className="text-[12px] leading-relaxed text-text-tertiary">
-            Spins up a sandboxed Chrome, screenshots the page, sends it + your question to Nova Lite
-            (multimodal). Returns an answer grounded in the visible content.
-          </p>
-        </Stack>
-
+    <Card padding="none" className="overflow-hidden">
+      <CardHeader
+        title="Ask a webpage"
+        subtitle="Spins up a sandboxed Chrome, screenshots the page, sends it + your question to Nova Lite (multimodal). Returns an answer grounded in the visible content."
+      />
+      <Stack gap="md" className="px-3.5 py-3">
         {canManage ? (
           <Stack gap="sm">
             <Input
@@ -81,6 +78,7 @@ export function WebQATab() {
   );
 }
 
+
 function WebQAResultPanes({ result }: { result: WebQAResult }) {
   return (
     <CatalogGrid columns={2} dense>
@@ -96,7 +94,7 @@ function WebQAResultPanes({ result }: { result: WebQAResult }) {
       </Stack>
       <Stack gap="xs">
         <SectionLabel>Answer</SectionLabel>
-        <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-text-primary">{result.answer}</p>
+        <T className="whitespace-pre-wrap text-[13px] leading-relaxed text-text-primary" wrap>{result.answer}</T>
       </Stack>
     </CatalogGrid>
   );

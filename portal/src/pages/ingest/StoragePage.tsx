@@ -1,6 +1,6 @@
 import {
-  Card, Table, TableHead, TableBody, TableRow, TableTh, TableTd,
-  PageSection,
+  Card, CardHeader, KPIGrid, PageSection, StatCard, Stack, Table, TableBody,
+  TableHead, TableRow, TableTd, TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { formatBytes } from '../../components/ingest/types';
@@ -15,161 +15,112 @@ function StoragePage() {
       title="3 · Storage"
       description="Where ingested documents land in S3, and how much of it the knowledge base has chunked."
     >
-      {/* Totals row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-        <TotalCard
-          label="S3 Bucket"
-          value={storage?.bucket ?? '—'}
-          mono
-        />
-        <TotalCard
-          label="Total Objects"
-          value={storage ? storage.totalObjects.toLocaleString() : '—'}
-        />
-        <TotalCard
-          label="Total Bytes"
-          value={storage ? formatBytes(storage.totalBytes) : '—'}
-        />
-      </div>
+      <Stack gap="md">
+        {/* Totals row */}
+        <KPIGrid columns={3}>
+          <StatCard label="S3 Bucket" value={storage?.bucket ?? '—'} mono />
+          <StatCard label="Total Objects" value={storage ? storage.totalObjects.toLocaleString() : '—'} />
+          <StatCard label="Total Bytes" value={storage ? formatBytes(storage.totalBytes) : '—'} />
+        </KPIGrid>
 
-      {/* KB indexed docs */}
-      <Card padding="md" style={{ marginBottom: 16 }}>
-        <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Knowledge Base</h3>
-        {!storage ? (
-          <EmptyState title="Loading storage breakdown…" />
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
-            <KVStat
-              label="KB Documents Indexed"
-              value={storage.kb.totalDocuments.toLocaleString()}
-            />
-            <KVStat
-              label="Last KB Ingest"
-              value={storage.kb.lastIngestedAt ? new Date(storage.kb.lastIngestedAt).toLocaleString() : '—'}
-            />
-          </div>
-        )}
-      </Card>
+        {/* KB indexed docs */}
+        <Card padding="md">
+          <CardHeader title="Knowledge Base" />
+          {!storage ? (
+            <EmptyState title="Loading storage breakdown…" />
+          ) : (
+            <KPIGrid columns={2}>
+              <StatCard label="KB Documents Indexed" value={storage.kb.totalDocuments.toLocaleString()} />
+              <StatCard
+                label="Last KB Ingest"
+                value={storage.kb.lastIngestedAt ? new Date(storage.kb.lastIngestedAt).toLocaleString() : '—'}
+              />
+            </KPIGrid>
+          )}
+        </Card>
 
-      {/* By extension */}
-      <Card padding="md" style={{ marginBottom: 16 }}>
-        <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>By File Type</h3>
-        {!storage || storage.byType.length === 0 ? (
-          <EmptyState title="No S3 objects yet." />
-        ) : (
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableTh>Extension</TableTh>
-                <TableTh style={{ textAlign: 'right' }}>Count</TableTh>
-                <TableTh style={{ textAlign: 'right' }}>Bytes</TableTh>
-                <TableTh style={{ textAlign: 'right' }}>Share</TableTh>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {storage.byType.map((row) => (
-                <TableRow key={row.extension}>
-                  <TableTd style={{ fontFamily: 'monospace', fontSize: 12 }}>
-                    {row.extension || '(none)'}
-                  </TableTd>
-                  <TableTd style={{ textAlign: 'right', fontSize: 12 }}>
-                    {row.count.toLocaleString()}
-                  </TableTd>
-                  <TableTd style={{ textAlign: 'right', fontSize: 12 }}>
-                    {formatBytes(row.bytes)}
-                  </TableTd>
-                  <TableTd style={{ textAlign: 'right', fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-                    {storage.totalBytes > 0
-                      ? `${((row.bytes / storage.totalBytes) * 100).toFixed(1)}%`
-                      : '—'}
-                  </TableTd>
+        {/* By extension */}
+        <Card padding="md">
+          <CardHeader title="By File Type" />
+          {!storage || storage.byType.length === 0 ? (
+            <EmptyState title="No S3 objects yet." />
+          ) : (
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableTh>Extension</TableTh>
+                  <TableTh className="text-right">Count</TableTh>
+                  <TableTh className="text-right">Bytes</TableTh>
+                  <TableTh className="text-right">Share</TableTh>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </Card>
+              </TableHead>
+              <TableBody>
+                {storage.byType.map((row) => (
+                  <TableRow key={row.extension}>
+                    <TableTd className="font-mono text-[12px]">
+                      {row.extension || '(none)'}
+                    </TableTd>
+                    <TableTd className="text-right text-[12px]">
+                      {row.count.toLocaleString()}
+                    </TableTd>
+                    <TableTd className="text-right text-[12px]">
+                      {formatBytes(row.bytes)}
+                    </TableTd>
+                    <TableTd className="text-right text-[11px] text-text-tertiary">
+                      {storage.totalBytes > 0
+                        ? `${((row.bytes / storage.totalBytes) * 100).toFixed(1)}%`
+                        : '—'}
+                    </TableTd>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </Card>
 
-      {/* By prefix */}
-      <Card padding="md" style={{ marginBottom: 16 }}>
-        <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>By Prefix</h3>
-        {!storage || storage.byPrefix.length === 0 ? (
-          <EmptyState title="No S3 objects yet." />
-        ) : (
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableTh>Prefix</TableTh>
-                <TableTh style={{ textAlign: 'right' }}>Count</TableTh>
-                <TableTh style={{ textAlign: 'right' }}>Bytes</TableTh>
-                <TableTh style={{ textAlign: 'right' }}>Share</TableTh>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {storage.byPrefix.map((row) => (
-                <TableRow key={row.prefix}>
-                  <TableTd
-                    style={{
-                      fontFamily: 'monospace',
-                      fontSize: 11,
-                      color: 'var(--color-text-secondary)',
-                      maxWidth: 480,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                    title={row.prefix}
-                  >
-                    {row.prefix}
-                  </TableTd>
-                  <TableTd style={{ textAlign: 'right', fontSize: 12 }}>
-                    {row.count.toLocaleString()}
-                  </TableTd>
-                  <TableTd style={{ textAlign: 'right', fontSize: 12 }}>
-                    {formatBytes(row.bytes)}
-                  </TableTd>
-                  <TableTd style={{ textAlign: 'right', fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-                    {storage.totalBytes > 0
-                      ? `${((row.bytes / storage.totalBytes) * 100).toFixed(1)}%`
-                      : '—'}
-                  </TableTd>
+        {/* By prefix */}
+        <Card padding="md">
+          <CardHeader title="By Prefix" />
+          {!storage || storage.byPrefix.length === 0 ? (
+            <EmptyState title="No S3 objects yet." />
+          ) : (
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableTh>Prefix</TableTh>
+                  <TableTh className="text-right">Count</TableTh>
+                  <TableTh className="text-right">Bytes</TableTh>
+                  <TableTh className="text-right">Share</TableTh>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </Card>
+              </TableHead>
+              <TableBody>
+                {storage.byPrefix.map((row) => (
+                  <TableRow key={row.prefix}>
+                    <TableTd
+                      className="max-w-[480px] overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[11px] text-text-secondary"
+                      title={row.prefix}
+                    >
+                      {row.prefix}
+                    </TableTd>
+                    <TableTd className="text-right text-[12px]">
+                      {row.count.toLocaleString()}
+                    </TableTd>
+                    <TableTd className="text-right text-[12px]">
+                      {formatBytes(row.bytes)}
+                    </TableTd>
+                    <TableTd className="text-right text-[11px] text-text-tertiary">
+                      {storage.totalBytes > 0
+                        ? `${((row.bytes / storage.totalBytes) * 100).toFixed(1)}%`
+                        : '—'}
+                    </TableTd>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </Card>
+      </Stack>
     </PageSection>
-  );
-}
-
-function TotalCard({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <Card padding="md">
-      <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>{label}</div>
-      <div
-        style={{
-          fontSize: 20,
-          fontWeight: 700,
-          marginTop: 4,
-          fontFamily: mono ? 'ui-monospace, SFMono-Regular, Menlo, monospace' : undefined,
-          wordBreak: 'break-all',
-        }}
-      >
-        {value}
-      </div>
-    </Card>
-  );
-}
-
-function KVStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
-        {label}
-      </div>
-      <div style={{ fontSize: 14, fontWeight: 600 }}>{value}</div>
-    </div>
   );
 }
 

@@ -1,6 +1,9 @@
-import { useState, useEffect } from 'react';
-import { FilterChip } from '@connorhoehnslalom/ui-components/shared';
+import { useEffect, useMemo, useReducer, useRef } from 'react';
+import type { KeyboardEvent } from 'react';
+import { Button, EmptyState, FilterChip, Inline, Input } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { filterSkillSuggestions } from './scoresFormat';
+import { initialSkillComboboxState, skillComboboxReducer } from './skillComboboxState';
 
 interface SkillSummary {
   id: string;
@@ -13,158 +16,171 @@ interface Props {
   onChange: (skill: string) => void;
 }
 
+// A free-text combobox, not a search box plus a permanent row of the top 10
+// skill chips — that chip row was one of six stacked blocks pushing the
+// leaderboard below the fold (DEFECTS.md #3).
+//
+// This is deliberately NOT built on the library's `InlinePopover`/
+// `PersonHoverCard`: both open on bare focus and unconditionally move focus
+// into the panel + trap Tab there for as long as they're open (see
+// `docs/ui-components-queue.md`'s "non-modal, non-trapping hover/pin
+// disclosure" row) — exactly the shape DEFECTS.md org-leader #10 found here:
+// Tab onto the search box opened a `role=dialog` reading `No skills match
+// ""`, stole focus into its own Clear button, and from then on Tab and
+// Escape did nothing and only the first typed character reached the input.
+// The suggestion list below is a plain, non-focusable, absolutely
+// positioned panel instead (same gap as the prompt-variable `Combobox` row
+// already queued for `capabilities/prompts/VarCombobox.tsx`) — the input
+// never loses focus, ArrowDown/ArrowUp only move `aria-activedescendant`,
+// Enter picks the highlight, Escape closes without clearing the query, and
+// Tab is never intercepted. `skillComboboxState.ts` holds the actual
+// open/query/highlight transitions so they're unit-tested without mounting
+// this component.
 export function SkillFilter({ selectedSkill, onChange }: Props) {
   const { data: skills } = useFetch<SkillSummary[]>('/api/scores/skills');
-  const [query, setQuery] = useState('');
-  const [open, setOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(-1);
+  const [state, dispatch] = useReducer(skillComboboxReducer, initialSkillComboboxState);
+  const { query, open, activeIndex } = state;
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const topSkills = (skills ?? []).slice(0, 10);
+  const suggestions = useMemo(
+    () => filterSkillSuggestions(skills ?? [], query, 8),
+    [skills, query],
+  );
+  // Only render the panel once there is something real to show: either
+  // suggestions, or an actual miss on a non-empty query. This is what keeps
+  // an empty query from ever rendering `No skills match ""`, even if `open`
+  // flips true (via ArrowDown) before /api/scores/skills has resolved.
+  const showPanel = open && (suggestions.length > 0 || query.length > 0);
 
-  // Autocomplete suggestions when user is typing
-  const suggestions = query.length > 0
-    ? (skills ?? []).filter(s => s.name.toLowerCase().includes(query.toLowerCase())).slice(0, 8)
-    : [];
-
-  // Reset active index when suggestions change
-  useEffect(() => { setActiveIndex(-1); }, [suggestions.length]);
-
-  // Open listbox when there are suggestions
-  useEffect(() => {
-    setOpen(suggestions.length > 0);
-  }, [suggestions.length]);
-
-  function handleSelect(name: string) {
+  function pick(name: string) {
     onChange(name);
-    setQuery('');
-    setOpen(false);
-    setActiveIndex(-1);
+    dispatch({ type: 'select' });
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (!open || suggestions.length === 0) return;
+  function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        setActiveIndex(i => Math.min(i + 1, suggestions.length - 1));
+        dispatch({ type: 'arrow-down', count: suggestions.length });
         break;
       case 'ArrowUp':
+        if (!open) return;
         e.preventDefault();
-        setActiveIndex(i => Math.max(i - 1, 0));
+        dispatch({ type: 'arrow-up', count: suggestions.length });
         break;
       case 'Enter':
-        e.preventDefault();
-        if (activeIndex >= 0) {
-          handleSelect(suggestions[activeIndex].name);
+        if (open && activeIndex >= 0 && suggestions[activeIndex]) {
+          e.preventDefault();
+          pick(suggestions[activeIndex].name);
         }
         break;
       case 'Escape':
-        e.preventDefault();
-        setOpen(false);
-        setActiveIndex(-1);
+        if (open) {
+          // Close only — never call blur/preventDefault beyond stopping the
+          // event from bubbling to a page-level Escape handler; focus was
+          // never moved off this input, so there is nothing to restore.
+          e.stopPropagation();
+          dispatch({ type: 'close' });
+        }
         break;
+      // No 'Tab' case: default browser behavior moves focus to the next
+      // control, exactly the "Tab moves on" rule this combobox must satisfy.
     }
   }
 
+  // Outside click closes the panel without touching focus (Escape above is
+  // the keyboard equivalent).
+  useEffect(() => {
+    if (!open) return;
+    function onDocMouseDown(e: MouseEvent) {
+      if (!containerRef.current?.contains(e.target as Node)) dispatch({ type: 'close' });
+    }
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, [open]);
+
   return (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{
-        fontSize: 11,
-        textTransform: 'uppercase',
-        color: 'var(--color-text-tertiary)',
-        letterSpacing: '0.05em',
-        marginBottom: 6,
-      }}>
-        Ranked by skill:
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <FilterChip
-          active={selectedSkill === ''}
-          onClick={() => handleSelect('')}
-        >
-          All skills
-        </FilterChip>
-
-        {topSkills.map(skill => (
-          <FilterChip
-            key={skill.id}
-            active={selectedSkill === skill.name}
-            onClick={() => handleSelect(skill.name)}
-          >
-            {skill.name}
-          </FilterChip>
-        ))}
-
-        {/* Free-text autocomplete */}
-        <div style={{ position: 'relative' }}>
-          <input
-            type="text"
-            role="combobox"
-            aria-expanded={open && suggestions.length > 0}
-            aria-controls="skill-filter-listbox"
-            aria-autocomplete="list"
-            aria-activedescendant={activeIndex >= 0 ? `skill-option-${activeIndex}` : undefined}
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Search skill…"
-            aria-label="Search skills"
-            style={{
-              padding: '4px 8px',
-              fontSize: 11,
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-sm)',
-              background: 'var(--color-surface)',
-              color: 'var(--color-text-primary)',
-              outline: 'none',
-              width: 110,
-            }}
-          />
-          {open && suggestions.length > 0 && (
-            <ul
-              id="skill-filter-listbox"
-              role="listbox"
-              aria-label="Skill suggestions"
-              style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                zIndex: 100,
-                marginTop: 2,
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-sm)',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                minWidth: 160,
-                listStyle: 'none',
-                margin: '2px 0 0',
-                padding: 0,
-              }}
+    <Inline align="center" gap="xs">
+      <div ref={containerRef} className="relative w-[180px]">
+        <Input
+          value={query}
+          onChange={(e) => dispatch({ type: 'type', value: e.target.value })}
+          onKeyDown={handleKeyDown}
+          placeholder="Search skill…"
+          aria-label="Search skills"
+          size="sm"
+          role="combobox"
+          aria-expanded={showPanel}
+          aria-controls="skill-filter-listbox"
+          aria-autocomplete="list"
+          aria-activedescendant={activeIndex >= 0 ? `skill-option-${activeIndex}` : undefined}
+          // `suffix` must never flip between `undefined` and an element: the
+          // library's `Input` renders a bare `<input>` at the root when there
+          // is no prefix/suffix, but switches to a wrapping `<div><input/>
+          // <span>{suffix}</span></div>` the instant either is non-null
+          // (`Input-*.js`: `!_ && !v ? <input> : <div>…</div>`). That is a
+          // root *element type* change at this JSX position — clearing vs.
+          // typing the first character used to toggle `suffix` from
+          // `undefined` to a `<Button>`, so React tore down the whole
+          // subtree and mounted a brand-new `<input>` DOM node on the very
+          // keystroke that typed into it, dropping focus to `<body>` and
+          // losing every keystroke after the first (DEFECTS.md org-leader
+          // #10, second half). The suffix button is now always mounted —
+          // only its visibility/hit-testing/focusability change with
+          // `query` — so the wrapper shape, and the `<input>` node inside
+          // it, never change.
+          suffix={
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={!query}
+              tabIndex={query ? undefined : -1}
+              aria-hidden={query ? undefined : true}
+              className={`!p-0 !border-0 !bg-transparent h-auto ${query ? '' : 'invisible pointer-events-none'}`}
+              onClick={() => dispatch({ type: 'clear' })}
+              aria-label="Clear skill search"
             >
-              {suggestions.map((s, i) => (
-                <li
-                  key={s.id}
-                  id={`skill-option-${i}`}
-                  role="option"
-                  aria-selected={i === activeIndex}
-                  onClick={() => handleSelect(s.name)}
-                  onMouseEnter={() => setActiveIndex(i)}
-                  style={{
-                    padding: '6px 10px',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    color: 'var(--color-text-primary)',
-                    background: i === activeIndex ? 'var(--color-surface-hover)' : 'transparent',
-                  }}
-                >
-                  {s.name}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+              ✕
+            </Button>
+          }
+        />
+        {showPanel && (
+          <div className="absolute inset-x-0 top-full z-50 mt-1 rounded-lg border border-border bg-surface p-1.5 shadow-lg">
+            {suggestions.length === 0 ? (
+              <EmptyState
+                title={`No skills match "${query}"`}
+                actionLabel="Clear search"
+                onAction={() => dispatch({ type: 'clear' })}
+              />
+            ) : (
+              <ul id="skill-filter-listbox" role="listbox" aria-label="Skill suggestions" className="m-0 flex list-none flex-col gap-0.5 p-0">
+                {suggestions.map((s, i) => (
+                  <li
+                    key={s.id}
+                    id={`skill-option-${i}`}
+                    role="option"
+                    aria-selected={i === activeIndex}
+                    // mousedown (not click/onClick), with preventDefault, so
+                    // picking a suggestion never blurs the input first — the
+                    // input must never lose focus while this is open.
+                    onMouseDown={(e) => { e.preventDefault(); pick(s.name); }}
+                    className={`cursor-pointer select-none rounded px-2 py-1 text-[12px] ${
+                      i === activeIndex ? 'bg-primary-soft text-primary' : s.name === selectedSkill ? 'font-semibold text-text-primary' : 'text-text-primary'
+                    }`}
+                  >
+                    {s.name}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </div>
-    </div>
+      {selectedSkill && (
+        <FilterChip active onClick={() => onChange('')}>
+          Ranked by: {selectedSkill} ✕
+        </FilterChip>
+      )}
+    </Inline>
   );
 }

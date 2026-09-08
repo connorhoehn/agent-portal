@@ -4,7 +4,7 @@
 **Name**: `orgiq-researcher`
 **Namespace**: `orgiq`
 
-This is the first real CRD-based capability declaration by App #2 (OrgIQ). It declares OrgIQ's newsroom research workflow as a gateway-reconciled `AgenticPipeline` — the proof of concept for the platform's CRD-driven capability layer.
+This is the first real CRD-based capability declaration by App #2 (OrgIQ). It declares OrgIQ's research workflow as a gateway-reconciled `AgenticPipeline` — the proof of concept for the platform's CRD-driven capability layer.
 
 ---
 
@@ -16,7 +16,7 @@ User submits a query → agent searches → agent summarizes → optional human 
 |---|---|---|
 | `search` | `tool-call` | Calls `web-search` with the trigger's query payload; retries up to 3 times |
 | `summarize` | `llm` | Summarizes search results via `claude-opus-4-7` |
-| `approval` | `approval` | Human gate — requires `role:editor`; times out after 24 hours |
+| `approval` | `approval` | Human gate — requires `role:org-leader`; times out after 24 hours |
 | `publish` | `webhook` | POSTs the summary to `https://orgiq.example/api/publish` |
 
 Edges: `search → summarize → approval →(approved) publish`
@@ -107,7 +107,7 @@ Subscribe to `pipeline:run:<runId>` after connecting:
 { "type": "pipeline:step:waiting", "runId": "<runId>", "stepId": "approval" }
 ```
 
-The `approval` step emits a `pipeline:step:waiting` frame. The editor approves via:
+The `approval` step emits a `pipeline:step:waiting` frame. The approver approves via:
 
 ```bash
 curl -X POST https://<platform-api-host>/api/pipelines/runs/<runId>/approve \
@@ -120,5 +120,5 @@ curl -X POST https://<platform-api-host>/api/pipelines/runs/<runId>/approve \
 
 Wire end-to-end trigger + observe in the OrgIQ portal:
 - `ResearcherPipelinePage` (stub at `portal/src/pages/ResearcherPipelinePage.tsx`) uses `useAgentStream` to subscribe to active runs of `orgiq-researcher`.
-- Approval gate surfaced via a modal in the newsroom editor view.
+- Approval gate surfaced via a modal in the reviewer's approval view.
 - Full implementation deferred — see the stub for the scaffold.

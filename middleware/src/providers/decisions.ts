@@ -1,10 +1,20 @@
 // Decisions provider — reads decisions + participants from Aurora PostgreSQL.
-// Tables: decisions(id, topic, summary, decided_at, created_at)
+// Tables: decisions(id, topic, summary, status, project_id, decided_at, ...)
 //         decision_participants(person_id, decision_id, role, weight)
 //         people(id, name, title, team)
+//
+// `decisions` is ONE concept with a lifecycle — see the comment on the table in
+// schema/orgiq_schema.sql. This provider serves the whole table, settled ADRs
+// and open calls alike; `providers/work-items.ts` serves the same rows filtered
+// to one initiative. Both report `status` and `projectId` so the two surfaces
+// can be recognised as views of one list rather than two unrelated ones.
 
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
+import { config } from '../config.js';
 import { exec } from './aurora.js';
+import { countBy } from '../mock/core/index.js';
+import { decisionRows, decisionParticipantRows } from '../mock/decisions.js';
+import { mockPeople } from '../mock/people.js';
 
 // ─── Local RDS Data API parameter helpers (mirroring aurora.ts internals) ────
 
@@ -22,6 +32,10 @@ export interface DecisionSummary {
   id: string;
   topic: string;
   summary: string | null;
+  /** open | escalated | resolved | rejected. */
+  status: string;
+  /** The initiative it was raised against, or null for an org-wide call. */
+  projectId: string | null;
   decidedAt: string | null;
   participantCount: number;
 }
@@ -30,6 +44,8 @@ export interface DecisionDetail {
   id: string;
   topic: string;
   summary: string | null;
+  status: string;
+  projectId: string | null;
   decidedAt: string | null;
   participants: Array<{
     personId: string;
@@ -42,10 +58,76 @@ export interface DecisionDetail {
 
 // ─── Queries ─────────────────────────────────────────────────────────────────
 
+// ─── Mock path (config.mock.aurora) ──────────────────────────────────────────
+//
+// Mirrors the two SQL statements below rather than hand-writing their answers:
+// the same ordering, the same `since` filter, and participantCount COUNTED
+// from the participant rows instead of stored beside the decision.
+
+/**
+ * `COALESCE(d.decided_at, d.created_at)` — the expression the SQL orders and
+ * filters on. Both seeds leave `created_at` to its `NOW()` default, so a
+ * decision that has not been decided yet sorts and filters as today: an open
+ * call is the most recent thing that happened to it. Reading `decidedAt ?? ''`
+ * instead put every open decision at the BOTTOM of a list Aurora puts them at
+ * the top of, which is the same fixture disagreeing with the query it mirrors.
+ */
+const SEEDED_AT = new Date().toISOString().slice(0, 10);
+const activityDate = (d: { decidedAt: string | null }): string => d.decidedAt ?? SEEDED_AT;
+
+function mockListDecisions(limit: number, since?: string): DecisionSummary[] {
+  const counts = countBy(decisionParticipantRows.rows(), 'decisionId');
+  return decisionRows
+    .rows()
+    // WHERE d.decided_at >= :since OR (d.decided_at IS NULL AND d.created_at >= :since)
+    .filter((d) => !since || activityDate(d) >= since)
+    .slice()
+    // ORDER BY COALESCE(decided_at, created_at) DESC NULLS LAST
+    .sort((a, b) => activityDate(b).localeCompare(activityDate(a)))
+    .slice(0, limit)
+    .map((d) => ({
+      id: d.id,
+      topic: d.topic,
+      summary: d.summary,
+      status: d.status,
+      projectId: d.projectId,
+      decidedAt: d.decidedAt,
+      participantCount: counts.get(d.id) ?? 0,
+    }));
+}
+
+function mockGetDecision(id: string): DecisionDetail | null {
+  const head = decisionRows.rows().find((d) => d.id === id);
+  if (!head) return null;
+  const byId = new Map(mockPeople.map((p) => [p.id, p]));
+  return {
+    id: head.id,
+    topic: head.topic,
+    summary: head.summary,
+    status: head.status,
+    projectId: head.projectId,
+    decidedAt: head.decidedAt,
+    participants: decisionParticipantRows
+      .rows()
+      .filter((p) => p.decisionId === id)
+      // The SQL JOINs `people`, so a participant with no person row is dropped
+      // rather than rendered as a nameless id.
+      .flatMap((p) => {
+        const person = byId.get(p.personId);
+        return person
+          ? [{ personId: p.personId, name: person.name, title: person.title, role: p.role, weight: p.weight }]
+          : [];
+      })
+      // ORDER BY dp.weight DESC NULLS LAST, p.name
+      .sort((a, b) => b.weight - a.weight || a.name.localeCompare(b.name)),
+  };
+}
+
 export async function listDecisions(
   opts: { limit?: number; since?: string } = {},
 ): Promise<DecisionSummary[]> {
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
+  if (config.mock.aurora) return mockListDecisions(limit, opts.since);
 
   const params = [intParam('lim', limit)];
   let sinceClause = '';
@@ -60,13 +142,15 @@ export async function listDecisions(
       d.id,
       d.topic,
       d.summary,
+      d.status,
+      d.project_id,
       d.decided_at,
       COUNT(dp.person_id)::int AS participant_count
     FROM decisions d
     LEFT JOIN decision_participants dp ON dp.decision_id = d.id
     WHERE 1=1
     ${sinceClause}
-    GROUP BY d.id, d.topic, d.summary, d.decided_at
+    GROUP BY d.id, d.topic, d.summary, d.status, d.project_id, d.decided_at
     ORDER BY COALESCE(d.decided_at, d.created_at) DESC NULLS LAST
     LIMIT :lim
   `;
@@ -76,14 +160,18 @@ export async function listDecisions(
     id: String(r['id']),
     topic: String(r['topic'] ?? ''),
     summary: r['summary'] != null ? String(r['summary']) : null,
+    status: String(r['status'] ?? 'open'),
+    projectId: r['project_id'] != null ? String(r['project_id']) : null,
     decidedAt: r['decided_at'] != null ? String(r['decided_at']) : null,
     participantCount: typeof r['participant_count'] === 'number' ? r['participant_count'] : 0,
   }));
 }
 
 export async function getDecision(id: string): Promise<DecisionDetail | null> {
+  if (config.mock.aurora) return mockGetDecision(id);
+
   const headRows = await exec(
-    `SELECT id, topic, summary, decided_at FROM decisions WHERE id = :id LIMIT 1`,
+    `SELECT id, topic, summary, status, project_id, decided_at FROM decisions WHERE id = :id LIMIT 1`,
     [strParam('id', id)],
   );
 
@@ -108,6 +196,8 @@ export async function getDecision(id: string): Promise<DecisionDetail | null> {
     id: String(head['id']),
     topic: String(head['topic'] ?? ''),
     summary: head['summary'] != null ? String(head['summary']) : null,
+    status: String(head['status'] ?? 'open'),
+    projectId: head['project_id'] != null ? String(head['project_id']) : null,
     decidedAt: head['decided_at'] != null ? String(head['decided_at']) : null,
     participants: partRows.map((r) => ({
       personId: String(r['person_id']),

@@ -8,20 +8,25 @@
 //   POST /api/observability/approvals/:id/decision      { decision, note? }
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import type { CSSProperties } from 'react';
 import {
+  Button,
   Card,
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableTh,
-  TableTd,
   Chip,
+  CodeBlock,
+  Inline,
+  Input,
   PageSection,
+  StatusDot,
+  Table,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableTd,
+  TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 import { useCapabilities } from '../../lib/capabilities';
+import { T } from './Text';
 
 interface Approval {
   approvalId: string;
@@ -179,23 +184,15 @@ function ApprovalQueuePage() {
       title="Approval Queue"
       description="Pending HITL approvals. Initial list via REST; live updates over SSE. Decisions are optimistic — denied requests reappear with a danger chip."
       actions={
-        <div style={liveIndicator}>
-          <span
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: '50%',
-              background: streaming
-                ? 'var(--color-success, #10b981)'
-                : 'var(--color-text-tertiary)',
-            }}
+        <Inline gap="sm" align="center" className="text-[11px] text-text-secondary">
+          <StatusDot
+            color={streaming ? 'var(--color-success)' : 'var(--color-text-tertiary)'}
+            size="sm"
           />
-          {streaming ? 'live' : 'reconnecting…'}
-          <span style={{ color: 'var(--color-text-tertiary)' }}>·</span>
-          <span>
-            <strong>{sorted.length}</strong> pending
-          </span>
-        </div>
+          <T>{streaming ? 'live' : 'reconnecting…'}</T>
+          <T className="text-text-tertiary">·</T>
+          <T><strong>{sorted.length}</strong> pending</T>
+        </Inline>
       }
     >
       <Card padding="md">
@@ -228,66 +225,68 @@ function ApprovalQueuePage() {
                 return (
                   <Fragment key={a.approvalId}>
                     <TableRow>
-                      <TableTd style={tsCell}>
+                      <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
                         {new Date(a.requestedAt).toLocaleTimeString()}
                       </TableTd>
-                      <TableTd style={agentCell}>{a.agentId}</TableTd>
-                      <TableTd style={monoCell} title={a.txId}>
+                      <TableTd className="text-[12px] font-medium whitespace-nowrap">{a.agentId}</TableTd>
+                      <TableTd className="text-[11px] text-text-tertiary font-mono" title={a.txId}>
                         {a.txId.length > 12 ? `${a.txId.slice(0, 12)}…` : a.txId}
                       </TableTd>
-                      <TableTd style={reasonCell} title={a.reason}>
+                      <TableTd className="text-[12px] max-w-[320px] truncate" title={a.reason}>
                         {a.reason}
                       </TableTd>
                       <TableTd>
-                        <button
-                          style={btnSecondary}
+                        <Button
+                          variant="secondary"
+                          size="sm"
                           onClick={() => togglePayload(a.approvalId)}
                         >
                           {open ? 'hide' : 'show'}
-                        </button>
+                        </Button>
                       </TableTd>
                       <TableTd>
                         {canApprove ? (
-                          <div style={decideRow}>
-                            <input
+                          <Inline gap="xs" align="center" wrap>
+                            <Input
+                              size="sm"
                               value={notes[a.approvalId] ?? ''}
                               onChange={(e) =>
                                 setNotes((m) => ({ ...m, [a.approvalId]: e.target.value }))
                               }
                               placeholder="note (optional)"
-                              style={{ ...inputStyle, minWidth: 140 }}
+                              className="min-w-[140px]"
                             />
-                            <button
-                              style={btnApprove}
+                            <Button
+                              variant="primary"
+                              size="sm"
                               onClick={() => decide(a.approvalId, 'APPROVED')}
                             >
                               Approve
-                            </button>
-                            <button
-                              style={btnReject}
+                            </Button>
+                            <Button
+                              variant="danger-solid"
+                              size="sm"
                               onClick={() => decide(a.approvalId, 'REJECTED')}
                             >
                               Reject
-                            </button>
+                            </Button>
                             {denied[a.approvalId] && (
                               <Chip tone="danger" size="xs">
                                 Not authorized
                               </Chip>
                             )}
-                          </div>
+                          </Inline>
                         ) : (
-                          <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>
+                          <T className="text-[11px] text-text-tertiary italic">
                             Viewing only — your role can&apos;t decide approvals
-                          </span>
+                          </T>
                         )}
                       </TableTd>
                     </TableRow>
                     {open && (
                       <TableRow key={`${a.approvalId}-payload`}>
-                        <TableTd colSpan={6} style={{ padding: 12, background: 'var(--color-bg)' }}>
-                          <pre style={payloadPre}>
-                            {safeJson(a.payload)}
-                          </pre>
+                        <TableTd colSpan={6} className="p-3 bg-bg">
+                          <CodeBlock code={safeJson(a.payload)} language="json" />
                         </TableTd>
                       </TableRow>
                     )}
@@ -309,94 +308,5 @@ function safeJson(v: unknown): string {
     return String(v);
   }
 }
-
-const liveIndicator: CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 8,
-  fontSize: 11,
-  color: 'var(--color-text-secondary)',
-};
-
-const tsCell: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  whiteSpace: 'nowrap',
-};
-
-const agentCell: CSSProperties = {
-  fontSize: 12,
-  fontWeight: 500,
-  whiteSpace: 'nowrap',
-};
-
-const monoCell: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  fontFamily: 'ui-monospace, monospace',
-};
-
-const reasonCell: CSSProperties = {
-  fontSize: 12,
-  maxWidth: 320,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-};
-
-const decideRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  flexWrap: 'wrap',
-};
-
-const inputStyle: CSSProperties = {
-  padding: '4px 8px',
-  fontSize: 12,
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm, 4px)',
-  background: 'var(--color-surface)',
-  color: 'var(--color-text-primary)',
-};
-
-const btnSecondary: CSSProperties = {
-  padding: '4px 10px',
-  fontSize: 12,
-  background: 'var(--color-surface-hover)',
-  color: 'var(--color-text-primary)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm, 4px)',
-  cursor: 'pointer',
-};
-
-const btnApprove: CSSProperties = {
-  ...btnSecondary,
-  background: 'var(--color-success, #10b981)',
-  color: '#fff',
-  border: '1px solid var(--color-success, #10b981)',
-};
-
-const btnReject: CSSProperties = {
-  ...btnSecondary,
-  background: 'var(--color-danger, #dc2626)',
-  color: '#fff',
-  border: '1px solid var(--color-danger, #dc2626)',
-};
-
-const payloadPre: CSSProperties = {
-  fontFamily: '"Fira Code", "Cascadia Code", monospace',
-  fontSize: 11.5,
-  lineHeight: 1.55,
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
-  margin: 0,
-  padding: '10px 12px',
-  borderRadius: 'var(--radius-sm)',
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  maxHeight: 320,
-  overflowY: 'auto',
-};
 
 export default ApprovalQueuePage;

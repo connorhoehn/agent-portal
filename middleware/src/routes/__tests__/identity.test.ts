@@ -31,6 +31,13 @@ jest.mock('../../lib/authz.js', () => ({
       if (!manageAllow.value) { res.status(403).json({ error: 'Forbidden', action }); return; }
       next();
     },
+  // The read gate accepts either capability; this suite toggles one switch
+  // for both, same as before the split.
+  requireAnyAction: (actions: string[]) =>
+    (_req: unknown, res: { status: (n: number) => { json: (b: unknown) => void } }, next: () => void) => {
+      if (!manageAllow.value) { res.status(403).json({ error: 'Forbidden', action: actions.join('|') }); return; }
+      next();
+    },
   clearAuthzCache: jest.fn(),
 }));
 
@@ -60,11 +67,13 @@ jest.mock('../../providers/identity.js', () => ({
 jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn() }));
 
 import express, { type Request, type Response, type NextFunction } from 'express';
-import request from 'supertest';
+import request from '../../test-support/http.js';
 import { identityRouter } from '../identity.js';
 import { errorHandler } from '../../lib/async-handler.js';
-import { getUser } from '../../providers/identity.js';
+import { getUser, createTenant, createUser, setGrants } from '../../providers/identity.js';
 import { exec } from '../../providers/aurora.js';
+import { config } from '../../config.js';
+import { roleRegistry } from '../../lib/role-registry.js';
 
 const getUserMock = getUser as unknown as jest.Mock;
 const execMock = exec as unknown as jest.Mock;
@@ -181,5 +190,57 @@ describe('PUT /api/identity/users/:id/person', () => {
     expect(res.status).toBe(403);
     expect(getUserMock).not.toHaveBeenCalled();
     expect(execMock).not.toHaveBeenCalled();
+  });
+});
+
+// ─── unconfigured Aurora ─────────────────────────────────────────────────────
+//
+// The provider throws with a clear reason ("Aurora not configured — cannot
+// provision tenants"), but asyncHandler turns a throw into a bare 500
+// "Internal server error", which tells an operator nothing about what to fix.
+// `PUT /users/:id/person` always answered 503 with the reason; these three did
+// not, so the same missing config read two different ways depending on which
+// identity write you reached for.
+describe('identity writes with no Aurora configured', () => {
+  const aurora = (config as unknown as { aurora: { clusterArn: string; secretArn: string } }).aurora;
+  let saved: { clusterArn: string; secretArn: string };
+
+  beforeAll(() => {
+    saved = { clusterArn: aurora.clusterArn, secretArn: aurora.secretArn };
+    aurora.clusterArn = '';
+    aurora.secretArn = '';
+  });
+  afterAll(() => { aurora.clusterArn = saved.clusterArn; aurora.secretArn = saved.secretArn; });
+  beforeEach(() => { manageAllow.value = true; });
+
+  it('503s with a reason on POST /tenants, and never reaches the provider', async () => {
+    const res = await request(buildApp(hrAdmin))
+      .post('/api/identity/tenants').send({ id: 'field-ops', displayName: 'Field Ops' });
+    expect(res.status).toBe(503);
+    expect(String(res.body.error)).toMatch(/Aurora not configured/);
+    expect(createTenant as jest.Mock).not.toHaveBeenCalled();
+  });
+
+  it('503s with a reason on POST /users', async () => {
+    const res = await request(buildApp(hrAdmin))
+      .post('/api/identity/users').send({ id: 'u-new', displayName: 'New Person' });
+    expect(res.status).toBe(503);
+    expect(String(res.body.error)).toMatch(/Aurora not configured/);
+    expect(createUser as jest.Mock).not.toHaveBeenCalled();
+  });
+
+  it('503s with a reason on PUT /users/:id/grants, after validation still runs', async () => {
+    // The registry is empty by default in this suite; a grants write validates
+    // against it, so give it the one role the payload names.
+    (roleRegistry as jest.Mock).mockReturnValue([{ id: 'member', tenant: 'orgiq' }]);
+    (getUser as jest.Mock).mockResolvedValue({ id: 'u-theo', displayName: 'Theo', grants: { orgiq: ['member'] } });
+    const res = await request(buildApp(hrAdmin))
+      .put('/api/identity/users/u-theo/grants').send({ grants: { orgiq: ['member'] } });
+    expect(res.status).toBe(503);
+    expect(setGrants as jest.Mock).not.toHaveBeenCalled();
+    // A bad payload is still a 400 — the config check does not mask validation.
+    const bad = await request(buildApp(hrAdmin))
+      .put('/api/identity/users/u-theo/grants').send({ grants: { orgiq: ['not-a-role'] } });
+    expect(bad.status).toBe(400);
   });
 });

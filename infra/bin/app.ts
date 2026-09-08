@@ -135,7 +135,6 @@ const observability = new ObservabilityStack(app, 'OrgIQ-Observability', {
   auroraClusterIdentifier: `${prefix}-aurora`,
   knowledgeBaseIds: {
     default: knowledgeBase.knowledgeBaseId,
-    // newsroom: added once Wave 3-A provisions it and the ID is available
   },
   monthlyBudgetUsd,
   alertEmail,
@@ -216,6 +215,21 @@ const agentCoreRuntime = new AgentCoreRuntimeStack(app, 'OrgIQ-AgentCoreRuntime'
   browserId: cdk.Fn.importValue(`${prefix}-browser-id`),
   browserArn: cdk.Fn.importValue(`${prefix}-browser-arn`),
   browserProfileId: cdk.Fn.importValue(`${prefix}-browser-profile-id`),
+  // Machine-callback auth for the sessionless routes the fleet POSTs to
+  // (approvals/request, harness/trace, assessment run-complete). These are
+  // plain CLI context values, not Fn.importValue — OrgIQ-MiddlewareService
+  // mints the actual secrets and is declared *after* this stack in this
+  // file with no dependency edge between them, so there is no CloudFormation
+  // export to import from here yet. Operator runbook (also in
+  // docs/agentcore-preview-surface.md): deploy OrgIQ-MiddlewareService
+  // first, `aws secretsmanager get-secret-value` each of the three
+  // `orgiq-*-secret` secrets it creates, then redeploy this stack with:
+  //   --context approvalsRequestSecret=<value>
+  //   --context harnessTraceSecret=<value>
+  //   --context assessmentRunCompleteSecret=<value>
+  approvalsRequestSecret: app.node.tryGetContext('approvalsRequestSecret') as string | undefined,
+  harnessTraceSecret: app.node.tryGetContext('harnessTraceSecret') as string | undefined,
+  assessmentRunCompleteSecret: app.node.tryGetContext('assessmentRunCompleteSecret') as string | undefined,
   description: 'OrgIQ AgentCore Runtime: 6 agent runtimes with lifecycle and endpoint config',
 });
 agentCoreRuntime.addDependency(agents);

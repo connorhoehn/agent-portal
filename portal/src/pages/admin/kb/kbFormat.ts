@@ -3,6 +3,7 @@
 // status LOOKS like are readable (and testable) without mounting a page.
 
 import type { ChipTone } from '@connorhoehnslalom/ui-components/shared';
+import type { Reconciled } from '../../knowledge/knowledgeFormat';
 import type { KbRegistryEntry, KbStatus, KbTenant } from './types';
 
 export function formatDate(iso: string | null | undefined): string {
@@ -37,14 +38,40 @@ export function statusStyle(status: KbStatus): { dot: string; tone: ChipTone } {
   return STATUS_STYLE[status] ?? STATUS_STYLE.PENDING;
 }
 
+/** What the detail header's badge and the pipeline chain's Bedrock KB stage
+ *  actually show. The registry row's own `status` column is what the last
+ *  provisioning call reported — it says nothing about whether that Bedrock
+ *  knowledge base still exists. `reconciled` (the matching row from
+ *  `GET /api/admin/kb-registry/reconcile`, keyed by `kb.id`) is the thing
+ *  that actually checked, so a KB whose Bedrock id was deleted out from
+ *  under it reads "Broken" here even while the registry still says ACTIVE
+ *  (DEFECTS.md #18). Anything the reconcile didn't flag falls back to the
+ *  registry's own lifecycle status. */
+export function effectiveStatus(
+  kb: KbRegistryEntry,
+  reconciled: Reconciled | null | undefined,
+): { label: string; tone: ChipTone } {
+  if (reconciled?.drift === 'missing') {
+    return { label: 'Broken — Bedrock knowledge base not found', tone: 'danger' };
+  }
+  if (reconciled?.drift === 'status-drift') {
+    return {
+      label: `${kb.status} (account reports ${reconciled.liveStatus ?? 'unknown'})`,
+      tone: 'warning',
+    };
+  }
+  const s = statusStyle(kb.status);
+  return { label: kb.status, tone: s.tone };
+}
+
 /** The chain diagram greys a stage that has not been provisioned yet, rather
  *  than painting it with the KB's overall status. */
 export function stageDot(status: KbStatus, reached: boolean): string {
   return reached ? statusStyle(status).dot : STATUS_STYLE.PENDING.dot;
 }
 
-export function tenantTone(tenant: KbTenant): ChipTone {
-  return tenant === 'orgiq' ? 'success' : 'warning';
+export function tenantTone(_tenant: KbTenant): ChipTone {
+  return 'success';
 }
 
 /** Bedrock ingestion-job states. COMPLETE is the only clean terminal state;

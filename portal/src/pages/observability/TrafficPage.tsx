@@ -3,7 +3,7 @@
 // Four sections:
 //   1. Header strip with totals + window picker.
 //   2. RPS-over-time stacked AreaChart (Recharts).
-//   3. 7×24 hour-of-week heatmap (plain CSS grid, no recharts — denser).
+//   3. 7×24 hour-of-week heatmap (composed frame — see TrafficHeatmapFrame.tsx).
 //   4. Top users table (link to invocation search filtered by user).
 //   5. Per-agent operational summary (RPS / P50 / P99 / err / cost chips).
 //
@@ -14,18 +14,22 @@
 //   GET /per-agent-summary?windowHours=
 
 import { useMemo, useState } from 'react';
-import type { CSSProperties } from 'react';
 import { Link } from 'react-router';
 import {
+  Button,
   Card,
+  CardHeader,
+  Chip,
+  Inline,
+  PageSection,
+  Stack,
+  StatStrip,
   Table,
-  TableHead,
   TableBody,
+  TableHead,
   TableRow,
   TableTh,
   TableTd,
-  Chip,
-  PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
   AreaChart,
@@ -39,6 +43,8 @@ import {
 } from 'recharts';
 import { useFetch } from '../../hooks/useFetch';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
+import { TrafficHeatmapFrame } from './TrafficHeatmapFrame';
+import { T } from './Text';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -103,16 +109,24 @@ const WINDOW_OPTIONS: Array<{ label: string; hours: number; bucket: number }> = 
   { label: '30d', hours: 720, bucket: 1440 },
 ];
 
-// Match drift / cost palettes — stable per-agent colors across pages.
+// Match drift / cost palettes — stable per-agent colors across pages. Same
+// eight tokenized hues as DriftPage.tsx / CostPage.tsx's AGENT_COLORS; pink
+// and lime are mixed from two tokens each since the tokenized palette only
+// has 6 distinct hues.
 const AGENT_COLORS = [
-  '#6366f1', '#ec4899', '#10b981', '#f59e0b',
-  '#06b6d4', '#a855f7', '#ef4444', '#84cc16',
+  'var(--color-brand)',
+  'color-mix(in srgb, var(--color-danger) 55%, var(--color-brand) 45%)',
+  'var(--color-success)',
+  'var(--color-warning)',
+  'color-mix(in srgb, var(--color-info) 60%, var(--color-success) 40%)',
+  'var(--color-optimize)',
+  'var(--color-danger)',
+  'color-mix(in srgb, var(--color-success) 65%, var(--color-warning) 35%)',
 ];
 const colorFor = (idx: number) => AGENT_COLORS[idx % AGENT_COLORS.length];
 
 // Mon-first day-of-week labels. Postgres' dow uses Sun=0..Sat=6 — we re-order
 // rows to Mon..Sun because that's how everyone reads a workweek heatmap.
-const DOW_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const POSTGRES_TO_MON_FIRST = [6, 0, 1, 2, 3, 4, 5]; // dow=0(Sun)→row 6, dow=1(Mon)→row 0, ...
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -267,17 +281,6 @@ function TrafficPage() {
     return { grid, max };
   }, [heatmapCells]);
 
-  function heatmapTone(count: number, max: number): string {
-    if (count === 0 || max <= 0) return 'var(--color-surface)';
-    const t = Math.min(1, count / max);
-    // 5-bucket palette of indigo intensities (--color-primary is indigo).
-    if (t < 0.2) return 'rgba(99,102,241,0.10)';
-    if (t < 0.4) return 'rgba(99,102,241,0.25)';
-    if (t < 0.6) return 'rgba(99,102,241,0.45)';
-    if (t < 0.8) return 'rgba(99,102,241,0.70)';
-    return 'rgba(99,102,241,0.95)';
-  }
-
   const headerSubline =
     `${fmtInt(totals.inv)} invocation${totals.inv === 1 ? '' : 's'} in last ${win.label} · ` +
     `${fmtRps(totals.avgRps)} RPS avg · ` +
@@ -290,35 +293,34 @@ function TrafficPage() {
       actions={<WindowPicker value={windowIdx} onChange={setWindowIdx} />}
     >
       <Card padding="md">
-        <div style={headlineRow}>
-          <HeadlineCard
-            label="Total invocations"
-            primary={fmtInt(totals.inv)}
-            secondary={`across ${perAgent.length} agent${perAgent.length === 1 ? '' : 's'} in ${win.label}`}
-          />
-          <HeadlineCard
-            label="Average RPS"
-            primary={fmtRps(totals.avgRps)}
-            secondary={`smoothed over the full ${win.label} window`}
-          />
-          <HeadlineCard
-            label="Spend"
-            primary={fmtUsd(totals.cost)}
-            secondary={`Bedrock + judge for this window`}
-          />
-        </div>
+        <StatStrip
+          frameless
+          items={[
+            {
+              label: 'Total invocations',
+              value: fmtInt(totals.inv),
+              hint: `across ${perAgent.length} agent${perAgent.length === 1 ? '' : 's'} in ${win.label}`,
+            },
+            {
+              label: 'Average RPS',
+              value: fmtRps(totals.avgRps),
+              hint: `smoothed over the full ${win.label} window`,
+            },
+            {
+              label: 'Spend',
+              value: fmtUsd(totals.cost),
+              hint: 'Bedrock + judge for this window',
+            },
+          ]}
+        />
       </Card>
 
       {/* RPS-over-time stacked-area chart. */}
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
-            RPS Over Time{' '}
-            <span style={hint}>
-              stacked invocations per agent · bucket {win.bucket}m · window {win.label}
-            </span>
-          </h2>
-        </div>
+        <CardHeader
+          title="RPS Over Time"
+          subtitle={`stacked invocations per agent · bucket ${win.bucket}m · window ${win.label}`}
+        />
         {chartData.length === 0 ? (
           <SmartEmptyState
             title="No traffic"
@@ -335,7 +337,7 @@ function TrafficPage() {
             ]}
           />
         ) : (
-          <div style={{ width: '100%', height: 280 }}>
+          <Stack className="w-full h-[280px]">
             <ResponsiveContainer>
               <AreaChart data={chartData} margin={{ top: 16, right: 16, bottom: 4, left: 0 }}>
                 <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
@@ -369,75 +371,29 @@ function TrafficPage() {
                 ))}
               </AreaChart>
             </ResponsiveContainer>
-          </div>
+          </Stack>
         )}
       </Card>
 
       {/* Heatmap. */}
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
-            Hour-of-Week Heatmap{' '}
-            <span style={hint}>
-              last 7 days · cell = invocations in that hour · peak {fmtInt(heatmapGrid.max)}
-            </span>
-          </h2>
-        </div>
+        <CardHeader
+          title="Hour-of-Week Heatmap"
+          subtitle={`last 7 days · cell = invocations in that hour · peak ${fmtInt(heatmapGrid.max)}`}
+        />
         {heatmapGrid.max === 0 ? (
           <EmptyState text="No traffic recorded over the last 7 days." />
         ) : (
-          <div style={heatmapContainer}>
-            <div style={heatmapHourHeader}>
-              <div style={heatmapCornerCell}></div>
-              {Array.from({ length: 24 }).map((_, h) => (
-                <div key={h} style={heatmapHourLabel}>
-                  {h % 3 === 0 ? h : ''}
-                </div>
-              ))}
-            </div>
-            {heatmapGrid.grid.map((row, rIdx) => (
-              <div key={rIdx} style={heatmapRow}>
-                <div style={heatmapDowLabel}>{DOW_LABELS[rIdx]}</div>
-                {row.map((count, h) => (
-                  <div
-                    key={h}
-                    style={{
-                      ...heatmapCell,
-                      background: heatmapTone(count, heatmapGrid.max),
-                    }}
-                    title={`${DOW_LABELS[rIdx]} ${String(h).padStart(2, '0')}:00 — ${count} invocations`}
-                    aria-label={`${DOW_LABELS[rIdx]} ${h}:00, ${count} invocations`}
-                  />
-                ))}
-              </div>
-            ))}
-            <div style={heatmapLegendRow}>
-              <span style={heatmapLegendLabel}>0</span>
-              {[0.1, 0.3, 0.5, 0.75, 0.95].map((t) => (
-                <div
-                  key={t}
-                  style={{
-                    ...heatmapCell,
-                    background: heatmapTone(Math.ceil(t * heatmapGrid.max), heatmapGrid.max),
-                  }}
-                />
-              ))}
-              <span style={heatmapLegendLabel}>{fmtInt(heatmapGrid.max)}</span>
-            </div>
-          </div>
+          <TrafficHeatmapFrame grid={heatmapGrid.grid} max={heatmapGrid.max} />
         )}
       </Card>
 
       {/* Top users. */}
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
-            Top Users{' '}
-            <span style={hint}>
-              by invocation count · click to drill into per-user search
-            </span>
-          </h2>
-        </div>
+        <CardHeader
+          title="Top Users"
+          subtitle="by invocation count · click to drill into per-user search"
+        />
         {topUsers.length === 0 ? (
           <EmptyState text="No user_id stamped traffic in this window — backfill with infra/scripts/seed_user_ids_on_traces.py." />
         ) : (
@@ -455,19 +411,19 @@ function TrafficPage() {
             <TableBody>
               {topUsers.map((u) => (
                 <TableRow key={u.userId}>
-                  <TableTd style={userCell}>{u.userId}</TableTd>
-                  <TableTd style={numCell}>{fmtInt(u.invocations)}</TableTd>
-                  <TableTd style={numCell}>{fmtInt(u.uniqueAgents)}</TableTd>
-                  <TableTd style={numCell}>{fmtUsd(u.totalCostUsd, 4)}</TableTd>
-                  <TableTd style={tsCell}>
+                  <TableTd className="text-[12px] font-medium font-mono whitespace-nowrap">{u.userId}</TableTd>
+                  <TableTd className="text-[12px] text-text-secondary tabular-nums">{fmtInt(u.invocations)}</TableTd>
+                  <TableTd className="text-[12px] text-text-secondary tabular-nums">{fmtInt(u.uniqueAgents)}</TableTd>
+                  <TableTd className="text-[12px] text-text-secondary tabular-nums">{fmtUsd(u.totalCostUsd, 4)}</TableTd>
+                  <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
                     {u.lastSeenAt
                       ? new Date(u.lastSeenAt.replace(' ', 'T')).toLocaleString()
                       : '—'}
                   </TableTd>
-                  <TableTd style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <TableTd className="text-right whitespace-nowrap">
                     <Link
                       to={`/admin/observability/invocations/search?userId=${encodeURIComponent(u.userId)}`}
-                      style={openLinkBtn}
+                      className="text-primary text-[14px] no-underline px-2 py-0.5"
                     >
                       →
                     </Link>
@@ -481,14 +437,10 @@ function TrafficPage() {
 
       {/* Per-agent operational summary. */}
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
-            Per-Agent Summary{' '}
-            <span style={hint}>
-              RPS / latency / error rate / low-quality rate / cost · window {win.label}
-            </span>
-          </h2>
-        </div>
+        <CardHeader
+          title="Per-Agent Summary"
+          subtitle={`RPS / latency / error rate / low-quality rate / cost · window ${win.label}`}
+        />
         {perAgent.length === 0 ? (
           <EmptyState text="No agents observed in this window." />
         ) : (
@@ -501,14 +453,14 @@ function TrafficPage() {
                 <TableTh>P50 latency</TableTh>
                 <TableTh>P99 latency</TableTh>
                 <TableTh>
-                  <span title="Guardrail interventions or schema-invalid outputs — real request failures.">
+                  <T title="Guardrail interventions or schema-invalid outputs — real request failures.">
                     Error rate
-                  </span>
+                  </T>
                 </TableTh>
                 <TableTh>
-                  <span title="Share of answers the judge scored below 0.3 — weak answers, not request failures.">
+                  <T title="Share of answers the judge scored below 0.3 — weak answers, not request failures.">
                     Low-quality rate
-                  </span>
+                  </T>
                 </TableTh>
                 <TableTh>Cost</TableTh>
               </TableRow>
@@ -516,13 +468,13 @@ function TrafficPage() {
             <TableBody>
               {perAgent.map((a) => (
                 <TableRow key={a.agentId}>
-                  <TableTd style={userCell}>{a.agentId}</TableTd>
-                  <TableTd style={numCell}>{fmtInt(a.invocations)}</TableTd>
+                  <TableTd className="text-[12px] font-medium font-mono whitespace-nowrap">{a.agentId}</TableTd>
+                  <TableTd className="text-[12px] text-text-secondary tabular-nums">{fmtInt(a.invocations)}</TableTd>
                   <TableTd>
                     <Chip tone={rpsTone(a.rps)} size="xs">{fmtRps(a.rps)}</Chip>
                   </TableTd>
-                  <TableTd style={numCell}>{fmtMs(a.p50DurationMs)}</TableTd>
-                  <TableTd style={numCell}>{fmtMs(a.p99DurationMs)}</TableTd>
+                  <TableTd className="text-[12px] text-text-secondary tabular-nums">{fmtMs(a.p50DurationMs)}</TableTd>
+                  <TableTd className="text-[12px] text-text-secondary tabular-nums">{fmtMs(a.p99DurationMs)}</TableTd>
                   <TableTd>
                     <Chip tone={errorTone(a.errorRate)} size="xs">
                       {fmtPct(a.errorRate)}
@@ -530,7 +482,7 @@ function TrafficPage() {
                   </TableTd>
                   <TableTd>
                     {a.lowQualityRate == null || !Number.isFinite(a.lowQualityRate) ? (
-                      <span style={numCell}>—</span>
+                      <T className="text-[12px] text-text-secondary tabular-nums">—</T>
                     ) : (
                       <Chip tone={lowQualityTone(a.lowQualityRate)} size="xs">
                         {fmtPct(a.lowQualityRate)}
@@ -554,24 +506,6 @@ function TrafficPage() {
 
 // ── Sub-components ──────────────────────────────────────────────────────────
 
-function HeadlineCard({
-  label,
-  primary,
-  secondary,
-}: {
-  label: string;
-  primary: string;
-  secondary: React.ReactNode;
-}) {
-  return (
-    <div style={headlineCard}>
-      <div style={headlineLabel}>{label.toUpperCase()}</div>
-      <div style={headlinePrimary}>{primary}</div>
-      <div style={headlineSecondary}>{secondary}</div>
-    </div>
-  );
-}
-
 function WindowPicker({
   value,
   onChange,
@@ -580,172 +514,27 @@ function WindowPicker({
   onChange: (i: number) => void;
 }) {
   return (
-    <div style={{ display: 'inline-flex', gap: 4 }}>
+    <Inline gap="xs">
       {WINDOW_OPTIONS.map((w, i) => (
-        <button
+        <Button
           key={w.label}
+          variant={i === value ? 'primary' : 'secondary'}
+          size="sm"
           onClick={() => onChange(i)}
-          style={{
-            fontSize: 11,
-            padding: '4px 10px',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-sm)',
-            background: i === value ? 'var(--color-primary)' : 'var(--color-surface)',
-            color: i === value ? 'white' : 'var(--color-text-secondary)',
-            cursor: 'pointer',
-            fontWeight: i === value ? 500 : 400,
-          }}
         >
           {w.label}
-        </button>
+        </Button>
       ))}
-    </div>
+    </Inline>
   );
 }
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div
-      style={{
-        padding: 24,
-        textAlign: 'center',
-        fontSize: 12,
-        color: 'var(--color-text-tertiary)',
-      }}
-    >
+    <T as="div" className="p-6 text-center text-[12px] text-text-tertiary">
       {text}
-    </div>
+    </T>
   );
 }
-
-// ── Styles ──────────────────────────────────────────────────────────────────
-
-const headerRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'flex-start',
-  justifyContent: 'space-between',
-  marginBottom: 12,
-  gap: 12,
-  flexWrap: 'wrap',
-};
-
-const h2: CSSProperties = { fontSize: 14, fontWeight: 600, margin: 0 };
-const subline: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  marginTop: 4,
-};
-const hint: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  fontWeight: 400,
-};
-
-const headlineRow: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-  gap: 12,
-};
-const headlineCard: CSSProperties = {
-  padding: '12px 16px',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm)',
-  background: 'var(--color-bg)',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-  minHeight: 88,
-};
-const headlineLabel: CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
-  color: 'var(--color-text-tertiary)',
-  letterSpacing: 0.5,
-};
-const headlinePrimary: CSSProperties = {
-  fontSize: 22,
-  fontWeight: 600,
-  lineHeight: 1.1,
-  fontVariantNumeric: 'tabular-nums',
-  color: 'var(--color-text-primary)',
-};
-const headlineSecondary: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-secondary)',
-  lineHeight: 1.4,
-};
-
-const userCell: CSSProperties = {
-  fontSize: 12,
-  fontWeight: 500,
-  whiteSpace: 'nowrap',
-  fontFamily: 'ui-monospace, monospace',
-};
-const numCell: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary)',
-  fontVariantNumeric: 'tabular-nums',
-};
-const tsCell: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  whiteSpace: 'nowrap',
-};
-const openLinkBtn: CSSProperties = {
-  color: 'var(--color-primary, #6366f1)',
-  fontSize: 14,
-  textDecoration: 'none',
-  padding: '2px 8px',
-};
-
-// Heatmap.
-const heatmapContainer: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 2,
-  fontSize: 10,
-  color: 'var(--color-text-tertiary)',
-  overflowX: 'auto',
-};
-const heatmapHourHeader: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '40px repeat(24, minmax(20px, 1fr))',
-  gap: 2,
-  alignItems: 'center',
-};
-const heatmapCornerCell: CSSProperties = { width: 40 };
-const heatmapHourLabel: CSSProperties = {
-  textAlign: 'center',
-  fontSize: 9,
-  color: 'var(--color-text-tertiary)',
-};
-const heatmapRow: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '40px repeat(24, minmax(20px, 1fr))',
-  gap: 2,
-  alignItems: 'center',
-};
-const heatmapDowLabel: CSSProperties = {
-  fontSize: 10,
-  fontWeight: 600,
-  color: 'var(--color-text-secondary)',
-  width: 40,
-};
-const heatmapCell: CSSProperties = {
-  height: 22,
-  borderRadius: 2,
-  border: '1px solid var(--color-border)',
-  cursor: 'default',
-};
-const heatmapLegendRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 4,
-  marginTop: 8,
-  marginLeft: 42,
-  fontSize: 10,
-  color: 'var(--color-text-tertiary)',
-};
-const heatmapLegendLabel: CSSProperties = { fontVariantNumeric: 'tabular-nums' };
 
 export default TrafficPage;

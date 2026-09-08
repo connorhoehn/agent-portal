@@ -7,6 +7,11 @@ module.exports = {
   // its per-request listen/close port churn — see jest.setup.cjs for the full
   // root cause. Runs once per test file, before the framework loads.
   setupFiles: ['<rootDir>/jest.setup.cjs'],
+  // Binds ONE http.Server per test file for supertest to reuse, instead of
+  // supertest's default of one listen/close per request. Must be
+  // setupFilesAfterEnv (not setupFiles) because it registers beforeAll/afterAll.
+  // See src/test-support/http.ts for the full root cause.
+  setupFilesAfterEnv: ['<rootDir>/src/test-support/jest-shared-server.ts'],
   roots: ['<rootDir>/src'],
   testMatch: ['**/__tests__/**/*.test.ts'],
   transform: {

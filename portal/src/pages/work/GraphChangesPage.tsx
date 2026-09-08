@@ -12,10 +12,13 @@
 
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button, Card, Chip, EmptyState, FilterChip, Inline, PageSection, Stack, Toolbar, ToolbarGroup,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
+import { PROPOSAL_STATUS_CHIP, T } from './workShared';
 
 interface Proposal {
   id: string;
@@ -44,14 +47,6 @@ const KIND_LABELS: Record<string, string> = {
   update_person_title: 'Changed a title',
   add_collaboration: 'Recorded a collaboration',
   add_skill: 'Added a skill',
-};
-
-const STATUS_TONE: Record<string, string> = {
-  applied: 'bg-success-bg text-success',
-  pending: 'bg-warning-bg text-warning',
-  approved: 'bg-primary/15 text-primary',
-  rejected: 'bg-surface-hover text-text-tertiary',
-  failed: 'bg-danger-bg text-danger',
 };
 
 type Filter = 'all' | 'applied' | 'pending' | 'rejected' | 'failed';
@@ -130,112 +125,96 @@ export default function GraphChangesPage() {
   // queue, and two queues one word apart kept getting confused.
   return (
     <PageSection title="Graph updates">
-      <p className="text-[13px] text-text-secondary mt-1 mb-5 max-w-3xl leading-relaxed">
+      <T as="div" wrap className="text-[13px] text-text-secondary mt-1 mb-5 max-w-3xl leading-relaxed">
         Every change an agent proposed to the org graph and what you decided about it.
         Nothing here was written without an approval — this is the record that makes
         that checkable. Raise new ones from <Link to="/iq/work" className="text-primary no-underline hover:underline">Work</Link>.
-      </p>
+      </T>
 
       {jobFilter && (
-        <div className="flex items-center gap-2 mb-3 text-[12px] text-text-secondary">
-          <span>
+        <Inline align="center" gap="sm" className="mb-3 text-[12px] text-text-secondary">
+          <T>
             Showing proposals from job{' '}
             <Link to={`/iq/work/${jobFilter}`} className="text-primary no-underline hover:underline font-mono">
               {jobFilter.slice(0, 8)}
             </Link>
-          </span>
-          <button
-            onClick={() => setSearchParams({}, { replace: true })}
-            className="text-[11px] text-text-tertiary bg-transparent border border-border rounded px-1.5 py-0.5 cursor-pointer hover:text-primary"
-          >
+          </T>
+          <Button variant="ghost" size="sm" onClick={() => setSearchParams({}, { replace: true })}>
             clear
-          </button>
-        </div>
+          </Button>
+        </Inline>
       )}
 
-      <div className="flex gap-1.5 mb-4 flex-wrap">
-        {(['all', 'applied', 'pending', 'rejected', 'failed'] as const).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-2.5 py-1 rounded text-[12px] font-semibold cursor-pointer border transition-colors ${
-              filter === f
-                ? 'bg-primary text-white border-primary'
-                : 'bg-surface text-text-secondary border-border hover:text-primary'}`}
-          >
-            {f}
-            {filter === 'all' && f !== 'all' && counts[f] ? ` (${counts[f]})` : ''}
-          </button>
-        ))}
-      </div>
+      <Toolbar aria-label="Change filters">
+        <ToolbarGroup aria-label="Status">
+          {(['all', 'applied', 'pending', 'rejected', 'failed'] as const).map((f) => (
+            <FilterChip key={f} active={filter === f} onClick={() => setFilter(f)} size="sm">
+              {f}{filter === 'all' && f !== 'all' && counts[f] ? ` (${counts[f]})` : ''}
+            </FilterChip>
+          ))}
+        </ToolbarGroup>
+      </Toolbar>
 
       <Card padding="none" className="overflow-hidden">
         {proposals.length === 0 ? (
-          <div className="px-3.5 py-10 text-center text-[12.5px] text-text-tertiary">
-            {filter === 'all'
+          <EmptyState
+            title="Nothing here"
+            description={filter === 'all'
               ? 'No agent has proposed a graph change yet. Analyse a document finding in Work to produce some.'
               : `No ${filter} changes.`}
-          </div>
+          />
         ) : proposals.map((p) => (
-          <div key={p.id} className="px-3.5 py-3 border-b border-border last:border-b-0">
-            <div className="flex items-start gap-3 min-w-0">
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded shrink-0 ${STATUS_TONE[p.status] ?? 'bg-surface-hover text-text-secondary'}`}>
-                {p.status}
-              </span>
+          <Inline key={p.id} align="start" gap="md" className="px-3.5 py-3 border-b border-border last:border-b-0 min-w-0">
+            <Chip tone={PROPOSAL_STATUS_CHIP[p.status] ?? 'neutral'} size="xs" className="shrink-0">
+              {p.status}
+            </Chip>
 
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[13px] font-semibold text-text-primary">
-                    {KIND_LABELS[p.kind] ?? p.kind}
-                  </span>
-                  <code className="text-[11.5px] text-text-secondary font-mono">{describe(p)}</code>
-                </div>
+            <Stack gap="xs" className="flex-1 min-w-0">
+              <Inline align="center" gap="sm" wrap>
+                <T className="text-[13px] font-semibold text-text-primary">
+                  {KIND_LABELS[p.kind] ?? p.kind}
+                </T>
+                <T className="text-[11.5px] text-text-secondary font-mono">{describe(p)}</T>
+              </Inline>
 
-                {p.rationale && (
-                  <div className="text-[12px] text-text-secondary mt-1 leading-snug">{p.rationale}</div>
+              {p.rationale && (
+                <T className="text-[12px] text-text-secondary leading-snug">{p.rationale}</T>
+              )}
+
+              {typeof p.evidence?.['quote'] === 'string' && (
+                <T wrap className="text-[12px] text-text-primary pl-2.5 border-l-2 border-primary/40 italic">
+                  “{String(p.evidence['quote'])}”
+                </T>
+              )}
+
+              {/* A failed apply is the most useful row on this page: it says
+                  the graph did NOT change and exactly why. */}
+              {p.applyError && (
+                <T className="text-[12px] text-danger">
+                  Did not apply — {p.applyError}
+                </T>
+              )}
+
+              {canManage && p.status === 'failed' && (
+                <Inline gap="sm">
+                  <Button size="sm" variant="secondary" onClick={() => void decide(p, 'approve')}>Retry</Button>
+                  <Button size="sm" variant="danger" onClick={() => void decide(p, 'reject')}>Reject it out</Button>
+                </Inline>
+              )}
+
+              <Inline gap="md" wrap className="text-[11px] text-text-tertiary">
+                <span>{p.source}</span>
+                {p.confidence != null && <span>confidence {(p.confidence * 100).toFixed(0)}%</span>}
+                <span>{p.reviewer ? `decided by ${p.reviewer}` : 'undecided'}</span>
+                <span>{when(p.decidedAt ?? p.createdAt)}</span>
+                {p.jobId && (
+                  <Link to={`/iq/work/${p.jobId}`} className="text-primary no-underline hover:underline">
+                    from a job →
+                  </Link>
                 )}
-
-                {typeof p.evidence?.['quote'] === 'string' && (
-                  <div className="text-[12px] text-text-primary mt-1.5 pl-2.5 border-l-2 border-primary/40 italic">
-                    “{String(p.evidence['quote'])}”
-                  </div>
-                )}
-
-                {/* A failed apply is the most useful row on this page: it says
-                    the graph did NOT change and exactly why. */}
-                {p.applyError && (
-                  <div className="text-[12px] text-danger mt-1.5">
-                    Did not apply — {p.applyError}
-                  </div>
-                )}
-
-                {canManage && p.status === 'failed' && (
-                  <div className="flex gap-2 mt-2">
-                    <button onClick={() => void decide(p, 'approve')}
-                      className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] font-semibold text-text-secondary cursor-pointer hover:text-primary hover:border-primary/50">
-                      Retry
-                    </button>
-                    <button onClick={() => void decide(p, 'reject')}
-                      className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] text-text-tertiary cursor-pointer hover:text-danger">
-                      Reject it out
-                    </button>
-                  </div>
-                )}
-
-                <div className="text-[11px] text-text-tertiary mt-1.5 flex gap-3 flex-wrap">
-                  <span>{p.source}</span>
-                  {p.confidence != null && <span>confidence {(p.confidence * 100).toFixed(0)}%</span>}
-                  <span>{p.reviewer ? `decided by ${p.reviewer}` : 'undecided'}</span>
-                  <span>{when(p.decidedAt ?? p.createdAt)}</span>
-                  {p.jobId && (
-                    <Link to={`/iq/work/${p.jobId}`} className="text-primary no-underline hover:underline">
-                      from a job →
-                    </Link>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
+              </Inline>
+            </Stack>
+          </Inline>
         ))}
       </Card>
     </PageSection>

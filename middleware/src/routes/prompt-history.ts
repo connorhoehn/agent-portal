@@ -15,6 +15,10 @@ import { randomUUID } from 'node:crypto';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { requireAction } from '../lib/authz.js';
+import {
+  PROMPT_KINDS, PROMPT_TIERS, EMPTY_CONTRACT,
+  type PromptContract, type PromptKind, type PromptTier,
+} from '../lib/prompt-contract.js';
 import { exec } from '../providers/aurora.js';
 
 export const promptHistoryRouter = Router();
@@ -49,7 +53,8 @@ promptHistoryRouter.get('/history/:promptId', asyncHandler(async (req, res) => {
   // Fetch version metadata rows
   const metaRows = await exec(
     `SELECT version, description, author_email, published_at,
-            deployed_at, superseded_at, lifecycle_status
+            deployed_at, superseded_at, lifecycle_status,
+            kind, tier, contract::text AS contract, owner_email, eval_pass_rate
      FROM observability.prompt_version_meta
      WHERE prompt_id = :promptId
      ORDER BY
@@ -89,6 +94,13 @@ promptHistoryRouter.get('/history/:promptId', asyncHandler(async (req, res) => {
     deployedAt: str(row['deployed_at']),
     supersededAt: str(row['superseded_at']),
     lifecycleStatus: str(row['lifecycle_status'], 'published'),
+    // The contract travels with the version — Studio needs it to render the
+    // right inputs, and the release gate needs it to decide deployability.
+    kind: str(row['kind'], 'prompt'),
+    tier: str(row['tier'], 'sandbox'),
+    contract: parseContract(safeJson(row['contract'])),
+    ownerEmail: row['owner_email'] != null ? str(row['owner_email']) : null,
+    evalPassRate: row['eval_pass_rate'] != null ? Number(row['eval_pass_rate']) : null,
     experiments: (expByVersion[str(row['version'])] ?? []).map(e => ({
       experimentId: str(e['experiment_id']),
       versionA: str(e['prompt_version_a']),
@@ -333,6 +345,47 @@ interface MetaBody {
   description?: unknown;
   authorEmail?: unknown;
   lifecycleStatus?: unknown;
+  kind?: unknown;
+  tier?: unknown;
+  contract?: unknown;
+  ownerEmail?: unknown;
+  evalPassRate?: unknown;
+}
+
+/** A jsonb column arrives as text over the Data API. A malformed blob must
+ *  degrade to the empty contract, never throw a read. */
+function safeJson(raw: unknown): unknown {
+  if (raw == null) return null;
+  if (typeof raw !== 'string') return raw;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+/** Accept only a shape the contract module understands; anything else falls
+ *  back to the empty contract rather than being written through unvalidated —
+ *  a malformed contract would silently disable fencing at render time. */
+function parseContract(raw: unknown): PromptContract {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return EMPTY_CONTRACT;
+  const o = raw as Record<string, unknown>;
+  const kind = PROMPT_KINDS.includes(o['kind'] as PromptKind) ? (o['kind'] as PromptKind) : 'prompt';
+  const tier = PROMPT_TIERS.includes(o['tier'] as PromptTier) ? (o['tier'] as PromptTier) : 'sandbox';
+  const variables = Array.isArray(o['variables'])
+    ? (o['variables'] as unknown[]).filter((v): v is Record<string, unknown> =>
+        v != null && typeof v === 'object' && typeof (v as Record<string, unknown>)['name'] === 'string')
+      .map((v) => ({
+        name: String(v['name']),
+        type: String(v['type'] ?? 'text'),
+        required: v['required'] === true,
+        source: String(v['source'] ?? 'untrusted'),
+        ...(typeof v['default'] === 'string' ? { default: v['default'] } : {}),
+        ...(typeof v['description'] === 'string' ? { description: v['description'] } : {}),
+        ...(Array.isArray(v['options']) ? { options: (v['options'] as unknown[]).map(String) } : {}),
+      }))
+    : [];
+  return {
+    kind, tier,
+    variables: variables as PromptContract['variables'],
+    guardrailId: typeof o['guardrailId'] === 'string' ? o['guardrailId'] : null,
+  };
 }
 
 promptHistoryRouter.put(
@@ -350,21 +403,40 @@ promptHistoryRouter.put(
     const rawStatus = str(body.lifecycleStatus, 'published');
     const lifecycleStatus = VALID_STATUSES.includes(rawStatus) ? rawStatus : 'published';
 
+    // The contract rides the same upsert: it is another portal-side fact about
+    // this version, and writing it separately would let the two drift.
+    const contract = parseContract(body.contract);
+    const ownerEmail = typeof body.ownerEmail === 'string' ? body.ownerEmail : null;
+    const evalPassRate = typeof body.evalPassRate === 'number' && Number.isFinite(body.evalPassRate)
+      ? body.evalPassRate : null;
+
     await exec(
       `INSERT INTO observability.prompt_version_meta
-         (prompt_id, version, description, author_email, lifecycle_status, published_at)
+         (prompt_id, version, description, author_email, lifecycle_status, published_at,
+          kind, tier, contract, owner_email, eval_pass_rate)
        VALUES
-         (:promptId, :version, :description, :authorEmail, :lifecycleStatus, now())
+         (:promptId, :version, :description, :authorEmail, :lifecycleStatus, now(),
+          :kind, :tier, :contract::jsonb, :ownerEmail, :evalPassRate)
        ON CONFLICT (prompt_id, version) DO UPDATE SET
          description      = COALESCE(EXCLUDED.description, prompt_version_meta.description),
          author_email     = COALESCE(EXCLUDED.author_email, prompt_version_meta.author_email),
-         lifecycle_status = EXCLUDED.lifecycle_status`,
+         lifecycle_status = EXCLUDED.lifecycle_status,
+         kind             = EXCLUDED.kind,
+         tier             = EXCLUDED.tier,
+         contract         = EXCLUDED.contract,
+         owner_email      = COALESCE(EXCLUDED.owner_email, prompt_version_meta.owner_email),
+         eval_pass_rate   = COALESCE(EXCLUDED.eval_pass_rate, prompt_version_meta.eval_pass_rate)`,
       [
         p('promptId', promptId),
         p('version', version),
         { name: 'description', value: description ? { stringValue: description } : { isNull: true } },
         { name: 'authorEmail', value: authorEmail ? { stringValue: authorEmail } : { isNull: true } },
         p('lifecycleStatus', lifecycleStatus),
+        p('kind', contract.kind),
+        p('tier', contract.tier),
+        p('contract', JSON.stringify(contract)),
+        { name: 'ownerEmail', value: ownerEmail ? { stringValue: ownerEmail } : { isNull: true } },
+        { name: 'evalPassRate', value: evalPassRate != null ? { doubleValue: evalPassRate } : { isNull: true } },
       ],
     );
 

@@ -16,6 +16,7 @@ import { useCapabilities } from '../../lib/capabilities';
 import type { BotRun } from '../bots/BotsPage';
 import { ItemRow } from './ItemRow';
 import { NewItemForm, type NewItemDraft } from './NewItemForm';
+import { T } from './Text';
 import { StatusChip } from './WorkItemChips';
 import { PRIORITY_GLYPH, countPoints, countStories, progressColor } from './projectFormat';
 import type { WorkItemStatus, WorkItemTree } from './types';
@@ -29,13 +30,13 @@ function EpicSummary({ item }: { item: WorkItemTree }) {
 
   return (
     <Inline gap="sm" align="center" wrap={false}>
-      <span aria-hidden="true" className="shrink-0 text-[11px]" title={`priority: ${item.priority}`}>
+      <T aria-hidden className="shrink-0 text-[11px]" title={`priority: ${item.priority}`}>
         {PRIORITY_GLYPH[item.priority] ?? PRIORITY_GLYPH.medium}
-      </span>
+      </T>
       {stories.total > 0 && (
-        <span className="shrink-0 whitespace-nowrap text-[12px] text-text-secondary tabular-nums">
+        <T className="shrink-0 whitespace-nowrap text-[12px] text-text-secondary tabular-nums">
           {stories.done}/{stories.total} stories
-        </span>
+        </T>
       )}
       {pts.total > 0 && (
         // No `label`: ProgressBar prints its own percentage beside a label, so
@@ -50,7 +51,7 @@ function EpicSummary({ item }: { item: WorkItemTree }) {
             showRatio={false}
             aria-label={`${pct}% of points done`}
           />
-          <span className="shrink-0 text-[11px] text-text-secondary tabular-nums">{pct}%</span>
+          <T className="shrink-0 text-[11px] text-text-secondary tabular-nums">{pct}%</T>
         </>
       )}
       {item.assigneeName && <Avatar name={item.assigneeName} size={24} title={item.assigneeName} />}
@@ -79,13 +80,21 @@ export function EpicCard({
   return (
     <Card padding="none" className="overflow-hidden">
       <CollapsibleSection
-        title={item.title}
+        // The epic's slug rides with its title: it is the id you hand an
+        // agent or paste into a commit, so it belongs where the epic is
+        // named rather than only inside the table below.
+        title={(
+          <Inline gap="sm" align="baseline" wrap={false}>
+            <span>{item.title}</span>
+            <T className="font-mono text-[10.5px] font-normal text-text-tertiary">{item.id}</T>
+          </Inline>
+        )}
         defaultOpen={item.status !== 'done'}
         badge={<EpicSummary item={item} />}
       >
         <Stack gap="sm" className="bg-surface-inset px-4 py-3">
           {item.description && (
-            <p className="m-0 text-[13px] leading-relaxed text-text-secondary">{item.description}</p>
+            <T as="p" className="m-0 text-[13px] leading-relaxed text-text-secondary">{item.description}</T>
           )}
 
           <Stack gap="none">

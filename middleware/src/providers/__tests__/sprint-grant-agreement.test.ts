@@ -35,6 +35,13 @@ async function envelopeOf(sprintId: string): Promise<{ grantedUsd: number; grant
   return { grantedUsd: row.grantedUsd, grantCount: row.grantCount };
 }
 
+/** The envelope a sprint carries in the SEED — read from the fixture's own rows
+ *  rather than typed, so it cannot drift from mock/budgets.ts. Callers use it
+ *  as the "before" of a mutation without having to snapshot one first. */
+function seedEnvelopeOf(sprintId: string): number {
+  return MOCK_GRANTS.filter((g) => g.sprintId === sprintId).reduce((n, g) => n + g.allocatedUsd, 0);
+}
+
 /** A seed grant that is scoped to a sprint the mock sprint list also carries. */
 function aSeededGrant() {
   const g = MOCK_GRANTS.find((x) => x.sprintId != null);
@@ -89,23 +96,57 @@ describe('a grant mutation is visible to the sprint rollup', () => {
     expect(after.grantedUsd).toBe(before.grantedUsd - seed.allocatedUsd);
   });
 
-  it('leaves the seed array unmutated, so the overlay is genuinely an overlay', async () => {
+  // The seed used to be a read-only array with an overlay Map on top, and this
+  // case pinned "the array is never mutated in place". That invariant is gone
+  // ON PURPOSE: the seed is a REGISTERED fixture now (`budget-grants`), so a
+  // patch writes straight into it and the reset — the same one
+  // `POST /api/__mock/reset` performs — is what puts it back. The overlay only
+  // ever existed because nothing could restore the seed. What has to hold is
+  // the stronger claim: the mutation is visible everywhere, and it is undoable.
+  it('writes through to the fixture, and a reset puts the seed back', async () => {
     const seed = aSeededGrant();
     const original = seed.allocatedUsd;
+    const seededEnvelope = seedEnvelopeOf(seed.sprintId!);
 
     await updateGrant(seed.id, { amountUsd: original + 99 });
 
-    // Reading MOCK_GRANTS directly must still show the seed. If this ever fails,
-    // something started mutating the fixtures in place and test isolation is
-    // gone — a far nastier bug than the one above.
-    expect(MOCK_GRANTS.find((g) => g.id === seed.id)?.allocatedUsd).toBe(original);
+    // Visible in the table itself, not parked in a side Map beside it.
+    expect(MOCK_GRANTS.find((g) => g.id === seed.id)?.allocatedUsd).toBe(original + 99);
+    expect((await envelopeOf(seed.sprintId!)).grantedUsd).toBe(seededEnvelope + 99);
 
-    // ...and the reset puts the rollup back where it started.
+    // ...and the reset puts both back where they started.
     _resetMockGrants();
-    const restored = await envelopeOf(seed.sprintId!);
-    const expected = MOCK_GRANTS
-      .filter((g) => g.sprintId === seed.sprintId)
-      .reduce((n, g) => n + g.allocatedUsd, 0);
-    expect(restored.grantedUsd).toBe(expected);
+    expect(MOCK_GRANTS.find((g) => g.id === seed.id)?.allocatedUsd).toBe(original);
+    expect((await envelopeOf(seed.sprintId!)).grantedUsd).toBe(seededEnvelope);
+  });
+
+  it('drops a created grant on reset, so a create is replayable', async () => {
+    const seed = aSeededGrant();
+    const sprintId = seed.sprintId!;
+    const before = await envelopeOf(sprintId);
+
+    const created = await createGrant({
+      orgProjectId: seed.orgProjectId,
+      sprintId,
+      granteePersonId: seed.granteePersonId,
+      amountUsd: 77,
+    });
+    expect(MOCK_GRANTS.some((g) => g.id === created.id)).toBe(true);
+
+    _resetMockGrants();
+    expect(MOCK_GRANTS.some((g) => g.id === created.id)).toBe(false);
+    expect(await envelopeOf(sprintId)).toEqual(before);
+  });
+
+  it('brings a revoked grant back on reset', async () => {
+    const seed = aSeededGrant();
+    const before = await envelopeOf(seed.sprintId!);
+
+    expect(await revokeGrant(seed.id)).toBe(true);
+    expect(MOCK_GRANTS.some((g) => g.id === seed.id)).toBe(false);
+
+    _resetMockGrants();
+    expect(MOCK_GRANTS.some((g) => g.id === seed.id)).toBe(true);
+    expect(await envelopeOf(seed.sprintId!)).toEqual(before);
   });
 });

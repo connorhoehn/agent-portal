@@ -49,6 +49,28 @@ describe('decideDispatch', () => {
     });
   });
 
+  // /admin/projects (Codebases) is an hr-admin-only page (sme.md defect #3):
+  // telling every other role to "link one in Codebases" sends them at a page
+  // that redirects them away. callerRole steers the wording; omitted or
+  // hr-admin keeps the actionable original.
+  it('keeps the actionable message when the caller is hr-admin, or the role is unknown', () => {
+    expect(decideDispatch(item(), [], undefined, 'hr-admin')).toMatchObject({
+      error: expect.stringMatching(/link one in Codebases/) as string,
+    });
+    expect(decideDispatch(item(), [], undefined, null)).toMatchObject({
+      error: expect.stringMatching(/link one in Codebases/) as string,
+    });
+  });
+
+  it('points every other role at a human instead of a page they cannot open', () => {
+    for (const role of ['sme', 'org-leader', 'program-owner', 'member']) {
+      expect(decideDispatch(item(), [], undefined, role)).toMatchObject({
+        kind: 'error', status: 400,
+        error: 'no codebase delivers this initiative — ask a program owner to link a codebase in Codebases',
+      });
+    }
+  });
+
   it('checks the item shape before codebase resolution — an epic with zero codebases is an epic problem', () => {
     expect(decideDispatch(item({ type: 'epic' }), [])).toMatchObject({
       kind: 'error', error: expect.stringMatching(/epics/) as string,

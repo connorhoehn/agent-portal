@@ -34,6 +34,8 @@ import { asyncHandler } from '../lib/async-handler.js';
 import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import { processTrace } from '../lib/trace-sink.js';
+import { getRecentInvocations } from '../lib/invocations.js';
+import type { InvocationRecord } from '../lib/invocations.js';
 
 export const invocationsRouter = Router();
 
@@ -299,9 +301,93 @@ interface ParentSummary {
   ts: string;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Mock branch for GET /:invocationId — dev:mock has no Aurora, so the tail
+// `getRecentInvocations` (recent-invocations, and the Runs list it backs)
+// serves is a fixture (mock/invocations.ts) with ids like `mock-inv-33`, not
+// UUIDs. Before this, `isUuid(id)` failed for every one of them and this
+// route 404'd unconditionally — the persona sent from Health to "read the
+// failures" could open the list but never a single row (org-leader.md #22).
+//
+// Resolves from the SAME tail the list route reads (recent-invocations
+// merges live ring + mock fixture; a wide limit here covers the whole mock
+// tail even though the list view itself is windowed to 50/100). Maps onto
+// the identical InvocationDetail/ToolCallRow shape the real Aurora path
+// returns, leaving every DB-only field (judge score, tokens, cost, model,
+// etc.) null rather than inventing values invocation_traces would actually
+// carry. invocation_traces has no error-message column of its own (only
+// tool_calls and memory_operations do — see the sprint2/4 schemas), so a
+// mock row's `error` is surfaced the same way a real agent-level tool
+// failure would be: as a single errored tool_calls entry, not a fabricated
+// top-level field.
+// ─────────────────────────────────────────────────────────────────────────────
+function findMockInvocation(id: string): InvocationRecord | null {
+  if (!config.mock.agentcore) return null;
+  return getRecentInvocations(500).find((r) => r.id === id) ?? null;
+}
+
+function mockInvocationDetail(rec: InvocationRecord): {
+  invocation: InvocationDetail;
+  toolCalls: ToolCallRow[];
+  parent: ParentSummary | null;
+  children: ChildSummary[];
+} {
+  const invocation: InvocationDetail = {
+    invocationId: rec.id,
+    agentId: rec.agentId,
+    agentName: rec.agentName,
+    templateId: rec.templateId ?? null,
+    promptSnippet: rec.promptSnippet,
+    responseSnippet: rec.responseSnippet,
+    judgeScore: null,
+    judgeRationale: null,
+    schemaValid: rec.error ? false : null,
+    piiDetected: false,
+    guardrailAction: rec.guardrailIntervened ? 'BLOCKED' : null,
+    durationMs: rec.durationMs,
+    inputTokens: null,
+    outputTokens: null,
+    judgeInputTokens: null,
+    judgeOutputTokens: null,
+    estCostUsd: null,
+    judgeCostUsd: null,
+    totalCostUsd: null,
+    promptVersion: null,
+    modelId: null,
+    runtimeImageDigest: null,
+    parentInvocationId: null,
+    userId: null,
+    sessionId: null,
+    humanLabel: null,
+    humanNote: null,
+    ts: rec.startedAt,
+  };
+  const toolCalls: ToolCallRow[] = rec.error
+    ? [{
+        toolCallId: `${rec.id}-tc0`,
+        toolName: 'agent_run',
+        startedAt: rec.startedAt,
+        durationMs: rec.durationMs,
+        inputSize: null,
+        outputSize: null,
+        errored: true,
+        errorMessage: rec.error,
+        inputSample: null,
+        outputSample: null,
+        estCostUsd: null,
+      }]
+    : [];
+  return { invocation, toolCalls, parent: null, children: [] };
+}
+
 invocationsRouter.get('/:invocationId', asyncHandler(async (req, res) => {
   const id = String(req.params['invocationId'] ?? '').trim();
   if (!isUuid(id)) {
+    const mock = findMockInvocation(id);
+    if (mock) {
+      res.json(mockInvocationDetail(mock));
+      return;
+    }
     res.status(404).json({ error: 'invocation not found' });
     return;
   }

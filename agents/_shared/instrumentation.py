@@ -56,6 +56,11 @@ from typing import Any, Callable, Iterator, Optional
 import urllib.error
 import urllib.request
 
+try:  # normal path: imported as `_shared.instrumentation`
+    from . import callbacks
+except ImportError:  # loaded as a bare top-level module (scripts, notebooks)
+    import callbacks  # type: ignore[no-redef]
+
 log = logging.getLogger(__name__)
 _oi_logger = logging.getLogger(__name__)
 
@@ -705,6 +710,19 @@ def post_trace(bundle: dict[str, Any], *, middleware_url: str | None = None) -> 
     INSERT path is idempotent on ``invocation_id``, so double-delivery
     (HTTP succeeds + CW Logs ingestion picks it up too) is safe.
 
+    Service auth: when ``HARNESS_TRACE_SECRET`` is set in the runtime's
+    environment the POST carries it as ``x-harness-auth``; when it is unset no
+    header is sent, which is exactly the pre-existing behaviour and exactly
+    what the middleware guard expects while *it* is unconfigured too. A
+    rejected POST (401/403) is **not** retried without the header — that could
+    never succeed against a locked middleware, and quietly downgrading would
+    hide the deployment-order mistake that caused it. It is also not fatal: the
+    stdout ``ORGIQ_TRACE:`` line was already emitted above, so CloudWatch →
+    the middleware's log poller still delivers this exact bundle. The trace is
+    therefore never lost to an auth mismatch — only the low-latency path is —
+    so the honest handling is a loud, specific log line naming the variable to
+    fix, and ``False``.
+
     NEVER raises: the agent must keep running even if observability is down.
     """
     # Always emit on stdout first so a slow / failing HTTP POST can't
@@ -718,12 +736,9 @@ def post_trace(bundle: dict[str, Any], *, middleware_url: str | None = None) -> 
     except (TypeError, ValueError) as exc:
         log.warning("instrumentation: failed to serialise trace bundle: %s", exc)
         return False
-    req = urllib.request.Request(
-        url,
-        data=data,
-        method="POST",
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
-    )
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    headers.update(callbacks.auth_headers(callbacks.HARNESS_TRACE))
+    req = urllib.request.Request(url, data=data, method="POST", headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT_S) as resp:
             # We don't care about the response body; we only POST for the
@@ -731,7 +746,16 @@ def post_trace(bundle: dict[str, Any], *, middleware_url: str | None = None) -> 
             resp.read()
         return True
     except urllib.error.HTTPError as exc:
-        log.warning("instrumentation: POST %s -> HTTP %s", url, exc.code)
+        if callbacks.is_auth_failure(exc.code):
+            # Loud, specific, and not retried — see the docstring. The bundle
+            # itself already went out on stdout, so this costs latency, not data.
+            log.error(
+                "instrumentation: %s (trace still delivered via the stdout → "
+                "CloudWatch path)",
+                callbacks.auth_failure_note(callbacks.HARNESS_TRACE, exc.code),
+            )
+        else:
+            log.warning("instrumentation: POST %s -> HTTP %s", url, exc.code)
     except urllib.error.URLError as exc:
         log.warning("instrumentation: POST %s failed: %s", url, exc.reason)
     except Exception as exc:  # noqa: BLE001

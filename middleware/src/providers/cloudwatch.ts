@@ -49,13 +49,23 @@ import type {
 // ── Mock provider ─────────────────────────────────────────────────────────────
 
 export const mockCloudWatch: CloudWatchProvider = {
+  // Every number here is a sum over `mockAgents`, and since the fixture floor
+  // landed every per-agent number there is itself COUNTED from the invocation
+  // rows the Invocations page lists (mock/invocations.ts). So Health, the
+  // Architecture graph and that list are three sums over one set of rows — the
+  // arrangement that makes "Health promises 25 errors, the list shows 6"
+  // structurally impossible rather than merely fixed.
   async getSummary(): Promise<ObservabilitySummary> {
-    const totalInvocations = mockAgents.reduce((s, a) => s + a.invocationsLast24h, 0);
-    const totalErrors = mockAgents.reduce((s, a) => s + a.errorsLast24h, 0);
-    const totalTokens = mockAgents.reduce((s, a) => s + a.tokensLast24h, 0);
-    const avgLatency = Math.round(
-      mockAgents.reduce((s, a) => s + a.latencyP50Ms, 0) / mockAgents.length,
-    );
+    const fleet = [...mockAgents];
+    const totalInvocations = fleet.reduce((s, a) => s + a.invocationsLast24h, 0);
+    const totalErrors = fleet.reduce((s, a) => s + a.errorsLast24h, 0);
+    const totalTokens = fleet.reduce((s, a) => s + a.tokensLast24h, 0);
+    // An empty fleet is a real state now (the `empty` scenario, and a real
+    // account before its first deploy). Dividing by its length produced NaN,
+    // which serialises to `null` and renders as a blank latency tile with no
+    // hint that the fleet, not the metric, is what is missing.
+    const avgLatency =
+      fleet.length > 0 ? Math.round(fleet.reduce((s, a) => s + a.latencyP50Ms, 0) / fleet.length) : 0;
     const successRate =
       totalInvocations > 0
         ? (((totalInvocations - totalErrors) / totalInvocations) * 100).toFixed(1)

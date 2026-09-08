@@ -18,9 +18,12 @@
 // behaviour a lie rather than merely terse.
 
 import { useState } from 'react';
-import { Avatar, Checkbox, Chip, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Link } from 'react-router';
+import { Button, Checkbox, Chip, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import type { BotRun } from '../bots/BotsPage';
+import { PersonRef } from './PersonRef';
+import { T } from './Text';
 import { EstimateChip, PrBadge, RunStateChips, StatusChip } from './WorkItemChips';
 import type { WorkItemStatus, WorkItemTree } from './types';
 
@@ -77,23 +80,25 @@ export function ItemRow({
           isDone ? 'bg-surface-hover' : 'bg-surface hover:bg-surface-panel',
         ].join(' ')}
       >
-        {/* Disclosure. A real <button> with aria-expanded, not a clickable
-            glyph — this is the only control that reveals the sized work, so it
-            has to be reachable from the keyboard and announced as a toggle.
-            Leaf rows render a fixed-width spacer so titles stay aligned down
-            the column. */}
+        {/* Disclosure. A real button (the library's, ghost-stripped down to
+            the glyph) with aria-expanded, not a clickable span — this is the
+            only control that reveals the sized work, so it has to be
+            reachable from the keyboard and announced as a toggle. Leaf rows
+            render a fixed-width spacer so titles stay aligned down the
+            column. */}
         {hasChildren ? (
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
             aria-label={`${open ? 'Collapse' : 'Expand'} ${children.length} under "${item.title}"`}
-            className="shrink-0 w-4 text-[11px] leading-none text-text-tertiary hover:text-text-primary"
+            className="h-auto min-w-0 shrink-0 w-4 border-0 p-0 text-[11px] leading-none text-text-tertiary hover:bg-transparent hover:text-text-primary"
           >
             <span aria-hidden="true">{open ? '▾' : '▸'}</span>
-          </button>
+          </Button>
         ) : (
-          <span aria-hidden="true" className="shrink-0 w-4" />
+          <T aria-hidden className="shrink-0 w-4" />
         )}
 
         {/* The done-toggle PATCHes the item — DispatchAgentRun only. Viewers
@@ -108,23 +113,28 @@ export function ItemRow({
 
         {/* Type glyph — a bug reads danger so it can't be mistaken for a story
             at a glance; a story takes a muted primary. */}
-        <span
-          aria-hidden="true"
+        <T
+          aria-hidden
           title={isBug ? 'bug' : 'story'}
           className={`shrink-0 font-mono text-[12px] ${isBug ? 'text-danger' : 'text-primary/50'}`}
         >
           {isBug ? '◆' : '■'}
-        </span>
+        </T>
         {isBug && <Chip tone="danger" size="xs">bug</Chip>}
 
-        <span
+        {/* The same destination the work table's titles use. A row that
+            renders identical information in a different view should not
+            behave differently: this one used to be dead text, so whether an
+            item opened depended on which view you happened to be in. */}
+        <Link
+          to={`?item=${encodeURIComponent(item.id)}`}
           className={[
-            'min-w-0 flex-1 text-[13px] font-medium',
+            'min-w-0 flex-1 text-[13px] font-medium no-underline hover:underline',
             isDone ? 'text-text-tertiary line-through' : 'text-text-primary',
           ].join(' ')}
         >
           {item.title}
-        </span>
+        </Link>
 
         {/* The count of what is hidden. Shown whether open or closed, because
             its job is to say the subtree EXISTS, not to describe the toggle. */}
@@ -149,7 +159,17 @@ export function ItemRow({
           </Chip>
         )}
 
-        {item.assigneeName && <Avatar name={item.assigneeName} size={22} title={item.assigneeName} />}
+        {item.assigneeName && (
+          <T className="shrink-0" onClick={(e) => e.stopPropagation()}>
+            <PersonRef
+              personId={item.assigneeId}
+              name={item.assigneeName}
+              department={item.assigneeDept}
+              avatarSize={22}
+              className="sr-only-name"
+            />
+          </T>
+        )}
 
         <StatusChip status={item.status} />
       </Inline>

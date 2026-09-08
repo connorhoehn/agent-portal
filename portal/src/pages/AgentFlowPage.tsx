@@ -5,22 +5,12 @@
 // static topology always renders so the graph is meaningful from first load.
 
 import { useEffect, useMemo, useState } from 'react';
-import {
-  ReactFlow,
-  ReactFlowProvider,
-  Background,
-  Controls,
-  Panel,
-  Handle,
-  Position,
-  MarkerType,
-  type Node,
-  type Edge,
-} from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
+import { MarkerType, type Node, type Edge } from '@xyflow/react';
 import { Link, useSearchParams } from 'react-router';
-import { Drawer } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, Chip, Drawer, Inline, InlineAlert, Stack, StatusDot } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
+import { AgentFlowFrame, NODE_HEIGHT, NODE_WIDTH, STATUS_COLORS, fmtCount, fmtMs } from './AgentFlowFrame';
+import { T } from './Text';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -61,7 +51,7 @@ interface AgentDef {
 
 // ── Static topology catalog ───────────────────────────────────────────────────
 
-type Cluster = 'orgiq' | 'newsroom';
+type Cluster = 'orgiq';
 
 interface AgentMeta {
   display: string;
@@ -78,9 +68,6 @@ const AGENTS: Record<string, AgentMeta> = {
   'orgiq-advisor':         { display: 'Advisor',         description: 'Recommends experts and decisions',              x: 580, y: 240, cluster: 'orgiq' },
   'orgiq-graph-builder':   { display: 'Graph Builder',   description: 'Merges entities + edges into Aurora',           x: 170, y: 450, cluster: 'orgiq' },
   'orgiq-ingestion':       { display: 'Ingestion',       description: 'Parses, chunks, and embeds documents',          x: 460, y: 450, cluster: 'orgiq' },
-  'orgiq-news-researcher': { display: 'News Researcher', description: 'Gathers signals, pitches stories',              x: 960, y: 120, cluster: 'newsroom' },
-  'orgiq-news-brief':      { display: 'News Brief',      description: 'Drafts long-form briefs from pitches',          x: 820, y: 340, cluster: 'newsroom' },
-  'orgiq-news-headline':   { display: 'News Headline',   description: 'Writes headlines from briefs',                  x: 1100, y: 340, cluster: 'newsroom' },
 };
 
 interface StaticEdgeDef { id: string; source: string; target: string }
@@ -89,27 +76,12 @@ const STATIC_EDGES: StaticEdgeDef[] = [
   { id: 'sup-search',    source: 'orgiq-supervisor',       target: 'orgiq-search' },
   { id: 'sup-scoring',   source: 'orgiq-supervisor',       target: 'orgiq-scoring' },
   { id: 'sup-advisor',   source: 'orgiq-supervisor',       target: 'orgiq-advisor' },
-  { id: 'sup-news',      source: 'orgiq-supervisor',       target: 'orgiq-news-researcher' },
   { id: 'search-graph',  source: 'orgiq-search',           target: 'orgiq-graph-builder' },
   { id: 'scoring-graph', source: 'orgiq-scoring',          target: 'orgiq-graph-builder' },
   { id: 'adv-scoring',   source: 'orgiq-advisor',          target: 'orgiq-scoring' },
-  { id: 'news-brief',    source: 'orgiq-news-researcher',  target: 'orgiq-news-brief' },
-  { id: 'news-headline', source: 'orgiq-news-researcher',  target: 'orgiq-news-headline' },
 ];
 
 // ── Constants / helpers ───────────────────────────────────────────────────────
-
-const STATUS_COLORS: Record<string, string> = {
-  healthy: '#10b981',
-  degraded: '#f59e0b',
-  offline: '#ef4444',
-  deploying: '#6366f1',
-};
-
-const CLUSTER_COLORS: Record<Cluster, string> = {
-  orgiq: '#6366f1',
-  newsroom: '#0ea5e9',
-};
 
 const WINDOWS: Array<{ label: string; hours: number }> = [
   { label: '1h', hours: 1 },
@@ -118,7 +90,7 @@ const WINDOWS: Array<{ label: string; hours: number }> = [
 ];
 
 // Both id shapes reach this page: the AgentCore runtime id that observability
-// records (orgiq_supervisor-UO5Xv95jsx, orgiq_news_researcher-…) and the plain
+// records (orgiq_supervisor-UO5Xv95jsx, orgiq_graph_builder-…) and the plain
 // agent name the static catalog is keyed by (orgiq-supervisor). Both must
 // collapse to the same key or the metrics land under a key nothing looks up.
 //
@@ -128,13 +100,12 @@ const WINDOWS: Array<{ label: string; hours: number }> = [
 // introduces the generated 10-character suffix. A plain agent name is the
 // mirror image: hyphens, never underscores.
 //
-// The old `-[A-Za-z0-9]{10}$` matched on length alone, and "supervisor" and
-// "researcher" are each exactly 10 alphanumerics, so it ate the last segment of
-// the plain names too: orgiq-supervisor → "orgiq" and orgiq-news-researcher →
-// "orgiq-news". Those keys matched no node and no edge, so the Supervisor and
-// News Researcher nodes read calls 0 / err 0 / p95 —, and all six of their
-// edges rendered grey "no traffic yet", while the header counted the raw
-// totals and said otherwise.
+// The old `-[A-Za-z0-9]{10}$` matched on length alone, and "supervisor" is
+// exactly 10 alphanumerics, so it ate the last segment of the plain name too:
+// orgiq-supervisor → "orgiq". That key matched no node and no edge, so the
+// Supervisor node read calls 0 / err 0 / p95 —, and all of its edges rendered
+// grey "no traffic yet", while the header counted the raw totals and said
+// otherwise.
 const RUNTIME_ID = /^([A-Za-z0-9]+(?:_[A-Za-z0-9]+)+)-[A-Za-z0-9]{10}$/;
 
 function canonicalKey(id: string): string {
@@ -142,21 +113,12 @@ function canonicalKey(id: string): string {
   return base.replace(/_/g, '-');
 }
 
-function fmtMs(ms: number | null): string {
-  if (ms == null) return '—';
-  return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
-}
-
-function fmtCount(n: number): string {
-  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
-}
-
 function edgeStroke(errorCount: number, callCount: number): string {
-  if (callCount === 0) return '#cbd5e1';
+  if (callCount === 0) return 'var(--color-text-tertiary)';
   const r = errorCount / callCount;
-  if (r >= 0.1) return '#dc2626';
-  if (r >= 0.02) return '#d97706';
-  return '#10b981';
+  if (r >= 0.1) return 'var(--color-danger)';
+  if (r >= 0.02) return 'var(--color-warning)';
+  return 'var(--color-success)';
 }
 
 // ── Agent summary (merged from /api/agents + /api/topology/a2a) ───────────────
@@ -198,78 +160,15 @@ function buildSummaries(
   return m;
 }
 
-// ── Custom AgentNode ──────────────────────────────────────────────────────────
-
-type AgentNodeData = {
-  meta: AgentMeta;
-  summary: AgentSummary | null;
-  onSelect: (id: string) => void;
-};
-
-function AgentNodeComp({ id, data }: { id: string; data: unknown }) {
-  const { meta, summary, onSelect } = data as AgentNodeData;
-  const status = summary?.status ?? 'offline';
-  const statusColor = STATUS_COLORS[status] ?? '#94a3b8';
-  const clusterColor = CLUSTER_COLORS[meta.cluster];
-
-  return (
-    <div
-      onClick={() => onSelect(id)}
-      className="bg-surface rounded-[10px] py-2.5 px-3.5 w-[215px] cursor-pointer select-none shadow-[0_2px_8px_rgba(15,23,42,0.07)]"
-      style={{ border: `2px solid ${statusColor}` }}
-    >
-      <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
-      <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
-
-      {/* Header row */}
-      <div className="flex items-center gap-1.5 mb-[5px]">
-        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: statusColor }} />
-        <span className="font-bold text-[13px] flex-1 text-text-primary">
-          {meta.display}
-        </span>
-        <span
-          className="text-[9px] font-bold rounded uppercase tracking-wide px-[5px] py-px"
-          style={{ color: clusterColor, background: `${clusterColor}18`, border: `1px solid ${clusterColor}40` }}
-        >
-          {meta.cluster === 'orgiq' ? 'Org' : 'Newsroom'}
-        </span>
-      </div>
-
-      {/* Description */}
-      <div className="text-[10px] text-text-tertiary mb-[9px] leading-[1.35]">
-        {meta.description}
-      </div>
-
-      {/* Metric chips */}
-      <div className="flex gap-1">
-        <MetricChip label="calls"  value={fmtCount(summary?.invocationCount ?? 0)} />
-        <MetricChip label="err"    value={String(summary?.errorCount ?? 0)} accent={(summary?.errorCount ?? 0) > 0 ? 'warn' : undefined} />
-        <MetricChip label="p95"    value={fmtMs(summary?.p95Ms ?? null)} />
-      </div>
-    </div>
-  );
-}
-
-function MetricChip({ label, value, accent }: { label: string; value: string; accent?: 'warn' | 'danger' }) {
-  const accentClass = accent === 'danger' ? 'text-danger' : accent === 'warn' ? 'text-warning' : 'text-text-primary';
-  return (
-    <div className="flex-1 bg-surface-inset border border-border rounded py-[3px] px-1 text-center">
-      <div className="text-[9px] text-text-tertiary leading-tight">{label}</div>
-      <div className={`text-[11px] font-semibold leading-[1.3] ${accentClass}`}>{value}</div>
-    </div>
-  );
-}
-
-const NODE_TYPES = { agentNode: AgentNodeComp };
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 function AgentFlowPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // ?cluster=orgiq | newsroom | all (default = all)
-  const clusterFilter = (searchParams.get('cluster') ?? 'all') as 'all' | 'orgiq' | 'newsroom';
+  // ?cluster=orgiq | all (default = all) — a single-cluster fleet today, kept
+  // as a filter param in case a second cluster returns.
+  const clusterFilter = (searchParams.get('cluster') ?? 'all') as 'all' | 'orgiq';
 
   // ?window=1h|24h|7d — the URL is the source of truth, so the Architecture
   // sub-nav's window links and the in-page buttons drive the same thing and a
@@ -328,6 +227,17 @@ function AgentFlowPage() {
         id,
         type: 'agentNode',
         position: { x: meta.x, y: meta.y },
+        // A fixed-position (non-autolayout) graph never gets past xyflow's
+        // pre-measurement `visibility: hidden` state on its own if the
+        // ResizeObserver that's supposed to flip it never settles — every
+        // node, and everything focusable inside it, stayed permanently
+        // hidden and untabbable (DEFECTS.md #6). `initialWidth`/
+        // `initialHeight` seed `hasDimensions` immediately; once the real
+        // observer does fire, xyflow drops back to measuring the actual
+        // DOM size (see AgentNodeComp's fixed w-[215px] card). Same
+        // approach as distillation/CompactionFlowFrame.tsx.
+        initialWidth: NODE_WIDTH,
+        initialHeight: NODE_HEIGHT,
         data: { meta, summary: summaries.get(id) ?? null, onSelect: handleSelect } as unknown as Record<string, unknown>,
       }));
   }, [summaries, visibleAgentIds]);
@@ -349,7 +259,7 @@ function AgentFlowPage() {
         animated: isHot,
         label: calls > 0 ? fmtCount(calls) : undefined,
         labelStyle: { fontSize: 10, fill: stroke, fontWeight: 600 },
-        labelBgStyle: { fill: 'var(--color-surface, #fff)', fillOpacity: 0.85 },
+        labelBgStyle: { fill: 'var(--color-surface)', fillOpacity: 0.85 },
         markerEnd: { type: MarkerType.ArrowClosed, color: stroke },
         style: {
           stroke,
@@ -377,67 +287,46 @@ function AgentFlowPage() {
   const selectedMeta    = selectedId ? AGENTS[selectedId] ?? null : null;
 
   return (
-    <div className="w-full h-full flex flex-col">
+    <Stack gap="none" className="h-full w-full">
       {topologyError && (
-        <div className="py-2 px-4 text-[12px] text-danger bg-danger/10 border-b border-danger/30 shrink-0">
+        <InlineAlert tone="error" className="shrink-0 rounded-none border-b py-2 text-[12px]">
           Live metrics unavailable — {topologyError}. Showing the static architecture; the call/error overlay needs the observability permission (org-leader or HR Admin).
-        </div>
+        </InlineAlert>
       )}
       {/* ── Summary bar ── */}
-      <div className="flex items-center justify-between py-2.5 px-4 border-b border-border bg-surface gap-4 shrink-0">
-        <div className="flex items-center gap-5">
+      <Inline align="center" justify="between" gap="md" className="shrink-0 border-b border-border bg-surface px-4 py-2.5">
+        <Inline align="center" gap="lg">
           <SummaryKV label="Agents" value={`${onlineCount} / ${Object.keys(AGENTS).length} online`} />
           <SummaryKV label={`Calls (${windowHours < 24 ? windowHours + 'h' : windowHours === 24 ? '24h' : '7d'})`} value={topologyError ? '—' : fmtCount(totalCalls)} />
           <SummaryKV label="Errors" value={topologyError ? '—' : fmtCount(totalErrors)} accent={!topologyError && totalErrors > 0 ? 'warn' : undefined} />
           <SummaryKV label="Err rate" value={topologyError ? '—' : errRate} accent={!topologyError && totalErrors > 0 ? 'warn' : undefined} />
           {topology?.generatedAt && (
-            <span className="text-[10.5px] text-text-tertiary">
+            <T className="text-[10.5px] text-text-tertiary">
               Refreshed {new Date(topology.generatedAt).toLocaleTimeString()}
-            </span>
+            </T>
           )}
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-[11px] text-text-secondary">Window</span>
+        </Inline>
+        <Inline align="center" gap="xs">
+          <T className="text-[11px] text-text-secondary">Window</T>
           {WINDOWS.map(w => {
             const active = w.hours === windowHours;
             return (
-              <button
+              <Button
                 key={w.hours}
+                size="sm"
+                variant={active ? 'primary' : 'secondary'}
                 onClick={() => setWindowLabel(w.label)}
-                className={
-                  active
-                    ? 'py-[3px] px-2.5 text-[11px] rounded border bg-primary text-white border-primary cursor-pointer font-[inherit]'
-                    : 'py-[3px] px-2.5 text-[11px] rounded border border-border bg-transparent text-text-secondary cursor-pointer font-[inherit]'
-                }
               >
                 {w.label}
-              </button>
+              </Button>
             );
           })}
-        </div>
-      </div>
+        </Inline>
+      </Inline>
 
       {/* ── Canvas ── */}
-      <div className="flex-1 min-h-0 relative">
-        <ReactFlowProvider>
-          <ReactFlow
-            nodes={rfNodes}
-            edges={rfEdges}
-            nodeTypes={NODE_TYPES}
-            fitView
-            fitViewOptions={{ padding: 0.12 }}
-            proOptions={{ hideAttribution: true }}
-            nodesDraggable={false}
-            nodesConnectable={false}
-            onPaneClick={() => setSelectedId(null)}
-          >
-            <Background color="var(--color-border, #e2e8f0)" />
-            <Controls />
-            <Panel position="bottom-left">
-              <Legend />
-            </Panel>
-          </ReactFlow>
-        </ReactFlowProvider>
+      <Stack gap="none" className="relative min-h-0 flex-1">
+        <AgentFlowFrame nodes={rfNodes} edges={rfEdges} onPaneClick={() => setSelectedId(null)} />
 
         {selectedMeta && (
           <Drawer
@@ -453,8 +342,8 @@ function AgentFlowPage() {
             />
           </Drawer>
         )}
-      </div>
-    </div>
+      </Stack>
+    </Stack>
   );
 }
 
@@ -463,10 +352,10 @@ function AgentFlowPage() {
 function SummaryKV({ label, value, accent }: { label: string; value: string; accent?: 'warn' }) {
   const valColor = accent ? 'text-warning' : 'text-text-primary';
   return (
-    <div>
-      <div className="text-[9.5px] text-text-tertiary uppercase tracking-wider">{label}</div>
-      <div className={`text-[13px] font-semibold ${valColor}`}>{value}</div>
-    </div>
+    <Stack gap="none">
+      <T className="text-[9.5px] uppercase tracking-wider text-text-tertiary">{label}</T>
+      <T className={`text-[13px] font-semibold ${valColor}`}>{value}</T>
+    </Stack>
   );
 }
 
@@ -481,59 +370,56 @@ function AgentDrawerBody({
   meta: AgentMeta;
   summary: AgentSummary | null;
 }) {
-  const statusColor = STATUS_COLORS[summary?.status ?? 'offline'] ?? '#94a3b8';
-  const clusterColor = CLUSTER_COLORS[meta.cluster];
+  const statusColor = STATUS_COLORS[summary?.status ?? 'offline'] ?? 'var(--color-text-tertiary)';
 
   return (
-    <div className="py-3 px-3.5 flex flex-col gap-3">
-      <div className="flex items-center gap-2">
-        <span className="w-2.5 h-2.5 rounded-full" style={{ background: statusColor }} />
-        <span
-          className="text-[9px] font-bold rounded uppercase px-[5px] py-px"
-          style={{ color: clusterColor, background: `${clusterColor}18`, border: `1px solid ${clusterColor}40` }}
-        >
-          {meta.cluster === 'orgiq' ? 'Org' : 'Newsroom'}
-        </span>
-      </div>
+    <Stack gap="md" className="px-3.5 py-3">
+      <Inline align="center" gap="sm">
+        <StatusDot color={statusColor} size="sm" />
+        {/* Every agent today is in the one `orgiq` cluster (CLUSTER_COLORS in
+            AgentFlowFrame.tsx has a single entry) — a fixed semantic tone
+            reads the same as that cluster's indigo swatch without a computed
+            `style` object per render. */}
+        <Chip size="xs" uppercase tone="accent">Org</Chip>
+      </Inline>
 
-      <div className="text-[11.5px] text-text-secondary leading-[1.45]">
+      <T className="block text-[11.5px] leading-[1.45] text-text-secondary">
         {meta.description}
-      </div>
+      </T>
 
-      <div className="flex flex-col gap-[3px]">
+      <Stack gap="xs">
         <DrawerKv label="Status" value={summary?.status ?? 'unknown'} />
         {summary?.protocol && <DrawerKv label="Protocol" value={summary.protocol.toUpperCase()} />}
         {summary?.model && <DrawerKv label="Model" value={summary.model} />}
         <DrawerKv label="Agent ID" value={agentId} mono />
-      </div>
+      </Stack>
 
-      <div>
+      <Stack gap="sm">
         <SectionLabel>Metrics</SectionLabel>
-        <div className="grid grid-cols-2 gap-2">
-          <BigMetric label="Calls"   value={fmtCount(summary?.invocationCount ?? 0)} />
-          <BigMetric label="Errors"  value={String(summary?.errorCount ?? 0)} />
-          <BigMetric label="p50"     value={fmtMs(summary?.p50Ms ?? null)} />
-          <BigMetric label="p95"     value={fmtMs(summary?.p95Ms ?? null)} />
-        </div>
-      </div>
+        <Stack gap="sm">
+          <Inline gap="sm">
+            <BigMetric label="Calls"  value={fmtCount(summary?.invocationCount ?? 0)} />
+            <BigMetric label="Errors" value={String(summary?.errorCount ?? 0)} />
+          </Inline>
+          <Inline gap="sm">
+            <BigMetric label="p50" value={fmtMs(summary?.p50Ms ?? null)} />
+            <BigMetric label="p95" value={fmtMs(summary?.p95Ms ?? null)} />
+          </Inline>
+        </Stack>
+      </Stack>
 
       {summary?.tools && summary.tools.length > 0 && (
-        <div>
+        <Stack gap="sm">
           <SectionLabel>Tools</SectionLabel>
-          <div className="flex flex-wrap gap-1">
+          <Inline wrap gap="xs">
             {summary.tools.map(t => (
-              <span
-                key={t}
-                className="text-[10px] py-0.5 px-[7px] bg-surface-inset border border-border rounded-full text-text-secondary font-mono"
-              >
-                {t}
-              </span>
+              <Chip key={t} tone="neutral" size="xs" mono>{t}</Chip>
             ))}
-          </div>
-        </div>
+          </Inline>
+        </Stack>
       )}
 
-      <div className="border-t border-border pt-2.5 flex flex-col gap-1.5">
+      <Stack gap="sm" className="border-t border-border pt-2.5">
         {/* The drawer is a summary; this is where the depth lives — prompt
             version in force, recent call timings, and the runtime's log.
             "View invocation history" used to point at /iq/invoke, which is the
@@ -541,76 +427,44 @@ function AgentDrawerBody({
             asked, from a panel about one specific agent. */}
         <Link
           to={`/iq/agents/${encodeURIComponent(agentId)}`}
-          className="text-xs text-primary no-underline font-medium"
+          className="text-xs font-medium text-primary no-underline"
         >
           Open agent details →
         </Link>
         <Link
           to={`/iq/invoke?agentId=${encodeURIComponent(agentId)}`}
-          className="text-xs text-primary no-underline font-medium"
+          className="text-xs font-medium text-primary no-underline"
         >
           Invoke this agent →
         </Link>
-      </div>
-    </div>
+      </Stack>
+    </Stack>
   );
 }
 
 function DrawerKv({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="flex justify-between gap-2 text-xs py-0.5">
-      <span className="text-text-tertiary shrink-0">{label}</span>
-      <span
-        className={`text-text-primary font-medium text-right break-all max-w-[180px] ${mono ? 'font-mono' : ''}`}
-      >
-        {value}
-      </span>
-    </div>
+    <Inline justify="between" gap="sm" className="py-0.5 text-xs">
+      <T className="shrink-0 text-text-tertiary">{label}</T>
+      <T className={`max-w-[180px] break-all text-right font-medium text-text-primary ${mono ? 'font-mono' : ''}`}>{value}</T>
+    </Inline>
   );
 }
 
 function BigMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-surface-inset border border-border rounded-md py-2 px-2.5">
-      <div className="text-[9.5px] text-text-tertiary uppercase tracking-wider">{label}</div>
-      <div className="text-[15px] font-bold text-text-primary mt-0.5">{value}</div>
-    </div>
+    <Card padding="none" className="flex-1 rounded-md border border-border bg-surface-inset px-2.5 py-2">
+      <T className="block text-[9.5px] uppercase tracking-wider text-text-tertiary">{label}</T>
+      <T className="mt-0.5 block text-[15px] font-bold text-text-primary">{value}</T>
+    </Card>
   );
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[10px] font-bold text-text-tertiary uppercase tracking-wider mb-2">
+    <T className="block text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
       {children}
-    </div>
-  );
-}
-
-// ── Legend ────────────────────────────────────────────────────────────────────
-
-function Legend() {
-  return (
-    <div className="py-[9px] px-3 bg-surface border border-border rounded-md flex flex-col gap-1 shadow-[0_2px_8px_rgba(15,23,42,0.05)]">
-      <div className="font-bold text-[10px] text-text-primary mb-[5px]">Edges</div>
-      {[
-        { color: '#10b981', label: '< 2% error' },
-        { color: '#d97706', label: '2 – 10% error' },
-        { color: '#dc2626', label: '> 10% error' },
-        { color: '#cbd5e1', label: 'no traffic yet' },
-      ].map(({ color, label }) => (
-        <div key={label} className="flex items-center gap-1.5 text-[10.5px]">
-          <span
-            className="inline-block w-4 h-[2.5px] rounded shrink-0"
-            style={{ background: color }}
-          />
-          <span className="text-text-secondary">{label}</span>
-        </div>
-      ))}
-      <div className="flex items-center gap-1.5 text-[10.5px] mt-[3px]">
-        <span className="inline-block w-4 h-0 border-t-2 border-dashed border-text-tertiary shrink-0" />
-        <span className="text-text-secondary">cross-cluster</span>
-      </div>
-    </div>
+    </T>
   );
 }
 

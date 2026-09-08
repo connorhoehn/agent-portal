@@ -11,6 +11,7 @@ import {
   PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { T } from './Text';
 
 interface Invocation {
   id: string;
@@ -96,23 +97,16 @@ function AgentMetricsPage() {
       title="Per-Agent Metrics"
       description="Derived from recent invocations (live) + Bedrock log (~30s lag, 60min window)"
       actions={
-        <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+        <T className="text-[11px] text-[var(--color-text-tertiary)]">
           {rows.length} agent{rows.length !== 1 ? 's' : ''}
-        </span>
+        </T>
       }
     >
       <Card padding="md">
         {rows.length === 0 ? (
-          <div
-            style={{
-              padding: 24,
-              textAlign: 'center',
-              fontSize: 12,
-              color: 'var(--color-text-tertiary)',
-            }}
-          >
+          <T as="div" className="p-6 text-center text-[12px] text-[var(--color-text-tertiary)]">
             No agent activity in the recent window. Invoke an agent to populate this view.
-          </div>
+          </T>
         ) : (
           <Table>
             <TableHead>
@@ -133,34 +127,34 @@ function AgentMetricsPage() {
                 const healthy = errRate === 0 && blockedRate < 0.1;
                 return (
                   <TableRow key={r.agentName}>
-                    <TableTd style={{ fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' }}>
+                    <TableTd className="text-[12px] font-medium whitespace-nowrap">
                       {r.agentName}
                     </TableTd>
-                    <TableTd style={{ fontSize: 12 }}>{r.invocations}</TableTd>
-                    <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                    <TableTd className="text-[12px]">{r.invocations}</TableTd>
+                    <TableTd className="text-[11px] text-[var(--color-text-tertiary)]">
                       {r.invocations > 0 ? `${(r.avgLatencyMs / 1000).toFixed(2)}s` : '—'}
                     </TableTd>
-                    <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                    <TableTd className="text-[11px] text-[var(--color-text-tertiary)]">
                       {r.tokensIn + r.tokensOut > 0
                         ? `${r.tokensIn.toLocaleString()} / ${r.tokensOut.toLocaleString()}`
                         : '—'}
                     </TableTd>
-                    <TableTd style={{ fontSize: 12 }}>
-                      <span style={{ color: r.errors > 0 ? 'var(--color-danger, #dc2626)' : undefined }}>
+                    <TableTd className="text-[12px]">
+                      <T className={r.errors > 0 ? 'text-[var(--color-danger)]' : ''}>
                         {r.errors}
-                      </span>
+                      </T>
                       {r.invocations > 0 && (
-                        <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginLeft: 6 }}>
+                        <T className="text-[11px] text-[var(--color-text-tertiary)] ml-1.5">
                           ({(errRate * 100).toFixed(0)}%)
-                        </span>
+                        </T>
                       )}
                     </TableTd>
-                    <TableTd style={{ fontSize: 12 }}>
+                    <TableTd className="text-[12px]">
                       {r.blocked}
                       {r.invocations > 0 && (
-                        <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginLeft: 6 }}>
+                        <T className="text-[11px] text-[var(--color-text-tertiary)] ml-1.5">
                           ({(blockedRate * 100).toFixed(0)}%)
-                        </span>
+                        </T>
                       )}
                     </TableTd>
                     <TableTd>

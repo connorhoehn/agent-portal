@@ -454,7 +454,7 @@ kbAdminRouter.delete('/:id', asyncHandler(async (req, res) => {
 // ─── POST /:id/provision ─────────────────────────────────────────────────────
 // (Re)provision a KB that is in PENDING or FAILED status.
 // The normal POST / creates a new row AND provisions it. This endpoint is for:
-//   - Seeded rows (newsroom KB) whose provisioning was deferred
+//   - Seeded rows whose provisioning was deferred
 //   - Failed rows that need to be retried after a bug fix
 
 kbAdminRouter.post('/:id/provision', asyncHandler(async (req, res) => {

@@ -13,7 +13,7 @@
 //      and nothing else (lib/devbox-visibility.ts)
 
 import express from 'express';
-import request from 'supertest';
+import request from '../../test-support/http.js';
 import { devboxRouter, _internal, validateCommand, buildContainerCommand, validateCwd, CWD_MARKER } from '../devbox.js';
 import { type Session } from '../../lib/session.js';
 import { registerBox, _resetFleet } from '../../lib/devbox-fleet.js';

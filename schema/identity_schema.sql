@@ -10,7 +10,7 @@
 -- user_tenant_roles, which is what prevents cross-tenant leakage.
 
 CREATE TABLE IF NOT EXISTS tenants (
-  id          TEXT PRIMARY KEY,           -- 'orgiq' | 'newsroom' | future
+  id          TEXT PRIMARY KEY,           -- 'orgiq' | 'assessment' | future
   display_name TEXT NOT NULL,
   status      TEXT NOT NULL DEFAULT 'ACTIVE',  -- ACTIVE | SUSPENDED
   settings    JSONB NOT NULL DEFAULT '{}'::jsonb,
@@ -47,7 +47,7 @@ CREATE INDEX IF NOT EXISTS user_tenant_roles_tenant_idx ON user_tenant_roles (te
 
 INSERT INTO tenants (id, display_name) VALUES
   ('orgiq', 'OrgIQ'),
-  ('newsroom', 'Newsroom')
+  ('assessment', 'Assessment')
 ON CONFLICT (id) DO NOTHING;
 
 -- ── Seed: demo users ─────────────────────────────────────────────────────────
@@ -61,8 +61,6 @@ INSERT INTO app_users (id, display_name, email, person_id) VALUES
   ('u-vera',     'Vera Green',        'vera.green@orgiq.example',
      (SELECT id FROM people WHERE name = 'Vera Green' LIMIT 1)),
   ('u-hr',       'Priya Desai',       'priya.desai@orgiq.example', NULL),
-  ('u-reporter', 'Marcus Webb',       'marcus.webb@newsroom.example', NULL),
-  ('u-editor',   'Elena Ortiz',       'elena.ortiz@newsroom.example', NULL),
   -- Program operating model cast (docs/program-operating-model.md): a release
   -- manager who grants SME budget envelopes, a program operator who runs the
   -- program surfaces, and SMEs who masquerade in and assign compute to work.
@@ -70,6 +68,8 @@ INSERT INTO app_users (id, display_name, email, person_id) VALUES
      (SELECT id FROM people WHERE name = 'Sienna Garcia' LIMIT 1)),
   ('u-rachel',   'Rachel Kowalski',   'rachel.kowalski@orgiq.example',
      (SELECT id FROM people WHERE name = 'Rachel Kowalski' LIMIT 1)),
+  ('u-mia',      'Mia Singh',         'mia.singh@orgiq.example',
+   (SELECT id FROM people WHERE id = 'p-030')),
   ('u-nora',     'Nora DaSilva',      'nora.dasilva@orgiq.example',
      (SELECT id FROM people WHERE name = 'Nora DaSilva' LIMIT 1)),
   ('u-eli',      'Eli Garcia',        'eli.garcia@orgiq.example',
@@ -77,22 +77,22 @@ INSERT INTO app_users (id, display_name, email, person_id) VALUES
   ('u-layla',    'Layla Hassan',      'layla.hassan@orgiq.example',
      (SELECT id FROM people WHERE name = 'Layla Hassan' LIMIT 1)),
   ('u-caleb',    'Caleb Turner',      'caleb.turner@orgiq.example',
-     (SELECT id FROM people WHERE name = 'Caleb Turner' LIMIT 1))
+     (SELECT id FROM people WHERE name = 'Caleb Turner' LIMIT 1)),
+  -- Assessment tenant cast (docs/assessment-tenant.md Roles (Cedar)).
+  ('u-asha',     'Asha Nair',         'asha.nair@assessment.example', NULL),
+  ('u-jonas',    'Jonas Lindqvist',   'jonas.lindqvist@assessment.example', NULL),
+  ('u-farah',    'Farah Osei',        'farah.osei@assessment.example', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO user_tenant_roles (user_id, tenant_id, role) VALUES
   -- Cross-tenant operator: the only identity allowed to masquerade.
   ('u-operator', 'orgiq',    'admin'),
-  ('u-operator', 'newsroom', 'admin'),
+  ('u-operator', 'assessment', 'admin'),
   -- OrgIQ-only users, one per role tier.
   ('u-theo',     'orgiq',    'member'),
   ('u-vera',     'orgiq',    'org-leader'),
   ('u-vera',     'orgiq',    'member'),
   ('u-hr',       'orgiq',    'hr-admin'),
-  -- Newsroom-only users. No orgiq grants — switching to orgiq must 403.
-  ('u-reporter', 'newsroom', 'reporter'),
-  ('u-editor',   'newsroom', 'editor'),
-  ('u-editor',   'newsroom', 'reporter'),
   -- Release manager: allocates initiative budgets and grants SME envelopes
   -- (org-leader carries ManageBudgets + DispatchAgentRun).
   ('u-release',  'orgiq',    'org-leader'),
@@ -100,9 +100,21 @@ INSERT INTO user_tenant_roles (user_id, tenant_id, role) VALUES
   -- Program operator: runs bots/identity/program governance surfaces.
   ('u-rachel',   'orgiq',    'hr-admin'),
   ('u-rachel',   'orgiq',    'org-leader'),
+
+  -- The program owner: runs the delivery program (sprints, bots, the board)
+  -- without the allocation authority (see seeds/roles/orgiq/program-owner.cedar).
+  ('u-mia',      'orgiq',    'program-owner'),
+  ('u-mia',      'orgiq',    'member'),
   -- SMEs: dispatch agent work against their granted envelopes.
   ('u-nora',     'orgiq',    'sme'),
   ('u-eli',      'orgiq',    'sme'),
   ('u-layla',    'orgiq',    'sme'),
-  ('u-caleb',    'orgiq',    'sme')
+  ('u-caleb',    'orgiq',    'sme'),
+
+  -- Assessment tenant: assessor -> lead-assessor -> program-lead ladder.
+  ('u-asha',     'assessment', 'assessor'),
+  ('u-jonas',    'assessment', 'lead-assessor'),
+  ('u-jonas',    'assessment', 'assessor'),
+  ('u-farah',    'assessment', 'program-lead'),
+  ('u-farah',    'assessment', 'lead-assessor')
 ON CONFLICT DO NOTHING;

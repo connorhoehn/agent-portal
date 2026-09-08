@@ -7,9 +7,17 @@
 // a 403 (e.g. authz-degraded probe was optimistic) maps to a quiet "needs
 // dispatch rights" toast with a revert. A 503 means the owner column predates
 // the migration; the server's error is shown as-is.
+//
+// The owner picker used to be a hand-rolled `<div role="listbox">` positioned
+// with inline styles and closed only on outside click — Escape did nothing,
+// so a keyboard user who opened it with the ✎ trigger had no way back short
+// of Tab-ing past every row. It now renders on the library's `DropdownMenu`,
+// which is built on `InlinePopover` and gets Escape-to-close plus
+// focus-capture/restore (back to the ✎ trigger) for free — the same fix
+// class as the rest of this codebase's popovers, not a one-off.
 
 import { useState } from 'react';
-import { Chip } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Chip, DropdownMenu, type DropdownMenuSection } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastInfo } from '../../lib/toastStore';
 
@@ -78,11 +86,9 @@ export interface OwnerEditorProps {
 }
 
 export function OwnerEditor({ projectId, contributors, ownerId, ownerName, onOwner, onRole }: OwnerEditorProps) {
-  const [open, setOpen] = useState(false);
   const { can, ready } = useCapabilities();
 
   async function pick(person: GovernanceContributor | null) {
-    setOpen(false);
     if ((person?.personId ?? null) === ownerId) return;
     const prevOwnerId = ownerId, prevOwnerName = ownerName;
     const prevRole = person?.role ?? null;
@@ -113,81 +119,30 @@ export function OwnerEditor({ projectId, contributors, ownerId, ownerName, onOwn
   // in the header stays; only the pencil goes away.
   if (!ready || !can('DispatchAgentRun')) return null;
 
+  const sections: DropdownMenuSection[] = [
+    {
+      items: contributors.length > 0
+        ? contributors.map((c) => ({
+            label: c.name,
+            active: c.personId === ownerId,
+            icon: c.personId === ownerId ? <span aria-hidden="true">✓</span> : undefined,
+            onSelect: () => void pick(c),
+          }))
+        : [{ label: 'No contributors to pick from yet.', onSelect: () => {} }],
+    },
+    ...(ownerId != null
+      ? [{ items: [{ label: 'Clear owner', onSelect: () => void pick(null) }] }]
+      : []),
+  ];
+
   return (
-    <span style={{ position: 'relative', display: 'inline-flex' }}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        title="Change who runs this initiative"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        style={{
-          border: 'none', background: 'transparent', cursor: 'pointer', padding: '0 2px',
-          fontSize: 11, color: 'var(--color-text-tertiary)', lineHeight: 1,
-        }}
-        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--color-primary)'; }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--color-text-tertiary)'; }}
-      >
-        ✎
-      </button>
-      {open && (
-        <div
-          role="listbox"
-          onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false); }}
-          style={{
-            position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 30,
-            minWidth: 200, maxHeight: 240, overflowY: 'auto', padding: 4,
-            background: 'var(--color-surface)', border: '1.5px solid var(--color-border)',
-            borderRadius: 8, boxShadow: '0 8px 24px rgba(15, 23, 42, 0.12)',
-          }}
-        >
-          {contributors.length === 0 && (
-            <div style={{ padding: '6px 10px', fontSize: 12, color: 'var(--color-text-tertiary)', fontStyle: 'italic' }}>
-              No contributors to pick from yet.
-            </div>
-          )}
-          {contributors.map((c) => (
-            <button
-              key={c.personId}
-              type="button"
-              role="option"
-              aria-selected={c.personId === ownerId}
-              onClick={() => void pick(c)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6, width: '100%', textAlign: 'left',
-                padding: '5px 10px', border: 'none', borderRadius: 5, cursor: 'pointer',
-                background: 'transparent', fontSize: 12.5,
-                color: c.personId === ownerId ? 'var(--color-primary)' : 'var(--color-text-primary)',
-                fontWeight: c.personId === ownerId ? 700 : 500,
-              }}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--color-surface-inset)'; }}
-              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-            >
-              <span style={{ flex: 1 }}>{c.name}</span>
-              {c.personId === ownerId && <span aria-hidden="true">✓</span>}
-            </button>
-          ))}
-          {ownerId != null && (
-            <>
-              <div style={{ height: 1, background: 'var(--color-border)', margin: '4px 0' }} />
-              <button
-                type="button"
-                onClick={() => void pick(null)}
-                style={{
-                  display: 'block', width: '100%', textAlign: 'left', padding: '5px 10px',
-                  border: 'none', borderRadius: 5, cursor: 'pointer', background: 'transparent',
-                  fontSize: 12, color: 'var(--color-text-secondary)',
-                }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--color-surface-inset)'; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-              >
-                Clear owner
-              </button>
-            </>
-          )}
-        </div>
-      )}
-    </span>
+    <DropdownMenu
+      trigger="✎"
+      triggerLabel="Change who runs this initiative"
+      triggerTitle="Change who runs this initiative"
+      triggerClassName="border-none bg-transparent px-0.5 py-0 text-[11px] leading-none text-text-tertiary hover:text-primary hover:bg-transparent"
+      sections={sections}
+    />
   );
 }
 
@@ -220,7 +175,7 @@ export function RoleCycleChip({
     ) : norm === 'sme' ? (
       <Chip tone="info" size="xs">sme</Chip>
     ) : (
-      <span style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>{role ?? '—'}</span>
+      <span className="text-[13px] text-text-secondary">{role ?? '—'}</span>
     );
   }
 
@@ -243,28 +198,23 @@ export function RoleCycleChip({
   }
 
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      size="sm"
       disabled={busy}
       onClick={(e) => { e.stopPropagation(); void cycle(); }}
       title={`Role: ${role ?? '—'} — click to make ${next ?? '—'}`}
-      style={{
-        border: 'none', background: 'transparent', padding: 0, cursor: 'pointer',
-        opacity: busy ? 0.5 : 1, font: 'inherit',
-      }}
+      className="h-auto w-auto min-w-0 border-0 bg-transparent p-0 font-normal hover:bg-transparent"
     >
       {norm === 'owner' ? (
         <Chip tone="purple" size="xs">owner</Chip>
       ) : norm === 'sme' ? (
         <Chip tone="info" size="xs">sme</Chip>
       ) : (
-        <span style={{
-          fontSize: 13, color: 'var(--color-text-secondary)',
-          borderBottom: '1px dashed var(--color-border-emphasis)',
-        }}>
+        <span className="border-b border-dashed border-border-emphasis text-[13px] text-text-secondary">
           {role ?? '—'}
         </span>
       )}
-    </button>
+    </Button>
   );
 }

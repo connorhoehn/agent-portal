@@ -7,6 +7,8 @@ import {
   Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import type { PromptLibraryEntry } from '../../../components/canary/types.js';
+import { friendlyLibraryError } from './libraryError';
+import { T } from '../Text';
 
 /** The prompt rail: search, the library list, and a manual refresh. */
 export function PromptSidebar({
@@ -33,7 +35,7 @@ export function PromptSidebar({
   canManage: boolean;
 }) {
   return (
-    <div className="flex w-60 flex-none flex-col overflow-hidden border-r border-border bg-surface">
+    <Stack gap="none" className="w-60 flex-none overflow-hidden border-r border-border bg-surface">
       <Stack gap="sm" className="flex-none border-b border-border px-3 pb-2.5 pt-3.5">
         {canManage && (
           <Button variant="primary" fullWidth onClick={onNew}>+ New prompt</Button>
@@ -41,9 +43,9 @@ export function PromptSidebar({
         <SearchInput value={search} onChange={onSearch} placeholder="Search prompts…" />
       </Stack>
 
-      <div className="flex-1 overflow-y-auto">
+      <Stack gap="none" className="flex-1 overflow-y-auto">
         {loading && <LoadingState label="Loading prompts…" />}
-        {error && <InlineAlert tone="error">{error}</InlineAlert>}
+        {error && <InlineAlert tone="error">{friendlyLibraryError(error)}</InlineAlert>}
         {!loading && !error && prompts.length === 0 && (
           <InlinePlaceholder>No prompts found.</InlinePlaceholder>
         )}
@@ -55,12 +57,12 @@ export function PromptSidebar({
             onSelect={() => onSelect(prompt)}
           />
         ))}
-      </div>
+      </Stack>
 
-      <div className="flex-none p-3">
+      <Stack gap="none" className="flex-none p-3">
         <Button variant="secondary" fullWidth onClick={onRefresh}>Refresh library</Button>
-      </div>
-    </div>
+      </Stack>
+    </Stack>
   );
 }
 
@@ -81,24 +83,27 @@ function PromptRow({
   onSelect: () => void;
 }) {
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      fullWidth
       onClick={onSelect}
       aria-pressed={active}
-      className={`block w-full cursor-pointer border-0 border-b border-b-border px-3.5 py-2.5 text-left ${
+      className={`!h-auto !justify-start !rounded-none !border-0 !border-b !border-b-border !px-3.5 !py-2.5 !text-left ${
         active
-          ? 'border-l-[3px] border-l-primary bg-[var(--color-primary-soft)] pl-[11px]'
-          : 'bg-transparent hover:bg-surface-hover'
+          ? '!border-l-[3px] !border-l-primary !bg-[var(--color-primary-soft)] !pl-[11px]'
+          : '!bg-transparent hover:!bg-surface-hover'
       }`}
     >
-      <span className="block truncate font-mono text-[12px] font-semibold leading-snug text-text-primary">
-        {prompt.name}
-      </span>
-      {prompt.description && (
-        <span className="mt-0.5 block truncate text-[11px] leading-snug text-text-tertiary">
-          {prompt.description}
-        </span>
-      )}
-    </button>
+      <Stack gap="none" align="start" className="w-full">
+        <T className="block w-full truncate font-mono text-[12px] font-semibold leading-snug text-text-primary">
+          {prompt.name}
+        </T>
+        {prompt.description && (
+          <T className="mt-0.5 block w-full truncate text-[11px] leading-snug text-text-tertiary">
+            {prompt.description}
+          </T>
+        )}
+      </Stack>
+    </Button>
   );
 }

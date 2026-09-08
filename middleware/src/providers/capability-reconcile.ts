@@ -24,6 +24,7 @@ import {
 } from '@aws-sdk/client-bedrock-agentcore-control';
 import { BedrockClient, ListGuardrailsCommand } from '@aws-sdk/client-bedrock';
 import { config } from '../config.js';
+import { capabilityConfigRows, capabilityInventoryRows } from '../mock/capability-inventory.js';
 
 let _client: BedrockAgentCoreControlClient | null = null;
 const client = (): BedrockAgentCoreControlClient =>
@@ -122,7 +123,34 @@ async function listGuardrails(): Promise<Array<{ id: string; status: string | nu
  *
  * Probes run together; one unreachable service must not hide the others.
  */
+/**
+ * Offline, both sides of the comparison come from fixtures and `probe` runs
+ * over them unchanged — so the states and the sentences are produced by the
+ * same code AWS drives, not written out beside the ids they describe. Without
+ * this every row reported `unconfigured`, which is the one answer that tells a
+ * reader nothing about whether reconciliation works.
+ */
+async function reconcileFromFixtures(): Promise<{ capabilities: CapabilityStatus[] }> {
+  const configured = new Map(capabilityConfigRows.rows().map((r) => [r.key, r.configuredId]));
+  const listing = (resource: string) => async () =>
+    capabilityInventoryRows.rows()
+      .filter((r) => r.resource === resource)
+      .map((r) => ({ id: r.id, status: r.status }));
+  const id = (key: CapabilityStatus['key']): string => configured.get(key) ?? '';
+  const capabilities = await Promise.all([
+    probe('browser', 'Browser', 'BROWSER_ID', id('browser'), listing('browser')),
+    probe('browserProfile', 'Browser profile', 'BROWSER_PROFILE_ID', id('browserProfile'), listing('browserProfile')),
+    probe('codeInterpreter', 'Code Interpreter', 'CODE_INTERPRETER_ID', id('codeInterpreter'), listing('codeInterpreter')),
+    probe('memory', 'Memory', 'MEMORY_ID', id('memory'), listing('memory')),
+    probe('guardrailMember', 'Guardrail (member)', 'GUARDRAIL_ID_MEMBER', id('guardrailMember'), listing('guardrail')),
+    probe('guardrailOrgLeader', 'Guardrail (org leader)', 'GUARDRAIL_ID_ORG_LEADER', id('guardrailOrgLeader'), listing('guardrail')),
+    probe('guardrailHrAdmin', 'Guardrail (HR admin)', 'GUARDRAIL_ID_HR_ADMIN', id('guardrailHrAdmin'), listing('guardrail')),
+  ]);
+  return { capabilities };
+}
+
 export async function reconcileCapabilities(): Promise<{ capabilities: CapabilityStatus[] }> {
+  if (config.mock.agentcore) return reconcileFromFixtures();
   const ac = config.agentcore;
   const capabilities = await Promise.all([
     probe('browser', 'Browser', 'BROWSER_ID', ac.browserId, async () => {

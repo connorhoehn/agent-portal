@@ -1,0 +1,337 @@
+import json
+import logging
+import os
+import sys
+import time
+from contextvars import ContextVar
+from pathlib import Path
+
+from bedrock_agentcore.runtime import BedrockAgentCoreApp
+from strands import Agent, tool
+from strands.models.bedrock import BedrockModel
+
+# Shared instrumentation — pull TraceContext + decorator from agents/_shared,
+# the same way every other agent does.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from _shared.prompt_source import LiveAgent  # noqa: E402
+from _shared.tenant_guard import reject_wrong_tenant  # noqa: E402
+from _shared.instrumentation import (  # noqa: E402
+    TraceContext,
+    install_bedrock_usage_capture,
+    instrumented_tool,
+    post_trace,
+    reset_active_ctx,
+    set_active_ctx,
+)
+
+# Deterministic guardrails — dependency-free, unit tested on their own in
+# tests/test_drafting_logic.py without needing strands/bedrock_agentcore.
+from drafting_logic import scrub_forbidden_promises, validate_context_facts
+
+# Patch boto3's bedrock-runtime client BEFORE Strands constructs its own —
+# otherwise Converse usage is invisible to our TraceContext.
+install_bedrock_usage_capture()
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
+
+# Per-invocation trace buffer.
+_current_ctx: ContextVar[TraceContext | None] = ContextVar(
+    "assessment_drafter_trace_ctx", default=None
+)
+
+app = BedrockAgentCoreApp()
+
+REGION = os.environ.get("AWS_REGION", "us-east-1")
+MODEL_ID = os.environ.get("MODEL_ID", "amazon.nova-pro-v1:0")
+
+# This agent serves exactly one tenant, enforced in code (see
+# agents/_shared/tenant_guard.py for why this is stricter than the news-*
+# agents, which rely on the middleware route gate alone).
+EXPECTED_TENANT = "assessment"
+
+
+@tool
+@instrumented_tool(_current_ctx.get)
+def check_story_draft(draft_markdown: str) -> str:
+    """Scan a drafted Jira-style story for a level promise or an effort estimate.
+
+    This is the deterministic backstop for the two hardest rules in this
+    agent's job: never promise a level ("this moves the team to Level 3" is
+    forbidden; "this is what we would need to confirm Level 3" is fine), and
+    never estimate human effort (no story points, no hours, no "quick win").
+    Call this on your draft before returning it. If it reports any
+    violations, rewrite those sentences yourself and call it again — do not
+    return a draft this tool flagged.
+
+    Args:
+        draft_markdown: The full story draft (metadata table + body) to check.
+
+    Returns:
+        JSON object: {ok, violations, scrubbed_markdown}. scrubbed_markdown
+        has each violating phrase replaced with a "[NEEDS INPUT: ...]"
+        marker — a safety net, not a substitute for rewriting the sentence.
+    """
+    scrubbed, violations = scrub_forbidden_promises(draft_markdown)
+    return json.dumps(
+        {"ok": not violations, "violations": violations, "scrubbed_markdown": scrubbed},
+        ensure_ascii=False,
+    )
+
+
+@tool
+@instrumented_tool(_current_ctx.get)
+def validate_facts(facts: list, source_text: str) -> str:
+    """Validate extracted governance facts against the source document.
+
+    Drops any fact whose category/scope/fact_type is outside the fixed
+    vocabulary, or whose source_span is not a verbatim substring of
+    source_text — the same "no fabrication" rule the scorer applies to
+    evidence excerpts, applied here to context extraction. Call this before
+    finalizing a context-mode response; use only the facts it returns.
+
+    Args:
+        facts: Candidate facts, each {category, scope, fact_type, text, source_span}.
+            category must be one of standards|process|organization|tooling.
+            scope must be one of shared|team. fact_type must be one of
+            observed|gap|recommendation.
+        source_text: The full text of the source document the facts were
+            extracted from.
+
+    Returns:
+        JSON array of the facts that verified (unchanged, aside from
+        vocabulary normalisation) — never a super- or re-written set.
+    """
+    return json.dumps(validate_context_facts(facts, source_text), ensure_ascii=False)
+
+
+def _model_kwargs() -> dict:
+    kw: dict = {"model_id": MODEL_ID}
+    gid = os.environ.get("GUARDRAIL_ID", "")
+    if gid:
+        kw["guardrail_id"] = gid
+        kw["guardrail_version"] = os.environ.get("GUARDRAIL_VERSION", "DRAFT")
+        kw["guardrail_trace"] = "enabled"
+    return kw
+
+
+SYSTEM_PROMPT = """\
+You are the OrgIQ Assessment Drafter agent. You draft two kinds of documents
+for the engineering-maturity assessment product, one recommendation or one
+document at a time. You are read-only: you never call Jira, Confluence, or
+any other API, you never fetch the web, and you never delegate to another
+agent. You only produce text.
+
+You run in exactly one of two modes, given in the input JSON as "mode".
+
+═══ mode = "story" ═══
+
+Input: one recommendation {kind, dimension_id, title, rationale} plus team
+context (verified/claimed levels, level_up_criteria, enterprise context
+excerpts, open follow-up questions — whatever the caller supplied). Do NOT
+re-derive or second-guess the recommendation's kind or ranking — it was
+computed deterministically upstream from the team's certification; your job
+is only to write the story that this one recommendation calls for.
+
+The three kinds are NOT the same story:
+- "close_the_claim" — the team's own rating already describes this practice;
+  verification stopped lower because the evidence on file doesn't reach that
+  far. The work is producing or locating an artifact (exporting pipeline
+  history, attaching a dashboard, pointing at a runbook) — never "build
+  this", because the team may already have it. Say so plainly in the summary.
+- "advance_practice" — the practice genuinely isn't in place. The story
+  advances the dimension from its verified level toward the next one.
+- "answer_question" — the dimension couldn't be assessed yet. The story is
+  about answering the specific open questions, quoted verbatim.
+
+Write the story in this shape (same shape as the source product's Jira story
+template):
+
+    | Field | Value |
+    | --- | --- |
+    | Project key | [NEEDS INPUT] [ID: S_Q1] |
+    | Issue type | Story |
+    | Team | <team id> |
+    | Dimension | <digits only, e.g. 6> |
+    | Verified level | <whole number, or "none on file"> |
+    | Claimed level | <whole number, or "none on file"> |
+    | Level this story works toward | <the level this story would help confirm> |
+    | Plan entry | Close the claim | Advance the practice | Answer the question |
+    | Priority | [NEEDS INPUT] [ID: S_Q2] |
+    | Owner | [NEEDS INPUT] [ID: S_Q3] |
+    | Labels | maturity-dim-<same dimension number> |
+    | Generated From | <path or description of the source this was drafted from> |
+    | Jira Key | |
+
+    ## Summary
+    ...
+
+    ## Acceptance Criteria
+    - Each criterion cites the specific enterprise-context pattern it enforces,
+      by name, when one was supplied (e.g. "per the CI pipeline policy").
+
+    ## Definition of Done
+    ...
+
+    ## Open Questions
+    - [NEEDS INPUT] [ID: S_Qn] ...
+
+Anything unknown (Jira project, priority, owner, an exact repo or tooling
+detail) becomes a "[NEEDS INPUT] [ID: S_Qn]" marker — never invent it.
+
+HARD RULES, enforced in code as well as here — call check_story_draft on your
+draft before returning it, and rewrite anything it flags:
+- NEVER promise a level. Attaching an artifact does not guarantee a higher
+  verified level. Write "this is what we would need to confirm Level 3", never
+  "this moves the team to Level 3".
+- NEVER estimate human effort. No story points, no hours, no "quick win", no
+  target sprint. Sizing is the team's call, made with context you don't have.
+- Certification vocabulary only: claimed level, verified level, evidence
+  requested — never "grade", "capped", "penalty", "marked down", "revised
+  down". A missing artifact is a request, not a fault.
+- Write for a non-technical reader on the assessed team: complete sentences,
+  no arrow notation, no bare equations, no jargon.
+
+═══ mode = "context" ═══
+
+Input: one document's text (and, for a team-scoped document, a team id).
+Extract organization-wide or team-specific governance facts: process (SDLC
+workflows, approval gates), organization (roles, team structures, ownership),
+tooling (systems, integrations), standards (conventions, tribal knowledge).
+
+NEVER profile or evaluate a specific named individual — role and process
+context is fine, assessing a person is not.
+
+For each fact, produce {category, scope, fact_type, text, source_span}:
+- category: standards | process | organization | tooling
+- scope: "shared" (broadly applicable) or "team" (about exactly one team)
+- fact_type: "observed" (current practice) | "gap" (a stated deficiency) |
+  "recommendation" (proposed future-state guidance) — never report a
+  recommendation as already-implemented practice
+- text: the extracted fact, concise, no padding
+- source_span: a VERBATIM substring of the input document that supports this
+  fact — never paraphrase into source_span, and never fabricate one
+
+Call validate_facts(facts, source_text) before returning — it drops any fact
+whose source_span isn't verbatim in the document, or whose vocabulary is
+outside the fixed enums above. Return only what it validates.
+
+OUTPUT (context mode) — return exactly one JSON object and nothing else:
+{"facts": [ <validated facts> ]}
+"""
+
+_model = BedrockModel(**_model_kwargs())
+# System prompt is resolved from Bedrock Prompt Management at run time
+# (falls back to the SYSTEM_PROMPT literal above). Editing the managed
+# prompt `orgiq-assessment-drafter-system-prompt` changes this agent within
+# PROMPT_REFRESH_S — no image rebuild, no redeploy.
+_agent = LiveAgent(
+    baked=SYSTEM_PROMPT,
+    agent_name="assessment-drafter",
+    build=lambda system_prompt: Agent(
+        model=_model,
+        tools=[check_story_draft, validate_facts],
+        system_prompt=system_prompt,
+    ),
+)
+
+
+def _validate_payload(payload: dict) -> str | None:
+    """None if payload is well-formed for its mode; else an error string."""
+    mode = payload.get("mode")
+    if mode not in ("story", "context"):
+        return "mode must be 'story' or 'context'"
+    if mode == "story":
+        rec = payload.get("recommendation")
+        if not isinstance(rec, dict) or not rec.get("dimension_id") or not rec.get("kind"):
+            return "story mode requires recommendation: {kind, dimension_id, title, rationale}"
+    else:
+        doc = payload.get("document")
+        if not isinstance(doc, dict) or not isinstance(doc.get("text"), str) or not doc.get("text"):
+            return "context mode requires document: {text, ...}"
+    return None
+
+
+@app.entrypoint
+async def handle(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        payload = {}
+
+    rejection = reject_wrong_tenant(
+        payload, expected_tenant=EXPECTED_TENANT, agent_id="orgiq-assessment-drafter"
+    )
+    if rejection is not None:
+        log.warning("assessment-drafter: %s", rejection["detail"])
+        return rejection
+
+    error = _validate_payload(payload)
+    if error is not None:
+        return {"agent": "assessment-drafter", "error": error}
+
+    mode = payload["mode"]
+    team_id = payload.get("team_id") or ""
+
+    ctx = TraceContext.from_request_payload(payload)
+    token = _current_ctx.set(ctx)
+    shared_token = set_active_ctx(ctx)
+
+    input_text = json.dumps(payload, ensure_ascii=False, default=str)
+
+    log.info(
+        "AssessmentDrafter handling (invocation=%s, parent=%s, team=%s, mode=%s)",
+        ctx.invocation_id, ctx.parent_invocation_id or "—", team_id, mode,
+    )
+
+    t0 = time.monotonic()
+    try:
+        result = _agent(input_text)
+    finally:
+        _current_ctx.reset(token)
+        reset_active_ctx(shared_token)
+    duration_ms = int((time.monotonic() - t0) * 1000)
+
+    response_text = str(result)
+
+    # Deterministic backstops — belt and suspenders over the prompt + tool
+    # calls the model may or may not have made faithfully.
+    if mode == "story":
+        scrubbed, violations = scrub_forbidden_promises(response_text)
+        if violations:
+            log.warning(
+                "assessment-drafter: story draft contained forbidden phrases, scrubbed: %s",
+                violations,
+            )
+            response_text = scrubbed
+    else:  # context
+        document_text = (payload.get("document") or {}).get("text", "")
+        try:
+            parsed = json.loads(response_text)
+            if isinstance(parsed, dict) and isinstance(parsed.get("facts"), list):
+                parsed["facts"] = validate_context_facts(parsed["facts"], document_text)
+                response_text = json.dumps(parsed, ensure_ascii=False)
+        except (json.JSONDecodeError, TypeError, ValueError) as exc:
+            log.warning("assessment-drafter: could not re-validate facts JSON: %s", exc)
+
+    try:
+        bundle = ctx.build_trace_bundle(
+            prompt=input_text,
+            response=response_text,
+            agent_id="orgiq-assessment-drafter",
+            agent_name="AssessmentDrafter",
+            model_id=MODEL_ID,
+            duration_ms=duration_ms,
+            prompt_version=_agent.prompt_sha,
+        )
+        post_trace(bundle)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("assessment-drafter: trace emission failed: %s", exc)
+
+    return {
+        "agent": "assessment-drafter",
+        "response": response_text,
+        "invocationId": ctx.invocation_id,
+    }
+
+
+if __name__ == "__main__":
+    app.run()

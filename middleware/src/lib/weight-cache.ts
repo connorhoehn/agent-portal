@@ -15,6 +15,12 @@ import {
   PutParameterCommand,
 } from '@aws-sdk/client-ssm';
 import type { CanaryControlState } from './canary-types.js';
+import {
+  mockGetControl,
+  mockGetWeightB,
+  mockSetControl,
+  mockSetWeightB,
+} from '../mock/canary-weight.js';
 import { config } from '../config.js';
 
 const TTL_MS = 20_000;
@@ -31,6 +37,11 @@ interface CacheEntry {
 let entry: CacheEntry | null = null;
 
 export async function getWeightB(): Promise<number> {
+  // `ParameterNotFound` below covers "the PromptCanary stack was never
+  // deployed". It does NOT cover "there is no credential to call SSM with":
+  // offline the SDK throws CredentialsProviderError before it ever reaches
+  // Parameter Store, the `catch` re-threw it, and GET /canary/weight 500'd.
+  if (config.mock.agentcore) return mockGetWeightB();
   const now = Date.now();
   if (entry && now - entry.fetchedAt < TTL_MS) return entry.value;
 
@@ -67,6 +78,12 @@ export async function setWeightB(
   // the mutation; the downstream broker event captures it. SSM itself is
   // history-agnostic, so we don't pass it to the API.
   void source;
+  if (config.mock.agentcore) {
+    // Move the same row the GET reads, so the slider's optimistic update is
+    // confirmed by the next poll rather than snapping back.
+    mockSetWeightB(weightB);
+    return;
+  }
   await client.send(
     new PutParameterCommand({
       Name: WEIGHT_PARAM,
@@ -103,6 +120,7 @@ function parseControl(raw: string | undefined | null): CanaryControlState {
 }
 
 export async function getControl(): Promise<CanaryControlState> {
+  if (config.mock.agentcore) return mockGetControl();
   try {
     const res = await client.send(
       new GetParameterCommand({ Name: CONTROL_PARAM }),
@@ -122,6 +140,10 @@ export async function setControl(
   control: Partial<CanaryControlState>,
 ): Promise<void> {
   // Merge with existing so partial updates don't clobber unrelated fields.
+  if (config.mock.agentcore) {
+    mockSetControl(control);
+    return;
+  }
   const existing = await getControl();
   const merged: CanaryControlState = {
     manual_override_until:

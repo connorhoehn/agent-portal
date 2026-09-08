@@ -74,9 +74,12 @@ function SprintMoney({ s }: { s: Sprint }) {
   );
 }
 
-export function SprintDetail({ s, personId, canManageSprints, canManageBudgets, onChanged }: {
+export function SprintDetail({ s, personId, canManageSprints, canManageBudgets, onChanged, frameless }: {
   s: Sprint; personId: string | null;
   canManageSprints: boolean; canManageBudgets: boolean; onChanged: () => void;
+  /** Skip the Card wrapper — for hosts that already frame the detail (the
+      Initiatives page renders it inside a Drawer). */
+  frameless?: boolean;
 }) {
   const [selectedTab, setTab] = useState('work');
   // Losing ManageBudgets while the Envelopes tab is open would otherwise leave
@@ -92,8 +95,7 @@ export function SprintDetail({ s, personId, canManageSprints, canManageBudgets, 
       : []),
   ];
 
-  return (
-    <Card padding="md">
+  const body = (
       <Stack gap="md">
         <DetailHeader
           title={s.name}
@@ -162,6 +164,7 @@ export function SprintDetail({ s, personId, canManageSprints, canManageBudgets, 
           </TabPanel>
         ) : null}
       </Stack>
-    </Card>
   );
+
+  return frameless ? body : <Card padding="md">{body}</Card>;
 }

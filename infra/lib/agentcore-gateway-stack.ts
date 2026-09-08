@@ -9,7 +9,6 @@ export interface AgentCoreGatewayStackProps extends cdk.StackProps {
   readonly auroraClusterArn: string;
   readonly auroraCredentialsSecretArn: string;
   readonly knowledgeBaseId: string;
-  readonly newsroomKbId?: string;
   readonly policyEngineArn: string;
   readonly policyEngineId: string;
   readonly agentRoles: Record<string, iam.Role>;
@@ -90,7 +89,6 @@ export class AgentCoreGatewayStack extends cdk.Stack {
       environment: {
         KB_ID: props.knowledgeBaseId,
         REGION: this.region,
-        ...(props.newsroomKbId && { NEWSROOM_KB_ID: props.newsroomKbId }),
       },
     });
 
@@ -232,7 +230,7 @@ export class AgentCoreGatewayStack extends cdk.Stack {
                     properties: {
                       query: { type: 'string', description: 'The search query' },
                       maxResults: { type: 'number', description: 'Maximum number of results to return (default 5)' },
-                      kb_slug: { type: 'string', description: "Registry slug of the KB to query (default: 'default' for orgiq, 'newsroom' for newsroom articles)" },
+                      kb_slug: { type: 'string', description: "Registry slug of the KB to query (default: 'default')" },
                     },
                     required: ['query'],
                   },

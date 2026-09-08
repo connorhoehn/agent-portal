@@ -15,6 +15,8 @@
 // credential vault for the length of one sync and is not stored here.
 
 import { borrowApiKey } from '../providers/connected-sources.js';
+import { config } from '../config.js';
+import { githubIdentityRow, githubOrgRows, githubRepoRows, githubSignalRows } from '../mock/github.js';
 
 const API = 'https://api.github.com';
 
@@ -165,6 +167,14 @@ export async function openPullRequest(
  * like an org with very little activity.
  */
 export async function identify(providerName: string): Promise<GitHubIdentity> {
+  // Fixture floor, not a network call: there is no vault in mock mode
+  // (borrowApiKey throws on purpose — see its own comment), so this branches
+  // before ever asking for a token rather than papering over a thrown error.
+  if (config.mock.agentcore) {
+    const row = githubIdentityRow.rows()[0];
+    if (!row) throw new Error(`no mock identity fixture for ${providerName}`);
+    return { ...row, scopes: [...row.scopes] };
+  }
   const token = await borrowApiKey(providerName);
   const url = new URL(`${API}/user`);
   const res = await fetch(url, {
@@ -190,8 +200,19 @@ export async function identify(providerName: string): Promise<GitHubIdentity> {
 
 /** Repositories the token can see, most recently pushed first. */
 export async function listRepos(providerName: string, opts: { org?: string; limit?: number } = {}): Promise<RepoRef[]> {
-  const token = await borrowApiKey(providerName);
   const limit = Math.min(Math.max(opts.limit ?? 30, 1), 100);
+  if (config.mock.agentcore) {
+    // Same filter+sort the real branch below applies, over the seeded rows
+    // instead of a page from the API — an `org` this token can't see (real
+    // GitHub 404s an org repos listing it has no access to) comes back empty
+    // rather than leaking every fixture repo regardless of what was asked.
+    const rows = githubRepoRows.rows()
+      .filter((r) => !opts.org || r.owner.toLowerCase() === opts.org.toLowerCase())
+      .slice()
+      .sort((a, b) => (b.pushedAt ?? '').localeCompare(a.pushedAt ?? ''));
+    return rows.slice(0, limit).map((r) => ({ ...r }));
+  }
+  const token = await borrowApiKey(providerName);
   const repos = await gh<Array<{ name: string; full_name: string; owner: { login: string }; pushed_at?: string | null }>>({
     token,
     path: opts.org ? `/orgs/${opts.org}/repos` : '/user/repos',
@@ -210,6 +231,11 @@ export async function listRepos(providerName: string, opts: { org?: string; limi
  * and borrowing per-level would hit the credential vault once per expand.
  */
 export async function listOrgs(token: string): Promise<Array<{ login: string; description: string | null }>> {
+  // Takes a token like the real branch, but never inspects it: the caller
+  // (routes/connections.ts) skips borrowApiKey entirely in mock mode, so
+  // `token` here is always the empty string it was given instead — the fixture
+  // path never depends on a value that mock mode has no honest way to produce.
+  if (config.mock.agentcore) return githubOrgRows.rows().map((o) => ({ ...o }));
   const orgs = await gh<Array<{ login?: string; description?: string | null }>>({
     token,
     path: '/user/orgs',
@@ -400,6 +426,14 @@ export async function readRepoSignal(
   repo: RepoRef,
   opts: { sinceDays?: number; maxCommits?: number } = {},
 ): Promise<ContributionSignal[]> {
+  if (config.mock.agentcore) {
+    // A repo with no seeded row is the honest empty case, not an error — the
+    // real endpoint returns no commits just as plainly for a quiet repo.
+    return githubSignalRows.rows()
+      .filter((s) => s.repo === repo.fullName)
+      .map((s) => ({ ...s, areas: [...s.areas], languages: { ...s.languages } }))
+      .sort((a, b) => b.commits - a.commits);
+  }
   const token = await borrowApiKey(providerName);
   const sinceDays = Math.min(Math.max(opts.sinceDays ?? 180, 1), 3650);
   const maxCommits = Math.min(Math.max(opts.maxCommits ?? 200, 1), 1000);

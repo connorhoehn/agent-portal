@@ -35,6 +35,7 @@ INITIATIVES = [
     dict(
         id='p-observability', slug='obs', repo='orgiq-observability', tier='flagship',
         owner='p-004', smes=['p-008', 'p-011'],
+        sponsor='p-002',
         description='Unified telemetry: OpenTelemetry collection, SLO/error-budget '
                     'alerting, and cost-aware retention across every service.',
         epics=[
@@ -53,7 +54,7 @@ INITIATIVES = [
                 ('story', 'SLO definitions in the service catalog with owners', 'done', 'high', 5, ['slo'], 's2'),
                 ('story', 'Multi-window burn-rate alerts (fast + slow burn)', 'in_review', 'high', 5, ['slo', 'alerting'], 's2'),
                 ('story', 'Error-budget dashboard per team', 'open', 'medium', 3, ['slo', 'dashboards'], 's3'),
-                ('bug', 'Alert dedup storm when a shared dependency degrades', 'open', 'high', 2, ['alerting'], 's3'),
+                ('bug', 'Alert dedup storm when a shared dependency degrades', 'open', 'high', 2, ['alerting', 'blocked'], 's3'),
              ]),
             ('e3', 'Cost-aware telemetry', 'medium', 'open',
              'Telemetry spend is budgeted like compute: cardinality and retention have owners.',
@@ -79,11 +80,12 @@ INITIATIVES = [
                  per_run=0.50, per_day=2.00, runs=10),
         decision=('d-otel-vendor', 'Self-hosted OTel collectors over vendor agents',
                   'Vendor agents priced per-host at 3x our infra cost; the collector fleet is '
-                  'ours to tune and the escape hatch stays open.', 'resolved', None),
+                  'ours to tune and the escape hatch stays open.', 'resolved', None, 'e1'),
     ),
     dict(
         id='p-auth-migration', slug='auth', repo='orgiq-auth-service', tier='flagship',
         owner='p-002', smes=['p-051', 'p-004'],
+        sponsor='p-052',
         description='Consolidate every login path onto Cognito + BFF OIDC and retire the '
                     'legacy SAML shim, tenant by tenant, with zero forced logouts.',
         epics=[
@@ -99,7 +101,7 @@ INITIATIVES = [
              'The SAML shim serves zero tenants and is deleted, not paused.',
              [
                 ('story', 'Inventory every consumer still on the SAML shim', 'done', 'medium', 3, ['decom'], 's1'),
-                ('story', 'Tenant-by-tenant cutover runbook with rollback', 'open', 'high', 5, ['decom', 'runbook'], 's2'),
+                ('story', 'Tenant-by-tenant cutover runbook with rollback', 'open', 'high', 5, ['decom', 'runbook', 'blocked'], 's2'),
                 ('bug', 'Logout leaves the legacy shim cookie alive', 'open', 'medium', 2, ['session', 'decom'], 's2'),
              ]),
         ],
@@ -109,7 +111,14 @@ INITIATIVES = [
             ('s2', 'Sprint 42 — Session hygiene', 'p-051', -14, 0, 'active',
              'Sessions expire server-side; revoked grants bite within a minute.'),
         ],
-        grants=[('s1', 'p-051', 25), ('s2', 'p-051', 20)],
+        # p-004 (Nora DaSilva, u-nora — the seeded sme login) is an SME here
+        # (see smes= above), not the owner; she gets her own envelope on the
+        # active sprint alongside p-051's so the sme persona can exercise the
+        # role's core loop (hold a grant, dispatch against it) without
+        # displacing the steward's existing one. Regression: sme.md defect #1
+        # — every seeded budget_grants row went to someone other than the one
+        # seeded `sme` user, so the audit persona could not dispatch anywhere.
+        grants=[('s1', 'p-051', 25), ('s2', 'p-051', 20), ('s2', 'p-004', 15)],
         budget=35,
         bot=dict(name='auth-dep-watch', template='bug', cron='0 5 * * 1-5',
                  mission='Weekday dependency and CVE watch for the auth service: bump patch '
@@ -118,11 +127,12 @@ INITIATIVES = [
                  per_run=0.40, per_day=1.50, runs=8),
         decision=('d-cognito-cutover', 'Cutover order for legacy SSO tenants',
                   'Smallest tenant first vs. riskiest first. Riskiest-first surfaces unknowns '
-                  'while rollback is cheap, but a failed first cutover is loud.', 'escalated', 'org-leader'),
+                  'while rollback is cheap, but a failed first cutover is loud.', 'escalated', 'org-leader', 'e2'),
     ),
     dict(
         id='p-llm-platform', slug='llm', repo='orgiq-llm-platform', tier='flagship',
         owner='p-047', smes=['p-042', 'p-013'],
+        sponsor='p-049',
         description='The paved road for LLM features: managed prompts, canary evaluation, '
                     'guardrail regression, and efficient serving.',
         epics=[
@@ -161,11 +171,12 @@ INITIATIVES = [
                  per_run=0.80, per_day=3.00, runs=9),
         decision=('d-eval-judge-model', 'Judge model for canary evaluation',
                   'Nova Pro judges cost ~6x Nova Lite but agree with human labels 11 points '
-                  'more often on the current rubric. Sample-rate tuning could fund the gap.', 'open', None),
+                  'more often on the current rubric. Sample-rate tuning could fund the gap.', 'open', None, 'e1'),
     ),
     dict(
         id='p-cost-opt', slug='cost', repo='orgiq-finops', tier='flagship',
         owner='p-008', smes=['p-011', 'p-017'],
+        sponsor='p-006',
         description='Idle capacity teardown and per-initiative showback: every dollar of '
                     'infra and agent spend attributable, every floor justified.',
         epics=[
@@ -202,6 +213,7 @@ INITIATIVES = [
     dict(
         id='p-realtime-analytics', slug='rta', repo='orgiq-stream-analytics', tier='standard',
         owner='p-017', smes=['p-019', 'p-024'],
+        sponsor='p-025',
         description='Exactly-once event pipeline on Flink: schema-governed ingest, '
                     'checkpointed processing, and replayable backfills.',
         epics=[
@@ -226,6 +238,7 @@ INITIATIVES = [
     dict(
         id='p-data-lake', slug='lake', repo='orgiq-data-lake', tier='standard',
         owner='p-025', smes=['p-017', 'p-015'],
+        sponsor='p-012',
         description='Lakehouse foundation on Iceberg: contract-governed ingest zones and '
                     'time-travel access for analytics and ML.',
         epics=[
@@ -243,11 +256,12 @@ INITIATIVES = [
         bot=None,  # planning-stage initiative: no repo activity to maintain yet
         decision=('d-iceberg', 'Iceberg over Delta for the lakehouse table format',
                   'Engine-neutral catalog support and snapshot isolation fit the multi-engine '
-                  'roadmap; Delta\'s tighter Spark coupling was the deciding cost.', 'resolved', None),
+                  'roadmap; Delta\'s tighter Spark coupling was the deciding cost.', 'resolved', None, 'e1'),
     ),
     dict(
         id='p-feature-store', slug='fs', repo='orgiq-feature-store', tier='standard',
         owner='p-042', smes=['p-019', 'p-044'],
+        sponsor='p-049',
         description='Online feature serving GA: point-in-time correct training data and '
                     'freshness-SLA\'d online lookups.',
         epics=[
@@ -271,6 +285,7 @@ INITIATIVES = [
     dict(
         id='p-mobile-redesign', slug='mob', repo='orgiq-mobile-app', tier='standard',
         owner='p-030', smes=['p-035', 'p-026'],
+        sponsor='p-036',
         description='Navigation-first redesign of the mobile app: new IA, deep-link '
                     'routing, and gesture-safe interactions.',
         epics=[
@@ -294,6 +309,7 @@ INITIATIVES = [
     dict(
         id='p-design-v3', slug='ds', repo='orgiq-design-system', tier='standard',
         owner='p-035', smes=['p-038', 'p-034'],
+        sponsor='p-036',
         description='Design System v3: semantic token pipeline from Figma to code with '
                     'accessibility gates built in.',
         epics=[
@@ -317,6 +333,7 @@ INITIATIVES = [
     dict(
         id='p-rag-search', slug='rag', repo='orgiq-rag-search', tier='standard',
         owner='p-048', smes=['p-047'],
+        sponsor='p-006',
         description='Retrieval-augmented org search — shipped. Hybrid retrieval with '
                     'grounded citations; in maintenance.',
         epics=[
@@ -339,6 +356,7 @@ INITIATIVES = [
     dict(
         id='p-soc2', slug='soc2', repo='orgiq-compliance', tier='standard',
         owner='p-052', smes=['p-055', 'p-051'],
+        sponsor='p-012',
         description='SOC 2 Type II readiness: controls mapped to owners, evidence '
                     'collection automated, access reviews on cadence.',
         epics=[
@@ -362,6 +380,7 @@ INITIATIVES = [
     dict(
         id='p-design-system-api', slug='dsapi', repo='orgiq-design-system-api', tier='standard',
         owner='p-038', smes=['p-035', 'p-001'],
+        sponsor='p-036',
         description='Programmatic access to the design system: typed component '
                     'contracts, versioned release channels, and codemod-assisted upgrades.',
         epics=[
@@ -385,6 +404,7 @@ INITIATIVES = [
     dict(
         id='p-inference-platform', slug='inf', repo='orgiq-inference-platform', tier='standard',
         owner='p-049', smes=['p-013', 'p-043'],
+        sponsor='p-012',
         description='Shared model serving: queue-depth autoscaling, warm pools, and '
                     'per-model canary rollout for every team shipping inference.',
         epics=[
@@ -408,6 +428,7 @@ INITIATIVES = [
     dict(
         id='p-zero-trust', slug='zt', repo='orgiq-zero-trust', tier='standard',
         owner='p-051', smes=['p-052', 'p-056'],
+        sponsor='p-052',
         description='Zero-trust segmentation blueprint: service identity everywhere, '
                     'mTLS by default, policy-engine enforced.',
         epics=[
@@ -500,7 +521,9 @@ def main() -> None:
 
         emit(
             f"UPDATE projects SET description = '{q(ini['description'])}', "
-            f"github_url = '{GH}/{ini['repo']}', owner_id = '{ini['owner']}' "
+            f"summary = '{q(ini['description'])}', "
+            f"github_url = '{GH}/{ini['repo']}', owner_id = '{ini['owner']}', "
+            f"sponsor_person_id = '{ini['sponsor']}' "
             f"WHERE id = '{pid}'"
         )
         emit(
@@ -597,17 +620,45 @@ def main() -> None:
                     "ON CONFLICT (id) DO NOTHING"
                 )
 
-        # Decision, when the initiative carries one.
+        # The decision this initiative raised, when it has one.
+        #
+        # Same table and same column list as schema/seed.sql's org-graph
+        # decisions — see the comment on `decisions` in schema/orgiq_schema.sql.
+        # These rows used to fill only half of it (no decided_at, no
+        # work_item_id, no participants) while seed.sql filled the other half
+        # (no status, no project_id), so `GET /api/graph/decisions` and an
+        # initiative's Decisions tab described two different worlds out of one
+        # table. Whatever is added here must be added there too.
+        #
+        # work_item_id can only be written from THIS file: the epic it names is
+        # emitted a few lines above, and does not exist when seed.sql runs.
         if ini['decision']:
-            (did, topic, summary, status, req_role) = ini['decision']
-            decided = days(RNG.randint(5, 20)) if status == 'resolved' else 'NULL'
+            (did, topic, summary, status, req_role, dec_ekey) = ini['decision']
+            resolved = days(RNG.randint(5, 20)) if status == 'resolved' else 'NULL'
             escalated = days(RNG.randint(1, 5)) if status == 'escalated' else 'NULL'
+            # A decision has a decided_at exactly when it has been decided. The
+            # graph's decision list orders on it, so leaving it NULL on a
+            # resolved row put a settled call in with the undecided ones.
+            decided = f'({resolved})::date' if status == 'resolved' else 'NULL'
             role_sql = f"'{req_role}'" if req_role else 'NULL'
             emit(
-                "INSERT INTO decisions (id, topic, summary, status, project_id, required_role, escalated_at, resolved_at) "
-                f"VALUES ('{did}', '{q(topic)}', '{q(summary)}', '{status}', '{pid}', {role_sql}, {escalated}, {decided}) "
+                "INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id) "
+                f"VALUES ('{did}', '{q(topic)}', '{q(summary)}', '{status}', '{pid}', {role_sql}, {decided}, {escalated}, {resolved}, "
+                f"'wi-{slug}-{dec_ekey}') "
                 "ON CONFLICT (id) DO NOTHING"
             )
+            # Who was in the room. Every decision in seed.sql carries this;
+            # these carried none, so the same rows that the initiative page
+            # showed read "0 participants" on the graph's decision list.
+            emit(
+                "INSERT INTO decision_participants (person_id, decision_id, role) "
+                f"VALUES ('{ini['owner']}', '{did}', 'decider') ON CONFLICT DO NOTHING"
+            )
+            for sme in ini['smes']:
+                emit(
+                    "INSERT INTO decision_participants (person_id, decision_id, role) "
+                    f"VALUES ('{sme}', '{did}', 'contributor') ON CONFLICT DO NOTHING"
+                )
 
         # The maintenance bot and its baseline: cron firing → queue job → run.
         bot = ini['bot']
@@ -636,6 +687,11 @@ def main() -> None:
                 # DO NOTHING cannot repair it; the row already exists.
                 f"ON CONFLICT (id) DO UPDATE SET org_project_id = '{pid}', enabled = {enabled}, paused_reason = {paused}"
             )
+            # The payload's requiresReview must agree with the bot's own
+            # requires_review column three lines up, which is TRUE for every
+            # seeded bot. It said false, so a seeded job claimed no review was
+            # needed while the bot that minted it said one was — one seed
+            # contradicting itself, which no fixture should be adjusted to match.
             for j in range(bot['runs']):
                 age = j * max(1, 30 // bot['runs']) + 1
                 cost = round(bot['per_run'] * RNG.uniform(0.25, 0.85), 4)
@@ -643,7 +699,7 @@ def main() -> None:
                 emit(
                     "INSERT INTO agent_jobs (id, kind, title, payload, status, priority, attempts, max_attempts, result, created_by, created_at, finished_at, bot_id) "
                     f"VALUES ('{jid}', 'devbox:task', '{q(bot['name'])}', "
-                    f"'{{\"prompt\": \"{q(bot['mission'])[:120]}\", \"requiresReview\": false, \"botId\": \"{bid}\", \"model\": \"us.amazon.nova-lite-v1:0\"}}'::jsonb, "
+                    f"'{{\"prompt\": \"{q(bot['mission'])[:120]}\", \"requiresReview\": true, \"botId\": \"{bid}\", \"model\": \"us.amazon.nova-lite-v1:0\"}}'::jsonb, "
                     f"'done', 100, 1, 1, '{{\"summary\": \"Maintenance pass complete\", \"costUsd\": {cost}}}'::jsonb, "
                     f"'scheduler', {days(age)}, {days(age)}, '{bid}') "
                     "ON CONFLICT (id) DO NOTHING"

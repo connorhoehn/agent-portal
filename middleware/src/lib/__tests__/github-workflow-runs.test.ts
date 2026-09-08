@@ -10,6 +10,12 @@
 // Also pinned: this function issues exactly one GET and never a POST. It is
 // the reporting half of a domain that deliberately has no dispatch half.
 
+// config.ts uses import.meta, which the CJS test transform cannot compile —
+// github-connector.ts now reads config.mock.agentcore for its mock branches,
+// so every test of it needs this stub even where (as here) real-mode fetch is
+// what's under test.
+jest.mock('../../config.js', () => ({ config: { region: 'us-east-1', mock: { agentcore: false } } }));
+
 jest.mock('../../providers/connected-sources.js', () => ({
   borrowApiKey: jest.fn(async () => 'ghp_test_token'),
 }));

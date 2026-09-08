@@ -18,18 +18,24 @@
 //   GET /deploy-markers?windowHours=
 
 import { useMemo, useState } from 'react';
-import type { CSSProperties } from 'react';
 import { useNavigate } from 'react-router';
 import {
+  Button,
   Card,
+  Chip,
+  Inline,
+  InlinePlaceholder,
+  KPIGrid,
+  PageSection,
+  SectionLabel,
+  Stack,
+  StatCard,
   Table,
   TableHead,
   TableBody,
   TableRow,
   TableTh,
   TableTd,
-  Chip,
-  PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
   BarChart,
@@ -46,6 +52,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { CostChip } from '../../components/observability/CostChip';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
+import { T } from './Text';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -168,16 +175,20 @@ const WINDOW_OPTIONS: Array<{ label: string; hours: number; bucket: number }> = 
   { label: '30d', hours: 720, bucket: 1440 },
 ];
 
-// Match drift palette so agent colors are stable across pages.
+// Match drift palette so agent colors are stable across pages. Eight
+// tokenized hues so up to 8 agents each keep a stable identity color; the
+// tokenized palette only has 6 distinct hues (brand/success/warning/
+// info/optimize/danger), so pink and lime are mixed from two tokens each
+// with color-mix rather than reused verbatim from another slot.
 const AGENT_COLORS = [
-  '#6366f1', // indigo
-  '#ec4899', // pink
-  '#10b981', // emerald
-  '#f59e0b', // amber
-  '#06b6d4', // cyan
-  '#a855f7', // purple
-  '#ef4444', // red
-  '#84cc16', // lime
+  'var(--color-brand)', // indigo
+  'color-mix(in srgb, var(--color-danger) 55%, var(--color-brand) 45%)', // pink
+  'var(--color-success)', // emerald
+  'var(--color-warning)', // amber
+  'color-mix(in srgb, var(--color-info) 60%, var(--color-success) 40%)', // cyan
+  'var(--color-optimize)', // purple
+  'var(--color-danger)', // red
+  'color-mix(in srgb, var(--color-success) 65%, var(--color-warning) 35%)', // lime
 ];
 const colorFor = (idx: number) => AGENT_COLORS[idx % AGENT_COLORS.length];
 
@@ -218,6 +229,14 @@ function costPerGoodTone(cost: number | null): 'success' | 'warning' | 'danger' 
   if (cost < 0.02)  return 'warning';
   return 'danger';
 }
+
+// ─── Reusable cell classes (Tailwind, not inline style objects) ─────────────
+
+const agentCellCls = 'whitespace-nowrap text-[12px] font-medium';
+const numCellCls = 'text-[12px] text-[var(--color-text-secondary)] [font-variant-numeric:tabular-nums]';
+const tsCellCls = 'whitespace-nowrap text-[11px] text-[var(--color-text-tertiary)]';
+const monoCellCls = 'whitespace-nowrap font-mono text-[11px] text-[var(--color-text-tertiary)]';
+const snippetCellCls = 'max-w-[360px] truncate text-[12px]';
 
 // ─── Page ───────────────────────────────────────────────────────────────────
 
@@ -374,40 +393,40 @@ function CostPage() {
 
       <Card padding="md">
         {/* Headline cards row. */}
-        <div style={headlineRow}>
-          <HeadlineCard
+        <KPIGrid columns={3}>
+          <StatCard
             label="Total spend"
-            primary={fmtUsd(totalCostUsd)}
-            secondary={`${fmtInt(invocations)} invocations · ${fmtInt(total?.inputTokens ?? 0)} in / ${fmtInt(total?.outputTokens ?? 0)} out tokens`}
+            value={fmtUsd(totalCostUsd)}
+            hint={`${fmtInt(invocations)} invocations · ${fmtInt(total?.inputTokens ?? 0)} in / ${fmtInt(total?.outputTokens ?? 0)} out tokens`}
           />
-          <HeadlineCard
+          <StatCard
             label="A2A overhead"
-            primary={fmtPct(a2a?.a2aFraction ?? 0)}
-            secondary={
+            value={fmtPct(a2a?.a2aFraction ?? 0)}
+            danger={!!(a2a && a2a.a2aFraction > 0.4)}
+            hint={
               a2a && a2a.totalCostUsd > 0
                 ? `${fmtUsd(a2a.a2aCostUsd)} of ${fmtUsd(a2a.totalCostUsd)} on multi-agent routing · ${fmtInt(a2a.a2aInvocations)} sub-calls`
                 : 'of total cost is multi-agent routing'
             }
-            tone={a2a && a2a.a2aFraction > 0.4 ? 'warning' : undefined}
           />
-          <HeadlineCard
+          <StatCard
             label="Cost per good response"
-            primary={
+            value={
               valueRatioRanked.best?.costPerGood != null
                 ? fmtUsd(valueRatioRanked.best.costPerGood, 4)
                 : '—'
             }
-            secondary={
+            hint={
               valueRatioRanked.best && valueRatioRanked.worst &&
               valueRatioRanked.best.agentId !== valueRatioRanked.worst.agentId ? (
-                <span style={chipRow}>
+                <Inline as="span" gap="xs" wrap align="center">
                   <Chip tone="success" size="xs">
                     ✓ {valueRatioRanked.best.agentId} {fmtUsd(valueRatioRanked.best.costPerGood, 4)}
                   </Chip>
                   <Chip tone="danger" size="xs">
                     ⚠ {valueRatioRanked.worst.agentId} {fmtUsd(valueRatioRanked.worst.costPerGood, 4)}
                   </Chip>
-                </span>
+                </Inline>
               ) : valueRatioRanked.best ? (
                 <Chip tone="success" size="xs">
                   ✓ {valueRatioRanked.best.agentId}
@@ -417,20 +436,18 @@ function CostPage() {
               )
             }
           />
-        </div>
+        </KPIGrid>
       </Card>
 
       {/* Cost over time. */}
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
-            Cost Over Time{' '}
-            <span style={hint}>
-              stacked $ per agent · bucket {win.bucket}m · window {win.label}
-              {chartMarkers.length > 0 ? ` · ${chartMarkers.length} deploy marker${chartMarkers.length === 1 ? '' : 's'}` : ''}
-            </span>
-          </h2>
-        </div>
+        <SectionLabel as="div" className="mb-3">
+          Cost Over Time{' '}
+          <T className="text-[11px] font-normal text-[var(--color-text-tertiary)]">
+            stacked $ per agent · bucket {win.bucket}m · window {win.label}
+            {chartMarkers.length > 0 ? ` · ${chartMarkers.length} deploy marker${chartMarkers.length === 1 ? '' : 's'}` : ''}
+          </T>
+        </SectionLabel>
         {chartData.length === 0 ? (
           <SmartEmptyState
             title="No cost data"
@@ -444,7 +461,7 @@ function CostPage() {
             ]}
           />
         ) : (
-          <div style={{ width: '100%', height: 300 }}>
+          <Stack className="h-[300px] w-full">
             <ResponsiveContainer>
               <BarChart data={chartData} margin={{ top: 20, right: 16, bottom: 4, left: 0 }}>
                 <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
@@ -477,7 +494,7 @@ function CostPage() {
                   <ReferenceLine
                     key={key}
                     x={label}
-                    stroke="var(--color-text-primary, #0f172a)"
+                    stroke="var(--color-text-primary)"
                     strokeDasharray="4 2"
                     strokeOpacity={0.55}
                     label={{
@@ -490,35 +507,39 @@ function CostPage() {
                 ))}
               </BarChart>
             </ResponsiveContainer>
-          </div>
+          </Stack>
         )}
         {chartMarkers.length > 0 && (
-          <div style={markerLegend}>
-            <span style={markerLegendLabel}>deploys:</span>
+          <Inline gap="xs" wrap align="center" className="mt-3 text-[11px] text-[var(--color-text-secondary)]">
+            <T className="text-[10px] font-bold tracking-[0.5px] text-[var(--color-text-tertiary)]">
+              deploys:
+            </T>
             {chartMarkers.map(({ marker, key }) => (
               <Chip key={key} tone="neutral" size="xs">
-                <span style={monoChip}>
+                <T className="font-mono">
                   {marker.agentId}@{marker.promptVersion.slice(0, 6)}
-                </span>
-                <span style={markerWhen}> · {shortTime(marker.registeredAt, win.hours)}</span>
+                </T>
+                <T className="text-[10px] text-[var(--color-text-tertiary)]">
+                  {' '}· {shortTime(marker.registeredAt, win.hours)}
+                </T>
               </Chip>
             ))}
-          </div>
+          </Inline>
         )}
       </Card>
 
       {/* Per-agent breakdown table. */}
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
-            Per-Agent Breakdown{' '}
-            <span style={hint}>
-              sorted by total cost · {perAgentRows.length} agent{perAgentRows.length === 1 ? '' : 's'}
-            </span>
-          </h2>
-        </div>
+        <SectionLabel as="div" className="mb-3">
+          Per-Agent Breakdown{' '}
+          <T className="text-[11px] font-normal text-[var(--color-text-tertiary)]">
+            sorted by total cost · {perAgentRows.length} agent{perAgentRows.length === 1 ? '' : 's'}
+          </T>
+        </SectionLabel>
         {perAgentRows.length === 0 ? (
-          <EmptyState text="No invocations with cost data in this window." />
+          <InlinePlaceholder align="center" size="sm">
+            No invocations with cost data in this window.
+          </InlinePlaceholder>
         ) : (
           <Table>
             <TableHead>
@@ -538,13 +559,13 @@ function CostPage() {
                 const cpg = costPerGoodByAgent.get(r.agentId) ?? null;
                 return (
                   <TableRow key={r.agentId}>
-                    <TableTd style={agentCell}>{r.agentId}</TableTd>
-                    <TableTd style={numCell}>{fmtInt(r.invocations)}</TableTd>
-                    <TableTd style={numCell}>{fmtInt(r.inputTokens)}</TableTd>
-                    <TableTd style={numCell}>{fmtInt(r.outputTokens)}</TableTd>
-                    <TableTd style={numCell}>{fmtUsd(r.estCostUsd, 4)}</TableTd>
-                    <TableTd style={numCell}>{fmtUsd(r.judgeCostUsd, 4)}</TableTd>
-                    <TableTd style={{ ...numCell, fontWeight: 600 }}>
+                    <TableTd className={agentCellCls}>{r.agentId}</TableTd>
+                    <TableTd className={numCellCls}>{fmtInt(r.invocations)}</TableTd>
+                    <TableTd className={numCellCls}>{fmtInt(r.inputTokens)}</TableTd>
+                    <TableTd className={numCellCls}>{fmtInt(r.outputTokens)}</TableTd>
+                    <TableTd className={numCellCls}>{fmtUsd(r.estCostUsd, 4)}</TableTd>
+                    <TableTd className={numCellCls}>{fmtUsd(r.judgeCostUsd, 4)}</TableTd>
+                    <TableTd className={`${numCellCls} font-semibold`}>
                       {fmtUsd(r.totalCostUsd)}
                     </TableTd>
                     <TableTd>
@@ -562,16 +583,16 @@ function CostPage() {
 
       {/* Top expensive invocations. */}
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
-            Top Expensive Invocations{' '}
-            <span style={hint}>
-              highest single-call cost first · click → open invocation detail
-            </span>
-          </h2>
-        </div>
+        <SectionLabel as="div" className="mb-3">
+          Top Expensive Invocations{' '}
+          <T className="text-[11px] font-normal text-[var(--color-text-tertiary)]">
+            highest single-call cost first · click → open invocation detail
+          </T>
+        </SectionLabel>
         {topRows.length === 0 ? (
-          <EmptyState text="No expensive invocations recorded in this window." />
+          <InlinePlaceholder align="center" size="sm">
+            No expensive invocations recorded in this window.
+          </InlinePlaceholder>
         ) : (
           <Table>
             <TableHead>
@@ -588,29 +609,31 @@ function CostPage() {
               {topRows.map((r) => (
                 <TableRow
                   key={r.invocationId}
+                  clickable
                   onClick={() =>
                     navigate(`/admin/observability/invocations/${r.invocationId}`)
                   }
-                  style={{ cursor: 'pointer' }}
                 >
-                  <TableTd style={tsCell}>
+                  <TableTd className={tsCellCls}>
                     {r.ts ? new Date(r.ts.replace(' ', 'T')).toLocaleString() : '—'}
                   </TableTd>
-                  <TableTd style={agentCell}>{r.agentId || '—'}</TableTd>
-                  <TableTd style={monoCell}>
+                  <TableTd className={agentCellCls}>{r.agentId || '—'}</TableTd>
+                  <TableTd className={monoCellCls}>
                     {r.promptVersion ? `p:${r.promptVersion.slice(0, 8)}` : '—'}
                   </TableTd>
                   <TableTd
-                    style={snippetCell}
+                    className={snippetCellCls}
                     title={r.promptSnippet}
                   >
                     {r.promptSnippet || '(empty)'}
                   </TableTd>
-                  <TableTd style={{ whiteSpace: 'nowrap' }}>
+                  <TableTd className="whitespace-nowrap">
                     <CostChip cost={r.totalCostUsd} />
                   </TableTd>
-                  <TableTd style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
-                    <span style={openLinkBtn} aria-hidden="true">→</span>
+                  <TableTd className="whitespace-nowrap text-right">
+                    <Inline as="span" gap="none" aria-hidden="true" className="text-[12px] text-[var(--color-primary)]">
+                      →
+                    </Inline>
                   </TableTd>
                 </TableRow>
               ))}
@@ -621,16 +644,16 @@ function CostPage() {
 
       {/* By-model breakdown. */}
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
-            By Model{' '}
-            <span style={hint}>
-              spend per foundation model · {byModelRows.length} model{byModelRows.length === 1 ? '' : 's'}
-            </span>
-          </h2>
-        </div>
+        <SectionLabel as="div" className="mb-3">
+          By Model{' '}
+          <T className="text-[11px] font-normal text-[var(--color-text-tertiary)]">
+            spend per foundation model · {byModelRows.length} model{byModelRows.length === 1 ? '' : 's'}
+          </T>
+        </SectionLabel>
         {byModelRows.length === 0 ? (
-          <EmptyState text="No model attribution yet — older rows may pre-date model_id capture." />
+          <InlinePlaceholder align="center" size="sm">
+            No model attribution yet — older rows may pre-date model_id capture.
+          </InlinePlaceholder>
         ) : (
           <Table>
             <TableHead>
@@ -645,11 +668,11 @@ function CostPage() {
             <TableBody>
               {byModelRows.map((r) => (
                 <TableRow key={r.modelId}>
-                  <TableTd style={monoCell}>{r.modelId}</TableTd>
-                  <TableTd style={numCell}>{fmtInt(r.invocations)}</TableTd>
-                  <TableTd style={numCell}>{fmtInt(r.inputTokens)}</TableTd>
-                  <TableTd style={numCell}>{fmtInt(r.outputTokens)}</TableTd>
-                  <TableTd style={{ ...numCell, fontWeight: 600 }}>
+                  <TableTd className={monoCellCls}>{r.modelId}</TableTd>
+                  <TableTd className={numCellCls}>{fmtInt(r.invocations)}</TableTd>
+                  <TableTd className={numCellCls}>{fmtInt(r.inputTokens)}</TableTd>
+                  <TableTd className={numCellCls}>{fmtInt(r.outputTokens)}</TableTd>
+                  <TableTd className={`${numCellCls} font-semibold`}>
                     {fmtUsd(r.totalCostUsd)}
                   </TableTd>
                 </TableRow>
@@ -664,32 +687,6 @@ function CostPage() {
 
 // ─── Sub-components ─────────────────────────────────────────────────────────
 
-function HeadlineCard({
-  label,
-  primary,
-  secondary,
-  tone,
-}: {
-  label: string;
-  primary: string;
-  secondary: React.ReactNode;
-  tone?: 'warning' | 'danger';
-}) {
-  const accent =
-    tone === 'danger'
-      ? 'var(--color-danger, #ef4444)'
-      : tone === 'warning'
-        ? 'var(--color-warning, #f59e0b)'
-        : 'var(--color-text-primary)';
-  return (
-    <div style={headlineCard}>
-      <div style={headlineLabel}>{label.toUpperCase()}</div>
-      <div style={{ ...headlinePrimary, color: accent }}>{primary}</div>
-      <div style={headlineSecondary}>{secondary}</div>
-    </div>
-  );
-}
-
 function WindowPicker({
   value,
   onChange,
@@ -698,158 +695,19 @@ function WindowPicker({
   onChange: (i: number) => void;
 }) {
   return (
-    <div style={{ display: 'inline-flex', gap: 4 }}>
+    <Inline gap="xs">
       {WINDOW_OPTIONS.map((w, i) => (
-        <button
+        <Button
           key={w.label}
+          size="sm"
+          variant={i === value ? 'primary' : 'secondary'}
           onClick={() => onChange(i)}
-          style={{
-            fontSize: 11,
-            padding: '4px 10px',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-sm)',
-            background: i === value ? 'var(--color-primary)' : 'var(--color-surface)',
-            color: i === value ? 'white' : 'var(--color-text-secondary)',
-            cursor: 'pointer',
-            fontWeight: i === value ? 500 : 400,
-          }}
         >
           {w.label}
-        </button>
+        </Button>
       ))}
-    </div>
+    </Inline>
   );
 }
-
-function EmptyState({ text }: { text: string }) {
-  return (
-    <div
-      style={{
-        padding: 24,
-        textAlign: 'center',
-        fontSize: 12,
-        color: 'var(--color-text-tertiary)',
-      }}
-    >
-      {text}
-    </div>
-  );
-}
-
-// ─── Styles ─────────────────────────────────────────────────────────────────
-
-const headerRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'flex-start',
-  justifyContent: 'space-between',
-  marginBottom: 12,
-  gap: 12,
-  flexWrap: 'wrap',
-};
-const h2: CSSProperties = { fontSize: 14, fontWeight: 600, margin: 0 };
-const subline: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  marginTop: 4,
-};
-const hint: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  fontWeight: 400,
-};
-const headlineRow: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-  gap: 12,
-};
-const headlineCard: CSSProperties = {
-  padding: '12px 16px',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm)',
-  background: 'var(--color-bg)',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-  minHeight: 96,
-};
-const headlineLabel: CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
-  color: 'var(--color-text-tertiary)',
-  letterSpacing: 0.5,
-};
-const headlinePrimary: CSSProperties = {
-  fontSize: 24,
-  fontWeight: 600,
-  lineHeight: 1.1,
-  fontVariantNumeric: 'tabular-nums',
-};
-const headlineSecondary: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-secondary)',
-  lineHeight: 1.4,
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  flexWrap: 'wrap',
-};
-const chipRow: CSSProperties = {
-  display: 'inline-flex',
-  gap: 6,
-  flexWrap: 'wrap',
-  alignItems: 'center',
-};
-const markerLegend: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  flexWrap: 'wrap',
-  marginTop: 12,
-  fontSize: 11,
-  color: 'var(--color-text-secondary)',
-};
-const markerLegendLabel: CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
-  color: 'var(--color-text-tertiary)',
-  letterSpacing: 0.5,
-};
-const monoChip: CSSProperties = { fontFamily: 'ui-monospace, monospace' };
-const markerWhen: CSSProperties = {
-  color: 'var(--color-text-tertiary)',
-  fontSize: 10,
-};
-const agentCell: CSSProperties = {
-  fontSize: 12,
-  fontWeight: 500,
-  whiteSpace: 'nowrap',
-};
-const numCell: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary)',
-  fontVariantNumeric: 'tabular-nums',
-};
-const tsCell: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  whiteSpace: 'nowrap',
-};
-const monoCell: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  fontFamily: 'ui-monospace, monospace',
-  whiteSpace: 'nowrap',
-};
-const snippetCell: CSSProperties = {
-  fontSize: 12,
-  maxWidth: 360,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-};
-const openLinkBtn: CSSProperties = {
-  color: 'var(--color-primary, #6366f1)',
-  fontSize: 12,
-};
 
 export default CostPage;

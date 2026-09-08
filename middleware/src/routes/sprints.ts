@@ -6,6 +6,11 @@
 //   GET /api/sprints?scope=mine   any signed-in orgiq session. Returns only
 //                                 sprints the caller stewards, holds a budget
 //                                 grant on, or has work assigned in.
+//   GET /api/sprints/envelopes    the caller's OWN sprint envelopes and what is
+//                                 left of each. Self-scoped, so it takes the
+//                                 same tier as scope=mine — see the note above
+//                                 the handler for why it is not gated on an
+//                                 action.
 //   GET /api/sprints?scope=all    the whole org's board. Every row carries the
 //                                 sprint's envelope and the initiative's spend
 //                                 inside it, which is the same money
@@ -29,6 +34,21 @@ import { initiativeExists } from '../providers/budgets.js';
 import { getWorkItem, updateWorkItem } from '../providers/work-items.js';
 import { getUser } from '../providers/identity.js';
 import { stewardsInitiative } from '../lib/initiative-scope.js';
+
+/**
+ * The SAME resolution the envelope brake uses (decideEnvelope's input), so what
+ * this read reports and what a dispatch is refused by cannot be two numbers.
+ *
+ * Loaded lazily, for the reason written out in lib/initiative-scope.ts: a
+ * module-scope import of bot-runner.ts drags config.ts into this router's graph,
+ * and config.ts uses `import.meta`, which ts-jest refuses to compile under the
+ * CommonJS test config — it turned this router's whole suite into "test suite
+ * failed to run". Node caches the module, so the await is a map lookup after
+ * the first call.
+ */
+async function envelopeReader(): Promise<typeof import('../lib/bot-runner.js')['listActiveEnvelopes']> {
+  return (await import('../lib/bot-runner.js')).listActiveEnvelopes;
+}
 
 export const sprintsRouter: Router = Router();
 
@@ -63,7 +83,7 @@ function isIsoDate(v: unknown): v is string {
 /** The roles that read the money-bearing org-wide board directly (mirrors the
  *  readForRolesElseAction list on /api/budgets); anyone else needs the Cedar
  *  action. `admin` is cross-tenant and passes every gate. */
-const WIDE_READ_ROLES = ['org-leader', 'hr-admin', 'admin'];
+const WIDE_READ_ROLES = ['org-leader', 'hr-admin', 'program-owner', 'admin'];
 
 async function canReadWide(role: string | undefined, principal: ReturnType<typeof resolveSession>): Promise<boolean> {
   if (role && WIDE_READ_ROLES.includes(role)) return true;
@@ -111,6 +131,118 @@ sprintsRouter.get('/', asyncHandler(async (req, res) => {
   });
 
   res.json({ scope, personId, canSeeAll: wide, sprints });
+}));
+
+// ─── My sprint envelopes ─────────────────────────────────────────────────────
+//
+//   GET /api/sprints/envelopes
+//   → 200 { personId, attributionAvailable, envelopes: [...] }
+//
+// The read behind the third dispatch brake. `decideEnvelope` (lib/bot-runner.ts)
+// can 409 an SME for overrunning a sprint envelope, and until now there was
+// nowhere to look up that envelope first: the grants table lives on
+// /admin/budgets behind ManageBudgets — the roles that ALLOCATE money — and
+// what it reports is `initiativeSpendInWindowUsd`, the INITIATIVE's spend in
+// the window, which is deliberately not anyone's burn. The number the brake
+// judges you on is a different one (the runs recorded against your own
+// subject), so reading the grants table would have told you the wrong thing
+// even if you could reach it.
+//
+// ── Gating ───────────────────────────────────────────────────────────────────
+// No Cedar action. This is strictly self-scoped: it resolves the caller's
+// session subject to a person and returns only grants naming that person, so
+// there is nothing here the caller is not already entitled to know about their
+// own money. That puts it in the same tier as `GET /api/sprints?scope=mine`,
+// which the mount's `requireSession('ViewSprints')` floor already covers.
+// `requireInitiativeSteward` is the WRITE scoping on this router and does not
+// apply: it answers "may you steer this initiative", not "how much is left of
+// your own envelope". Inventing an action would also have had to be added to
+// CAPABILITY_ACTIONS in lib/authz.ts or every role's portal `can()` would read
+// `undefined` and hide the control — a cost with no authorization benefit,
+// since a self-scoped read has no wider variant to gate.
+//
+// ── Unknown burn stays unknown ───────────────────────────────────────────────
+// `bot_runs.dispatched_by` (schema/agent_run_attribution_schema.sql) is what a
+// burn is summed from. On a cluster that predates that migration the sum is
+// meaningless, so `spentUsd`/`remainingUsd` are NULL and `attributionAvailable`
+// is false — never 0, which a client would read as a full envelope. Same
+// posture decideEnvelope takes when it refuses to judge a burn it cannot see.
+
+interface EnvelopeReadRow {
+  grantId: string;
+  orgProjectId: string;
+  orgProjectName: string | null;
+  sprintId: string | null;
+  sprintName: string | null;
+  sprintStatus: string | null;
+  startsOn: string | null;
+  endsOn: string | null;
+  allocatedUsd: number;
+  /** Runs recorded as dispatched by THIS caller in the envelope's window.
+   *  Null when attribution is unavailable — unknown, not zero. */
+  spentUsd: number | null;
+  remainingUsd: number | null;
+  attributionAvailable: boolean;
+}
+
+/** Said wherever a burn appears, so a small number is never read as "this SME
+ *  has hardly spent". Mirrors ATTRIBUTION_NOTE in lib/bot-runner.ts. */
+const ATTRIBUTED_NOTE = 'counts only runs recorded as dispatched by you';
+const UNKNOWN_NOTE =
+  'this cluster does not record who dispatched a run, so the burn against this envelope is unknown, not zero';
+
+sprintsRouter.get('/envelopes', asyncHandler(async (req, res) => {
+  const session = resolveSession(req);
+  if (!session) { res.status(401).json({ error: 'Unauthenticated' }); return; }
+
+  const listActiveEnvelopes = await envelopeReader();
+  const envelopes = await listActiveEnvelopes(session.sub);
+  // Null = the caller could not be resolved to an SME (no linked person, or the
+  // grants read failed). That is not "you have no envelopes" — say so rather
+  // than render an empty list that reads as $0 of everything.
+  if (envelopes === null) {
+    const personId = (await getUser(session.sub))?.personId ?? null;
+    res.json({
+      personId,
+      resolved: false,
+      reason: personId
+        ? 'your sprint envelopes could not be read just now'
+        : 'this account is not linked to a person in the org graph, so it holds no sprint envelopes',
+      attributionAvailable: null,
+      envelopes: [],
+    });
+    return;
+  }
+
+  const rows: EnvelopeReadRow[] = envelopes.map((e) => ({
+    grantId: e.grantId,
+    orgProjectId: e.orgProjectId,
+    orgProjectName: e.orgProjectName,
+    sprintId: e.sprintId,
+    sprintName: e.sprintName ?? null,
+    sprintStatus: e.sprintStatus,
+    startsOn: e.startsOn,
+    endsOn: e.endsOn,
+    allocatedUsd: e.allocatedUsd,
+    spentUsd: e.attributionAvailable ? e.attributedSpentUsd : null,
+    // Floored at zero the same way decideEnvelope reads it: an overrun envelope
+    // has nothing left, not negative money.
+    remainingUsd: e.attributionAvailable
+      ? Math.round(Math.max(0, e.allocatedUsd - e.attributedSpentUsd) * 100) / 100
+      : null,
+    attributionAvailable: e.attributionAvailable,
+  }));
+
+  // One envelope with no attribution poisons the whole answer's burn, so report
+  // the weakest row rather than a per-page true that some rows contradict.
+  const attributionAvailable = rows.every((r) => r.attributionAvailable);
+  res.json({
+    personId: envelopes[0]?.granteePersonId ?? (await getUser(session.sub))?.personId ?? null,
+    resolved: true,
+    attributionAvailable,
+    note: attributionAvailable ? ATTRIBUTED_NOTE : UNKNOWN_NOTE,
+    envelopes: rows,
+  });
 }));
 
 // ─── Create a sprint ──────────────────────────────────────────────────────────

@@ -15,7 +15,15 @@ import { config } from '../config.js';
 import {
   evaluate, DEFAULT_POLICIES,
   type SdlcPolicy, type ChangeFacts, type ReviewVerdict, type Evaluation,
+  type GateResult,
 } from '../lib/sdlc-policy.js';
+import {
+  mockListPolicies, mockSeedDefaultPolicies, mockUpsertPolicy, mockDeletePolicy,
+  mockCreateChange, mockSetCommitSha, mockGetChange, mockListChanges,
+  mockHasNewerChangeForProject, mockSetChangeStatus, mockListReviews,
+  mockRecordReview, mockListGates, mockReplaceGates, mockRunCostUsd,
+  type JoinedChange, type StatusExtras,
+} from '../mock/sdlc.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
@@ -48,7 +56,7 @@ function rowToPolicy(r: Record<string, unknown>): SdlcPolicy {
 }
 
 export async function listPolicies(): Promise<SdlcPolicy[]> {
-  if (config.mock.aurora) return DEFAULT_POLICIES.map((p, i) => ({ id: `default-${i}`, ...p }));
+  if (config.mock.aurora) return mockListPolicies();
   const rows = await exec(`SELECT * FROM sdlc_policies ORDER BY created_at`);
   return rows.map(rowToPolicy);
 }
@@ -61,7 +69,11 @@ export async function listPolicies(): Promise<SdlcPolicy[]> {
  * governance layer, and an empty policy table would auto-approve everything.
  */
 export async function seedDefaultPolicies(): Promise<number> {
-  if (config.mock.aurora) return 0;
+  // Offline this is not a no-op. Returning 0 without seeding left the mock
+  // policy set defined only by whatever `listPolicies` happened to synthesise,
+  // so an emptied policy table could never come back — and `evaluateChange`'s
+  // fail-closed arm (no policies configured) could never be exercised.
+  if (config.mock.aurora) return mockSeedDefaultPolicies();
   const existing = await exec(`SELECT count(*)::int AS n FROM sdlc_policies`);
   if (toNum(existing[0]?.['n']) > 0) return 0;
   let seeded = 0;
@@ -81,6 +93,12 @@ export async function upsertPolicy(input: {
   id?: string; name: string; enabled: boolean; kind: SdlcPolicy['kind'];
   config: Record<string, unknown>; action: SdlcPolicy['action'];
 }): Promise<SdlcPolicy> {
+  if (config.mock.aurora) {
+    // Mirror the update/insert split exactly: only a uuid `id` addresses an
+    // existing row; anything else is an insert, id and all.
+    const { id, ...rest } = input;
+    return mockUpsertPolicy(id && isUuid(id) ? { ...rest, id } : rest);
+  }
   if (input.id && isUuid(input.id)) {
     const rows = await exec(
       `UPDATE sdlc_policies
@@ -104,6 +122,7 @@ export async function upsertPolicy(input: {
 
 export async function deletePolicy(id: string): Promise<boolean> {
   if (!isUuid(id)) return false;
+  if (config.mock.aurora) return mockDeletePolicy(id);
   const rows = await exec(`DELETE FROM sdlc_policies WHERE id = :id::uuid RETURNING id`, [s('id', id)]);
   return rows.length > 0;
 }
@@ -200,6 +219,13 @@ export async function createChangeRequest(input: {
 }): Promise<ChangeRequest> {
   const truncated = input.diff.length > MAX_DIFF_CHARS;
   const diff = truncated ? input.diff.slice(0, MAX_DIFF_CHARS) : input.diff;
+  const title = input.title.slice(0, 300);
+  if (config.mock.aurora) {
+    return joinedToChange(mockCreateChange({
+      projectId: input.projectId, runId: input.runId ?? null, title,
+      diff, diffTruncated: truncated, files: input.files, model: input.model ?? null,
+    }));
+  }
   // work_item_id is copied from the run at capture time, so the change carries
   // its marketplace attribution even after the run row is retained away. The
   // subquery yields NULL when runId is absent (no row matches a NULL id).
@@ -212,7 +238,7 @@ export async function createChangeRequest(input: {
     [
       s('pid', input.projectId),
       input.runId ? s('rid', input.runId) : nul('rid'),
-      s('title', input.title.slice(0, 300)),
+      s('title', title),
       s('diff', diff),
       b('trunc', truncated),
       s('files', JSON.stringify(input.files)),
@@ -225,146 +251,34 @@ export async function createChangeRequest(input: {
 
 /** Record the workspace commit a change was captured as (commit-per-capture). */
 export async function setCommitSha(id: string, sha: string): Promise<void> {
+  if (config.mock.aurora) { mockSetCommitSha(id, sha); return; }
   await exec(
     `UPDATE agent_change_requests SET commit_sha = :sha, updated_at = NOW() WHERE id = :id::uuid`,
     [s('id', id), s('sha', sha)],
   );
 }
 
-
-// ── Mock change requests ────────────────────────────────────────────────────
-//
-// dev:mock previously returned an empty queue, which made the review surface
-// undemoable offline — and unreviewable in tests. These fixtures are shaped
-// exactly like real captures: genuine unified diffs, reviewer findings that
-// point at real file:line targets inside them (the reviewer UI pins notes to
-// diff lines, so a finding aimed at a line the diff lacks would silently
-// exercise nothing), and gate rows. Decisions mutate them in memory.
-
-const MOCK_DEDUP_DIFF = `diff --git a/src/alerts/dedup.ts b/src/alerts/dedup.ts
-index 3f1a2b4..9c8d7e6 100644
---- a/src/alerts/dedup.ts
-+++ b/src/alerts/dedup.ts
-@@ -12,9 +12,12 @@ export interface AlertGroup {
- export function groupKey(alert: Alert): string {
--  return alert.name;
-+  // Collapse per team, not per fleet: a storm on a shared dependency is
-+  // handled by the inhibition rule, not by hiding real per-team pages.
-+  return \`\${alert.name}:\${alert.namespace}\`;
- }
- 
- export function dedupe(alerts: Alert[]): AlertGroup[] {
-   const groups = new Map<string, Alert[]>();
-+  const seen = new Set<string>();
-   for (const a of alerts) {
-     const key = groupKey(a);
-@@ -30,6 +33,7 @@ export function dedupe(alerts: Alert[]): AlertGroup[] {
-   return [...groups.entries()].map(([key, list]) => ({
-     key,
-     count: list.length,
-+    namespaces: [...new Set(list.map((a) => a.namespace))],
-   }));
- }
-diff --git a/src/alerts/dedup.test.ts b/src/alerts/dedup.test.ts
-new file mode 100644
-index 0000000..1a2b3c4
---- /dev/null
-+++ b/src/alerts/dedup.test.ts
-@@ -0,0 +1,9 @@
-+import { groupKey } from './dedup';
-+
-+describe('groupKey', () => {
-+  it('separates namespaces', () => {
-+    expect(groupKey({ name: 'HighErrorRate', namespace: 'payments' }))
-+      .not.toBe(groupKey({ name: 'HighErrorRate', namespace: 'search' }));
-+  });
-+});
-+
-`;
-
-const MOCK_DASH_DIFF = `diff --git a/dashboards/red.jsonnet b/dashboards/red.jsonnet
-index aaa111..bbb222 100644
---- a/dashboards/red.jsonnet
-+++ b/dashboards/red.jsonnet
-@@ -4,6 +4,8 @@ local grafana = import 'grafonnet/grafana.libsonnet';
- {
-   red_dashboard(service):: {
-     title: 'RED — ' + service,
-+    // Span metrics are the primary source; StatsD stays as the fallback
-+    // panel behind the $source variable (span metrics lag ~3min).
-     panels: [
-@@ -22,7 +24,7 @@ local grafana = import 'grafonnet/grafana.libsonnet';
-       rate_panel(service):: {
--        expr: 'sum(rate(statsd_requests_total{service="' + service + '"}[5m]))',
-+        expr: 'sum(rate(traces_span_metrics_calls_total{service="' + service + '"}[5m]))',
-       },
-`;
-
-function mockChange(over: Partial<ChangeRequest> & Pick<ChangeRequest, 'id' | 'title' | 'status' | 'diff'>): ChangeRequest {
-  const files = parseFilesOf(over.diff ?? '');
-  return {
-    runId: null, projectId: 'mock-proj-obs', repoFullName: 'connorhoehn/observability-platform',
-    orgProjectId: 'p-observability', orgProjectName: 'Observability Platform',
-    workItemId: null, diffTruncated: false, files, filesChanged: files.length,
-    model: 'us.anthropic.claude-sonnet-5', commitSha: 'c0ffee1', branchName: null, prUrl: null,
-    decidedBy: null, decidedAt: null, decisionNote: null, error: null,
-    createdAt: new Date(Date.now() - 40 * 60_000).toISOString(),
-    reviews: [], gates: [], ...over,
-  };
+/**
+ * The offline row → the wire shape.
+ *
+ * `reviews`/`gates` start empty here for the same reason `rowToChange` does:
+ * neither read joins them, and only `getChangeRequest` fetches them afterwards.
+ * An offline list that carried reviews the live list cannot return would be a
+ * fixture disagreeing with its own server.
+ */
+function joinedToChange(row: JoinedChange): ChangeRequest {
+  return { ...row, reviews: [], gates: [] };
 }
-
-function parseFilesOf(diff: string): string[] {
-  return [...diff.matchAll(/^diff --git a\/.* b\/(.*)$/gm)].map((m) => m[1]!);
-}
-
-const MOCK_CHANGES: ChangeRequest[] = [
-  mockChange({
-    id: 'chg-mock-1',
-    title: 'Alert dedup: collapse by alertname+namespace',
-    status: 'needs_approval',
-    diff: MOCK_DEDUP_DIFF,
-    branchName: 'agent/alert-dedup-namespace',
-    reviews: [{
-      id: 'rev-1', reviewer: 'model', model: 'amazon.nova-pro-v1:0', verdict: 'approve',
-      summary: 'Correct approach and a pinning test. One latent collision risk and one leftover variable worth a look before shipping.',
-      findings: [
-        { severity: 'warning', file: 'src/alerts/dedup.ts', line: 16, note: 'Template-literal key means a namespace containing ":" collides with another alert — consider a tuple key or escaping.' },
-        { severity: 'info', file: 'src/alerts/dedup.ts', line: 20, note: 'The new `seen` set is never read — leftover from an earlier approach?' },
-        { severity: 'info', file: 'src/alerts/dedup.test.ts', line: 5, note: 'Good: this test pins the collapse-per-namespace decision.' },
-      ],
-      createdAt: new Date(Date.now() - 35 * 60_000).toISOString(),
-    }],
-    gates: [
-      { policyName: 'sensitive-paths', kind: 'path', outcome: 'pass', detail: 'No sensitive path touched' },
-      { policyName: 'max-diff-size', kind: 'size', outcome: 'pass', detail: '46 lines changed (limit 1500)' },
-      { policyName: 'human-approval', kind: 'approval', outcome: 'hold', detail: 'Alerting config always needs a person' },
-    ],
-  }),
-  mockChange({
-    id: 'chg-mock-2',
-    title: 'RED dashboards: span metrics primary, StatsD fallback',
-    status: 'delivered',
-    diff: MOCK_DASH_DIFF,
-    branchName: 'agent/red-span-metrics',
-    prUrl: 'https://github.com/connorhoehn/observability-platform/pull/41',
-    decidedBy: 'u-nora', decidedAt: new Date(Date.now() - 3 * 3600_000).toISOString(),
-    decisionNote: 'Matches the consult decision — span metrics primary.',
-    createdAt: new Date(Date.now() - 4 * 3600_000).toISOString(),
-    reviews: [{
-      id: 'rev-2', reviewer: 'model', model: 'amazon.nova-pro-v1:0', verdict: 'approve',
-      summary: 'Source swap is scoped to the rate panel and documented.',
-      findings: [],
-      createdAt: new Date(Date.now() - 4 * 3600_000).toISOString(),
-    }],
-    gates: [
-      { policyName: 'sensitive-paths', kind: 'path', outcome: 'pass', detail: 'No sensitive path touched' },
-      { policyName: 'max-diff-size', kind: 'size', outcome: 'pass', detail: '12 lines changed (limit 1500)' },
-    ],
-  }),
-];
 
 export async function getChangeRequest(id: string): Promise<ChangeRequest | null> {
-  if (config.mock.aurora) return MOCK_CHANGES.find((c) => c.id === id) ?? null;
+  if (config.mock.aurora) {
+    const row = mockGetChange(id);
+    if (!row) return null;
+    const change = joinedToChange(row);
+    change.reviews = await listReviews(id);
+    change.gates = await listGates(id);
+    return change;
+  }
   if (!isUuid(id)) return null;
   const rows = await exec(
     `SELECT cr.*, ap.repo_full_name, ap.org_project_id, op.name AS org_project_name
@@ -382,11 +296,7 @@ export async function getChangeRequest(id: string): Promise<ChangeRequest | null
 }
 
 export async function listChangeRequests(opts: { projectId?: string; open?: boolean } = {}): Promise<ChangeRequest[]> {
-  if (config.mock.aurora) {
-    return MOCK_CHANGES.filter((c) =>
-      (!opts.projectId || c.projectId === opts.projectId) &&
-      (!opts.open || ['needs_approval', 'changes_requested', 'in_review', 'captured'].includes(c.status)));
-  }
+  if (config.mock.aurora) return mockListChanges(opts).map(joinedToChange);
   const where: string[] = [];
   const params: SqlParameter[] = [];
   if (opts.projectId && isUuid(opts.projectId)) { where.push('cr.project_id = :pid::uuid'); params.push(s('pid', opts.projectId)); }
@@ -417,6 +327,7 @@ export async function listChangeRequests(opts: { projectId?: string; open?: bool
  * status is needed and an approved-but-stale change simply cannot be shipped.
  */
 export async function hasNewerChangeForProject(changeId: string): Promise<boolean> {
+  if (config.mock.aurora) return mockHasNewerChangeForProject(changeId);
   if (!isUuid(changeId)) return false;
   const rows = await exec(
     `SELECT 1
@@ -431,20 +342,39 @@ export async function hasNewerChangeForProject(changeId: string): Promise<boolea
   return rows.length > 0;
 }
 
-async function setStatus(id: string, status: string, extra: SqlParameter[] = [], set = ''): Promise<void> {
+/**
+ * Move a change to a status, optionally writing the columns that go with it.
+ *
+ * The extras are a typed patch rather than a raw `SET` fragment plus loose
+ * parameters. The fragment version could not be mirrored offline — a mock
+ * branch cannot apply `branch_name = :branch` to an object — so the whole
+ * lifecycle (in_review, delivering, delivered, failed, and every human
+ * decision) had no offline path and 500'd. One shape, two backends.
+ */
+async function setStatus(id: string, status: string, extras: StatusExtras = {}): Promise<void> {
+  if (config.mock.aurora) { mockSetChangeStatus(id, status, extras); return; }
+  const sets: string[] = [];
+  const params: SqlParameter[] = [s('id', id), s('status', status)];
+  if (extras.branchName !== undefined) { sets.push('branch_name = :branch'); params.push(s('branch', extras.branchName)); }
+  if (extras.prUrl !== undefined) { sets.push('pr_url = :pr'); params.push(s('pr', extras.prUrl)); }
+  if (extras.error !== undefined) { sets.push('error = :err'); params.push(s('err', extras.error.slice(0, 2000))); }
+  if (extras.decision) {
+    sets.push('decided_by = :by', 'decided_at = NOW()', 'decision_note = :note');
+    params.push(maybe('by', extras.decision.by), maybe('note', extras.decision.note));
+  }
   await exec(
-    `UPDATE agent_change_requests SET status = :status, updated_at = NOW()${set ? `, ${set}` : ''} WHERE id = :id::uuid`,
-    [s('id', id), s('status', status), ...extra],
+    `UPDATE agent_change_requests SET status = :status, updated_at = NOW()${sets.length ? `, ${sets.join(', ')}` : ''} WHERE id = :id::uuid`,
+    params,
   );
 }
 
 export async function markInReview(id: string): Promise<void> { await setStatus(id, 'in_review'); }
 export async function markDelivering(id: string): Promise<void> { await setStatus(id, 'delivering'); }
 export async function markDelivered(id: string, branch: string, prUrl: string): Promise<void> {
-  await setStatus(id, 'delivered', [s('branch', branch), s('pr', prUrl)], 'branch_name = :branch, pr_url = :pr');
+  await setStatus(id, 'delivered', { branchName: branch, prUrl });
 }
 export async function markFailed(id: string, error: string): Promise<void> {
-  await setStatus(id, 'failed', [s('err', error.slice(0, 2000))], 'error = :err');
+  await setStatus(id, 'failed', { error });
 }
 
 // ─── Reviews ──────────────────────────────────────────────────────────────────
@@ -462,6 +392,9 @@ function rowToReview(r: Record<string, unknown>): ChangeReview {
 }
 
 export async function listReviews(changeId: string): Promise<ChangeReview[]> {
+  if (config.mock.aurora) {
+    return mockListReviews(changeId).map(({ changeRequestId: _fk, ...review }) => review);
+  }
   if (!isUuid(changeId)) return [];
   const rows = await exec(
     `SELECT * FROM agent_change_reviews WHERE change_request_id = :id::uuid ORDER BY created_at DESC`,
@@ -475,6 +408,17 @@ export async function recordReview(input: {
   verdict: ReviewVerdict; summary?: string | null;
   findings?: ChangeReview['findings'];
 }): Promise<void> {
+  if (config.mock.aurora) {
+    mockRecordReview({
+      changeId: input.changeId,
+      reviewer: input.reviewer ?? 'agent',
+      model: input.model ?? null,
+      verdict: input.verdict,
+      summary: input.summary ?? null,
+      findings: input.findings ?? [],
+    });
+    return;
+  }
   await exec(
     `INSERT INTO agent_change_reviews (change_request_id, reviewer, model, verdict, summary, findings)
      VALUES (:cid::uuid, :reviewer, :model, :verdict, :summary, :findings::jsonb)`,
@@ -492,6 +436,14 @@ export async function recordReview(input: {
 // ─── Gates ────────────────────────────────────────────────────────────────────
 
 async function listGates(changeId: string): Promise<ChangeGate[]> {
+  if (config.mock.aurora) {
+    // `detail` is nullable in the table and `toStr` reads a NULL as '', so the
+    // offline row coalesces the same way rather than emitting a null the wire
+    // shape does not allow.
+    return mockListGates(changeId).map((g) => ({
+      policyName: g.policyName, kind: g.kind, outcome: g.outcome, detail: g.detail ?? '',
+    }));
+  }
   if (!isUuid(changeId)) return [];
   const rows = await exec(
     `SELECT policy_name, kind, outcome, detail FROM agent_change_gates
@@ -505,6 +457,28 @@ async function listGates(changeId: string): Promise<ChangeGate[]> {
 }
 
 /**
+ * Replace this change's recorded gates with the current evaluation's.
+ *
+ * The recorded gates should reflect the current decision, not accumulate every
+ * re-evaluation — so it is a delete-then-insert, and it is one function rather
+ * than two raw `exec`s inline in `evaluateChange` so the offline path has a
+ * seam to mirror. Without it, re-running the gates 500'd offline even though
+ * every fact it needed was in memory.
+ */
+async function replaceGates(changeId: string, gates: GateResult[]): Promise<void> {
+  if (config.mock.aurora) { mockReplaceGates(changeId, gates); return; }
+  await exec(`DELETE FROM agent_change_gates WHERE change_request_id = :id::uuid`, [s('id', changeId)]);
+  for (const g of gates) {
+    await exec(
+      `INSERT INTO agent_change_gates (change_request_id, policy_id, policy_name, kind, outcome, detail)
+       VALUES (:cid::uuid, :pid, :name, :kind, :outcome, :detail)`,
+      [s('cid', changeId), maybe('pid', g.policyId), s('name', g.policyName),
+        s('kind', g.kind), s('outcome', g.outcome), maybe('detail', g.detail)],
+    );
+  }
+}
+
+/**
  * The recorded dollar cost of the run behind a change — the max_cost fact.
  *
  * Null when the change has no run, the run row is gone, or the run finished
@@ -512,6 +486,7 @@ async function listGates(changeId: string): Promise<ChangeGate[]> {
  * judge" rather than "over budget"; see the max_cost case in sdlc-policy.ts.
  */
 async function runCostUsd(runId: string | null): Promise<number | null> {
+  if (config.mock.aurora) return mockRunCostUsd(runId);
   if (!runId || !isUuid(runId)) return null;
   const rows = await exec(
     `SELECT cost_usd::float8 AS cost_usd FROM agent_project_runs WHERE id = :id::uuid`,
@@ -566,18 +541,7 @@ export async function evaluateChange(changeId: string): Promise<{ evaluation: Ev
     });
   }
 
-  // Replace prior gate rows for this change — the recorded gates should reflect
-  // the current decision, not accumulate every re-evaluation.
-  await exec(`DELETE FROM agent_change_gates WHERE change_request_id = :id::uuid`, [s('id', changeId)]);
-  for (const g of evaluation.gates) {
-    await exec(
-      `INSERT INTO agent_change_gates (change_request_id, policy_id, policy_name, kind, outcome, detail)
-       VALUES (:cid::uuid, :pid, :name, :kind, :outcome, :detail)`,
-      [s('cid', changeId), maybe('pid', g.policyId), s('name', g.policyName),
-        s('kind', g.kind), s('outcome', g.outcome), maybe('detail', g.detail)],
-    );
-  }
-
+  await replaceGates(changeId, evaluation.gates);
   await setStatus(changeId, evaluation.decision);
   return { evaluation, status: evaluation.decision };
 }
@@ -607,15 +571,10 @@ export async function decideChange(id: string, decision: 'approve' | 'reject', i
     return { ok: false, error: `change is ${change.status}, not awaiting a decision` };
   }
   const status = decision === 'approve' ? 'approved' : 'rejected';
-  if (config.mock.aurora) {
-    change.status = status;
-    change.decidedBy = input.by ?? null;
-    change.decidedAt = new Date().toISOString();
-    change.decisionNote = input.note ?? null;
-    return { ok: true, status };
-  }
-  await setStatus(id, status,
-    [maybe('by', input.by ?? null), maybe('note', input.note ?? null)],
-    'decided_by = :by, decided_at = NOW(), decision_note = :note');
+  // One call for both backends. The old offline arm mutated the object it had
+  // just read — a copy, in the fixture world — so an offline approval reported
+  // success and left the queue untouched; and it minted its own `new Date()`,
+  // a fixture timestamp outside the fixture directory.
+  await setStatus(id, status, { decision: { by: input.by ?? null, note: input.note ?? null } });
   return { ok: true, status };
 }

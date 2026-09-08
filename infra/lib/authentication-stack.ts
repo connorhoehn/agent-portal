@@ -113,8 +113,6 @@ export class AuthenticationStack extends cdk.Stack {
       { email: 'theo.chang@orgiq.example', name: 'Theo Chang' },
       { email: 'vera.green@orgiq.example', name: 'Vera Green' },
       { email: 'priya.desai@orgiq.example', name: 'Priya Desai' },
-      { email: 'marcus.webb@newsroom.example', name: 'Marcus Webb' },
-      { email: 'elena.ortiz@newsroom.example', name: 'Elena Ortiz' },
       // Program operating model cast (docs/program-operating-model.md). Without
       // these, the release manager and the SMEs — the roles the model is built
       // around — could only reach the app through the dev-only picker, which
@@ -123,6 +121,7 @@ export class AuthenticationStack extends cdk.Stack {
       // than creating a duplicate.
       { email: 'sienna.garcia@orgiq.example', name: 'Sienna Garcia' },
       { email: 'rachel.kowalski@orgiq.example', name: 'Rachel Kowalski' },
+      { email: 'mia.singh@orgiq.example', name: 'Mia Singh' },
       { email: 'nora.dasilva@orgiq.example', name: 'Nora DaSilva' },
       { email: 'eli.garcia@orgiq.example', name: 'Eli Garcia' },
       { email: 'layla.hassan@orgiq.example', name: 'Layla Hassan' },

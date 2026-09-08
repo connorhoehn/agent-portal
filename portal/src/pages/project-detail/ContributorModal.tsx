@@ -14,18 +14,19 @@ import {
   LoadingState,
   MetaLine,
   Modal,
+  SectionLabel,
   Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
+import { T } from './Text';
 import type { PersonDetail } from './types';
 
-/** The small uppercase caption above a block inside the card. No library
- *  primitive covers a bare section caption, so it lives here — on tokens, not
- *  on an inline style. */
+/** The small uppercase caption above a block inside the card — the library's
+ *  own SectionLabel, sized to this card's 11px captions. */
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <span className="text-[11px] uppercase tracking-wide text-text-tertiary">{children}</span>
+    <SectionLabel className="text-[11px] font-normal tracking-wide">{children}</SectionLabel>
   );
 }
 
@@ -86,10 +87,10 @@ export function ContributorModal({
           )}
 
           {showAnalytics && person.influenceScore != null && (
-            <span className="text-[13px] text-text-secondary">
+            <T className="text-[13px] text-text-secondary">
               Influence score{' '}
               <strong className="text-text-primary tabular-nums">{person.influenceScore}</strong>
-            </span>
+            </T>
           )}
 
           {topCollaborators.length > 0 && (
@@ -98,13 +99,13 @@ export function ContributorModal({
               {topCollaborators.map((c) => (
                 <Inline key={c.otherPerson.id} gap="sm" align="center" wrap={false}>
                   <Avatar name={c.otherPerson.name} size={22} />
-                  <span className="text-[13px] text-text-primary">{c.otherPerson.name}</span>
-                  <span className="min-w-0 flex-1 truncate text-[12px] text-text-tertiary">
+                  <T className="text-[13px] text-text-primary">{c.otherPerson.name}</T>
+                  <T className="min-w-0 flex-1 truncate text-[12px] text-text-tertiary">
                     {c.otherPerson.title ?? ''}
-                  </span>
-                  <span className="text-[12px] text-text-tertiary tabular-nums">
+                  </T>
+                  <T className="text-[12px] text-text-tertiary tabular-nums">
                     {Math.round(c.strength * 100)}%
-                  </span>
+                  </T>
                 </Inline>
               ))}
             </Stack>

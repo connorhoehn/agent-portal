@@ -15,7 +15,7 @@
 // any role's coarse granted-action set — so the matrix test would stay green
 // while the security property silently regressed (e.g. `>` widened to `>=`, a
 // forbid's `when` gaining a tenant guard that lets a masquerader slip past, a
-// tenant condition dropped so an orgiq permit fires inside newsroom).
+// tenant condition dropped so an orgiq permit fires inside assessment).
 //
 // Like authz-matrix.test.ts this is pure filesystem reads + string parsing
 // (reusing the same seed-parsing approach and lib/cedar-parse.ts's
@@ -104,8 +104,6 @@ const NON_ADMIN_TENANTS: Array<[string, string]> = [
   ['orgiq/sme', 'orgiq'],
   ['orgiq/org-leader', 'orgiq'],
   ['orgiq/hr-admin', 'orgiq'],
-  ['newsroom/reporter', 'newsroom'],
-  ['newsroom/editor', 'newsroom'],
 ];
 
 // ===========================================================================
@@ -211,15 +209,15 @@ describe('explicit forbid-wins on ApproveTransaction (separation of duties)', ()
 // ===========================================================================
 // 3. Tenant conditioning — the cross-pollination guard, asserted per-statement.
 //    Every permit of a non-admin role must condition on its own tenant (so an
-//    orgiq grant can never fire inside newsroom and vice-versa). org-leader has
-//    TWO permits; both must be guarded — a per-statement check the file-level
-//    regex in the matrix test does not make.
+//    orgiq grant can never fire inside another tenant and vice-versa).
+//    org-leader has TWO permits; both must be guarded — a per-statement check
+//    the file-level regex in the matrix test does not make.
 // ===========================================================================
 describe('per-statement tenant conditioning (cross-pollination guard)', () => {
   test.each(NON_ADMIN_TENANTS)('%s: EVERY permit conditions on principal.tenant == "%s"', (key, tenant) => {
     const ps = permits(role(key));
     expect(ps.length).toBeGreaterThan(0);
-    const other = tenant === 'orgiq' ? 'newsroom' : 'orgiq';
+    const other = tenant === 'orgiq' ? 'assessment' : 'orgiq';
     for (const p of ps) {
       const cond = whenBody(p);
       expect(cond).toMatch(new RegExp(`principal\\.tenant\\s*==\\s*"${tenant}"`));

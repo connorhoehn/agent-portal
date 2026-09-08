@@ -14,7 +14,7 @@
 //      GET  /api/gateway/activity/:channel/history
 
 import express from 'express';
-import request from 'supertest';
+import request from '../../test-support/http.js';
 import { gatewayProxyRouter, _internal } from '../gateway-proxy.js';
 
 // ─── Test app ─────────────────────────────────────────────────────────────────

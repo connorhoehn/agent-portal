@@ -38,6 +38,7 @@ import {
   type WorkItemPriority,
   type PrStatus,
 } from '../providers/work-items.js';
+import { getProjectActivitySeries } from '../providers/activity.js';
 
 export const workItemsRouter = Router();
 
@@ -193,6 +194,29 @@ workItemsRouter.get(
     const limit = Number.isNaN(rawLimit) ? 25 : Math.min(Math.max(rawLimit, 1), 100);
     const activity = await getProjectActivity(id, { limit });
     res.json(activity);
+  }),
+);
+
+// ── Project activity time series ──────────────────────────────────────────────
+// GET /api/graph/projects/:id/activity/series?days=30
+//
+// Daily buckets (runs, spendUsd, completed) for the initiative detail page's
+// activity graph — distinct from the /activity feed above, which is a list of
+// recent events, not a time series. Kept at its own sub-path rather than
+// overloaded onto `/activity` itself: Express only ever dispatches the first
+// route registered for a given method+path, so reusing it would silently
+// shadow one of the two response shapes. Same tenant-open, 404-on-unknown-id
+// posture as /work and /decisions — no extra gate.
+workItemsRouter.get(
+  '/projects/:id/activity/series',
+  asyncHandler(async (req, res) => {
+    const id = req.params['id'] as string;
+    if (!id) { res.status(400).json({ error: 'Missing project id' }); return; }
+    const rawDays = parseInt(req.query['days'] as string ?? '30', 10);
+    const days = Number.isNaN(rawDays) ? 30 : Math.min(Math.max(rawDays, 1), 90);
+    const result = await getProjectActivitySeries(id, days);
+    if (!result) { res.status(404).json({ error: 'Project not found' }); return; }
+    res.json(result);
   }),
 );
 

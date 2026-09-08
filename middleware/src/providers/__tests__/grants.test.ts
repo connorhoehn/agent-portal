@@ -135,7 +135,13 @@ describe('mock mode', () => {
     expect(execMock).not.toHaveBeenCalled();
   });
 
-  it('creates a grant that then lists for its sprint, without mutating the seed', async () => {
+  // "without mutating the seed" was the old contract, when the seed was a
+  // read-only array with an overlay Map on top. The seed is a REGISTERED fixture
+  // now (`budget-grants`), so a create appends to the table itself and
+  // `_resetMockGrants()` — the same reset POST /api/__mock/reset performs — is
+  // what takes it out again. That is the property worth pinning: before, a
+  // create in dev:mock could not be undone at all.
+  it('creates a grant that lists for its sprint, and a reset removes it', async () => {
     const seedLen = MOCK_GRANTS.length;
     const grant = await createGrant({
       orgProjectId: 'p-observability', sprintId: 'spr-obs-s3', granteePersonId: 'p-008', amountUsd: 12,
@@ -146,8 +152,13 @@ describe('mock mode', () => {
     expect(grant.orgProjectName).toBe('Observability Platform');
     const forSprint = await listGrantsForSprint('spr-obs-s3');
     expect(forSprint.some((g) => g.id === grant.id)).toBe(true);
-    // seed array is never mutated in place
+    // The row is really in the table — a create that a later read cannot see is
+    // the failure this whole branch exists to remove.
+    expect(MOCK_GRANTS.length).toBe(seedLen + 1);
+
+    _resetMockGrants();
     expect(MOCK_GRANTS.length).toBe(seedLen);
+    expect(await getGrant(grant.id)).toBeNull();
   });
 
   it('re-allocates a created grant in-memory', async () => {

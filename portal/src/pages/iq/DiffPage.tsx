@@ -2,43 +2,17 @@
 //
 // Left column: pick Prompt A + version A.
 // Right column: pick Prompt B + version B (defaults to same prompt, next version).
-// Centre: unified LCS line diff rendered inline.
+// Centre: a prose before/after diff (ChangeDiff) or the two raw templates
+// side by side.
 
 import { useState, useEffect, useMemo } from 'react';
-import type { CSSProperties } from 'react';
+import {
+  Chip, CodeBlock, EmptyState, Select, Stack, Inline, Tabs,
+} from '@connorhoehnslalom/ui-components/shared';
 import { usePromptList, usePromptVersions } from '../../components/canary/usePromptLibrary.js';
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-type DiffLine = { kind: 'same' | 'add' | 'remove'; text: string };
-
-// ── LCS line diff ─────────────────────────────────────────────────────────────
-
-function lineDiff(a: string, b: string): DiffLine[] {
-  const la = a.split('\n');
-  const lb = b.split('\n');
-  const m = la.length, n = lb.length;
-  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
-  for (let i = m - 1; i >= 0; i--) {
-    for (let j = n - 1; j >= 0; j--) {
-      dp[i]![j] = la[i] === lb[j]
-        ? 1 + (dp[i + 1]?.[j + 1] ?? 0)
-        : Math.max(dp[i + 1]?.[j] ?? 0, dp[i]?.[j + 1] ?? 0);
-    }
-  }
-  const result: DiffLine[] = [];
-  let i = 0, j = 0;
-  while (i < m || j < n) {
-    if (i < m && j < n && la[i] === lb[j]) {
-      result.push({ kind: 'same', text: la[i]! }); i++; j++;
-    } else if (j < n && (i >= m || (dp[i + 1]?.[j] ?? 0) <= (dp[i]?.[j + 1] ?? 0))) {
-      result.push({ kind: 'add', text: lb[j]! }); j++;
-    } else {
-      result.push({ kind: 'remove', text: la[i]! }); i++;
-    }
-  }
-  return result;
-}
+import { diffStats, lineDiff } from './diffFormat';
+import { DiffFrame } from './DiffFrame';
+import { T } from './Text';
 
 // ── Hooks ─────────────────────────────────────────────────────────────────────
 
@@ -79,33 +53,30 @@ function PromptVersionPicker({
   const { versions } = usePromptVersions(promptId);
 
   return (
-    <div style={pickerStyle}>
-      <div style={pickerLabelStyle}>{label}</div>
-      <select
+    <Stack gap="xs" className="min-w-[220px] flex-1">
+      <T className="text-[10px] font-bold uppercase tracking-wide text-text-tertiary">{label}</T>
+      <Select
         value={promptId ?? ''}
         onChange={e => onPromptChange(e.target.value)}
-        style={selectStyle}
-      >
-        <option value="">Select prompt…</option>
-        {prompts.map(p => (
-          <option key={p.id} value={p.id}>{p.name}</option>
-        ))}
-      </select>
-      <select
+        placeholder="Select prompt…"
+        options={prompts.map(p => ({ value: p.id, label: p.name }))}
+        size="sm"
+        aria-label={`${label} — prompt`}
+      />
+      <Select
         value={version ?? ''}
         onChange={e => onVersionChange(e.target.value)}
-        style={selectStyle}
+        placeholder="Select version…"
         disabled={!promptId || versions.length === 0}
-      >
-        <option value="">Select version…</option>
-        {versions.map(v => (
-          <option key={v.version} value={v.isDraft ? 'DRAFT' : v.version}>
-            {v.isDraft || v.version === 'DRAFT' ? 'DRAFT' : `v${v.version}`}
-            {v.description ? ` — ${v.description.slice(0, 40)}` : ''}
-          </option>
-        ))}
-      </select>
-    </div>
+        options={versions.map(v => ({
+          value: v.isDraft ? 'DRAFT' : v.version,
+          label: (v.isDraft || v.version === 'DRAFT' ? 'DRAFT' : `v${v.version}`)
+            + (v.description ? ` — ${v.description.slice(0, 40)}` : ''),
+        }))}
+        size="sm"
+        aria-label={`${label} — version`}
+      />
+    </Stack>
   );
 }
 
@@ -115,48 +86,25 @@ function DiffViewer({ textA, textB, labelA, labelB }: {
   textA: string; textB: string; labelA: string; labelB: string;
 }): React.ReactElement {
   const lines = useMemo(() => lineDiff(textA, textB), [textA, textB]);
-  const added = lines.filter(l => l.kind === 'add').length;
-  const removed = lines.filter(l => l.kind === 'remove').length;
-  const unchanged = lines.filter(l => l.kind === 'same').length;
+  const stats = useMemo(() => diffStats(lines), [lines]);
+  const identical = stats.added === 0 && stats.removed === 0;
 
   return (
-    <div style={diffWrapStyle}>
-      <div style={diffHeaderStyle}>
-        <span style={diffLabelStyle}>{labelA} → {labelB}</span>
-        <div style={diffStatsStyle}>
-          <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>+{added}</span>
-          <span style={{ color: 'var(--color-danger)', fontWeight: 600 }}>−{removed}</span>
-          <span style={{ color: 'var(--color-text-tertiary)' }}>{unchanged} unchanged</span>
-        </div>
-      </div>
-      {lines.length === 0 ? (
-        <div style={emptyDiffStyle}>Select two versions to compare.</div>
-      ) : added === 0 && removed === 0 ? (
-        <div style={emptyDiffStyle}>✓ Templates are identical.</div>
+    <Stack gap="sm" className="min-h-0 flex-1 p-4">
+      <Inline gap="sm" align="center" wrap>
+        <T className="font-mono text-[12px] font-semibold text-text-secondary">{labelA} → {labelB}</T>
+        <Chip tone="success" size="xs" mono>+{stats.added}</Chip>
+        <Chip tone="danger" size="xs" mono>−{stats.removed}</Chip>
+        <Chip tone="neutral" size="xs" mono>{stats.unchanged} unchanged</Chip>
+      </Inline>
+      {identical ? (
+        <T className="p-8 text-center text-[13px] text-text-tertiary">✓ Templates are identical.</T>
       ) : (
-        <div style={diffBodyStyle}>
-          {lines.map((line, i) => (
-            <div
-              key={i}
-              style={{
-                display: 'flex',
-                gap: 8,
-                padding: '1px 16px',
-                background: line.kind === 'add' ? 'var(--color-success-bg)' : line.kind === 'remove' ? 'var(--color-danger-bg)' : 'transparent',
-                color: line.kind === 'add' ? 'var(--color-success)' : line.kind === 'remove' ? 'var(--color-danger)' : 'var(--color-text-primary)',
-              }}
-            >
-              <span style={{ width: 14, flexShrink: 0, userSelect: 'none', opacity: 0.5, fontFamily: 'monospace', fontSize: 12 }}>
-                {line.kind === 'add' ? '+' : line.kind === 'remove' ? '−' : ' '}
-              </span>
-              <span style={{ fontFamily: 'monospace', fontSize: 12, lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                {line.text}
-              </span>
-            </div>
-          ))}
-        </div>
+        <Stack gap="none" className="min-h-0 flex-1 overflow-auto">
+          <DiffFrame lines={lines} />
+        </Stack>
       )}
-    </div>
+    </Stack>
   );
 }
 
@@ -166,17 +114,16 @@ function SideBySide({ textA, textB, labelA, labelB }: {
   textA: string; textB: string; labelA: string; labelB: string;
 }): React.ReactElement {
   return (
-    <div style={sideBySideStyle}>
-      <div style={sideStyle}>
-        <div style={sideLabelStyle}>{labelA}</div>
-        <pre style={templatePreStyle}>{textA || '(empty)'}</pre>
-      </div>
-      <div style={dividerStyle} />
-      <div style={sideStyle}>
-        <div style={sideLabelStyle}>{labelB}</div>
-        <pre style={templatePreStyle}>{textB || '(empty)'}</pre>
-      </div>
-    </div>
+    <Inline gap="none" className="min-h-0 flex-1 overflow-hidden">
+      <Stack gap="xs" className="min-w-0 flex-1 overflow-auto border-r border-border p-4">
+        <T className="text-[10px] font-bold uppercase tracking-wide text-text-tertiary">{labelA}</T>
+        <CodeBlock code={textA || '(empty)'} language="text" />
+      </Stack>
+      <Stack gap="xs" className="min-w-0 flex-1 overflow-auto p-4">
+        <T className="text-[10px] font-bold uppercase tracking-wide text-text-tertiary">{labelB}</T>
+        <CodeBlock code={textB || '(empty)'} language="text" />
+      </Stack>
+    </Inline>
   );
 }
 
@@ -217,23 +164,21 @@ export default function DiffPage(): React.ReactElement {
   if (promptsError) {
     const denied = /403|forbidden/i.test(promptsError);
     return (
-      <div style={{ padding: 40, maxWidth: 560 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>
-          {denied ? 'Prompt diff access needed' : 'Could not load prompts'}
-        </h2>
-        <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
-          {denied
+      <Stack gap="none" className="max-w-xl p-10">
+        <EmptyState
+          title={denied ? 'Prompt diff access needed' : 'Could not load prompts'}
+          description={denied
             ? 'Prompt comparison is limited to the org-leader and HR Admin roles. Switch role from the identity menu, top right.'
             : <>The prompt library did not load. {promptsError}</>}
-        </p>
-      </div>
+        />
+      </Stack>
     );
   }
 
   return (
-    <div style={pageStyle}>
+    <Stack gap="none" className="-m-6 h-full min-h-0">
       {/* ── Toolbar ── */}
-      <div style={toolbarStyle}>
+      <Inline gap="md" align="end" wrap className="shrink-0 flex-wrap border-b border-border bg-surface px-5 py-4">
         <PromptVersionPicker
           label="Version A (baseline)"
           promptId={promptIdA}
@@ -242,7 +187,7 @@ export default function DiffPage(): React.ReactElement {
           onVersionChange={setVersionA}
         />
 
-        <div style={vsChipStyle}>↔</div>
+        <T className="shrink-0 pb-1.5 text-lg text-text-tertiary">↔</T>
 
         <PromptVersionPicker
           label="Version B (challenger)"
@@ -252,35 +197,31 @@ export default function DiffPage(): React.ReactElement {
           onVersionChange={setVersionB}
         />
 
-        <div style={viewToggleStyle}>
-          {(['diff', 'side-by-side'] as ViewMode[]).map(m => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setViewMode(m)}
-              style={m === viewMode ? activeToggleStyle : inactiveToggleStyle}
-            >
-              {m === 'diff' ? 'Unified diff' : 'Side by side'}
-            </button>
-          ))}
-        </div>
-      </div>
+        <Tabs
+          items={[
+            { id: 'diff', label: 'Unified diff' },
+            { id: 'side-by-side', label: 'Side by side' },
+          ]}
+          value={viewMode}
+          onValueChange={id => setViewMode(id as ViewMode)}
+          variant="segmented"
+          size="sm"
+          className="shrink-0 self-end"
+        />
+      </Inline>
 
       {/* ── Main content ── */}
-      <div style={contentStyle}>
+      <Stack gap="none" className="min-h-0 flex-1 overflow-auto">
         {!canCompare && (
-          <div style={placeholderStyle}>
-            <div style={placeholderIconStyle}>⇄</div>
-            <p style={placeholderMsgStyle}>
-              Select a prompt and version in each column above to compare their templates.
-            </p>
-          </div>
+          <EmptyState
+            icon="⇄"
+            title="Nothing to compare yet"
+            description="Select a prompt and version in each column above to compare their templates."
+          />
         )}
 
         {canCompare && loading && (
-          <div style={placeholderStyle}>
-            <p style={placeholderMsgStyle}>Loading templates…</p>
-          </div>
+          <T className="flex-1 p-10 text-center text-[13px] text-text-tertiary">Loading templates…</T>
         )}
 
         {canCompare && !loading && viewMode === 'diff' && (
@@ -290,212 +231,7 @@ export default function DiffPage(): React.ReactElement {
         {canCompare && !loading && viewMode === 'side-by-side' && (
           <SideBySide textA={textA} textB={textB} labelA={labelA} labelB={labelB} />
         )}
-      </div>
-    </div>
+      </Stack>
+    </Stack>
   );
 }
-
-// ── Styles ────────────────────────────────────────────────────────────────────
-
-const pageStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  height: '100%',
-  minHeight: 0,
-  margin: -24,
-};
-
-const toolbarStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'flex-end',
-  gap: 12,
-  padding: '16px 20px',
-  borderBottom: '1px solid var(--color-border)',
-  flexShrink: 0,
-  background: 'var(--color-surface)',
-  flexWrap: 'wrap',
-};
-
-const pickerStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-  flex: 1,
-  minWidth: 220,
-};
-
-const pickerLabelStyle: CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
-  color: 'var(--color-text-tertiary)',
-};
-
-const selectStyle: CSSProperties = {
-  padding: '7px 10px',
-  fontSize: 12,
-  border: '1px solid var(--color-border)',
-  borderRadius: 4,
-  background: 'var(--color-bg)',
-  color: 'var(--color-text-primary)',
-  outline: 'none',
-  fontFamily: 'inherit',
-  width: '100%',
-  boxSizing: 'border-box',
-};
-
-const vsChipStyle: CSSProperties = {
-  fontSize: 18,
-  color: 'var(--color-text-tertiary)',
-  paddingBottom: 6,
-  flexShrink: 0,
-};
-
-const viewToggleStyle: CSSProperties = {
-  display: 'flex',
-  border: '1px solid var(--color-border)',
-  borderRadius: 4,
-  overflow: 'hidden',
-  flexShrink: 0,
-  alignSelf: 'flex-end',
-};
-
-const activeToggleStyle: CSSProperties = {
-  padding: '6px 12px',
-  fontSize: 11,
-  fontWeight: 600,
-  border: 'none',
-  background: 'var(--color-primary)',
-  color: 'var(--color-surface)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-};
-
-const inactiveToggleStyle: CSSProperties = {
-  padding: '6px 12px',
-  fontSize: 11,
-  fontWeight: 500,
-  border: 'none',
-  background: 'transparent',
-  color: 'var(--color-text-secondary)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-};
-
-const contentStyle: CSSProperties = {
-  flex: 1,
-  minHeight: 0,
-  overflow: 'auto',
-  display: 'flex',
-  flexDirection: 'column',
-};
-
-const placeholderStyle: CSSProperties = {
-  flex: 1,
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: 12,
-  padding: 40,
-};
-
-const placeholderIconStyle: CSSProperties = {
-  fontSize: 40,
-  color: 'var(--color-border)',
-};
-
-const placeholderMsgStyle: CSSProperties = {
-  fontSize: 13,
-  color: 'var(--color-text-tertiary)',
-  margin: 0,
-  textAlign: 'center',
-  maxWidth: 360,
-};
-
-const diffWrapStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  flex: 1,
-};
-
-const diffHeaderStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: '12px 16px',
-  borderBottom: '1px solid var(--color-border)',
-  background: 'var(--color-bg)',
-  flexShrink: 0,
-  flexWrap: 'wrap',
-  gap: 8,
-};
-
-const diffLabelStyle: CSSProperties = {
-  fontSize: 12,
-  fontWeight: 600,
-  color: 'var(--color-text-secondary)',
-  fontFamily: 'monospace',
-};
-
-const diffStatsStyle: CSSProperties = {
-  display: 'flex',
-  gap: 12,
-  fontSize: 12,
-};
-
-const diffBodyStyle: CSSProperties = {
-  flex: 1,
-  overflowY: 'auto',
-};
-
-const emptyDiffStyle: CSSProperties = {
-  padding: 32,
-  fontSize: 13,
-  color: 'var(--color-text-tertiary)',
-  textAlign: 'center',
-};
-
-const sideBySideStyle: CSSProperties = {
-  display: 'flex',
-  flex: 1,
-  minHeight: 0,
-  overflow: 'hidden',
-};
-
-const sideStyle: CSSProperties = {
-  flex: 1,
-  minWidth: 0,
-  display: 'flex',
-  flexDirection: 'column',
-  overflow: 'auto',
-  padding: 16,
-};
-
-const sideLabelStyle: CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
-  color: 'var(--color-text-tertiary)',
-  marginBottom: 8,
-  flexShrink: 0,
-};
-
-const dividerStyle: CSSProperties = {
-  width: 1,
-  background: 'var(--color-border)',
-  flexShrink: 0,
-};
-
-const templatePreStyle: CSSProperties = {
-  fontFamily: 'monospace',
-  fontSize: 12,
-  lineHeight: 1.7,
-  margin: 0,
-  padding: 0,
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
-  color: 'var(--color-text-primary)',
-};

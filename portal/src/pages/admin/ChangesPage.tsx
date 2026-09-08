@@ -14,11 +14,15 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button, Card, Chip, EmptyState, ErrorState, Inline, InlineAlert, LoadingState,
+  MetaLine, PageSection, SectionLabel, Stack, Tabs,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
 import { PolicyEditor } from '../../components/sdlc/PolicyEditor';
+import { ExternalLink } from './ExternalLinkFrame';
 
 type Verdict = 'approve' | 'request_changes' | 'reject';
 interface Review {
@@ -38,17 +42,10 @@ interface Change {
   createdAt: string; reviews: Review[]; gates: Gate[];
 }
 
-const STATUS_TONE: Record<string, string> = {
-  needs_approval: 'bg-warning-bg text-warning',
-  changes_requested: 'bg-warning-bg text-warning',
-  in_review: 'bg-surface-hover text-text-tertiary',
-  captured: 'bg-surface-hover text-text-tertiary',
-  approved: 'bg-success-bg text-success',
-  delivering: 'bg-surface-hover text-text-secondary',
-  delivered: 'bg-success-bg text-success',
-  blocked: 'bg-danger-bg text-danger',
-  rejected: 'bg-danger-bg text-danger',
-  failed: 'bg-danger-bg text-danger',
+const STATUS_TONE: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> = {
+  needs_approval: 'warning', changes_requested: 'warning', in_review: 'neutral',
+  captured: 'neutral', approved: 'success', delivering: 'neutral',
+  delivered: 'success', blocked: 'danger', rejected: 'danger', failed: 'danger',
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -60,6 +57,9 @@ const STATUS_LABEL: Record<string, string> = {
 
 const VERDICT_LABEL: Record<Verdict, string> = {
   approve: 'approved', request_changes: 'requested changes', reject: 'rejected',
+};
+const VERDICT_TONE: Record<Verdict, 'success' | 'danger' | 'warning'> = {
+  approve: 'success', reject: 'danger', request_changes: 'warning',
 };
 
 /** Parse a DB timestamp (with or without a T/Z) to millis. */
@@ -79,7 +79,6 @@ function when(iso: string): string {
   if (mins < 1440) return `${Math.round(mins / 60)}h ago`;
   return `${Math.round(mins / 1440)}d ago`;
 }
-
 
 export default function ChangesPage() {
   const [tab, setTab] = useState<'queue' | 'policies'>('queue');
@@ -148,58 +147,54 @@ export default function ChangesPage() {
   );
   const rest = changes.filter((c) => !needsYou.includes(c));
 
+  const tabItems = canManage
+    ? [
+        { id: 'queue', label: `Review queue${needsYou.length ? ` (${needsYou.length})` : ''}` },
+        { id: 'policies', label: 'Policies' },
+      ]
+    : [{ id: 'queue', label: `Review queue${needsYou.length ? ` (${needsYou.length})` : ''}` }];
+
   return (
     <PageSection
       title="Changes"
       description="Code agents wrote, and the decision each one is waiting on. Every agent change is reviewed and gated before it can ship."
     >
-      <div className="flex items-center gap-1 mb-4">
-        {(canManage ? (['queue', 'policies'] as const) : (['queue'] as const)).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-3 py-1.5 rounded-md text-[12px] font-semibold cursor-pointer border ${
-              tab === t ? 'bg-primary text-white border-primary' : 'bg-surface text-text-secondary border-border hover:border-primary/50'}`}
-          >
-            {t === 'queue' ? `Review queue${needsYou.length ? ` (${needsYou.length})` : ''}` : 'Policies'}
-          </button>
-        ))}
-      </div>
+      <Tabs items={tabItems} value={tab} onValueChange={(id) => setTab(id as 'queue' | 'policies')} size="sm" className="mb-4" />
 
       {tab === 'policies' && canManage ? <PolicyEditor /> : (
-        <>
+        <Stack gap="md">
           {/* The list is stale, not gone — rows below are from the last good
               fetch, and the queue may have moved since. */}
           {error && changes.length > 0 && (
-            <div className="mb-3 rounded-md border border-warning/40 bg-warning-bg/40 px-3 py-2 text-[12px] text-warning">
+            <InlineAlert tone="warning">
               {denied
                 ? 'These rows are from before your role changed — the review queue is no longer readable to this role, so nothing here is refreshing.'
                 : `Showing the last queue this page could load — refreshes are failing (${error}). Newer changes may be missing.`}
-            </div>
+            </InlineAlert>
           )}
 
           {needsYou.length > 0 && (
-            <div className="mb-5">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-warning mb-2">Needs you</div>
-              <div className="flex flex-col gap-3">
+            <Stack gap="sm">
+              <SectionLabel className="text-warning">Needs you</SectionLabel>
+              <Stack gap="sm">
                 {needsYou.map((c) => (
                   <ChangeCard key={c.id} change={c}
                     busy={busy === c.id} act={act} superseded={supersededIds.has(c.id)} />
                 ))}
-              </div>
-            </div>
+              </Stack>
+            </Stack>
           )}
 
           {rest.length > 0 && (
-            <div>
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-2">Recent</div>
-              <div className="flex flex-col gap-3">
+            <Stack gap="sm">
+              <SectionLabel>Recent</SectionLabel>
+              <Stack gap="sm">
                 {rest.map((c) => (
                   <ChangeCard key={c.id} change={c}
                     busy={busy === c.id} act={act} superseded={supersededIds.has(c.id)} />
                 ))}
-              </div>
-            </div>
+              </Stack>
+            </Stack>
           )}
 
           {/* Three different facts, three different cards. An empty queue is
@@ -207,51 +202,47 @@ export default function ChangesPage() {
               either as "No changes yet" tells a reviewer their review queue is
               clear when the truth is that this page cannot see it. */}
           {changes.length === 0 && denied && (
-            <Card padding="md">
-              <div className="text-[13px] font-semibold text-text-primary">You cannot see the review queue</div>
-              <div className="text-[12px] text-text-secondary mt-1 leading-snug">
-                Reading change requests requires the <span className="font-mono">ManageDevbox</span> authority,
-                which this role does not hold — so this page cannot say whether anything is waiting.
-                It is not empty; it is unreadable. Dispatch rights
-                (<span className="font-mono">DispatchAgentRun</span>) let you start governed runs but not review
-                what they produce. Switch to HR Admin from the identity menu, top right, or ask an admin for the
-                grant.
-              </div>
-            </Card>
+            <ErrorState
+              title="You cannot see the review queue"
+              description={
+                <>
+                  Reading change requests requires the <code>ManageDevbox</code> authority,
+                  which this role does not hold — so this page cannot say whether anything is waiting.
+                  It is not empty; it is unreadable. Dispatch rights
+                  (<code>DispatchAgentRun</code>) let you start governed runs but not review
+                  what they produce. Switch to HR Admin from the identity menu, top right, or ask an admin for the
+                  grant.
+                </>
+              }
+            />
           )}
 
           {changes.length === 0 && unreachable && (
-            <Card padding="md">
-              <div className="text-[13px] font-semibold text-text-primary">Review queue unreachable</div>
-              <div className="text-[12px] text-text-secondary mt-1 leading-snug">
-                This list is unknown, not empty — there may be changes waiting for a decision. {error}
-              </div>
-              <button
-                onClick={refresh}
-                className="mt-2.5 px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors"
-              >
-                Try again
-              </button>
-            </Card>
+            <ErrorState
+              title="Review queue unreachable"
+              description={`This list is unknown, not empty — there may be changes waiting for a decision. ${error}`}
+              actionLabel="Try again"
+              onAction={refresh}
+            />
           )}
 
           {changes.length === 0 && isLoading && !error && (
-            <Card padding="md">
-              <div className="text-[12px] text-text-tertiary">Loading the review queue…</div>
-            </Card>
+            <LoadingState label="Loading the review queue…" />
           )}
 
           {changes.length === 0 && !isLoading && !error && (
-            <Card padding="md">
-              <div className="text-[13px] font-semibold text-text-primary">No changes yet</div>
-              <div className="text-[12px] text-text-secondary mt-1 leading-snug">
-                When an agent changes code in a{' '}
-                <Link to="/admin/projects" className="text-primary no-underline hover:underline">codebase</Link>,
-                the change is captured, reviewed, and gated — and shows up here for whatever decision it needs.
-              </div>
-            </Card>
+            <EmptyState
+              title="No changes yet"
+              description={
+                <>
+                  When an agent changes code in a{' '}
+                  <Link to="/admin/projects" className="text-primary no-underline hover:underline">codebase</Link>,
+                  the change is captured, reviewed, and gated — and shows up here for whatever decision it needs.
+                </>
+              }
+            />
           )}
-        </>
+        </Stack>
       )}
     </PageSection>
   );
@@ -268,169 +259,168 @@ function ChangeCard({ change: c, busy, act, superseded }: {
   const blockingGates = c.gates.filter((g) => g.outcome !== 'pass');
 
   return (
-    <Card padding="none" className="overflow-hidden">
-      <div className="px-3.5 py-2.5 border-b border-border flex items-center gap-2">
-        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded shrink-0 ${STATUS_TONE[c.status] ?? 'bg-surface-hover text-text-tertiary'}`}>
-          {STATUS_LABEL[c.status] ?? c.status}
-        </span>
-        {superseded && (
-          <span className="text-[10px] font-semibold px-2 py-0.5 rounded shrink-0 bg-surface-hover text-text-tertiary" title="A newer change has been captured for this codebase">
-            superseded
-          </span>
-        )}
-        <span className="text-[13px] font-semibold text-text-primary truncate">{c.title}</span>
-        <div className="flex-1" />
+    <Card padding="none">
+      <Inline align="center" gap="sm" wrap justify="between" className="border-b border-border px-3.5 py-2.5">
+        <Inline align="center" gap="sm" wrap>
+          <Chip tone={STATUS_TONE[c.status] ?? 'neutral'} size="xs">{STATUS_LABEL[c.status] ?? c.status}</Chip>
+          {superseded && (
+            <Chip tone="neutral" size="xs" title="A newer change has been captured for this codebase">superseded</Chip>
+          )}
+          <Inline as="span" gap="none" className="min-w-0 truncate text-[13px] font-semibold text-text-primary">{c.title}</Inline>
+        </Inline>
         {c.repoFullName && (
           <Link
             to={`/admin/projects?project=${c.projectId}`}
             title="Open this codebase"
-            className="text-[11px] font-mono text-text-tertiary shrink-0 no-underline hover:text-primary hover:underline"
+            className="shrink-0 font-mono text-[11px] text-text-tertiary no-underline hover:text-primary hover:underline"
           >
             {c.repoFullName}
           </Link>
         )}
-      </div>
+      </Inline>
 
-      <div className="px-3.5 py-2.5">
-        <div className="text-[11px] text-text-tertiary">
-          {c.filesChanged} {c.filesChanged === 1 ? 'file' : 'files'} · {c.model ?? 'unknown model'} · {when(c.createdAt)}
-          {/* The run that wrote this change — jumps to the codebase with that
-              run highlighted, so a reviewer can read what the agent was asked
-              before judging what it did. */}
-          {c.runId && (
-            <span>
-              {' · '}
+      <Stack gap="sm" className="px-3.5 py-2.5">
+        <MetaLine
+          size="xs"
+          items={[
+            `${c.filesChanged} ${c.filesChanged === 1 ? 'file' : 'files'}`,
+            c.model ?? 'unknown model',
+            when(c.createdAt),
+            // The run that wrote this change — jumps to the codebase with that
+            // run highlighted, so a reviewer can read what the agent was asked
+            // before judging what it did.
+            c.runId && (
               <Link
+                key="run"
                 to={`/admin/projects?project=${c.projectId}&run=${c.runId}`}
                 title="Open the run that produced this change"
                 className="text-text-secondary no-underline hover:text-primary hover:underline"
               >
                 run {c.runId.slice(0, 8)}
               </Link>
-            </span>
-          )}
-          {/* The initiative this code serves — the thread from org intent to a
-              delivered change, which is the whole reason codebases join the
-              org graph. */}
-          {c.orgProjectName && (
-            <span>
-              {' · delivering '}
-              {c.orgProjectId ? (
+            ),
+            // The initiative this code serves — the thread from org intent to a
+            // delivered change, which is the whole reason codebases join the
+            // org graph.
+            c.orgProjectName && (
+              c.orgProjectId ? (
                 <Link
+                  key="proj"
                   to={`/iq/projects/${c.orgProjectId}`}
                   title="Open this initiative"
                   className="text-text-secondary no-underline hover:text-primary hover:underline"
                 >
-                  {c.orgProjectName}
+                  delivering {c.orgProjectName}
                 </Link>
               ) : (
-                <span className="text-text-secondary">{c.orgProjectName}</span>
-              )}
-            </span>
-          )}
-        </div>
+                <span key="proj">delivering {c.orgProjectName}</span>
+              )
+            ),
+          ]}
+        />
 
         {/* Why a human is here — the gates that did not pass. */}
         {blockingGates.length > 0 && (
-          <div className="mt-2 flex flex-col gap-1">
+          <Stack gap="xs">
             {blockingGates.map((g, i) => (
-              <div key={i} className="text-[11px] text-text-secondary leading-snug">
-                <span className={g.outcome === 'block' ? 'text-danger' : 'text-warning'}>●</span>{' '}
+              <Chip key={i} tone={g.outcome === 'block' ? 'danger' : 'warning'} size="xs" dot="static">
                 {g.detail}
-              </div>
+              </Chip>
             ))}
-          </div>
+          </Stack>
         )}
 
         {/* What the reviewer said. */}
         {review && (
-          <div className="mt-2.5 rounded-md border border-border p-2.5">
-            <div className="text-[11px]">
-              <span className={`font-semibold ${
-                review.verdict === 'approve' ? 'text-success'
-                  : review.verdict === 'reject' ? 'text-danger' : 'text-warning'}`}>
-                Reviewer {VERDICT_LABEL[review.verdict]}
-              </span>
-              <span className="text-text-tertiary"> · {review.model ?? 'model'}</span>
-            </div>
-            {review.summary && <div className="text-[12px] text-text-secondary mt-1 leading-snug">{review.summary}</div>}
-            {review.findings.length > 0 && (
-              <ul className="mt-1.5 flex flex-col gap-0.5">
-                {review.findings.slice(0, 6).map((f, i) => (
-                  <li key={i} className="text-[11px] text-text-tertiary leading-snug">
-                    <span className={f.severity === 'high' ? 'text-danger' : f.severity === 'low' ? 'text-text-tertiary' : 'text-warning'}>
-                      {f.severity ?? 'note'}
-                    </span>
-                    {f.file ? ` ${f.file}${f.line ? `:${f.line}` : ''}` : ''} — {f.note}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+          <Card padding="sm">
+            <Stack gap="xs">
+              <Inline gap="xs" align="baseline">
+                <Chip tone={VERDICT_TONE[review.verdict]} size="xs">Reviewer {VERDICT_LABEL[review.verdict]}</Chip>
+                <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">{review.model ?? 'model'}</Inline>
+              </Inline>
+              {review.summary && (
+                <Inline as="span" gap="none" className="text-[12px] leading-snug text-text-secondary">{review.summary}</Inline>
+              )}
+              {review.findings.length > 0 && (
+                <Stack gap="none" className="mt-0.5">
+                  {review.findings.slice(0, 6).map((f, i) => (
+                    <Inline key={i} gap="xs" wrap>
+                      <Chip
+                        size="xs"
+                        tone={f.severity === 'high' ? 'danger' : f.severity === 'low' ? 'neutral' : 'warning'}
+                      >
+                        {f.severity ?? 'note'}
+                      </Chip>
+                      <Inline as="span" gap="none" className="text-[11px] leading-snug text-text-tertiary">
+                        {f.file ? `${f.file}${f.line ? `:${f.line}` : ''} — ` : ''}{f.note}
+                      </Inline>
+                    </Inline>
+                  ))}
+                </Stack>
+              )}
+            </Stack>
+          </Card>
         )}
 
-        {c.error && <div className="mt-2 text-[11px] text-danger leading-snug">{c.error}</div>}
+        {c.error && <Inline as="span" gap="none" className="text-[11px] leading-snug text-danger">{c.error}</Inline>}
         {c.prUrl && (
-          <a href={c.prUrl} target="_blank" rel="noreferrer"
-            className="inline-block mt-2 text-[12px] text-primary no-underline hover:underline">
+          <ExternalLink href={c.prUrl} className="inline-block text-[12px] text-primary no-underline hover:underline">
             View pull request →
-          </a>
+          </ExternalLink>
         )}
 
         {/* Actions, by state. A superseded change has been overtaken by a newer
             capture on the same codebase; its forward actions are gone because
             delivery would ship the newer change's content — act on that one. */}
-        <div className="mt-3 flex items-center gap-2 flex-wrap">
+        <Inline gap="sm" align="center" wrap>
           {superseded ? (
-            <span className="text-[11px] text-text-tertiary italic">
+            <Inline as="span" gap="none" className="text-[11px] italic text-text-tertiary">
               A newer change supersedes this one — decide and deliver the latest change for this codebase instead.
-            </span>
+            </Inline>
           ) : !canDecide ? null : (
             <>
               {(c.status === 'needs_approval' || c.status === 'changes_requested') && (
                 <>
-                  <button disabled={busy} onClick={() => act(c.id, 'decide', 'Approving', { decision: 'approve' })}
-                    className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-50">
+                  <Button variant="primary" size="sm" disabled={busy} onClick={() => act(c.id, 'decide', 'Approving', { decision: 'approve' })}>
                     {c.status === 'changes_requested' ? 'Approve anyway' : 'Approve'}
-                  </button>
-                  <button disabled={busy} onClick={() => act(c.id, 'decide', 'Rejecting', { decision: 'reject' })}
-                    className="px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-secondary cursor-pointer hover:border-danger hover:text-danger transition-colors disabled:opacity-50">
+                  </Button>
+                  <Button variant="secondary" size="sm" disabled={busy} onClick={() => act(c.id, 'decide', 'Rejecting', { decision: 'reject' })}>
                     Reject
-                  </button>
+                  </Button>
                 </>
               )}
               {c.status === 'approved' && (
-                <button disabled={busy} onClick={() => act(c.id, 'deliver', 'Delivering', {})}
-                  className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-50">
+                <Button variant="primary" size="sm" disabled={busy} onClick={() => act(c.id, 'deliver', 'Delivering', {})}>
                   {busy ? 'delivering…' : 'Deliver as pull request'}
-                </button>
+                </Button>
               )}
               {c.status === 'changes_requested' && (
-                <button disabled={busy} onClick={() => act(c.id, 'address', 'Dispatching a fix', {})}
+                <Button
+                  variant="secondary" size="sm" disabled={busy}
                   title="Send the reviewer's findings back to an agent to fix"
-                  className="px-3 py-1.5 rounded-md border border-primary/50 bg-surface text-[12px] font-semibold text-primary cursor-pointer hover:bg-primary hover:text-white transition-colors disabled:opacity-50">
+                  onClick={() => act(c.id, 'address', 'Dispatching a fix', {})}
+                >
                   Address with an agent
-                </button>
+                </Button>
               )}
               {(c.status === 'changes_requested' || c.status === 'failed') && (
-                <button disabled={busy} onClick={() => act(c.id, 'rereview', 'Re-reviewing', {})}
-                  className="px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors disabled:opacity-50">
+                <Button variant="secondary" size="sm" disabled={busy} onClick={() => act(c.id, 'rereview', 'Re-reviewing', {})}>
                   Re-review
-                </button>
+                </Button>
               )}
             </>
           )}
           {c.diff && (
             <Link
               to={`/admin/changes/${c.id}`}
-              className="px-2.5 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-secondary no-underline cursor-pointer hover:border-primary hover:text-primary transition-colors"
+              className="rounded-md border border-border bg-surface px-2.5 py-1.5 text-[12px] text-text-secondary no-underline hover:border-primary hover:text-primary transition-colors"
               title="Per-file diff with the reviewer's findings pinned to lines"
             >
               Review diff →
             </Link>
           )}
-        </div>
-      </div>
+        </Inline>
+      </Stack>
     </Card>
   );
 }

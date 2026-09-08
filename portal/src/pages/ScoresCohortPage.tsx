@@ -1,52 +1,53 @@
-
-import { PageSection } from '@connorhoehnslalom/ui-components/shared';
+import { CatalogGrid, EmptyState, ErrorState, LoadingState, PageSection } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
+import { useCapabilities } from '../lib/capabilities';
 import { CohortCard, type CohortStats } from '../components/scores/CohortCard';
+import { LeaderboardAccessNeeded, isLeaderboardForbiddenError } from '../components/scores/LeaderboardAccessNeeded';
 
 function ScoresCohortPage() {
-  const { data, isLoading, error } = useFetch<CohortStats[]>('/api/scores/cohorts');
+  // Same guard as ScoresPage.tsx: ask the capability before asking the
+  // server, so a role without the grant never fires the request (and never
+  // sees the request's raw denial) — docs/orgiq-journeys/sme/DEFECTS.md #6.
+  const { can, ready: capsReady } = useCapabilities();
+  const mayViewLeaderboard = capsReady && can('ViewLeaderboard');
+  const { data, isLoading, error } = useFetch<CohortStats[]>(mayViewLeaderboard ? '/api/scores/cohorts' : null);
 
-  if (isLoading) {
-    return (
-      <div style={{ padding: 24, color: 'var(--color-text-tertiary, #9ca3af)' }}>
-        Loading cohort data...
-      </div>
-    );
+  // Capabilities not resolved yet is LOADING, not denied — see ScoresPage.tsx.
+  if (!capsReady || isLoading) {
+    return <LoadingState label="Loading cohort data…" />;
+  }
+
+  if (!mayViewLeaderboard) {
+    return <LeaderboardAccessNeeded />;
   }
 
   if (error) {
-    return (
-      <div style={{ padding: 24, color: 'var(--color-error, #dc2626)' }}>
-        Failed to load cohorts: {error}
-      </div>
-    );
+    if (isLeaderboardForbiddenError(error)) return <LeaderboardAccessNeeded />;
+    return <ErrorState title="Failed to load cohorts" body={error} />;
   }
 
   if (!data || data.length === 0) {
     return (
-      <div style={{ padding: 40, maxWidth: 560 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>No department data yet</h2>
-        <p style={{ fontSize: 14, color: 'var(--color-text-secondary, #6b7280)', lineHeight: 1.6 }}>
-          Run <code>python schema/seed.py</code> to populate Aurora with people and scores,
-          then this page will show per-department analytics automatically.
-        </p>
-      </div>
+      <EmptyState
+        title="No department data yet"
+        description={
+          <>
+            Run <code>python schema/seed.py</code> to populate Aurora with
+            people and scores, then this page will show per-department
+            analytics automatically.
+          </>
+        }
+      />
     );
   }
 
   return (
     <PageSection title="Score Cohorts">
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
-          gap: 20,
-        }}
-      >
+      <CatalogGrid columns={3}>
         {data.map((cohort) => (
           <CohortCard key={cohort.department} cohort={cohort} />
         ))}
-      </div>
+      </CatalogGrid>
     </PageSection>
   );
 }

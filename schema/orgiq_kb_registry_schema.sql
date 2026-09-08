@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS knowledge_bases (
   slug                TEXT        NOT NULL UNIQUE,   -- machine key, URL-safe, used for Aurora table + S3 prefix naming
 
   -- Tenant / purpose routing
-  tenant              TEXT        NOT NULL DEFAULT 'orgiq',   -- orgiq | newsroom
+  tenant              TEXT        NOT NULL DEFAULT 'orgiq',   -- orgiq | assessment | future
   purpose             TEXT        NOT NULL DEFAULT 'default', -- default | articles | hr | engineering | custom
 
   description         TEXT,

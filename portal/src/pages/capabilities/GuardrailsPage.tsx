@@ -3,12 +3,21 @@ import {
   Banner,
   Button,
   Card,
+  CardHeader,
   Chip,
   ConfirmDialog,
   FormField,
   IconButton,
+  Inline,
+  InlinePlaceholder,
+  Input,
+  MetaLine,
   Modal,
   PageSection,
+  SectionLabel,
+  Select,
+  Stack,
+  StatStrip,
   Switch,
   Table,
   TableBody,
@@ -16,10 +25,12 @@ import {
   TableRow,
   TableTd,
   TableTh,
+  Textarea,
   useToast,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
+import { T } from './Text';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -58,6 +69,7 @@ interface GuardrailMetrics {
 }
 
 const PII_ACTIONS: PiiAction[] = ['BLOCK', 'ANONYMIZE', 'NONE'];
+const PII_ACTION_OPTIONS = PII_ACTIONS.map(a => ({ value: a, label: a }));
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -192,65 +204,43 @@ function GuardrailsPage() {
 
   if (!guardrail) {
     return (
-      <div style={{ padding: 24 }} data-testid="guardrails-page-loading">
-        <div style={{ color: 'var(--color-text-secondary)' }}>Loading guardrail...</div>
-      </div>
+      <InlinePlaceholder size="sm" align="center" data-testid="guardrails-page-loading">
+        Loading guardrail...
+      </InlinePlaceholder>
     );
   }
 
   return (
-    <div style={{ padding: 24 }} data-testid="guardrails-page">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-        <Banner variant="warning" data-testid="guardrails-live-banner">
-          Changes apply to the live guardrail DRAFT immediately.
-        </Banner>
+    <>
+    <Stack gap="lg" data-testid="guardrails-page">
+      <Banner variant="warning" data-testid="guardrails-live-banner">
+        Changes apply to the live guardrail DRAFT immediately.
+      </Banner>
 
         {/* Status + metrics — wrapped in a single Card per spec */}
-        <Card padding="md" data-testid="guardrails-status-card">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <span style={{ fontWeight: 600 }}>{guardrail.name}</span>
-              <span style={{ marginLeft: 12, fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                v{guardrail.version} · Updated {new Date(guardrail.updatedAt).toLocaleString()}
-              </span>
-            </div>
-            <Chip tone={guardrail.status === 'READY' ? 'success' : 'warning'} size="xs">{guardrail.status}</Chip>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 12 }}>
-            <div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>GROUNDING THRESHOLD</div>
-              <div style={{ fontSize: 16, fontWeight: 600 }}>{(guardrail.groundingThreshold * 100).toFixed(0)}%</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>RELEVANCE THRESHOLD</div>
-              <div style={{ fontSize: 16, fontWeight: 600 }}>{(guardrail.relevanceThreshold * 100).toFixed(0)}%</div>
-            </div>
-          </div>
-
-          <div style={{ marginTop: 20 }}>
-            <h2 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
-              Activity (last 6h){' '}
-              <span style={{ fontWeight: 400, fontSize: 12, color: 'var(--color-text-tertiary)' }}>
-                from AWS/Bedrock metrics
-              </span>
-            </h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 16 }}>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>INVOCATIONS</div>
-                <div style={{ fontSize: 20, fontWeight: 600 }}>{metrics?.totalInvocations ?? 0}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>INTERVENTIONS</div>
-                <div style={{ fontSize: 20, fontWeight: 600 }}>{metrics?.totalInterventions ?? 0}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 4 }}>RATE</div>
-                <div style={{ fontSize: 20, fontWeight: 600 }}>{metrics?.interventionRate ?? '0.0'}%</div>
-              </div>
-            </div>
-            {/* NOTE: lib Sparkline is single-series; we need 2 overlaid series so we keep this SVG renderer. */}
-            <MetricsSparkline series={metrics?.series ?? []} />
-          </div>
+        <Card padding="none" className="overflow-hidden" data-testid="guardrails-status-card">
+          <CardHeader
+            title={guardrail.name}
+            subtitle={`v${guardrail.version} · Updated ${new Date(guardrail.updatedAt).toLocaleString()}`}
+            action={<Chip tone={guardrail.status === 'READY' ? 'success' : 'warning'} size="xs">{guardrail.status}</Chip>}
+          />
+          <Stack gap="md" className="px-3.5 py-3">
+            <StatStrip
+              frameless
+              items={[
+                { label: 'Grounding threshold', value: `${(guardrail.groundingThreshold * 100).toFixed(0)}%` },
+                { label: 'Relevance threshold', value: `${(guardrail.relevanceThreshold * 100).toFixed(0)}%` },
+                { label: 'Invocations (6h)', value: metrics?.totalInvocations ?? 0 },
+                { label: 'Interventions (6h)', value: metrics?.totalInterventions ?? 0, tone: (metrics?.totalInterventions ?? 0) > 0 ? 'danger' : 'default' },
+                { label: 'Rate (6h)', value: `${metrics?.interventionRate ?? '0.0'}%` },
+              ]}
+            />
+            <Stack gap="xs">
+              <SectionLabel as="div">Activity (last 6h) · from AWS/Bedrock metrics</SectionLabel>
+              {/* NOTE: lib Sparkline is single-series; we need 2 overlaid series so we keep this SVG renderer. */}
+              <MetricsSparkline series={metrics?.series ?? []} />
+            </Stack>
+          </Stack>
         </Card>
 
         {/* PII Filters */}
@@ -268,7 +258,7 @@ function GuardrailsPage() {
               <TableBody>
                 {guardrail.piiFilters.map(filter => (
                   <TableRow key={filter.type}>
-                    <TableTd style={{ fontWeight: 500 }}>{filter.type}</TableTd>
+                    <TableTd className="font-medium">{filter.type}</TableTd>
                     <TableTd>
                       <Chip
                         tone={filter.enabled ? 'success' : 'neutral'}
@@ -279,25 +269,16 @@ function GuardrailsPage() {
                     </TableTd>
                     <TableTd>
                       {canEdit ? (
-                        <select
+                        <Select
                           aria-label={`Action for ${filter.type}`}
                           data-testid={`pii-action-${filter.type}`}
                           value={filter.action}
                           onChange={e => patchPii(filter.type, { action: e.target.value as PiiAction })}
-                          style={{
-                            fontSize: 12,
-                            padding: '4px 8px',
-                            border: '1px solid var(--color-border)',
-                            borderRadius: 'var(--radius-sm)',
-                            background: 'var(--color-surface)',
-                          }}
-                        >
-                          {PII_ACTIONS.map(a => (
-                            <option key={a} value={a}>{a}</option>
-                          ))}
-                        </select>
+                          options={PII_ACTION_OPTIONS}
+                          size="sm"
+                        />
                       ) : (
-                        <span style={{ fontSize: 12 }}>{filter.action}</span>
+                        <T className="text-xs">{filter.action}</T>
                       )}
                     </TableTd>
                     <TableTd>
@@ -328,7 +309,7 @@ function GuardrailsPage() {
             Switch column mirroring the PII filter table. */}
         <PageSection title="Content Policy" description="View-only. Mutation API not yet available.">
           <Card padding="md" data-testid="content-policy-card">
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <Inline gap="sm" wrap>
               {Object.entries(guardrail.contentPolicy).map(([key, enabled]) => (
                 <Chip
                   key={key}
@@ -338,7 +319,7 @@ function GuardrailsPage() {
                   {key.replace('Enabled', '')}
                 </Chip>
               ))}
-            </div>
+            </Inline>
           </Card>
         </PageSection>
 
@@ -346,71 +327,45 @@ function GuardrailsPage() {
         <PageSection title="Denied Topics" description="Topics the guardrail will refuse to discuss.">
           <Card padding="md" data-testid="denied-topics-card">
             {canEdit && (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '200px 1fr auto',
-                gap: 12,
-                alignItems: 'end',
-                marginBottom: 16,
-                padding: 12,
-                background: 'var(--color-surface-hover)',
-                borderRadius: 'var(--radius-md)',
-              }}
-              data-testid="topic-add-form"
-            >
-              <FormField label="Topic name">
-                {p => (
-                  <input
-                    {...p}
-                    type="text"
-                    value={newTopic.name}
-                    onChange={e => setNewTopic(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="e.g. competitor-strategy"
-                    data-testid="topic-add-name"
-                    style={{
-                      width: '100%',
-                      padding: '6px 10px',
-                      fontSize: 12,
-                      border: '1px solid var(--color-border)',
-                      borderRadius: 'var(--radius-sm)',
-                      background: 'var(--color-surface)',
-                    }}
-                  />
-                )}
-              </FormField>
-              <FormField label="Definition" hint="What does this topic cover?">
-                {p => (
-                  <textarea
-                    {...p}
-                    value={newTopic.definition}
-                    onChange={e => setNewTopic(prev => ({ ...prev, definition: e.target.value }))}
-                    placeholder="A short natural-language description the model will match against."
-                    rows={2}
-                    data-testid="topic-add-definition"
-                    style={{
-                      width: '100%',
-                      padding: '6px 10px',
-                      fontSize: 12,
-                      border: '1px solid var(--color-border)',
-                      borderRadius: 'var(--radius-sm)',
-                      background: 'var(--color-surface)',
-                      resize: 'vertical',
-                      fontFamily: 'inherit',
-                    }}
-                  />
-                )}
-              </FormField>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={addTopic}
-                disabled={adding || !newTopic.name.trim() || !newTopic.definition.trim()}
-                data-testid="topic-add-submit"
-              >
-                {adding ? 'Adding…' : 'Add'}
-              </Button>
-            </div>
+              <Card padding="sm" className="mb-4 bg-surface-hover" data-testid="topic-add-form">
+                <Stack gap="sm">
+                  <FormField label="Topic name">
+                    {p => (
+                      <Input
+                        {...p}
+                        type="text"
+                        value={newTopic.name}
+                        onChange={e => setNewTopic(prev => ({ ...prev, name: e.target.value }))}
+                        placeholder="e.g. competitor-strategy"
+                        data-testid="topic-add-name"
+                      />
+                    )}
+                  </FormField>
+                  <FormField label="Definition" hint="What does this topic cover?">
+                    {p => (
+                      <Textarea
+                        {...p}
+                        value={newTopic.definition}
+                        onChange={e => setNewTopic(prev => ({ ...prev, definition: e.target.value }))}
+                        placeholder="A short natural-language description the model will match against."
+                        rows={2}
+                        data-testid="topic-add-definition"
+                      />
+                    )}
+                  </FormField>
+                  <Inline justify="end">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={addTopic}
+                      disabled={adding || !newTopic.name.trim() || !newTopic.definition.trim()}
+                      data-testid="topic-add-submit"
+                    >
+                      {adding ? 'Adding…' : 'Add'}
+                    </Button>
+                  </Inline>
+                </Stack>
+              </Card>
             )}
 
             <Table>
@@ -425,8 +380,8 @@ function GuardrailsPage() {
               <TableBody>
                 {guardrail.deniedTopics.map(topic => (
                   <TableRow key={topic.name} data-testid={`topic-row-${topic.name}`}>
-                    <TableTd style={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{topic.name}</TableTd>
-                    <TableTd style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{topic.definition}</TableTd>
+                    <TableTd className="whitespace-nowrap font-medium">{topic.name}</TableTd>
+                    <TableTd className="text-xs text-text-secondary">{topic.definition}</TableTd>
                     <TableTd>
                       {canEdit ? (
                         <Switch
@@ -443,7 +398,7 @@ function GuardrailsPage() {
                     </TableTd>
                     <TableTd>
                       {canEdit && (
-                        <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                        <Inline gap="xs" justify="end">
                           <IconButton
                             aria-label={`Edit definition for ${topic.name}`}
                             variant="ghost"
@@ -462,7 +417,7 @@ function GuardrailsPage() {
                           >
                             Remove
                           </IconButton>
-                        </div>
+                        </Inline>
                       )}
                     </TableTd>
                   </TableRow>
@@ -471,7 +426,7 @@ function GuardrailsPage() {
             </Table>
           </Card>
         </PageSection>
-      </div>
+      </Stack>
 
       {/* Edit topic definition modal */}
       <Modal
@@ -480,7 +435,7 @@ function GuardrailsPage() {
         title={editing ? `Edit definition — ${editing.name}` : 'Edit topic'}
         maxWidth={520}
         footer={
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <Inline gap="sm" justify="end">
             <Button variant="ghost" size="sm" onClick={() => setEditing(null)} disabled={savingEdit}>
               Cancel
             </Button>
@@ -493,27 +448,17 @@ function GuardrailsPage() {
             >
               {savingEdit ? 'Saving…' : 'Save'}
             </Button>
-          </div>
+          </Inline>
         }
       >
         <FormField label="Definition" hint="Natural-language description used by the model.">
           {p => (
-            <textarea
+            <Textarea
               {...p}
               value={editingDef}
               onChange={e => setEditingDef(e.target.value)}
               rows={5}
               data-testid="topic-edit-definition"
-              style={{
-                width: '100%',
-                padding: '8px 10px',
-                fontSize: 13,
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-sm)',
-                background: 'var(--color-surface)',
-                resize: 'vertical',
-                fontFamily: 'inherit',
-              }}
             />
           )}
         </FormField>
@@ -535,7 +480,7 @@ function GuardrailsPage() {
         confirmDisabled={deleting}
         tone="destructive"
       />
-    </div>
+    </>
   );
 }
 
@@ -555,23 +500,25 @@ function MetricsSparkline({ series }: { series: Array<{ timestamp: string; invoc
 
   if (series.length === 0) {
     return (
-      <div style={{ textAlign: 'center', padding: 20, color: 'var(--color-text-tertiary)', fontSize: 12 }}>
+      <InlinePlaceholder size="sm" align="center">
         No metrics yet — guardrail hasn't been invoked recently.
-      </div>
+      </InlinePlaceholder>
     );
   }
 
   return (
-    <div>
-      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ width: '100%', height: 80, display: 'block' }}>
-        <polyline fill="none" stroke="var(--color-primary, #6366f1)" strokeWidth="1.5" points={points('invocations')} />
+    <Stack gap="xs">
+      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="block h-20 w-full">
+        <polyline fill="none" stroke="var(--color-primary)" strokeWidth="1.5" points={points('invocations')} />
         <polyline fill="none" stroke="var(--color-danger)" strokeWidth="1.5" points={points('interventions')} />
       </svg>
-      <div style={{ display: 'flex', gap: 16, fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 4 }}>
-        <span><span style={{ display: 'inline-block', width: 8, height: 2, background: 'var(--color-primary, #6366f1)', marginRight: 4, verticalAlign: 'middle' }} />invocations</span>
-        <span><span style={{ display: 'inline-block', width: 8, height: 2, background: '#dc2626', marginRight: 4, verticalAlign: 'middle' }} />interventions</span>
-      </div>
-    </div>
+      <MetaLine
+        items={[
+          <Chip tone="info" dot="static" size="xs">invocations</Chip>,
+          <Chip tone="danger" dot="static" size="xs">interventions</Chip>,
+        ]}
+      />
+    </Stack>
   );
 }
 

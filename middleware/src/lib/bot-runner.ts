@@ -28,17 +28,19 @@ import {
 // is not edited from here — the brake consumes listGrants exactly as the
 // Budgets page does, so the number an SME is stopped by and the number they see
 // come from one query.
-import { listGrants, getBudget } from '../providers/budgets.js';
+import { listGrants, getBudget, type GrantRow } from '../providers/budgets.js';
 import { getUser } from '../providers/identity.js';
 import {
   getAgentProject, listAgentProjects, buildCloneCommand, markCloned, type AgentProject,
 } from '../providers/agent-projects.js';
 import { getWorkItem, updateWorkItem, addWorkItemComment, type WorkItem } from '../providers/work-items.js';
-import { enqueueJob } from '../providers/agent-jobs.js';
+import {
+  enqueueJob, claimJob, markRunning, completeJob, cancelJob,
+} from '../providers/agent-jobs.js';
 import { dispatchGovernedRun } from './sdlc-pipeline.js';
 import { runDevboxShell } from './project-runner.js';
 import { resolveDevboxArn, devboxDataClient } from './devbox-arn.js';
-import { registerBox, getBoxBySession } from './devbox-fleet.js';
+import { registerBox, getBoxBySession, appendEvent } from './devbox-fleet.js';
 import { normalizeRuntimeSessionId } from './runtime-session.js';
 import type { ForecastConfidence } from './bot-estimate.js';
 import { selectDispatchForecast, type ForecastSamples } from './marketplace-estimate.js';
@@ -511,6 +513,91 @@ export interface ResolvedEnvelope extends EnvelopeState {
   grantId: string;
   sprintId: string | null;
   granteePersonId: string;
+  /** Which initiative this envelope is on. Carried so a caller reading ALL of
+   *  their envelopes (listActiveEnvelopes) can say where each one applies —
+   *  loadEnvelope's own caller already knows, having asked for one initiative. */
+  orgProjectId: string;
+  orgProjectName: string | null;
+  /** The envelope's burn window: the sprint's dates, null-unbounded on either
+   *  side. Surfaced so a read of the envelope can say what period the burn
+   *  covers rather than leaving it implicit. */
+  startsOn: string | null;
+  endsOn: string | null;
+  sprintStatus: string | null;
+}
+
+/**
+ * A grant counts as ACTIVE when its sprint is `active`, or when it has no
+ * sprint at all — an initiative-level standing grant is always in force and its
+ * burn window is simply unbounded.
+ *
+ * One predicate, called by loadEnvelope, listActiveEnvelopes and
+ * resolveActiveGrant, so the envelope an SME is braked by and the envelope the
+ * read surface shows them can never be a different grant.
+ */
+function isActiveGrant(g: GrantRow): boolean {
+  return g.sprintStatus === 'active' || g.sprintId == null;
+}
+
+/**
+ * One grant → the envelope it defines, with the caller's own burn inside it.
+ *
+ * The burn is `bot_runs.dispatched_by` summed over this caller's subject only
+ * (see the section note); when the attribution column is absent the sum is
+ * meaningless and `attributionAvailable` is false, which every consumer must
+ * read as UNKNOWN rather than zero.
+ */
+async function resolveEnvelope(grant: GrantRow, sessionSub: string, personId: string): Promise<ResolvedEnvelope> {
+  const burn = await dispatchedSpendInWindow({
+    orgProjectId: grant.orgProjectId, dispatchedBy: sessionSub,
+    startsOn: grant.startsOn, endsOn: grant.endsOn,
+  });
+  return {
+    grantId: grant.id,
+    sprintId: grant.sprintId,
+    sprintName: grant.sprintName,
+    sprintStatus: grant.sprintStatus,
+    granteePersonId: personId,
+    orgProjectId: grant.orgProjectId,
+    orgProjectName: grant.orgProjectName,
+    startsOn: grant.startsOn,
+    endsOn: grant.endsOn,
+    allocatedUsd: grant.allocatedUsd,
+    attributedSpentUsd: burn.spentUsd,
+    attributionAvailable: burn.attributionAvailable,
+  };
+}
+
+/**
+ * Every ACTIVE envelope this caller holds, across every initiative — the read
+ * side of the brake below.
+ *
+ * An SME can be refused by decideEnvelope with no way to have seen the number
+ * beforehand: the grants table on /admin/budgets is gated to the roles that
+ * ALLOCATE money, and it reports the initiative's window spend rather than the
+ * caller's own burn, which is a different figure. This resolves exactly what
+ * the brake resolves — same grants read, same active predicate, same
+ * dispatched_by sum — so "what is left" and "what stopped me" cannot disagree.
+ *
+ * Empty means no active grant, which is "not braked here", never "zero
+ * envelope". Null means the caller cannot be resolved to an SME at all (no
+ * session, no linked person, or a grants read that failed) — the same
+ * do-not-guess posture loadEnvelope takes, so a read failure never renders as
+ * "you have no money".
+ */
+export async function listActiveEnvelopes(
+  sessionSub: string | undefined,
+): Promise<ResolvedEnvelope[] | null> {
+  if (!sessionSub) return null;
+  try {
+    const personId = (await getUser(sessionSub))?.personId;
+    if (!personId) return null;
+    const mine = (await listGrants()).filter((g) => g.granteePersonId === personId && isActiveGrant(g));
+    return await Promise.all(mine.map((g) => resolveEnvelope(g, sessionSub, personId)));
+  } catch (err) {
+    console.warn('[bots] could not list the caller\'s sprint envelopes:', (err as Error).message);
+    return null;
+  }
 }
 
 /**
@@ -538,24 +625,11 @@ export async function loadEnvelope(
     if (!personId) return null;
 
     const grants = await listGrants(orgProjectId);
-    const grant = grants.find(
-      (g) => g.granteePersonId === personId && (g.sprintStatus === 'active' || g.sprintId == null),
-    );
+    const grant = grants.find((g) => g.granteePersonId === personId && isActiveGrant(g));
     if (!grant) return null;
-
-    const burn = await dispatchedSpendInWindow({
-      orgProjectId, dispatchedBy: sessionSub,
-      startsOn: grant.startsOn, endsOn: grant.endsOn,
-    });
-    return {
-      grantId: grant.id,
-      sprintId: grant.sprintId,
-      sprintName: grant.sprintName,
-      granteePersonId: personId,
-      allocatedUsd: grant.allocatedUsd,
-      attributedSpentUsd: burn.spentUsd,
-      attributionAvailable: burn.attributionAvailable,
-    };
+    // Same resolution listActiveEnvelopes uses, so the envelope that brakes a
+    // dispatch and the envelope GET /api/sprints/envelopes shows are one row.
+    return await resolveEnvelope(grant, sessionSub, personId);
   } catch (err) {
     // A brake that cannot read its own inputs must not become a refusal — the
     // allocation brake still stands behind it.
@@ -663,7 +737,7 @@ export async function resolveActiveGrant(
     if (!personId) return null;
     const grants = await listGrants(orgProjectId);
     const mine = grants.filter((g) => g.granteePersonId === personId);
-    const active = mine.some((g) => g.sprintStatus === 'active' || g.sprintId == null);
+    const active = mine.some(isActiveGrant);
     return {
       hasActiveGrant: active,
       hasAnyGrant: mine.length > 0,
@@ -673,6 +747,28 @@ export async function resolveActiveGrant(
     console.warn(`[bots] could not resolve grant-scoped dispatch for ${orgProjectId}:`, (err as Error).message);
     return null;
   }
+}
+
+/**
+ * The combined grant-scoped verdict a route needs: resolve the caller's grant
+ * context on this initiative, then judge it. One call, shared by every
+ * dispatch surface (marketplace dispatch-work, promoting a finding into a job)
+ * so "may this sme spend here" is answered identically everywhere it is asked
+ * — previously inlined in routes/bots.ts alone, which let a second dispatch
+ * path (POST /api/work/findings/:id/promote) skip the check entirely.
+ */
+export async function grantScopedDispatchVerdict(
+  orgProjectId: string,
+  session: { sub?: string; role?: string } | undefined,
+): Promise<DispatchGrantDecision> {
+  const grantCtx = await resolveActiveGrant(orgProjectId, session?.sub);
+  if (!grantCtx) return { kind: 'allow' };
+  return decideGrantScopedDispatch({
+    role: session?.role,
+    hasActiveGrant: grantCtx.hasActiveGrant,
+    hasAnyGrant: grantCtx.hasAnyGrant,
+    initiativeName: grantCtx.initiativeName,
+  });
 }
 
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
@@ -906,11 +1002,18 @@ export type DispatchDecision =
  * the refusal matrix in one place, judgeable without a database. Ordering:
  * item-shape refusals (type, status) come before codebase resolution, because
  * "pick a codebase" is a useless answer for an epic or a done item.
+ *
+ * `callerRole` only steers the no-codebase message's wording: `/admin/projects`
+ * (Codebases) is an hr-admin-only page, so telling every other role to "link
+ * one in Codebases" sends them at a page that redirects them away. Omitted or
+ * `hr-admin` keeps the actionable original; anyone else hears the human
+ * remedy instead.
  */
 export function decideDispatch(
   item: Pick<WorkItem, 'type' | 'status'>,
   codebases: DispatchCandidate[],
   agentProjectId?: string,
+  callerRole?: string | null,
 ): DispatchDecision {
   if (item.type !== 'story' && item.type !== 'bug') {
     return { kind: 'error', status: 400, error: 'only stories and bugs dispatch — epics roll up, they do not run' };
@@ -922,7 +1025,10 @@ export function decideDispatch(
     return { kind: 'error', status: 400, error: `a ${item.status} work item cannot be dispatched` };
   }
   if (codebases.length === 0) {
-    return { kind: 'error', status: 400, error: 'no codebase delivers this initiative — link one in Codebases' };
+    const error = callerRole == null || callerRole === 'hr-admin'
+      ? 'no codebase delivers this initiative — link one in Codebases'
+      : 'no codebase delivers this initiative — ask a program owner to link a codebase in Codebases';
+    return { kind: 'error', status: 400, error };
   }
   if (agentProjectId) {
     const chosen = codebases.find((c) => c.id === agentProjectId);
@@ -986,18 +1092,25 @@ export type WorkItemPreflight =
  * Resolving the codebase here is the second reason: the brake can then price
  * against the repo the run will actually use, even when the caller left it to
  * the server to pick.
+ *
+ * `callerRole` feeds decideDispatch's no-codebase wording. `knownItem` lets a
+ * caller that already fetched the item (the route resolves it once, up front,
+ * for the grant-scoped authorization check that now runs before this) hand it
+ * in rather than pay a second lookup.
  */
 export async function preflightWorkItem(
   workItemId: string,
   agentProjectId?: string,
+  callerRole?: string | null,
+  knownItem?: WorkItem,
 ): Promise<WorkItemPreflight> {
-  const item = await getWorkItem(workItemId);
+  const item = knownItem ?? await getWorkItem(workItemId);
   if (!item) return { ok: false, status: 404, error: 'no such work item' };
 
   const codebases = (await listAgentProjects())
     .filter((p) => p.orgProjectId != null && p.orgProjectId === item.projectId)
     .map((p) => ({ id: p.id, repoFullName: p.repoFullName }));
-  const decision = decideDispatch(item, codebases, agentProjectId);
+  const decision = decideDispatch(item, codebases, agentProjectId, callerRole);
   if (decision.kind === 'error') {
     return {
       ok: false, status: decision.status, error: decision.error,
@@ -1055,27 +1168,38 @@ export async function dispatchWorkItem(input: {
   // dispatch got there first — the read-then-dispatch race two interleaved
   // authorizations used to win together. (A failed run hands the item back to
   // 'open' via reconcile, so retries re-claim cleanly.)
-  const claimed = await exec(
-    `UPDATE work_items SET status = 'in_progress', updated_at = NOW()
-      WHERE id = :wid AND status IN ('open') RETURNING id`,
-    [s('wid', item.id)],
-  );
-  if (claimed.length === 0) {
+  //
+  // Through updateWorkItem (expectStatus is its own compare-and-swap guard),
+  // not a raw `exec()`, so this works in mock mode too — a raw exec() here
+  // always hit real Aurora regardless of config.mock.aurora and 500'd every
+  // dispatch that reached this far in dev:mock (org-leader.md defect #3's
+  // deeper half, past the codebase-400 fix).
+  const claimedItem = await updateWorkItem(item.id, { status: 'in_progress', expectStatus: 'open' });
+  if (!claimedItem) {
     return { ok: false, status: 409, error: 'this work item is already being worked' };
   }
   const revertClaim = async (): Promise<void> => {
-    await exec(
-      `UPDATE work_items SET status = 'open', updated_at = NOW()
-        WHERE id = :wid AND status = 'in_progress'`,
-      [s('wid', item.id)],
-    ).catch((err: unknown) =>
+    await updateWorkItem(item.id, { status: 'open', expectStatus: 'in_progress' }).catch((err: unknown) =>
       console.warn(`[bots] could not revert claim on ${item.id}:`, (err as Error).message));
   };
+
+  const prompt = renderWorkItemPrompt(item, input.instruction);
+
+  // Offline, everything below this line needs a deployed devbox runtime, so
+  // the queue stands in for the workspace — see simulateMarketplaceDispatch.
+  // Deliberately AFTER the claim: the compare-and-swap above is the only thing
+  // stopping two dispatches working one item, and it must hold offline too.
+  if (config.mock.aurora) {
+    return simulateMarketplaceDispatch({
+      item, project, prompt, model: input.model, revertClaim,
+      ...(input.actor ? { actor: input.actor } : {}),
+      ...(input.estimate ? { estimate: input.estimate } : {}),
+    });
+  }
 
   const ws = await ensureWorkspace(project);
   if (!ws.ok) { await revertClaim(); return { ok: false, status: 503, error: ws.error }; }
 
-  const prompt = renderWorkItemPrompt(item, input.instruction);
   const started = await dispatchGovernedRun({
     project, prompt, model: input.model, sessionId: ws.sessionId,
   });
@@ -1084,10 +1208,14 @@ export async function dispatchWorkItem(input: {
   // Bind the governed run to its work item. Direct SQL on purpose — the
   // sdlc-pipeline API takes no work-item concept and stays that way; the
   // column was added by agent_bots_schema.sql for exactly this write.
-  await exec(
-    `UPDATE agent_project_runs SET work_item_id = :wid WHERE id = :rid::uuid`,
-    [s('wid', item.id), s('rid', started.runId)],
-  );
+  // (No mock branch above this point creates a real agent_project_runs row,
+  // so there is nothing to bind in mock mode — skip rather than crash.)
+  if (!config.mock.aurora) {
+    await exec(
+      `UPDATE agent_project_runs SET work_item_id = :wid WHERE id = :rid::uuid`,
+      [s('wid', item.id), s('rid', started.runId)],
+    );
+  }
 
   const run = await createBotRun({
     botId: null, trigger: 'marketplace', runId: started.runId, workItemId: item.id,
@@ -1106,6 +1234,219 @@ export async function dispatchWorkItem(input: {
     return { ok: false, status: 503, error: 'could not record the marketplace run' };
   }
   return { ok: true, run };
+}
+
+// ─── The offline dispatch (config.mock.aurora) ────────────────────────────────
+//
+// What this is for. Every gate above already ran correctly in `dev:mock` —
+// grant scope, codebase preflight, per-run cap, allocation, envelope, each
+// refusing with its own named gate and confirm flag. And then the journey
+// died: `ensureWorkspace` needs a deployed devbox runtime to clone into, so a
+// dispatch that had passed every one of them answered
+// `503 the devbox runtime is not deployed`. The money gates were demonstrable
+// offline and their OUTCOME was not — nobody had ever audited what a
+// successful dispatch produces, because offline nothing could succeed.
+//
+// What it does NOT do is loosen anything. It is entered after the last gate
+// and after the work item has been claimed, so every refusal still fires in
+// exactly the order and with exactly the wording it did before; the only thing
+// that changes is what happens once they have all passed.
+//
+// ── Why the queue, and not a fake governed run ───────────────────────────────
+// A governed run is not one row: it is an `agent_project_runs` row, a live
+// devbox session executing a prompt, a working-tree capture, a change request,
+// the review gates, and a commit. Faking that chain would mean inventing a
+// captured diff and a change request nobody wrote — a fabrication an operator
+// could mistake for governance that happened.
+//
+// So the simulated dispatch takes the OTHER dispatch shape this codebase
+// already has: `fireBot`'s initiative-target path, which enqueues an
+// `agent_jobs` row and records a bot_run bound to it by `job_id` (both columns
+// exist on `bot_runs`, and reconcileBotRuns' job-backed arm settles exactly
+// this shape). Nothing here is a new concept; it is the queue path, driven by
+// hand because no worker will pick the job up offline.
+
+/**
+ * What a simulated run reports back when it finishes.
+ *
+ * The same figures `lib/mock-bot-runner.ts`'s `playDispatchedRun` returns for
+ * a simulated *queue* job, so `dev:mock` quotes one price for a fake run
+ * rather than two — a second, slightly different number is how the Bots page
+ * and the Work page come to disagree about what the same simulation cost.
+ */
+const SIMULATED_RESULT = { costUsd: 0.0341, turns: 6, toolCalls: 5 } as const;
+
+/**
+ * How long a simulated dispatch spends in each state before moving to the
+ * next. Three steps — claimed, running, finished — so a page polling the queue
+ * watches the job move instead of finding it already terminal; the audit that
+ * asked for this had the same complaint about `compactNow`, and this is that
+ * fix's shape. 0 runs the whole progression synchronously before the route
+ * answers, which is the test seam (`providers/distillation.ts`'s
+ * `__setCompactRunMs`).
+ */
+let mockDispatchStepMs = 2_000;
+export function __setMockDispatchStepMs(ms: number): void { mockDispatchStepMs = ms; }
+
+/** Sleep between simulated states. Unref'd: a pending step must never be the
+ *  reason a process stays alive. */
+function pause(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    timer.unref?.();
+  });
+}
+
+/**
+ * Dispatch a work item with no runtime behind it: enqueue the job, record the
+ * run, then walk the pair through queued → claimed → running → done.
+ *
+ * Returns as soon as the run exists (202, like the real path — a dispatch is
+ * accepted, not awaited), with the progression continuing in the background,
+ * unless `mockDispatchStepMs` is 0.
+ */
+async function simulateMarketplaceDispatch(input: {
+  item: WorkItem;
+  project: AgentProject;
+  prompt: string;
+  model: string;
+  actor?: string;
+  estimate?: Record<string, unknown>;
+  revertClaim: () => Promise<void>;
+}): Promise<DispatchWorkResult> {
+  const { item, project } = input;
+
+  // The half of ensureWorkspace that does not need the runtime: a session id
+  // the runtime's ≥33-char rule would accept, and a fleet box registered
+  // against it, reusing the project's existing box when it has one. So the
+  // job's box_id/session_id below are real registry values rather than
+  // placeholders, and an operator tailing that box sees the same
+  // job_started/job_finished bookends lib/job-dispatcher.ts emits.
+  const sessionId = normalizeRuntimeSessionId(project.sessionId);
+  const box = getBoxBySession(sessionId) ?? registerBox({ sessionId });
+  await markCloned(project.id, sessionId);
+
+  const job = await enqueueJob({
+    kind: 'devbox:task',
+    title: item.title,
+    // fireBot's payload, minus botId — there is no standing mission behind a
+    // marketplace dispatch. requiresReview is false because nothing is
+    // captured to review: see the completion below.
+    payload: { prompt: input.prompt, requiresReview: false, model: input.model },
+    ...(input.actor ? { createdBy: input.actor } : {}),
+  });
+  if (!job) {
+    await input.revertClaim();
+    return { ok: false, status: 503, error: 'could not enqueue the job' };
+  }
+
+  const run = await createBotRun({
+    botId: null, trigger: 'marketplace', jobId: job.id, workItemId: item.id,
+    ceiling: botMaxConcurrent(),
+    // The marketplace's actor IS the dispatcher — same string the envelope
+    // brake burns down against, taken from the session and never the body.
+    dispatchedBy: input.actor ?? null,
+    outcome: {
+      sessionId, boxId: box.id,
+      ...(input.actor ? { actor: input.actor } : {}),
+      ...(input.estimate ? { estimate: input.estimate } : {}),
+      // Said on the row, not only in this file. Every surface that renders a
+      // run outcome can then tell a simulated dispatch from a real one, which
+      // matters most for the money: this run's cost is a fixture, not a bill.
+      simulated: true,
+    },
+  });
+  if (!run) {
+    // The concurrency ceiling refused the row (createBotRun's null). Take the
+    // queued job back out with it — a job nothing will ever run is worse than
+    // no job, and the real path has no equivalent orphan because it never
+    // enqueues one.
+    await cancelJob(job.id);
+    await input.revertClaim();
+    return { ok: false, status: 503, error: 'could not record the marketplace run' };
+  }
+
+  const startedMs = Date.now();
+  const progression = [
+    async () => { await claimJob(job.id, box.id, sessionId); },
+    async () => {
+      await markRunning(job.id);
+      appendEvent(box.id, {
+        type: 'job_started', jobId: job.id, title: job.title, kind: job.kind,
+        ts: new Date().toISOString(),
+      });
+    },
+    async () => { await settleSimulatedRun({ jobId: job.id, runId: run.id, boxId: box.id, item, startedMs }); },
+  ];
+
+  const walk = async (): Promise<void> => {
+    for (const step of progression) {
+      if (mockDispatchStepMs > 0) await pause(mockDispatchStepMs);
+      await step();
+    }
+  };
+
+  if (mockDispatchStepMs <= 0) {
+    await walk();
+  } else {
+    void walk().catch((err: unknown) =>
+      console.warn(`[bots] simulated dispatch of ${item.id} stalled:`, (err as Error).message));
+  }
+  return { ok: true, run };
+}
+
+/**
+ * Finish a simulated run: the job, the bot_run, and the work item, settled in
+ * the order reconcileBotRuns settles them (work item first, run row last — the
+ * `status = 'running'` filter is what would re-select an unsettled row, so
+ * finalizing first and then failing the settle is what strands an item).
+ *
+ * The work item goes back to **open**, not to done or in_review. That is not a
+ * shortcut: it is reconcile's own third branch, "done but nothing captured".
+ * A simulated run checks out no repository and captures no diff, so there is
+ * no change request for `in_review` to point at and nothing anyone delivered
+ * — and a mock that marked the item done would be claiming work the platform
+ * did not do. Back to open also makes the journey repeatable: the next
+ * dispatch re-claims cleanly instead of 409ing on an item nothing will ever
+ * move again.
+ */
+async function settleSimulatedRun(input: {
+  jobId: string; runId: string; boxId: string; item: WorkItem; startedMs: number;
+}): Promise<void> {
+  const durationMs = Date.now() - input.startedMs;
+  const summary =
+    `Simulated run for ${input.item.id}: no devbox runtime is deployed, so nothing was ` +
+    'checked out and no diff was captured.';
+
+  // job-dispatcher.ts's own result shape, minus `transcript` — there is no
+  // transcript, and an empty one would read as a run that said nothing rather
+  // than a run that was never streamed.
+  await completeJob(input.jobId, {
+    status: 'done',
+    result: {
+      summary, durationMs,
+      costUsd: SIMULATED_RESULT.costUsd,
+      turns: SIMULATED_RESULT.turns,
+      toolCalls: SIMULATED_RESULT.toolCalls,
+    },
+  });
+  appendEvent(input.boxId, {
+    type: 'job_finished', jobId: input.jobId, ok: true, ts: new Date().toISOString(),
+  });
+
+  await updateWorkItem(input.item.id, { status: 'open' });
+  await addWorkItemComment(
+    input.item.id,
+    'Marketplace run completed without a captured change — the run was simulated, ' +
+    'because no devbox runtime is deployed.',
+    { isSystem: true },
+  );
+
+  await finalizeBotRun(input.runId, {
+    status: 'done',
+    costUsd: SIMULATED_RESULT.costUsd,
+    outcome: { filesChanged: 0, summary },
+  });
 }
 
 // ─── Reconciliation ───────────────────────────────────────────────────────────

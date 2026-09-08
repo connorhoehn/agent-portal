@@ -48,6 +48,21 @@ export function resolveAgentSpend(
   };
 }
 
+/**
+ * The same resolved spend, shaped for a StatStrip cluster instead of a card.
+ *
+ * The provenance still travels with it: `resolveAgentSpend` is what knows the
+ * difference between "$0.00 spent" and "unknown, not zero", and that
+ * distinction must survive the move to a denser control — it is the whole
+ * reason the tooltip exists.
+ */
+export function agentSpendStripItem(inputs: AgentSpendInputs): {
+  label: string; value: string; hint?: string;
+} {
+  const { value, label, title } = resolveAgentSpend(inputs);
+  return { label, value, ...(title ? { hint: title } : {}) };
+}
+
 export function AgentSpendStat(inputs: AgentSpendInputs) {
   const { value, label, title } = resolveAgentSpend(inputs);
   // StatCard now carries the tooltip itself. It used to ride on a <span> inside

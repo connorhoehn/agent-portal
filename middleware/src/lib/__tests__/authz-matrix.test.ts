@@ -144,14 +144,28 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       // computers plus the ones shared on initiatives they are attached to.
       // Granting the capability is not granting the fleet.
       'DispatchAgentRun', 'ManageSprints', 'ManageDevbox', 'EnterEnvironment',
+      // Standing up template bots / loop crons for mundane work is the SME's
+      // own job — the dispatch pipeline's money brakes still govern the spend.
+      'ManageBots',
+    ],
+  },
+  'orgiq/program-owner': {
+    tenant: 'orgiq',
+    granted: [
+      // The solution/program owner: runs the cadence and the automations
+      // across the whole board, and allocates the per-initiative budget they
+      // are accountable for — same allocation authority as hr-admin and
+      // org-leader. Transaction approval and the admin surface stay closed.
+      'Search', 'ViewOrgChart', 'ViewObservability', 'LabelFeedback',
+      'DispatchAgentRun', 'ManageSprints', 'ManageBots', 'ManageBudgets',
     ],
   },
   'orgiq/org-leader': {
     tenant: 'orgiq',
     granted: [
       'Search', 'ViewOrgChart', 'ViewLeaderboard', 'ViewObservability', 'LabelFeedback',
-      'ManageCanary', 'DispatchAgentRun', 'ManageBudgets', 'ManageSprints', 'ApproveTransaction',
-      'EnterEnvironment', 'ManageEnvironments',
+      'ManageCanary', 'DispatchAgentRun', 'ManageBudgets', 'ManageSprints', 'ManageBots',
+      'ApproveTransaction', 'EnterEnvironment', 'ManageEnvironments',
     ],
   },
   'orgiq/hr-admin': {
@@ -160,18 +174,31 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       'Search', 'ViewOrgChart', 'ViewLeaderboard', 'ViewSalary', 'ViewPerformance',
       'EditGuardrail', 'EditPolicy', 'EditSchema', 'ViewIdentityAdmin', 'ViewObservability',
       'LabelFeedback', 'ManageIngest', 'ManageCanary', 'ManageKB', 'ManageDevbox',
-      'ManageUsers', 'DispatchAgentRun', 'ManageBudgets', 'ManageEnvironments',
+      'ManageBots', 'ManageUsers', 'DispatchAgentRun', 'ManageBudgets', 'ManageEnvironments',
     ],
   },
-  'newsroom/reporter': {
-    tenant: 'newsroom',
-    granted: ['Search', 'WriteArticle', 'ManagePitches', 'LabelFeedback'],
-  },
-  'newsroom/editor': {
-    tenant: 'newsroom',
+  'assessment/assessor': {
+    tenant: 'assessment',
     granted: [
-      'Search', 'WriteArticle', 'ManagePitches', 'PublishArticle',
-      'ManageKB', 'ViewObservability', 'LabelFeedback',
+      'ViewAssessment', 'ScoreAssessment', 'ManageSubmissions',
+      'RunAssessmentAgent', 'Search', 'LabelFeedback',
+    ],
+  },
+  'assessment/lead-assessor': {
+    tenant: 'assessment',
+    granted: [
+      'ViewAssessment', 'ScoreAssessment', 'ManageSubmissions',
+      'RunAssessmentAgent', 'Search', 'LabelFeedback',
+      'ApproveException', 'PublishReport', 'ManageKnowledge', 'ViewObservability',
+    ],
+  },
+  'assessment/program-lead': {
+    tenant: 'assessment',
+    granted: [
+      'ViewAssessment', 'ScoreAssessment', 'ManageSubmissions',
+      'RunAssessmentAgent', 'Search', 'LabelFeedback',
+      'ApproveException', 'PublishReport', 'ManageKnowledge', 'ViewObservability',
+      'ManageAssessmentConfig', 'ManageUsers',
     ],
   },
   '*/admin': {
@@ -181,7 +208,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
 };
 
 describe('seed Cedar role -> capability matrix', () => {
-  test('exactly the seven seed roles exist', () => {
+  test('exactly the nine seed roles exist', () => {
     expect(sorted([...roles.keys()])).toEqual(sorted(Object.keys(MATRIX)));
   });
 
@@ -228,6 +255,18 @@ describe('capability boundaries that must not regress', () => {
     expect(has('orgiq/sme', 'ManageEnvironments')).toBe(false);
   });
 
+  test('program-owner allocates budgets and runs the program, never approval or the admin surface', () => {
+    for (const cap of ['DispatchAgentRun', 'ManageSprints', 'ManageBots', 'ManageBudgets']) {
+      expect(has('orgiq/program-owner', cap)).toBe(true);
+    }
+    for (const cap of [
+      'ApproveTransaction', 'ManageUsers', 'EditPolicy',
+      'Masquerade', 'ManageDevbox', 'ManageIngest', 'ViewLeaderboard',
+    ]) {
+      expect(has('orgiq/program-owner', cap)).toBe(false);
+    }
+  });
+
   test('org-leader holds budgets/sprints/dispatch/approval; not ingest, users, masquerade', () => {
     for (const cap of ['ManageBudgets', 'ManageSprints', 'DispatchAgentRun', 'ApproveTransaction']) {
       expect(has('orgiq/org-leader', cap)).toBe(true);
@@ -251,15 +290,28 @@ describe('capability boundaries that must not regress', () => {
     }
   });
 
-  test('reporter can pitch but never publish', () => {
-    expect(has('newsroom/reporter', 'ManagePitches')).toBe(true);
-    expect(has('newsroom/reporter', 'Search')).toBe(true);
-    expect(has('newsroom/reporter', 'PublishArticle')).toBe(false);
+  test('assessor can score but never approve an exception or publish a report', () => {
+    expect(has('assessment/assessor', 'ViewAssessment')).toBe(true);
+    expect(has('assessment/assessor', 'ScoreAssessment')).toBe(true);
+    expect(has('assessment/assessor', 'ApproveException')).toBe(false);
+    expect(has('assessment/assessor', 'PublishReport')).toBe(false);
   });
 
-  test('editor is reporter + publish', () => {
-    expect(has('newsroom/editor', 'ManagePitches')).toBe(true);
-    expect(has('newsroom/editor', 'PublishArticle')).toBe(true);
+  test('lead-assessor adds exception approval + report publishing, not config', () => {
+    expect(has('assessment/lead-assessor', 'ApproveException')).toBe(true);
+    expect(has('assessment/lead-assessor', 'PublishReport')).toBe(true);
+    expect(has('assessment/lead-assessor', 'ManageAssessmentConfig')).toBe(false);
+  });
+
+  test('program-lead is the only assessment role holding ManageAssessmentConfig', () => {
+    expect(has('assessment/program-lead', 'ManageAssessmentConfig')).toBe(true);
+    for (const key of ['assessment/assessor', 'assessment/lead-assessor']) {
+      expect(has(key, 'ManageAssessmentConfig')).toBe(false);
+    }
+  });
+
+  test('an orgiq member cannot view the assessment tenant', () => {
+    expect(has('orgiq/member', 'ViewAssessment')).toBe(false);
   });
 
   test('admin is the ONLY role with a blanket grant — and thus the only masquerader', () => {
@@ -292,6 +344,31 @@ describe('explicit ApproveTransaction forbids (separation of duties)', () => {
     expect(role('orgiq/org-leader').forbidden).not.toContain('ApproveTransaction');
     // The approval permit is threshold-scoped, not blanket.
     expect(role('orgiq/org-leader').cedar).toMatch(/resource\.amount\s*>\s*10000/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Assessment separation of duties: an assessor drafts/proposes but a
+// lead-assessor approves and publishes; a lead-assessor still can't touch
+// program-wide configuration, which is program-lead only.
+// ---------------------------------------------------------------------------
+describe('assessment separation-of-duties forbids', () => {
+  test('assessor explicitly forbids ApproveException and PublishReport', () => {
+    const a = role('assessment/assessor');
+    for (const cap of ['ApproveException', 'PublishReport']) {
+      expect(a.forbidden).toContain(cap);
+      expect(a.granted).not.toContain(cap);
+    }
+  });
+
+  test('lead-assessor explicitly forbids ManageAssessmentConfig', () => {
+    const la = role('assessment/lead-assessor');
+    expect(la.forbidden).toContain('ManageAssessmentConfig');
+    expect(la.granted).not.toContain('ManageAssessmentConfig');
+  });
+
+  test('program-lead carries no forbids of its own', () => {
+    expect(role('assessment/program-lead').forbidden).toEqual([]);
   });
 });
 
@@ -339,8 +416,8 @@ describe('environment access (EnterEnvironment)', () => {
     expect(hr.forbidden).toContain(ENTER);
   });
 
-  test('newsroom roles have no environment authority at all', () => {
-    for (const key of ['newsroom/reporter', 'newsroom/editor']) {
+  test('assessment roles have no environment authority at all', () => {
+    for (const key of ['assessment/assessor', 'assessment/lead-assessor', 'assessment/program-lead']) {
       expect(role(key).granted).not.toContain(ENTER);
       expect(role(key).granted).not.toContain(MANAGE);
     }
@@ -386,8 +463,8 @@ describe('environment access (EnterEnvironment)', () => {
 // ---------------------------------------------------------------------------
 // Cross-tenant isolation: the enforcement mechanism is the `principal.tenant`
 // condition on every tenant-scoped permit. An orgiq role's grants can never
-// apply inside newsroom (and vice-versa) because the permit only matches when
-// principal.tenant equals the role's tenant. Admin is deliberately NOT
+// apply inside assessment (and vice-versa) because the permit only matches
+// when principal.tenant equals the role's tenant. Admin is deliberately NOT
 // tenant-conditioned (break-glass), so its blanket permit applies in whatever
 // tenant the session is parked in.
 // ---------------------------------------------------------------------------
@@ -397,14 +474,15 @@ describe('cross-tenant isolation', () => {
     ['orgiq/sme', 'orgiq'],
     ['orgiq/org-leader', 'orgiq'],
     ['orgiq/hr-admin', 'orgiq'],
-    ['newsroom/reporter', 'newsroom'],
-    ['newsroom/editor', 'newsroom'],
+    ['assessment/assessor', 'assessment'],
+    ['assessment/lead-assessor', 'assessment'],
+    ['assessment/program-lead', 'assessment'],
   ])('%s guards its permit with principal.tenant == "%s"', (key, tenant) => {
     const r = role(key);
     // The permit only fires in-tenant.
     expect(r.cedar).toMatch(new RegExp(`principal\\.tenant\\s*==\\s*"${tenant}"`));
     // ...and never claims the other tenant.
-    const other = tenant === 'orgiq' ? 'newsroom' : 'orgiq';
+    const other = tenant === 'orgiq' ? 'assessment' : 'orgiq';
     expect(r.cedar).not.toMatch(new RegExp(`principal\\.tenant\\s*==\\s*"${other}"`));
   });
 
@@ -412,11 +490,29 @@ describe('cross-tenant isolation', () => {
     expect(role('*/admin').cedar).not.toMatch(/principal\.tenant\s*==/);
   });
 
-  test('newsroom roles carry no orgiq-only management capability', () => {
-    // Newsroom grants must not leak orgiq program/admin authority.
-    const orgiqOnly = ['ManageBudgets', 'ManageSprints', 'DispatchAgentRun', 'ManageIngest', 'ManageUsers', 'ApproveTransaction'];
-    for (const key of ['newsroom/reporter', 'newsroom/editor']) {
+  test('assessment roles carry no orgiq management capability, and vice versa', () => {
+    // ManageUsers is deliberately excluded here: program-lead holds it
+    // scoped to the assessment tenant (see docs/assessment-tenant.md), the
+    // same capability hr-admin holds scoped to orgiq — shared vocabulary,
+    // not tenant leakage. Cedar's principal.tenant condition only scopes
+    // *when the action is usable* (a program-lead session parked in another
+    // tenant can't invoke it at all) — it says nothing about which tenant's
+    // grants a request body may name once the action is allowed. That part
+    // is enforced in code: routes/identity.ts's PUT /users/:id/grants (and
+    // POST /users) reject any tenant key in the body other than the
+    // caller's own session tenant for every non-admin role.
+    const orgiqOnly = ['ManageBudgets', 'ManageSprints', 'DispatchAgentRun', 'ManageIngest', 'ApproveTransaction'];
+    for (const key of ['assessment/assessor', 'assessment/lead-assessor', 'assessment/program-lead']) {
       for (const cap of orgiqOnly) {
+        expect(role(key).granted).not.toContain(cap);
+      }
+    }
+    const assessmentOnly = [
+      'ViewAssessment', 'ScoreAssessment', 'ApproveException', 'PublishReport',
+      'ManageSubmissions', 'RunAssessmentAgent', 'ManageKnowledge', 'ManageAssessmentConfig',
+    ];
+    for (const key of ['orgiq/member', 'orgiq/sme', 'orgiq/org-leader', 'orgiq/hr-admin']) {
+      for (const cap of assessmentOnly) {
         expect(role(key).granted).not.toContain(cap);
       }
     }
@@ -453,4 +549,5 @@ describe('schema completeness (AVP rejects undeclared actions)', () => {
     expect(user.tenant.type).toBe('String');
     expect(schema.OrgIQ.entityTypes.Application.shape.attributes.amount.type).toBe('Long');
   });
+
 });

@@ -9,7 +9,7 @@
 
 import { Router } from 'express';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
-import { requireAction, requireSession } from '../lib/authz.js';
+import { resolveSession, requireAction, requireSession } from '../lib/authz.js';
 import { type Session } from '../lib/session.js';
 import { getUser } from '../providers/identity.js';
 import { searchWorkItems, getWorkItem } from '../providers/work-items.js';
@@ -18,11 +18,14 @@ import { rankSuggestions, askSuggestionsFrom, seesEveryInitiative } from '../lib
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
 import {
   enqueueJob, listJobs, getJob, reviewJob, cancelJob, queueStats,
+  requeueJob,
 } from '../providers/agent-jobs.js';
 import {
   runSweep, runAllSweeps, listFindings, setFindingStatus, getFinding, findingStats,
-  remediationFor, reopenFindingForJob, releaseAbandonedFindings, SWEEP_NAMES, type SweepName,
+  remediationFor, reopenFindingForJob, releaseAbandonedFindings, initiativeIdForFinding,
+  SWEEP_NAMES, type SweepName,
 } from '../providers/org-sweeps.js';
+import { grantScopedDispatchVerdict } from '../lib/bot-runner.js';
 import {
   listProposals, decideProposal, proposeGraphChange, proposalStats,
 } from '../providers/graph-proposals.js';
@@ -250,6 +253,22 @@ workRouter.post('/jobs/:id/review', requireAction('ManageDevbox'), asyncHandler(
   res.json(job);
 }));
 
+// Requeue a dead-lettered job — the DLQ's one verb. The server clones the
+// original (kind/title/payload) so the caller never has to re-supply a prompt;
+// 409 when the job is not in a terminal failed/cancelled state.
+workRouter.post('/jobs/:id/requeue', requireAction('ManageDevbox'), asyncHandler(async (req, res) => {
+  const id = String(req.params['id'] ?? '');
+  const session = resolveSession(req);
+  const job = await requeueJob(id, session?.sub);
+  if (!job) {
+    const dead = await getJob(id);
+    if (!dead) { res.status(404).json({ error: 'job not found' }); return; }
+    res.status(409).json({ error: `only failed or cancelled jobs can be requeued (this one is ${dead.status})` });
+    return;
+  }
+  res.status(201).json(job);
+}));
+
 workRouter.delete('/jobs/:id', requireAction('ManageDevbox'), asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
   const ok = await cancelJob(id);
@@ -281,7 +300,16 @@ workRouter.get('/findings', asyncHandler(async (req, res) => {
   res.json({ findings: await listFindings({ status, ...(sweep ? { sweep } : {}), limit }) });
 }));
 
-workRouter.post('/sweeps/run', requireAction('ManageDevbox'), asyncHandler(async (req, res) => {
+/**
+ * "Run sweeps now" only reads the graph and (re)writes the `findings` cache —
+ * org-sweeps.ts makes no Bedrock call and enqueues no agent job, so it spends
+ * nothing and dispatches nothing. `ManageDevbox` (the Computer Lab / devbox
+ * capability) was the wrong gate for that: it is a read-tier action, exactly
+ * like the mount-level `requireSession('ViewWork')` floor GET /findings
+ * already relies on, so this drops to the same floor rather than a specific
+ * capability (program-owner.md defect #4 — auditing the surrounding gates).
+ */
+workRouter.post('/sweeps/run', requireSession('RunSweeps'), asyncHandler(async (req, res) => {
   const name = (req.body ?? {} as { sweep?: string }).sweep as SweepName | undefined;
   if (name && !SWEEP_NAMES.includes(name)) {
     throw new ValidationError(`unknown sweep '${name}' — expected one of ${SWEEP_NAMES.join(', ')}`);
@@ -303,13 +331,35 @@ workRouter.post('/sweeps/run', requireAction('ManageDevbox'), asyncHandler(async
  * caller — a client cannot dictate what the agent is told to do, and a new
  * sweep ships its own remediation with it. The caller may override priority
  * (an operator escalating something) but not the instructions.
+ *
+ * Grant-scoped the same as `POST /api/bots/dispatch-work`: this is a second
+ * front door onto the same spend, and an ungranted sme must be refused here
+ * exactly as they are there — same helper (`grantScopedDispatchVerdict`),
+ * same deny text, same bypass for org-leader/hr-admin/admin. A finding with no
+ * initiative in its evidence is unscoped (see `initiativeIdForFinding`) and
+ * the gate never fires for it, matching the money gates' own posture: no
+ * context is not a denial to invent.
+ *
+ * Gated `DispatchAgentRun`, not `ManageDevbox` (program-owner.md defect #4):
+ * promoting a finding enqueues an agent job — the same act as
+ * `POST /api/bots/dispatch-work` — and `DispatchAgentRun` is the capability
+ * Cedar grants for exactly that (sme, program-owner, org-leader, hr-admin).
+ * `ManageDevbox` is the Computer Lab / devbox-driving capability, which is
+ * unrelated: it 403'd program-owner here while the same role could already
+ * authorize the identical spend from initiative-detail's Estimate flow.
  */
-workRouter.post('/findings/:id/promote', requireAction('ManageDevbox'), asyncHandler(async (req, res) => {
+workRouter.post('/findings/:id/promote', requireAction('DispatchAgentRun'), asyncHandler(async (req, res) => {
   const finding = await getFinding(String(req.params['id'] ?? ''));
   if (!finding) { res.status(404).json({ error: 'finding not found' }); return; }
   if (finding.jobId && finding.status === 'promoted') {
     res.status(409).json({ error: 'finding already has a worker on it', jobId: finding.jobId });
     return;
+  }
+
+  const initiativeId = initiativeIdForFinding(finding);
+  if (initiativeId) {
+    const verdict = await grantScopedDispatchVerdict(initiativeId, resolveSession(req) ?? undefined);
+    if (verdict.kind === 'deny') { res.status(403).json({ error: verdict.reason }); return; }
   }
 
   const remedy = remediationFor(finding);
@@ -356,6 +406,13 @@ workRouter.post('/findings/:id/analyze', requireAction('ManageDevbox'), asyncHan
  * The provider picks the documents: open findings with no live proposal yet,
  * so pressing this twice makes progress instead of re-analysing the same head
  * of the list. `remaining` reports what is left after this pass.
+ *
+ * Stays `ManageDevbox` (program-owner.md defect #4 — audited, not changed):
+ * unlike sweeps/run, this calls Bedrock per document (real spend) and writes
+ * `graph_proposals` rows — the same write `POST /proposals` (manual proposal
+ * creation, also `ManageDevbox`) makes. It is not agent-job dispatch, so
+ * `DispatchAgentRun` would be the wrong capability; it is a graph-write-
+ * adjacent action, so it keeps the same gate as its manual counterpart.
  */
 workRouter.post('/findings/analyze-batch', requireAction('ManageDevbox'), asyncHandler(async (req, res) => {
   const { limit, sweep } = (req.body ?? {}) as { limit?: number; sweep?: string };

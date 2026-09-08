@@ -35,8 +35,18 @@ Usage:
     python3 infra/scripts/harness.py diff <run_a> <run_b>
 
 Env:
-    MIDDLEWARE_URL   default http://localhost:3001
-    AWS credentials  via boto3 default chain (SSO profile is fine)
+    MIDDLEWARE_URL        default http://localhost:3001
+    HARNESS_TRACE_SECRET  service-auth secret for POST /harness/trace. Unset
+                          (the local default) sends no header, which is what
+                          the middleware guard expects while it is unconfigured
+                          too. Set it to the value of the
+                          `orgiq-harness-trace-secret` Secrets Manager secret
+                          when running against a middleware that has it wired
+                          — otherwise every trace POST 401s. See
+                          `requireTraceAuth` in middleware/src/routes/harness.ts
+                          and agents/_shared/callbacks.py, which is the agent
+                          half of the same contract.
+    AWS credentials       via boto3 default chain (SSO profile is fine)
 """
 from __future__ import annotations
 
@@ -243,12 +253,73 @@ class HttpError(RuntimeError):
         self.body = body
 
 
+# ── Service auth for the trace callback ──────────────────────────────────────
+#
+# POST /api/observability/harness/trace is a SESSIONLESS MACHINE CALLBACK: the
+# middleware's `requireTraceAuth` is open while HARNESS_TRACE_SECRET is unset
+# and does a constant-time compare of `x-harness-auth` once it is set. This
+# runner sent no header at all, so it worked only because nobody had set the
+# secret yet — setting it would have 401'd every trace POST here with no signal
+# beyond a per-case warning. Mirrors agents/_shared/callbacks.py, including the
+# `.strip()`: an operator pasting from
+# `aws secretsmanager get-secret-value --output text` picks up a trailing
+# newline, which is not a legal header value and would turn a correct secret
+# into an unsendable request.
+_TRACE_PATH = "/api/observability/harness/trace"
+_TRACE_AUTH_HEADER = "x-harness-auth"
+_TRACE_AUTH_ENV = "HARNESS_TRACE_SECRET"
+_announced_trace_auth = False
+
+
+def _trace_secret() -> str:
+    """The configured trace secret, or '' when unset/blank."""
+    return (os.environ.get(_TRACE_AUTH_ENV) or "").strip()
+
+
+def _service_auth_headers(url: str) -> dict[str, str]:
+    """Header dict for `url` — empty unless it's the trace callback AND a
+    secret is configured, so every other request goes out unchanged."""
+    global _announced_trace_auth
+    if not url.split("?", 1)[0].endswith(_TRACE_PATH):
+        return {}
+    secret = _trace_secret()
+    if not _announced_trace_auth:
+        _announced_trace_auth = True
+        print(
+            f"  trace callback: {'sending' if secret else 'no'} service auth "
+            f"({_TRACE_AUTH_ENV} {'set' if secret else 'unset'})",
+            file=sys.stderr,
+        )
+    return {_TRACE_AUTH_HEADER: secret} if secret else {}
+
+
+def trace_auth_hint(status: int) -> str:
+    """One actionable sentence for a trace POST the middleware rejected.
+
+    Distinguishes the two mistakes an operator has to tell apart: this runner
+    sent nothing (secret not exported) versus it sent the wrong value (rotated
+    under it).
+    """
+    if _trace_secret():
+        return (
+            f"trace endpoint rejected {_TRACE_AUTH_HEADER} (HTTP {status}): the "
+            f"{_TRACE_AUTH_ENV} in this shell does not match the middleware's "
+            "secret — re-read orgiq-harness-trace-secret from Secrets Manager"
+        )
+    return (
+        f"trace endpoint requires service auth (HTTP {status}) and "
+        f"{_TRACE_AUTH_ENV} is unset in this shell — export it from the "
+        "orgiq-harness-trace-secret Secrets Manager secret"
+    )
+
+
 def _http(method: str, url: str, body: dict | None = None, timeout: int = 60) -> dict:
     data = None
     headers = {"Accept": "application/json"}
     if body is not None:
         data = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
+    headers.update(_service_auth_headers(url))
     req = urllib.request.Request(url, data=data, method=method, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
@@ -861,8 +932,15 @@ def cmd_run(args: argparse.Namespace) -> int:
             if isinstance(trace_cost, (int, float)):
                 est_cost_usd = float(trace_cost)
         except (HttpError, RuntimeError) as e:
-            fail_reasons.append(f"trace-sink-error:{type(e).__name__}")
-            print(f"  warn: trace-sink failed for {test_id}: {e}", file=sys.stderr)
+            # A 401/403 here is a service-auth mismatch, not a flaky sink — and
+            # it will hit EVERY case in the run, so say what to fix rather than
+            # emitting the same opaque warning N times.
+            if isinstance(e, HttpError) and e.status in (401, 403):
+                fail_reasons.append("trace-sink-auth")
+                print(f"  ERROR: {trace_auth_hint(e.status)}", file=sys.stderr)
+            else:
+                fail_reasons.append(f"trace-sink-error:{type(e).__name__}")
+                print(f"  warn: trace-sink failed for {test_id}: {e}", file=sys.stderr)
 
         # 4. Compute pass/fail.
         passed, tag_hits, more_reasons = evaluate_case(

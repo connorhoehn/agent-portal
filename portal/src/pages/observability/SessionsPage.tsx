@@ -1,7 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import {
+  Button,
   Card,
+  Inline,
+  Input,
   Table,
   TableHead,
   TableBody,
@@ -12,6 +15,7 @@ import {
   PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { T } from './Text';
 
 interface SessionSummary {
   sessionId: string;
@@ -52,68 +56,42 @@ function SessionsPage() {
       title="Chat Sessions"
       description="From AgentCore Memory · 15s refresh"
       actions={
-        <>
-          <input
+        <Inline gap="sm" align="center">
+          <Input
             type="search"
+            size="sm"
             placeholder="Filter by title, agent, session id…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            style={{
-              fontSize: 12,
-              padding: '4px 8px',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-sm)',
-              background: 'var(--color-surface)',
-              color: 'var(--color-text-primary)',
-              width: 240,
-            }}
+            className="w-[240px]"
           />
-          <button
-            type="button"
-            onClick={() => refresh()}
-            style={{
-              fontSize: 12,
-              padding: '4px 10px',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-sm)',
-              background: 'var(--color-surface)',
-              color: 'var(--color-text-primary)',
-              cursor: 'pointer',
-            }}
-          >
+          <Button variant="secondary" size="sm" onClick={() => refresh()}>
             Refresh
-          </button>
-          <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+          </Button>
+          <T className="text-[11px] text-text-tertiary">
             {filtered.length} session{filtered.length !== 1 ? 's' : ''}
-          </span>
-        </>
+          </T>
+        </Inline>
       }
     >
       <Card padding="md">
         {filtered.length === 0 ? (
-          <div
-            style={{
-              padding: 24,
-              textAlign: 'center',
-              fontSize: 12,
-              color: 'var(--color-text-tertiary)',
-            }}
-          >
+          <T as="div" className="p-6 text-center text-[12px] text-[var(--color-text-tertiary)]">
             {unavailable ? (
               <>
-                <div style={{ fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+                <T as="div" className="font-semibold text-[var(--color-text-secondary)]">
                   Couldn’t load your chat sessions
-                </div>
-                <div style={{ marginTop: 4 }}>
+                </T>
+                <T as="div" className="mt-1">
                   {needsAuth
                     ? 'Your session expired — sign in to see them. Nothing has been deleted.'
                     : `The session list request failed (${error}).`}
-                </div>
+                </T>
               </>
             ) : sessions.length === 0
               ? 'No chat sessions yet. Start a conversation on the Agent Tools page.'
               : 'No sessions match the current filter.'}
-          </div>
+          </T>
         ) : (
           <Table>
             <TableHead>
@@ -132,17 +110,10 @@ function SessionsPage() {
               {filtered.map((s) => (
                 <TableRow key={s.sessionId}>
                   <TableTd
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 500,
-                      maxWidth: 280,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
+                    className="text-[12px] font-medium max-w-[280px] overflow-hidden text-ellipsis whitespace-nowrap"
                     title={s.title}
                   >
-                    {s.title ?? <span style={{ color: 'var(--color-text-tertiary)' }}>untitled</span>}
+                    {s.title ?? <T className="text-[var(--color-text-tertiary)]">untitled</T>}
                   </TableTd>
                   <TableTd>
                     {s.agentName ? (
@@ -150,43 +121,21 @@ function SessionsPage() {
                         {s.agentName.replace('orgiq-', '')}
                       </Chip>
                     ) : (
-                      <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>—</span>
+                      <T className="text-[11px] text-[var(--color-text-tertiary)]">—</T>
                     )}
                   </TableTd>
-                  <TableTd
-                    style={{
-                      fontSize: 11,
-                      color: 'var(--color-text-tertiary)',
-                      fontFamily: 'monospace',
-                    }}
-                  >
+                  <TableTd className="text-[11px] text-[var(--color-text-tertiary)] font-mono">
                     {s.actorId ?? '—'}
                   </TableTd>
-                  <TableTd
-                    style={{
-                      fontSize: 11,
-                      color: 'var(--color-text-tertiary)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
+                  <TableTd className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap">
                     {new Date(s.createdAt).toLocaleString()}
                   </TableTd>
-                  <TableTd
-                    style={{
-                      fontSize: 11,
-                      color: 'var(--color-text-tertiary)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
+                  <TableTd className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap">
                     {s.lastMessageAt ? new Date(s.lastMessageAt).toLocaleString() : '—'}
                   </TableTd>
-                  <TableTd style={{ fontSize: 12 }}>{s.messageCount ?? '—'}</TableTd>
+                  <TableTd className="text-[12px]">{s.messageCount ?? '—'}</TableTd>
                   <TableTd
-                    style={{
-                      fontSize: 10,
-                      fontFamily: 'monospace',
-                      color: 'var(--color-text-tertiary)',
-                    }}
+                    className="text-[10px] font-mono text-[var(--color-text-tertiary)]"
                     title={s.sessionId}
                   >
                     {s.sessionId.slice(0, 12)}…
@@ -194,16 +143,7 @@ function SessionsPage() {
                   <TableTd>
                     <Link
                       to={`/iq/invoke?session=${encodeURIComponent(s.sessionId)}`}
-                      style={{
-                        fontSize: 11,
-                        padding: '2px 8px',
-                        background: 'none',
-                        border: '1px solid var(--color-border)',
-                        color: 'var(--color-text-secondary)',
-                        borderRadius: 'var(--radius-sm)',
-                        cursor: 'pointer',
-                        textDecoration: 'none',
-                      }}
+                      className="text-[11px] px-2 py-0.5 bg-transparent border border-[var(--color-border)] text-[var(--color-text-secondary)] rounded-[var(--radius-sm)] cursor-pointer no-underline"
                     >
                       Open
                     </Link>

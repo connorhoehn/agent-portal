@@ -25,14 +25,19 @@
 // retry that dropped an earlier confirmation would trip the same gate again and
 // loop the operator through the same dialog forever.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Drawer,
   ConfirmDialog,
   Chip,
+  InlineAlert,
 } from '@connorhoehnslalom/ui-components/shared';
 import { DEVBOX_MODELS, DEFAULT_DEVBOX_MODEL } from '../../lib/devboxModels';
 import { useCapabilities } from '../../lib/capabilities';
+import { useFetch } from '../../hooks/useFetch';
+import { useSession } from '../../lib/auth';
+import { preflightEnvelope } from '../../lib/envelopeFormat';
+import type { EnvelopesResponse } from '../../lib/envelopeFormat';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import type { BotRun } from '../../pages/bots/BotsPage';
 
@@ -75,6 +80,13 @@ export interface EstimateDrawerProps {
   item: EstimateItem | null;
   /** The codebases delivering this initiative — estimate context + 409 fallback. */
   codebases: CodebaseOption[];
+  /**
+   * The initiative this run is charged to. Used to look up the caller's own
+   * sprint envelope BEFORE they authorize, so the envelope brake's 409 stops
+   * being the first they hear of it. Optional — a host that cannot name the
+   * initiative simply gets no pre-flight, never a wrong envelope.
+   */
+  orgProjectId?: string | null;
   /** Called on 202 so the page can flip the item to in_progress optimistically. */
   onDispatched: (workItemId: string, run: BotRun) => void;
 }
@@ -223,9 +235,43 @@ export function estimateLine(est: WorkEstimate): string {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }: EstimateDrawerProps) {
+export function EstimateDrawer({
+  open, onClose, item, codebases, orgProjectId = null, onDispatched,
+}: EstimateDrawerProps) {
+  // The library's Drawer restores focus to whatever was document.activeElement
+  // when it MOUNTED. That's wrong here: the most common trigger is the
+  // WorkItemDrawer's own "⚡ Estimate & dispatch" footer button, which calls
+  // onEstimate(item) and onClose() in the same click — unmounting itself in
+  // the very render that mounts this drawer. The browser force-blurs a
+  // removed focused element to <body> as part of that DOM mutation, which
+  // happens before any effect runs, so by the time this drawer's mount effect
+  // captures "previous focus" it has already lost the real trigger and saves
+  // the app shell instead. Escape or Cancel then lands there.
+  //
+  // Fixing it means not trusting that snapshot: every place that can open
+  // this drawer tags its own trigger button with `data-estimate-trigger`
+  // keyed on the work item's id (Button isn't forwardRef, so a captured DOM
+  // ref would go stale the moment the triggering drawer unmounts — a
+  // re-queryable id survives that). On close, look it up fresh — the
+  // WorkItemDrawer's own button may be long gone, but the same item's row in
+  // the board/epic/list view usually still has one — and focus it if it's
+  // still around; if nothing matches (the row scrolled out of a filtered
+  // view, etc.) leave focus wherever the browser already put it rather than
+  // force it onto something unrelated. The requestAnimationFrame runs after
+  // the library's own (wrong) restore has already fired, so ours is the one
+  // that sticks.
+  const closingItemId = item?.id ?? null;
+  const handleClose = () => {
+    onClose();
+    if (!closingItemId) return;
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>(`[data-estimate-trigger="${CSS.escape(closingItemId)}"]`)?.focus();
+    });
+  };
+
   const { can, ready } = useCapabilities();
   const canDispatch = ready && can('DispatchAgentRun');
+  const { session } = useSession();
   const [model, setModel] = useState<string>(DEFAULT_DEVBOX_MODEL);
   const [instruction, setInstruction] = useState('');
   const [agentProjectId, setAgentProjectId] = useState<string | null>(null);
@@ -326,6 +372,26 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
     return () => { cancelled = true; };
   }, [open, item, model, agentProjectId]);
 
+  // ── The envelope, BEFORE the money is committed ────────────────────────────
+  //
+  // The third brake (decideEnvelope) can 409 an SME who had no way to see the
+  // number it judges them on. This reads the same rows the brake resolves
+  // (GET /api/sprints/envelopes → listActiveEnvelopes), keyed on the same
+  // initiative, so the panel below and the refusal cannot be two figures.
+  // Re-read on every open rather than polled: an envelope moves when a run
+  // finishes, and a stale "what's left" is worse than none.
+  const { data: envelopeData } = useFetch<EnvelopesResponse>(
+    open && canDispatch ? '/api/sprints/envelopes' : null,
+  );
+  const envelope = useMemo(() => preflightEnvelope({
+    data: envelopeData,
+    orgProjectId,
+    forecast: estimate
+      ? { costUsdP25: estimate.costUsdP25, costUsdP75: estimate.costUsdP75 }
+      : null,
+    role: session?.role,
+  }), [envelopeData, orgProjectId, estimate, session?.role]);
+
   async function dispatch(overrideAgentProjectId?: string) {
     if (!item || dispatching) return;
     setDispatching(true);
@@ -421,7 +487,7 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
       toastSuccess(null, 'Agent dispatched', `"${item.title}" is in progress — watch it on its row or in Computers.`);
       setConfirmOpen(false);
       onDispatched(item.id, payload.run);
-      onClose();
+      handleClose();
     } catch (err) {
       setConfirmOpen(false);
       toastError(null, 'Dispatch failed', (err as Error).message);
@@ -438,7 +504,7 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
     <>
       <Drawer
         open={open}
-        onClose={onClose}
+        onClose={handleClose}
         title="Estimate & authorize"
         subtitle="A governed agent run, bound to this work item — its change still passes review."
         footer={
@@ -447,7 +513,7 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
               {estimate ? `model: ${modelLabel}` : ''}
             </span>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-secondary cursor-pointer"
             >
               Cancel
@@ -530,6 +596,17 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
               <div className="text-[12px] text-text-tertiary">—</div>
             )}
           </div>
+
+          {/* What is left of the operator's own sprint envelope, read before
+              they commit. Sits directly under the estimate because the only
+              question it answers is "does that forecast fit what I have left" —
+              and it names the state in words when the burn is unattributed,
+              because a null burn is unknown, never $0.00. */}
+          {envelope && (
+            <InlineAlert tone={envelope.tone}>
+              <strong>{envelope.title}.</strong> {envelope.body}
+            </InlineAlert>
+          )}
 
           {/* The operator's own ceiling on this run. Optional, and soft: the
               server answers a 409 the operator can still confirm, which is why
@@ -634,11 +711,16 @@ export function EstimateDrawer({ open, onClose, item, codebases, onDispatched }:
         open={confirmOpen}
         tone="caution"
         title="Authorize agent run?"
-        body={
+        // The envelope line rides on the confirmation itself, not only on the
+        // form behind it: this dialog is the last thing between the operator and
+        // the spend, so what is left of their envelope belongs here rather than
+        // in a 409 a second later.
+        body={[
           estimate
             ? `${estimateLine(estimate)}. The run uses ${modelLabel}, is bound to "${item.title}", and every change it makes still passes the review queue.`
-            : `Dispatch "${item.title}" to an agent on ${modelLabel}? Every change it makes still passes the review queue.`
-        }
+            : `Dispatch "${item.title}" to an agent on ${modelLabel}? Every change it makes still passes the review queue.`,
+          envelope?.confirmLine,
+        ].filter(Boolean).join(' ')}
         confirmLabel={dispatching ? 'Dispatching…' : 'Authorize run'}
         confirmDisabled={dispatching}
         onConfirm={() => void dispatch()}

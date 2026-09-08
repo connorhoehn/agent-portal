@@ -60,7 +60,10 @@ ingestRouter.get('/data-sources', asyncHandler(async (_req, res) => {
 
 ingestRouter.get('/jobs', asyncHandler(async (req, res) => {
   const dataSourceId = (req.query['dataSourceId'] as string) || undefined;
-  const limit = Math.max(1, Math.min(100, parseInt((req.query['limit'] as string) ?? '20', 10) || 20));
+  // `|| 20` read a valid `limit=0` as "not given" and returned 20 rows;
+  // only NaN should fall back to the default, and 0 clamps to 1.
+  const rawLimit = parseInt((req.query['limit'] as string) ?? '20', 10);
+  const limit = Math.max(1, Math.min(100, Number.isNaN(rawLimit) ? 20 : rawLimit));
   const jobs = await listIngestionJobs(dataSourceId, limit);
   res.json({ jobs });
 }));
@@ -133,13 +136,26 @@ ingestRouter.get('/queue', asyncHandler(async (req, res) => {
   const kbSlug = (req.query['kbSlug'] as string | undefined)?.trim() || undefined;
   const jobs = await listIngestionJobs(undefined, 5);
   const lastComplete = jobs.find(j => j.status === 'COMPLETE');
+  // The registry lookup used to be made and thrown away, so ?kbSlug=<anything>
+  // returned the whole bucket's count under that KB's name. The row's
+  // `s3_prefix` is threaded now — the same key providers/landing-zones.ts uses
+  // to decide where a KB's documents live — and an unknown slug refuses rather
+  // than answering about a different corpus.
+  //
+  // A scoped answer echoes the prefix it counted, so a zero reads as "nothing
+  // under orgiq/" rather than "this knowledge base is empty". Those are
+  // different claims and only the first one is ours to make.
+  let prefix: string | undefined;
   if (kbSlug) {
-    // Resolve the KB's s3_prefix from the registry for a per-KB queue count.
-    const _entry = await getKbBySlug(kbSlug); // eslint-disable-line @typescript-eslint/no-unused-vars
-    // TODO Wave 2: pass prefix once countS3Documents accepts it
+    const entry = await getKbBySlug(kbSlug);
+    if (!entry) {
+      res.status(404).json({ error: `No knowledge base is registered with slug "${kbSlug}"` });
+      return;
+    }
+    prefix = entry.s3Prefix || undefined;
   }
-  const queue = await countS3Documents(lastComplete?.updatedAt);
-  res.json(queue);
+  const queue = await countS3Documents(lastComplete?.updatedAt, prefix);
+  res.json(kbSlug ? { ...queue, kbSlug, s3Prefix: prefix ?? null } : queue);
 }));
 
 // --- Schedule CRUD ---
@@ -204,24 +220,49 @@ ingestRouter.post('/start', asyncHandler(async (req, res) => {
     description?: string;
   };
 
-  // Per-KB path: resolve bedrockKbId + dataSourceId from the registry.
+  // Per-KB path: resolve bedrockKbId + dataSourceId from the `knowledge_bases`
+  // registry and sync THAT knowledge base.
+  //
+  // This used to fall through to the configured KB whenever the slug failed to
+  // resolve cleanly, and `startIngestionJob` read its kbId from config either
+  // way — so `{"kbSlug":"orgiq-onboarding"}` reported `ok: true` while syncing
+  // orgiq-default. Silently syncing the wrong corpus is worse than refusing, so
+  // the slug is threaded through to StartIngestionJob and each way it can fail
+  // to resolve now refuses with the reason named. There is no fall-through: a
+  // caller that asked for one KB never gets a job against a different one.
   if (kbSlug) {
     const entry = await getKbBySlug(kbSlug);
-    if (entry && entry.bedrockKbId && entry.dataSourceId) {
-      // NOTE: startIngestionJob currently reads kbId from config; it does not
-      // accept a per-call kbId override. Passing entry.dataSourceId here works
-      // only when entry.bedrockKbId matches the configured KB. A proper
-      // per-KB implementation requires startIngestionJob to accept a kbId param
-      // — that change is deferred to Wave 2 so it doesn't break existing callers.
-      const job = await startIngestionJob(entry.dataSourceId, description);
-      if (!job) {
-        res.status(500).json({ error: 'StartIngestionJob failed — check middleware logs' });
-        return;
-      }
-      res.json({ ok: true, job });
+    if (!entry) {
+      res.status(404).json({ error: `No knowledge base is registered with slug "${kbSlug}"` });
       return;
     }
-    // Entry not found or missing IDs — fall through to the single-KB path below.
+    if (!entry.bedrockKbId) {
+      res.status(409).json({
+        error:
+          `Knowledge base "${kbSlug}" has no bedrock_kb_id (registry status ${entry.status}) — ` +
+          `it has not finished provisioning, so there is nothing to sync.`,
+      });
+      return;
+    }
+    if (!entry.dataSourceId) {
+      // Repointing bedrock_kb_id alone leaves a row that still rejects every
+      // sync: StartIngestionJob needs the pair. /admin/knowledge's adoption
+      // flow captures the data source id — see providers/kb-reconcile.ts.
+      res.status(409).json({
+        error:
+          `Knowledge base "${kbSlug}" is registered as ${entry.bedrockKbId} but has no ` +
+          `data_source_id, so StartIngestionJob has no target. Re-adopt it from ` +
+          `/admin/knowledge to capture the data source id.`,
+      });
+      return;
+    }
+    const job = await startIngestionJob(entry.dataSourceId, description, entry.bedrockKbId);
+    if (!job) {
+      res.status(500).json({ error: 'StartIngestionJob failed — check middleware logs' });
+      return;
+    }
+    res.json({ ok: true, job, kbSlug, knowledgeBaseId: job.knowledgeBaseId });
+    return;
   }
 
   if (!dataSourceId) {
@@ -233,7 +274,7 @@ ingestRouter.post('/start', asyncHandler(async (req, res) => {
     res.status(500).json({ error: 'StartIngestionJob failed — check middleware logs' });
     return;
   }
-  res.json({ ok: true, job });
+  res.json({ ok: true, job, knowledgeBaseId: job.knowledgeBaseId });
 }));
 
 // ─── Stats ────────────────────────────────────────────────────────────────────
@@ -397,12 +438,16 @@ ingestRouter.get('/crawl/:id/page/:idx/screenshot', asyncHandler(async (req, res
 
   try {
     const obj = await _s3().send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    // Headers go on only once we know there is a body to describe. Setting
+    // Content-Type first meant the empty-body branch answered 502 with a JSON
+    // error still labelled image/png — `res.json` will not overwrite an
+    // existing Content-Type — so a client parsing JSON saw nothing at all.
+    const body = obj.Body as Readable | undefined;
+    if (!body) { res.status(502).json({ error: 'Empty S3 body' }); return; }
     res.setHeader('Content-Type', obj.ContentType ?? 'image/png');
     res.setHeader('Cache-Control', 'public, max-age=86400');
     if (obj.ETag) res.setHeader('ETag', obj.ETag);
     if (typeof obj.ContentLength === 'number') res.setHeader('Content-Length', String(obj.ContentLength));
-    const body = obj.Body as Readable | undefined;
-    if (!body) { res.status(502).json({ error: 'Empty S3 body' }); return; }
     body.on('error', (err) => {
       console.warn('[ingest] screenshot stream error:', err.message);
       if (!res.headersSent) res.status(502).json({ error: 'Screenshot stream failed' });
@@ -541,13 +586,20 @@ ingestRouter.post('/crawl-targets/:id/run', asyncHandler(async (req, res) => {
 
 ingestRouter.get('/storage', asyncHandler(async (req, res) => {
   const kbSlug = (req.query['kbSlug'] as string | undefined)?.trim() || undefined;
+  // Same as /queue: the prefix is what scopes a breakdown to one KB, so it is
+  // passed rather than resolved and discarded, and a scoped answer says which
+  // prefix it summed.
+  let prefix: string | undefined;
   if (kbSlug) {
-    // Resolve the KB's s3_prefix from the registry for a per-KB storage breakdown.
-    const _entry = await getKbBySlug(kbSlug); // eslint-disable-line @typescript-eslint/no-unused-vars
-    // TODO Wave 2: pass prefix once getStorageBreakdown accepts it
+    const entry = await getKbBySlug(kbSlug);
+    if (!entry) {
+      res.status(404).json({ error: `No knowledge base is registered with slug "${kbSlug}"` });
+      return;
+    }
+    prefix = entry.s3Prefix || undefined;
   }
-  const breakdown = await getStorageBreakdown();
-  res.json(breakdown);
+  const breakdown = await getStorageBreakdown(prefix);
+  res.json(kbSlug ? { ...breakdown, kbSlug, s3Prefix: prefix ?? null } : breakdown);
 }));
 
 // ── Site survey — reconnaissance before a crawl ─────────────────────────────

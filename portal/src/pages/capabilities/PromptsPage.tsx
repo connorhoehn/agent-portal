@@ -5,7 +5,7 @@
 // mounted; every panel, control and derivation lives in ./prompts/.
 
 import { useEffect, useState } from 'react';
-import { EmptyState } from '@connorhoehnslalom/ui-components/shared';
+import { EmptyState, ErrorState } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { CreatePanel } from './prompts/CreatePanel';
 import { EditPanel } from './prompts/EditPanel';
@@ -15,6 +15,8 @@ import { ViewPanel } from './prompts/ViewPanel';
 import type { PanelMode, Selection } from './prompts/types';
 import { usePromptList } from '../../components/canary/usePromptLibrary.js';
 import type { PromptLibraryEntry } from '../../components/canary/types.js';
+import { PromptsFrame } from './PromptsFrame';
+import { friendlyLibraryError } from './prompts/libraryError';
 
 function PromptsPage() {
   // Create/edit/publish/test/optimize all POST the canary prompt library
@@ -51,31 +53,42 @@ function PromptsPage() {
   }
 
   return (
-    // -m-6 cancels the shell's page padding: the rail and the workspace are
-    // full-bleed columns, not a card sitting inside the content area.
-    <div className="-m-6 flex h-full min-h-0">
-      <PromptSidebar
-        prompts={filtered}
-        loading={loading}
-        error={error}
-        search={search}
-        onSearch={setSearch}
-        selectedId={selection?.promptId ?? null}
-        onSelect={selectPrompt}
-        onRefresh={refresh}
-        onNew={() => { setSelection(null); setMode('create'); }}
-        canManage={canManage}
-      />
-
-      <div className="flex min-w-0 flex-1 flex-col overflow-auto bg-surface">
+    <PromptsFrame
+      rail={(
+        <PromptSidebar
+          prompts={filtered}
+          loading={loading}
+          error={error}
+          search={search}
+          onSearch={setSearch}
+          selectedId={selection?.promptId ?? null}
+          onSelect={selectPrompt}
+          onRefresh={refresh}
+          onNew={() => { setSelection(null); setMode('create'); }}
+          canManage={canManage}
+        />
+      )}
+    >
+        {/* Exactly one of these renders: a failed fetch is not "empty", and an
+            empty library is not an error — showing both at once (DEFECTS.md
+            #8) told the reader two contradictory things at the same time. */}
         {!selection && !loading && mode !== 'create' && (
-          <EmptyState
-            title="No prompts yet"
-            description="The Bedrock Prompt Library is empty for this tenant."
-            {...(canManage
-              ? { actionLabel: '+ New prompt', onAction: () => setMode('create') }
-              : {})}
-          />
+          error ? (
+            <ErrorState
+              title="Prompt library unreachable"
+              description={friendlyLibraryError(error)}
+              actionLabel="Retry"
+              onAction={refresh}
+            />
+          ) : (
+            <EmptyState
+              title="No prompts yet"
+              description="The Bedrock Prompt Library is empty for this tenant."
+              {...(canManage
+                ? { actionLabel: '+ New prompt', onAction: () => setMode('create') }
+                : {})}
+            />
+          )
         )}
 
         {selection && mode === 'view' && (
@@ -117,8 +130,7 @@ function PromptsPage() {
             }}
           />
         )}
-      </div>
-    </div>
+    </PromptsFrame>
   );
 }
 

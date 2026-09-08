@@ -105,14 +105,21 @@ function promptFor(kind: SuggestionKind, item: SuggestibleItem): string {
   }
 }
 
+/**
+ * The state, without the initiative's name.
+ *
+ * The name used to be glued on the end — "Blocked on Auth Migration" — and on
+ * the Ask page's 233px cards every one of those lines ellipsised at exactly
+ * the word that says WHICH initiative the card is about ("Blocked on Auth
+ * Migrati…"). The name now travels as its own field so a card can place it
+ * where it will not be cut. Callers that want the old sentence can join them.
+ */
 function reasonFor(kind: SuggestionKind, item: SuggestibleItem): string {
   switch (kind) {
-    case 'blocked': return `Blocked on ${item.projectName}`;
-    case 'in-review': return `Waiting in review on ${item.projectName}`;
-    case 'next-up': return item.sprintId
-      ? `Next up in this sprint on ${item.projectName}`
-      : `Not started on ${item.projectName}`;
-    case 'maintenance': return `Upkeep on ${item.projectName}`;
+    case 'blocked': return 'Blocked';
+    case 'in-review': return 'Waiting in review';
+    case 'next-up': return item.sprintId ? 'Next up in this sprint' : 'Not started';
+    case 'maintenance': return 'Upkeep';
   }
 }
 

@@ -12,7 +12,7 @@
 // BUG FIXED HERE: every one of these surfaces was painted
 // `var(--color-primary-subtle, #eef2ff)`. `--color-primary-subtle` is defined
 // nowhere in the portal, so the fallback always won and the strips stayed
-// indigo under the newsroom tenant, whose accent is amber. The real token is
+// indigo under a non-orgiq tenant, whose accent differs. The real token is
 // `--color-primary-soft`, which `[data-tenant]` actually overrides.
 
 import type { ReactNode } from 'react';

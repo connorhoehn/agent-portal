@@ -49,13 +49,22 @@ export const CAPABILITY_ACTIONS = [
   'ManageCanary',        // canary.ts, canary-library.ts, evaluations.ts, prompt-history.ts
   'LabelFeedback',       // quality.ts
   'ApproveTransaction',  // approvals.ts
-  'ManagePitches',       // newsroom-articles.ts
-  'PublishArticle',      // newsroom-articles.ts
   'Masquerade',          // session.ts
   'ManageBudgets',       // budgets.ts — initiative allocations (program management)
   'ManageSprints',       // sprints.ts — create sprints, move work between them (org-leader + sme)
   'EnterEnvironment',    // environments.ts — reach a deployed environment from a devbox
   'ManageEnvironments',  // environments.ts — describe/edit/remove an environment
+  // Assessment tenant — routes/assessment.ts. Missing from this list, every
+  // assessment control hid for every role: the portal's can() read undefined
+  // for actions the server never evaluated. See docs/assessment-tenant.md.
+  'ViewAssessment',         // reads: teams, dimensions, runs, knowledge, rollup
+  'ScoreAssessment',        // intake, scores apply, feedback resolve/dismiss
+  'ApproveException',       // N/A exception approve/deny — lead-assessor and up
+  'PublishReport',          // publish a team/program report — lead-assessor and up
+  'ManageSubmissions',      // Forms envelope parse/commit/clear
+  'RunAssessmentAgent',     // POST /runs — launch/stop the scorer and drafter
+  'ManageKnowledge',        // knowledge doc PUT/restore
+  'ManageAssessmentConfig', // motions + target level — program-lead only
 ] as const;
 
 export type CapabilityAction = (typeof CAPABILITY_ACTIONS)[number];
@@ -185,7 +194,14 @@ async function seedPolicyDecision(role: string, action: string): Promise<boolean
       );
     }
   }
-  return seedMatrix?.get(role)?.has(action) ?? false;
+  const granted = seedMatrix?.get(role);
+  // `*` is how role-registry records an UNCONSTRAINED permit (admin.cedar has
+  // no `action in [...]` list). A plain `has(action)` never matched it, so in
+  // open mode admin was denied on every plain requireAction gate while
+  // passing the read gates that special-case the role by name — an
+  // inconsistency the assessment tenant exposed, since all of its gates are
+  // plain. The wildcard means what it says.
+  return granted != null && (granted.has(action) || granted.has('*'));
 }
 
 async function evaluate(principal: PrincipalRef, action: string, resourceAttrs?: ResourceAttrs): Promise<'ALLOW' | 'DENY'> {
@@ -293,6 +309,35 @@ export function requireSession(label = 'Read') {
  * Returns a middleware that requires Cedar permission for `action`.
  * Action ids match the Cedar schema (Search, ViewSalary, EditGuardrail, ...).
  */
+/**
+ * Pass when the session holds ANY of the actions. For a router whose
+ * routes are owned by different capabilities — identity.ts serves both the
+ * hr-admin read surface (ViewIdentityAdmin) and the tenant-scoped user
+ * admin that program-lead holds via ManageUsers — a single router-wide
+ * `requireAction` silently locks the second group out (review finding 2).
+ * The audit line names the action that passed.
+ */
+export function requireAnyAction(actions: string[]) {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const session = resolveSession(req);
+    if (!session) { denyUnauthenticated(req, res, actions[0] ?? 'unknown'); return; }
+    try {
+      for (const action of actions) {
+        if ((await evaluate(session, action)) === 'ALLOW') {
+          logAuthz(eventFromSession(session, action, 'ALLOW', { path: req.path }));
+          next();
+          return;
+        }
+      }
+      logAuthz(eventFromSession(session, actions.join('|'), 'DENY', { path: req.path }));
+      res.status(403).json({ error: 'Forbidden', action: actions.join('|'), role: session.role, tenant: session.tenant });
+    } catch (err) {
+      logAuthz(eventFromSession(session, actions.join('|'), 'DENY', { path: req.path, reason: `authz-error: ${(err as Error).message}` }));
+      res.status(503).json({ error: 'authorization unavailable', action: actions.join('|') });
+    }
+  };
+}
+
 export function requireAction(action: string) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const session = resolveSession(req);

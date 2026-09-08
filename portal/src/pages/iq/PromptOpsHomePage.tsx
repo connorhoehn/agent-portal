@@ -18,9 +18,12 @@
 // SSM, runtimes from the AgentCore control plane, experiments from Aurora.
 
 import { Link, useNavigate } from 'react-router';
-import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
+import { Badge, Button, Card, CardHeader, CatalogGrid, Chip, EmptyState, Inline, InlineAlert, PageSection, Stack, StatCard, StatusDot, Tooltip } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { useSession } from '../../lib/auth';
+import { T } from './Text';
+import { parseArn, runtimeForSystemPrompt, subjectLabel, systemPromptForRuntime } from './promptOpsFormat';
 
 interface LibraryPrompt { id: string; name: string; updatedAt?: string; description?: string }
 interface LibraryResponse { prompts?: LibraryPrompt[] }
@@ -33,27 +36,18 @@ interface PromptsResponse {
 interface ExperimentsResponse { experiments?: Array<{ id: string }> }
 interface AgentRuntime { id: string; name: string; status: string; invocationsLast24h?: number }
 
-/** `…:prompt/ABC123:1` → { id: 'ABC123', version: '1' } (version '' = DRAFT). */
-function parseArn(arn: string | undefined): { id: string; version: string } {
-  const tail = (arn ?? '').split('/').pop() ?? '';
-  const [id = '', version = ''] = tail.split(':');
-  return { id, version };
-}
-
-function subjectLabel(arn: string | undefined, names: Map<string, string>): string {
-  const { id, version } = parseArn(arn);
-  if (!id) return '—';
-  return `${names.get(id) ?? id} · ${version ? `v${version}` : 'DRAFT'}`;
-}
-
-/** `orgiq-search-system-prompt` → `orgiq_search` (the runtime that owns it). */
-function runtimeForSystemPrompt(name: string): string | null {
-  const m = /^orgiq-(.+)-system-prompt$/.exec(name);
-  return m?.[1] ? `orgiq_${m[1].replace(/-/g, '_')}` : null;
-}
-
 export default function PromptOpsHomePage() {
   const navigate = useNavigate();
+  const { session } = useSession();
+  // Same platform-role test as the rail (iqSubNavCatalog.ts PROMPT_MGMT_PLATFORM_GROUPS).
+  // This page is wired for a `ViewObservability` read, which member deliberately
+  // holds as an all-hands read (member.cedar) — so its data loads fine and the
+  // libraryError branch below never fires. Without this check a member who
+  // reaches the URL directly (⌘K, a bookmark, or before the route guard's
+  // session fetch resolves) saw the full page: eleven CTAs into Studio,
+  // Test-a-prompt and Rollout, every one a platform route that bounces them
+  // straight back out (DEFECTS.md #10).
+  const isPlatform = session?.role === 'org-leader' || session?.role === 'hr-admin' || session?.role === 'admin';
   const { data: library, error: libraryError } = useFetch<LibraryResponse>('/api/observability/canary/library', 30_000);
   const { data: weight } = useFetch<WeightResponse>('/api/observability/canary/weight', 10_000);
   const { data: prompts } = useFetch<PromptsResponse>('/api/observability/canary/prompts', 30_000);
@@ -91,6 +85,37 @@ export default function PromptOpsHomePage() {
   const experimentLive = halted || weightB > 0;
   const pastCount = experiments?.experiments?.length ?? 0;
 
+  const steps = [
+    { n: 1, title: 'Author', body: 'Edit a prompt in the studio and save it as a new version. Drafts stay unpublished until you publish.', cta: 'Prompt Studio', to: '/iq/prompts' },
+    { n: 2, title: 'Test', body: 'Run it against real people and skills from the org graph, optionally behind a guardrail, and read the output.', cta: 'Test a prompt', to: '/iq/prompts' },
+    { n: 3, title: 'Roll out', body: 'Start a canary: baseline vs challenger, weighted traffic, judge scores, automatic promote or rollback.', cta: experimentLive ? 'Open experiment' : 'Start a canary', to: '/iq/canary' },
+  ];
+
+  // This surface's guided path — Author, Test, Roll out — and its full
+  // library listing all point at platform-only routes. Explain that plainly
+  // instead of rendering links that redirect the moment they're clicked.
+  if (!isPlatform) {
+    return (
+      <PageSection title="Prompt Management">
+        <Stack gap="none" className="max-w-xl">
+          <EmptyState
+            title="This is a platform surface"
+            description={
+              <>
+                Authoring, testing and rolling out prompts — Studio, Versions, Evals and
+                Rollout — is limited to the org-leader and HR Admin roles.{' '}
+                <Link to="/iq/library" className="font-semibold text-primary no-underline hover:underline">
+                  Browse the library
+                </Link>{' '}
+                instead, or switch role from the identity menu, top right.
+              </>
+            }
+          />
+        </Stack>
+      </PageSection>
+    );
+  }
+
   // The whole surface is driven by the prompt library, which is ViewObservability-
   // gated. If it's denied, say so plainly rather than rendering an empty library
   // that reads as "nothing is deployed".
@@ -108,206 +133,191 @@ export default function PromptOpsHomePage() {
 
   return (
     <PageSection title="Prompt Management">
-      <p className="text-[13px] text-text-secondary mt-1 mb-5 max-w-3xl leading-relaxed">
+      <T className="mt-1 mb-5 max-w-3xl text-[13px] leading-relaxed text-text-secondary" wrap>
         Every prompt here is wired to something running. <b>Agent system prompts</b> are resolved
         from this library by each deployed agent on every invocation (60&nbsp;s cache) — edit one and
         the live fleet picks it up within a minute, no rebuild. <b>Canary prompts</b> are invoked by
         ARN by the A/B rollout surface. If the library is ever unreachable, agents fall back to the
         prompt baked into their image, so a Bedrock outage cannot take the fleet down.
-      </p>
+      </T>
 
       {/* ── What is deployed ── */}
-      <div className="grid gap-4 mb-5 grid-cols-1 lg:grid-cols-2">
-        <Card padding="md" className="flex flex-col">
-          <div className="flex items-baseline gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Deployed agents</span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-success-bg text-success font-semibold">prompt resolved from library</span>
-          </div>
-          <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-[24px] font-bold text-text-primary leading-none">{deployedRuntimes.length}</span>
-            <span className="text-[12px] text-text-secondary">
-              runtimes · {healthy} healthy
-            </span>
-          </div>
-          <div className="flex flex-wrap gap-1.5 mt-3">
-            {deployedRuntimes.map((r) => (
-              <span
-                key={r.id}
-                title={
-                  libraryNames.has(`orgiq-${r.name.replace(/^orgiq_/, '').replace(/_/g, '-')}-system-prompt`)
-                    ? `${r.name} · ${r.status} · resolves orgiq-${r.name.replace(/^orgiq_/, '').replace(/_/g, '-')}-system-prompt from the library`
-                    : `${r.name} · ${r.status} · no library entry — running its baked prompt`
-                }
-                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border border-border text-[11px] text-text-secondary"
-              >
-                <span aria-hidden="true" className={`w-1.5 h-1.5 rounded-full ${r.status === 'healthy' ? 'bg-success' : 'bg-text-tertiary'}`} />
-                {r.name.replace(/^orgiq_/, '')}
-                {!libraryNames.has(`orgiq-${r.name.replace(/^orgiq_/, '').replace(/_/g, '-')}-system-prompt`) && (
-                  <span className="text-warning" title="no library entry — using baked prompt">•</span>
-                )}
-              </span>
-            ))}
-            {deployedRuntimes.length === 0 && (
-              <span className="text-[12px] text-text-tertiary">no runtimes deployed</span>
-            )}
-          </div>
-          <div className="mt-auto pt-3 text-[11px] text-text-tertiary leading-snug">
-            Each runtime reads <code>orgiq-&lt;agent&gt;-system-prompt</code> from the library on every
-            invocation and rebuilds itself when the text changes. Tool wiring and model choice still
-            require a code change and redeploy.
-          </div>
+      <CatalogGrid columns={2} className="mb-5">
+        <Card padding="md">
+          <Stack gap="sm">
+            <CardHeader title="Deployed agents" meta={<Chip tone="success" size="xs">prompt resolved from library</Chip>} />
+            <StatCard label="Deployed" value={deployedRuntimes.length} hint={`runtimes · ${healthy} healthy`} />
+            <Inline gap="xs" wrap>
+              {deployedRuntimes.map((r) => {
+                const shortName = r.name.replace(/^orgiq_/, '');
+                const promptName = systemPromptForRuntime(r.name);
+                const hasEntry = libraryNames.has(promptName);
+                const detail = hasEntry
+                  ? `${r.name} · ${r.status} · resolves ${promptName} from the library`
+                  : `${r.name} · ${r.status} · no library entry — running its baked prompt`;
+                return (
+                  <Tooltip key={r.id} content={detail}>
+                    <Chip tone={r.status === 'healthy' ? 'success' : 'neutral'} dot="static" size="xs">
+                      {shortName}{hasEntry ? '' : ' •'}
+                    </Chip>
+                  </Tooltip>
+                );
+              })}
+              {deployedRuntimes.length === 0 && (
+                <T className="text-[12px] text-text-tertiary">no runtimes deployed</T>
+              )}
+            </Inline>
+            <T className="text-[11px] leading-snug text-text-tertiary" wrap>
+              Each runtime reads <code>orgiq-&lt;agent&gt;-system-prompt</code> from the library on every
+              invocation and rebuilds itself when the text changes. Tool wiring and model choice still
+              require a code change and redeploy.
+            </T>
+          </Stack>
         </Card>
 
-        <Card padding="md" className="flex flex-col">
-          <div className="flex items-baseline gap-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Canary prompts</span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-success-bg text-success font-semibold">edits apply immediately</span>
-          </div>
-          <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-[24px] font-bold text-text-primary leading-none">{livePrompts.length}</span>
-            <span className="text-[12px] text-text-secondary">invoked by ARN by the rollout surface</span>
-          </div>
-          <div className="flex flex-col gap-1 mt-3">
-            {livePrompts.map((p) => (
-              <div key={p.id} className="flex items-center gap-2 min-w-0">
-                <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-success shrink-0" />
-                <span className="text-[12px] font-semibold text-text-primary truncate">{p.name}</span>
-                <span className="text-[11px] text-text-tertiary truncate">{p.description ?? ''}</span>
-              </div>
-            ))}
-            {livePrompts.length === 0 && (
-              <span className="text-[12px] text-text-tertiary">none — start a canary to wire prompts live</span>
-            )}
-          </div>
-          <div className="mt-auto pt-3 text-[11px] text-text-tertiary leading-snug">
-            The canary subjects and judge. Used by the A/B rollout surface, not by the agent fleet.
-          </div>
+        <Card padding="md">
+          <Stack gap="sm">
+            <CardHeader title="Canary prompts" meta={<Chip tone="success" size="xs">edits apply immediately</Chip>} />
+            <StatCard label="Live" value={livePrompts.length} hint="invoked by ARN by the rollout surface" />
+            <Stack gap="xs">
+              {livePrompts.map((p) => (
+                <Inline key={p.id} gap="sm" align="center">
+                  <StatusDot color="var(--color-success)" size="xs" />
+                  <T className="min-w-0 truncate text-[12px] font-semibold text-text-primary">{p.name}</T>
+                  <T className="min-w-0 truncate text-[11px] text-text-tertiary">{p.description ?? ''}</T>
+                </Inline>
+              ))}
+              {livePrompts.length === 0 && (
+                <T className="text-[12px] text-text-tertiary">none — start a canary to wire prompts live</T>
+              )}
+            </Stack>
+            <T className="text-[11px] leading-snug text-text-tertiary" wrap>
+              The canary subjects and judge. Used by the A/B rollout surface, not by the agent fleet.
+            </T>
+          </Stack>
         </Card>
-      </div>
+      </CatalogGrid>
 
       {/* ── Rollout + history ── */}
-      <div className="grid gap-4 mb-5 grid-cols-1 md:grid-cols-2">
-        <Card padding="md" className="flex flex-col">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Rollout</div>
-          {experimentLive ? (
-            <>
-              <div className="flex items-center gap-2 mt-1">
-                <span aria-hidden="true" className={`w-2 h-2 rounded-full ${halted ? 'bg-danger' : 'bg-success'}`} />
-                <span className="text-[15px] font-bold text-text-primary">
-                  {halted ? 'Halted' : `${100 - weightB}% A / ${weightB}% B`}
-                </span>
-              </div>
-              <div className="text-[12px] text-text-secondary mt-1 leading-snug">
-                <div className="truncate" title={aArn}>A · {subjectLabel(aArn, promptNames)}</div>
-                <div className="truncate" title={bArn}>B · {subjectLabel(bArn, promptNames)}</div>
-              </div>
-              {degenerate && (
-                <div className="mt-2 px-2 py-1.5 rounded-md bg-warning-bg text-warning text-[11px] leading-snug">
-                  Both sides point at the same prompt version — the judge is scoring identical
-                  answers, so no promote/rollback signal can emerge. Publish a challenger version
-                  and restart the experiment.
-                </div>
-              )}
-              <Link to="/iq/canary" className="mt-auto pt-3 text-[12px] font-semibold text-primary no-underline hover:underline">
-                Open live experiment →
-              </Link>
-            </>
-          ) : (
-            <>
-              <div className="text-[15px] font-bold text-text-primary mt-1">No experiment running</div>
-              <div className="text-[12px] text-text-secondary mt-0.5">100% of canary traffic on the baseline prompt</div>
-              <button
-                onClick={() => void navigate('/iq/canary')}
-                className="mt-auto self-start mt-3 px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer"
-              >
-                Start an experiment
-              </button>
-            </>
-          )}
+      <CatalogGrid columns={2} className="mb-5">
+        <Card padding="md">
+          <Stack gap="sm">
+            <CardHeader title="Rollout" />
+            {experimentLive ? (
+              <Stack gap="sm">
+                <Inline gap="sm" align="center">
+                  <StatusDot color={halted ? 'var(--color-danger)' : 'var(--color-success)'} size="sm" />
+                  <T className="text-[15px] font-bold text-text-primary">
+                    {halted ? 'Halted' : `${100 - weightB}% A / ${weightB}% B`}
+                  </T>
+                </Inline>
+                <Stack gap="none">
+                  <T className="truncate text-[12px] text-text-secondary" title={aArn}>A · {subjectLabel(aArn, promptNames)}</T>
+                  <T className="truncate text-[12px] text-text-secondary" title={bArn}>B · {subjectLabel(bArn, promptNames)}</T>
+                </Stack>
+                {degenerate && (
+                  <InlineAlert tone="warning">
+                    Both sides point at the same prompt version — the judge is scoring identical
+                    answers, so no promote/rollback signal can emerge. Publish a challenger version
+                    and restart the experiment.
+                  </InlineAlert>
+                )}
+                <Link to="/iq/canary" className="text-[12px] font-semibold text-primary no-underline hover:underline">
+                  Open live experiment →
+                </Link>
+              </Stack>
+            ) : (
+              <Stack gap="sm">
+                <T className="text-[15px] font-bold text-text-primary">No experiment running</T>
+                <T className="text-[12px] text-text-secondary">100% of canary traffic on the baseline prompt</T>
+                <Button variant="primary" size="sm" onClick={() => void navigate('/iq/canary')} className="self-start">
+                  Start an experiment
+                </Button>
+              </Stack>
+            )}
+          </Stack>
         </Card>
 
-        <Card padding="md" className="flex flex-col">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Past experiments</div>
-          <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-[24px] font-bold text-text-primary leading-none">
-              {experimentsError ? '—' : pastCount}
-            </span>
-            <span className="text-[12px] text-text-secondary">
-              {experimentsError ? 'unknown' : pastCount === 0 ? 'none completed yet' : 'completed rollouts'}
-            </span>
-          </div>
-          <div className="text-[12px] text-text-tertiary mt-1 leading-snug">
+        <Card padding="md">
+          <Stack gap="sm">
+            <CardHeader title="Past experiments" />
+            <StatCard
+              label="Past"
+              value={experimentsError ? '—' : pastCount}
+              hint={experimentsError ? 'unknown' : pastCount === 0 ? 'none completed yet' : 'completed rollouts'}
+            />
             {/* Experiment history lives in Aurora. A failed load used to render
                 a confident 0 and tell you to go run a canary, when the truth
                 was that we could not see the ones already there. */}
-            {experimentsError
-              ? 'Experiment history is unreachable, so this is unknown rather than none.'
-              : pastCount === 0
-                ? 'Finish a canary — promote or roll back — and its outcome is recorded here.'
-                : 'Recorded outcomes with judge scores and controller decisions.'}
-          </div>
-          {pastCount > 0 && (
-            <Link to="/iq/history" className="mt-auto pt-3 text-[12px] font-semibold text-primary no-underline hover:underline">
-              View history →
-            </Link>
-          )}
+            <T className="text-[12px] leading-snug text-text-tertiary" wrap>
+              {experimentsError
+                ? 'Experiment history is unreachable, so this is unknown rather than none.'
+                : pastCount === 0
+                  ? 'Finish a canary — promote or roll back — and its outcome is recorded here.'
+                  : 'Recorded outcomes with judge scores and controller decisions.'}
+            </T>
+            {pastCount > 0 && (
+              <Link to="/iq/history" className="text-[12px] font-semibold text-primary no-underline hover:underline">
+                View history →
+              </Link>
+            )}
+          </Stack>
         </Card>
-      </div>
+      </CatalogGrid>
 
       {/* ── Guided path ── */}
       <Card padding="md" className="mb-5">
-        <div className="text-xs font-semibold text-text-secondary tracking-wide select-none mb-3">HOW A CHANGE SHIPS</div>
-        <ol className="list-none p-0 m-0 grid gap-3 grid-cols-1 md:grid-cols-3">
-          {[
-            { n: 1, title: 'Author', body: 'Edit a prompt in the studio and save it as a new version. Drafts stay unpublished until you publish.', cta: 'Prompt Studio', to: '/iq/prompts' },
-            { n: 2, title: 'Test', body: 'Run it against real people and skills from the org graph, optionally behind a guardrail, and read the output.', cta: 'Test a prompt', to: '/iq/prompts' },
-            { n: 3, title: 'Roll out', body: 'Start a canary: baseline vs challenger, weighted traffic, judge scores, automatic promote or rollback.', cta: experimentLive ? 'Open experiment' : 'Start a canary', to: '/iq/canary' },
-          ].map((step) => (
-            <li key={step.n} className="border border-border rounded-lg p-3.5 flex flex-col">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary text-white text-[11px] font-bold">{step.n}</span>
-                <span className="text-[13px] font-bold text-text-primary">{step.title}</span>
-              </div>
-              <p className="text-[12px] leading-relaxed text-text-secondary mt-2 mb-3">{step.body}</p>
-              <Link to={step.to} className="mt-auto text-[12px] font-semibold text-primary no-underline hover:underline">
-                {step.cta} →
-              </Link>
-            </li>
-          ))}
-        </ol>
+        <Stack gap="md">
+          <CardHeader title="How a change ships" />
+          <CatalogGrid columns={3}>
+            {steps.map((step) => (
+              <Card key={step.n} padding="md">
+                <Stack gap="xs">
+                  <Inline gap="sm" align="center">
+                    <Badge variant="count" value={step.n} color="accent" />
+                    <T className="text-[13px] font-bold text-text-primary">{step.title}</T>
+                  </Inline>
+                  <T className="text-[12px] leading-relaxed text-text-secondary" wrap>{step.body}</T>
+                  <Link to={step.to} className="text-[12px] font-semibold text-primary no-underline hover:underline">
+                    {step.cta} →
+                  </Link>
+                </Stack>
+              </Card>
+            ))}
+          </CatalogGrid>
+        </Stack>
       </Card>
 
       {/* ── Full library, classified ── */}
-      <Card className="overflow-hidden">
-        <div className="px-3.5 py-3 border-b border-border flex items-center gap-2">
-          <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">PROMPT LIBRARY</span>
-          <span className="text-[11px] text-text-tertiary">{allPrompts.length} in Bedrock</span>
-          <div className="flex-1" />
-          <Link to="/iq/prompts" className="text-[12px] font-semibold text-primary no-underline hover:underline">Open Prompt Studio →</Link>
-        </div>
-        <div className="flex flex-col">
+      <Card padding="none" className="overflow-hidden">
+        <CardHeader
+          title="Prompt library"
+          subtitle={`${allPrompts.length} in Bedrock`}
+          action={<Link to="/iq/prompts" className="text-[12px] font-semibold text-primary no-underline hover:underline">Open Prompt Studio →</Link>}
+        />
+        <Stack gap="none">
           {[
-            { rows: livePrompts, badge: 'live · canary', tone: 'bg-success-bg text-success', note: 'invoked by ARN' },
-            { rows: agentCopies, badge: 'live · agent', tone: 'bg-success-bg text-success', note: 'resolved at run time' },
-            { rows: otherPrompts, badge: 'unused', tone: 'bg-surface-hover text-text-tertiary', note: 'not wired to anything' },
+            { rows: livePrompts, badge: 'live · canary', tone: 'success' as const, note: 'invoked by ARN' },
+            { rows: agentCopies, badge: 'live · agent', tone: 'success' as const, note: 'resolved at run time' },
+            { rows: otherPrompts, badge: 'unused', tone: 'neutral' as const, note: 'not wired to anything' },
           ].flatMap(({ rows, badge, tone, note }) =>
             rows.map((p) => (
               <Link
                 key={p.id}
                 to="/iq/prompts"
-                className="flex items-center gap-3 px-3.5 py-2 border-b border-border last:border-b-0 no-underline min-w-0 hover:bg-surface-hover"
+                className="flex min-w-0 items-center gap-3 border-b border-border px-3.5 py-2 no-underline last:border-b-0 hover:bg-surface-hover"
               >
-                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${tone}`}>{badge}</span>
-                <span className="text-[12.5px] font-semibold text-text-primary truncate">{p.name}</span>
-                <span className="text-[11px] text-text-tertiary truncate flex-1">{p.description ?? ''}</span>
-                <span className="text-[10px] text-text-tertiary shrink-0 hidden md:inline">{note}</span>
+                <Chip tone={tone} size="xs">{badge}</Chip>
+                <T className="min-w-0 truncate text-[12.5px] font-semibold text-text-primary">{p.name}</T>
+                <T className="min-w-0 flex-1 truncate text-[11px] text-text-tertiary">{p.description ?? ''}</T>
+                <T className="hidden shrink-0 text-[10px] text-text-tertiary md:inline">{note}</T>
               </Link>
             )),
           )}
           {allPrompts.length === 0 && (
-            <div className="px-3.5 py-6 text-center text-[12px] text-text-tertiary">No prompts in the Bedrock library yet.</div>
+            <EmptyState title="No prompts in the Bedrock library yet." />
           )}
-        </div>
+        </Stack>
       </Card>
     </PageSection>
   );

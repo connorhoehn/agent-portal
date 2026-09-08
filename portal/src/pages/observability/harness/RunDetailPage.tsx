@@ -5,23 +5,29 @@
 //   GET /api/observability/harness/runs/:prevId        → previous results for delta
 
 import { useEffect, useMemo, useState } from 'react';
-import type { CSSProperties } from 'react';
 import { Link, useParams, useNavigate } from 'react-router';
 import {
+  Button,
   Card,
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableTh,
-  TableTd,
+  CardHeader,
   Chip,
+  CodeBlock,
+  Inline,
   Modal,
   PageSection,
+  Select,
+  Stack,
+  Table,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableTd,
+  TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
 import { CostChip } from '../../../components/observability/CostChip';
 import { ModeChip } from '../../../components/observability/ModeChip';
+import { T } from '../Text';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -281,9 +287,9 @@ function RunDetailPage() {
     return (
       <PageSection title="Harness Run">
         <Card padding="md">
-          <div style={{ color: 'var(--color-text-tertiary)', fontSize: 12 }}>
+          <T as="div" className="text-text-tertiary text-[12px]">
             Loading run…
-          </div>
+          </T>
         </Card>
       </PageSection>
     );
@@ -302,55 +308,53 @@ function RunDetailPage() {
     <PageSection title={run.label}>
       {/* Header */}
       <Card padding="md">
-        <div style={headerRow}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <Inline justify="between" align="start" gap="md" className="mb-3">
+          <Stack gap="xs">
+            <Inline gap="sm" align="center">
               <Chip tone={statusTone(run.status)} size="xs">
                 {run.status}
               </Chip>
               <ModeChip mode={run.mode} />
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  fontSize: 11,
-                  color: 'var(--color-text-tertiary)',
-                }}
+              <Inline
+                as="span"
+                gap="xs"
+                className="text-[11px] text-text-tertiary"
                 title="total cost across all results in this run"
               >
                 <CostChip cost={run.totalCostUsd} />
-                <span>total</span>
-              </span>
-            </div>
-            <div style={subline}>
-              started <strong>{new Date(run.startedAt).toLocaleString()}</strong>
+                <T>total</T>
+              </Inline>
+            </Inline>
+            <Inline gap="sm" align="center" className="text-[12px] text-text-secondary">
+              <T>started <strong>{new Date(run.startedAt).toLocaleString()}</strong></T>
               {run.finishedAt && (
                 <>
-                  <span style={dot}>·</span>
-                  finished <strong>{new Date(run.finishedAt).toLocaleString()}</strong>
-                  <span style={dot}>·</span>
-                  duration <strong>{durationStr(run.startedAt, run.finishedAt)}</strong>
+                  <T className="text-text-tertiary">·</T>
+                  <T>finished <strong>{new Date(run.finishedAt).toLocaleString()}</strong></T>
+                  <T className="text-text-tertiary">·</T>
+                  <T>duration <strong>{durationStr(run.startedAt, run.finishedAt)}</strong></T>
                 </>
               )}
-            </div>
-            <div style={subline}>
-              judge: <span style={monoInline}>{run.judgeModelId}</span>
+            </Inline>
+            <Inline gap="sm" align="center" className="text-[12px] text-text-secondary">
+              <T>judge:</T> <T className="font-mono text-[11.5px]">{run.judgeModelId}</T>
               {run.gitSha && (
                 <>
-                  <span style={dot}>·</span>
-                  git: <span style={monoInline}>{shortSha(run.gitSha)}</span>
+                  <T className="text-text-tertiary">·</T>
+                  <T>git:</T> <T className="font-mono text-[11.5px]">{shortSha(run.gitSha)}</T>
                 </>
               )}
-              <span style={dot}>·</span>
-              pass rate:{' '}
+              <T className="text-text-tertiary">·</T>
+              <T>pass rate:</T>
               <Chip tone={passRateTone(run.passRate)} size="xs">
                 {fmtPct(run.passRate)} ({run.passed}/{run.totalCases})
               </Chip>
-            </div>
-            {run.notes && <div style={notesLine}>{run.notes}</div>}
-          </div>
-          <div style={headerActions}>
+            </Inline>
+            {run.notes && (
+              <T as="div" className="text-[12px] text-text-secondary italic">{run.notes}</T>
+            )}
+          </Stack>
+          <Inline gap="sm" align="center" wrap>
             <BaselinePicker
               runs={allRuns}
               currentRunId={runId}
@@ -362,20 +366,23 @@ function RunDetailPage() {
               }}
             />
             {run.agentVersions && Object.keys(run.agentVersions).length > 0 && (
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={() => setPromoteOpen(true)}
-                style={primaryBtn}
                 title="Promote one or more of this run's prompt versions"
               >
                 Promote prompt versions
-              </button>
+              </Button>
             )}
-            <Link to="/admin/observability/harness" style={btnLink}>
+            <Link
+              to="/admin/observability/harness"
+              className="text-[12px] text-primary no-underline px-2 py-0.5 rounded hover:underline"
+            >
               ← Back to harness
             </Link>
-          </div>
-        </div>
+          </Inline>
+        </Inline>
       </Card>
 
       {promoteOpen && run.agentVersions && (
@@ -388,15 +395,10 @@ function RunDetailPage() {
       {/* Regressions */}
       {hasRegressions && (
         <Card padding="md">
-          <div style={headerRow}>
-            <h2 style={h2}>
-              Regressions vs. previous run{' '}
-              <span style={hint}>
-                {regressions.length} test{regressions.length === 1 ? '' : 's'} scored lower · sorted
-                by |Δ|
-              </span>
-            </h2>
-          </div>
+          <CardHeader
+            title="Regressions vs. previous run"
+            subtitle={`${regressions.length} test${regressions.length === 1 ? '' : 's'} scored lower · sorted by |Δ|`}
+          />
           <Table>
             <TableHead>
               <TableRow>
@@ -411,8 +413,8 @@ function RunDetailPage() {
             <TableBody>
               {regressions.map((r) => (
                 <TableRow key={r.testId}>
-                  <TableTd style={monoCell}>{r.testId}</TableTd>
-                  <TableTd style={agentCell}>{r.agentId ?? '—'}</TableTd>
+                  <TableTd className="text-[11px] text-text-tertiary font-mono whitespace-nowrap">{r.testId}</TableTd>
+                  <TableTd className="text-[12px] font-medium whitespace-nowrap">{r.agentId ?? '—'}</TableTd>
                   <TableTd>
                     <Chip tone={judgeTone(r.prev)} size="xs">
                       {fmt(r.prev)}
@@ -428,7 +430,10 @@ function RunDetailPage() {
                       ↓ {fmt(Math.abs(r.delta))}
                     </Chip>
                   </TableTd>
-                  <TableTd style={snippetCell} title={r.responseSnippet ?? undefined}>
+                  <TableTd
+                    className="text-[12px] max-w-[320px] truncate"
+                    title={r.responseSnippet ?? undefined}
+                  >
                     {snip(r.responseSnippet)}
                   </TableTd>
                 </TableRow>
@@ -440,21 +445,20 @@ function RunDetailPage() {
 
       {/* Full matrix */}
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
-            <button
-              onClick={() => setMatrixOpen(!matrixIsOpen)}
-              style={collapseBtn}
-              aria-expanded={matrixIsOpen}
-            >
-              {matrixIsOpen ? '▾' : '▸'} Full matrix
-            </button>{' '}
-            <span style={hint}>
-              {sortedResults.length} result{sortedResults.length === 1 ? '' : 's'} · sorted by
-              ascending score · click a row to expand
-            </span>
-          </h2>
-        </div>
+        <Inline justify="between" align="center" className="mb-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setMatrixOpen(!matrixIsOpen)}
+            aria-expanded={matrixIsOpen}
+          >
+            {matrixIsOpen ? '▾' : '▸'} Full matrix
+          </Button>
+          <T className="text-[11px] text-text-tertiary">
+            {sortedResults.length} result{sortedResults.length === 1 ? '' : 's'} · sorted by
+            ascending score · click a row to expand
+          </T>
+        </Inline>
 
         {matrixIsOpen && (
           sortedResults.length === 0 ? (
@@ -482,22 +486,22 @@ function RunDetailPage() {
                       <TableRow
                         key={r.testId}
                         onClick={() => setExpanded(isOpen ? null : r.testId)}
-                        style={{ cursor: 'pointer' }}
+                        className="cursor-pointer"
                       >
-                        <TableTd style={monoCell}>
+                        <TableTd className="text-[11px] text-text-tertiary font-mono whitespace-nowrap">
                           {r.testId}
                           {r.invocationId && (
                             <Link
                               to={`/admin/observability/invocations/${r.invocationId}`}
                               onClick={(e) => e.stopPropagation()}
                               title="Open invocation detail"
-                              style={inlineOpenLink}
+                              className="ml-1.5 text-primary no-underline text-[11px]"
                             >
                               →
                             </Link>
                           )}
                         </TableTd>
-                        <TableTd style={agentCell}>{r.agentId ?? '—'}</TableTd>
+                        <TableTd className="text-[12px] font-medium whitespace-nowrap">{r.agentId ?? '—'}</TableTd>
                         <TableTd>
                           <PassChip passed={r.passed} />
                         </TableTd>
@@ -514,14 +518,14 @@ function RunDetailPage() {
                             {tagSummary(r.tagHits)}
                           </Chip>
                         </TableTd>
-                        <TableTd style={numCell}>
+                        <TableTd className="text-[12px] text-text-secondary whitespace-nowrap">
                           {r.durationMs != null ? `${r.durationMs}ms` : '—'}
                         </TableTd>
-                        <TableTd style={{ whiteSpace: 'nowrap' }}>
+                        <TableTd className="whitespace-nowrap">
                           <CostChip cost={r.estCostUsd} />
                         </TableTd>
                         <TableTd
-                          style={snippetCell}
+                          className="text-[12px] max-w-[320px] truncate"
                           title={r.responseSnippet ?? undefined}
                         >
                           {snip(r.responseSnippet, 60)}
@@ -529,7 +533,7 @@ function RunDetailPage() {
                       </TableRow>
                       {isOpen && (
                         <TableRow key={`${r.testId}-detail`}>
-                          <TableTd colSpan={9} style={detailRowCell}>
+                          <TableTd colSpan={9} className="p-3 bg-bg">
                             <ResultDetail result={r} />
                           </TableTd>
                         </TableRow>
@@ -546,30 +550,16 @@ function RunDetailPage() {
       {/* Cases without results */}
       {missingCount > 0 && (
         <Card padding="md">
-          <div style={headerRow}>
-            <h2 style={h2}>
-              Cases without results{' '}
-              <span style={hint}>
-                {missingCount} test{missingCount === 1 ? '' : 's'} did not produce a result · runner
-                may have crashed
-              </span>
-            </h2>
-          </div>
-          <div
-            style={{
-              padding: 12,
-              fontSize: 12,
-              color: 'var(--color-text-secondary)',
-              background: 'var(--color-surface-hover)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 4,
-            }}
-          >
+          <CardHeader
+            title="Cases without results"
+            subtitle={`${missingCount} test${missingCount === 1 ? '' : 's'} did not produce a result · runner may have crashed`}
+          />
+          <Card padding="sm" className="text-[12px] text-text-secondary">
             Total cases: <strong>{run.totalCases}</strong>, completed:{' '}
             <strong>{run.completed}</strong>, missing: <strong>{missingCount}</strong>.
-            Inspect the runner logs (<code style={monoInline}>infra/scripts/harness.py</code>) for
+            Inspect the runner logs (<T className="font-mono text-[11.5px]">infra/scripts/harness.py</T>) for
             crashes.
-          </div>
+          </Card>
         </Card>
       )}
     </PageSection>
@@ -599,85 +589,87 @@ function SchemaChip({ valid }: { valid: boolean | null }) {
 function ResultDetail({ result }: { result: TestResult }) {
   const tagEntries = result.tagHits ? Object.entries(result.tagHits) : [];
   return (
-    <div style={detailGrid}>
+    <Stack gap="md">
       {result.prompt && (
-        <div style={detailFull}>
-          <div style={detailLabel}>PROMPT</div>
-          <pre style={detailPre}>{result.prompt}</pre>
-        </div>
+        <Stack gap="xs">
+          <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">PROMPT</T>
+          <CodeBlock code={result.prompt} language="text" />
+        </Stack>
       )}
-      <div style={detailFull}>
-        <div style={detailLabel}>RESPONSE</div>
-        <pre style={detailPre}>{result.responseSnippet ?? '(no response captured)'}</pre>
-      </div>
-      <div style={detailHalf}>
-        <div style={detailLabel}>JUDGE RATIONALE</div>
-        {result.judgeRationale ? (
-          <pre style={detailPre}>{result.judgeRationale}</pre>
-        ) : (
-          <div style={detailEmpty}>(no rationale)</div>
-        )}
-      </div>
-      <div style={detailHalf}>
-        <div style={detailLabel}>FAIL REASONS</div>
-        {result.failReasons && result.failReasons.length > 0 ? (
-          <ul style={failList}>
-            {result.failReasons.map((r, i) => (
-              <li key={i}>{r}</li>
-            ))}
-          </ul>
-        ) : (
-          <div style={detailEmpty}>(none)</div>
-        )}
-      </div>
+      <Stack gap="xs">
+        <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">RESPONSE</T>
+        <CodeBlock code={result.responseSnippet ?? '(no response captured)'} language="text" />
+      </Stack>
+      <Inline gap="md" align="start">
+        <Stack gap="xs" className="flex-1 min-w-0">
+          <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">JUDGE RATIONALE</T>
+          {result.judgeRationale ? (
+            <CodeBlock code={result.judgeRationale} language="text" />
+          ) : (
+            <T className="text-[11px] text-text-tertiary italic">(no rationale)</T>
+          )}
+        </Stack>
+        <Stack gap="xs" className="flex-1 min-w-0">
+          <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">FAIL REASONS</T>
+          {result.failReasons && result.failReasons.length > 0 ? (
+            <Stack as="ul" gap="xs" className="m-0 pl-4 text-[12px] text-danger list-disc">
+              {result.failReasons.map((r, i) => (
+                <li key={i}>{r}</li>
+              ))}
+            </Stack>
+          ) : (
+            <T className="text-[11px] text-text-tertiary italic">(none)</T>
+          )}
+        </Stack>
+      </Inline>
       {tagEntries.length > 0 && (
-        <div style={detailFull}>
-          <div style={detailLabel}>TAG BREAKDOWN</div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <Stack gap="xs">
+          <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">TAG BREAKDOWN</T>
+          <Inline gap="xs">
             {tagEntries.map(([tag, hit]) => (
               <Chip key={tag} tone={hit ? 'success' : 'danger'} size="xs">
                 {hit ? '✓' : '✗'} {tag}
               </Chip>
             ))}
-          </div>
-        </div>
+          </Inline>
+        </Stack>
       )}
-      <div style={detailFull}>
-        <div style={detailHintLine}>
-          reference similarity: <strong>{fmt(result.referenceSimilarity)}</strong>
-          {(result.inputTokens != null || result.outputTokens != null) && (
-            <>
-              <span style={dot}>·</span>
+      <Inline gap="sm" align="center" className="text-[11px] text-text-tertiary">
+        <T>reference similarity: <strong>{fmt(result.referenceSimilarity)}</strong></T>
+        {(result.inputTokens != null || result.outputTokens != null) && (
+          <>
+            <T>·</T>
+            <T>
               tokens:{' '}
               <strong>
                 input: {result.inputTokens ?? '—'} · output: {result.outputTokens ?? '—'}
               </strong>
-            </>
-          )}
-          {result.estCostUsd != null && (
-            <>
-              <span style={dot}>·</span>
-              cost: <CostChip cost={result.estCostUsd} />
-            </>
-          )}
-          {result.invocationId && (
-            <>
-              <span style={dot}>·</span>
-              invocation:{' '}
-              <Link
-                to={`/admin/observability/invocations/${result.invocationId}`}
-                style={{ ...monoInline, color: 'var(--color-primary, #6366f1)' }}
-                title="Open invocation detail"
-              >
-                {result.invocationId} →
-              </Link>
-            </>
-          )}
-          <span style={dot}>·</span>
-          ts: {new Date(result.ts).toLocaleString()}
-        </div>
-      </div>
-    </div>
+            </T>
+          </>
+        )}
+        {result.estCostUsd != null && (
+          <>
+            <T>·</T>
+            <T>cost:</T> <CostChip cost={result.estCostUsd} />
+          </>
+        )}
+        {result.invocationId && (
+          <>
+            <T>·</T>
+            <T>invocation:</T>
+            <Link
+              to={`/admin/observability/invocations/${result.invocationId}`}
+              className="font-mono text-[11.5px] text-primary"
+              title="Open invocation detail"
+            >
+              {result.invocationId} →
+            </Link>
+          </>
+        )}
+        <T>·</T>
+        <T>ts: {new Date(result.ts).toLocaleString()}</T>
+      </Inline>
+    </Stack>
   );
 }
 
@@ -694,14 +686,23 @@ function ErrorBlock({
     <PageSection
       title={title}
       actions={
-        <Link to="/admin/observability/harness" style={btnLink}>
+        <Link
+          to="/admin/observability/harness"
+          className="text-[12px] text-primary no-underline px-2 py-0.5 rounded hover:underline"
+        >
           ← Back to harness
         </Link>
       }
     >
       <Card padding="md">
-        {runId && <div style={subline}>run id: <span style={monoInline}>{runId}</span></div>}
-        <div style={{ ...subline, color: 'var(--color-text-secondary)' }}>{detail}</div>
+        {runId && (
+          <Inline gap="sm" align="center" className="text-[12px] text-text-secondary">
+            <T>run id:</T> <T className="font-mono text-[11.5px]">{runId}</T>
+          </Inline>
+        )}
+        <Inline as="div" gap="xs" wrap className="text-[12px] text-text-secondary items-center">
+          {detail}
+        </Inline>
       </Card>
     </PageSection>
   );
@@ -724,34 +725,25 @@ function BaselinePicker({
   );
   if (candidates.length === 0) return null;
   return (
-    <label
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11 }}
+    <Inline
+      as="label"
+      gap="xs"
+      align="center"
+      className="text-[11px]"
       title="Pick another run to side-by-side compare against this one"
     >
-      <span style={{ color: 'var(--color-text-tertiary)' }}>Compare to baseline:</span>
-      <select
-        defaultValue=""
-        onChange={(e) => {
-          onPick(e.target.value);
-          // Reset so the same option can be picked again later if the user
-          // navigates back.
-          e.target.value = '';
-        }}
-        style={pickerSelect}
-      >
-        <option value="" disabled>
-          pick a run…
-        </option>
-        {candidates.map((c) => {
+      <T className="text-text-tertiary">Compare to baseline:</T>
+      <Select
+        size="sm"
+        value=""
+        placeholder="pick a run…"
+        onChange={(e) => onPick(e.target.value)}
+        options={candidates.map((c) => {
           const short = c.runId.length > 8 ? c.runId.slice(0, 8) : c.runId;
-          return (
-            <option key={c.runId} value={c.runId}>
-              {short} · {c.label}
-            </option>
-          );
+          return { value: c.runId, label: `${short} · ${c.label}` };
         })}
-      </select>
-    </label>
+      />
+    </Inline>
   );
 }
 
@@ -806,41 +798,32 @@ function PromoteModal({
 
   return (
     <Modal open onClose={onClose} title="Promote prompt versions" maxWidth={520} rawChildren>
-      <div style={modalBody}>
-        <p style={{ margin: '0 0 8px', color: 'var(--color-text-secondary)' }}>
+      <Stack gap="md" className="p-4 overflow-y-auto text-[12px]">
+        <Stack as="p" gap="none" className="mb-2 text-text-secondary">
           Mark these prompt versions as production-blessed. Promote per-agent so a
           partial decision (some agents OK, others still under review) stays clean.
-        </p>
+        </Stack>
         {entries.length === 0 ? (
-          <div style={{ color: 'var(--color-text-tertiary)' }}>
+          <T as="div" className="text-text-tertiary">
             This run did not record any prompt versions.
-          </div>
+          </T>
         ) : (
           entries.map(([agentId, pv]) => {
             const short = pv.length > 8 ? pv.slice(0, 8) : pv;
             const rs = state[agentId] ?? { kind: 'idle' as const };
             return (
-              <div key={agentId} style={promoteRow}>
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: 12, fontWeight: 500 }}>{agentId}</span>
-                  <span
-                    style={{
-                      ...monoInline,
-                      color: 'var(--color-text-tertiary)',
-                    }}
-                  >
+              <Inline key={agentId} justify="between" align="center" gap="md" className="py-2 border-b border-border">
+                <Stack gap="none">
+                  <T className="text-[12px] font-medium">{agentId}</T>
+                  <T className="font-mono text-[11.5px] text-text-tertiary">
                     p:{short}
-                  </span>
-                </div>
-                <div>
+                  </T>
+                </Stack>
+                <Inline gap="sm" align="center">
                   {rs.kind === 'idle' && (
-                    <button
-                      type="button"
-                      onClick={() => promote(agentId, pv)}
-                      style={promoteBtn}
-                    >
+                    <Button variant="secondary" size="sm" onClick={() => promote(agentId, pv)}>
                       Promote {agentId}
-                    </button>
+                    </Button>
                   )}
                   {rs.kind === 'pending' && (
                     <Chip tone="warning" size="xs">promoting…</Chip>
@@ -853,213 +836,22 @@ function PromoteModal({
                   {rs.kind === 'error' && (
                     <Chip tone="danger" size="xs">{rs.message}</Chip>
                   )}
-                </div>
-              </div>
+                </Inline>
+              </Inline>
             );
           })
         )}
-      </div>
+      </Stack>
     </Modal>
   );
 }
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div
-      style={{
-        padding: 24,
-        textAlign: 'center',
-        fontSize: 12,
-        color: 'var(--color-text-tertiary)',
-      }}
-    >
+    <T as="div" className="p-6 text-center text-[12px] text-text-tertiary">
       {text}
-    </div>
+    </T>
   );
 }
-
-// ── styles ────────────────────────────────────────────────────────────────────
-
-const headerRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'flex-start',
-  justifyContent: 'space-between',
-  marginBottom: 12,
-  gap: 12,
-  flexWrap: 'wrap',
-};
-const h2: CSSProperties = { fontSize: 14, fontWeight: 600, margin: 0 };
-const subline: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary)',
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  flexWrap: 'wrap',
-};
-const dot: CSSProperties = { color: 'var(--color-text-tertiary)' };
-const hint: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  fontWeight: 400,
-};
-const notesLine: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary)',
-  fontStyle: 'italic',
-};
-const monoInline: CSSProperties = {
-  fontFamily: 'ui-monospace, monospace',
-  fontSize: 11.5,
-};
-const monoCell: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  fontFamily: 'ui-monospace, monospace',
-  whiteSpace: 'nowrap',
-};
-const agentCell: CSSProperties = {
-  fontSize: 12,
-  fontWeight: 500,
-  whiteSpace: 'nowrap',
-};
-const numCell: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary)',
-  whiteSpace: 'nowrap',
-};
-const snippetCell: CSSProperties = {
-  fontSize: 12,
-  maxWidth: 320,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-};
-const collapseBtn: CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  padding: 0,
-  margin: 0,
-  fontSize: 14,
-  fontWeight: 600,
-  color: 'var(--color-text-primary)',
-  cursor: 'pointer',
-};
-const inlineOpenLink: CSSProperties = {
-  marginLeft: 6,
-  color: 'var(--color-primary, #6366f1)',
-  textDecoration: 'none',
-  fontSize: 11,
-  fontFamily: 'system-ui, sans-serif',
-};
-const btnLink: CSSProperties = {
-  padding: '2px 8px',
-  fontSize: 12,
-  color: 'var(--color-primary, #6366f1)',
-  textDecoration: 'none',
-  border: '1px solid transparent',
-  borderRadius: 4,
-};
-const headerActions: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  flexWrap: 'wrap',
-};
-const primaryBtn: CSSProperties = {
-  padding: '4px 10px',
-  fontSize: 12,
-  fontWeight: 500,
-  color: '#fff',
-  background: 'var(--color-primary, #6366f1)',
-  border: '1px solid var(--color-primary, #6366f1)',
-  borderRadius: 4,
-  cursor: 'pointer',
-};
-const pickerSelect: CSSProperties = {
-  padding: '4px 8px',
-  fontSize: 12,
-  color: 'var(--color-text-primary)',
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 4,
-  cursor: 'pointer',
-};
-const modalBody: CSSProperties = {
-  padding: 16,
-  overflowY: 'auto',
-  fontSize: 12,
-};
-const promoteRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: 12,
-  padding: '8px 0',
-  borderBottom: '1px solid var(--color-border)',
-};
-const promoteBtn: CSSProperties = {
-  padding: '4px 10px',
-  fontSize: 11,
-  color: 'var(--color-primary, #6366f1)',
-  background: 'transparent',
-  border: '1px solid var(--color-primary, #6366f1)',
-  borderRadius: 4,
-  cursor: 'pointer',
-};
-const detailRowCell: CSSProperties = {
-  padding: 12,
-  background: 'var(--color-bg)',
-};
-const detailGrid: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '1fr 1fr',
-  gap: 12,
-};
-const detailFull: CSSProperties = {
-  gridColumn: '1 / span 2',
-};
-const detailHalf: CSSProperties = {};
-const detailLabel: CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
-  color: 'var(--color-text-tertiary)',
-  marginBottom: 4,
-  letterSpacing: 0.5,
-};
-const detailPre: CSSProperties = {
-  fontFamily: '"Fira Code", "Cascadia Code", monospace',
-  fontSize: 11.5,
-  lineHeight: 1.55,
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
-  margin: 0,
-  padding: '10px 12px',
-  borderRadius: 4,
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  maxHeight: 240,
-  overflowY: 'auto',
-};
-const detailEmpty: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  fontStyle: 'italic',
-  padding: '6px 0',
-};
-const detailHintLine: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  display: 'flex',
-  gap: 6,
-  flexWrap: 'wrap',
-  alignItems: 'center',
-};
-const failList: CSSProperties = {
-  margin: 0,
-  padding: '0 0 0 16px',
-  fontSize: 12,
-  color: 'var(--color-danger, #ef4444)',
-};
 
 export default RunDetailPage;

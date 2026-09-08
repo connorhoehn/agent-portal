@@ -200,3 +200,57 @@ test('peopleGroups labels the roster "People" when there are no contributors', (
 test('peopleGroups is empty when nobody is available, so the caller can say why', () => {
   assert.deepEqual(peopleGroups([], []), []);
 });
+
+// ─── Health ──────────────────────────────────────────────────────────────────
+// Dates far in the past so windowProgress clamps to 1 (fully elapsed) without
+// the tests depending on today's date.
+
+import { sprintHealth, atRiskCount } from '../sprintFormat.ts';
+
+const ELAPSED = { startsOn: '2020-01-01', endsOn: '2020-01-15' };
+
+test('sprintHealth judges only active sprints', () => {
+  assert.equal(sprintHealth(sprint({ status: 'planned', pointsTotal: 10 })), null);
+  assert.equal(sprintHealth(sprint({ status: 'done', pointsTotal: 10 })), null);
+});
+
+test('sprintHealth: fully elapsed with nothing delivered is off track', () => {
+  const h = sprintHealth(sprint({ ...ELAPSED, pointsTotal: 26, pointsDone: 0 }));
+  assert.equal(h?.key, 'off_track');
+  assert.equal(h?.tone, 'danger');
+});
+
+test('sprintHealth: fully elapsed and fully delivered is on track', () => {
+  const h = sprintHealth(sprint({ ...ELAPSED, pointsTotal: 26, pointsDone: 26 }));
+  assert.equal(h?.key, 'on_track');
+});
+
+test('sprintHealth: a moderate gap is at risk', () => {
+  // elapsed 1.0, delivered 0.65 → gap 0.35 → at risk (not off track).
+  const h = sprintHealth(sprint({ ...ELAPSED, pointsTotal: 20, pointsDone: 13 }));
+  assert.equal(h?.key, 'at_risk');
+  assert.equal(h?.tone, 'warning');
+});
+
+test('sprintHealth: over-envelope trumps a healthy points line', () => {
+  const h = sprintHealth(sprint({
+    ...ELAPSED, pointsTotal: 20, pointsDone: 20,
+    grantCount: 1, grantedUsd: 10, initiativeSpendInWindowUsd: 12,
+  }));
+  assert.equal(h?.key, 'over_envelope');
+  assert.equal(h?.tone, 'danger');
+});
+
+test('sprintHealth: nothing estimated → nothing to judge', () => {
+  assert.equal(sprintHealth(sprint({ ...ELAPSED, pointsTotal: 0 })), null);
+});
+
+test('atRiskCount counts everything not on track', () => {
+  const sprints = [
+    sprint({ ...ELAPSED, pointsTotal: 26, pointsDone: 0 }),                 // off track
+    sprint({ ...ELAPSED, pointsTotal: 26, pointsDone: 26 }),                // on track
+    sprint({ status: 'planned', pointsTotal: 10 }),                          // unjudged
+    sprint({ ...ELAPSED, pointsTotal: 20, pointsDone: 20, grantCount: 1, grantedUsd: 5, initiativeSpendInWindowUsd: 9 }), // over envelope
+  ];
+  assert.equal(atRiskCount(sprints), 2);
+});

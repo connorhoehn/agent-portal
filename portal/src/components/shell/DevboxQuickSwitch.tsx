@@ -12,7 +12,7 @@ export function DevboxQuickSwitch() {
   // The fleet, and whether this session may add to it, both come from the
   // app-wide ComputeHost — one list, one answer, no localStorage mirror to
   // drift out of step with the dock.
-  const { computers: boxes, create, canManage } = useCompute();
+  const { computers: boxes, create, canManage, isLoading, error } = useCompute();
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -121,6 +121,29 @@ export function DevboxQuickSwitch() {
             : <span className="text-[10px] text-text-tertiary">type to filter</span>}
         </div>
         <div className="max-h-[50vh] overflow-y-auto">
+          {/* The switcher used to open onto nothing for a role without
+              Computer Lab, or while the fleet was still loading, or when the
+              fleet was empty — a blank popover that says "type to filter".
+              Every one of those states now says what is true and what to do. */}
+          {!canManage && (
+            <div className="px-4 py-3 text-[12px] text-text-secondary">
+              <span className="font-semibold text-text-primary">You don’t have access to computers.</span>{' '}
+              Computer Lab needs the <span className={mono}>ManageDevbox</span> capability (SME or HR admin).
+              Ask an administrator, or sign in as a role that has it.
+            </div>
+          )}
+          {canManage && error && (
+            <div className="px-4 py-3 text-[12px] text-danger">Couldn’t load computers: {error}</div>
+          )}
+          {canManage && !error && isLoading && boxes.length === 0 && (
+            <div className="px-4 py-3 text-[12px] text-text-tertiary">Loading computers…</div>
+          )}
+          {canManage && !error && !isLoading && boxes.length === 0 && (
+            <div className="px-4 py-3 text-[12px] text-text-secondary">No computers yet — create one below, or open Computer Lab.</div>
+          )}
+          {canManage && !error && boxes.length > 0 && matches.length === 0 && (
+            <div className="px-4 py-3 text-[12px] text-text-tertiary">No computer matches “{query}”.</div>
+          )}
           {matches.map((box, i) => (
             <div
               key={box.id}

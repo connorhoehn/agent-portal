@@ -67,14 +67,38 @@ INSERT INTO projects (id, name, status) VALUES ('p-llm-platform', 'LLM Applicati
 INSERT INTO projects (id, name, status) VALUES ('p-rag-search', 'RAG Knowledge Search', 'completed');
 INSERT INTO projects (id, name, status) VALUES ('p-soc2', 'SOC2 Compliance', 'in_progress');
 INSERT INTO projects (id, name, status) VALUES ('p-zero-trust', 'Zero Trust Network', 'planning');
-INSERT INTO decisions (id, topic, summary, decided_at) VALUES ('d-aurora', 'Adopt Aurora over Neptune', 'Picked Aurora PostgreSQL + relational graph over Neptune Analytics for cost + latency reasons.', DATE '2026-03-12');
-INSERT INTO decisions (id, topic, summary, decided_at) VALUES ('d-k8s', 'Migrate to Kubernetes from ECS', 'Standardize compute layer on EKS for portability and ecosystem.', DATE '2026-02-04');
-INSERT INTO decisions (id, topic, summary, decided_at) VALUES ('d-nova', 'Standardize on Nova Pro', 'Use amazon.nova-pro-v1 as primary inference model across all agents.', DATE '2026-04-21');
-INSERT INTO decisions (id, topic, summary, decided_at) VALUES ('d-legacy-auth', 'Sunset legacy auth service', 'Migrate remaining services off the v1 auth gateway before Q3 2026.', DATE '2026-01-30');
-INSERT INTO decisions (id, topic, summary, decided_at) VALUES ('d-otel', 'Adopt OpenTelemetry', 'Replace ad-hoc tracing with OTLP + AWS X-Ray for unified observability.', DATE '2026-03-25');
-INSERT INTO decisions (id, topic, summary, decided_at) VALUES ('d-react-19', 'React 19 upgrade timeline', 'Roll out React 19 across portal + design system over Q2.', DATE '2026-04-02');
-INSERT INTO decisions (id, topic, summary, decided_at) VALUES ('d-iceberg', 'Snowflake to Iceberg evaluation', 'Pilot Iceberg-on-S3 for the analytics lakehouse — defer go/no-go to Q3.', DATE '2026-05-01');
-INSERT INTO decisions (id, topic, summary, decided_at) VALUES ('d-vectordb', 'Vector DB vendor selection', 'Chose pgvector inside Aurora over standalone vector DBs to keep ops surface small.', DATE '2026-03-18');
+-- Decisions. ONE concept, one column set — see the comment on the table in
+-- schema/orgiq_schema.sql. These seven are the org graph's settled calls: all
+-- `resolved`, all carrying the date they were decided, and each linked to the
+-- initiative it was raised against when there is one. `project_id NULL` is not
+-- "unknown", it is org-wide: d-aurora and d-k8s are platform standards that no
+-- single initiative owns, and the Decisions surface must be able to say so.
+--
+-- The column list here is deliberately identical to the one
+-- schema/seed_program.sql emits, including the columns these rows leave NULL.
+-- Half-filling it is what made `GET /api/graph/decisions` and an initiative's
+-- Decisions tab describe two different worlds out of one table: these eight
+-- rows carried no project_id, so no initiative could ever show them, and the
+-- program rows carried no decided_at or participants, so the graph could never
+-- date them or say who was in the room.
+--
+-- `work_item_id` is always NULL here and it has to be: work_items does not
+-- exist yet when this file runs. A decision that blocks a work item is
+-- initiative-scoped and belongs to the program seed, which emits it with the
+-- item in the same file.
+--
+-- (d-iceberg used to be here AND in schema/seed_program.sql under the same id.
+-- seed.sql runs first, so the program copy's `ON CONFLICT (id) DO NOTHING`
+-- silently lost — the Data Lake initiative's one decision was dead SQL, and
+-- its Decisions tab was empty against Aurora while the mock showed it. It now
+-- lives once, in the program seed, next to the epic it blocks.)
+INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id) VALUES ('d-aurora', 'Adopt Aurora over Neptune', 'Picked Aurora PostgreSQL + relational graph over Neptune Analytics for cost + latency reasons.', 'resolved', NULL, NULL, DATE '2026-03-12', NULL, TIMESTAMPTZ '2026-03-12 00:00:00+00', NULL);
+INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id) VALUES ('d-k8s', 'Migrate to Kubernetes from ECS', 'Standardize compute layer on EKS for portability and ecosystem.', 'resolved', NULL, NULL, DATE '2026-02-04', NULL, TIMESTAMPTZ '2026-02-04 00:00:00+00', NULL);
+INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id) VALUES ('d-nova', 'Standardize on Nova Pro', 'Use amazon.nova-pro-v1 as primary inference model across all agents.', 'resolved', 'p-llm-platform', NULL, DATE '2026-04-21', NULL, TIMESTAMPTZ '2026-04-21 00:00:00+00', NULL);
+INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id) VALUES ('d-legacy-auth', 'Sunset legacy auth service', 'Migrate remaining services off the v1 auth gateway before Q3 2026.', 'resolved', 'p-auth-migration', NULL, DATE '2026-01-30', NULL, TIMESTAMPTZ '2026-01-30 00:00:00+00', NULL);
+INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id) VALUES ('d-otel', 'Adopt OpenTelemetry', 'Replace ad-hoc tracing with OTLP + AWS X-Ray for unified observability.', 'resolved', 'p-observability', NULL, DATE '2026-03-25', NULL, TIMESTAMPTZ '2026-03-25 00:00:00+00', NULL);
+INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id) VALUES ('d-react-19', 'React 19 upgrade timeline', 'Roll out React 19 across portal + design system over Q2.', 'resolved', 'p-design-v3', NULL, DATE '2026-04-02', NULL, TIMESTAMPTZ '2026-04-02 00:00:00+00', NULL);
+INSERT INTO decisions (id, topic, summary, status, project_id, required_role, decided_at, escalated_at, resolved_at, work_item_id) VALUES ('d-vectordb', 'Vector DB vendor selection', 'Chose pgvector inside Aurora over standalone vector DBs to keep ops surface small.', 'resolved', 'p-rag-search', NULL, DATE '2026-03-18', NULL, TIMESTAMPTZ '2026-03-18 00:00:00+00', NULL);
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-001', 'Theo Chang', 'theo.chang@orgiq.example', 'Engineer', 'Platform Engineering', 64.46, 91.55, 79.36, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-002', 'Vera Green', 'vera.green@orgiq.example', 'Principal Engineer', 'Platform Engineering', 40.56, 80.31, 62.42, NOW());
 INSERT INTO people (id, name, email, title, team, expertise_score, pagerank_score, composite_score, scored_at) VALUES ('p-003', 'Marcus O''Brien', 'marcus.obrien@orgiq.example', 'Senior Engineer', 'Platform Engineering', 47.79, 77.32, 64.03, NOW());
@@ -777,16 +801,6 @@ INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-035'
 INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-025', 'd-react-19', 'contributor');
 INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-012', 'd-react-19', 'contributor');
 INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-024', 'd-react-19', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-024', 'd-iceberg', 'decider');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-012', 'd-iceberg', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-029', 'd-iceberg', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-003', 'd-iceberg', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-017', 'd-iceberg', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-054', 'd-iceberg', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-030', 'd-iceberg', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-052', 'd-iceberg', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-015', 'd-iceberg', 'contributor');
-INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-018', 'd-iceberg', 'contributor');
 INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-010', 'd-vectordb', 'decider');
 INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-049', 'd-vectordb', 'contributor');
 INSERT INTO decision_participants (person_id, decision_id, role) VALUES ('p-045', 'd-vectordb', 'contributor');

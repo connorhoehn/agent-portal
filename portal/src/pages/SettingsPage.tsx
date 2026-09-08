@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react';
-import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
+import {
+  PageSection, Card, Stack, Inline, Divider, SectionLabel, Button, Switch, RadioGroup,
+} from '@connorhoehnslalom/ui-components/shared';
+import { T } from './Text';
+import { RangeSliderFrame } from './RangeSliderFrame';
 import { SettingRow } from '../components/settings';
 import { loadPreferences, savePreferences, DEFAULTS } from '../lib/preferences';
 import type { Theme, Preferences } from '../lib/preferences';
@@ -82,301 +86,257 @@ export function SettingsPage() {
 
   return (
     <PageSection title="Settings">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 680 }}>
+      <Stack gap="lg" className="max-w-[680px]">
 
         {/* 1. Appearance */}
         <Card padding="md">
-          <div style={sectionHeaderStyle}>Appearance</div>
-          <div style={dividerStyle} />
+          <SectionLabel as="div" className="mb-1">Appearance</SectionLabel>
+          <Divider spacing="none" className="mb-1" />
           <SettingRow
             title="Theme"
             description="Day or night, applied immediately — terminals included. System follows the OS."
             control={
-              <div style={{ display: 'flex', gap: 8 }}>
-                {THEME_OPTIONS.map(opt => {
-                  const active = prefs.theme === opt.value;
-                  return (
-                    <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-                      <input
-                        type="radio"
-                        name="theme"
-                        value={opt.value}
-                        checked={active}
-                        onChange={() => updatePref('theme', opt.value)}
-                        style={{ accentColor: 'var(--color-primary, #6366f1)', cursor: 'pointer' }}
-                      />
-                      <span style={{ fontSize: 13, color: 'var(--color-text-primary)', fontWeight: active ? 600 : 400 }}>
-                        {opt.label}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
+              <RadioGroup
+                name="theme"
+                value={prefs.theme}
+                onChange={(v) => updatePref('theme', v)}
+                options={THEME_OPTIONS}
+                orientation="horizontal"
+              />
             }
           />
         </Card>
 
-        {/* 2. Scores */}
+        {/* 2. Scores — an Org surface; the assessment tenant has no leaderboard. */}
+        {session?.tenant === 'orgiq' && (
         <Card padding="md">
-          <div style={sectionHeaderStyle}>Scores</div>
-          <div style={dividerStyle} />
+          <SectionLabel as="div" className="mb-1">Scores</SectionLabel>
+          <Divider spacing="none" className="mb-1" />
           <SettingRow
             title="Default composite weighting"
             description="Applied when opening the Scores page with no ?w= query param."
             control={
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => updatePref('defaultCompositeWeight', DEFAULTS.defaultCompositeWeight)}
-                style={resetButtonStyle}
               >
                 Reset
-              </button>
+              </Button>
             }
           />
-          <div style={{ paddingTop: 4, paddingBottom: 8 }}>
-            <input
-              type="range"
+          <Stack gap="xs" className="pt-1 pb-2">
+            <RangeSliderFrame
+              label=""
+              ariaLabel="Composite weight"
               min={0}
               max={100}
               value={infPct}
-              onChange={e => updatePref('defaultCompositeWeight', Number(e.target.value) / 100)}
-              style={{ width: '100%', accentColor: 'var(--color-primary, #6366f1)', cursor: 'pointer' }}
+              onChange={v => updatePref('defaultCompositeWeight', v / 100)}
+              valueLabel=""
+              className="w-full [&>input]:w-full [&>input]:cursor-pointer [&>span]:hidden"
             />
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
-              <span style={{ fontSize: 11, color: 'var(--color-primary, #6366f1)', fontWeight: 500 }}>
-                Influence {infPct}%
-              </span>
-              <span style={{ fontSize: 11, color: 'var(--color-success)', fontWeight: 500 }}>
-                Expertise {expPct}%
-              </span>
-            </div>
-          </div>
+            <Inline justify="between" className="mt-1">
+              <T className="text-[11px] font-medium text-primary">Influence {infPct}%</T>
+              <T className="text-[11px] font-medium text-success">Expertise {expPct}%</T>
+            </Inline>
+          </Stack>
         </Card>
+        )}
 
         {/* 3. Keyboard */}
         <Card padding="md">
-          <div style={sectionHeaderStyle}>Keyboard</div>
-          <div style={dividerStyle} />
+          <SectionLabel as="div" className="mb-1">Keyboard</SectionLabel>
+          <Divider spacing="none" className="mb-1" />
           <SettingRow
             title="⌘K command palette"
             description="Enable global command palette (Cmd+K / Ctrl+K)."
             control={
-              <button
-                role="switch"
-                aria-checked={prefs.paletteEnabled}
-                onClick={() => updatePref('paletteEnabled', !prefs.paletteEnabled)}
-                style={{
-                  width: 44,
-                  height: 24,
-                  borderRadius: 12,
-                  border: 'none',
-                  cursor: 'pointer',
-                  background: prefs.paletteEnabled ? 'var(--color-primary, #6366f1)' : 'var(--color-border, #334155)',
-                  position: 'relative',
-                  transition: 'background 0.2s',
-                  flexShrink: 0,
-                }}
-              >
-                <span style={{
-                  position: 'absolute',
-                  top: 3,
-                  left: prefs.paletteEnabled ? 23 : 3,
-                  width: 18,
-                  height: 18,
-                  borderRadius: '50%',
-                  background: '#fff',
-                  transition: 'left 0.2s',
-                }} />
-              </button>
+              <Switch
+                checked={prefs.paletteEnabled}
+                onChange={(v) => updatePref('paletteEnabled', v)}
+                aria-label="Command palette"
+              />
             }
           />
         </Card>
 
         {/* 4. Security */}
         <Card padding="md">
-          <div style={sectionHeaderStyle}>Security</div>
-          <div style={dividerStyle} />
+          <SectionLabel as="div" className="mb-1">Security</SectionLabel>
+          <Divider spacing="none" className="mb-1" />
           <SettingRow
             title="This session"
             description="The session you're using right now — it stays signed in."
             control={
-              <span style={readOnlyValueStyle}>
+              <T className="text-[13px] text-text-secondary font-mono">
                 {session ? `${session.tenant} · ${session.role}` : '—'}
-              </span>
+              </T>
             }
           />
-          <div style={intraCardDivider} />
+          <Divider spacing="none" />
           <SettingRow
             title="Sign out my other sessions"
             description="Ends your sessions on other devices and browser tabs. They stop within about 2 minutes — sessions re-check every couple of minutes. This session is unaffected."
             control={
               masquerading ? (
-                <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }}>
+                <T className="text-[12px] text-text-tertiary whitespace-nowrap">
                   Stop masquerading first
-                </span>
+                </T>
               ) : (
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
                   onClick={handleRevokeOthers}
                   disabled={revokeState === 'pending'}
-                  style={{
-                    ...revokeButtonStyle,
-                    cursor: revokeState === 'pending' ? 'default' : 'pointer',
-                    opacity: revokeState === 'pending' ? 0.6 : 1,
-                  }}
                 >
                   {revokeState === 'pending' ? 'Signing out…' : 'Sign out other sessions'}
-                </button>
+                </Button>
               )
             }
           />
           {revokeState === 'success' && (
-            <div style={{ fontSize: 12, color: 'var(--color-success, #10b981)', paddingTop: 6 }}>
+            <T className="block text-[12px] text-success pt-1.5">
               Your other sessions will end within ~2 minutes.
-            </div>
+            </T>
           )}
           {revokeError && (
-            <div style={{ fontSize: 12, color: 'var(--color-danger, #ef4444)', paddingTop: 6 }}>
+            <T className="block text-[12px] text-danger pt-1.5">
               {revokeError}
-            </div>
+            </T>
           )}
         </Card>
 
         {/* 5. Masquerade history */}
         <Card padding="md">
-          <div style={sectionHeaderStyle}>Masquerade history</div>
-          <div style={dividerStyle} />
+          <SectionLabel as="div" className="mb-1">Masquerade history</SectionLabel>
+          <Divider spacing="none" className="mb-1" />
           {masqHistory.length === 0 ? (
-            <div style={{ fontSize: 13, color: 'var(--color-text-tertiary)', padding: '8px 0' }}>
+            <T className="block text-[13px] text-text-tertiary py-2">
               No masquerade history found. Switch roles via the header menu to populate.
-            </div>
+            </T>
           ) : (
-            <ul style={{ margin: 0, paddingLeft: 20, listStyle: 'disc' }}>
+            <Stack as="ul" gap="none" className="m-0 pl-5 list-disc">
               {masqHistory.map((entry, i) => (
-                <li key={i} style={{ fontSize: 13, color: 'var(--color-text-secondary)', padding: '3px 0' }}>
+                <Stack as="li" gap="none" key={i} className="text-[13px] text-text-secondary py-[3px]">
                   {entry}
-                </li>
+                </Stack>
               ))}
-            </ul>
+            </Stack>
           )}
         </Card>
 
         {/* 6. About */}
         <Card padding="md">
-          <div style={sectionHeaderStyle}>About</div>
-          <div style={dividerStyle} />
+          <SectionLabel as="div" className="mb-1">About</SectionLabel>
+          <Divider spacing="none" className="mb-1" />
           <SettingRow
             title="Region"
             control={
-              <span style={readOnlyValueStyle}>
+              <T className="text-[13px] text-text-secondary font-mono">
                 {health?.region ?? '—'}
-              </span>
+              </T>
             }
           />
-          <div style={intraCardDivider} />
+          <Divider spacing="none" />
           <SettingRow
             title="Service status"
             control={
-              <span style={{ ...readOnlyValueStyle, color: !health ? 'var(--color-text-tertiary)' : mocksActive.length === 0 ? 'var(--color-success, #10b981)' : 'var(--color-warning, #f59e0b)' }}>
+              <T className={`text-[13px] font-mono ${!health ? 'text-text-tertiary' : mocksActive.length === 0 ? 'text-success' : 'text-warning'}`}>
                 {!health ? '…' : mocksActive.length === 0 ? `Live · ${health.status}` : health.status}
-              </span>
+              </T>
             }
           />
-          <div style={intraCardDivider} />
+          <Divider spacing="none" />
           <SettingRow
             title="Mocks active"
             control={
-              <span style={readOnlyValueStyle}>
+              <T className="text-[13px] text-text-secondary font-mono">
                 {!health ? '—' : mocksActive.length === 0 ? 'None' : mocksActive.join(', ')}
-              </span>
+              </T>
             }
           />
         </Card>
 
         {/* 7. Gateway (websocket-gateway via @connorhoehnslalom/realtime-modules) */}
         <Card padding="md">
-          <div style={sectionHeaderStyle}>Gateway</div>
-          <div style={dividerStyle} />
+          <SectionLabel as="div" className="mb-1">Gateway</SectionLabel>
+          <Divider spacing="none" className="mb-1" />
           <SettingRow
             title="Endpoint"
             control={
-              <span style={readOnlyValueStyle}>{gateway.gatewayUrl}</span>
+              <T className="text-[13px] text-text-secondary font-mono">{gateway.gatewayUrl}</T>
             }
           />
-          <div style={intraCardDivider} />
+          <Divider spacing="none" />
           <SettingRow
             title="Cluster nodes"
             control={
-              <span style={readOnlyValueStyle}>
+              <T className="text-[13px] text-text-secondary font-mono">
                 {gateway.error
                   ? '—'
                   : gateway.cluster
                     ? String(gateway.cluster.totalNodes)
                     : '…'}
-              </span>
+              </T>
             }
           />
-          <div style={intraCardDivider} />
+          <Divider spacing="none" />
           <SettingRow
             title="Active connections"
             control={
-              <span style={readOnlyValueStyle}>
+              <T className="text-[13px] text-text-secondary font-mono">
                 {gateway.error
                   ? '—'
                   : gateway.cluster
                     ? String(gateway.cluster.totalConnections)
                     : '…'}
-              </span>
+              </T>
             }
           />
-          <div style={intraCardDivider} />
+          <Divider spacing="none" />
           <SettingRow
             title="Uptime"
             control={
-              <span style={readOnlyValueStyle}>
+              <T className="text-[13px] text-text-secondary font-mono">
                 {gateway.error
                   ? '—'
                   : gateway.metrics
                     ? formatUptime(gateway.metrics.uptime)
                     : '…'}
-              </span>
+              </T>
             }
           />
-          <div style={intraCardDivider} />
+          <Divider spacing="none" />
           <SettingRow
             title="Redis"
             control={
-              <span
-                style={{
-                  ...readOnlyValueStyle,
-                  color: gateway.metrics
+              <T
+                className={`text-[13px] font-mono ${
+                  gateway.metrics
                     ? gateway.metrics.redis.status === 'connected'
-                      ? 'var(--color-success, #10b981)'
-                      : 'var(--color-warning, #f59e0b)'
-                    : 'var(--color-text-tertiary)',
-                }}
+                      ? 'text-success'
+                      : 'text-warning'
+                    : 'text-text-tertiary'
+                }`}
               >
                 {gateway.error
                   ? '—'
                   : gateway.metrics
                     ? gateway.metrics.redis.status
                     : '…'}
-              </span>
+              </T>
             }
           />
           {gateway.error && (
-            <div
-              style={{
-                fontSize: 11,
-                color: 'var(--color-text-tertiary)',
-                paddingTop: 6,
-              }}
-            >
+            <T className="block text-[11px] text-text-tertiary pt-1.5">
               {gateway.error}
-            </div>
+            </T>
           )}
         </Card>
 
-      </div>
+      </Stack>
     </PageSection>
   );
 }
@@ -396,49 +356,5 @@ function formatUptime(seconds: number): string {
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
 }
-
-const sectionHeaderStyle: React.CSSProperties = {
-  fontSize: 11,
-  fontWeight: 600,
-  textTransform: 'uppercase',
-  letterSpacing: '0.07em',
-  color: 'var(--color-text-tertiary)',
-  marginBottom: 4,
-};
-
-const dividerStyle: React.CSSProperties = {
-  borderTop: '1px solid var(--color-border)',
-  marginBottom: 4,
-};
-
-const intraCardDivider: React.CSSProperties = {
-  borderTop: '1px solid var(--color-border)',
-};
-
-const readOnlyValueStyle: React.CSSProperties = {
-  fontSize: 13,
-  color: 'var(--color-text-secondary)',
-  fontFamily: 'monospace',
-};
-
-const revokeButtonStyle: React.CSSProperties = {
-  fontSize: 13,
-  fontWeight: 600,
-  padding: '7px 14px',
-  borderRadius: 8,
-  border: '1px solid var(--color-border, #334155)',
-  background: 'var(--color-surface, transparent)',
-  color: 'var(--color-text-primary)',
-  whiteSpace: 'nowrap',
-};
-
-const resetButtonStyle: React.CSSProperties = {
-  fontSize: 12,
-  background: 'none',
-  border: 'none',
-  color: 'var(--color-primary, #6366f1)',
-  cursor: 'pointer',
-  padding: 0,
-};
 
 export default SettingsPage;

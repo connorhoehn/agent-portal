@@ -8,23 +8,30 @@
 // PromptVersionChip reused verbatim from Sprint 1.
 
 import { useEffect, useMemo, useState } from 'react';
-import type { CSSProperties, FormEvent } from 'react';
+import type { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
+  Button,
   Card,
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableTh,
-  TableTd,
   Chip,
+  FormField,
+  Inline,
+  Input,
   PageSection,
+  Select,
+  Stack,
+  Table,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableTd,
+  TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { CostChip } from '../../components/observability/CostChip';
 import { PromptVersionChip } from '../../components/observability/PromptVersionChip';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
+import { T } from './Text';
 
 interface InvocationSearchResult {
   invocationId: string;
@@ -222,135 +229,142 @@ function InvocationSearchPage() {
       actions={
         <Link
           to="/admin/observability/invocations"
-          style={{ fontSize: 12, color: 'var(--color-primary)', textDecoration: 'none' }}
+          className="text-[12px] text-primary no-underline hover:underline"
         >
           ← Recent activity
         </Link>
       }
     >
       <Card padding="md">
-        <form onSubmit={onSubmit} style={form}>
-          <div style={filterGrid}>
-            <label style={field}>
-              <span style={lab}>Search prompt</span>
-              <input
-                type="text"
-                value={draft.q}
-                onChange={(e) => update('q', e.target.value)}
-                placeholder="substring match…"
-                style={input}
-              />
-            </label>
+        <form onSubmit={onSubmit}>
+          <Stack gap="md">
+            <Inline gap="md" wrap>
+              <FormField label="Search prompt" className="flex-1 min-w-[180px]">
+                {({ labelId: _labelId, ...field }) => (
+                  <Input
+                    {...field}
+                    type="text"
+                    value={draft.q}
+                    onChange={(e) => update('q', e.target.value)}
+                    placeholder="substring match…"
+                  />
+                )}
+              </FormField>
 
-            <label style={field}>
-              <span style={lab}>Agent</span>
-              <select
-                value={draft.agentId}
-                onChange={(e) => update('agentId', e.target.value)}
-                style={input}
-              >
-                <option value="">All</option>
-                {agentOptions.map((a) => (
-                  <option key={a} value={a}>
-                    {a}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <FormField label="Agent" className="flex-1 min-w-[180px]">
+                {({ labelId: _labelId, ...field }) => (
+                  <Select
+                    {...field}
+                    value={draft.agentId}
+                    onChange={(e) => update('agentId', e.target.value)}
+                    options={[
+                      { value: '', label: 'All' },
+                      ...agentOptions.map((a) => ({ value: a, label: a })),
+                    ]}
+                  />
+                )}
+              </FormField>
 
-            <label style={field}>
-              <span style={lab}>Mode</span>
-              <select
-                value={draft.mode}
-                onChange={(e) =>
-                  update('mode', e.target.value as FilterState['mode'])
-                }
-                style={input}
-              >
-                <option value="all">All</option>
-                <option value="live">Live</option>
-                <option value="sim">Sim</option>
-              </select>
-            </label>
+              <FormField label="Mode" className="flex-1 min-w-[180px]">
+                {({ labelId: _labelId, ...field }) => (
+                  <Select
+                    {...field}
+                    value={draft.mode}
+                    onChange={(e) => update('mode', e.target.value as FilterState['mode'])}
+                    options={[
+                      { value: 'all', label: 'All' },
+                      { value: 'live', label: 'Live' },
+                      { value: 'sim', label: 'Sim' },
+                    ]}
+                  />
+                )}
+              </FormField>
 
-            <label style={field}>
-              <span style={lab}>Min judge score</span>
-              <input
-                type="number"
-                value={draft.minScore}
-                onChange={(e) => update('minScore', e.target.value)}
-                placeholder="0.00"
-                step="0.05"
-                min="0"
-                max="1"
-                style={input}
-              />
-            </label>
+              <FormField label="Min judge score" className="flex-1 min-w-[180px]">
+                {({ labelId: _labelId, ...field }) => (
+                  <Input
+                    {...field}
+                    type="number"
+                    value={draft.minScore}
+                    onChange={(e) => update('minScore', e.target.value)}
+                    placeholder="0.00"
+                    step={0.05}
+                    min={0}
+                    max={1}
+                  />
+                )}
+              </FormField>
 
-            <label style={field}>
-              <span style={lab}>Max judge score</span>
-              <input
-                type="number"
-                value={draft.maxScore}
-                onChange={(e) => update('maxScore', e.target.value)}
-                placeholder="1.00"
-                step="0.05"
-                min="0"
-                max="1"
-                style={input}
-              />
-            </label>
+              <FormField label="Max judge score" className="flex-1 min-w-[180px]">
+                {({ labelId: _labelId, ...field }) => (
+                  <Input
+                    {...field}
+                    type="number"
+                    value={draft.maxScore}
+                    onChange={(e) => update('maxScore', e.target.value)}
+                    placeholder="1.00"
+                    step={0.05}
+                    min={0}
+                    max={1}
+                  />
+                )}
+              </FormField>
 
-            <label style={field}>
-              <span style={lab}>Since</span>
-              <input
-                type="datetime-local"
-                value={draft.since}
-                onChange={(e) => update('since', e.target.value)}
-                style={input}
-              />
-            </label>
+              <FormField label="Since" className="flex-1 min-w-[180px]">
+                {({ labelId: _labelId, ...field }) => (
+                  <Input
+                    {...field}
+                    type="datetime-local"
+                    value={draft.since}
+                    onChange={(e) => update('since', e.target.value)}
+                  />
+                )}
+              </FormField>
 
-            <label style={field}>
-              <span style={lab}>Until</span>
-              <input
-                type="datetime-local"
-                value={draft.until}
-                onChange={(e) => update('until', e.target.value)}
-                style={input}
-              />
-            </label>
+              <FormField label="Until" className="flex-1 min-w-[180px]">
+                {({ labelId: _labelId, ...field }) => (
+                  <Input
+                    {...field}
+                    type="datetime-local"
+                    value={draft.until}
+                    onChange={(e) => update('until', e.target.value)}
+                  />
+                )}
+              </FormField>
 
-            <label style={field}>
-              <span style={lab}>Prompt version</span>
-              <input
-                type="text"
-                value={draft.promptVersion}
-                onChange={(e) => update('promptVersion', e.target.value)}
-                placeholder="sha (full or partial)"
-                style={input}
-              />
-            </label>
+              <FormField label="Prompt version" className="flex-1 min-w-[180px]">
+                {({ labelId: _labelId, ...field }) => (
+                  <Input
+                    {...field}
+                    type="text"
+                    value={draft.promptVersion}
+                    onChange={(e) => update('promptVersion', e.target.value)}
+                    placeholder="sha (full or partial)"
+                  />
+                )}
+              </FormField>
 
-            <label style={field}>
-              <span style={lab}>User id</span>
-              <input
-                type="text"
-                value={draft.userId}
-                onChange={(e) => update('userId', e.target.value)}
-                placeholder="optional"
-                style={input}
-              />
-            </label>
-          </div>
-          <div style={btnRow}>
-            <button type="submit" style={btnPrimary}>
-              Search
-            </button>
-            <button type="button" onClick={onClear} style={btnSecondary}>
-              Clear
-            </button>
-          </div>
+              <FormField label="User id" className="flex-1 min-w-[180px]">
+                {({ labelId: _labelId, ...field }) => (
+                  <Input
+                    {...field}
+                    type="text"
+                    value={draft.userId}
+                    onChange={(e) => update('userId', e.target.value)}
+                    placeholder="optional"
+                  />
+                )}
+              </FormField>
+            </Inline>
+            <Inline gap="sm">
+              <Button type="submit" variant="primary" size="sm">
+                Search
+              </Button>
+              <Button type="button" variant="secondary" size="sm" onClick={onClear}>
+                Clear
+              </Button>
+            </Inline>
+          </Stack>
         </form>
       </Card>
 
@@ -375,9 +389,9 @@ function InvocationSearchPage() {
         )}
         {applied && !error && rows.length > 0 && (
           <>
-            <div style={resultHint}>
+            <T as="div" className="text-[11px] text-text-tertiary mb-2">
               Showing {rows.length} of {totalCount}
-            </div>
+            </T>
             <Table>
               <TableHead>
                 <TableRow>
@@ -398,18 +412,18 @@ function InvocationSearchPage() {
                     onClick={() =>
                       navigate(`/admin/observability/invocations/${r.invocationId}`)
                     }
-                    style={{ cursor: 'pointer' }}
+                    className="cursor-pointer"
                   >
-                    <TableTd style={tsCell}>
+                    <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
                       {new Date(r.ts).toLocaleString()}
                     </TableTd>
-                    <TableTd style={agentCell}>
+                    <TableTd className="text-[12px] font-medium whitespace-nowrap">
                       {r.agentName || r.agentId}
                     </TableTd>
-                    <TableTd style={snippetCell} title={r.promptSnippet}>
+                    <TableTd className="text-[12px] max-w-[280px] truncate" title={r.promptSnippet}>
                       {snip(r.promptSnippet, 100)}
                     </TableTd>
-                    <TableTd style={snippetCell} title={r.responseSnippet}>
+                    <TableTd className="text-[12px] max-w-[280px] truncate" title={r.responseSnippet}>
                       {snip(r.responseSnippet, 100)}
                     </TableTd>
                     <TableTd>
@@ -417,13 +431,13 @@ function InvocationSearchPage() {
                         {fmt(r.judgeScore)}
                       </Chip>
                     </TableTd>
-                    <TableTd style={{ whiteSpace: 'nowrap' }}>
+                    <TableTd className="whitespace-nowrap">
                       <CostChip cost={r.totalCostUsd} />
                     </TableTd>
-                    <TableTd style={{ whiteSpace: 'nowrap' }}>
+                    <TableTd className="whitespace-nowrap">
                       <PromptVersionChip promptVersion={r.promptVersion} />
                     </TableTd>
-                    <TableTd style={numCell}>{fmtDur(r.durationMs)}</TableTd>
+                    <TableTd className="text-[12px] text-text-secondary whitespace-nowrap">{fmtDur(r.durationMs)}</TableTd>
                   </TableRow>
                 ))}
               </TableBody>
@@ -437,112 +451,10 @@ function InvocationSearchPage() {
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div
-      style={{
-        padding: 24,
-        textAlign: 'center',
-        fontSize: 12,
-        color: 'var(--color-text-tertiary)',
-      }}
-    >
+    <T as="div" className="p-6 text-center text-[12px] text-text-tertiary">
       {text}
-    </div>
+    </T>
   );
 }
-
-// ── styles ────────────────────────────────────────────────────────────────────
-
-const form: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 12,
-};
-
-const filterGrid: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-  gap: 12,
-};
-
-const field: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 4,
-};
-
-const lab: CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
-  color: 'var(--color-text-tertiary)',
-  letterSpacing: 0.5,
-  textTransform: 'uppercase',
-};
-
-const input: CSSProperties = {
-  fontSize: 12,
-  padding: '6px 8px',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm, 4px)',
-  background: 'var(--color-surface)',
-  color: 'var(--color-text-primary)',
-};
-
-const btnRow: CSSProperties = {
-  display: 'flex',
-  gap: 8,
-};
-
-const btnPrimary: CSSProperties = {
-  padding: '6px 14px',
-  fontSize: 12,
-  fontWeight: 500,
-  background: 'var(--color-primary, #6366f1)',
-  color: '#fff',
-  border: '1px solid var(--color-primary, #6366f1)',
-  borderRadius: 'var(--radius-sm, 4px)',
-  cursor: 'pointer',
-};
-
-const btnSecondary: CSSProperties = {
-  padding: '6px 14px',
-  fontSize: 12,
-  background: 'var(--color-surface)',
-  color: 'var(--color-text-secondary)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm, 4px)',
-  cursor: 'pointer',
-};
-
-const resultHint: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  marginBottom: 8,
-};
-
-const tsCell: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  whiteSpace: 'nowrap',
-};
-
-const agentCell: CSSProperties = {
-  fontSize: 12,
-  fontWeight: 500,
-  whiteSpace: 'nowrap',
-};
-
-const snippetCell: CSSProperties = {
-  fontSize: 12,
-  maxWidth: 280,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-};
-
-const numCell: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary)',
-  whiteSpace: 'nowrap',
-};
 
 export default InvocationSearchPage;

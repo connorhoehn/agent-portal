@@ -9,6 +9,9 @@
 import {
   RDSDataClient,
   ExecuteStatementCommand,
+  BeginTransactionCommand,
+  CommitTransactionCommand,
+  RollbackTransactionCommand,
   type SqlParameter,
   type Field,
 } from '@aws-sdk/client-rds-data';
@@ -108,7 +111,7 @@ function readField(cell: Field | undefined): unknown {
   return null;
 }
 
-export async function exec(sql: string, params: SqlParameter[] = []): Promise<Record<string, any>[]> {
+export async function exec(sql: string, params: SqlParameter[] = [], transactionId?: string): Promise<Record<string, any>[]> {
   const resp = await client().send(
     new ExecuteStatementCommand({
       resourceArn: config.aurora.clusterArn,
@@ -117,6 +120,7 @@ export async function exec(sql: string, params: SqlParameter[] = []): Promise<Re
       sql,
       parameters: params,
       includeResultMetadata: true,
+      ...(transactionId ? { transactionId } : {}),
     }),
   );
   const cols = (resp.columnMetadata ?? []).map((c) => c.name ?? '');
@@ -127,6 +131,61 @@ export async function exec(sql: string, params: SqlParameter[] = []): Promise<Re
     });
     return row;
   });
+}
+
+/** The subset of `exec`'s signature a transaction-bound statement needs. */
+export type TxExec = (sql: string, params?: SqlParameter[]) => Promise<Record<string, any>[]>;
+
+/**
+ * Runs `fn` inside a single RDS Data API transaction: begins one, hands `fn`
+ * an `exec`-shaped function that threads the transactionId through every
+ * statement it issues, commits on success, and rolls back (best-effort —
+ * a rollback failure is swallowed so it never masks the original error)
+ * before re-throwing on any error `fn` throws.
+ *
+ * No other provider in this codebase issues more than one autocommit
+ * statement per call (budgets.ts, bots.ts, agent-jobs.ts, assessment-aurora.ts
+ * elsewhere) — this is the first seam that needs multi-statement atomicity:
+ * assessment.ts's commitSubmissions superseding an existing envelope and
+ * inserting its replacement must not be observable half-done.
+ */
+export async function withTransaction<T>(fn: (tx: TxExec) => Promise<T>): Promise<T> {
+  const begun = await client().send(
+    new BeginTransactionCommand({
+      resourceArn: config.aurora.clusterArn,
+      secretArn: config.aurora.secretArn,
+      database: config.aurora.database,
+    }),
+  );
+  const transactionId = begun.transactionId;
+  if (!transactionId) throw new Error('BeginTransactionCommand did not return a transactionId');
+
+  try {
+    const result = await fn((sql, params = []) => exec(sql, params, transactionId));
+    await client().send(
+      new CommitTransactionCommand({
+        resourceArn: config.aurora.clusterArn,
+        secretArn: config.aurora.secretArn,
+        transactionId,
+      }),
+    );
+    return result;
+  } catch (err) {
+    try {
+      await client().send(
+        new RollbackTransactionCommand({
+          resourceArn: config.aurora.clusterArn,
+          secretArn: config.aurora.secretArn,
+          transactionId,
+        }),
+      );
+    } catch {
+      // Best-effort — the transaction times out and auto-rolls-back on its
+      // own if this fails too; never let a rollback failure hide the real
+      // error that triggered it.
+    }
+    throw err;
+  }
 }
 
 function strParam(name: string, value: string): SqlParameter {

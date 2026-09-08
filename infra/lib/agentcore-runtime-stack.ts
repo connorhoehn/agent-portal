@@ -46,16 +46,22 @@ export interface AgentCoreRuntimeStackProps extends cdk.StackProps {
   readonly auroraClusterArn: string;
   readonly auroraCredentialsSecretArn: string;
   readonly knowledgeBaseId: string;
-  /** Newsroom KB ID — injected into news-researcher agent only. Provisioned via portal after Wave 3. */
-  readonly newsroomKbId?: string;
-  /** Documents S3 bucket name — injected into news-researcher so it can push articles to S3. */
-  readonly documentsBucketName?: string;
   readonly modelId?: string;
   readonly codeInterpreterId?: string;
   readonly codeInterpreterArn?: string;
   readonly browserId?: string;
   readonly browserArn?: string;
   readonly browserProfileId?: string;
+
+  // ── Machine-callback auth (matches middleware-service-stack.ts) ──────────
+  // Plain string values, NOT Secrets Manager ARNs — see the long comment
+  // where these are consumed below for why. Only supervisor + the two
+  // assessment agents call these callbacks today, but every runtime gets the
+  // same three env vars (cheap, and future agents may grow a callback too);
+  // an unset value is simply omitted rather than sent as "undefined".
+  readonly approvalsRequestSecret?: string;
+  readonly harnessTraceSecret?: string;
+  readonly assessmentRunCompleteSecret?: string;
 }
 
 const AGENT_NAMES = [
@@ -65,26 +71,20 @@ const AGENT_NAMES = [
   'advisor',
   'ingestion',
   'graph-builder',
+  'assessment-scorer',
+  'assessment-drafter',
 ] as const;
 
-// News agents — ECR repos exist externally (created via `aws ecr create-repository`
-// before the stack knew about these names). Imported rather than created here.
-const EXTERNAL_AGENT_NAMES = [
-  'news-researcher',
-  'news-brief',
-  'news-headline',
-] as const;
-
-const ALL_AGENT_NAMES = [...AGENT_NAMES, ...EXTERNAL_AGENT_NAMES] as const;
+const ALL_AGENT_NAMES = AGENT_NAMES;
 
 // Explicit session lifecycle per agent. The service defaults are 900s idle /
 // 28800s max — set explicitly so the numbers live in source rather than being
 // implicit, and tuned per agent:
 //  - supervisor: 1800s idle — it fronts multi-turn AG-UI sessions, and a
 //    warm microVM avoids the ~8s cold-start TTFT penalty between user turns.
-//  - everything else: 600s idle — sub-agents and newsroom agents are invoked
-//    per-request (A2A or direct); releasing the workload sooner is pure cost
-//    hygiene with no UX cost (they cold-start per invocation anyway).
+//  - everything else: 600s idle — sub-agents are invoked per-request (A2A or
+//    direct); releasing the workload sooner is pure cost hygiene with no UX
+//    cost (they cold-start per invocation anyway).
 // None of these runtimes use session storage, so lifecycle changes carry no
 // data-loss risk (the resulting version bump wipes nothing).
 const DEFAULT_LIFECYCLE = { idleRuntimeSessionTimeout: 600, maxLifetime: 28800 } as const;
@@ -117,15 +117,16 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
     //   cdk deploy OrgIQ-AgentCoreRuntime --context deployRuntimes=true
     //
     // Optionally restrict to a subset of agents whose images are actually in
-    // ECR via --context onlyAgents=supervisor[,search,...]. When unset, all
-    // six runtimes are created (which requires all six images to exist).
+    // ECR via --context onlyAgents=supervisor[,search,...]. When unset, every
+    // runtime in ALL_AGENT_NAMES is created (which requires every one of
+    // those images to exist).
     const deployRuntimes = this.node.tryGetContext('deployRuntimes') === 'true';
     const onlyAgentsCtx = this.node.tryGetContext('onlyAgents') as string | undefined;
     const onlyAgents = onlyAgentsCtx
       ? new Set(onlyAgentsCtx.split(',').map(s => s.trim()).filter(Boolean))
       : null;
 
-    // Shared base image for all 6 agents. Built once via agents/base/build.sh
+    // Shared base image for every internally-managed agent. Built once via agents/base/build.sh
     // and pre-loaded with strands-agents + bedrock-agentcore + ag-ui deps, so
     // per-agent rebuilds become a single COPY layer (<10s).
     const baseRepo = new ecr.Repository(this, 'AgentBaseRepo', {
@@ -143,31 +144,19 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
 
     for (const agentName of ALL_AGENT_NAMES) {
       const agentRole = props.agentRoles[agentName];
-      // External agents (news-*) are not registered in AgentsStack, so they won't
-      // have an entry in props.agentRoles. Allow them through — the runtime stack
-      // creates its own execution role for every agent regardless.
-      const isExternal = (EXTERNAL_AGENT_NAMES as readonly string[]).includes(agentName);
-      if (!agentRole && !isExternal) continue;
+      if (!agentRole) continue;
 
       const pascal = this.pascal(agentName);
       const runtimeName = `${prefix}-${agentName}`;
       // agentRuntimeName and endpoint name must match [a-zA-Z][a-zA-Z0-9_]{0,47} — no hyphens
       const safeRuntimeName = `${prefix}_${agentName.replace(/-/g, '_')}`;
 
-      // ECR repo — created for internally-managed agents, imported for externally-managed.
-      // News agent repos were created manually before the stack covered them; importing
-      // avoids "repository already exists" errors while still wiring up the runtime.
-      let repo: ecr.IRepository;
-      if (isExternal) {
-        repo = ecr.Repository.fromRepositoryName(this, `${pascal}Repo`, runtimeName);
-      } else {
-        repo = new ecr.Repository(this, `${pascal}Repo`, {
-          repositoryName: runtimeName,
-          removalPolicy: cdk.RemovalPolicy.DESTROY,
-          emptyOnDelete: true,
-          lifecycleRules: [{ maxImageCount: 5 }],
-        });
-      }
+      const repo: ecr.IRepository = new ecr.Repository(this, `${pascal}Repo`, {
+        repositoryName: runtimeName,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+        emptyOnDelete: true,
+        lifecycleRules: [{ maxImageCount: 5 }],
+      });
       this.ecrRepos[agentName] = repo;
 
       // Runtime execution role — trusted by bedrock-agentcore service
@@ -399,10 +388,6 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
           AURORA_CLUSTER_ARN: props.auroraClusterArn,
           AURORA_SECRET_ARN: props.auroraCredentialsSecretArn,
           KB_ID: props.knowledgeBaseId,
-          // Newsroom KB — only injected for the news-researcher agent so it
-          // resolves the correct vector space for newsroom article retrieval.
-          ...(agentName === 'news-researcher' && props.newsroomKbId && { NEWSROOM_KB_ID: props.newsroomKbId }),
-          ...(agentName === 'news-researcher' && props.documentsBucketName && { DOCUMENTS_BUCKET: props.documentsBucketName }),
           PROJECT_PREFIX: prefix,
           ...(props.codeInterpreterId && { CODE_INTERPRETER_ID: props.codeInterpreterId }),
           ...(props.browserId && { BROWSER_ID: props.browserId }),
@@ -413,6 +398,42 @@ export class AgentCoreRuntimeStack extends cdk.Stack {
           ...(agentName === 'supervisor' && props.guardrailIdMember && { GUARDRAIL_ID_MEMBER: props.guardrailIdMember }),
           ...(agentName === 'supervisor' && props.guardrailIdOrgLeader && { GUARDRAIL_ID_ORG_LEADER: props.guardrailIdOrgLeader }),
           ...(agentName === 'supervisor' && props.guardrailIdHrAdmin && { GUARDRAIL_ID_HR_ADMIN: props.guardrailIdHrAdmin }),
+          // Machine-callback auth, mirroring middleware-service-stack.ts's
+          // APPROVALS_REQUEST_SECRET / HARNESS_TRACE_SECRET /
+          // ASSESSMENT_RUN_COMPLETE_SECRET container secrets. These arrive
+          // here as PLAIN STRINGS via CDK context (--context
+          // approvalsRequestSecret=..., see app.ts), not as Secrets Manager
+          // ARNs, for two reasons:
+          //   1. Ordering: this stack is instantiated (and normally deployed
+          //      — see CLAUDE.md's "genuine second phase" gotcha) before
+          //      OrgIQ-MiddlewareService in app.ts, and neither stack
+          //      declares a dependency on the other. An Fn.importValue here
+          //      would reference a CloudFormation export that doesn't exist
+          //      yet on this stack's first deploy, breaking `deployRuntimes`
+          //      well before the ordering problem this comment describes was
+          //      even relevant.
+          //   2. Even with the ARN in hand, AWS::BedrockAgentCore::Runtime's
+          //      EnvironmentVariables is a bare string map — unlike ECS
+          //      TaskDefinition, this resource type has no `Secret` /
+          //      fromSecretsManager equivalent that pulls the value at
+          //      container start. The only way to get a Secrets Manager
+          //      value in here at all is a raw CloudFormation dynamic
+          //      reference resolved by the CFN service before the
+          //      CreateAgentRuntime/UpdateAgentRuntime call — which would
+          //      still land as plaintext in the runtime's environment
+          //      (visible to anyone with bedrock-agentcore:GetAgentRuntime),
+          //      defeating the point of Secrets Manager, on a resource type
+          //      new enough that dynamic-reference support isn't confirmed.
+          //      Rather than invent that mechanism, this stays a plain
+          //      context value the operator copies in by hand.
+          //
+          // Runbook: after `OrgIQ-MiddlewareService` mints the three
+          // secrets, `aws secretsmanager get-secret-value` each one and
+          // redeploy this stack with all three --context values set. See
+          // docs/agentcore-preview-surface.md for the full sequencing.
+          ...(props.approvalsRequestSecret && { APPROVALS_REQUEST_SECRET: props.approvalsRequestSecret }),
+          ...(props.harnessTraceSecret && { HARNESS_TRACE_SECRET: props.harnessTraceSecret }),
+          ...(props.assessmentRunCompleteSecret && { ASSESSMENT_RUN_COMPLETE_SECRET: props.assessmentRunCompleteSecret }),
         },
       });
 

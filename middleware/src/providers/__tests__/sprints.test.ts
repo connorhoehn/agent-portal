@@ -11,7 +11,7 @@ jest.mock('../../config.js', () => ({ config: { mock: { aurora: false } } }));
 
 import { exec } from '../aurora.js';
 import { config } from '../../config.js';
-import { spendPredicateSql, MOCK_GRANTS } from '../budgets.js';
+import { spendPredicateSql, MOCK_GRANTS, mockInitiativeWindowSpendUsd } from '../budgets.js';
 import { searchWorkItems } from '../work-items.js';
 import {
   listSprints, isMine, SPRINT_STATUSES, createSprint, getSprint, personExists,
@@ -182,9 +182,14 @@ describe('mock mode', () => {
     // table already references — a sprint no other surface has heard of is a
     // demo that contradicts itself.
     const ids = (await listSprints()).map((s) => s.id);
+    // The work board's half is READ from the board, not restated here: a
+    // hand-typed list of its sprint ids is the same copied-constant defect
+    // this test exists to catch, one level up. It went stale the moment
+    // work-items.ts mirrored the seed's p-llm-platform / p-inference-platform
+    // / p-zero-trust rows and their sprints came with them.
     const known = new Set([
       ...MOCK_GRANTS.map((g) => g.sprintId),
-      'spr-obs-s1', 'spr-obs-s2', 'spr-obs-s3', // providers/work-items.ts MOCK_PROGRAM_FIELDS
+      ...(await searchWorkItems({ limit: 1000 })).map((i) => i.sprintId).filter((s): s is string => s !== null),
     ]);
     for (const id of ids) expect(known.has(id)).toBe(true);
     expect(ids.length).toBeGreaterThan(0);
@@ -195,8 +200,11 @@ describe('mock mode', () => {
       const grants = MOCK_GRANTS.filter((g) => g.sprintId === row.id);
       expect(row.grantCount).toBe(grants.length);
       expect(row.grantedUsd).toBe(grants.reduce((n, g) => n + g.allocatedUsd, 0));
+      // Granted money is per-grant and sums. SPEND is not: it belongs to the
+      // initiative over the sprint's window, counted once however many grants
+      // the sprint carries — see the window-spend describe below.
       expect(row.initiativeSpendInWindowUsd)
-        .toBe(grants.reduce((n, g) => n + g.initiativeSpendInWindowUsd, 0));
+        .toBeCloseTo(mockInitiativeWindowSpendUsd(row.orgProjectId, row.startsOn, row.endsOn), 2);
     }
   });
 
@@ -351,5 +359,41 @@ describe('createSprint (mock mode)', () => {
     });
     const mine = await listSprints({ personId: 'p-008', mineOnly: true });
     expect(mine.some((s) => s.id === created.id && s.isSteward)).toBe(true);
+  });
+});
+
+// ─── window spend is the initiative's, counted once ──────────────────────────
+//
+// The SQL sums bot_runs for the initiative over the sprint window in ONE
+// subquery, independent of how many grants the sprint carries. The mock used
+// to add up each grant's own `initiativeSpendInWindowUsd`, so a sprint with
+// two grants reported the same initiative's money twice — and reported a
+// LIFETIME total, because a seeded grant carries no window bounds.
+describe('mock sprint window spend', () => {
+  beforeAll(() => { (config as { mock: { aurora: boolean } }).mock.aurora = true; });
+  afterAll(() => { (config as { mock: { aurora: boolean } }).mock.aurora = false; });
+  beforeEach(() => { _resetMockSprints(); });
+
+  it('does not scale with grant count on a multi-grant sprint', async () => {
+    const board = await listSprints();
+    const multi = board.filter((s) => s.grantCount > 1);
+    expect(multi.length).toBeGreaterThan(0);
+    for (const s of multi) {
+      const once = mockInitiativeWindowSpendUsd(s.orgProjectId, s.startsOn, s.endsOn);
+      expect(s.initiativeSpendInWindowUsd).toBeCloseTo(once, 2);
+      // The old bug: grantCount copies of the same money.
+      const perGrantSum = MOCK_GRANTS
+        .filter((g) => g.sprintId === s.id)
+        .reduce((n, g) => n + g.initiativeSpendInWindowUsd, 0);
+      if (perGrantSum > 0) expect(s.initiativeSpendInWindowUsd).toBeLessThan(perGrantSum);
+    }
+  });
+
+  it('is bounded by the sprint window, not the initiative lifetime', async () => {
+    const board = await listSprints();
+    for (const s of board) {
+      const lifetime = mockInitiativeWindowSpendUsd(s.orgProjectId, null, null);
+      expect(s.initiativeSpendInWindowUsd).toBeLessThanOrEqual(lifetime + 1e-9);
+    }
   });
 });

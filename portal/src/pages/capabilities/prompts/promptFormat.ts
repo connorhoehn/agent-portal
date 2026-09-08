@@ -111,3 +111,23 @@ export function enforceNamePrefix(value: string): string {
 export function isValidNewPrompt(name: string, templateText: string): boolean {
   return name.trim().length > NAME_PREFIX.length && templateText.trim().length > 0;
 }
+
+/**
+ * The identifying tail of a prompt ARN.
+ *
+ * Every prompt's ARN opens with the same
+ * `arn:aws:bedrock:<region>:<account>:prompt/`, so a header that truncates
+ * from the END shows the same string for every prompt — the audit measured
+ * all six reading `arn:aws:bedrock:us-east-1:000…`. The tail is what says
+ * WHICH prompt this is, so keep that and drop the head, cutting at a `:` or
+ * `/` boundary when one is near so the result starts at a real segment.
+ */
+export function arnTail(arn: string, maxChars = 28): string {
+  if (arn.length <= maxChars) return arn;
+  const tail = arn.slice(arn.length - maxChars);
+  const boundary = Math.max(tail.indexOf(':'), tail.indexOf('/'));
+  // Only honour a boundary in the first third — past that it would eat the
+  // very identifier this exists to show.
+  const cut = boundary > 0 && boundary < Math.floor(maxChars / 3) ? boundary + 1 : 0;
+  return `…${tail.slice(cut)}`;
+}

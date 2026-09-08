@@ -23,6 +23,12 @@ export interface ProjectSummary {
   /** Genuinely last, unwindowed — an initiative can have $0.00 this month and
       still have run in June. */
   lastAgentActivityAt?: string | null;
+  /** Agents (bot_runs) running on this initiative right now. */
+  activeAgentRuns?: number | null;
+  /** Highest open work-item priority: critical | high | medium | low. */
+  priority?: string | null;
+  /** Monthly allocation the MTD spend reads against (initiative_budgets). */
+  allocatedUsd?: number | null;
   /** `owner/repo` (Mission-2). Rendered as a GitHub link, no capability gate. */
   repoFullName?: string | null;
 }

@@ -15,8 +15,8 @@
 // Server-side expiry: GET /approvals/:id flips PENDING rows older than 5min
 // to EXPIRED on read so a crashed/forgotten poller can never re-emerge.
 
-import { Router, type Request, type Response, type NextFunction } from 'express';
-import { randomUUID, timingSafeEqual } from 'node:crypto';
+import { Router } from 'express';
+import { randomUUID } from 'node:crypto';
 import {
   RDSDataClient,
   ExecuteStatementCommand,
@@ -37,6 +37,7 @@ import { isAllowed, resolveSession, requireSession, requireTenant, requireAction
 import { ssoAvailable } from '../lib/session.js';
 import { logAuthz } from '../lib/audit.js';
 import { rateLimit } from '../lib/rate-limit.js';
+import { APPROVALS_SERVICE_AUTH, requireServiceAuth, serviceAuthOr } from '../lib/service-auth.js';
 
 export const approvalsRouter = Router();
 
@@ -48,18 +49,10 @@ export const approvalsRouter = Router();
 //      must present it in `x-approvals-auth`; unset (the demo default) leaves the
 //      endpoint open exactly as before. This lets an operator lock the endpoint
 //      to the agent fleet without breaking local dev.
+// The compare itself now lives in lib/service-auth.ts so the *read* half of the
+// same loop (GET /:id, below) can reuse it without a second copy.
 const requestLimit = rateLimit('approvals-request', 60, 60_000);
-
-function requireServiceAuth(req: Request, res: Response, next: NextFunction): void {
-  const secret = process.env['APPROVALS_REQUEST_SECRET'];
-  if (!secret) { next(); return; } // open when unconfigured
-  const got = req.headers['x-approvals-auth'];
-  const presented = typeof got === 'string' ? got : '';
-  const a = Buffer.from(presented);
-  const b = Buffer.from(secret);
-  if (a.length === b.length && timingSafeEqual(a, b)) { next(); return; }
-  res.status(401).json({ error: 'service authentication required' });
-}
+const serviceAuth = requireServiceAuth(APPROVALS_SERVICE_AUTH);
 
 // ── RDS Data API helpers (same shape as providers/aurora.ts) ───────────────
 
@@ -297,7 +290,7 @@ function isPastExpiry(requestedAt: string): boolean {
 // Create a new approval request. Called from the agent's `request_approval`
 // Strands tool. Rate-limited and optionally service-authed (see above); the
 // agent identity is still captured as `agentId`.
-approvalsRouter.post('/request', requestLimit, requireServiceAuth, asyncHandler(async (req, res) => {
+approvalsRouter.post('/request', requestLimit, serviceAuth, asyncHandler(async (req, res) => {
   const body = (req.body ?? {}) as { txId?: unknown; agentId?: unknown; payload?: unknown; reason?: unknown };
   const txId = typeof body.txId === 'string' ? body.txId : '';
   const agentId = typeof body.agentId === 'string' ? body.agentId : '';
@@ -359,10 +352,39 @@ approvalsRouter.get('/stream', requireTenant('orgiq'), requireAction('ViewObserv
   req.on('close', () => { unsubscribe(); endSSE(res); });
 });
 
-// Single-row fetch. Used by the Strands tool to long-poll. Server-side: if a
-// PENDING row is past its 5min expiry, flip it to EXPIRED before returning so
-// stale tools don't hang.
-approvalsRouter.get('/:id', requireTenant('orgiq'), requireAction('ViewObservability'), asyncHandler(async (req, res) => {
+// Single-row fetch — the ONLY route on this router with two legitimate kinds
+// of caller, and the reason it does not simply take the human gate:
+//
+//   - A human, in the portal's approval drawer: session + tenant + Cedar,
+//     exactly as before.
+//   - The `request_approval` Strands tool inside a DEPLOYED RUNTIME, which
+//     long-polls this row every 2s waiting for a decision. It has no session
+//     cookie and never will, so against a session-enforcing deployment (SSO on,
+//     demo fallback off) every poll 401s and the HITL loop can never close: the
+//     human approves in the portal, the agent never learns, and the tool times
+//     out at 5 minutes as EXPIRED. Filing the request worked; hearing the
+//     answer did not.
+//
+// So: `serviceAuthOr` — a valid x-approvals-auth (the SAME fleet credential
+// that unlocks POST /request, so there is one secret to deploy, not two) passes;
+// everything else falls through to the unchanged human gate. Note this is NOT
+// the open-when-unset shape the write callbacks use. With APPROVALS_REQUEST_SECRET
+// unset this route behaves byte-for-byte as it did before — session + Cedar — so
+// the change cannot open a readable surface to an anonymous caller. The trade is
+// deliberate: with no secret configured the deployed agent still can't poll, and
+// the fix for that is to configure the secret, not to widen the read.
+//
+// The bypass is scoped to this route alone. GET / (the queue) and GET /stream
+// (the live feed) are human surfaces with no machine caller, and stay
+// session-gated.
+//
+// Server-side: if a PENDING row is past its 5min expiry, flip it to EXPIRED
+// before returning so stale tools don't hang.
+approvalsRouter.get('/:id', serviceAuthOr(
+  APPROVALS_SERVICE_AUTH,
+  requireTenant('orgiq'),
+  requireAction('ViewObservability'),
+), asyncHandler(async (req, res) => {
   const id = req.params['id'] as string;
   let row = await fetchApproval(id);
   if (!row) {

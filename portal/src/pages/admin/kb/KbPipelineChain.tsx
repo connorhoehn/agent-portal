@@ -9,20 +9,37 @@
 
 import { Card, CardHeader, Stack, StackDiagram } from '@connorhoehnslalom/ui-components/shared';
 import type { ChipTone, StackLayerSpec } from '@connorhoehnslalom/ui-components/shared';
+import type { Reconciled } from '../../knowledge/knowledgeFormat';
 import { statusStyle } from './kbFormat';
 import type { KbRegistryEntry } from './types';
 
 const NOT_PROVISIONED = '(not provisioned)';
 
-export function KbPipelineChain({ kb }: { kb: KbRegistryEntry }) {
+export function KbPipelineChain({
+  kb,
+  reconciled,
+}: {
+  kb: KbRegistryEntry;
+  /** The matching row from the reconcile API, when known — see
+   *  `kbFormat.effectiveStatus`. A Bedrock id the account does not
+   *  recognise draws this stage (and everything downstream of it) in
+   *  danger, not the registry's own optimistic status (DEFECTS.md #18). */
+  reconciled?: Reconciled | null;
+}) {
   const live = statusStyle(kb.status).tone;
   const stage = (reached: boolean): ChipTone => (reached ? live : 'neutral');
+  const kbBroken = reconciled?.drift === 'missing';
 
   const layers: StackLayerSpec[] = [
     { id: 's3', label: 'S3 landing zone', description: kb.s3Prefix, tone: stage(!!kb.s3Prefix) },
     { id: 'ds', label: 'Data source', description: kb.dataSourceId ?? NOT_PROVISIONED, tone: stage(!!kb.dataSourceId) },
-    { id: 'kb', label: 'Bedrock KB', description: kb.bedrockKbId ?? NOT_PROVISIONED, tone: stage(!!kb.bedrockKbId) },
-    { id: 'agents', label: 'Agents', description: 'search · advisor', tone: stage(kb.status === 'ACTIVE') },
+    {
+      id: 'kb',
+      label: 'Bedrock KB',
+      description: kbBroken ? `${kb.bedrockKbId} — not found in this account` : (kb.bedrockKbId ?? NOT_PROVISIONED),
+      tone: kbBroken ? 'danger' : stage(!!kb.bedrockKbId),
+    },
+    { id: 'agents', label: 'Agents', description: 'search · advisor', tone: kbBroken ? 'neutral' : stage(kb.status === 'ACTIVE') },
   ];
 
   return (

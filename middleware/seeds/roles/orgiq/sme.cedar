@@ -13,6 +13,11 @@ permit (
     OrgIQ::Action::"LabelFeedback",
     // The point of the role: assign computers to do the work.
     OrgIQ::Action::"DispatchAgentRun",
+    // Stand up the mundane-work automations themselves — a bot built from a
+    // predefined template (PR analysis, dependency watch) or a loop cron. The
+    // envelope/allocation brakes on the dispatch pipeline still govern what a
+    // bot may spend; this only lets the SME author the standing mission.
+    OrgIQ::Action::"ManageBots",
     // Reaching the Computers surface at all. Role-wide, like ManageSprints and
     // for the same reason: Cedar answers "may an SME ever use a computer", and
     // the route layer (lib/devbox-visibility.ts) then answers "which ones" —

@@ -38,6 +38,7 @@ Env contract
 from __future__ import annotations
 
 import hashlib
+import re
 import logging
 import os
 import threading
@@ -165,6 +166,28 @@ def _fetch_text(name: str) -> tuple[str, str] | None:
     return text, (detail.get("version") or version or "DRAFT")
 
 
+_PLACEHOLDER = re.compile(r"\{\{\s*[^}\s]+\s*\}\}")
+
+
+def unexpanded_variables(text: str) -> list[str]:
+    """Placeholders still sitting in a resolved prompt.
+
+    A system prompt is meant to be complete text. If one still contains
+    ``{{tenant}}`` by the time it reaches the model, nothing downstream will
+    ever fill it — the fleet ships the braces verbatim and the instruction
+    quietly means something other than what its author wrote. There is no
+    substitution step on this path by design (see the module header: an agent's
+    identity is not parameterised), so the honest handling is to NOT guess a
+    value and instead make the mistake loud: it is logged here and carried on
+    the resolved prompt so a trace can show it.
+
+    Parameterised assets belong in the library and are rendered through the
+    contract (middleware lib/prompt-contract.ts), which types every variable
+    and fences the untrusted ones.
+    """
+    return sorted({m.group(0) for m in _PLACEHOLDER.finditer(text)})
+
+
 def resolve_system_prompt(
     baked: str,
     *,
@@ -199,6 +222,17 @@ def resolve_system_prompt(
         resolved = ResolvedPrompt(
             text=text, source="bedrock", version=version, sha=prompt_sha(text)
         )
+        leftover = unexpanded_variables(text)
+        if leftover:
+            # Loud, not fatal: the prompt still works better than the baked
+            # fallback would, but somebody has shipped a template where a
+            # finished prompt belongs.
+            log.warning(
+                "prompt_source: %s still contains unexpanded %s — system prompts are not "
+                "parameterised on this path; move the variable part into a library asset "
+                "with a contract",
+                prompt_name, ", ".join(leftover),
+            )
         _cache.put(prompt_name, resolved)
         log.info(
             "prompt_source: resolved %s from Bedrock (version=%s sha=%s)",

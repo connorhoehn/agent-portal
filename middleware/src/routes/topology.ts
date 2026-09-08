@@ -14,6 +14,8 @@ import { Router } from 'express';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { asyncHandler } from '../lib/async-handler.js';
 import { exec } from '../providers/aurora.js';
+import { config } from '../config.js';
+import { buildMockTopologyNodes } from '../mock/topology.js';
 
 export const topologyRouter = Router();
 
@@ -80,6 +82,28 @@ topologyRouter.get('/a2a', asyncHandler(async (req, res) => {
 
   let nodes: TopologyNode[] = [];
   let edges: TopologyEdge[] = [];
+
+  // In dev:mock (or MOCK_AURORA) there is no Aurora to query — the raw
+  // `exec()` calls below always throw, are swallowed by their own catch
+  // blocks, and the response used to fall back to an all-zero
+  // `{ nodes: [], edges: [] }` even though Health's summary (mockAgents, via
+  // providers/cloudwatch.ts) reported thousands of invocations for the same
+  // 24h window. Derive nodes from the SAME mockAgents fixture instead, so
+  // Architecture and Health can't independently disagree about whether
+  // anything ran today (org-leader.md defect #13). Edges stay empty — no
+  // mock parent/child call graph exists to derive them from — the same
+  // "nothing to show yet" state a freshly-deployed real fleet has before its
+  // first A2A call.
+  if (config.mock.aurora) {
+    const response: TopologyResponse = {
+      windowHours: hours,
+      nodes: buildMockTopologyNodes(hours),
+      edges: [],
+      generatedAt: new Date().toISOString(),
+    };
+    res.json(response);
+    return;
+  }
 
   // ── Nodes: one row per agent that invoked anything in the window. ────────
   try {

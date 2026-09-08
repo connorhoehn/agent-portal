@@ -19,6 +19,16 @@
 
 import { exec } from './aurora.js';
 import { config } from '../config.js';
+// The mock stores below are fixture writes living outside src/mock, so their
+// stamps come from the one clock rather than `new Date()` — freezeClock can
+// then pin what a write recorded, and expireStale reads the same instant the
+// row was written against instead of racing wall time.
+import { clock } from '../mock/core/index.js';
+// The rows themselves live behind registered fixtures, so a recorded
+// experience or an answered consult is undone by `POST /api/__mock/reset`.
+import {
+  labConsults, labExperiences, nextMockConsultId, nextMockExperienceId,
+} from '../mock/lab.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 
 const s = (name: string, value: string): SqlParameter => ({ name, value: { stringValue: value } });
@@ -43,16 +53,13 @@ export interface LabExperience {
   createdAt: string;
 }
 
-const MOCK_EXPERIENCES: LabExperience[] = [];
-let expSeq = 0;
-
 export async function recordExperience(input: {
   sessionId?: string; boxId?: string; repo?: string; initiativeId?: string;
   kind: ExperienceKind; title: string; body?: string; tags?: string[];
 }): Promise<LabExperience> {
   if (config.mock.aurora) {
     const exp: LabExperience = {
-      id: `exp-mock-${++expSeq}`,
+      id: nextMockExperienceId(),
       sessionId: input.sessionId ?? null,
       boxId: input.boxId ?? null,
       repo: input.repo ?? null,
@@ -61,9 +68,9 @@ export async function recordExperience(input: {
       title: input.title,
       body: input.body ?? null,
       tags: input.tags ?? [],
-      createdAt: new Date().toISOString(),
+      createdAt: clock.nowIso(),
     };
-    MOCK_EXPERIENCES.push(exp);
+    labExperiences.rows().push(exp);
     return exp;
   }
   const rows = await exec(
@@ -86,7 +93,7 @@ export async function listExperiences(opts: {
 } = {}): Promise<LabExperience[]> {
   const limit = Math.min(Math.max(opts.limit ?? 30, 1), 100);
   if (config.mock.aurora) {
-    return MOCK_EXPERIENCES
+    return labExperiences.rows()
       .filter((e) =>
         (!opts.repo || e.repo === opts.repo) &&
         (!opts.initiativeId || e.initiativeId === opts.initiativeId))
@@ -148,11 +155,12 @@ export interface LabConsult {
   answeredAt: string | null;
 }
 
-const MOCK_CONSULTS: LabConsult[] = [];
-let conSeq = 0;
-
 function expireStale(c: LabConsult): LabConsult {
-  if (c.status === 'pending' && Date.now() - Date.parse(c.createdAt) > CONSULT_EXPIRY_MS) {
+  // `clock.now()`, not `Date.now()`: openConsult stamps createdAt from the
+  // clock, so measuring its age against wall time would expire every consult a
+  // frozen-clock test opens in the past — and would leave a consult opened
+  // under a freeze un-expirable forever.
+  if (c.status === 'pending' && clock.now().getTime() - Date.parse(c.createdAt) > CONSULT_EXPIRY_MS) {
     c.status = 'expired';
   }
   return c;
@@ -164,7 +172,7 @@ export async function openConsult(input: {
 }): Promise<LabConsult> {
   if (config.mock.aurora) {
     const con: LabConsult = {
-      id: `con-mock-${++conSeq}`,
+      id: nextMockConsultId(),
       sessionId: input.sessionId ?? null,
       boxId: input.boxId ?? null,
       repo: input.repo ?? null,
@@ -174,10 +182,10 @@ export async function openConsult(input: {
       status: 'pending',
       answer: null,
       answeredBy: null,
-      createdAt: new Date().toISOString(),
+      createdAt: clock.nowIso(),
       answeredAt: null,
     };
-    MOCK_CONSULTS.push(con);
+    labConsults.rows().push(con);
     return con;
   }
   const rows = await exec(
@@ -195,7 +203,7 @@ export async function openConsult(input: {
 
 export async function getConsult(id: string): Promise<LabConsult | null> {
   if (config.mock.aurora) {
-    const c = MOCK_CONSULTS.find((x) => x.id === id);
+    const c = labConsults.rows().find((x) => x.id === id);
     return c ? expireStale(c) : null;
   }
   // Expiry on read, like approvals: a crashed poller's consult can't linger.
@@ -214,8 +222,9 @@ export async function getConsult(id: string): Promise<LabConsult | null> {
 export async function listConsults(opts: { status?: string; limit?: number } = {}): Promise<LabConsult[]> {
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
   if (config.mock.aurora) {
-    MOCK_CONSULTS.forEach(expireStale);
-    return MOCK_CONSULTS
+    const rows = labConsults.rows();
+    rows.forEach(expireStale);
+    return rows
       .filter((c) => !opts.status || c.status === opts.status)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, limit);
@@ -238,12 +247,12 @@ export async function listConsults(opts: { status?: string; limit?: number } = {
 /** Answer a pending consult. Attribution comes from the session, never the body. */
 export async function answerConsult(id: string, answer: string, answeredBy: string): Promise<LabConsult | null> {
   if (config.mock.aurora) {
-    const c = MOCK_CONSULTS.find((x) => x.id === id);
+    const c = labConsults.rows().find((x) => x.id === id);
     if (!c || expireStale(c).status !== 'pending') return null;
     c.status = 'answered';
     c.answer = answer;
     c.answeredBy = answeredBy;
-    c.answeredAt = new Date().toISOString();
+    c.answeredAt = clock.nowIso();
     return c;
   }
   const rows = await exec(

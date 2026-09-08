@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Card, Inline, InlineAlert, InlinePlaceholder, Input, MetaLine, SectionLabel, SegmentedControl, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, CardHeader, Inline, InlineAlert, InlinePlaceholder, Input, MetaLine, SectionLabel, SegmentedControl, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../../lib/capabilities';
 import { useFetch } from '../../../hooks/useFetch';
 import { JourneyCarousel } from './JourneyCarousel';
@@ -7,6 +7,7 @@ import { JourneyTimeline } from './JourneyTimeline';
 import { SESSIONS_URL, closeSession, journeyUrl, launchSession, navigateSession } from './browserApi';
 import { openSessions } from './browserFormat';
 import type { BrowserSession, JourneyStep } from './types';
+import { T } from '../Text';
 
 const VIEW_OPTIONS = [
   { value: 'carousel', label: 'Carousel' },
@@ -84,16 +85,12 @@ export function JourneyTab() {
   }
 
   return (
-    <Card padding="md">
-      <Stack gap="md">
-        <Stack gap="xs">
-          <h2 className="text-[14px] font-semibold text-text-primary">Journey Recorder</h2>
-          <p className="text-[12px] leading-relaxed text-text-tertiary">
-            Record an ordered series of web pages with screenshots. Replay as a carousel or
-            scrollable timeline.
-          </p>
-        </Stack>
-
+    <Card padding="none" className="overflow-hidden">
+      <CardHeader
+        title="Journey Recorder"
+        subtitle="Record an ordered series of web pages with screenshots. Replay as a carousel or scrollable timeline."
+      />
+      <Stack gap="md" className="px-3.5 py-3">
         {!activeSessionId ? (
           <Stack gap="lg">
             {canManage ? (
@@ -140,8 +137,8 @@ export function JourneyTab() {
                       {/* Button centres its content; the rail reads as a list,
                           so the label is pushed left by a full-width row. */}
                       <Inline gap="sm" justify="start" wrap={false} className="w-full">
-                        <span className="font-mono text-[11px]">{s.sessionId}</span>
-                        <span className="text-text-tertiary">{s.agentName}</span>
+                        <T className="font-mono text-[11px]">{s.sessionId}</T>
+                        <T className="text-text-tertiary">{s.agentName}</T>
                       </Inline>
                     </Button>
                   ))}
@@ -173,7 +170,7 @@ export function JourneyTab() {
               <MetaLine
                 items={[
                   `${steps.length} step${steps.length === 1 ? '' : 's'}`,
-                  <span key="sid" className="font-mono">session {activeSessionId.slice(0, 12)}…</span>,
+                  <T key="sid" className="font-mono">session {activeSessionId.slice(0, 12)}…</T>,
                 ]}
               />
               <SegmentedControl options={VIEW_OPTIONS} value={view} onChange={setView} size="sm" />

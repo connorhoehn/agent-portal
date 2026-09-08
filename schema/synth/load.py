@@ -32,7 +32,7 @@ class LoadableDoc:
     body_markdown: str
     mentions: list[dict]        # [{entity_type, entity_id, count?}, ...]
     s3_prefix: str              # under bucket: e.g. "synth/internal/adr/"
-    # Newsroom-extended columns on `documents`. NULL where not applicable.
+    # Metadata columns on `documents`. NULL where not applicable.
     doc_type: str | None = None
     headline: str | None = None
     published_at: str | None = None      # ISO-8601 date or timestamp
@@ -132,123 +132,6 @@ def load_one(doc: LoadableDoc) -> str:
     upsert_mentions(doc)
     log.info("loaded %s → %s", doc.id, uri)
     return uri
-
-
-# ── Newsroom-side loaders ─────────────────────────────────────────────────────
-
-def upsert_entities(entities: list[dict]) -> None:
-    """entities: [{id, name, entity_type}, ...]"""
-    if not entities:
-        return
-    param_sets = [
-        [
-            {"name": "id",          "value": {"stringValue": e["id"]}},
-            {"name": "name",        "value": {"stringValue": e["name"]}},
-            {"name": "entity_type", "value": {"stringValue": e["entity_type"]}},
-        ]
-        for e in entities
-    ]
-    aurora.execute_many(
-        """
-        INSERT INTO entities (id, name, entity_type)
-        VALUES (:id, :name, :entity_type)
-        ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name
-        """,
-        param_sets,
-    )
-
-
-def upsert_article_entities(rows: list[dict]) -> None:
-    """rows: [{article_id, entity_id, salience}, ...]"""
-    if not rows:
-        return
-    param_sets = [
-        [
-            {"name": "article_id", "value": {"stringValue": r["article_id"]}},
-            {"name": "entity_id",  "value": {"stringValue": r["entity_id"]}},
-            {"name": "salience",   "value": {"doubleValue": float(r.get("salience", 1.0))}},
-        ]
-        for r in rows
-    ]
-    aurora.execute_many(
-        """
-        INSERT INTO article_entities (article_id, entity_id, salience)
-        VALUES (:article_id, :entity_id, :salience)
-        ON CONFLICT (article_id, entity_id) DO UPDATE SET salience = EXCLUDED.salience
-        """,
-        param_sets,
-    )
-
-
-def upsert_clusters(clusters: list[dict]) -> None:
-    """clusters: [{id, title, description, primary_beat, article_ids: [...]}, ...]"""
-    if not clusters:
-        return
-    cluster_params = [
-        [
-            {"name": "id",           "value": {"stringValue": c["id"]}},
-            {"name": "title",        "value": {"stringValue": c["title"]}},
-            {"name": "description",  "value": {"stringValue": c["description"]}},
-            {"name": "primary_beat", "value": {"stringValue": c["primary_beat"]}},
-        ]
-        for c in clusters
-    ]
-    aurora.execute_many(
-        """
-        INSERT INTO story_clusters (id, title, description, primary_beat)
-        VALUES (:id, :title, :description, :primary_beat)
-        ON CONFLICT (id) DO UPDATE
-          SET title = EXCLUDED.title,
-              description = EXCLUDED.description,
-              primary_beat = EXCLUDED.primary_beat,
-              last_updated = NOW()
-        """,
-        cluster_params,
-    )
-    edge_params = [
-        [
-            {"name": "cluster_id", "value": {"stringValue": c["id"]}},
-            {"name": "article_id", "value": {"stringValue": aid}},
-        ]
-        for c in clusters for aid in c["article_ids"]
-    ]
-    aurora.execute_many(
-        """
-        INSERT INTO cluster_articles (cluster_id, article_id)
-        VALUES (:cluster_id, :article_id)
-        ON CONFLICT (cluster_id, article_id) DO NOTHING
-        """,
-        edge_params,
-    )
-
-
-def upsert_pitches(pitches: list[dict]) -> None:
-    """pitches: [{id, title, body, beat, cluster_id}, ...]"""
-    if not pitches:
-        return
-    param_sets = [
-        [
-            {"name": "id",         "value": {"stringValue": p["id"]}},
-            {"name": "title",      "value": {"stringValue": p["title"]}},
-            {"name": "body",       "value": {"stringValue": p["body"]}},
-            {"name": "beat",       "value": {"stringValue": p.get("beat", "")}},
-            {"name": "cluster_id", "value": {"stringValue": p["cluster_id"]}},
-        ]
-        for p in pitches
-    ]
-    aurora.execute_many(
-        """
-        INSERT INTO pitches (id, title, body, beat, cluster_id)
-        VALUES (:id, :title, :body, :beat, :cluster_id)
-        ON CONFLICT (id) DO UPDATE
-          SET title = EXCLUDED.title,
-              body = EXCLUDED.body,
-              beat = EXCLUDED.beat,
-              cluster_id = EXCLUDED.cluster_id,
-              updated_at = NOW()
-        """,
-        param_sets,
-    )
 
 
 def upsert_node_embeddings(rows: list[dict]) -> None:

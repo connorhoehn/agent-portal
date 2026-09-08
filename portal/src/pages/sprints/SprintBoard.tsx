@@ -1,7 +1,7 @@
 // The work board for one sprint: the items in it, bucketed by status, plus the
 // two ManageSprints writes (move an item in, move one out).
 
-import { useMemo, useState } from 'react';
+import { useMemo, useReducer, useState, type KeyboardEvent } from 'react';
 import {
   BoardColumn,
   Button,
@@ -18,6 +18,9 @@ import {
   Switch,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { escapeNestReducer, INITIAL_ESCAPE_NEST_STATE, shouldHostHandleEscape, topEscapeLayer } from './escapeNesting';
+import { ExternalLink } from './ExternalLinkFrame';
+import { T } from './Text';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { sprintItemUrl, sprintItemsUrl } from './sprintForm';
 import { addableItems, bucketByColumn, PRIORITY_TONE, usd } from './sprintFormat';
@@ -30,7 +33,14 @@ import type { WorkItem, WorkTreeNode } from './types';
 function AddItemControl({ sprintId, orgProjectId, presentIds, onAdded }: {
   sprintId: string; orgProjectId: string; presentIds: Set<string>; onAdded: () => void;
 }) {
-  const [open, setOpen] = useState(false);
+  // Same nesting rule as GrantsPanel's forms (escapeNesting.ts): this
+  // control lives inside the sprint drawer's Work tab, and the drawer's own
+  // Escape-to-close must not fire while this inline form is open — one
+  // Escape cancels the form and returns focus to "+ Add work item"; only
+  // the next one closes the drawer.
+  const [nest, dispatchNest] = useReducer(escapeNestReducer, INITIAL_ESCAPE_NEST_STATE);
+  const open = topEscapeLayer(nest) === 'add';
+
   const { data: tree } = useFetch<WorkTreeNode[]>(
     open ? `/api/graph/projects/${encodeURIComponent(orgProjectId)}/work` : null,
   );
@@ -42,6 +52,29 @@ function AddItemControl({ sprintId, orgProjectId, presentIds, onAdded }: {
     [tree, presentIds],
   );
 
+  function openForm() {
+    dispatchNest({ type: 'open', id: 'add' });
+  }
+  function closeForm() {
+    dispatchNest({ type: 'close', id: 'add' });
+    setChoice('');
+    // "+ Add work item" is conditionally rendered, not just hidden, so it has
+    // already unmounted by the time this runs — a captured DOM ref would be
+    // stale. The stable `data-add-item-trigger` survives the remount; the
+    // requestAnimationFrame runs after it's back (same pattern as
+    // EstimateDrawer's `handleClose` / GrantsPanel's `focusTrigger`).
+    requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>('[data-add-item-trigger]')?.focus();
+    });
+  }
+  function handleKeyDown(e: KeyboardEvent) {
+    if (e.key !== 'Escape') return;
+    if (shouldHostHandleEscape(nest)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeForm();
+  }
+
   async function add() {
     if (!choice) return;
     setBusy(true);
@@ -49,21 +82,30 @@ function AddItemControl({ sprintId, orgProjectId, presentIds, onAdded }: {
     setBusy(false);
     if (!res.ok) { toastError(null, 'Could not add item', res.error ?? ''); return; }
     toastSuccess(null, 'Item added to sprint');
-    setChoice(''); setOpen(false);
+    closeForm();
     onAdded();
   }
 
   if (!open) {
-    return <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>+ Add work item</Button>;
+    return (
+      <Button size="sm" variant="secondary" onClick={openForm} data-add-item-trigger>
+        + Add work item
+      </Button>
+    );
   }
   return (
-    <Inline gap="xs">
+    <Inline gap="xs" onKeyDown={handleKeyDown}>
       <Select
         size="sm"
         className="w-auto min-w-[220px]"
         aria-label="Work item to add to this sprint"
         value={choice}
         onChange={(e) => setChoice(e.target.value)}
+        // The form mounts fresh every time "+ Add work item" opens it —
+        // autoFocus lands the keyboard here instead of leaving it on
+        // `<body>`, which is what made this form's own Escape handler
+        // never see the key.
+        autoFocus
         options={[
           {
             value: '',
@@ -73,7 +115,7 @@ function AddItemControl({ sprintId, orgProjectId, presentIds, onAdded }: {
         ]}
       />
       <Button size="sm" variant="primary" disabled={busy || !choice} onClick={() => void add()}>Add</Button>
-      <Button size="sm" variant="ghost" disabled={busy} onClick={() => { setOpen(false); setChoice(''); }}>Cancel</Button>
+      <Button size="sm" variant="ghost" disabled={busy} onClick={closeForm}>Cancel</Button>
     </Inline>
   );
 }
@@ -90,7 +132,7 @@ function WorkItemCard({ item, isMine, canRemove, removing, onRemove }: {
     >
       <Stack gap="xs">
         <Inline gap="xs" align="start" justify="between" wrap={false}>
-          <span className="text-[13px] leading-snug">{item.title}</span>
+          <T className="text-[13px] leading-snug">{item.title}</T>
           {canRemove ? (
             <IconButton
               aria-label={`Remove ${item.title} from this sprint`}
@@ -117,7 +159,7 @@ function WorkItemCard({ item, isMine, canRemove, removing, onRemove }: {
             item.estimatedCostUsd != null ? `est ${usd(item.estimatedCostUsd)}` : null,
             item.assigneeName,
             item.prUrl
-              ? <a key="pr" href={item.prUrl} target="_blank" rel="noreferrer" className="text-primary">PR</a>
+              ? <ExternalLink key="pr" href={item.prUrl} className="text-primary">PR</ExternalLink>
               : null,
           ]}
         />

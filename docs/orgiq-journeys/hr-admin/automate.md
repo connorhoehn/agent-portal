@@ -1,0 +1,14 @@
+surface: automate
+role: hr-admin
+user: u-rachel (Rachel Kowalski) — verified via GET /api/session/me on this surface (sub u-rachel, role hr-admin, tenant orgiq)
+url: /iq/work
+pages: portal/src/pages/work
+audited: 2026-09-06 00:18 local, Chrome 1552px, middleware dev:mock
+screenshot: automate.jpg
+verdict: pass
+console errors: 0
+layout: pass — content col left 224px w 1304px (one 24px padding on the shell main); breadcrumb "Build › Automate" at the top of the content box; nested "Automate" rail (Run/Configure/Review) flush with the content box at 224px (0px offset); first-row-top: 293px (the first bot-roster row, obs-nightly-maintenance — this Overview is a stat-tile dashboard with no table); above it one 4-tile stat strip (Waiting/Processing/Est. to drain/Bots on this queue) and nothing else; no horizontal scroll (scrollWidth 1552 = innerWidth)
+keyboard: pass — 47 controls counted, 47 reached by a real 50-press Tab sweep (focusin-recorded: palette button → account menu → the 7 rail groups and their links → the nested Automate rail → Graph updates → Manage bots → the 5 roster links → the Workers and Findings+DLQ tiles (real buttons) → the inline queue / Computer Lab links → wraps to the palette); nothing in the DOM was skipped
+empty-state: pass — every stat tile reads its own zero honestly (0 waiting / 0 processing / "clear" / 0 needs-you / 0 workers) and the attention panel says "Nothing needs your attention right now / Agent questions and finished work awaiting review will show up here."; the Findings + DLQ tile reads 4 open findings, matching what /iq/work/findings lists
+role-gating: hr-admin sees the real "BOTS PULLING FROM THIS QUEUE" roster (5 bots with cron, last-ran, today's run count; cost-anomaly-sweep shows the amber "paused" state) and a "Manage bots →" link into /admin/bots; the inline "Computer Lab" link resolves to /admin/devbox, which hr-admin can open. No dispatch control on this page — dispatch lives on the initiative and Bots pages
+notes: the layered shell is in place — tinted ground, panel rails, brand hairline at the top of the header, gradient mark on the Org tile; the header's "⌘K Search" and the account menu are the only chrome controls ahead of the rail in the tab order. The roster row is a whole-row link (each `<a href="/admin/bots/<uuid>">`), so Enter on a focused row opens the bot detail.

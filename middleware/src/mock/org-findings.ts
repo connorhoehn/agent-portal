@@ -1,0 +1,168 @@
+// Organizational sweep findings — `agent_findings`, offline.
+//
+// These seven rows were a `seedMockFindings()` function inside
+// providers/org-sweeps.ts, pushing into a bare module-level `MOCK_FINDINGS`
+// array. They moved here for the two reasons the floor names:
+//
+//   1. THE STAMPS WERE MINTED OFF THE WALL CLOCK. The seed built every
+//      first/last-seen out of a local `new Date(Date.now() - h * 3_600_000)`,
+//      so `freezeClock` could not pin them and a frozen-clock test could not
+//      assert what a sweep re-observed. `clock.hoursAgo` inside the rows
+//      factory samples at READ time instead, which is also what keeps the ages
+//      honest in a process left running overnight.
+//   2. WRITES HAD NOWHERE TO GO BACK TO. `fileLabSignal`, `setFindingStatus`
+//      and the mock `runSweep` all mutate these rows — dismissing a finding or
+//      promoting it to a job is a demo action an auditor takes — and a
+//      mutation against a bare array is the "damage the shared state and warn
+//      the next auditor" problem the scenario control plane exists to end.
+//      Behind a fixture, `POST /api/__mock/reset` puts the board back.
+//
+// AGE IS THE CLAIM HERE, NOT THE DAY, so none of these use
+// `keepWithinToday`: nothing buckets a finding by calendar day (the Work page
+// renders them as a severity-ranked list), and a finding first seen 200 hours
+// ago is meant to read as eight days old whatever the wall clock says.
+//
+// IDS ARE PART OF THE CONTRACT. `find-mock-1` … `find-mock-7` are addressed by
+// name from routes/__tests__/work-findings-promote.test.ts (which picks rows
+// for their evidence shape: an initiative-scoped finding, one with no
+// initiative context at all, one carrying only a candidate initiative), so
+// they are written out rather than handed to a counter that renumbers when a
+// row is inserted above.
+
+import { clock, defineFixture } from './core/index.js';
+import { liveRows } from './live.js';
+// Type-only, so it is erased at compile: providers/org-sweeps.ts imports the
+// rows below at run time, and a value import back the other way would be a
+// genuine cycle rather than a shared shape.
+import type { Finding } from '../providers/org-sweeps.js';
+
+/** Matches providers/org-sweeps.ts's `LAB_SWEEP` without importing it — that
+ *  module imports this one, and a cycle through a const is avoidable. */
+const LAB_SWEEP = 'lab-signal';
+
+/**
+ * What the three scheduled sweeps and one lab signal produce against
+ * schema/seed_program.sql's cast. Every status the Work page filters on is
+ * represented (open / promoted / resolved / dismissed) — an empty status tab
+ * is indistinguishable from a broken query, and this is the surface that has
+ * to be auditable without Aurora.
+ */
+function seedFindings(): Finding[] {
+  return [
+    {
+      id: 'find-mock-1',
+      sweep: 'bus_factor', severity: 'critical',
+      title: 'Aurora cold-start recovery has a single holder',
+      detail: 'Only Vera Green (p-002) carries skill-cold-start-aurora; the on-call rotation for p-observability depends on it.',
+      entityType: 'skill', entityId: 'skill-cold-start-aurora',
+      evidence: { holders: 1, holderIds: ['p-002'], holderNames: ['Vera Green'], initiatives: ['p-observability'] },
+      status: 'open', jobId: null,
+      firstSeenAt: clock.hoursAgo(70), lastSeenAt: clock.hoursAgo(6),
+      fingerprint: 'bus_factor:skill-cold-start-aurora',
+    },
+    {
+      id: 'find-mock-2',
+      sweep: 'bus_factor', severity: 'warning',
+      title: 'Flaky-test triage is held by two people on the same team',
+      detail: 'skill-flaky-test-triage: Theo Chang (p-001) and Nora DaSilva (p-004), both on Platform — one leave request empties it.',
+      entityType: 'skill', entityId: 'skill-flaky-test-triage',
+      evidence: { holders: 2, holderIds: ['p-001', 'p-004'], holderNames: ['Theo Chang', 'Nora DaSilva'] },
+      status: 'open', jobId: null,
+      firstSeenAt: clock.hoursAgo(46), lastSeenAt: clock.hoursAgo(6),
+      fingerprint: 'bus_factor:skill-flaky-test-triage',
+    },
+    {
+      id: 'find-mock-3',
+      sweep: 'stale_docs', severity: 'warning',
+      title: 'ADR-014 "Retry the Data API through an Aurora cold start" is 190 days old',
+      detail: 'Last edited before the Data API retry landed in schema/load_schema.py; the ADR still describes the pre-retry failure mode.',
+      entityType: 'document', entityId: 'doc-adr-014',
+      evidence: { ageDays: 190, initiative: 'p-observability', lastEditedBy: 'p-002' },
+      status: 'promoted', jobId: null,
+      firstSeenAt: clock.hoursAgo(120), lastSeenAt: clock.hoursAgo(6),
+      fingerprint: 'stale_docs:doc-adr-014',
+    },
+    {
+      id: 'find-mock-4',
+      sweep: 'stale_docs', severity: 'info',
+      title: 'Cost-optimisation runbook has no owner on the current roster',
+      detail: 'runbook-cost-opt names an owner who left; p-cost-opt has no replacement steward for it.',
+      entityType: 'document', entityId: 'doc-runbook-cost-opt',
+      evidence: { ageDays: 88, initiative: 'p-cost-opt', ownerActive: false },
+      status: 'open', jobId: null,
+      firstSeenAt: clock.hoursAgo(30), lastSeenAt: clock.hoursAgo(6),
+      fingerprint: 'stale_docs:doc-runbook-cost-opt',
+    },
+    {
+      id: 'find-mock-5',
+      sweep: 'orphan_decisions', severity: 'warning',
+      title: 'Decision "Move auth to Cognito hosted UI" links to no initiative',
+      detail: 'dec-cognito-hosted-ui has an owner (Sienna Garcia, p-005) but no initiative or work item cites it; p-auth-migration is the obvious home.',
+      entityType: 'decision', entityId: 'dec-cognito-hosted-ui',
+      evidence: { ownerId: 'p-005', candidateInitiative: 'p-auth-migration', citedBy: 0 },
+      status: 'open', jobId: null,
+      firstSeenAt: clock.hoursAgo(54), lastSeenAt: clock.hoursAgo(6),
+      fingerprint: 'orphan_decisions:dec-cognito-hosted-ui',
+    },
+    {
+      id: 'find-mock-6',
+      sweep: 'orphan_decisions', severity: 'info',
+      title: 'Decision "Pin Titan v2 at 1024 dims" superseded by the KB rebuild',
+      detail: 'Resolved when p-llm-platform re-linked it to the knowledge-base initiative.',
+      entityType: 'decision', entityId: 'dec-titan-1024',
+      evidence: { ownerId: 'p-003', linkedTo: 'p-llm-platform' },
+      status: 'resolved', jobId: null,
+      firstSeenAt: clock.hoursAgo(200), lastSeenAt: clock.hoursAgo(26),
+      fingerprint: 'orphan_decisions:dec-titan-1024',
+    },
+    {
+      id: 'find-mock-7',
+      sweep: LAB_SWEEP, severity: 'warning',
+      title: 'Devbox session left 412 MB of build output in /mnt/workspace',
+      detail: 'Session storage is wiped on every runtime update; the artefacts were never pushed. Dismissed: the box was a throwaway experiment.',
+      entityType: 'repo', entityId: 'orgiq-portal',
+      evidence: { sessionId: 'sess-mock-throwaway-experiment-000000000001', boxId: 'box-mock-3', repo: 'orgiq-portal', initiativeId: 'p-observability' },
+      status: 'dismissed', jobId: null,
+      firstSeenAt: clock.hoursAgo(20), lastSeenAt: clock.hoursAgo(20),
+      fingerprint: 'lab:workspace-bloat:box-mock-3',
+    },
+  ];
+}
+
+/**
+ * The findings board.
+ *
+ * `empty` — the sweeps have run and found nothing. Declared explicitly: an
+ *           undeclared scenario falls back to `default`, and "no findings" is
+ *           the state the Work page's reassuring empty copy is written for —
+ *           the one state a seeded board can never show.
+ */
+export const orgFindings = defineFixture<Finding>({
+  key: 'org-findings',
+  scenarios: {
+    default: seedFindings,
+    empty: () => [],
+  },
+});
+
+/** Live view — see mock/live.ts. The provider keeps reading it as an array. */
+export const mockFindings: Finding[] = liveRows(orgFindings);
+
+/**
+ * The next `find-mock-N` id, derived from the rows that are actually there
+ * rather than from a module counter.
+ *
+ * A counter would collide after a reset: `POST /api/__mock/reset` rebuilds the
+ * seed as `find-mock-1` … `-7` while a counter that had reached 9 keeps
+ * counting, and a counter reset with the fixture would re-mint an id the
+ * seed already owns. Reading the high-water mark off the live rows is correct
+ * in both directions.
+ */
+export function nextMockFindingId(): string {
+  let max = 0;
+  for (const f of orgFindings.rows()) {
+    const m = /^find-mock-(\d+)$/.exec(f.id);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return `find-mock-${max + 1}`;
+}

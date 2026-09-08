@@ -29,7 +29,6 @@ from .load import LoadableDoc
 from .prompts import (
     adr as adr_prompts,
     all_hands as all_hands_prompts,
-    news_article as news_prompts,
     perf_review as perf_prompts,
     postmortem as postmortem_prompts,
     slack_thread as slack_prompts,
@@ -37,7 +36,6 @@ from .prompts import (
 from .schemas import (
     ADR, ADRGen,
     AllHandsRecap, AllHandsRecapGen,
-    NewsArticle, NewsArticleGen,
     PerfReview, PerfReviewGen,
     Postmortem, PostmortemGen,
     SlackThread, SlackThreadGen,
@@ -381,66 +379,6 @@ def plan_all_hands(graph: dict, personas_by_pid: dict[str, dict]) -> list[Genera
             system=all_hands_prompts.SYSTEM, user_prompt=prompt,
             output_model=AllHandsRecapGen, finalize=_finalize,
             s3_prefix=CONFIG.s3_internal_prefix + "all_hands",
-        ))
-    return tasks
-
-
-# ── News article planner ──────────────────────────────────────────────────────
-
-NEWS_ANGLES = [
-    "OrgIQ raises funding round amid AI-infrastructure boom",
-    "OrgIQ announces general availability of a new product line",
-    "Industry analyst weighs in on OrgIQ's competitive position",
-    "OrgIQ partners with a fictional cloud provider on a new integration",
-    "Inside OrgIQ's engineering culture: lessons from the platform team",
-    "OrgIQ hires a high-profile executive away from a rival",
-    "OrgIQ's latest open-source release sparks debate among practitioners",
-    "OrgIQ faces scrutiny over its data-handling practices, response",
-    "How OrgIQ's RAG platform stacks up against competing offerings",
-    "OrgIQ profiles an internal engineering migration in a public blog post",
-]
-
-
-def plan_news_articles(graph: dict, _personas_by_pid: dict[str, dict]) -> list[GenerationTask]:
-    rng = random.Random(99)
-    catalog = {"teams": graph["teams"], "projects": graph["projects"], "skills": graph["skills"]}
-    decisions = graph["decisions"]
-    projects = graph["projects"]
-
-    tasks: list[GenerationTask] = []
-    for i in range(CONFIG.n_news_articles):
-        angle = NEWS_ANGLES[i % len(NEWS_ANGLES)]
-        # Anchor every other article to a real decision or project for variety.
-        related_decision = decisions[i % len(decisions)] if i % 2 == 0 and decisions else None
-        related_project = projects[i % len(projects)] if i % 2 == 1 and projects else None
-        # Date spread across 2026.
-        day = (i * 7) % 360 + 5
-        dateline = f"2026-{(day // 30) % 12 + 1:02d}-{(day % 28) + 1:02d}"
-        prompt = news_prompts.build_prompt(angle, related_decision, related_project, catalog)
-        doc_id = f"news-{i:03d}"
-
-        def _finalize(gen: NewsArticleGen, _dateline=dateline, _doc_id=doc_id) -> LoadableDoc:
-            article = NewsArticle(dateline=_dateline, **gen.model_dump())
-            section = (article.topic_tags or ["news"])[0]
-            return LoadableDoc(
-                id=_doc_id,
-                title=article.headline,
-                source="news_article",
-                body_markdown=article.body_markdown,
-                mentions=[],  # NER pass populates newsroom entities separately
-                s3_prefix=CONFIG.s3_news_prefix,
-                doc_type="news_article",
-                headline=article.headline,
-                published_at=_dateline,
-                section=section,
-            )
-
-        tasks.append(GenerationTask(
-            doc_id=doc_id, doc_type="news_article",
-            model_id=NOVA_PRO, temperature=CONFIG.temperature_structured,
-            system=news_prompts.SYSTEM, user_prompt=prompt,
-            output_model=NewsArticleGen, finalize=_finalize,
-            s3_prefix=CONFIG.s3_news_prefix,
         ))
     return tasks
 

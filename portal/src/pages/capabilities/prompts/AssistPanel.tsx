@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Button, CodeBlock, CollapsibleSection, FormField, InlineAlert, SectionLabel, Select, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { optimizePrompt, type OptimizeMetric } from '../../../components/canary/usePromptLibrary.js';
+import { T } from '../Text';
 
 const METRIC_OPTIONS = [
   { value: 'clarity',      label: 'Clarity — clearer instructions' },
@@ -39,10 +40,10 @@ export function AssistPanel({ promptId, templateText }: { promptId: string; temp
   return (
     <CollapsibleSection title="AI Assist" storageKey="prompt-studio-assist">
       <Stack gap="md" className="p-4">
-        <p className="m-0 text-[11px] leading-relaxed text-text-tertiary">
+        <T className="text-[11px] leading-relaxed text-text-tertiary" wrap>
           Let Nova Pro rewrite the current template for a specific goal. Review the result and copy
           it to your editor.
-        </p>
+        </T>
 
         <FormField label="Optimize for">
           {({ labelId: _labelId, ...field }) => (

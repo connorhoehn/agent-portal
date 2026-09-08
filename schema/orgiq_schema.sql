@@ -45,12 +45,37 @@ CREATE TABLE IF NOT EXISTS teams (
 );
 
 CREATE TABLE IF NOT EXISTS projects (
-  id          TEXT PRIMARY KEY,
-  name        TEXT NOT NULL,
-  status      TEXT,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id                 TEXT PRIMARY KEY,
+  name               TEXT NOT NULL,
+  status             TEXT,
+  summary            TEXT,
+  sponsor_person_id  TEXT REFERENCES people(id) ON DELETE SET NULL,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Idempotent for databases created before summary/sponsor existed.
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS summary            TEXT;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS sponsor_person_id  TEXT REFERENCES people(id) ON DELETE SET NULL;
+
+-- A call the org has made, or still has to make. ONE concept with a lifecycle,
+-- not two things sharing a table:
+--
+--   status       open -> escalated -> resolved | rejected
+--   decided_at   set exactly when the call has been made; NULL while it is open
+--   project_id   the initiative it was raised against, or NULL for an org-wide
+--                standard that no single initiative owns (d-aurora, d-k8s)
+--   work_item_id the work this decision blocks, when it blocks work
+--
+-- `status`, `project_id`, `required_role`, `resolution`, `escalated_at`,
+-- `resolved_at` and `work_item_id` are ALTERed in by
+-- schema/orgiq_work_items_schema.sql, which is why they are not listed here —
+-- they need `projects` and `work_items` to exist first. They are part of this
+-- table's definition all the same, and BOTH seeds fill the whole set: a seed
+-- that fills half of it is how `GET /api/graph/decisions` and an initiative's
+-- Decisions tab came to describe two different worlds out of one table.
+--
+-- Who was in the room lives in `decision_participants` below — for every
+-- decision, not just the ADR-shaped ones.
 CREATE TABLE IF NOT EXISTS decisions (
   id          TEXT PRIMARY KEY,
   topic       TEXT NOT NULL,

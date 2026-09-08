@@ -16,10 +16,12 @@
 //   GET /api/observability/calibration/runs?limit=14      (recent MAE)
 
 import { useEffect, useMemo, useState } from 'react';
-import type { CSSProperties } from 'react';
+import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import {
   Card,
+  CardHeader,
+  FormField,
   Table,
   TableHead,
   TableBody,
@@ -27,9 +29,13 @@ import {
   TableTh,
   TableTd,
   Chip,
+  Inline,
   PageSection,
+  Select,
+  StatStrip,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { T } from './Text';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -228,6 +234,86 @@ function ModelComparePage() {
     ? (costPerGoodB - costPerGoodA)
     : null;
 
+  const headlineItems = summary ? [
+    {
+      label: 'Pass rate',
+      value: fmtPct(summary.passRateB),
+      hint: (
+        <Inline gap="xs" align="center" wrap>
+          <Chip tone="neutral" size="xs">A {fmtPct(summary.passRateA)}</Chip>
+          <T className="text-text-tertiary">→</T>
+          <Chip tone="neutral" size="xs">B {fmtPct(summary.passRateB)}</Chip>
+          <Chip tone={passRateDeltaTone(summary.passRateDelta)} size="xs">
+            {summary.passRateDelta >= 0 ? '▲' : '▼'} {fmtSignedPct(summary.passRateDelta)}
+          </Chip>
+        </Inline>
+      ),
+    },
+    {
+      label: 'Total cost',
+      value: fmtUsd(summary.costBUsd, 3),
+      hint: (
+        <Inline gap="xs" align="center" wrap>
+          <Chip tone="neutral" size="xs">A {fmtUsd(summary.costAUsd, 3)}</Chip>
+          <T className="text-text-tertiary">→</T>
+          <Chip tone="neutral" size="xs">B {fmtUsd(summary.costBUsd, 3)}</Chip>
+          <Chip tone={costDeltaTone(summary.costDeltaUsd)} size="xs">
+            {fmtSignedCost(summary.costDeltaUsd)}
+          </Chip>
+        </Inline>
+      ),
+    },
+    {
+      label: 'Cost per good response',
+      value: fmtUsd(costPerGoodB, 4),
+      hint: (
+        <Inline gap="xs" align="center" wrap>
+          <Chip tone="neutral" size="xs">A {fmtUsd(costPerGoodA, 4)}</Chip>
+          <T className="text-text-tertiary">→</T>
+          <Chip tone="neutral" size="xs">B {fmtUsd(costPerGoodB, 4)}</Chip>
+          <Chip tone={costDeltaTone(costPerGoodDelta)} size="xs">
+            {fmtSignedCost(costPerGoodDelta)}
+          </Chip>
+        </Inline>
+      ),
+    },
+    {
+      label: 'Avg latency',
+      value: fmtSignedDuration(Math.round(summary.avgDurationMsB)),
+      hint: (
+        <Inline gap="xs" align="center" wrap>
+          <Chip tone="neutral" size="xs">A {fmtSignedDuration(Math.round(summary.avgDurationMsA))}</Chip>
+          <T className="text-text-tertiary">→</T>
+          <Chip tone="neutral" size="xs">B {fmtSignedDuration(Math.round(summary.avgDurationMsB))}</Chip>
+          <Chip tone={durationDeltaTone(summary.durationDeltaMs)} size="xs">
+            {fmtSignedDuration(summary.durationDeltaMs)}
+          </Chip>
+        </Inline>
+      ),
+    },
+    {
+      label: 'Judge MAE (calibration)',
+      value: maeB ? fmt(maeB.mae) : '—',
+      hint: (maeA && maeB ? (
+        <Inline gap="xs" align="center" wrap>
+          <Chip tone="neutral" size="xs">A {fmt(maeA.mae)}</Chip>
+          <T className="text-text-tertiary">→</T>
+          <Chip tone="neutral" size="xs">B {fmt(maeB.mae)}</Chip>
+          {maeDelta != null && (
+            <Chip tone={maeDelta > 0.01 ? 'danger' : maeDelta < -0.01 ? 'success' : 'neutral'} size="xs">
+              {maeDelta >= 0 ? '+' : ''}{maeDelta.toFixed(3)}
+            </Chip>
+          )}
+        </Inline>
+      ) : (
+        <T className="text-[11px] text-text-tertiary">
+          Run a calibration to anchor this judge.{' '}
+          <Link to="/admin/observability/calibration" className="text-primary no-underline hover:underline">open →</Link>
+        </T>
+      )) as ReactNode,
+    },
+  ] : [];
+
   return (
     <PageSection
       title="Model Compare"
@@ -235,7 +321,7 @@ function ModelComparePage() {
     >
       {/* Pickers */}
       <Card padding="md">
-        <div style={pickerRow}>
+        <Inline gap="md" align="end" wrap>
           <RunPicker
             label="Run A (baseline)"
             runs={runs}
@@ -243,7 +329,7 @@ function ModelComparePage() {
             onChange={setRunIdA}
             otherValue={runIdB}
           />
-          <span style={arrowBetween}>vs</span>
+          <T className="text-base text-text-tertiary pb-1.5">vs</T>
           <RunPicker
             label="Run B (candidate)"
             runs={runs}
@@ -251,35 +337,35 @@ function ModelComparePage() {
             onChange={setRunIdB}
             otherValue={runIdA}
           />
-        </div>
+        </Inline>
         {runA && runB && (
-          <div style={{ ...subline, marginTop: 8 }}>
-            <span style={runLabelChip} title={`run A: ${runA.runId}`}>
-              A: <strong>{runA.label}</strong>{' '}
-              <span style={monoInline}>· judge {runA.judgeModelId}</span>
+          <Inline gap="sm" wrap align="center" className="text-[12px] text-text-secondary mt-2">
+            <Inline as="span" gap="xs" align="center" wrap title={`run A: ${runA.runId}`}>
+              <T>A: <strong>{runA.label}</strong></T>
+              <T className="font-mono text-[11.5px]">· judge {runA.judgeModelId}</T>
               {agentModelA && (
                 <>
-                  <span style={dot}>·</span>
+                  <T className="text-text-tertiary">·</T>
                   <Chip tone="neutral" size="xs">
-                    <span style={monoInline}>agent {agentModelA}</span>
+                    <T className="font-mono text-[11.5px]">agent {agentModelA}</T>
                   </Chip>
                 </>
               )}
-            </span>
-            <span style={dot}>→</span>
-            <span style={runLabelChip} title={`run B: ${runB.runId}`}>
-              B: <strong>{runB.label}</strong>{' '}
-              <span style={monoInline}>· judge {runB.judgeModelId}</span>
+            </Inline>
+            <T className="text-text-tertiary">→</T>
+            <Inline as="span" gap="xs" align="center" wrap title={`run B: ${runB.runId}`}>
+              <T>B: <strong>{runB.label}</strong></T>
+              <T className="font-mono text-[11.5px]">· judge {runB.judgeModelId}</T>
               {agentModelB && (
                 <>
-                  <span style={dot}>·</span>
+                  <T className="text-text-tertiary">·</T>
                   <Chip tone="neutral" size="xs">
-                    <span style={monoInline}>agent {agentModelB}</span>
+                    <T className="font-mono text-[11.5px]">agent {agentModelB}</T>
                   </Chip>
                 </>
               )}
-            </span>
-          </div>
+            </Inline>
+          </Inline>
         )}
       </Card>
 
@@ -304,102 +390,11 @@ function ModelComparePage() {
         <>
           {/* Headline metrics */}
           <Card padding="md">
-            <div style={headerRow}>
-              <h2 style={h2}>
-                Headline metrics{' '}
-                <span style={hint}>
-                  green = B is better · red = B is worse · neutral = within band
-                </span>
-              </h2>
-            </div>
-            <div style={headlineRow}>
-              <HeadlineCard
-                label="Pass rate"
-                primary={fmtPct(summary.passRateB)}
-                secondary={
-                  <span style={chipRow}>
-                    <Chip tone="neutral" size="xs">A {fmtPct(summary.passRateA)}</Chip>
-                    <span style={dot}>→</span>
-                    <Chip tone="neutral" size="xs">B {fmtPct(summary.passRateB)}</Chip>
-                    <Chip tone={passRateDeltaTone(summary.passRateDelta)} size="xs">
-                      {summary.passRateDelta >= 0 ? '▲' : '▼'} {fmtSignedPct(summary.passRateDelta)}
-                    </Chip>
-                  </span>
-                }
-              />
-              <HeadlineCard
-                label="Total cost"
-                primary={fmtUsd(summary.costBUsd, 3)}
-                secondary={
-                  <span style={chipRow}>
-                    <Chip tone="neutral" size="xs">A {fmtUsd(summary.costAUsd, 3)}</Chip>
-                    <span style={dot}>→</span>
-                    <Chip tone="neutral" size="xs">B {fmtUsd(summary.costBUsd, 3)}</Chip>
-                    <Chip tone={costDeltaTone(summary.costDeltaUsd)} size="xs">
-                      {fmtSignedCost(summary.costDeltaUsd)}
-                    </Chip>
-                  </span>
-                }
-              />
-              <HeadlineCard
-                label="Cost per good response"
-                primary={fmtUsd(costPerGoodB, 4)}
-                secondary={
-                  <span style={chipRow}>
-                    <Chip tone="neutral" size="xs">A {fmtUsd(costPerGoodA, 4)}</Chip>
-                    <span style={dot}>→</span>
-                    <Chip tone="neutral" size="xs">B {fmtUsd(costPerGoodB, 4)}</Chip>
-                    <Chip tone={costDeltaTone(costPerGoodDelta)} size="xs">
-                      {fmtSignedCost(costPerGoodDelta)}
-                    </Chip>
-                  </span>
-                }
-              />
-              <HeadlineCard
-                label="Avg latency"
-                primary={fmtSignedDuration(Math.round(summary.avgDurationMsB))}
-                secondary={
-                  <span style={chipRow}>
-                    <Chip tone="neutral" size="xs">
-                      A {fmtSignedDuration(Math.round(summary.avgDurationMsA))}
-                    </Chip>
-                    <span style={dot}>→</span>
-                    <Chip tone="neutral" size="xs">
-                      B {fmtSignedDuration(Math.round(summary.avgDurationMsB))}
-                    </Chip>
-                    <Chip tone={durationDeltaTone(summary.durationDeltaMs)} size="xs">
-                      {fmtSignedDuration(summary.durationDeltaMs)}
-                    </Chip>
-                  </span>
-                }
-              />
-              <HeadlineCard
-                label="Judge MAE (calibration)"
-                primary={maeB ? fmt(maeB.mae) : '—'}
-                secondary={
-                  maeA && maeB ? (
-                    <span style={chipRow}>
-                      <Chip tone="neutral" size="xs">A {fmt(maeA.mae)}</Chip>
-                      <span style={dot}>→</span>
-                      <Chip tone="neutral" size="xs">B {fmt(maeB.mae)}</Chip>
-                      {maeDelta != null && (
-                        <Chip
-                          tone={maeDelta > 0.01 ? 'danger' : maeDelta < -0.01 ? 'success' : 'neutral'}
-                          size="xs"
-                        >
-                          {maeDelta >= 0 ? '+' : ''}{maeDelta.toFixed(3)}
-                        </Chip>
-                      )}
-                    </span>
-                  ) : (
-                    <span style={hint}>
-                      Run a calibration to anchor this judge.{' '}
-                      <Link to="/admin/observability/calibration" style={inlineLink}>open →</Link>
-                    </span>
-                  )
-                }
-              />
-            </div>
+            <CardHeader
+              title="Headline metrics"
+              subtitle="green = B is better · red = B is worse · neutral = within band"
+            />
+            <StatStrip frameless items={headlineItems} />
           </Card>
 
           {/* Regressions / Fixes */}
@@ -419,17 +414,17 @@ function ModelComparePage() {
           />
 
           <Card padding="md">
-            <div style={subline}>
-              <span style={hint}>
-                Want a deeper view? Open the full Sprint 3 compare page:{' '}
-              </span>
+            <Inline gap="xs" align="center" wrap className="text-[12px] text-text-secondary">
+              <T className="text-[11px] text-text-tertiary">
+                Want a deeper view? Open the full Sprint 3 compare page:
+              </T>
               <Link
                 to={`/admin/observability/harness/compare/${encodeURIComponent(runIdA)}/${encodeURIComponent(runIdB)}`}
-                style={inlineLink}
+                className="text-[12px] text-primary no-underline hover:underline"
               >
                 detailed compare →
               </Link>
-            </div>
+            </Inline>
           </Card>
         </>
       ) : null}
@@ -453,45 +448,23 @@ function RunPicker({
   otherValue: string;
 }) {
   return (
-    <label style={pickerLabel}>
-      <span style={pickerLabelText}>{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={pickerSelect}
-      >
-        <option value="">— pick a run —</option>
-        {runs.map((r) => {
-          const sha = r.gitSha ? ` · ${r.gitSha.slice(0, 7)}` : '';
-          const mode = r.mode ? ` · ${r.mode}` : '';
-          const judge = r.judgeModelId ? ` · judge ${r.judgeModelId.replace('amazon.', '')}` : '';
-          const isOther = r.runId === otherValue;
-          return (
-            <option key={r.runId} value={r.runId}>
-              {r.label}{mode}{judge}{sha}{isOther ? ' (other side)' : ''}
-            </option>
-          );
-        })}
-      </select>
-    </label>
-  );
-}
-
-function HeadlineCard({
-  label,
-  primary,
-  secondary,
-}: {
-  label: string;
-  primary: string;
-  secondary: React.ReactNode;
-}) {
-  return (
-    <div style={headlineCard}>
-      <div style={headlineLabel}>{label.toUpperCase()}</div>
-      <div style={headlinePrimary}>{primary}</div>
-      <div style={headlineSecondary}>{secondary}</div>
-    </div>
+    <FormField label={label} className="flex-1 min-w-[280px]">
+      {({ labelId: _labelId, ...field }) => (
+        <Select
+          {...field}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="— pick a run —"
+          options={runs.map((r) => {
+            const sha = r.gitSha ? ` · ${r.gitSha.slice(0, 7)}` : '';
+            const mode = r.mode ? ` · ${r.mode}` : '';
+            const judge = r.judgeModelId ? ` · judge ${r.judgeModelId.replace('amazon.', '')}` : '';
+            const isOther = r.runId === otherValue;
+            return { value: r.runId, label: `${r.label}${mode}${judge}${sha}${isOther ? ' (other side)' : ''}` };
+          })}
+        />
+      )}
+    </FormField>
   );
 }
 
@@ -508,19 +481,14 @@ function DeltaTable({
   results: ComparedResult[];
   emptyText: string;
 }) {
-  const cardTint: CSSProperties =
-    tone === 'danger'
-      ? { borderTop: '2px solid var(--color-danger, #ef4444)' }
-      : tone === 'success'
-        ? { borderTop: '2px solid var(--color-success, #22c55e)' }
-        : {};
+  const toneClass = tone === 'danger'
+    ? 'border-t-2 border-danger'
+    : tone === 'success'
+      ? 'border-t-2 border-success'
+      : undefined;
   return (
-    <Card padding="md" style={cardTint}>
-      <div style={headerRow}>
-        <h2 style={h2}>
-          {title} <span style={hint}>{hintText}</span>
-        </h2>
-      </div>
+    <Card padding="md" className={toneClass}>
+      <CardHeader title={title} subtitle={hintText} />
       {results.length === 0 ? (
         <EmptyState text={emptyText} />
       ) : (
@@ -545,11 +513,11 @@ function DeltaTable({
                 : tone;
               return (
                 <TableRow key={r.testId}>
-                  <TableTd style={monoCell}>{r.testId}</TableTd>
-                  <TableTd style={agentCell}>{r.agentId || '—'}</TableTd>
-                  <TableTd style={{ whiteSpace: 'nowrap' }}>
+                  <TableTd className="text-[11px] text-text-tertiary font-mono whitespace-nowrap">{r.testId}</TableTd>
+                  <TableTd className="text-[12px] font-medium whitespace-nowrap">{r.agentId || '—'}</TableTd>
+                  <TableTd className="whitespace-nowrap">
                     <Chip tone={judgeTone(r.scoreA)} size="xs">{fmt(r.scoreA)}</Chip>
-                    <span style={{ ...dot, margin: '0 4px' }}>→</span>
+                    <T className="text-text-tertiary mx-1">→</T>
                     <Chip tone={judgeTone(r.scoreB)} size="xs">{fmt(r.scoreB)}</Chip>
                   </TableTd>
                   <TableTd>
@@ -562,7 +530,7 @@ function DeltaTable({
                       {fmtSignedCost(r.costDeltaUsd)}
                     </Chip>
                   </TableTd>
-                  <TableTd style={numCell}>
+                  <TableTd className="text-[12px] text-text-secondary whitespace-nowrap">
                     {fmtSignedDuration(r.durationDeltaMs)}
                   </TableTd>
                 </TableRow>
@@ -577,157 +545,14 @@ function DeltaTable({
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div
-      style={{
-        padding: 24,
-        textAlign: 'center',
-        fontSize: 12,
-        color: 'var(--color-text-tertiary)',
-      }}
-    >
+    <T as="div" className="p-6 text-center text-[12px] text-text-tertiary">
       {text}
-    </div>
+    </T>
   );
 }
 
 // Reference shortRunId to keep the export happy; the diagnostic chip used to
 // surface it but the secondary chip rows show full label now.
 void shortRunId;
-
-// ─── Styles ─────────────────────────────────────────────────────────────────
-
-const headerRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'flex-start',
-  justifyContent: 'space-between',
-  marginBottom: 12,
-  gap: 12,
-  flexWrap: 'wrap',
-};
-const h2: CSSProperties = { fontSize: 14, fontWeight: 600, margin: 0 };
-const h2title: CSSProperties = { fontSize: 16, fontWeight: 600, margin: 0 };
-const subline: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary)',
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  flexWrap: 'wrap',
-  marginTop: 4,
-};
-const dot: CSSProperties = { color: 'var(--color-text-tertiary)' };
-const hint: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  fontWeight: 400,
-};
-const monoInline: CSSProperties = {
-  fontFamily: 'ui-monospace, monospace',
-  fontSize: 11.5,
-};
-const inlineLink: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-primary, #6366f1)',
-  textDecoration: 'none',
-};
-const pickerRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'flex-end',
-  gap: 12,
-  flexWrap: 'wrap',
-};
-const pickerLabel: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 4,
-  flex: '1 1 320px',
-  minWidth: 280,
-};
-const pickerLabelText: CSSProperties = {
-  fontSize: 11,
-  fontWeight: 700,
-  color: 'var(--color-text-tertiary)',
-  letterSpacing: 0.5,
-};
-const pickerSelect: CSSProperties = {
-  padding: '6px 10px',
-  fontSize: 12,
-  border: '1px solid var(--color-border)',
-  borderRadius: 4,
-  background: 'var(--color-surface)',
-  color: 'var(--color-text-primary)',
-};
-const arrowBetween: CSSProperties = {
-  fontSize: 16,
-  color: 'var(--color-text-tertiary)',
-  paddingBottom: 6,
-};
-const runLabelChip: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary)',
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 4,
-  flexWrap: 'wrap',
-};
-const headlineRow: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-  gap: 12,
-};
-const headlineCard: CSSProperties = {
-  padding: '12px 16px',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm)',
-  background: 'var(--color-bg)',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-  minHeight: 96,
-};
-const headlineLabel: CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
-  color: 'var(--color-text-tertiary)',
-  letterSpacing: 0.5,
-};
-const headlinePrimary: CSSProperties = {
-  fontSize: 24,
-  fontWeight: 600,
-  lineHeight: 1.1,
-  fontVariantNumeric: 'tabular-nums',
-  color: 'var(--color-text-primary)',
-};
-const headlineSecondary: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-secondary)',
-  lineHeight: 1.4,
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  flexWrap: 'wrap',
-};
-const chipRow: CSSProperties = {
-  display: 'inline-flex',
-  gap: 6,
-  flexWrap: 'wrap',
-  alignItems: 'center',
-};
-const monoCell: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  fontFamily: 'ui-monospace, monospace',
-  whiteSpace: 'nowrap',
-};
-const agentCell: CSSProperties = {
-  fontSize: 12,
-  fontWeight: 500,
-  whiteSpace: 'nowrap',
-};
-const numCell: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary)',
-  whiteSpace: 'nowrap',
-};
 
 export default ModelComparePage;

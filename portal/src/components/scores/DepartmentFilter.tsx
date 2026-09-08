@@ -1,33 +1,31 @@
-import { FilterChip } from '@connorhoehnslalom/ui-components/shared';
+import { FormField, Select } from '@connorhoehnslalom/ui-components/shared';
 
 interface Props {
   departments: string[];
   selected: string;
   onChange: (d: string) => void;
-  deptColors: Record<string, string>;
 }
 
-export function DepartmentFilter({ departments, selected, onChange, deptColors }: Props) {
+// A closed Select, not a row of FilterChips per department — the chip row
+// grew with the department count and was one of the stacked blocks pushing
+// the leaderboard below the fold (DEFECTS.md #3). One control, fixed width,
+// sits inline with the skill search and weighting trigger.
+export function DepartmentFilter({ departments, selected, onChange }: Props) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 12 }}>
-      <span style={{ color: 'var(--color-text-tertiary)' }}>Filter:</span>
-      <FilterChip
-        active={selected === ''}
-        onClick={() => onChange('')}
-        color="#64748b"
-      >
-        All
-      </FilterChip>
-      {departments.map(d => (
-        <FilterChip
-          key={d}
-          active={selected === d}
-          onClick={() => onChange(d)}
-          color={deptColors[d] ?? '#64748b'}
-        >
-          {d}
-        </FilterChip>
-      ))}
-    </div>
+    <FormField label="Department" layout="inline">
+      {(wiring) => (
+        <Select
+          id={wiring.id}
+          aria-describedby={wiring['aria-describedby']}
+          value={selected}
+          onChange={(e) => onChange(e.target.value)}
+          size="sm"
+          options={[
+            { value: '', label: 'All departments' },
+            ...departments.map(d => ({ value: d, label: d })),
+          ]}
+        />
+      )}
+    </FormField>
   );
 }

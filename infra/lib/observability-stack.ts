@@ -13,7 +13,7 @@ export interface ObservabilityStackProps extends cdk.StackProps {
   readonly auroraClusterIdentifier: string;
   /** Knowledge Base ID for metrics (singular, kept for backwards compatibility) */
   readonly knowledgeBaseId?: string;
-  /** Per-KB metrics: slug → Bedrock KB ID (e.g. { default: 'EJYAXQAMHQ', newsroom: 'XYZ123' }) */
+  /** Per-KB metrics: slug → Bedrock KB ID (e.g. { default: 'EJYAXQAMHQ' }) */
   readonly knowledgeBaseIds?: Record<string, string>;
 }
 

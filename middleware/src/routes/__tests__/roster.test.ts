@@ -16,7 +16,7 @@ jest.mock('../../config.js', () => ({
 jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn() }));
 
 import express from 'express';
-import request from 'supertest';
+import request from '../../test-support/http.js';
 import { rosterRouter } from '../roster.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { exec } from '../../providers/aurora.js';

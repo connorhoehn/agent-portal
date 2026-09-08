@@ -9,20 +9,34 @@
 @source "../node_modules/@connorhoehnslalom/ui-components/dist";
 
 @theme {
-  --color-primary: #646cff;
-  --color-primary-hover: #4f55ff;
+  /* ── Brand ──────────────────────────────────────────────────────────
+     One family per tenant, set on [data-tenant] below. --color-primary is
+     an alias so the ~60 existing consumers (and the component library)
+     pick the tenant's accent up without being touched. */
+  --color-brand: #6366f1;
+  --color-brand-hover: #4f46e5;
+  --color-brand-ink: #1e1b4b;
+  --color-brand-soft: #eef2ff;
+  --background-image-brand-gradient: linear-gradient(90deg, #6366f1 0%, #8b5cf6 55%, #ec4899 100%);
+  --color-primary: var(--color-brand);
+  --color-primary-hover: var(--color-brand-hover);
 
   --color-text-primary: #0f172a;
   --color-text-secondary: #475569;
   --color-text-tertiary: #94a3b8;
 
+  /* ── Surface layers ─────────────────────────────────────────────────
+     Four distinct tones, so a card reads as a card and a rail as a rail.
+     bg (the ground) < surface-panel (rails, side panels) < surface (cards,
+     tables, the header) ; surface-inset is the well INSIDE a card. */
+  --color-bg: #eef1f6;
+  --color-surface-panel: #f4f6fa;
   --color-surface: #ffffff;
-  --color-surface-inset: #fafbfc;
-  --color-surface-panel: #f8fafc;
-  --color-surface-hover: #f1f5f9;
+  --color-surface-inset: #f8fafc;
+  --color-surface-hover: #eef2f7;
 
-  --color-border: #e2e8f0;
-  --color-border-emphasis: #cbd5e1;
+  --color-border: #dfe4ec;
+  --color-border-emphasis: #c3cbd8;
 
   --color-state-idle: #d1d5db;
   --color-state-pending: #93c5fd;
@@ -58,10 +72,9 @@
      typechecking and looking like ordinary Tailwind.
      @theme still emits these to :root, so the ~60 var(--color-x) consumers
      (including imported ui-components) are unaffected. */
-  --color-bg: #f8fafc;              /* page background, slightly off-white */
   --color-surface-raised: #ffffff;  /* elevated card / panel surface */
   --color-text-disabled: #cbd5e1;   /* tertiary text for disabled controls */
-  --color-primary-soft: #eef2ff;    /* primary-tinted soft fill (already in [data-tenant] selectors; needed at root for fallback) */
+  --color-primary-soft: var(--color-brand-soft); /* primary-tinted soft fill — follows the tenant brand */
   --color-success-border: #34d399;
   --color-warning-border: #fbbf24;
   --color-danger-border:  #f87171;
@@ -73,6 +86,11 @@
 :root {
   /* Added: previously-undefined tokens referenced by CommandPalette, ingest, and tenant-scoped overrides */
 
+  /* Height of everything above the content scroller: the header (≈64px),
+     the breadcrumb row with its margin (≈38px) and the content padding
+     (24px top + 24px bottom). A sticky rail's ceiling is 100vh minus this. */
+  --shell-chrome-h: 150px;
+
   /* Upstream ui-components token family — define here so imported components render correctly */
   --color-border-field:   var(--color-border, #e2e8f0);
 
@@ -81,18 +99,136 @@
 
 body {
   font-family: system-ui, -apple-system, sans-serif;
-  background: var(--color-surface-inset);
+  background: var(--color-bg);
   color: var(--color-text-primary);
   margin: 0;
 }
 
-/* Tenant accent overrides. Subtle — change only the primary accent. */
-[data-tenant="orgiq"] {
-  --color-primary: #6366f1; /* indigo */
-  --color-primary-soft: #eef2ff;
+/* ── Dark ──────────────────────────────────────────────────────────────
+   Every colour token @theme declares gets a night value here; the library
+   ships its own [data-theme=dark] block for its tokens; html[data-theme]
+   outranks it whichever stylesheet loads last. Four surface layers, still four
+   distinct tones. */
+html[data-theme="dark"] {
+  --color-brand: #8b91ff;
+  --color-brand-hover: #a5aaff;
+  --color-brand-ink: #c7d2fe;
+  --color-brand-soft: #1e1b4b;
+  --background-image-brand-gradient: linear-gradient(90deg, #8b91ff 0%, #a78bfa 55%, #f472b6 100%);
+  --color-primary: var(--color-brand);
+  --color-primary-hover: var(--color-brand-hover);
+  --color-primary-soft: var(--color-brand-soft);
+
+  --color-text-primary: #f1f5f9;
+  --color-text-secondary: #cbd5e1;
+  --color-text-tertiary: #94a3b8;
+  --color-text-disabled: #475569;
+
+  --color-bg: #0b1220;
+  --color-surface-panel: #111a2e;
+  --color-surface: #172033;
+  --color-surface-inset: #0f172a;
+  --color-surface-hover: #1e293b;
+  --color-surface-raised: #1e293b;
+
+  --color-border: #263247;
+  --color-border-emphasis: #334155;
+
+  --color-state-idle: #475569;
+  --color-state-pending: #60a5fa;
+  --color-state-running: #3b82f6;
+  --color-state-awaiting: #fbbf24;
+  --color-state-completed: #22c55e;
+  --color-state-failed: #ef4444;
+
+  --color-success: #22c55e;
+  --color-success-bg: #052e16;
+  --color-success-border: #166534;
+  --color-warning: #fbbf24;
+  --color-warning-bg: #422006;
+  --color-warning-border: #a16207;
+  --color-danger: #f87171;
+  --color-danger-bg: #450a0a;
+  --color-danger-border: #b91c1c;
+  --color-info: #60a5fa;
+  --color-info-bg: #172554;
+  --color-info-border: #1d4ed8;
+  --color-optimize: #a78bfa;
+  --color-optimize-hover: #c4b5fd;
 }
 
-[data-tenant="newsroom"] {
-  --color-primary: #d97706; /* amber */
-  --color-primary-soft: #fef3c7;
+/* ── Tenants ───────────────────────────────────────────────────────────
+   Only the brand family changes per tenant; the layers are shared, so a
+   card is a card everywhere and the accent says whose product this is. */
+/* ⚠ A var() inside a custom property resolves where that property is
+   DECLARED, not where it is read: `--color-primary: var(--color-brand)` on
+   :root is frozen to :root's brand, so every tenant block re-states the
+   primary family with its own values (the journeys caught teal nav beside
+   indigo buttons). */
+[data-tenant="orgiq"] {
+  --color-brand: #6366f1;            /* indigo */
+  --color-brand-hover: #4f46e5;
+  --color-brand-ink: #1e1b4b;
+  --color-brand-soft: #eef2ff;
+  --background-image-brand-gradient: linear-gradient(90deg, #6366f1 0%, #8b5cf6 55%, #ec4899 100%);
+  --color-primary: #6366f1;
+  --color-primary-hover: #4f46e5;
+  --color-primary-soft: #eef2ff;
 }
+html[data-theme="dark"] [data-tenant="orgiq"] {
+  --color-brand: #8b91ff;
+  --color-brand-hover: #a5aaff;
+  --color-brand-ink: #c7d2fe;
+  --color-brand-soft: #1e1b4b;
+  --color-primary: #8b91ff;
+  --color-primary-hover: #a5aaff;
+  --color-primary-soft: #1e1b4b;
+}
+[data-tenant="assessment"] {
+  --color-brand: #0d9488;            /* teal */
+  --color-brand-hover: #0f766e;
+  --color-brand-ink: #134e4a;
+  --color-brand-soft: #ccfbf1;
+  --background-image-brand-gradient: linear-gradient(90deg, #0d9488 0%, #06b6d4 55%, #3b82f6 100%);
+  --color-primary: #0d9488;
+  --color-primary-hover: #0f766e;
+  --color-primary-soft: #ccfbf1;
+}
+html[data-theme="dark"] [data-tenant="assessment"] {
+  --color-brand: #2dd4bf;
+  --color-brand-hover: #5eead4;
+  --color-brand-ink: #99f6e4;
+  --color-brand-soft: #134e4a;
+  --color-primary: #2dd4bf;
+  --color-primary-hover: #5eead4;
+  --color-primary-soft: #134e4a;
+}
+
+/* ── Shell ─────────────────────────────────────────────────────────────
+   The library's SubNavLayout and ChannelHeader take no colour props, so the
+   shell marks its regions and the layers land here. */
+/* Every SubNavLayout rail inside the shell — the tenant rail and the nested
+   section rails (Library, Automate, Budgets, Observability …) — is a panel. */
+[data-shell-nav] aside {
+  background: var(--color-surface-panel);
+}
+/* One content padding, everywhere: the shell's SubNavLayout <main> pads 24px
+   and that is the only padding a route gets. A NESTED section layout
+   (Library, Automate, Budgets, Observability …) pads its own <main> too,
+   which put those titles 24px lower — its main keeps only a left gap from
+   its rail, so nested and plain pages share one title offset. */
+[data-shell-nav] > div > main main {
+  padding: 0 0 0 1.5rem;
+}
+.shell-header {
+  position: relative;
+  background: var(--color-surface);
+}
+.shell-header::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background-image: var(--background-image-brand-gradient);
+}
+

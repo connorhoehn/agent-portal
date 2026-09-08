@@ -16,15 +16,18 @@
 // written by one agent run, so authorship is per-change, not per-line — the
 // rail names the run, the model, and links to what the agent was asked.
 
+import type { ReactNode } from 'react';
 import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import {
-  PageSection, Card, Chip, DiffViewer, EmptyState, LoadingState,
+  Button, Card, Chip, DiffViewer, EmptyState, Inline, LoadingState, PageSection,
+  RailLayout, SectionLabel, Stack,
   type DiffAnnotation,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
+import { ExternalLink } from './ExternalLinkFrame';
 
 type Verdict = 'approve' | 'request_changes' | 'reject';
 interface Review {
@@ -58,6 +61,12 @@ const STATUS_LABEL: Record<string, string> = {
 const VERDICT_LABEL: Record<Verdict, string> = {
   approve: 'approved', request_changes: 'requested changes', reject: 'rejected',
 };
+const VERDICT_TONE: Record<Verdict, 'success' | 'danger' | 'warning'> = {
+  approve: 'success', reject: 'danger', request_changes: 'warning',
+};
+const GATE_TONE: Record<string, 'success' | 'danger' | 'warning'> = {
+  pass: 'success', block: 'danger',
+};
 
 /** Reviewer pipelines have said high/medium/low AND critical/warning/info —
  *  normalise both onto the DiffViewer's scale. */
@@ -72,12 +81,14 @@ function when(iso: string): string {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
 }
 
-function RailRow({ label, children }: { label: string; children: React.ReactNode }) {
+/** Label:value rail row — `Inline` in `as="span"` mode for both halves, so
+ *  the row carries zero raw styled elements. */
+function RailRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex items-baseline gap-2 min-w-0 text-[12px]">
-      <span className="text-text-tertiary shrink-0 w-[72px]">{label}</span>
-      <span className="text-text-primary min-w-0 truncate">{children}</span>
-    </div>
+    <Inline gap="sm" align="baseline">
+      <Inline as="span" gap="none" className="w-[72px] shrink-0 text-[12px] text-text-tertiary">{label}</Inline>
+      <Inline as="span" gap="none" className="min-w-0 truncate text-[12px] text-text-primary">{children}</Inline>
+    </Inline>
   );
 }
 
@@ -141,17 +152,140 @@ export default function ChangeReviewPage() {
 
   const decidable = c.status === 'needs_approval' || c.status === 'changes_requested';
 
+  const rail = (
+    <Stack gap="sm">
+      <Card padding="md">
+        <Stack gap="xs">
+          <SectionLabel>Authorship</SectionLabel>
+          <RailRow label="Written by">{c.model ?? 'unknown model'}</RailRow>
+          {c.runId && (
+            <RailRow label="Run">
+              <Link
+                to={`/admin/projects?project=${c.projectId}&run=${c.runId}`}
+                title="What the agent was asked, and what it did"
+                className="font-mono text-primary no-underline hover:underline"
+              >
+                {c.runId.slice(0, 8)}
+              </Link>
+            </RailRow>
+          )}
+          {c.branchName && (
+            <RailRow label="Branch"><Inline as="span" gap="none" className="font-mono">{c.branchName}</Inline></RailRow>
+          )}
+          {c.commitSha && (
+            <RailRow label="Commit"><Inline as="span" gap="none" className="font-mono">{c.commitSha.slice(0, 10)}</Inline></RailRow>
+          )}
+          <RailRow label="Captured">{when(c.createdAt)}</RailRow>
+          {c.decidedBy && (
+            <>
+              <RailRow label="Decided by">{c.decidedBy}</RailRow>
+              {c.decidedAt && <RailRow label="Decided">{when(c.decidedAt)}</RailRow>}
+              {c.decisionNote && (
+                <Inline as="span" gap="none" className="mt-1 border-l-2 border-border pl-2 text-[11.5px] leading-snug text-text-secondary">
+                  {c.decisionNote}
+                </Inline>
+              )}
+            </>
+          )}
+        </Stack>
+      </Card>
+
+      {c.reviews.length > 0 && (
+        <Card padding="md">
+          <Stack gap="sm">
+            <SectionLabel>Reviews</SectionLabel>
+            {c.reviews.map((r) => (
+              <Stack key={r.id} gap="none">
+                <Inline gap="xs" align="baseline">
+                  <Chip tone={VERDICT_TONE[r.verdict]} size="xs">{VERDICT_LABEL[r.verdict]}</Chip>
+                  <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">{r.model ?? r.reviewer}</Inline>
+                </Inline>
+                {r.summary && (
+                  <Inline as="span" gap="none" className="text-[11.5px] leading-snug text-text-secondary">{r.summary}</Inline>
+                )}
+                {r.findings.length > 0 && (
+                  <Inline as="span" gap="none" className="text-[10.5px] text-text-tertiary">
+                    {r.findings.length} finding{r.findings.length === 1 ? '' : 's'} — pinned in the diff.
+                  </Inline>
+                )}
+              </Stack>
+            ))}
+          </Stack>
+        </Card>
+      )}
+
+      {c.gates.length > 0 && (
+        <Card padding="md">
+          <Stack gap="xs">
+            <SectionLabel>Policy gates</SectionLabel>
+            {c.gates.map((g, i) => (
+              <Inline key={i} gap="xs" align="baseline" wrap>
+                <Chip tone={GATE_TONE[g.outcome] ?? 'warning'} size="xs" dot="static">{g.policyName}</Chip>
+                <Inline as="span" gap="none" className="text-[11.5px] text-text-secondary">{g.detail}</Inline>
+              </Inline>
+            ))}
+          </Stack>
+        </Card>
+      )}
+
+      {c.error && (
+        <Card padding="md">
+          <Inline as="span" gap="none" className="text-[11.5px] leading-snug text-danger">{c.error}</Inline>
+        </Card>
+      )}
+
+      {canDecide && (decidable || c.status === 'approved' || c.status === 'failed') && (
+        <Card padding="md">
+          <Stack gap="sm">
+            <SectionLabel>Decision</SectionLabel>
+            <Inline gap="sm" wrap>
+              {decidable && (
+                <>
+                  <Button variant="primary" size="sm" disabled={busy} onClick={() => void act('decide', 'Approving', { decision: 'approve' })}>
+                    {c.status === 'changes_requested' ? 'Approve anyway' : 'Approve'}
+                  </Button>
+                  <Button variant="secondary" size="sm" disabled={busy} tone="surface" onClick={() => void act('decide', 'Rejecting', { decision: 'reject' })}>
+                    Reject
+                  </Button>
+                </>
+              )}
+              {c.status === 'approved' && (
+                <Button variant="primary" size="sm" disabled={busy} onClick={() => void act('deliver', 'Delivering', {})}>
+                  Deliver as pull request
+                </Button>
+              )}
+              {c.status === 'changes_requested' && (
+                <Button
+                  variant="secondary" size="sm" disabled={busy}
+                  title="Send the reviewer's findings back to an agent to fix"
+                  onClick={() => void act('address', 'Dispatching a fix', {})}
+                >
+                  Address with an agent
+                </Button>
+              )}
+              {(c.status === 'changes_requested' || c.status === 'failed') && (
+                <Button variant="secondary" size="sm" disabled={busy} onClick={() => void act('rereview', 'Re-reviewing', {})}>
+                  Re-review
+                </Button>
+              )}
+            </Inline>
+          </Stack>
+        </Card>
+      )}
+    </Stack>
+  );
+
   return (
     <PageSection
       title={c.title}
       description={`${c.repoFullName ?? 'unknown repo'} — every agent change is reviewed and gated before it can ship.`}
       actions={
-        <Link to="/admin/changes" className="text-[12px] text-primary no-underline hover:underline whitespace-nowrap">
+        <Link to="/admin/changes" className="whitespace-nowrap text-[12px] text-primary no-underline hover:underline">
           ← back to the queue
         </Link>
       }
     >
-      <div className="flex items-center gap-2 mb-4 flex-wrap">
+      <Inline gap="sm" wrap className="mb-4">
         <Chip tone={STATUS_TONE[c.status] ?? 'neutral'} size="xs" uppercase>{STATUS_LABEL[c.status] ?? c.status}</Chip>
         {c.orgProjectName && c.orgProjectId && (
           <Link to={`/iq/projects/${c.orgProjectId}`} className="text-[11px] text-text-secondary no-underline hover:text-primary hover:underline">
@@ -159,145 +293,25 @@ export default function ChangeReviewPage() {
           </Link>
         )}
         {c.prUrl && (
-          <a href={c.prUrl} target="_blank" rel="noreferrer" className="text-[11px] text-primary no-underline hover:underline">
+          <ExternalLink href={c.prUrl} className="text-[11px] text-primary no-underline hover:underline">
             pull request →
-          </a>
+          </ExternalLink>
         )}
-      </div>
+      </Inline>
 
-      <div className="grid gap-4 items-start" style={{ gridTemplateColumns: 'minmax(0, 1fr) 300px' }}>
-        {/* ── The diff, findings pinned in place ── */}
-        <div className="min-w-0">
-          {c.diff ? (
-            <DiffViewer
-              diff={c.diff}
-              annotations={annotations}
-              {...(c.diffTruncated ? { truncatedNote: 'Diff truncated for size — the full change is in the branch once delivered.' } : {})}
-            />
-          ) : (
-            <Card padding="md">
-              <div className="text-[12px] text-text-tertiary">This change has no stored diff.</div>
-            </Card>
-          )}
-        </div>
-
-        {/* ── The rail: authorship, verdicts, gates, decision ── */}
-        <div className="flex flex-col gap-3">
-          <Card padding="md" className="flex flex-col gap-1.5">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">Authorship</div>
-            <RailRow label="Written by">{c.model ?? 'unknown model'}</RailRow>
-            {c.runId && (
-              <RailRow label="Run">
-                <Link
-                  to={`/admin/projects?project=${c.projectId}&run=${c.runId}`}
-                  title="What the agent was asked, and what it did"
-                  className="text-primary no-underline hover:underline font-mono"
-                >
-                  {c.runId.slice(0, 8)}
-                </Link>
-              </RailRow>
-            )}
-            {c.branchName && <RailRow label="Branch"><span className="font-mono">{c.branchName}</span></RailRow>}
-            {c.commitSha && <RailRow label="Commit"><span className="font-mono">{c.commitSha.slice(0, 10)}</span></RailRow>}
-            <RailRow label="Captured">{when(c.createdAt)}</RailRow>
-            {c.decidedBy && (
-              <>
-                <RailRow label="Decided by">{c.decidedBy}</RailRow>
-                {c.decidedAt && <RailRow label="Decided">{when(c.decidedAt)}</RailRow>}
-                {c.decisionNote && (
-                  <div className="text-[11.5px] text-text-secondary leading-snug border-l-2 border-border pl-2 mt-1">
-                    {c.decisionNote}
-                  </div>
-                )}
-              </>
-            )}
+      <RailLayout rail={rail}>
+        {c.diff ? (
+          <DiffViewer
+            diff={c.diff}
+            annotations={annotations}
+            {...(c.diffTruncated ? { truncatedNote: 'Diff truncated for size — the full change is in the branch once delivered.' } : {})}
+          />
+        ) : (
+          <Card padding="md">
+            <Inline as="span" gap="none" className="text-[12px] text-text-tertiary">This change has no stored diff.</Inline>
           </Card>
-
-          {c.reviews.length > 0 && (
-            <Card padding="md" className="flex flex-col gap-2.5">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Reviews</div>
-              {c.reviews.map((r) => (
-                <div key={r.id} className="flex flex-col gap-0.5">
-                  <div className="text-[12px]">
-                    <span className={
-                      r.verdict === 'approve' ? 'text-success font-semibold'
-                        : r.verdict === 'reject' ? 'text-danger font-semibold' : 'text-warning font-semibold'}>
-                      {VERDICT_LABEL[r.verdict]}
-                    </span>
-                    <span className="text-text-tertiary"> · {r.model ?? r.reviewer}</span>
-                  </div>
-                  {r.summary && <div className="text-[11.5px] text-text-secondary leading-snug">{r.summary}</div>}
-                  {r.findings.length > 0 && (
-                    <div className="text-[10.5px] text-text-tertiary">
-                      {r.findings.length} finding{r.findings.length === 1 ? '' : 's'} — pinned in the diff.
-                    </div>
-                  )}
-                </div>
-              ))}
-            </Card>
-          )}
-
-          {c.gates.length > 0 && (
-            <Card padding="md" className="flex flex-col gap-1.5">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Policy gates</div>
-              {c.gates.map((g, i) => (
-                <div key={i} className="text-[11.5px] leading-snug">
-                  <span className={
-                    g.outcome === 'pass' ? 'text-success'
-                      : g.outcome === 'block' ? 'text-danger' : 'text-warning'}>●</span>{' '}
-                  <span className="text-text-primary font-medium">{g.policyName}</span>
-                  <span className="text-text-secondary"> — {g.detail}</span>
-                </div>
-              ))}
-            </Card>
-          )}
-
-          {c.error && (
-            <Card padding="md">
-              <div className="text-[11.5px] text-danger leading-snug">{c.error}</div>
-            </Card>
-          )}
-
-          {canDecide && (decidable || c.status === 'approved' || c.status === 'failed') && (
-            <Card padding="md" className="flex flex-col gap-2">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Decision</div>
-              <div className="flex items-center gap-2 flex-wrap">
-                {decidable && (
-                  <>
-                    <button disabled={busy} onClick={() => void act('decide', 'Approving', { decision: 'approve' })}
-                      className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-50">
-                      {c.status === 'changes_requested' ? 'Approve anyway' : 'Approve'}
-                    </button>
-                    <button disabled={busy} onClick={() => void act('decide', 'Rejecting', { decision: 'reject' })}
-                      className="px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-secondary cursor-pointer hover:border-danger hover:text-danger transition-colors disabled:opacity-50">
-                      Reject
-                    </button>
-                  </>
-                )}
-                {c.status === 'approved' && (
-                  <button disabled={busy} onClick={() => void act('deliver', 'Delivering', {})}
-                    className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-50">
-                    Deliver as pull request
-                  </button>
-                )}
-                {c.status === 'changes_requested' && (
-                  <button disabled={busy} onClick={() => void act('address', 'Dispatching a fix', {})}
-                    title="Send the reviewer's findings back to an agent to fix"
-                    className="px-3 py-1.5 rounded-md border border-primary/50 bg-surface text-[12px] font-semibold text-primary cursor-pointer hover:bg-primary hover:text-white transition-colors disabled:opacity-50">
-                    Address with an agent
-                  </button>
-                )}
-                {(c.status === 'changes_requested' || c.status === 'failed') && (
-                  <button disabled={busy} onClick={() => void act('rereview', 'Re-reviewing', {})}
-                    className="px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors disabled:opacity-50">
-                    Re-review
-                  </button>
-                )}
-              </div>
-            </Card>
-          )}
-        </div>
-      </div>
+        )}
+      </RailLayout>
     </PageSection>
   );
 }

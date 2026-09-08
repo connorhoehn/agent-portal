@@ -1,0 +1,14 @@
+surface: knowledge
+role: org-leader
+user: u-vera (Vera Green — ManageKB / ManageKnowledge / ManageIngest all false); re-checked GET /api/session/me on arrival (sub u-vera, tenant orgiq, role org-leader)
+url: /admin/knowledge
+pages: portal/src/pages/knowledge,portal/src/pages/admin/KBDetailPage.tsx,portal/src/pages/admin/kb
+audited: 2026-09-05 23:38 local, Chrome 152 at 1552px, middleware dev:mock
+screenshot: knowledge.jpg
+verdict: pass
+console errors: 0
+layout: pass — content col left 200px w 1352px; nested "Knowledge" rail (Overview / Registry) flush with the content box (200 = 200); first-row-top: 297px; above the table a "✕ 1 KB broken" badge, one description line and one search + All / Needs-attention filter row with a "3 of 3 knowledge bases · registry vs. the live account" caption; the two stat strips sit below the table; no horizontal scroll (1552 = 1552)
+keyboard: pass — 39 tabbable, all 39 reached in one 70-Tab sweep (focus-log diff: missing none); each KB name is a real `<a href="/admin/knowledge/registry/<id>">` — Enter on "OrgIQ Legacy Docs" opens its registry detail (pipeline chain, Landing zone / Documents / Ingestion jobs / Configuration); the All / Needs attention pills are real toggles
+empty-state: pass — searching "zzznoexistkb" renders "No knowledge bases match the current filters." in the table body with the caption "0 of 3 knowledge bases" (no clear action; emptying the search box is the way back)
+role-gating: org-leader can read the reconciliation (in sync / points at nothing, registry ↔ account ids, last sync) and open each KB; the ACTIONS column for the broken row now reads "Repointing needs Manage KB — an HR admin can do it from Knowledge." (the two in-sync rows are blank, correctly — nothing to do), and the detail page has no Sync Now / adopt / repoint control (ManageKB false) — the gated controls are absent from the DOM and the page now says which capability the fix needs
+notes: The overview's headline ("✕ 1 KB broken — OrgIQ Legacy Docs points at KBMOCK-GONE, which does not exist in this account") no longer dead-ends: the ACTIONS cell names the capability and the role that holds it (DEFECTS #17 closed). The detail page agrees with the overview now: header badge "Broken — Bedrock knowledge base not found", the Pipeline chain draws "Bedrock KB · KBMOCK-GONE — not found in this account" in the danger tone with "Data source (not provisioned)" beside it, and the Landing zone tab reads only "Upload documents to this S3 prefix." — no "then run Sync Now" for a role that has no Sync Now (DEFECTS #18 closed). Two minor things remain: the "✕ 1 KB broken" badge is still a `<button>` that does nothing when pressed (on both pages), and the detail page's header starts ~40px below the breadcrumb with nothing in the gap. The stat strip's "KNOWLEDGE BASES 2 · 2 active in AWS" under a 3-row table is still correct-but-read-twice.

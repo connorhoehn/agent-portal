@@ -1,10 +1,12 @@
 import { useMemo } from 'react';
-import { useSearchParams, Navigate, Link } from 'react-router';
-import { PageSection } from '@connorhoehnslalom/ui-components/shared';
+import { useSearchParams, Navigate } from 'react-router';
+import { Card, EmptyState, ErrorState, LoadingState, PageHeader, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
+import { useCapabilities } from '../lib/capabilities';
 import { DEPT_COLORS } from '../components/scores/types';
 import { OverlayRadar } from '../components/scores/OverlayRadar';
 import { CompareDeltaTable } from '../components/scores/CompareDeltaTable';
+import { LeaderboardAccessNeeded, isLeaderboardForbiddenError } from '../components/scores/LeaderboardAccessNeeded';
 import type { RadarBatchEntry } from '../components/scores/OverlayRadar';
 
 function ScoresComparePage() {
@@ -18,58 +20,60 @@ function ScoresComparePage() {
 
   const isValid = ids.length >= 2 && ids.length <= 4;
 
-  const fetchUrl = isValid ? `/api/scores/radar?ids=${ids.map(encodeURIComponent).join(',')}` : '';
+  // Same guard as ScoresPage.tsx / ScoresCohortPage.tsx — ask the
+  // capability before asking the server, and never render a raw denial —
+  // docs/orgiq-journeys/sme/DEFECTS.md #6.
+  const { can, ready: capsReady } = useCapabilities();
+  const mayViewLeaderboard = capsReady && can('ViewLeaderboard');
+
+  const fetchUrl = isValid && mayViewLeaderboard
+    ? `/api/scores/radar?ids=${ids.map(encodeURIComponent).join(',')}`
+    : '';
   const { data, isLoading, error } = useFetch<RadarBatchEntry[]>(fetchUrl);
 
   if (!isValid) {
     return <Navigate to="/iq/scores" replace />;
   }
 
+  // Capabilities not resolved yet is LOADING, not denied — see ScoresPage.tsx.
+  if (!capsReady) {
+    return <LoadingState label="Loading…" />;
+  }
+  if (!mayViewLeaderboard) {
+    return <LeaderboardAccessNeeded />;
+  }
+
   const backUrl = searchParams.get('w') ? `/iq/scores?w=${searchParams.get('w')}` : '/iq/scores';
 
   return (
-    <PageSection
-      title={`Compare ${ids.length} ${ids.length === 1 ? 'person' : 'people'}`}
-      actions={
-        <Link
-          to={backUrl}
-          style={{ fontSize: 13, color: 'var(--color-primary, #6366f1)', textDecoration: 'none' }}
-        >
-          &#8592; Back to Scores
-        </Link>
-      }
-    >
-      {isLoading && (
-        <div style={{ color: 'var(--color-text-tertiary)', fontSize: 13 }}>Loading radar data...</div>
-      )}
+    <Stack gap="lg">
+      <PageHeader
+        title={`Compare ${ids.length} ${ids.length === 1 ? 'person' : 'people'}`}
+        back={{ label: '← Back to Scores', to: backUrl }}
+      />
 
-      {error && (
-        <div style={{ color: 'var(--color-danger)', fontSize: 13 }}>Failed to load: {error}</div>
-      )}
+      {isLoading && <LoadingState label="Loading radar data…" />}
+
+      {error && (isLeaderboardForbiddenError(error)
+        ? <LeaderboardAccessNeeded />
+        : <ErrorState title="Failed to load" body={error} />)}
 
       {data && data.length > 0 && (
-        <>
-          <div>
-            <OverlayRadar entries={data} deptColors={DEPT_COLORS} />
-          </div>
-
-          <div style={{
-            background: 'var(--color-surface, #1e1e2e)',
-            border: '1px solid var(--color-border, #3f3f5f)',
-            borderRadius: 8,
-            overflow: 'hidden',
-          }}>
+        <Stack gap="lg">
+          <OverlayRadar entries={data} deptColors={DEPT_COLORS} />
+          <Card padding="none">
             <CompareDeltaTable entries={data} />
-          </div>
-        </>
+          </Card>
+        </Stack>
       )}
 
       {data && data.length === 0 && (
-        <div style={{ color: 'var(--color-text-tertiary)', fontSize: 13 }}>
-          No radar data found for the selected people. Scores may not have been computed yet.
-        </div>
+        <EmptyState
+          title="No radar data"
+          body="No radar data found for the selected people. Scores may not have been computed yet."
+        />
       )}
-    </PageSection>
+    </Stack>
   );
 }
 

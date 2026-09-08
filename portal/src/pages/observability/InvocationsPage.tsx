@@ -1,20 +1,38 @@
-import { useMemo, useState } from 'react';
-import type { CSSProperties } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import {
+  CatalogGrid,
   Card,
+  Chip,
+  CodeBlock,
+  CollapsibleSection,
+  EmptyState,
+  Inline,
+  InlineAlert,
+  InlinePlaceholder,
+  MetaLine,
+  PageSection,
+  SectionLabel,
+  Select,
+  Stack,
   Table,
   TableHead,
   TableBody,
   TableRow,
   TableTh,
   TableTd,
-  Chip,
-  PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { CostChip } from '../../components/observability/CostChip';
 import { PromptVersionChip } from '../../components/observability/PromptVersionChip';
+import { T } from './Text';
+import {
+  applyFiltersToParams,
+  firstSentence,
+  parseAgentFilter,
+  parseStatusFilter,
+  type StatusFilter,
+} from './invocationsFilters';
 
 interface SandboxExecution {
   code: string;
@@ -47,6 +65,14 @@ interface Invocation {
   modelId?: string | null;
 }
 
+/** Just enough of GET /api/agents to populate the "All agents" filter from
+ *  the fleet registry — not from whatever happens to be in the live tail,
+ *  which is empty on a fresh dev:mock boot (DEFECTS.md #7). */
+interface AgentRegistryEntry {
+  id: string;
+  name: string;
+}
+
 interface BedrockInvocation {
   requestId: string;
   timestamp: string;
@@ -61,8 +87,6 @@ interface BedrockInvocation {
   interventions: Array<{ source: 'INPUT' | 'OUTPUT'; policyType: string; detail: string }>;
 }
 
-type StatusFilter = 'all' | 'ok' | 'blocked' | 'error';
-
 function InvocationsPage() {
   const { data: recent } = useFetch<{ invocations: Invocation[] }>(
     '/api/observability/recent-invocations?limit=50',
@@ -72,31 +96,100 @@ function InvocationsPage() {
     '/api/observability/bedrock-invocations?limit=20&sinceMin=60',
     20000,
   );
+  // The fleet registry, not the tail: on a fresh dev:mock boot (or any
+  // moment with no traffic yet) the tail is empty, but the "All agents"
+  // filter should still list every deployed agent (DEFECTS.md #7).
+  const { data: registry } = useFetch<AgentRegistryEntry[]>('/api/agents', 60000);
 
-  // Seed the agent filter from ?agentId= so "view this agent's invocations"
-  // links (from the Architecture graph and agent detail page) land pre-filtered
-  // instead of showing every agent's traffic.
-  const [searchParams] = useSearchParams();
-  const [agentFilter, setAgentFilter] = useState<string>(() => searchParams.get('agentId') ?? 'all');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  // Both filters live in the URL, not local state — a link that already
+  // knows what it wants to show (Health's "Read the failures on …", the
+  // Architecture graph, an agent detail page) lands pre-filtered, and
+  // changing a filter (including Clear filters) writes straight back so
+  // `location.search` always describes what's on screen: a reload or a
+  // shared link reproduces the same view instead of snapping back to
+  // unfiltered (DEFECTS.md #26). Accepts both `agentId` (existing links) and
+  // `agent` (Health's wording) on read; writes only the canonical `agentId`.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const agentFilter = parseAgentFilter(searchParams);
+  const statusFilter = parseStatusFilter(searchParams);
+  const setAgentFilter = useCallback(
+    (next: string) => {
+      setSearchParams((prev) => applyFiltersToParams(prev, next, parseStatusFilter(prev)), { replace: true });
+    },
+    [setSearchParams],
+  );
+  const setStatusFilter = useCallback(
+    (next: StatusFilter) => {
+      setSearchParams((prev) => applyFiltersToParams(prev, parseAgentFilter(prev), next), { replace: true });
+    },
+    [setSearchParams],
+  );
 
   const allInvocations = recent?.invocations ?? [];
 
+  // The tail's `agentName` is not trustworthy on its own — a real trace with
+  // no display name falls back to the raw id server-side (trace-sink.ts
+  // `agentName = input.agentName || agentId`), which is how "Supervisor" and
+  // "orgiq-supervisor" could both show up as agents (DEFECTS.md #16).
+  // `agentId` is always the real registry id, so resolve every invocation
+  // (and every incoming `?agentId=` link, which some callers seed with the
+  // id and some with the display name) to the registry's id and key the
+  // Select and the filter on that — one entry per agent, ever.
+  const registryById = useMemo(
+    () => new Map((registry ?? []).map((a) => [a.id, a.name] as const)),
+    [registry],
+  );
+  const registryIdByName = useMemo(
+    () => new Map((registry ?? []).map((a) => [a.name, a.id] as const)),
+    [registry],
+  );
+  const resolveAgentKey = useCallback(
+    (rawId: string | undefined, rawName: string | undefined): string => {
+      if (rawId && registryById.has(rawId)) return rawId;
+      if (rawName && registryIdByName.has(rawName)) return registryIdByName.get(rawName)!;
+      return rawId || rawName || 'unknown';
+    },
+    [registryById, registryIdByName],
+  );
+
   const agentOptions = useMemo(() => {
-    const names = new Set<string>();
-    allInvocations.forEach((i) => names.add(i.agentName));
-    return Array.from(names).sort();
-  }, [allInvocations]);
+    const byId = new Map<string, string>();
+    (registry ?? []).forEach((a) => byId.set(a.id, a.name));
+    // Belt-and-suspenders: an agent that has traffic but somehow isn't in the
+    // registry response should still be selectable, under its own key.
+    allInvocations.forEach((i) => {
+      const key = resolveAgentKey(i.agentId, i.agentName);
+      if (!byId.has(key)) byId.set(key, i.agentName || i.agentId || key);
+    });
+    return Array.from(byId.entries())
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [registry, allInvocations, resolveAgentKey]);
+
+  // Seeded from the URL as whatever string arrived (id or display name);
+  // resolved to a registry id so it lines up with agentOptions/filtering
+  // regardless of which form the link used.
+  const resolvedAgentFilter = useMemo(
+    () => (agentFilter === 'all' ? 'all' : resolveAgentKey(agentFilter, agentFilter)),
+    [agentFilter, resolveAgentKey],
+  );
 
   const filtered = useMemo(() => {
     return allInvocations.filter((inv) => {
-      if (agentFilter !== 'all' && inv.agentName !== agentFilter) return false;
+      if (resolvedAgentFilter !== 'all' && resolveAgentKey(inv.agentId, inv.agentName) !== resolvedAgentFilter) {
+        return false;
+      }
       if (statusFilter === 'ok' && (inv.error || inv.guardrailIntervened)) return false;
       if (statusFilter === 'blocked' && !inv.guardrailIntervened) return false;
       if (statusFilter === 'error' && !inv.error) return false;
       return true;
     });
-  }, [allInvocations, agentFilter, statusFilter]);
+  }, [allInvocations, resolvedAgentFilter, statusFilter, resolveAgentKey]);
+
+  const filtersActive = resolvedAgentFilter !== 'all' || statusFilter !== 'all';
+  const clearFilters = useCallback(() => {
+    setSearchParams((prev) => applyFiltersToParams(prev, 'all', 'all'), { replace: true });
+  }, [setSearchParams]);
 
   const intervenedCount = filtered.filter((i) => i.guardrailIntervened).length;
 
@@ -105,55 +198,51 @@ function InvocationsPage() {
       title="Recent Activity"
       description="Live · last 50 invocations · 5s refresh"
       actions={
-        <>
+        <Inline gap="sm" align="center">
           <Link
             to="/admin/observability/invocations/search"
-            style={{ fontSize: 12, color: 'var(--color-primary)', textDecoration: 'none', marginRight: 10 }}
+            className="mr-[10px] text-[12px] text-[var(--color-primary)] no-underline"
           >
             Search & triage →
           </Link>
-          <select
-            value={agentFilter}
+          <Select
+            value={resolvedAgentFilter}
             onChange={(e) => setAgentFilter(e.target.value)}
-            style={selectStyle}
-          >
-            <option value="all">All agents</option>
-            {agentOptions.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-          <select
+            size="sm"
+            options={[
+              { value: 'all', label: 'All agents' },
+              ...agentOptions.map((o) => ({ value: o.id, label: o.label })),
+            ]}
+          />
+          <Select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-            style={selectStyle}
-          >
-            <option value="all">All statuses</option>
-            <option value="ok">OK</option>
-            <option value="blocked">Blocked</option>
-            <option value="error">Error</option>
-          </select>
-          <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-            {intervenedCount} intervened
-          </span>
-        </>
+            size="sm"
+            options={[
+              { value: 'all', label: 'All statuses' },
+              { value: 'ok', label: 'OK' },
+              { value: 'blocked', label: 'Blocked' },
+              { value: 'error', label: 'Error' },
+            ]}
+          />
+          <T className="text-[11px] text-[var(--color-text-tertiary)]">{intervenedCount} intervened</T>
+        </Inline>
       }
     >
       <Card padding="md">
         {filtered.length === 0 ? (
-          <div
-            style={{
-              padding: 24,
-              textAlign: 'center',
-              fontSize: 12,
-              color: 'var(--color-text-tertiary)',
-            }}
-          >
-            {allInvocations.length === 0
-              ? "No invocations yet. Send a message via the Agent Tools page and it'll appear here within 5 seconds."
-              : 'No invocations match the current filters.'}
-          </div>
+          allInvocations.length === 0 ? (
+            <InlinePlaceholder align="center" size="sm">
+              No invocations yet. Send a message via the Agent Tools page and it'll appear here
+              within 5 seconds.
+            </InlinePlaceholder>
+          ) : (
+            <EmptyState
+              title="No invocations match"
+              description="No invocations match the current filters."
+              {...(filtersActive ? { actionLabel: 'Clear filters', onAction: clearFilters } : {})}
+            />
+          )
         ) : (
           <Table>
             <TableHead>
@@ -171,56 +260,37 @@ function InvocationsPage() {
             <TableBody>
               {filtered.map((inv) => (
                 <TableRow key={inv.id}>
-                  <TableTd
-                    style={{
-                      fontSize: 11,
-                      color: 'var(--color-text-tertiary)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {new Date(inv.startedAt).toLocaleTimeString()}
+                  <TableTd className="whitespace-nowrap text-[11px] text-[var(--color-text-tertiary)]">
+                    <Link
+                      to={`/admin/observability/invocations/${encodeURIComponent(inv.id)}`}
+                      className="text-[var(--color-text-tertiary)] no-underline hover:text-[var(--color-primary)] hover:underline"
+                    >
+                      {new Date(inv.startedAt).toLocaleTimeString()}
+                    </Link>
                   </TableTd>
-                  <TableTd style={{ fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' }}>
-                    {inv.agentName}
+                  <TableTd className="whitespace-nowrap text-[12px] font-medium">
+                    {registryById.get(resolveAgentKey(inv.agentId, inv.agentName)) ?? inv.agentName}
                   </TableTd>
-                  <TableTd style={{ whiteSpace: 'nowrap' }}>
+                  <TableTd className="whitespace-nowrap">
                     <PromptVersionChip promptVersion={inv.promptVersion} />
                   </TableTd>
-                  <TableTd
-                    style={{
-                      fontSize: 12,
-                      maxWidth: 280,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                    title={inv.promptSnippet}
-                  >
+                  <TableTd className="max-w-[280px] truncate text-[12px]" title={inv.promptSnippet}>
                     {inv.promptSnippet}
                   </TableTd>
                   <TableTd
-                    style={{
-                      fontSize: 12,
-                      maxWidth: 320,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      color: 'var(--color-text-secondary)',
-                    }}
-                    title={inv.responseSnippet || inv.error}
+                    className="max-w-[320px] text-[12px] text-[var(--color-text-secondary)]"
+                    title={inv.error ? `error: ${inv.error}` : inv.responseSnippet}
                   >
                     {inv.error ? (
-                      <span style={{ color: 'var(--color-danger, #dc2626)' }}>
-                        error: {inv.error}
-                      </span>
+                      <T className="text-[var(--color-danger)]">error: {firstSentence(inv.error)}</T>
                     ) : (
-                      inv.responseSnippet
+                      firstSentence(inv.responseSnippet)
                     )}
                   </TableTd>
-                  <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                  <TableTd className="text-[11px] text-[var(--color-text-tertiary)]">
                     {(inv.durationMs / 1000).toFixed(1)}s
                   </TableTd>
-                  <TableTd style={{ whiteSpace: 'nowrap' }}>
+                  <TableTd className="whitespace-nowrap">
                     <CostChip cost={inv.totalCostUsd} />
                   </TableTd>
                   <TableTd>
@@ -248,35 +318,21 @@ function InvocationsPage() {
       <CodeInterpreterTraces invocations={filtered} />
 
       <Card padding="md">
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            marginBottom: 12,
-          }}
-        >
-          <h2 style={{ fontSize: 14, fontWeight: 600 }}>
+        <Inline align="center" justify="between" className="mb-3">
+          <SectionLabel as="div">
             Bedrock Invocations{' '}
-            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 400 }}>
+            <T className="text-[11px] font-normal text-[var(--color-text-tertiary)]">
               from /orgiq/bedrock-invocations · ~30s lag · full guardrail trace
-            </span>
-          </h2>
-          <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+            </T>
+          </SectionLabel>
+          <T className="text-[11px] text-[var(--color-text-tertiary)]">
             {bedrock?.entries.filter((e) => e.intervened).length ?? 0} intervened in last hour
-          </span>
-        </div>
+          </T>
+        </Inline>
         {(bedrock?.entries ?? []).length === 0 ? (
-          <div
-            style={{
-              padding: 24,
-              textAlign: 'center',
-              fontSize: 12,
-              color: 'var(--color-text-tertiary)',
-            }}
-          >
+          <InlinePlaceholder align="center" size="sm">
             No Bedrock calls in the last hour. Invoke an agent and wait ~30s.
-          </div>
+          </InlinePlaceholder>
         ) : (
           <Table>
             <TableHead>
@@ -292,40 +348,17 @@ function InvocationsPage() {
             <TableBody>
               {(bedrock?.entries ?? []).map((b) => (
                 <TableRow key={b.requestId}>
-                  <TableTd
-                    style={{
-                      fontSize: 11,
-                      color: 'var(--color-text-tertiary)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
+                  <TableTd className="whitespace-nowrap text-[11px] text-[var(--color-text-tertiary)]">
                     {new Date(b.timestamp).toLocaleTimeString()}
                   </TableTd>
-                  <TableTd style={{ fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' }}>
-                    {b.agent}
-                  </TableTd>
-                  <TableTd
-                    style={{
-                      fontSize: 11,
-                      color: 'var(--color-text-tertiary)',
-                      fontFamily: 'monospace',
-                    }}
-                  >
+                  <TableTd className="whitespace-nowrap text-[12px] font-medium">{b.agent}</TableTd>
+                  <TableTd className="font-mono text-[11px] text-[var(--color-text-tertiary)]">
                     {b.operation}
                   </TableTd>
-                  <TableTd
-                    style={{
-                      fontSize: 12,
-                      maxWidth: 320,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                    title={b.promptSnippet}
-                  >
+                  <TableTd className="max-w-[320px] truncate text-[12px]" title={b.promptSnippet}>
                     {b.promptSnippet}
                   </TableTd>
-                  <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                  <TableTd className="text-[11px] text-[var(--color-text-tertiary)]">
                     {b.inputTokens}↓ / {b.outputTokens}↑
                   </TableTd>
                   <TableTd>
@@ -357,318 +390,117 @@ function InvocationsPage() {
 
 // ─── Code Interpreter Traces ──────────────────────────────────────────────────
 
-const monoStyle: CSSProperties = {
-  fontFamily: '"Fira Code", "Cascadia Code", monospace',
-  fontSize: 11.5,
-  lineHeight: 1.55,
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
-  margin: 0,
-  padding: '10px 12px',
-  borderRadius: 'var(--radius-sm)',
-  overflowX: 'auto',
-};
-
-const selectStyle: CSSProperties = {
-  fontSize: 12,
-  padding: '4px 8px',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm)',
-  background: 'var(--color-surface)',
-  color: 'var(--color-text-primary)',
-};
-
 function CodeInterpreterTraces({ invocations }: { invocations: Invocation[] }) {
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [expandedExec, setExpandedExec] = useState<Set<string>>(new Set());
-
   const traced = invocations.filter((i) => (i.sandboxExecutions?.length ?? 0) > 0);
-
-  const toggle = (id: string) =>
-    setExpanded((prev) => {
-      const s = new Set(prev);
-      if (s.has(id)) s.delete(id);
-      else s.add(id);
-      return s;
-    });
-
-  const toggleExec = (key: string) =>
-    setExpandedExec((prev) => {
-      const s = new Set(prev);
-      if (s.has(key)) s.delete(key);
-      else s.add(key);
-      return s;
-    });
-
   const totalExecs = traced.reduce((n, i) => n + (i.sandboxExecutions?.length ?? 0), 0);
 
   return (
-    <Card padding="md" style={{ marginBottom: 24 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-        <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>Code Interpreter Traces</h2>
-        <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+    <Card padding="md" className="mb-6">
+      <Inline gap="sm" align="center" className="mb-3">
+        <SectionLabel as="div">Code Interpreter Traces</SectionLabel>
+        <T className="text-[11px] text-[var(--color-text-tertiary)]">
           invocations that triggered run_in_sandbox · live ring buffer
-        </span>
+        </T>
         {traced.length > 0 && (
-          <span
-            style={{
-              marginLeft: 'auto',
-              fontSize: 11,
-              fontWeight: 600,
-              color: 'var(--color-primary)',
-            }}
-          >
+          <T className="ml-auto text-[11px] font-semibold text-[var(--color-primary)]">
             {traced.length} invocation{traced.length !== 1 ? 's' : ''} · {totalExecs} execution
             {totalExecs !== 1 ? 's' : ''}
-          </span>
+          </T>
         )}
-      </div>
+      </Inline>
 
       {traced.length === 0 ? (
-        <div
-          style={{
-            padding: '20px 0',
-            textAlign: 'center',
-            fontSize: 12,
-            color: 'var(--color-text-tertiary)',
-          }}
-        >
+        <InlinePlaceholder align="center" size="sm">
           No Code Interpreter executions yet. Ask the scoring or graph-builder agent a
           computational question (e.g. "compute PageRank" or "run expertise scoring 5 different
           ways") and executions will appear here.
-        </div>
+        </InlinePlaceholder>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <Stack gap="sm">
           {traced.map((inv) => {
-            const isOpen = expanded.has(inv.id);
             const execCount = inv.sandboxExecutions?.length ?? 0;
             return (
-              <div
+              <CollapsibleSection
                 key={inv.id}
-                style={{
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-md)',
-                  overflow: 'hidden',
-                }}
+                title={
+                  <MetaLine
+                    items={[
+                      <T className="whitespace-nowrap text-[11px] text-[var(--color-text-tertiary)]">
+                        {new Date(inv.startedAt).toLocaleTimeString()}
+                      </T>,
+                      <T className="whitespace-nowrap rounded-full bg-[var(--color-surface-hover)] px-[7px] py-[1px] text-[11px] font-semibold text-[var(--color-primary)]">
+                        {inv.agentName.replace('orgiq-', '')}
+                      </T>,
+                      <T className="max-w-[360px] truncate text-[12px]">{inv.promptSnippet}</T>,
+                    ]}
+                  />
+                }
+                badge={
+                  <Inline gap="sm" align="center">
+                    <T className="whitespace-nowrap rounded-full bg-[var(--color-primary)] px-2 py-[2px] text-[11px] font-semibold text-white">
+                      {execCount} sandbox run{execCount !== 1 ? 's' : ''}
+                    </T>
+                    <T className="whitespace-nowrap text-[11px] text-[var(--color-text-tertiary)]">
+                      {(inv.durationMs / 1000).toFixed(1)}s total
+                    </T>
+                  </Inline>
+                }
               >
-                <div
-                  onClick={() => toggle(inv.id)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    padding: '10px 14px',
-                    cursor: 'pointer',
-                    background: isOpen ? 'var(--color-surface-hover)' : 'var(--color-surface)',
-                    userSelect: 'none',
-                  }}
-                >
-                  <span style={{ fontSize: 13, color: 'var(--color-text-tertiary)' }}>
-                    {isOpen ? '▾' : '▸'}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 11,
-                      color: 'var(--color-text-tertiary)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {new Date(inv.startedAt).toLocaleTimeString()}
-                  </span>
-                  <span
-                    style={{
-                      padding: '1px 7px',
-                      borderRadius: 99,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      background: 'var(--color-surface-hover)',
-                      color: 'var(--color-primary)',
-                    }}
-                  >
-                    {inv.agentName.replace('orgiq-', '')}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 12,
-                      flex: 1,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {inv.promptSnippet}
-                  </span>
-                  <span
-                    style={{
-                      padding: '2px 8px',
-                      borderRadius: 99,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      whiteSpace: 'nowrap',
-                      background: 'var(--color-primary)',
-                      color: '#fff',
-                    }}
-                  >
-                    {execCount} sandbox run{execCount !== 1 ? 's' : ''}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 11,
-                      color: 'var(--color-text-tertiary)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {(inv.durationMs / 1000).toFixed(1)}s total
-                  </span>
-                </div>
-
-                {isOpen && (
-                  <div
-                    style={{
-                      borderTop: '1px solid var(--color-border)',
-                      background: 'var(--color-bg)',
-                    }}
-                  >
-                    {(inv.sandboxExecutions ?? []).map((exec, idx) => {
-                      const execKey = `${inv.id}-${idx}`;
-                      const execOpen = expandedExec.has(execKey);
-                      return (
-                        <div
-                          key={execKey}
-                          style={{
-                            borderBottom:
-                              idx < execCount - 1 ? '1px solid var(--color-border)' : undefined,
-                          }}
-                        >
-                          <div
-                            onClick={() => toggleExec(execKey)}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 8,
-                              padding: '8px 14px 8px 28px',
-                              cursor: 'pointer',
-                              userSelect: 'none',
-                              background: execOpen ? 'var(--color-surface)' : 'transparent',
-                            }}
-                          >
-                            <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>
-                              {execOpen ? '▾' : '▸'}
-                            </span>
-                            <span
-                              style={{
-                                padding: '1px 6px',
-                                borderRadius: 4,
-                                fontSize: 10,
-                                fontWeight: 700,
-                                background: exec.error
-                                  ? 'var(--color-error-bg, #fee2e2)'
-                                  : 'var(--color-success-bg, #dcfce7)',
-                                color: exec.error
-                                  ? 'var(--color-error, #dc2626)'
-                                  : 'var(--color-success, #16a34a)',
-                              }}
-                            >
+                <Stack gap="sm">
+                  {(inv.sandboxExecutions ?? []).map((exec, idx) => (
+                    <CollapsibleSection
+                      key={`${inv.id}-${idx}`}
+                      title={
+                        <MetaLine
+                          items={[
+                            <Chip tone={exec.error ? 'danger' : 'success'} size="xs">
                               run {idx + 1}
-                            </span>
-                            <code
-                              style={{
-                                fontSize: 11,
-                                color: 'var(--color-text-secondary)',
-                                flex: 1,
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
+                            </Chip>,
+                            <T className="max-w-[420px] truncate font-mono text-[11px] text-[var(--color-text-secondary)]">
                               {exec.code
                                 .trim()
                                 .split('\n')
                                 .find((l) => l.trim() && !l.startsWith('#')) ??
                                 exec.code.trim().slice(0, 80)}
-                            </code>
-                            <span
-                              style={{
-                                fontSize: 11,
-                                color: 'var(--color-text-tertiary)',
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
+                            </T>,
+                            <T className="whitespace-nowrap text-[11px] text-[var(--color-text-tertiary)]">
                               {exec.durationMs}ms · {exec.sessionId.slice(-8)}
-                            </span>
-                          </div>
-
-                          {execOpen && (
-                            <div
-                              style={{
-                                padding: '0 14px 12px 28px',
-                                display: 'grid',
-                                gridTemplateColumns: '1fr 1fr',
-                                gap: 10,
-                              }}
-                            >
-                              <div>
-                                <div
-                                  style={{
-                                    fontSize: 10,
-                                    fontWeight: 700,
-                                    color: 'var(--color-text-tertiary)',
-                                    marginBottom: 4,
-                                  }}
-                                >
-                                  INPUT — generated code
-                                </div>
-                                <pre
-                                  style={{
-                                    ...monoStyle,
-                                    background: 'var(--color-surface)',
-                                    border: '1px solid var(--color-border)',
-                                    maxHeight: 300,
-                                    overflowY: 'auto',
-                                  }}
-                                >
-                                  {exec.code}
-                                </pre>
-                              </div>
-                              <div>
-                                <div
-                                  style={{
-                                    fontSize: 10,
-                                    fontWeight: 700,
-                                    color: 'var(--color-text-tertiary)',
-                                    marginBottom: 4,
-                                  }}
-                                >
-                                  OUTPUT{exec.error ? ' — error' : ''}
-                                </div>
-                                <pre
-                                  style={{
-                                    ...monoStyle,
-                                    background: exec.error
-                                      ? 'var(--color-error-bg, #fee2e2)'
-                                      : 'var(--color-bg)',
-                                    border: '1px solid var(--color-border)',
-                                    color: exec.error
-                                      ? 'var(--color-error, #dc2626)'
-                                      : 'var(--color-text)',
-                                    maxHeight: 300,
-                                    overflowY: 'auto',
-                                  }}
-                                >
-                                  {exec.output || '(no output)'}
-                                </pre>
-                              </div>
-                            </div>
+                            </T>,
+                          ]}
+                        />
+                      }
+                    >
+                      <CatalogGrid columns={2} dense>
+                        <Stack gap="xs">
+                          <SectionLabel as="div">INPUT — generated code</SectionLabel>
+                          <CodeBlock
+                            code={exec.code}
+                            language="text"
+                            theme="light"
+                            className="max-h-[300px] overflow-y-auto"
+                          />
+                        </Stack>
+                        <Stack gap="xs">
+                          <SectionLabel as="div">OUTPUT{exec.error ? ' — error' : ''}</SectionLabel>
+                          {exec.error ? (
+                            <InlineAlert tone="error">{exec.output || '(no output)'}</InlineAlert>
+                          ) : (
+                            <CodeBlock
+                              code={exec.output || '(no output)'}
+                              language="text"
+                              theme="light"
+                              className="max-h-[300px] overflow-y-auto"
+                            />
                           )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+                        </Stack>
+                      </CatalogGrid>
+                    </CollapsibleSection>
+                  ))}
+                </Stack>
+              </CollapsibleSection>
             );
           })}
-        </div>
+        </Stack>
       )}
     </Card>
   );

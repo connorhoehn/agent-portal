@@ -1,6 +1,7 @@
 // providers/grantOverlay.ts
 //
-// The in-memory grant overlay for mock mode (config.mock.aurora === true).
+// The mock `budget_grants` table — the one read that every offline grant
+// mutation is visible through.
 //
 // WHY THIS IS ITS OWN MODULE, and not part of providers/grants.ts where it
 // started: two readers need it, and they cannot both import grants.ts.
@@ -8,62 +9,91 @@
 //   grants.ts  imports getSprint from sprints.ts  (to label a created grant)
 //   sprints.ts needs the merged grants            (to roll up a sprint envelope)
 //
-// so sprints.ts -> grants.ts would close an import cycle. While the overlay
-// lived in grants.ts, sprints.ts read the raw `MOCK_GRANTS` seed instead — and
-// that was a real, user-visible bug: PATCH a grant and /api/grants reported the
-// new amount while /api/sprints kept reporting the old envelope, because only
-// one of them knew the overlay existed.
+// so sprints.ts -> grants.ts would close an import cycle. While this lived in
+// grants.ts, sprints.ts read the raw seed instead — and that was a real,
+// user-visible bug: PATCH a grant and /api/grants reported the new amount while
+// /api/sprints kept reporting the old envelope, because only one of them knew
+// the mutations existed.
 //
 // This module imports budgets.ts only, so both can depend on it and neither
 // depends on the other. Nothing here should ever import grants.ts or sprints.ts.
 //
-// The model:
-//   The seed envelopes are budgets.MOCK_GRANTS and are READ-ONLY. The overlay
-//   records mutations on top of them so dev:mock can create/patch/revoke:
-//     id -> updated row   (a create, or a patched seed/created grant)
-//     id -> null          (a tombstone: the grant was revoked)
-//   Reads merge the seed with the overlay; the seed is never mutated in place.
+// WHAT CHANGED. There used to be an OVERLAY here: a `Map<id, GrantRow | null>`
+// recording creates, patches and tombstones on top of a seed array that was
+// never allowed to change. That existed for exactly one reason — there was no
+// way to put the seed back, so the seed had to be read-only, and every reader
+// had to know to merge two things. A REGISTERED FIXTURE is that way:
+// `budgetGrants` (mock/budgets.ts) is in the registry, so `POST /api/__mock/reset`
+// restores it and the rows can simply be mutated. The merge, the tombstones and
+// the "read this, not that" rule are all gone; the exported names stay because
+// grants.ts and sprints.ts call them.
 
-import { type GrantRow, MOCK_GRANTS, MOCK_BUDGETS } from './budgets.js';
+import { type GrantRow, type MockGrantSeed, MOCK_BUDGETS, MOCK_GRANTS } from './budgets.js';
+import { budgetGrants } from '../mock/budgets.js';
 
-const MOCK_OVERLAY = new Map<string, GrantRow | null>();
+/** Test-only: put the seeded envelopes back, dropping anything this process
+ *  created, patched or revoked. `fixtureRegistry.resetAll()` (POST
+ *  /api/__mock/reset) does the same, which is the point of the fixture. */
+export function _resetMockGrants(): void { budgetGrants.reset(); }
 
-/** Test-only: clear the in-memory grant overlay between cases. */
-export function _resetMockGrants(): void { MOCK_OVERLAY.clear(); }
+/**
+ * The stored half of a grant row.
+ *
+ * `budget_grants` holds an allocation, a grantee, a sprint and who authorized
+ * it — and nothing else. `orgProjectName` is a projects join,
+ * `startsOn`/`endsOn` are the SPRINT's dates, and `initiativeSpendInWindowUsd`
+ * is a correlated SUM over bot_runs. All four are re-attached on the way out
+ * (`mockGrant` in providers/budgets.ts), so a create or a patch cannot freeze
+ * one of them into the table the way the old overlay did.
+ */
+function toSeed(row: GrantRow): MockGrantSeed {
+  return {
+    id: row.id,
+    orgProjectId: row.orgProjectId,
+    granteePersonId: row.granteePersonId,
+    granteeName: row.granteeName,
+    sprintId: row.sprintId,
+    sprintName: row.sprintName,
+    sprintStatus: row.sprintStatus,
+    allocatedUsd: row.allocatedUsd,
+    grantedBy: row.grantedBy,
+    note: row.note,
+  };
+}
 
-/** Record a create or a patch. */
-export function setMockGrant(id: string, row: GrantRow): void { MOCK_OVERLAY.set(id, row); }
+/** Record a create or a patch — an upsert against the fixture, matching the
+ *  INSERT and the UPDATE ... RETURNING in providers/grants.ts. */
+export function setMockGrant(id: string, row: GrantRow): void {
+  const rows = budgetGrants.rows();
+  const at = rows.findIndex((g) => g.id === id);
+  const seed = { ...toSeed(row), id };
+  if (at < 0) rows.push(seed);
+  else rows[at] = seed;
+}
 
-/** Record a revoke. A tombstone, so the seed row stops being read. */
-export function tombstoneMockGrant(id: string): void { MOCK_OVERLAY.set(id, null); }
+/** Record a revoke. The row leaves the table, exactly as `DELETE FROM
+ *  budget_grants` does — no tombstone, because there is no read-only seed
+ *  underneath it any more to shadow. */
+export function tombstoneMockGrant(id: string): void {
+  const rows = budgetGrants.rows();
+  const at = rows.findIndex((g) => g.id === id);
+  if (at >= 0) rows.splice(at, 1);
+}
 
-function seedGrantRows(): GrantRow[] {
-  // Same name-join budgets.listGrants does in mock, kept local so this module
-  // does not depend on that path's filtering.
+/**
+ * Every mock grant, projected the way listGrants projects a real one.
+ *
+ * The name kept its "merged" spelling because two dozen call sites and two test
+ * suites use it, and because what it promises is unchanged: this is the read
+ * that sees mutations. There is simply nothing to merge any more.
+ *
+ * `MOCK_GRANTS` is a live view over the fixture whose rows carry `startsOn`,
+ * `endsOn` and the window burn as GETTERS, so spreading here resolves each of
+ * them at read time — the initiative name is the only thing this function adds.
+ */
+export function mergedMockGrants(): GrantRow[] {
   return MOCK_GRANTS.map((g) => ({
     ...g,
     orgProjectName: MOCK_BUDGETS.find((b) => b.id === g.orgProjectId)?.name ?? null,
   }));
-}
-
-/**
- * The seed with the overlay applied — the ONLY honest read of mock grants.
- * Read this rather than `MOCK_GRANTS` anywhere a mutation should be visible.
- */
-export function mergedMockGrants(): GrantRow[] {
-  const seed = seedGrantRows();
-  const seedIds = new Set(seed.map((g) => g.id));
-  const out: GrantRow[] = [];
-  for (const g of seed) {
-    if (MOCK_OVERLAY.has(g.id)) {
-      const v = MOCK_OVERLAY.get(g.id);
-      if (v) out.push(v); // patched; a tombstone (null) drops it
-    } else {
-      out.push(g);
-    }
-  }
-  for (const [id, v] of MOCK_OVERLAY) {
-    if (!seedIds.has(id) && v) out.push(v);
-  }
-  return out;
 }

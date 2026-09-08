@@ -156,8 +156,8 @@ intermediate artifacts that currently have nowhere to live between tool calls:
 Both are invoked with a `runtimeSessionId` already threaded from the supervisor,
 so the plumbing exists.
 
-Deliberately **not** recommending it for the other seven: `search`, `scoring`,
-`advisor`, and the three newsroom agents are largely read-through-and-respond,
+Deliberately **not** recommending it for the other six: `search`, `scoring`,
+`advisor`, and the two assessment agents are largely read-through-and-respond,
 and `supervisor`'s multi-turn state is already handled by AgentCore Memory + the
 AG-UI session work in `47f0a99`.
 
@@ -404,6 +404,141 @@ decision:
 3. **Do `ingestion` / `graph-builder` receive stable session IDs** on their real invocation paths, or only when called through the supervisor? Direct invocation via `/invoke` may not thread one, in which case session storage buys those calls nothing.
 4. **Is `agentcore` CLI meant to be installed here?** CLAUDE.md documents it as a global npm install and `agentcore dev` as the local dev loop, but it isn't present. Either the doc or the machine is out of date.
 5. **CLAUDE.md image-size limit** — says 1 GB, quota is 2 GB (§2).
+
+## 6a. Machine-callback auth secrets — operator runbook
+
+Three middleware routes are agent-facing callbacks with no session
+(`POST /api/observability/approvals/request`, `POST /api/observability/harness/trace`,
+`POST /api/assessment/runs/:runId/complete` — see `middleware/src/routes/{approvals,harness,assessment}.ts`).
+Each guard (`requireServiceAuth` / `requireTraceAuth` / `requireRunCompleteAuth`)
+is **open** when its env var (`APPROVALS_REQUEST_SECRET` / `HARNESS_TRACE_SECRET`
+/ `ASSESSMENT_RUN_COMPLETE_SECRET`) is unset and does a constant-time header
+check (`x-approvals-auth` / `x-harness-auth` / `x-assessment-run-auth`) when set.
+In the deployed stack these vars were never set, so all three callbacks were
+open on the internet-facing ALB.
+
+`OrgIQ-MiddlewareService` (`infra/lib/middleware-service-stack.ts`) now mints
+three separate Secrets Manager secrets (`orgiq-approvals-request-secret`,
+`orgiq-harness-trace-secret`, `orgiq-assessment-run-complete-secret`) and
+injects them as ECS container secrets (`ecs.Secret.fromSecretsManager`, same
+mechanism as `COGNITO_CLIENT_SECRET`) — the values never appear in the task
+definition's plaintext `Environment` block, only under `Secrets`, resolved by
+the execution role at container start. Three secrets rather than one JSON
+blob: CDK's `generateSecretString` only auto-generates one field per Secret
+resource, and independent secrets let an operator rotate one leaked
+credential without touching the other two.
+
+**The agent half has now shipped** (`agents/_shared/callbacks.py`, wired into
+`instrumentation.py::post_trace` and `approval_tool.py::request_approval`).
+Every callback reads its secret from the runtime's own environment and sends
+the matching header **only when that variable is set**; unset sends no header,
+which is byte-for-byte the pre-existing request. So the two halves are
+independent — a runtime carrying the secret works against an open middleware
+(the header is ignored) and a runtime without it works against an open one —
+and the *only* thing that forces an ordering is that the secret value does
+not exist until `OrgIQ-MiddlewareService` mints it.
+
+The third callback (`/runs/:runId/complete`) still has no in-repo driver; per
+its own route comment it is hit out of band by a deployed or `agentcore dev`-run
+scorer. `callbacks.post_run_complete()` is the canonical header-aware client
+for it — whatever ends up driving assessment runs should call that rather than
+hand-rolling a POST, or it will be the one thing left behind by this rollout.
+
+**Why the runtime side can't just import the ARN.** `AgentCoreRuntimeStack`
+is instantiated before `MiddlewareServiceStack` in `infra/bin/app.ts` with no
+dependency edge between them, so an `Fn.importValue` there would reference an
+export that doesn't exist on `OrgIQ-AgentCoreRuntime`'s own first deploy.
+Separately, `AWS::BedrockAgentCore::Runtime.EnvironmentVariables` is a bare
+string map — unlike ECS, this resource type has no `Secret`/
+`fromSecretsManager`-equivalent that resolves a value at container start.
+Getting a Secrets Manager value into it at all means a raw CloudFormation
+dynamic reference resolved before the `CreateAgentRuntime` call, which would
+still land in the runtime's plaintext environment (visible via
+`DescribeAgentRuntime`) — defeating the purpose, on top of being unconfirmed
+for this preview-era resource type. Rather than invent that mechanism,
+`AgentCoreRuntimeStack` takes the three values as plain CDK context strings
+(`approvalsRequestSecret` / `harnessTraceSecret` / `assessmentRunCompleteSecret`,
+wired through `infra/bin/app.ts`) that the operator copies in by hand.
+
+**Important: there is no staged "mint but stay open" mode.** The container
+secrets are wired unconditionally, so the moment `OrgIQ-MiddlewareService`'s
+new task definition rolls out, all three guards go from open to required —
+in the same deploy that creates the secrets. There is still no way to learn
+the generated secret *value* before that deploy runs (Secrets Manager picks
+it), so a window between "middleware requires the header" and "the fleet
+carries it" remains. What the agent half changes is that the window no longer
+needs an image build inside it, and nothing in it is unsafe.
+
+Required order:
+
+1. **Roll the agent images first, with no secret context.** The header-capable
+   code (`agents/_shared/callbacks.py`) has to be *inside* the running
+   containers before any env var can matter. Build and push
+   (`agents/base/build.sh`, then `agents/build-all.sh` — local ARM64 buildx),
+   then `./scripts/deploy.sh OrgIQ-AgentCoreRuntime --context deployRuntimes=true`
+   with **none** of the three secret contexts set. This is behaviourally a
+   no-op — no env var, no header, identical requests — so it can be done days
+   ahead, on its own change window. It is also the slow step (image build +
+   push + a full runtime version roll, which per the digest-pinning gotcha
+   wipes `/mnt/workspace`); getting it out of the way is the point.
+2. Deploy `OrgIQ-MiddlewareService`. The moment its new tasks are live, all
+   three callbacks require the header — this starts the window.
+3. Read each value:
+   `aws secretsmanager get-secret-value --secret-id orgiq-approvals-request-secret --query SecretString --output text`
+   (repeat for `orgiq-harness-trace-secret` and `orgiq-assessment-run-complete-secret`).
+4. Redeploy `OrgIQ-AgentCoreRuntime --context deployRuntimes=true --context approvalsRequestSecret=<value> --context harnessTraceSecret=<value> --context assessmentRunCompleteSecret=<value>`. No rebuild — the images from step 1 already contain the code; this only changes `EnvironmentVariables`. It still rolls every runtime to a new version (and wipes `/mnt/workspace` again).
+
+Skipping step 1 does not just lengthen the window, it makes it unbounded: a
+runtime running a pre-`callbacks.py` image sends no header no matter what
+env you hand it in step 4.
+
+**What the window between steps 2 and 4 actually costs**, per callback:
+
+- **Traces — no data loss.** `post_trace` emits the `ORGIQ_TRACE:` stdout line
+  *before* it POSTs, so CloudWatch → the middleware's log poller delivers the
+  same bundle regardless; only the low-latency HTTP path is down. A 401 is
+  logged at ERROR naming `HARNESS_TRACE_SECRET`, and is deliberately **not**
+  retried without the header (it could not succeed, and a silent downgrade
+  would hide the ordering mistake).
+- **Approvals — a real outage, failing safe.** There is no second path, so
+  `request_approval` returns `{"status": "ERROR"}` with a note naming
+  `APPROVALS_REQUEST_SECRET`. No approval row is created and the agent never
+  reads a rejected request as a decision, so a gated action is blocked, not
+  auto-approved. Time step 2→4 tightly if anything is mid-workflow.
+  (Separate, pre-existing: only `POST /approvals/request` is a machine
+  callback. The tool's long-poll of `GET /approvals/:id` goes through
+  `requireTenant('orgiq') + requireAction('ViewObservability')`, which a
+  cookie-less agent can only pass in dev open-mode — so the HITL loop cannot
+  complete against a session-enforcing deployment regardless of these secrets.
+  Middleware-side; not addressed here.)
+- **Run-complete — nothing in-repo is affected.** An out-of-band caller using
+  `callbacks.post_run_complete()` gets `ok: false` with the same actionable
+  note; its run stays `running` and holds a `RUN_CONCURRENCY_CAP` slot until
+  it is re-reported or `/stop`ped.
+
+**Rollback** is the reverse and is safe in either order: unset the middleware
+secrets (guards reopen) and/or redeploy the runtimes without the contexts (no
+header sent). A runtime holding a stale secret against a reopened middleware
+is also fine — an open guard ignores the header entirely.
+
+**Rotation** is one secret at a time (that is why they are three resources):
+put the new value in Secrets Manager, redeploy `OrgIQ-MiddlewareService`, then
+redeploy the runtimes with the new context value. The same window applies, with
+the same per-callback costs.
+
+**One caller is still unpatched: `infra/scripts/harness.py`.** The regression
+harness runner POSTs its own bundles to `/api/observability/harness/trace`
+(`_http(...)` around line 848) with a hand-built header dict and no service
+auth, so it 401s as soon as `HARNESS_TRACE_SECRET` is set. It runs on an
+operator's laptop, not in a runtime, so the fix is the same three lines against
+`os.environ['HARNESS_TRACE_SECRET']` — tracked here rather than done, since it
+lives under `infra/`.
+
+Diagnosing a 401 after all this: each runtime logs once per process, at INFO,
+whether it is sending service auth for each callback (`callbacks: POST … →
+sending service auth / no service auth`), and the failure messages distinguish
+"variable unset in this runtime" from "value does not match the middleware's" —
+so CloudWatch answers which half is stale without guessing.
 
 ## 7. Explicitly out of scope
 

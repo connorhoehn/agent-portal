@@ -20,21 +20,21 @@ import type { Request, Response, NextFunction } from 'express';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import { config } from '../config.js';
 
-export const TENANTS = ['orgiq', 'newsroom'] as const;
+export const TENANTS = ['orgiq', 'assessment'] as const;
 export type Tenant = typeof TENANTS[number];
 
 // Role vocabulary per tenant. Must match the Cedar seeds in
 // middleware/seeds/roles/{tenant}/. 'admin' is cross-tenant: it can hold a
 // grant in any tenant and is the only role permitted to masquerade.
 export const ROLES_BY_TENANT: Record<Tenant, readonly string[]> = {
-  orgiq: ['member', 'sme', 'org-leader', 'hr-admin'],
-  newsroom: ['reporter', 'editor'],
+  orgiq: ['member', 'sme', 'program-owner', 'org-leader', 'hr-admin'],
+  assessment: ['assessor', 'lead-assessor', 'program-lead'],
 };
 export const ADMIN_ROLE = 'admin';
 
 // Legacy export — the orgiq role list. Prefer ROLES_BY_TENANT.
-export const ROLES = ROLES_BY_TENANT.orgiq as readonly ['member', 'sme', 'org-leader', 'hr-admin'];
-export type Role = 'member' | 'sme' | 'org-leader' | 'hr-admin' | 'reporter' | 'editor' | 'admin';
+export const ROLES = ROLES_BY_TENANT.orgiq as readonly ['member', 'sme', 'program-owner', 'org-leader', 'hr-admin'];
+export type Role = 'member' | 'sme' | 'program-owner' | 'org-leader' | 'hr-admin' | 'assessor' | 'lead-assessor' | 'program-lead' | 'admin';
 
 export const DEFAULT_ROLE: Role = 'member';
 export const DEFAULT_TENANT: Tenant = 'orgiq';
@@ -91,6 +91,37 @@ export function permissiveGrants(): Grants {
   return g;
 }
 
+/**
+ * What the cookie-less demo identity holds AFTER choosing a role.
+ *
+ * `demoSession()` starts permissive — every role in every tenant — so the
+ * context picker can offer every persona. But the demo persona wearing "SME"
+ * kept every one of those grants: the Assessment tile stayed on the picker,
+ * the tenant's routes stayed open, and the person demoing an SME saw pages an
+ * SME cannot see. Choosing a non-admin role now narrows the demo identity to
+ * exactly that role in that tenant — it becomes the persona rather than
+ * wearing its label. Choosing `admin` restores the permissive set, and
+ * signing out (which drops the cookie) starts over. Real users are untouched:
+ * their grants come from the identity store and this never applies.
+ */
+export const DEMO_SUB = 'demo-user';
+export function demoScopedGrants(sub: string, tenant: string, role: string, current: Grants): Grants {
+  if (sub !== DEMO_SUB) return current;
+  if (role === ADMIN_ROLE) return permissiveGrants();
+  return { [tenant]: [role] };
+}
+
+/**
+ * What a switch is validated AGAINST. The demo cookie is narrowed to one role
+ * (above), but the persona is still allowed to become any other one — the
+ * picker POSTs `/tenant` then `/role`, and the first call narrowing the cookie
+ * must not make the second one 403. Real users are validated against the
+ * grants in their cookie, which are the identity store's.
+ */
+export function switchableGrants(sub: string, current: Grants): Grants {
+  return sub === DEMO_SUB ? permissiveGrants() : current;
+}
+
 export function rolesForTenant(grants: Grants, tenant: string): string[] {
   return grants[tenant] ?? [];
 }
@@ -101,7 +132,7 @@ export function hasGrant(grants: Grants, tenant: string, role: string): boolean 
 
 // Privilege rank, lower = less privileged. Used to choose a login landing role.
 const ROLE_RANK: Record<string, number> = {
-  member: 0, reporter: 0, sme: 1, 'org-leader': 2, editor: 1, 'hr-admin': 3, admin: 99,
+  member: 0, assessor: 0, sme: 1, 'lead-assessor': 2, 'program-owner': 2, 'org-leader': 3, 'program-lead': 3, 'hr-admin': 4, admin: 99,
 };
 
 /**

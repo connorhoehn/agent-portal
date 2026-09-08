@@ -9,12 +9,25 @@
 // budget) lives in lib/bot-runner.ts, the cron registry in lib/bot-scheduler.ts.
 // Schema: schema/agent_bots_schema.sql.
 
+import { randomUUID } from 'node:crypto';
 import { exec } from './aurora.js';
 import { config } from '../config.js';
 // The attribution model of record for "which initiative did this run spend
 // against" (imported, never re-derived — two copies of that predicate is how
 // two surfaces come to disagree about the same dollar).
 import { spendPredicateSql } from './budgets.js';
+// Mock-mode only, and read-only: listMarketplaceRuns keys a bot-less run to an
+// initiative THROUGH its work item, exactly as the Aurora statement's subquery
+// does. work-items.ts does not import this module, so this is a one-way edge.
+import { getWorkItem, mockWorkItemProjectId } from './work-items.js';
+// Mock-mode only, and read-only: the initiative join createBot's Aurora
+// read-back gets for free. One initiative table, so a bot created offline names
+// its initiative the same way every other mock surface does.
+import { mockProjectName } from './projects.js';
+// The one clock. Every fixture timestamp and every mock-branch stamp below is
+// read through it, so freezeClock works and a run stamped "earlier today"
+// cannot land in yesterday when the process boots near UTC midnight.
+import { clock, DAY_MS, HOUR_MS } from '../mock/core/index.js';
 import type { RunPercentiles } from '../lib/bot-estimate.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 
@@ -190,7 +203,14 @@ let _attribution: boolean | null = null;
  * writes on it is how a run gets recorded twice.
  */
 export async function attributionAvailable(): Promise<boolean> {
-  if (config.mock.aurora) return false;
+  // Mock mode stands in for a cluster that HAS had the migration applied — the
+  // migration is checked in, and createBotRun below records dispatchedBy on
+  // every row it writes offline. This used to answer false, which made the
+  // envelope brake's burn permanently "unknown" in dev:mock: an SME could
+  // dispatch against a $15 envelope all day and hear the identical verdict at
+  // every level of spend, because the only number the brake had was the
+  // envelope's own size.
+  if (config.mock.aurora) return true;
   if (_attribution !== null) return _attribution;
   try {
     const rows = await exec(
@@ -236,7 +256,7 @@ export async function dispatchedSpendInWindow(input: {
   startsOn: string | null;
   endsOn: string | null;
 }): Promise<DispatchedSpend> {
-  if (config.mock.aurora) return { spentUsd: 0, attributionAvailable: false };
+  if (config.mock.aurora) return mockDispatchedSpend(input);
   if (!(await attributionAvailable())) return { spentUsd: 0, attributionAvailable: false };
 
   const params: SqlParameter[] = [s('pid', input.orgProjectId), s('by', input.dispatchedBy)];
@@ -272,14 +292,131 @@ export async function dispatchedSpendInWindow(input: {
   }
 }
 
+/**
+ * The mock analogue of the statement above, row for row.
+ *
+ * Both halves of the ledger are here — the seeded cron history (`botRuns`)
+ * and every run this process recorded (`liveBotRuns`) — because Aurora sums
+ * one `bot_runs` table and does not care which of them wrote a row. The seeded
+ * firings carry `dispatchedBy: null`, so in practice they match nobody: a cron
+ * firing is authorized by no envelope, and the sum stays "only the runs
+ * recorded as dispatched by you".
+ *
+ * Attribution to the initiative is `spendPredicateSql`'s three arms, in the
+ * same order:
+ *   1. through the run's WORK ITEM (every marketplace dispatch is one of
+ *      these — bot_id null, work_item_id set);
+ *   2. through a bot targeting the initiative directly;
+ *   3. through a bot targeting a codebase that delivers it. No mock bot
+ *      carries an agentProjectId, so the third arm can match nothing here;
+ *      it is written out rather than silently dropped so the difference from
+ *      the SQL is visible rather than assumed.
+ *
+ * `cost_usd IS NOT NULL` is the predicate's own first clause: a run still in
+ * flight has posted no cost and burns nothing yet. The window bounds are the
+ * sprint's dates, exclusive-upper at ends_on + 1 day, matching both the SQL
+ * above and listGrants; a null bound is unbounded on that side.
+ *
+ * The total is rounded to `cost_usd`'s own scale rather than left as raw
+ * float noise — Postgres sums NUMERIC exactly, and a burn reading
+ * 0.06820000000000001 is a mock artefact, not a number the real path can
+ * produce.
+ */
+async function mockDispatchedSpend(input: {
+  orgProjectId: string;
+  dispatchedBy: string;
+  startsOn: string | null;
+  endsOn: string | null;
+}): Promise<DispatchedSpend> {
+  const from = input.startsOn ? Date.parse(`${input.startsOn}T00:00:00Z`) : null;
+  const toExclusive = input.endsOn ? Date.parse(`${input.endsOn}T00:00:00Z`) + 86_400_000 : null;
+
+  const runs = allMockRuns().filter((r) => {
+    if (r.dispatchedBy !== input.dispatchedBy) return false;
+    if (r.costUsd == null) return false;
+    const at = Date.parse(r.startedAt);
+    if (from != null && at < from) return false;
+    if (toExclusive != null && at >= toExclusive) return false;
+    return true;
+  });
+
+  let spent = 0;
+  for (const run of runs) {
+    let attributed = false;
+    if (run.workItemId) {
+      const item = await getWorkItem(run.workItemId);
+      attributed = item?.projectId === input.orgProjectId;
+    }
+    if (!attributed && run.botId) {
+      const bot = MOCK_BOTS.find((b) => b.id === run.botId);
+      // Arm 3 (bot → agent_project → initiative) would go here; every mock bot
+      // targets its initiative directly, so arm 2 is the only one that fires.
+      attributed = bot?.orgProjectId === input.orgProjectId;
+    }
+    if (attributed) spent += run.costUsd ?? 0;
+  }
+
+  return { spentUsd: Math.round(spent * 10_000) / 10_000, attributionAvailable: true };
+}
+
+// ─── Mock roster (config.mock.aurora) ──────────────────────────────
+//
+// The roster, the seeded cron history and the runs this process recorded are
+// REGISTERED FIXTURES now, in mock/bots.ts. They were three module-level arrays
+// right here (`MOCK_BOTS`, `MOCK_BOT_RUNS`, `MOCK_LIVE_RUNS`) and nothing could
+// put them back: `POST /api/__mock/reset` walks the fixture registry, and none
+// of the three was in it. So pausing a bot, resuming one or dispatching a run
+// changed dev:mock permanently, and a write-capture sweep had to refuse those
+// routes or replay them as echo-backs — a test that proves nothing. The array
+// literals also baked their timestamps at import, so "2 runs today" meant two
+// runs on the day the process booted, not on the day of the request.
+//
+// The exported names are unchanged, because they are a real API read across
+// module boundaries (providers/agent-jobs.ts, providers/budgets.ts,
+// providers/activity.ts and several suites). They are LIVE VIEWS onto the
+// fixtures now — see mock/live-view.ts for why a captured array goes stale the
+// moment a reset rebuilds it.
+export { MOCK_BOTS, MOCK_BOT_RUNS, deriveBotStats, SEED_PAUSED_REASON } from '../mock/bots.js';
+
+import {
+  allMockRuns,
+  bots as botsFixture,
+  deriveBotStats,
+  liveBotRuns,
+  liveRunsFor,
+  MOCK_BOTS,
+  seededRunsFor,
+} from '../mock/bots.js';
+
+/** Test seam — drop everything this process recorded, leaving the seeded cron
+ *  history alone. `fixtureRegistry.resetAll()` (POST /api/__mock/reset) does the
+ *  same for both halves, which is what makes an offline dispatch undoable. */
+export function __resetMockRuns(): void { liveBotRuns.reset(); }
+
+/** Live rows for one bot — merged into the seeded history by listBotRuns so a
+ *  bot fired by hand in dev:mock appears above its cron past. */
+function liveRunsForBot(botId: string): BotRun[] {
+  return liveRunsFor(botId);
+}
+
+/** The mock analogue of countRunningRuns' 24-hour window — see that function
+ *  for why the window is there. */
+function countMockRunningRuns(): number {
+  const cutoff = clock.now().getTime() - 24 * HOUR_MS;
+  return liveBotRuns.rows().filter(
+    (r) => r.status === 'running' && Date.parse(r.startedAt) > cutoff,
+  ).length;
+}
+
 export async function listBots(): Promise<Bot[]> {
-  if (config.mock.aurora) return [];
+  if (config.mock.aurora) return MOCK_BOTS;
   const rows = await safeExec(`${BOT_SELECT} ORDER BY b.created_at DESC LIMIT 200`);
   return rows.map(rowToBot);
 }
 
 export async function getBot(id: string): Promise<Bot | null> {
-  if (config.mock.aurora || !isUuid(id)) return null;
+  if (config.mock.aurora) return MOCK_BOTS.find((b) => b.id === id) ?? null;
+  if (!isUuid(id)) return null;
   const rows = await safeExec(`${BOT_SELECT} WHERE b.id = :id::uuid`, [s('id', id)]);
   return rows[0] ? rowToBot(rows[0]) : null;
 }
@@ -291,7 +428,54 @@ export async function createBot(input: {
   maxRunsPerDay?: number; requiresReview?: boolean; enforceAllocation?: boolean;
   createdBy?: string | null;
 }): Promise<Bot | null> {
-  if (config.mock.aurora) return null;
+  if (config.mock.aurora) {
+    // Used to `return null`, and the route reads a null as "could not create"
+    // and answers 503 — so authoring a bot was simply dead offline, which makes
+    // an unbuilt feature and an unseeded one look identical (contract.ts bug
+    // #5). A create has to mutate something; it mutates the REGISTERED roster
+    // fixture, so `POST /api/__mock/reset` takes the new bot back out again.
+    //
+    // The defaults below are the bots table's own (schema/agent_bots_schema.sql)
+    // and the same ones the INSERT binds, so a bot created offline carries the
+    // same money gates a bot created against Aurora would.
+    // gen_random_uuid()'s shape, so the isUuid() guards still mean something
+    // offline, and so the run history can be asked about before the row exists.
+    const id = randomUUID();
+    const created: Bot = {
+      id,
+      name: input.name,
+      template: input.template,
+      prompt: input.prompt,
+      agentProjectId: input.agentProjectId ?? null,
+      agentProjectRepo: null,
+      orgProjectId: input.orgProjectId ?? null,
+      // The projects join the INSERT's read-back does, resolved against the
+      // same initiative table the rest of mock mode renders — not restated.
+      orgProjectName: input.orgProjectId ? mockProjectName(input.orgProjectId) : null,
+      model: input.model,
+      trigger: input.trigger,
+      cronExpr: input.cronExpr ?? null,
+      enabled: input.enabled !== false,
+      budgetPerRunUsd: input.budgetPerRunUsd ?? null,
+      budgetPerDayUsd: input.budgetPerDayUsd ?? null,
+      maxRunsPerDay: input.maxRunsPerDay ?? 4,
+      requiresReview: input.requiresReview !== false,
+      enforceAllocation: input.enforceAllocation === true,
+      createdBy: input.createdBy ?? null,
+      // Through the clock, never `new Date()` — a created bot's age has to move
+      // with a frozen test the same way the seeded roster's does.
+      createdAt: clock.nowIso(),
+      pausedReason: null,
+      // Derived, not typed — the same expression every seeded roster entry
+      // uses (mockBot in mock/bots.ts), over this bot's own history rather than
+      // three zeros written by hand. A fresh uuid has no runs on either side, so
+      // it reads null/0/0; writing that out by hand would be a typed aggregate
+      // beside rows the fixture also exports (contract.ts rule 1).
+      ...deriveBotStats([...seededRunsFor(id), ...liveRunsFor(id)]),
+    };
+    botsFixture.rows().push(created);
+    return { ...created };
+  }
   const rows = await exec(
     `INSERT INTO bots (name, template, prompt_template, model, trigger, cron_expr,
                        agent_project_id, org_project_id, enabled, budget_per_run_usd,
@@ -327,7 +511,20 @@ export interface BotPatch {
 }
 
 export async function updateBot(id: string, patch: BotPatch): Promise<Bot | null> {
-  if (config.mock.aurora || !isUuid(id)) return null;
+  if (config.mock.aurora) {
+    // Mutates the shared MOCK_BOTS singleton in place — the same array
+    // listBots()/getBot() read — so a toggle persists for the life of the
+    // process instead of silently discarding the caller's patch (defect #10:
+    // resume's `updateBot(id, { enabled: true })` used to no-op here, so the
+    // route answered 200 with a bot that was never actually re-enabled).
+    // Only `enabled` is wired up — the only field either mock caller sets —
+    // other BotPatch keys remain unsupported in mock mode, same as before.
+    const bot = MOCK_BOTS.find((b) => b.id === id);
+    if (!bot) return null;
+    if (patch.enabled !== undefined) bot.enabled = patch.enabled;
+    return bot;
+  }
+  if (!isUuid(id)) return null;
   // Only the provided keys are written, so a PATCH that sets one field cannot
   // silently null out the rest — and `null` remains expressible for the
   // nullable columns (clearing a cron expr, detaching a target).
@@ -368,7 +565,17 @@ export async function deleteBot(id: string): Promise<boolean> {
 
 /** Set (or clear, with null) the self-pause. Cleared on resume. */
 export async function setPausedReason(id: string, reason: string | null): Promise<void> {
-  if (config.mock.aurora || !isUuid(id)) return;
+  if (config.mock.aurora) {
+    // Same fix as updateBot above: mutate the MOCK_BOTS singleton instead of
+    // returning early. Before this, POST /:id/pause acknowledged a change it
+    // never made — the route re-reads via getBot() right after, so the
+    // response (and the portal's "✓ Paused" toast) reported the bot enabled
+    // and unpaused no matter what the operator did (defect #10).
+    const bot = MOCK_BOTS.find((b) => b.id === id);
+    if (bot) bot.pausedReason = reason;
+    return;
+  }
+  if (!isUuid(id)) return;
   await exec(
     `UPDATE bots SET paused_reason = :reason, updated_at = NOW() WHERE id = :id::uuid`,
     [s('id', id), maybe('reason', reason)],
@@ -383,7 +590,16 @@ export async function markBotRan(id: string): Promise<void> {
 // ─── Runs ─────────────────────────────────────────────────────────────────────
 
 export async function listBotRuns(botId: string, limit = 50): Promise<BotRun[]> {
-  if (config.mock.aurora || !isUuid(botId)) return [];
+  if (config.mock.aurora) {
+    // The SAME array deriveBotStats() reads for lastRunAt/todayRunCount —
+    // before this, the detail page's run list was hard-coded to `[]`
+    // regardless of what the roster's summary numbers claimed (org-leader.md
+    // defect #20).
+    const runs = [...seededRunsFor(botId), ...liveRunsForBot(botId)]
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+    return runs.slice(0, Math.min(Math.max(limit, 1), 200)).map((r) => ({ ...r }));
+  }
+  if (!isUuid(botId)) return [];
   const rows = await safeExec(
     `SELECT * FROM bot_runs WHERE bot_id = :bid::uuid
       ORDER BY started_at DESC LIMIT :lim`,
@@ -398,7 +614,21 @@ export async function listBotRuns(botId: string, limit = 50): Promise<BotRun[]> 
  * because the bot_run itself carries no project linkage.
  */
 export async function listMarketplaceRuns(orgProjectId: string, limit = 100): Promise<BotRun[]> {
-  if (config.mock.aurora) return [];
+  if (config.mock.aurora) {
+    // The same two conditions the statement below applies, resolved row by row:
+    // bot-less, and bound to a work item on this initiative. Seeded history has
+    // no marketplace runs (the seed's runs all belong to a maintenance bot), so
+    // everything here is a dispatch this process authorized.
+    const botless = liveBotRuns.rows().filter((r) => r.botId === null && r.workItemId);
+    const matched: BotRun[] = [];
+    for (const run of botless) {
+      const item = await getWorkItem(run.workItemId as string);
+      if (item?.projectId === orgProjectId) matched.push({ ...run });
+    }
+    return matched
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+      .slice(0, Math.min(Math.max(limit, 1), 200));
+  }
   const rows = await safeExec(
     `SELECT * FROM bot_runs
       WHERE bot_id IS NULL
@@ -407,6 +637,76 @@ export async function listMarketplaceRuns(orgProjectId: string, limit = 100): Pr
     [s('pid', orgProjectId), int('lim', Math.min(Math.max(limit, 1), 200))],
   );
   return rows.map(rowToRun);
+}
+
+/**
+ * Every `bot_run` this process can see — the seeded cron history plus every
+ * row `createBotRun` recorded. The mock analogue of a bare `FROM bot_runs`
+ * with no attribution predicate at all, which is what the ORG-wide total sums
+ * (providers/budgets.ts `orgSummary`): the org total must not hide spend that
+ * no initiative predicate happens to claim.
+ */
+export function mockAllRuns(): BotRun[] {
+  return allMockRuns();
+}
+
+/**
+ * **The one place mock attribution is resolved**: every `bot_run` this process
+ * can see that belongs to `orgProjectId`, seeded history and live rows alike.
+ *
+ * This is `spendPredicateSql` evaluated row by row instead of by Postgres, and
+ * it exists because three surfaces were each doing a DIFFERENT subset of that
+ * job. The Initiatives rollup and the Budgets ledger summed only the seeded
+ * cron history; the activity graph summed the seeded history plus marketplace
+ * runs; nobody summed a live firing of a seeded bot. So a dispatch offline
+ * moved the activity graph and left the two money surfaces flat, and one
+ * `bot_runs` table answered three ways depending on which page asked.
+ *
+ * The arms, in `spendPredicateSql`'s own order:
+ *   1. through the run's WORK ITEM — every marketplace dispatch (bot_id NULL,
+ *      work_item_id set), and any bot run that also carries a work item;
+ *   2. through a bot targeting the initiative directly;
+ *   3. through a bot targeting a codebase that delivers it — no mock bot
+ *      carries an agentProjectId, so this arm matches nothing here. Written
+ *      out rather than silently dropped, so the gap from the SQL is visible.
+ *
+ * Deduped by run id: a live run can satisfy arms 1 and 2 at once, and a dollar
+ * counted twice is worse than a dollar counted late.
+ *
+ * Synchronous, deliberately. `listMarketplaceRuns` is async only because it
+ * resolves work items through `getWorkItem`; the mock work-item table is in
+ * memory, so `mockWorkItemProjectId` answers the same question without an
+ * await. That matters beyond convenience: `GrantRow.initiativeSpendInWindowUsd`
+ * is a **getter** on every mock grant row (providers/budgets.ts `mockGrant`,
+ * providers/grants.ts `withDerivedWindowSpend`), which is what keeps a grant's
+ * burn derived through every reader that merely spreads the row. A getter
+ * cannot await, so an async derivation here would force those back into stored
+ * numbers — reintroducing exactly the drift they were built to prevent.
+ *
+ * Cost is NOT filtered here: "which runs belong to this initiative" and "which
+ * of them have posted a cost" are different questions, and the activity graph
+ * wants the first. Callers summing money apply `cost_usd IS NOT NULL`
+ * themselves.
+ */
+export function mockRunsAttributedTo(orgProjectId: string): BotRun[] {
+  const byId = new Map<string, BotRun>();
+
+  // Arm 1 — through the work item. Covers marketplace dispatches (no bot at
+  // all) and any bot run carrying one.
+  for (const run of allMockRuns()) {
+    if (!run.workItemId) continue;
+    if (mockWorkItemProjectId(run.workItemId) === orgProjectId) byId.set(run.id, run);
+  }
+
+  // Arm 2 — a bot targeting the initiative. Seeded history AND live firings:
+  // Aurora sums one bot_runs table and does not care which of them wrote a row.
+  for (const bot of MOCK_BOTS) {
+    if (bot.orgProjectId !== orgProjectId) continue;
+    for (const run of seededRunsFor(bot.id)) byId.set(run.id, run);
+    for (const run of liveRunsForBot(bot.id)) byId.set(run.id, run);
+  }
+
+  return [...byId.values()];
 }
 
 export async function createBotRun(input: {
@@ -429,8 +729,49 @@ export async function createBotRun(input: {
    *  recording. */
   dispatchedBy?: string | null;
 }): Promise<BotRun | null> {
-  if (config.mock.aurora) return null;
   const status = input.status ?? 'running';
+  if (config.mock.aurora) {
+    // The ceiling, held the same way the Aurora INSERT holds it: the count and
+    // the append are one synchronous step here (single process, single thread),
+    // so there is no read-then-write window, and a refusal is the same `null`
+    // the guarded INSERT ... SELECT returns. Without this the concurrency gate
+    // could never fire offline — countRunningRuns answered 0 forever, so
+    // dev:mock claimed a ceiling it did not hold.
+    if (status === 'running' && input.ceiling != null && countMockRunningRuns() >= input.ceiling) {
+      return null;
+    }
+    // Through the mock clock, not `new Date()`. This stamp decides which
+    // calendar day and which calendar month a dispatch's money lands in, and
+    // every reader of it — the bot's todaySpendUsd, the ledger's period spend,
+    // the sprint envelope's window — buckets in UTC through that same clock.
+    // A wall-clock mint here is also what makes a frozen-clock test impossible
+    // to write: the run would ignore the instant the test froze.
+    const startedAt = clock.nowIso();
+    const run: BotRun = {
+      id: randomUUID(),                     // gen_random_uuid()'s shape, so the
+      botId: input.botId,                   // isUuid() guards below still mean
+      trigger: input.trigger,               // something offline.
+      runId: input.runId ?? null,
+      jobId: input.jobId ?? null,
+      workItemId: input.workItemId ?? null,
+      status,
+      costUsd: null,
+      startedAt,
+      // Mirrors the INSERT's CASE: a run that never dispatched is finished the
+      // moment it is recorded.
+      finishedAt: status === 'running' ? null : startedAt,
+      outcome: input.outcome ?? {},
+      // Recorded unconditionally, unlike the Aurora path's attributionAvailable()
+      // probe: that probe asks whether THIS cluster has had
+      // schema/agent_run_attribution_schema.sql applied, and the mock stands in
+      // for a cluster that has (the migration is checked in). The envelope
+      // brake's READ side — dispatchedSpendInWindow — sums exactly these rows,
+      // so a dispatch offline burns a real envelope down.
+      dispatchedBy: input.dispatchedBy ?? null,
+    };
+    liveBotRuns.rows().push(run);
+    return { ...run };
+  }
   const params: SqlParameter[] = [
     maybe('bid', input.botId), s('trigger', input.trigger),
     maybe('run', input.runId ?? null), maybe('job', input.jobId ?? null),
@@ -472,7 +813,21 @@ export async function finalizeBotRun(id: string, result: {
   costUsd?: number | null;
   outcome?: Record<string, unknown>;
 }): Promise<void> {
-  if (config.mock.aurora || !isUuid(id)) return;
+  if (config.mock.aurora) {
+    const run = liveBotRuns.rows().find((r) => r.id === id);
+    if (!run) return;
+    run.status = result.status;
+    // COALESCE and `||` respectively: a null cost leaves the recorded one
+    // alone, and the outcome merges rather than replaces.
+    if (result.costUsd != null) run.costUsd = result.costUsd;
+    run.outcome = { ...run.outcome, ...(result.outcome ?? {}) };
+    // NOW() in the UPDATE below; clock.nowIso() here, for the same reason the
+    // insert's startedAt is — one clock, so a frozen test freezes both ends of
+    // a run rather than half of it.
+    run.finishedAt = clock.nowIso();
+    return;
+  }
+  if (!isUuid(id)) return;
   await exec(
     `UPDATE bot_runs
         SET status = :status,
@@ -498,7 +853,7 @@ export async function countRunningRuns(): Promise<number> {
   // 'running' (crashed reconcile, vanished linkage) must not eat a concurrency
   // slot forever. The boot sweep and reconcile arms fail such rows properly;
   // this window just caps the damage until they do.
-  if (config.mock.aurora) return 0;
+  if (config.mock.aurora) return countMockRunningRuns();
   const rows = await safeExec(
     `SELECT COUNT(*)::int AS n FROM bot_runs
       WHERE status = 'running' AND started_at > NOW() - INTERVAL '24 hours'`,

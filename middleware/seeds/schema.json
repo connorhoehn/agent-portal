@@ -225,36 +225,6 @@
           ]
         }
       },
-      "WriteArticle": {
-        "appliesTo": {
-          "principalTypes": [
-            "User"
-          ],
-          "resourceTypes": [
-            "Application"
-          ]
-        }
-      },
-      "PublishArticle": {
-        "appliesTo": {
-          "principalTypes": [
-            "User"
-          ],
-          "resourceTypes": [
-            "Application"
-          ]
-        }
-      },
-      "ManagePitches": {
-        "appliesTo": {
-          "principalTypes": [
-            "User"
-          ],
-          "resourceTypes": [
-            "Application"
-          ]
-        }
-      },
       "DispatchAgentRun": {
         "appliesTo": {
           "principalTypes": [
@@ -296,6 +266,96 @@
         }
       },
       "ManageEnvironments": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ManageBots": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ViewAssessment": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ScoreAssessment": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ApproveException": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "PublishReport": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ManageSubmissions": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "RunAssessmentAgent": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ManageKnowledge": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
+      },
+      "ManageAssessmentConfig": {
         "appliesTo": {
           "principalTypes": [
             "User"

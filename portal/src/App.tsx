@@ -1,9 +1,10 @@
 import { lazy, Suspense } from 'react';
-import { Routes, Route, Navigate, Outlet, useParams } from 'react-router';
+import { Routes, Route, Navigate, Outlet, useParams, useLocation } from 'react-router';
 import { Layout } from './components/shell/Layout';
-import { RequireRole } from './lib/auth';
+import { RequireRole, RequireTenant } from './lib/auth';
+import { RouteErrorBoundary } from './components/shell/RouteErrorBoundary';
 import { useSession } from './lib/auth';
-import { NEWSROOM_ENABLED } from './lib/features';
+import { ASSESSMENT_ENABLED } from './lib/features';
 import { hasChosenContext } from './lib/contextChoice';
 import { GatewaySocketProvider } from '@connorhoehnslalom/realtime-modules/client/ws';
 import { ComputeHost } from './components/compute/ComputeHost';
@@ -16,18 +17,19 @@ const ScoresComparePage = lazy(() => import('./pages/ScoresComparePage'));
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
 const ProjectDetailPage = lazy(() => import('./pages/ProjectDetailPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
-const NewsroomLayout = lazy(() => import('./pages/newsroom/NewsroomLayout'));
 const IqLayout = lazy(() => import('./pages/iq/IqLayout'));
 const AdminLayout = lazy(() => import('./pages/admin/AdminLayout'));
-const NewsroomHomePage = lazy(() => import('./pages/newsroom/HomePage'));
-const NewsroomArticlesPage = lazy(() => import('./pages/newsroom/ArticlesPage'));
-const NewsroomArticleDetailPage = lazy(() => import('./pages/newsroom/ArticleDetailPage'));
-const NewsroomEntityDetailPage = lazy(() => import('./pages/newsroom/EntityDetailPage'));
-const NewsroomBeatsPage = lazy(() => import('./pages/newsroom/BeatsPage'));
-const NewsroomResearcherPage = lazy(() => import('./pages/newsroom/ResearcherPage'));
-const NewsroomBriefsPage = lazy(() => import('./pages/newsroom/BriefsPage'));
-const NewsroomHeadlinesPage = lazy(() => import('./pages/newsroom/HeadlinesPage'));
-const NewsroomPitchesPage = lazy(() => import('./pages/newsroom/PitchesPage'));
+const AssessmentLayout = lazy(() => import('./pages/assessment/AssessmentLayout'));
+const AssessmentDashboardPage = lazy(() => import('./pages/assessment/DashboardPage'));
+const AssessmentSubmissionsPage = lazy(() => import('./pages/assessment/SubmissionsPage'));
+const AssessmentFeedbackPage = lazy(() => import('./pages/assessment/FeedbackPage'));
+const AssessmentReportsPage = lazy(() => import('./pages/assessment/ReportsPage'));
+const AssessmentEnterprisePage = lazy(() => import('./pages/assessment/EnterprisePage'));
+const AssessmentWorkspacePage = lazy(() => import('./pages/assessment/WorkspacePage'));
+const AssessmentPromptsPage = lazy(() => import('./pages/assessment/PromptsPage'));
+const AssessmentRulesPage = lazy(() => import('./pages/assessment/RulesPage'));
+const AssessmentRunsPage = lazy(() => import('./pages/assessment/RunsPage'));
+const AssessmentConfigurationPage = lazy(() => import('./pages/assessment/ConfigurationPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const KnowledgeHomePage = lazy(() => import('./pages/knowledge/KnowledgeHomePage'));
 const KnowledgeLayout = lazy(() => import('./pages/knowledge/KnowledgeLayout'));
@@ -38,7 +40,6 @@ const DevboxPage = lazy(() => import('./pages/admin/DevboxPage'));
 const AgentProjectsPage = lazy(() => import('./pages/admin/AgentProjectsPage'));
 const BotsPage = lazy(() => import('./pages/bots/BotsPage'));
 const BudgetsPage = lazy(() => import('./pages/budgets/BudgetsPage'));
-const SprintsPage = lazy(() => import('./pages/sprints/SprintsPage'));
 const BotDetailPage = lazy(() => import('./pages/bots/BotDetailPage'));
 const ChangesPage = lazy(() => import('./pages/admin/ChangesPage'));
 const ChangeReviewPage = lazy(() => import('./pages/admin/ChangeReviewPage'));
@@ -50,6 +51,20 @@ const PromptStudioPage = lazy(() => import('./pages/capabilities/PromptsPage'));
 const PromptHistoryPage = lazy(() => import('./pages/iq/PromptHistoryPage'));
 const PromptOpsHomePage = lazy(() => import('./pages/iq/PromptOpsHomePage'));
 const WorkHomePage = lazy(() => import('./pages/work/WorkHomePage'));
+const WorkQueuePage = lazy(() => import('./pages/work/QueuePage'));
+const DesignsPage = lazy(() => import('./pages/designs/DesignsPage'));
+const LibraryPage = lazy(() => import('./pages/library/LibraryPage'));
+const PromotionsPage = lazy(() => import('./pages/promotions/PromotionsPage'));
+const SessionConfigPage = lazy(() => import('./pages/release/SessionConfigPage'));
+const DistillationLayout = lazy(() => import('./pages/distillation/DistillationLayout'));
+const DistillationOverviewPage = lazy(() => import('./pages/distillation/OverviewPage'));
+const DistillationTiersPage = lazy(() => import('./pages/distillation/TiersPage'));
+const DistillationArtifactsPage = lazy(() => import('./pages/distillation/ArtifactsPage'));
+const DistillationLineagePage = lazy(() => import('./pages/distillation/LineagePage'));
+const DistillationCompactionsPage = lazy(() => import('./pages/distillation/CompactionsPage'));
+const DistillationReviewPage = lazy(() => import('./pages/distillation/ReviewPage'));
+const DesignThreadPage = lazy(() => import('./pages/designs/DesignThreadPage'));
+const WorkFindingsPage = lazy(() => import('./pages/work/FindingsPage'));
 const JobDetailPage = lazy(() => import('./pages/work/JobDetailPage'));
 const GraphChangesPage = lazy(() => import('./pages/work/GraphChangesPage'));
 const DiffPage = lazy(() => import('./pages/iq/DiffPage'));
@@ -122,7 +137,14 @@ function Loading() {
 }
 
 function Page({ element }: { element: React.ReactNode }) {
-  return <Suspense fallback={<Loading />}>{element}</Suspense>;
+  // Keyed on the location so navigating away from a failed page clears
+  // the boundary; the shell around the page never unmounts.
+  const location = useLocation();
+  return (
+    <RouteErrorBoundary resetKey={location.pathname + location.search}>
+      <Suspense fallback={<Loading />}>{element}</Suspense>
+    </RouteErrorBoundary>
+  );
 }
 
 function KbDetailRedirect() {
@@ -133,19 +155,22 @@ function KbDetailRedirect() {
 function RootRedirect() {
   const { session, isLoading } = useSession();
   if (isLoading) return null;
-  // Count the workspaces (tenant, role) actually usable to this identity —
-  // newsroom is dropped when the flag is off. A multi-context identity that
-  // hasn't picked yet this session lands on the chooser first (AWS-style);
-  // a single-context or already-chosen identity goes straight in. Masqueraders
-  // skip the chooser — the operator deliberately chose who to view as.
+  // Count the workspaces (tenant, role) actually usable to this identity.
+  // A multi-context identity that hasn't picked yet this session lands on
+  // the chooser first (AWS-style); a single-context or already-chosen
+  // identity goes straight in. Masqueraders skip the chooser — the operator
+  // deliberately chose who to view as.
   const usable = Object.entries(session?.grants ?? {})
-    .filter(([t]) => NEWSROOM_ENABLED || t !== 'newsroom')
+    .filter(([t]) => ASSESSMENT_ENABLED || t !== 'assessment')
     .reduce((n, [, roles]) => n + (roles?.length ?? 0), 0);
   if (usable > 1 && !session?.masquerading && !hasChosenContext(session?.sub ?? '')) {
     return <Navigate to="/select" replace />;
   }
-  const toNewsroom = session?.tenant === 'newsroom' && NEWSROOM_ENABLED;
-  return <Navigate to={toNewsroom ? '/newsroom/home' : '/iq/work'} replace />;
+  const toAssessment = session?.tenant === 'assessment' && ASSESSMENT_ENABLED;
+  // Land on Plan's front door (the program wall), not the Automate loop — a
+  // member's first screen should be the work of the org, not an ops queue
+  // that is legitimately all-zeros on a quiet morning.
+  return <Navigate to={toAssessment ? '/assessment/teams' : '/iq/projects'} replace />;
 }
 
 export function App() {
@@ -191,40 +216,60 @@ export function App() {
         <Route index element={<RootRedirect />} />
         <Route path="settings" element={<Page element={<SettingsPage />} />} />
 
-        {/* ── /newsroom/* — the second tenant, the flagship multi-tenant demo
-             surface. Feature-flagged ON by default (NEWSROOM_ENABLED); set
-             VITE_ENABLE_NEWSROOM=false to park the route tree. ── */}
-        {NEWSROOM_ENABLED ? (
-          <Route path="newsroom" element={<Page element={<NewsroomLayout />} />}>
-            <Route index element={<Navigate to="home" replace />} />
-            <Route path="home" element={<Page element={<NewsroomHomePage />} />} />
-            <Route path="articles" element={<Page element={<NewsroomArticlesPage />} />} />
-            <Route path="articles/:id" element={<Page element={<NewsroomArticleDetailPage />} />} />
-            <Route path="entities/:id" element={<Page element={<NewsroomEntityDetailPage />} />} />
-            <Route path="beats" element={<Page element={<NewsroomBeatsPage />} />} />
-            <Route path="researcher" element={<Page element={<NewsroomResearcherPage />} />} />
-            <Route path="briefs" element={<Page element={<NewsroomBriefsPage />} />} />
-            <Route path="headlines" element={<Page element={<NewsroomHeadlinesPage />} />} />
-            <Route path="pitches" element={<Page element={<NewsroomPitchesPage />} />} />
+        {/* ── /assessment/* — the second tenant, ported from
+             agentic-assessment-accelerator. Feature-flagged ON by default
+             (ASSESSMENT_ENABLED); set VITE_ENABLE_ASSESSMENT=false to park
+             the route tree. See docs/assessment-tenant.md. ── */}
+        {ASSESSMENT_ENABLED ? (
+          <Route
+            path="assessment"
+            element={(
+              <RequireTenant tenant="assessment" fallback={<Navigate to="/iq/projects" replace />}>
+                <Page element={<AssessmentLayout />} />
+              </RequireTenant>
+            )}
+          >
+            <Route index element={<Navigate to="teams" replace />} />
+            <Route path="teams" element={<Page element={<AssessmentDashboardPage />} />} />
+            <Route path="teams/:teamId" element={<Page element={<AssessmentDashboardPage />} />} />
+            <Route path="submissions" element={<Page element={<AssessmentSubmissionsPage />} />} />
+            <Route path="feedback" element={<Page element={<AssessmentFeedbackPage />} />} />
+            <Route path="reports" element={<Page element={<AssessmentReportsPage />} />} />
+            <Route path="enterprise" element={<Page element={<AssessmentEnterprisePage />} />} />
+            <Route path="workspace" element={<Page element={<AssessmentWorkspacePage />} />} />
+            <Route path="prompts" element={<Page element={<AssessmentPromptsPage />} />} />
+            <Route path="rules" element={<Page element={<AssessmentRulesPage />} />} />
+            <Route path="runs" element={<Page element={<AssessmentRunsPage />} />} />
+            <Route path="configuration" element={<Page element={<AssessmentConfigurationPage />} />} />
           </Route>
         ) : (
-          <Route path="newsroom/*" element={<Navigate to="/" replace />} />
+          <Route path="assessment/*" element={<Navigate to="/" replace />} />
         )}
 
-        {/* ── /iq/* — OrgIQ tenant pages ── */}
-        <Route path="iq" element={<Page element={<IqLayout />} />}>
+        {/* ── /iq/* — OrgIQ tenant pages. Guarded like the other two trees:
+             an assessor who types /iq/projects must land on their own home,
+             not on the assessment shell wrapped around an orgiq page that
+             dies with the server's 403. ── */}
+        <Route
+          path="iq"
+          element={(
+            <RequireTenant tenant="orgiq" fallback={<Navigate to="/iq/projects" replace />}>
+              <Page element={<IqLayout />} />
+            </RequireTenant>
+          )}
+        >
           <Route index element={<Navigate to="work" replace />} />
           {/* Architecture is a platform surface — nav shows it to platform
               roles only, so the route matches (it was URL-open to anyone). */}
           <Route path="agents" element={
-            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/" replace />}>
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
               <Page element={<AgentFlowPage />} />
             </RequireRole>
           } />
           {/* One agent in depth. Architecture answers "what is the fleet";
               this answers "what is this one doing". */}
           <Route path="agents/:agentId" element={
-            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/" replace />}>
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
               <Page element={<AgentDetailPage />} />
             </RequireRole>
           } />
@@ -239,29 +284,97 @@ export function App() {
           <Route path="decisions/:id" element={<Navigate to="/iq/projects" replace />} />
           <Route path="projects" element={<Page element={<ProjectsPage />} />} />
           <Route path="projects/:id" element={<Page element={<ProjectDetailPage />} />} />
-          {/* Sprints — the SME's own cadence. Deliberately NOT role-gated:
-              this is a read surface every member and SME is meant to open, and
-              the one privileged thing on it (the org-wide scope) is refused by
-              /api/sprints itself rather than by hiding the route. It sits under
-              /iq/* so it is orgiq-tenant scoped like the rest of the tree. */}
-          <Route path="sprints" element={<Page element={<SprintsPage />} />} />
+          {/* Sprints merged into Initiatives as a lens — one program surface,
+              two zooms. The old URL keeps working. */}
+          <Route path="sprints" element={<Navigate to="/iq/projects?lens=sprints" replace />} />
           <Route path="explore" element={<Page element={<ExplorePage />} />} />
           {/* The demo page duplicated /admin/capabilities/code-interpreter
               (same execute endpoint) and had no inbound link anywhere. */}
           <Route path="code-interpreter" element={<Navigate to="/admin/capabilities/code-interpreter" replace />} />
-          <Route path="canary" element={<Page element={<CanaryPage />} />} />
-          <Route path="prompt-ops" element={<Page element={<PromptOpsHomePage />} />} />
+          <Route path="canary" element={
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
+              <Page element={<CanaryPage />} />
+            </RequireRole>
+          } />
+          <Route path="prompt-ops" element={
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
+              <Page element={<PromptOpsHomePage />} />
+            </RequireRole>
+          } />
+          {/* Design reviews — the ADR threads that guide initiative designs.
+              Read-open; answering and sign-off are gated by the API. */}
+          {/* The asset library — prompts, evaluators, skills, insights. Read
+              open to the tenant; authoring and deploy stay gated. */}
+          <Route path="library" element={<Page element={<LibraryPage />} />} />
+          {/* A per-asset URL: the distillation Artifacts page links to the
+              runbook/skill an artifact became, and "Distilled from" links
+              back. The page opens its drawer from the param. */}
+          <Route path="library/:assetId" element={<Page element={<LibraryPage />} />} />
+          {/* The ladder's inbox — what the fleet learned, waiting to become
+              a reusable asset. */}
+          <Route path="promotions" element={<Page element={<PromotionsPage />} />} />
+          {/* Release: what the Claude Code sessions themselves are shipped —
+              hooks, bundled skills, config. */}
+          <Route path="release" element={<Page element={<SessionConfigPage />} />} />
+          {/* The shared-memory pipeline: L0 raw observations compacting into
+              L1 clusters and L2 artifacts. A nested rail (like Observability)
+              rather than one long page — Memory (what's in the store),
+              Knowledge (what it produced, with provenance), Operations
+              (running it and keeping it honest). */}
+          <Route path="distillation" element={<Page element={<DistillationLayout />} />}>
+            <Route index element={<Navigate to="overview" replace />} />
+            <Route path="overview" element={<Page element={<DistillationOverviewPage />} />} />
+            <Route path="tiers" element={<Page element={<DistillationTiersPage />} />} />
+            <Route path="artifacts" element={<Page element={<DistillationArtifactsPage />} />} />
+            <Route path="lineage" element={<Page element={<DistillationLineagePage />} />} />
+            <Route path="compactions" element={<Page element={<DistillationCompactionsPage />} />} />
+            <Route path="review" element={<Page element={<DistillationReviewPage />} />} />
+          </Route>
+          <Route path="designs" element={<Page element={<DesignsPage />} />} />
+          <Route path="designs/:id" element={<Page element={<DesignThreadPage />} />} />
           <Route path="work" element={<Page element={<WorkHomePage />} />} />
+          <Route path="work/queue" element={<Page element={<WorkQueuePage />} />} />
+          <Route path="work/findings" element={<Page element={<WorkFindingsPage />} />} />
           <Route path="work/changes" element={<Page element={<GraphChangesPage />} />} />
           <Route path="work/:jobId" element={<Page element={<JobDetailPage />} />} />
-          <Route path="prompts" element={<Page element={<PromptStudioPage />} />} />
-          <Route path="history" element={<Page element={<PromptHistoryPage />} />} />
-          <Route path="diff" element={<Page element={<DiffPage />} />} />
-          <Route path="evaluations" element={<Page element={<EvaluationsPage />} />} />
+          {/* Prompt Studio / History / Diff / Evaluations are platform
+              surfaces (the palette lists them for org-leader + hr-admin
+              only), but the routes were open — the member audit walked
+              straight into /iq/prompts and the Library linked there. Same
+              guard the Architecture routes carry. */}
+          <Route path="prompts" element={
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
+              <Page element={<PromptStudioPage />} />
+            </RequireRole>
+          } />
+          <Route path="history" element={
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
+              <Page element={<PromptHistoryPage />} />
+            </RequireRole>
+          } />
+          <Route path="diff" element={
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
+              <Page element={<DiffPage />} />
+            </RequireRole>
+          } />
+          <Route path="evaluations" element={
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
+              <Page element={<EvaluationsPage />} />
+            </RequireRole>
+          } />
         </Route>
 
         {/* ── /admin/* — Admin / operations pages ── */}
-        <Route path="admin" element={<Page element={<AdminLayout />} />}>
+        {/* Platform/admin surfaces belong to the org tenant's product; the
+            cross-tenant admin role passes RequireTenant regardless. */}
+        <Route
+          path="admin"
+          element={(
+            <RequireTenant tenant="orgiq" fallback={<Navigate to="/iq/projects" replace />}>
+              <Page element={<AdminLayout />} />
+            </RequireTenant>
+          )}
+        >
           <Route index element={<Navigate to="observability" replace />} />
 
           {/* Knowledge — one destination for "where the agents' knowledge comes
@@ -273,7 +386,7 @@ export function App() {
               org-leader/hr-admin visibility. Without this the route rendered for
               any role and then showed a raw 403 from the hr-admin-only API. */}
           <Route path="knowledge" element={
-            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/" replace />}>
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
               <Page element={<KnowledgeLayout />} />
             </RequireRole>
           }>
@@ -295,7 +408,7 @@ export function App() {
               so the route is guarded to match, keeping the page out of a role that
               would only hit 403s. */}
           <Route path="projects" element={
-            <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
+            <RequireRole roles={['hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
               <Page element={<AgentProjectsPage />} />
             </RequireRole>
           } />
@@ -304,32 +417,34 @@ export function App() {
               (org-leader + hr-admin, like observability); writes are gated
               per-affordance on ManageBudgets inside the page. */}
           <Route path="budgets" element={
-            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/" replace />}>
+            <RequireRole roles={['org-leader', 'hr-admin', 'program-owner']} fallback={<Navigate to="/iq/projects" replace />}>
               <Page element={<BudgetsPage />} />
             </RequireRole>
           } />
-          {/* Bots — durable, mission-configured agents. Same gate as the other
-              Build action surfaces: their API is hr-admin territory. */}
+          {/* Bots — durable, mission-configured agents. Open to every role
+              that holds ManageBots in Cedar (sme, program-owner, leaders):
+              setting up template bots / loop crons for mundane work is their
+              job, and the API gates the writes. */}
           <Route path="bots" element={
-            <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
+            <RequireRole roles={['hr-admin', 'sme', 'program-owner', 'org-leader']} fallback={<Navigate to="/iq/projects" replace />}>
               <Page element={<BotsPage />} />
             </RequireRole>
           } />
           <Route path="bots/:id" element={
-            <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
+            <RequireRole roles={['hr-admin', 'sme', 'program-owner', 'org-leader']} fallback={<Navigate to="/iq/projects" replace />}>
               <Page element={<BotDetailPage />} />
             </RequireRole>
           } />
           {/* The governance queue for code agents wrote — review, approve, deliver. */}
           <Route path="changes" element={
-            <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
+            <RequireRole roles={['hr-admin', 'program-owner']} fallback={<Navigate to="/iq/projects" replace />}>
               <Page element={<ChangesPage />} />
             </RequireRole>
           } />
           {/* One change, reviewed properly: the diff with findings pinned to
               lines, authorship, gates, and the decision. */}
           <Route path="changes/:id" element={
-            <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
+            <RequireRole roles={['hr-admin', 'program-owner']} fallback={<Navigate to="/iq/projects" replace />}>
               <Page element={<ChangeReviewPage />} />
             </RequireRole>
           } />
@@ -340,13 +455,13 @@ export function App() {
               their initiatives (middleware lib/devbox-visibility.ts), so this
               opens a door rather than handing over a key. */}
           <Route path="devbox" element={
-            <RequireRole roles={['hr-admin', 'sme']} fallback={<Navigate to="/" replace />}>
+            <RequireRole roles={['hr-admin', 'sme']} fallback={<Navigate to="/iq/projects" replace />}>
               <Page element={<DevboxPage />} />
             </RequireRole>
           } />
 
           <Route path="ingest" element={
-            <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
+            <RequireRole roles={['hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
               <Page element={<IngestLayout />} />
             </RequireRole>
           }>
@@ -362,7 +477,7 @@ export function App() {
           </Route>
 
           <Route path="observability" element={
-            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/" replace />}>
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
               <Page element={<ObservabilityLayout />} />
             </RequireRole>
           }>
@@ -397,7 +512,7 @@ export function App() {
               app depends on it; the pages below are the diagnostics behind
               that, reached from the cards rather than from a rail. */}
           <Route path="capabilities" element={
-            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/" replace />}>
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
               <Outlet />
             </RequireRole>
           }>
@@ -417,7 +532,7 @@ export function App() {
           </Route>
 
           <Route path="identity" element={
-            <RequireRole roles={['hr-admin']} fallback={<Navigate to="/" replace />}>
+            <RequireRole roles={['hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
               <Page element={<IdentityLayout />} />
             </RequireRole>
           }>

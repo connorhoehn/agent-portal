@@ -53,6 +53,7 @@ import {
 } from '../lib/devbox-fleet.js';
 import { presignShellUrl, isValidShellId, MAX_FRAME_BYTES } from '../lib/devbox-shell.js';
 import { startReaper, timeLeft } from '../lib/devbox-reaper.js';
+import { mockDevboxClient } from '../mock/devbox-shell.js';
 
 export const devboxRouter = Router();
 
@@ -75,7 +76,15 @@ const region = (): string => process.env['AWS_REGION'] ?? 'us-east-1';
 const mockAgentCore = (): boolean => process.env['MOCK_AGENTCORE'] === 'true';
 
 function dataClient(): BedrockAgentCoreClient {
-  if (!_data) _data = new BedrockAgentCoreClient({ region: region() });
+  // Offline this is the same fake microVM `lib/devbox-arn.ts` hands every
+  // other devbox caller. This file kept a private client and a private ARN
+  // resolver, so the interactive terminal, the session list and the reaper
+  // went on 503ing in dev:mock after the shared path was fixed.
+  if (!_data) {
+    _data = mockAgentCore()
+      ? mockDevboxClient()
+      : new BedrockAgentCoreClient({ region: region() });
+  }
   return _data;
 }
 function controlClient(): BedrockAgentCoreControlClient {
@@ -95,6 +104,14 @@ const ARN_CACHE_TTL_MS = 60_000;
 async function resolveDevboxArn(): Promise<string | null> {
   const fromEnv = process.env['DEVBOX_RUNTIME_ARN'];
   if (fromEnv) return fromEnv;
+
+  // Offline the answer is "yes, there is a runtime" and it is a fake one, the
+  // same shape `lib/devbox-arn.ts` builds. Not cached: the cache bounds a live
+  // ListAgentRuntimes call and there is none to bound.
+  if (mockAgentCore()) {
+    const account = process.env['AWS_ACCOUNT_ID'] || '000000000000';
+    return `arn:aws:bedrock-agentcore:${region()}:${account}:runtime/${DEVBOX_RUNTIME_NAME}-MOCK`;
+  }
 
   const now = Date.now();
   if (_arnCache && now - _arnCache.ts < ARN_CACHE_TTL_MS) return _arnCache.arn;

@@ -1,34 +1,46 @@
-// The board view of the same work the tree shows.
+// ONE board for the initiative's whole backlog.
 //
-// This used to be a hand-built CSS matrix — `gridTemplateColumns: '160px
-// repeat(4, 1fr)'` with a sticky header row, a hairline on every cell edge and
-// a dashed "—" box in each of the (many) empty cells. On a lopsided initiative
-// that is four columns of dashed boxes, which is most of the clutter on the
-// page. It is now one Card per epic holding four real lanes, so an empty lane
-// says so once instead of drawing a placeholder per cell.
+// This used to render a Card per epic, each with its own four lanes — so an
+// initiative with six epics stacked six boards down the page and you could
+// never see "everything in review" in one place, which is the only question a
+// board answers. An initiative has one backlog; an epic is a way of filtering
+// it, so filtering happens in the toolbar above and this draws four lanes,
+// once, over whatever survived.
 
-import { Avatar, BoardColumn, Card, CatalogGrid, Chip, DetailHeader, EmptyState, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Link } from 'react-router';
+import { Avatar, BoardColumn, Card, CatalogGrid, Chip, EmptyState, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
 import type { BotRun } from '../bots/BotsPage';
-import { EstimateChip, PrBadge, RunStateChips, StatusChip } from './WorkItemChips';
+import { T } from './Text';
+import { EstimateChip, PrBadge, RunStateChips } from './WorkItemChips';
 import {
   BOARD_STATUSES,
   BOARD_STATUS_LABELS,
   PRIORITY_BORDER_CLASS,
-  bucketByStatus,
+  bucketItemsByStatus,
 } from './projectFormat';
+import type { FlatWorkItem } from './projectFormat';
 import type { WorkItemTree } from './types';
 
 function BoardCard({
   item,
   run,
   onEstimate,
+  itemHref,
 }: {
-  item: WorkItemTree;
+  item: FlatWorkItem;
   run: BotRun | undefined;
   onEstimate: (item: WorkItemTree) => void;
+  itemHref: (id: string) => string;
 }) {
   const isBug = item.type === 'bug';
   return (
+    // Only the title opens the item (same `?item=` destination the table's
+    // titles use) — the card itself is not a link. It used to wrap the whole
+    // card in a `Link`, which put PrBadge's external `<a>` and RunStateChips'
+    // internal `Link`s inside it: an `<a>` nested in an `<a>`, which React
+    // (correctly) logs as a hydration error. `ItemRow` already links only the
+    // title for the same item in the tree view, so this brings Board in line
+    // with it rather than inventing a third pattern.
     <Card
       padding="sm"
       className={`border-l-[3px] ${PRIORITY_BORDER_CLASS[item.priority] ?? PRIORITY_BORDER_CLASS.medium}`}
@@ -38,10 +50,18 @@ function BoardCard({
           <Chip tone={isBug ? 'danger' : 'info'} size="xs" uppercase>{item.type}</Chip>
           {/* The title wraps rather than truncating: a card whose only job is
               to name the work must not end in "…". */}
-          <span className="min-w-0 flex-1 text-[12px] font-medium leading-snug text-text-primary">
+          <Link
+            to={itemHref(item.id)}
+            className="min-w-0 flex-1 text-[12px] font-medium leading-snug text-text-primary no-underline hover:underline"
+          >
             {item.title}
-          </span>
+          </Link>
         </Inline>
+        {/* With one board across all epics, the card has to say which epic it
+            belongs to — that context used to come from the swimlane header. */}
+        <T as="div" className="block truncate text-[10.5px] uppercase tracking-wide text-text-tertiary">
+          {item.epicTitle}
+        </T>
         <Inline gap="xs" justify="between">
           <Inline gap="xs">
             {item.assigneeName && <Avatar name={item.assigneeName} size={18} title={item.assigneeName} />}
@@ -62,81 +82,46 @@ function BoardCard({
   );
 }
 
-function EpicSwimlane({
-  epic,
-  marketRuns,
-  onEstimate,
-}: {
-  epic: WorkItemTree;
-  marketRuns: Record<string, BotRun>;
-  onEstimate: (item: WorkItemTree) => void;
-}) {
-  const byStatus = bucketByStatus(epic);
-  return (
-    <Card padding="sm">
-      <Stack gap="sm">
-        <DetailHeader
-          as="h3"
-          title={epic.title}
-          badge={<StatusChip status={epic.status} />}
-          meta={(
-            <Inline gap="xs" align="center">
-              <Chip tone="neutral" size="xs" uppercase>Epic</Chip>
-              {epic.assigneeName && (
-                <Inline gap="xs" align="center" wrap={false}>
-                  <Avatar name={epic.assigneeName} size={18} title={epic.assigneeName} />
-                  <span>{epic.assigneeName}</span>
-                </Inline>
-              )}
-            </Inline>
-          )}
-        />
-        <CatalogGrid columns={4} dense>
-          {BOARD_STATUSES.map((status) => {
-            const items = byStatus.get(status) ?? [];
-            return (
-              <BoardColumn
-                key={status}
-                label={BOARD_STATUS_LABELS[status]}
-                count={items.length}
-                emptyLabel="Nothing here"
-              >
-                {items.length > 0
-                  ? items.map((item) => (
-                    <BoardCard
-                      key={item.id}
-                      item={item}
-                      run={marketRuns[item.id]}
-                      onEstimate={onEstimate}
-                    />
-                  ))
-                  : undefined}
-              </BoardColumn>
-            );
-          })}
-        </CatalogGrid>
-      </Stack>
-    </Card>
-  );
-}
-
 export function BoardView({
-  epics,
+  items,
   marketRuns,
   onEstimate,
+  itemHref,
 }: {
-  epics: WorkItemTree[];
+  items: FlatWorkItem[];
   marketRuns: Record<string, BotRun>;
   onEstimate: (item: WorkItemTree) => void;
+  itemHref: (id: string) => string;
 }) {
-  if (epics.length === 0) {
-    return <EmptyState title="No epics yet" body="Create one to see the board." />;
+  if (items.length === 0) {
+    return <EmptyState title="Nothing on the board" body="No work items match the current filters." />;
   }
+  const byStatus = bucketItemsByStatus(items);
   return (
-    <Stack gap="md">
-      {epics.map((epic) => (
-        <EpicSwimlane key={epic.id} epic={epic} marketRuns={marketRuns} onEstimate={onEstimate} />
-      ))}
-    </Stack>
+    <CatalogGrid columns={4} dense>
+      {BOARD_STATUSES.map((status) => {
+        const lane = byStatus.get(status) ?? [];
+        return (
+          <BoardColumn
+            key={status}
+            label={BOARD_STATUS_LABELS[status]}
+            count={lane.length}
+            emptyLabel="Nothing here"
+          >
+            {lane.length > 0
+              ? lane.map((item) => (
+                <BoardCard
+                  key={item.id}
+                  item={item}
+                  run={marketRuns[item.id]}
+                  onEstimate={onEstimate}
+                  itemHref={itemHref}
+                />
+              ))
+              : undefined}
+          </BoardColumn>
+        );
+      })}
+    </CatalogGrid>
   );
 }

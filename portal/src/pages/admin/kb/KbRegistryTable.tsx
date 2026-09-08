@@ -74,12 +74,15 @@ export function KbRegistryTable({
                     250-char Bedrock message would set the column width for
                     every other row — clipped here, in full on the detail page. */}
                 {kb.errorMessage && (
-                  <span
-                    className="block max-w-[200px] break-words text-[10px] text-danger"
+                  <Inline
+                    as="span"
+                    gap="none"
+                    wrap
+                    className="max-w-[200px] break-words text-[10px] text-danger"
                     title={kb.errorMessage}
                   >
                     {truncate(kb.errorMessage, 60)}
-                  </span>
+                  </Inline>
                 )}
               </Stack>
             </TableTd>
@@ -107,9 +110,9 @@ export function KbRegistryTable({
                   // page, so starting it here means going there.
                   <ProvisionButton kbId={kb.id} retry={kb.status === 'FAILED'} onDone={() => onOpen(kb)} />
                 ) : (
-                  <span className="text-[11px] text-text-tertiary">
+                  <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">
                     {kb.status === 'CREATING' ? 'Provisioning…' : '—'}
-                  </span>
+                  </Inline>
                 )}
                 {/* Delete is the escape hatch for rows that never came up. */}
                 {canProvision(kb) && (

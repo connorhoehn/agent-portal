@@ -28,7 +28,10 @@ import {
 } from '@aws-sdk/client-bedrock-agent-runtime';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { requireAction } from '../lib/authz.js';
+import { prepareValues, EMPTY_CONTRACT, type PromptContract } from '../lib/prompt-contract.js';
+import { exec as auroraExec } from '../providers/aurora.js';
 import { config } from '../config.js';
+import { MOCK_PROMPT_LIBRARY, findMockPrompt } from '../mock/canary-library.js';
 
 export const canaryLibraryRouter = Router();
 
@@ -61,6 +64,21 @@ function paramStr(v: string | string[]): string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 canaryLibraryRouter.get('/library', asyncHandler(async (_req, res) => {
+  // dev:mock has no Bedrock to call — serve a real-looking library instead of
+  // the 503 every prompt-management call would otherwise 503 with. See
+  // mock/canary-library.ts and DEFECTS.md #8.
+  if (config.mock.aurora) {
+    res.json({
+      prompts: MOCK_PROMPT_LIBRARY.map((p) => {
+        const d = p.versions[0]!;
+        return {
+          id: p.id, arn: d.arn, name: p.name, description: p.description,
+          version: d.version, updatedAt: d.updatedAt,
+        };
+      }),
+    });
+    return;
+  }
   try {
     const prompts: {
       id: string;
@@ -107,6 +125,21 @@ canaryLibraryRouter.get('/library', asyncHandler(async (_req, res) => {
 
 canaryLibraryRouter.get('/library/:promptId/versions', asyncHandler(async (req, res) => {
   const promptId = paramStr(req.params['promptId'] ?? '');
+  if (config.mock.aurora) {
+    const p = findMockPrompt(promptId);
+    if (!p) {
+      res.status(404).json({ error: 'prompt not found', promptId });
+      return;
+    }
+    res.json({
+      versions: p.versions.map((v) => ({
+        version: v.version, arn: v.arn, description: v.description,
+        createdAt: v.createdAt, updatedAt: v.updatedAt,
+        ...(v.version === 'DRAFT' ? { isDraft: true } : {}),
+      })),
+    });
+    return;
+  }
   try {
     const out = await bedrockAgent().send(
       new ListPromptsCommand({ promptIdentifier: promptId }),
@@ -166,6 +199,23 @@ canaryLibraryRouter.get('/library/:promptId/version/:version', asyncHandler(asyn
   const promptId = paramStr(req.params['promptId'] ?? '');
   const version = paramStr(req.params['version'] ?? '');
   const promptVersion = version === 'DRAFT' ? undefined : version;
+  if (config.mock.aurora) {
+    const p = findMockPrompt(promptId);
+    const v = p?.versions.find((x) => x.version === version);
+    if (!p || !v) {
+      res.status(404).json({ error: 'prompt version not found', promptId, version });
+      return;
+    }
+    res.json({
+      id: p.id, arn: v.arn, name: p.name, version: v.version, updatedAt: v.updatedAt,
+      variant: {
+        name: v.variant.name, modelId: v.variant.modelId, templateType: v.variant.templateType,
+        templateText: v.variant.templateText, inputVariables: v.variant.inputVariables,
+        inferenceConfig: v.variant.inferenceConfig,
+      },
+    });
+    return;
+  }
   try {
     const out = await bedrockAgent().send(
       new GetPromptCommand({ promptIdentifier: promptId, promptVersion }),
@@ -450,6 +500,34 @@ interface InvokeBody {
   guardrailVersion?: unknown;
 }
 
+/**
+ * The stored contract for a version, or the empty one.
+ *
+ * Reads degrade to EMPTY_CONTRACT rather than failing the invoke: a prompt
+ * that predates contracts (or an Aurora blip) must still run, it simply runs
+ * without typed validation — the same posture prompt_source.py takes toward a
+ * missing library entry.
+ */
+async function loadContract(promptId: string, version?: string): Promise<PromptContract> {
+  try {
+    const rows = await auroraExec(
+      `SELECT contract::text AS contract FROM observability.prompt_version_meta
+        WHERE prompt_id = :promptId AND version = :version LIMIT 1`,
+      [
+        { name: 'promptId', value: { stringValue: promptId } },
+        { name: 'version', value: { stringValue: version ?? 'DRAFT' } },
+      ],
+    );
+    const raw = rows[0]?.['contract'];
+    if (typeof raw !== 'string') return EMPTY_CONTRACT;
+    const parsed = JSON.parse(raw) as Partial<PromptContract>;
+    if (!Array.isArray(parsed.variables)) return EMPTY_CONTRACT;
+    return { ...EMPTY_CONTRACT, ...parsed } as PromptContract;
+  } catch {
+    return EMPTY_CONTRACT;
+  }
+}
+
 canaryLibraryRouter.post(
   '/library/:promptId/invoke',
   requireAction('ManageCanary'),
@@ -460,7 +538,7 @@ canaryLibraryRouter.post(
     const guardrailId = typeof body.guardrailId === 'string' ? body.guardrailId : undefined;
     const guardrailVersion = typeof body.guardrailVersion === 'string' ? body.guardrailVersion : '1';
 
-    const variables: Record<string, string> =
+    const rawVariables: Record<string, string> =
       body.variables != null && typeof body.variables === 'object' && !Array.isArray(body.variables)
         ? Object.fromEntries(
             Object.entries(body.variables as Record<string, unknown>)
@@ -468,6 +546,29 @@ canaryLibraryRouter.post(
               .map(([k, v]) => [k, v as string]),
           )
         : {};
+
+    // Apply the contract BEFORE the values leave us.
+    //
+    // Bedrock expands `{{…}}` itself when a prompt ARN is the model, so the
+    // template is not ours to wrap by the time it renders — the fence has to
+    // be on the VALUE. A prompt with no stored contract renders exactly as it
+    // used to, so this is additive: the typed ones get the trust boundary,
+    // the untyped ones are unchanged.
+    const contract = await loadContract(promptId, version);
+    const prepared = prepareValues(contract, rawVariables);
+    if (!prepared.ok) {
+      res.status(400).json({
+        error: 'the supplied values do not satisfy this prompt\'s contract',
+        issues: prepared.issues,
+      });
+      return;
+    }
+    const variables = prepared.values;
+    if (prepared.fenced.length > 0) {
+      // Say it out loud: a reader of the logs should be able to see that the
+      // boundary was applied, and to which variables.
+      console.log(`[prompt] fenced ${prepared.fenced.join(', ')} for ${promptId}@${version ?? 'DRAFT'}`);
+    }
 
     // Fetch the prompt ARN (the ARN is the modelId for ConverseStream).
     let modelId: string;

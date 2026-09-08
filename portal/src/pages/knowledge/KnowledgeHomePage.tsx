@@ -8,81 +8,50 @@
 // showed that these documents are what agents retrieve, or what the sweeps
 // read.
 //
-// The order here is the order things actually happen: sources produce
-// documents, documents land in storage, storage syncs into a knowledge base,
-// and agents retrieve from it. Everything above that is what is wrong right
-// now, because a knowledge pipeline that is quietly broken looks identical to
-// one that is idle.
+// The registry list sits above the fold — it is the thing this page exists to
+// show — with a single filter row above it. Everything else (the "right now"
+// numbers, the pipeline stages) is a stat strip, not a stack of cards: they
+// are context for the list, not content in their own right. The order below
+// that is the order things actually happen: sources produce documents,
+// documents land in storage, storage syncs into a knowledge base, and agents
+// retrieve from it.
 
-import { useCallback, useState } from 'react';
-import { Link } from 'react-router';
-import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
+import { useCallback, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router';
+import {
+  Banner, Button, Chip, DataTable, Inline, InlineAlert, MetaLine, PageSection,
+  SearchInput, SegmentedControl, StatStrip, Toolbar,
+  type DataTableColumn,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
 import { DocumentDropzone } from '../../components/knowledge/DocumentDropzone';
 import { ShareLinks } from '../../components/knowledge/ShareLinks';
-
-type DriftKind = 'missing' | 'unregistered' | 'unprovisioned' | 'status-drift' | 'ok';
-
-interface Reconciled {
-  id: string | null;
-  slug: string | null;
-  name: string;
-  tenant: string | null;
-  registryKbId: string | null;
-  registryStatus: string | null;
-  liveKbId: string | null;
-  liveStatus: string | null;
-  dataSourceCount: number | null;
-  lastSyncStatus: string | null;
-  lastSyncAt: string | null;
-  lastSyncScanned: number | null;
-  documentCount: number | null;
-  drift: DriftKind;
-  detail: string;
-}
+import {
+  DRIFT_LABEL, DRIFT_TONE, adoptableEntries, bytes, computeSyncGap, filterEntries,
+  summarizeEntries, when, type EntryStatusFilter, type Reconciled,
+} from './knowledgeFormat';
 
 interface IngestJob { jobId?: string; status?: string; startedAt?: string }
 interface CrawlTarget { id: string; name?: string; url?: string; enabled?: boolean }
 interface StorageBreakdown { totalObjects?: number; totalBytes?: number; chunks?: number }
 
-const DRIFT_TONE: Record<DriftKind, string> = {
-  missing: 'bg-danger-bg text-danger',
-  unregistered: 'bg-warning-bg text-warning',
-  unprovisioned: 'bg-surface-hover text-text-tertiary',
-  'status-drift': 'bg-warning-bg text-warning',
-  ok: 'bg-success-bg text-success',
-};
+const STATUS_OPTIONS = [
+  { label: 'All', value: 'all' },
+  { label: 'Needs attention', value: 'attention' },
+];
 
-const DRIFT_LABEL: Record<DriftKind, string> = {
-  missing: 'points at nothing',
-  unregistered: 'not registered',
-  unprovisioned: 'never created',
-  'status-drift': 'status disagrees',
-  ok: 'in sync',
-};
-
-function bytes(n: number | undefined): string {
-  if (!n) return '0 B';
-  const u = ['B', 'KB', 'MB', 'GB'];
-  let i = 0; let v = n;
-  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
-  return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${u[i]}`;
-}
-
-function when(iso: string | null | undefined): string {
-  if (!iso) return 'never';
-  const d = new Date(iso);
-  const mins = Math.round((Date.now() - d.getTime()) / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  if (mins < 1440) return `${Math.round(mins / 60)}h ago`;
-  return d.toLocaleDateString();
+/** An ACTIONS cell with no control still needs to say something — an empty
+ *  cell on a row that says "broken" reads as a dead end (DEFECTS.md #17). */
+function actionHint(text: string) {
+  return <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">{text}</Inline>;
 }
 
 export default function KnowledgeHomePage() {
+  const navigate = useNavigate();
+
   // Reading the knowledge surface is open to org-leaders; changing it (adopt,
   // sync, upload, share links) requires the ManageKB capability — the same
   // Cedar decision the /api/admin/kb-registry mutations enforce — so those
@@ -99,17 +68,19 @@ export default function KnowledgeHomePage() {
   const { data: storage } = useFetch<StorageBreakdown>('/api/ingest/storage', 60_000);
 
   const [busy, setBusy] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<EntryStatusFilter>('all');
 
   const entries = rec?.entries ?? [];
-  const live = entries.filter((e) => e.liveKbId);
-  const problems = entries.filter((e) => e.drift !== 'ok');
-  const docs = entries.reduce((n, e) => n + (e.documentCount ?? 0), 0);
-  const dataSources = live.reduce((n, e) => n + (e.dataSourceCount ?? 0), 0);
-  const lastSync = live
-    .map((e) => e.lastSyncAt)
-    .filter(Boolean)
-    .sort()
-    .reverse()[0] ?? null;
+  const { live, problems, docs, dataSources } = summarizeEntries(entries);
+  const adopters = adoptableEntries(entries);
+  const filtered = useMemo(
+    () => filterEntries(entries, { search, status: statusFilter }),
+    [entries, search, statusFilter],
+  );
+
+  const stored = storage?.totalObjects ?? 0;
+  const { syncTarget, behind, neverRan, lastSync } = computeSyncGap(entries, stored);
 
   const adopt = useCallback(async (slug: string, kbId: string) => {
     setBusy(slug);
@@ -129,37 +100,6 @@ export default function KnowledgeHomePage() {
     } finally { setBusy(null); }
   }, [refreshRec]);
 
-  /**
-   * Rows that may adopt an unclaimed knowledge base.
-   *
-   * Only broken pointers — a row that names an id which does not exist is
-   * unambiguously wrong, and repointing it is a repair. A row that was never
-   * provisioned is a different situation: "newsroom has no knowledge base yet"
-   * is not evidence that it should claim the documents one, and offering that
-   * as a button invites someone to make two corpora silently share an index.
-   */
-  const adopters = entries.filter((e) => e.slug && e.drift === 'missing');
-
-  /**
-   * A knowledge base that is in sync with the account and has a data source,
-   * but has never ingested anything, while storage is not empty.
-   *
-   * Both halves matter: without storage content there is nothing to sync, and
-   * without a data source the sync call is rejected outright — offering the
-   * button in either case would be offering a failure.
-   */
-  const syncTarget = entries.find(
-    (e) => e.id && e.drift === 'ok' && e.liveKbId && (e.dataSourceCount ?? 0) > 0,
-  ) ?? null;
-  // Behind, not merely never run. A sync that ran once and has been out of
-  // date ever since reports a recent, successful job — indistinguishable from
-  // a current index unless you compare what it covered against what is in
-  // storage now. Both states get the same offer, with different wording.
-  const stored = storage?.totalObjects ?? 0;
-  const scanned = syncTarget?.lastSyncScanned ?? null;
-  const behind = stored > 0 && (!lastSync || (scanned !== null && scanned < stored));
-  const neverRan = !lastSync;
-
   const startSync = useCallback(async (id: string, name: string) => {
     setBusy('sync');
     const tid = toastPending('Starting ingestion', name);
@@ -177,6 +117,68 @@ export default function KnowledgeHomePage() {
       toastError(tid, 'Could not start ingestion', (err as Error).message);
     } finally { setBusy(null); }
   }, [refreshRec]);
+
+  const columns: DataTableColumn<Reconciled>[] = [
+    {
+      key: 'name',
+      header: 'Knowledge base',
+      sortable: true,
+      render: (e) => (
+        <Inline gap="xs" align="center" wrap={false}>
+          {e.id ? (
+            <Link
+              to={`/admin/knowledge/registry/${e.id}`}
+              onClick={(ev) => ev.stopPropagation()}
+              className="text-[13px] font-semibold text-text-primary no-underline hover:text-primary hover:underline truncate"
+            >
+              {e.name}
+            </Link>
+          ) : (
+            <Inline as="span" gap="none" className="text-[13px] font-semibold text-text-primary truncate">
+              {e.name}
+            </Inline>
+          )}
+          {e.slug && (
+            <Inline as="span" gap="none" className="text-[11px] text-text-tertiary truncate">· {e.slug}</Inline>
+          )}
+        </Inline>
+      ),
+    },
+    {
+      key: 'drift',
+      header: 'Status',
+      sortable: true,
+      render: (e) => <Chip tone={DRIFT_TONE[e.drift]} size="xs">{DRIFT_LABEL[e.drift]}</Chip>,
+    },
+    {
+      key: 'detail',
+      header: 'Detail',
+      render: (e) => (
+        <Inline as="span" gap="none" className="text-[12px] text-text-secondary">{e.detail}</Inline>
+      ),
+    },
+    {
+      key: 'ids',
+      header: 'Registry ↔ account',
+      render: (e) => (
+        <MetaLine
+          size="xs" tone="tertiary"
+          items={[e.registryKbId ?? '—', e.liveKbId ? `${e.liveKbId}${e.liveStatus ? ` (${e.liveStatus})` : ''}` : '—']}
+        />
+      ),
+    },
+    {
+      key: 'lastSyncAt',
+      header: 'Last sync',
+      sortable: true,
+      render: (e) => (
+        <MetaLine
+          size="xs" tone="tertiary"
+          items={[when(e.lastSyncAt), e.documentCount != null ? `${e.documentCount.toLocaleString()} docs` : null]}
+        />
+      ),
+    },
+  ];
 
   return (
     <PageSection
@@ -196,109 +198,112 @@ export default function KnowledgeHomePage() {
         <UnavailableNotice error={rec.problem} what="the live account comparison" className="mb-4" />
       )}
 
+      {/* ── One filter row, then the registry list — above the fold ──────── */}
+      <Toolbar
+        className="mb-2 rounded-lg"
+        end={(
+          <MetaLine
+            size="xs" tone="tertiary"
+            items={[`${filtered.length} of ${entries.length} knowledge bases`, 'registry vs. the live account']}
+          />
+        )}
+      >
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search by name, slug or id…"
+          className="max-w-xs"
+        />
+        <SegmentedControl options={STATUS_OPTIONS} value={statusFilter} onChange={(v) => setStatusFilter(v as EntryStatusFilter)} size="sm" />
+      </Toolbar>
+
+      <DataTable<Reconciled>
+        data={filtered}
+        columns={columns}
+        keyField={(e) => e.id ?? e.slug ?? e.liveKbId ?? e.name}
+        emptyMessage={entries.length === 0 ? 'No knowledge bases registered yet.' : 'No knowledge bases match the current filters.'}
+        rowActions={(e) => {
+          // The only automatic repair offered. Creating, deleting or syncing
+          // are decisions; repointing a row at a knowledge base that
+          // demonstrably exists is not.
+          if (e.drift === 'unprovisioned' && e.id) {
+            return (
+              <Button
+                variant="secondary" size="sm"
+                onClick={() => navigate(`/admin/knowledge/registry/${e.id}`)}
+              >
+                set it up →
+              </Button>
+            );
+          }
+          if (e.drift === 'unregistered' && e.liveKbId && adopters.length > 0) {
+            if (!canManage) {
+              return actionHint('Repointing needs Manage KB — an HR admin can do it from Knowledge.');
+            }
+            return (
+              <Inline gap="xs" wrap={false}>
+                {adopters.map((target) => (
+                  <Button
+                    key={target.slug}
+                    variant="secondary" size="sm"
+                    disabled={busy === target.slug}
+                    onClick={() => void adopt(target.slug as string, e.liveKbId as string)}
+                  >
+                    {busy === target.slug ? 'repointing…' : `point "${target.slug}" here`}
+                  </Button>
+                ))}
+              </Inline>
+            );
+          }
+          // Nothing renders here for `ok` — there's nothing to explain. Every
+          // other drift is a row a person came here worried about (DEFECTS.md
+          // #17: an empty ACTIONS cell on a row that says "broken" reads as a
+          // dead end); the remedy — if one exists at all — is either not
+          // available to this role or lives on a different row (adopting
+          // happens from the unregistered knowledge base's row, once one
+          // shows up), so say so instead of leaving the cell blank.
+          if (e.drift === 'missing') {
+            return actionHint(
+              canManage
+                ? 'Repoint this from the matching unregistered knowledge base’s row, once one appears.'
+                : 'Repointing needs Manage KB — an HR admin can do it from Knowledge.',
+            );
+          }
+          if (e.drift === 'status-drift') {
+            return actionHint(
+              canManage
+                ? 'Re-sync to refresh the account status.'
+                : 'Needs Manage KB — an HR admin can do it from Knowledge.',
+            );
+          }
+          return null;
+        }}
+        className="mb-5"
+      />
+
       {/* ── Right now ────────────────────────────────────────────────────── */}
-      <div className="grid gap-4 mb-5 grid-cols-1 md:grid-cols-3">
-        <Card padding="md">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Knowledge bases</div>
-          <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-[24px] font-bold leading-none">{recError ? '—' : live.length}</span>
-            <span className="text-[12px] text-text-secondary">
-              {recError ? 'unknown' : `${live.filter((e) => e.liveStatus === 'ACTIVE').length} active in AWS`}
-            </span>
-          </div>
-          <div className="text-[11px] text-text-tertiary mt-2 leading-snug">
-            Counted from the account, not from the registry.
-          </div>
-        </Card>
-
-        <Card padding="md">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Documents indexed</div>
-          <div className="flex items-baseline gap-2 mt-1">
-            <span className="text-[24px] font-bold leading-none">{recError ? '—' : docs.toLocaleString()}</span>
-            <span className="text-[12px] text-text-secondary">in the graph</span>
-          </div>
-          <div className="text-[11px] text-text-tertiary mt-2 leading-snug">
-            These are what <Link to="/iq/work" className="text-primary no-underline hover:underline">sweeps</Link> read
-            and what agents cite.
-          </div>
-        </Card>
-
-        <Card padding="md">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Needs attention</div>
-          <div className="flex items-baseline gap-2 mt-1">
-            <span className={`text-[24px] font-bold leading-none ${problems.length ? 'text-warning' : ''}`}>
-              {recError ? '—' : problems.length}
-            </span>
-            <span className="text-[12px] text-text-secondary">
-              {problems.length === 1 ? 'disagreement' : 'disagreements'}
-            </span>
-          </div>
-          <div className="text-[11px] text-text-tertiary mt-2 leading-snug">
-            Between what the registry claims and what the account has.
-          </div>
-        </Card>
-      </div>
-
-      {/* ── What is wrong ────────────────────────────────────────────────── */}
-      {problems.length > 0 && (
-        <Card padding="none" className="mb-5 overflow-hidden border-warning/40">
-          <div className="px-3.5 py-3 border-b border-border">
-            <span className="text-xs font-semibold text-warning tracking-wide select-none">REGISTRY vs ACCOUNT</span>
-            <span className="text-[11px] text-text-tertiary ml-2">
-              the registry is bookkeeping about AWS resources; nothing kept it honest
-            </span>
-          </div>
-          {problems.map((e) => (
-            <div key={e.slug ?? e.liveKbId} className="px-3.5 py-3 border-b border-border last:border-b-0 flex items-start gap-3">
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded shrink-0 ${DRIFT_TONE[e.drift]}`}>
-                {DRIFT_LABEL[e.drift]}
-              </span>
-              <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-semibold text-text-primary">
-                  {e.name}{e.slug ? <span className="text-text-tertiary font-normal"> · {e.slug}</span> : null}
-                </div>
-                <div className="text-[12px] text-text-secondary mt-1 leading-snug">{e.detail}</div>
-                <div className="text-[11px] text-text-tertiary mt-1 font-mono">
-                  registry: {e.registryKbId ?? '—'} · account: {e.liveKbId ?? '—'}
-                  {e.liveStatus ? ` (${e.liveStatus})` : ''}
-                </div>
-              </div>
-
-              {/* The only automatic repair offered. Creating, deleting or
-                  syncing are decisions; repointing a row at a knowledge base
-                  that demonstrably exists is not. */}
-              {/* A row that was never provisioned needs a knowledge base
-                  created, which builds real infrastructure and costs money —
-                  so it links to the row's own page rather than firing from
-                  here. Naming a problem without a route to fixing it is how
-                  the old registry page left people stuck. */}
-              {e.drift === 'unprovisioned' && e.id && (
-                <Link
-                  to={`/admin/knowledge/registry/${e.id}`}
-                  className="shrink-0 px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] font-semibold text-text-secondary no-underline hover:border-primary hover:text-primary transition-colors"
-                >
-                  set it up →
-                </Link>
-              )}
-
-              {e.drift === 'unregistered' && e.liveKbId && adopters.length > 0 && canManage && (
-                <div className="flex gap-1.5 shrink-0">
-                  {adopters.map((target) => (
-                    <button
-                      key={target.slug}
-                      disabled={busy === target.slug}
-                      onClick={() => void adopt(target.slug as string, e.liveKbId as string)}
-                      className="px-2.5 py-1 rounded-md border border-primary/50 bg-surface text-[11px] font-semibold text-primary cursor-pointer hover:bg-primary hover:text-white transition-colors disabled:opacity-50"
-                    >
-                      {busy === target.slug ? 'repointing…' : `point “${target.slug}” here`}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </Card>
-      )}
+      <StatStrip
+        aria-label="Knowledge, right now"
+        className="mb-5"
+        items={[
+          {
+            label: 'Knowledge bases',
+            value: recError ? '—' : live.length,
+            hint: recError ? 'unknown' : `${live.filter((e) => e.liveStatus === 'ACTIVE').length} active in AWS — counted from the account`,
+          },
+          {
+            label: 'Documents indexed',
+            value: recError ? '—' : docs.toLocaleString(),
+            hint: <>in the graph — what <Link to="/iq/work" className="text-primary no-underline hover:underline">sweeps</Link> read and agents cite</>,
+          },
+          {
+            label: 'Needs attention',
+            value: recError ? '—' : problems.length,
+            tone: problems.length ? 'danger' : 'default',
+            hint: `${problems.length === 1 ? 'disagreement' : 'disagreements'} between the registry and the account`,
+          },
+        ]}
+      />
 
       {/* ── The one state the pipeline gets stuck in ─────────────────────── */}
       {/* Documents sitting in storage that the knowledge base has never read
@@ -308,103 +313,92 @@ export default function KnowledgeHomePage() {
           state a fresh environment starts in, so it is worth an action rather
           than a number. */}
       {behind && syncTarget && (
-        <Card padding="md" className="mb-5 border-primary/40">
-          <div className="flex items-start gap-3">
-            <div className="flex-1 min-w-0">
-              <div className="text-[13px] font-semibold text-text-primary">
-                {neverRan
-                  ? `${stored.toLocaleString()} documents are in storage but have never been indexed`
-                  : `The knowledge base is behind storage — it last indexed ${(scanned ?? 0).toLocaleString()} of ${stored.toLocaleString()} documents`}
-              </div>
-              <div className="text-[12px] text-text-secondary mt-1 leading-snug">
-                Agents can only cite what the knowledge base has read. Syncing starts a Bedrock ingestion
-                job over <span className="font-mono">{syncTarget.name}</span>; it runs in the background and
-                costs embedding tokens once per document that changed.
-              </div>
-            </div>
-            {canManage && (
-              <button
+        <Banner variant="warning" className="mb-5">
+          {neverRan
+            ? `${stored.toLocaleString()} documents are in storage but have never been indexed.`
+            : `The knowledge base is behind storage — it last indexed ${(syncTarget.lastSyncScanned ?? 0).toLocaleString()} of ${stored.toLocaleString()} documents.`}
+          {' '}Agents can only cite what the knowledge base has read. Syncing starts a Bedrock ingestion job over{' '}
+          <strong>{syncTarget.name}</strong>; it runs in the background and costs embedding tokens once per document
+          that changed.
+          {canManage && (
+            <Inline className="mt-2">
+              <Button
+                variant="primary" size="sm"
                 disabled={busy === 'sync'}
                 onClick={() => void startSync(syncTarget.id as string, syncTarget.name)}
-                className="shrink-0 px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer hover:opacity-90 disabled:opacity-50"
               >
                 {busy === 'sync' ? 'starting…' : 'Sync now'}
-              </button>
-            )}
-          </div>
-        </Card>
+              </Button>
+            </Inline>
+          )}
+        </Banner>
       )}
 
       {/* ── The pipeline, in the order it happens ────────────────────────── */}
-      <Card padding="none" className="overflow-hidden">
-        <div className="px-3.5 py-3 border-b border-border flex items-center gap-2">
-          <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">THE PIPELINE</span>
-          <span className="text-[11px] text-text-tertiary">source → storage → knowledge base → agents</span>
-        </div>
+      <StatStrip
+        aria-label="The pipeline"
+        className="mb-3"
+        items={[
+          {
+            label: 'Sources',
+            value: targets ? String(targets.targets?.length ?? 0) : '—',
+            hint: (
+              <>
+                {(targets?.targets ?? []).filter((t) => t.enabled !== false).length > 0
+                  ? `${(targets?.targets ?? []).filter((t) => t.enabled !== false).length} enabled`
+                  : 'nothing configured to pull content in'}
+                {canIngest && <> · <Link to="/admin/ingest/crawl" className="text-primary no-underline hover:underline">manage →</Link></>}
+              </>
+            ),
+          },
+          {
+            label: 'Ingestion',
+            value: jobs ? String(jobs.jobs?.length ?? 0) : '—',
+            hint: (
+              <>
+                {jobs?.jobs?.[0]?.status ? `last ${jobs.jobs[0].status.toLowerCase()} ${when(jobs.jobs[0].startedAt)}` : 'no ingestion has run'}
+                {canIngest && <> · <Link to="/admin/ingest/sources" className="text-primary no-underline hover:underline">history →</Link></>}
+              </>
+            ),
+          },
+          {
+            label: 'Storage',
+            value: storage?.totalObjects != null ? storage.totalObjects.toLocaleString() : '—',
+            hint: (
+              <>
+                {storage?.totalBytes ? bytes(storage.totalBytes) : 'nothing stored yet'}
+                {canIngest && <> · <Link to="/admin/ingest/storage" className="text-primary no-underline hover:underline">browse →</Link></>}
+              </>
+            ),
+          },
+          {
+            label: 'Knowledge base',
+            value: recError ? '—' : String(live.length),
+            hint: (
+              <>
+                {dataSources === 0 ? 'no data source attached' : `${dataSources} data source${dataSources === 1 ? '' : 's'} · last sync ${when(lastSync)}`}
+                {' '}· <Link to="/admin/knowledge/registry" className="text-primary no-underline hover:underline">registry →</Link>
+              </>
+            ),
+          },
+        ]}
+      />
 
-        <div className="grid grid-cols-1 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-border">
-          <Stage
-            title="Sources"
-            value={targets ? String(targets.targets?.length ?? 0) : '—'}
-            unit="crawl targets"
-            detail={
-              (targets?.targets ?? []).filter((t) => t.enabled !== false).length > 0
-                ? `${(targets?.targets ?? []).filter((t) => t.enabled !== false).length} enabled`
-                : 'Nothing is configured to pull content in.'
-            }
-            {...(canIngest ? { to: '/admin/ingest/crawl' } : {})}
-            cta="Manage sources"
-          />
-          <Stage
-            title="Ingestion"
-            value={jobs ? String(jobs.jobs?.length ?? 0) : '—'}
-            unit="recent jobs"
-            detail={
-              jobs?.jobs?.[0]?.status
-                ? `Last job ${jobs.jobs[0].status.toLowerCase()} ${when(jobs.jobs[0].startedAt)}`
-                : 'No ingestion has run.'
-            }
-            {...(canIngest ? { to: '/admin/ingest/sources' } : {})}
-            cta="Run history"
-          />
-          <Stage
-            title="Storage"
-            value={storage?.totalObjects != null ? storage.totalObjects.toLocaleString() : '—'}
-            unit="objects in S3"
-            detail={storage?.totalBytes ? bytes(storage.totalBytes) : 'Nothing stored yet.'}
-            {...(canIngest ? { to: '/admin/ingest/storage' } : {})}
-            cta="Browse storage"
-          />
-          <Stage
-            title="Knowledge base"
-            value={recError ? '—' : String(live.length)}
-            unit={live.length === 1 ? 'in the account' : 'in the account'}
-            detail={
-              dataSources === 0
-                ? 'No data source attached — nothing can sync into it.'
-                : `${dataSources} data source${dataSources === 1 ? '' : 's'} · last sync ${when(lastSync)}`
-            }
-            to="/admin/knowledge/registry"
-            cta="Registry detail"
-          />
-        </div>
+      {/* Who consumes it — the connection that was missing entirely. */}
+      <InlineAlert tone="info" className="mb-5">
+        Agents retrieve from these knowledge bases on every answer in{' '}
+        <Link to="/iq/invoke" className="text-primary no-underline hover:underline">Ask</Link>, and the documents
+        they contain are what the{' '}
+        <Link to="/iq/work" className="text-primary no-underline hover:underline">stale-document sweep</Link>{' '}
+        reads when it looks for knowledge nothing references.
+      </InlineAlert>
 
-        {/* Who consumes it — the connection that was missing entirely. */}
-        <div className="px-3.5 py-3 border-t border-border bg-surface-hover/40 text-[12px] text-text-secondary leading-relaxed">
-          Agents retrieve from these knowledge bases on every answer in{' '}
-          <Link to="/iq/invoke" className="text-primary no-underline hover:underline">Ask</Link>, and the
-          documents they contain are what the{' '}
-          <Link to="/iq/work" className="text-primary no-underline hover:underline">stale-document sweep</Link>{' '}
-          reads when it looks for knowledge nothing references.
-        </div>
-      </Card>
       {/* ── Getting documents in ──────────────────────────────────────────
           Below the pipeline, because the pipeline is what explains where an
           upload lands. Sources/crawling is one way in; these are the other
-          two, and until now neither existed in working form. Uploading and
-          minting share links are writes — hr-admin only. */}
+          two. Uploading and minting share links are writes — hr-admin only. */}
       {canManage && (
-        <div className="grid gap-4 mt-5 grid-cols-1 lg:grid-cols-2">
+        <Inline wrap gap="md" className="items-stretch [&>*]:flex-1 [&>*]:min-w-[320px]">
           <DocumentDropzone
             target={syncTarget && syncTarget.id
               ? { id: syncTarget.id, slug: syncTarget.slug ?? '', name: syncTarget.name }
@@ -412,27 +406,8 @@ export default function KnowledgeHomePage() {
             onUploaded={() => refreshRec()}
           />
           <ShareLinks kbSlug={syncTarget?.slug ?? null} />
-        </div>
+        </Inline>
       )}
-
     </PageSection>
-  );
-}
-
-function Stage({ title, value, unit, detail, to, cta }: {
-  title: string; value: string; unit: string; detail: string; to?: string; cta: string;
-}) {
-  return (
-    <div className="px-3.5 py-3 flex flex-col">
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">{title}</div>
-      <div className="flex items-baseline gap-1.5 mt-1">
-        <span className="text-[20px] font-bold text-text-primary leading-none">{value}</span>
-        <span className="text-[11px] text-text-secondary">{unit}</span>
-      </div>
-      <div className="text-[11px] text-text-tertiary mt-1.5 leading-snug flex-1">{detail}</div>
-      {/* No `to` = the viewer's role can't open the drill-in (ingest pages are
-          hr-admin-only). The stat stays; a link that bounces does not. */}
-      {to && <Link to={to} className="text-[11px] text-primary no-underline hover:underline mt-2">{cta} →</Link>}
-    </div>
   );
 }

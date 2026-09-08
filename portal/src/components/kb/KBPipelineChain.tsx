@@ -110,8 +110,7 @@ function Arrow() {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const DEFAULT_AGENTS: Record<KbRegistryEntry['tenant'], string[]> = {
-  orgiq:    ['search', 'advisor'],
-  newsroom: ['news-researcher'],
+  orgiq: ['search', 'advisor'],
 };
 
 export function KBPipelineChain({ kb, agentNames }: KBPipelineChainProps) {

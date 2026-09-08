@@ -1,0 +1,15 @@
+surface: runs
+role: program-lead
+user: u-farah
+url: /assessment/runs
+pages: portal/src/pages/assessment/RunsPage.tsx
+audited: 2026-09-05 07:37 local, Chrome 1440px, gateway mode (VITE_GATEWAY_URL=http://localhost:18080), middleware dev:mock
+screenshot: runs.jpg
+verdict: pass
+console errors: 0
+layout: pass — main left 200px w 1272px; scrollWidth 1472 = innerWidth 1472 (no horizontal scroll); document body does not scroll (scrollHeight 845 = innerHeight 845, same fixed-body/inner-scroll-pane shell as feedback/reports)
+keyboard: pass — 42 visible interactive controls (ledger rows + team selector + 9 command "Run" buttons)
+empty-state: n/a for this pass — the ledger has substantial history; no zero-runs state exists to check
+role-gating: program-lead can launch any of the 9 commands against any team (RunAssessmentAgent) — same authority as the other roles per the earlier passes; no controls hidden here.
+notes: Launched `classify-transcript` against TEAM-004 from the launcher (selected the team from the "Choose a team…" dropdown, clicked Run). A "Run started" toast fired immediately, a new row (`run-20260905T051943Z-classify-transcript-3e4f878bc3d3`) appeared at the TOP of the ledger with status "running" and "just now" with no page reload, and 6 seconds later — still with no reload — it flipped to "completed" / "0m 08s" in place. This confirms the ledger polls live. Also visible in the ledger: the two submissions-wizard process-self-assessment runs for TEAM-005/TEAM-006 from the submissions-wizard pass, both completed in ~8s, corroborating that log. One pre-existing run (`run-20260904T091140Z-score-dimensions-cc10aa77ff02`, TEAM-003) has sat "running" for 13+ minutes across this whole audit session — plausibly a stuck/orphaned run from earlier testing, not something this pass caused, but worth flagging if it never resolves. Checked for the command-palette's observability-harness 403 poll (assessor/DEFECTS.md #8): zero `/api/observability/harness/*` requests fired on this page across the whole visit — that defect does not reproduce here.
+re-verified 2026-09-05 07:37 (gateway mode): console 0, layout main left 200px w 1240px / scrollWidth 1440 = innerWidth 1440 / body scrollHeight 758 = innerHeight 758 (no scroll), screenshot retaken; 40 interactive controls (was 42 at original audit — ledger composition just differs by which runs are visible, not a defect); spot-checked keyboard — ledger rows and the team selector remain reachable/functional. Top row is now `run-20260905T072242Z-score-dimensions-a5abd12ac353` (TEAM-007, completed, 0m 08s) from stretch/agent-e2e.md Part 2's re-proof. The previously-flagged stuck run (`run-20260904T091140Z-score-dimensions-cc10aa77ff02`, TEAM-003) is STILL "running" at 42m ago (was 13+ min at original audit) — confirms this is a genuinely orphaned/stuck run, not a one-off timing artifact; worth filing as a defect if not already.

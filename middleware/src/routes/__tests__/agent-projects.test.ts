@@ -32,7 +32,7 @@ jest.mock('../../providers/agent-projects.js', () => ({
 jest.mock('../../lib/sdlc-pipeline.js', () => ({ dispatchGovernedRun: jest.fn() }));
 
 import express, { type Request, type Response, type NextFunction } from 'express';
-import request from 'supertest';
+import request from '../../test-support/http.js';
 import { agentProjectsRouter } from '../agent-projects.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import {

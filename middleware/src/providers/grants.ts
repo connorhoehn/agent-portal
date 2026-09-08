@@ -14,7 +14,10 @@
 import { exec } from './aurora.js';
 import { config } from '../config.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
-import { type GrantRow, listGrants as budgetsListGrants, MOCK_BUDGETS } from './budgets.js';
+import {
+  type GrantRow, listGrants as budgetsListGrants, MOCK_BUDGETS,
+  mockInitiativeWindowSpendUsd,
+} from './budgets.js';
 import {
   mergedMockGrants,
   setMockGrant,
@@ -22,6 +25,9 @@ import {
   _resetMockGrants,
 } from './grantOverlay.js';
 import { getSprint } from './sprints.js';
+// The one clock. A created grant's id carries an instant, and a fixture instant
+// is read through the clock so a frozen test freezes it too.
+import { clock } from '../mock/core/index.js';
 
 // Re-exported so existing test imports (`_resetMockGrants` from this module)
 // keep working now that the overlay itself lives next door.
@@ -52,12 +58,33 @@ export interface CreateGrantInput {
 // here, sprints.ts read the raw seed instead and reported a stale envelope after
 // every grant PATCH. See that file's header for the full reasoning.
 
+/**
+ * Re-attach the window burn as a live getter.
+ *
+ * `initiativeSpendInWindowUsd` is derived on the Aurora side (a SUM over
+ * bot_runs inside the sprint window) and must never be stored beside the row —
+ * see the `mockGrant` note in providers/budgets.ts. Every row this module puts
+ * into the overlay goes through here, so a created or patched grant is summed
+ * from the runs at read time exactly like a seed row is, including for the
+ * readers that go straight to `mergedMockGrants()` (providers/sprints.ts).
+ * Without this a create wrote a literal 0 and a patch froze whatever the burn
+ * happened to be at the moment of the spread.
+ */
+function withDerivedWindowSpend(row: Omit<GrantRow, 'initiativeSpendInWindowUsd'>): GrantRow {
+  return {
+    ...row,
+    get initiativeSpendInWindowUsd(): number {
+      return mockInitiativeWindowSpendUsd(row.orgProjectId, row.startsOn, row.endsOn);
+    },
+  };
+}
+
 async function mockGrantRowFor(input: CreateGrantInput, id: string): Promise<GrantRow> {
   // Pull the sprint's initiative/date labels through getSprint so a created
   // grant reads consistently with the sprint it funds. granteeName is unknown
   // in mock (no people join) and left null — honest, not fabricated.
   const sprint = await getSprint(input.sprintId);
-  return {
+  return withDerivedWindowSpend({
     id,
     orgProjectId: input.orgProjectId,
     orgProjectName: sprint?.orgProjectName
@@ -71,8 +98,7 @@ async function mockGrantRowFor(input: CreateGrantInput, id: string): Promise<Gra
     sprintStatus: sprint?.status ?? null,
     allocatedUsd: input.amountUsd,
     grantedBy: input.grantedBy ?? null,
-    initiativeSpendInWindowUsd: 0,
-  };
+  });
 }
 
 // ─── Read (one grant, and a scoped list) ─────────────────────────────────────
@@ -80,7 +106,8 @@ async function mockGrantRowFor(input: CreateGrantInput, id: string): Promise<Gra
 /** One grant by id, projected through the read shape. Null when unknown. */
 export async function getGrant(id: string): Promise<GrantRow | null> {
   if (config.mock.aurora) {
-    return mergedMockGrants().find((g) => g.id === id) ?? null;
+    const row = mergedMockGrants().find((g) => g.id === id);
+    return row ? withDerivedWindowSpend(row) : null;
   }
   // No initiative scope known up front, so read unscoped and pick the row out.
   const all = await budgetsListGrants();
@@ -90,7 +117,7 @@ export async function getGrant(id: string): Promise<GrantRow | null> {
 /** Grants for one sprint (the portal's read-back target after a write). */
 export async function listGrantsForSprint(sprintId: string): Promise<GrantRow[]> {
   if (config.mock.aurora) {
-    return mergedMockGrants().filter((g) => g.sprintId === sprintId);
+    return mergedMockGrants().filter((g) => g.sprintId === sprintId).map(withDerivedWindowSpend);
   }
   const all = await budgetsListGrants();
   return all.filter((g) => g.sprintId === sprintId);
@@ -100,7 +127,12 @@ export async function listGrantsForSprint(sprintId: string): Promise<GrantRow[]>
 
 export async function createGrant(input: CreateGrantInput): Promise<GrantRow> {
   if (config.mock.aurora) {
-    const id = `bg-mock-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    // The instant comes from the mock clock, not `Date.now()`: a fixture id is
+    // a fixture timestamp with a prefix, and a frozen test that cannot predict
+    // the id it just created cannot assert on it. The random suffix is what
+    // keeps two creates apart, so reading the clock half through the clock
+    // costs no uniqueness — including under one frozen instant.
+    const id = `bg-mock-${clock.now().getTime()}-${Math.floor(Math.random() * 1e6)}`;
     const row = await mockGrantRowFor(input, id);
     setMockGrant(id, row);
     return row;
@@ -156,13 +188,15 @@ export async function updateGrant(id: string, patch: UpdateGrantInput): Promise<
   if (config.mock.aurora) {
     const current = mergedMockGrants().find((g) => g.id === id);
     if (!current) return null;
-    const updated: GrantRow = {
+    // Rebuilt through withDerivedWindowSpend: the spread below would otherwise
+    // flatten the burn getter into a frozen number and store it on the overlay.
+    const updated: GrantRow = withDerivedWindowSpend({
       ...current,
       ...(setAmount ? { allocatedUsd: patch.amountUsd! } : {}),
       // Mirrors the real SET clause: only a provided field is written, so a
       // note-only patch leaves the amount alone and vice versa.
       ...(setNote ? { note: patch.note ?? null } : {}),
-    };
+    });
     setMockGrant(id, updated);
     return updated;
   }

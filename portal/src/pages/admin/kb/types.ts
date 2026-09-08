@@ -10,7 +10,7 @@ export type KbStatus =
   | 'UPDATING'
   | 'DELETING';
 
-export type KbTenant = 'orgiq' | 'newsroom';
+export type KbTenant = 'orgiq';
 
 export interface KbRegistryEntry {
   id: string;

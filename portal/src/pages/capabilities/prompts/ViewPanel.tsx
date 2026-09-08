@@ -2,9 +2,10 @@ import { Button, Chip, DetailHeader, Inline, InlineAlert, InlinePlaceholder, Met
 import { relativeTime } from '../../../lib/relativeTime';
 import { TemplateHighlighted } from './TemplateHighlighted';
 import { VersionSelect } from './VersionSelect';
-import { extractVariables } from './promptFormat';
+import { arnTail, extractVariables } from './promptFormat';
 import { usePromptVersionDetail } from '../../../components/canary/usePromptLibrary.js';
 import type { Selection } from './types';
+import { T } from '../Text';
 
 /** Read-only view of one prompt version: the template, its variables, and the
  *  inference settings baked into the variant. */
@@ -47,18 +48,25 @@ export function ViewPanel({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex-none border-b border-border px-6 pb-4 pt-5">
+    <Stack gap="none" className="h-full min-h-0">
+      <Stack gap="none" className="flex-none border-b border-border px-6 pb-4 pt-5">
         <DetailHeader
           as="h2"
-          title={<span className="font-mono">{selection.promptName}</span>}
+          title={<T className="font-mono">{selection.promptName}</T>}
           meta={
             <MetaLine
               items={[
                 detail?.arn && (
-                  <code key="arn" className="block max-w-[480px] truncate font-mono" title={detail.arn}>
-                    {detail.arn}
-                  </code>
+                  // Capped to fit inside the header's own left column, not a
+                  // guess at the ARN's natural width — see the arithmetic in
+                  // ViewPanel's header comment below.
+                  // …showing the ARN's identifying TAIL, not its head: every
+                  // prompt's ARN opens with the same `arn:aws:bedrock:
+                  // <region>:<account>:prompt/`, so a head-truncated 200px box
+                  // read identically for all six (see arnTail).
+                  <T key="arn" className="block max-w-[200px] truncate font-mono" title={detail.arn}>
+                    {arnTail(detail.arn)}
+                  </T>
                 ),
                 detail?.updatedAt && `Updated ${relativeTime(detail.updatedAt)}`,
               ]}
@@ -69,21 +77,39 @@ export function ViewPanel({
               <VersionSelect promptId={selection.promptId} value={selection.version} onChange={onVersionChange} />
               {canManage && (
                 <>
-                  <Button variant="ghost" onClick={onTest}>Test ▶</Button>
-                  <Button variant="primary" onClick={onEdit}>Edit / new version</Button>
+                  {/* One word each: the audit measured "Test ▶" at 61px and
+                      "Edit / new version" at 97px, which with the 246px
+                      select and two 8px gaps filled the 420px aside exactly
+                      — so BOTH wrapped to two lines. The fuller sense moves
+                      into the title attribute. */}
+                  <Button variant="ghost" size="sm" data-prompt-test-trigger onClick={onTest} title="Test this prompt against a live model">Test</Button>
+                  <Button variant="primary" size="sm" data-prompt-edit-trigger onClick={onEdit} title="Edit the template and publish a new version">Edit</Button>
                 </>
               )}
             </Inline>
           }
-          asideWidth={canManage ? 380 : 120}
+          // 420, not the old 380: at 1552px this header's content row is
+          // ~772px wide (viewport minus the fixed shell rail + tenant rail +
+          // the 240px prompt rail + this panel's px-6 padding — none of
+          // which scale with the viewport, so the header row shrinks 1:1
+          // with it). Select(246 measured) + gap(8) + "Test"(~52) +
+          // gap(8) + "Edit"(~52) ≈ 366px. The old labels measured 61 and 97,
+          // filling 420 exactly and wrapping both onto two lines; the short
+          // ones leave ~54px of slack. That
+          // takes the left (title/meta) column down to 772-420-12(gap)=340px
+          // at 1552px and 660-420-12=228px at 1440px (660 = the same
+          // arithmetic 112px narrower) — the ARN's 200px cap (below) fits
+          // inside the smaller of the two with room to spare, instead of a
+          // 480px box that was 100-250px wider than the column actually had.
+          asideWidth={canManage ? 420 : 120}
         />
-      </div>
+      </Stack>
 
-      <div className="flex-1 overflow-auto border-b border-border">
+      <Stack gap="none" className="flex-1 overflow-auto border-b border-border">
         {templateText
           ? <TemplateHighlighted text={templateText} />
           : <InlinePlaceholder size="sm" className="px-6 py-5">No template text for this version.</InlinePlaceholder>}
-      </div>
+      </Stack>
 
       {(variables.length > 0 || modelId || inf) && (
         <Inline gap="md" className="flex-none bg-surface-panel px-6 py-2.5">
@@ -102,6 +128,6 @@ export function ViewPanel({
           )}
         </Inline>
       )}
-    </div>
+    </Stack>
   );
 }

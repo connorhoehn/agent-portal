@@ -23,6 +23,7 @@ export type Action =
   | 'EditSchema'
   | 'EditGuardrail'
   | 'ManageDevbox'
+  | 'ManageBots'
   | 'DispatchAgentRun'
   | 'ManageIngest'
   | 'ManageKB'
@@ -33,7 +34,16 @@ export type Action =
   | 'PublishArticle'
   | 'Masquerade'
   | 'ManageBudgets'
-  | 'ManageSprints';
+  | 'ManageSprints'
+  // Assessment tenant (docs/assessment-tenant.md)
+  | 'ViewAssessment'
+  | 'ScoreAssessment'
+  | 'ApproveException'
+  | 'PublishReport'
+  | 'ManageSubmissions'
+  | 'RunAssessmentAgent'
+  | 'ManageKnowledge'
+  | 'ManageAssessmentConfig';
 
 interface CapabilitiesPayload {
   role: string;

@@ -15,7 +15,7 @@ import {
 } from '@aws-sdk/client-bedrock';
 
 import { config } from '../config.js';
-import { mockGuardrail } from '../mock/capabilities.js';
+import { mockGuardrailRow } from '../mock/capabilities.js';
 import type {
   ContentPolicy,
   DeniedTopic,
@@ -309,19 +309,26 @@ export const realGuardrails: GuardrailsProvider = {
 
 // ── mock implementation ───────────────────────────────────────────────────────
 //
-// Wraps the shared `mockGuardrail` object and mutates it in place so a session
-// against the mock provider sees its edits stick (matches the legacy route's
-// behavior).
-
-// Narrow the loose `mockGuardrail` literal to the shape our routes expect.
-const m = mockGuardrail as GuardrailSnapshot;
+// Reads the guardrail fixture and mutates the row it hands back IN PLACE, so a
+// session against the mock provider sees its edits stick (matching the legacy
+// route's behavior). The row is resolved per call rather than captured at
+// import: the fixture is scenario-switchable now, and a module-scope capture
+// would keep serving whichever world happened to be live when this file loaded
+// — and would keep an auditor's edits alive across a `reset` that was supposed
+// to drop them.
+function snapshot(): GuardrailSnapshot {
+  const row = mockGuardrailRow();
+  if (!row) throw new Error('no guardrail is attached in this mock scenario');
+  return row as GuardrailSnapshot;
+}
 
 export const mockGuardrails: GuardrailsProvider = {
   async getGuardrail() {
-    return m;
+    return snapshot();
   },
 
   async togglePiiFilter(type, patch) {
+    const m = snapshot();
     const f = m.piiFilters.find((p) => p.type === type);
     if (!f) return null;
     if (patch.enabled !== undefined) f.enabled = patch.enabled;
@@ -331,6 +338,7 @@ export const mockGuardrails: GuardrailsProvider = {
   },
 
   async updateDeniedTopic(name, patch) {
+    const m = snapshot();
     const t = m.deniedTopics.find((d) => d.name === name);
     if (!t) return null;
     if (patch.enabled !== undefined) t.enabled = patch.enabled;
@@ -340,6 +348,7 @@ export const mockGuardrails: GuardrailsProvider = {
   },
 
   async addDeniedTopic(topic) {
+    const m = snapshot();
     const next: DeniedTopic = { name: topic.name, definition: topic.definition, enabled: true };
     m.deniedTopics.push(next);
     m.updatedAt = new Date().toISOString();
@@ -347,6 +356,7 @@ export const mockGuardrails: GuardrailsProvider = {
   },
 
   async removeDeniedTopic(name) {
+    const m = snapshot();
     const i = m.deniedTopics.findIndex((t) => t.name === name);
     if (i < 0) return false;
     m.deniedTopics.splice(i, 1);

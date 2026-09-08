@@ -12,12 +12,19 @@
 // consumer of the fleet reads the same list.
 
 import { useSearchParams } from 'react-router';
-import { ErrorState } from '@connorhoehnslalom/ui-components/shared';
+import { ErrorState, InlineAlert, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { ComputerLab } from '@connorhoehnslalom/ui-components/compute';
 import { useCapabilities } from '../../lib/capabilities';
+import { useSession } from '../../lib/auth';
+
+/** Roles the server lets read the fleet without ManageDevbox — mirrors the
+ *  /api/devbox mount in middleware/src/index.ts. Keep the two in step: a
+ *  wider list here is a door onto a 403, a narrower one hides real access. */
+const FLEET_READ_ROLES = ['org-leader', 'hr-admin', 'program-owner', 'admin'];
 
 export default function DevboxPage() {
   const { can, ready } = useCapabilities();
+  const { session } = useSession();
   // `?box=` is the deep link the rest of the app already writes — the "agent
   // working" chip on a work item, for one. The name is the old registry's and
   // stays: changing it would break links already rendered elsewhere for the
@@ -25,7 +32,13 @@ export default function DevboxPage() {
   const [params] = useSearchParams();
   const focusComputerId = params.get('box');
 
-  if (ready && !can('ManageDevbox')) {
+  // Reading the fleet and driving it are different rights, and this guard used
+  // to conflate them: it short-circuited on the WRITE capability before any
+  // fetch, so a leader who can legitimately see the fleet (the server's read
+  // tier, and FLEET_WIDE_ROLES in devbox-visibility.ts) was shown a permission
+  // wall instead of their computers. Writes are still refused by the API.
+  const canRead = can('ManageDevbox') || FLEET_READ_ROLES.includes(session?.role ?? '');
+  if (ready && !canRead) {
     return (
       <ErrorState
         title="No computers here"
@@ -44,12 +57,30 @@ export default function DevboxPage() {
   // place in the app instead of a thing that swallows it. The variant also
   // drops the modal semantics and the ✕ — see the prop's docs. `onClose` is a
   // no-op because inline never calls it.
+  // A reader without ManageDevbox can list the fleet but not attach a shell,
+  // and the lab surfaces that refusal as a bare `error · Forbidden` in the
+  // terminal pane — technically accurate, and indistinguishable from a broken
+  // product. Name the boundary before they hit it, the same way the empty
+  // state above names its cause rather than blaming permissions for an empty
+  // fleet.
+  const readOnly = ready && !can('ManageDevbox');
+
   return (
-    <ComputerLab
-      open
-      variant="inline"
-      onClose={() => {}}
-      focusComputerId={focusComputerId}
-    />
+    <Stack gap="none" className="h-full min-h-0">
+      {readOnly && (
+        <InlineAlert tone="info" className="mx-4 mt-3">
+          You can see the fleet but not drive it. Opening a shell or dispatching work
+          needs the ManageDevbox capability — an SME or a platform operator can.
+        </InlineAlert>
+      )}
+      <Stack gap="none" className="min-h-0 flex-1">
+        <ComputerLab
+          open
+          variant="inline"
+          onClose={() => {}}
+          focusComputerId={focusComputerId}
+        />
+      </Stack>
+    </Stack>
   );
 }

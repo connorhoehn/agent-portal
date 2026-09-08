@@ -19,9 +19,28 @@
 // own. One line here would have replaced all three.
 
 import { Link } from 'react-router';
-import { PageSection, Card } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Card,
+  CardHeader,
+  CatalogGrid,
+  Chip,
+  MetaLine,
+  PageSection,
+  SectionLabel,
+  Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useSession, type SessionRole } from '../../lib/auth';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { T } from './Text';
+
+/** Everything under `/admin/ingest` — including `/admin/ingest/crawl`, which
+ *  "Surveying a site" and the footer's "Knowledge → Sources" point at — is
+ *  RequireRole-gated to hr-admin in App.tsx. Kept here, exported, so a link
+ *  to that route can check before rendering instead of sending a role there
+ *  to bounce silently (DEFECTS.md #19). 'admin' always passes RequireRole
+ *  regardless of this list, same as the route guard. */
+export const INGEST_ROLES: SessionRole[] = ['hr-admin'];
 
 type CapabilityState = 'ok' | 'missing' | 'unconfigured' | 'unknown';
 
@@ -38,11 +57,11 @@ interface CapabilityStatus {
 
 interface CapabilityEvent { kind?: string; startedAt?: string; ok?: boolean }
 
-const STATE_TONE: Record<CapabilityState, string> = {
-  ok: 'bg-success-bg text-success',
-  missing: 'bg-danger-bg text-danger',
-  unconfigured: 'bg-surface-hover text-text-tertiary',
-  unknown: 'bg-warning-bg text-warning',
+const STATE_TONE: Record<CapabilityState, 'success' | 'danger' | 'neutral' | 'warning'> = {
+  ok: 'success',
+  missing: 'danger',
+  unconfigured: 'neutral',
+  unknown: 'warning',
 };
 
 const STATE_LABEL: Record<CapabilityState, string> = {
@@ -132,6 +151,9 @@ const EVENT_KIND_BY_KEY: Record<string, CapabilityStatus['key']> = {
 };
 
 export default function CapabilitiesHomePage() {
+  const { session } = useSession();
+  const canOpenIngest = !!session && (session.role === 'admin' || INGEST_ROLES.includes(session.role));
+
   const { data, error, refresh } = useFetch<{ capabilities: CapabilityStatus[] }>(
     '/api/capabilities/reconcile', 60_000,
   );
@@ -165,88 +187,87 @@ export default function CapabilitiesHomePage() {
 
       {problems.length > 0 && (
         <Card padding="none" className="mb-4 overflow-hidden border-danger/40">
-          <div className="px-3.5 py-3 border-b border-border">
-            <span className="text-xs font-semibold text-danger tracking-wide select-none">NEEDS ATTENTION</span>
-            <span className="text-[11px] text-text-tertiary ml-2">
-              configured ids checked against the account
-            </span>
-          </div>
-          {problems.map((c) => (
-            <div key={c.key} className="px-3.5 py-3 border-b border-border last:border-b-0">
-              <div className="text-[13px] font-semibold text-text-primary">{c.label}</div>
-              <div className="text-[12px] text-text-secondary mt-1 leading-snug">{c.detail}</div>
-            </div>
-          ))}
+          <CardHeader title="Needs attention" subtitle="configured ids checked against the account" />
+          <Stack gap="none">
+            {problems.map((c) => (
+              <Stack key={c.key} gap="xs" className="border-b border-border px-3.5 py-3 last:border-b-0">
+                <T className="text-[13px] font-semibold text-text-primary">{c.label}</T>
+                <T className="text-[12px] leading-snug text-text-secondary" wrap>{c.detail}</T>
+              </Stack>
+            ))}
+          </Stack>
         </Card>
       )}
 
-      <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
+      <CatalogGrid columns={2}>
         {caps.map((c) => {
           const role = ROLES[c.key];
           const used = lastUse(c.key);
           return (
             <Card key={c.key} padding="none" className="overflow-hidden">
-              <div className="px-3.5 py-2.5 border-b border-border flex items-center gap-2">
-                <span className="text-[13px] font-semibold text-text-primary">{c.label}</span>
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${STATE_TONE[c.state]}`}>
-                  {STATE_LABEL[c.state]}
-                </span>
-                <div className="flex-1" />
-                {used && <span className="text-[11px] text-text-tertiary">used {when(used)}</span>}
-              </div>
+              <CardHeader
+                title={c.label}
+                meta={<Chip tone={STATE_TONE[c.state]} size="xs">{STATE_LABEL[c.state]}</Chip>}
+                action={used ? <T className="text-[11px] text-text-tertiary">used {when(used)}</T> : undefined}
+              />
 
-              <div className="px-3.5 py-3">
-                <div className="text-[12px] text-text-secondary leading-snug">{role.purpose}</div>
+              <Stack gap="sm" className="px-3.5 py-3">
+                <T className="text-[12px] leading-snug text-text-secondary" wrap>{role.purpose}</T>
 
-                <div className="mt-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">
-                    What uses it here
-                  </div>
+                <Stack gap="xs">
+                  <SectionLabel as="div">What uses it here</SectionLabel>
                   {role.usedBy ? (
-                    <div className="mt-1">
-                      <Link to={role.usedBy.to} className="text-[12px] font-semibold text-primary no-underline hover:underline">
-                        {role.usedBy.label} →
-                      </Link>
-                      <div className="text-[11px] text-text-tertiary mt-0.5 leading-snug">
+                    <Stack gap="none">
+                      {role.usedBy.to === '/admin/ingest/crawl' && !canOpenIngest ? (
+                        <T className="text-[12px] font-semibold text-text-tertiary">
+                          {role.usedBy.label} (HR admin)
+                        </T>
+                      ) : (
+                        <Link to={role.usedBy.to} className="text-[12px] font-semibold text-primary no-underline hover:underline">
+                          {role.usedBy.label} →
+                        </Link>
+                      )}
+                      <T className="mt-0.5 text-[11px] leading-snug text-text-tertiary" wrap>
                         {role.usedBy.description}
-                      </div>
-                    </div>
+                      </T>
+                    </Stack>
                   ) : (
                     // Stated plainly rather than dressed up with a demo. A
                     // capability nobody has found a job for is worth knowing
                     // about — it is a candidate to use or to stop paying for.
-                    <div className="text-[11px] text-text-tertiary mt-1 leading-snug">
+                    <T className="text-[11px] leading-snug text-text-tertiary" wrap>
                       Nothing in this app uses it yet.
-                    </div>
+                    </T>
                   )}
-                </div>
+                </Stack>
 
                 {c.configuredId && (
-                  <div className="text-[11px] text-text-tertiary font-mono mt-3 truncate" title={c.configuredId}>
-                    {c.configuredId}
-                  </div>
+                  <MetaLine items={[<T className="truncate font-mono" title={c.configuredId}>{c.configuredId}</T>]} />
                 )}
-              </div>
+              </Stack>
 
               {role.tools && (
-                <div className="px-3.5 py-2 border-t border-border bg-surface-hover/40">
+                <Stack gap="none" className="border-t border-border bg-surface-hover/40 px-3.5 py-2">
                   <Link to={role.tools.to} className="text-[11px] text-primary no-underline hover:underline">
                     {role.tools.label} →
                   </Link>
-                </div>
+                </Stack>
               )}
             </Card>
           );
         })}
+      </CatalogGrid>
 
-      </div>
-
-      <div className="mt-4 text-[11px] text-text-tertiary leading-snug">
+      <T className="mt-4 text-[11px] leading-snug text-text-tertiary" wrap>
         Prompts moved to <Link to="/iq/prompts" className="text-primary no-underline hover:underline">Prompts</Link>,
         which is the same page this section used to render a second copy of. Crawling moved to{' '}
-        <Link to="/admin/ingest/crawl" className="text-primary no-underline hover:underline">Knowledge → Sources</Link>,
-        where a crawl can be scoped to what a survey found instead of started blind.
-      </div>
+        {canOpenIngest ? (
+          <Link to="/admin/ingest/crawl" className="text-primary no-underline hover:underline">Knowledge → Sources</Link>
+        ) : (
+          'Knowledge → Sources (HR admin)'
+        )}
+        , where a crawl can be scoped to what a survey found instead of started blind.
+      </T>
     </PageSection>
   );
 }

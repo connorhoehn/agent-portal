@@ -29,7 +29,7 @@ jest.mock('../../providers/identity.js', () => ({
 }));
 
 import express from 'express';
-import request from 'supertest';
+import request from '../../test-support/http.js';
 import { sessionRouter } from '../session.js';
 import { resetRateLimits } from '../../lib/rate-limit.js';
 import type { Session } from '../../lib/session.js';
@@ -56,7 +56,7 @@ function issuedPayload(res: request.Response): Record<string, unknown> {
 
 const realSession: Session = {
   sub: 'u-real', name: 'Real', role: 'member', tenant: 'orgiq',
-  grants: { orgiq: ['member', 'org-leader'], newsroom: ['reporter'] }, iat: Math.floor(Date.now() / 1000), epoch: 3,
+  grants: { orgiq: ['member', 'org-leader'], assessment: ['assessor'] }, iat: Math.floor(Date.now() / 1000), epoch: 3,
 };
 
 const masqSession: Session = {
@@ -76,10 +76,10 @@ describe('a real switch bumps the epoch and the cookie carries it', () => {
   });
 
   it('POST /tenant bumps and stamps the new epoch', async () => {
-    const res = await request(buildApp({ ...realSession })).post('/api/session/tenant').send({ tenant: 'newsroom' });
+    const res = await request(buildApp({ ...realSession })).post('/api/session/tenant').send({ tenant: 'assessment' });
     expect(res.status).toBe(200);
     expect(bumpSessionEpoch).toHaveBeenCalledWith('u-real');
-    expect(issuedPayload(res)).toMatchObject({ tenant: 'newsroom', epoch: 9 });
+    expect(issuedPayload(res)).toMatchObject({ tenant: 'assessment', epoch: 9 });
   });
 });
 

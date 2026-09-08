@@ -3,7 +3,7 @@ kb_resolver.py — resolve Bedrock KB IDs from the Aurora knowledge_bases regist
 
 Priority:
   1. Aurora knowledge_bases table (SELECT bedrock_kb_id WHERE tenant=:t AND purpose=:p AND status='ACTIVE')
-  2. Environment variable fallbacks (NEWSROOM_KB_ID for newsroom, KB_ID for orgiq)
+  2. Environment variable fallback (KB_ID)
 
 All lookups are lru_cache'd so the Aurora call only happens once per process.
 Agents are long-lived containers — the cache persists for the container lifetime.
@@ -12,7 +12,6 @@ Usage:
   from _shared.kb_resolver import resolve_kb_id, resolve_kb_id_by_slug
 
   KB_ID = resolve_kb_id("orgiq", "default") or ""
-  NEWSROOM_KB_ID = resolve_kb_id("newsroom", "articles") or ""
 """
 
 import os
@@ -36,7 +35,7 @@ def resolve_kb_id(tenant: str, purpose: str = "default") -> Optional[str]:
     environment variables.
 
     Args:
-        tenant: Tenant identifier (e.g. "orgiq", "newsroom")
+        tenant: Tenant identifier (e.g. "orgiq")
         purpose: Purpose/type of KB (e.g. "default", "articles")
 
     Returns:
@@ -69,9 +68,7 @@ def resolve_kb_id(tenant: str, purpose: str = "default") -> Optional[str]:
                 tenant, purpose, exc,
             )
 
-    # Env var fallbacks
-    if tenant == "newsroom":
-        return os.environ.get("NEWSROOM_KB_ID") or os.environ.get("KB_ID") or None
+    # Env var fallback
     return os.environ.get("KB_ID") or None
 
 
@@ -83,7 +80,7 @@ def resolve_kb_id_by_slug(slug: str) -> Optional[str]:
     well-known environment variables for canonical slugs.
 
     Args:
-        slug: Registry slug for the KB (e.g. "default", "newsroom")
+        slug: Registry slug for the KB (e.g. "default")
 
     Returns:
         The bedrock_kb_id string if found, or None.
@@ -114,11 +111,9 @@ def resolve_kb_id_by_slug(slug: str) -> Optional[str]:
                 slug, exc,
             )
 
-    # Env var fallbacks for canonical slugs
+    # Env var fallback for the canonical slug
     if slug == "default":
         return os.environ.get("KB_ID") or None
-    if slug == "newsroom":
-        return os.environ.get("NEWSROOM_KB_ID") or None
     return None
 
 

@@ -19,6 +19,13 @@
 import { randomUUID } from 'node:crypto';
 import { exec } from './aurora.js';
 import { borrowApiKey } from './connected-sources.js';
+import {
+  mockFinishRun, mockRecentRunsForProjects, mockRunsForProject, mockStartRun,
+} from '../mock/agent-project-runs.js';
+import {
+  mockGetAgentProject, mockLinkAgentProject, mockListAgentProjects, mockMarkCloned,
+  mockUnlinkAgentProject,
+} from '../mock/agent-projects.js';
 import { config } from '../config.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 
@@ -96,8 +103,27 @@ function rowToRun(r: Record<string, unknown>): ProjectRun {
   };
 }
 
+// The 14 seeded repositories now live behind a fixture in
+// mock/agent-projects.ts rather than as a const array here. They were moved
+// because the write paths below need somewhere to put a row: mutating a bare
+// module-level array is the "auditor damages shared state" problem the
+// scenario control plane exists to end, and the hand-typed `createdAt`
+// literals they carried were frozen at edit time (the seed does not even set
+// the column — it defaults to NOW()). Behind the fixture,
+// `POST /api/__mock/reset` puts the seeded fleet back.
+//
+// The rows still mirror `schema/seed_program.sql`'s `agent_projects` exactly
+// (id, repo_full_name, org_project_id) — one linked codebase per seeded
+// initiative. Before that mirror existed `listAgentProjects()` returned `[]`
+// unconditionally in mock mode, so the dispatch preflight (bot-runner.ts
+// `preflightWorkItem`, which filters `listAgentProjects()` by
+// `orgProjectId === item.projectId`) 400'd EVERY initiative with "no codebase
+// delivers this initiative" even though the initiative header (providers/
+// projects.ts MOCK_INITIATIVES[].repo) shows the very same repo the seed links
+// (org-leader.md defect #3 / sme #3 / program-owner #13).
+
 export async function listAgentProjects(): Promise<AgentProject[]> {
-  if (config.mock.aurora) return [];
+  if (config.mock.aurora) return mockListAgentProjects();
   const rows = await exec(
     `SELECT ap.*, p.name AS org_project_name
        FROM agent_projects ap
@@ -134,6 +160,7 @@ export async function listAgentProjects(): Promise<AgentProject[]> {
 }
 
 export async function getAgentProject(id: string): Promise<AgentProject | null> {
+  if (config.mock.aurora) return mockGetAgentProject(id);
   if (!isUuid(id)) return null;
   const rows = await exec(
     `SELECT ap.*, p.name AS org_project_name
@@ -149,6 +176,18 @@ export async function linkAgentProject(input: {
   repoFullName: string; defaultBranch?: string; connectionName?: string | null;
   orgProjectId?: string | null; addedBy?: string | null;
 }): Promise<AgentProject> {
+  // A raw exec() reaches the RDS Data API whatever config.mock.aurora says, so
+  // without this branch `POST /api/agent-projects` 500'd offline and a repo
+  // could not be linked at all in dev:mock — invisible to the judge, because
+  // rule 4's evidence is a GET-only wire capture.
+  if (config.mock.aurora) {
+    return mockLinkAgentProject({
+      repoFullName: input.repoFullName,
+      ...(input.defaultBranch ? { defaultBranch: input.defaultBranch } : {}),
+      connectionName: input.connectionName ?? null,
+      orgProjectId: input.orgProjectId ?? null,
+    });
+  }
   const rows = await exec(
     `INSERT INTO agent_projects (repo_full_name, default_branch, connection_name, org_project_id, added_by)
      VALUES (:repo, :branch, :conn, :org, :by)
@@ -172,6 +211,10 @@ export async function linkAgentProject(input: {
 }
 
 export async function unlinkAgentProject(id: string): Promise<boolean> {
+  // Before the uuid guard on purpose: the mock branch answers about the rows
+  // it actually holds, and a caller passing a non-uuid gets the same honest
+  // `false` either way.
+  if (config.mock.aurora) return mockUnlinkAgentProject(id);
   if (!isUuid(id)) return false;
   const rows = await exec(`DELETE FROM agent_projects WHERE id = :id::uuid RETURNING id`, [s('id', id)]);
   return rows.length > 0;
@@ -236,6 +279,20 @@ export async function buildCloneCommand(project: AgentProject): Promise<{ comman
 }
 
 export async function markCloned(id: string, sessionId: string): Promise<void> {
+  // A raw exec() reaches the RDS Data API whatever config.mock.aurora says —
+  // there is no mock branch inside `exec`. Without this guard the last step of
+  // the clone/session flow was the one statement in that flow that still
+  // demanded a live cluster, so an offline workspace could be established and
+  // then 500 while recording that it had been. (The same shape of bug
+  // bot-runner.ts's work-item claim already fixed by routing through
+  // updateWorkItem instead of exec.)
+  //
+  // The stamp comes from mock/core/clock.ts, not `new Date()`. It was
+  // `new Date().toISOString()` here for exactly as long as rule 3 could not see
+  // it: the rule scanned `src/mock/**` only, so a provider minting its own
+  // timestamp inside its own mock branch was invisible. The rule now reads
+  // provider mock branches too.
+  if (config.mock.aurora) { mockMarkCloned(id, sessionId); return; }
   await exec(
     `UPDATE agent_projects SET session_id = :sid, cloned_at = NOW(), updated_at = NOW() WHERE id = :id::uuid`,
     [s('sid', sessionId), s('id', id)],
@@ -247,6 +304,13 @@ export async function markCloned(id: string, sessionId: string): Promise<void> {
 export async function startRun(input: {
   projectId: string; prompt: string; model?: string | null; sessionId?: string | null;
 }): Promise<ProjectRun> {
+  // The run rows render offline (mockRunsForProject) but could not be *made*
+  // offline, so the portal's run button 500'd here on a laptop. The mock row
+  // starts `running` with a clock stamp and no duration — the same state the
+  // table's defaults produce — and `finishRun` below closes it.
+  if (config.mock.aurora) {
+    return mockStartRun({ projectId: input.projectId, prompt: input.prompt, model: input.model ?? null });
+  }
   const id = randomUUID();
   const rows = await exec(
     `INSERT INTO agent_project_runs (id, project_id, prompt, model, session_id)
@@ -266,6 +330,20 @@ export async function finishRun(id: string, outcome: {
   status: 'done' | 'failed'; filesChanged?: number | null; diffSummary?: string | null; error?: string | null;
   costUsd?: number | null;
 }): Promise<void> {
+  // `duration_ms` is not written here in mock mode and is not stored in the
+  // fixture: the row carries `started_at` and `finished_at`, and the duration
+  // falls out of the two the way this statement computes it. A stored copy
+  // beside its own stamps is the typed aggregate rule 1 forbids.
+  if (config.mock.aurora) {
+    mockFinishRun(id, {
+      status: outcome.status,
+      filesChanged: outcome.filesChanged ?? null,
+      diffSummary: outcome.diffSummary ?? null,
+      error: outcome.error ?? null,
+      costUsd: outcome.costUsd ?? null,
+    });
+    return;
+  }
   await exec(
     `UPDATE agent_project_runs
         SET status = :status,
@@ -290,6 +368,11 @@ export async function finishRun(id: string, outcome: {
 
 export async function listRuns(projectId: string, limit = 25): Promise<ProjectRun[]> {
   if (!isUuid(projectId)) return [];
+  // Third time this shape has bitten today (the work-item claim, markCloned,
+  // this): `exec` reaches the RDS Data API whatever config.mock.aurora says,
+  // so a raw call here 500'd the focused run list in dev:mock while the list
+  // page beside it rendered fine from its own (empty) mock branch.
+  if (config.mock.aurora) return mockRunsForProject(projectId, limit);
   const rows = await exec(
     `SELECT id, project_id, prompt, model, status, started_at, finished_at,
             duration_ms, files_changed, diff_summary, error, cost_usd
@@ -316,7 +399,11 @@ export async function listRecentRunsForProjects(
   ids: string[], perProject = 5,
 ): Promise<Map<string, ProjectRun[]>> {
   const grouped = new Map<string, ProjectRun[]>();
-  if (config.mock.aurora) return grouped;
+  // This branch used to return the empty map unconditionally, so every linked
+  // repo on /admin/codebases read "Nothing has been run against this yet" —
+  // indistinguishable from a fleet that has genuinely never been dispatched.
+  // Same rows as listRuns above, so the list and the detail agree.
+  if (config.mock.aurora) return mockRecentRunsForProjects(ids, perProject);
   const valid = ids.filter(isUuid);
   if (valid.length === 0) return grouped;
   const n = Math.min(Math.max(perProject, 1), 100);

@@ -2,7 +2,7 @@
 // Without it, finding someone means eyeballing 56 nodes.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Input, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { EmptyState, Input, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { OverlineLabel, SuggestionRow } from './graphOverlay';
 import { searchGraph } from './graphInsights';
 import type { GraphPerson } from './types';
@@ -32,6 +32,11 @@ export function GraphSearchBox({ people, onPickPerson, onPickSkill }: GraphSearc
 
   const { personMatches, skillMatches } = useMemo(() => searchGraph(people, q), [q, people]);
   const totalRows = personMatches.length + skillMatches.length;
+  // DEFECT (docs/orgiq-journeys/member/explore.md, member/DEFECTS.md #6): a
+  // query with no match rendered nothing at all — no dropdown, no "no
+  // results" text — so there was no way to tell the search even ran. The
+  // dropdown now opens on any non-empty query, not just one with rows.
+  const hasQuery = q.trim().length > 0;
 
   function pick(index: number) {
     if (index < personMatches.length) {
@@ -56,7 +61,7 @@ export function GraphSearchBox({ people, onPickPerson, onPickSkill }: GraphSearc
       <Input
         type="search"
         role="combobox"
-        aria-expanded={open && totalRows > 0}
+        aria-expanded={open && hasQuery}
         aria-label="Find a person or skill"
         placeholder="Find a person or skill…"
         value={q}
@@ -71,7 +76,7 @@ export function GraphSearchBox({ people, onPickPerson, onPickSkill }: GraphSearc
         }}
       />
 
-      {open && totalRows > 0 && (
+      {open && hasQuery && totalRows > 0 && (
         <Stack
           gap="none"
           role="listbox"
@@ -106,6 +111,22 @@ export function GraphSearchBox({ people, onPickPerson, onPickSkill }: GraphSearc
               />
             );
           })}
+        </Stack>
+      )}
+
+      {/* No-match state — same slot the results list uses, so the box never
+          just silently sits there when a search finds nothing (DEFECT #6). */}
+      {open && hasQuery && totalRows === 0 && (
+        <Stack
+          role="status"
+          className="absolute left-0 top-[calc(100%+6px)] z-[120] w-[290px] rounded-lg border border-border bg-surface shadow-md"
+        >
+          <EmptyState
+            title={`No matches for "${q}"`}
+            body="Try a different name, title, department, or skill."
+            actionLabel="Clear search"
+            onAction={() => { setQ(''); setOpen(false); }}
+          />
         </Stack>
       )}
     </div>

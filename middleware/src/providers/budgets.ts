@@ -13,6 +13,26 @@
 import { exec } from './aurora.js';
 import { config } from '../config.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
+// The mock ledger's rows. Imported for VALUES, but only ever read inside a
+// function body — bots.ts imports spendPredicateSql back out of this module, so
+// the two form an ES module cycle and a module-scope read here would hit the
+// other side's temporal dead zone depending on which was loaded first. Every
+// use below is lazy for that reason. (spendPredicateSql is a hoisted function
+// declaration, which is why the edge in the other direction is already safe.)
+import { MOCK_BOTS, mockAllRuns, mockRunsAttributedTo, type BotRun } from './bots.js';
+// The sprint calendar. Its own module (not sprints.ts) because sprints.ts
+// already imports this one — see providers/sprintWindows.ts's header.
+import { mockSprintDates } from './sprintWindows.js';
+import { clock, sumBy, groupBy } from '../mock/core/index.js';
+// The registered fixtures behind this module's mock branches. `MOCK_BUDGETS` is
+// re-exported from mock/budgets.ts below; the grant rows are projected through
+// `mockGrant` on the way out, so only columns are ever stored.
+import { budgetGrants, initiativeBudgets, MOCK_BUDGETS } from '../mock/budgets.js';
+import { liveArrayView } from '../mock/live-view.js';
+// Mock-mode only, and read-only: the projects join an allocation's read-back
+// gets for free. Lazy like every other use in this module — see the note on the
+// bots.ts import above for why nothing here may read at module scope.
+import { mockProjectName } from './projects.js';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
 function nul(name: string): SqlParameter { return { name, value: { isNull: true } }; }
@@ -105,7 +125,15 @@ export function spendPredicateSql(projectRef: string): string {
 // spending with no allocation so the blind-spot signal is demonstrable.
 
 export interface MockBudget {
-  id: string; name: string; allocated: number | null; spent: number; runs: number; maintenance: number;
+  /** ALLOCATION ONLY. Spend, run count and the maintenance floor are NOT
+   *  fields here: they are summed from bot_runs at read time
+   *  (`mockInitiativeSpend` below), because a total written beside the rows it
+   *  claims to count is right the day it is typed and wrong the first time
+   *  either side moves. This fixture carried `spent`/`runs`/`maintenance` for
+   *  months and every one of them had drifted off its own run history — see the
+   *  section header below. An allocation is genuinely stored (it is a column in
+   *  initiative_budgets), so it stays. */
+  id: string; name: string; allocated: number | null;
   /** Hours since this initiative's last attributed run. Per-initiative rather
    *  than one flat stub because providers/projects.ts renders the same
    *  timestamp as the Initiatives page's liveness — a constant here would make
@@ -114,52 +142,244 @@ export interface MockBudget {
   activityHoursAgo: number;
 }
 
-/** Exported so providers/projects.ts can render the SAME spend figure on the
- *  Initiatives rollup that this ledger renders. Mock mode used to return
- *  `agentSpendUsd: null` there while showing money here, so `dev:mock` said
- *  "no agent runs yet" on one page beside $19.77 spent on the other. */
-export const MOCK_BUDGETS: MockBudget[] = [
-  { id: 'p-observability',     name: 'Observability Platform',   allocated: 60, spent: 4.12, runs: 14, maintenance: 2.74, activityHoursAgo: 1 },
-  { id: 'p-llm-platform',      name: 'LLM Application Platform', allocated: 45, spent: 6.38, runs: 11, maintenance: 4.10, activityHoursAgo: 2 },
-  { id: 'p-auth-migration',    name: 'Auth Migration',           allocated: 35, spent: 2.91, runs: 9,  maintenance: 1.70, activityHoursAgo: 3 },
-  { id: 'p-cost-opt',          name: 'Cost Optimization',        allocated: 30, spent: 2.05, runs: 12, maintenance: 1.83, activityHoursAgo: 5 },
-  { id: 'p-soc2',              name: 'SOC2 Compliance',          allocated: 18, spent: 0.94, runs: 8,  maintenance: 0.94, activityHoursAgo: 14 },
-  { id: 'p-feature-store',     name: 'ML Feature Store',         allocated: 18, spent: 1.55, runs: 7,  maintenance: 1.39, activityHoursAgo: 12 },
-  // Spending with no allocation — the blind spot the ledger exists to surface.
-  { id: 'p-inference-platform', name: 'Inference Platform',      allocated: null, spent: 1.82, runs: 7, maintenance: 1.82, activityHoursAgo: 7 },
-];
+/**
+ * The allocations, live.
+ *
+ * The rows are the REGISTERED `initiative-budgets` fixture (mock/budgets.ts).
+ * They were an array literal here, and nothing could put them back — so
+ * `PUT /api/budgets/:id` had no mock branch at all (it 503'd) and there was no
+ * honest way to give it one: a write that mutates a module array cannot be
+ * undone by `POST /api/__mock/reset`, which is why every offline audit that
+ * touched the ledger had to warn the next auditor in its log.
+ *
+ * The NAME stays, because it is a real cross-module API — providers/projects.ts
+ * renders the SAME spend figure on the Initiatives rollup that this ledger
+ * renders (mock mode used to return `agentSpendUsd: null` there while showing
+ * money here, so dev:mock said "no agent runs yet" on one page beside $19.77
+ * spent on the other). It is a live VIEW onto the fixture now; see
+ * mock/live-view.ts for why a captured array would go stale after a reset.
+ */
+export { MOCK_BUDGETS } from '../mock/budgets.js';
+
+
+// ─── Mock spend, DERIVED from bot_runs (never stored) ────────────────────────
+//
+// `spentThisPeriodUsd`, `runCountThisPeriod` and `maintenanceUsd` used to be
+// typed onto each MOCK_BUDGETS row. Every one of them had drifted off the run
+// history the Bots pages render from the same process: p-observability claimed
+// $4.12 over nine runs summing $1.91, p-cost-opt claimed 12 runs over a bot
+// with two. Nothing could have caught it, because the number and the rows were
+// never compared. They are now the same arithmetic Aurora does, over the same
+// rows — bots.ts's MOCK_BOT_RUNS — so they cannot disagree again.
+//
+// Three deliberate fidelity choices:
+//
+//  1. The window is the CALENDAR MONTH, matching PERIOD_START_SQL. That is what
+//     `…ThisPeriod` means, and it is what a real cluster carrying
+//     schema/seed_program.sql returns: the seed dates its bot_runs `NOW() -
+//     INTERVAL 'N days'` across ~30 days, so on the 7th of a month most of that
+//     history is last month's money and does not count here. The mock's stored
+//     totals were month-independent, which is a shape Aurora cannot produce.
+//  2. Attribution is spendPredicateSql's arms, resolved row by row, in
+//     bots.ts's `mockRunsAttributedTo` — one resolver, shared with the activity
+//     graph, rather than a copy per surface. Arm 1 (via the run's work item)
+//     matches every marketplace dispatch this process recorded; no seeded run
+//     carries a work_item_id, so on a freshly booted process only arm 2 fires.
+//     Arm 3 (bot → agent_project → initiative) can match nothing here — no mock
+//     bot carries an agentProjectId — and is written out rather than silently
+//     dropped, so the difference from the SQL is visible.
+//  3. `cost_usd IS NOT NULL` is the predicate's own first clause: a run still in
+//     flight has posted no cost and has spent nothing yet.
+//
+// Scope: the seeded history AND every run this process recorded — attribution
+// is resolved once, in bots.ts's `mockRunsAttributedTo`, which both this module
+// and the activity graph read. It used to read the seeded history only, on the
+// reasoning that live rows were reachable only through async readers while
+// providers/projects.ts rendered `agentSpendUsd` from `mockBudgetRow` inside a
+// synchronous `.map`. The consequence was two answers again, just quieter than
+// before: dispatch a run in dev:mock and the initiative's activity graph moved
+// (providers/activity.ts DID count marketplace runs) while Initiatives and
+// Budgets sat still. One bot_runs table, three readers, three totals.
+// `mockRunsAttributedTo` is synchronous — see its header for why that is a
+// requirement rather than a shortcut — so the "Initiatives and Budgets report
+// the same money" invariant holds with live spend included, not instead of it.
+
+/** `bot_runs.cost_usd` is NUMERIC(10,4). Every mock sum rounds to that scale
+ *  and no further: four decimals is the precision the column actually holds,
+ *  so it is the precision Postgres returns and the only one at which the mock
+ *  and the real query can agree. */
+const COST_SCALE = 4;
+
+/** Start of the current budget period — the fixture analogue of
+ *  PERIOD_START_SQL (`date_trunc('month', NOW())`, in a UTC session). Read
+ *  through the mock clock so a frozen test sees a frozen period. */
+function periodStartMs(): number {
+  const now = clock.now();
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+}
+
+/** Costed runs only — `cost_usd IS NOT NULL`. */
+function costed(runs: readonly BotRun[]): BotRun[] {
+  return runs.filter((r) => r.costUsd != null);
+}
+
+export interface MockInitiativeSpend {
+  spentUsd: number;
+  runCount: number;
+  maintenanceUsd: number;
+}
+
+/** This period's spend, run count and cron floor for one initiative, summed
+ *  from its own runs. The mock analogue of budgetSelectSql's `period_spend`. */
+export function mockInitiativeSpend(orgProjectId: string): MockInitiativeSpend {
+  const start = periodStartMs();
+  const runs = costed(mockRunsAttributedTo(orgProjectId))
+    .filter((r) => Date.parse(r.startedAt) >= start);
+  return {
+    // COST_SCALE, not 2. `cost_usd` is NUMERIC(10,4) and the seed writes four
+    // decimals (0.1739, 0.0341), so Postgres sums them EXACTLY and returns
+    // four; rounding to cents here would report $0.31 where Aurora reports
+    // $0.3148, and — worse — would make a sum of rounded rows disagree with a
+    // rounded sum of rows by up to half a cent per initiative, so the ledger's
+    // rows would stop adding up to its own org total. The rounding still earns
+    // its place: it strips float noise (0.1739 + 0.1409 is 0.31480000000000002
+    // in binary), which is all it was ever for. Same scale bots.ts's
+    // mockDispatchedSpend already uses. Presentation rounding is the portal's.
+    spentUsd: sumBy(runs, 'costUsd', { digits: COST_SCALE }),
+    runCount: runs.length,
+    // The cron SUBSET of the same rows, never a separate bucket —
+    // `SUM(cost_usd) FILTER (WHERE trigger = 'cron')`.
+    maintenanceUsd: sumBy(runs.filter((r) => r.trigger === 'cron'), 'costUsd', { digits: COST_SCALE }),
+  };
+}
+
+/**
+ * Initiative spend inside an arbitrary window — what a sprint envelope's
+ * `initiativeSpendInWindowUsd` is. Bounds mirror listGrants' subquery exactly:
+ * `starts_on` inclusive, `ends_on` exclusive at +1 day (ends_on is a DATE and a
+ * sprint ends ON that day), and a null bound is unbounded on that side.
+ */
+export function mockInitiativeWindowSpendUsd(
+  orgProjectId: string,
+  startsOn: string | null,
+  endsOn: string | null,
+): number {
+  const from = startsOn ? Date.parse(`${startsOn}T00:00:00Z`) : null;
+  const toExclusive = endsOn ? Date.parse(`${endsOn}T00:00:00Z`) + 86_400_000 : null;
+  const runs = costed(mockRunsAttributedTo(orgProjectId)).filter((r) => {
+    const at = Date.parse(r.startedAt);
+    if (from != null && at < from) return false;
+    if (toExclusive != null && at >= toExclusive) return false;
+    return true;
+  });
+  return sumBy(runs, 'costUsd', { digits: COST_SCALE });
+}
+
+/**
+ * Every costed run in the current period, carrying the model it should be
+ * grouped under — the rows behind the org-wide summary's two breakdown cards.
+ *
+ * UNattributed, deliberately: the Aurora total is `SUM(cost_usd) FROM bot_runs
+ * WHERE started_at >= period`, with no initiative predicate at all, because
+ * the org total must not hide spend that no initiative happens to claim. A
+ * marketplace dispatch for an initiative absent from the ledger still cost
+ * money.
+ *
+ * The model resolves the way the SQL's COALESCE does: the bot's model where a
+ * bot is behind the run, and `'unknown'` otherwise. A marketplace dispatch has
+ * no bot, and the mock records no per-run model, so it groups as unknown —
+ * which is the same answer the real query's last fallback gives, and an
+ * unattributable dollar is a thing to show rather than hide.
+ */
+function mockPeriodRuns(): Array<{ run: BotRun; model: string }> {
+  const start = periodStartMs();
+  const modelByBot = new Map(MOCK_BOTS.map((b) => [b.id, b.model]));
+  return costed(mockAllRuns())
+    .filter((run) => Date.parse(run.startedAt) >= start)
+    .map((run) => ({ run, model: (run.botId && modelByBot.get(run.botId)) || 'unknown' }));
+}
 
 export function mockBudgetRow(m: MockBudget): BudgetRow {
+  const spend = mockInitiativeSpend(m.id);
   return {
     orgProjectId: m.id,
     orgProjectName: m.name,
     allocatedUsd: m.allocated,
     period: m.allocated == null ? null : 'monthly',
     updatedBy: m.allocated == null ? null : 'u-release',
-    updatedAt: m.allocated == null ? null : new Date(Date.now() - 6 * 86_400_000).toISOString(),
-    spentThisPeriodUsd: m.spent,
-    runCountThisPeriod: m.runs,
-    lastAgentActivityAt: new Date(Date.now() - m.activityHoursAgo * 3_600_000).toISOString(),
-    maintenanceUsd: m.maintenance,
+    updatedAt: m.allocated == null ? null : new Date(clock.now().getTime() - 6 * 86_400_000).toISOString(),
+    spentThisPeriodUsd: spend.spentUsd,
+    runCountThisPeriod: spend.runCount,
+    lastAgentActivityAt: new Date(clock.now().getTime() - m.activityHoursAgo * 3_600_000).toISOString(),
+    maintenanceUsd: spend.maintenanceUsd,
   };
 }
 
-/** Exported so providers/sprints.ts reads envelope figures from here rather
- *  than restating them — one envelope, one number, on both surfaces. */
-export const MOCK_GRANTS: Array<Omit<GrantRow, 'orgProjectName'>> = [
-  { id: 'bg-obs-3', orgProjectId: 'p-observability', granteePersonId: 'p-008', granteeName: 'Layla Hassan',
-    sprintId: 'spr-obs-s3', sprintName: 'Sprint 98 — Span metrics + decom', startsOn: null, endsOn: null,
-    sprintStatus: 'active', allocatedUsd: 30, grantedBy: 'u-release', initiativeSpendInWindowUsd: 2.74 },
-  { id: 'bg-llm-2', orgProjectId: 'p-llm-platform', granteePersonId: 'p-013', granteeName: 'Caleb Turner',
-    sprintId: 'spr-llm-s2', sprintName: 'Sprint 8 — Judge + evals', startsOn: null, endsOn: null,
-    sprintStatus: 'active', allocatedUsd: 35, grantedBy: 'u-release', initiativeSpendInWindowUsd: 4.10 },
-  { id: 'bg-auth-2', orgProjectId: 'p-auth-migration', granteePersonId: 'p-051', granteeName: 'Nora Chang',
-    sprintId: 'spr-auth-s2', sprintName: 'Sprint 42 — Session hygiene', startsOn: null, endsOn: null,
-    sprintStatus: 'active', allocatedUsd: 20, grantedBy: 'u-release', initiativeSpendInWindowUsd: 1.70 },
-  { id: 'bg-cost-2', orgProjectId: 'p-cost-opt', granteePersonId: 'p-017', granteeName: 'Daniel Chang',
-    sprintId: 'spr-cost-s2', sprintName: 'Sprint 24 — Attribution', startsOn: null, endsOn: null,
-    sprintStatus: 'active', allocatedUsd: 20, grantedBy: 'u-release', initiativeSpendInWindowUsd: 1.83 },
-];
+/** The seed shape: everything a `budget_grants` row actually stores. The burn
+ *  is NOT in here — see `mockGrant` below. Neither are the window dates: a
+ *  grant row in Aurora has no start or end of its own, it JOINS the sprint for
+ *  them (`sp.starts_on`, `sp.ends_on` in listGrants), so the fixture reads them
+ *  from the sprint calendar rather than restating them per grant. */
+export type MockGrantSeed =
+  Omit<GrantRow, 'orgProjectName' | 'initiativeSpendInWindowUsd' | 'startsOn' | 'endsOn'>;
+
+/**
+ * A seed envelope, with `initiativeSpendInWindowUsd` attached as a **getter**
+ * rather than a stored number.
+ *
+ * That field is derived on the Aurora side (a correlated SUM over bot_runs in
+ * the sprint window — see listGrants), and it was typed by hand here: three of
+ * the six rows claimed $1.70/$2.74/$4.10 against run histories that sum to
+ * something else entirely, and bg-auth-2 and bg-auth-3 each claimed the SAME
+ * $1.70 of p-auth-migration spend, which is one initiative's money counted
+ * twice by anything that adds envelopes up.
+ *
+ * A getter and not a plain selector function because `mergedMockGrants()`
+ * (providers/grantOverlay.ts) hands these rows on by spreading them, and a
+ * spread reads a getter — so the number is recomputed at every read, through
+ * every reader, without any of them having to know. Nothing is stored, so
+ * nothing can drift.
+ *
+ * `startsOn`/`endsOn` are getters for a second reason: THE WINDOW WAS MISSING.
+ * Every seed row carried `startsOn: null, endsOn: null`, and a null bound is
+ * unbounded on that side — in the SQL and in the mock alike — so "spend inside
+ * this envelope's sprint window" was really the initiative's LIFETIME spend.
+ * The sprint page beside it windowed the same money correctly, so one envelope
+ * reported two figures, and lib/bot-runner.ts's envelope brake burned an SME
+ * down against a total that could only ever grow. The dates were never
+ * missing; they were in the sprint fixture, one module away — now
+ * providers/sprintWindows.ts, read here by sprint id. Derived at read time so
+ * the window slides with the clock exactly as `NOW() - INTERVAL '14 days'`
+ * does, instead of freezing at import.
+ */
+function mockGrant(seed: MockGrantSeed): Omit<GrantRow, 'orgProjectName'> {
+  const dates = (): { startsOn: string; endsOn: string } | null => mockSprintDates(seed.sprintId);
+  return {
+    ...seed,
+    get startsOn(): string | null { return dates()?.startsOn ?? null; },
+    get endsOn(): string | null { return dates()?.endsOn ?? null; },
+    get initiativeSpendInWindowUsd(): number {
+      const d = dates();
+      return mockInitiativeWindowSpendUsd(seed.orgProjectId, d?.startsOn ?? null, d?.endsOn ?? null);
+    },
+  };
+}
+
+/**
+ * The seed envelopes, live and projected.
+ *
+ * The rows are the REGISTERED `budget-grants` fixture (mock/budgets.ts), which
+ * stores COLUMNS only; `mockGrant` puts the derived fields back on as getters
+ * on the way out. That is what makes a create, a patch and a revoke undoable:
+ * they mutate the fixture directly (providers/grantOverlay.ts) instead of
+ * writing into a side Map that a reset could never reach.
+ *
+ * Exported so providers/sprints.ts reads envelope figures from here rather than
+ * restating them — one envelope, one number, on both surfaces.
+ */
+export const MOCK_GRANTS: Array<Omit<GrantRow, 'orgProjectName'>> =
+  liveArrayView(() => budgetGrants.rows().map(mockGrant));
+
 
 // ─── Read plumbing ───────────────────────────────────────────────────────────
 
@@ -273,7 +493,35 @@ export async function upsertAllocation(
   allocatedUsd: number,
   updatedBy: string | null,
 ): Promise<BudgetRow | null> {
-  if (config.mock.aurora) return null;
+  if (config.mock.aurora) {
+    // Used to `return null`, which routes/budgets.ts reads as "no Aurora" and
+    // answers 503 — so a release manager could not move an allocation offline
+    // at all, and the ledger's central write was undemonstrable. The upsert is
+    // the statement below, evaluated against the fixture: an existing row is
+    // updated in place (ON CONFLICT DO UPDATE), a new initiative is appended
+    // (INSERT). `POST /api/__mock/reset` puts the seeded allocations back.
+    const rows = initiativeBudgets.rows();
+    const existing = rows.find((b) => b.id === orgProjectId);
+    if (existing) {
+      existing.allocated = allocatedUsd;
+    } else {
+      rows.push({
+        id: orgProjectId,
+        // The projects join the read-back does. Null rather than invented when
+        // the initiative is outside the mock corpus — the ledger renders the id
+        // in that case, which is the honest answer.
+        name: mockProjectName(orgProjectId) ?? orgProjectId,
+        allocated: allocatedUsd,
+        // A never-before-allocated initiative has no attributed run behind it
+        // yet; 0 hours ago is "as of this write", which is what NOW() would
+        // stamp on the row the INSERT creates.
+        activityHoursAgo: 0,
+      });
+    }
+    // Re-read through the list shape, exactly as the Aurora path does, so the
+    // response carries this-period spend rather than just the number written.
+    return getBudget(orgProjectId);
+  }
   await exec(
     `INSERT INTO initiative_budgets (org_project_id, allocated_usd, updated_by)
      VALUES (:pid, :alloc, :by)
@@ -289,7 +537,16 @@ export async function upsertAllocation(
 }
 
 export async function deleteAllocation(orgProjectId: string): Promise<boolean> {
-  if (config.mock.aurora) return false;
+  if (config.mock.aurora) {
+    // `false` here means "nothing matched", which the route answers 404 to — so
+    // DELETE was indistinguishable from a bad id offline. The DELETE ...
+    // RETURNING below returns rows only when one matched, and so does this.
+    const rows = initiativeBudgets.rows();
+    const at = rows.findIndex((b) => b.id === orgProjectId);
+    if (at < 0) return false;
+    rows.splice(at, 1);
+    return true;
+  }
   const rows = await exec(
     `DELETE FROM initiative_budgets WHERE org_project_id = :pid RETURNING org_project_id`,
     [s('pid', orgProjectId)],
@@ -326,9 +583,27 @@ export interface GrantRow {
 /** Envelopes, newest sprint first. Scoped to one initiative when given. */
 export async function listGrants(orgProjectId?: string): Promise<GrantRow[]> {
   if (config.mock.aurora) {
-    const named = MOCK_GRANTS.map((g) => ({
+    // Through the OVERLAY, not the raw seed. providers/grantOverlay.ts is the
+    // record of every mock create/patch/revoke, and its own header says to
+    // read it "anywhere a mutation should be visible" — this reader was left
+    // behind when sprints.ts was fixed, and it is the one the sprint-envelope
+    // brake consumes (lib/bot-runner.ts's loadEnvelope calls this function).
+    // So a release manager could re-allocate an envelope in dev:mock, see the
+    // new amount on /api/grants and /api/sprints, and have the brake keep
+    // judging the SME against the seeded amount.
+    //
+    // Imported dynamically because grantOverlay.ts imports MOCK_GRANTS from
+    // this module: a static edge back would close a cycle. Same reason the
+    // overlay lives in its own file at all.
+    const { mergedMockGrants } = await import('./grantOverlay.js');
+    // Recomputed on the way out, not trusted from the row. A seed row carries
+    // the burn as a getter (mockGrant above), but the overlay stores whatever
+    // shape a create/patch produced — a plain spread flattens the getter into
+    // a frozen number. Deriving here means every row on this path is summed
+    // from bot_runs at read time, whichever half of the merge it came from.
+    const named = mergedMockGrants().map((g) => ({
       ...g,
-      orgProjectName: MOCK_BUDGETS.find((b) => b.id === g.orgProjectId)?.name ?? null,
+      initiativeSpendInWindowUsd: mockInitiativeWindowSpendUsd(g.orgProjectId, g.startsOn, g.endsOn),
     }));
     return orgProjectId ? named.filter((g) => g.orgProjectId === orgProjectId) : named;
   }
@@ -385,28 +660,33 @@ export async function orgSummary(): Promise<OrgBudgetSummary> {
     byModel: [], byTrigger: [],
   };
   if (config.mock.aurora) {
-    // Totals sum the same fixtures, so the tiles and the table agree. Both
-    // breakdowns sum to totalSpentThisPeriodUsd as well — they are two cuts of
-    // one set of runs, and a demo where the by-model card and the by-trigger
-    // card add up to different money is the same defect this module exists to
-    // avoid. (The by-trigger manual row absorbs the remainder for that reason.)
-    const sum = (f: (b: MockBudget) => number) => MOCK_BUDGETS.reduce((n, b) => n + f(b), 0);
-    const spent = Number(sum((b) => b.spent).toFixed(2));
-    const cron = Number(sum((b) => b.maintenance).toFixed(2));
-    const marketplace = 4.31;
+    // Every number here is now one cut or another of ONE row set — this
+    // period's costed bot_runs — so the tiles, the by-model card and the
+    // by-trigger card add up to the same money by construction rather than by
+    // arithmetic that has to be kept in agreement. It used to be the latter:
+    // the by-model split was `spent * 0.72`, marketplace was a flat $4.31, and
+    // the manual row absorbed whatever was left over, with the run counts
+    // (54/14, 52/11/5) typed beside totals derived from a different fixture
+    // entirely. Deriving the totals from bot_runs would have driven that
+    // leftover negative, which is how it came to light.
+    //
+    // Allocation stays a sum over MOCK_BUDGETS: an allocation is a stored
+    // column (initiative_budgets.allocated_usd), not an aggregate of rows.
+    const runs = mockPeriodRuns();
+    const byModel = groupBy(runs, (r) => r.model);
+    const byTrigger = groupBy(runs, (r) => r.run.trigger);
+    const money = (rows: Array<{ run: BotRun }>): number =>
+      sumBy(rows.map((r) => r.run), 'costUsd', { digits: COST_SCALE });
     return {
-      totalAllocatedUsd: sum((b) => b.allocated ?? 0),
-      totalSpentThisPeriodUsd: spent,
-      totalMaintenanceUsd: cron,
-      byModel: [
-        { model: 'us.amazon.nova-lite-v1:0', spentUsd: Number((spent * 0.72).toFixed(2)), runCount: 54 },
-        { model: 'us.amazon.nova-pro-v1:0', spentUsd: Number((spent - Number((spent * 0.72).toFixed(2))).toFixed(2)), runCount: 14 },
-      ],
-      byTrigger: [
-        { trigger: 'cron', spentUsd: cron, runCount: 52 },
-        { trigger: 'marketplace', spentUsd: marketplace, runCount: 11 },
-        { trigger: 'manual', spentUsd: Number((spent - cron - marketplace).toFixed(2)), runCount: 5 },
-      ],
+      totalAllocatedUsd: sumBy(MOCK_BUDGETS, (b) => b.allocated ?? 0, { digits: 2 }),
+      totalSpentThisPeriodUsd: money(runs),
+      totalMaintenanceUsd: money(runs.filter((r) => r.run.trigger === 'cron')),
+      byModel: [...byModel].map(([model, rows]) => ({
+        model, spentUsd: money(rows), runCount: rows.length,
+      })).sort((a, b) => b.spentUsd - a.spentUsd),
+      byTrigger: [...byTrigger].map(([trigger, rows]) => ({
+        trigger, spentUsd: money(rows), runCount: rows.length,
+      })).sort((a, b) => b.spentUsd - a.spentUsd),
     };
   }
 

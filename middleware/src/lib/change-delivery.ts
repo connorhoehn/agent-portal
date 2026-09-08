@@ -17,6 +17,8 @@
 import { runDevboxShell } from './project-runner.js';
 import { openPullRequest } from './github-connector.js';
 import { buildDeliveryScript } from './delivery-script.js';
+import { config } from '../config.js';
+import { mockDeliverChange } from '../mock/devbox-delivery.js';
 import type { BedrockAgentCoreClient } from '@aws-sdk/client-bedrock-agentcore';
 
 export interface DeliveryInput {
@@ -85,6 +87,23 @@ export async function deliverChange(input: DeliveryInput): Promise<DeliveryResul
     if (!status.trim()) {
       return { ok: false, error: 'The workspace no longer holds these changes — its microVM was likely reaped. Re-run the task to regenerate them.' };
     }
+  }
+
+  // Offline the workspace check above has already run — against the fake
+  // microVM in `mock/devbox-shell.ts`, so a reaped-workspace refusal is still
+  // this function reading a checkout rather than a fixture asserting one.
+  // Everything from here needs two things this process cannot have: a
+  // credential from the vault (`borrowApiKey` throws in mock mode, on purpose)
+  // and github.com. So the branch is here, below every check and above the
+  // first thing that reaches outside.
+  if (config.mock.agentcore) {
+    return mockDeliverChange({
+      changeId: input.changeId,
+      repoFullName: input.repoFullName,
+      branch,
+      baseBranch: input.defaultBranch,
+      commitSha: input.commitSha,
+    });
   }
 
   // 2. Branch, commit, push. The token is placed in the remote URL only for the

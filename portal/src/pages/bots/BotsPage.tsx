@@ -7,18 +7,26 @@
 // governance story is unchanged — every change a bot ships still flows through
 // the Changes review queue and policy gates.
 
-import { useState } from 'react';
-import { Link } from 'react-router';
+import { useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router';
 import {
-  PageSection,
-  Card,
+  Banner,
+  Button,
   Chip,
-  ProgressBar,
+  DataTable,
   EmptyState,
+  Inline,
+  Input,
+  MetaLine,
+  PageSection,
+  ProgressBar,
+  Select,
+  type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { BotCreateWizard } from './BotCreateWizard';
+import { botListLastRanText, botsSummaryLine, filterBots, type BotStatusFilter } from './botsFormat';
 
 // ─── Types (the /api/bots contract) ──────────────────────────────────────────
 
@@ -108,42 +116,145 @@ export function when(iso: string | null): string {
   return `${Math.round(mins / 1440)}d ago`;
 }
 
+const STATUS_OPTIONS: Array<{ value: BotStatusFilter; label: string }> = [
+  { value: 'all', label: 'All bots' },
+  { value: 'enabled', label: 'Enabled' },
+  { value: 'paused', label: 'Paused' },
+];
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function BotsPage() {
   const { data, error, refresh } = useFetch<{ bots: Bot[] }>('/api/bots', 15_000);
   const [wizardOpen, setWizardOpen] = useState(false);
   const { can, ready } = useCapabilities();
-  const canManage = ready && can('ManageDevbox');
+  const canManage = ready && can('ManageBots');
+  const navigate = useNavigate();
+
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState<BotStatusFilter>('all');
 
   const bots = data?.bots ?? [];
+  const filtered = useMemo(() => filterBots(bots, { search, status }), [bots, search, status]);
+  const hasFilters = search.trim() !== '' || status !== 'all';
+
+  const columns: DataTableColumn<Bot>[] = [
+    {
+      key: 'name',
+      header: 'Bot',
+      sortable: true,
+      // A real Link, not just the row's onClick: DataTable's row-click is a
+      // bare <tr onClick> with no tabIndex/keydown handling, so a keyboard
+      // user tabbing through the filter bar would otherwise skip straight
+      // past every row with no way to open one. This is the row's one
+      // focusable, Enter/Space-activatable control; the row click stays as a
+      // mouse convenience alongside it.
+      render: (bot) => (
+        <Inline gap="xs" align="center">
+          <Link
+            to={`/admin/bots/${bot.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="text-[13px] font-semibold text-text-primary no-underline hover:text-primary hover:underline"
+          >
+            {bot.name}
+          </Link>
+          <Chip tone={TEMPLATE_TONE[bot.template]} size="xs">{bot.template}</Chip>
+        </Inline>
+      ),
+    },
+    {
+      key: 'paused',
+      header: 'Status',
+      render: (bot) => {
+        const paused = !bot.enabled || bot.pausedReason != null;
+        return paused ? (
+          <Chip tone="warning" size="xs" dot="static" title={bot.pausedReason ?? undefined}>paused</Chip>
+        ) : (
+          <Chip tone="success" size="xs" dot="static">enabled</Chip>
+        );
+      },
+    },
+    {
+      key: 'target',
+      header: 'Target',
+      render: (bot) => (
+        bot.agentProjectRepo && bot.agentProjectId ? (
+          <Link
+            to={`/admin/projects?project=${bot.agentProjectId}`}
+            onClick={(e) => e.stopPropagation()}
+            title={`Open the codebase this bot works on: ${bot.agentProjectRepo}`}
+            className="font-mono text-[11px] text-text-secondary no-underline hover:text-primary hover:underline"
+          >
+            {bot.agentProjectRepo}
+          </Link>
+        ) : bot.orgProjectId ? (
+          <Link
+            to={`/iq/projects/${bot.orgProjectId}`}
+            onClick={(e) => e.stopPropagation()}
+            title={`Open the initiative this bot serves: ${bot.orgProjectName ?? bot.orgProjectId}`}
+            className="text-[11px] text-primary no-underline hover:underline"
+          >
+            {bot.orgProjectName ?? bot.orgProjectId}
+          </Link>
+        ) : (
+          <MetaLine size="xs" tone="tertiary" items={['no target']} />
+        )
+      ),
+    },
+    { key: 'trigger', header: 'Trigger', render: (bot) => triggerSummary(bot) },
+    {
+      key: 'lastRunAt',
+      header: 'Last ran',
+      sortable: true,
+      // Same `lastRanText`/`botRunSummary` the detail page uses for its
+      // header, so the wording ("never fired") and the empty-runs
+      // definition can't diverge between the two surfaces — see
+      // `botListLastRanText`'s doc comment in botsFormat.ts for the
+      // data-level gap this does NOT close (DEFECTS.md org-leader #20).
+      render: (bot) => botListLastRanText(bot, when),
+    },
+    {
+      key: 'today',
+      header: 'Today',
+      render: (bot) => (
+        <MetaLine
+          size="xs"
+          items={[
+            `${bot.todayRunCount}/${bot.maxRunsPerDay} ${bot.todayRunCount === 1 ? 'run' : 'runs'}`,
+            `$${bot.todaySpendUsd.toFixed(2)}${bot.budgetPerDayUsd != null ? ` of $${bot.budgetPerDayUsd.toFixed(2)}` : ' spent'}`,
+          ]}
+        />
+      ),
+    },
+    {
+      key: 'budget',
+      header: 'Budget',
+      render: (bot) => (
+        bot.budgetPerDayUsd != null && bot.budgetPerDayUsd > 0 ? (
+          <ProgressBar
+            value={Math.min(bot.todaySpendUsd, bot.budgetPerDayUsd)}
+            max={bot.budgetPerDayUsd}
+            size="sm"
+            showRatio={false}
+            color={bot.todaySpendUsd >= bot.budgetPerDayUsd * 0.8 ? 'var(--color-warning)' : undefined}
+            aria-label="Today's spend vs daily budget"
+          />
+        ) : (
+          <MetaLine size="xs" tone="tertiary" items={['—']} />
+        )
+      ),
+    },
+  ];
 
   return (
     <PageSection
       title="Bots"
       description="Standing missions: pick a template, write what the bot should do, point it at a codebase or an initiative, and govern what it ships."
+      actions={canManage ? (
+        <Button variant="primary" size="sm" onClick={() => setWizardOpen(true)}>+ New bot</Button>
+      ) : undefined}
     >
-      <div className="flex items-center gap-2 mb-4">
-        {canManage && (
-          <button
-            onClick={() => setWizardOpen(true)}
-            className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer"
-          >
-            + New bot
-          </button>
-        )}
-        {bots.length > 0 && (
-          <span className="text-[11px] text-text-tertiary">
-            {bots.length} {bots.length === 1 ? 'bot' : 'bots'} · every change still passes review + policy gates
-          </span>
-        )}
-      </div>
-
-      {error && (
-        <Card padding="md" className="mb-4">
-          <div className="text-[12px] text-danger">Failed to load bots: {error}</div>
-        </Card>
-      )}
+      {error && <Banner variant="error" className="mb-4">Failed to load bots: {error}</Banner>}
 
       {!error && bots.length === 0 ? (
         <EmptyState
@@ -152,86 +263,40 @@ export default function BotsPage() {
           {...(canManage ? { actionLabel: '+ New bot', onAction: () => setWizardOpen(true) } : {})}
         />
       ) : (
-        <div className="grid gap-4 grid-cols-1 xl:grid-cols-2">
-          {bots.map((bot) => {
-            // Paused is either half: operator-disabled OR self-paused (budget).
-            const paused = !bot.enabled || bot.pausedReason != null;
-            return (
-              <Card key={bot.id} padding="none" className="overflow-hidden">
-                <div className="px-3.5 py-2.5 border-b border-border flex items-center gap-2 flex-wrap">
-                  <Link
-                    to={`/admin/bots/${bot.id}`}
-                    className="text-[13px] font-semibold text-text-primary no-underline truncate hover:text-primary hover:underline"
-                  >
-                    {bot.name}
-                  </Link>
-                  <Chip tone={TEMPLATE_TONE[bot.template]} size="xs">{bot.template}</Chip>
-                  <div className="flex-1" />
-                  {paused ? (
-                    <Chip tone="warning" size="xs" dot="static">paused</Chip>
-                  ) : (
-                    <Chip tone="success" size="xs" dot="static">enabled</Chip>
-                  )}
-                </div>
+        <>
+          <Inline wrap align="center" gap="sm" className="mb-3">
+            <Input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by name, codebase or initiative…"
+              className="min-w-[220px] flex-1"
+            />
+            <Select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as BotStatusFilter)}
+              options={STATUS_OPTIONS}
+            />
+            {hasFilters && (
+              <Button variant="ghost" size="sm" onClick={() => { setSearch(''); setStatus('all'); }}>
+                Clear filters
+              </Button>
+            )}
+            <MetaLine
+              size="xs" tone="tertiary"
+              items={[botsSummaryLine(bots.length, filtered.length), 'every change still passes review + policy gates']}
+            />
+          </Inline>
 
-                {paused && bot.pausedReason && (
-                  <div className="px-3.5 py-2 border-b border-border bg-warning-bg/40 text-[11px] text-warning">
-                    {bot.pausedReason}
-                  </div>
-                )}
-
-                <div className="px-3.5 py-2.5 border-b border-border flex items-center gap-2 flex-wrap min-w-0">
-                  {bot.agentProjectRepo && bot.agentProjectId ? (
-                    <Link
-                      to={`/admin/projects?project=${bot.agentProjectId}`}
-                      title={`Open the codebase this bot works on: ${bot.agentProjectRepo}`}
-                      className="text-[12px] font-mono text-text-secondary no-underline truncate hover:text-primary hover:underline"
-                    >
-                      {bot.agentProjectRepo}
-                    </Link>
-                  ) : bot.orgProjectId ? (
-                    <Link
-                      to={`/iq/projects/${bot.orgProjectId}`}
-                      title={`Open the initiative this bot serves: ${bot.orgProjectName ?? bot.orgProjectId}`}
-                      className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary no-underline hover:underline truncate max-w-[60%]"
-                    >
-                      {bot.orgProjectName ?? bot.orgProjectId}
-                    </Link>
-                  ) : (
-                    <span className="text-[11px] text-text-tertiary">no target</span>
-                  )}
-                  <div className="flex-1" />
-                  <span className="text-[11px] text-text-tertiary whitespace-nowrap">{triggerSummary(bot)}</span>
-                  <span className="text-[11px] text-text-tertiary whitespace-nowrap" title={bot.lastRunAt ?? undefined}>
-                    · last ran {when(bot.lastRunAt)}
-                  </span>
-                </div>
-
-                <div className="px-3.5 py-2.5">
-                  <div className="flex items-center gap-2 text-[11px] text-text-tertiary">
-                    <span>
-                      today: {bot.todayRunCount}/{bot.maxRunsPerDay} {bot.todayRunCount === 1 ? 'run' : 'runs'}
-                      {' · '}${bot.todaySpendUsd.toFixed(2)}
-                      {bot.budgetPerDayUsd != null ? ` of $${bot.budgetPerDayUsd.toFixed(2)}` : ' spent'}
-                    </span>
-                  </div>
-                  {bot.budgetPerDayUsd != null && bot.budgetPerDayUsd > 0 && (
-                    <div className="mt-1.5">
-                      <ProgressBar
-                        value={Math.min(bot.todaySpendUsd, bot.budgetPerDayUsd)}
-                        max={bot.budgetPerDayUsd}
-                        size="sm"
-                        showRatio={false}
-                        color={bot.todaySpendUsd >= bot.budgetPerDayUsd * 0.8 ? 'var(--color-warning)' : undefined}
-                        aria-label="Today's spend vs daily budget"
-                      />
-                    </div>
-                  )}
-                </div>
-              </Card>
-            );
-          })}
-        </div>
+          <DataTable<Bot>
+            data={filtered}
+            keyField={(b) => b.id}
+            onRowClick={(b) => navigate(`/admin/bots/${b.id}`)}
+            striped
+            emptyMessage={bots.length === 0 ? 'No bots yet.' : 'No bots match the current filters.'}
+            columns={columns}
+          />
+        </>
       )}
 
       <BotCreateWizard open={wizardOpen} onClose={() => { setWizardOpen(false); refresh(); }} />

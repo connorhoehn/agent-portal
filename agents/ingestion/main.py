@@ -133,7 +133,6 @@ def sync_knowledge_base(kb_slug: str = "default") -> str:
 
     Args:
         kb_slug: Registry slug of the KB to sync (default: "default" = main OrgIQ KB).
-                 Use "newsroom" to sync the newsroom articles KB.
 
     Returns:
         JSON with {job_id, status, knowledge_base_id, data_source_id}

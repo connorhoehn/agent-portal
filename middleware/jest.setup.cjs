@@ -29,6 +29,15 @@
 // listen/close boundary. This is a TEST-CLIENT resource fix: it changes no
 // production code path (the middleware sets its own agents where it cares) and
 // does not serialize the suite.
+//
+// This file only removed the socket-REUSE half of the hazard. The listen/close
+// churn itself — which also recycles ephemeral ports fast enough to hand a
+// client a port whose previous owner is mid-teardown, surfacing as
+// `Parse Error: Expected HTTP/, RTSP/ or ICE/` — is removed by
+// `src/test-support/http.ts`, which binds ONE server per test file and has
+// every `request(app)` in `src/routes/__tests__/` dispatch through it. The
+// global agent still matters for the fallback paths in that module (a base-URL
+// string, or a caller running without the setup files), so this stays.
 
 const http = require('node:http');
 const https = require('node:https');

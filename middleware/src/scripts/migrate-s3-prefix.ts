@@ -53,8 +53,6 @@ if (DRY_RUN) {
 function shouldMigrate(key: string): boolean {
   // Skip objects already under orgiq/ — they've already been migrated.
   if (key.startsWith('orgiq/')) return false;
-  // Leave newsroom prefix untouched.
-  if (key.startsWith('newsroom/')) return false;
   // Skip bare .keep markers (empty bucket placeholders).
   if (key === '.keep' || key.endsWith('/.keep')) return false;
   return true;

@@ -2,7 +2,7 @@
 // is a plain function over a ProjectSummary so it can be reasoned about (and
 // unit-tested) without mounting a page.
 
-import { relativeTime } from '../../lib/relativeTime';
+import { relativeTime } from '../../lib/relativeTime.ts';
 import type { ProjectSummary } from './types';
 
 // ─── Status ───────────────────────────────────────────────────────────────────
@@ -16,7 +16,7 @@ export const STATUS_LABELS: Record<string, string> = {
 
 /** Design-system tone, not a hex. The page used to carry a six-entry table of
  *  raw #hex triples that could not follow a theme. */
-export type ProjectTone = 'success' | 'info' | 'warning' | 'caution' | 'neutral';
+export type ProjectTone = 'success' | 'info' | 'warning' | 'caution' | 'danger' | 'neutral';
 
 const STATUS_TONES: Record<string, ProjectTone> = {
   active: 'success',
@@ -46,6 +46,7 @@ export function toneBorderTopClass(tone: ProjectTone): string {
     case 'info':    return 'border-t-info';
     case 'warning': return 'border-t-warning';
     case 'caution': return 'border-t-warning';
+    case 'danger':  return 'border-t-danger';
     default:        return 'border-t-border-emphasis';
   }
 }
@@ -108,6 +109,15 @@ export function workLine(p: ProjectSummary): string | null {
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
+/** Open stories/bugs only — for labels that already carry the points ratio,
+ *  where workLine's points suffix would say it twice. */
+export function openWorkLine(p: ProjectSummary): string | null {
+  const parts: string[] = [];
+  if (p.openStories != null) parts.push(`${p.openStories} ${p.openStories === 1 ? 'story' : 'stories'}`);
+  if (p.openBugs != null) parts.push(`${p.openBugs} ${p.openBugs === 1 ? 'bug' : 'bugs'}`);
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
+
 export function usd(n: number): string {
   return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
@@ -138,6 +148,166 @@ export function spendLine(p: ProjectSummary): { text: string; muted: boolean } {
 export const SPEND_MONTH = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
 export const SPEND_TITLE = `Agent spend so far in ${SPEND_MONTH}. Same window as the Budgets ledger, which judges it against this initiative's monthly allocation.`;
+
+// ─── Priority ─────────────────────────────────────────────────────────────────
+
+/** work_items.priority values, hottest first. Anything unknown ranks after
+ *  'low' so a null/absent priority never outranks a real one. */
+const PRIORITY_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+
+export const PRIORITY_TONE: Record<string, 'danger' | 'warning' | 'info' | 'neutral'> = {
+  critical: 'danger', high: 'warning', medium: 'info', low: 'neutral',
+};
+
+export function priorityRank(priority: string | null | undefined): number {
+  return priority != null && priority in PRIORITY_ORDER ? PRIORITY_ORDER[priority]! : 4;
+}
+
+// ─── Live agent activity ──────────────────────────────────────────────────────
+
+/** "2 agents on it now" — the real-time line. Null when nothing is running,
+ *  in which case the card falls back to spendLine's last-run stamp. */
+export function liveAgentsLabel(p: ProjectSummary): string | null {
+  const n = p.activeAgentRuns ?? 0;
+  if (n <= 0) return null;
+  return `${n} agent${n === 1 ? '' : 's'} on it now`;
+}
+
+// ─── Progress + allocation ────────────────────────────────────────────────────
+
+/** Delivery progress 0–1, or null when the rollup is absent or nothing is
+ *  planned (0/0 is "not started planning", not 0%). */
+export function pointsFraction(p: ProjectSummary): number | null {
+  if (p.pointsDone == null || p.pointsTotal == null || p.pointsTotal <= 0) return null;
+  return Math.min(1, p.pointsDone / p.pointsTotal);
+}
+
+/** MTD spend over the monthly allocation, uncapped (1.2 = 20% over). Null when
+ *  no allocation exists — nothing to be over. */
+export function allocationFraction(p: ProjectSummary): number | null {
+  if (p.allocatedUsd == null || p.allocatedUsd <= 0) return null;
+  return (p.agentSpendUsd ?? 0) / p.allocatedUsd;
+}
+
+// ─── Card accent ──────────────────────────────────────────────────────────────
+
+/**
+ * The card's top-stripe tone, driven by what is GOING ON, not by the status
+ * enum — status made every in-progress card identically blue, which said
+ * nothing. Hottest condition wins: money trouble and critical work paint
+ * danger, high priority paints warning, live agents paint success, and only
+ * a genuinely quiet card falls back to its status tone.
+ */
+export function cardTone(p: ProjectSummary): ProjectTone {
+  const burn = allocationFraction(p);
+  if (burn != null && burn > 1) return 'danger';
+  if (p.priority === 'critical') return 'danger';
+  if (p.priority === 'high') return 'warning';
+  if ((p.activeAgentRuns ?? 0) > 0) return 'success';
+  return statusTone(p.status);
+}
+
+// ─── Sorting + search ─────────────────────────────────────────────────────────
+
+export type ProjectSortKey = 'activity' | 'priority' | 'progress' | 'spend' | 'name';
+
+export const SORT_OPTIONS: Array<{ value: ProjectSortKey; label: string }> = [
+  { value: 'activity', label: 'Live activity' },
+  { value: 'priority', label: 'Priority' },
+  { value: 'progress', label: 'Progress' },
+  { value: 'spend',    label: 'Agent spend' },
+  { value: 'name',     label: 'Name' },
+];
+
+const time = (iso: string | null | undefined) => (iso ? new Date(iso).getTime() : 0);
+
+export function compareProjects(a: ProjectSummary, b: ProjectSummary, key: ProjectSortKey): number {
+  switch (key) {
+    case 'activity':
+      // Running agents first, then whoever an agent touched most recently.
+      return (b.activeAgentRuns ?? 0) - (a.activeAgentRuns ?? 0)
+        || time(b.lastActivityAt) - time(a.lastActivityAt);
+    case 'priority':
+      return priorityRank(a.priority) - priorityRank(b.priority)
+        || (b.activeAgentRuns ?? 0) - (a.activeAgentRuns ?? 0);
+    case 'progress': {
+      // Furthest-behind first — a progress sort is for finding what needs
+      // attention, and 90%-done initiatives are not it.
+      const fa = pointsFraction(a); const fb = pointsFraction(b);
+      if (fa == null && fb == null) return 0;
+      if (fa == null) return 1;
+      if (fb == null) return -1;
+      return fa - fb;
+    }
+    case 'spend':
+      return (b.agentSpendUsd ?? 0) - (a.agentSpendUsd ?? 0);
+    case 'name':
+      return a.name.localeCompare(b.name);
+  }
+}
+
+/** Case-insensitive match over the fields a person actually types: name, key,
+ *  owner, SMEs, repo. */
+export function matchesQuery(p: ProjectSummary, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const hay = [
+    p.name,
+    deriveProjectKey(p.id, p.name),
+    p.ownerName ?? '',
+    ...(p.smeNames ?? []),
+    p.repoFullName ?? '',
+  ].join(' ').toLowerCase();
+  return hay.includes(q);
+}
+
+// ─── Program rollup (the KPI strip) ───────────────────────────────────────────
+
+export interface ProgramTotals {
+  inFlight: number;
+  planning: number;
+  agentsActive: number;
+  /** Count of initiatives (within this same set) with at least one active
+   *  agent run — the number the "Agents active" tile's hint describes. Kept
+   *  distinct from `inFlight` (initiatives whose *status* is active/
+   *  in_progress): those are different questions, and a tile that answers
+   *  one with a hint answering the other reads as self-contradictory (e.g.
+   *  "Agents active 0 · 1 in flight" when zero agents are running but one
+   *  initiative happens to be status=active). */
+  agentsActiveInitiatives: number;
+  openStories: number;
+  openBugs: number;
+  criticalCount: number;
+  pointsDone: number;
+  pointsTotal: number;
+  spendUsd: number;
+  allocatedUsd: number;
+}
+
+/** Sums the initiatives currently loaded (post-scope, pre-status-filter), so
+ *  the tiles describe the program the list is showing. Every field is derived
+ *  from the SAME `projects` array — there is no second, differently-filtered
+ *  source feeding any one tile's value or hint. */
+export function programTotals(projects: ProjectSummary[]): ProgramTotals {
+  return projects.reduce<ProgramTotals>((acc, p) => {
+    const s = normalizeStatus(p.status);
+    const active = p.activeAgentRuns ?? 0;
+    return {
+      inFlight: acc.inFlight + (s === 'active' || s === 'in_progress' ? 1 : 0),
+      planning: acc.planning + (s === 'planning' ? 1 : 0),
+      agentsActive: acc.agentsActive + active,
+      agentsActiveInitiatives: acc.agentsActiveInitiatives + (active > 0 ? 1 : 0),
+      openStories: acc.openStories + (p.openStories ?? 0),
+      openBugs: acc.openBugs + (p.openBugs ?? 0),
+      criticalCount: acc.criticalCount + (p.priority === 'critical' ? 1 : 0),
+      pointsDone: acc.pointsDone + (p.pointsDone ?? 0),
+      pointsTotal: acc.pointsTotal + (p.pointsTotal ?? 0),
+      spendUsd: acc.spendUsd + (p.agentSpendUsd ?? 0),
+      allocatedUsd: acc.allocatedUsd + (p.allocatedUsd ?? 0),
+    };
+  }, { inFlight: 0, planning: 0, agentsActive: 0, agentsActiveInitiatives: 0, openStories: 0, openBugs: 0,
+       criticalCount: 0, pointsDone: 0, pointsTotal: 0, spendUsd: 0, allocatedUsd: 0 });
+}
 
 // ─── Filtering ────────────────────────────────────────────────────────────────
 

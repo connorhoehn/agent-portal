@@ -11,6 +11,12 @@
 
 import { exec } from './aurora.js';
 import { config } from '../config.js';
+// The offline findings board and its stamps. The rows used to be a bare
+// module-level array seeded by a local `hoursAgo(h)` helper built on
+// `Date.now()`; they live behind a fixture now, so `POST /api/__mock/reset`
+// undoes a demo dismissal and `freezeClock` can pin what a mock sweep wrote.
+import { mockFindings, nextMockFindingId } from '../mock/org-findings.js';
+import { clock } from '../mock/core/index.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 
 export type SweepName = 'bus_factor' | 'stale_docs' | 'orphan_decisions';
@@ -39,6 +45,31 @@ interface DraftFinding {
   entityId: string;
   evidence: Record<string, unknown>;
   fingerprint: string;
+}
+
+/**
+ * The initiative a finding concerns, when it names one — normalized across
+ * sweeps that do not agree on a key for it: `bus_factor` lists `initiatives`
+ * (an array, since a skill can back several), `stale_docs` names a single
+ * `initiative`, `orphan_decisions` a `candidateInitiative` (a suggestion, not
+ * yet a real link), and a lab signal carries `initiativeId`. Checked in that
+ * order so a confirmed link always wins over a mere candidate.
+ *
+ * Returns null when the finding carries no initiative context at all (a
+ * skill-coverage finding with only holder ids, say) — "no initiative context"
+ * is not "no initiative", and a caller that grant-scopes on this (promoting a
+ * finding into a job, same as dispatching a work item) must treat null as
+ * unscoped rather than fabricate a denial it cannot support.
+ */
+export function initiativeIdForFinding(finding: Pick<Finding, 'evidence'>): string | null {
+  const ev = finding.evidence ?? {};
+  for (const key of ['initiativeId', 'initiative', 'candidateInitiative']) {
+    const v = ev[key];
+    if (typeof v === 'string' && v) return v;
+  }
+  const list = ev['initiatives'];
+  if (Array.isArray(list) && typeof list[0] === 'string' && list[0]) return list[0];
+  return null;
 }
 
 function s(name: string, value: string): SqlParameter {
@@ -279,7 +310,15 @@ export const SWEEP_NAMES = Object.keys(SWEEPS) as SweepName[];
 export async function runSweep(name: SweepName): Promise<{
   sweep: SweepName; found: number; created: number; updated: number; resolved: number;
 }> {
-  if (config.mock.aurora) return { sweep: name, found: 0, created: 0, updated: 0, resolved: 0 };
+  if (config.mock.aurora) {
+    // The sweeps read Aurora; in dev:mock a run re-observes the seeded rows
+    // for that sweep (last_seen bumps, nothing created) so the button's
+    // result line is honest about what happened.
+    const now = clock.nowIso();
+    const mine = mockFindings.filter((f) => f.sweep === name && f.status !== 'dismissed');
+    for (const f of mine) f.lastSeenAt = now;
+    return { sweep: name, found: mine.length, created: 0, updated: mine.length, resolved: 0 };
+  }
 
   const drafts = await SWEEPS[name]();
   let created = 0;
@@ -401,14 +440,13 @@ export async function runAllSweeps(): Promise<SweepRunReport> {
 // abandoned-job release) applies to a lab signal for free, because it is not
 // a new kind of thing; it is a finding from a new source.
 //
-// Mock mode gets a real in-memory store (unlike the scheduled sweeps, which
-// read Aurora and honestly no-op without it): the whole point of a signal is
-// an agent ASSERTING it, and that works fine against memory in dev:mock.
+// Mock mode files a signal into the same board every other finding lives on
+// (mock/org-findings.ts) rather than a parallel store: the whole point of a
+// signal is an agent ASSERTING it, and that works fine against a fixture in
+// dev:mock — including the re-file-updates-last_seen path, which is the only
+// half of the ON CONFLICT statement below a demo ever exercises.
 
 export const LAB_SWEEP = 'lab-signal';
-
-const MOCK_FINDINGS: Finding[] = [];
-let mockFindingSeq = 0;
 
 export interface LabSignalInput {
   severity: 'critical' | 'warning' | 'info';
@@ -429,10 +467,12 @@ export async function fileLabSignal(input: LabSignalInput): Promise<Finding> {
     ...(input.repo ? { repo: input.repo } : {}),
     ...(input.initiativeId ? { initiativeId: input.initiativeId } : {}),
   };
-  const now = new Date().toISOString();
+  // Clock, not `new Date()`: only the mock branch below reads this (the Aurora
+  // statement stamps with NOW()), so it is a fixture write like any other.
+  const now = clock.nowIso();
 
   if (config.mock.aurora) {
-    const existing = MOCK_FINDINGS.find(
+    const existing = mockFindings.find(
       (f) => f.sweep === LAB_SWEEP && f.fingerprint === input.fingerprint,
     );
     if (existing) {
@@ -445,7 +485,7 @@ export async function fileLabSignal(input: LabSignalInput): Promise<Finding> {
       return existing;
     }
     const finding: Finding = {
-      id: `find-mock-${++mockFindingSeq}`,
+      id: nextMockFindingId(),
       sweep: LAB_SWEEP,
       severity: input.severity,
       title: input.title,
@@ -459,7 +499,7 @@ export async function fileLabSignal(input: LabSignalInput): Promise<Finding> {
       lastSeenAt: now,
       fingerprint: input.fingerprint,
     };
-    MOCK_FINDINGS.push(finding);
+    mockFindings.push(finding);
     return finding;
   }
 
@@ -489,7 +529,7 @@ export async function fileLabSignal(input: LabSignalInput): Promise<Finding> {
 export async function listFindings(opts: { status?: string; sweep?: string; limit?: number } = {}): Promise<Finding[]> {
   if (config.mock.aurora) {
     const sevRank = { critical: 0, warning: 1, info: 2 } as const;
-    return MOCK_FINDINGS
+    return mockFindings
       .filter((f) => (!opts.status || f.status === opts.status) && (!opts.sweep || f.sweep === opts.sweep))
       .sort((a, b) =>
         (sevRank[a.severity] ?? 3) - (sevRank[b.severity] ?? 3) ||
@@ -531,7 +571,7 @@ export async function listFindings(opts: { status?: string; sweep?: string; limi
 
 /** One finding by id, or null. */
 export async function getFinding(id: string): Promise<Finding | null> {
-  if (config.mock.aurora) return MOCK_FINDINGS.find((f) => f.id === id) ?? null;
+  if (config.mock.aurora) return mockFindings.find((f) => f.id === id) ?? null;
   const rows = await exec(
     `SELECT id, sweep, severity, title, detail, entity_type, entity_id,
             evidence::text AS evidence, status, job_id,
@@ -597,7 +637,7 @@ export async function reopenFindingForJob(jobId: string): Promise<number> {
 
 export async function setFindingStatus(id: string, status: 'open' | 'dismissed' | 'promoted' | 'resolved', jobId?: string): Promise<boolean> {
   if (config.mock.aurora) {
-    const f = MOCK_FINDINGS.find((x) => x.id === id);
+    const f = mockFindings.find((x) => x.id === id);
     if (!f) return false;
     f.status = status;
     if (jobId) f.jobId = jobId;

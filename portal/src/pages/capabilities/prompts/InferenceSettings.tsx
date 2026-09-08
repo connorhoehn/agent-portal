@@ -1,5 +1,6 @@
 import { Card, FormField, FormRow, Input, SectionLabel, Select, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { DEFAULT_TEMPERATURE, MAX_TOKEN_OPTIONS } from './promptFormat';
+import { RangeSliderFrame } from '../../RangeSliderFrame';
 
 /**
  * Temperature / max tokens / model ID.
@@ -39,27 +40,19 @@ export function InferenceSettings({
         <SectionLabel>{title}</SectionLabel>
         <FormRow stackBelow="md">
           <FormField label="Temperature">
-            {({ labelId: _labelId, ...field }) => (
-              <Stack gap="xs">
-                <span className="text-right text-[11px] font-semibold tabular-nums text-text-secondary">
-                  {shownTemperature.toFixed(2)}
-                </span>
-                {/* A raw range input: the library's Slider is exported from the
-                    root entry only, and pulling the root entry into this lazy
-                    chunk drags the whole video/yjs graph with it. Reported to
-                    the coordinator — swap to <Slider> once it is on /shared. */}
-                <input
-                  {...field}
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={shownTemperature}
-                  onChange={e => onChange({ temperature: e.target.value })}
-                  disabled={disabled}
-                  className="w-full accent-[var(--color-optimize)]"
-                />
-              </Stack>
+            {() => (
+              <RangeSliderFrame
+                label=""
+                ariaLabel="Temperature"
+                min={0}
+                max={1}
+                step={0.01}
+                value={shownTemperature}
+                onChange={v => onChange({ temperature: String(v) })}
+                valueLabel={shownTemperature.toFixed(2)}
+                disabled={disabled}
+                className="w-full [&>input]:w-full [&>input]:accent-[var(--color-optimize)] [&>span]:min-w-8 [&>span]:text-[11px] [&>span]:font-semibold"
+              />
             )}
           </FormField>
 

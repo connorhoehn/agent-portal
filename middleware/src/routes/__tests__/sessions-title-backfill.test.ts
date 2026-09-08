@@ -32,7 +32,7 @@ jest.mock('@aws-sdk/client-bedrock-runtime', () => ({
 }));
 
 import express from 'express';
-import request from 'supertest';
+import request from '../../test-support/http.js';
 import { sessionsRouter } from '../sessions.js';
 import { _resetTitleState, getSessionTitle } from '../../lib/session-titles.js';
 

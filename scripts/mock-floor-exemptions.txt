@@ -1,0 +1,17 @@
+# Routes that may 500 under `dev:mock` — rule 4's written exemption list.
+#
+# FORMAT:  <METHOD> <path> | why this genuinely cannot have a mock branch
+#
+# A bare route with no reason after the `|` is NOT an exemption; the validator
+# fails it, on the same contract as mock/core/wire/allow.ts. The bar is "this
+# call has no meaning without a real external credential", not "nobody has got
+# to it yet" — Aurora, SSM, CloudWatch, Bedrock and AgentCore are all mocked
+# elsewhere in this middleware, so a route reaching those is a gap, not an
+# exemption. An entry that stops 500ing is reported as stale and must be
+# deleted.
+
+# (Currently empty. The two GitHub-credential routes that lived here —
+# `GET /api/connections/:name/github/orgs` and `/repos` — stopped 500ing once
+# src/mock/github.ts gave them an offline answer, so rule 4 reported them stale
+# and they were deleted. That is the contract working: an exemption may not
+# outlive the problem it excuses.)

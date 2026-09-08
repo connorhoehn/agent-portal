@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Build + push all 6 OrgIQ agent images in parallel.
+# Build + push all OrgIQ agent images in parallel.
 #
 # Prerequisite: agents/base/build.sh has been run once so orgiq-agent-base:latest
 # exists in ECR. Per-agent builds extend that base, so each is just a COPY layer.
 #
 # Usage:
-#   ./agents/build-all.sh                              # all 6
+#   ./agents/build-all.sh                              # all agents
 #   ./agents/build-all.sh supervisor search            # only listed
 #   AGENTS="supervisor search" ./agents/build-all.sh   # via env
 set -euo pipefail
@@ -18,13 +18,13 @@ BASE="${ECR_HOST}/orgiq-agent-base:latest"
 cd "$(dirname "$0")/.."
 ROOT=$(pwd)
 
-# Resolve agent list from args, env, or default to all 6.
+# Resolve agent list from args, env, or default to every agent.
 if [ "$#" -gt 0 ]; then
   AGENTS=("$@")
 elif [ -n "${AGENTS:-}" ]; then
   read -ra AGENTS <<< "$AGENTS"
 else
-  AGENTS=(supervisor search scoring advisor ingestion graph-builder news-researcher news-brief news-headline)
+  AGENTS=(supervisor search scoring advisor ingestion graph-builder assessment-scorer assessment-drafter)
 fi
 
 echo "Logging in to ECR..."

@@ -2,6 +2,7 @@
 // headline.
 
 import { Card, Chip, Inline, InlinePlaceholder, MetaLine, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { T } from './Text';
 import { DECISION_TONE } from './projectFormat';
 import type { ProjectDecision } from './types';
 
@@ -22,15 +23,15 @@ export function DecisionQueue({ decisions }: { decisions: ProjectDecision[] }) {
               <Chip tone={DECISION_TONE[d.status] ?? 'warning'} size="xs" uppercase>
                 {d.status}
               </Chip>
-              <span className="min-w-0 flex-1 text-[14px] font-semibold text-text-primary">
+              <T className="min-w-0 flex-1 text-[14px] font-semibold text-text-primary">
                 {d.topic}
-              </span>
+              </T>
               {d.requiredRole && (
                 <Chip tone="purple" size="xs" className="shrink-0">needs {d.requiredRole}</Chip>
               )}
             </Inline>
             {d.summary && (
-              <p className="m-0 text-[13px] leading-relaxed text-text-secondary">{d.summary}</p>
+              <T as="p" className="m-0 text-[13px] leading-relaxed text-text-secondary">{d.summary}</T>
             )}
             <MetaLine
               items={[

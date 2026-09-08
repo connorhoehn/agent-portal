@@ -4,7 +4,20 @@
 // the rejection text surfaces inline.
 
 import { useEffect, useMemo, useState } from 'react';
-import { TagEditor, CollapsibleSection, PageSection } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button,
+  Card,
+  Chip,
+  CollapsibleSection,
+  ErrorState,
+  Inline,
+  InlineAlert,
+  LoadingState,
+  PageSection,
+  SectionLabel,
+  Stack,
+  TagEditor,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 
@@ -43,8 +56,20 @@ function SchemaPage() {
     setPendingActions(null);
   }, [data]);
 
-  if (isLoading) return <PageSection title="Schema"><div style={{ color: 'var(--color-text-tertiary)' }}>Loading schema…</div></PageSection>;
-  if (error) return <PageSection title="Schema"><div style={{ color: 'var(--color-error, #ef4444)' }}>Error: {error}</div></PageSection>;
+  if (isLoading) {
+    return (
+      <PageSection title="Schema">
+        <LoadingState label="Loading schema…" />
+      </PageSection>
+    );
+  }
+  if (error) {
+    return (
+      <PageSection title="Schema">
+        <ErrorState title="Could not load schema" body={error} />
+      </PageSection>
+    );
+  }
   if (!data) return null;
 
   const namespace = data.schema?.[NS];
@@ -106,140 +131,68 @@ function SchemaPage() {
       actions={
         canEdit && dirty ? (
           <>
-            <button onClick={discard} disabled={busy} style={btnSecondary}>Discard</button>
-            <button onClick={save} disabled={busy} style={btnPrimary}>Save changes</button>
+            <Button variant="secondary" onClick={discard} disabled={busy}>Discard</Button>
+            <Button onClick={save} disabled={busy}>Save changes</Button>
           </>
         ) : undefined
       }
     >
-      {errMsg && <div style={errorBanner}>{errMsg}</div>}
+      {errMsg && <InlineAlert tone="error">{errMsg}</InlineAlert>}
 
-      <article style={card}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Namespace: <code>{NS}</code></div>
+      <Card>
+        <Stack gap="lg">
+          <Inline gap="xs" className="text-[13px] font-semibold">
+            Namespace: <code>{NS}</code>
+          </Inline>
 
-        <div style={{ marginBottom: 20 }}>
-          <div style={sectionLabel}>Entity types</div>
-          <div style={chipRow}>
-            {entityTypes.length > 0
-              ? entityTypes.map(t => <span key={t} style={chip}>{t}</span>)
-              : <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>(none)</span>}
-          </div>
-          <div style={hint}>
-            Entity types are fixed in this schema. Edit raw JSON via the AVP API to add custom entities.
-          </div>
-        </div>
+          <Stack gap="xs">
+            <SectionLabel>Entity types</SectionLabel>
+            <Inline gap="xs" wrap>
+              {entityTypes.length > 0
+                ? entityTypes.map(t => <Chip key={t} size="xs" mono>{t}</Chip>)
+                : <Inline as="span" className="text-[12px] text-text-tertiary">(none)</Inline>}
+            </Inline>
+            <Stack as="p" gap="none" className="m-0 text-[11px] text-text-tertiary">
+              Entity types are fixed in this schema. Edit raw JSON via the AVP API to add custom entities.
+            </Stack>
+          </Stack>
 
-        <div>
-          <div style={sectionLabel}>Actions</div>
-          {canEdit ? (
-            <>
-              <TagEditor
-                value={actions}
-                onChange={setActions}
-                placeholder="add action…"
-                lowercase={false}
-              />
-              <div style={hint}>
-                Type an action name and press Enter. New actions inherit appliesTo: {DEFAULT_APPLIES_TO.principalTypes.join(', ')} → {DEFAULT_APPLIES_TO.resourceTypes.join(', ')}.
-              </div>
-            </>
-          ) : (
-            <div style={chipRow}>
-              {actions.length > 0
-                ? actions.map(a => <span key={a} style={chip}>{a}</span>)
-                : <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>(none)</span>}
-            </div>
-          )}
-        </div>
-      </article>
+          <Stack gap="xs">
+            <SectionLabel>Actions</SectionLabel>
+            {canEdit ? (
+              <>
+                <TagEditor
+                  value={actions}
+                  onChange={setActions}
+                  placeholder="add action…"
+                  lowercase={false}
+                />
+                <Stack as="p" gap="none" className="m-0 text-[11px] text-text-tertiary">
+                  Type an action name and press Enter. New actions inherit appliesTo: {DEFAULT_APPLIES_TO.principalTypes.join(', ')} → {DEFAULT_APPLIES_TO.resourceTypes.join(', ')}.
+                </Stack>
+              </>
+            ) : (
+              <Inline gap="xs" wrap>
+                {actions.length > 0
+                  ? actions.map(a => <Chip key={a} size="xs" mono>{a}</Chip>)
+                  : <Inline as="span" className="text-[12px] text-text-tertiary">(none)</Inline>}
+              </Inline>
+            )}
+          </Stack>
+        </Stack>
+      </Card>
 
       <CollapsibleSection title="Raw schema (JSON)" defaultOpen={false}>
-        <pre style={preBlock}>{JSON.stringify(data.schema, null, 2)}</pre>
+        <Stack
+          as="pre"
+          gap="none"
+          className="m-0 overflow-x-auto whitespace-pre-wrap rounded-[4px] border border-border bg-surface-hover p-3 font-mono text-[12px] leading-relaxed text-text-primary"
+        >
+          {JSON.stringify(data.schema, null, 2)}
+        </Stack>
       </CollapsibleSection>
     </PageSection>
   );
 }
-
-const card: React.CSSProperties = {
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-md)',
-  padding: 16,
-};
-
-const sectionLabel: React.CSSProperties = {
-  fontSize: 10,
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-  color: 'var(--color-text-tertiary)',
-  marginBottom: 8,
-};
-
-const chipRow: React.CSSProperties = {
-  display: 'flex',
-  flexWrap: 'wrap',
-  gap: 6,
-};
-
-const chip: React.CSSProperties = {
-  fontSize: 11,
-  padding: '2px 8px',
-  background: 'var(--color-surface-hover)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 999,
-  color: 'var(--color-text-primary)',
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-};
-
-const hint: React.CSSProperties = {
-  marginTop: 6,
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-};
-
-const preBlock: React.CSSProperties = {
-  margin: '6px 0 0',
-  padding: 12,
-  background: 'var(--color-surface-hover)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm, 4px)',
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-  fontSize: 12,
-  lineHeight: 1.5,
-  color: 'var(--color-text-primary)',
-  whiteSpace: 'pre-wrap',
-  overflowX: 'auto',
-};
-
-const btnPrimary: React.CSSProperties = {
-  padding: '5px 12px',
-  background: 'var(--color-primary)',
-  color: 'white',
-  border: 'none',
-  borderRadius: 'var(--radius-sm, 4px)',
-  fontSize: 12,
-  fontWeight: 500,
-  cursor: 'pointer',
-};
-
-const btnSecondary: React.CSSProperties = {
-  padding: '5px 12px',
-  background: 'var(--color-surface-hover)',
-  color: 'var(--color-text-primary)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm, 4px)',
-  fontSize: 12,
-  cursor: 'pointer',
-};
-
-const errorBanner: React.CSSProperties = {
-  padding: 10,
-  background: '#fee2e2',
-  border: '1px solid #ef4444',
-  borderRadius: 'var(--radius-md)',
-  color: '#991b1b',
-  fontSize: 12,
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-};
 
 export default SchemaPage;

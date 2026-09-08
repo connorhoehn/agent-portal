@@ -44,7 +44,7 @@ jest.mock('@aws-sdk/client-verifiedpermissions', () => ({
 }));
 
 import express from 'express';
-import request from 'supertest';
+import request from '../../test-support/http.js';
 import { config } from '../../config.js';
 import { sessionRouter } from '../session.js';
 import { requireAction, clearAuthzCache, CAPABILITY_ACTIONS } from '../../lib/authz.js';
@@ -123,7 +123,7 @@ describe('GET /api/session/capabilities', () => {
     expect(res.body.actions['ManageDevbox']).toBe(true);
     expect(res.body.actions['Search']).toBe(true);
     expect(res.body.actions['ManageUsers']).toBe(false);
-    expect(res.body.actions['PublishArticle']).toBe(false);
+    expect(res.body.actions['ApproveTransaction']).toBe(false);
   });
 
   it('degrades (per-action false + degraded flag) when AVP is down — never 500', async () => {

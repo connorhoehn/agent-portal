@@ -38,7 +38,6 @@ export type { KbRegistryEntry } from './kb/types';
 const TENANT_FILTERS: { value: TenantFilter; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'orgiq', label: 'orgiq' },
-  { value: 'newsroom', label: 'newsroom' },
 ];
 
 export function KBRegistryPage() {

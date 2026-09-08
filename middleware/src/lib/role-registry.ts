@@ -20,10 +20,12 @@ export interface RoleDefinition {
 const PRESENTATION: Record<string, { label: string; summary: string }> = {
   member: { label: 'Member', summary: 'Rank-and-file IC. Search the org, see basic profile pages.' },
   sme: { label: 'SME', summary: 'Subject-matter expert on initiatives. Dispatches agent work against a granted budget envelope.' },
+  'program-owner': { label: 'Program Owner', summary: 'Solution/program owner. Runs the delivery cadence — sprints, bots, the whole board — and allocates the monthly budget and sprint envelopes on the initiatives they own. No leaderboard access, no identity admin, and never transaction approval.' },
   'org-leader': { label: 'Org Leader', summary: 'VPs / Directors. Full org visibility, leaderboards, and transaction approval over $10k.' },
   'hr-admin': { label: 'HR Admin', summary: 'People Ops. Sees salary + performance, edits guardrails/policies, manages users and ingest.' },
-  reporter: { label: 'Reporter', summary: 'Files stories and pitches. No publish authority.' },
-  editor: { label: 'Editor', summary: 'Desk lead. Publishes, manages the newsroom KB, sees newsroom observability.' },
+  assessor: { label: 'Assessor', summary: 'Scores dimensions and manages submission intake. No exception approval or report publishing.' },
+  'lead-assessor': { label: 'Lead Assessor', summary: 'Approves N/A exceptions, publishes reports, curates the assessment knowledge base.' },
+  'program-lead': { label: 'Program Lead', summary: 'Owns the assessment program — rubric target level, configuration, and user management.' },
   admin: { label: 'Admin', summary: 'Cross-tenant platform operator. Full access; the only role that can masquerade.' },
 };
 

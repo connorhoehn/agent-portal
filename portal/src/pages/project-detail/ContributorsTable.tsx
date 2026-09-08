@@ -3,11 +3,15 @@
 // Previously a hand-built <table> with inline cell padding, JS mouseenter/leave
 // row hovering, and a <style> tag injected into the body to give the name cell
 // a focus ring — because an inline style object can't carry :focus-visible.
-// DataTable owns the chrome and the name is a real <Button>, so the ring comes
-// from the design system and the row stays reachable from the keyboard.
+// DataTable owns the chrome now, so focus styling comes from the design
+// system and the row stays reachable from the keyboard. The name cell is a
+// PersonRef — the same link-plus-people-card every other person on this page
+// renders as.
 
-import { Avatar, Button, DataTable, Inline, InlinePlaceholder, ProgressBar } from '@connorhoehnslalom/ui-components/shared';
+import { DataTable, Inline, InlinePlaceholder, ProgressBar } from '@connorhoehnslalom/ui-components/shared';
 import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
+import { PersonRef } from './PersonRef';
+import { T } from './Text';
 import { RoleCycleChip } from '../../components/marketplace/GovernanceEditor';
 import type { ProjectContributor } from './types';
 
@@ -30,25 +34,31 @@ export function ContributorsTable({
 
   const columns: DataTableColumn<ProjectContributor>[] = [
     {
+      // The name is a LINK to the person's graph node, and hovering it opens
+      // the people card. The row click still opens the in-place modal — the
+      // two answer different questions ("remind me who this is", without
+      // leaving, versus "take me to them"), and collapsing them into one
+      // control is what left names unclickable everywhere else.
       key: 'name', header: 'Name', sortable: true,
       render: (c) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="px-0 font-medium"
-          aria-label={`View ${c.name}`}
-          onClick={(e) => { e.stopPropagation(); onOpenPerson(c.personId, c.role); }}
-        >
-          <Inline gap="xs" align="center" wrap={false}>
-            <Avatar name={c.name} size={24} />
-            <span className="text-[13px]">{c.name}</span>
-          </Inline>
-        </Button>
+        <span onClick={(e) => e.stopPropagation()}>
+          <PersonRef
+            personId={c.personId}
+            name={c.name}
+            title={c.title}
+            avatarSize={24}
+            className="text-[13px] font-medium text-text-primary"
+          />
+        </span>
       ),
     },
     {
+      key: 'personId', header: 'ID', width: '92px', sortable: true,
+      render: (c) => <T className="font-mono text-[11px] text-text-tertiary">{c.personId}</T>,
+    },
+    {
       key: 'title', header: 'Title', sortable: true,
-      render: (c) => <span className="text-text-secondary">{c.title ?? '—'}</span>,
+      render: (c) => <T className="text-text-secondary">{c.title ?? '—'}</T>,
     },
     {
       key: 'role', header: 'Role',
@@ -74,9 +84,9 @@ export function ContributorsTable({
             showRatio={false}
             aria-label={`${(c.weight * 100).toFixed(0)}% attribution`}
           />
-          <span className="min-w-[36px] text-right text-[13px] font-medium text-text-secondary tabular-nums">
+          <T className="min-w-[36px] text-right text-[13px] font-medium text-text-secondary tabular-nums">
             {(c.weight * 100).toFixed(0)}%
-          </span>
+          </T>
         </Inline>
       ),
     },
@@ -84,6 +94,7 @@ export function ContributorsTable({
 
   return (
     <DataTable
+      striped
       data={contributors}
       columns={columns}
       keyField={(c) => c.personId}

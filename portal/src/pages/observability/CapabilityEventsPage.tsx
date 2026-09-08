@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import type { CSSProperties } from 'react';
 import { Link } from 'react-router';
 import {
   Card,
+  Select,
   Table,
   TableHead,
   TableBody,
@@ -13,6 +13,7 @@ import {
   PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { T } from './Text';
 
 type CapabilityKind =
   | 'browser_navigate'
@@ -56,36 +57,30 @@ function CapabilityEventsPage() {
       title="Capability Events"
       description="Browser + code interpreter activity · live · 5s refresh"
       actions={
-        <select
+        <Select
+          size="sm"
           value={kindFilter}
           onChange={(e) => setKindFilter(e.target.value as KindFilter)}
-          style={selectStyle}
-        >
-          <option value="all">All kinds</option>
-          <option value="browser">Browser</option>
-          <option value="code">Code execute</option>
-        </select>
+          options={[
+            { value: 'all', label: 'All kinds' },
+            { value: 'browser', label: 'Browser' },
+            { value: 'code', label: 'Code execute' },
+          ]}
+        />
       }
     >
       <Card padding="md">
         {filtered.length === 0 ? (
-          <div
-            style={{
-              padding: 24,
-              textAlign: 'center',
-              fontSize: 12,
-              color: 'var(--color-text-tertiary)',
-            }}
-          >
+          <T as="div" className="p-6 text-center text-[12px] text-[var(--color-text-tertiary)]">
             {events.length === 0 ? (
               <>
                 No browser or code-interpreter activity yet. Trigger some from the{' '}
-                <Link to="/admin/capabilities" style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>
+                <Link to="/admin/capabilities" className="text-[var(--color-primary)] no-underline">
                   Capabilities page
                 </Link>.
               </>
             ) : 'No events match the current filter.'}
-          </div>
+          </T>
         ) : (
           <Table>
             <TableHead>
@@ -103,13 +98,7 @@ function CapabilityEventsPage() {
                 const detailText = formatCapDetail(ev);
                 return (
                   <TableRow key={ev.id}>
-                    <TableTd
-                      style={{
-                        fontSize: 11,
-                        color: 'var(--color-text-tertiary)',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
+                    <TableTd className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap">
                       {new Date(ev.startedAt).toLocaleTimeString()}
                     </TableTd>
                     <TableTd>
@@ -117,28 +106,16 @@ function CapabilityEventsPage() {
                         {ev.kind.replace('_', ' ')}
                       </Chip>
                     </TableTd>
-                    <TableTd
-                      style={{
-                        fontSize: 10,
-                        fontFamily: 'monospace',
-                        color: 'var(--color-text-tertiary)',
-                      }}
-                    >
+                    <TableTd className="text-[10px] font-mono text-[var(--color-text-tertiary)]">
                       {ev.sessionId ? ev.sessionId.slice(0, 12) + '…' : '—'}
                     </TableTd>
                     <TableTd
-                      style={{
-                        fontSize: 12,
-                        maxWidth: 380,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
+                      className="text-[12px] max-w-[380px] overflow-hidden text-ellipsis whitespace-nowrap"
                       title={detailText}
                     >
                       {detailText}
                     </TableTd>
-                    <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                    <TableTd className="text-[11px] text-[var(--color-text-tertiary)]">
                       {(ev.durationMs / 1000).toFixed(2)}s
                     </TableTd>
                     <TableTd>
@@ -182,14 +159,5 @@ function formatCapDetail(ev: CapabilityEvent): string {
       return JSON.stringify(d);
   }
 }
-
-const selectStyle: CSSProperties = {
-  fontSize: 12,
-  padding: '4px 8px',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm)',
-  background: 'var(--color-surface)',
-  color: 'var(--color-text-primary)',
-};
 
 export default CapabilityEventsPage;

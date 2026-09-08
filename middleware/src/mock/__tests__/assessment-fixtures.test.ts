@@ -1,0 +1,191 @@
+// The assessment tenant on the mock floor.
+//
+// Three properties, one per class of bug the floor exists to close
+// (src/mock/core/contract.ts):
+//
+//   1. Nothing countable is stored. A team's status and a doc version's size
+//      are derived; both shipped wrong when they were fields.
+//   2. Every scenario a surface needs is DECLARED. An undeclared `empty` is
+//      not empty — it silently falls back to `default` — so "pin it to empty
+//      and audit the empty state" has to be asserted, not assumed.
+//   3. Timestamps are sampled when the rows are built, not at import.
+
+import { freezeClock, fixtureRegistry } from '../core/index.js';
+import * as M from '../assessment.js';
+
+afterEach(() => {
+  fixtureRegistry.resetAll('default');
+});
+
+describe('registration', () => {
+  const KEYS = [
+    'assessment-archetypes', 'assessment-teams', 'assessment-scores',
+    'assessment-provenance', 'assessment-evidence-log', 'assessment-submissions',
+    'assessment-runs', 'assessment-scoring-logs', 'assessment-feedback',
+    'assessment-knowledge-sections', 'assessment-knowledge-docs',
+    'assessment-knowledge-versions', 'assessment-motions',
+    'assessment-configuration', 'assessment-stories',
+  ];
+
+  it('every collection is in the registry, so the control plane can reach it', () => {
+    const registered = new Set(fixtureRegistry.all().map((f) => f.key));
+    for (const key of KEYS) expect(registered.has(key)).toBe(true);
+  });
+
+  it('every fixture that has an empty state DECLARES it — an undeclared one is not empty', () => {
+    // The one deliberate exception is the configuration: a tenant with nothing
+    // in it still has a target level, so its `empty` keeps the row and drops
+    // the motions instead. Assert that too, rather than exempting it silently.
+    for (const key of KEYS) {
+      const fixture = fixtureRegistry.get(key)!;
+      if (key === 'assessment-configuration') {
+        expect(fixture.rows('empty')).toHaveLength(1);
+        expect(M.configurationFixture.rows('empty')[0]!.motions).toEqual([]);
+        continue;
+      }
+      expect(fixture.rows('empty')).toEqual([]);
+    }
+  });
+
+  it('`error` on the knowledge tree fails loudly rather than reading as "nothing synced"', () => {
+    expect(() => M.knowledgeSectionsFixture.rows('error')).toThrow(/knowledge sync provider unavailable/);
+  });
+
+  it('`error` on the runs ledger is a fleet that is up and losing, not a thrown provider', () => {
+    const failed = M.runsFixture.rows('error');
+    expect(failed.length).toBeGreaterThan(0);
+    expect(failed.every((r) => r.status !== 'completed')).toBe(true);
+  });
+
+  it('`large` gives the team list and the run ledger something to paginate', () => {
+    expect(M.teamsFixture.rows('large').length).toBeGreaterThan(100);
+    expect(M.runsFixture.rows('large').length).toBeGreaterThan(100);
+    // Ids stay unique — a "large" world with duplicate keys tests nothing.
+    const ids = M.teamsFixture.rows('large').map((t) => t.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('`fresh` is the cast with no history: every team reads NEW', () => {
+    fixtureRegistry.resetAll('fresh');
+    expect(M.teams().length).toBeGreaterThan(0);
+    for (const team of M.teams()) expect(M.teamStatus(team.id)).toBe('NEW');
+  });
+
+  it('pinning teams to empty empties the roster and leaves the rubric alone', () => {
+    expect(M.teamsFixture.rows('empty')).toEqual([]);
+    // The rubric is reference data, not a fixture — 17 dimensions, always.
+    expect(M.DIMENSION_IDS).toHaveLength(17);
+  });
+});
+
+describe('no typed aggregates', () => {
+  it('a team status is derived from its dimensions, not stored beside them', () => {
+    for (const team of M.teams()) {
+      expect(team.status).toBeUndefined();
+      expect(['NEW', 'IN_PROGRESS', 'ASSESSED']).toContain(M.teamStatus(team.id));
+    }
+  });
+
+  it('a team reading ASSESSED has every applicable dimension scored', () => {
+    for (const team of M.teams()) {
+      if (M.teamStatus(team.id) !== 'ASSESSED') continue;
+      const dims = Object.values(M.scoresFor(team.id) ?? {});
+      const applicable = dims.filter((d) => !d.is_na);
+      expect(applicable.every((d) => d.current_level !== null)).toBe(true);
+    }
+  });
+
+  it('a team reading NEW has nothing scored — the "New · 17/17" pairing cannot recur', () => {
+    for (const team of M.teams()) {
+      if (M.teamStatus(team.id) !== 'NEW') continue;
+      const dims = Object.values(M.scoresFor(team.id) ?? {});
+      expect(dims.filter((d) => d.current_level !== null || d.is_na)).toEqual([]);
+    }
+  });
+
+  it('a doc version has no stored size; docVersionOut counts the markdown it ships', () => {
+    for (const row of M.knowledgeVersionsFixture.rows()) {
+      for (const version of row.versions) {
+        expect(version).not.toHaveProperty('size');
+        expect(M.docVersionOut(version).size).toBe(version.markdown.length);
+      }
+    }
+  });
+
+  it('the configuration serves the motions fixture, not a second copy of it', () => {
+    expect(M.configuration().motions).toEqual(M.motions());
+  });
+
+  it('the run ledger counts its own statuses', () => {
+    const counted = M.runCountsByStatus();
+    let total = 0;
+    for (const n of counted.values()) total += n;
+    expect(total).toBe(M.runs().length);
+  });
+});
+
+describe('the clock, not module load', () => {
+  it('rows are stamped when the factory runs, so a frozen instant reaches them', () => {
+    const restore = freezeClock('2026-03-04T00:05:00.000Z');
+    try {
+      M.runsFixture.reset();
+      const run = M.runsFixture.rows().find((r) => r.started_at)!;
+      expect(run.started_at.startsWith('2026-0')).toBe(true);
+      expect(Date.parse(run.started_at)).toBeLessThanOrEqual(Date.parse('2026-03-04T00:05:00.000Z'));
+    } finally {
+      restore();
+      M.runsFixture.reset();
+    }
+  });
+
+  it('two freezes a day apart produce rows a day apart — nothing is baked at import', () => {
+    const at = (iso: string): number => {
+      const restore = freezeClock(iso);
+      try {
+        M.feedbackFixture.reset();
+        return Date.parse(M.feedback()[0]!.created_at);
+      } finally {
+        restore();
+      }
+    };
+    const day1 = at('2026-03-04T12:00:00.000Z');
+    const day2 = at('2026-03-05T12:00:00.000Z');
+    expect(day2 - day1).toBe(86_400_000);
+    M.feedbackFixture.reset();
+  });
+});
+
+describe('mutation and reset', () => {
+  it('a write lands on the live rows and reset puts the seed back', () => {
+    const before = M.teams().length;
+    M.teams().push({
+      id: 'TEAM-ZZZ', name: 'Scratch', cohort: 'general', workflow_step: 1,
+      assessment_lead: '', contacts: [], repos: [], archetype: null, exceptions: [],
+      created_at: '2026-01-01T00:00:00.000Z', updated_at: '2026-01-01T00:00:00.000Z', contributors: [],
+    });
+    expect(M.findTeam('TEAM-ZZZ')).toBeDefined();
+    M.teamsFixture.reset();
+    expect(M.teams()).toHaveLength(before);
+    expect(M.findTeam('TEAM-ZZZ')).toBeUndefined();
+  });
+
+  it('dropTeam takes every team-keyed fixture with it', () => {
+    const id = 'TEAM-001';
+    expect(M.scoresFor(id)).toBeDefined();
+    expect(M.dropTeam(id)).toBe(true);
+    expect(M.findTeam(id)).toBeUndefined();
+    expect(M.scoresFor(id)).toBeUndefined();
+    expect(M.provenanceFor(id)).toEqual([]);
+    expect(M.submissionsFor(id)).toEqual([]);
+    expect(M.scoringLogsFor(id)).toEqual([]);
+    expect(M.storiesFor(id)).toEqual([]);
+    fixtureRegistry.resetAll('default');
+  });
+
+  it('a read never creates a bucket — asking about an unknown team leaves the rows alone', () => {
+    const before = M.provenanceFixture.rows().length;
+    expect(M.provenanceFor('TEAM-NOPE')).toEqual([]);
+    expect(M.evidenceLogFor('TEAM-NOPE')).toEqual([]);
+    expect(M.provenanceFixture.rows()).toHaveLength(before);
+  });
+});

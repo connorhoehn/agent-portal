@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   Button,
   Card,
+  CardHeader,
   Chip,
   Inline,
   InlinePlaceholder,
@@ -21,6 +22,8 @@ import { relativeTimeSeconds } from '../../../lib/relativeTime';
 import { SESSIONS_URL, closeSession, launchSession } from './browserApi';
 import { closedSessions, isBlankUrl, openSessions, sessionTone } from './browserFormat';
 import type { BrowserSession } from './types';
+import { T } from '../Text';
+import { ExternalLink } from '../ExternalLinkFrame';
 
 const MAX_PAST_ROWS = 20;
 
@@ -42,12 +45,9 @@ export function SessionsTab() {
     <Stack gap="lg">
       {canManage && <LaunchSessionCard onLaunched={refresh} />}
 
-      <Card padding="md">
-        <Stack gap="md">
-          <Inline gap="sm" justify="between">
-            <h2 className="text-[14px] font-semibold text-text-primary">Open sessions</h2>
-            <MetaLine items={[`${open.length} open`]} />
-          </Inline>
+      <Card padding="none" className="overflow-hidden">
+        <CardHeader title="Open sessions" action={<MetaLine items={[`${open.length} open`]} />} />
+        <Stack gap="md" className="px-3.5 py-3">
           {open.length === 0 ? (
             <InlinePlaceholder align="center" size="sm">No open browser sessions.</InlinePlaceholder>
           ) : (
@@ -59,7 +59,7 @@ export function SessionsTab() {
                   <TableTh>Current URL</TableTh>
                   <TableTh className="text-right">Requests</TableTh>
                   <TableTh>Last active</TableTh>
-                  <TableTh><span className="sr-only">Actions</span></TableTh>
+                  <TableTh><T className="sr-only">Actions</T></TableTh>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -71,16 +71,9 @@ export function SessionsTab() {
                     </TableTd>
                     <TableTd className="max-w-[260px] truncate text-[11px]">
                       {isBlankUrl(session.currentUrl) ? (
-                        <span className="text-text-tertiary">—</span>
+                        <T className="text-text-tertiary">—</T>
                       ) : (
-                        <a
-                          href={session.currentUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-primary no-underline hover:underline"
-                        >
-                          {session.currentUrl}
-                        </a>
+                        <ExternalLink href={session.currentUrl}>{session.currentUrl}</ExternalLink>
                       )}
                     </TableTd>
                     <TableTd className="text-right tabular-nums whitespace-nowrap">{session.requestCount}</TableTd>
@@ -106,12 +99,12 @@ export function SessionsTab() {
         </Stack>
       </Card>
 
-      <Card padding="md">
-        <Stack gap="md">
-          <Inline gap="sm" justify="between">
-            <h2 className="text-[14px] font-semibold text-text-primary">Past sessions</h2>
-            <MetaLine items={['from AgentCore Data Plane', `${closed.length} closed`]} />
-          </Inline>
+      <Card padding="none" className="overflow-hidden">
+        <CardHeader
+          title="Past sessions"
+          action={<MetaLine items={['from AgentCore Data Plane', `${closed.length} closed`]} />}
+        />
+        <Stack gap="md" className="px-3.5 py-3">
           {closed.length === 0 ? (
             <InlinePlaceholder align="center" size="sm">
               No past sessions yet. Launch one above, or invoke the search agent with a
@@ -136,7 +129,7 @@ export function SessionsTab() {
                     </TableTd>
                     <TableTd className="text-[12px]">{s.agentName}</TableTd>
                     <TableTd className="max-w-[320px] truncate text-[11px]" title={s.currentUrl}>
-                      {isBlankUrl(s.currentUrl) ? <span className="text-text-tertiary">—</span> : s.currentUrl}
+                      {isBlankUrl(s.currentUrl) ? <T className="text-text-tertiary">—</T> : s.currentUrl}
                     </TableTd>
                     <TableTd className="text-right tabular-nums whitespace-nowrap text-[11px] text-text-tertiary">
                       {s.requestCount}
@@ -171,9 +164,9 @@ function LaunchSessionCard({ onLaunched }: { onLaunched: () => void }) {
   }
 
   return (
-    <Card padding="md">
-      <Stack gap="md">
-        <h2 className="text-[14px] font-semibold text-text-primary">Launch browser session</h2>
+    <Card padding="none" className="overflow-hidden">
+      <CardHeader title="Launch browser session" />
+      <Stack gap="md" className="px-3.5 py-3">
         <Inline gap="sm" wrap={false}>
           <Input
             value={agentName}

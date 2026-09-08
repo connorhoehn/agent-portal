@@ -4,10 +4,34 @@
 // session routes), so this page is where tenant isolation is administered.
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Chip, PageSection } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button,
+  Card,
+  Checkbox,
+  Chip,
+  DataTable,
+  Drawer,
+  FormField,
+  Inline,
+  InlineAlert,
+  Input,
+  LoadingState,
+  PageSection,
+  SectionLabel,
+  Stack,
+} from '@connorhoehnslalom/ui-components/shared';
+import type { DataTableColumn } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../../lib/auth';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError } from '../../lib/toastStore';
+import {
+  grantChipLabels,
+  inputWiring,
+  rolesForTenantMap,
+  tenantIdProblem,
+  tenantUserCount,
+  toggleGrantSet,
+} from './identityFormat';
 
 interface TenantInfo { id: string; displayName: string; status: string }
 interface RoleInfo { id: string; tenant: string | null; label: string; summary: string; capabilities: string[] }
@@ -43,7 +67,7 @@ function UsersPage() {
   const [users, setUsers] = useState<UserInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState<string | null>(null);      // user id with open grants editor
+  const [grantsUser, setGrantsUser] = useState<UserInfo | null>(null); // user with the "Edit grants" drawer open
   const [draftGrants, setDraftGrants] = useState<Record<string, string[]>>({});
   const [busy, setBusy] = useState(false);
   const [showNewUser, setShowNewUser] = useState(false);
@@ -67,13 +91,7 @@ function UsersPage() {
   useEffect(() => { void load(); }, [load]);
 
   // Roles selectable for a tenant = that tenant's roles + cross-tenant roles.
-  const rolesForTenant = useMemo(() => {
-    const map = new Map<string, RoleInfo[]>();
-    for (const t of tenants) {
-      map.set(t.id, roles.filter(r => r.tenant === t.id || r.tenant === null));
-    }
-    return map;
-  }, [tenants, roles]);
+  const rolesForTenant = useMemo(() => rolesForTenantMap(tenants, roles), [tenants, roles]);
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -81,27 +99,23 @@ function UsersPage() {
     try { await fn(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   };
 
-  const openEditor = (u: UserInfo) => {
-    setEditing(u.id);
+  const openGrantsEditor = (u: UserInfo) => {
+    setGrantsUser(u);
     setDraftGrants(JSON.parse(JSON.stringify(u.grants)) as Record<string, string[]>);
   };
 
   const toggleGrant = (tenant: string, role: string) => {
-    setDraftGrants(prev => {
-      const held = new Set(prev[tenant] ?? []);
-      if (held.has(role)) held.delete(role); else held.add(role);
-      const next = { ...prev };
-      if (held.size === 0) delete next[tenant]; else next[tenant] = [...held];
-      return next;
-    });
+    setDraftGrants(prev => toggleGrantSet(prev, tenant, role));
   };
 
-  const saveGrants = (userId: string) => run(async () => {
+  const saveGrants = () => run(async () => {
+    if (!grantsUser) return;
+    const userId = grantsUser.id;
     await api(`/api/identity/users/${userId}/grants`, {
       method: 'PUT',
       body: JSON.stringify({ grants: draftGrants }),
     });
-    setEditing(null);
+    setGrantsUser(null);
     await load();
     // If we just edited the signed-in user, their session grants are stale
     // until the next login — refresh so the switcher reflects reality.
@@ -119,268 +133,301 @@ function UsersPage() {
     await load();
   });
 
-  if (loading) return <div style={{ color: 'var(--color-text-tertiary)' }}>Loading users…</div>;
+  const canSignInAs = !ssoRequired;
+  const signInAs = (u: UserInfo) => {
+    // Not a bare `void login(...)`: login hard-navigates on success, so the
+    // ONLY observable outcome of a failure is nothing happening — a button
+    // that sometimes silently does nothing reads as broken twice over.
+    login(u.id).catch((err: unknown) =>
+      toastError(null, `Could not sign in as ${u.displayName}`, (err as Error).message));
+  };
+
+  const columns: DataTableColumn<UserInfo>[] = [
+    {
+      key: 'user',
+      header: 'User',
+      render: (u) => (
+        <Stack gap="none">
+          <Inline gap="xs" align="center">
+            <Inline as="span" className="text-[13px] font-medium text-text-primary">{u.displayName}</Inline>
+            {session?.sub === u.id && <Chip size="xs">you</Chip>}
+          </Inline>
+          <Inline as="span" className="font-mono text-[11px] text-text-tertiary">{u.id}</Inline>
+        </Stack>
+      ),
+    },
+    {
+      key: 'email',
+      header: 'Email',
+      render: (u) => <Inline as="span" className="text-text-secondary">{u.email ?? '—'}</Inline>,
+    },
+    {
+      key: 'persona',
+      header: 'Persona',
+      render: (u) => (
+        <PersonaCell
+          user={u}
+          busy={busy}
+          canEdit={canManage}
+          onLink={(personId) => void linkPerson(u.id, personId)}
+        />
+      ),
+    },
+    {
+      key: 'grants',
+      header: 'Grants',
+      render: (u) => {
+        const labels = grantChipLabels(u.grants);
+        return labels.length > 0
+          ? <Inline gap="xs" wrap>{labels.map(l => <Chip key={l} size="xs">{l}</Chip>)}</Inline>
+          : <Inline as="span" className="text-text-tertiary">none</Inline>;
+      },
+    },
+  ];
 
   return (
     <PageSection
       title="Users & Tenants"
       description="Login-able identities and their per-tenant role grants. A user with no grant in a tenant cannot switch into it."
       actions={canManage ? (
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button style={btnSecondary} onClick={() => setShowNewTenant(s => !s)}>+ Tenant</button>
-          <button style={btnPrimary} onClick={() => setShowNewUser(s => !s)}>+ User</button>
-        </div>
+        <Inline gap="xs">
+          <Button size="sm" variant="secondary" onClick={() => setShowNewTenant(true)}>+ Tenant</Button>
+          <Button size="sm" onClick={() => setShowNewUser(true)}>+ User</Button>
+        </Inline>
       ) : undefined}
     >
-      {error && (
-        <div role="alert" style={{
-          padding: '8px 12px', fontSize: 12, borderRadius: 'var(--radius-sm, 4px)',
-          background: 'var(--color-danger-bg, rgba(220,38,38,0.12))', color: 'var(--color-danger, #dc2626)',
-        }}>
-          {error}
-        </div>
-      )}
+      {error && <InlineAlert tone="error">{error}</InlineAlert>}
 
       {/* Tenants strip */}
-      <section style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+      <Inline gap="md" wrap>
         {tenants.map(t => {
-          const userCount = users.filter(u => (u.grants[t.id] ?? []).length > 0).length;
+          const userCount = tenantUserCount(t.id, users);
+          const tenantRoles = (rolesForTenant.get(t.id) ?? []).filter(r => r.tenant === t.id);
           return (
-            <div key={t.id} style={{
-              background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-md)', padding: '10px 14px', minWidth: 160,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>{t.displayName}</span>
+            <Card key={t.id} padding="sm" className="min-w-[160px]">
+              <Inline gap="xs" align="center">
+                <Inline as="span" className="text-[13px] font-semibold">{t.displayName}</Inline>
                 <Chip tone={t.status === 'ACTIVE' ? 'success' : 'warning'} size="xs">{t.status}</Chip>
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 4 }}>
-                {t.id} · {userCount} user{userCount === 1 ? '' : 's'} · roles: {(rolesForTenant.get(t.id) ?? []).filter(r => r.tenant === t.id).map(r => r.id).join(', ') || '—'}
-              </div>
-            </div>
+              </Inline>
+              <Inline as="span" className="mt-1 text-[11px] text-text-tertiary">
+                {t.id} · {userCount} user{userCount === 1 ? '' : 's'} · roles: {tenantRoles.map(r => r.id).join(', ') || '—'}
+              </Inline>
+            </Card>
           );
         })}
-      </section>
+      </Inline>
 
-      {showNewTenant && <NewTenantForm busy={busy} onSubmit={(id, name) => run(async () => {
-        await api('/api/identity/tenants', { method: 'POST', body: JSON.stringify({ id, displayName: name }) });
-        setShowNewTenant(false);
-        await load();
-      })} />}
+      {loading ? (
+        <LoadingState label="Loading users…" />
+      ) : (
+        <DataTable
+          data={users}
+          keyField={u => u.id}
+          columns={columns}
+          searchable
+          searchPlaceholder="Search users…"
+          rowActions={(u) => (
+            <Inline gap="xs" justify="end">
+              {/* Become this user. Deliberately here and not in the header
+                  menu: it is a rare administrative act, not a thing to trip
+                  over while working. Hidden when a real sign-in is required,
+                  where the underlying POST would 403 anyway. */}
+              {canSignInAs && session?.sub !== u.id && (
+                <Button size="sm" variant="secondary" disabled={busy} onClick={() => signInAs(u)} title="Reload the app as this user (dev only)">
+                  Sign in as
+                </Button>
+              )}
+              {canManage && (
+                <Button size="sm" variant="secondary" disabled={busy} onClick={() => openGrantsEditor(u)}>
+                  Edit grants
+                </Button>
+              )}
+            </Inline>
+          )}
+        />
+      )}
 
-      {showNewUser && (
+      <Drawer
+        open={showNewTenant}
+        onClose={() => setShowNewTenant(false)}
+        title="New tenant"
+      >
+        <NewTenantForm
+          busy={busy}
+          error={error}
+          onCancel={() => setShowNewTenant(false)}
+          onSubmit={(id, name) => run(async () => {
+            await api('/api/identity/tenants', { method: 'POST', body: JSON.stringify({ id, displayName: name }) });
+            setShowNewTenant(false);
+            await load();
+          })}
+        />
+      </Drawer>
+
+      <Drawer
+        open={showNewUser}
+        onClose={() => setShowNewUser(false)}
+        title="New user"
+        width={560}
+      >
         <NewUserForm
           busy={busy}
           tenants={tenants}
           rolesForTenant={rolesForTenant}
+          onCancel={() => setShowNewUser(false)}
           onSubmit={(input) => run(async () => {
             await api('/api/identity/users', { method: 'POST', body: JSON.stringify(input) });
             setShowNewUser(false);
             await load();
           })}
         />
-      )}
+      </Drawer>
 
-      {/* Users table */}
-      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-          <thead>
-            <tr style={{ background: 'var(--color-surface-hover)' }}>
-              <th style={th}>User</th>
-              <th style={th}>Email</th>
-              <th style={th}>Persona</th>
-              <th style={th}>Grants</th>
-              <th style={th} />
-            </tr>
-          </thead>
-          <tbody>
-            {users.map(u => (
-              <UserRow
-                key={u.id}
-                user={u}
-                isSelf={session?.sub === u.id}
-                isEditing={editing === u.id}
-                draftGrants={draftGrants}
-                tenants={tenants}
-                rolesForTenant={rolesForTenant}
-                busy={busy}
-                canEdit={canManage}
-                // Dev-only identity switch — see the note on the button.
-                canSignInAs={!ssoRequired}
-                // Not a bare `void login(...)`: login hard-navigates on
-                // success, so the ONLY observable outcome of a failure is
-                // nothing happening — a button that sometimes silently does
-                // nothing reads as broken twice over.
-                onSignInAs={() => {
-                  login(u.id).catch((err: unknown) =>
-                    toastError(null, `Could not sign in as ${u.displayName}`, (err as Error).message));
-                }}
-                onEdit={() => openEditor(u)}
-                onCancel={() => setEditing(null)}
-                onToggle={toggleGrant}
-                onSave={() => void saveGrants(u.id)}
-                onLinkPerson={personId => void linkPerson(u.id, personId)}
+      <Drawer
+        open={!!grantsUser}
+        onClose={() => setGrantsUser(null)}
+        title={grantsUser ? `Edit grants — ${grantsUser.displayName}` : 'Edit grants'}
+        footer={
+          <Inline gap="xs" justify="end">
+            <Button variant="secondary" onClick={() => setGrantsUser(null)} disabled={busy}>Cancel</Button>
+            <Button onClick={saveGrants} disabled={busy}>Save grants</Button>
+          </Inline>
+        }
+      >
+        {grantsUser && (
+          <Inline gap="md" wrap align="start">
+            {tenants.map(t => (
+              <TenantGrantsCard
+                key={t.id}
+                tenant={t}
+                roles={rolesForTenant.get(t.id) ?? []}
+                checked={draftGrants[t.id] ?? []}
+                onToggle={(role) => toggleGrant(t.id, role)}
               />
             ))}
-          </tbody>
-        </table>
-      </div>
+          </Inline>
+        )}
+      </Drawer>
     </PageSection>
   );
 }
 
-function UserRow({ user, isSelf, isEditing, draftGrants, tenants, rolesForTenant, busy, canEdit, canSignInAs, onSignInAs, onEdit, onCancel, onToggle, onSave, onLinkPerson }: {
+function PersonaCell({ user, busy, canEdit, onLink }: {
   user: UserInfo;
-  isSelf: boolean;
-  isEditing: boolean;
-  draftGrants: Record<string, string[]>;
-  tenants: TenantInfo[];
-  rolesForTenant: Map<string, RoleInfo[]>;
   busy: boolean;
-  /** ManageUsers — grant edits hide without it. */
   canEdit: boolean;
-  /** Dev builds only (no SSO requirement) — see the button. */
-  canSignInAs: boolean;
-  onSignInAs: () => void;
-  onEdit: () => void;
-  onCancel: () => void;
-  onToggle: (tenant: string, role: string) => void;
-  onSave: () => void;
-  /** Link/relink/clear the org-graph person (null clears it). */
-  onLinkPerson: (personId: string | null) => void;
+  onLink: (personId: string | null) => void;
 }) {
-  const [editingPerson, setEditingPerson] = useState(false);
-  const [personDraft, setPersonDraft] = useState(user.personId ?? '');
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(user.personId ?? '');
+
+  if (editing) {
+    return (
+      <Inline gap="xs" align="center">
+        <Input
+          placeholder="person id"
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          disabled={busy}
+          autoFocus
+          aria-label="Person id"
+        />
+        <Button size="sm" disabled={busy} onClick={() => { onLink(draft.trim() || null); setEditing(false); }}>
+          Save
+        </Button>
+        <Button size="sm" variant="secondary" disabled={busy} onClick={() => { setDraft(user.personId ?? ''); setEditing(false); }}>
+          Cancel
+        </Button>
+      </Inline>
+    );
+  }
   return (
-    <>
-      <tr style={{ borderTop: '1px solid var(--color-border)' }}>
-        <td style={td}>
-          <div style={{ fontWeight: 500 }}>{user.displayName}{isSelf && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--color-text-tertiary)' }}>you</span>}</div>
-          <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontFamily: 'ui-monospace, monospace' }}>{user.id}</div>
-        </td>
-        <td style={{ ...td, color: 'var(--color-text-secondary)' }}>{user.email ?? '—'}</td>
-        <td style={{ ...td, fontFamily: 'ui-monospace, monospace', color: 'var(--color-text-secondary)' }}>
-          {editingPerson ? (
-            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-              <input
-                style={{ ...inputStyle, width: 90 }}
-                placeholder="person id"
-                value={personDraft}
-                onChange={e => setPersonDraft(e.target.value)}
-                disabled={busy}
-                autoFocus
-              />
-              <button
-                style={btnPrimary}
-                disabled={busy}
-                onClick={() => { onLinkPerson(personDraft.trim() || null); setEditingPerson(false); }}
-              >
-                Save
-              </button>
-              <button
-                style={btnSecondary}
-                disabled={busy}
-                onClick={() => { setPersonDraft(user.personId ?? ''); setEditingPerson(false); }}
-              >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <span>{user.personId ?? '—'}</span>
-              {canEdit && (
-                <button style={btnSecondary} disabled={busy} onClick={() => { setPersonDraft(user.personId ?? ''); setEditingPerson(true); }}>
-                  {user.personId ? 'Relink' : 'Link'}
-                </button>
-              )}
-            </div>
-          )}
-        </td>
-        <td style={td}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-            {Object.entries(user.grants).flatMap(([tenant, roleIds]) =>
-              roleIds.map(r => (
-                <span key={`${tenant}-${r}`} style={{
-                  fontSize: 11, padding: '1px 8px', borderRadius: 999,
-                  background: 'var(--color-surface-hover)', border: '1px solid var(--color-border)',
-                }}>
-                  {tenant}/{r}
-                </span>
-              )))}
-            {Object.keys(user.grants).length === 0 && <span style={{ color: 'var(--color-text-tertiary)' }}>none</span>}
-          </div>
-        </td>
-        <td style={{ ...td, textAlign: 'right' }}>
-          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-            {/* Become this user. Deliberately here and not in the header menu:
-                it is a rare administrative act, not a thing to trip over while
-                working. Hidden when a real sign-in is required, where the
-                underlying POST would 403 anyway. */}
-            {canSignInAs && !isSelf && (
-              <button style={btnSecondary} disabled={busy} onClick={onSignInAs} title="Reload the app as this user (dev only)">
-                Sign in as
-              </button>
-            )}
-            {canEdit && (
-              <button style={btnSecondary} disabled={busy} onClick={isEditing ? onCancel : onEdit}>
-                {isEditing ? 'Cancel' : 'Edit grants'}
-              </button>
-            )}
-          </div>
-        </td>
-      </tr>
-      {isEditing && (
-        <tr>
-          <td colSpan={5} style={{ padding: '4px 12px 14px', background: 'var(--color-surface-hover)' }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, padding: '8px 0' }}>
-              {tenants.map(t => (
-                <fieldset key={t.id} style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm, 4px)', padding: '8px 12px', minWidth: 180 }}>
-                  <legend style={{ fontSize: 11, fontWeight: 600, padding: '0 4px' }}>{t.displayName}</legend>
-                  {(rolesForTenant.get(t.id) ?? []).map(r => (
-                    <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '2px 0', cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={(draftGrants[t.id] ?? []).includes(r.id)}
-                        onChange={() => onToggle(t.id, r.id)}
-                      />
-                      {r.label}
-                      {r.tenant === null && <span style={{ fontSize: 10, color: 'var(--color-text-tertiary)' }}>cross-tenant</span>}
-                    </label>
-                  ))}
-                </fieldset>
-              ))}
-            </div>
-            <button style={btnPrimary} disabled={busy} onClick={onSave}>Save grants</button>
-          </td>
-        </tr>
+    <Inline gap="xs" align="center">
+      <Inline as="span" className="font-mono text-text-secondary">{user.personId ?? '—'}</Inline>
+      {canEdit && (
+        <Button size="sm" variant="secondary" disabled={busy} onClick={() => { setDraft(user.personId ?? ''); setEditing(true); }}>
+          {user.personId ? 'Relink' : 'Link'}
+        </Button>
       )}
-    </>
+    </Inline>
   );
 }
 
-function NewTenantForm({ busy, onSubmit }: { busy: boolean; onSubmit: (id: string, name: string) => void }) {
+function TenantGrantsCard({ tenant, roles, checked, onToggle }: {
+  tenant: TenantInfo;
+  roles: RoleInfo[];
+  checked: string[];
+  onToggle: (role: string) => void;
+}) {
+  return (
+    <Card padding="sm" className="min-w-[180px]">
+      <Stack gap="xs">
+        <SectionLabel>{tenant.displayName}</SectionLabel>
+        {roles.map(r => (
+          <Inline as="label" key={r.id} gap="xs" align="center" className="cursor-pointer text-[12px]">
+            <Checkbox checked={checked.includes(r.id)} onChange={() => onToggle(r.id)} aria-label={r.label} />
+            {r.label}
+            {r.tenant === null && <Inline as="span" className="text-[10px] text-text-tertiary">cross-tenant</Inline>}
+          </Inline>
+        ))}
+      </Stack>
+    </Card>
+  );
+}
+
+function NewTenantForm({ busy, error, onCancel, onSubmit }: {
+  busy: boolean;
+  /** The server's own refusal, shown INSIDE the drawer — a page-level alert
+   *  sits behind it where the reader cannot see it. */
+  error: string | null;
+  onCancel: () => void;
+  onSubmit: (id: string, name: string) => void;
+}) {
   const [id, setId] = useState('');
   const [name, setName] = useState('');
+  // Say what is wrong while it is being typed, in the same terms the field's
+  // label promises, rather than enabling Create and letting the server 400.
+  const problem = id.trim() ? tenantIdProblem(id) : null;
   return (
-    <form
-      onSubmit={e => { e.preventDefault(); onSubmit(id.trim(), name.trim() || id.trim()); }}
-      style={formCard}
-    >
-      <strong style={{ fontSize: 12 }}>New tenant</strong>
-      <input style={inputStyle} placeholder="id (kebab-case)" value={id} onChange={e => setId(e.target.value)} pattern="[a-z][a-z0-9-]{1,30}" required />
-      <input style={inputStyle} placeholder="Display name" value={name} onChange={e => setName(e.target.value)} />
-      <button type="submit" style={btnPrimary} disabled={busy || !id.trim()}>Create</button>
-      <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-        Creates the tenant row. Add role seeds under middleware/seeds/roles/&lt;id&gt;/ for its Cedar roles.
-      </span>
-    </form>
+    <Stack gap="lg">
+      {error && <InlineAlert tone="error">{error}</InlineAlert>}
+      <Stack gap="md">
+        <FormField label="ID (kebab-case)" hint={problem ?? 'e.g. assessment'}>
+          {(wiring) => (
+            <Input
+              {...inputWiring(wiring)}
+              value={id}
+              invalid={problem != null}
+              aria-invalid={problem != null || undefined}
+              onChange={e => setId(e.target.value)}
+            />
+          )}
+        </FormField>
+        <FormField label="Display name" hint="Defaults to the id when left blank.">
+          {(wiring) => <Input {...inputWiring(wiring)} value={name} onChange={e => setName(e.target.value)} />}
+        </FormField>
+        <Inline as="span" className="text-[11px] text-text-tertiary">
+          Creates the tenant row. Add role seeds under <code>middleware/seeds/roles/&lt;id&gt;/</code> for its Cedar roles.
+        </Inline>
+      </Stack>
+      <Inline gap="xs" justify="end">
+        <Button variant="secondary" onClick={onCancel} disabled={busy}>Cancel</Button>
+        <Button
+          onClick={() => onSubmit(id.trim(), name.trim() || id.trim())}
+          disabled={busy || tenantIdProblem(id) != null}
+        >
+          Create
+        </Button>
+      </Inline>
+    </Stack>
   );
 }
 
-function NewUserForm({ busy, tenants, rolesForTenant, onSubmit }: {
+function NewUserForm({ busy, tenants, rolesForTenant, onCancel, onSubmit }: {
   busy: boolean;
   tenants: TenantInfo[];
   rolesForTenant: Map<string, RoleInfo[]>;
+  onCancel: () => void;
   onSubmit: (input: { id: string; displayName: string; email?: string; personId?: string; grants: Record<string, string[]> }) => void;
 }) {
   const [id, setId] = useState('');
@@ -390,76 +437,57 @@ function NewUserForm({ busy, tenants, rolesForTenant, onSubmit }: {
   const [grants, setGrants] = useState<Record<string, string[]>>({});
 
   const toggle = (tenant: string, role: string) => {
-    setGrants(prev => {
-      const held = new Set(prev[tenant] ?? []);
-      if (held.has(role)) held.delete(role); else held.add(role);
-      const next = { ...prev };
-      if (held.size === 0) delete next[tenant]; else next[tenant] = [...held];
-      return next;
-    });
+    setGrants(prev => toggleGrantSet(prev, tenant, role));
   };
 
   return (
-    <form
-      onSubmit={e => {
-        e.preventDefault();
-        onSubmit({
-          id: id.trim(), displayName: name.trim(),
-          ...(email.trim() && { email: email.trim() }),
-          ...(personId.trim() && { personId: personId.trim() }),
-          grants,
-        });
-      }}
-      style={{ ...formCard, flexDirection: 'column', alignItems: 'stretch' }}
-    >
-      <strong style={{ fontSize: 12 }}>New user</strong>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        <input style={inputStyle} placeholder="id (e.g. u-jane)" value={id} onChange={e => setId(e.target.value)} required />
-        <input style={inputStyle} placeholder="Display name" value={name} onChange={e => setName(e.target.value)} required />
-        <input style={inputStyle} placeholder="email (optional)" value={email} onChange={e => setEmail(e.target.value)} />
-        <input style={inputStyle} placeholder="person_id link (optional)" value={personId} onChange={e => setPersonId(e.target.value)} />
-      </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-        {tenants.map(t => (
-          <fieldset key={t.id} style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm, 4px)', padding: '8px 12px' }}>
-            <legend style={{ fontSize: 11, fontWeight: 600, padding: '0 4px' }}>{t.displayName}</legend>
-            {(rolesForTenant.get(t.id) ?? []).map(r => (
-              <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '2px 0', cursor: 'pointer' }}>
-                <input type="checkbox" checked={(grants[t.id] ?? []).includes(r.id)} onChange={() => toggle(t.id, r.id)} />
-                {r.label}
-              </label>
-            ))}
-          </fieldset>
-        ))}
-      </div>
-      <div>
-        <button type="submit" style={btnPrimary} disabled={busy || !id.trim() || !name.trim()}>Create user</button>
-      </div>
-    </form>
+    <Stack gap="lg">
+      <Stack gap="md">
+        <FormField label="ID" hint="e.g. u-jane">
+          {(wiring) => <Input {...inputWiring(wiring)} value={id} onChange={e => setId(e.target.value)} />}
+        </FormField>
+        <FormField label="Display name">
+          {(wiring) => <Input {...inputWiring(wiring)} value={name} onChange={e => setName(e.target.value)} />}
+        </FormField>
+        <FormField label="Email" hint="Optional">
+          {(wiring) => <Input {...inputWiring(wiring)} type="email" value={email} onChange={e => setEmail(e.target.value)} />}
+        </FormField>
+        <FormField label="Person id link" hint="Optional — links this login to an org-graph person">
+          {(wiring) => <Input {...inputWiring(wiring)} value={personId} onChange={e => setPersonId(e.target.value)} />}
+        </FormField>
+      </Stack>
+
+      <Stack gap="sm">
+        <SectionLabel>Grants</SectionLabel>
+        <Inline gap="md" wrap align="start">
+          {tenants.map(t => (
+            <TenantGrantsCard
+              key={t.id}
+              tenant={t}
+              roles={rolesForTenant.get(t.id) ?? []}
+              checked={grants[t.id] ?? []}
+              onToggle={(role) => toggle(t.id, role)}
+            />
+          ))}
+        </Inline>
+      </Stack>
+
+      <Inline gap="xs" justify="end">
+        <Button variant="secondary" onClick={onCancel} disabled={busy}>Cancel</Button>
+        <Button
+          disabled={busy || !id.trim() || !name.trim()}
+          onClick={() => onSubmit({
+            id: id.trim(), displayName: name.trim(),
+            ...(email.trim() && { email: email.trim() }),
+            ...(personId.trim() && { personId: personId.trim() }),
+            grants,
+          })}
+        >
+          Create user
+        </Button>
+      </Inline>
+    </Stack>
   );
 }
-
-const th: React.CSSProperties = {
-  textAlign: 'left', padding: '8px 12px', fontWeight: 600, fontSize: 11,
-  color: 'var(--color-text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5,
-};
-const td: React.CSSProperties = { padding: '8px 12px', verticalAlign: 'top' };
-const inputStyle: React.CSSProperties = {
-  padding: '5px 8px', fontSize: 12, border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm, 4px)', background: 'var(--color-surface)', color: 'var(--color-text-primary)',
-};
-const btnPrimary: React.CSSProperties = {
-  padding: '5px 12px', fontSize: 12, background: 'var(--color-primary)', color: 'white',
-  border: 'none', borderRadius: 'var(--radius-sm, 4px)', cursor: 'pointer',
-};
-const btnSecondary: React.CSSProperties = {
-  padding: '4px 10px', fontSize: 12, background: 'var(--color-surface-hover)', color: 'var(--color-text-primary)',
-  border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm, 4px)', cursor: 'pointer',
-};
-const formCard: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-md)', padding: 12,
-};
 
 export default UsersPage;

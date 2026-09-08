@@ -21,6 +21,8 @@ import {
   type Role,
   type Session,
   type Tenant,
+  demoScopedGrants,
+  switchableGrants,
 } from '../lib/session.js';
 import { isAllowed, CAPABILITY_ACTIONS } from '../lib/authz.js';
 import { eventFromSession, logAuthz } from '../lib/audit.js';
@@ -43,6 +45,11 @@ function publicView(session: Session) {
     role: session.role,
     tenant: session.tenant,
     grants: session.grants,
+    // What this identity may still BECOME. For a real user that is its
+    // grants; for the cookie-less demo persona it is every persona, even
+    // though the cookie has been narrowed to the one it picked — the picker
+    // offers personas from this, the session's authority comes from `grants`.
+    switchable: switchableGrants(session.sub, session.grants),
     availableRoles: rolesForTenant(session.grants, session.tenant),
     availableTenants: TENANTS.filter(t => rolesForTenant(session.grants, t).length > 0),
     masquerading: session.act ? { asUser: session.sub, actor: session.act.sub } : null,
@@ -167,18 +174,22 @@ sessionRouter.post('/role', switchLimit, asyncHandler(async (req, res) => {
   const session = sessionOrNull(req);
   if (!session) { unauthenticated(res); return; }
   if (!role) { res.status(400).json({ error: 'role is required' }); return; }
-  if (!hasGrant(session.grants, session.tenant, role)) {
+  const switchable = switchableGrants(session.sub, session.grants);
+  if (!hasGrant(switchable, session.tenant, role)) {
     logAuthz(eventFromSession(session, 'SwitchRole', 'DENY', {
       path: req.path, reason: `no grant for role=${role} in tenant=${session.tenant}`,
     }));
     res.status(403).json({
       error: `no grant for role '${role}' in tenant '${session.tenant}'`,
-      availableRoles: rolesForTenant(session.grants, session.tenant),
+      availableRoles: rolesForTenant(switchable, session.tenant),
     });
     return;
   }
   const epoch = await nextEpochForSwitch(session);
-  await issue(res, { ...session, role: role as Role, iat: Math.floor(Date.now() / 1000), epoch });
+  // The demo identity BECOMES the chosen role (see demoScopedGrants); a real
+  // user's grants are theirs and pass through unchanged.
+  const grants = demoScopedGrants(session.sub, session.tenant, role, session.grants);
+  await issue(res, { ...session, role: role as Role, grants, iat: Math.floor(Date.now() / 1000), epoch });
 }));
 
 sessionRouter.post('/tenant', switchLimit, asyncHandler(async (req, res) => {
@@ -189,7 +200,7 @@ sessionRouter.post('/tenant', switchLimit, asyncHandler(async (req, res) => {
     res.status(400).json({ error: `tenant must be one of ${TENANTS.join(', ')}` });
     return;
   }
-  const held = rolesForTenant(session.grants, tenant);
+  const held = rolesForTenant(switchableGrants(session.sub, session.grants), tenant);
   if (held.length === 0) {
     // The cross-pollination guard: no grant in the target tenant, no switch.
     logAuthz(eventFromSession(session, 'SwitchTenant', 'DENY', {
@@ -204,8 +215,9 @@ sessionRouter.post('/tenant', switchLimit, asyncHandler(async (req, res) => {
     ? session.role
     : (held.find(r => r !== ADMIN_ROLE) ?? held[0]!) as Role;
   const epoch = await nextEpochForSwitch(session);
+  const grants = demoScopedGrants(session.sub, tenant, role, session.grants);
   await issue(res, {
-    ...session, tenant: tenant as Tenant, role, iat: Math.floor(Date.now() / 1000), epoch,
+    ...session, tenant: tenant as Tenant, role, grants, iat: Math.floor(Date.now() / 1000), epoch,
   });
 }));
 

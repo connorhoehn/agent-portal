@@ -16,6 +16,9 @@ permit (
     OrgIQ::Action::"DispatchAgentRun",
     // Program management — allocating agent spend per initiative.
     OrgIQ::Action::"ManageBudgets",
+    // Author standing missions too — the leader who allocates the spend can
+    // set up the bots that burn it.
+    OrgIQ::Action::"ManageBots",
     // Run the program cadence — create sprints and move work between them.
     // The release manager owns the iteration calendar for the initiative.
     OrgIQ::Action::"ManageSprints",

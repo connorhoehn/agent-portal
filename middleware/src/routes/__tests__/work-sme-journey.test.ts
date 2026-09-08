@@ -26,7 +26,7 @@ jest.mock('../../lib/authz.js', () => ({
 }));
 
 import express, { type Request, type Response, type NextFunction } from 'express';
-import request from 'supertest';
+import request from '../../test-support/http.js';
 import { workRouter } from '../work.js';
 import { errorHandler } from '../../lib/async-handler.js';
 

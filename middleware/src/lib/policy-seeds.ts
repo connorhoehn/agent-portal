@@ -36,7 +36,7 @@ function seedsDir(): string {
 // Role definitions live under seeds/roles/{tenant}/{role}.cedar, with
 // cross-tenant roles (admin) directly under seeds/roles/. Discovered at boot.
 interface SeedRoleFile {
-  /** e.g. 'member' or 'newsroom/reporter' — tenant prefix omitted for orgiq
+  /** e.g. 'member' or 'assessment/assessor' — tenant prefix omitted for orgiq
    * and root-level files so descriptions stay byte-identical with stores
    * seeded before the multi-tenant reorg. */
   key: string;

@@ -12,9 +12,9 @@
 //   GET /neighbors/:invocationId?limit=
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import type { CSSProperties } from 'react';
 import { useNavigate } from 'react-router';
 import {
+  Button,
   Card,
   Table,
   TableHead,
@@ -23,7 +23,11 @@ import {
   TableTh,
   TableTd,
   Chip,
+  IconButton,
+  Inline,
   PageSection,
+  Select,
+  Stack,
   useToast,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
@@ -41,6 +45,7 @@ import { CostChip } from '../../components/observability/CostChip';
 import { PromptVersionChip } from '../../components/observability/PromptVersionChip';
 import { SaveAsTestCaseModal } from '../../components/observability/SaveAsTestCaseModal';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
+import { T } from './Text';
 
 interface DriftSummary {
   agentId: string;
@@ -109,16 +114,20 @@ const judgeP50Tone = (v: number | null): Tone =>
 const fmt = (n: number | null, digits = 2): string =>
   n != null && Number.isFinite(n) ? n.toFixed(digits) : '—';
 
-// Distinct, accessible colors per agent — researchers need to track lines visually.
+// Distinct, accessible colors per agent — researchers need to track lines
+// visually. Same eight tokenized hues as CostPage.tsx's AGENT_COLORS (kept
+// in sync so an agent's line color matches across pages); the tokenized
+// palette only has 6 distinct hues, so pink and lime are mixed from two
+// tokens each with color-mix rather than reused verbatim from another slot.
 const AGENT_COLORS = [
-  '#6366f1', // indigo
-  '#ec4899', // pink
-  '#10b981', // emerald
-  '#f59e0b', // amber
-  '#06b6d4', // cyan
-  '#a855f7', // purple
-  '#ef4444', // red
-  '#84cc16', // lime
+  'var(--color-brand)', // indigo
+  'color-mix(in srgb, var(--color-danger) 55%, var(--color-brand) 45%)', // pink
+  'var(--color-success)', // emerald
+  'var(--color-warning)', // amber
+  'color-mix(in srgb, var(--color-info) 60%, var(--color-success) 40%)', // cyan
+  'var(--color-optimize)', // purple
+  'var(--color-danger)', // red
+  'color-mix(in srgb, var(--color-success) 65%, var(--color-warning) 35%)', // lime
 ];
 const colorFor = (idx: number) => AGENT_COLORS[idx % AGENT_COLORS.length];
 
@@ -226,8 +235,8 @@ function DriftPage() {
             <TableBody>
               {rows.map((r) => (
                 <TableRow key={r.agentId}>
-                  <TableTd style={agentCell}>{r.agentId}</TableTd>
-                  <TableTd style={numCell}>{r.count}</TableTd>
+                  <TableTd className="text-[12px] font-medium whitespace-nowrap">{r.agentId}</TableTd>
+                  <TableTd className="text-[12px] text-[var(--color-text-secondary)]">{r.count}</TableTd>
                   <TableTd>
                     <Chip tone={schemaTone(r.schemaConformance)} size="xs">
                       {(r.schemaConformance * 100).toFixed(1)}%
@@ -252,18 +261,18 @@ function DriftPage() {
       </Card>
 
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
+        <Inline as="div" align="center" justify="between" wrap gap="md" className="mb-3">
+          <Inline as="h2" gap="xs" wrap className="text-[14px] font-semibold m-0">
             Drift Over Time{' '}
-            <span style={hint}>
+            <T className="text-[11px] text-[var(--color-text-tertiary)] font-normal">
               P95 cosine distance to centroid · bucket {win.bucket}m · window {win.label}
-            </span>
-          </h2>
-        </div>
+            </T>
+          </Inline>
+        </Inline>
         {chartData.length === 0 ? (
           <EmptyState text="Not enough samples in this window to plot a series yet." />
         ) : (
-          <div style={{ width: '100%', height: 260 }}>
+          <Stack className="w-full h-[260px]">
             <ResponsiveContainer>
               <LineChart data={chartData} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
                 <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
@@ -292,19 +301,19 @@ function DriftPage() {
                 ))}
               </LineChart>
             </ResponsiveContainer>
-          </div>
+          </Stack>
         )}
       </Card>
 
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
+        <Inline as="div" align="center" justify="between" wrap gap="md" className="mb-3">
+          <Inline as="h2" gap="xs" wrap className="text-[14px] font-semibold m-0">
             By Template{' '}
-            <span style={hint}>
+            <T className="text-[11px] text-[var(--color-text-tertiary)] font-normal">
               which prompt is drifting · {templates.length} group{templates.length === 1 ? '' : 's'} · sorted by drift
-            </span>
-          </h2>
-        </div>
+            </T>
+          </Inline>
+        </Inline>
         {templates.length === 0 ? (
           <EmptyState text="No template groups have enough samples to compare yet." />
         ) : (
@@ -326,15 +335,18 @@ function DriftPage() {
                 return (
                   <TableRow
                     key={`${t.agentId}::${t.templateId}`}
+                    clickable
                     onClick={() => {
                       setSelectedAgent(t.agentId);
                       setExpanded(null);
                     }}
-                    style={focused ? { background: 'var(--color-surface-hover)', cursor: 'pointer' } : { cursor: 'pointer' }}
+                    className={focused ? 'bg-[var(--color-surface-hover)]' : ''}
                   >
-                    <TableTd style={agentCell}>{t.agentId}</TableTd>
-                    <TableTd style={monoCell}>{t.templateId}</TableTd>
-                    <TableTd style={numCell}>{t.count}</TableTd>
+                    <TableTd className="text-[12px] font-medium whitespace-nowrap">{t.agentId}</TableTd>
+                    <TableTd className="text-[11px] text-[var(--color-text-tertiary)] font-[ui-monospace,monospace] whitespace-nowrap">
+                      {t.templateId}
+                    </TableTd>
+                    <TableTd className="text-[12px] text-[var(--color-text-secondary)]">{t.count}</TableTd>
                     <TableTd>
                       <Chip tone={judgeP50Tone(t.judgeP50)} size="xs">{fmt(t.judgeP50)}</Chip>
                     </TableTd>
@@ -358,25 +370,24 @@ function DriftPage() {
       </Card>
 
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
+        <Inline as="div" align="center" justify="between" wrap gap="md" className="mb-3">
+          <Inline as="h2" gap="xs" wrap className="text-[14px] font-semibold m-0">
             Outliers{' '}
-            <span style={hint}>
+            <T className="text-[11px] text-[var(--color-text-tertiary)] font-normal">
               highest drift first · click a row to inspect + see nearest known-good neighbor
-            </span>
-          </h2>
-          <select
+            </T>
+          </Inline>
+          <Select
             value={selectedAgent}
             onChange={(e) => { setSelectedAgent(e.target.value); setExpanded(null); }}
-            style={selectStyle}
             disabled={rows.length === 0}
-          >
-            {rows.length === 0 && <option value="">(no agents)</option>}
-            {rows.map((r) => (
-              <option key={r.agentId} value={r.agentId}>{r.agentId}</option>
-            ))}
-          </select>
-        </div>
+            options={
+              rows.length === 0
+                ? [{ value: '', label: '(no agents)' }]
+                : rows.map((r) => ({ value: r.agentId, label: r.agentId }))
+            }
+          />
+        </Inline>
 
         {!selectedAgent ? (
           <EmptyState text="Pick an agent above to see outliers." />
@@ -402,17 +413,21 @@ function DriftPage() {
                 return (
                   <Fragment key={o.invocationId}>
                     <TableRow>
-                      <TableTd style={tsCell}>{new Date(o.ts).toLocaleTimeString()}</TableTd>
-                      <TableTd style={monoCell}>{o.templateId ?? '(none)'}</TableTd>
+                      <TableTd className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap">
+                        {new Date(o.ts).toLocaleTimeString()}
+                      </TableTd>
+                      <TableTd className="text-[11px] text-[var(--color-text-tertiary)] font-[ui-monospace,monospace] whitespace-nowrap">
+                        {o.templateId ?? '(none)'}
+                      </TableTd>
                       <TableTd
-                        style={{ ...snippetCell, cursor: 'pointer' }}
+                        className="text-[12px] max-w-[320px] overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer"
                         title={o.promptSnippet}
                         onClick={() => setExpanded(isOpen ? null : o.invocationId)}
                       >
                         {o.promptSnippet}
                       </TableTd>
                       <TableTd
-                        style={{ ...snippetCell, cursor: 'pointer' }}
+                        className="text-[12px] max-w-[320px] overflow-hidden text-ellipsis whitespace-nowrap cursor-pointer"
                         title={o.responseSnippet}
                         onClick={() => setExpanded(isOpen ? null : o.invocationId)}
                       >
@@ -424,28 +439,28 @@ function DriftPage() {
                       <TableTd>
                         <Chip tone={driftP95Tone(o.distance)} size="xs">{fmt(o.distance)}</Chip>
                       </TableTd>
-                      <TableTd style={{ whiteSpace: 'nowrap' }}>
+                      <TableTd className="whitespace-nowrap">
                         <CostChip cost={o.totalCostUsd} />
                       </TableTd>
-                      <TableTd style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
+                      <TableTd className="whitespace-nowrap text-right">
                         {o.invocationId ? (
-                          <button
-                            type="button"
+                          <IconButton
+                            aria-label="Open invocation detail"
+                            title="Open invocation detail"
+                            icon="→"
+                            variant="ghost"
+                            size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
                               navigate(`/admin/observability/invocations/${o.invocationId}`);
                             }}
-                            title="Open invocation detail"
-                            style={openLinkBtn}
-                          >
-                            →
-                          </button>
+                          />
                         ) : null}
                       </TableTd>
                     </TableRow>
                     {isOpen && (
                       <TableRow key={`${o.invocationId}-detail`}>
-                        <TableTd colSpan={8} style={{ padding: 12, background: 'var(--color-bg)' }}>
+                        <TableTd colSpan={8} className="p-3 bg-[var(--color-bg)]">
                           <OutlierDetail outlier={o} onSave={setSaveSource} />
                         </TableTd>
                       </TableRow>
@@ -503,78 +518,96 @@ function OutlierDetail({
   const nearest = neighbors?.[0];
   return (
     <div>
-      <div style={detailGrid}>
-        <div>
-          <div style={detailLabel}>OUTLIER</div>
-          <div style={outlierMetaRow}>
+      <Inline as="div" align="start" gap="md">
+        <Stack gap="none" className="flex-1">
+          <T as="div" className="text-[10px] font-bold text-[var(--color-text-tertiary)] mb-1 tracking-[0.5px]">
+            OUTLIER
+          </T>
+          <Inline as="div" align="center" wrap gap="xs" className="text-[11px] text-[var(--color-text-secondary)] mb-1.5">
             <span>distance {fmt(outlier.distance)}</span>
-            <span style={dotSep}>·</span>
+            <T className="text-[var(--color-text-tertiary)]">·</T>
             <span>judge {fmt(outlier.judgeScore)}</span>
-            <span style={dotSep}>·</span>
+            <T className="text-[var(--color-text-tertiary)]">·</T>
             <CostChip cost={outlier.totalCostUsd} />
             <PromptVersionChip promptVersion={outlier.promptVersion} />
-          </div>
-          <pre style={detailPre}>{outlier.responseSnippet}</pre>
+          </Inline>
+          <Stack
+            as="pre"
+            gap="none"
+            className="font-['Fira_Code','Cascadia_Code',monospace] text-[11.5px] leading-[1.55] whitespace-pre-wrap [word-break:break-word] m-0 py-2.5 px-3 rounded-[var(--radius-sm)] bg-[var(--color-surface)] border border-[var(--color-border)] max-h-[300px] overflow-y-auto"
+          >
+            {outlier.responseSnippet}
+          </Stack>
           {outlier.judgeRationale && (
-            <div style={detailHint}>judge: {outlier.judgeRationale}</div>
+            <T as="div" className="text-[10.5px] text-[var(--color-text-tertiary)] mt-1.5 italic">
+              judge: {outlier.judgeRationale}
+            </T>
           )}
-        </div>
-        <div>
-          <div style={detailLabel}>
+        </Stack>
+        <Stack gap="none" className="flex-1">
+          <T as="div" className="text-[10px] font-bold text-[var(--color-text-tertiary)] mb-1 tracking-[0.5px]">
             NEAREST KNOWN-GOOD{' '}
             {nearest && (
-              <span style={detailHintInline}>
+              <T className="font-normal text-[var(--color-text-tertiary)]">
                 · distance {fmt(nearest.distance)} · judge {fmt(nearest.judgeScore)}
-              </span>
+              </T>
             )}
-          </div>
+          </T>
           {neighbors == null ? (
-            <pre style={detailPre}>loading…</pre>
+            <Stack
+              as="pre"
+              gap="none"
+              className="font-['Fira_Code','Cascadia_Code',monospace] text-[11.5px] leading-[1.55] whitespace-pre-wrap [word-break:break-word] m-0 py-2.5 px-3 rounded-[var(--radius-sm)] bg-[var(--color-surface)] border border-[var(--color-border)] max-h-[300px] overflow-y-auto"
+            >
+              loading…
+            </Stack>
           ) : nearest ? (
-            <pre style={detailPre}>{nearest.responseSnippet}</pre>
+            <Stack
+              as="pre"
+              gap="none"
+              className="font-['Fira_Code','Cascadia_Code',monospace] text-[11.5px] leading-[1.55] whitespace-pre-wrap [word-break:break-word] m-0 py-2.5 px-3 rounded-[var(--radius-sm)] bg-[var(--color-surface)] border border-[var(--color-border)] max-h-[300px] overflow-y-auto"
+            >
+              {nearest.responseSnippet}
+            </Stack>
           ) : (
-            <pre style={{ ...detailPre, color: 'var(--color-text-tertiary)' }}>
+            <Stack
+              as="pre"
+              gap="none"
+              className="font-['Fira_Code','Cascadia_Code',monospace] text-[11.5px] leading-[1.55] whitespace-pre-wrap [word-break:break-word] m-0 py-2.5 px-3 rounded-[var(--radius-sm)] bg-[var(--color-surface)] border border-[var(--color-border)] max-h-[300px] overflow-y-auto text-[var(--color-text-tertiary)]"
+            >
               no trusted neighbor in last 7d
-            </pre>
+            </Stack>
           )}
-        </div>
-      </div>
-      <div style={outlierActionRow}>
-        <button
-          type="button"
+        </Stack>
+      </Inline>
+      <Inline as="div" justify="end" className="mt-2.5">
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => onSave(outlier)}
-          style={saveBtn}
           title="Lock this outlier in as a regression test case"
         >
           + Save as test case
-        </button>
-      </div>
+        </Button>
+      </Inline>
     </div>
   );
 }
 
 function WindowPicker({ value, onChange }: { value: number; onChange: (i: number) => void }) {
   return (
-    <div style={{ display: 'inline-flex', gap: 4 }}>
+    <Inline as="div" gap="xs">
       {WINDOW_OPTIONS.map((w, i) => (
-        <button
+        <Button
           key={w.label}
+          variant={i === value ? 'primary' : 'secondary'}
+          size="sm"
           onClick={() => onChange(i)}
-          style={{
-            fontSize: 11,
-            padding: '4px 10px',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-sm)',
-            background: i === value ? 'var(--color-primary)' : 'var(--color-surface)',
-            color: i === value ? 'white' : 'var(--color-text-secondary)',
-            cursor: 'pointer',
-            fontWeight: i === value ? 500 : 400,
-          }}
         >
           {w.label}
-        </button>
+        </Button>
       ))}
-    </div>
+    </Inline>
   );
 }
 
@@ -589,75 +622,10 @@ function shortTime(iso: string, hours: number): string {
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div style={{ padding: 24, textAlign: 'center', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+    <Inline as="div" justify="center" className="p-6 text-[12px] text-[var(--color-text-tertiary)]">
       {text}
-    </div>
+    </Inline>
   );
 }
-
-const headerRow: CSSProperties = {
-  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-  marginBottom: 12, gap: 12, flexWrap: 'wrap',
-};
-const h2: CSSProperties = { fontSize: 14, fontWeight: 600, margin: 0 };
-const hint: CSSProperties = { fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 400 };
-const selectStyle: CSSProperties = {
-  fontSize: 12, padding: '4px 8px', border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm)', background: 'var(--color-surface)', color: 'var(--color-text-primary)',
-};
-const agentCell: CSSProperties = { fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' };
-const numCell: CSSProperties = { fontSize: 12, color: 'var(--color-text-secondary)' };
-const tsCell: CSSProperties = { fontSize: 11, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' };
-const monoCell: CSSProperties = {
-  fontSize: 11, color: 'var(--color-text-tertiary)',
-  fontFamily: 'ui-monospace, monospace', whiteSpace: 'nowrap',
-};
-const snippetCell: CSSProperties = {
-  fontSize: 12, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-};
-const detailGrid: CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 };
-const detailLabel: CSSProperties = {
-  fontSize: 10, fontWeight: 700, color: 'var(--color-text-tertiary)',
-  marginBottom: 4, letterSpacing: 0.5,
-};
-const detailHintInline: CSSProperties = { fontWeight: 400, color: 'var(--color-text-tertiary)' };
-const outlierMetaRow: CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
-  fontSize: 11, color: 'var(--color-text-secondary)', marginBottom: 6,
-};
-const dotSep: CSSProperties = { color: 'var(--color-text-tertiary)' };
-const detailHint: CSSProperties = {
-  fontSize: 10.5, color: 'var(--color-text-tertiary)', marginTop: 6, fontStyle: 'italic',
-};
-const openLinkBtn: CSSProperties = {
-  background: 'transparent',
-  border: '1px solid var(--color-border)',
-  borderRadius: 4,
-  color: 'var(--color-primary, #6366f1)',
-  cursor: 'pointer',
-  fontSize: 12,
-  padding: '2px 8px',
-  fontFamily: 'inherit',
-};
-const detailPre: CSSProperties = {
-  fontFamily: '"Fira Code", "Cascadia Code", monospace',
-  fontSize: 11.5, lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-  margin: 0, padding: '10px 12px', borderRadius: 'var(--radius-sm)',
-  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-  maxHeight: 300, overflowY: 'auto',
-};
-const outlierActionRow: CSSProperties = {
-  display: 'flex', justifyContent: 'flex-end', marginTop: 10,
-};
-const saveBtn: CSSProperties = {
-  padding: '6px 12px',
-  fontSize: 12,
-  background: 'var(--color-surface)',
-  color: 'var(--color-text-secondary)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 4,
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-};
 
 export default DriftPage;

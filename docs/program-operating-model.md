@@ -253,7 +253,7 @@ requesting it gets a 403, not a silently narrowed answer.
   hold no active grant there.
 - **Direct-invoke authorization.** `POST /api/agents/:id/invoke` gates the write
   agents (graph-builder, ingestion, scoring) on `ManageIngest`, so a member
-  can't drive graph/KB/score writes directly; read + newsroom agents unchanged.
+  can't drive graph/KB/score writes directly; read agents unchanged.
 - **Roster-sourced pickers.** `GET /api/roster` (people + `isSme`, tenant+session
   gated) backs the New Sprint steward and grant-grantee pickers, which list an
   initiative's own contributors first, then everyone else with SMEs tagged — so a
@@ -264,10 +264,6 @@ requesting it gets a 403, not a silently narrowed answer.
   Link/Relink affordance on `/admin/identity/users`. Previously `personId` was
   settable only at user creation, so the Sprints "link it from Identity → Users"
   remediation was a dead end.
-- **Editor publish (built).** The `PublishArticle` capability now has a portal
-  surface: a `PublishArticle`-gated Publish button on the newsroom article page
-  (`POST /api/newsroom/articles/:id/publish`) that refetches on success, hides
-  once published, and never renders for a reporter.
 - **Agent-projects read tier.** The `/api/agent-projects` list + `/:id/runs` are
   now read-tiered via `readForRolesElseAction(['org-leader','hr-admin'],
   'DispatchAgentRun')` (`routes/agent-projects.ts`) instead of gating reads on

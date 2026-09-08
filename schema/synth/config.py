@@ -47,12 +47,10 @@ class SynthConfig:
     n_perf_reviews_per_person: int = 1         # 1 × ~60 people  = ~60
     n_slack_threads_per_project: int = 5       # 5 × ~12 projects = ~60
     n_all_hands: int = 6                       # monthly cadence
-    n_news_articles: int = 50
-    n_pitches_per_cluster: int = 1
 
     # Generation params.
     temperature_structured: float = 0.4        # ADR / postmortem / perf review
-    temperature_casual: float = 0.7            # Slack / all-hands / news
+    temperature_casual: float = 0.7            # Slack / all-hands
     max_output_tokens: int = 4096
 
     # Validation thresholds.
@@ -76,7 +74,6 @@ class SynthConfig:
         return f"orgiq-documents-{acct}-{self.region}"
 
     s3_internal_prefix: str = "synth/internal/"
-    s3_news_prefix: str = "synth/news/"
 
 
 CONFIG = SynthConfig()

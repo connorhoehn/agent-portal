@@ -1,0 +1,178 @@
+stretch item: accessibility sweep
+role: lead-assessor
+user: u-jonas
+tenant: assessment
+pages: portal/src/pages/assessment
+audited: 2026-09-07 05:03 local, Chrome 1560x757, middleware dev:mock on 127.0.0.1:3011 behind the Vite proxy (`curl localhost:5183/api/health` → `{"service":"orgiq-middleware"}`) — re-run after the fix that stopped the cross-tab save notice freezing its age
+verdict: pass — every control the tenant renders resolves an accessible name, in all three document states. The four explorer surfaces and the read/edit/drawer states were re-measured because the landed fix touches `DocPane`: **25 read / 28 edit / 32 edit-plus-drawer, 0 unnamed** at every step, identical to the previous pass. One cosmetic gap remains and is unchanged: the explorer `[role=tree]` containers still carry no `aria-label`.
+console errors: 0 — read after each of the four re-measured explorer surfaces, and after the read-state, edit-state and drawer-state sweeps on `/assessment/rules`.
+
+Re-run scope: this pass re-measured the four knowledge-explorer surfaces
+(workspace, enterprise, rules, prompts) and the document read/edit/drawer
+states, because those are what the notice-ageing fix reaches — it lives in
+`DocPane` and its knowledge helpers. The other eight rows in the table below
+carry their 2026-09-07 02:35 measurements unchanged; nothing in this fix
+touches them. Rows re-measured in this pass are marked **(re-measured 05:03)**.
+
+Method, unchanged so the numbers stay comparable: for each surface,
+`javascript_tool` queried `button, a[href], input, select, textarea,
+[role=button], [role=tab], [role=treeitem], [role=option]` (visible only —
+`getClientRects().length > 0`) and checked each for an accessible name via, in
+order: `aria-label`, `aria-labelledby` (resolved to real text), an associated
+`<label for>` or wrapping `<label>`, the first `<option>` of a `<select>`,
+non-empty text content, then `title`. A `<textarea>`'s `textContent` is its
+default *value*, not an accessible name, so it is excluded — that correction
+dates from the 02:00 pass and is what originally surfaced the editor gap. Each
+surface was reached by a real navigation, not a client-side `pushState`, which
+races the router and reads the previous route.
+
+## Per-surface table
+
+| surface | url | controls | unnamed | notes | verdict |
+|---|---|---|---|---|---|
+| dashboard | `/assessment/teams` | 28 | 0 | cohort tiles, table rows, "+ New team" all named via text | pass |
+| team-scorecard | `/assessment/teams/TEAM-001` | 50 | 0 | see master-detail detail below | pass |
+| submissions | `/assessment/submissions` | 34 | 0 | table + search + row actions all named; the revision-history drawer's ✕ carries `aria-label="Close"` rather than visible text, which the sweep resolves correctly | pass |
+| submissions-wizard | `/assessment/submissions?view=add`, step 1 (Drop file) | 25 | 0 | stepper items, dropzone, Parse/Back/Next all named; the three disabled buttons are still named | pass |
+| feedback | `/assessment/feedback` | 224 | 0 | the largest surface in the tenant and it stays clean | pass |
+| reports | `/assessment/reports` | 24 | 0 | | pass |
+| runs | `/assessment/runs` | 46 | 0 | ledger rows + per-command "Run" buttons + the team `<select>`, whose visible "Choose a team…" default option acts as its name | pass |
+| configuration | `/assessment/configuration` | 26 | 0 | as lead-assessor: read-only banner, every field disabled but still carrying a text `<label>` | pass |
+| workspace | `/assessment/workspace?doc=page:100002` | 27 | 0 | **(re-measured 05:03)** unchanged; see tree detail below | pass |
+| enterprise | `/assessment/enterprise?doc=ec:standards/ci-cd-standards.md` | 36 | 0 | **(re-measured 05:03)** unchanged; four icon-only directory chevrons, all named | pass |
+| rules | `/assessment/rules?doc=rule:scoring-guardrails.md` | 25 | 0 | **(re-measured 05:03)** unchanged from the previous pass's 25 | pass |
+| prompts | `/assessment/prompts?doc=prompt:classify-transcript.md` | 28 | 0 | **(re-measured 05:03)** unchanged | pass |
+
+Zero unnamed interactive controls on any of the twelve surfaces, across 573
+checked live nodes. Every icon-only control resolved a name through
+`aria-label` rather than relying on a glyph — including the four "Collapse"
+and "Expand" chevrons the enterprise tree renders.
+
+## The update notice, when it is on screen
+
+The read-state count of 25 on rules is measured on a page with **no** notice —
+which is the correct state for a fresh arrival, and why the count dropped from
+26 in the 02:35 pass. This run also measured a page where a notice *was*
+showing, in the tab that had been left open across a peer save: its Dismiss
+control resolves `aria-label="Dismiss"` on a ✕ glyph, so the control the
+earlier count included was never unnamed — it simply should not have been
+rendering on arrival.
+
+New this pass, and the reason the log was re-run: the notice's **text** is now
+derived at render rather than formatted once into state. That matters for a
+screen-reader user for the same reason it matters for a sighted one — the
+sentence "Updated by u-jonas just now" is an assertion about the present, and
+it used to keep asserting it eight minutes later. It was watched ageing through
+"just now" (7 s) → "2m ago" (2 min 27 s) → "5m ago" (5 min 40 s) → "9m ago"
+(9 min 03 s) → "20m ago". The banner is not a live region, so nothing is
+re-announced spuriously; it simply reads correctly whenever it is read.
+
+## Document states — re-measured after the ageing fix
+
+Measured on `/assessment/rules?doc=rule:scoring-guardrails.md` as u-jonas,
+gateway unreachable, three states of the same page:
+
+| state | controls | unnamed | previous pass (04:18) |
+|---|---|---|---|
+| read (document card, drawer closed) | **25** | 0 | 25 / 0 |
+| edit (Edit pressed, drawer closed) | **28** | 0 | 28 / 0 |
+| edit + Comments drawer open | **32** | 0 | 32 / 0 |
+
+The three names that made this log fail at 02:00 all still resolve, read off
+the live DOM in this pass:
+
+1. **The body editor `<textarea>`** — `aria-label="Scoring Guardrails — document body"`,
+   holding all 363 characters of the current document. Composed from the
+   document title, so it identifies *which* document is being edited rather
+   than announcing a generic "document body" on a surface where four explorer
+   modes render the same editor.
+2. **The "Version label (optional)" `<textarea>`** — `aria-label="Version label (optional)"`,
+   alongside rather than instead of the grey hint text, so the name survives the
+   field having content.
+3. **The Comments drawer's message `<input>`** — `aria-label="Add a comment"`,
+   applied by `useCommentComposerLabel` in `DocPane.tsx` with a
+   `MutationObserver`, because `ChatPanel` (`ui-components/social`) exposes no
+   prop that reaches that field's name and this repo cannot edit the library.
+   It held across a drawer close and reopen again in this pass. The library gap
+   is queued in `docs/ui-components-queue.md`.
+
+A trap worth recording for anyone scripting this sweep: the editor renders
+**two** textareas and the first in document order is the version-label field,
+not the body. `document.querySelector('main textarea')` therefore returns a
+zero-length value on a fully populated editor, which reads exactly like an
+empty-editor regression. Select by `aria-label` — `main textarea[aria-label$="document body"]` —
+or index from the end.
+
+## Trees (enterprise / workspace / rules / prompts) — all four re-measured
+
+| surface | `[role=tree]` | treeitems | `aria-level` | `aria-expanded` on directories | roving `tabindex="0"` | tree has `aria-label` |
+|---|---|---|---|---|---|---|
+| workspace | yes | 5 | all 5 (`1,2,2,2,1`) | 2 nodes, reading `true` and `false` | exactly 1 | **no** |
+| rules | yes | 3 (flat) | all 3 | n/a — no directories | exactly 1 | **no** |
+| prompts | yes | 9 (flat) | all 9 (`1`×9) | n/a — no directories | exactly 1 | **no** |
+| enterprise | yes | 6 loaded, 10 expanded | all 6 (`1,2,2,1,1,1`) | all 4 directories — "Standards" `true`, Process/Organization/Tooling `false` | exactly 1 | **no** |
+
+All four document-explorer surfaces implement real `tree`/`treeitem` semantics
+with `aria-level` and correct roving tabindex, and both surfaces with nesting
+toggle `aria-expanded` correctly. The roving pattern was re-checked rather than
+assumed: on every rail exactly one row carries `tabindex="0"`, so the Tab order
+contains one tree entry and the rest are reached with the arrow keys — which is
+why the per-surface control counts in the role logs are larger than their
+Tab-order counts and neither number is wrong.
+
+The one gap is unchanged and applies to all four rails: no `[role=tree]`
+container carries an `aria-label`, so a screen reader announces "tree" four
+times with nothing to distinguish them. The section heading already rendered
+above each rail ("ENTERPRISE CONTEXT · 10", "RULES · 3", "PROMPTS · 9",
+"ENGINEERING SPACE (CONFLUENCE) · 5 · SYNCED") is the obvious
+`aria-labelledby` target. Cosmetic severity — it costs orientation, not access.
+
+## Master-detail rail (team-scorecard)
+
+Unchanged from 02:35 and outside this fix's blast radius: the rail container is
+`role="listbox"` with `aria-label="Dimensions"`, holding 17 `role="option"`
+children, all 17 carrying both `aria-posinset` and `aria-setsize`, with exactly
+one at `aria-selected="true"` at any time.
+
+## Dialogs
+
+| dialog | trigger | role / aria-modal | name source | focus on open | Escape closes | focus restored to trigger |
+|---|---|---|---|---|---|---|
+| New team | Dashboard → "+ New team" | `dialog` / `true` | `aria-label="New team"` | the Name input | yes | yes |
+| N/A exceptions | Team scorecard → "Exceptions" | `dialog` / `true` | `aria-label="N/A exceptions"` | the "Close" button | yes | yes |
+| How it was assessed | Team scorecard → "How it was assessed" | `dialog` / `true` | `aria-labelledby` → "How it was assessed" | its "Close" button | yes | yes |
+| Command palette | ⌘K anywhere | `dialog` / `true` | `aria-label="Command palette"` | the search input | yes | yes |
+| Comments drawer | any document card → "Comments" | `dialog` | resolved via its "Comments" heading | the composer input (`aria-label="Add a comment"`) | yes — re-verified this pass on rules, 1 dialog → 0 | yes |
+| Version history | rules/enterprise document card → "History" | `dialog` | resolved via its "Version history" heading | its first Restore action | yes — re-verified this pass for lead-assessor, program-lead and admin, 1 → 0 each | yes |
+
+Methodological note worth keeping, because it produced a false "fail" in an
+earlier pass and would again: a JS `.click()` on a trigger does **not** focus
+it the way a real mouse click does. Open a dialog that way and the modal
+captures `BODY` as the element to restore, so focus appears to be dropped on
+close. Focusing the trigger first — as any real interaction leaves it — gives
+the correct hand-back. Every row above was measured that way. Two more harness
+notes: a double-`requestAnimationFrame` wait never resolves in a background tab
+here and hangs the evaluation outright, so focus readings use `setTimeout`; and
+a synthetic Enter `keydown` does not activate an `<a>` or `<button>`, so
+activation uses a real `.click()` on the focused element (a dispatched Escape
+does work).
+
+## Summary
+
+Every interactive control the assessment tenant renders resolves an accessible
+name, in all three document states: zero unnamed across 573 live read-state
+nodes, zero in the edit state, zero with the comments drawer open. Alongside
+that: a real `listbox`/`option` master-detail with full positional metadata,
+real `tree`/`treeitem` semantics with `aria-level` and correct `aria-expanded`
+on all four explorer surfaces, and six dialogs implementing the modal contract
+correctly — labelled, focus in on open, focus back to the trigger on Escape.
+
+The one gap stands, and it is the cosmetic one this log has carried since
+2026-09-05: no `[role=tree]` container has an `aria-label`. It costs
+orientation, not access.
+
+The change since the last run is not in the counts, which are identical, but in
+what the one time-bearing string on these surfaces says. A banner that reads
+"just now" forever is a wrong statement rendered with a correct name — the
+worst thing a sweep like this can pass. It now reads the real age whenever it
+is read.

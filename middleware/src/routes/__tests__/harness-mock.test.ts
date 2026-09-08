@@ -24,7 +24,7 @@ jest.mock('../../lib/authz.js', () => ({
 }));
 
 import express from 'express';
-import request from 'supertest';
+import request from '../../test-support/http.js';
 import { harnessRouter } from '../harness.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { exec } from '../../providers/aurora.js';

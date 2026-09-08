@@ -14,12 +14,18 @@
 // Polling: 15s for the page (operational), 30s for the events feed.
 
 import { useMemo, useState } from 'react';
-import type { CSSProperties } from 'react';
 import { useNavigate } from 'react-router';
 import {
+  Button,
   Card,
+  CardHeader,
   Chip,
+  Inline,
+  InlineAlert,
   PageSection,
+  Stack,
+  StatCard,
+  StatusDot,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
   ComposedChart,
@@ -35,6 +41,7 @@ import {
 } from 'recharts';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
+import { T } from './Text';
 
 // ── API contracts (mirrors middleware/src/routes/oncall.ts) ────────────────
 
@@ -185,12 +192,12 @@ function OnCallPage() {
       title="On-Call"
       description={undefined}
       actions={
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Inline align="center" gap="sm">
           <WindowPicker value={windowIdx} onChange={setWindowIdx} />
-          <button onClick={refreshTimeline} style={refreshBtn} title="Refresh now">
+          <Button variant="secondary" size="sm" onClick={refreshTimeline} title="Refresh now">
             Refresh
-          </button>
-        </div>
+          </Button>
+        </Inline>
       }
     >
       {/* Alarms and the incident timeline both come from here. An empty
@@ -207,67 +214,61 @@ function OnCallPage() {
 
       {/* Status strip */}
       <Card padding="md">
-        <div style={subline}>
+        <Inline gap="sm" align="center" wrap className="text-[12px] text-text-secondary">
           <SeverityDot severity={criticalCount > 0 ? 'critical' : warningCount > 0 ? 'warning' : 'ok'} />
-          <span>
+          <T>
             {activeAlarms.length === 0
               ? 'no active alarms'
               : `${activeAlarms.length} active alarm${activeAlarms.length === 1 ? '' : 's'}`}
-          </span>
-          <span style={dotSep}>·</span>
-          <span>
+          </T>
+          <T className="text-text-tertiary">·</T>
+          <T>
             <strong>{hitl?.pendingCount ?? 0}</strong> pending approval
             {hitl?.pendingCount === 1 ? '' : 's'}
-          </span>
-          <span style={dotSep}>·</span>
-          <span>
+          </T>
+          <T className="text-text-tertiary">·</T>
+          <T>
             last incident {lastIncident ? timeAgo(lastIncident) : '—'}
-          </span>
-        </div>
+          </T>
+        </Inline>
       </Card>
 
       {/* Active alarms */}
       <Card padding="md">
-        <h3 style={h3}>
-          Active Alarms{' '}
-          <span style={hint}>computed from last 1h of signals · 15s refresh</span>
-        </h3>
+        <CardHeader title="Active Alarms" subtitle="computed from last 1h of signals · 15s refresh" />
         {activeAlarms.length === 0 ? (
-          <div style={allClearRow}>
+          <Inline gap="sm" align="center" className="py-1.5 px-1">
             <SeverityDot severity="ok" />
-            <span style={allClearText}>
+            <T className="text-[12px] text-text-secondary">
               All clear · all signals within thresholds
-            </span>
-          </div>
+            </T>
+          </Inline>
         ) : (
-          <div style={alarmList}>
+          <Stack gap="sm">
             {activeAlarms.map((a) => (
               <AlarmChip key={a.name} alarm={a} />
             ))}
-          </div>
+          </Stack>
         )}
       </Card>
 
       {/* Timeline composed chart */}
       <Card padding="md">
-        <div style={headerRow}>
-          <h3 style={h3}>
-            Incident Timeline{' '}
-            <span style={hint}>
-              errors = real failures (guardrail / schema-invalid) · judge P05 = answer-quality floor ·
-              drift · cost · deploys · bucket {win.bucket}m · {win.label}
-            </span>
-          </h3>
-          {deployLines.length > 0 && (
-            <span style={legendHint}>
-              <span style={{ color: 'var(--color-warning, #f59e0b)' }}>↑</span> deploy markers
-            </span>
-          )}
-        </div>
+        <CardHeader
+          title="Incident Timeline"
+          subtitle={`errors = real failures (guardrail / schema-invalid) · judge P05 = answer-quality floor · drift · cost · deploys · bucket ${win.bucket}m · ${win.label}`}
+          action={
+            deployLines.length > 0 ? (
+              <T className="text-[11px] text-text-tertiary">
+                <T className="text-warning">↑</T> deploy markers
+              </T>
+            ) : undefined
+          }
+        />
         {chartData.length === 0 ? (
           <EmptyState text="No invocations in this window yet — timeline activates after the first sampled call." />
         ) : (
-          <div style={{ width: '100%', height: 320 }}>
+          <Stack className="w-full h-[320px]">
             <ResponsiveContainer>
               <ComposedChart
                 data={chartData}
@@ -320,7 +321,7 @@ function OnCallPage() {
                   yAxisId="right"
                   dataKey="errors"
                   name="errors (failures)"
-                  fill="var(--color-danger, #ef4444)"
+                  fill="var(--color-danger)"
                   opacity={0.35}
                   isAnimationActive={false}
                 />
@@ -329,7 +330,7 @@ function OnCallPage() {
                   type="monotone"
                   dataKey="judgeP05"
                   name="judge P05 (quality)"
-                  stroke="#10b981"
+                  stroke="var(--color-success)"
                   strokeWidth={1.5}
                   dot={false}
                   connectNulls
@@ -340,7 +341,7 @@ function OnCallPage() {
                   type="monotone"
                   dataKey="driftP95"
                   name="drift P95"
-                  stroke="#ef4444"
+                  stroke="var(--color-danger)"
                   strokeWidth={1.5}
                   dot={false}
                   connectNulls
@@ -351,7 +352,7 @@ function OnCallPage() {
                   type="monotone"
                   dataKey="costUsd"
                   name="cost ($)"
-                  stroke="#6366f1"
+                  stroke="var(--color-brand)"
                   strokeWidth={1.5}
                   dot={false}
                   connectNulls
@@ -363,61 +364,60 @@ function OnCallPage() {
                     key={`${d.label}-${i}`}
                     yAxisId="left"
                     x={d.label}
-                    stroke="var(--color-warning, #f59e0b)"
+                    stroke="var(--color-warning)"
                     strokeDasharray="4 4"
                     label={{
                       value: d.markerLabel,
                       position: 'insideTopRight',
-                      style: { fontSize: 10, fill: 'var(--color-warning, #f59e0b)' },
+                      style: { fontSize: 10, fill: 'var(--color-warning)' },
                     }}
                   />
                 ))}
               </ComposedChart>
             </ResponsiveContainer>
-          </div>
+          </Stack>
         )}
       </Card>
 
       {/* HITL SLA card + Recent events — side-by-side on wide, stacked on narrow */}
-      <div style={twoColRow}>
-        <Card padding="md">
-          <h3 style={h3}>
-            HITL SLA{' '}
-            <span style={hint}>approval-queue health · window {win.label}</span>
-          </h3>
-          {hitl ? (
-            <HitlSlaBody hitl={hitl} onViewQueue={() => navigate('/admin/observability/approvals')} />
-          ) : (
-            <EmptyState text="Loading approval-queue stats…" />
-          )}
-        </Card>
+      <Inline gap="lg" wrap align="start">
+        <Stack className="flex-1 min-w-[280px]">
+          <Card padding="md">
+            <CardHeader title="HITL SLA" subtitle={`approval-queue health · window ${win.label}`} />
+            {hitl ? (
+              <HitlSlaBody hitl={hitl} onViewQueue={() => navigate('/admin/observability/approvals')} />
+            ) : (
+              <EmptyState text="Loading approval-queue stats…" />
+            )}
+          </Card>
+        </Stack>
 
-        <Card padding="md">
-          <h3 style={h3}>
-            Recent Events{' '}
-            <span style={hint}>
-              deploys · alarms · HITL · judge regressions · {events.length} event{events.length === 1 ? '' : 's'}
-            </span>
-          </h3>
-          {events.length === 0 ? (
-            <EmptyState text="No recent events." />
-          ) : (
-            <div style={eventList}>
-              {events.map((e, i) => (
-                <EventRow
-                  key={`${e.ts}-${i}`}
-                  event={e}
-                  onClick={() => {
-                    if (e.relatedInvocationId) {
-                      navigate(`/admin/observability/invocations/${e.relatedInvocationId}`);
-                    }
-                  }}
-                />
-              ))}
-            </div>
-          )}
-        </Card>
-      </div>
+        <Stack className="flex-[2] min-w-0">
+          <Card padding="md">
+            <CardHeader
+              title="Recent Events"
+              subtitle={`deploys · alarms · HITL · judge regressions · ${events.length} event${events.length === 1 ? '' : 's'}`}
+            />
+            {events.length === 0 ? (
+              <EmptyState text="No recent events." />
+            ) : (
+              <Stack gap="xs" className="max-h-[420px] overflow-y-auto">
+                {events.map((e, i) => (
+                  <EventRow
+                    key={`${e.ts}-${i}`}
+                    event={e}
+                    onClick={() => {
+                      if (e.relatedInvocationId) {
+                        navigate(`/admin/observability/invocations/${e.relatedInvocationId}`);
+                      }
+                    }}
+                  />
+                ))}
+              </Stack>
+            )}
+          </Card>
+        </Stack>
+      </Inline>
     </PageSection>
   );
 }
@@ -432,21 +432,20 @@ function AlarmChip({ alarm }: { alarm: AlarmState }) {
     : alarm.severity === 'warning' ? 'warning'
     : alarm.severity === 'unknown' ? 'neutral'
     : 'success';
-  const glyph = alarm.severity === 'critical' ? '✗'
-    : alarm.severity === 'warning' ? '⚠'
-    : alarm.severity === 'unknown' ? '?'
-    : '✓';
+  const alertTone = alarm.severity === 'critical' ? 'error'
+    : alarm.severity === 'warning' ? 'warning'
+    : alarm.severity === 'unknown' ? 'info'
+    : 'success';
   return (
-    <div style={alarmChipBox(alarm.severity)}>
-      <span style={alarmGlyph(alarm.severity)}>{glyph}</span>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-        <div style={alarmTitleRow}>
-          <span style={alarmName}>{alarm.name}</span>
+    <InlineAlert tone={alertTone}>
+      <Stack gap="none">
+        <Inline gap="sm" align="center" wrap>
+          <T className="text-[12px] font-semibold font-mono">{alarm.name}</T>
           <Chip tone={tone} size="xs">{alarm.severity}</Chip>
-        </div>
-        <span style={alarmReason}>{alarm.reason}</span>
-      </div>
-    </div>
+        </Inline>
+        <T className="text-[11px] text-text-secondary">{alarm.reason}</T>
+      </Stack>
+    </InlineAlert>
   );
 }
 
@@ -467,20 +466,16 @@ function HitlSlaBody({
       : 'danger';
 
   return (
-    <div style={hitlBody}>
-      <div style={hitlBigRow}>
-        <div style={hitlBigNumber}>
-          <div style={hitlBigDigit}>{hitl.pendingCount}</div>
-          <div style={hitlBigLabel}>pending</div>
-        </div>
+    <Stack gap="md">
+      <Inline align="baseline" gap="md" wrap>
+        <StatCard label="Pending" value={hitl.pendingCount} />
         {oldestMin != null && oldestMin >= 5 && (
-          <div style={hitlAgeBox}>
-            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>oldest</span>
-            <span style={hitlAgeText}>{oldestMin}m</span>
-          </div>
+          <Chip tone="warning" size="sm">
+            oldest {oldestMin}m
+          </Chip>
         )}
-      </div>
-      <div style={hitlChipRow}>
+      </Inline>
+      <Inline gap="xs" wrap>
         <Chip tone="neutral" size="xs">
           p50 {hitl.p50DecisionSeconds.toFixed(1)}s
         </Chip>
@@ -495,13 +490,11 @@ function HitlSlaBody({
             {hitl.expiredInWindow} expired
           </Chip>
         )}
-      </div>
-      <div style={{ marginTop: 12 }}>
-        <button onClick={onViewQueue} style={viewQueueBtn} type="button">
-          View queue →
-        </button>
-      </div>
-    </div>
+      </Inline>
+      <Button variant="secondary" size="sm" className="mt-3 self-start" onClick={onViewQueue} type="button">
+        View queue →
+      </Button>
+    </Stack>
   );
 }
 
@@ -519,24 +512,40 @@ function EventRow({ event, onClick }: { event: RecentEvent; onClick: () => void 
       : event.severity === 'warning' ? 'warning'
       : 'info';
   const clickable = !!event.relatedInvocationId;
+  const dotColor = event.severity === 'critical'
+    ? 'var(--color-danger)'
+    : event.severity === 'warning'
+    ? 'var(--color-warning)'
+    : 'var(--color-success)';
+  const glyphClass = event.severity === 'critical'
+    ? 'text-danger'
+    : event.severity === 'warning'
+    ? 'text-warning'
+    : 'text-text-secondary';
   return (
-    <div
+    <Inline
+      align="center"
+      gap="sm"
+      className={`px-2 py-1.5 rounded-sm border-b border-border ${clickable ? 'cursor-pointer' : 'cursor-default'}`}
       onClick={clickable ? onClick : undefined}
-      style={{
-        ...eventRowStyle,
-        cursor: clickable ? 'pointer' : 'default',
-      }}
       title={clickable ? 'Open invocation detail' : undefined}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={clickable ? (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); }
+      } : undefined}
     >
-      <span style={eventGlyph(event.severity)}>{EVENT_GLYPH[event.kind]}</span>
-      <SeverityDot severity={event.severity === 'info' ? 'ok' : event.severity} />
-      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
-        <span style={eventTitle}>{event.title}</span>
-        {event.detail && <span style={eventDetail}>{event.detail}</span>}
-      </div>
-      <span style={eventTs}>{new Date(event.ts).toLocaleTimeString()}</span>
+      <T className={`text-[13px] w-3.5 text-center shrink-0 ${glyphClass}`}>{EVENT_GLYPH[event.kind]}</T>
+      <StatusDot color={dotColor} size="xs" />
+      <Stack gap="none" className="min-w-0 flex-1">
+        <T as="div" className="text-[12px] font-medium truncate">{event.title}</T>
+        {event.detail && <T as="div" className="text-[11px] text-text-tertiary truncate">{event.detail}</T>}
+      </Stack>
+      <T className="text-[11px] text-text-tertiary font-mono whitespace-nowrap shrink-0">
+        {new Date(event.ts).toLocaleTimeString()}
+      </T>
       {tone === 'danger' && <Chip tone="danger" size="xs">crit</Chip>}
-    </div>
+    </Inline>
   );
 }
 
@@ -546,54 +555,35 @@ function SeverityDot({
   severity: 'critical' | 'warning' | 'ok' | 'unknown';
 }) {
   const color = severity === 'critical'
-    ? 'var(--color-danger, #ef4444)'
+    ? 'var(--color-danger)'
     : severity === 'warning'
-    ? 'var(--color-warning, #f59e0b)'
-    : 'var(--color-success, #10b981)';
-  return (
-    <span
-      style={{
-        width: 8,
-        height: 8,
-        borderRadius: '50%',
-        background: color,
-        display: 'inline-block',
-        flexShrink: 0,
-      }}
-    />
-  );
+    ? 'var(--color-warning)'
+    : 'var(--color-success)';
+  return <StatusDot color={color} size="sm" />;
 }
 
 function WindowPicker({ value, onChange }: { value: number; onChange: (i: number) => void }) {
   return (
-    <div style={{ display: 'inline-flex', gap: 4 }}>
+    <Inline gap="xs">
       {WINDOW_OPTIONS.map((w, i) => (
-        <button
+        <Button
           key={w.label}
+          variant={i === value ? 'primary' : 'secondary'}
+          size="sm"
           onClick={() => onChange(i)}
-          style={{
-            fontSize: 11,
-            padding: '4px 10px',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-sm)',
-            background: i === value ? 'var(--color-primary)' : 'var(--color-surface)',
-            color: i === value ? 'white' : 'var(--color-text-secondary)',
-            cursor: 'pointer',
-            fontWeight: i === value ? 500 : 400,
-          }}
         >
           {w.label}
-        </button>
+        </Button>
       ))}
-    </div>
+    </Inline>
   );
 }
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div style={{ padding: 24, textAlign: 'center', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+    <T as="div" className="p-6 text-center text-[12px] text-text-tertiary">
       {text}
-    </div>
+    </T>
   );
 }
 
@@ -619,159 +609,5 @@ function timeAgo(iso: string): string {
   const days = Math.floor(hr / 24);
   return `${days}d ago`;
 }
-
-// ── Styles ─────────────────────────────────────────────────────────────────
-
-const headerRow: CSSProperties = {
-  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-  marginBottom: 8, gap: 12, flexWrap: 'wrap',
-};
-const h3: CSSProperties = { fontSize: 14, fontWeight: 600, margin: 0, marginBottom: 12 };
-const subline: CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 8,
-  fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 4, flexWrap: 'wrap',
-};
-const hint: CSSProperties = { fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 400 };
-const legendHint: CSSProperties = { fontSize: 11, color: 'var(--color-text-tertiary)' };
-const dotSep: CSSProperties = { color: 'var(--color-text-tertiary)' };
-
-const refreshBtn: CSSProperties = {
-  fontSize: 11, padding: '4px 10px',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm)',
-  background: 'var(--color-surface)',
-  color: 'var(--color-text-secondary)',
-  cursor: 'pointer',
-};
-
-const allClearRow: CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 10, padding: '6px 4px',
-};
-const allClearText: CSSProperties = {
-  fontSize: 12, color: 'var(--color-text-secondary)',
-};
-const alarmList: CSSProperties = {
-  display: 'flex', flexDirection: 'column', gap: 8,
-};
-
-const alarmChipBox = (sev: AlarmState['severity']): CSSProperties => ({
-  display: 'flex', alignItems: 'flex-start', gap: 10,
-  padding: '8px 12px',
-  border: `1px solid ${
-    sev === 'critical'
-      ? 'var(--color-danger, #ef4444)'
-      : sev === 'warning'
-      ? 'var(--color-warning, #f59e0b)'
-      : 'var(--color-border)'
-  }`,
-  borderRadius: 'var(--radius-sm, 4px)',
-  background: sev === 'critical'
-    ? 'rgba(239,68,68,0.06)'
-    : sev === 'warning'
-    ? 'rgba(245,158,11,0.06)'
-    : 'transparent',
-});
-
-const alarmGlyph = (sev: AlarmState['severity']): CSSProperties => ({
-  fontSize: sev === 'critical' ? 18 : 14,
-  lineHeight: 1,
-  color: sev === 'critical'
-    ? 'var(--color-danger, #ef4444)'
-    : sev === 'warning'
-    ? 'var(--color-warning, #f59e0b)'
-    : 'var(--color-success, #10b981)',
-  flexShrink: 0,
-  marginTop: 1,
-});
-
-const alarmTitleRow: CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-};
-const alarmName: CSSProperties = {
-  fontSize: 12, fontWeight: 600,
-  fontFamily: 'ui-monospace, monospace',
-  color: 'var(--color-text-primary)',
-};
-const alarmReason: CSSProperties = {
-  fontSize: 11, color: 'var(--color-text-secondary)',
-};
-
-const twoColRow: CSSProperties = {
-  display: 'grid', gap: 24,
-  gridTemplateColumns: 'minmax(280px, 1fr) minmax(0, 2fr)',
-};
-
-const hitlBody: CSSProperties = {
-  display: 'flex', flexDirection: 'column', gap: 12,
-};
-const hitlBigRow: CSSProperties = {
-  display: 'flex', alignItems: 'baseline', gap: 16, flexWrap: 'wrap',
-};
-const hitlBigNumber: CSSProperties = {
-  display: 'flex', alignItems: 'baseline', gap: 6,
-};
-const hitlBigDigit: CSSProperties = {
-  fontSize: 32, fontWeight: 600, lineHeight: 1,
-  fontFamily: 'ui-monospace, monospace',
-};
-const hitlBigLabel: CSSProperties = {
-  fontSize: 11, color: 'var(--color-text-tertiary)',
-};
-const hitlAgeBox: CSSProperties = {
-  display: 'flex', alignItems: 'baseline', gap: 4,
-  padding: '4px 8px',
-  border: '1px solid var(--color-warning, #f59e0b)',
-  borderRadius: 'var(--radius-sm, 4px)',
-  background: 'rgba(245,158,11,0.06)',
-};
-const hitlAgeText: CSSProperties = {
-  fontSize: 16, fontWeight: 600,
-  color: 'var(--color-warning, #f59e0b)',
-  fontFamily: 'ui-monospace, monospace',
-};
-const hitlChipRow: CSSProperties = {
-  display: 'flex', gap: 6, flexWrap: 'wrap',
-};
-
-const viewQueueBtn: CSSProperties = {
-  fontSize: 11, padding: '4px 10px',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm)',
-  background: 'transparent',
-  color: 'var(--color-primary, #6366f1)',
-  cursor: 'pointer',
-};
-
-const eventList: CSSProperties = {
-  display: 'flex', flexDirection: 'column', gap: 4,
-  maxHeight: 420, overflowY: 'auto',
-};
-const eventRowStyle: CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 8,
-  padding: '6px 8px',
-  borderRadius: 'var(--radius-sm, 4px)',
-  borderBottom: '1px solid var(--color-border)',
-};
-const eventGlyph = (sev: RecentEvent['severity']): CSSProperties => ({
-  fontSize: 13, lineHeight: 1, width: 14, textAlign: 'center',
-  color: sev === 'critical'
-    ? 'var(--color-danger, #ef4444)'
-    : sev === 'warning'
-    ? 'var(--color-warning, #f59e0b)'
-    : 'var(--color-text-secondary)',
-});
-const eventTitle: CSSProperties = {
-  fontSize: 12, fontWeight: 500,
-  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-};
-const eventDetail: CSSProperties = {
-  fontSize: 11, color: 'var(--color-text-tertiary)',
-  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-};
-const eventTs: CSSProperties = {
-  fontSize: 11, color: 'var(--color-text-tertiary)',
-  fontFamily: 'ui-monospace, monospace',
-  whiteSpace: 'nowrap', flexShrink: 0,
-};
 
 export default OnCallPage;

@@ -21,14 +21,32 @@ import {
 } from '../components/org-graph/ExplorePanels';
 import type { MENode, MEEdge } from '../components/multi-entity-graph/types';
 import {
+  Banner,
+  Button,
+  Card,
   ChatComposer,
+  DropdownMenu,
+  EmptyState,
+  ErrorState,
+  FilterChip,
+  IconButton,
+  Inline,
+  LoadingState,
   MessageBubble,
   PageSection,
+  SegmentedControl,
   Spinner,
-  Card,
+  Stack,
+  StatusDot,
+  Toolbar,
+  ToolbarGroup,
+  ToolbarLabel,
+  Tooltip,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { Markdown } from '../components/Markdown';
+import { T } from './Text';
+import { RangeSliderFrame } from './RangeSliderFrame';
 import { fetchSessionMessages, rememberSession, recallSession, forgetSession, stripThinking } from '../lib/chatSessions';
 import { ChatSessionPicker } from '../components/ChatSessionPicker';
 import { deriveSources, extractSources } from '../components/chat/answerSources';
@@ -194,39 +212,12 @@ function ExplorePage() {
   const [filterToSelection, setFilterToSelection] = useState(true);
   const [activeStatuses, setActiveStatuses] = useState<Set<string> | null>(null);
   const [presenceFilter, setPresenceFilter] = useState<'office' | 'remote' | 'away' | null>(null);
-  const [presenceOpen, setPresenceOpen] = useState(false);
-  const presenceRef = useRef<HTMLDivElement>(null);
-  const presenceTriggerRef = useRef<HTMLButtonElement>(null);
-  const presenceListRef = useRef<HTMLDivElement>(null);
-
-  // Close presence dropdown on outside click
-  useEffect(() => {
-    if (!presenceOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (presenceRef.current && !presenceRef.current.contains(e.target as Node)) {
-        setPresenceOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [presenceOpen]);
-
-  // Move focus into the listbox when it opens so keyboard users land inside it.
-  useEffect(() => {
-    if (presenceOpen) presenceListRef.current?.focus();
-  }, [presenceOpen]);
-
-  // Escape closes the listbox and returns focus to its trigger.
-  const closePresence = () => {
-    setPresenceOpen(false);
-    presenceTriggerRef.current?.focus();
-  };
 
   // ?layout= and ?entities= params driven by the sub-nav catalog
   const rawLayout = searchParams.get('layout');
   const layoutMode: LayoutMode = rawLayout === 'radial' ? 'radial' : 'force';
 
-  // entityFilter: 'all' | 'people' | 'skills' | 'projects' | 'decisions'
+  // entityFilter: 'all' | 'people' | 'skills' | 'projects' | 'hierarchy'
   const entityFilter = searchParams.get('entities') ?? 'all';
 
   // Fetch multi-entity graph data only when that view is active (lazy)
@@ -266,13 +257,19 @@ function ExplorePage() {
   // Each view surfaces a distinct slice of the org graph:
   //   skills    → shared expertise connections only (expert_in_common)
   //   projects  → collaboration edges only (collaborates)
-  //   decisions → reporting/mentoring hierarchy (mentors + reports_to)
+  //   hierarchy → reporting/mentoring structure (mentors + reports_to) — this
+  //               is NOT the decision layer. /api/graph/entities carries no
+  //               decision nodes at all (decisions only weight collaboration
+  //               edges), and the 8 seeded ADR rows behind /api/graph/decisions
+  //               carry no project_id, so there is no honest way to surface
+  //               them here or on the initiative Decisions tab. See
+  //               middleware/src/routes/decisions.ts for the full story.
   //   people / all → all edge types
   const entityFilteredEdges = useMemo(() => {
     if (!data) return [] as GraphRelationship[];
     if (entityFilter === 'skills') return data.edges.filter(e => e.type === 'expert_in_common');
     if (entityFilter === 'projects') return data.edges.filter(e => e.type === 'collaborates');
-    if (entityFilter === 'decisions') return data.edges.filter(e => e.type === 'mentors' || e.type === 'reports_to');
+    if (entityFilter === 'hierarchy') return data.edges.filter(e => e.type === 'mentors' || e.type === 'reports_to');
     return data.edges; // 'people' or 'all'
   }, [data, entityFilter]);
 
@@ -293,7 +290,7 @@ function ExplorePage() {
     };
   }, [data, entityFilteredEdges, filterToSelection, selectedIds]);
 
-  // When a specific edge type is active (skills/projects/decisions), skip the
+  // When a specific edge type is active (skills/projects/hierarchy), skip the
   // minStrength gate — the user explicitly chose that view so show all of those edges.
   const isSpecificFilter = entityFilter !== 'all' && entityFilter !== 'people';
   const activeMinStrength = isSpecificFilter ? 0 : minStrength;
@@ -496,19 +493,13 @@ function ExplorePage() {
   if (!data && graphError) {
     return (
       <PageSection title="Explore">
-        <Card padding="md" className="max-w-2xl border-danger/40">
-          <div className="text-[13px] font-semibold text-danger">Could not load the org graph</div>
-          <div className="text-[12px] text-text-secondary mt-1 leading-snug">
-            {graphError}. People, skills, projects and decisions all come from Aurora, so
+        <Stack gap="sm" className="max-w-2xl" align="start">
+          <Banner variant="error" title="Could not load the org graph">
+            {graphError}. People, skills, projects and reporting structure all come from Aurora, so
             this usually means the database is unreachable rather than that the graph is empty.
-          </div>
-          <button
-            onClick={() => refreshGraph()}
-            className="mt-3 px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] font-semibold text-text-secondary cursor-pointer hover:text-primary hover:border-primary/50 transition-colors"
-          >
-            Try again
-          </button>
-        </Card>
+          </Banner>
+          <Button variant="secondary" size="sm" onClick={() => refreshGraph()}>Try again</Button>
+        </Stack>
       </PageSection>
     );
   }
@@ -516,7 +507,7 @@ function ExplorePage() {
   if (!data) {
     return (
       <PageSection title="Explore">
-        <div style={{ color: 'var(--color-text-tertiary)' }}>Loading graph…</div>
+        <LoadingState label="Loading graph…" />
       </PageSection>
     );
   }
@@ -524,10 +515,50 @@ function ExplorePage() {
   const hasMessages = messages.length > 0 || isStreaming;
 
   return (
-    <div style={{ display: 'flex', height: '100%', flexDirection: 'column' }}>
+    <Stack gap="none" className="h-full min-h-0">
       {/* ── Toolbar ─────────────────────────────────────────────────────── */}
-      <div style={toolbarStyle}>
-        <span style={{ fontWeight: 600 }}>Explore</span>
+      <Toolbar
+        wrap
+        aria-label="Explore controls"
+        end={
+          <>
+            {selectedIds.size > 0 && (
+              <ToolbarGroup aria-label="Selection actions">
+                <T className="text-primary font-semibold text-[12px]">{selectedIds.size} selected</T>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => { setSelectedIds(new Set()); setActiveDepartment(null); setFilterToSelection(true); }}
+                >
+                  Clear
+                </Button>
+                <Button variant="primary" size="sm" onClick={() => openAndAsk(Array.from(selectedIds))}>
+                  Ask about selection →
+                </Button>
+              </ToolbarGroup>
+            )}
+            <Button variant="secondary" size="sm" onClick={() => chatOpen ? handleClose() : setChatOpen(true)}>
+              {chatOpen ? 'Close search' : messages.length > 0 ? `Search (${messages.length})` : 'Search'}
+            </Button>
+          </>
+        }
+      >
+        <ToolbarLabel>Explore</ToolbarLabel>
+        {/* Layout is a rendering choice, not a place — it used to live in the
+            sub-nav rail as two pseudo-pages (Force / Radial). */}
+        <SegmentedControl
+          size="sm"
+          value={layoutMode}
+          onChange={(v) => {
+            const next = new URLSearchParams(searchParams);
+            next.set('layout', v);
+            setSearchParams(next, { replace: true });
+          }}
+          options={[
+            { label: 'Force', value: 'force' },
+            { label: 'Radial', value: 'radial' },
+          ]}
+        />
         <GraphSearchBox
           people={data.nodes}
           onPickPerson={(id) => {
@@ -541,35 +572,46 @@ function ExplorePage() {
             setFilterToSelection(true);
           }}
         />
-        <span style={{ color: 'var(--color-text-tertiary)' }}>
+        <T className="text-text-tertiary">
           {meGraph
             ? <><b>{meGraph.nodes.filter(n => n.kind !== 'skill_domain').length}</b> nodes · <b>{meGraph.edges.filter(e => e.type !== 'belongs_to').length}</b> {entityFilter} edges</>
             : <><b>{visibleNodes.length}</b>{isFiltered ? ` / ${data?.nodes.length ?? 0}` : ''} people · <b>{filteredEdges.length}</b>{isEntityFiltered ? ` ${entityFilter}` : ''} edges</>
           }
-        </span>
+        </T>
         {isFiltered && (
-          <button onClick={() => setFilterToSelection(false)} style={primaryBtn()}>✕ Show full graph</button>
+          <Button variant="primary" size="sm" onClick={() => setFilterToSelection(false)}>✕ Show full graph</Button>
         )}
-        <span style={controlStyle}>
-          Top-K
-          <input type="range" aria-label="Top K results" min={1} max={10} value={topK} onChange={e => setTopK(parseInt(e.target.value, 10))} style={{ width: 80 }} />
-          <span style={{ width: 16, textAlign: 'right' }}>{topK}</span>
-        </span>
-        <span style={{ ...controlStyle, opacity: isSpecificFilter ? 0.35 : 1 }} title={isSpecificFilter ? 'Min strength ignored when a specific view is active' : undefined}>
-          Min strength
-          <input type="range" aria-label="Minimum relationship strength" min={0} max={100} value={Math.round(minStrength * 100)}
-            onChange={e => setMinStrength(parseInt(e.target.value, 10) / 100)} style={{ width: 80 }}
-            disabled={isSpecificFilter} />
-          <span style={{ width: 28, textAlign: 'right' }}>{minStrength.toFixed(2)}</span>
-        </span>
+        <RangeSliderFrame
+          label="Top-K"
+          ariaLabel="Top K results"
+          min={1}
+          max={10}
+          value={topK}
+          onChange={v => setTopK(v)}
+          valueLabel={topK}
+        />
+        <RangeSliderFrame
+          label="Min strength"
+          ariaLabel="Minimum relationship strength"
+          min={0}
+          max={100}
+          value={Math.round(minStrength * 100)}
+          onChange={v => setMinStrength(v / 100)}
+          valueLabel={minStrength.toFixed(2)}
+          disabled={isSpecificFilter}
+          title={isSpecificFilter ? 'Min strength ignored when a specific view is active' : undefined}
+          className="min-w-0 [&>span]:min-w-7"
+        />
         {entityFilter === 'projects' && meGraph?.allStatuses && meGraph.allStatuses.length > 0 && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <span style={{ color: 'var(--color-text-secondary)' }}>Status</span>
+          <Inline gap="xs" align="center">
+            <T className="text-text-secondary">Status</T>
             {meGraph.allStatuses.map(s => {
               const isActive = activeStatuses === null || activeStatuses.has(s);
               return (
-                <button
+                <FilterChip
                   key={s}
+                  active={isActive}
+                  size="sm"
                   onClick={() => setActiveStatuses(prev => {
                     const all = new Set(meGraph.allStatuses!);
                     if (prev === null) {
@@ -585,97 +627,54 @@ function ExplorePage() {
                     next.add(s);
                     return next.size === all.size ? null : next;
                   })}
-                  style={statusChipStyle(isActive)}
                 >
                   {projectStatusLabel(s)}
-                </button>
+                </FilterChip>
               );
             })}
-          </span>
+          </Inline>
         )}
 
         {/* Presence dropdown — only relevant for person-based views */}
-        {(entityFilter === 'all' || entityFilter === 'people' || entityFilter === 'decisions') && (() => {
+        {(entityFilter === 'all' || entityFilter === 'people' || entityFilter === 'hierarchy') && (() => {
           const FACETS = [
-            { key: 'office' as const, label: 'In Office', dot: '#16a34a' },
-            { key: 'remote' as const, label: 'Remote',    dot: '#3b82f6' },
-            { key: 'away'   as const, label: 'Away',      dot: '#f97316' },
+            { key: 'office' as const, label: 'In Office', dot: 'var(--color-success)' },
+            { key: 'remote' as const, label: 'Remote',    dot: 'var(--color-info)' },
+            { key: 'away'   as const, label: 'Away',      dot: 'var(--color-warning)' },
           ];
           const activeFacet = FACETS.find(f => f.key === presenceFilter);
           return (
-            <div
-              ref={presenceRef}
-              style={{ position: 'relative' }}
-              onKeyDown={e => { if (e.key === 'Escape' && presenceOpen) { e.stopPropagation(); closePresence(); } }}
-            >
-              <button
-                ref={presenceTriggerRef}
-                onClick={() => setPresenceOpen(o => !o)}
-                aria-expanded={presenceOpen}
-                aria-haspopup="listbox"
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                  padding: '3px 9px', borderRadius: 9999,
-                  border: presenceFilter
-                    ? '1.5px solid var(--color-primary, #6366f1)'
-                    : '1.5px solid var(--color-border)',
-                  background: presenceFilter ? 'var(--color-primary-subtle, #eef2ff)' : 'transparent',
-                  color: presenceFilter ? 'var(--color-primary, #6366f1)' : 'var(--color-text-secondary)',
-                  fontSize: 11, fontWeight: presenceFilter ? 600 : 400,
-                  cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-                }}
-              >
-                {activeFacet
-                  ? <><span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: activeFacet.dot, flexShrink: 0 }} />{activeFacet.label}</>
-                  : 'Today'
-                }
-                <span aria-hidden="true" style={{ fontSize: 9, opacity: 0.5, marginLeft: 1 }}>▾</span>
-              </button>
-
-              {presenceOpen && (
-                <div ref={presenceListRef} role="listbox" tabIndex={-1} aria-label="Filter by presence" style={{
-                  position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 100,
-                  background: 'var(--color-surface, #fff)',
-                  border: '1px solid var(--color-border, #e2e8f0)',
-                  borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-                  padding: '6px 0', minWidth: 160, outline: 'none',
-                }}>
-                  {FACETS.map(({ key, label, dot }) => {
-                    const count = data?.nodes.filter(n => {
-                      const p = n.presence ?? 'unknown';
-                      if (key === 'office') return p === 'office';
-                      if (key === 'remote') return p === 'wfh' || p === 'travel';
-                      return p === 'pto' || p === 'vacation' || p === 'sick';
-                    }).length ?? 0;
-                    const active = presenceFilter === key;
-                    return (
-                      <button
-                        key={key}
-                        role="option"
-                        aria-selected={active}
-                        onClick={() => { setPresenceFilter(active ? null : key); setPresenceOpen(false); }}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                          padding: '7px 14px', border: 'none', background: active ? 'var(--color-primary-subtle, #eef2ff)' : 'transparent',
-                          color: active ? 'var(--color-primary, #6366f1)' : 'var(--color-text-primary, #0f172a)',
-                          fontSize: 12, fontWeight: active ? 600 : 400,
-                          cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
-                        }}
-                      >
-                        <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: dot, flexShrink: 0 }} />
-                        <span style={{ flex: 1 }}>{label}</span>
-                        <span style={{ fontSize: 11, color: 'var(--color-text-tertiary, #94a3b8)' }}>{count}</span>
-                        {active && <span aria-hidden="true" style={{ fontSize: 11, color: 'var(--color-primary, #6366f1)', marginLeft: 2 }}>✓</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            <DropdownMenu
+              triggerLabel="Filter by presence"
+              triggerTitle="Filter by presence"
+              trigger={
+                <Inline as="span" gap="xs" align="center">
+                  {activeFacet && <StatusDot color={activeFacet.dot} size="xs" />}
+                  <T>{activeFacet ? activeFacet.label : 'Today'}</T>
+                </Inline>
+              }
+              sections={[{
+                items: FACETS.map(({ key, label, dot }) => {
+                  const count = data?.nodes.filter(n => {
+                    const p = n.presence ?? 'unknown';
+                    if (key === 'office') return p === 'office';
+                    if (key === 'remote') return p === 'wfh' || p === 'travel';
+                    return p === 'pto' || p === 'vacation' || p === 'sick';
+                  }).length ?? 0;
+                  const active = presenceFilter === key;
+                  return {
+                    label: `${label} · ${count}`,
+                    icon: <StatusDot color={dot} size="xs" />,
+                    active,
+                    onSelect: () => setPresenceFilter(active ? null : key),
+                  };
+                }),
+              }]}
+            />
           );
         })()}
 
-        {(entityFilter === 'all' || entityFilter === 'people' || entityFilter === 'decisions') && (
+        {(entityFilter === 'all' || entityFilter === 'people' || entityFilter === 'hierarchy') && (
           <DepartmentChips
             departments={data.departments}
             people={data.nodes}
@@ -692,21 +691,7 @@ function ExplorePage() {
             }}
           />
         )}
-
-        <span style={{ flex: 1 }} />
-        {selectedIds.size > 0 && (
-          <>
-            <span style={{ color: 'var(--color-primary)', fontWeight: 600, fontSize: 12 }}>
-              {selectedIds.size} selected
-            </span>
-            <button onClick={() => { setSelectedIds(new Set()); setActiveDepartment(null); setFilterToSelection(true); }} style={ghostBtn()}>Clear</button>
-            <button onClick={() => openAndAsk(Array.from(selectedIds))} style={primaryBtn()}>Ask about selection →</button>
-          </>
-        )}
-        <button onClick={() => chatOpen ? handleClose() : setChatOpen(true)} style={ghostBtn()}>
-          {chatOpen ? 'Close search' : messages.length > 0 ? `Search (${messages.length})` : 'Search'}
-        </button>
-      </div>
+      </Toolbar>
 
       {/* ── Department insight strip — active department chip ─────────────── */}
       {activeDepartment && (
@@ -736,9 +721,9 @@ function ExplorePage() {
       )}
 
       {/* ── Graph + Chat split ───────────────────────────────────────────── */}
-      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+      <Inline gap="none" align="stretch" wrap={false} className="flex-1 min-h-0">
         {/* Graph */}
-        <div style={{ flex: 1, position: 'relative', minWidth: 0 }}>
+        <Stack gap="none" className="flex-1 relative min-w-0">
           {detailId && selectedIds.has(detailId) && (
             <PersonDetailCard
               personId={detailId}
@@ -770,46 +755,45 @@ function ExplorePage() {
 
             if (meActive) {
               return (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                <Stack align="center" justify="center" className="h-full">
                   {meLoading ? (
-                    <div style={meStateCardStyle}>
+                    <Card padding="md" className="flex flex-col items-center gap-2 text-[13px] text-text-secondary">
                       <Spinner size="sm" />
-                      <span>Loading {entityFilter} graph…</span>
-                    </div>
+                      <T>Loading {entityFilter} graph…</T>
+                    </Card>
                   ) : meError ? (
-                    <div style={meStateCardStyle}>
-                      <span style={{ color: 'var(--color-error, #ef4444)' }}>Failed to load {entityFilter} graph</span>
-                      <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{meError}</span>
-                      <button onClick={meRefresh} style={{ fontSize: 11, padding: '4px 10px', marginTop: 4, borderRadius: 4, border: '1px solid var(--color-border)', background: 'var(--color-bg)', cursor: 'pointer' }}>
-                        Retry
-                      </button>
-                    </div>
+                    <ErrorState
+                      title={`Failed to load ${entityFilter} graph`}
+                      description={meError}
+                      actionLabel="Retry"
+                      onAction={meRefresh}
+                    />
                   ) : null}
-                </div>
+                </Stack>
               );
             }
 
-            // Decisions filter: show empty state when no hierarchy edges exist
-            if (entityFilter === 'decisions' && filteredEdges.length === 0 && selectedIds.size === 0) {
+            // Hierarchy filter: show empty state when no hierarchy edges exist
+            if (entityFilter === 'hierarchy' && filteredEdges.length === 0 && selectedIds.size === 0) {
               return (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                  <div style={{ ...meStateCardStyle, maxWidth: 420, textAlign: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 22 }}>🏛</span>
-                    <span style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>No hierarchy data</span>
-                    <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
-                      The Decisions view shows mentoring and reporting relationships — who reports to whom and who mentors whom across the org.
-                    </p>
-                    <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-tertiary)', lineHeight: 1.5 }}>
-                      No <code>mentors</code> or <code>reports_to</code> edges are in the graph yet. Run the ingestion pipeline to extract org hierarchy from 1:1 notes and performance reviews, or select <b>All</b> to explore the full collaboration network.
-                    </p>
-                    <button
-                      onClick={() => setSearchParams(new URLSearchParams({ entities: 'all' }))}
-                      style={{ fontSize: 11, padding: '5px 14px', borderRadius: 4, border: 'none', background: 'var(--color-primary, #6366f1)', color: '#fff', cursor: 'pointer', marginTop: 4 }}
-                    >
-                      Switch to All
-                    </button>
-                  </div>
-                </div>
+                <Stack align="center" justify="center" className="h-full">
+                  <EmptyState
+                    icon="🏛"
+                    title="No hierarchy data"
+                    description={
+                      <Stack gap="sm" align="center" className="max-w-[420px] text-center">
+                        <T className="text-[12px] text-text-secondary leading-relaxed">
+                          The Hierarchy view shows mentoring and reporting relationships — who reports to whom and who mentors whom across the org.
+                        </T>
+                        <T className="text-[12px] text-text-tertiary leading-snug">
+                          No <code>mentors</code> or <code>reports_to</code> edges are in the graph yet. Run the ingestion pipeline to extract org hierarchy from 1:1 notes and performance reviews, or select <b>All</b> to explore the full collaboration network.
+                        </T>
+                      </Stack>
+                    }
+                    actionLabel="Switch to All"
+                    onAction={() => setSearchParams(new URLSearchParams({ entities: 'all' }))}
+                  />
+                </Stack>
               );
             }
 
@@ -826,50 +810,64 @@ function ExplorePage() {
                   presenceFilter={presenceFilter ?? undefined}
                 />
                 {selectedIds.size === 0 && !chatOpen && (
-                  <div style={hintStyle}>
+                  <T className="absolute bottom-3 left-3 px-2.5 py-1.5 bg-surface border border-border rounded text-[11px] text-text-tertiary">
                     Click people to select them, then <b>Ask about selection</b> to query with the graph in view.
-                  </div>
+                  </T>
                 )}
               </>
             );
           })()}
-        </div>
+        </Stack>
 
         {/* Chat panel */}
         {chatOpen && (
-          <div style={chatPanelStyle}>
+          <Stack gap="none" className="w-[380px] shrink-0 border-l border-border bg-surface min-h-0">
             {/* Panel header */}
-            <div style={chatHeaderStyle}>
-              <span style={{ fontWeight: 600, fontSize: 12 }}>Search</span>
-              <span style={{ flex: 1 }} />
-              {/* This panel is Ask embedded beside the graph, not a second
-                  chat product — hand the session over when the conversation
-                  outgrows a side panel. */}
-              <Link
-                to={`/iq/invoke${sessionId ? `?session=${encodeURIComponent(sessionId)}` : ''}`}
-                title="Continue this conversation full-width in Ask"
-                style={{ fontSize: 11, color: 'var(--color-primary)', textDecoration: 'none', marginRight: 6 }}
-              >
-                Open in Ask →
-              </Link>
-              <ChatSessionPicker
-                activeSessionId={sessionId}
-                onPick={(sid) => {
-                  rememberSession('explore', sid);
-                  void loadHistory(sid);
-                }}
-              />
-              {hasMessages && (
-                <button onClick={handleNewConversation} style={iconBtn()} title="New conversation">↺</button>
-              )}
-            </div>
+            <Inline align="center" justify="between" className="px-3 py-2 border-b border-border shrink-0">
+              <T className="font-semibold text-[12px]">Search</T>
+              <Inline align="center" gap="sm">
+                {/* This panel is Ask embedded beside the graph, not a second
+                    chat product — hand the session over when the conversation
+                    outgrows a side panel. */}
+                <Link
+                  to={`/iq/invoke${sessionId ? `?session=${encodeURIComponent(sessionId)}` : ''}`}
+                  title="Continue this conversation full-width in Ask"
+                  className="text-[11px] text-primary no-underline"
+                >
+                  Open in Ask →
+                </Link>
+                <ChatSessionPicker
+                  activeSessionId={sessionId}
+                  onPick={(sid) => {
+                    rememberSession('explore', sid);
+                    void loadHistory(sid);
+                  }}
+                />
+                {hasMessages && (
+                  <IconButton
+                    aria-label="New conversation"
+                    title="New conversation"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleNewConversation}
+                    icon={<T>↺</T>}
+                  />
+                )}
+              </Inline>
+            </Inline>
 
             {/* Messages */}
-            <div role="log" aria-live="polite" aria-relevant="additions text" style={chatMessagesStyle}>
+            <Stack
+              gap="md"
+              className="flex-1 overflow-y-auto px-3 pt-3 pb-0"
+              role="log"
+              aria-live="polite"
+              aria-relevant="additions text"
+            >
               {!hasMessages && (
-                <div style={chatEmptyStyle}>
-                  Ask anything about your org — people, skills, connections, decisions.
-                </div>
+                <T className="text-text-tertiary text-[12px] leading-relaxed py-2">
+                  Ask anything about your org — people, skills, connections, reporting lines.
+                </T>
               )}
               {displayMessages.map(msg => {
                 // Compose: strip <thinking> blocks (no ThinkingBlock renderer
@@ -889,7 +887,7 @@ function ExplorePage() {
                 // from the tool calls the stream captured (if any).
                 const toolSummary = msg.role === 'assistant' ? summarizeToolCalls(msg.toolCalls) : null;
                 return (
-                  <div key={msg.id}>
+                  <Stack key={msg.id} gap="xs">
                     <MessageBubble
                       role={msg.role}
                       content={resolvedContent}
@@ -897,30 +895,28 @@ function ExplorePage() {
                       renderMarkdown={(content) => <Markdown>{content}</Markdown>}
                     />
                     {toolSummary && (
-                      <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 2 }}>
-                        {toolSummary}
-                      </div>
+                      <T className="text-[11px] text-text-tertiary mt-0.5">{toolSummary}</T>
                     )}
                     <SourceChips sources={sources} {...(provenance ? { provenance } : {})} />
                     {mentioned.length > 0 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                      <Inline gap="xs" wrap className="mt-1.5">
                         {mentioned.map(p => (
-                          <button
+                          <Tooltip
                             key={p.id}
-                            onClick={() => toggleSelect(p.id)}
-                            style={personChipStyle(selectedIds.has(p.id))}
-                            title={selectedIds.has(p.id) ? 'Click to deselect on graph' : 'Click to highlight on graph'}
+                            content={selectedIds.has(p.id) ? 'Click to deselect on graph' : 'Click to highlight on graph'}
                           >
-                            {p.name}
-                          </button>
+                            <FilterChip active={selectedIds.has(p.id)} onClick={() => toggleSelect(p.id)} size="xs">
+                              {p.name}
+                            </FilterChip>
+                          </Tooltip>
                         ))}
-                      </div>
+                      </Inline>
                     )}
-                  </div>
+                  </Stack>
                 );
               })}
               {isStreaming && (
-                <div>
+                <Stack gap="xs">
                   <MessageBubble
                     role="assistant"
                     content={streamingText ? (() => {
@@ -942,25 +938,28 @@ function ExplorePage() {
                   {streamingText && data && (() => {
                     const live = findMentionedPeople(resolvePersonIds(streamingText, data.nodes), data.nodes);
                     return live.length > 0 ? (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                      <Inline gap="xs" wrap className="mt-1.5">
                         {live.map(p => (
-                          <button key={p.id} onClick={() => toggleSelect(p.id)}
-                            style={personChipStyle(selectedIds.has(p.id))}
-                            title={selectedIds.has(p.id) ? 'Click to deselect on graph' : 'Click to highlight on graph'}>
-                            {p.name}
-                          </button>
+                          <Tooltip
+                            key={p.id}
+                            content={selectedIds.has(p.id) ? 'Click to deselect on graph' : 'Click to highlight on graph'}
+                          >
+                            <FilterChip active={selectedIds.has(p.id)} onClick={() => toggleSelect(p.id)} size="xs">
+                              {p.name}
+                            </FilterChip>
+                          </Tooltip>
                         ))}
-                      </div>
+                      </Inline>
                     ) : null;
                   })()}
-                </div>
+                </Stack>
               )}
-              {error && <div style={errorStyle}>Error: {error}</div>}
+              {error && <Banner variant="error">Error: {error}</Banner>}
               <div ref={bottomRef} />
-            </div>
+            </Stack>
 
             {/* Composer */}
-            <div style={composerWrapStyle}>
+            <Stack gap="none" className="p-3 border-t border-border shrink-0">
               <ChatComposer
                 value={input}
                 onChange={setInput}
@@ -969,100 +968,12 @@ function ExplorePage() {
                 multiline
                 placeholder="Ask about people, skills, connections…"
               />
-            </div>
-          </div>
+            </Stack>
+          </Stack>
         )}
-      </div>
-    </div>
+      </Inline>
+    </Stack>
   );
-}
-
-// ── Styles ───────────────────────────────────────────────────────────────────
-
-const toolbarStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
-  padding: '8px 16px', borderBottom: '1px solid var(--color-border)',
-  fontSize: 12, background: 'var(--color-surface)', flexShrink: 0,
-};
-const controlStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 6, color: 'var(--color-text-secondary)',
-};
-const hintStyle: React.CSSProperties = {
-  position: 'absolute', bottom: 12, left: 12, padding: '6px 10px',
-  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-  borderRadius: 4, fontSize: 11, color: 'var(--color-text-tertiary)',
-};
-const meStateCardStyle: React.CSSProperties = {
-  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
-  padding: '20px 28px', background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)', borderRadius: 8,
-  fontSize: 13, color: 'var(--color-text-secondary)',
-};
-const chatPanelStyle: React.CSSProperties = {
-  width: 380, flexShrink: 0, display: 'flex', flexDirection: 'column',
-  borderLeft: '1px solid var(--color-border)', background: 'var(--color-surface)',
-  minHeight: 0,
-};
-const chatHeaderStyle: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-  padding: '8px 12px', borderBottom: '1px solid var(--color-border)', flexShrink: 0,
-};
-const chatMessagesStyle: React.CSSProperties = {
-  flex: 1, overflowY: 'auto', padding: '12px 12px 0', display: 'flex', flexDirection: 'column', gap: 12,
-};
-const chatEmptyStyle: React.CSSProperties = {
-  color: 'var(--color-text-tertiary)', fontSize: 12, lineHeight: 1.6, padding: '8px 0',
-};
-const composerWrapStyle: React.CSSProperties = {
-  padding: 12, borderTop: '1px solid var(--color-border)', flexShrink: 0,
-};
-const errorStyle: React.CSSProperties = {
-  fontSize: 12, color: 'var(--color-error, #ef4444)', padding: '4px 0',
-};
-
-function statusChipStyle(active: boolean): React.CSSProperties {
-  return {
-    fontSize: 11, padding: '2px 8px', borderRadius: 10, cursor: 'pointer',
-    fontFamily: 'inherit', fontWeight: active ? 600 : 400,
-    background: active ? 'var(--color-primary-subtle, #eef2ff)' : 'var(--color-surface)',
-    color: active ? 'var(--color-primary, #6366f1)' : 'var(--color-text-tertiary)',
-    border: `1px solid ${active ? 'var(--color-primary-border, #c7d2fe)' : 'var(--color-border)'}`,
-    transition: 'all 0.1s',
-  };
-}
-
-function personChipStyle(selected: boolean): React.CSSProperties {
-  return {
-    fontSize: 11, padding: '3px 8px', borderRadius: 12, cursor: 'pointer',
-    fontFamily: 'inherit', fontWeight: selected ? 600 : 400,
-    background: selected ? 'var(--color-primary, #6366f1)' : 'var(--color-bg)',
-    color: selected ? '#fff' : 'var(--color-text-secondary)',
-    border: `1px solid ${selected ? 'var(--color-primary, #6366f1)' : 'var(--color-border)'}`,
-    transition: 'all 0.1s',
-  };
-}
-
-function primaryBtn(): React.CSSProperties {
-  return {
-    fontSize: 11, padding: '4px 10px',
-    background: 'var(--color-primary, #6366f1)', color: '#fff',
-    border: 'none', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 500,
-    whiteSpace: 'nowrap',
-  };
-}
-function ghostBtn(): React.CSSProperties {
-  return {
-    fontSize: 11, padding: '4px 10px',
-    background: 'var(--color-surface)', color: 'var(--color-text-primary)',
-    border: '1px solid var(--color-border)', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit',
-    whiteSpace: 'nowrap',
-  };
-}
-function iconBtn(): React.CSSProperties {
-  return {
-    background: 'none', border: 'none', cursor: 'pointer', fontSize: 14,
-    color: 'var(--color-text-tertiary)', padding: '2px 4px', borderRadius: 3,
-  };
 }
 
 export default ExplorePage;

@@ -26,19 +26,19 @@ describe('mintSession', () => {
   });
 
   it('defaults to orgiq when granted there', () => {
-    const s = mintSession(user, { orgiq: ['member'], newsroom: ['editor'] });
+    const s = mintSession(user, { orgiq: ['member'], assessment: ['lead-assessor'] });
     expect(s).toMatchObject({ sub: 'u-test', tenant: 'orgiq', role: 'member' });
   });
 
   it('falls back to the only granted tenant', () => {
-    const s = mintSession(user, { newsroom: ['reporter'] });
-    expect(s).toMatchObject({ tenant: 'newsroom', role: 'reporter' });
+    const s = mintSession(user, { assessment: ['assessor'] });
+    expect(s).toMatchObject({ tenant: 'assessment', role: 'assessor' });
   });
 
   it('honors a preferred tenant/role only when actually granted', () => {
-    const grants: Grants = { orgiq: ['member'], newsroom: ['editor', 'reporter'] };
-    expect(mintSession(user, grants, { tenant: 'newsroom', role: 'reporter' }))
-      .toMatchObject({ tenant: 'newsroom', role: 'reporter' });
+    const grants: Grants = { orgiq: ['member'], assessment: ['lead-assessor', 'assessor'] };
+    expect(mintSession(user, grants, { tenant: 'assessment', role: 'assessor' }))
+      .toMatchObject({ tenant: 'assessment', role: 'assessor' });
     // hr-admin not granted → falls back to a held role.
     expect(mintSession(user, grants, { tenant: 'orgiq', role: 'hr-admin' }))
       .toMatchObject({ tenant: 'orgiq', role: 'member' });
@@ -55,8 +55,8 @@ describe('mintSession', () => {
     expect(mintSession(user, { orgiq: ['member', 'org-leader'] })?.role).toBe('member');
     // hr-admin is the most privileged, so it's never the landing role here.
     expect(mintSession(user, { orgiq: ['hr-admin', 'org-leader', 'member'] })?.role).toBe('member');
-    // newsroom: reporter (rank 0) beats editor (rank 1).
-    expect(mintSession(user, { newsroom: ['editor', 'reporter'] })?.role).toBe('reporter');
+    // assessment: assessor (rank 0) beats lead-assessor (rank 2).
+    expect(mintSession(user, { assessment: ['lead-assessor', 'assessor'] })?.role).toBe('assessor');
   });
 });
 
@@ -64,7 +64,7 @@ describe('landingRole', () => {
   it('picks the lowest-rank non-admin role, deterministically', () => {
     expect(landingRole(['org-leader', 'member'])).toBe('member');
     expect(landingRole(['member', 'org-leader'])).toBe('member');
-    expect(landingRole(['editor', 'reporter'])).toBe('reporter');
+    expect(landingRole(['lead-assessor', 'assessor'])).toBe('assessor');
     expect(landingRole(['hr-admin'])).toBe('hr-admin');
   });
 
@@ -85,13 +85,13 @@ describe('landingRole', () => {
 
 describe('sign/verify round trip', () => {
   it('preserves grants and masquerade provenance', async () => {
-    const grants: Grants = { newsroom: ['editor'] };
-    const session = mintSession({ id: 'u-editor', displayName: 'Elena' }, grants, undefined, {
+    const grants: Grants = { assessment: ['lead-assessor'] };
+    const session = mintSession({ id: 'u-jonas', displayName: 'Jonas' }, grants, undefined, {
       sub: 'u-operator', role: 'admin', tenant: 'orgiq', grants: permissiveGrants(),
     })!;
     const verified = await verifySession(await signSession(session));
     expect(verified).not.toBeNull();
-    expect(verified!.sub).toBe('u-editor');
+    expect(verified!.sub).toBe('u-jonas');
     expect(verified!.grants).toEqual(grants);
     expect(verified!.act?.sub).toBe('u-operator');
   });
@@ -109,18 +109,18 @@ describe('sign/verify round trip', () => {
     // iat must be recent — verifySession now enforces the session age
     // server-side, so an ancient iat is (correctly) an expired session.
     const stale: Session = {
-      sub: 'u-x', role: 'hr-admin', tenant: 'newsroom',
-      grants: { newsroom: ['reporter'] }, iat: Math.floor(Date.now() / 1000),
+      sub: 'u-x', role: 'hr-admin', tenant: 'assessment',
+      grants: { assessment: ['assessor'] }, iat: Math.floor(Date.now() / 1000),
     };
     const verified = await verifySession(await signSession(stale));
-    expect(verified).toMatchObject({ tenant: 'newsroom', role: 'reporter' });
+    expect(verified).toMatchObject({ tenant: 'assessment', role: 'assessor' });
   });
 
   it('grants permissive access to legacy cookies without a grants field', async () => {
     const legacy = { sub: 'demo-user', role: 'member', tenant: 'orgiq', iat: Math.floor(Date.now() / 1000) };
     const verified = await verifySession(await signSession(legacy as unknown as Session));
     expect(verified).not.toBeNull();
-    expect(rolesForTenant(verified!.grants, 'newsroom').length).toBeGreaterThan(0);
+    expect(rolesForTenant(verified!.grants, 'assessment').length).toBeGreaterThan(0);
   });
 
   it('rejects a validly-signed cookie whose iat is older than the session TTL', async () => {
@@ -150,11 +150,11 @@ describe('session_epoch', () => {
   it('preserves the cookie epoch through the stale-role REPAIR branch', async () => {
     // Role not held in its tenant → verifySession re-mints; the epoch must survive.
     const stale: Session = {
-      sub: 'u-x', role: 'hr-admin', tenant: 'newsroom',
-      grants: { newsroom: ['reporter'] }, iat: Math.floor(Date.now() / 1000), epoch: 4,
+      sub: 'u-x', role: 'hr-admin', tenant: 'assessment',
+      grants: { assessment: ['assessor'] }, iat: Math.floor(Date.now() / 1000), epoch: 4,
     };
     const verified = await verifySession(await signSession(stale));
-    expect(verified).toMatchObject({ tenant: 'newsroom', role: 'reporter', epoch: 4 });
+    expect(verified).toMatchObject({ tenant: 'assessment', role: 'assessor', epoch: 4 });
   });
 
   describe('grants-refresh epoch enforcement', () => {
@@ -208,10 +208,10 @@ describe('session_epoch', () => {
 
 describe('grant checks', () => {
   it('hasGrant is tenant-scoped — the cross-pollination guard', () => {
-    const grants: Grants = { orgiq: ['org-leader'], newsroom: ['reporter'] };
+    const grants: Grants = { orgiq: ['org-leader'], assessment: ['assessor'] };
     expect(hasGrant(grants, 'orgiq', 'org-leader')).toBe(true);
-    expect(hasGrant(grants, 'newsroom', 'org-leader')).toBe(false);
-    expect(hasGrant(grants, 'orgiq', 'reporter')).toBe(false);
+    expect(hasGrant(grants, 'assessment', 'org-leader')).toBe(false);
+    expect(hasGrant(grants, 'orgiq', 'assessor')).toBe(false);
     expect(hasGrant(grants, 'unknown', 'org-leader')).toBe(false);
   });
 });

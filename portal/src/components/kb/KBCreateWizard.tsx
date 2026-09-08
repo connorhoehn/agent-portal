@@ -37,7 +37,7 @@ interface Step1State {
   name: string;
   slug: string;
   slugTouched: boolean;
-  tenant: 'orgiq' | 'newsroom';
+  tenant: 'orgiq';
   purpose: 'default' | 'articles' | 'hr' | 'engineering' | 'custom';
   description: string;
 }
@@ -135,7 +135,6 @@ function Step1({
             onChange={(e) => onChange({ tenant: e.target.value as Step1State['tenant'] })}
           >
             <option value="orgiq">orgiq</option>
-            <option value="newsroom">newsroom</option>
           </select>
         )}
       </FormField>

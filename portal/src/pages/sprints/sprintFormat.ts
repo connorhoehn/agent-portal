@@ -81,6 +81,43 @@ export function isOverEnvelope(s: Sprint): boolean {
   return s.grantCount > 0 && s.initiativeSpendInWindowUsd > s.grantedUsd;
 }
 
+// ─── Health ──────────────────────────────────────────────────────────────────
+
+export interface SprintHealth {
+  key: 'over_envelope' | 'off_track' | 'at_risk' | 'on_track';
+  label: string;
+  tone: 'danger' | 'warning' | 'success';
+}
+
+/**
+ * The one judgment the page used to make the reader compute themselves: an
+ * active sprint at 100% elapsed with 0/26 points is not "0%", it is off track.
+ *
+ * Time-vs-delivery, judged only for ACTIVE sprints (a planned sprint has no
+ * clock; a done one is history): money first — outspending the envelope is
+ * red regardless of points — then the gap between window elapsed and points
+ * delivered. Null when there is nothing to judge (no window, nothing
+ * estimated).
+ */
+export function sprintHealth(s: Sprint): SprintHealth | null {
+  if (s.status !== 'active') return null;
+  if (isOverEnvelope(s)) return { key: 'over_envelope', label: 'Over envelope', tone: 'danger' };
+  const w = windowProgress(s);
+  if (w == null || s.pointsTotal <= 0) return null;
+  const gap = w - s.pointsDone / s.pointsTotal;
+  if (gap > 0.5) return { key: 'off_track', label: 'Off track', tone: 'danger' };
+  if (gap > 0.25) return { key: 'at_risk', label: 'At risk', tone: 'warning' };
+  return { key: 'on_track', label: 'On track', tone: 'success' };
+}
+
+/** How many of the loaded sprints need attention — the KPI strip's alarm. */
+export function atRiskCount(sprints: Sprint[]): number {
+  return sprints.filter((s) => {
+    const h = sprintHealth(s);
+    return h != null && h.key !== 'on_track';
+  }).length;
+}
+
 // ─── Why this sprint is yours ────────────────────────────────────────────────
 
 export interface MineReason { key: string; label: string; tone: 'accent' | 'info' }

@@ -38,10 +38,13 @@ export interface PeopleSelectProps {
   emptyLabel: string;
   id?: string;
   'aria-describedby'?: string;
+  /** Focus this field on mount — the caller uses it when this select is the
+   *  first field of a form that just opened. */
+  autoFocus?: boolean;
 }
 
 export function PeopleSelect({
-  value, onChange, groups, loading, emptyLabel, id, ...aria
+  value, onChange, groups, loading, emptyLabel, id, autoFocus, ...aria
 }: PeopleSelectProps) {
   const hasPeople = groups.length > 0;
   return (
@@ -55,6 +58,7 @@ export function PeopleSelect({
         disabled: !hasPeople,
       }]}
       groups={groups}
+      autoFocus={autoFocus}
       {...aria}
     />
   );

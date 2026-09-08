@@ -12,9 +12,13 @@
 // echoed back. Plus the response mapping on top of it.
 
 jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn() }));
+// config.ts uses import.meta (ESM-only) and this suite exercises the REAL
+// (non-mock) Aurora path below, so mock.aurora must read false here — same
+// pattern as agents-invoke-capability.test.ts.
+jest.mock('../../config.js', () => ({ config: { mock: { aurora: false } } }));
 
 import express from 'express';
-import request from 'supertest';
+import request from '../../test-support/http.js';
 import { topologyRouter } from '../topology.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { exec } from '../../providers/aurora.js';

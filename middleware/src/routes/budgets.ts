@@ -20,7 +20,7 @@ import {
 
 export const budgetsRouter: Router = Router();
 
-const readGate = readForRolesElseAction(['org-leader', 'hr-admin'], 'ManageBudgets');
+const readGate = readForRolesElseAction(['org-leader', 'hr-admin', 'program-owner'], 'ManageBudgets');
 const manageGate = requireAction('ManageBudgets');
 
 budgetsRouter.get('/', readGate, asyncHandler(async (_req, res) => {

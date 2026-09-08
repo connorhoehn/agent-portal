@@ -61,7 +61,7 @@ jest.mock('../../providers/index.js', () => ({
 }));
 
 import express from 'express';
-import request from 'supertest';
+import request from '../../test-support/http.js';
 import { agentsRouter } from '../agents.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { clearAuthzCache } from '../../lib/authz.js';

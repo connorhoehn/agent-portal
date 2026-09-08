@@ -5,7 +5,7 @@
 // the policy store on first boot; subsequent edits persist in AVP and are
 // never clobbered by CDK or the seeder.
 
-import { Router } from 'express';
+import { Router, type Response } from 'express';
 import {
   VerifiedPermissionsClient,
   ListPoliciesCommand,
@@ -18,7 +18,7 @@ import {
   IsAuthorizedCommand,
 } from '@aws-sdk/client-verifiedpermissions';
 import { asyncHandler } from '../lib/async-handler.js';
-import { clearAuthzCache, requireAction } from '../lib/authz.js';
+import { clearAuthzCache, requireAction, requireAnyAction } from '../lib/authz.js';
 import { logAuthz } from '../lib/audit.js';
 import { config } from '../config.js';
 import { roleRegistry } from '../lib/role-registry.js';
@@ -36,13 +36,28 @@ export const identityRouter = Router();
 
 const client = new VerifiedPermissionsClient({ region: config.region });
 
-// ── Roles (read-only, ViewIdentityAdmin) ──────────────────────────────────────
+// ── Gates ────────────────────────────────────────────────────────────────────
+// Two capabilities own this router. ViewIdentityAdmin (hr-admin) is the
+// full identity-admin surface, policies and schema included. ManageUsers
+// is ALSO held tenant-scoped by program-lead (assessment) for user/grant
+// admin inside its own tenant — a router-wide ViewIdentityAdmin gate locked
+// that role out of the very routes built for it (review finding 2). So the
+// people/tenant/role routes take either capability; policies + schema stay
+// hr-admin's alone.
+const identityRead = requireAnyAction(['ViewIdentityAdmin', 'ManageUsers']);
+const identityAdminOnly = requireAction('ViewIdentityAdmin');
 
-identityRouter.use(requireAction('ViewIdentityAdmin'));
+/** A scoped (non-admin, non-hr) manager only ever sees their own tenant. */
+function scopedToOwnTenant(session: { role: string; tenant: string } | undefined): string | null {
+  if (!session || session.role === 'admin' || session.role === 'hr-admin') return null;
+  return session.tenant;
+}
+
+// ── Roles ─────────────────────────────────────────────────────────────────────
 
 // Role definitions are derived from the enforced Cedar seed files — there is
 // deliberately no second hand-maintained capability list here.
-identityRouter.get('/roles', (req, res) => {
+identityRouter.get('/roles', identityRead, (req, res) => {
   const tenant = req.query['tenant'] as string | undefined;
   const roles = roleRegistry();
   res.json(tenant ? roles.filter(r => r.tenant === null || r.tenant === tenant) : roles);
@@ -50,9 +65,23 @@ identityRouter.get('/roles', (req, res) => {
 
 // ── Tenants + users (grants admin, gated ManageUsers) ─────────────────────────
 
-identityRouter.get('/tenants', asyncHandler(async (_req, res) => {
-  res.json(await listTenants());
+identityRouter.get('/tenants', identityRead, asyncHandler(async (req, res) => {
+  const only = scopedToOwnTenant(req.session);
+  const tenants = await listTenants();
+  res.json(only ? tenants.filter((t: { id: string }) => t.id === only) : tenants);
 }));
+
+// Provisioning writes need a real Aurora — the identity provider throws with a
+// clear reason when there is none, but `asyncHandler` turns a throw into a bare
+// 500 "Internal server error", which tells an operator nothing. The sibling
+// `PUT /users/:id/person` route below always returned 503 with the reason;
+// these three did not. Same shape, so an unconfigured environment reads the
+// same way whichever identity write you reach for.
+function auroraMissing(res: Response, what: string): boolean {
+  if (config.aurora.clusterArn && config.aurora.secretArn) return false;
+  res.status(503).json({ error: `Aurora not configured \u2014 cannot ${what}` });
+  return true;
+}
 
 identityRouter.post('/tenants', requireAction('ManageUsers'), asyncHandler(async (req, res) => {
   const { id, displayName } = req.body as { id?: string; displayName?: string };
@@ -60,12 +89,33 @@ identityRouter.post('/tenants', requireAction('ManageUsers'), asyncHandler(async
     res.status(400).json({ error: 'id must be lowercase kebab-case, 2-31 chars' });
     return;
   }
+  if (auroraMissing(res, 'provision tenants')) return;
   res.status(201).json(await createTenant(id, displayName || id));
 }));
 
-identityRouter.get('/users', asyncHandler(async (_req, res) => {
-  res.json(await listUsers());
+identityRouter.get('/users', identityRead, asyncHandler(async (req, res) => {
+  const only = scopedToOwnTenant(req.session);
+  const users = await listUsers();
+  // A tenant-scoped manager sees the people provisioned in their tenant,
+  // and only that tenant's grants on them — not the org's whole roster.
+  res.json(only
+    ? users
+      .filter((u) => (u.grants[only] ?? []).length > 0)
+      .map((u) => ({ ...u, grants: { [only]: u.grants[only] ?? [] } }))
+    : users);
 }));
+
+// ManageUsers is held scoped to one tenant by program-lead (assessment) — the
+// same capability name hr-admin holds scoped to orgiq. AVP only checks that
+// the action is permitted, never the payload, so a scoped (non-admin) caller
+// could otherwise put another tenant's key in a grants body and grant itself
+// cross-tenant roles. Returns the offending tenant, or null if the payload is
+// entirely within the caller's own session tenant (always null for admin,
+// whose ManageUsers grant is cross-tenant).
+function offendingTenant(session: { role: string; tenant: string }, grants: Grants): string | null {
+  if (session.role === 'admin') return null;
+  return Object.keys(grants).find((tenant) => tenant !== session.tenant) ?? null;
+}
 
 identityRouter.post('/users', requireAction('ManageUsers'), asyncHandler(async (req, res) => {
   const { id, displayName, email, personId, grants } = req.body as {
@@ -75,6 +125,14 @@ identityRouter.post('/users', requireAction('ManageUsers'), asyncHandler(async (
     res.status(400).json({ error: 'id and displayName are required' });
     return;
   }
+  if (grants) {
+    const offending = offendingTenant(req.session!, grants);
+    if (offending) {
+      res.status(403).json({ error: `cannot set grants for tenant '${offending}' — your session is scoped to '${req.session!.tenant}'` });
+      return;
+    }
+  }
+  if (auroraMissing(res, 'provision users')) return;
   await createUser({ id, displayName, ...(email && { email }), ...(personId && { personId }) });
   if (grants) await setGrants(id, grants);
   res.status(201).json(await getUser(id));
@@ -96,7 +154,24 @@ identityRouter.put('/users/:id/grants', requireAction('ManageUsers'), asyncHandl
     }
   }
   const userId = String(req.params['id']);
-  await setGrants(userId, grants);
+  const session = req.session!;
+  const offending = offendingTenant(session, grants);
+  if (offending) {
+    res.status(403).json({ error: `cannot set grants for tenant '${offending}' — your session is scoped to '${session.tenant}'` });
+    return;
+  }
+  const current = await getUser(userId);
+  if (!current) {
+    res.status(404).json({ error: `user '${userId}' not found` });
+    return;
+  }
+  // setGrants replaces a user's grants wholesale, so a scoped caller's
+  // payload (which only ever names their own tenant) is merged onto the
+  // user's existing grants first — otherwise every other tenant's roles
+  // would be deleted, not merely left unwritten.
+  const merged: Grants = session.role === 'admin' ? grants : { ...current.grants, ...grants };
+  if (auroraMissing(res, 'set grants')) return;
+  await setGrants(userId, merged);
   res.json(await getUser(userId));
 }));
 
@@ -158,7 +233,7 @@ identityRouter.put('/users/:id/person', requireAction('ManageUsers'), asyncHandl
 // Returns the decision and the determining policies — useful for HRAdmin to
 // validate a Cedar edit before saving. Read-only side effects.
 
-identityRouter.post('/policies/test', asyncHandler(async (req, res) => {
+identityRouter.post('/policies/test', identityAdminOnly, asyncHandler(async (req, res) => {
   const policyStoreId = ensureStore(res); if (!policyStoreId) return;
   const { role, action, tenant, resourceId } = req.body as {
     role?: string; action?: string; tenant?: string; resourceId?: string;
@@ -203,7 +278,7 @@ function ensureStore(res: import('express').Response): string | null {
   return id;
 }
 
-identityRouter.get('/policies', asyncHandler(async (_req, res) => {
+identityRouter.get('/policies', identityAdminOnly, asyncHandler(async (_req, res) => {
   const policyStoreId = ensureStore(res); if (!policyStoreId) return;
   const list = await client.send(new ListPoliciesCommand({ policyStoreId }));
   const items = await Promise.all((list.policies ?? []).map(async (p) => {
@@ -222,7 +297,7 @@ identityRouter.get('/policies', asyncHandler(async (_req, res) => {
   res.json({ policies: items });
 }));
 
-identityRouter.post('/policies', requireAction('EditPolicy'), asyncHandler(async (req, res) => {
+identityRouter.post('/policies', identityAdminOnly, requireAction('EditPolicy'), asyncHandler(async (req, res) => {
   const policyStoreId = ensureStore(res); if (!policyStoreId) return;
   const { description, statement } = req.body as { description?: string; statement?: string };
   if (!statement) {
@@ -242,7 +317,7 @@ identityRouter.post('/policies', requireAction('EditPolicy'), asyncHandler(async
   }
 }));
 
-identityRouter.put('/policies/:id', requireAction('EditPolicy'), asyncHandler(async (req, res) => {
+identityRouter.put('/policies/:id', identityAdminOnly, requireAction('EditPolicy'), asyncHandler(async (req, res) => {
   const policyStoreId = ensureStore(res); if (!policyStoreId) return;
   const policyId = req.params['id'] as string;
   const { description, statement } = req.body as { description?: string; statement?: string };
@@ -264,7 +339,7 @@ identityRouter.put('/policies/:id', requireAction('EditPolicy'), asyncHandler(as
   }
 }));
 
-identityRouter.delete('/policies/:id', requireAction('EditPolicy'), asyncHandler(async (req, res) => {
+identityRouter.delete('/policies/:id', identityAdminOnly, requireAction('EditPolicy'), asyncHandler(async (req, res) => {
   const policyStoreId = ensureStore(res); if (!policyStoreId) return;
   const policyId = req.params['id'] as string;
   await client.send(new DeletePolicyCommand({ policyStoreId, policyId }));
@@ -275,7 +350,7 @@ identityRouter.delete('/policies/:id', requireAction('EditPolicy'), asyncHandler
 
 // ── Schema GET/PUT ────────────────────────────────────────────────────────────
 
-identityRouter.get('/schema', asyncHandler(async (_req, res) => {
+identityRouter.get('/schema', identityAdminOnly, asyncHandler(async (_req, res) => {
   const policyStoreId = ensureStore(res); if (!policyStoreId) return;
   const out = await client.send(new GetSchemaCommand({ policyStoreId }));
   let parsed: unknown = null;
@@ -283,7 +358,7 @@ identityRouter.get('/schema', asyncHandler(async (_req, res) => {
   res.json({ schema: parsed, raw: out.schema ?? '' });
 }));
 
-identityRouter.put('/schema', requireAction('EditSchema'), asyncHandler(async (req, res) => {
+identityRouter.put('/schema', identityAdminOnly, requireAction('EditSchema'), asyncHandler(async (req, res) => {
   const policyStoreId = ensureStore(res); if (!policyStoreId) return;
   const { schema } = req.body as { schema?: unknown };
   const cedarJson = typeof schema === 'string' ? schema : JSON.stringify(schema);

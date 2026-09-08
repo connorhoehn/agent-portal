@@ -25,6 +25,7 @@ permit (
     OrgIQ::Action::"ManageCanary",
     OrgIQ::Action::"ManageKB",
     OrgIQ::Action::"ManageDevbox",
+    OrgIQ::Action::"ManageBots",
     OrgIQ::Action::"ManageUsers",
     // Dispatch agent runs against initiatives (bots, marketplace authorize).
     // Held globally by hr-admin and org-leader; the middleware additionally

@@ -12,7 +12,7 @@ This domain naturally exercises **every** AgentCore service and Bedrock feature:
 
 | Feature | How OrgIQ Uses It |
 |---------|-------------------|
-| **AgentCore Runtime** | All 9 agents (6 OrgIQ + 3 newsroom) deployed as microVM-isolated sessions |
+| **AgentCore Runtime** | All 8 agents (6 OrgIQ + 2 assessment) deployed as microVM-isolated sessions |
 | **A2A Protocol** | Supervisor → specialist routing (Search, Advisor, Scoring) |
 | **AG-UI Protocol** | Streaming events (text, tool calls, state) to React portal |
 | **MCP Gateway** | Tools for Jira, Confluence, Slack, Calendar, Aurora SQL queries |
@@ -177,20 +177,15 @@ async def invoke(payload, context):
 - **Tools**: `query_graph`, `dynamodb_get_scores`, `query_knowledge_base`
 - **Examples**: "Team X has bus factor of 1 on service Y", "Consider pairing A with B"
 
-### 7. News Researcher Agent (`news-researcher`)
-- **Protocol**: A2A
-- **Role**: Fetch and triage external news for the Newsroom demo surface
-- **Tools**: web fetch, KB-grounded summarization, entity extraction against Aurora
+### 7. Assessment Scorer Agent (`assessment-scorer`)
+- **Protocol**: A2A, gated to the `assessment` tenant only
+- **Role**: Classify evidence and produce a scoring envelope for the assessment tenant
+- **Tools**: `classify_evidence`; never persists — the provider's deterministic `applyScores` validates and applies its output
 
-### 8. News Brief Agent (`news-brief`)
-- **Protocol**: A2A
-- **Role**: Synthesize researched items into per-entity briefs
-- **Tools**: KB retrieve, Aurora entity lookup, summarization
-
-### 9. News Headline Agent (`news-headline`)
-- **Protocol**: A2A
-- **Role**: Lightweight headline + lede generator (smallest of the news family)
-- **Tools**: Nova Pro completion only (no external IO)
+### 8. Assessment Drafter Agent (`assessment-drafter`)
+- **Protocol**: A2A, gated to the `assessment` tenant only
+- **Role**: Draft and fact-check narrative assessment content from scored evidence
+- **Tools**: `check_story_draft`, `validate_facts`
 
 > **Shared utilities** live in `agents/_shared/` (`approval_tool.py`, `instrumentation.py`).
 > The common runtime image is built from `agents/base/Dockerfile` and pinned via `agents/Dockerfile.agent`.
@@ -217,9 +212,8 @@ via the RDS Data API; read tools enforce `SELECT`/`WITH` only.
 | `documents` | id, source, source_uri, title, ingested_at | via `node_embeddings` (kind='document') |
 | `node_embeddings` | node_id, kind, embedding `vector(1024)` (Titan V2) | — |
 
-Newsroom adds its own tables (`schema/newsroom_schema.sql`): articles,
-entities, clusters, pitches. Observability adds `schema/observability_*.sql`
-(spans, approvals, calibration, memory).
+Observability adds `schema/observability_*.sql` (spans, approvals,
+calibration, memory).
 
 ### Edge tables (one per relationship type)
 
@@ -470,7 +464,7 @@ CDK manages **everything**, including AgentCore primitives (Memory, Policy, Gate
 | `OrgIQ-AgentCoreMemory` | `CfnMemory` resources for the supervisor session store |
 | `OrgIQ-AgentCorePolicy` | `CfnPolicyEngine` wiring Cedar → AgentCore at request time |
 | `OrgIQ-AgentCoreCapabilities` | Code Interpreter, Browser, Workload Identity (`CfnCodeInterpreter`, `CfnBrowser`, `CfnWorkloadIdentity`) |
-| `OrgIQ-AgentCoreRuntime` | `CfnRuntime` + `CfnRuntimeEndpoint` for the 6 originals + 3 newsroom agents (phase 2, gated on `--context deployRuntimes=true`) |
+| `OrgIQ-AgentCoreRuntime` | `CfnRuntime` + `CfnRuntimeEndpoint` for the 6 originals + 2 assessment agents (phase 2, gated on `--context deployRuntimes=true`) |
 | `OrgIQ-AgentCoreGateway` | `CfnGateway` + targets (Jira/Confluence/Slack OpenAPI specs) + Cedar gateway policies |
 | `OrgIQ-AgentCoreTelemetry` | Custom evaluators + online evaluation config (gated on `--context enableEval=true`) |
 | `OrgIQ-SpanProjector` | Lambda that consumes CloudWatch Logs Insights, projects OpenInference spans into Aurora observability tables |
@@ -519,7 +513,7 @@ agents/
 │   ├── approval_tool.py               # Human-in-the-loop approval gating
 │   └── instrumentation.py             # OpenInference root spans, RETRIEVER, guardrail capture
 ├── Dockerfile.agent                   # Per-agent thin layer over base/Dockerfile
-├── build-all.sh                       # Build + push all 9 ECR images
+├── build-all.sh                       # Build + push all 8 ECR images
 │
 ├── supervisor/main.py                 # AG-UI entrypoint, A2A routing, Cedar role resolution
 ├── ingestion/main.py                  # MCP tool consumer (Jira, Confluence, S3, Slack)
@@ -528,9 +522,8 @@ agents/
 ├── search/main.py                     # query_knowledge_base, query_graph, fetch_web_page
 ├── advisor/main.py                    # Pattern-detection queries against Aurora + scores
 │
-├── news-researcher/main.py            # Newsroom: external fetch + triage
-├── news-brief/main.py                 # Newsroom: per-entity brief synthesis
-└── news-headline/main.py              # Newsroom: headline + lede (Nova Pro only)
+├── assessment-scorer/main.py          # Evidence classification for the assessment tenant
+└── assessment-drafter/main.py         # Draft + fact-check assessment narrative content
 ```
 
 ### Phase 3b: Middleware (Week 5)
@@ -644,7 +637,7 @@ portal/
 - **Sandbox notebook patterns**: Docker setup, resource tracker, config.json sharing, cleanup utilities
 
 ### Built New
-- **Strands agent code** (9 agents — 6 OrgIQ + 3 newsroom — with tools, prompts, memory)
+- **Strands agent code** (8 agents — 6 OrgIQ + 2 assessment — with tools, prompts, memory)
 - **CDK stacks** (Aurora, KB, Guardrails, AgentCore Memory/Policy/Capabilities/Runtime/Gateway/Telemetry, SpanProjector, Authorization)
 - **Schema + synth pipeline** (`schema/orgiq_schema.sql`, `schema/synth/` LLM-driven corpus generator)
 - **Middleware** (AG-UI proxy, RDS Data API layer, WebSocket bridge, trace sink)
@@ -685,21 +678,21 @@ aws-agentcore/
 │
 ├── schema/                             # Aurora SQL + LLM-driven synth pipeline
 │   ├── orgiq_schema.sql                # Canonical org-graph relational schema
-│   ├── newsroom_schema.sql             # Articles, entities, clusters, pitches
+│   ├── assessment_schema.sql           # Assessment tenant schema
 │   ├── observability_*.sql             # Sprint-versioned OI projections + approvals
 │   ├── seed.py / seed.sql              # Idempotent seed loader
 │   ├── apply-schema.sh                 # Apply via RDS Data API
 │   ├── README.md
 │   └── synth/                          # LLM-driven synthetic corpus pipeline
 │
-├── agents/                             # Phase 3: 9 Strands agents + shared layer
+├── agents/                             # Phase 3: 8 Strands agents + shared layer
 │   ├── base/                           # Shared multistage Dockerfile
 │   ├── _shared/                        # approval_tool, instrumentation (OI helpers)
 │   ├── Dockerfile.agent
 │   ├── build-all.sh
 │   ├── supervisor/  ingestion/  graph-builder/
 │   ├── scoring/  search/  advisor/
-│   └── news-researcher/  news-brief/  news-headline/
+│   └── assessment-scorer/  assessment-drafter/
 │
 ├── infra/                              # Phase 2: 14 CDK stacks
 │   ├── bin/app.ts
@@ -718,7 +711,7 @@ aws-agentcore/
 │
 └── portal/                             # React 19 + Vite 7 (~25 pages)
     ├── src/
-    │   ├── pages/                      # iq, admin, newsroom, capabilities, identity, observability, ingest …
+    │   ├── pages/                      # iq, admin, assessment, capabilities, identity, observability, ingest …
     │   ├── components/
     │   ├── hooks/
     │   └── providers/

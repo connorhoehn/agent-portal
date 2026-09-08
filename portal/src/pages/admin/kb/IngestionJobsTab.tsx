@@ -4,6 +4,7 @@ import {
   Card,
   CardHeader,
   Chip,
+  Inline,
   InlinePlaceholder,
   MetaLine,
   Stack,
@@ -50,11 +51,11 @@ export function IngestionJobsTab({ kb }: { kb: KbRegistryEntry }) {
                         size="sm"
                         items={[
                           <Chip key="s" tone={jobTone(job.status)} size="xs">{job.status}</Chip>,
-                          <span key="id" className="font-mono">{job.jobId.slice(0, 8)}…</span>,
+                          <Inline key="id" as="span" gap="none" className="font-mono">{job.jobId.slice(0, 8)}…</Inline>,
                         ]}
                       />
                       {job.description && (
-                        <span className="text-[11px] text-text-secondary">{job.description}</span>
+                        <Inline as="span" gap="none" className="text-[11px] text-text-secondary">{job.description}</Inline>
                       )}
                     </Stack>
                   </TableTd>

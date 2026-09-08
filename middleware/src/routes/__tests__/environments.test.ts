@@ -70,7 +70,7 @@ jest.mock('../../providers/environments.js', () => ({
 jest.mock('../../lib/github-connector.js', () => ({ listWorkflowRuns: jest.fn() }));
 
 import express, { type Request, type Response, type NextFunction } from 'express';
-import request from 'supertest';
+import request from '../../test-support/http.js';
 import { environmentsRouter } from '../environments.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import {
@@ -305,5 +305,52 @@ describe('workflow runs are reported, never triggered', () => {
       .map((l) => `${Object.keys(l.route!.methods).join(',')} ${l.route!.path}`);
     expect(paths.some((p) => /runs/.test(p) && !p.startsWith('get'))).toBe(false);
     expect(paths.filter((p) => /dispatch|rerun|re-run|deploy/i.test(p))).toEqual([]);
+  });
+});
+
+// GET /api/environments/:id — the record read, as distinct from /:id/access.
+// The two look alike and behave very differently on purpose: reading the MAP
+// is wide (readGate fast-paths any tenant role), asking whether you may get
+// INSIDE is Cedar-evaluated per environment. This pins the record read.
+describe('GET /api/environments/:id', () => {
+  const ENV = {
+    id: 'env-prod', orgProjectId: 'p-observability', name: 'prod', kind: 'eks',
+    rank: 3, status: 'active', awsAccountId: '647757222309', awsRegion: 'us-east-1',
+    clusterName: 'orgiq-prod', accessRoleArn: 'arn:aws:iam::647757222309:role/orgiq-prod-access',
+  };
+
+  it('returns the record wrapped, for a plain member', async () => {
+    // An environment row names an account, a region, a cluster and a role —
+    // a map, not a key. Hiding it from the people working on the initiative
+    // buys no security.
+    getMock.mockResolvedValue(ENV);
+    const res = await request(app('member')).get('/api/environments/env-prod');
+    expect(res.status).toBe(200);
+    expect(Object.keys(res.body)).toEqual(['environment']);
+    expect(res.body.environment.awsAccountId).toBe('647757222309');
+    expect(getMock).toHaveBeenCalledWith('env-prod');
+  });
+
+  it('does NOT ask Cedar about the specific environment — that is /:id/access', async () => {
+    getMock.mockResolvedValue(ENV);
+    await request(app('member')).get('/api/environments/env-prod');
+    expect(isAllowed).not.toHaveBeenCalled();
+  });
+
+  it('404s an unknown environment', async () => {
+    getMock.mockResolvedValue(null);
+    const res = await request(app('member')).get('/api/environments/env-nope');
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/No such environment/);
+  });
+
+  it('reads an environment that is not wired for access yet, role ARN and all', async () => {
+    // null accessRoleArn means "not wired for access yet" — a real state the
+    // record read has to render rather than refuse.
+    getMock.mockResolvedValue({ ...ENV, accessRoleArn: null, status: 'provisioning' });
+    const res = await request(app('member')).get('/api/environments/env-prod');
+    expect(res.status).toBe(200);
+    expect(res.body.environment.accessRoleArn).toBeNull();
+    expect(res.body.environment.status).toBe('provisioning');
   });
 });

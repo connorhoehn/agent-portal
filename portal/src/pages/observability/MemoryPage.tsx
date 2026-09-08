@@ -12,20 +12,27 @@
 // Polling: 30s, matches DriftPage.
 
 import { Fragment, useMemo, useState } from 'react';
-import type { CSSProperties } from 'react';
+import type { ReactNode } from 'react';
 import {
+  Button,
   Card,
-  Table,
-  TableHead,
-  TableBody,
-  TableRow,
-  TableTh,
-  TableTd,
+  CardHeader,
   Chip,
+  CodeBlock,
+  Inline,
   PageSection,
+  Select,
+  Stack,
+  Table,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableTd,
+  TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
+import { T } from './Text';
 
 // ── Types (mirrored from middleware/src/routes/memory.ts) ──────────────────
 
@@ -184,9 +191,9 @@ function MemoryPage() {
             <TableBody>
               {stats.map((s) => (
                 <TableRow key={s.agentId}>
-                  <TableTd style={agentCell}>{s.agentId}</TableTd>
-                  <TableTd style={numCell}>{s.retrieves}</TableTd>
-                  <TableTd style={numCell}>{s.writes}</TableTd>
+                  <TableTd className="text-[12px] font-medium whitespace-nowrap">{s.agentId}</TableTd>
+                  <TableTd className="text-[12px] text-text-secondary">{s.retrieves}</TableTd>
+                  <TableTd className="text-[12px] text-text-secondary">{s.writes}</TableTd>
                   <TableTd>
                     <Chip tone={latencyTone(s.p50RetrieveMs)} size="xs">
                       {fmtMs(s.p50RetrieveMs)}
@@ -215,35 +222,29 @@ function MemoryPage() {
       </Card>
 
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
-            Recent events{' '}
-            <span style={hint}>
-              click a row to inspect retrieved summary + error detail
-            </span>
-          </h2>
-          <div style={filterRow}>
-            <select
-              value={agentFilter}
-              onChange={(e) => { setAgentFilter(e.target.value); setExpanded(null); }}
-              style={selectStyle}
-            >
-              <option value="">all agents</option>
-              {stats.map((s) => (
-                <option key={s.agentId} value={s.agentId}>{s.agentId}</option>
-              ))}
-            </select>
-            <select
-              value={kindFilter}
-              onChange={(e) => { setKindFilter(e.target.value); setExpanded(null); }}
-              style={selectStyle}
-            >
-              {KIND_OPTIONS.map((k) => (
-                <option key={k} value={k}>{k || 'all kinds'}</option>
-              ))}
-            </select>
-          </div>
-        </div>
+        <CardHeader
+          title="Recent events"
+          subtitle="click a row to inspect retrieved summary + error detail"
+          action={
+            <Inline gap="xs">
+              <Select
+                size="sm"
+                value={agentFilter}
+                onChange={(e) => { setAgentFilter(e.target.value); setExpanded(null); }}
+                options={[
+                  { value: '', label: 'all agents' },
+                  ...stats.map((s) => ({ value: s.agentId, label: s.agentId })),
+                ]}
+              />
+              <Select
+                size="sm"
+                value={kindFilter}
+                onChange={(e) => { setKindFilter(e.target.value); setExpanded(null); }}
+                options={KIND_OPTIONS.map((k) => ({ value: k, label: k || 'all kinds' }))}
+              />
+            </Inline>
+          }
+        />
         {events.length === 0 ? (
           <EmptyState text="No matching memory events in this window." />
         ) : (
@@ -266,22 +267,22 @@ function MemoryPage() {
                   <Fragment key={e.memoryEventId}>
                     <TableRow
                       onClick={() => setExpanded(isOpen ? null : e.memoryEventId)}
-                      style={{ cursor: 'pointer' }}
+                      className="cursor-pointer"
                     >
-                      <TableTd style={tsCell}>
+                      <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
                         {new Date(e.ts).toLocaleTimeString()}
                       </TableTd>
-                      <TableTd style={agentCell}>{e.agentId}</TableTd>
+                      <TableTd className="text-[12px] font-medium whitespace-nowrap">{e.agentId}</TableTd>
                       <TableTd>
                         <Chip tone={kindTone(e.kind)} size="xs">{e.kind}</Chip>
                       </TableTd>
-                      <TableTd style={snippetCell} title={e.queryText ?? e.memoryId ?? ''}>
+                      <TableTd className="text-[12px] max-w-[320px] truncate" title={e.queryText ?? e.memoryId ?? ''}>
                         {e.queryText ?? e.memoryId ?? '—'}
                       </TableTd>
-                      <TableTd style={numCell}>
+                      <TableTd className="text-[12px] text-text-secondary">
                         {e.resultCount == null ? '—' : e.resultCount}
                       </TableTd>
-                      <TableTd style={numCell}>{fmtMs(e.durationMs)}</TableTd>
+                      <TableTd className="text-[12px] text-text-secondary">{fmtMs(e.durationMs)}</TableTd>
                       <TableTd>
                         {e.errored ? (
                           <Chip tone="danger" size="xs">error</Chip>
@@ -294,7 +295,7 @@ function MemoryPage() {
                     </TableRow>
                     {isOpen && (
                       <TableRow key={`${e.memoryEventId}-detail`}>
-                        <TableTd colSpan={7} style={detailCell}>
+                        <TableTd colSpan={7} className="p-3 bg-bg">
                           <EventDetail event={e} />
                         </TableTd>
                       </TableRow>
@@ -310,117 +311,66 @@ function MemoryPage() {
   );
 }
 
-function EventDetail({ event }: { event: MemoryEvent }) {
+function MetaRow({ label, value, mono }: { label: string; value: ReactNode; mono?: boolean }) {
   return (
-    <div style={detailGrid}>
-      <div>
-        <div style={detailLabel}>METADATA</div>
-        <dl style={metaList}>
-          <DT>session</DT><DD>{event.sessionId ?? '—'}</DD>
-          <DT>memory id</DT><DD>{event.memoryId ?? '—'}</DD>
-          <DT>invocation</DT><DD style={mono}>{event.invocationId ?? '—'}</DD>
-          {event.queryText && (<><DT>query</DT><DD>{event.queryText}</DD></>)}
-        </dl>
-      </div>
-      <div>
-        <div style={detailLabel}>
-          {event.errored ? 'ERROR' : 'RETRIEVED SUMMARY'}
-        </div>
-        {event.errored ? (
-          <pre style={detailPre}>{event.errorMessage ?? '(no error message)'}</pre>
-        ) : event.retrievedSummary ? (
-          <pre style={detailPre}>{event.retrievedSummary}</pre>
-        ) : (
-          <pre style={{ ...detailPre, color: 'var(--color-text-tertiary)' }}>
-            (no payload captured)
-          </pre>
-        )}
-      </div>
-    </div>
+    <Inline gap="sm" align="baseline">
+      <T className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wide w-20 shrink-0">{label}</T>
+      <T className={`text-[11.5px] text-text-secondary ${mono ? 'font-mono' : ''}`}>{value}</T>
+    </Inline>
   );
 }
 
-function DT({ children }: { children: React.ReactNode }) {
-  return <dt style={dtStyle}>{children}</dt>;
-}
-function DD({ children, style }: { children: React.ReactNode; style?: CSSProperties }) {
-  return <dd style={{ ...ddStyle, ...style }}>{children}</dd>;
+function EventDetail({ event }: { event: MemoryEvent }) {
+  return (
+    <Inline gap="md" align="start">
+      <Stack gap="xs" className="flex-1 min-w-0">
+        <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">METADATA</T>
+        <Stack gap="xs">
+          <MetaRow label="session" value={event.sessionId ?? '—'} />
+          <MetaRow label="memory id" value={event.memoryId ?? '—'} />
+          <MetaRow label="invocation" value={event.invocationId ?? '—'} mono />
+          {event.queryText && <MetaRow label="query" value={event.queryText} />}
+        </Stack>
+      </Stack>
+      <Stack gap="xs" className="flex-1 min-w-0">
+        <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">
+          {event.errored ? 'ERROR' : 'RETRIEVED SUMMARY'}
+        </T>
+        {event.errored ? (
+          <CodeBlock code={event.errorMessage ?? '(no error message)'} language="text" />
+        ) : event.retrievedSummary ? (
+          <CodeBlock code={event.retrievedSummary} language="text" />
+        ) : (
+          <T className="text-[11.5px] text-text-tertiary italic">(no payload captured)</T>
+        )}
+      </Stack>
+    </Inline>
+  );
 }
 
 function WindowPicker({ value, onChange }: { value: number; onChange: (i: number) => void }) {
   return (
-    <div style={{ display: 'inline-flex', gap: 4 }}>
+    <Inline gap="xs">
       {WINDOW_OPTIONS.map((w, i) => (
-        <button
+        <Button
           key={w.label}
+          variant={i === value ? 'primary' : 'secondary'}
+          size="sm"
           onClick={() => onChange(i)}
-          style={{
-            fontSize: 11,
-            padding: '4px 10px',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-sm)',
-            background: i === value ? 'var(--color-primary)' : 'var(--color-surface)',
-            color: i === value ? 'white' : 'var(--color-text-secondary)',
-            cursor: 'pointer',
-            fontWeight: i === value ? 500 : 400,
-          }}
         >
           {w.label}
-        </button>
+        </Button>
       ))}
-    </div>
+    </Inline>
   );
 }
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div style={{ padding: 24, textAlign: 'center', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+    <T as="div" className="p-6 text-center text-[12px] text-text-tertiary">
       {text}
-    </div>
+    </T>
   );
 }
-
-// ── styles ────────────────────────────────────────────────────────────────
-
-const headerRow: CSSProperties = {
-  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-  marginBottom: 12, gap: 12, flexWrap: 'wrap',
-};
-const h2: CSSProperties = { fontSize: 14, fontWeight: 600, margin: 0 };
-const hint: CSSProperties = { fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 400 };
-const filterRow: CSSProperties = { display: 'flex', gap: 6 };
-const selectStyle: CSSProperties = {
-  fontSize: 12, padding: '4px 8px', border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm)', background: 'var(--color-surface)', color: 'var(--color-text-primary)',
-};
-const agentCell: CSSProperties = { fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' };
-const numCell: CSSProperties = { fontSize: 12, color: 'var(--color-text-secondary)' };
-const tsCell: CSSProperties = { fontSize: 11, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' };
-const snippetCell: CSSProperties = {
-  fontSize: 12, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-};
-const detailCell: CSSProperties = { padding: 12, background: 'var(--color-bg)' };
-const detailGrid: CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 };
-const detailLabel: CSSProperties = {
-  fontSize: 10, fontWeight: 700, color: 'var(--color-text-tertiary)',
-  marginBottom: 4, letterSpacing: 0.5,
-};
-const detailPre: CSSProperties = {
-  fontFamily: '"Fira Code", "Cascadia Code", monospace',
-  fontSize: 11.5, lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-  margin: 0, padding: '10px 12px', borderRadius: 'var(--radius-sm)',
-  background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-  maxHeight: 220, overflowY: 'auto',
-};
-const metaList: CSSProperties = {
-  margin: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px',
-  fontSize: 11.5,
-};
-const dtStyle: CSSProperties = {
-  fontWeight: 600, color: 'var(--color-text-tertiary)', textTransform: 'uppercase',
-  fontSize: 10, letterSpacing: 0.5,
-};
-const ddStyle: CSSProperties = { margin: 0, color: 'var(--color-text-secondary)' };
-const mono: CSSProperties = { fontFamily: 'ui-monospace, monospace', fontSize: 11 };
 
 export default MemoryPage;

@@ -9,8 +9,14 @@ export type WorkItemStatus = 'open' | 'in_progress' | 'in_review' | 'done' | 'ca
 export type WorkItemPriority = 'critical' | 'high' | 'medium' | 'low';
 export type PrStatus = 'open' | 'draft' | 'merged' | 'closed';
 
-/** Which pane of the work column is mounted. */
-export type WorkView = 'tree' | 'board';
+/**
+ * Which pane of the work column is mounted.
+ *
+ * `items` is the default and the flat one: the initiative's whole backlog as a
+ * sortable table, with the epic reduced to a column and a filter. `epics` is
+ * the rollup for when you want progress per epic rather than the work itself.
+ */
+export type WorkView = 'items' | 'board' | 'epics';
 
 export interface WorkItem {
   id: string;
@@ -69,6 +75,15 @@ export interface ProjectDetail {
   // cleanly when the detail response doesn't carry it yet.
   ownerId?: string | null;
   ownerName?: string | null;
+  /** Prose: what this initiative is for. One to three sentences. */
+  summary?: string | null;
+  // Sponsor — the executive who authorized the initiative existing, and whose
+  // budget it draws on. Distinct from the OWNER, who runs it day to day: the
+  // page previously showed only the latter, so nothing on it answered "who
+  // signed off on this" — the question every funding conversation opens with.
+  sponsorId?: string | null;
+  sponsorName?: string | null;
+  sponsorTitle?: string | null;
   createdAt: string | null;
   contributors: ProjectContributor[];
 }

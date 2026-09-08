@@ -1,0 +1,14 @@
+surface: automate
+role: member
+user: u-theo (Theo Chang) — GET /api/session/me on this sign-in: sub u-theo, tenant orgiq, role member
+url: /iq/work
+pages: portal/src/pages/work
+audited: 2026-09-06 10:36 local, Chrome 1552×789, middleware dev:mock
+screenshot: automate.jpg
+verdict: pass
+console errors: 0
+layout: pass — content col left 224px w 1304px (one 24px shell padding); breadcrumb "Build › Automate"; nested "Automate" rail (Overview / Queue / Findings, each with a one-line caption) flush with the content box (aside right edge 444px = inner main content left 444px + its own 24px gutter → content at 468px, w 1060px); first-row-top: 188px (the WAITING tile — this Overview is two four-tile stat rows, one sentence and an all-clear panel, no table); no horizontal scroll (scrollWidth 1552 = innerWidth)
+keyboard: pass — 26 tabbable controls, none with tabIndex −1, all 26 reached in a 30-press Tab sweep (focus-log diff: missing none); the rail's Overview/Queue/Findings are real `<a>`s, "Graph updates →" (/iq/work/changes) and the inline "queue" (/iq/work/queue) are real links; the WORKERS and FINDINGS + DLQ tiles are `<button>`s — Return on FINDINGS + DLQ navigated to /iq/work/findings; Return on WORKERS (`onSelect: navigate('/iq/work/queue')` in WorkHomePage.tsx:177) left the URL at /iq/work in this session, see notes
+empty-state: pass — every tile reads its own zero honestly (WAITING 0 "jobs queued, none claimed yet", PROCESSING 0 "nothing mid-flight", EST. TO DRAIN "clear · the queue is empty", NEEDS YOU 0 "0 for review · 0 graph changes · 0 agent questions", WORKERS 0 "all idle — the next queued job dispatches within ~10s") and the review lane carries an explicit "Nothing needs your attention right now / Agent questions and finished work awaiting review will show up here." panel
+role-gating: member sees the queue counters, FINDINGS + DLQ (4 open findings · 0 dead-lettered) and REDISCOVERY AVOIDED ($11.00) read-only; BOTS ON THIS QUEUE reads "— roster not visible to this role" rather than an empty table; "Computer Lab" in the description is plain text for member (the only `<a>`s in the content are "Graph updates →" and "queue"); no Accept/Reject/Approve/dispatch/requeue control exists in `<main>` — the review controls in WorkHomePage.tsx only mount when there is something to review, and nothing is queued for this role
+notes: the NEEDS YOU and WORKERS hints truncate with an ellipsis at 1552px ("0 for review · 0 graph changes · 0 age…", "all idle — the next queued job dispatch…") so the full sentence needs a hover. Return on the focused WORKERS tile did not move to /iq/work/queue where the same key on FINDINGS + DLQ did move; a mouse click was not retried, so this is one keyboard observation, not filed. The Automate rail still hides "Graph updates" from member while the Overview header links to it and the page renders for the role (unchanged from the 2026-09-05 pass, not a leak).

@@ -47,6 +47,21 @@ const LOCAL_PREFIXES: readonly string[] = [
   'chat.session.',            // lib/chatSessions.ts STORAGE_PREFIX — per-surface chat session pointers
 ];
 
+// Additive: sessionStorage keys that cache USER-scoped data (not tenant data
+// specifically, but the same "survives a hard-nav that doesn't touch web
+// storage" problem — DEFECTS #5 (assessor) / #8 (lead-assessor) / #7
+// (program-lead, admin)). Observed live: signing in as u-operator in a tab
+// that had just been u-jonas still showed u-jonas's six confirmed own-save
+// timestamps, because DocPane's "was this save mine?" set never keyed on who
+// is signed in. Restated by literal key rather than imported — same
+// rationale as the compute keys above (DocPane.tsx pulls in the CRDT/
+// realtime-modules stack, which this shared, dependency-light module has no
+// business dragging in) — with the node:test below pinning it against a
+// rename in DocPane.tsx.
+const SESSION_KEYS: readonly string[] = [
+  'assessment.knowledge.ownSaveTimestamps', // knowledge/DocPane.tsx OWN_SAVE_TS_STORAGE_KEY — this tab's confirmed own-saves
+];
+
 /**
  * Remove every tenant/user-scoped client cache while preserving device/UI
  * preferences. Safe to call in private-browsing mode or when a key is absent:
@@ -66,6 +81,10 @@ export function clearTenantScopedCaches(): void {
       }
     } catch { /* localStorage unreadable — ignore */ }
   }
-  // sessionStorage: the per-sub "context chosen" marker owns its own clear.
+  // sessionStorage: the per-sub "context chosen" marker owns its own clear...
   try { clearContextChosen(); } catch { /* ignore */ }
+  // ...plus the flat sessionStorage keys above.
+  for (const key of SESSION_KEYS) {
+    try { sessionStorage.removeItem(key); } catch { /* private mode / unavailable — ignore */ }
+  }
 }

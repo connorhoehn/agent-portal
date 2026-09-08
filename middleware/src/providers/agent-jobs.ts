@@ -12,9 +12,20 @@
 // recovered by reapStaleJobs(): claimed/running rows older than the stale
 // window go back to queued if attempts remain, else fail with a clear reason.
 
+import { randomUUID } from 'node:crypto';
 import { exec } from './aurora.js';
 import { config } from '../config.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
+// Every timestamp the mock queue writes comes from here, never `new Date()`:
+// the mock branches below are fixture writes living outside src/mock, and a
+// stamp minted off the wall clock cannot be frozen by freezeClock (so no test
+// can pin what a transition wrote) and lands in yesterday when the process
+// runs a minute after UTC midnight.
+import { clock } from '../mock/core/index.js';
+// Mock-mode only: the roster + run history a bot's "job →" links point at
+// (see seedMockJobsFromBotRuns below). bots.ts never imports this module, so
+// this is a one-way dependency, not a cycle.
+import { MOCK_BOTS, MOCK_BOT_RUNS, type BotRun } from './bots.js';
 
 export type JobStatus =
   | 'queued' | 'claimed' | 'running' | 'awaiting_review' | 'done' | 'failed' | 'cancelled';
@@ -119,7 +130,24 @@ function rowToJob(r: Record<string, unknown>): AgentJob {
 // which in mock mode leaves rows sitting visibly `queued` — the honest answer,
 // and the one the page renders.
 const MOCK_JOBS: AgentJob[] = [];
-let mockSeq = 0;
+
+/**
+ * A queue id in the shape the table itself mints.
+ *
+ * `agent_jobs.id` defaults to `'job-' || gen_random_uuid()`
+ * (schema/agentic_work_schema.sql), and only the seed writes ids by hand
+ * (`job-<slug>-maint-N`, one per cron firing it fabricates history for). The
+ * mock used to mint `job-mock-1`, `job-mock-2` … — a third dialect that
+ * belongs to neither, so a "job →" link from a run recorded offline opened an
+ * id Aurora could never hold, and the same click worked in dev:mock and 404'd
+ * on the cluster. That is the same defect seedMockJobsFromBotRuns() below was
+ * written to fix for the *seeded* runs; this closes it for newly enqueued
+ * ones. A slug-and-counter id would be wrong here for a second reason: a
+ * hand-driven dispatch is not maintenance, and borrowing `-maint-N` would
+ * collide with the range the seed reserves for a bot that really does fire on
+ * a schedule.
+ */
+function mockJobId(): string { return `job-${randomUUID()}`; }
 
 const MOCK_STATUS_RANK: Record<string, number> = {
   running: 0, claimed: 1, awaiting_review: 2, queued: 3,
@@ -131,6 +159,90 @@ function mockOrder(a: AgentJob, b: AgentJob): number {
   if (a.priority !== b.priority) return a.priority - b.priority;
   return b.createdAt.localeCompare(a.createdAt);
 }
+
+/** BotRun.status → AgentJob.status. Every run bots.ts seeds today is 'done',
+ *  but the mapping is written generically (not a single hard-coded 'done')
+ *  so a future 'failed'/'running' fixture lands on the right job state
+ *  without anyone having to remember to update this file too. 'skipped'
+ *  never reaches here in practice (a skipped firing never dispatches, so
+ *  genRun() never gives it a jobId) but maps to 'cancelled' rather than
+ *  silently defaulting to 'done'. */
+function jobStatusForRunStatus(status: BotRun['status']): JobStatus {
+  switch (status) {
+    case 'done': return 'done';
+    case 'failed': return 'failed';
+    case 'running': return 'running';
+    case 'skipped': return 'cancelled';
+  }
+}
+
+/**
+ * Mint a matching mock `agent_jobs` row for every seeded bot run that carries
+ * a jobId, so the "job →" link on a bot's run history (BotDetailPage.tsx)
+ * always resolves at GET /api/work/jobs/:id instead of 404ing — defect #11:
+ * bots.ts's mock run generator (genRun) mints jobIds like `job-obs-maint-1`
+ * that no job provider knew about, so every run-history "job →" link led to
+ * a page stuck on "Loading job …" forever.
+ *
+ * Reads MOCK_BOTS/MOCK_BOT_RUNS directly (the SAME fixtures the bots
+ * provider and BotDetailPage's run list use) rather than a second, hand-typed
+ * list of ids — the two cannot drift apart, and a job's title/model/prompt
+ * provenance genuinely comes from the bot that "ran" it, matching how a real
+ * dispatch enqueues (lib/bot-runner.ts fireBot: kind 'devbox:task', title is
+ * the bot's name, payload carries prompt/model/botId, bot_id column set).
+ */
+function seedMockJobsFromBotRuns(): void {
+  for (const bot of MOCK_BOTS) {
+    for (const run of MOCK_BOT_RUNS[bot.id] ?? []) {
+      if (!run.jobId || MOCK_JOBS.some((j) => j.id === run.jobId)) continue;
+      const status = jobStatusForRunStatus(run.status);
+      const terminal = status === 'done' || status === 'failed' || status === 'cancelled';
+      const durationMs = run.finishedAt
+        ? new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime()
+        : null;
+      const reason = typeof run.outcome['reason'] === 'string' ? run.outcome['reason'] as string : 'scheduled maintenance';
+      MOCK_JOBS.push({
+        id: run.jobId,
+        kind: 'devbox:task',
+        title: bot.name,
+        payload: { prompt: bot.prompt, requiresReview: bot.requiresReview, botId: bot.id, model: bot.model },
+        status,
+        priority: 100,
+        boxId: null,
+        sessionId: null,
+        attempts: terminal ? 1 : 0,
+        // The seed writes max_attempts 1 on every scheduled job. Typing 2 here
+        // made a one-shot job read as retryable offline, so the reaper's
+        // "attempts 1/1 — exhausted" state was unreachable in dev:mock. New
+        // jobs created at run time still default to 2 (`enqueue` below); this
+        // is the seeded history, and it says 1.
+        maxAttempts: 1,
+        result: status === 'done'
+          ? { summary: `${reason} — completed.`, costUsd: run.costUsd ?? undefined, durationMs: durationMs ?? undefined }
+          : null,
+        error: status === 'failed' ? reason : null,
+        // Provenance, not a placeholder. A cron firing was minted by the
+        // scheduler and nobody authorized it from inside an envelope — which
+        // is why bot_runs.dispatched_by is null for one. `?? 'portal'` read
+        // that null as "a person did this from the portal", so all nine
+        // job-obs-maint-* rows claimed a human origin the seed spells
+        // 'scheduler'; /iq/work then attributed scheduled maintenance to
+        // someone's morning. Fall back per trigger, and only a genuinely
+        // hand-driven run with no attribution column reads as 'portal'.
+        createdBy: run.dispatchedBy ?? (run.trigger === 'cron' || run.trigger === 'pr_watch' ? 'scheduler' : 'portal'),
+        createdAt: run.startedAt,
+        claimedAt: run.startedAt,
+        startedAt: run.startedAt,
+        finishedAt: run.finishedAt,
+        botId: bot.id,
+        botName: bot.name,
+        botTrigger: run.trigger,
+      });
+    }
+  }
+}
+
+if (config.mock.aurora) seedMockJobsFromBotRuns();
 
 export async function enqueueJob(input: {
   kind: string;
@@ -145,7 +257,7 @@ export async function enqueueJob(input: {
 }): Promise<AgentJob | null> {
   if (config.mock.aurora) {
     const job: AgentJob = {
-      id: `job-mock-${++mockSeq}`,
+      id: mockJobId(),
       kind: input.kind,
       title: input.title,
       payload: input.payload ?? {},
@@ -158,7 +270,7 @@ export async function enqueueJob(input: {
       result: null,
       error: null,
       createdBy: input.createdBy ?? 'portal',
-      createdAt: new Date().toISOString(),
+      createdAt: clock.nowIso(),
       claimedAt: null,
       startedAt: null,
       finishedAt: null,
@@ -186,6 +298,27 @@ export async function enqueueJob(input: {
     ],
   );
   return rows[0] ? rowToJob(rows[0]) : null;
+}
+
+/**
+ * Clone a dead-lettered job back onto the queue. Only terminal failures
+ * qualify — requeueing a job that is still moving would double-run it. The
+ * clone keeps the original kind/title/payload (the server holds the full
+ * payload; the portal never re-supplies a prompt it may not even see) and
+ * records where it came from in created_by.
+ */
+export async function requeueJob(id: string, requeuedBy?: string): Promise<AgentJob | null> {
+  const dead = await getJob(id);
+  if (!dead) return null;
+  if (dead.status !== 'failed' && dead.status !== 'cancelled') return null;
+  return enqueueJob({
+    kind: dead.kind,
+    title: dead.title,
+    payload: dead.payload,
+    priority: dead.priority,
+    createdBy: requeuedBy ? `${requeuedBy} (requeue of ${dead.id})` : `requeue of ${dead.id}`,
+    ...(dead.botId ? { botId: dead.botId } : {}),
+  });
 }
 
 export async function listJobs(opts: { status?: string; limit?: number } = {}): Promise<AgentJob[]> {
@@ -243,7 +376,7 @@ export async function claimNextJob(boxId: string, sessionId: string): Promise<Ag
     next.status = 'claimed';
     next.boxId = boxId;
     next.sessionId = sessionId;
-    next.claimedAt = new Date().toISOString();
+    next.claimedAt = clock.nowIso();
     next.attempts += 1;
     return { ...next };
   }
@@ -263,10 +396,44 @@ export async function claimNextJob(boxId: string, sessionId: string): Promise<Ag
   return rows[0] ? rowToJob(rows[0]) : null;
 }
 
+/**
+ * Claim ONE named job for a box — claimNextJob addressed by id instead of by
+ * queue position.
+ *
+ * The dispatcher wants the head of the queue and must never be handed a row
+ * another dispatcher already took, which is what SKIP LOCKED buys it. A caller
+ * that enqueued a job and wants to drive *that* job through its states has the
+ * opposite requirement: it knows which row it means, and taking whatever is
+ * oldest would silently start someone else's work. Guarded on `status =
+ * 'queued'` for the same reason claimNextJob is: a job already claimed must
+ * not be claimed twice.
+ */
+export async function claimJob(id: string, boxId: string, sessionId: string): Promise<AgentJob | null> {
+  if (config.mock.aurora) {
+    const job = MOCK_JOBS.find((j) => j.id === id && j.status === 'queued');
+    if (!job) return null;
+    job.status = 'claimed';
+    job.boxId = boxId;
+    job.sessionId = sessionId;
+    job.claimedAt = clock.nowIso();
+    job.attempts += 1;
+    return { ...job };
+  }
+  const rows = await exec(
+    `UPDATE agent_jobs
+        SET status = 'claimed', box_id = :box, session_id = :session,
+            claimed_at = NOW(), attempts = attempts + 1, updated_at = NOW()
+      WHERE id = :id AND status = 'queued'
+      RETURNING ${COLUMNS}`,
+    [strParam('id', id), strParam('box', boxId), strParam('session', sessionId)],
+  );
+  return rows[0] ? rowToJob(rows[0]) : null;
+}
+
 export async function markRunning(id: string): Promise<void> {
   if (config.mock.aurora) {
     const job = MOCK_JOBS.find((j) => j.id === id);
-    if (job) { job.status = 'running'; job.startedAt = new Date().toISOString(); }
+    if (job) { job.status = 'running'; job.startedAt = clock.nowIso(); }
     return;
   }
   await exec(
@@ -286,7 +453,7 @@ export async function completeJob(id: string, opts: {
       job.status = opts.status;
       if (opts.result) job.result = opts.result;
       job.error = opts.error ?? null;
-      job.finishedAt = new Date().toISOString();
+      job.finishedAt = clock.nowIso();
     }
     return;
   }
@@ -336,7 +503,7 @@ export async function cancelJob(id: string): Promise<boolean> {
     const job = MOCK_JOBS.find((j) => j.id === id && (j.status === 'queued' || j.status === 'claimed'));
     if (!job) return false;
     job.status = 'cancelled';
-    job.finishedAt = new Date().toISOString();
+    job.finishedAt = clock.nowIso();
     return true;
   }
   const rows = await exec(

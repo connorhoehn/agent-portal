@@ -8,12 +8,18 @@
 // returns 501 currently, surfaced via a small toast.
 
 import { useEffect, useMemo, useState } from 'react';
-import type { CSSProperties } from 'react';
 import { Link, useParams } from 'react-router';
 import {
+  Button,
   Card,
   Chip,
+  CodeBlock,
+  Inline,
+  InlineAlert,
+  InlinePlaceholder,
   PageSection,
+  SectionLabel,
+  Stack,
   useToast,
 } from '@connorhoehnslalom/ui-components/shared';
 import { CostChip } from '../../components/observability/CostChip';
@@ -25,6 +31,7 @@ import { ToolWaterfall } from '../../components/observability/ToolWaterfall';
 import type { ToolCall } from '../../components/observability/ToolWaterfall';
 import { GuardrailRuleBadge } from '../../components/observability/GuardrailRuleBadge';
 import { SaveAsTestCaseModal } from '../../components/observability/SaveAsTestCaseModal';
+import { T } from './Text';
 
 // The "invocation" payload is intentionally permissive — Agent A's backend
 // returns every column from invocation_traces, so we type the known fields
@@ -185,9 +192,7 @@ function InvocationDetailPage() {
     return (
       <PageSection title="Invocation">
         <Card padding="md">
-          <div style={{ color: 'var(--color-text-tertiary)', fontSize: 12 }}>
-            Loading invocation…
-          </div>
+          <T className="text-[12px] text-[var(--color-text-tertiary)]">Loading invocation…</T>
         </Card>
       </PageSection>
     );
@@ -253,29 +258,33 @@ function InvocationDetailPage() {
 
   const hasTrace = parentNode != null || childrenNodes.length > 0;
 
+  // The failure text lives on the errored tool call (invocation_traces has no
+  // error column of its own — only tool_calls does, real path and mock alike;
+  // see mockInvocationDetail in middleware/src/routes/invocations.ts), and
+  // previously surfaced only as that bar's hover `title` — mouse-only, so a
+  // keyboard or screen-reader user never saw it (DEFECTS.md #25). State it in
+  // visible text above the response instead, on top of the existing red bar
+  // and "✗ schema" badge, not in place of them.
+  const failureMessage = toolCalls.find((t) => t.errored && t.errorMessage)?.errorMessage ?? null;
+
   return (
     <PageSection title={agentName}>
 
       <Card padding="md">
-        <div style={headerRow}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minWidth: 0 }}>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                flexWrap: 'wrap',
-              }}
-            >
-              {ts && (
-                <span style={subdued}>
-                  {new Date(ts).toLocaleString()}
-                </span>
-              )}
-            </div>
-            <div style={monoLine}>{invocationId}</div>
-            <div style={chipRow}>
-              <span style={chipLabel}>judge</span>
+        <Inline align="start" justify="between" wrap gap="sm">
+          <Stack gap="sm" className="min-w-0 flex-1">
+            {ts && (
+              <T className="text-[12px] text-[var(--color-text-secondary)]">
+                {new Date(ts).toLocaleString()}
+              </T>
+            )}
+            <T as="div" className="break-all font-mono text-[11px] text-[var(--color-text-tertiary)]">
+              {invocationId}
+            </T>
+            <Inline gap="sm" wrap align="center">
+              <T className="text-[10px] font-semibold uppercase tracking-[0.5px] text-[var(--color-text-tertiary)]">
+                judge
+              </T>
               <Chip tone={judgeTone(inv.judgeScore)} size="xs">
                 {inv.judgeScore != null && Number.isFinite(inv.judgeScore)
                   ? Number(inv.judgeScore).toFixed(2)
@@ -291,43 +300,42 @@ function InvocationDetailPage() {
               <CostChip cost={totalCost} />
               <PromptVersionChip promptVersion={inv.promptVersion ?? null} />
               {inv.modelId && (
-                <span style={monoInline} title="model id">
+                <T title="model id" className="font-mono text-[11px] text-[var(--color-text-tertiary)]">
                   {String(inv.modelId)}
-                </span>
+                </T>
               )}
-              <span style={subduedSmall}>· duration {fmtDur(inv.durationMs)}</span>
-            </div>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
-            <Link to="/admin/observability/invocations/search" style={btnLink}>
+              <T className="text-[11px] text-[var(--color-text-tertiary)]">
+                · duration {fmtDur(inv.durationMs)}
+              </T>
+            </Inline>
+          </Stack>
+          <Stack gap="xs" align="end">
+            <Link
+              to="/admin/observability/invocations/search"
+              className="px-2 py-[2px] text-[12px] text-[var(--color-primary)] no-underline"
+            >
               ← Back to search
             </Link>
-            <div style={btnGroup}>
-              <button
-                type="button"
+            <Inline gap="xs">
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={onReplay}
                 disabled={replayLoading}
-                style={{ ...btnPrimary, opacity: replayLoading ? 0.6 : 1 }}
                 title="Replay this invocation (backend may return 501 — replay coming soon)"
               >
                 {replayLoading ? 'Replaying…' : 'Replay'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setSaveOpen(true)}
-                style={btnSecondary}
-              >
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => setSaveOpen(true)}>
                 + Save as test case
-              </button>
-            </div>
-          </div>
-        </div>
+              </Button>
+            </Inline>
+          </Stack>
+        </Inline>
       </Card>
 
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>Trace chain</h2>
-        </div>
+        <SectionLabel as="div" className="mb-3">Trace chain</SectionLabel>
         {hasTrace ? (
           <TraceTree
             parent={parentNode}
@@ -336,19 +344,19 @@ function InvocationDetailPage() {
             currentInvocationId={invocationId}
           />
         ) : (
-          <EmptyState text="This invocation has no recorded parent or child invocations yet." />
+          <InlinePlaceholder align="center" size="sm">
+            This invocation has no recorded parent or child invocations yet.
+          </InlinePlaceholder>
         )}
       </Card>
 
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
-            Tool calls{' '}
-            <span style={hint}>
-              {toolCalls.length} call{toolCalls.length === 1 ? '' : 's'}
-            </span>
-          </h2>
-        </div>
+        <SectionLabel as="div" className="mb-3">
+          Tool calls{' '}
+          <T className="text-[11px] font-normal text-[var(--color-text-tertiary)]">
+            {toolCalls.length} call{toolCalls.length === 1 ? '' : 's'}
+          </T>
+        </SectionLabel>
         <ToolWaterfall toolCalls={toolCalls} />
       </Card>
 
@@ -359,43 +367,48 @@ function InvocationDetailPage() {
       )}
 
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>Prompt</h2>
-        </div>
+        <SectionLabel as="div" className="mb-3">Prompt</SectionLabel>
         {prompt ? (
-          <pre style={detailPre}>{prompt}</pre>
+          <CodeBlock code={prompt} language="text" theme="light" className="max-h-[360px] overflow-y-auto" />
         ) : (
-          <EmptyState text="No prompt text captured for this invocation." />
+          <InlinePlaceholder align="center" size="sm">
+            No prompt text captured for this invocation.
+          </InlinePlaceholder>
         )}
       </Card>
 
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>Response</h2>
-        </div>
+        <SectionLabel as="div" className="mb-3">Response</SectionLabel>
+        {failureMessage && (
+          <InlineAlert tone="error" className="mb-3">
+            {failureMessage}
+          </InlineAlert>
+        )}
         {response ? (
-          <pre style={detailPre}>{response}</pre>
+          <CodeBlock code={response} language="text" theme="light" className="max-h-[360px] overflow-y-auto" />
         ) : (
-          <EmptyState text="No response text captured for this invocation." />
+          <InlinePlaceholder align="center" size="sm">
+            No response text captured for this invocation.
+          </InlinePlaceholder>
         )}
       </Card>
 
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>Judge</h2>
-        </div>
-        <div style={judgeRow}>
+        <SectionLabel as="div" className="mb-3">Judge</SectionLabel>
+        <Inline align="start" gap="sm">
           <Chip tone={judgeTone(inv.judgeScore)} size="sm">
             {inv.judgeScore != null && Number.isFinite(inv.judgeScore)
               ? Number(inv.judgeScore).toFixed(2)
               : '—'}
           </Chip>
           {inv.judgeRationale ? (
-            <p style={judgePara}>{inv.judgeRationale}</p>
+            <T as="div" className="text-[12px] leading-[1.5] text-[var(--color-text-secondary)]">
+              {inv.judgeRationale}
+            </T>
           ) : (
-            <span style={subduedSmall}>(no rationale recorded)</span>
+            <T className="text-[11px] text-[var(--color-text-tertiary)]">(no rationale recorded)</T>
           )}
-        </div>
+        </Inline>
       </Card>
 
       <RawMetadataCard invocation={inv} />
@@ -455,63 +468,70 @@ function MemoryOperationsCard({ invocationId }: { invocationId: string }) {
   const count = events?.length ?? 0;
   return (
     <Card padding="md">
-      <div style={headerRow}>
-        <h2 style={h2}>
-          Memory operations{' '}
-          <span style={hint}>
-            {events == null ? 'loading…' : `${count} op${count === 1 ? '' : 's'}`}
-          </span>
-        </h2>
-      </div>
+      <SectionLabel as="div" className="mb-3">
+        Memory operations{' '}
+        <T className="text-[11px] font-normal text-[var(--color-text-tertiary)]">
+          {events == null ? 'loading…' : `${count} op${count === 1 ? '' : 's'}`}
+        </T>
+      </SectionLabel>
       {events == null ? (
-        <div style={loadingHint}>Loading…</div>
+        <InlinePlaceholder align="center" size="sm">Loading…</InlinePlaceholder>
       ) : events.length === 0 ? (
-        <EmptyState text="No memory operations recorded for this invocation." />
+        <InlinePlaceholder align="center" size="sm">
+          No memory operations recorded for this invocation.
+        </InlinePlaceholder>
       ) : (
-        <div style={memoryList}>
+        <Stack gap="sm">
           {events.map((e) => (
-            <div key={e.memoryEventId} style={memoryRow}>
-              <div style={memoryRowHeader}>
-                <Chip
-                  tone={
-                    e.errored
-                      ? 'danger'
-                      : e.kind === 'retrieve' && e.resultCount === 0
-                        ? 'warning'
-                        : 'neutral'
-                  }
-                  size="xs"
-                >
-                  {e.kind}
-                </Chip>
-                <span style={subduedSmall}>
-                  {e.resultCount == null ? '—' : `${e.resultCount} result${e.resultCount === 1 ? '' : 's'}`}
-                </span>
-                <span style={subduedSmall}>·</span>
-                <span style={subduedSmall}>
-                  {e.durationMs == null ? '—' : `${e.durationMs}ms`}
-                </span>
-                {e.sessionId && (
-                  <>
-                    <span style={subduedSmall}>·</span>
-                    <span style={subduedSmall}>session {e.sessionId}</span>
-                  </>
+            <Card key={e.memoryEventId} padding="sm" className="bg-[var(--color-bg)]">
+              <Stack gap="xs">
+                <Inline gap="sm" wrap align="center">
+                  <Chip
+                    tone={
+                      e.errored
+                        ? 'danger'
+                        : e.kind === 'retrieve' && e.resultCount === 0
+                          ? 'warning'
+                          : 'neutral'
+                    }
+                    size="xs"
+                  >
+                    {e.kind}
+                  </Chip>
+                  <T className="text-[11px] text-[var(--color-text-tertiary)]">
+                    {e.resultCount == null ? '—' : `${e.resultCount} result${e.resultCount === 1 ? '' : 's'}`}
+                  </T>
+                  <T className="text-[11px] text-[var(--color-text-tertiary)]">·</T>
+                  <T className="text-[11px] text-[var(--color-text-tertiary)]">
+                    {e.durationMs == null ? '—' : `${e.durationMs}ms`}
+                  </T>
+                  {e.sessionId && (
+                    <>
+                      <T className="text-[11px] text-[var(--color-text-tertiary)]">·</T>
+                      <T className="text-[11px] text-[var(--color-text-tertiary)]">session {e.sessionId}</T>
+                    </>
+                  )}
+                </Inline>
+                {e.queryText && (
+                  <T as="div" className="text-[12px] italic text-[var(--color-text-secondary)]">
+                    {e.queryText}
+                  </T>
                 )}
-              </div>
-              {e.queryText && (
-                <div style={memoryQuery}>{e.queryText}</div>
-              )}
-              {e.retrievedSummary && (
-                <pre style={memoryPre}>{e.retrievedSummary}</pre>
-              )}
-              {e.errored && e.errorMessage && (
-                <pre style={{ ...memoryPre, color: 'var(--color-danger)' }}>
-                  {e.errorMessage}
-                </pre>
-              )}
-            </div>
+                {e.retrievedSummary && (
+                  <CodeBlock
+                    code={e.retrievedSummary}
+                    language="text"
+                    theme="light"
+                    className="max-h-[200px] overflow-y-auto"
+                  />
+                )}
+                {e.errored && e.errorMessage && (
+                  <InlineAlert tone="error">{e.errorMessage}</InlineAlert>
+                )}
+              </Stack>
+            </Card>
           ))}
-        </div>
+        </Stack>
       )}
     </Card>
   );
@@ -549,41 +569,48 @@ function GuardrailTraceCard({ invocationId }: { invocationId: string }) {
 
   return (
     <Card padding="md">
-      <div style={headerRow}>
-        <h2 style={h2}>
-          Guardrail trace{' '}
-          <span style={hint}>
-            {rows == null ? 'loading…' : `${rows.length} rule${rows.length === 1 ? '' : 's'} fired`}
-          </span>
-        </h2>
-      </div>
+      <SectionLabel as="div" className="mb-3">
+        Guardrail trace{' '}
+        <T className="text-[11px] font-normal text-[var(--color-text-tertiary)]">
+          {rows == null ? 'loading…' : `${rows.length} rule${rows.length === 1 ? '' : 's'} fired`}
+        </T>
+      </SectionLabel>
       {rows == null ? (
-        <div style={loadingHint}>Loading…</div>
+        <InlinePlaceholder align="center" size="sm">Loading…</InlinePlaceholder>
       ) : rows.length === 0 ? (
-        <EmptyState text="The invocation was intervened on, but no rule-level breakdown was captured." />
+        <InlinePlaceholder align="center" size="sm">
+          The invocation was intervened on, but no rule-level breakdown was captured.
+        </InlinePlaceholder>
       ) : (
-        <div style={memoryList}>
+        <Stack gap="sm">
           {rows.map((r) => (
-            <div key={r.interventionId} style={memoryRow}>
-              <div style={memoryRowHeader}>
-                <GuardrailRuleBadge
-                  ruleName={r.ruleName}
-                  action={r.action}
-                  severity={r.severity}
-                />
-                {r.ruleCategory && (
-                  <span style={subduedSmall}>{r.ruleCategory}</span>
+            <Card key={r.interventionId} padding="sm" className="bg-[var(--color-bg)]">
+              <Stack gap="xs">
+                <Inline gap="sm" wrap align="center">
+                  <GuardrailRuleBadge
+                    ruleName={r.ruleName}
+                    action={r.action}
+                    severity={r.severity}
+                  />
+                  {r.ruleCategory && (
+                    <T className="text-[11px] text-[var(--color-text-tertiary)]">{r.ruleCategory}</T>
+                  )}
+                  {r.severity && (
+                    <T className="text-[11px] text-[var(--color-text-tertiary)]">severity {r.severity}</T>
+                  )}
+                </Inline>
+                {r.matchedText && (
+                  <CodeBlock
+                    code={r.matchedText}
+                    language="text"
+                    theme="light"
+                    className="max-h-[200px] overflow-y-auto"
+                  />
                 )}
-                {r.severity && (
-                  <span style={subduedSmall}>severity {r.severity}</span>
-                )}
-              </div>
-              {r.matchedText && (
-                <pre style={memoryPre}>{r.matchedText}</pre>
-              )}
-            </div>
+              </Stack>
+            </Card>
           ))}
-        </div>
+        </Stack>
       )}
     </Card>
   );
@@ -619,19 +646,17 @@ function RawMetadataCard({ invocation }: { invocation: InvocationRow }) {
   }, [invocation]);
   return (
     <Card padding="md">
-      <div style={headerRow}>
-        <h2 style={h2}>
-          <button
-            onClick={() => setOpen((v) => !v)}
-            style={collapseBtn}
-            aria-expanded={open}
-          >
-            {open ? '▾' : '▸'} Raw metadata
-          </button>{' '}
-          <span style={hint}>full invocation_traces row · JSON</span>
-        </h2>
-      </div>
-      {open && <pre style={detailPre}>{json}</pre>}
+      <Inline align="center" gap="sm" className="mb-3">
+        <Button variant="ghost" size="sm" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+          {open ? '▾' : '▸'} Raw metadata
+        </Button>
+        <T className="text-[11px] font-normal text-[var(--color-text-tertiary)]">
+          full invocation_traces row · JSON
+        </T>
+      </Inline>
+      {open && (
+        <CodeBlock code={json} language="json" theme="light" className="max-h-[360px] overflow-y-auto" />
+      )}
     </Card>
   );
 }
@@ -649,213 +674,24 @@ function ErrorBlock({
     <PageSection
       title={title}
       actions={
-        <Link to="/admin/observability/invocations/search" style={btnLink}>
+        <Link
+          to="/admin/observability/invocations/search"
+          className="px-2 py-[2px] text-[12px] text-[var(--color-primary)] no-underline"
+        >
           ← Back to search
         </Link>
       }
     >
       <Card padding="md">
         {invocationId && (
-          <div style={monoLine}>id: {invocationId}</div>
+          <T as="div" className="break-all font-mono text-[11px] text-[var(--color-text-tertiary)]">
+            id: {invocationId}
+          </T>
         )}
-        <div style={{ ...subdued, marginTop: 4 }}>{detail}</div>
+        <T as="div" className="mt-1 text-[12px] text-[var(--color-text-secondary)]">{detail}</T>
       </Card>
     </PageSection>
   );
 }
-
-function EmptyState({ text }: { text: string }) {
-  return (
-    <div
-      style={{
-        padding: 24,
-        textAlign: 'center',
-        fontSize: 12,
-        color: 'var(--color-text-tertiary)',
-      }}
-    >
-      {text}
-    </div>
-  );
-}
-
-// ── styles ────────────────────────────────────────────────────────────────────
-
-const headerRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'flex-start',
-  justifyContent: 'space-between',
-  marginBottom: 12,
-  gap: 12,
-  flexWrap: 'wrap',
-};
-
-const h2: CSSProperties = { fontSize: 14, fontWeight: 600, margin: 0 };
-const hint: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  fontWeight: 400,
-};
-
-const subdued: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary)',
-};
-
-const subduedSmall: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-};
-
-const monoLine: CSSProperties = {
-  fontSize: 11,
-  fontFamily: 'ui-monospace, monospace',
-  color: 'var(--color-text-tertiary)',
-  wordBreak: 'break-all',
-};
-
-const monoInline: CSSProperties = {
-  fontFamily: 'ui-monospace, monospace',
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-};
-
-const chipRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  flexWrap: 'wrap',
-};
-
-const chipLabel: CSSProperties = {
-  fontSize: 10,
-  color: 'var(--color-text-tertiary)',
-  fontWeight: 600,
-  textTransform: 'uppercase',
-  letterSpacing: 0.5,
-};
-
-const judgeRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'flex-start',
-  gap: 12,
-};
-
-const judgePara: CSSProperties = {
-  margin: 0,
-  fontSize: 12,
-  color: 'var(--color-text-secondary)',
-  lineHeight: 1.5,
-};
-
-const btnLink: CSSProperties = {
-  padding: '2px 8px',
-  fontSize: 12,
-  color: 'var(--color-primary)',
-  textDecoration: 'none',
-};
-
-const btnGroup: CSSProperties = {
-  display: 'flex',
-  gap: 6,
-};
-
-const btnPrimary: CSSProperties = {
-  padding: '6px 12px',
-  fontSize: 12,
-  fontWeight: 500,
-  background: 'var(--color-primary)',
-  color: 'var(--color-surface)',
-  border: '1px solid var(--color-primary)',
-  borderRadius: 'var(--radius-sm, 4px)',
-  cursor: 'pointer',
-};
-
-const btnSecondary: CSSProperties = {
-  padding: '6px 12px',
-  fontSize: 12,
-  background: 'var(--color-surface)',
-  color: 'var(--color-text-secondary)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm, 4px)',
-  cursor: 'pointer',
-};
-
-const collapseBtn: CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  padding: 0,
-  margin: 0,
-  fontSize: 14,
-  fontWeight: 600,
-  color: 'var(--color-text-primary)',
-  cursor: 'pointer',
-};
-
-const detailPre: CSSProperties = {
-  fontFamily: '"Fira Code", "Cascadia Code", monospace',
-  fontSize: 11.5,
-  lineHeight: 1.55,
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
-  margin: 0,
-  padding: '10px 12px',
-  borderRadius: 4,
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  maxHeight: 360,
-  overflowY: 'auto',
-};
-
-const loadingHint: CSSProperties = {
-  padding: 16,
-  fontSize: 12,
-  color: 'var(--color-text-tertiary)',
-};
-
-const memoryList: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 12,
-};
-
-const memoryRow: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-  padding: '10px 12px',
-  border: '1px solid var(--color-border)',
-  borderRadius: 4,
-  background: 'var(--color-bg)',
-};
-
-const memoryRowHeader: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  flexWrap: 'wrap',
-};
-
-const memoryQuery: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary)',
-  fontStyle: 'italic',
-};
-
-const memoryPre: CSSProperties = {
-  fontFamily: '"Fira Code", "Cascadia Code", monospace',
-  fontSize: 11,
-  lineHeight: 1.5,
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
-  margin: 0,
-  padding: '8px 10px',
-  borderRadius: 3,
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  maxHeight: 200,
-  overflowY: 'auto',
-};
-
 
 export default InvocationDetailPage;

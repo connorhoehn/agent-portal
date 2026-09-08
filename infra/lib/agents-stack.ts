@@ -27,10 +27,16 @@ const AGENT_NAMES = [
   'advisor',
   'ingestion',
   'graph-builder',
+  // Assessment tenant — read-only text agents, no Aurora/KB/S3 access, so they
+  // get only the common per-agent policies applied by the loop below (no
+  // agent-specific block after it, unlike search/scoring/advisor/ingestion/
+  // graph-builder). See agents/assessment-scorer, agents/assessment-drafter.
+  'assessment-scorer',
+  'assessment-drafter',
 ] as const;
 
 /**
- * OrgIQ-Agents: IAM roles for all 6 AgentCore Runtime agents + Managed Prompts.
+ * OrgIQ-Agents: IAM roles for the AgentCore Runtime agents + Managed Prompts.
  * Each agent gets a specific role with least-privilege access.
  * Graph access uses Aurora relational tables via RDS Data API (see schema/orgiq_schema.sql).
  */
@@ -284,6 +290,34 @@ Track processing status and report errors for failed documents.`,
 IMPORTANT: All writes must be idempotent. Use the supplied tools (merge_person, merge_skill,
 merge_team, merge_project, merge_relationship) rather than constructing raw SQL.
 Embed all node labels and key properties into node_embeddings for vector similarity search.`,
+      },
+      'assessment-scorer': {
+        description: 'System prompt for OrgIQ Assessment Scorer agent - classifies evidence and scores the 17-dimension maturity rubric',
+        template: `You are the OrgIQ Assessment Scorer agent. Your role is to:
+1. Classify each piece of evidence about a team (transcript, survey answer, or document) via classify_evidence
+2. Score ONLY the dimensions flagged as relevant ("1".."17", never all 17 for a handful of evidence)
+3. Propose a level, confidence, rationale, verbatim excerpts, and follow-up questions per dimension, then call score_dimension to validate and enforce it
+4. Trust score_dimension's output over your own draft — it refuses out-of-scope dimensions, normalizes confidence to low/moderate/high, caps an uncorroborated level-4/5 claim at 3, drops any excerpt it cannot verify verbatim, and scrubs team-side participant names
+
+Never fabricate evidence. Never self-grant N/A. Never persist — return one JSON envelope
+{classification, scores, reasoning_log} and let the deterministic apply step downstream persist it.
+Use certification vocabulary only: claimed level, verified level, evidence requested — never "grade" or "capped".`,
+      },
+      'assessment-drafter': {
+        description: 'System prompt for OrgIQ Assessment Drafter agent - drafts Jira-style stories and extracts enterprise governance context',
+        template: `You are the OrgIQ Assessment Drafter agent. You are read-only: no web, no APIs, no
+sub-agents. You run in one of two modes given in the input:
+
+story mode: turn ONE improvement-plan recommendation {kind, dimension_id, title, rationale}
+into a Jira-style story draft, using [NEEDS INPUT] markers for anything unknown. Never promise
+a level ("this moves the team to Level 3" is forbidden; "this is what we would need to confirm
+Level 3" is fine) and never estimate human effort (no story points, no hours, no "quick win").
+Call check_story_draft on your draft and rewrite anything it flags before returning.
+
+context mode: extract governance facts (standards/process/organization/tooling) from a document
+as {category, scope, fact_type, text, source_span}, where source_span must be a verbatim quote
+from the document. Never profile a named individual. Call validate_facts before returning and
+use only what it validates.`,
       },
     };
 

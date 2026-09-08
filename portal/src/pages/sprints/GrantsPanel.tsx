@@ -4,7 +4,7 @@
 // write refetches both the grants and the sprint rollup above, because the
 // sprint's "Envelope granted" tile is derived from exactly these rows.
 
-import { useState } from 'react';
+import { useEffect, useReducer, useState, type KeyboardEvent } from 'react';
 import {
   Button,
   FormField,
@@ -23,11 +23,15 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { toastError, toastSuccess } from '../../lib/toastStore';
+import { escapeNestReducer, INITIAL_ESCAPE_NEST_STATE, shouldHostHandleEscape, topEscapeLayer } from './escapeNesting';
 import { grantUrl, grantsUrl, validateGrantAmount } from './sprintForm';
 import { usd } from './sprintFormat';
 import { PeopleSelect, usePeopleOptions } from './PeopleSelect';
+import { T } from './Text';
 import { writeJson } from './writeJson';
 import type { GrantRow, Sprint } from './types';
+
+const EDIT_PREFIX = 'edit:';
 
 function AddGrantForm({ sprint, onDone, onCancel, onError }: {
   sprint: Sprint; onDone: () => void; onCancel: () => void; onError: (msg: string | null) => void;
@@ -63,6 +67,11 @@ function AddGrantForm({ sprint, onDone, onCancel, onError }: {
           <PeopleSelect
             id={id} value={grantee} onChange={setGrantee}
             groups={groups} loading={isLoading} emptyLabel="Select…"
+            // The form mounts fresh every time "+ Grant envelope" opens it
+            // (conditionally rendered, not just hidden) — autoFocus lands
+            // the keyboard here instead of leaving it on `<body>`, which is
+            // what made the form's own Escape handler never see the key.
+            autoFocus
           />
         )}
       </FormField>
@@ -104,7 +113,10 @@ function GrantRowView({ grant, editing, busy, onEdit, onSave, onCancelEdit, onRe
         <TableTd>{grant.granteeName ?? grant.granteePersonId}</TableTd>
         <TableTd className="text-right">
           <Input size="sm" inputMode="decimal" aria-label="Envelope amount (USD)"
-            className="w-28" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            className="w-28" value={amount} onChange={(e) => setAmount(e.target.value)}
+            // First field of a row that just remounted into edit mode —
+            // land the keyboard here instead of on `<body>`.
+            autoFocus />
         </TableTd>
         <TableTd>
           <Input size="sm" aria-label="Grant note" placeholder="Note (optional)"
@@ -126,7 +138,11 @@ function GrantRowView({ grant, editing, busy, onEdit, onSave, onCancelEdit, onRe
       <TableTd className="text-text-tertiary">{grant.note ?? '—'}</TableTd>
       <TableTd className="text-right">
         <Inline gap="xs" justify="end">
-          <Button size="sm" variant="ghost" onClick={onEdit}>Edit</Button>
+          {/* Stable, re-queryable handle for closeEdit to refocus on Escape/
+              Cancel — see the comment there. Button isn't forwardRef, and
+              this row itself remounts (keyed on edit state) the moment
+              editing starts, so a captured DOM ref would already be stale. */}
+          <Button size="sm" variant="ghost" onClick={onEdit} data-grant-trigger={`edit:${grant.id}`}>Edit</Button>
           <Button size="sm" variant="ghost" disabled={busy} onClick={onRevoke}>Revoke</Button>
         </Inline>
       </TableTd>
@@ -138,10 +154,78 @@ export function GrantsPanel({ sprint, onChanged }: { sprint: Sprint; onChanged: 
   const { data, isLoading, error, refresh } = useFetch<{ grants: GrantRow[] }>(grantsUrl(sprint.id));
   const grants = data?.grants ?? [];
 
-  const [adding, setAdding] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
+  // Which inline form is open, as a stack the drawer's own Escape-to-close
+  // never sees while it isn't empty — see escapeNesting.ts. At most one of
+  // "add" or "edit:<id>" is ever open in this panel, but the stack shape is
+  // shared with SprintBoard's own nested form so both close on the same rule.
+  const [nest, dispatchNest] = useReducer(escapeNestReducer, INITIAL_ESCAPE_NEST_STATE);
+  const topLayer = topEscapeLayer(nest);
+  const adding = topLayer === 'add';
+  const editId = topLayer?.startsWith(EDIT_PREFIX) ? topLayer.slice(EDIT_PREFIX.length) : null;
+
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Focus target for Escape/Cancel to return to, restored by a `useEffect`
+  // rather than a `requestAnimationFrame`. Both "+ Grant envelope" and each
+  // row's "Edit" are conditionally rendered (not just hidden) while their
+  // form is open, and the row itself remounts (keyed on edit state) — a
+  // captured DOM ref would go stale the moment its trigger unmounts — so
+  // each trigger instead carries a stable, re-queryable `data-grant-trigger`
+  // (see GrantRowView and the "+ Grant envelope" button below).
+  //
+  // This used to schedule the refocus with `requestAnimationFrame`, which
+  // ties the callback to the next paint — a frame that a hidden/backgrounded
+  // tab can defer or skip outright, and Escape and a Cancel click don't
+  // reliably drive the same next-paint timing even in a foregrounded tab.
+  // `closeAdd`/`closeEdit` now just record *which* selector should receive
+  // focus (`pendingFocus`) alongside the state change that closes the form;
+  // the effect below runs on React's own commit — after `adding`/`editId`
+  // have flipped and the trigger button has remounted — for BOTH paths
+  // identically, with no dependency on frame scheduling.
+  const [pendingFocus, setPendingFocus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!pendingFocus) return;
+    document.querySelector<HTMLElement>(pendingFocus)?.focus();
+    setPendingFocus(null);
+    // Re-run once the DOM this selector targets has actually changed shape
+    // (a trigger remounting), not just when the selector string is set.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingFocus, adding, editId]);
+
+  function openAdd() {
+    setFormError(null);
+    dispatchNest({ type: 'open', id: 'add' });
+  }
+  function closeAdd() {
+    dispatchNest({ type: 'close', id: 'add' });
+    setFormError(null);
+    setPendingFocus('[data-grant-trigger="add"]');
+  }
+  function openEdit(id: string) {
+    setFormError(null);
+    dispatchNest({ type: 'open', id: `${EDIT_PREFIX}${id}` });
+  }
+  function closeEdit(id: string) {
+    dispatchNest({ type: 'close', id: `${EDIT_PREFIX}${id}` });
+    setPendingFocus(`[data-grant-trigger="edit:${CSS.escape(id)}"]`);
+  }
+
+  // The first Escape while a form is open cancels ONLY the form and returns
+  // focus to the control that opened it — stopping the event here keeps it
+  // from ever reaching the Drawer's window-level Escape-to-close listener.
+  // A second Escape, with nothing left on the stack, is left alone and
+  // bubbles up to close the drawer itself (which restores focus to the row).
+  function handleNestedEscape(e: KeyboardEvent) {
+    if (e.key !== 'Escape') return;
+    if (shouldHostHandleEscape(nest)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const closing = topLayer;
+    if (closing === 'add') closeAdd();
+    else if (closing?.startsWith(EDIT_PREFIX)) closeEdit(closing.slice(EDIT_PREFIX.length));
+  }
 
   function reload() { refresh(); onChanged(); }
 
@@ -160,7 +244,7 @@ export function GrantsPanel({ sprint, onChanged }: { sprint: Sprint; onChanged: 
     setBusy(false);
     if (!res.ok) { toastError(null, 'Could not update grant', res.error ?? ''); return; }
     toastSuccess(null, 'Envelope updated', usd(amt.value));
-    setEditId(null);
+    closeEdit(id);
     reload();
   }
 
@@ -174,13 +258,13 @@ export function GrantsPanel({ sprint, onChanged }: { sprint: Sprint; onChanged: 
   }
 
   return (
-    <Stack gap="sm">
+    <Stack gap="sm" onKeyDown={handleNestedEscape}>
       <Inline justify="between" align="baseline">
-        <span className="text-[13px] text-text-secondary">
+        <T className="text-[13px] text-text-secondary" wrap>
           Budget envelopes scoped to this sprint. Zeroing one freezes its spend without losing its history.
-        </span>
+        </T>
         {!adding ? (
-          <Button size="sm" variant="secondary" onClick={() => { setAdding(true); setFormError(null); }}>
+          <Button size="sm" variant="secondary" onClick={openAdd} data-grant-trigger="add">
             + Grant envelope
           </Button>
         ) : null}
@@ -194,8 +278,8 @@ export function GrantsPanel({ sprint, onChanged }: { sprint: Sprint; onChanged: 
         <AddGrantForm
           sprint={sprint}
           onError={setFormError}
-          onCancel={() => { setAdding(false); setFormError(null); }}
-          onDone={() => { setAdding(false); reload(); }}
+          onCancel={closeAdd}
+          onDone={() => { closeAdd(); reload(); }}
         />
       ) : null}
 
@@ -225,8 +309,8 @@ export function GrantsPanel({ sprint, onChanged }: { sprint: Sprint; onChanged: 
                 grant={g}
                 editing={editId === g.id}
                 busy={busy}
-                onEdit={() => { setEditId(g.id); setFormError(null); }}
-                onCancelEdit={() => setEditId(null)}
+                onEdit={() => openEdit(g.id)}
+                onCancelEdit={() => closeEdit(g.id)}
                 onSave={(amount, note) => void saveEdit(g.id, amount, note)}
                 onRevoke={() => void revoke(g)}
               />

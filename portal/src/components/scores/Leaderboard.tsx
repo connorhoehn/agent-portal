@@ -1,5 +1,12 @@
-import { Card, Table, TableHead, TableBody, TableRow, TableTh, TableTd } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, Checkbox, Table, TableHead, TableBody, TableRow, TableTh, TableTd } from '@connorhoehnslalom/ui-components/shared';
 import { ScoreEntry } from './types';
+import { formatScore } from './scoresFormat';
+
+/** A stable id for a row's name button, independent of DOM node identity —
+ * see ScoresPage.tsx's focus-restore effect (DEFECTS.md org-leader #12). */
+export function scoreRowButtonId(personId: string): string {
+  return `score-row-${personId}`;
+}
 
 interface Props {
   entries: ScoreEntry[];
@@ -45,48 +52,63 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
             const selected = s.personId === selectedId;
             const inComparison = comparisonIds.has(s.personId);
             const checkboxDisabled = compareDisabled && !inComparison;
-            const inf01 = Math.min(1, Math.max(0, s.influence > 1 ? s.influence / 100 : s.influence));
-            const exp01 = Math.min(1, Math.max(0, s.expertise > 1 ? s.expertise / 100 : s.expertise));
-            const compositeFromWeight = Math.round(weight * inf01 * 100 + (1 - weight) * exp01 * 100);
-            const infW = 60 * weight * inf01;
-            const expW = 60 * (1 - weight) * exp01;
-            const tooltip = `${Math.round(weight * 100)}% influence (${Math.round(weight * inf01 * 100)}) + ${Math.round((1 - weight) * 100)}% expertise (${Math.round((1 - weight) * exp01 * 100)})`;
+            // Influence/expertise/composite all pass through the one
+            // `formatScore` normalizer — DEFECTS.md org-leader #11 was three
+            // different scales for one score because this row used to
+            // re-derive its own influence/expertise fractions independently
+            // of the composite computed upstream in ScoresPage.
+            const infScore = formatScore(s.influence);
+            const expScore = formatScore(s.expertise);
+            const compositeScore = formatScore(s.composite);
+            const infW = 60 * (weight * infScore) / 100;
+            const expW = 60 * ((1 - weight) * expScore) / 100;
+            const tooltip = `${Math.round(weight * 100)}% influence (${infScore}) + ${Math.round((1 - weight) * 100)}% expertise (${expScore})`;
             return (
               <TableRow
                 key={s.personId}
                 onClick={() => onSelect(selected ? null : s.personId)}
                 className={`cursor-pointer ${selected ? 'bg-surface-hover' : ''}`}
               >
-                <TableTd
-                  className="w-8 pr-0"
-                  onClick={(e: React.MouseEvent) => {
-                    e.stopPropagation();
-                    if (!checkboxDisabled) onToggleCompare(s.personId);
-                  }}
-                >
-                  <input
-                    type="checkbox"
+                <TableTd className="w-8 pr-0">
+                  <Checkbox
                     checked={inComparison}
                     disabled={checkboxDisabled}
-                    onChange={() => {/* controlled via onClick above */}}
-                    className={`accent-primary ${checkboxDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                    onChange={() => onToggleCompare(s.personId)}
+                    onClick={(e) => e.stopPropagation()}
+                    aria-label={`Compare ${s.name}`}
                   />
                 </TableTd>
                 <TableTd className="text-text-tertiary">{i + 1}</TableTd>
-                <TableTd className={selected ? 'font-semibold' : 'font-medium'}>{s.name}</TableTd>
+                <TableTd className={selected ? 'font-semibold' : 'font-medium'}>
+                  {/* A real interactive element in the row, not just the <tr>
+                      onClick above — that left Tab landing on the compare
+                      checkbox with no way to open the row from the keyboard
+                      (DEFECTS.md #4). stopPropagation so a click here doesn't
+                      also fire the row's own onClick with the same (idempotent
+                      but redundant) toggle. */}
+                  <Button
+                    id={scoreRowButtonId(s.personId)}
+                    variant="ghost"
+                    size="sm"
+                    className="!h-auto !justify-start !border-0 !bg-transparent !p-0 font-inherit text-inherit hover:!bg-transparent hover:underline focus-visible:underline"
+                    onClick={(e) => { e.stopPropagation(); onSelect(selected ? null : s.personId); }}
+                  >
+                    {s.name}
+                  </Button>
+                </TableTd>
                 <TableTd>
                   <span className="text-xs" style={{ color: deptColors[s.department] ?? 'var(--color-text-secondary)' }}>
                     {s.department}
                   </span>
                 </TableTd>
                 <TableTd className="text-right text-xs text-text-secondary">
-                  {Math.round(s.influence)}
+                  {infScore}
                 </TableTd>
                 <TableTd className="text-right text-xs text-text-secondary">
-                  {Math.round(s.expertise)}
+                  {expScore}
                 </TableTd>
                 <TableTd className="text-right font-semibold">
-                  {compositeFromWeight}
+                  {compositeScore}
                   <div title={tooltip} className="mt-1">
                     <svg width={60} height={6} className="block ml-auto">
                       <rect x={0}    y={0} width={infW} height={6} rx={2} fill="var(--color-primary, #6366f1)" />

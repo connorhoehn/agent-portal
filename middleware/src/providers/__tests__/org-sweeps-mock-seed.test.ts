@@ -1,0 +1,37 @@
+// dev:mock is the contract the portal is built against: the Findings list
+// must render rows in every status without Aurora, and a mock sweep run must
+// report what it re-observed rather than a flat zero.
+jest.mock('../aurora.js', () => ({ exec: jest.fn() }));
+jest.mock('../../config.js', () => ({ config: { mock: { aurora: true } } }));
+
+import { listFindings, getFinding, runSweep } from '../org-sweeps.js';
+
+describe('mock findings seed', () => {
+  it('lists seeded findings across open / promoted / resolved / dismissed', async () => {
+    const all = await listFindings();
+    expect(all.length).toBeGreaterThanOrEqual(6);
+    const statuses = new Set(all.map((f) => f.status));
+    for (const st of ['open', 'promoted', 'resolved', 'dismissed']) expect(statuses.has(st)).toBe(true);
+    // critical first, then warning, then info
+    const rank = { critical: 0, warning: 1, info: 2 } as const;
+    for (let i = 1; i < all.length; i++) expect(rank[all[i - 1].severity]).toBeLessThanOrEqual(rank[all[i].severity]);
+  });
+
+  it('honours the status and sweep filters', async () => {
+    const open = await listFindings({ status: 'open' });
+    expect(open.length).toBeGreaterThanOrEqual(3);
+    expect(open.every((f) => f.status === 'open')).toBe(true);
+    const bus = await listFindings({ sweep: 'bus_factor' });
+    expect(bus.every((f) => f.sweep === 'bus_factor')).toBe(true);
+    expect(bus.length).toBe(2);
+  });
+
+  it('resolves a seeded finding by id and a mock sweep re-observes its rows', async () => {
+    const [first] = await listFindings();
+    expect((await getFinding(first.id))?.id).toBe(first.id);
+    const r = await runSweep('stale_docs');
+    expect(r.found).toBe(2);
+    expect(r.updated).toBe(2);
+    expect(r.created).toBe(0);
+  });
+});

@@ -1,0 +1,2231 @@
+{
+  "capturedAt": "2026-09-08T01:06:01.251Z",
+  "baseUrl": "http://127.0.0.1:3043",
+  "policy": "middleware/src/mock/core/wire/write-policy.ts",
+  "routes": {
+    "DELETE /api/admin/kb-registry/:id": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/admin/kb-registry/upload-links/:linkId": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/agent-projects/:id": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/assessment/submissions/:team/:envelope": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/assessment/teams/:id": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/bots/:id": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/budgets/:orgProjectId": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/capabilities/browser-sessions/:sessionId": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/capabilities/browser-sessions/:sessionId/journey": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/capabilities/code-sessions/:sessionId": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/capabilities/guardrail/topics/:name": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/connections/:name": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/devbox/:sessionId": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/devbox/boxes/:boxId": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/environments/:id": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/grants/:id": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/identity/policies/:id": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/ingest/crawl-targets/:id": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/ingest/crawl/:id": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/ingest/schedules/:id": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/observability/calibration/cases/:id": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/observability/harness/cases/:id": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/sdlc/policies/:id": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/sprints/:sprintId/items/:itemId": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/work/jobs/:id": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "PATCH /api/admin/kb-registry/:id": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean"
+      },
+      "values": {},
+      "sent": []
+    },
+    "PATCH /api/assessment/submissions/:team/:envelope/links": {
+      "skipped": "no body: the envelope carries no link to mark"
+    },
+    "PATCH /api/assessment/teams/:id": {
+      "persona": "assessment/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "archetype": "string",
+        "assessment_lead": "string",
+        "cohort": "string",
+        "contacts": "array",
+        "contacts[]": "string",
+        "contributors": "array",
+        "contributors[]": "object",
+        "contributors[].initials": "string",
+        "contributors[].name": "string",
+        "created_at": "string",
+        "exceptions": "array",
+        "exceptions[]": "object",
+        "exceptions[].approved_at": "string",
+        "exceptions[].approved_by": "string",
+        "exceptions[].dimension_id": "string",
+        "exceptions[].reason": "string",
+        "exceptions[].source": "string",
+        "exceptions[].status": "string",
+        "id": "string",
+        "name": "string",
+        "repos": "array",
+        "repos[]": "object",
+        "repos[].gitlab_url": "string",
+        "repos[].name": "string",
+        "status": "string",
+        "updated_at": "string",
+        "workflow_step": "number"
+      },
+      "values": {
+        "exceptions[].status": [
+          "approved",
+          "requested"
+        ],
+        "status": [
+          "ASSESSED"
+        ]
+      },
+      "sent": []
+    },
+    "PATCH /api/assessment/teams/:id/exceptions/:dimensionId": {
+      "skipped": "HTTP 404: no requested exception found for that team/dimension (assessment/admin)",
+      "sent": [
+        "status"
+      ]
+    },
+    "PATCH /api/bots/:id": {
+      "refused": {
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: calls registerBot, which re-arms the patched bot on the live cron scheduler."
+      }
+    },
+    "PATCH /api/capabilities/guardrail/pii": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: edits a live Bedrock Guardrail."
+      }
+    },
+    "PATCH /api/capabilities/guardrail/topics/:name": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: edits a live Bedrock Guardrail."
+      }
+    },
+    "PATCH /api/devbox/boxes/:boxId": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: drives a devbox microVM."
+      }
+    },
+    "PATCH /api/environments/:id": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "environment": "object",
+        "environment.accessRoleArn": "string",
+        "environment.awsAccountId": "string",
+        "environment.awsRegion": "string",
+        "environment.clusterArn": "string",
+        "environment.clusterName": "string",
+        "environment.createdAt": "string",
+        "environment.id": "string",
+        "environment.kind": "string",
+        "environment.name": "string",
+        "environment.namespace": "string",
+        "environment.orgProjectId": "string",
+        "environment.orgProjectName": "string",
+        "environment.rank": "number",
+        "environment.status": "string",
+        "environment.updatedAt": "string"
+      },
+      "values": {
+        "environment.kind": [
+          "eks"
+        ],
+        "environment.status": [
+          "active"
+        ]
+      },
+      "sent": []
+    },
+    "PATCH /api/grants/:id": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "grant": "object",
+        "grant.allocatedUsd": "number",
+        "grant.endsOn": "string",
+        "grant.grantedBy": "string",
+        "grant.granteeName": "string",
+        "grant.granteePersonId": "string",
+        "grant.id": "string",
+        "grant.initiativeSpendInWindowUsd": "number",
+        "grant.orgProjectId": "string",
+        "grant.orgProjectName": "string",
+        "grant.sprintId": "string",
+        "grant.sprintName": "string",
+        "grant.sprintStatus": "string",
+        "grant.startsOn": "string"
+      },
+      "values": {},
+      "sent": [
+        "amountUsd"
+      ]
+    },
+    "PATCH /api/graph/projects/:id": {
+      "skipped": "HTTP 503: project owner updates require Aurora (orgiq/admin)",
+      "sent": [
+        "ownerId"
+      ]
+    },
+    "PATCH /api/graph/projects/:id/contributors/:personId": {
+      "skipped": "HTTP 503: contribution role updates require Aurora (orgiq/admin)",
+      "sent": [
+        "role"
+      ]
+    },
+    "PATCH /api/graph/work-items/:id": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "assigneeDept": "string",
+        "assigneeId": "string",
+        "assigneeName": "string",
+        "childCount": "number",
+        "childDoneCount": "number",
+        "completedAt": "string",
+        "createdAt": "string",
+        "description": "null",
+        "estimatedCostUsd": "number",
+        "id": "string",
+        "labels": "array",
+        "labels[]": "string",
+        "parentId": "string",
+        "prStatus": "string",
+        "prUrl": "string",
+        "priority": "string",
+        "projectId": "string",
+        "projectName": "string",
+        "sprintId": "string",
+        "status": "string",
+        "storyPoints": "number",
+        "title": "string",
+        "type": "string",
+        "updatedAt": "string"
+      },
+      "values": {
+        "status": [
+          "done"
+        ],
+        "type": [
+          "story"
+        ]
+      },
+      "sent": [
+        "priority"
+      ]
+    },
+    "PATCH /api/ingest/crawl-targets/:id": {
+      "refused": {
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: writes crawl-targets.json and re-registers its node-cron task."
+      }
+    },
+    "PATCH /api/ingest/schedules/:id/toggle": {
+      "refused": {
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: writes ingest-schedules.json and starts or stops a node-cron task."
+      }
+    },
+    "PATCH /api/observability/calibration/cases/:id": {
+      "skipped": "no value found for :id under /api/observability/calibration/cases (orgiq/admin)"
+    },
+    "PATCH /api/observability/harness/cases/:id": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean"
+      },
+      "values": {},
+      "sent": []
+    },
+    "PATCH /api/observability/harness/runs/:id": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "changed": "number",
+        "ok": "boolean"
+      },
+      "values": {},
+      "sent": []
+    },
+    "PATCH /api/sprints/:sprintId/items": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "workItem": "object",
+        "workItem.assigneeDept": "string",
+        "workItem.assigneeId": "string",
+        "workItem.assigneeName": "string",
+        "workItem.childCount": "number",
+        "workItem.childDoneCount": "number",
+        "workItem.completedAt": "null",
+        "workItem.createdAt": "string",
+        "workItem.description": "null",
+        "workItem.estimatedCostUsd": "number",
+        "workItem.id": "string",
+        "workItem.labels": "array",
+        "workItem.labels[]": "string",
+        "workItem.parentId": "string",
+        "workItem.prStatus": "null",
+        "workItem.prUrl": "null",
+        "workItem.priority": "string",
+        "workItem.projectId": "string",
+        "workItem.projectName": "string",
+        "workItem.sprintId": "string",
+        "workItem.status": "string",
+        "workItem.storyPoints": "number",
+        "workItem.title": "string",
+        "workItem.type": "string",
+        "workItem.updatedAt": "string"
+      },
+      "values": {
+        "workItem.status": [
+          "in_progress"
+        ],
+        "workItem.type": [
+          "story"
+        ]
+      },
+      "sent": [
+        "workItemId"
+      ]
+    },
+    "POST /api/__mock/reset": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "enabled": "boolean",
+        "fixtures": "array",
+        "fixtures[]": "object",
+        "fixtures[].key": "string",
+        "fixtures[].pinned": "boolean",
+        "fixtures[].rows": "number",
+        "fixtures[].scenario": "string",
+        "registryLoaded": "boolean",
+        "reset": "object",
+        "reset.fixture": "null",
+        "reset.scenario": "string",
+        "scenario": "string"
+      },
+      "values": {
+        "fixtures[].key": [
+          "agent-fleet",
+          "agent-project-runs",
+          "agent-projects",
+          "assessment-archetypes",
+          "assessment-configuration",
+          "assessment-evidence-log",
+          "assessment-feedback",
+          "assessment-knowledge-docs",
+          "assessment-knowledge-sections",
+          "assessment-knowledge-versions",
+          "assessment-motions",
+          "assessment-provenance",
+          "assessment-runs",
+          "assessment-scores",
+          "assessment-scoring-logs",
+          "assessment-stories",
+          "assessment-submissions",
+          "assessment-teams",
+          "bot-runs",
+          "bot-runs-live",
+          "bots",
+          "browser-sessions",
+          "budget-grants",
+          "canary-weight",
+          "capability-config",
+          "capability-inventory",
+          "chat-responses",
+          "code-sessions",
+          "connected-sources",
+          "design-reviews",
+          "devbox-deliveries",
+          "devbox-work-products",
+          "devbox-workspaces",
+          "distillation-artifacts",
+          "distillation-clusters",
+          "distillation-compactions",
+          "distillation-facts",
+          "distillation-ingest-writers",
+          "distillation-library-links",
+          "distillation-observations",
+          "distillation-review-samples",
+          "github-identity",
+          "github-orgs",
+          "github-repos",
+          "github-signal",
+          "graph-decision-participants",
+          "graph-decisions",
+          "guardrail",
+          "harness-cases",
+          "harness-results",
+          "harness-runs",
+          "initiative-budgets",
+          "invocation-tail",
+          "kb-data-sources",
+          "kb-documents",
+          "kb-ingestion-jobs",
+          "kb-registry",
+          "kb-s3-objects",
+          "kb-summary",
+          "lab-consults",
+          "lab-experiences",
+          "org-findings",
+          "promotion-candidates",
+          "prompt-eval-cases",
+          "prompt-eval-runs",
+          "prompt-versions",
+          "scores",
+          "sdlc-change-gates",
+          "sdlc-change-reviews",
+          "sdlc-changes",
+          "sdlc-policies",
+          "session-bundles",
+          "sprints",
+          "traces",
+          "work-item-comments",
+          "work-items"
+        ],
+        "fixtures[].scenario": [
+          "default"
+        ],
+        "reset.scenario": [
+          "default"
+        ],
+        "scenario": [
+          "default"
+        ]
+      },
+      "sent": []
+    },
+    "POST /api/__mock/scenario": {
+      "refused": {
+        "rule": "control-plane",
+        "reason": "The capture's own tool. `POST /api/__mock/scenario` switches the world every later shape would be captured in, so the harness may not replay it. (`POST /api/__mock/reset` IS replayed — the sweep calls it between every write anyway, so its shape comes for free and costs nothing.)"
+      }
+    },
+    "POST /api/admin/kb-registry": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: INSERTs through the RDS Data API with no mock branch."
+      }
+    },
+    "POST /api/admin/kb-registry/:id/landing-zone/upload": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: writes the uploaded object to S3."
+      }
+    },
+    "POST /api/admin/kb-registry/:id/provision": {
+      "refused": {
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: starts a fire-and-forget provisioning job."
+      }
+    },
+    "POST /api/admin/kb-registry/:id/sync": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: calls Bedrock Agent StartIngestionJob directly from the handler."
+      }
+    },
+    "POST /api/admin/kb-registry/reconcile/adopt": {
+      "skipped": "no body: `kbId` is a live Bedrock knowledge-base id. Nothing offline enumerates one — GET /reconcile does not surface live AWS ids under the mock providers — and a made-up id would prove nothing."
+    },
+    "POST /api/admin/kb-registry/upload-links": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: INSERTs through the RDS Data API with no mock branch."
+      }
+    },
+    "POST /api/agent-projects": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: drives a devbox microVM (lib/project-runner.ts)."
+      }
+    },
+    "POST /api/agent-projects/:id/clone-command": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: drives a devbox microVM (lib/project-runner.ts)."
+      }
+    },
+    "POST /api/agent-projects/:id/cloned": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: drives a devbox microVM (lib/project-runner.ts)."
+      }
+    },
+    "POST /api/agent-projects/:id/runs": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: drives a devbox microVM (lib/project-runner.ts)."
+      }
+    },
+    "POST /api/agent-projects/runs/:runId/finish": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: drives a devbox microVM (lib/project-runner.ts)."
+      }
+    },
+    "POST /api/agents/:agentId/invoke": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: invokes an AgentCore runtime."
+      }
+    },
+    "POST /api/assessment/feedback": {
+      "persona": "assessment/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "created_at": "string",
+        "dimension_id": "null",
+        "kind": "string",
+        "question": "string",
+        "resolved_at": "null",
+        "response": "null",
+        "status": "string",
+        "task_id": "string",
+        "team_id": "null"
+      },
+      "values": {
+        "kind": [
+          "general"
+        ],
+        "status": [
+          "OPEN"
+        ]
+      },
+      "sent": [
+        "question"
+      ]
+    },
+    "POST /api/assessment/feedback/:taskId/dismiss": {
+      "persona": "assessment/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "created_at": "string",
+        "dimension_id": "string",
+        "kind": "string",
+        "question": "string",
+        "resolved_at": "string",
+        "response": "null",
+        "status": "string",
+        "task_id": "string",
+        "team_id": "string"
+      },
+      "values": {
+        "kind": [
+          "follow_up"
+        ],
+        "status": [
+          "DISMISSED"
+        ]
+      },
+      "sent": []
+    },
+    "POST /api/assessment/feedback/:taskId/resolve": {
+      "persona": "assessment/admin",
+      "status": 200,
+      "shape": {
+        "$": "object(dictionary)"
+      },
+      "values": {},
+      "sent": [
+        "response"
+      ]
+    },
+    "POST /api/assessment/knowledge/doc/comment": {
+      "persona": "assessment/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "ok": "boolean"
+      },
+      "values": {},
+      "sent": [
+        "body",
+        "id"
+      ]
+    },
+    "POST /api/assessment/knowledge/doc/publish": {
+      "persona": "assessment/admin",
+      "status": 202,
+      "shape": {
+        "$": "object",
+        "ok": "boolean",
+        "page_id": "string",
+        "version": "number"
+      },
+      "values": {},
+      "sent": [
+        "id"
+      ]
+    },
+    "POST /api/assessment/knowledge/doc/restore": {
+      "persona": "assessment/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean",
+        "updated_at": "string"
+      },
+      "values": {},
+      "sent": [
+        "id",
+        "stamp"
+      ]
+    },
+    "POST /api/assessment/knowledge/presence": {
+      "skipped": "non-JSON (no content-type) (HTTP 204) (assessment/admin)",
+      "sent": [
+        "action",
+        "doc_id",
+        "tab_id"
+      ]
+    },
+    "POST /api/assessment/knowledge/pull": {
+      "refused": {
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: schedules a deferred pull that mutates the section 1.5s later."
+      }
+    },
+    "POST /api/assessment/reports/publish": {
+      "persona": "assessment/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "at_or_above_target": "number",
+        "claims_open": "number",
+        "published_at": "string",
+        "published_by": "string",
+        "target_level": "number",
+        "teams_total": "number"
+      },
+      "values": {},
+      "sent": []
+    },
+    "POST /api/assessment/runs": {
+      "refused": {
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: starts progress timers that auto-complete the run eight seconds later."
+      }
+    },
+    "POST /api/assessment/runs/:runId/complete": {
+      "persona": "assessment/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "args": "object",
+        "command": "string",
+        "error": "null",
+        "files_written": "array",
+        "finished_at": "string",
+        "id": "string",
+        "source": "string",
+        "started_at": "string",
+        "status": "string",
+        "summary": "string",
+        "team_id": "string"
+      },
+      "values": {
+        "status": [
+          "completed"
+        ]
+      },
+      "sent": [
+        "status"
+      ]
+    },
+    "POST /api/assessment/runs/:runId/stop": {
+      "persona": "assessment/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "args": "object",
+        "command": "string",
+        "error": "string",
+        "files_written": "array",
+        "finished_at": "string",
+        "id": "string",
+        "source": "string",
+        "started_at": "string",
+        "status": "string",
+        "summary": "string",
+        "team_id": "string"
+      },
+      "values": {
+        "status": [
+          "failed"
+        ]
+      },
+      "sent": []
+    },
+    "POST /api/assessment/submissions/clear": {
+      "persona": "assessment/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "cleared": "number"
+      },
+      "values": {},
+      "sent": [
+        "targets"
+      ]
+    },
+    "POST /api/assessment/submissions/commit": {
+      "persona": "assessment/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "committed": "array",
+        "committed[]": "string"
+      },
+      "values": {},
+      "sent": [
+        "envelope_ids",
+        "team_id"
+      ]
+    },
+    "POST /api/assessment/submissions/parse": {
+      "persona": "assessment/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "mapping_warnings": "array",
+        "rows": "array",
+        "rows[]": "object",
+        "rows[].classification": "string",
+        "rows[].team_id": "string",
+        "rows[].team_name_raw": "string",
+        "source_file": "string",
+        "staging_token": "string"
+      },
+      "values": {
+        "rows[].classification": [
+          "seen"
+        ]
+      },
+      "sent": [
+        "rows"
+      ]
+    },
+    "POST /api/assessment/teams": {
+      "persona": "assessment/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "archetype": "null",
+        "assessment_lead": "string",
+        "cohort": "string",
+        "contacts": "array",
+        "contributors": "array",
+        "created_at": "string",
+        "exceptions": "array",
+        "id": "string",
+        "name": "string",
+        "repos": "array",
+        "status": "string",
+        "updated_at": "string",
+        "workflow_step": "number"
+      },
+      "values": {
+        "status": [
+          "NEW"
+        ]
+      },
+      "sent": [
+        "cohort",
+        "name"
+      ]
+    },
+    "POST /api/assessment/teams/:id/evidence": {
+      "persona": "assessment/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "captured_at": "string",
+        "dimension_id": "null",
+        "evidence_id": "string",
+        "excerpt": "string",
+        "scored": "boolean",
+        "source_ref": "string",
+        "source_type": "string",
+        "status": "string",
+        "supports_level": "null"
+      },
+      "values": {
+        "status": [
+          "PENDING"
+        ]
+      },
+      "sent": [
+        "excerpt"
+      ]
+    },
+    "POST /api/assessment/teams/:id/intake/image": {
+      "persona": "assessment/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "captured_at": "string",
+        "dimension_id": "null",
+        "evidence_id": "string",
+        "excerpt": "string",
+        "scored": "boolean",
+        "source_ref": "string",
+        "source_type": "string",
+        "status": "string",
+        "supports_level": "null"
+      },
+      "values": {
+        "status": [
+          "PENDING"
+        ]
+      },
+      "sent": [
+        "filename"
+      ]
+    },
+    "POST /api/assessment/teams/:id/intake/text": {
+      "persona": "assessment/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "captured_at": "string",
+        "dimension_id": "null",
+        "evidence_id": "string",
+        "excerpt": "string",
+        "scored": "boolean",
+        "source_ref": "string",
+        "source_type": "string",
+        "status": "string",
+        "supports_level": "null"
+      },
+      "values": {
+        "status": [
+          "PENDING"
+        ]
+      },
+      "sent": [
+        "text"
+      ]
+    },
+    "POST /api/assessment/teams/:id/reset-assessment": {
+      "persona": "assessment/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean"
+      },
+      "values": {},
+      "sent": []
+    },
+    "POST /api/assessment/teams/:id/scores/apply": {
+      "persona": "assessment/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "applied": "array",
+        "applied[]": "object",
+        "applied[].cap_applied": "boolean",
+        "applied[].current_level": "number",
+        "applied[].dimension_id": "string",
+        "rejected": "array"
+      },
+      "values": {},
+      "sent": [
+        "relevant_dimension_ids",
+        "scores"
+      ]
+    },
+    "POST /api/auth/logout": {
+      "refused": {
+        "rule": "session",
+        "reason": "Mutates the capture's own identity. The sweep holds one cookie per persona; logging out, switching tenant or masquerading mid-sweep would either drop that cookie or bump `session_epoch` and invalidate it, and every later route would be captured as 401/403. The GET sweep already calls login/tenant itself — those two shapes are pinned there."
+      }
+    },
+    "POST /api/bots": {
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "bot": "object",
+        "bot.agentProjectId": "null",
+        "bot.agentProjectRepo": "null",
+        "bot.budgetPerDayUsd": "null",
+        "bot.budgetPerRunUsd": "null",
+        "bot.createdAt": "string",
+        "bot.createdBy": "string",
+        "bot.cronExpr": "null",
+        "bot.enabled": "boolean",
+        "bot.enforceAllocation": "boolean",
+        "bot.id": "string",
+        "bot.lastRunAt": "null",
+        "bot.maxRunsPerDay": "number",
+        "bot.model": "string",
+        "bot.name": "string",
+        "bot.orgProjectId": "null",
+        "bot.orgProjectName": "null",
+        "bot.pausedReason": "null",
+        "bot.prompt": "string",
+        "bot.requiresReview": "boolean",
+        "bot.template": "string",
+        "bot.todayRunCount": "number",
+        "bot.todaySpendUsd": "number",
+        "bot.trigger": "string"
+      },
+      "values": {},
+      "sent": [
+        "model",
+        "name",
+        "prompt",
+        "template",
+        "trigger"
+      ]
+    },
+    "POST /api/bots/:id/pause": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "bot": "object",
+        "bot.agentProjectId": "null",
+        "bot.agentProjectRepo": "null",
+        "bot.budgetPerDayUsd": "number",
+        "bot.budgetPerRunUsd": "number",
+        "bot.createdAt": "string",
+        "bot.createdBy": "string",
+        "bot.cronExpr": "string",
+        "bot.enabled": "boolean",
+        "bot.enforceAllocation": "boolean",
+        "bot.id": "string",
+        "bot.lastRunAt": "string",
+        "bot.maxRunsPerDay": "number",
+        "bot.model": "string",
+        "bot.name": "string",
+        "bot.orgProjectId": "string",
+        "bot.orgProjectName": "string",
+        "bot.pausedReason": "string",
+        "bot.prompt": "string",
+        "bot.requiresReview": "boolean",
+        "bot.template": "string",
+        "bot.todayRunCount": "number",
+        "bot.todaySpendUsd": "number",
+        "bot.trigger": "string"
+      },
+      "values": {},
+      "sent": []
+    },
+    "POST /api/bots/:id/resume": {
+      "refused": {
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: arms the bot on the live cron scheduler."
+      }
+    },
+    "POST /api/bots/:id/run": {
+      "refused": {
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: fires the bot now."
+      }
+    },
+    "POST /api/bots/dispatch-work": {
+      "refused": {
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: authorizes a run and enqueues it for the fleet dispatcher."
+      }
+    },
+    "POST /api/capabilities/browser-sessions": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: opens a real Browser or Code Interpreter session."
+      }
+    },
+    "POST /api/capabilities/browser-sessions/:sessionId/navigate": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: opens a real Browser or Code Interpreter session."
+      }
+    },
+    "POST /api/capabilities/browser-sessions/:sessionId/screenshot": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: opens a real Browser or Code Interpreter session."
+      }
+    },
+    "POST /api/capabilities/browser/crawl": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: opens a real Browser or Code Interpreter session."
+      }
+    },
+    "POST /api/capabilities/browser/crawl/:crawlId/cancel": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: opens a real Browser or Code Interpreter session."
+      }
+    },
+    "POST /api/capabilities/browser/web-qa": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: opens a real Browser or Code Interpreter session."
+      }
+    },
+    "POST /api/capabilities/code-interpreter/execute": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: opens a real Browser or Code Interpreter session."
+      }
+    },
+    "POST /api/capabilities/guardrail/topics": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: opens a real Browser or Code Interpreter session."
+      }
+    },
+    "POST /api/connections": {
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "name": "string",
+        "verified": "object",
+        "verified.login": "string",
+        "verified.name": "string",
+        "verified.scopes": "array",
+        "verified.scopes[]": "string"
+      },
+      "values": {},
+      "sent": [
+        "apiKey",
+        "kind",
+        "label"
+      ]
+    },
+    "POST /api/designs/:id/answer": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "affected": "array",
+        "affected[]": "object",
+        "affected[].impact": "string",
+        "affected[].orgProjectId": "string",
+        "affected[].orgProjectName": "string",
+        "createdAt": "string",
+        "dependsOn": "array",
+        "gates": "array",
+        "id": "string",
+        "kbSynced": "boolean",
+        "openQuestions": "number",
+        "orgProjectId": "string",
+        "orgProjectName": "string",
+        "postCount": "number",
+        "posts": "array",
+        "posts[]": "object",
+        "posts[].artifact": "null|object",
+        "posts[].artifact.name": "string",
+        "posts[].artifact.type": "string",
+        "posts[].artifact.url": "null",
+        "posts[].authorKind": "string",
+        "posts[].authorName": "string",
+        "posts[].body": "string",
+        "posts[].createdAt": "string",
+        "posts[].id": "string",
+        "posts[].kind": "string",
+        "posts[].resolvedBy": "null|string",
+        "signoffs": "array",
+        "status": "string",
+        "summary": "string",
+        "title": "string",
+        "updatedAt": "string"
+      },
+      "values": {
+        "posts[].artifact.type": [
+          "browser screenshot"
+        ],
+        "posts[].kind": [
+          "analysis",
+          "answer",
+          "artifact",
+          "decision",
+          "problem",
+          "question",
+          "revision"
+        ],
+        "status": [
+          "proposed"
+        ]
+      },
+      "sent": [
+        "body",
+        "questionPostId"
+      ]
+    },
+    "POST /api/designs/:id/signoff": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "affected": "array",
+        "affected[]": "object",
+        "affected[].impact": "string",
+        "affected[].orgProjectId": "string",
+        "affected[].orgProjectName": "string",
+        "createdAt": "string",
+        "dependsOn": "array",
+        "gates": "array",
+        "id": "string",
+        "kbSynced": "boolean",
+        "openQuestions": "number",
+        "orgProjectId": "string",
+        "orgProjectName": "string",
+        "postCount": "number",
+        "posts": "array",
+        "posts[]": "object",
+        "posts[].artifact": "null|object",
+        "posts[].artifact.name": "string",
+        "posts[].artifact.type": "string",
+        "posts[].artifact.url": "null",
+        "posts[].authorKind": "string",
+        "posts[].authorName": "string",
+        "posts[].body": "string",
+        "posts[].createdAt": "string",
+        "posts[].id": "string",
+        "posts[].kind": "string",
+        "posts[].resolvedBy": "null",
+        "signoffs": "array",
+        "signoffs[]": "object",
+        "signoffs[].at": "string",
+        "signoffs[].decision": "string",
+        "signoffs[].personName": "string",
+        "signoffs[].role": "string",
+        "status": "string",
+        "summary": "string",
+        "title": "string",
+        "updatedAt": "string"
+      },
+      "values": {
+        "posts[].artifact.type": [
+          "browser screenshot"
+        ],
+        "posts[].kind": [
+          "analysis",
+          "artifact",
+          "problem",
+          "question"
+        ],
+        "signoffs[].decision": [
+          "reject"
+        ],
+        "signoffs[].role": [
+          "admin"
+        ],
+        "status": [
+          "rejected"
+        ]
+      },
+      "sent": [
+        "decision"
+      ]
+    },
+    "POST /api/devbox/:sessionId/command": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: drives a devbox microVM."
+      }
+    },
+    "POST /api/devbox/:sessionId/shell-url": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: drives a devbox microVM."
+      }
+    },
+    "POST /api/devbox/:sessionId/task": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: drives a devbox microVM."
+      }
+    },
+    "POST /api/devbox/boxes": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: drives a devbox microVM."
+      }
+    },
+    "POST /api/devbox/sessions": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: drives a devbox microVM."
+      }
+    },
+    "POST /api/distillation/compact": {
+      "refused": {
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: schedules a three-second completion timer."
+      }
+    },
+    "POST /api/distillation/review/:id": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "id": "string",
+        "note": "null",
+        "reviewer": "string",
+        "sampled_at": "string",
+        "target_id": "string",
+        "target_kind": "string",
+        "verdict": "string"
+      },
+      "values": {
+        "verdict": [
+          "agree"
+        ]
+      },
+      "sent": [
+        "verdict"
+      ]
+    },
+    "POST /api/drop/:token/upload": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: reaches the RDS Data API unguarded, then S3."
+      }
+    },
+    "POST /api/environments": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: INSERTs through the RDS Data API with no mock branch."
+      }
+    },
+    "POST /api/gateway/channels/:id/messages": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: signs and POSTs to the real MCP gateway when a gateway URL is set."
+      }
+    },
+    "POST /api/grants": {
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "grant": "object",
+        "grant.allocatedUsd": "number",
+        "grant.endsOn": "string",
+        "grant.grantedBy": "string",
+        "grant.granteeName": "null",
+        "grant.granteePersonId": "string",
+        "grant.id": "string",
+        "grant.initiativeSpendInWindowUsd": "number",
+        "grant.orgProjectId": "string",
+        "grant.orgProjectName": "string",
+        "grant.sprintId": "string",
+        "grant.sprintName": "string",
+        "grant.sprintStatus": "string",
+        "grant.startsOn": "string"
+      },
+      "values": {},
+      "sent": [
+        "amountUsd",
+        "granteePersonId",
+        "initiativeId",
+        "sprintId"
+      ]
+    },
+    "POST /api/graph/work-items": {
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "assigneeDept": "null",
+        "assigneeId": "null",
+        "assigneeName": "null",
+        "childCount": "number",
+        "childDoneCount": "number",
+        "completedAt": "null",
+        "createdAt": "string",
+        "description": "null",
+        "estimatedCostUsd": "null",
+        "id": "string",
+        "labels": "array",
+        "parentId": "null",
+        "prStatus": "null",
+        "prUrl": "null",
+        "priority": "string",
+        "projectId": "string",
+        "projectName": "string",
+        "sprintId": "null",
+        "status": "string",
+        "storyPoints": "null",
+        "title": "string",
+        "type": "string",
+        "updatedAt": "string"
+      },
+      "values": {
+        "status": [
+          "open"
+        ],
+        "type": [
+          "story"
+        ]
+      },
+      "sent": [
+        "projectId",
+        "title",
+        "type"
+      ]
+    },
+    "POST /api/identity/policies": {
+      "skipped": "no body: `statement` is Cedar policy source. GET /api/identity/policies needs a live policy store, so no real statement is readable offline, and writing one from memory is the invention this harness forbids."
+    },
+    "POST /api/identity/policies/test": {
+      "skipped": "HTTP 503: POLICY_STORE_ID not configured (orgiq/admin)",
+      "sent": [
+        "action",
+        "role"
+      ]
+    },
+    "POST /api/identity/tenants": {
+      "skipped": "HTTP 503: Aurora not configured — cannot provision tenants (orgiq/admin)",
+      "sent": [
+        "displayName",
+        "id"
+      ]
+    },
+    "POST /api/identity/users": {
+      "skipped": "HTTP 503: Aurora not configured — cannot provision users (orgiq/admin)",
+      "sent": [
+        "displayName",
+        "id"
+      ]
+    },
+    "POST /api/ingest/crawl": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: fetches the target URL and runs the Bedrock vision extractor."
+      }
+    },
+    "POST /api/ingest/crawl-targets": {
+      "refused": {
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: writes crawl-targets.json and may register a node-cron task."
+      }
+    },
+    "POST /api/ingest/crawl-targets/:id/run": {
+      "refused": {
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: starts a crawl and writes crawl-targets.json."
+      }
+    },
+    "POST /api/ingest/crawl/:id/sync": {
+      "skipped": "no value found for :id under /api/ingest/crawl (orgiq/admin)"
+    },
+    "POST /api/ingest/schedules": {
+      "refused": {
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: writes ingest-schedules.json and registers a node-cron task."
+      }
+    },
+    "POST /api/ingest/start": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "job": "object",
+        "job.dataSourceId": "string",
+        "job.jobId": "string",
+        "job.knowledgeBaseId": "string",
+        "job.status": "string",
+        "knowledgeBaseId": "string",
+        "ok": "boolean"
+      },
+      "values": {
+        "job.status": [
+          "STARTING"
+        ]
+      },
+      "sent": [
+        "dataSourceId"
+      ]
+    },
+    "POST /api/ingest/survey": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: fetches robots.txt and every discovered page."
+      }
+    },
+    "POST /api/ingest/survey/:id/target": {
+      "refused": {
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: writes crawl-targets.json and may register a node-cron task."
+      }
+    },
+    "POST /api/ingest/upload": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: writes an uploaded object to S3."
+      }
+    },
+    "POST /api/iq/prompts/experiments/:experimentId/complete": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: upserts through the RDS Data API with no mock branch."
+      }
+    },
+    "POST /api/knowledge-base/sync": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "jobId": "string",
+        "ok": "boolean"
+      },
+      "values": {},
+      "sent": [
+        "dataSourceId"
+      ]
+    },
+    "POST /api/lab/consults": {
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "consult": "object",
+        "consult.answer": "null",
+        "consult.answeredAt": "null",
+        "consult.answeredBy": "null",
+        "consult.boxId": "null",
+        "consult.context": "null",
+        "consult.createdAt": "string",
+        "consult.id": "string",
+        "consult.initiativeId": "null",
+        "consult.question": "string",
+        "consult.repo": "null",
+        "consult.sessionId": "null",
+        "consult.status": "string"
+      },
+      "values": {
+        "consult.status": [
+          "pending"
+        ]
+      },
+      "sent": [
+        "question"
+      ]
+    },
+    "POST /api/lab/consults/:id/answer": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "consult": "object(dictionary)"
+      },
+      "values": {},
+      "sent": [
+        "answer"
+      ]
+    },
+    "POST /api/lab/experiences": {
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "experience": "object",
+        "experience.body": "null",
+        "experience.boxId": "null",
+        "experience.createdAt": "string",
+        "experience.id": "string",
+        "experience.initiativeId": "null",
+        "experience.kind": "string",
+        "experience.repo": "null",
+        "experience.sessionId": "null",
+        "experience.tags": "array",
+        "experience.title": "string"
+      },
+      "values": {
+        "experience.kind": [
+          "gotcha"
+        ]
+      },
+      "sent": [
+        "kind",
+        "title"
+      ]
+    },
+    "POST /api/lab/signals": {
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "finding": "object",
+        "finding.detail": "null",
+        "finding.entityId": "null",
+        "finding.entityType": "null",
+        "finding.evidence": "object",
+        "finding.fingerprint": "string",
+        "finding.firstSeenAt": "string",
+        "finding.id": "string",
+        "finding.jobId": "null",
+        "finding.lastSeenAt": "string",
+        "finding.severity": "string",
+        "finding.status": "string",
+        "finding.sweep": "string",
+        "finding.title": "string"
+      },
+      "values": {
+        "finding.severity": [
+          "info"
+        ],
+        "finding.status": [
+          "open"
+        ]
+      },
+      "sent": [
+        "severity",
+        "title"
+      ]
+    },
+    "POST /api/library/evals/:assetId/run": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "assetId": "string",
+        "id": "string",
+        "passRate": "null",
+        "passed": "number",
+        "ranAt": "string",
+        "ranBy": "string",
+        "results": "array",
+        "total": "number",
+        "version": "string"
+      },
+      "values": {},
+      "sent": [
+        "version"
+      ]
+    },
+    "POST /api/observability/approvals/:id/decision": {
+      "skipped": "no value found for :id under /api/observability/approvals (orgiq/admin)"
+    },
+    "POST /api/observability/approvals/request": {
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "approvalId": "string"
+      },
+      "values": {},
+      "sent": [
+        "agentId",
+        "txId"
+      ]
+    },
+    "POST /api/observability/calibration/cases": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: INSERTs through the RDS Data API with no mock branch."
+      }
+    },
+    "POST /api/observability/calibration/runs": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: runs the Nova judge once per active case."
+      }
+    },
+    "POST /api/observability/canary/ask": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: streams from a Bedrock prompt ARN and fires the judge."
+      }
+    },
+    "POST /api/observability/canary/halt": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean"
+      },
+      "values": {},
+      "sent": []
+    },
+    "POST /api/observability/canary/library": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: creates a real Bedrock managed prompt."
+      }
+    },
+    "POST /api/observability/canary/library/:promptId/invoke": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: publishes, invokes or optimizes a real Bedrock managed prompt."
+      }
+    },
+    "POST /api/observability/canary/library/:promptId/optimize": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: publishes, invokes or optimizes a real Bedrock managed prompt."
+      }
+    },
+    "POST /api/observability/canary/library/:promptId/publish": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: publishes, invokes or optimizes a real Bedrock managed prompt."
+      }
+    },
+    "POST /api/observability/canary/reset": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean"
+      },
+      "values": {},
+      "sent": []
+    },
+    "POST /api/observability/canary/start": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: writes both subject ARNs to SSM."
+      }
+    },
+    "POST /api/observability/harness/cases": {
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "testId": "string"
+      },
+      "values": {},
+      "sent": [
+        "agentId",
+        "prompt"
+      ]
+    },
+    "POST /api/observability/harness/promote": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: writes through the RDS Data API with no mock branch."
+      }
+    },
+    "POST /api/observability/harness/results/:invocationId/rejudge": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: re-judges with three Nova calls."
+      }
+    },
+    "POST /api/observability/harness/runs": {
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "mode": "string",
+        "runId": "string"
+      },
+      "values": {
+        "mode": [
+          "sim"
+        ]
+      },
+      "sent": []
+    },
+    "POST /api/observability/harness/runs/:id/execute": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: invokes the fleet and the judge per case."
+      }
+    },
+    "POST /api/observability/harness/runs/:runId/results": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: invokes the fleet and the judge per case."
+      }
+    },
+    "POST /api/observability/harness/trace": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: runs Titan embedding AND the Nova judge — it spends even with Aurora down."
+      }
+    },
+    "POST /api/observability/invocations/:invocationId/replay": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: resolves and invokes a deployed agent, then embeds and judges the reply."
+      }
+    },
+    "POST /api/observability/memory/events": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: INSERTs through the RDS Data API with no mock branch."
+      }
+    },
+    "POST /api/observability/prompt-versions": {
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "promptVersion": "string"
+      },
+      "values": {},
+      "sent": [
+        "agentId",
+        "content"
+      ]
+    },
+    "POST /api/observability/quality/feedback": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: UPDATEs through the RDS Data API with no mock branch."
+      }
+    },
+    "POST /api/observability/test-fixtures/refresh-seed-timestamps": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: DELETEs and UPDATEs through the RDS Data API with no mock branch."
+      }
+    },
+    "POST /api/observability/test-fixtures/reset-approvals": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: DELETEs and UPDATEs through the RDS Data API with no mock branch."
+      }
+    },
+    "POST /api/promotions/:id/dismiss": {
+      "refused": {
+        "rule": "unresettable",
+        "reason": "Flips a seeded row that lives in module-level provider state registering no fixture, so `POST /api/__mock/reset` cannot put it back. Appending a row to such a provider is fine and several specs do it; changing one the seed shipped is not. `defineFixture` is the fix, not an exemption. Here: providers/promotions.ts MOCK_CANDIDATES registers no fixture."
+      }
+    },
+    "POST /api/promotions/:id/promote": {
+      "refused": {
+        "rule": "unresettable",
+        "reason": "Flips a seeded row that lives in module-level provider state registering no fixture, so `POST /api/__mock/reset` cannot put it back. Appending a row to such a provider is fine and several specs do it; changing one the seed shipped is not. `defineFixture` is the fix, not an exemption. Here: providers/promotions.ts MOCK_CANDIDATES registers no fixture."
+      }
+    },
+    "POST /api/rediscovery/check": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "estimateAvoidedMinutes": "null",
+        "estimateAvoidedUsd": "null",
+        "matches": "array"
+      },
+      "values": {},
+      "sent": [
+        "problem"
+      ]
+    },
+    "POST /api/rediscovery/outcome": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean"
+      },
+      "values": {},
+      "sent": [
+        "action",
+        "experienceId"
+      ]
+    },
+    "POST /api/scores/analysis": {
+      "skipped": "HTTP 503: Aurora is mocked — no scores to analyse (orgiq/admin)",
+      "sent": []
+    },
+    "POST /api/sdlc/changes/:id/address": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: resolves the devbox runtime via ListAgentRuntimes, then invokes it."
+      }
+    },
+    "POST /api/sdlc/changes/:id/decide": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean",
+        "status": "string"
+      },
+      "values": {
+        "status": [
+          "approved"
+        ]
+      },
+      "sent": [
+        "decision"
+      ]
+    },
+    "POST /api/sdlc/changes/:id/deliver": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: resolves the devbox runtime via ListAgentRuntimes."
+      }
+    },
+    "POST /api/sdlc/changes/:id/rereview": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: sends the diff to Bedrock Converse (lib/change-reviewer.ts, no mock branch)."
+      }
+    },
+    "POST /api/sdlc/policies": {
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "policy": "object",
+        "policy.action": "string",
+        "policy.config": "object",
+        "policy.enabled": "boolean",
+        "policy.id": "string",
+        "policy.kind": "string",
+        "policy.name": "string"
+      },
+      "values": {
+        "policy.action": [
+          "require_approval"
+        ],
+        "policy.kind": [
+          "require_review"
+        ]
+      },
+      "sent": [
+        "kind",
+        "name"
+      ]
+    },
+    "POST /api/session-bundle/:id/publish": {
+      "refused": {
+        "rule": "unresettable",
+        "reason": "Flips a seeded row that lives in module-level provider state registering no fixture, so `POST /api/__mock/reset` cannot put it back. Appending a row to such a provider is fine and several specs do it; changing one the seed shipped is not. `defineFixture` is the fix, not an exemption. Here: providers/session-bundle.ts MOCK_BUNDLES registers no fixture, and publishing supersedes the live bundle."
+      }
+    },
+    "POST /api/session/login": {
+      "refused": {
+        "rule": "session",
+        "reason": "Mutates the capture's own identity. The sweep holds one cookie per persona; logging out, switching tenant or masquerading mid-sweep would either drop that cookie or bump `session_epoch` and invalidate it, and every later route would be captured as 401/403. The GET sweep already calls login/tenant itself — those two shapes are pinned there."
+      }
+    },
+    "POST /api/session/logout": {
+      "refused": {
+        "rule": "session",
+        "reason": "Mutates the capture's own identity. The sweep holds one cookie per persona; logging out, switching tenant or masquerading mid-sweep would either drop that cookie or bump `session_epoch` and invalidate it, and every later route would be captured as 401/403. The GET sweep already calls login/tenant itself — those two shapes are pinned there."
+      }
+    },
+    "POST /api/session/masquerade": {
+      "refused": {
+        "rule": "session",
+        "reason": "Mutates the capture's own identity. The sweep holds one cookie per persona; logging out, switching tenant or masquerading mid-sweep would either drop that cookie or bump `session_epoch` and invalidate it, and every later route would be captured as 401/403. The GET sweep already calls login/tenant itself — those two shapes are pinned there."
+      }
+    },
+    "POST /api/session/masquerade/stop": {
+      "refused": {
+        "rule": "session",
+        "reason": "Mutates the capture's own identity. The sweep holds one cookie per persona; logging out, switching tenant or masquerading mid-sweep would either drop that cookie or bump `session_epoch` and invalidate it, and every later route would be captured as 401/403. The GET sweep already calls login/tenant itself — those two shapes are pinned there."
+      }
+    },
+    "POST /api/session/revoke-others": {
+      "refused": {
+        "rule": "session",
+        "reason": "Mutates the capture's own identity. The sweep holds one cookie per persona; logging out, switching tenant or masquerading mid-sweep would either drop that cookie or bump `session_epoch` and invalidate it, and every later route would be captured as 401/403. The GET sweep already calls login/tenant itself — those two shapes are pinned there."
+      }
+    },
+    "POST /api/session/role": {
+      "refused": {
+        "rule": "session",
+        "reason": "Mutates the capture's own identity. The sweep holds one cookie per persona; logging out, switching tenant or masquerading mid-sweep would either drop that cookie or bump `session_epoch` and invalidate it, and every later route would be captured as 401/403. The GET sweep already calls login/tenant itself — those two shapes are pinned there."
+      }
+    },
+    "POST /api/session/tenant": {
+      "refused": {
+        "rule": "session",
+        "reason": "Mutates the capture's own identity. The sweep holds one cookie per persona; logging out, switching tenant or masquerading mid-sweep would either drop that cookie or bump `session_epoch` and invalidate it, and every later route would be captured as 401/403. The GET sweep already calls login/tenant itself — those two shapes are pinned there."
+      }
+    },
+    "POST /api/sprints": {
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "sprint": "object",
+        "sprint.doneItemCount": "number",
+        "sprint.endsOn": "string",
+        "sprint.estimatedCostUsd": "number",
+        "sprint.goal": "null",
+        "sprint.grantCount": "number",
+        "sprint.grantedUsd": "number",
+        "sprint.id": "string",
+        "sprint.initiativeSpendInWindowUsd": "number",
+        "sprint.isGrantee": "boolean",
+        "sprint.isSteward": "boolean",
+        "sprint.itemCount": "number",
+        "sprint.myItemCount": "number",
+        "sprint.myOpenItemCount": "number",
+        "sprint.name": "string",
+        "sprint.orgProjectId": "string",
+        "sprint.orgProjectName": "null",
+        "sprint.pointsDone": "number",
+        "sprint.pointsTotal": "number",
+        "sprint.startsOn": "string",
+        "sprint.status": "string",
+        "sprint.stewardName": "null",
+        "sprint.stewardPersonId": "null"
+      },
+      "values": {
+        "sprint.status": [
+          "planned"
+        ]
+      },
+      "sent": [
+        "endsOn",
+        "initiativeId",
+        "name",
+        "startsOn"
+      ]
+    },
+    "POST /api/work/dispatch": {
+      "refused": {
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: drives one dispatcher tick synchronously, claiming queued jobs."
+      }
+    },
+    "POST /api/work/findings/:id/analyze": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "alreadyKnown": "number",
+        "candidatesConsidered": "number",
+        "documentId": "string",
+        "links": "array",
+        "problem": "string",
+        "proposals": "array",
+        "textLength": "number",
+        "title": "string"
+      },
+      "values": {},
+      "sent": [
+        "dryRun"
+      ]
+    },
+    "POST /api/work/findings/:id/dismiss": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "dismissed": "boolean"
+      },
+      "values": {},
+      "sent": []
+    },
+    "POST /api/work/findings/:id/promote": {
+      "refused": {
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: enqueues an agent job the dispatcher will claim."
+      }
+    },
+    "POST /api/work/findings/analyze-batch": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "alreadyKnown": "number",
+        "analysed": "number",
+        "failed": "number",
+        "noLinks": "number",
+        "outcomes": "array",
+        "proposed": "number",
+        "remaining": "number"
+      },
+      "values": {},
+      "sent": []
+    },
+    "POST /api/work/jobs": {
+      "refused": {
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: enqueues an agent job the dispatcher will claim."
+      }
+    },
+    "POST /api/work/jobs/:id/requeue": {
+      "refused": {
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: enqueues a fresh copy of the job."
+      }
+    },
+    "POST /api/work/jobs/:id/review": {
+      "skipped": "HTTP 404: job not found or not awaiting review (orgiq/admin)",
+      "sent": [
+        "decision"
+      ]
+    },
+    "POST /api/work/proposals": {
+      "skipped": "no body: `kind` is a ProposalKind union with no run-time validation, and no GET route enumerates its members — inventing one is exactly the fiction this harness exists to stop."
+    },
+    "POST /api/work/proposals/:id/decide": {
+      "skipped": "no value found for :id under /api/work/proposals (orgiq/admin)"
+    },
+    "POST /api/work/sweeps/run": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "released": "number",
+        "results": "array",
+        "results[]": "object",
+        "results[].created": "number",
+        "results[].found": "number",
+        "results[].resolved": "number",
+        "results[].sweep": "string",
+        "results[].updated": "number"
+      },
+      "values": {},
+      "sent": []
+    },
+    "PUT /api/assessment/configuration": {
+      "persona": "assessment/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "motions": "array",
+        "motions[]": "object",
+        "motions[].accent": "string",
+        "motions[].cohort": "string",
+        "motions[].description": "string",
+        "motions[].tag": "string",
+        "motions[].title": "string",
+        "target_level": "number",
+        "updated_at": "string"
+      },
+      "values": {},
+      "sent": []
+    },
+    "PUT /api/assessment/knowledge/doc": {
+      "persona": "assessment/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean",
+        "updated_at": "string"
+      },
+      "values": {},
+      "sent": [
+        "id",
+        "markdown"
+      ]
+    },
+    "PUT /api/budgets/:orgProjectId": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "budget": "object",
+        "budget.allocatedUsd": "number",
+        "budget.lastAgentActivityAt": "string",
+        "budget.maintenanceUsd": "number",
+        "budget.orgProjectId": "string",
+        "budget.orgProjectName": "string",
+        "budget.period": "string",
+        "budget.runCountThisPeriod": "number",
+        "budget.spentThisPeriodUsd": "number",
+        "budget.updatedAt": "string",
+        "budget.updatedBy": "string"
+      },
+      "values": {},
+      "sent": [
+        "allocatedUsd"
+      ]
+    },
+    "PUT /api/identity/policies/:id": {
+      "skipped": "no value found for :id under /api/identity/policies (orgiq/admin)"
+    },
+    "PUT /api/identity/schema": {
+      "skipped": "no body: `schema` is a Cedar JSON schema; GET /api/identity/schema needs a live policy store, so none is readable offline."
+    },
+    "PUT /api/identity/users/:id/grants": {
+      "skipped": "HTTP 503: Aurora not configured — cannot set grants (orgiq/admin)",
+      "sent": [
+        "grants"
+      ]
+    },
+    "PUT /api/identity/users/:id/person": {
+      "skipped": "HTTP 503: Aurora not configured — cannot link person (orgiq/admin)",
+      "sent": [
+        "personId"
+      ]
+    },
+    "PUT /api/iq/prompts/meta/:promptId/:version": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: upserts through the RDS Data API with no mock branch."
+      }
+    },
+    "PUT /api/observability/canary/library/:promptId/draft": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: updates a real Bedrock managed prompt."
+      }
+    },
+    "PUT /api/observability/canary/weight": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean",
+        "weight_b": "number"
+      },
+      "values": {},
+      "sent": [
+        "weight_b"
+      ]
+    },
+    "PUT /api/observability/evaluations/config": {
+      "refused": {
+        "rule": "spends",
+        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: writes the judge config to SSM, changing live judging for the whole fleet."
+      }
+    }
+  }
+}

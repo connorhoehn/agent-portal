@@ -1,0 +1,16 @@
+surface: runs
+role: assessor
+user: u-asha
+url: /assessment/runs
+pages: portal/src/pages/assessment/RunsPage.tsx
+audited: 2026-09-05 08:22 local, Chrome 1440px, gateway mode (VITE_GATEWAY_URL=http://localhost:18080), middleware dev:mock
+screenshot: runs.jpg
+verdict: pass
+console errors: 0
+layout: pass — content col left 200px w 1272px; scrollWidth 1472 = innerWidth 1472 (no horizontal scroll)
+keyboard: pass — 39 interactive controls; each run-id cell is a real button (elementFromPoint resolves straight to BUTTON, not a bare tr), so Tab reaches every row; Enter/click opens the detail drawer, Escape closes it and returns focus to the triggering button.
+empty-state: n/a — the ledger and launcher both have data for every team in this role's fixture set; nothing renders a true empty state here.
+role-gating: assessor holds RunAssessmentAgent — can pick a team from "Choose a team...", Run any of the 7 allowlisted commands, and Stop a running one (verified live, see notes). Nothing on this surface is hidden for the role.
+notes: Launched classify-transcript for TEAM-001 (Northstar Payments): a "Run started" toast appeared, a new row (run-20260905T035950Z-classify-transcript-a74bfb8d7189) appeared at the top of the ledger as "running" with "just now", and within ~1s it flipped to "completed" with a real "0m 08s" duration and a mock summary ("Mock run completed for classify-transcript on TEAM-001.") — all via the live SSE connection (green dot next to "Activity"), no manual refresh. Opened the still-running TEAM-003 score-dimensions run's detail drawer and confirmed a working "Stop" button for assessor. One defect found elsewhere but visible from this page's network traffic: the global command palette's "recent harness runs" fetch (portal/src/components/shell/portalCommands.ts:166, `useRecentHarnessRuns`) hits `/api/observability/harness/runs?limit=5`, which 403s for every assessment-tenant role since that's an orgiq-only observability endpoint — and despite the code comment "refresh once per session," it re-fires on every single route navigation in this session (13 repeated 403s observed across ~13 page changes), because the hook's `loaded` state resets whenever the palette/shell component remounts. Filed in DEFECTS.md as a shell-level issue, not specific to this page.
+re-verified 2026-09-05 03:28: console 0, layout content col left 200px w 1272px / scrollWidth 1472 = innerWidth 1472 / body scrollHeight 845 = innerHeight 845 (unchanged), screenshot retaken (TEAM-003 score-dimensions now correctly shows "failed" / 43m 54s, matching the Stop action from this session's admin pass — confirms the run ledger persists across sessions); spot-checked keyboard — run rows remain real buttons; also captured `read_network_requests` filtered on "harness" across 3 route navigations (reports → feedback → runs) and found zero matching requests, directly confirming (not just inferring) that the observability-harness 403 poll defect (DEFECTS.md #8) stays fixed.
+re-verified 2026-09-05 08:22 (gateway mode, freshness re-sweep): console 0, layout unchanged; 43 interactive controls. Ledger shows this session's stretch/Part-4 runs at top; TEAM-003's stuck run (`run-20260904T091140Z`) STILL "running" at 1h ago — confirms orphan, already tracked.

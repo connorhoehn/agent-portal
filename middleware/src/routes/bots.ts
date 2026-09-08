@@ -25,8 +25,9 @@ import {
 } from '../providers/bots.js';
 import {
   fireBot, dispatchWorkItem, preflightWorkItem, decideRunBudget, decideAllocation,
-  decideEnvelope, loadEnvelope, resolveActiveGrant, decideGrantScopedDispatch,
+  decideEnvelope, loadEnvelope, grantScopedDispatchVerdict,
 } from '../lib/bot-runner.js';
+import { getWorkItem } from '../providers/work-items.js';
 import { getBudget } from '../providers/budgets.js';
 import { registerBot, unregisterBot } from '../lib/bot-scheduler.js';
 import { validateCronExpr } from '../lib/ingest-scheduler.js';
@@ -37,8 +38,11 @@ export const botsRouter: Router = Router();
 // The gate tiers (see the header). readGate only fast-paths GETs, so attaching
 // it to a read route is exactly "org-leader/hr-admin/admin may look, anyone
 // else needs ManageDevbox".
-const readGate = readForRolesElseAction(['org-leader', 'hr-admin'], 'ManageDevbox');
-const manageGate = requireAction('ManageDevbox');
+// ManageBots, not ManageDevbox: authoring a standing mission is its own
+// authority (sme + program-owner + leaders hold it in Cedar) and no longer
+// implies the microVM surface.
+const readGate = readForRolesElseAction(['org-leader', 'hr-admin', 'program-owner'], 'ManageBots');
+const manageGate = requireAction('ManageBots');
 const dispatchGate = requireAction('DispatchAgentRun');
 // Reads that belong to the DISPATCH journey rather than to bot administration:
 // the estimator and the runs behind the initiative board. An SME holds
@@ -215,48 +219,52 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
     budgetPerRunUsd = body.budgetPerRunUsd;
   }
 
-  // ── 1. Shape, before money ────────────────────────────────────────────────
+  // ── 0. Existence ───────────────────────────────────────────────────────────
+  // Fetched once, up front: the grant-scoped check below needs the initiative
+  // (item.projectId) before shape/codebase questions are even asked, and
+  // preflightWorkItem accepts this same item so it never re-fetches it.
+  const item = await getWorkItem(workItemId);
+  if (!item) { res.status(404).json({ error: 'no such work item' }); return; }
+
+  // ── 1. Grant-scoped authorization, before shape or money ──────────────────
+  // An SME may only dispatch against an initiative they hold an ACTIVE sprint
+  // grant on — they spend inside an envelope someone else authorized. This is
+  // authorization (a hard 403), distinct from the envelope brake below, which
+  // enforces the money OF that grant, and it runs before the codebase/shape
+  // preflight: an ungranted SME must hear "you have no grant here", not "no
+  // codebase delivers this initiative" (a refusal for a reason they cannot
+  // act on and that used to fire first). org-leader/hr-admin/admin allocate
+  // and need no grant; resolveActiveGrant returns null (→ no enforcement) for
+  // non-SME platform identities and on any grants-read failure, so an authz
+  // check never fabricates a denial it can't support.
+  const verdict = await grantScopedDispatchVerdict(item.projectId, req.session);
+  if (verdict.kind === 'deny') {
+    res.status(403).json({ error: verdict.reason });
+    return;
+  }
+
+  // ── 2. Shape, before money ────────────────────────────────────────────────
   // Is this thing dispatchable at all, and against which codebase? The budget
   // gates used to run first, so a `done` item that also overran its allocation
   // asked the operator to confirm spending over budget and only THEN told them
   // the item was never dispatchable. Nobody should be asked to authorize spend
   // on work that cannot run.
-  const pre = await preflightWorkItem(workItemId, body.agentProjectId ? String(body.agentProjectId) : undefined);
+  const pre = await preflightWorkItem(
+    workItemId, body.agentProjectId ? String(body.agentProjectId) : undefined, req.session?.role, item,
+  );
   if (!pre.ok) {
     // 400 undispatchable, 404 missing, 409 ambiguous codebase (with options).
     res.status(pre.status).json({ error: pre.error, ...(pre.options ? { options: pre.options } : {}) });
     return;
   }
 
-  // ── 1b. Grant-scoped authorization, before any money ──────────────────────
-  // An SME may only dispatch against an initiative they hold an ACTIVE sprint
-  // grant on — they spend inside an envelope someone else authorized. This is
-  // authorization (a hard 403), distinct from the envelope brake below, which
-  // enforces the money OF that grant. org-leader/hr-admin/admin allocate and
-  // need no grant; resolveActiveGrant returns null (→ no enforcement) for
-  // non-SME platform identities and on any grants-read failure, so an authz
-  // check never fabricates a denial it can't support.
-  const grantCtx = await resolveActiveGrant(pre.item.projectId, req.session?.sub);
-  if (grantCtx) {
-    const verdict = decideGrantScopedDispatch({
-      role: req.session?.role,
-      hasActiveGrant: grantCtx.hasActiveGrant,
-      hasAnyGrant: grantCtx.hasAnyGrant,
-      initiativeName: grantCtx.initiativeName,
-    });
-    if (verdict.kind === 'deny') {
-      res.status(403).json({ error: verdict.reason });
-      return;
-    }
-  }
-
-  // ── 2. One fresh forecast, for both money gates ───────────────────────────
+  // ── 3. One fresh forecast, for both money gates ───────────────────────────
   // Fresh on purpose: never the estimate echoed in body.estimate, which may be
   // stale or shaped by the client. Priced against the codebase preflight
   // resolved, so a server-picked repo is still priced on its own history.
   const forecast = await loadForecast(model, pre.agentProjectId, pre.item.storyPoints);
 
-  // ── 3. Per-run budget, request-supplied (no bot here carries one) ─────────
+  // ── 4. Per-run budget, request-supplied (no bot here carries one) ─────────
   // The operator's own cap on this one run. First because it is the cheapest
   // and the most personal: someone who said "not over $2" should hear about
   // that before being told anything about other people's fences.
@@ -278,7 +286,7 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
     }
   }
 
-  // ── 4. The initiative's allocation, as a brake rather than a report ───────
+  // ── 5. The initiative's allocation, as a brake rather than a report ───────
   // Dispatching work whose forecast does not fit the money left this period
   // demands the same explicit confirmation the per-run cap does.
   //
@@ -325,7 +333,7 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
     }
   }
 
-  // ── 5. The caller's own sprint envelope ───────────────────────────────────
+  // ── 6. The caller's own sprint envelope ───────────────────────────────────
   // The last brake, and the narrowest: a release manager granted THIS person a
   // spend envelope for this sprint (budget_grants), and until now nothing
   // checked it. Last on purpose — the initiative running out of money is the

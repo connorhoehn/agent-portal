@@ -22,14 +22,15 @@ jest.mock('../../providers/budgets.js', () => ({
   upsertAllocation: jest.fn(),
   deleteAllocation: jest.fn(),
   initiativeExists: jest.fn(),
+  listGrants: jest.fn(),
 }));
 
 import express from 'express';
-import request from 'supertest';
+import request from '../../test-support/http.js';
 import { budgetsRouter } from '../budgets.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import {
-  listBudgets, orgSummary, upsertAllocation, deleteAllocation, initiativeExists,
+  listBudgets, orgSummary, upsertAllocation, deleteAllocation, initiativeExists, listGrants,
 } from '../../providers/budgets.js';
 
 const listMock = listBudgets as unknown as jest.Mock;
@@ -143,5 +144,61 @@ describe('DELETE /api/budgets/:orgProjectId', () => {
     deleteMock.mockResolvedValue(false);
     const res = await request(buildApp()).delete('/api/budgets/proj-none');
     expect(res.status).toBe(404);
+  });
+});
+
+// Sprint envelopes — GET /api/budgets/grants. Declared BEFORE '/:orgProjectId'
+// in the router, and that ordering is the thing worth pinning: if it slipped
+// below, "grants" would be read as an initiative id and the envelope list
+// would 404 (or worse, answer about an initiative called "grants").
+describe('GET /api/budgets/grants', () => {
+  const grantsMock = listGrants as unknown as jest.Mock;
+
+  beforeEach(() => { grantsMock.mockReset(); });
+
+  it('resolves as a literal, not as /:orgProjectId', async () => {
+    grantsMock.mockResolvedValue([]);
+    const res = await request(buildApp()).get('/api/budgets/grants');
+    expect(res.status).toBe(200);
+    expect(Object.keys(res.body)).toEqual(['grants']);
+    // The param route would have asked the budgets provider about an
+    // initiative literally called "grants".
+    expect(listMock).not.toHaveBeenCalled();
+  });
+
+  it('carries who holds how much, on which sprint', async () => {
+    grantsMock.mockResolvedValue([{
+      id: 'bg-auth-3', orgProjectId: 'p-auth-migration', granteePersonId: 'p-004',
+      granteeName: 'Nora Vance', sprintId: 'sp-12', amountUsd: 120, spentUsd: 42.5,
+      grantedBy: 'u-release', status: 'active',
+    }]);
+    const res = await request(buildApp()).get('/api/budgets/grants?orgProjectId=p-auth-migration');
+    expect(res.status).toBe(200);
+    const g = res.body.grants[0];
+    // An envelope means nothing without all three: whose, how much, which sprint.
+    expect(g.granteePersonId).toBe('p-004');
+    expect(g.sprintId).toBe('sp-12');
+    expect(g.amountUsd).toBe(120);
+    // Spend is reported beside the envelope, not derived by the caller.
+    expect(g.spentUsd).toBeLessThanOrEqual(g.amountUsd);
+  });
+
+  it('scopes to one initiative when asked, and to all when not', async () => {
+    grantsMock.mockResolvedValue([]);
+    const app = buildApp();
+    await request(app).get('/api/budgets/grants');
+    await request(app).get('/api/budgets/grants?orgProjectId=');
+    await request(app).get('/api/budgets/grants?orgProjectId=%20%20');
+    await request(app).get('/api/budgets/grants?orgProjectId=p-auth-migration');
+    // A blank filter widens to every initiative rather than matching an
+    // initiative whose id is the empty string.
+    expect(grantsMock.mock.calls.map((c) => c[0]))
+      .toEqual([undefined, undefined, undefined, 'p-auth-migration']);
+  });
+
+  it('serves an initiative with no envelopes as an empty list', async () => {
+    grantsMock.mockResolvedValue([]);
+    const res = await request(buildApp()).get('/api/budgets/grants?orgProjectId=p-observability');
+    expect(res.body).toEqual({ grants: [] });
   });
 });

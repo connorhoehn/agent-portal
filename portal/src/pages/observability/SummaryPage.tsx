@@ -1,7 +1,8 @@
 import type React from 'react';
 import { Link } from 'react-router';
-import { Card, PageSection, StatCard } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Inline, PageSection, Stack, StatCard, StatStrip } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { T } from './Text';
 
 interface ObsSummary {
   totalInvocations24h: number;
@@ -98,7 +99,11 @@ function deriveNextSteps(
     steps.push({
       label: `Read the failures on ${failing.map((a) => a.name).join(', ')}`,
       detail: `${failing.reduce((n, a) => n + a.errorsLast24h, 0)} errored invocations in the last 24h.`,
-      to: '/admin/observability/invocations',
+      // Invocations seeds its filters from the query (`invocationsFilters.ts`),
+      // so the link lands on the failures it names, not on the full tail.
+      to: failing.length === 1
+        ? `/admin/observability/invocations?status=error&agentId=${encodeURIComponent(failing[0].id)}`
+        : '/admin/observability/invocations?status=error',
       urgent: true,
     });
   }
@@ -174,139 +179,126 @@ function SummaryPage() {
       description="What is deployed, whether it is working, and what needs you next."
     >
       {/* ── Right now ─────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-4">
-        <Card padding="md">
-          <div className="text-xs uppercase tracking-wide text-[var(--color-text-tertiary)]">
-            Deployed agents
-          </div>
-          <div className="mt-1 flex items-baseline gap-2">
-            <span className="text-3xl font-semibold">{runtimes.length || '—'}</span>
-            <span className="text-sm text-[var(--color-text-secondary)]">
-              {blind ? 'unknown' : `${healthy} healthy${runtimes.length > healthy ? ` · ${runtimes.length - healthy} not` : ''}`}
-            </span>
-          </div>
-          <div className="mt-2 text-xs text-[var(--color-text-tertiary)]">
-            {blind
-              ? 'Cannot list runtimes while the backend is unreachable.'
-              : 'Live from AgentCore Runtime, not a static list.'}
-          </div>
-        </Card>
+      <Inline gap="md" wrap={false} className="items-stretch [&>*]:flex-1">
+        <StatCard
+          label="Deployed agents"
+          value={runtimes.length || '—'}
+          hint={(
+            <Stack gap="none">
+              <T>{blind ? 'unknown' : `${healthy} healthy${runtimes.length > healthy ? ` · ${runtimes.length - healthy} not` : ''}`}</T>
+              <T className="text-xs text-text-tertiary" wrap>
+                {blind
+                  ? 'Cannot list runtimes while the backend is unreachable.'
+                  : 'Live from AgentCore Runtime, not a static list.'}
+              </T>
+            </Stack>
+          )}
+        />
 
-        <Card padding="md">
-          <div className="text-xs uppercase tracking-wide text-[var(--color-text-tertiary)]">
-            Alarms
-          </div>
-          <div className="mt-1 flex items-baseline gap-2">
-            <span
-              className={`text-3xl font-semibold ${!blind && firing.length ? 'text-red-600' : ''}`}
-            >
-              {dash(firing.length)}
-            </span>
-            <span className="text-sm text-[var(--color-text-secondary)]">firing</span>
-          </div>
-          <div className="mt-2 text-xs text-[var(--color-text-tertiary)]">
-            {blind
-              ? 'Cannot evaluate alarms while the backend is unreachable.'
-              : alarms[0]?.reason ?? 'No alarm evaluation yet.'}
-          </div>
-        </Card>
+        <StatCard
+          label="Alarms"
+          value={dash(firing.length)}
+          danger={!blind && firing.length > 0}
+          hint={(
+            <Stack gap="none">
+              <T>firing</T>
+              <T className="text-xs text-text-tertiary" wrap>
+                {blind
+                  ? 'Cannot evaluate alarms while the backend is unreachable.'
+                  : alarms[0]?.reason ?? 'No alarm evaluation yet.'}
+              </T>
+            </Stack>
+          )}
+        />
 
-        <Card padding="md">
-          <div
-            className="text-xs uppercase tracking-wide text-[var(--color-text-tertiary)]"
-            title="Real system errors from AgentCore runtimes (CloudWatch SystemErrors). This is a failure count, not answer quality — a low judge score is a weak answer to a request that still succeeded and is tracked separately on Quality / On-Call."
-          >
-            Errors (24h)
-          </div>
-          <div className="mt-1 flex items-baseline gap-2">
-            <span
-              className={`text-3xl font-semibold ${!blind && summary?.totalErrors24h ? 'text-red-600' : ''}`}
-            >
-              {dash(summary?.totalErrors24h ?? 0)}
-            </span>
-            <span className="text-sm text-[var(--color-text-secondary)]">
-              {blind ? 'no data' : `of ${summary?.totalInvocations24h ?? 0} runs`}
-            </span>
-          </div>
-          <div className="mt-1 text-xs text-[var(--color-text-tertiary)]">
-            System failures, not answer quality.
-          </div>
-          <Link
-            to="/admin/observability/invocations"
-            className="mt-2 inline-block text-xs text-[var(--color-primary)] hover:underline"
-          >
-            Open Runs →
-          </Link>
-        </Card>
-      </div>
+        <StatCard
+          label="Errors (24h)"
+          title="Real system errors from AgentCore runtimes (CloudWatch SystemErrors). This is a failure count, not answer quality — a low judge score is a weak answer to a request that still succeeded and is tracked separately on Quality / On-Call."
+          value={dash(summary?.totalErrors24h ?? 0)}
+          danger={!blind && (summary?.totalErrors24h ?? 0) > 0}
+          hint={(
+            <Stack gap="none">
+              <T>{blind ? 'no data' : `of ${summary?.totalInvocations24h ?? 0} runs`}</T>
+              <T className="text-xs text-text-tertiary">System failures, not answer quality.</T>
+              <Link to="/admin/observability/invocations?status=error" className="text-xs text-primary hover:underline">
+                Open Runs →
+              </Link>
+            </Stack>
+          )}
+        />
+      </Inline>
 
       {/* ── What to do next ───────────────────────────────────────────── */}
       <Card padding="md">
-        <div className="text-xs uppercase tracking-wide text-[var(--color-text-tertiary)]">
+        <T as="div" className="text-xs uppercase tracking-wide text-[var(--color-text-tertiary)]">
           What to do next
-        </div>
-        <div className="mt-3 flex flex-col gap-3">
+        </T>
+        <Stack gap="sm" className="mt-3">
           {steps.map((s) => (
             <Link
               key={s.label}
               to={s.to}
               className="flex items-start gap-3 rounded-md border border-[var(--color-border)] p-3 no-underline hover:bg-[var(--color-surface-hover)]"
             >
-              <span
+              <T
+                as="div"
                 className={`mt-1 h-2 w-2 shrink-0 rounded-full ${
-                  s.urgent ? 'bg-red-500' : 'bg-[var(--color-text-tertiary)]'
+                  s.urgent ? 'bg-danger' : 'bg-[var(--color-text-tertiary)]'
                 }`}
               />
-              <span>
-                <span className="block text-sm font-medium text-[var(--color-text-primary)]">
+              <Stack gap="none">
+                <T as="div" className="text-sm font-medium text-[var(--color-text-primary)]">
                   {s.label}
-                </span>
-                <span className="block text-xs text-[var(--color-text-secondary)]">{s.detail}</span>
-              </span>
+                </T>
+                <T as="div" className="text-xs text-[var(--color-text-secondary)]" wrap>{s.detail}</T>
+              </Stack>
             </Link>
           ))}
-        </div>
+        </Stack>
       </Card>
 
       {/* ── Raw numbers, below the fold of the decision ───────────────── */}
-      <div className="grid grid-cols-5 gap-4">
-        <StatCard label="Invocations (24h)" value={summary?.totalInvocations24h.toLocaleString() ?? '—'} />
-        <StatCard label="Avg Latency" value={summary ? `${(summary.avgLatencyMs / 1000).toFixed(1)}s` : '—'} />
-        <StatCard label="Tokens (24h, account)" value={summary ? `${(summary.totalTokens24h / 1000).toFixed(0)}k` : '—'} />
-        <StatCard label="Success Rate" value={summary ? `${summary.successRate}%` : '—'} accent />
-        <StatCard
-          label="Errors (24h)"
-          value={blind ? '—' : String(summary?.totalErrors24h ?? 0)}
-          hint="System errors, not answer quality"
-          danger={!blind && !!summary && summary.totalErrors24h > 0}
-        />
-      </div>
+      <StatStrip
+        aria-label="24h rollup"
+        items={[
+          { label: 'Invocations (24h)', value: summary?.totalInvocations24h.toLocaleString() ?? '—' },
+          { label: 'Avg Latency', value: summary ? `${(summary.avgLatencyMs / 1000).toFixed(1)}s` : '—' },
+          { label: 'Tokens (24h, account)', value: summary ? `${(summary.totalTokens24h / 1000).toFixed(0)}k` : '—' },
+          { label: 'Success Rate', value: summary ? `${summary.successRate}%` : '—', tone: 'accent' },
+          {
+            label: 'Errors (24h)',
+            value: blind ? '—' : String(summary?.totalErrors24h ?? 0),
+            hint: 'System errors, not answer quality',
+            ...(!blind && !!summary && summary.totalErrors24h > 0 ? { tone: 'danger' as const } : {}),
+          },
+        ]}
+      />
 
       <Card padding="md">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold">
-            Guardrail Activity (6h){' '}
-            <span className="text-xs font-normal text-[var(--color-text-tertiary)]">
+        <Inline align="center" justify="between" className="mb-3">
+          <Inline align="baseline" gap="xs">
+            <T as="div" className="text-sm font-semibold">Guardrail Activity (6h)</T>
+            <T className="text-xs font-normal text-[var(--color-text-tertiary)]">
               from AWS/Bedrock metrics
-            </span>
-          </h2>
-          <div className="flex gap-5 text-xs">
-            <span>
-              <span className="text-[var(--color-text-tertiary)]">Invocations: </span>
-              <b>{blind ? '—' : guardrail?.totalInvocations ?? 0}</b>
-            </span>
-            <span>
-              <span className="text-[var(--color-text-tertiary)]">Interventions: </span>
-              <b className={!blind && (guardrail?.totalInterventions ?? 0) > 0 ? 'text-red-600' : ''}>
+            </T>
+          </Inline>
+          <Inline gap="lg" className="text-xs">
+            <T>
+              <T className="text-[var(--color-text-tertiary)]">Invocations: </T>
+              <T className="font-semibold">{blind ? '—' : guardrail?.totalInvocations ?? 0}</T>
+            </T>
+            <T>
+              <T className="text-[var(--color-text-tertiary)]">Interventions: </T>
+              <T className={`font-semibold ${!blind && (guardrail?.totalInterventions ?? 0) > 0 ? 'text-red-600' : ''}`}>
                 {blind ? '—' : guardrail?.totalInterventions ?? 0}
-              </b>
-            </span>
-            <span>
-              <span className="text-[var(--color-text-tertiary)]">Rate: </span>
-              <b>{blind ? '—' : `${guardrail?.interventionRate ?? '0.0'}%`}</b>
-            </span>
-          </div>
-        </div>
+              </T>
+            </T>
+            <T>
+              <T className="text-[var(--color-text-tertiary)]">Rate: </T>
+              <T className="font-semibold">{blind ? '—' : `${guardrail?.interventionRate ?? '0.0'}%`}</T>
+            </T>
+          </Inline>
+        </Inline>
         <GuardrailSparkline series={guardrail?.series ?? []} />
       </Card>
     </PageSection>
@@ -333,9 +325,9 @@ function GuardrailSparkline({
 
   if (series.length === 0) {
     return (
-      <div className="p-4 text-center text-xs text-[var(--color-text-tertiary)]">
+      <T as="div" className="p-4 text-center text-xs text-[var(--color-text-tertiary)]">
         No guardrail activity in the last 6h.
-      </div>
+      </T>
     );
   }
 
@@ -347,11 +339,11 @@ function GuardrailSparkline({
     >
       <polyline
         fill="none"
-        stroke="var(--color-primary, #6366f1)"
+        stroke="var(--color-primary)"
         strokeWidth="1.5"
         points={points('invocations')}
       />
-      <polyline fill="none" stroke="#dc2626" strokeWidth="1.5" points={points('interventions')} />
+      <polyline fill="none" stroke="var(--color-danger)" strokeWidth="1.5" points={points('interventions')} />
     </svg>
   );
 }

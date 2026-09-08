@@ -67,7 +67,7 @@ export { hasActiveGrantOnInitiative };
 function BackToProjects() {
   return (
     <Link to="/iq/projects" className="no-underline">
-      <Button variant="secondary" size="sm">← Back to Projects</Button>
+      <Button variant="secondary" size="sm">← Back to Initiatives</Button>
     </Link>
   );
 }
@@ -311,6 +311,8 @@ function ProjectDetailPage() {
   // three tabs: one is on screen, the counts stay visible on the triggers.
   const tabs = [
     { id: 'work', label: 'Work' },
+    // Activity is not a tab: it sits in the fixed rail beside the work, so
+    // the day-by-day lines are readable while the table scrolls.
     {
       id: 'decisions',
       label: 'Decisions',
@@ -330,7 +332,12 @@ function ProjectDetailPage() {
   ];
 
   return (
-    <Stack gap="lg" className="max-w-[1240px] pb-16">
+    <Stack gap="lg" className="pb-16">
+      {/* Two columns from the top of the page: the header, tabs and table on
+          the left; the rail on the right runs the full height beside them
+          and stays put while the left column scrolls. */}
+      <Inline gap="lg" align="start" wrap={false} className="items-start">
+        <Stack gap="lg" className="min-w-0 flex-1 basis-[520px]">
       <InitiativeHeader
         project={project}
         projectId={id ?? ''}
@@ -350,13 +357,12 @@ function ProjectDetailPage() {
         }}
         repoUrl={repoUrl ?? project.githubUrl ?? null}
         repoLabel={projectRollup?.repoFullName ?? (repoUrl ? null : project.githubUrl ? 'GitHub' : null)}
+        repoCount={codebases.length}
         onOwner={(oid, oname) => setOwnerOverride({ ownerId: oid, ownerName: oname })}
         onRole={handleRoleOverride}
-        onOpenPerson={handleOpenPerson}
       />
 
-      <Inline gap="lg" align="start" className="items-start">
-        <Stack gap="md" className="min-w-0 flex-1 basis-[520px]">
+        <Stack gap="md">
           <Tabs
             idPrefix="initiative"
             aria-label="Initiative detail"
@@ -392,9 +398,24 @@ function ProjectDetailPage() {
             />
           </TabPanel>
         </Stack>
+        </Stack>
 
-        <Stack gap="sm" className="sticky top-4 w-[300px] shrink-0 self-start">
-          <InitiativeRail initiativeId={id} activity={agentActivity} codebases={codebases} />
+        {/* The rail is fixed: it sticks to the top of the shell's scroll
+            container and scrolls inside itself when its cards are taller than
+            that container. Its ceiling is the container's height (the
+            viewport minus the shell chrome, --shell-chrome-h in app.css) — a
+            rail taller than the container cannot be pinned and clips. */}
+        <Stack
+          gap="sm"
+          className="sticky top-0 max-h-[calc(100vh-var(--shell-chrome-h))] w-[320px] shrink-0 self-start overflow-y-auto rounded-lg bg-surface-panel p-3"
+        >
+          <InitiativeRail
+            initiativeId={id}
+            activity={agentActivity}
+            codebases={codebases}
+            runs={marketplaceRuns}
+            workTree={workTree}
+          />
         </Stack>
       </Inline>
 
@@ -414,6 +435,10 @@ function ProjectDetailPage() {
         onClose={() => setEstimateItem(null)}
         item={estimateItem}
         codebases={codebases.map((cb) => ({ id: cb.id, repoFullName: cb.repoFullName }))}
+        // The initiative this run is charged to — the drawer reads the caller's
+        // own sprint envelope on it and reports what is left BEFORE they
+        // authorize, instead of leaving the envelope brake's 409 to say it.
+        orgProjectId={id ?? null}
         onDispatched={handleDispatched}
       />
     </Stack>

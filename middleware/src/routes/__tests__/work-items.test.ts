@@ -21,6 +21,10 @@ jest.mock('../../lib/authz.js', () => ({
   },
 }));
 
+jest.mock('../../providers/activity.js', () => ({
+  getProjectActivitySeries: jest.fn(),
+}));
+
 jest.mock('../../providers/work-items.js', () => ({
   searchWorkItems: jest.fn(),
   getProjectWorkTree: jest.fn(),
@@ -40,7 +44,7 @@ jest.mock('../../providers/work-items.js', () => ({
 }));
 
 import express from 'express';
-import request from 'supertest';
+import request from '../../test-support/http.js';
 import { workItemsRouter } from '../work-items.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import {
@@ -49,7 +53,9 @@ import {
   countOpenChangeRequests, wouldCreateParentCycle, projectExists, personExists,
   type WorkItem,
 } from '../../providers/work-items.js';
+import { getProjectActivitySeries } from '../../providers/activity.js';
 
+const seriesMock = getProjectActivitySeries as unknown as jest.Mock;
 const searchMock = searchWorkItems as unknown as jest.Mock;
 const treeMock = getProjectWorkTree as unknown as jest.Mock;
 const activityMock = getProjectActivity as unknown as jest.Mock;
@@ -83,7 +89,7 @@ function buildApp() {
 
 beforeEach(() => {
   [searchMock, treeMock, activityMock, decisionsMock, personWorkMock, getMock,
-    createMock, updateMock, openCrMock, cycleMock, projectExistsMock, personExistsMock,
+    createMock, updateMock, openCrMock, cycleMock, projectExistsMock, personExistsMock, seriesMock,
   ].forEach((m) => m.mockReset());
   projectExistsMock.mockResolvedValue(true);
   personExistsMock.mockResolvedValue(true);
@@ -186,6 +192,46 @@ describe('collection endpoints under a parent that does not exist', () => {
     const res = await request(buildApp()).get('/api/graph/people/p-008/work');
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
+  });
+});
+
+// ── Activity time series ──────────────────────────────────────────────────────
+
+describe('GET /api/graph/projects/:id/activity/series', () => {
+  const SERIES = {
+    days: 30, from: '2026-08-03', to: '2026-09-01',
+    series: { runs: new Array(30).fill(0), spendUsd: new Array(30).fill(0), completed: new Array(30).fill(0) },
+    totals: { runs: 0, spendUsd: 0, completed: 0 },
+  };
+
+  it('404s an unknown initiative instead of a bare empty series', async () => {
+    seriesMock.mockResolvedValue(null);
+    const res = await request(buildApp()).get('/api/graph/projects/p-nope/activity/series');
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/Project not found/);
+  });
+
+  it('defaults to 30 days', async () => {
+    seriesMock.mockResolvedValue(SERIES);
+    const res = await request(buildApp()).get('/api/graph/projects/p-observability/activity/series');
+    expect(res.status).toBe(200);
+    expect(seriesMock).toHaveBeenCalledWith('p-observability', 30);
+    expect(res.body).toEqual(SERIES);
+  });
+
+  it('clamps an out-of-range days value to the 1..90 window', async () => {
+    seriesMock.mockResolvedValue(SERIES);
+    await request(buildApp()).get('/api/graph/projects/p-observability/activity/series?days=999');
+    expect(seriesMock).toHaveBeenCalledWith('p-observability', 90);
+
+    await request(buildApp()).get('/api/graph/projects/p-observability/activity/series?days=0');
+    expect(seriesMock).toHaveBeenCalledWith('p-observability', 1);
+
+    await request(buildApp()).get('/api/graph/projects/p-observability/activity/series?days=-5');
+    expect(seriesMock).toHaveBeenCalledWith('p-observability', 1);
+
+    await request(buildApp()).get('/api/graph/projects/p-observability/activity/series?days=not-a-number');
+    expect(seriesMock).toHaveBeenCalledWith('p-observability', 30);
   });
 });
 

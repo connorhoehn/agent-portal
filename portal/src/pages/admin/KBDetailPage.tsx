@@ -34,6 +34,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch.js';
+import type { Reconciled } from '../knowledge/knowledgeFormat';
 import { ConfigurationTab } from './kb/ConfigurationTab';
 import { DeleteButton } from './kb/DeleteButton';
 import { DocumentsTab } from './kb/DocumentsTab';
@@ -41,9 +42,8 @@ import { IngestionJobsTab } from './kb/IngestionJobsTab';
 import { KbPipelineChain } from './kb/KbPipelineChain';
 import { LandingZoneTab } from './kb/LandingZoneTab';
 import { ProvisionModal } from './kb/ProvisionModal';
-import { StatusChip } from './kb/StatusChip';
 import { SyncButton } from './kb/SyncButton';
-import { canDelete, canProvision, canSync, shortModel } from './kb/kbFormat';
+import { canDelete, canProvision, canSync, effectiveStatus, shortModel } from './kb/kbFormat';
 import type { KbDetailResponse, KbTabId } from './kb/types';
 
 const REGISTRY_PATH = '/admin/knowledge/registry';
@@ -71,7 +71,17 @@ export function KBDetailPage() {
     10_000,
   );
 
+  // The registry row's own `status` only reflects the last provisioning
+  // call — it does not know whether the Bedrock KB it names still exists.
+  // The reconcile API actually checked; the detail header, the pipeline
+  // chain and the Sync hint all read that instead (DEFECTS.md #18).
+  const { data: reconcileData } = useFetch<{ entries: Reconciled[] }>(
+    '/api/admin/kb-registry/reconcile',
+    30_000,
+  );
+
   const kb = data?.kb;
+  const reconciled = kb ? (reconcileData?.entries.find((e) => e.id === kb.id) ?? null) : null;
 
   // No breadcrumb row here: the app shell already renders one above this page.
   if (isLoading && !kb) {
@@ -89,11 +99,13 @@ export function KBDetailPage() {
     );
   }
 
+  const eff = effectiveStatus(kb, reconciled);
+
   return (
     <Stack gap="lg" as="section">
       <DetailHeader
         title={kb.name}
-        badge={<StatusChip status={kb.status} />}
+        badge={<Chip tone={eff.tone} size="xs" dot="static">{eff.label}</Chip>}
         description={kb.description}
         // Identity, not configuration: what this KB IS, not how it is tuned.
         // The tuning fields moved to the Configuration tab, which is where
@@ -141,7 +153,7 @@ export function KBDetailPage() {
         </InlineAlert>
       )}
 
-      <KbPipelineChain kb={kb} />
+      <KbPipelineChain kb={kb} reconciled={reconciled} />
 
       <Stack gap="md">
         <SegmentedControl
@@ -149,7 +161,7 @@ export function KBDetailPage() {
           onChange={(v) => setActiveTab(v as KbTabId)}
           options={TABS.map((t) => ({ value: t.value, label: t.label }))}
         />
-        {activeTab === 'landing-zone' && <LandingZoneTab kb={kb} />}
+        {activeTab === 'landing-zone' && <LandingZoneTab kb={kb} showSyncHint={canManage && canSync(kb)} />}
         {activeTab === 'documents' && <DocumentsTab kb={kb} />}
         {activeTab === 'ingestion-jobs' && <IngestionJobsTab kb={kb} />}
         {activeTab === 'configuration' && <ConfigurationTab kb={kb} />}

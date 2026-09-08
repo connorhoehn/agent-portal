@@ -1,55 +1,104 @@
-// The initiative's identity and its three headline numbers.
+// The initiative's identity, its summary, who authorized it, and its three
+// headline numbers.
 //
-// The old header was one Card carrying a status pill, an owner/SME line, the
-// description, a free-floating row of hand-centred stat divs and a bare
-// progress track. The stats are now a KPIGrid of StatCards — one grid, one
-// scale, one alignment — and the title block is PageHeader, so this page's
-// heading matches every other page in the portal.
+// Two rounds of fixes are visible here. First, the old header was one Card
+// carrying a status pill, an owner/SME line, a free-floating row of
+// hand-centred stat divs and a bare progress track; the stats became a
+// compact StatStrip and the title block became PageHeader.
+//
+// Then the Card-wrapped StatStrip drew its OWN border inside the Card — a
+// card in a card, two rounded boxes a few pixels apart standing in for a
+// hierarchy that does not exist. It renders `frameless` now, with a Divider
+// doing the separating.
+//
+// The bigger gap was in what the block SAID. It named the owner (who runs the
+// initiative) and the SMEs (who attach to it), and stopped — so the page
+// answered "who is doing this" but never "what is this for" or "who
+// authorized it". Both are now first-class: the summary is prose above the
+// identity row, and the SPONSOR leads that row, since the executive who
+// signed off is the originator every funding conversation starts from.
 
 import {
   Avatar,
   Button,
   Card,
   Chip,
+  Divider,
   Inline,
-  KPIGrid,
+  SectionLabel,
+  StatStrip,
   PageHeader,
   Stack,
-  StatCard,
 } from '@connorhoehnslalom/ui-components/shared';
 import { OwnerEditor } from '../../components/marketplace/GovernanceEditor';
-import { AgentSpendStat, type AgentSpendInputs } from './AgentSpendStat';
-import { PROJECT_STATUS_TONE } from './projectFormat';
+import { ExternalLink } from './ExternalLinkFrame';
+import { PersonRef } from './PersonRef';
+import { T } from './Text';
+import { agentSpendStripItem, type AgentSpendInputs } from './AgentSpendStat';
+import { PROJECT_STATUS_TONE, daysRunning, runningLabel } from './projectFormat';
 import type { ProjectContributor, ProjectDetail } from './types';
 
-/** Who runs the initiative and who directs agents on it. The edit affordance
- *  only renders for sessions holding DispatchAgentRun (OwnerEditor gates
- *  itself). */
+/** The uppercase caption naming one role in the identity row. */
+function RoleLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <SectionLabel className="text-[10px] font-semibold tracking-wide">
+      {children}
+    </SectionLabel>
+  );
+}
+
+/**
+ * Who authorized the initiative, who runs it, and who directs agents on it —
+ * in that order, because that is the order of authority.
+ *
+ * Every name here is a PersonRef: one link, one hover card, wherever a person
+ * appears on this page. They used to be ghost buttons opening a modal, which
+ * meant a name behaved differently here than in the work table and could not
+ * be opened in a new tab or linked to.
+ *
+ * The owner edit affordance only renders for sessions holding DispatchAgentRun
+ * (OwnerEditor gates itself).
+ */
 function IdentityLine({
-  projectId, contributors, ownerId, ownerName, smes, onOwner, onRole, onOpenPerson,
+  projectId, contributors, ownerId, ownerName, smes, sponsorId, sponsorName, sponsorTitle,
+  onOwner, onRole,
 }: {
   projectId: string;
   contributors: ProjectContributor[];
   ownerId: string | null;
   ownerName: string | null;
   smes: ProjectContributor[];
+  sponsorId: string | null;
+  sponsorName: string | null;
+  sponsorTitle: string | null;
   onOwner: (ownerId: string | null, ownerName: string | null) => void;
   onRole: (personId: string, role: string | null) => void;
-  onOpenPerson: (personId: string, role: string | null) => void;
 }) {
   return (
-    <Inline gap="sm" align="center" className="text-[12px] text-text-secondary">
+    <Inline gap="lg" align="center" className="text-[12px] text-text-secondary">
+      {sponsorName && (
+        <Inline gap="xs" align="center" wrap={false}>
+          <RoleLabel>Sponsor</RoleLabel>
+          <PersonRef
+            personId={sponsorId}
+            name={sponsorName}
+            title={sponsorTitle}
+            className="font-semibold text-text-primary"
+          />
+          {sponsorTitle && <T className="text-text-tertiary">{sponsorTitle}</T>}
+        </Inline>
+      )}
+
       <Inline gap="xs" align="center" wrap={false}>
-        {ownerName && <Avatar name={ownerName} size={18} title={ownerName} />}
-        <span>Run by</span>
-        {ownerName && ownerId ? (
-          <Button variant="ghost" size="sm" className="px-0 font-semibold" onClick={() => onOpenPerson(ownerId, 'owner')}>
-            {ownerName}
-          </Button>
-        ) : ownerName ? (
-          <span className="font-semibold text-text-primary">{ownerName}</span>
+        <RoleLabel>Owner</RoleLabel>
+        {ownerName ? (
+          <PersonRef
+            personId={ownerId}
+            name={ownerName}
+            className="font-semibold text-text-primary"
+          />
         ) : (
-          <span className="text-text-tertiary">—</span>
+          <T className="text-text-tertiary">—</T>
         )}
         <OwnerEditor
           projectId={projectId}
@@ -60,18 +109,20 @@ function IdentityLine({
           onRole={onRole}
         />
       </Inline>
-      {smes.map((s) => (
-        <Button
-          key={s.personId}
-          variant="ghost"
-          size="sm"
-          className="p-0"
-          title={`${s.name} — SME directing agents on this initiative`}
-          onClick={() => onOpenPerson(s.personId, 'sme')}
-        >
-          <Chip tone="info" size="xs">SME · {s.name}</Chip>
-        </Button>
-      ))}
+
+      {smes.length > 0 && (
+        <Inline gap="xs" align="center">
+          <RoleLabel>SMEs</RoleLabel>
+          {smes.map((s) => (
+            <PersonRef
+              key={s.personId}
+              personId={s.personId}
+              name={s.name}
+              title={s.title}
+            />
+          ))}
+        </Inline>
+      )}
     </Inline>
   );
 }
@@ -89,9 +140,9 @@ export function InitiativeHeader({
   spend,
   repoUrl,
   repoLabel,
+  repoCount,
   onOwner,
   onRole,
-  onOpenPerson,
 }: {
   project: ProjectDetail;
   projectId: string;
@@ -106,35 +157,60 @@ export function InitiativeHeader({
   /** Mission-2 codebase link — the repo that delivers this initiative. */
   repoUrl: string | null;
   repoLabel: string | null;
+  /** How many codebases deliver this initiative. Counted from the codebase
+   *  list the page already fetches — never a stored number to drift. */
+  repoCount: number;
   onOwner: (ownerId: string | null, ownerName: string | null) => void;
   onRole: (personId: string, role: string | null) => void;
-  onOpenPerson: (personId: string, role: string | null) => void;
 }) {
   const status = project.status ?? 'unknown';
-  const hasIdentity = Boolean(ownerName) || smes.length > 0 || contributors.length > 0;
+  const hasIdentity =
+    Boolean(ownerName) || Boolean(project.sponsorName) || smes.length > 0 || contributors.length > 0;
+  // `summary` is the new prose field; `description` is the legacy one some
+  // rows still carry. Prefer the former, fall back rather than showing
+  // nothing where the older value exists.
+  const summary = project.summary ?? project.description ?? null;
+  const age = daysRunning(project.createdAt);
+  const startedLabel = project.createdAt
+    ? new Date(project.createdAt).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })
+    : '';
 
   return (
     <Stack gap="md">
+      {/* No `back` here. The shell's Breadcrumbs already renders
+          Plan / Initiatives / <name> with Initiatives as a live link, so a
+          second "← Initiatives" directly beneath it was two doors to the same
+          place stacked on top of each other. */}
       <PageHeader
-        back={{ label: 'Projects', to: '/iq/projects' }}
         title={project.name}
-        description={project.description ?? undefined}
-        badge={<Chip tone={PROJECT_STATUS_TONE[status] ?? 'info'} size="sm" uppercase>{status}</Chip>}
+        badge={(
+          <Inline gap="xs" align="center" wrap={false}>
+            <Chip tone={PROJECT_STATUS_TONE[status] ?? 'info'} size="sm" uppercase>{status}</Chip>
+            {/* The initiative's machine slug. Everything under it — epics,
+                stories, bots — is addressed by an id derived from this one,
+                so the top of the chain should be as citable as the rest. */}
+            <T className="font-mono text-[11px] text-text-tertiary">{project.id}</T>
+          </Inline>
+        )}
         actions={repoUrl ? (
-          <a
+          <ExternalLink
             href={repoUrl}
-            target="_blank"
-            rel="noreferrer"
             title={repoLabel ?? undefined}
             className="text-[12px] font-medium text-primary no-underline hover:underline"
           >
             ↗ {repoLabel ?? 'GitHub'}
-          </a>
+          </ExternalLink>
         ) : undefined}
       />
 
       <Card padding="md">
         <Stack gap="md">
+          {summary && (
+            <T as="p" className="m-0 max-w-[70ch] text-[13px] leading-relaxed text-text-secondary">
+              {summary}
+            </T>
+          )}
+
           {hasIdentity && (
             <IdentityLine
               projectId={projectId}
@@ -142,32 +218,62 @@ export function InitiativeHeader({
               ownerId={ownerId}
               ownerName={ownerName}
               smes={smes}
+              sponsorId={project.sponsorId ?? null}
+              sponsorName={project.sponsorName ?? null}
+              sponsorTitle={project.sponsorTitle ?? null}
               onOwner={onOwner}
               onRole={onRole}
-              onOpenPerson={onOpenPerson}
             />
           )}
 
-          <KPIGrid columns={3} dense>
-            {points.total > 0 && (
-              // The bare full-width progress track that used to sit under this
-              // grid said nothing the tile doesn't; the sparkline-free tile
-              // plus its ratio hint is the whole story.
-              <StatCard
-                accent
-                label="points done"
-                value={`${points.pct}%`}
-                hint={`${points.done}/${points.total} pts`}
-              />
-            )}
-            <AgentSpendStat {...spend} />
-            <StatCard
-              danger={escalatedCount > 0}
-              label="open decisions"
-              value={openDecisionCount}
-              hint={escalatedCount > 0 ? `${escalatedCount} escalated` : undefined}
-            />
-          </KPIGrid>
+          <Divider spacing="none" />
+
+          {/* One compact strip, not three tall tiles. These numbers are
+              context for the work below, and a card apiece spent ~110px of
+              vertical space saying three short things — pushing the actual
+              board under the fold on a laptop.
+
+              `frameless` because the Card above already provides the frame:
+              the strip's own border inside it was a card in a card. */}
+          <StatStrip
+            frameless
+            aria-label="Initiative rollup"
+            items={[
+              ...(points.total > 0
+                ? [{
+                    label: 'Points done',
+                    value: `${points.pct}%`,
+                    tone: 'accent' as const,
+                    hint: `${points.done}/${points.total} pts`,
+                  }]
+                : []),
+              agentSpendStripItem(spend),
+              // Two questions the rollup never answered: how big is this
+              // (repos) and how long has it been going (age). Both come from
+              // data already on the page — the codebase list and createdAt —
+              // so neither is a number that can drift from reality.
+              ...(repoCount > 0
+                ? [{
+                    label: 'Repos',
+                    value: repoCount,
+                    hint: repoCount === 1 ? 'codebase' : 'codebases',
+                  }]
+                : []),
+              ...(age != null
+                ? [{
+                    label: 'Running',
+                    value: runningLabel(age),
+                    hint: `since ${startedLabel}`,
+                  }]
+                : []),
+              {
+                label: 'Open decisions',
+                value: openDecisionCount,
+                ...(escalatedCount > 0 ? { tone: 'danger' as const } : {}),
+                ...(escalatedCount > 0 ? { hint: `${escalatedCount} escalated` } : {}),
+              },
+            ]}
+          />
         </Stack>
       </Card>
     </Stack>

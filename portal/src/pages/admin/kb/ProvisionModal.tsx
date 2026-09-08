@@ -61,14 +61,14 @@ export function ProvisionModal({
       maxWidth={460}
     >
       <Stack gap="md">
-        <MetaLine size="sm" items={[kb.name, <code key="slug" className="font-mono">{kb.slug}</code>]} />
+        <MetaLine size="sm" items={[kb.name, <code key="slug">{kb.slug}</code>]} />
 
         {!started ? (
           <>
-            <p className="m-0 text-[13px] text-text-secondary">
+            <Inline as="p" gap="none" className="m-0 text-[13px] text-text-secondary">
               This will provision the Bedrock Knowledge Base for <strong>{kb.name}</strong>.
               The 7-step process takes about 2–3 minutes.
-            </p>
+            </Inline>
             {kb.status === 'FAILED' && kb.errorMessage && (
               <InlineAlert tone="error">
                 <strong>Previous failure:</strong> {kb.errorMessage}

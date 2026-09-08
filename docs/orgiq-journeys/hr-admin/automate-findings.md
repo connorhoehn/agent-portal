@@ -1,0 +1,14 @@
+surface: automate-findings
+role: hr-admin
+user: u-rachel (Rachel Kowalski) — verified via GET /api/session/me on this surface (sub u-rachel, role hr-admin, tenant orgiq)
+url: /iq/work/findings
+pages: portal/src/pages/work
+audited: 2026-09-06 00:20 local, Chrome 1552px, middleware dev:mock
+screenshot: automate-findings.jpg
+verdict: pass
+console errors: 0
+layout: pass — content col left 224px w 1304px; breadcrumb "Build › Automate › Findings"; nested Automate rail flush with the content box (224px, 0px offset); first-row-top: 416px (the first finding group row, "critical · Bus factor · 2 findings" — findings render as severity groups, not a table); above it one dead-letter panel (a single "Nothing dead-lettered" line) and one status-pill row (open/promoted/resolved/dismissed); no horizontal scroll (1552 = 1552)
+keyboard: pass — 46 controls counted, 46 reached by a 49-press Tab sweep (rail → nested rail → Run sweeps now → the 4 status pills → the 3 group rows, each a real `<button>` → "Find links in 1 of these" → wraps). Focusing the Bus factor group and pressing Enter expands it in place (row flips ▸→▾ and "show"→"hide", the two findings appear with their own "Put a worker on it" / "Dismiss" buttons) and focus stays on the group row
+empty-state: pass — the dead-letter queue reads "Nothing dead-lettered. Failed jobs land here with their error and a requeue button." with no fake table; every status pill toggles `aria-pressed` and re-filters (open → Bus factor 2 + Orphan decisions 1 + Stale docs 1; promoted → Stale docs 1; resolved → Orphan decisions 1; dismissed → Lab signals 1), so this seed has no filter that yields zero findings — the pill set itself is the zero-check and each one lands on real rows
+role-gating: hr-admin gets "Run sweeps now" in the header (not pressed — it enqueues real sweep jobs) plus per-finding "Put a worker on it" and "Dismiss" actions and the "Find links in 1 of these" action on Stale docs; the 4 open findings match the "4 open findings · 0 dead-lettered jobs" tile on the Automate overview, so the count and the list agree
+notes: the finding groups are the page — no summary strip sits above them. The dead-letter panel sits above the findings rather than below; at 4 findings it costs ~100px and the first group is still at 416px, so it stays inside the budget, but on a page with a long dead-letter list it would push findings down (nothing to fail today).

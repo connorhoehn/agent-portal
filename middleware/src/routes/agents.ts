@@ -37,6 +37,29 @@ agentsRouter.get('/:agentId/metrics', requireTenant('orgiq'), asyncHandler(async
  * RUN_STARTED id while the transcript was recorded under the handler's id,
  * so restoring a fresh conversation always found 0 events.
  */
+/**
+ * The human display name to record on a live invocation, given the agent id
+ * from the URL.
+ *
+ * The recent-activity ring (lib/invocations.ts) merges live traffic recorded
+ * here with the dev:mock tail (mock/invocations.ts) for the SAME agent id.
+ * The tail carries a human display name ("Supervisor"); this call used to
+ * record `agentName: agentId` ("orgiq-supervisor") — a raw id repeated, not a
+ * name — so anything that groups or dedupes invocations by display name saw
+ * two agents instead of one for the same fleet member (org-leader.md defect
+ * #16). `agentcore.getRuntime` resolves the same registry in both mock mode
+ * (mockAgents) and real mode (the AgentCore runtime's own name), falling back
+ * to the id only when the runtime is unknown or the lookup throws.
+ */
+export async function resolveAgentName(agentId: string): Promise<string> {
+  try {
+    const rt = await agentcore.getRuntime(agentId);
+    return rt?.name || agentId;
+  } catch {
+    return agentId;
+  }
+}
+
 function deriveSessionId(req: { body?: Record<string, unknown> }): string {
   const r = req as { body?: { sessionId?: string }; _canonicalSessionId?: string };
   if (!r._canonicalSessionId) {
@@ -55,14 +78,18 @@ function deriveSessionId(req: { body?: Record<string, unknown> }): string {
 // deriveSessionId option — no more CUSTOM `session` workaround.
 // Tool results are emitted via standard TOOL_CALL_RESULT events — no more
 // CUSTOM `tool_call_result` workaround.
-// Agents are tenant-scoped both ways: news-* agents serve newsroom sessions
-// only, and the orgiq specialists (search, scoring, advisor, ingestion,
-// graph-builder) serve orgiq sessions only. The supervisor is tenant-aware
-// (it builds a per-(tenant, role) Agent) so any tenant may invoke it, and
-// the cross-tenant admin role passes every guard. This runs BEFORE the SSE
-// stream opens so the caller gets a plain 403, not a mid-stream error event.
-function agentTenant(agentId: string): 'newsroom' | 'orgiq' | null {
-  if (/(^|-)news-/.test(agentId)) return 'newsroom';
+// Agents are tenant-scoped: the assessment scorer/drafter serve assessment
+// sessions only, and the orgiq specialists (search, scoring, advisor,
+// ingestion, graph-builder) serve orgiq sessions only. The supervisor is
+// tenant-aware (it builds a per-(tenant, role) Agent) so any tenant may
+// invoke it, and the cross-tenant admin role passes every guard. This runs
+// BEFORE the SSE stream opens so the caller gets a plain 403, not a
+// mid-stream error event.
+function agentTenant(agentId: string): 'assessment' | 'orgiq' | null {
+  // The assessment scorer/drafter also gate tenant in-process
+  // (agents/_shared/tenant_guard.py); this is the route-layer floor that
+  // keeps an orgiq session from ever reaching them.
+  if (/(^|-)assessment-/.test(agentId)) return 'assessment';
   if (/supervisor/.test(agentId)) return null; // serves all tenants
   return 'orgiq';
 }
@@ -84,8 +111,7 @@ function requireAgentTenant(req: import('express').Request, res: import('express
 // is enough to READ through the fleet, but DIRECT invocation of a write agent
 // bypasses the supervisor's role guardrail — so it additionally requires the
 // data-plane ManageIngest capability. Read agents (supervisor/search/advisor)
-// and the newsroom agents keep their existing Search + tenant gating: news-*
-// are the newsroom tenant's own tools, authorized by requireAgentTenant.
+// keep their existing Search + tenant gating, authorized by requireAgentTenant.
 //
 // The id is matched on the normalized form because the runtime cache registers
 // several spellings (graph-builder / orgiq-graph-builder / orgiq_graph_builder),
@@ -163,6 +189,7 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
   }
 
   const startedAt = new Date();
+  const agentName = await resolveAgentName(agentId);
 
   // Fetch conversation history for multi-turn context.
   const events = await listEvents(canonicalSessionId, actorId);
@@ -311,7 +338,7 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
     recordInvocation({
       id: stream.runId,
       agentId,
-      agentName: agentId,
+      agentName,
       startedAt: startedAt.toISOString(),
       durationMs: Date.now() - startedAt.getTime(),
       promptSnippet: snippet(userMessage),
@@ -348,7 +375,7 @@ agentsRouter.post('/:agentId/invoke', requireAction('Search'), requireAgentTenan
   recordInvocation({
     id: stream.runId,
     agentId,
-    agentName: agentId,
+    agentName,
     startedAt: startedAt.toISOString(),
     durationMs: Date.now() - startedAt.getTime(),
     promptSnippet: snippet(userMessage),

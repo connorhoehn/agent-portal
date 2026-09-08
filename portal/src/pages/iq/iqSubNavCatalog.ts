@@ -11,9 +11,11 @@
 // real. When a page learns to read a param, add its item back here.
 
 import type { SubNavItem } from '@connorhoehnslalom/ui-components/shared';
+import { useAutomateSpec } from '../work/automateNav';
 import { useCanaryNavItems } from '../../components/canary/canaryNavItems';
 import { useSession } from '../../lib/auth';
 import { useCanaryStore } from '../../components/canary/canaryStore';
+import { promptMgmtItemsFor } from './iqSubNavFormat';
 
 export interface IqSubNavSpec {
   title: string;
@@ -40,70 +42,57 @@ const SCORES_ITEMS: SubNavItem[] = [
   { path: '/iq/scores/cohorts',  label: 'Cohorts',   hint: 'Distribution by team',         group: 'Scores' },
   { path: '/iq/scores/compare',  label: 'Compare',   hint: 'Two-person side-by-side',      group: 'Scores' },
   { path: '/iq/explore',         label: 'Graph',       hint: 'The org as a network',       group: 'Other views' },
-  { path: '/iq/projects',        label: 'Initiatives', hint: 'Contributions + status',     group: 'Other views' },
 ];
 
-// Explore is the "look at the org" surface, so the other org views hang off
-// it. Scores is appended in the hook, and only for the leadership roles that
-// hold ViewLeaderboard — for everyone else the rail offered a door straight
-// into a 403'd leaderboard.
+// Explore's rail is only the entity lens now. Ask and Initiatives are
+// top-level doors of their own (duplicating them here made the rail read as a
+// second, stale main nav), and Force/Radial are a rendering choice, not a
+// place — they moved into the page's own toolbar as a toggle.
 const EXPLORE_ITEMS: SubNavItem[] = [
-  { path: '/iq/invoke',   label: 'Ask',         hint: 'Chat + who can help with what', group: 'Other views' },
-  { path: '/iq/projects', label: 'Initiatives', hint: 'Contributions + status',       group: 'Other views' },
   { path: 'explore?entities=people',    label: 'People',   group: 'Show' },
   { path: 'explore?entities=skills',    label: 'Skills',   group: 'Show' },
   { path: 'explore?entities=projects',  label: 'Projects', group: 'Show' },
-  { path: 'explore?entities=decisions', label: 'Decisions', group: 'Show' },
+  { path: 'explore?entities=hierarchy', label: 'Hierarchy', group: 'Show' },
   { path: 'explore?entities=all',       label: 'All',      group: 'Show' },
-  { path: 'explore?layout=force',  label: 'Force',  hint: 'Default',       group: 'Layout' },
-  { path: 'explore?layout=radial', label: 'Radial', hint: 'By centrality', group: 'Layout' },
 ];
 
 // ── Hook ───────────────────────────────────────────────────────────────────
 
 // Prompt Management sub-nav — shared across the prompt-ops overview,
-// /iq/prompts, /iq/canary, and the audit surfaces.
-const PROMPT_MGMT_ITEMS: SubNavItem[] = [
-  { path: '/iq/prompt-ops',           label: 'Overview',        hint: 'What is deployed + what to do next', group: 'Start here' },
-  { path: '/iq/prompts',              label: 'Prompt Studio',   hint: 'Author, version, and test prompts',  group: 'Start here' },
-  { path: '/iq/canary',               label: 'Deployment',      hint: 'Canary A/B rollout',                 group: 'Start here' },
-  { path: '/iq/history',              label: 'History',         hint: 'Version log + past experiments',     group: 'Advanced' },
-  { path: '/iq/diff',                 label: 'Diff',            hint: 'Compare two prompt versions',        group: 'Advanced' },
-  { path: '/iq/evaluations',          label: 'Evaluations',     hint: 'LLM-as-judge configuration',         group: 'Advanced' },
-];
+// /iq/prompts, /iq/canary, and the audit surfaces. The item list + the
+// platform-role filter over it live in iqSubNavFormat.ts (pure, unit-tested);
+// this file only wires it to the current viewer's role.
 
-// Work — the agentic queue. Only real routes: the queue itself, the workers
-// that drain it, and where finished work leaves a trace. No inert filters.
-const WORK_ITEMS: SubNavItem[] = [
-  { path: '/iq/work',                        label: 'Queue',   hint: 'Findings, jobs, and what needs you', group: 'Start here' },
-  { path: '/admin/devbox',                   label: 'Workers', hint: 'Computers fleet that runs the jobs', group: 'Start here' },
-  // "Graph updates", not "Graph changes" — Changes (/admin/changes) is code review.
-  { path: '/iq/work/changes',                label: 'Graph updates', hint: 'What reached the org graph',   group: 'Start here' },
-  { path: '/admin/observability/invocations', label: 'Runs',   hint: 'What the workers actually did',      group: 'Advanced' },
-];
+// There is deliberately NO Delivery sub-rail any more. Initiatives, Queue and
+// Budgets are global rail doors (Layout.tsx, grouped by SDLC phase), sprints
+// are a lens on Initiatives, and Graph updates is linked from the Queue page
+// itself — a sub-rail here could only duplicate the global hierarchy, and a
+// nested link that jumps to another top-level door breaks the breadcrumb
+// trail (the old Workers item did exactly that).
 
 export function useIqSubNav(pathname: string): IqSubNavSpec | null {
   // All hooks must be called unconditionally (rules of hooks).
+  const automateSpec = useAutomateSpec();
   const canaryItems = useCanaryNavItems();
   const experimentState = useCanaryStore((s) => s.experimentState);
   const { session } = useSession();
   const seesScores =
     session?.role === 'org-leader' || session?.role === 'hr-admin' || session?.role === 'admin';
+  const promptItems = promptMgmtItemsFor(seesScores);
   const exploreItems = seesScores
     ? [
         { path: '/iq/scores', label: 'Scores', hint: 'Ranked influence + expertise', group: 'Other views' },
         ...EXPLORE_ITEMS,
       ]
     : EXPLORE_ITEMS;
+  // The Automate family — overview, queue, findings, and (via AdminLayout)
+  // bots + changes share this one rail.
+  if (pathname.startsWith('/iq/work')) return automateSpec;
 
-  if (pathname.startsWith('/iq/work')) {
-    return { title: 'Work', items: WORK_ITEMS, storageKey: 'iq-work-subnav' };
-  }
-
-  if (pathname.startsWith('/iq/prompt-ops') || pathname.startsWith('/iq/prompts') || pathname.startsWith('/iq/history') || pathname.startsWith('/iq/diff') || pathname.startsWith('/iq/evaluations')) {
+  if (pathname.startsWith('/iq/library') || pathname.startsWith('/iq/prompt-ops') || pathname.startsWith('/iq/prompts') || pathname.startsWith('/iq/history') || pathname.startsWith('/iq/diff') || pathname.startsWith('/iq/evaluations')) {
     return {
       title: 'Prompt Management',
-      items: PROMPT_MGMT_ITEMS,
+      items: promptItems,
       storageKey: 'iq-prompts-subnav',
     };
   }
@@ -112,7 +101,7 @@ export function useIqSubNav(pathname: string): IqSubNavSpec | null {
     const isLive = experimentState === 'running' || experimentState === 'terminal';
     return {
       title: 'Prompt Management',
-      items: PROMPT_MGMT_ITEMS,
+      items: promptItems,
       storageKey: 'iq-canary-subnav',
       ...(isLive ? {
         secondaryTitle: 'Live Experiment',
@@ -135,15 +124,8 @@ export function useIqSubNav(pathname: string): IqSubNavSpec | null {
   if (pathname.startsWith('/iq/scores')) {
     return { title: 'Explore', items: SCORES_ITEMS, storageKey: 'iq-scores-subnav' };
   }
-  // Project list → show filter rail; detail pages (/iq/projects/:id) → full-width, no rail.
-  if (pathname === '/iq/projects' || pathname.startsWith('/iq/projects?')) {
-    // Projects is an Explore view, so it keeps the Explore rail — an empty
-    // rail of its own was a dead 200px column with no way back.
-    return { title: 'Explore', items: exploreItems, storageKey: 'iq-explore-subnav' };
-  }
-  if (pathname.startsWith('/iq/projects/')) {
-    return null; // detail page is full-width
-  }
+  // The program page carries its own lens toggle and filters — no rail.
+  if (pathname.startsWith('/iq/projects')) return null;
   if (pathname.startsWith('/iq/explore')) {
     return { title: 'Explore', items: exploreItems, storageKey: 'iq-explore-subnav' };
   }

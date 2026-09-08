@@ -8,14 +8,21 @@ export const scoresRouter = Router();
 
 scoresRouter.get('/leaderboard', asyncHandler(async (req, res) => {
   const department = req.query['department'] as string | undefined;
-  const limit = parseInt(req.query['limit'] as string ?? '12', 10);
+  // Guard NaN here rather than in the provider: `limit=abc` parsed to NaN,
+  // survived `Math.max(1, Math.min(NaN, 200))` (still NaN) and reached the
+  // query builder as `LIMIT NaN`, so a typo in a query string 500'd. The
+  // sibling `/:personId/history` route below already clamped; this is the
+  // same shape.
+  const rawLimit = parseInt(req.query['limit'] as string ?? '12', 10);
+  const limit = Number.isNaN(rawLimit) ? 12 : rawLimit;
 
   const result = await aurora.getLeaderboard({ department, limit });
   res.json(result);
 }));
 
 scoresRouter.get('/skills', asyncHandler(async (req, res) => {
-  const limit = req.query['limit'] ? parseInt(req.query['limit'] as string, 10) : 30;
+  const rawLimit = req.query['limit'] ? parseInt(req.query['limit'] as string, 10) : 30;
+  const limit = Number.isNaN(rawLimit) ? 30 : rawLimit;
   const result = await aurora.getTopSkills(limit);
   res.json(result);
 }));

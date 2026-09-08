@@ -19,8 +19,14 @@ import boto3  # noqa: E402
 RETRYABLE = ('HttpEndpointNotEnabledException', 'ThrottlingException', 'StatementTimeoutException')
 
 FILES = [
-    'schema/seed.sql',
+    # Before seed.sql: it adds decisions.status / .project_id / .work_item_id
+    # (and the work_items table those reference), and seed.sql's decision rows
+    # fill that whole column set. Applied after seed.sql, a seed-only run
+    # against an older database failed every decision INSERT on an unknown
+    # column. Every statement in it is CREATE/ALTER ... IF NOT EXISTS, so
+    # running it first costs nothing on an up-to-date cluster.
     'schema/orgiq_work_items_schema.sql',
+    'schema/seed.sql',
     # Sprints, budget grants, work-item cost estimates — the program tables the
     # curated seed writes into. load_schema.py also applies this; listing it
     # here means a seed-only run against an older database still works.

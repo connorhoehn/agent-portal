@@ -14,6 +14,7 @@
 
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
 import { config } from '../config.js';
+import { staticReview } from '../mock/static-review.js';
 import type { ReviewVerdict } from './sdlc-policy.js';
 
 const REVIEW_MODEL = process.env['SDLC_REVIEW_MODEL_ID'] ?? 'amazon.nova-pro-v1:0';
@@ -71,6 +72,23 @@ export async function reviewDiff(input: {
 }): Promise<ReviewResult> {
   if (!input.diff.trim()) {
     return { verdict: 'reject', summary: 'The change is empty — there is nothing to review.', findings: [], model: REVIEW_MODEL };
+  }
+
+  // Offline: a real reading of this diff, not a canned verdict and not the
+  // Bedrock failure below dressed up as one. `mock/static-review.ts` scans the
+  // added and removed lines for committed credentials, removed guards, skipped
+  // tests and debug output, and its verdict then flows into the real
+  // `evaluate()` unchanged — so the gates and the resulting status are genuine
+  // engine output, exactly as `mock/sdlc.ts` derives its seeded statuses.
+  //
+  // NOTE the placement. This branch is above the `try`, not inside its
+  // `catch`: the catch is the outage path, and it must keep degrading to
+  // `request_changes` in real mode. A mock branch that softened it would turn
+  // "the reviewer could not run" into "the reviewer approved", which is the
+  // one thing a governance gate must never do.
+  if (config.mock.agentcore) {
+    const out = staticReview({ title: input.title, diff: input.diff, truncated: input.truncated });
+    return { verdict: out.verdict, summary: out.summary, findings: out.findings, model: out.model };
   }
 
   const user = [

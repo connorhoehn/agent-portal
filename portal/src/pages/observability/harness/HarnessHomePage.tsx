@@ -9,18 +9,22 @@
 //   POST /runs                   → {runId}
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
 import { useNavigate } from 'react-router';
 import {
+  Button,
   Card,
+  Chip,
+  Inline,
+  Input,
+  PageSection,
+  ProgressBar,
+  Stack,
   Table,
   TableHead,
   TableBody,
   TableRow,
   TableTh,
   TableTd,
-  Chip,
-  PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
   BarChart,
@@ -36,6 +40,7 @@ import { useFetch } from '../../../hooks/useFetch';
 import { CostChip } from '../../../components/observability/CostChip';
 import { ModeChip } from '../../../components/observability/ModeChip';
 import { SmartEmptyState } from '../../../components/observability/SmartEmptyState';
+import { T } from '../Text';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -96,10 +101,10 @@ const passRateTone = (v: number | null): Tone =>
   v == null ? 'warning' : v >= 0.85 ? 'success' : v >= 0.7 ? 'warning' : 'danger';
 
 const passRateColor = (v: number | null): string => {
-  if (v == null) return 'var(--color-text-tertiary, #94a3b8)';
-  if (v >= 0.85) return 'var(--color-success, #10b981)';
-  if (v >= 0.7) return 'var(--color-warning, #f59e0b)';
-  return 'var(--color-danger, #ef4444)';
+  if (v == null) return 'var(--color-text-tertiary)';
+  if (v >= 0.85) return 'var(--color-success)';
+  if (v >= 0.7) return 'var(--color-warning)';
+  return 'var(--color-danger)';
 };
 
 const statusTone = (s: RunStatus): Tone => {
@@ -314,25 +319,36 @@ function HarnessHomePage() {
     <PageSection
       title="Test Harness"
       actions={
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button style={btnPrimary} onClick={openModal} disabled={!!activeRunId && !activeDismissed}>
+        <Inline as="div" gap="sm">
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={openModal}
+            disabled={!!activeRunId && !activeDismissed}
+          >
             Run now
-          </button>
-          <button style={btnSecondary} onClick={refreshAll}>
+          </Button>
+          <Button variant="secondary" size="sm" onClick={refreshAll}>
             Refresh
-          </button>
-        </div>
+          </Button>
+        </Inline>
       }
     >
       {/* Header */}
       <Card padding="md">
-        <div style={subline}>
+        <Inline
+          as="div"
+          align="center"
+          wrap
+          gap="xs"
+          className="text-[12px] text-[var(--color-text-secondary)] mt-1.5"
+        >
           <strong>{activeCount}</strong> active case{activeCount === 1 ? '' : 's'}
-          <span style={dot}>·</span>
+          <T className="text-[var(--color-text-tertiary)]">·</T>
           last run <strong>{relTime(lastRun?.startedAt ?? null)}</strong>
-          <span style={dot}>·</span>
-          judge: <span style={monoInline}>{judgeModelId}</span>
-        </div>
+          <T className="text-[var(--color-text-tertiary)]">·</T>
+          judge: <T className="font-[ui-monospace,monospace] text-[11.5px]">{judgeModelId}</T>
+        </Inline>
 
         {/* Active-run banner */}
         {activeRunId && !activeDismissed && (
@@ -347,16 +363,18 @@ function HarnessHomePage() {
 
       {/* Pass-rate sparkline */}
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
+        <Inline as="div" align="center" justify="between" wrap gap="md" className="mb-3">
+          <Inline as="h2" gap="xs" wrap className="text-[14px] font-semibold m-0">
             Pass-rate over last {sparkData.length || 14} run{sparkData.length === 1 ? '' : 's'}{' '}
-            <span style={hint}>green ≥ 85% · amber 70–85% · red &lt; 70%</span>
-          </h2>
-        </div>
+            <T className="text-[11px] text-[var(--color-text-tertiary)] font-normal">
+              green ≥ 85% · amber 70–85% · red &lt; 70%
+            </T>
+          </Inline>
+        </Inline>
         {sparkData.length === 0 ? (
           <EmptyState text="No runs yet. Click Run now to replay the test set." />
         ) : (
-          <div style={{ width: '100%', height: 220 }}>
+          <Stack className="w-full h-[220px]">
             <ResponsiveContainer>
               <BarChart data={sparkData} margin={{ top: 8, right: 16, bottom: 4, left: -8 }}>
                 <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
@@ -386,20 +404,20 @@ function HarnessHomePage() {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-          </div>
+          </Stack>
         )}
       </Card>
 
       {/* Recent runs */}
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
+        <Inline as="div" align="center" justify="between" wrap gap="md" className="mb-3">
+          <Inline as="h2" gap="xs" wrap className="text-[14px] font-semibold m-0">
             Recent runs{' '}
-            <span style={hint}>
+            <T className="text-[11px] text-[var(--color-text-tertiary)] font-normal">
               latest {runs.length} · Δ shows pass-count drift vs previous run
-            </span>
-          </h2>
-        </div>
+            </T>
+          </Inline>
+        </Inline>
         {runs.length === 0 ? (
           <SmartEmptyState
             title="No runs yet"
@@ -434,21 +452,23 @@ function HarnessHomePage() {
                 const prev = runs[i + 1];
                 return (
                   <TableRow key={r.runId}>
-                    <TableTd style={labelCell} title={r.label}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <TableTd className="text-[12px] font-medium max-w-[220px]" title={r.label}>
+                      <Stack gap="xs">
                         <span>{r.label}</span>
                         {r.gitSha && (
-                          <span style={shaInline}>{shortSha(r.gitSha)}</span>
+                          <T className="text-[10.5px] text-[var(--color-text-tertiary)] font-[ui-monospace,monospace]">
+                            {shortSha(r.gitSha)}
+                          </T>
                         )}
-                      </div>
+                      </Stack>
                     </TableTd>
-                    <TableTd style={{ whiteSpace: 'nowrap' }}>
+                    <TableTd className="whitespace-nowrap">
                       <ModeChip mode={r.mode} />
                     </TableTd>
-                    <TableTd style={tsCell}>
+                    <TableTd className="text-[11px] text-[var(--color-text-tertiary)] whitespace-nowrap">
                       {new Date(r.startedAt).toLocaleString()}
                     </TableTd>
-                    <TableTd style={numCell}>
+                    <TableTd className="text-[12px] text-[var(--color-text-secondary)] whitespace-nowrap">
                       {r.completed}/{r.totalCases}
                     </TableTd>
                     <TableTd>
@@ -456,10 +476,10 @@ function HarnessHomePage() {
                         {fmtPct(r.passRate)}
                       </Chip>
                     </TableTd>
-                    <TableTd style={numCell}>
+                    <TableTd className="text-[12px] text-[var(--color-text-secondary)] whitespace-nowrap">
                       <RegressionDelta current={r} previous={prev} />
                     </TableTd>
-                    <TableTd style={{ whiteSpace: 'nowrap' }}>
+                    <TableTd className="whitespace-nowrap">
                       <CostChip cost={r.totalCostUsd} />
                     </TableTd>
                     <TableTd>
@@ -468,12 +488,13 @@ function HarnessHomePage() {
                       </Chip>
                     </TableTd>
                     <TableTd>
-                      <button
-                        style={btnLink}
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => navigate(`/admin/observability/harness/runs/${r.runId}`)}
                       >
                         view
-                      </button>
+                      </Button>
                     </TableTd>
                   </TableRow>
                 );
@@ -485,23 +506,22 @@ function HarnessHomePage() {
 
       {/* Coverage bars */}
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
+        <Inline as="div" align="center" justify="between" wrap gap="md" className="mb-3">
+          <Inline as="h2" gap="xs" wrap className="text-[14px] font-semibold m-0">
             Coverage{' '}
-            <span style={hint}>
+            <T className="text-[11px] text-[var(--color-text-tertiary)] font-normal">
               ⚠ flag indicates &lt; 5 cases · last-run pass count shown on the right
-            </span>
-          </h2>
-        </div>
+            </T>
+          </Inline>
+        </Inline>
         {coverage.length === 0 ? (
           <EmptyState text="No coverage data yet." />
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <Stack gap="sm">
             {(() => {
               const maxCount = Math.max(...coverage.map((c) => c.count), 1);
               return coverage.map((c) => {
                 const thin = c.count < 5;
-                const pct = Math.max(2, Math.round((c.count / maxCount) * 100));
                 const hasLast =
                   c.lastRunTotal != null &&
                   c.lastRunPassed != null &&
@@ -510,67 +530,81 @@ function HarnessHomePage() {
                   ? (c.lastRunPassed as number) / (c.lastRunTotal as number)
                   : null;
                 return (
-                  <div key={c.agentId} style={coverageRow}>
-                    <div style={coverageLabel}>
+                  <Inline key={c.agentId} as="div" align="center" gap="md" className="text-[12px]">
+                    <Inline as="div" align="center" gap="xs" className="w-[160px] shrink-0 font-medium">
                       <span>{c.agentId}</span>
                       {thin && (
-                        <span style={warnInline} title="Thin coverage (< 5 cases)">
+                        <T
+                          className="text-[10.5px] text-[var(--color-warning)]"
+                          title="Thin coverage (< 5 cases)"
+                        >
                           ⚠ thin
-                        </span>
+                        </T>
                       )}
-                    </div>
-                    <div style={coverageBarTrack}>
-                      <div
-                        style={{
-                          ...coverageBarFill,
-                          width: `${pct}%`,
-                          background: thin
-                            ? 'var(--color-warning, #f59e0b)'
-                            : 'var(--color-primary, #6366f1)',
-                        }}
+                    </Inline>
+                    <Inline as="div" gap="none" className="flex-1">
+                      <ProgressBar
+                        value={c.count}
+                        max={maxCount}
+                        size="sm"
+                        showRatio={false}
+                        label={`${c.count} case${c.count === 1 ? '' : 's'}`}
+                        color={
+                          thin ? 'var(--color-warning)' : 'var(--color-primary)'
+                        }
                       />
-                      <span style={coverageBarText}>{c.count} case{c.count === 1 ? '' : 's'}</span>
-                    </div>
-                    <div style={coverageRight}>
+                    </Inline>
+                    <T as="div" className="w-[80px] text-right">
                       {hasLast ? (
                         <Chip tone={passRateTone(lastRate)} size="xs">
                           {c.lastRunPassed}/{c.lastRunTotal}
                         </Chip>
                       ) : (
-                        <span style={hint}>no data</span>
+                        <T className="text-[11px] text-[var(--color-text-tertiary)] font-normal">
+                          no data
+                        </T>
                       )}
-                    </div>
-                  </div>
+                    </T>
+                  </Inline>
                 );
               });
             })()}
-          </div>
+          </Stack>
         )}
       </Card>
 
       {/* Run-now modal */}
       {modalOpen && (
         <Modal onClose={closeModal}>
-          <h3 style={modalTitle}>Start a new run</h3>
-          <label style={modalLabelStyle}>
+          <Inline as="h3" gap="none" className="mt-0 mb-3 text-[15px] font-semibold">
+            Start a new run
+          </Inline>
+          <Stack as="label" gap="xs" className="text-[12px] text-[var(--color-text-secondary)]">
             Label for this run
-            <input
+            <Input
               autoFocus
               value={modalLabel}
               onChange={(e) => setModalLabel(e.target.value)}
-              style={modalInput}
               placeholder="manual@2026-01-01T12:00"
             />
-          </label>
-          {modalErr && <div style={modalError}>{modalErr}</div>}
-          <div style={modalActions}>
-            <button style={btnSecondary} onClick={closeModal} disabled={submitting}>
+          </Stack>
+          {modalErr && (
+            <Stack
+              as="div"
+              gap="none"
+              className="mt-2.5 py-1.5 px-2.5 text-[12px] bg-[rgba(239,68,68,0.10)] border border-[var(--color-danger)] rounded-[4px] text-[var(--color-danger)]"
+            >
+              {modalErr}
+            </Stack>
+          )}
+          <Inline as="div" justify="end" gap="sm" className="mt-4">
+            <Button variant="secondary" size="sm" onClick={closeModal} disabled={submitting}>
               Cancel
-            </button>
-            <button style={btnPrimary} onClick={startRun} disabled={submitting}>
+            </Button>
+            <Button variant="primary" size="sm" onClick={startRun} disabled={submitting}>
               {submitting ? 'Starting…' : 'Start'}
-            </button>
-          </div>
+            </Button>
+          </Inline>
         </Modal>
       )}
     </PageSection>
@@ -595,24 +629,20 @@ function SparkTooltip(props: {
   if (!props.active || !props.payload || props.payload.length === 0) return null;
   const p = props.payload[0].payload;
   return (
-    <div
-      style={{
-        background: 'var(--color-surface)',
-        border: '1px solid var(--color-border)',
-        borderRadius: 4,
-        padding: '6px 10px',
-        fontSize: 12,
-        lineHeight: 1.55,
-      }}
+    <Stack
+      gap="none"
+      className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-[4px] py-1.5 px-2.5 text-[12px] leading-[1.55]"
     >
-      <div style={{ fontWeight: 600 }}>{p.fullLabel}</div>
+      <T as="div" className="font-semibold">
+        {p.fullLabel}
+      </T>
       <div>
         {p.passed}/{p.total} passing ({(p.passRate * 100).toFixed(1)}%)
       </div>
-      <div style={{ color: 'var(--color-text-tertiary)', fontSize: 11 }}>
+      <T as="div" className="text-[var(--color-text-tertiary)] text-[11px]">
         judge: {p.judgeModelId}
-      </div>
-    </div>
+      </T>
+    </Stack>
   );
 }
 
@@ -623,9 +653,9 @@ function RegressionDelta({
   current: TestRun;
   previous: TestRun | undefined;
 }) {
-  if (!previous) return <span style={{ color: 'var(--color-text-tertiary)' }}>—</span>;
+  if (!previous) return <T className="text-[var(--color-text-tertiary)]">—</T>;
   const delta = current.passed - previous.passed;
-  if (delta === 0) return <span style={{ color: 'var(--color-text-tertiary)' }}>—</span>;
+  if (delta === 0) return <T className="text-[var(--color-text-tertiary)]">—</T>;
   if (delta > 0) {
     return (
       <Chip tone="success" size="xs">
@@ -639,6 +669,12 @@ function RegressionDelta({
     </Chip>
   );
 }
+
+const activeRunBannerToneClasses: Record<'info' | 'success' | 'danger', string> = {
+  success: 'bg-[rgba(16,185,129,0.10)] border-[var(--color-success)]',
+  danger: 'bg-[rgba(239,68,68,0.10)] border-[var(--color-danger)]',
+  info: 'bg-[rgba(99,102,241,0.10)] border-[var(--color-primary)]',
+};
 
 function ActiveRunBanner({
   runId,
@@ -659,19 +695,6 @@ function ActiveRunBanner({
         ? 'danger'
         : 'info';
 
-  const bg =
-    tone === 'success'
-      ? 'rgba(16,185,129,0.10)'
-      : tone === 'danger'
-        ? 'rgba(239,68,68,0.10)'
-        : 'rgba(99,102,241,0.10)';
-  const border =
-    tone === 'success'
-      ? 'var(--color-success, #10b981)'
-      : tone === 'danger'
-        ? 'var(--color-danger, #ef4444)'
-        : 'var(--color-primary, #6366f1)';
-
   const message = !status
     ? 'Run started · monitoring…'
     : isTerminal
@@ -679,34 +702,27 @@ function ActiveRunBanner({
       : `Running ${status.completed}/${status.total}…`;
 
   return (
-    <div
-      style={{
-        marginTop: 12,
-        padding: '8px 12px',
-        borderRadius: 4,
-        background: bg,
-        border: `1px solid ${border}`,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        fontSize: 12,
-      }}
+    <Inline
+      as="div"
+      align="center"
+      gap="md"
+      className={`mt-3 rounded-[4px] border py-2 px-3 text-[12px] ${activeRunBannerToneClasses[tone]}`}
     >
-      <span style={{ flex: 1 }}>
+      <T className="flex-1">
         <strong>{message}</strong>
-        <span style={{ color: 'var(--color-text-tertiary)', marginLeft: 8 }}>
-          run id: <span style={monoInline}>{runId.slice(0, 8)}…</span>
-        </span>
-      </span>
-      <button style={btnLink} onClick={onView}>
+        <T className="text-[var(--color-text-tertiary)] ml-2">
+          run id: <T className="font-[ui-monospace,monospace] text-[11.5px]">{runId.slice(0, 8)}…</T>
+        </T>
+      </T>
+      <Button variant="ghost" size="sm" onClick={onView}>
         view details
-      </button>
+      </Button>
       {isTerminal && (
-        <button style={btnLink} onClick={onDismiss}>
+        <Button variant="ghost" size="sm" onClick={onDismiss}>
           dismiss
-        </button>
+        </Button>
       )}
-    </div>
+    </Inline>
   );
 }
 
@@ -718,209 +734,33 @@ function Modal({
   onClose: () => void;
 }) {
   return (
-    <div
+    <Inline
+      as="div"
+      align="center"
+      justify="center"
       role="dialog"
       aria-modal="true"
       onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.4)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-      }}
+      className="fixed inset-0 bg-[rgba(0,0,0,0.4)] z-[1000]"
     >
-      <div
+      <Stack
+        as="div"
+        gap="none"
         onClick={(e) => e.stopPropagation()}
-        style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 6,
-          padding: 20,
-          minWidth: 360,
-          maxWidth: 480,
-          boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
-        }}
+        className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md py-5 px-5 min-w-[360px] max-w-[480px] shadow-[0_10px_30px_rgba(0,0,0,0.25)]"
       >
         {children}
-      </div>
-    </div>
+      </Stack>
+    </Inline>
   );
 }
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div
-      style={{
-        padding: 24,
-        textAlign: 'center',
-        fontSize: 12,
-        color: 'var(--color-text-tertiary)',
-      }}
-    >
+    <Inline as="div" justify="center" className="p-6 text-[12px] text-[var(--color-text-tertiary)]">
       {text}
-    </div>
+    </Inline>
   );
 }
-
-// ── styles ────────────────────────────────────────────────────────────────────
-
-const headerRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  marginBottom: 12,
-  gap: 12,
-  flexWrap: 'wrap',
-};
-const h2: CSSProperties = { fontSize: 14, fontWeight: 600, margin: 0 };
-const subline: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary)',
-  marginTop: 6,
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  flexWrap: 'wrap',
-};
-const dot: CSSProperties = { color: 'var(--color-text-tertiary)' };
-const hint: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  fontWeight: 400,
-};
-const monoInline: CSSProperties = {
-  fontFamily: 'ui-monospace, monospace',
-  fontSize: 11.5,
-};
-const labelCell: CSSProperties = {
-  fontSize: 12,
-  fontWeight: 500,
-  maxWidth: 220,
-};
-const tsCell: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  whiteSpace: 'nowrap',
-};
-const numCell: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary)',
-  whiteSpace: 'nowrap',
-};
-const shaInline: CSSProperties = {
-  fontSize: 10.5,
-  color: 'var(--color-text-tertiary)',
-  fontFamily: 'ui-monospace, monospace',
-};
-const coverageRow: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '160px 1fr 80px',
-  alignItems: 'center',
-  gap: 12,
-  fontSize: 12,
-};
-const coverageLabel: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  fontWeight: 500,
-};
-const warnInline: CSSProperties = {
-  fontSize: 10.5,
-  color: 'var(--color-warning, #f59e0b)',
-};
-const coverageBarTrack: CSSProperties = {
-  position: 'relative',
-  height: 18,
-  background: 'var(--color-surface-hover)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 4,
-  overflow: 'hidden',
-};
-const coverageBarFill: CSSProperties = {
-  position: 'absolute',
-  top: 0,
-  left: 0,
-  bottom: 0,
-};
-const coverageBarText: CSSProperties = {
-  position: 'absolute',
-  left: 8,
-  top: '50%',
-  transform: 'translateY(-50%)',
-  fontSize: 11,
-  color: 'var(--color-text-primary)',
-  fontWeight: 500,
-  textShadow: '0 0 2px var(--color-surface)',
-};
-const coverageRight: CSSProperties = {
-  textAlign: 'right',
-};
-const btnPrimary: CSSProperties = {
-  padding: '6px 14px',
-  fontSize: 12,
-  fontWeight: 500,
-  background: 'var(--color-primary, #6366f1)',
-  color: '#fff',
-  border: '1px solid var(--color-primary, #6366f1)',
-  borderRadius: 'var(--radius-sm, 4px)',
-  cursor: 'pointer',
-};
-const btnSecondary: CSSProperties = {
-  padding: '6px 14px',
-  fontSize: 12,
-  background: 'var(--color-surface-hover)',
-  color: 'var(--color-text-primary)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm, 4px)',
-  cursor: 'pointer',
-};
-const btnLink: CSSProperties = {
-  padding: '2px 8px',
-  fontSize: 12,
-  background: 'transparent',
-  color: 'var(--color-primary, #6366f1)',
-  border: '1px solid transparent',
-  borderRadius: 'var(--radius-sm, 4px)',
-  cursor: 'pointer',
-};
-const modalTitle: CSSProperties = {
-  margin: '0 0 12px 0',
-  fontSize: 15,
-  fontWeight: 600,
-};
-const modalLabelStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-  fontSize: 12,
-  color: 'var(--color-text-secondary)',
-};
-const modalInput: CSSProperties = {
-  padding: '6px 10px',
-  fontSize: 13,
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm, 4px)',
-  background: 'var(--color-surface)',
-  color: 'var(--color-text-primary)',
-};
-const modalError: CSSProperties = {
-  marginTop: 10,
-  padding: '6px 10px',
-  fontSize: 12,
-  background: 'rgba(239,68,68,0.10)',
-  border: '1px solid var(--color-danger, #ef4444)',
-  borderRadius: 'var(--radius-sm, 4px)',
-  color: 'var(--color-danger, #ef4444)',
-};
-const modalActions: CSSProperties = {
-  marginTop: 16,
-  display: 'flex',
-  justifyContent: 'flex-end',
-  gap: 8,
-};
 
 export default HarnessHomePage;

@@ -1,0 +1,14 @@
+surface: scores-cohorts
+role: org-leader
+user: u-vera (Vera Green) — GET /api/session/me re-checked this session: sub u-vera, tenant orgiq, role org-leader; ViewLeaderboard true
+url: /iq/scores/cohorts
+pages: portal/src/pages/ScoresCohortPage.tsx,portal/src/components/scores
+audited: 2026-09-06 11:29 local, Chrome at 1552px (innerWidth 1552, innerHeight 759), middleware dev:mock
+screenshot: scores-cohorts.jpg
+verdict: pass
+console errors: 0
+layout: pass — content col left 224px w 1304px; breadcrumb "Org › Scores › Cohorts" then the nested "Explore" rail flush with the content box (224 = 224, 0px gap); H1 at 125px, first-row-top: 178px — the first cohort card ("Data Platform · 5 people · median 79.0 · Gini 0.05") is the page's first data row and there is nothing above it but the H1: no stat strip, no filter row, no card stack; no horizontal scroll (scrollWidth 1552 = innerWidth 1552)
+keyboard: pass — 32 tabbable controls counted, all 32 reached in one 45-press Tab sweep (focusin log diffed against the tabbable set: missing none). Every tabbable on the page belongs to the shell (rail, breadcrumb, nested Explore rail, header) — the cohort cards, their histograms and the two broker names are static text, so there is nothing here for Enter/Escape to act on and nothing that only responds to a mouse
+empty-state: n/a — the page has no filter, search or detail route, and both cohorts render real data (Data Platform 5 people, Platform Engineering 7 people)
+role-gating: org-leader sees both cohort cards and the broker list (ViewLeaderboard true); the page carries no write control for any role, and nothing is hidden from org-leader here
+notes: The page answers "is expertise concentrated?" in two numbers per team (median and Gini) plus the brokers, and the two cards sit side by side above the fold. Unchanged minor points, neither a defect: the broker names (Theo Chang, Maria Johnson) are plain text although both are one click away on the Overview leaderboard and in Explore; and the Data Platform card has no BROKERS block at all rather than an explicit "no brokers", which makes the two cards different heights with nothing saying why. Coverage is still the honest limit — 2 of the org's 6 departments, 12 of 56 people, because that is what the scoring fixture holds.

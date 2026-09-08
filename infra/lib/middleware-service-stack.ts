@@ -89,6 +89,15 @@ export class MiddlewareServiceStack extends cdk.Stack {
   public readonly ecrRepoUri: string;
   /** ALB DNS name (use this as CNAME in Route 53 or as origin in CloudFront) */
   public readonly loadBalancerDnsName: string;
+  /**
+   * ARNs of the three machine-callback auth secrets minted by this stack.
+   * Exposed for completeness (e.g. an operator script resolving by stack
+   * output); NOT consumable by AgentCoreRuntimeStack at synth time — see the
+   * ⚠️ comment above where these secrets are created.
+   */
+  public readonly approvalsRequestSecretArn!: string;
+  public readonly harnessTraceSecretArn!: string;
+  public readonly assessmentRunCompleteSecretArn!: string;
 
   constructor(scope: Construct, id: string, props: MiddlewareServiceStackProps) {
     super(scope, id, props);
@@ -186,6 +195,75 @@ export class MiddlewareServiceStack extends cdk.Stack {
       );
       auroraSecret.grantRead(taskRole);
     }
+
+    // Secrets Manager — machine-callback auth for the three sessionless
+    // agent-facing routes (routes/approvals.ts requireServiceAuth,
+    // routes/harness.ts requireTraceAuth, routes/assessment.ts
+    // requireRunCompleteAuth). Each guard is OPEN when its env var is unset
+    // and does a constant-time header check when it's set — today none of
+    // these vars are set anywhere, so all three callbacks are open on this
+    // internet-facing service.
+    //
+    // Three separate secrets rather than one JSON secret: CDK's
+    // `generateSecretString` only auto-generates a single random field per
+    // Secret resource (a JSON secret would need a custom resource to
+    // populate more than one key at deploy time), and three independent
+    // secrets let an operator rotate one callback's credential (e.g. if a
+    // harness-trace secret leaks into a log) without touching the other two
+    // — matching the fact that each guard already checks exactly one
+    // independent env var with no shared state.
+    //
+    // ⚠️ Wiring these as container secrets flips each guard from open to
+    // required the moment this stack deploys. As of this change NO agent
+    // code sends the corresponding header — see the operator runbook in
+    // docs/agentcore-preview-surface.md — so deploying this alone will 401
+    // every approval request, every trace POST, and (if anything calls it)
+    // every assessment run-complete callback until the agent side is also
+    // patched and redeployed. Read that runbook before deploying.
+    const approvalsRequestSecret = new secretsmanager.Secret(this, 'ApprovalsRequestSecret', {
+      secretName: `${prefix}-approvals-request-secret`,
+      description: 'Shared secret for x-approvals-auth on POST /api/observability/approvals/request (requireServiceAuth)',
+      generateSecretString: { excludePunctuation: true, passwordLength: 40 },
+    });
+    approvalsRequestSecret.grantRead(taskRole);
+
+    const harnessTraceSecret = new secretsmanager.Secret(this, 'HarnessTraceSecret', {
+      secretName: `${prefix}-harness-trace-secret`,
+      description: 'Shared secret for x-harness-auth on POST /api/observability/harness/trace (requireTraceAuth)',
+      generateSecretString: { excludePunctuation: true, passwordLength: 40 },
+    });
+    harnessTraceSecret.grantRead(taskRole);
+
+    const assessmentRunCompleteSecret = new secretsmanager.Secret(this, 'AssessmentRunCompleteSecret', {
+      secretName: `${prefix}-assessment-run-complete-secret`,
+      description: 'Shared secret for x-assessment-run-auth on POST /api/assessment/runs/:runId/complete (requireRunCompleteAuth)',
+      generateSecretString: { excludePunctuation: true, passwordLength: 40 },
+    });
+    assessmentRunCompleteSecret.grantRead(taskRole);
+
+    this.approvalsRequestSecretArn = approvalsRequestSecret.secretArn;
+    this.harnessTraceSecretArn = harnessTraceSecret.secretArn;
+    this.assessmentRunCompleteSecretArn = assessmentRunCompleteSecret.secretArn;
+
+    // Exported so a future stack (or an operator script) can look these up
+    // by stable name instead of hunting through the console. NOTE: these
+    // exports do NOT solve the AgentCoreRuntime wiring problem described in
+    // agentcore-runtime-stack.ts — that stack is instantiated earlier in
+    // app.ts than this one, and even if it imported the ARN it could not
+    // resolve the secret's plaintext value at synth time. See the comment
+    // near ApprovalsRequestSecret usage in agentcore-runtime-stack.ts.
+    new cdk.CfnOutput(this, 'ApprovalsRequestSecretArnOutput', {
+      value: approvalsRequestSecret.secretArn,
+      exportName: `${prefix}-approvals-request-secret-arn`,
+    });
+    new cdk.CfnOutput(this, 'HarnessTraceSecretArnOutput', {
+      value: harnessTraceSecret.secretArn,
+      exportName: `${prefix}-harness-trace-secret-arn`,
+    });
+    new cdk.CfnOutput(this, 'AssessmentRunCompleteSecretArnOutput', {
+      value: assessmentRunCompleteSecret.secretArn,
+      exportName: `${prefix}-assessment-run-complete-secret-arn`,
+    });
 
     // DynamoDB — scores + sessions tables
     taskRole.addToPolicy(new iam.PolicyStatement({
@@ -439,7 +517,15 @@ export class MiddlewareServiceStack extends cdk.Stack {
 
     // Cognito app-client secret injected as an ECS secret (pulled at task start
     // by the execution role, never rendered into the task-def env in plaintext).
-    const containerSecrets: Record<string, ecs.Secret> = {};
+    const containerSecrets: Record<string, ecs.Secret> = {
+      // Machine-callback auth — see the ⚠️ comment above where these secrets
+      // are minted. Env var names must match the exact strings the route
+      // guards read: APPROVALS_REQUEST_SECRET (approvals.ts), HARNESS_TRACE_SECRET
+      // (harness.ts), ASSESSMENT_RUN_COMPLETE_SECRET (assessment.ts).
+      APPROVALS_REQUEST_SECRET: ecs.Secret.fromSecretsManager(approvalsRequestSecret),
+      HARNESS_TRACE_SECRET: ecs.Secret.fromSecretsManager(harnessTraceSecret),
+      ASSESSMENT_RUN_COMPLETE_SECRET: ecs.Secret.fromSecretsManager(assessmentRunCompleteSecret),
+    };
     if (props.cognitoClientSecretArn) {
       const cognitoSecretRef = secretsmanager.Secret.fromSecretCompleteArn(
         this, 'CognitoClientSecretRef', props.cognitoClientSecretArn,

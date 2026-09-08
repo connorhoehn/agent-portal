@@ -7,17 +7,28 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import {
-  PageSection,
+  Banner,
+  Button,
   Card,
+  CatalogGrid,
+  Checkbox,
   Chip,
-  ProgressBar,
   ConfirmDialog,
+  FormField,
+  Inline,
+  Input,
+  MetaLine,
+  PageSection,
+  ProgressBar,
+  Select,
+  Stack,
   Table,
   TableHead,
   TableBody,
   TableRow,
   TableTh,
   TableTd,
+  Textarea,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
@@ -25,6 +36,8 @@ import { toastError, toastSuccess } from '../../lib/toastStore';
 import { CostVsEstimate, runEstimate } from '../../components/marketplace/EstimateDrawer';
 import { RunTimeline } from '../../components/runs/RunTimeline';
 import { DEVBOX_MODELS } from '../../lib/devboxModels';
+import { botRunSummary, inputWiring, lastRanText } from './botsFormat';
+import { ExternalLink } from './ExternalLinkFrame';
 import { TEMPLATE_TONE, triggerSummary, when, type Bot, type BotRun } from './BotsPage';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -80,7 +93,14 @@ export default function BotDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { can, ready } = useCapabilities();
-  const canManage = ready && can('ManageDevbox');
+  // The controls on this page (Run now, Pause/Resume, Delete, mission/guardrail
+  // edits) all PATCH/POST /api/bots/:id* routes gated server-side on ManageBots
+  // (middleware/src/routes/bots.ts `manageGate`) — a different capability from
+  // Computer Lab's ManageDevbox. Gating on ManageDevbox here hid every control
+  // from a role (program-owner) that holds ManageBots but not ManageDevbox,
+  // even though the server would have accepted the request. DEFECTS.md
+  // program-owner #9.
+  const canManage = ready && can('ManageBots');
 
   const { data: botData, error: botError, refresh: refreshBot } =
     useFetch<{ bot: Bot }>(id ? `/api/bots/${id}` : null, 15_000);
@@ -235,8 +255,10 @@ export default function BotDetailPage() {
     return (
       <PageSection title="Bot">
         <Card padding="md">
-          <div className="text-[12px] text-danger">Failed to load bot: {botError}</div>
-          <Link to="/admin/bots" className="text-[12px] text-primary no-underline hover:underline">← Bots</Link>
+          <Stack gap="xs">
+            <Banner variant="error">Failed to load bot: {botError}</Banner>
+            <Link to="/admin/bots" className="text-[12px] text-primary no-underline hover:underline">← Bots</Link>
+          </Stack>
         </Card>
       </PageSection>
     );
@@ -244,235 +266,202 @@ export default function BotDetailPage() {
   if (!bot) {
     return (
       <PageSection title="Bot">
-        <div className="text-[12px] text-text-tertiary">Loading…</div>
+        <MetaLine size="sm" tone="tertiary" items={['Loading…']} />
       </PageSection>
     );
   }
 
   const paused = !bot.enabled || bot.pausedReason != null;
+  // Derived from the SAME `runs` array the RUNS table below renders, so the
+  // header and the table can never disagree about whether this bot has ever
+  // fired (DEFECTS.md program-owner #9) — `bot.lastRunAt`/`todayRunCount` are
+  // a separate summary that can drift from (or, in dev:mock, never match)
+  // the actual run history.
+  const runSummary = botRunSummary(runs);
+  const modelOptions = [
+    ...DEVBOX_MODELS.map((m) => ({ value: m.id, label: m.label })),
+    ...(!DEVBOX_MODELS.some((m) => m.id === gModel) && gModel ? [{ value: gModel, label: gModel }] : []),
+  ];
 
   return (
     <PageSection title={bot.name}>
       {/* ── Header: identity + state + controls ── */}
       <Card padding="sm" className="mb-4">
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <Link to="/admin/bots" className="text-[12px] text-primary no-underline hover:underline shrink-0">← Bots</Link>
-          <Chip tone={TEMPLATE_TONE[bot.template]} size="xs">{bot.template}</Chip>
-          {paused ? (
-            <Chip tone="warning" size="xs" dot="static" title={bot.pausedReason ?? undefined}>paused</Chip>
-          ) : (
-            <Chip tone="success" size="xs" dot="static">enabled</Chip>
-          )}
-          <span className="text-[11px] text-text-tertiary">{triggerSummary(bot)} · last ran {when(bot.lastRunAt)}</span>
-          <div className="flex-1" />
+        <Inline gap="sm" wrap align="center" justify="between">
+          <Inline gap="sm" wrap align="center">
+            <Link to="/admin/bots" className="text-[12px] text-primary no-underline hover:underline shrink-0">← Bots</Link>
+            <Chip tone={TEMPLATE_TONE[bot.template]} size="xs">{bot.template}</Chip>
+            {paused ? (
+              <Chip tone="warning" size="xs" dot="static" title={bot.pausedReason ?? undefined}>paused</Chip>
+            ) : (
+              <Chip tone="success" size="xs" dot="static">enabled</Chip>
+            )}
+            <MetaLine
+              size="xs" tone="tertiary"
+              items={[
+                triggerSummary(bot),
+                lastRanText(runs, when),
+              ]}
+            />
+          </Inline>
           {canManage && (
-            <>
-              <button
-                onClick={() => setRunOpen((v) => !v)}
-                className="px-2.5 py-1 rounded-md border-none bg-primary text-white text-[11px] font-semibold cursor-pointer"
-              >
+            <Inline gap="xs">
+              <Button variant="primary" size="sm" onClick={() => setRunOpen((v) => !v)}>
                 {runOpen ? 'Cancel' : '▶ Run now'}
-              </button>
-              <button
-                onClick={() => void pauseOrResume()}
-                disabled={busy === 'pause' || busy === 'resume'}
-                className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
-              >
+              </Button>
+              <Button variant="secondary" size="sm" disabled={busy === 'pause' || busy === 'resume'} onClick={() => void pauseOrResume()}>
                 {paused ? 'Resume' : 'Pause'}
-              </button>
-              <button
-                onClick={() => setConfirmDelete(true)}
-                className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] text-text-secondary cursor-pointer hover:text-danger hover:border-danger/50 transition-colors"
-              >
+              </Button>
+              <Button variant="danger" size="sm" onClick={() => setConfirmDelete(true)}>
                 Delete
-              </button>
-            </>
+              </Button>
+            </Inline>
           )}
-        </div>
+        </Inline>
+
         {paused && bot.pausedReason && (
-          <div className="mt-2 px-3 py-1.5 rounded bg-warning-bg/40 text-[11px] text-warning">{bot.pausedReason}</div>
+          <Banner variant="warning" className="mt-2">{bot.pausedReason}</Banner>
         )}
+
         {runOpen && (
-          <div className="mt-2.5 border-t border-border pt-2.5">
-            <textarea
+          <Stack gap="xs" className="mt-2.5 pt-2.5 border-t border-border">
+            <Textarea
               autoFocus
               value={instruction}
               onChange={(e) => setInstruction(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void runNow(); }}
-              rows={2}
+              minRows={2}
               placeholder="Optional one-shot instruction for this run — e.g. 'focus on the auth module'. Leave empty to run the mission as written."
-              className="w-full px-2.5 py-2 rounded-md border border-border bg-surface text-[12px] text-text-primary resize-y box-border"
             />
-            <div className="flex items-center gap-2 mt-1.5">
-              <span className="text-[11px] text-text-tertiary flex-1">⌘⏎ to run</span>
-              <button
-                onClick={() => void runNow()}
-                disabled={busy === 'run'}
-                className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-40"
-              >
+            <Inline gap="sm" align="center" justify="between">
+              <MetaLine size="xs" tone="tertiary" items={['⌘⏎ to run']} />
+              <Button variant="primary" size="sm" disabled={busy === 'run'} onClick={() => void runNow()}>
                 {busy === 'run' ? 'starting…' : 'Run'}
-              </button>
-            </div>
-          </div>
+              </Button>
+            </Inline>
+          </Stack>
         )}
       </Card>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4 items-start">
+      <CatalogGrid columns={2} className="mb-4 items-start">
         {/* ── THE MISSION ── */}
         <Card padding="none" className="overflow-hidden">
-          <div className="px-3.5 py-2.5 border-b border-border flex items-center gap-2">
-            <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">THE MISSION</span>
-            <div className="flex-1" />
+          <Inline gap="sm" align="center" justify="between" className="px-3.5 py-2.5 border-b border-border">
+            <strong className="text-xs font-semibold text-text-secondary tracking-wide select-none">THE MISSION</strong>
             {canManage && (
-              <button
-                onClick={() => { setMissionText(bot.prompt); setEditMission((v) => !v); }}
-                className="text-[11px] px-2 py-0.5 rounded border border-border bg-surface text-text-secondary cursor-pointer hover:text-primary"
-              >
+              <Button variant="ghost" size="sm" onClick={() => { setMissionText(bot.prompt); setEditMission((v) => !v); }}>
                 {editMission ? 'cancel' : 'edit'}
-              </button>
+              </Button>
             )}
-          </div>
+          </Inline>
           {editMission ? (
-            <div className="p-3.5">
-              <textarea
-                value={missionText}
-                onChange={(e) => setMissionText(e.target.value)}
-                rows={6}
-                className="w-full px-2.5 py-2 rounded-md border border-border bg-surface text-[12px] text-text-primary resize-y box-border"
-              />
-              <div className="flex justify-end mt-1.5">
-                <button
-                  onClick={() => void saveMission()}
-                  disabled={busy === 'mission' || !missionText.trim()}
-                  className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-40"
-                >
+            <Stack gap="xs" className="p-3.5">
+              <Textarea value={missionText} onChange={(e) => setMissionText(e.target.value)} minRows={6} />
+              <Inline justify="end">
+                <Button variant="primary" size="sm" disabled={busy === 'mission' || !missionText.trim()} onClick={() => void saveMission()}>
                   {busy === 'mission' ? 'saving…' : 'Save mission'}
-                </button>
-              </div>
-            </div>
+                </Button>
+              </Inline>
+            </Stack>
           ) : (
-            <div className="px-3.5 py-3 text-[12.5px] text-text-primary leading-relaxed whitespace-pre-wrap">
+            <Stack gap="none" className="px-3.5 py-3 text-[12.5px] text-text-primary leading-relaxed whitespace-pre-wrap">
               {bot.prompt}
-            </div>
+            </Stack>
           )}
         </Card>
 
         {/* ── GUARDRAILS ── */}
         <Card padding="none" className="overflow-hidden">
-          <div className="px-3.5 py-2.5 border-b border-border flex items-center gap-2">
-            <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">GUARDRAILS</span>
-            <div className="flex-1" />
+          <Inline gap="sm" align="center" justify="between" className="px-3.5 py-2.5 border-b border-border">
+            <strong className="text-xs font-semibold text-text-secondary tracking-wide select-none">GUARDRAILS</strong>
             {canManage && (
-              <button
-                onClick={() => (editGuards ? setEditGuards(false) : beginEditGuards())}
-                className="text-[11px] px-2 py-0.5 rounded border border-border bg-surface text-text-secondary cursor-pointer hover:text-primary"
-              >
+              <Button variant="ghost" size="sm" onClick={() => (editGuards ? setEditGuards(false) : beginEditGuards())}>
                 {editGuards ? 'cancel' : 'edit'}
-              </button>
+              </Button>
             )}
-          </div>
+          </Inline>
           {editGuards ? (
-            <div className="p-3.5 flex flex-col gap-2.5">
-              <label className="flex items-center gap-2 text-[12px] text-text-secondary">
-                <span className="w-32 shrink-0">Model</span>
-                <select
-                  value={gModel}
-                  onChange={(e) => setGModel(e.target.value)}
-                  className="flex-1 px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary"
-                >
-                  {DEVBOX_MODELS.map((m) => <option key={m.id} value={m.id} title={m.hint}>{m.label}</option>)}
-                  {!DEVBOX_MODELS.some((m) => m.id === gModel) && gModel && (
-                    <option value={gModel}>{gModel}</option>
-                  )}
-                </select>
-              </label>
-              <label className="flex items-center gap-2 text-[12px] text-text-secondary">
-                <span className="w-32 shrink-0">Budget / run ($)</span>
-                <input
-                  type="number" min={0} step="0.01" value={gPerRun} placeholder="none"
-                  onChange={(e) => setGPerRun(e.target.value)}
-                  className="flex-1 px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary"
-                />
-              </label>
-              <label className="flex items-center gap-2 text-[12px] text-text-secondary">
-                <span className="w-32 shrink-0">Budget / day ($)</span>
-                <input
-                  type="number" min={0} step="0.01" value={gPerDay} placeholder="none"
-                  onChange={(e) => setGPerDay(e.target.value)}
-                  className="flex-1 px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary"
-                />
-              </label>
-              <label className="flex items-center gap-2 text-[12px] text-text-secondary">
-                <span className="w-32 shrink-0">Max runs / day</span>
-                <input
-                  type="number" min={1} value={gMaxRuns}
-                  onChange={(e) => setGMaxRuns(Math.max(1, Number(e.target.value)))}
-                  className="flex-1 px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary"
-                />
-              </label>
-              <label className="flex items-center gap-2 text-[12px] text-text-secondary cursor-pointer select-none">
-                <span className="w-32 shrink-0">Requires review</span>
-                <input type="checkbox" checked={gReview} onChange={(e) => setGReview(e.target.checked)} />
-              </label>
-              <label className="flex items-start gap-2 text-[12px] text-text-secondary cursor-pointer select-none">
-                <span className="w-32 shrink-0 pt-0.5">Enforce initiative allocation</span>
-                <span className="flex flex-col gap-1">
-                  <input
-                    type="checkbox"
-                    className="self-start"
-                    checked={gEnforceAlloc}
-                    onChange={(e) => setGEnforceAlloc(e.target.checked)}
-                  />
-                  <span className="text-[11px] text-text-tertiary leading-snug">
-                    A cron fire that would push this initiative past its monthly allocation is skipped and retried
-                    next cycle. Off by default — a bot is the maintenance floor.
-                  </span>
-                </span>
-              </label>
-              <div className="flex justify-end">
-                <button
-                  onClick={() => void saveGuards()}
-                  disabled={busy === 'guards'}
-                  className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-40"
-                >
+            <Stack gap="sm" className="p-3.5">
+              <FormField label="Model" layout="inline">
+                {(wiring) => (
+                  <Select {...inputWiring(wiring)} value={gModel} onChange={(e) => setGModel(e.target.value)} options={modelOptions} />
+                )}
+              </FormField>
+              <FormField label="Budget / run ($)" layout="inline">
+                {(wiring) => (
+                  <Input {...inputWiring(wiring)} type="number" min={0} step="0.01" value={gPerRun} placeholder="none" onChange={(e) => setGPerRun(e.target.value)} />
+                )}
+              </FormField>
+              <FormField label="Budget / day ($)" layout="inline">
+                {(wiring) => (
+                  <Input {...inputWiring(wiring)} type="number" min={0} step="0.01" value={gPerDay} placeholder="none" onChange={(e) => setGPerDay(e.target.value)} />
+                )}
+              </FormField>
+              <FormField label="Max runs / day" layout="inline">
+                {(wiring) => (
+                  <Input {...inputWiring(wiring)} type="number" min={1} value={gMaxRuns} onChange={(e) => setGMaxRuns(Math.max(1, Number(e.target.value)))} />
+                )}
+              </FormField>
+              <FormField label="Requires review" layout="inline">
+                {(wiring) => (
+                  <Checkbox {...inputWiring(wiring)} aria-labelledby={wiring.labelId} checked={gReview} onChange={setGReview} />
+                )}
+              </FormField>
+              <FormField
+                label="Enforce initiative allocation"
+                layout="inline"
+                hint="A cron fire that would push this initiative past its monthly allocation is skipped and retried next cycle. Off by default — a bot is the maintenance floor."
+              >
+                {(wiring) => (
+                  <Checkbox {...inputWiring(wiring)} aria-labelledby={wiring.labelId} checked={gEnforceAlloc} onChange={setGEnforceAlloc} />
+                )}
+              </FormField>
+              <Inline justify="end">
+                <Button variant="primary" size="sm" disabled={busy === 'guards'} onClick={() => void saveGuards()}>
                   {busy === 'guards' ? 'saving…' : 'Save guardrails'}
-                </button>
-              </div>
-            </div>
+                </Button>
+              </Inline>
+            </Stack>
           ) : (
-            <div className="divide-y divide-border text-[12px]">
-              <div className="px-3.5 py-2 flex items-center gap-2">
-                <span className="text-text-tertiary w-32 shrink-0">Model</span>
-                <span className="text-text-primary" title={bot.model}>{modelLabel(bot.model)}</span>
-              </div>
-              <div className="px-3.5 py-2 flex items-center gap-2">
-                <span className="text-text-tertiary w-32 shrink-0">Budget / run</span>
-                <span className="text-text-primary">{bot.budgetPerRunUsd != null ? `$${bot.budgetPerRunUsd.toFixed(2)}` : 'none (soft cap unset)'}</span>
-              </div>
-              <div className="px-3.5 py-2 flex items-center gap-2">
-                <span className="text-text-tertiary w-32 shrink-0">Budget / day</span>
-                <span className="text-text-primary">{bot.budgetPerDayUsd != null ? `$${bot.budgetPerDayUsd.toFixed(2)}` : 'none (hard cap unset)'}</span>
-              </div>
-              <div className="px-3.5 py-2 flex items-center gap-2">
-                <span className="text-text-tertiary w-32 shrink-0">Max runs / day</span>
-                <span className="text-text-primary">{bot.maxRunsPerDay}</span>
-              </div>
-              <div className="px-3.5 py-2 flex items-center gap-2">
-                <span className="text-text-tertiary w-32 shrink-0">Requires review</span>
-                <span className="text-text-primary">{bot.requiresReview ? 'yes' : 'no'}</span>
-              </div>
-              <div className="px-3.5 py-2 flex items-center gap-2">
-                <span className="text-text-tertiary w-32 shrink-0">Enforce allocation</span>
-                <span className="text-text-primary" title="When on, a cron fire that would push this initiative past its monthly allocation is skipped and retried next cycle.">
-                  {botEnforceAllocation(bot) ? 'on — cron fires braked by allocation' : 'off (bot spend is the maintenance floor)'}
-                </span>
-              </div>
-              <div className="px-3.5 py-2.5">
-                <div className="text-[11px] text-text-tertiary mb-1">
-                  today: {bot.todayRunCount}/{bot.maxRunsPerDay} {bot.todayRunCount === 1 ? 'run' : 'runs'}
-                  {' · '}${bot.todaySpendUsd.toFixed(2)}
-                  {bot.budgetPerDayUsd != null ? ` of $${bot.budgetPerDayUsd.toFixed(2)}` : ' spent'}
-                </div>
+            <Stack gap="none">
+              <Table>
+                <TableBody>
+                  <TableRow>
+                    <TableTd className="text-text-tertiary w-32">Model</TableTd>
+                    <TableTd title={bot.model}>{modelLabel(bot.model)}</TableTd>
+                  </TableRow>
+                  <TableRow>
+                    <TableTd className="text-text-tertiary">Budget / run</TableTd>
+                    <TableTd>{bot.budgetPerRunUsd != null ? `$${bot.budgetPerRunUsd.toFixed(2)}` : 'none (soft cap unset)'}</TableTd>
+                  </TableRow>
+                  <TableRow>
+                    <TableTd className="text-text-tertiary">Budget / day</TableTd>
+                    <TableTd>{bot.budgetPerDayUsd != null ? `$${bot.budgetPerDayUsd.toFixed(2)}` : 'none (hard cap unset)'}</TableTd>
+                  </TableRow>
+                  <TableRow>
+                    <TableTd className="text-text-tertiary">Max runs / day</TableTd>
+                    <TableTd>{bot.maxRunsPerDay}</TableTd>
+                  </TableRow>
+                  <TableRow>
+                    <TableTd className="text-text-tertiary">Requires review</TableTd>
+                    <TableTd>{bot.requiresReview ? 'yes' : 'no'}</TableTd>
+                  </TableRow>
+                  <TableRow>
+                    <TableTd className="text-text-tertiary">Enforce allocation</TableTd>
+                    <TableTd title="When on, a cron fire that would push this initiative past its monthly allocation is skipped and retried next cycle.">
+                      {botEnforceAllocation(bot) ? 'on — cron fires braked by allocation' : 'off (bot spend is the maintenance floor)'}
+                    </TableTd>
+                  </TableRow>
+                </TableBody>
+              </Table>
+              <Stack gap="xs" className="px-3.5 py-2.5">
+                <MetaLine
+                  size="xs" tone="tertiary"
+                  items={[
+                    `today: ${runSummary.todayRunCount}/${bot.maxRunsPerDay} ${runSummary.todayRunCount === 1 ? 'run' : 'runs'}`,
+                    `$${bot.todaySpendUsd.toFixed(2)}${bot.budgetPerDayUsd != null ? ` of $${bot.budgetPerDayUsd.toFixed(2)}` : ' spent'}`,
+                  ]}
+                />
                 {bot.budgetPerDayUsd != null && bot.budgetPerDayUsd > 0 && (
                   <ProgressBar
                     value={Math.min(bot.todaySpendUsd, bot.budgetPerDayUsd)}
@@ -483,37 +472,32 @@ export default function BotDetailPage() {
                     aria-label="Today's spend vs daily budget"
                   />
                 )}
-              </div>
-            </div>
+              </Stack>
+            </Stack>
           )}
         </Card>
-      </div>
+      </CatalogGrid>
 
       {/* ── LIVE ACTIVITY — the current run's execution timeline ── */}
       {liveBoxId && (
-        <div className="mb-4">
+        <Stack gap="none" className="mb-4">
           <RunTimeline
             boxId={liveBoxId}
             title="LIVE ACTIVITY"
             maxHeightClass="max-h-[420px]"
             emptyHint="The run just started — Claude Code's tool calls stream here as it works."
             headerExtra={
-              <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-primary ml-auto">
-                <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-primary" style={{ animation: 'runtl-pulse 1s ease-in-out infinite' }} />
-                live
-              </span>
+              <Chip size="xs" tone="accent" dot="pulse" className="ml-auto">live</Chip>
             }
           />
-        </div>
+        </Stack>
       )}
 
       {/* ── Runs ── */}
       <Card padding="md">
-        <div className="text-xs font-semibold text-text-secondary tracking-wide select-none mb-2">RUNS</div>
+        <strong className="block text-xs font-semibold text-text-secondary tracking-wide select-none mb-2">RUNS</strong>
         {runs.length === 0 ? (
-          <div className="text-[12px] text-text-tertiary py-2">
-            This bot has never fired. Use ▶ Run now, or wait for its trigger.
-          </div>
+          <MetaLine size="sm" tone="tertiary" items={['This bot has never fired. Use ▶ Run now, or wait for its trigger.']} />
         ) : (
           <Table>
             <TableHead>
@@ -541,30 +525,30 @@ export default function BotDetailPage() {
                 );
                 return (
                 <TableRow key={r.id}>
-                  <TableTd style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{r.trigger}</TableTd>
+                  <TableTd className="text-[12px] text-text-secondary">{r.trigger}</TableTd>
                   <TableTd>
                     <Chip tone={RUN_STATUS_TONE[r.status]} size="xs" dot={r.status === 'running' ? 'pulse' : undefined}>
                       {r.status}
                     </Chip>
                   </TableTd>
-                  <TableTd style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                  <TableTd className="text-[12px] whitespace-nowrap">
                     <CostVsEstimate costUsd={r.costUsd} estimate={runEstimate(r)} />
                   </TableTd>
                   <TableTd
-                    style={{ fontSize: 12, color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}
+                    className="text-[12px] text-text-secondary whitespace-nowrap"
                     title={dur.title}
                   >
                     {dur.text}
                   </TableTd>
-                  <TableTd style={{ fontSize: 12, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }} title={r.startedAt}>
+                  <TableTd className="text-[12px] text-text-tertiary whitespace-nowrap" title={r.startedAt}>
                     {when(r.startedAt)}
                   </TableTd>
                   <TableTd>
-                    <div className="flex items-center gap-2 flex-wrap text-[12px]" title={o.summary}>
+                    <Inline gap="sm" wrap className="text-[12px]" title={o.summary}>
                       {o.reason && (
-                        <span className={r.status === 'failed' ? 'text-danger' : 'text-text-secondary'}>
-                          {o.reason}
-                        </span>
+                        r.status === 'failed'
+                          ? <Chip tone="danger" size="xs">{o.reason}</Chip>
+                          : o.reason
                       )}
                       {o.changeId && (
                         <Link to="/admin/changes" className="text-primary no-underline hover:underline">
@@ -572,13 +556,14 @@ export default function BotDetailPage() {
                         </Link>
                       )}
                       {o.prUrl && (
-                        <a
-                          href={o.prUrl} target="_blank" rel="noopener noreferrer"
-                          className="text-primary no-underline hover:underline inline-flex items-center gap-1"
-                        >
-                          PR <span aria-hidden="true" className="text-[10px]">↗</span>
-                        </a>
+                        <ExternalLink href={o.prUrl} className="text-primary no-underline hover:underline">
+                          PR ↗
+                        </ExternalLink>
                       )}
+                      {/* The run row carries no summary — that lives on the job
+                          this firing enqueued. When there is no devbox run to
+                          open, the job is the only place the detail exists, so
+                          link it rather than leaving the cell a dead end. */}
                       {canLinkRun && (
                         <Link
                           to={`/admin/projects?project=${bot.agentProjectId}&run=${r.runId}`}
@@ -587,10 +572,6 @@ export default function BotDetailPage() {
                           run {r.runId!.slice(0, 8)}
                         </Link>
                       )}
-                      {/* The run row carries no summary — that lives on the job
-                          this firing enqueued. When there is no devbox run to
-                          open, the job is the only place the detail exists, so
-                          link it rather than leaving the cell a dead end. */}
                       {!canLinkRun && r.jobId && (
                         <Link
                           to={`/iq/work/${encodeURIComponent(r.jobId)}`}
@@ -601,14 +582,12 @@ export default function BotDetailPage() {
                         </Link>
                       )}
                       {o.filesChanged != null && (
-                        <span className="text-text-tertiary text-[11px]">
-                          {o.filesChanged} {o.filesChanged === 1 ? 'file' : 'files'}
-                        </span>
+                        <MetaLine size="xs" tone="tertiary" items={[`${o.filesChanged} ${o.filesChanged === 1 ? 'file' : 'files'}`]} />
                       )}
                       {!hasOutcome && (
-                        <span className="text-text-tertiary" title="This run recorded no outcome">—</span>
+                        <MetaLine size="xs" tone="tertiary" items={['—']} />
                       )}
-                    </div>
+                    </Inline>
                   </TableTd>
                 </TableRow>
                 );

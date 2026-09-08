@@ -1,11 +1,13 @@
-import React, { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import {
-  Card, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip,
-  PageSection,
+  Button, Card, CardHeader, Chip, Inline, InlineAlert, PageSection,
+  ProgressBar, Stack, StatStrip, Table, TableBody, TableHead, TableRow,
+  TableTd, TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { EmptyState, PulseDot } from '../../components/ingest/ui';
+import { T } from './Text';
 
 interface DataSource {
   id: string; name: string; status: string; description: string;
@@ -115,140 +117,129 @@ function DataSourcesPage() {
       title="4 · KB sync"
       description="The data sources that carry storage into the knowledge base, and the jobs that ran."
     >
-      {actionMessage && (
-        <div style={{
-          padding: 10, marginBottom: 12, borderRadius: 4, fontSize: 12,
-          background: actionMessage.tone === 'ok' ? '#ecfdf5' : '#fef2f2',
-          color: actionMessage.tone === 'ok' ? '#065f46' : '#991b1b',
-        }}>
-          {actionMessage.text}
-        </div>
-      )}
+      <Stack gap="md">
+        {actionMessage && (
+          <InlineAlert tone={actionMessage.tone === 'ok' ? 'success' : 'error'}>
+            {actionMessage.text}
+          </InlineAlert>
+        )}
 
-      {/* Live KB-sync monitor */}
-      {activeJob && (
-        <LiveJobMonitor
-          baseJob={activeJob}
-          liveJob={liveJob}
-          streamDone={streamDone}
-          style={{ marginBottom: 16 }}
-        />
-      )}
+        {/* Live KB-sync monitor */}
+        {activeJob && (
+          <LiveJobMonitor baseJob={activeJob} liveJob={liveJob} streamDone={streamDone} />
+        )}
 
-      {/* Data Sources */}
-      <Card padding="md" style={{ marginBottom: 16 }}>
-        <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Data Sources</h3>
-        {sources.length === 0 ? (
-          <EmptyState title="No data sources" body="No data sources attached to this Knowledge Base." />
-        ) : (
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableTh>Name</TableTh><TableTh>Type</TableTh>
-                <TableTh>Source URI</TableTh><TableTh>Status</TableTh><TableTh></TableTh>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {sources.map(ds => (
-                <TableRow key={ds.id}>
-                  <TableTd>
-                    <div style={{ fontWeight: 500 }}>{ds.name}</div>
-                    <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--color-text-tertiary)' }}>{ds.id}</div>
-                  </TableTd>
-                  <TableTd style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>{ds.type}</TableTd>
-                  <TableTd style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--color-text-secondary)', maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ds.sourceUri}>
-                    {ds.sourceUri || '—'}
-                  </TableTd>
-                  <TableTd>
-                    <Chip tone={ds.status === 'AVAILABLE' ? 'success' : 'warning'} size="xs">{ds.status}</Chip>
-                  </TableTd>
-                  <TableTd>
-                    {canManage && (
-                      <button
-                        onClick={() => triggerSync(ds.id)}
-                        disabled={triggering === ds.id || !!activeJob}
-                        style={syncBtnStyle(triggering === ds.id || !!activeJob)}
-                      >
-                        {triggering === ds.id ? 'Syncing…' : activeJob ? 'In Progress' : 'Sync now'}
-                      </button>
-                    )}
-                  </TableTd>
+        {/* Data Sources */}
+        <Card padding="md">
+          <CardHeader title="Data Sources" />
+          {sources.length === 0 ? (
+            <EmptyState title="No data sources" body="No data sources attached to this Knowledge Base." />
+          ) : (
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableTh>Name</TableTh><TableTh>Type</TableTh>
+                  <TableTh>Source URI</TableTh><TableTh>Status</TableTh><TableTh></TableTh>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </Card>
-
-      {/* KB Job History */}
-      <Card padding="md" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <h3 style={{ fontSize: 13, fontWeight: 600 }}>
-            KB Job History{' '}
-            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 400 }}>· 10s refresh</span>
-          </h3>
-          {jobs[0] && (
-            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-              last: {new Date(jobs[0].startedAt).toLocaleString()}
-            </span>
+              </TableHead>
+              <TableBody>
+                {sources.map(ds => (
+                  <TableRow key={ds.id}>
+                    <TableTd>
+                      <T className="block font-medium">{ds.name}</T>
+                      <T className="block font-mono text-[10px] text-text-tertiary">{ds.id}</T>
+                    </TableTd>
+                    <TableTd className="text-[11px] text-text-secondary">{ds.type}</TableTd>
+                    <TableTd
+                      className="max-w-[320px] overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[11px] text-text-secondary"
+                      title={ds.sourceUri}
+                    >
+                      {ds.sourceUri || '—'}
+                    </TableTd>
+                    <TableTd>
+                      <Chip tone={ds.status === 'AVAILABLE' ? 'success' : 'warning'} size="xs">{ds.status}</Chip>
+                    </TableTd>
+                    <TableTd>
+                      {canManage && (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => triggerSync(ds.id)}
+                          disabled={triggering === ds.id || !!activeJob}
+                        >
+                          {triggering === ds.id ? 'Syncing…' : activeJob ? 'In Progress' : 'Sync now'}
+                        </Button>
+                      )}
+                    </TableTd>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
-        </div>
-        {jobs.length === 0 ? (
-          <EmptyState title="No ingestion jobs yet" />
-        ) : (
-          <JobHistoryTable jobs={jobs} />
-        )}
-      </Card>
+        </Card>
+
+        {/* KB Job History */}
+        <Card padding="md">
+          <CardHeader
+            title="KB Job History"
+            subtitle="10s refresh"
+            action={jobs[0]
+              ? <T className="text-[11px] text-text-tertiary">last: {new Date(jobs[0].startedAt).toLocaleString()}</T>
+              : undefined}
+          />
+          {jobs.length === 0 ? (
+            <EmptyState title="No ingestion jobs yet" />
+          ) : (
+            <JobHistoryTable jobs={jobs} />
+          )}
+        </Card>
+      </Stack>
     </PageSection>
   );
 }
 
 function LiveJobMonitor({
-  baseJob, liveJob, streamDone, style,
+  baseJob, liveJob, streamDone,
 }: {
   baseJob: IngestionJob; liveJob: IngestionJob | null; streamDone: boolean;
-  style?: React.CSSProperties;
 }) {
   const job = liveJob ?? baseJob;
-  const progress = job.documentsScanned > 0
-    ? Math.min(100, Math.round((job.documentsIndexed / job.documentsScanned) * 100))
-    : 0;
-  const tone = streamDone ? '#065f46' : '#92400e';
-  const bg  = streamDone ? '#ecfdf5' : '#fffbeb';
-  const bar = streamDone ? 'var(--color-success)' : 'var(--color-warning)';
+  const barColor = streamDone ? 'var(--color-success)' : 'var(--color-warning)';
 
   return (
-    <Card padding="md" style={{ ...style, background: bg, borderLeft: `3px solid ${bar}` }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <PulseDot active={!streamDone} color={bar} />
-          <span style={{ fontWeight: 600, fontSize: 13, color: tone }}>
-            {streamDone ? 'Sync complete' : 'Sync in progress'}
-          </span>
-          <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--color-text-tertiary)' }}>
-            {job.jobId.slice(0, 12)}…
-          </span>
-        </div>
-        <Chip tone={JOB_STATUS_TONE[job.status] ?? 'neutral'} size="xs">{job.status}</Chip>
-      </div>
+    <Card padding="md" className={streamDone ? 'border-l-[3px] border-l-success bg-success-bg' : 'border-l-[3px] border-l-warning bg-warning-bg'}>
+      <Stack gap="sm">
+        <Inline justify="between" align="center">
+          <Inline gap="sm" align="center">
+            <PulseDot active={!streamDone} color={barColor} />
+            <T className={`text-[13px] font-semibold ${streamDone ? 'text-success' : 'text-warning'}`}>
+              {streamDone ? 'Sync complete' : 'Sync in progress'}
+            </T>
+            <T className="font-mono text-[11px] text-text-tertiary">{job.jobId.slice(0, 12)}…</T>
+          </Inline>
+          <Chip tone={JOB_STATUS_TONE[job.status] ?? 'neutral'} size="xs">{job.status}</Chip>
+        </Inline>
 
-      {job.documentsScanned > 0 && (
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ height: 5, background: 'rgba(0,0,0,.08)', borderRadius: 3, overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${progress}%`, background: bar, transition: 'width 0.5s ease' }} />
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 4 }}>
-            {job.documentsIndexed} / {job.documentsScanned} indexed ({progress}%)
-          </div>
-        </div>
-      )}
+        {job.documentsScanned > 0 && (
+          <ProgressBar
+            value={job.documentsIndexed}
+            max={job.documentsScanned}
+            color={barColor}
+            label={`${job.documentsIndexed} / ${job.documentsScanned} indexed`}
+          />
+        )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-        <MiniStat label="Scanned"  value={job.documentsScanned} />
-        <MiniStat label="Indexed"  value={job.documentsIndexed} />
-        <MiniStat label="Failed"   value={job.documentsFailed}  danger={job.documentsFailed > 0} />
-        <MiniStat label="Deleted"  value={job.documentsDeleted} />
-      </div>
+        <StatStrip
+          frameless
+          aria-label="Job document counts"
+          items={[
+            { label: 'Scanned', value: job.documentsScanned },
+            { label: 'Indexed', value: job.documentsIndexed },
+            { label: 'Failed', value: job.documentsFailed, ...(job.documentsFailed > 0 ? { tone: 'danger' as const } : {}) },
+            { label: 'Deleted', value: job.documentsDeleted },
+          ]}
+        />
+      </Stack>
     </Card>
   );
 }
@@ -273,10 +264,10 @@ function JobHistoryTable({ jobs }: { jobs: IngestionJob[] }) {
         <TableRow>
           <TableTh>Started</TableTh><TableTh>Job</TableTh><TableTh>Status</TableTh>
           <TableTh>Duration</TableTh>
-          <TableTh style={{ textAlign: 'right' }}>Indexed</TableTh>
-          <TableTh style={{ textAlign: 'right' }}>Scanned</TableTh>
-          <TableTh style={{ textAlign: 'right' }}>Failed</TableTh>
-          <TableTh style={{ textAlign: 'right' }}>Deleted</TableTh>
+          <TableTh className="text-right">Indexed</TableTh>
+          <TableTh className="text-right">Scanned</TableTh>
+          <TableTh className="text-right">Failed</TableTh>
+          <TableTh className="text-right">Deleted</TableTh>
           <TableTh></TableTh>
         </TableRow>
       </TableHead>
@@ -284,48 +275,45 @@ function JobHistoryTable({ jobs }: { jobs: IngestionJob[] }) {
         {jobs.map(j => (
           <Fragment key={j.jobId}>
             <TableRow>
-              <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }}>
+              <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
                 {new Date(j.startedAt).toLocaleString()}
               </TableTd>
-              <TableTd style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--color-text-tertiary)' }}>
+              <TableTd className="font-mono text-[10px] text-text-tertiary">
                 {j.jobId.slice(0, 12)}…
               </TableTd>
               <TableTd>
                 <Chip tone={JOB_STATUS_TONE[j.status] ?? 'neutral'} size="xs">{j.status}</Chip>
               </TableTd>
-              <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+              <TableTd className="text-[11px] text-text-tertiary">
                 {j.durationMs > 0 ? `${(j.durationMs / 1000).toFixed(1)}s` : '—'}
               </TableTd>
-              <TableTd style={{ textAlign: 'right', fontWeight: 600 }}>{j.documentsIndexed}</TableTd>
-              <TableTd style={{ textAlign: 'right', fontSize: 12, color: 'var(--color-text-secondary)' }}>{j.documentsScanned}</TableTd>
-              <TableTd style={{ textAlign: 'right', fontSize: 12, color: j.documentsFailed > 0 ? 'var(--color-danger)' : 'var(--color-text-secondary)' }}>
+              <TableTd className="text-right font-semibold">{j.documentsIndexed}</TableTd>
+              <TableTd className="text-right text-[12px] text-text-secondary">{j.documentsScanned}</TableTd>
+              <TableTd className={`text-right text-[12px] ${j.documentsFailed > 0 ? 'text-danger' : 'text-text-secondary'}`}>
                 {j.documentsFailed}
               </TableTd>
-              <TableTd style={{ textAlign: 'right', fontSize: 12, color: 'var(--color-text-secondary)' }}>{j.documentsDeleted}</TableTd>
+              <TableTd className="text-right text-[12px] text-text-secondary">{j.documentsDeleted}</TableTd>
               <TableTd>
                 {j.status === 'FAILED' && (
-                  <button
-                    onClick={() => loadDetails(j.jobId, j.dataSourceId)}
-                    style={{ fontSize: 11, color: 'var(--color-danger)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => loadDetails(j.jobId, j.dataSourceId)}>
                     {expanded === j.jobId ? 'hide' : 'details'}
-                  </button>
+                  </Button>
                 )}
               </TableTd>
             </TableRow>
             {expanded === j.jobId && (
               <TableRow>
-                <TableTd colSpan={9} style={{ background: '#fef2f2', padding: '10px 16px' }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#991b1b', marginBottom: 4 }}>Failure reasons</div>
-                  {(details[j.jobId]?.failureReasons ?? j.failureReasons ?? []).length === 0 ? (
-                    <div style={{ fontSize: 12, color: '#991b1b' }}>No details returned by Bedrock.</div>
-                  ) : (
-                    <ul style={{ margin: 0, paddingLeft: 16 }}>
-                      {(details[j.jobId]?.failureReasons ?? j.failureReasons).map((r, i) => (
-                        <li key={i} style={{ fontSize: 12, color: '#991b1b', marginBottom: 2 }}>{r}</li>
-                      ))}
-                    </ul>
-                  )}
+                <TableTd colSpan={9} className="bg-danger-bg px-4 py-2.5">
+                  <Stack gap="xs">
+                    <T className="text-[12px] font-semibold text-danger">Failure reasons</T>
+                    {(details[j.jobId]?.failureReasons ?? j.failureReasons ?? []).length === 0 ? (
+                      <T className="text-[12px] text-danger">No details returned by Bedrock.</T>
+                    ) : (
+                      (details[j.jobId]?.failureReasons ?? j.failureReasons).map((r, i) => (
+                        <T key={i} className="text-[12px] text-danger">· {r}</T>
+                      ))
+                    )}
+                  </Stack>
                 </TableTd>
               </TableRow>
             )}
@@ -334,23 +322,6 @@ function JobHistoryTable({ jobs }: { jobs: IngestionJob[] }) {
       </TableBody>
     </Table>
   );
-}
-
-function MiniStat({ label, value, danger }: { label: string; value: number; danger?: boolean }) {
-  return (
-    <div style={{ textAlign: 'center' }}>
-      <div style={{ fontSize: 18, fontWeight: 700, color: danger ? 'var(--color-danger)' : undefined }}>{value}</div>
-      <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
-    </div>
-  );
-}
-
-function syncBtnStyle(disabled: boolean): React.CSSProperties {
-  return {
-    fontSize: 11, padding: '4px 12px', background: 'var(--color-primary)', color: '#fff',
-    border: 'none', borderRadius: 'var(--radius-sm)',
-    cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
-  };
 }
 
 export default DataSourcesPage;

@@ -1,0 +1,22 @@
+[project]
+name = "orgiq-assessment-scorer"
+version = "0.1.0"
+description = "OrgIQ Assessment Scorer Agent - classifies evidence and scores teams against the 17-dimension engineering-maturity rubric"
+requires-python = ">=3.12"
+dependencies = [
+    "strands-agents>=1.39",
+    "bedrock-agentcore[ag-ui]>=1.9",
+    "boto3>=1.34",
+    "ag-ui-protocol>=0.1.18",
+    "ag-ui-strands>=0.1.8",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]

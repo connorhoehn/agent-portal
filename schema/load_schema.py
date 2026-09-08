@@ -184,7 +184,6 @@ def main():
         'observability_sprint5_canary_schema.sql',
         'observability_sprint6_prompt_history_schema.sql',
         'observability_approvals_schema.sql',
-        'newsroom_schema.sql',
         'orgiq_kb_registry_schema.sql',
         'orgiq_work_items_schema.sql',
         # The agentic loop: agent_jobs, agent_findings, graph_proposals. Was
@@ -200,6 +199,10 @@ def main():
         'agent_sdlc_schema.sql',
         # The lab loop: fleet memory + human consults for computer-lab agents.
         'lab_loop_schema.sql',
+        # L1 clusters + L2 artifacts distilled from lab_experiences (L0).
+        # Loads right after it: distillation_cluster_members FKs
+        # lab_experiences directly.
+        'distillation_schema.sql',
         # Bots + bot_runs. Loads last: it references agent_projects,
         # agent_project_runs, agent_jobs and projects, and its ALTERs add
         # linkage columns to tables the files above create.
@@ -211,6 +214,11 @@ def main():
         # baseline view. Loads last: references people, projects, work_items,
         # bots and bot_runs.
         'program_schema.sql',
+        # The assessment tenant's own tables (docs/assessment-tenant.md).
+        # Standalone — no FK into the org graph — so it can load anywhere;
+        # kept here so a rebuilt cluster has the tables the Aurora path of
+        # providers/assessment.ts will query.
+        'assessment_schema.sql',
         # bot_runs.dispatched_by — who authorized a run, which is what lets the
         # per-SME budget_grants envelope be enforced. Additive ALTER, so it
         # loads after agent_bots_schema.sql creates the table.

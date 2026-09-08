@@ -4,10 +4,28 @@
 // Falls back to rich in-memory mock data when config.mock.aurora === true so
 // the portal is fully navigable in offline / local dev without Aurora.
 
+import { randomUUID } from 'node:crypto';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 import { exec } from './aurora.js';
 import { config } from '../config.js';
-import { mockProjectExists } from './projects.js';
+import { mockProjectExists, mockProjectName } from './projects.js';
+import { clock } from '../mock/core/index.js';
+import { workItemComments } from '../mock/work-item-comments.js';
+// Names only, for the activity feed's `LEFT JOIN people` — the same cast
+// providers/people.ts serves, so an actor's name here is the name every other
+// surface gives that id.
+import { mockPeople } from '../mock/people.js';
+// The `decisions` table, whole. An initiative's Decisions tab is this table
+// filtered by project_id — the SAME rows GET /api/graph/decisions lists — so
+// it reads the same fixture rather than a hand-typed copy of half of it.
+import { decisionRows } from '../mock/decisions.js';
+// The board's rows. `MOCK_EPOCH` is re-exported below rather than redefined —
+// providers/activity.ts and the mock seeds must reproject from one anchor.
+import {
+  workItems,
+  nextMockWorkItemId,
+  MOCK_EPOCH as FIXTURE_MOCK_EPOCH,
+} from '../mock/work-items.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -557,170 +575,146 @@ export function buildWorkItemTree(items: WorkItem[]): WorkItemTree[] {
 }
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
+//
+// The rows themselves live in mock/work-items.ts, behind a registered fixture,
+// so `POST /api/__mock/reset` undoes a board edit. What stays here is the
+// reprojection every reader of a seeded stamp needs.
 
-const D = (days: number): string => {
-  const d = new Date('2026-05-21T12:00:00Z');
-  d.setDate(d.getDate() - days);
-  return d.toISOString();
-};
+/**
+ * The fixed "today" every seeded `D(n)` offset is written against.
+ * Re-exported from the fixture so providers/activity.ts keeps one import site.
+ */
+export const MOCK_EPOCH = FIXTURE_MOCK_EPOCH;
 
-// The fixtures predate sprint_id / estimated_cost_usd; rather than restate two
-// nulls on every row, seeds omit what they don't carry and the normaliser below
-// fills them in. Costs on the seeded rows follow the same ~$1.2/point curve the
-// program seed uses (schema/seed_program.sql).
-type MockSeed = Omit<WorkItem, 'sprintId' | 'estimatedCostUsd'>
-  & Partial<Pick<WorkItem, 'sprintId' | 'estimatedCostUsd'>>;
+/**
+ * Replay a seeded timestamp's "n before the reference point" offset from real
+ * now, so a D(14) completion still reads as fourteen days ago however long
+ * ago MOCK_EPOCH was.
+ *
+ * The single definition of that reprojection: providers/activity.ts had its
+ * own day-granularity copy for the initiative activity GRAPH, and the activity
+ * FEED needs the same rule at full precision — two copies is how one surface
+ * comes to place an event on a day the other does not.
+ *
+ * Only the SEED is offset-encoded. A stamp written by this process (a board
+ * PATCH, a dispatch claiming or settling an item) is a real wall-clock instant
+ * and is already on the calendar every reader uses; reprojecting it would
+ * invert the offset — now is later than the frozen epoch, so the difference
+ * goes negative — and throw the event months into the FUTURE, i.e. above
+ * everything, forever. Hence the guard, not a bare subtraction.
+ */
+export function mockReprojectedIso(iso: string): string {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms) || ms > MOCK_EPOCH.getTime()) return iso;
+  return new Date(clock.now().getTime() - (MOCK_EPOCH.getTime() - ms)).toISOString();
+}
 
-const MOCK_WORK_ITEM_SEEDS: MockSeed[] = [
-  // ── Project: Kubernetes Cluster Upgrade ────────────────────────────────────
-  // Epic 1: Control Plane Upgrade
-  { id: 'wi-k8s-e1', projectId: 'p-observability', projectName: 'Observability Platform', parentId: null, type: 'epic', title: 'Control Plane Upgrade to 1.29', description: 'Upgrade all control-plane components from 1.26 to 1.29 with zero-downtime SLO.', status: 'in_progress', priority: 'critical', assigneeId: 'p-001', assigneeName: 'Alex Chen', assigneeDept: 'Platform Engineering', labels: ['kubernetes', 'infra', 'backend'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(45), updatedAt: D(2), completedAt: null, childCount: 2, childDoneCount: 1 },
-  // Feature 1.1: Pre-upgrade audit
-  { id: 'wi-k8s-f1', projectId: 'p-observability', projectName: 'Observability Platform', parentId: 'wi-k8s-e1', type: 'story', title: 'Pre-upgrade compatibility audit', description: 'Identify deprecated APIs and incompatible workloads before upgrading.', status: 'done', priority: 'high', assigneeId: 'p-001', assigneeName: 'Alex Chen', assigneeDept: 'Platform Engineering', labels: ['kubernetes', 'infra'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(44), updatedAt: D(20), completedAt: D(20), childCount: 2, childDoneCount: 2 },
-  { id: 'wi-k8s-s1', projectId: 'p-observability', projectName: 'Observability Platform', parentId: 'wi-k8s-f1', type: 'story', title: 'Audit deprecated API usage across all deployments', description: 'Run pluto and kubent to find usage of removed API versions.', status: 'done', priority: 'high', assigneeId: 'p-001', assigneeName: 'Alex Chen', assigneeDept: 'Platform Engineering', labels: ['kubernetes', 'infra'], storyPoints: 5, prUrl: 'https://github.com/orgiq/platform/pull/312', prStatus: 'merged', createdAt: D(44), updatedAt: D(30), completedAt: D(30), childCount: 0, childDoneCount: 0 },
-  { id: 'wi-k8s-s2', projectId: 'p-observability', projectName: 'Observability Platform', parentId: 'wi-k8s-f1', type: 'story', title: 'Test workloads in staging 1.29 cluster', description: 'Spin up ephemeral staging cluster at 1.29 and validate all namespace workloads.', status: 'done', priority: 'high', assigneeId: 'p-002', assigneeName: 'Maria Santos', assigneeDept: 'Platform Engineering', labels: ['kubernetes', 'testing'], storyPoints: 8, prUrl: 'https://github.com/orgiq/platform/pull/331', prStatus: 'merged', createdAt: D(40), updatedAt: D(22), completedAt: D(22), childCount: 0, childDoneCount: 0 },
-  // Feature 1.2: Control plane upgrade execution
-  { id: 'wi-k8s-f2', projectId: 'p-observability', projectName: 'Observability Platform', parentId: 'wi-k8s-e1', type: 'story', title: 'Control plane node upgrade', description: 'Rolling upgrade of kube-apiserver, etcd, controller-manager, and scheduler.', status: 'in_progress', priority: 'critical', assigneeId: 'p-001', assigneeName: 'Alex Chen', assigneeDept: 'Platform Engineering', labels: ['kubernetes', 'infra'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(20), updatedAt: D(1), completedAt: null, childCount: 3, childDoneCount: 1 },
-  { id: 'wi-k8s-s3', projectId: 'p-observability', projectName: 'Observability Platform', parentId: 'wi-k8s-f2', type: 'story', title: 'Upgrade etcd cluster from 3.4 to 3.5', description: 'Backup etcd, upgrade leader then followers, verify quorum.', status: 'done', priority: 'critical', assigneeId: 'p-001', assigneeName: 'Alex Chen', assigneeDept: 'Platform Engineering', labels: ['kubernetes', 'infra', 'etcd'], storyPoints: 13, prUrl: 'https://github.com/orgiq/platform/pull/388', prStatus: 'merged', createdAt: D(18), updatedAt: D(10), completedAt: D(10), childCount: 2, childDoneCount: 2 },
-  { id: 'wi-k8s-t1', projectId: 'p-observability', projectName: 'Observability Platform', parentId: 'wi-k8s-s3', type: 'story', title: 'Snapshot etcd before upgrade', description: null, status: 'done', priority: 'critical', assigneeId: 'p-001', assigneeName: 'Alex Chen', assigneeDept: 'Platform Engineering', labels: ['kubernetes', 'etcd'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(18), updatedAt: D(12), completedAt: D(12), childCount: 0, childDoneCount: 0 },
-  { id: 'wi-k8s-t2', projectId: 'p-observability', projectName: 'Observability Platform', parentId: 'wi-k8s-s3', type: 'story', title: 'Validate etcd quorum post-upgrade', description: null, status: 'done', priority: 'high', assigneeId: 'p-001', assigneeName: 'Alex Chen', assigneeDept: 'Platform Engineering', labels: ['kubernetes', 'etcd'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(18), updatedAt: D(10), completedAt: D(10), childCount: 0, childDoneCount: 0 },
-  { id: 'wi-k8s-s4', projectId: 'p-observability', projectName: 'Observability Platform', parentId: 'wi-k8s-f2', type: 'story', title: 'Upgrade kube-apiserver pods', description: 'Cordon, drain, upgrade image, uncordon. Repeat per control-plane node.', status: 'in_progress', priority: 'critical', assigneeId: 'p-001', assigneeName: 'Alex Chen', assigneeDept: 'Platform Engineering', labels: ['kubernetes', 'infra'], storyPoints: 8, prUrl: 'https://github.com/orgiq/platform/pull/401', prStatus: 'open', createdAt: D(8), updatedAt: D(1), completedAt: null, childCount: 0, childDoneCount: 0 },
-  { id: 'wi-k8s-s5', projectId: 'p-observability', projectName: 'Observability Platform', parentId: 'wi-k8s-f2', type: 'story', title: 'Update admission webhooks and cert-manager', description: 'Ensure TLS bootstrapping certs are renewed for 1.29 admission API changes.', status: 'open', priority: 'high', assigneeId: null, assigneeName: null, assigneeDept: null, labels: ['kubernetes', 'security', 'infra'], storyPoints: 5, prUrl: null, prStatus: null, createdAt: D(5), updatedAt: D(5), completedAt: null, childCount: 0, childDoneCount: 0 },
-  // Epic 2: Worker Node Fleet
-  { id: 'wi-k8s-e2', projectId: 'p-observability', projectName: 'Observability Platform', parentId: null, type: 'epic', title: 'Worker Node Fleet Upgrade', description: 'Replace all worker node groups with 1.29 AMIs using rolling drain strategy.', status: 'open', priority: 'high', assigneeId: 'p-002', assigneeName: 'Maria Santos', assigneeDept: 'Platform Engineering', labels: ['kubernetes', 'infra'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(30), updatedAt: D(5), completedAt: null, childCount: 2, childDoneCount: 0 },
-  { id: 'wi-k8s-f3', projectId: 'p-observability', projectName: 'Observability Platform', parentId: 'wi-k8s-e2', type: 'story', title: 'Node drain and replacement strategy', description: 'Design and implement blue/green node group replacement with PodDisruptionBudgets.', status: 'open', priority: 'high', assigneeId: 'p-002', assigneeName: 'Maria Santos', assigneeDept: 'Platform Engineering', labels: ['kubernetes', 'infra'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(30), updatedAt: D(8), completedAt: null, childCount: 2, childDoneCount: 0 },
-  { id: 'wi-k8s-s6', projectId: 'p-observability', projectName: 'Observability Platform', parentId: 'wi-k8s-f3', type: 'story', title: 'Implement PodDisruptionBudgets for all stateful workloads', description: null, status: 'open', priority: 'high', assigneeId: 'p-004', assigneeName: 'Priya Patel', assigneeDept: 'Platform Engineering', labels: ['kubernetes', 'infra'], storyPoints: 8, prUrl: null, prStatus: null, createdAt: D(25), updatedAt: D(8), completedAt: null, childCount: 0, childDoneCount: 0 },
-  { id: 'wi-k8s-s7', projectId: 'p-observability', projectName: 'Observability Platform', parentId: 'wi-k8s-f3', type: 'story', title: 'Write node replacement runbook', description: null, status: 'open', priority: 'medium', assigneeId: 'p-009', assigneeName: "Ryan O'Brien", assigneeDept: 'Product', labels: ['kubernetes', 'documentation'], storyPoints: 3, prUrl: null, prStatus: null, createdAt: D(20), updatedAt: D(8), completedAt: null, childCount: 0, childDoneCount: 0 },
-  { id: 'wi-k8s-f4', projectId: 'p-observability', projectName: 'Observability Platform', parentId: 'wi-k8s-e2', type: 'story', title: 'GPU node group upgrade coordination', description: 'Coordinate with ML team to migrate GPU workloads during node replacement window.', status: 'open', priority: 'medium', assigneeId: 'p-013', assigneeName: 'Ahmed Hassan', assigneeDept: 'Data Platform', labels: ['kubernetes', 'ml', 'infra'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(20), updatedAt: D(5), completedAt: null, childCount: 1, childDoneCount: 0 },
-  { id: 'wi-k8s-s8', projectId: 'p-observability', projectName: 'Observability Platform', parentId: 'wi-k8s-f4', type: 'story', title: 'Coordinate ML team GPU workload cutover window', description: null, status: 'open', priority: 'medium', assigneeId: 'p-013', assigneeName: 'Ahmed Hassan', assigneeDept: 'Data Platform', labels: ['kubernetes', 'ml'], storyPoints: 13, prUrl: null, prStatus: null, createdAt: D(18), updatedAt: D(5), completedAt: null, childCount: 0, childDoneCount: 0 },
+/**
+ * The mock board — the fixture's live rows.
+ *
+ * Still a function, not a captured array: `rows()` resolves the scenario the
+ * control plane currently has live, so a read after
+ * `POST /api/__mock/scenario {"scenario":"empty","fixture":"work-items"}` sees
+ * the empty world instead of a photograph of the seeded one.
+ */
+function mockWorkItems(): WorkItem[] {
+  return workItems.rows();
+}
 
-  // ── Project: Istio Service Mesh Migration ──────────────────────────────────
-  { id: 'wi-istio-e1', projectId: 'p-zero-trust', projectName: 'Zero Trust Network', parentId: null, type: 'epic', title: 'Sidecar Injection Rollout', description: 'Enable Istio sidecar injection across all production namespaces with mTLS in STRICT mode.', status: 'in_progress', priority: 'high', assigneeId: 'p-001', assigneeName: 'Alex Chen', assigneeDept: 'Platform Engineering', labels: ['istio', 'service-mesh', 'kubernetes', 'security'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(60), updatedAt: D(3), completedAt: null, childCount: 2, childDoneCount: 1 },
-  { id: 'wi-istio-f1', projectId: 'p-zero-trust', projectName: 'Zero Trust Network', parentId: 'wi-istio-e1', type: 'story', title: 'Namespace opt-in labels', description: null, status: 'done', priority: 'high', assigneeId: 'p-001', assigneeName: 'Alex Chen', assigneeDept: 'Platform Engineering', labels: ['istio', 'kubernetes'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(58), updatedAt: D(30), completedAt: D(30), childCount: 2, childDoneCount: 2 },
-  { id: 'wi-istio-s1', projectId: 'p-zero-trust', projectName: 'Zero Trust Network', parentId: 'wi-istio-f1', type: 'story', title: 'Apply istio-injection=enabled to core namespaces', description: null, status: 'done', priority: 'high', assigneeId: 'p-001', assigneeName: 'Alex Chen', assigneeDept: 'Platform Engineering', labels: ['istio', 'kubernetes'], storyPoints: 3, prUrl: 'https://github.com/orgiq/platform/pull/255', prStatus: 'merged', createdAt: D(55), updatedAt: D(40), completedAt: D(40), childCount: 0, childDoneCount: 0 },
-  { id: 'wi-istio-s2', projectId: 'p-zero-trust', projectName: 'Zero Trust Network', parentId: 'wi-istio-f1', type: 'story', title: 'Document injection troubleshooting guide', description: null, status: 'in_review', priority: 'medium', assigneeId: 'p-009', assigneeName: "Ryan O'Brien", assigneeDept: 'Product', labels: ['istio', 'documentation'], storyPoints: 5, prUrl: 'https://github.com/orgiq/platform/pull/289', prStatus: 'open', createdAt: D(45), updatedAt: D(3), completedAt: null, childCount: 0, childDoneCount: 0 },
-  { id: 'wi-istio-f2', projectId: 'p-zero-trust', projectName: 'Zero Trust Network', parentId: 'wi-istio-e1', type: 'story', title: 'Traffic policy and mTLS configuration', description: null, status: 'in_progress', priority: 'critical', assigneeId: 'p-022', assigneeName: 'Sophie Turner', assigneeDept: 'Platform Engineering', labels: ['istio', 'security', 'service-mesh'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(30), updatedAt: D(2), completedAt: null, childCount: 2, childDoneCount: 0 },
-  { id: 'wi-istio-s3', projectId: 'p-zero-trust', projectName: 'Zero Trust Network', parentId: 'wi-istio-f2', type: 'story', title: 'Configure mTLS STRICT mode for payment-svc', description: null, status: 'in_progress', priority: 'critical', assigneeId: 'p-022', assigneeName: 'Sophie Turner', assigneeDept: 'Platform Engineering', labels: ['istio', 'security'], storyPoints: 8, prUrl: 'https://github.com/orgiq/platform/pull/410', prStatus: 'draft', createdAt: D(15), updatedAt: D(2), completedAt: null, childCount: 0, childDoneCount: 0 },
-  { id: 'wi-istio-s4', projectId: 'p-zero-trust', projectName: 'Zero Trust Network', parentId: 'wi-istio-f2', type: 'story', title: 'Port circuit-breaker configs from Hystrix to Istio DestinationRules', description: null, status: 'open', priority: 'high', assigneeId: 'p-004', assigneeName: 'Priya Patel', assigneeDept: 'Platform Engineering', labels: ['istio', 'resilience'], storyPoints: 13, prUrl: null, prStatus: null, createdAt: D(10), updatedAt: D(5), completedAt: null, childCount: 0, childDoneCount: 0 },
-  { id: 'wi-istio-e2', projectId: 'p-zero-trust', projectName: 'Zero Trust Network', parentId: null, type: 'epic', title: 'Observability Integration', description: 'Connect Istio telemetry to unified observability stack (Prometheus + Grafana + Tempo).', status: 'open', priority: 'medium', assigneeId: 'p-021', assigneeName: 'Ben Foster', assigneeDept: 'Platform Engineering', labels: ['istio', 'observability', 'service-mesh'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(40), updatedAt: D(5), completedAt: null, childCount: 1, childDoneCount: 0 },
-  { id: 'wi-istio-f3', projectId: 'p-zero-trust', projectName: 'Zero Trust Network', parentId: 'wi-istio-e2', type: 'story', title: 'Kiali + Jaeger integration', description: null, status: 'open', priority: 'medium', assigneeId: 'p-021', assigneeName: 'Ben Foster', assigneeDept: 'Platform Engineering', labels: ['istio', 'observability'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(35), updatedAt: D(5), completedAt: null, childCount: 2, childDoneCount: 0 },
-  { id: 'wi-istio-s5', projectId: 'p-zero-trust', projectName: 'Zero Trust Network', parentId: 'wi-istio-f3', type: 'story', title: 'Deploy Kiali dashboard for mesh topology', description: null, status: 'open', priority: 'medium', assigneeId: 'p-021', assigneeName: 'Ben Foster', assigneeDept: 'Platform Engineering', labels: ['istio', 'observability'], storyPoints: 5, prUrl: null, prStatus: null, createdAt: D(30), updatedAt: D(5), completedAt: null, childCount: 0, childDoneCount: 0 },
-  { id: 'wi-istio-s6', projectId: 'p-zero-trust', projectName: 'Zero Trust Network', parentId: 'wi-istio-f3', type: 'story', title: 'Configure Jaeger sampling rates per service class', description: null, status: 'open', priority: 'low', assigneeId: null, assigneeName: null, assigneeDept: null, labels: ['istio', 'observability'], storyPoints: 3, prUrl: null, prStatus: null, createdAt: D(28), updatedAt: D(5), completedAt: null, childCount: 0, childDoneCount: 0 },
+/**
+ * Which initiative a mock work item belongs to — the sync sibling of
+ * `getWorkItem(id)?.projectId`, over the same `mockWorkItems()` array.
+ *
+ * Exists for arm 1 of `spendPredicateSql` (a bot_run attributed through its
+ * work item), which providers/bots.ts `mockRunsAttributedTo` has to resolve
+ * from inside a getter — `GrantRow.initiativeSpendInWindowUsd` is derived at
+ * every read, and a getter cannot await. Mock-mode only; on a real cluster
+ * that subquery is Postgres's job.
+ */
+export function mockWorkItemProjectId(id: string | null | undefined): string | null {
+  if (!id) return null;
+  return mockWorkItems().find((i) => i.id === id)?.projectId ?? null;
+}
 
-  // ── Project: CI/CD Pipeline Unification ───────────────────────────────────
-  { id: 'wi-cicd-e1', projectId: 'p-llm-platform', projectName: 'LLM Application Platform', parentId: null, type: 'epic', title: 'Migrate to Unified GitHub Actions Workflows', description: 'Replace 14 disparate Jenkins + CircleCI pipelines with a shared GitHub Actions monorepo workflow.', status: 'in_progress', priority: 'high', assigneeId: 'p-002', assigneeName: 'Maria Santos', assigneeDept: 'Platform Engineering', labels: ['ci-cd', 'github-actions', 'devops'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(50), updatedAt: D(1), completedAt: null, childCount: 2, childDoneCount: 1 },
-  { id: 'wi-cicd-f1', projectId: 'p-llm-platform', projectName: 'LLM Application Platform', parentId: 'wi-cicd-e1', type: 'story', title: 'Shared reusable workflow library', description: null, status: 'done', priority: 'high', assigneeId: 'p-002', assigneeName: 'Maria Santos', assigneeDept: 'Platform Engineering', labels: ['ci-cd', 'github-actions'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(48), updatedAt: D(25), completedAt: D(25), childCount: 2, childDoneCount: 2 },
-  { id: 'wi-cicd-s1', projectId: 'p-llm-platform', projectName: 'LLM Application Platform', parentId: 'wi-cicd-f1', type: 'story', title: 'Create reusable build-test-publish workflow', description: null, status: 'done', priority: 'high', assigneeId: 'p-002', assigneeName: 'Maria Santos', assigneeDept: 'Platform Engineering', labels: ['ci-cd', 'github-actions'], storyPoints: 8, prUrl: 'https://github.com/orgiq/platform/pull/190', prStatus: 'merged', createdAt: D(48), updatedAt: D(33), completedAt: D(33), childCount: 0, childDoneCount: 0 },
-  { id: 'wi-cicd-s2', projectId: 'p-llm-platform', projectName: 'LLM Application Platform', parentId: 'wi-cicd-f1', type: 'story', title: 'Implement OIDC-based AWS credential vending', description: null, status: 'done', priority: 'high', assigneeId: 'p-022', assigneeName: 'Sophie Turner', assigneeDept: 'Platform Engineering', labels: ['ci-cd', 'security', 'aws'], storyPoints: 5, prUrl: 'https://github.com/orgiq/platform/pull/201', prStatus: 'merged', createdAt: D(45), updatedAt: D(28), completedAt: D(28), childCount: 0, childDoneCount: 0 },
-  { id: 'wi-cicd-f2', projectId: 'p-llm-platform', projectName: 'LLM Application Platform', parentId: 'wi-cicd-e1', type: 'story', title: 'Service-by-service pipeline migration', description: null, status: 'in_progress', priority: 'high', assigneeId: 'p-003', assigneeName: 'James Wright', assigneeDept: 'Platform Engineering', labels: ['ci-cd', 'github-actions'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(25), updatedAt: D(1), completedAt: null, childCount: 3, childDoneCount: 1 },
-  { id: 'wi-cicd-s3', projectId: 'p-llm-platform', projectName: 'LLM Application Platform', parentId: 'wi-cicd-f2', type: 'story', title: 'Migrate orgiq-supervisor service to GitHub Actions', description: null, status: 'done', priority: 'high', assigneeId: 'p-002', assigneeName: 'Maria Santos', assigneeDept: 'Platform Engineering', labels: ['ci-cd', 'github-actions'], storyPoints: 5, prUrl: 'https://github.com/orgiq/platform/pull/222', prStatus: 'merged', createdAt: D(24), updatedAt: D(15), completedAt: D(15), childCount: 0, childDoneCount: 0 },
-  { id: 'wi-cicd-s4', projectId: 'p-llm-platform', projectName: 'LLM Application Platform', parentId: 'wi-cicd-f2', type: 'story', title: 'Migrate data-platform services to GitHub Actions', description: null, status: 'in_progress', priority: 'medium', assigneeId: 'p-003', assigneeName: 'James Wright', assigneeDept: 'Platform Engineering', labels: ['ci-cd', 'github-actions'], storyPoints: 8, prUrl: 'https://github.com/orgiq/platform/pull/240', prStatus: 'draft', createdAt: D(18), updatedAt: D(1), completedAt: null, childCount: 0, childDoneCount: 0 },
-  { id: 'wi-cicd-s5', projectId: 'p-llm-platform', projectName: 'LLM Application Platform', parentId: 'wi-cicd-f2', type: 'story', title: 'Migrate legacy Jenkins jobs for newsroom services', description: null, status: 'open', priority: 'low', assigneeId: null, assigneeName: null, assigneeDept: null, labels: ['ci-cd', 'github-actions'], storyPoints: 5, prUrl: null, prStatus: null, createdAt: D(10), updatedAt: D(5), completedAt: null, childCount: 0, childDoneCount: 0 },
+const OPEN_STATUSES = new Set<WorkItemStatus>(['open', 'in_progress', 'in_review']);
 
-  // ── Project: Unified Observability Stack ──────────────────────────────────
-  { id: 'wi-otel-e1', projectId: 'p-inference-platform', projectName: 'Unified Observability Stack', parentId: null, type: 'epic', title: 'OpenTelemetry Collector Migration', description: 'Replace CloudWatch Agents and Datadog agents with ADOT collector as the single telemetry pipeline.', status: 'in_progress', priority: 'high', assigneeId: 'p-021', assigneeName: 'Ben Foster', assigneeDept: 'Platform Engineering', labels: ['observability', 'opentelemetry', 'kubernetes'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(70), updatedAt: D(2), completedAt: null, childCount: 2, childDoneCount: 1 },
-  { id: 'wi-otel-f1', projectId: 'p-inference-platform', projectName: 'Unified Observability Stack', parentId: 'wi-otel-e1', type: 'story', title: 'ADOT Collector DaemonSet deployment', description: null, status: 'done', priority: 'high', assigneeId: 'p-021', assigneeName: 'Ben Foster', assigneeDept: 'Platform Engineering', labels: ['observability', 'opentelemetry', 'kubernetes'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(68), updatedAt: D(35), completedAt: D(35), childCount: 2, childDoneCount: 2 },
-  { id: 'wi-otel-s1', projectId: 'p-inference-platform', projectName: 'Unified Observability Stack', parentId: 'wi-otel-f1', type: 'story', title: 'Deploy ADOT collector as DaemonSet in production', description: null, status: 'done', priority: 'high', assigneeId: 'p-021', assigneeName: 'Ben Foster', assigneeDept: 'Platform Engineering', labels: ['observability', 'opentelemetry'], storyPoints: 5, prUrl: 'https://github.com/orgiq/infra/pull/88', prStatus: 'merged', createdAt: D(65), updatedAt: D(45), completedAt: D(45), childCount: 0, childDoneCount: 0 },
-  { id: 'wi-otel-s2', projectId: 'p-inference-platform', projectName: 'Unified Observability Stack', parentId: 'wi-otel-f1', type: 'story', title: 'Configure Prometheus remote-write to Amazon Managed Prometheus', description: null, status: 'done', priority: 'high', assigneeId: 'p-021', assigneeName: 'Ben Foster', assigneeDept: 'Platform Engineering', labels: ['observability', 'prometheus'], storyPoints: 3, prUrl: 'https://github.com/orgiq/infra/pull/95', prStatus: 'merged', createdAt: D(60), updatedAt: D(40), completedAt: D(40), childCount: 0, childDoneCount: 0 },
-  { id: 'wi-otel-f2', projectId: 'p-inference-platform', projectName: 'Unified Observability Stack', parentId: 'wi-otel-e1', type: 'story', title: 'Service instrumentation', description: null, status: 'in_progress', priority: 'high', assigneeId: 'p-021', assigneeName: 'Ben Foster', assigneeDept: 'Platform Engineering', labels: ['observability', 'opentelemetry'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(35), updatedAt: D(2), completedAt: null, childCount: 3, childDoneCount: 1 },
-  { id: 'wi-otel-s3', projectId: 'p-inference-platform', projectName: 'Unified Observability Stack', parentId: 'wi-otel-f2', type: 'story', title: 'Instrument orgiq-supervisor with OTel traces', description: null, status: 'done', priority: 'high', assigneeId: 'p-021', assigneeName: 'Ben Foster', assigneeDept: 'Platform Engineering', labels: ['observability', 'opentelemetry'], storyPoints: 8, prUrl: 'https://github.com/orgiq/agents/pull/44', prStatus: 'merged', createdAt: D(33), updatedAt: D(20), completedAt: D(20), childCount: 0, childDoneCount: 0 },
-  { id: 'wi-otel-s4', projectId: 'p-inference-platform', projectName: 'Unified Observability Stack', parentId: 'wi-otel-f2', type: 'story', title: 'Instrument ingestion pipeline with OTel spans', description: null, status: 'in_progress', priority: 'medium', assigneeId: 'p-021', assigneeName: 'Ben Foster', assigneeDept: 'Platform Engineering', labels: ['observability', 'opentelemetry'], storyPoints: 5, prUrl: 'https://github.com/orgiq/agents/pull/58', prStatus: 'draft', createdAt: D(15), updatedAt: D(2), completedAt: null, childCount: 0, childDoneCount: 0 },
-  { id: 'wi-otel-s5', projectId: 'p-inference-platform', projectName: 'Unified Observability Stack', parentId: 'wi-otel-f2', type: 'story', title: 'Migrate CloudWatch metric namespace to OTel conventions', description: null, status: 'open', priority: 'medium', assigneeId: null, assigneeName: null, assigneeDept: null, labels: ['observability', 'cloudwatch'], storyPoints: 13, prUrl: null, prStatus: null, createdAt: D(10), updatedAt: D(5), completedAt: null, childCount: 0, childDoneCount: 0 },
-  { id: 'wi-otel-e2', projectId: 'p-inference-platform', projectName: 'Unified Observability Stack', parentId: null, type: 'epic', title: 'Grafana Dashboard Library', description: 'Standardized dashboards for SLO burn rates, agent traces, and infra capacity.', status: 'open', priority: 'medium', assigneeId: 'p-021', assigneeName: 'Ben Foster', assigneeDept: 'Platform Engineering', labels: ['observability', 'grafana'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(40), updatedAt: D(5), completedAt: null, childCount: 1, childDoneCount: 0 },
-  { id: 'wi-otel-f3', projectId: 'p-inference-platform', projectName: 'Unified Observability Stack', parentId: 'wi-otel-e2', type: 'story', title: 'SLO burn-rate dashboards', description: null, status: 'open', priority: 'medium', assigneeId: 'p-021', assigneeName: 'Ben Foster', assigneeDept: 'Platform Engineering', labels: ['observability', 'grafana'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(38), updatedAt: D(5), completedAt: null, childCount: 2, childDoneCount: 0 },
-  { id: 'wi-otel-s6', projectId: 'p-inference-platform', projectName: 'Unified Observability Stack', parentId: 'wi-otel-f3', type: 'story', title: 'Create SLO burn-rate dashboard for API gateway', description: null, status: 'open', priority: 'medium', assigneeId: null, assigneeName: null, assigneeDept: null, labels: ['observability', 'grafana'], storyPoints: 5, prUrl: null, prStatus: null, createdAt: D(35), updatedAt: D(5), completedAt: null, childCount: 0, childDoneCount: 0 },
-  { id: 'wi-otel-s7', projectId: 'p-inference-platform', projectName: 'Unified Observability Stack', parentId: 'wi-otel-f3', type: 'story', title: 'Create agent invocation latency p99 dashboard', description: null, status: 'open', priority: 'low', assigneeId: null, assigneeName: null, assigneeDept: null, labels: ['observability', 'grafana'], storyPoints: 3, prUrl: null, prStatus: null, createdAt: D(30), updatedAt: D(5), completedAt: null, childCount: 0, childDoneCount: 0 },
+/**
+ * The initiative-level work rollup (open stories, open bugs, points done,
+ * points total), computed from THIS module's own `mockWorkItems()` — the same
+ * array `getProjectWorkItems`/`searchWorkItems` return to the initiative
+ * detail Work tab. Mirrors the real Aurora rollup SQL in providers/projects.ts
+ * exactly (type + status filters), so a mock initiative can no longer restate
+ * these numbers independently of its own items: providers/projects.ts's
+ * `listProjects()` calls this instead of a hand-typed number on
+ * `MOCK_INITIATIVES`, closing the gap where the Initiatives list rollup and
+ * the initiative-detail Work tab disagreed (org-leader.md #2 / program-owner
+ * #3 — "34/72 pts · 47%" on the list vs. "0/10 pts" on the detail for
+ * Observability Platform, because the list number had no relationship to the
+ * wi-obs-* items below).
+ */
+export function mockWorkItemRollup(projectId: string): {
+  openStories: number;
+  openBugs: number;
+  pointsDone: number;
+  pointsTotal: number;
+  /**
+   * Highest priority among this initiative's still-open items, or null when it
+   * has none — the same `MAX(priority)` over open rows the Aurora rollup does.
+   * Restated by hand on MOCK_INITIATIVES until the board grew the seed's real
+   * items, at which point two initiatives badged "high" over a board carrying
+   * an open `critical` bug.
+   */
+  highestOpenPriority: WorkItemPriority | null;
+} {
+  const items = mockWorkItems().filter((i) => i.projectId === projectId);
+  const openStories = items.filter((i) => i.type === 'story' && OPEN_STATUSES.has(i.status)).length;
+  const openBugs = items.filter((i) => i.type === 'bug' && OPEN_STATUSES.has(i.status)).length;
+  const sized = items.filter((i) => i.type === 'story' || i.type === 'bug');
+  const pointsTotal = sized.reduce((n, i) => n + (i.storyPoints ?? 0), 0);
+  const pointsDone = sized
+    .filter((i) => i.status === 'done')
+    .reduce((n, i) => n + (i.storyPoints ?? 0), 0);
+  const RANK: WorkItemPriority[] = ['critical', 'high', 'medium', 'low'];
+  const highestOpenPriority = RANK.find(
+    (p) => items.some((i) => OPEN_STATUSES.has(i.status) && i.priority === p),
+  ) ?? null;
+  return { openStories, openBugs, pointsDone, pointsTotal, highestOpenPriority };
+}
 
-  // ── Project: Cedar Auth Policy Migration ──────────────────────────────────
-  { id: 'wi-cedar-e1', projectId: 'p-rag-search', projectName: 'Cedar Auth Policy Migration', parentId: null, type: 'epic', title: 'Replace RBAC with Cedar Policy Engine', description: 'Migrate all application-level authz checks from hardcoded role checks to Cedar policies in Amazon Verified Permissions.', status: 'in_progress', priority: 'critical', assigneeId: 'p-022', assigneeName: 'Sophie Turner', assigneeDept: 'Platform Engineering', labels: ['cedar', 'auth', 'security', 'aws'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(55), updatedAt: D(3), completedAt: null, childCount: 2, childDoneCount: 1 },
-  { id: 'wi-cedar-f1', projectId: 'p-rag-search', projectName: 'Cedar Auth Policy Migration', parentId: 'wi-cedar-e1', type: 'story', title: 'Policy schema and seed policies', description: null, status: 'done', priority: 'critical', assigneeId: 'p-022', assigneeName: 'Sophie Turner', assigneeDept: 'Platform Engineering', labels: ['cedar', 'auth'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(53), updatedAt: D(25), completedAt: D(25), childCount: 2, childDoneCount: 2 },
-  { id: 'wi-cedar-s1', projectId: 'p-rag-search', projectName: 'Cedar Auth Policy Migration', parentId: 'wi-cedar-f1', type: 'story', title: 'Design Cedar schema for OrgIQ principal/resource types', description: null, status: 'done', priority: 'critical', assigneeId: 'p-022', assigneeName: 'Sophie Turner', assigneeDept: 'Platform Engineering', labels: ['cedar', 'auth'], storyPoints: 8, prUrl: 'https://github.com/orgiq/infra/pull/112', prStatus: 'merged', createdAt: D(52), updatedAt: D(38), completedAt: D(38), childCount: 0, childDoneCount: 0 },
-  { id: 'wi-cedar-s2', projectId: 'p-rag-search', projectName: 'Cedar Auth Policy Migration', parentId: 'wi-cedar-f1', type: 'story', title: 'Seed role-based Cedar policies (member/org-leader/hr-admin)', description: null, status: 'done', priority: 'high', assigneeId: 'p-022', assigneeName: 'Sophie Turner', assigneeDept: 'Platform Engineering', labels: ['cedar', 'auth'], storyPoints: 5, prUrl: 'https://github.com/orgiq/infra/pull/128', prStatus: 'merged', createdAt: D(45), updatedAt: D(28), completedAt: D(28), childCount: 0, childDoneCount: 0 },
-  { id: 'wi-cedar-f2', projectId: 'p-rag-search', projectName: 'Cedar Auth Policy Migration', parentId: 'wi-cedar-e1', type: 'story', title: 'Middleware authz middleware integration', description: null, status: 'in_progress', priority: 'critical', assigneeId: 'p-022', assigneeName: 'Sophie Turner', assigneeDept: 'Platform Engineering', labels: ['cedar', 'auth', 'backend'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(25), updatedAt: D(3), completedAt: null, childCount: 2, childDoneCount: 1 },
-  { id: 'wi-cedar-s3', projectId: 'p-rag-search', projectName: 'Cedar Auth Policy Migration', parentId: 'wi-cedar-f2', type: 'story', title: 'Implement requireAction() Cedar middleware helper', description: null, status: 'done', priority: 'critical', assigneeId: 'p-022', assigneeName: 'Sophie Turner', assigneeDept: 'Platform Engineering', labels: ['cedar', 'auth', 'backend'], storyPoints: 13, prUrl: 'https://github.com/orgiq/middleware/pull/67', prStatus: 'merged', createdAt: D(24), updatedAt: D(12), completedAt: D(12), childCount: 0, childDoneCount: 0 },
-  { id: 'wi-cedar-s4', projectId: 'p-rag-search', projectName: 'Cedar Auth Policy Migration', parentId: 'wi-cedar-f2', type: 'story', title: 'Gate ManageIngest and ManageCanary with Cedar policies', description: null, status: 'in_progress', priority: 'high', assigneeId: 'p-003', assigneeName: 'James Wright', assigneeDept: 'Platform Engineering', labels: ['cedar', 'auth'], storyPoints: 8, prUrl: 'https://github.com/orgiq/middleware/pull/79', prStatus: 'open', createdAt: D(12), updatedAt: D(3), completedAt: null, childCount: 0, childDoneCount: 0 },
-
-  // ── Project: Developer Onboarding ─────────────────────────────────────────
-  { id: 'wi-onboard-e1', projectId: 'p-mobile-redesign', projectName: 'Developer Onboarding Improvements', parentId: null, type: 'epic', title: 'Self-Service Dev Environment Setup', description: 'Reduce time-to-first-commit from 5 days to same day for new engineers.', status: 'open', priority: 'high', assigneeId: 'p-005', assigneeName: 'David Kim', assigneeDept: 'Platform Engineering', labels: ['onboarding', 'devex', 'developer-experience'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(30), updatedAt: D(7), completedAt: null, childCount: 1, childDoneCount: 0 },
-  { id: 'wi-onboard-f1', projectId: 'p-mobile-redesign', projectName: 'Developer Onboarding Improvements', parentId: 'wi-onboard-e1', type: 'story', title: 'Automated dev toolchain bootstrap script', description: null, status: 'open', priority: 'high', assigneeId: 'p-003', assigneeName: 'James Wright', assigneeDept: 'Platform Engineering', labels: ['onboarding', 'devex'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(28), updatedAt: D(7), completedAt: null, childCount: 2, childDoneCount: 0 },
-  { id: 'wi-onboard-s1', projectId: 'p-mobile-redesign', projectName: 'Developer Onboarding Improvements', parentId: 'wi-onboard-f1', type: 'story', title: 'Write bootstrap.sh to install all required tools via brew/mise', description: null, status: 'open', priority: 'high', assigneeId: 'p-003', assigneeName: 'James Wright', assigneeDept: 'Platform Engineering', labels: ['onboarding', 'devex'], storyPoints: 5, prUrl: null, prStatus: null, createdAt: D(25), updatedAt: D(7), completedAt: null, childCount: 0, childDoneCount: 0 },
-  { id: 'wi-onboard-s2', projectId: 'p-mobile-redesign', projectName: 'Developer Onboarding Improvements', parentId: 'wi-onboard-f1', type: 'story', title: 'Create ONBOARDING.md with architecture overview + runbook', description: null, status: 'open', priority: 'medium', assigneeId: 'p-009', assigneeName: "Ryan O'Brien", assigneeDept: 'Product', labels: ['onboarding', 'documentation'], storyPoints: 3, prUrl: null, prStatus: null, createdAt: D(20), updatedAt: D(7), completedAt: null, childCount: 0, childDoneCount: 0 },
-
-  // ── The SME's own board ────────────────────────────────────────────────────
-  //
-  // Everything above predates the program operating model: it is a fixture
-  // about Kubernetes and Istio that was later re-pointed at `p-*` initiative
-  // ids, so an initiative's name and its items' subject matter disagree, and
-  // the cast is the older one (p-004 reads as "Priya Patel" up there, and as
-  // Nora DaSilva everywhere the identity provider is involved).
-  //
-  // These rows are lifted straight from `schema/seed_program.sql`, ids and
-  // all, so mock mode and a seeded Aurora tell the same story about the two
-  // initiatives Nora DaSilva (p-004, `u-nora`, role `sme`) is attached to —
-  // she owns Observability Platform and is an SME on Auth Migration. Without
-  // them the Work page's suggestion strip was empty for her and there was
-  // nothing on the page to explain why: the mock board carried no `in_review`
-  // work and nothing blocked on either initiative, so the ranker had nothing
-  // to rank. They also give the page its narrative — one thing waiting on
-  // *her* review, one thing stalled on someone else's decision.
-  //
-  // `blocked` is a label, not a status: see kindOf in lib/work-suggestions.ts.
-
-  // ── p-observability — SLOs and error budgets (Nora owns this initiative) ──
-  { id: 'wi-obs-e2', projectId: 'p-observability', projectName: 'Observability Platform', parentId: null, type: 'epic', title: 'SLOs and error budgets', description: 'Every tier-1 service has an SLO, a burn-rate alert, and an owner.', status: 'in_progress', priority: 'high', assigneeId: 'p-004', assigneeName: 'Nora DaSilva', assigneeDept: 'Platform Engineering', labels: ['slo'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(75), updatedAt: D(5), completedAt: null, childCount: 3, childDoneCount: 0 },
-  { id: 'wi-obs-e2-s2', projectId: 'p-observability', projectName: 'Observability Platform', parentId: 'wi-obs-e2', type: 'story', title: 'Multi-window burn-rate alerts (fast + slow burn)', description: 'Fast burn pages, slow burn tickets. Thresholds derived from the SLO, not hand-picked.', status: 'in_review', priority: 'high', assigneeId: 'p-008', assigneeName: 'Layla Hassan', assigneeDept: 'Platform Engineering', labels: ['slo', 'alerting'], storyPoints: 5, prUrl: 'https://github.com/connorhoehnslalom/orgiq-observability/pull/38', prStatus: 'open', createdAt: D(21), updatedAt: D(6), completedAt: null, childCount: 0, childDoneCount: 0 },
-  { id: 'wi-obs-e2-s3', projectId: 'p-observability', projectName: 'Observability Platform', parentId: 'wi-obs-e2', type: 'story', title: 'Error-budget dashboard per team', description: 'One panel per team: budget remaining, burn over the window, and who owns the service.', status: 'open', priority: 'medium', assigneeId: 'p-004', assigneeName: 'Nora DaSilva', assigneeDept: 'Platform Engineering', labels: ['slo', 'dashboards'], storyPoints: 3, prUrl: null, prStatus: null, createdAt: D(33), updatedAt: D(2), completedAt: null, childCount: 0, childDoneCount: 0 },
-  { id: 'wi-obs-e2-b4', projectId: 'p-observability', projectName: 'Observability Platform', parentId: 'wi-obs-e2', type: 'bug', title: 'Alert dedup storm when a shared dependency degrades', description: 'One degraded dependency fans out to forty pages. Waiting on the dependency map before dedup keys can be chosen.', status: 'open', priority: 'high', assigneeId: 'p-011', assigneeName: 'Eli Garcia', assigneeDept: 'Platform Engineering', labels: ['alerting', 'blocked'], storyPoints: 2, prUrl: null, prStatus: null, createdAt: D(75), updatedAt: D(4), completedAt: null, childCount: 0, childDoneCount: 0 },
-
-  // ── p-auth-migration — Nora is an SME here, not the owner ────────────────
-  { id: 'wi-auth-e1', projectId: 'p-auth-migration', projectName: 'Auth Migration', parentId: null, type: 'epic', title: 'Cognito consolidation', description: 'One IdP, one session mint path, verified JWKS everywhere.', status: 'in_progress', priority: 'critical', assigneeId: 'p-002', assigneeName: 'Vera Green', assigneeDept: 'Platform Engineering', labels: ['oidc'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(75), updatedAt: D(3), completedAt: null, childCount: 1, childDoneCount: 0 },
-  { id: 'wi-auth-e1-s3', projectId: 'p-auth-migration', projectName: 'Auth Migration', parentId: 'wi-auth-e1', type: 'story', title: 'Session cookie hardening: max-age, rotation on switch', description: 'Re-mint on every tenant and role switch; the pre-switch cookie stops working within the refresh window.', status: 'in_review', priority: 'high', assigneeId: 'p-004', assigneeName: 'Nora DaSilva', assigneeDept: 'Platform Engineering', labels: ['session'], storyPoints: 5, prUrl: 'https://github.com/connorhoehnslalom/orgiq-auth-service/pull/44', prStatus: 'open', createdAt: D(30), updatedAt: D(5), completedAt: null, childCount: 0, childDoneCount: 0 },
-  { id: 'wi-auth-e2', projectId: 'p-auth-migration', projectName: 'Auth Migration', parentId: null, type: 'epic', title: 'Legacy SSO decommission', description: 'The SAML shim serves zero tenants and is deleted, not paused.', status: 'open', priority: 'high', assigneeId: 'p-002', assigneeName: 'Vera Green', assigneeDept: 'Platform Engineering', labels: ['decom'], storyPoints: null, prUrl: null, prStatus: null, createdAt: D(75), updatedAt: D(6), completedAt: null, childCount: 2, childDoneCount: 0 },
-  { id: 'wi-auth-e2-s2', projectId: 'p-auth-migration', projectName: 'Auth Migration', parentId: 'wi-auth-e2', type: 'story', title: 'Tenant-by-tenant cutover runbook with rollback', description: 'Cannot be written until the cutover order is settled — smallest tenant first or riskiest first is still escalated.', status: 'open', priority: 'high', assigneeId: 'p-051', assigneeName: 'Nora Chang', assigneeDept: 'Security', labels: ['decom', 'runbook', 'blocked'], storyPoints: 5, prUrl: null, prStatus: null, createdAt: D(44), updatedAt: D(9), completedAt: null, childCount: 0, childDoneCount: 0 },
-  { id: 'wi-auth-e2-b3', projectId: 'p-auth-migration', projectName: 'Auth Migration', parentId: 'wi-auth-e2', type: 'bug', title: 'Logout leaves the legacy shim cookie alive', description: 'Signing out clears the OrgIQ session and not the SAML shim cookie, so the next visit silently re-authenticates.', status: 'open', priority: 'medium', assigneeId: 'p-002', assigneeName: 'Vera Green', assigneeDept: 'Platform Engineering', labels: ['session', 'decom'], storyPoints: 2, prUrl: null, prStatus: null, createdAt: D(39), updatedAt: D(4), completedAt: null, childCount: 0, childDoneCount: 0 },
-];
-
-/** Sprint membership + dollar estimate for the seeds that carry one. */
-const MOCK_PROGRAM_FIELDS: Record<string, { sprintId?: string; estimatedCostUsd?: number }> = {
-  'wi-k8s-s1': { sprintId: 'spr-obs-s1', estimatedCostUsd: 6.15 },
-  'wi-k8s-s2': { sprintId: 'spr-obs-s1', estimatedCostUsd: 10.42 },
-  'wi-k8s-s3': { sprintId: 'spr-obs-s2', estimatedCostUsd: 16.90 },
-  'wi-k8s-s4': { sprintId: 'spr-obs-s3', estimatedCostUsd: 10.77 },
-  'wi-k8s-s5': { sprintId: 'spr-obs-s3', estimatedCostUsd: 5.77 },
-  'wi-k8s-s6': { sprintId: 'spr-obs-s3', estimatedCostUsd: 9.84 },
-  'wi-k8s-s7': { estimatedCostUsd: 3.61 },
-  // The SME's board, matching schema/seed_program.sql row for row.
-  'wi-obs-e2-s2': { sprintId: 'spr-obs-s2', estimatedCostUsd: 6.32 },
-  'wi-obs-e2-s3': { sprintId: 'spr-obs-s3', estimatedCostUsd: 2.67 },
-  'wi-obs-e2-b4': { sprintId: 'spr-obs-s3', estimatedCostUsd: 1.82 },
-  'wi-auth-e1-s3': { sprintId: 'spr-auth-s2', estimatedCostUsd: 5.33 },
-  'wi-auth-e2-s2': { sprintId: 'spr-auth-s2', estimatedCostUsd: 4.85 },
-  'wi-auth-e2-b3': { sprintId: 'spr-auth-s2', estimatedCostUsd: 1.74 },
-};
-
-const MOCK_WORK_ITEMS: WorkItem[] = MOCK_WORK_ITEM_SEEDS.map((seed) => ({
-  sprintId: null,
-  estimatedCostUsd: null,
-  ...seed,
-  ...MOCK_PROGRAM_FIELDS[seed.id],
-}));
-
-// Mirrors the decisions in schema/seed_program.sql so mock mode and a seeded
-// Aurora tell the same story.
-const MOCK_DECISIONS: ProjectDecision[] = [
-  { id: 'd-otel-vendor', topic: 'Self-hosted OTel collectors over vendor agents', summary: 'Vendor agents priced per-host at 3x our infra cost; the collector fleet is ours to tune and the escape hatch stays open.', status: 'resolved', requiredRole: null, escalatedAt: null, workItemId: 'wi-obs-e1', workItemTitle: 'OpenTelemetry everywhere' },
-  { id: 'd-cognito-cutover', topic: 'Cutover order for legacy SSO tenants', summary: 'Smallest tenant first vs. riskiest first. Riskiest-first surfaces unknowns while rollback is cheap, but a failed first cutover is loud.', status: 'escalated', requiredRole: 'org-leader', escalatedAt: D(3), workItemId: 'wi-auth-e2', workItemTitle: 'Legacy SSO decommission' },
-  { id: 'd-eval-judge-model', topic: 'Judge model for canary evaluation', summary: 'Nova Pro judges cost ~6x Nova Lite but agree with human labels 11 points more often on the current rubric. Sample-rate tuning could fund the gap.', status: 'open', requiredRole: null, escalatedAt: null, workItemId: 'wi-llm-e1', workItemTitle: 'Prompt management and canary' },
-  { id: 'd-iceberg', topic: 'Iceberg over Delta for the lakehouse table format', summary: 'Engine-neutral catalog support and snapshot isolation fit the multi-engine roadmap; Delta\'s tighter Spark coupling was the deciding cost.', status: 'resolved', requiredRole: null, escalatedAt: null, workItemId: 'wi-lake-e1', workItemTitle: 'Lakehouse foundation' },
-];
-
-// Project ID → decisions index
-const PROJECT_DECISIONS: Record<string, string[]> = {
-  'p-observability':  ['d-otel-vendor'],
-  'p-auth-migration': ['d-cognito-cutover'],
-  'p-llm-platform':   ['d-eval-judge-model'],
-  'p-data-lake':      ['d-iceberg'],
-};
+// An initiative's decisions, derived from the `decisions` fixture rather than
+// typed out again.
+//
+// This used to be a hand-written `MOCK_DECISIONS` of seed_program.sql's four
+// rows plus a `PROJECT_DECISIONS` index. Two costs: (1) it was a second,
+// disjoint decision list — mock/decisions.ts carried seed.sql's rows and this
+// carried the program's, so `GET /api/graph/decisions` and this tab could
+// never show each other's, out of one table; (2) its `workItemTitle`s were
+// typed by hand, so `d-eval-judge-model` claimed the title of an item the mock
+// board does not carry. Deriving mirrors `dbGetProjectDecisions` instead: the
+// same filter, the same LEFT JOIN on work_items (a title only when the board
+// really has that item), and the same ORDER BY.
+function mockProjectDecisions(projectId: string): ProjectDecision[] {
+  const titleById = new Map(mockWorkItems().map((i) => [i.id, i.title]));
+  const rank = (status: string): number =>
+    (status === 'escalated' ? 0 : status === 'open' ? 1 : 2);
+  return decisionRows
+    .rows()
+    .filter((d) => d.projectId === projectId)
+    .map((d) => ({
+      id: d.id,
+      topic: d.topic,
+      summary: d.summary,
+      status: d.status,
+      requiredRole: d.requiredRole,
+      escalatedAt: d.escalatedAt,
+      workItemId: d.workItemId,
+      workItemTitle: d.workItemId != null ? titleById.get(d.workItemId) ?? null : null,
+    }))
+    // ORDER BY CASE status WHEN 'escalated' THEN 0 WHEN 'open' THEN 1 ELSE 2 END,
+    //          COALESCE(escalated_at, created_at) DESC
+    .sort((a, b) => rank(a.status) - rank(b.status)
+      || (b.escalatedAt ?? '').localeCompare(a.escalatedAt ?? ''));
+}
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -729,7 +723,7 @@ export async function searchWorkItems(opts: SearchWorkItemsOpts): Promise<WorkIt
     return dbSearchWorkItems(opts);
   }
   // Mock path
-  let items = MOCK_WORK_ITEMS.slice();
+  let items = mockWorkItems().slice();
   if (opts.label) {
     const lc = opts.label.toLowerCase();
     items = items.filter((i) => i.labels.some((l) => l.toLowerCase().includes(lc)));
@@ -747,12 +741,15 @@ export async function searchWorkItems(opts: SearchWorkItemsOpts): Promise<WorkIt
   if (opts.sprintId) {
     items = items.filter((i) => i.sprintId === opts.sprintId);
   }
+  // `clock.now()`, not `Date.now()`: the rows a period filter is measured
+  // against are the fixture's, and a frozen-clock test that stamps an item
+  // "an hour ago" must see that item under `period=today`.
   if (opts.period === 'today') {
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    items = items.filter((i) => new Date(i.updatedAt) >= cutoff);
+    const cutoff = clock.now().getTime() - 24 * 60 * 60 * 1000;
+    items = items.filter((i) => Date.parse(i.updatedAt) >= cutoff);
   } else if (opts.period === 'week') {
-    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    items = items.filter((i) => new Date(i.updatedAt) >= cutoff);
+    const cutoff = clock.now().getTime() - 7 * 24 * 60 * 60 * 1000;
+    items = items.filter((i) => Date.parse(i.updatedAt) >= cutoff);
   }
   items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return items.slice(0, Math.min(opts.limit ?? 50, 200));
@@ -762,7 +759,7 @@ export async function getProjectWorkItems(projectId: string): Promise<WorkItem[]
   if (!config.mock.aurora) {
     return dbGetProjectWorkItems(projectId);
   }
-  return MOCK_WORK_ITEMS.filter((i) => i.projectId === projectId);
+  return mockWorkItems().filter((i) => i.projectId === projectId);
 }
 
 export async function getProjectWorkTree(projectId: string): Promise<WorkItemTree[]> {
@@ -774,7 +771,7 @@ export async function getPersonWorkItems(personId: string, opts: { status?: stri
   if (!config.mock.aurora) {
     return dbGetPersonWorkItems(personId, opts);
   }
-  let items = MOCK_WORK_ITEMS.filter((i) => i.assigneeId === personId);
+  let items = mockWorkItems().filter((i) => i.assigneeId === personId);
   if (opts.status) items = items.filter((i) => i.status === opts.status);
   items.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return items.slice(0, opts.limit ?? 30);
@@ -784,21 +781,25 @@ export async function getProjectDecisions(projectId: string): Promise<ProjectDec
   if (!config.mock.aurora) {
     return dbGetProjectDecisions(projectId);
   }
-  const ids = PROJECT_DECISIONS[projectId] ?? [];
-  return MOCK_DECISIONS.filter((d) => ids.includes(d.id));
+  return mockProjectDecisions(projectId);
 }
 
 export async function createWorkItem(data: CreateWorkItemInput): Promise<WorkItem> {
   if (!config.mock.aurora) {
     return dbCreateWorkItem(data);
   }
-  // Mock: return a synthetic item
-  const id = `wi-mock-${Date.now()}`;
-  const now = new Date().toISOString();
+  // Mock: append a real row to the fixture, so the create shows up in the next
+  // GET and `POST /api/__mock/reset` takes it away again. The id is the
+  // fixture's high-water mark rather than `Date.now()` — a wall-clock id is
+  // both unstable under a frozen clock and unreadable in a journey log.
+  const id = nextMockWorkItemId();
+  const now = clock.nowIso();
   const item: WorkItem = {
     id,
     projectId: data.projectId,
-    projectName: '',
+    // Same rule as the seeded rows: the name comes from the initiative list,
+    // never from the caller. A blank here put an unlabelled row on the board.
+    projectName: mockProjectName(data.projectId) ?? data.projectId,
     parentId: data.parentId ?? null,
     type: data.type,
     title: data.title,
@@ -820,7 +821,7 @@ export async function createWorkItem(data: CreateWorkItemInput): Promise<WorkIte
     childCount: 0,
     childDoneCount: 0,
   };
-  MOCK_WORK_ITEMS.push(item);
+  mockWorkItems().push(item);
   return item;
 }
 
@@ -838,7 +839,7 @@ export async function updateWorkItem(id: string, patch: UpdateWorkItemPatch): Pr
   if (!config.mock.aurora) {
     return dbUpdateWorkItem(id, patch);
   }
-  const item = MOCK_WORK_ITEMS.find((i) => i.id === id);
+  const item = mockWorkItems().find((i) => i.id === id);
   if (!item) return null;
   if (patch.expectStatus !== undefined && item.status !== patch.expectStatus) return null;
   if (patch.status !== undefined) item.status = patch.status;
@@ -853,7 +854,7 @@ export async function updateWorkItem(id: string, patch: UpdateWorkItemPatch): Pr
   if (patch.assigneeId !== undefined) item.assigneeId = patch.assigneeId;
   if (patch.prUrl !== undefined) item.prUrl = patch.prUrl;
   if (patch.prStatus !== undefined) item.prStatus = patch.prStatus;
-  item.updatedAt = new Date().toISOString();
+  item.updatedAt = clock.nowIso();
   if (patch.status === 'done') item.completedAt = item.completedAt ?? item.updatedAt;
   return { ...item };
 }
@@ -862,7 +863,7 @@ export async function updateWorkItem(id: string, patch: UpdateWorkItemPatch): Pr
 export async function wouldCreateParentCycle(id: string, newParentId: string): Promise<boolean> {
   if (id === newParentId) return true;
   if (!config.mock.aurora) return dbWouldCreateParentCycle(id, newParentId);
-  const byId = new Map(MOCK_WORK_ITEMS.map((i) => [i.id, i] as const));
+  const byId = new Map(mockWorkItems().map((i) => [i.id, i] as const));
   let cursor: string | null = newParentId;
   const seen = new Set<string>();
   while (cursor && !seen.has(cursor)) {
@@ -908,8 +909,8 @@ export async function projectExists(projectId: string): Promise<boolean> {
     // project referenced only by a work item should still resolve rather than
     // vanish.
     return mockProjectExists(projectId)
-      || MOCK_WORK_ITEMS.some((i) => i.projectId === projectId)
-      || Object.hasOwn(PROJECT_DECISIONS, projectId);
+      || mockWorkItems().some((i) => i.projectId === projectId)
+      || decisionRows.rows().some((d) => d.projectId === projectId);
   }
   const rows = await safeExec('SELECT 1 FROM projects WHERE id = :pid LIMIT 1', [strParam('pid', projectId)]);
   return rows.length > 0;
@@ -917,7 +918,7 @@ export async function projectExists(projectId: string): Promise<boolean> {
 
 /** Same question for `/people/:personId/work`. */
 export async function personExists(personId: string): Promise<boolean> {
-  if (config.mock.aurora) return MOCK_WORK_ITEMS.some((i) => i.assigneeId === personId);
+  if (config.mock.aurora) return mockWorkItems().some((i) => i.assigneeId === personId);
   const rows = await safeExec('SELECT 1 FROM people WHERE id = :pid LIMIT 1', [strParam('pid', personId)]);
   return rows.length > 0;
 }
@@ -925,7 +926,7 @@ export async function personExists(personId: string): Promise<boolean> {
 /** One work item by id — the marketplace's dispatch precondition read. */
 export async function getWorkItem(id: string): Promise<WorkItem | null> {
   if (config.mock.aurora) {
-    const item = MOCK_WORK_ITEMS.find((i) => i.id === id);
+    const item = mockWorkItems().find((i) => i.id === id);
     return item ? { ...item } : null;
   }
   const sql = `
@@ -946,7 +947,28 @@ export async function addWorkItemComment(
   body: string,
   opts: { authorId?: string | null; isSystem?: boolean } = {},
 ): Promise<void> {
-  if (config.mock.aurora) return;
+  if (config.mock.aurora) {
+    // This used to `return` — a write that reported success and stored
+    // nothing. The one comment `dev:mock` actually produces is the settle
+    // comment a simulated marketplace dispatch leaves (lib/bot-runner.ts's
+    // settleSimulatedRun), which explains why the item went back to `open`
+    // instead of to `done`; dropping it left the item silently reverted with
+    // no reason recorded anywhere. Appended to the fixture's live rows, the
+    // same way the mock POST paths elsewhere push onto `rows()`.
+    //
+    // `wic-` + a uuid is the column's own DEFAULT in
+    // schema/orgiq_work_items_schema.sql, so an id minted here has the shape
+    // Aurora would have given it.
+    workItemComments.rows().push({
+      id: `wic-${randomUUID()}`,
+      workItemId,
+      authorId: opts.authorId ?? null,
+      body,
+      isSystem: opts.isSystem === true,
+      createdAt: clock.nowIso(),
+    });
+    return;
+  }
   const params: SqlParameter[] = [strParam('wid', workItemId), strParam('body', body)];
   const authorClause = opts.authorId ? ':author' : 'NULL';
   if (opts.authorId) params.push(strParam('author', opts.authorId));
@@ -987,12 +1009,122 @@ function ticketLabel(workItemId: string): string {
   return parts.length >= 3 ? parts.slice(1).join('-').toUpperCase() : workItemId.toUpperCase();
 }
 
+// The two projections, as pure functions over the fields each source supplies,
+// so the Aurora branch and the mock branch cannot describe the same event
+// differently. (They did not diverge — the mock branch returned `[]` and
+// described nothing at all — but a second hand-written copy of "done →
+// completed, merged → pr" is exactly how that starts.)
+
+interface CommentEvent {
+  id: string; workItemId: string; body: string; isSystem: boolean; at: string;
+  authorId: string | null; authorName: string | null;
+  title: string; prUrl: string | null; prStatus: string | null;
+}
+
+function commentActivity(c: CommentEvent): ProjectActivityItem {
+  return {
+    id: c.id,
+    kind: c.isSystem ? 'status' : 'comment',
+    action: c.isSystem ? 'updated' : 'commented on',
+    actorId: c.authorId,
+    actorName: c.authorName,
+    workItemId: c.workItemId,
+    ticketId: ticketLabel(c.workItemId),
+    // A system row IS its message ("Marketplace run completed without a
+    // captured change…"); a human comment is rendered under the item's title.
+    subject: c.isSystem ? c.body : c.title,
+    at: c.at,
+    prUrl: c.prUrl,
+    prStatus: c.prStatus,
+  };
+}
+
+interface ItemEvent {
+  id: string; title: string; at: string; isDone: boolean; isUpdated: boolean;
+  assigneeId: string | null; assigneeName: string | null;
+  prUrl: string | null; prStatus: string | null;
+}
+
+function itemActivity(r: ItemEvent): ProjectActivityItem {
+  return {
+    id: `wi-ev-${r.id}`,
+    kind: r.prStatus === 'merged' ? 'pr' : r.isDone ? 'status' : 'task',
+    action: r.isDone ? 'completed' : r.prStatus === 'merged' ? 'merged' : r.isUpdated ? 'updated' : 'created',
+    actorId: r.assigneeId,
+    actorName: r.assigneeName,
+    workItemId: r.id,
+    ticketId: ticketLabel(r.id),
+    subject: r.title,
+    at: r.at,
+    prUrl: r.prUrl,
+    prStatus: r.prStatus,
+  };
+}
+
+/**
+ * The mock analogue of the two statements below: the same two arms, the same
+ * per-arm LIMIT before the merge, over this module's own work-item fixture and
+ * mock/work-item-comments.ts.
+ *
+ * It used to return `[]` unconditionally, which made an initiative with
+ * seeded work, seeded comments and (since today) real dispatch history read
+ * "no activity yet" offline — an unbuilt feature and an unseeded one looking
+ * identical, which is the fourth rule of the mock floor.
+ *
+ * Work-item stamps are reprojected (mockReprojectedIso): the seeds encode
+ * "n days before MOCK_EPOCH", and read literally every seeded event would now
+ * be months old and sort below anything this process wrote. Comment stamps
+ * are NOT reprojected — the fixture takes them from the clock already, and a
+ * comment written by a dispatch is a real instant.
+ */
+function mockProjectActivity(projectId: string, limit: number): ProjectActivityItem[] {
+  const items = mockWorkItems().filter((i) => i.projectId === projectId);
+  const byId = new Map(items.map((i) => [i.id, i] as const));
+  const personName = (id: string | null): string | null =>
+    (id ? mockPeople.find((p) => p.id === id)?.name ?? null : null);
+
+  // `JOIN work_items w ON w.id = c.work_item_id WHERE w.project_id = :pid` —
+  // an inner join, so a comment whose item this initiative does not own is not
+  // this initiative's activity.
+  const comments = workItemComments.rows()
+    .filter((c) => byId.has(c.workItemId))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, limit)
+    .map((c) => {
+      const item = byId.get(c.workItemId)!;
+      return commentActivity({
+        id: c.id, workItemId: c.workItemId, body: c.body, isSystem: c.isSystem,
+        at: c.createdAt, authorId: c.authorId, authorName: personName(c.authorId),
+        title: item.title, prUrl: item.prUrl, prStatus: item.prStatus,
+      });
+    });
+
+  const events = items
+    .map((i) => ({
+      item: i,
+      at: mockReprojectedIso(i.completedAt ?? i.updatedAt ?? i.createdAt),
+    }))
+    .sort((a, b) => b.at.localeCompare(a.at))
+    .slice(0, limit)
+    .map(({ item, at }) => itemActivity({
+      id: item.id, title: item.title, at,
+      isDone: item.completedAt != null,
+      isUpdated: item.updatedAt > item.createdAt,
+      assigneeId: item.assigneeId, assigneeName: item.assigneeName,
+      prUrl: item.prUrl, prStatus: item.prStatus,
+    }));
+
+  return [...comments, ...events]
+    .sort((a, b) => b.at.localeCompare(a.at))
+    .slice(0, limit);
+}
+
 export async function getProjectActivity(
   projectId: string,
   opts: { limit?: number } = {},
 ): Promise<ProjectActivityItem[]> {
   const limit = Math.min(Math.max(opts.limit ?? 25, 1), 100);
-  if (config.mock.aurora) return [];
+  if (config.mock.aurora) return mockProjectActivity(projectId, limit);
 
   // Comments (human + system audit rows) joined to their work item.
   const commentRows = await exec(
@@ -1027,39 +1159,32 @@ export async function getProjectActivity(
   const activity: ProjectActivityItem[] = [];
 
   for (const r of commentRows) {
-    const isSystem = r['is_system'] === true;
-    activity.push({
+    activity.push(commentActivity({
       id: String(r['id']),
-      kind: isSystem ? 'status' : 'comment',
-      action: isSystem ? 'updated' : 'commented on',
-      actorId: r['author_id'] ? String(r['author_id']) : null,
-      actorName: r['author_name'] ? String(r['author_name']) : null,
       workItemId: String(r['work_item_id']),
-      ticketId: ticketLabel(String(r['work_item_id'])),
-      subject: isSystem ? String(r['body']) : String(r['title']),
+      body: String(r['body']),
+      isSystem: r['is_system'] === true,
       at: String(r['at']),
+      authorId: r['author_id'] ? String(r['author_id']) : null,
+      authorName: r['author_name'] ? String(r['author_name']) : null,
+      title: String(r['title']),
       prUrl: r['pr_url'] ? String(r['pr_url']) : null,
       prStatus: r['pr_status'] ? String(r['pr_status']) : null,
-    });
+    }));
   }
 
   for (const r of itemRows) {
-    const prStatus = r['pr_status'] ? String(r['pr_status']) : null;
-    const done = r['is_done'] === true;
-    const updated = r['is_updated'] === true;
-    activity.push({
-      id: `wi-ev-${String(r['id'])}`,
-      kind: prStatus === 'merged' ? 'pr' : done ? 'status' : 'task',
-      action: done ? 'completed' : prStatus === 'merged' ? 'merged' : updated ? 'updated' : 'created',
-      actorId: r['assignee_id'] ? String(r['assignee_id']) : null,
-      actorName: r['assignee_name'] ? String(r['assignee_name']) : null,
-      workItemId: String(r['id']),
-      ticketId: ticketLabel(String(r['id'])),
-      subject: String(r['title']),
+    activity.push(itemActivity({
+      id: String(r['id']),
+      title: String(r['title']),
       at: String(r['at']),
+      isDone: r['is_done'] === true,
+      isUpdated: r['is_updated'] === true,
+      assigneeId: r['assignee_id'] ? String(r['assignee_id']) : null,
+      assigneeName: r['assignee_name'] ? String(r['assignee_name']) : null,
       prUrl: r['pr_url'] ? String(r['pr_url']) : null,
-      prStatus,
-    });
+      prStatus: r['pr_status'] ? String(r['pr_status']) : null,
+    }));
   }
 
   return activity

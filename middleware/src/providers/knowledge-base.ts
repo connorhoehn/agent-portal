@@ -6,7 +6,7 @@
 //   - getKb()                       → KB metadata (id, embedding model, status)
 //   - listDataSources()             → S3 ingestion targets bound to the KB
 //   - listIngestionJobs(dsId?)      → recent sync runs
-//   - startIngestionJob(dsId, desc) → trigger a fresh sync
+//   - startIngestionJob(dsId, desc, kbId?) → trigger a fresh sync
 
 import {
   BedrockAgentClient,
@@ -22,6 +22,16 @@ import { extname, basename } from 'node:path';
 import { config } from '../config.js';
 import type { StorageBreakdown } from '../lib/crawler-types.js';
 import { exec } from './aurora.js';
+import { clock, groupBy, sumBy } from '../mock/core/index.js';
+import {
+  MOCK_DOCUMENTS_BUCKET,
+  kbDataSourceRows,
+  kbDocumentRows,
+  kbIngestionJobRows,
+  kbObjectRows,
+  kbSummaryRows,
+  type KbObjectRow,
+} from '../mock/knowledge-base.js';
 
 // ─── Knowledge-Base Management Surface types ──────────────────────────────────
 // Used by the /knowledge-base route and the KnowledgeBasePage portal surface.
@@ -46,6 +56,15 @@ export interface DataSource {
 // Defensive: returns [] if the table doesn't exist yet.
 export async function listIngestedDocs(opts: { limit?: number; since?: string } = {}): Promise<IngestedDoc[]> {
   const limit = Math.min(opts.limit ?? 50, 500);
+  if (mockDocs()) {
+    // Mirrors the SQL below: `ingested_at > :since`, newest first, NULLS LAST.
+    return kbDocumentRows
+      .rows()
+      .filter((d) => !opts.since || (d.ingestedAt != null && d.ingestedAt > opts.since!))
+      .slice()
+      .sort((a, b) => (b.ingestedAt ?? '').localeCompare(a.ingestedAt ?? ''))
+      .slice(0, limit);
+  }
   const sincePart = opts.since ? 'AND ingested_at > :since' : '';
   const sql = `
     SELECT id::text, source, source_uri, title, ingested_at::text
@@ -75,6 +94,20 @@ export async function listIngestedDocs(opts: { limit?: number; since?: string } 
 // List data sources with their latest ingestion job status.
 // Returns [] when kbId is empty.
 export async function listDataSourcesWithStatus(kbId: string): Promise<DataSource[]> {
+  if (mockAws()) {
+    // The KB id is unset offline, so gate on the mock flag before the guard
+    // below — otherwise /api/knowledge-base/data-sources answers `[]` forever.
+    return kbDataSourceRows.rows().map((s) => {
+      const latest = mockListIngestionJobs(s.id, 1)[0];
+      return {
+        id: s.id,
+        name: s.name,
+        status: s.status,
+        lastSyncedAt: latest?.updatedAt ?? null,
+        lastJobStatus: latest?.status ?? null,
+      };
+    });
+  }
   if (!kbId) return [];
   try {
     const client = new BedrockAgentClient({ region: config.region });
@@ -120,6 +153,9 @@ export async function listDataSourcesWithStatus(kbId: string): Promise<DataSourc
 
 // Trigger an ingestion job. Throws on error so the route can return 500.
 export async function startSync(kbId: string, dataSourceId: string): Promise<{ jobId: string }> {
+  if (mockAws()) {
+    return { jobId: mockStartJob(dataSourceId, 'Manual sync from portal').jobId };
+  }
   if (!kbId) throw new Error('KNOWLEDGE_BASE_ID not configured');
   const client = new BedrockAgentClient({ region: config.region });
   const resp = await client.send(
@@ -170,6 +206,106 @@ export interface IngestionJobSummary {
   failureReasons: string[];
 }
 
+// ─── Mock path ───────────────────────────────────────────────────────────────
+//
+// Every AWS call in this file swallows its own failure and returns `[]`/`null`,
+// so offline the whole ingestion surface rendered as a populated shape with
+// nothing in it — indistinguishable from a feature that was never built. These
+// helpers answer from src/mock/knowledge-base.ts instead.
+//
+// Nothing here stores a total. A job's statistics are counted from the document
+// rows that existed when it finished, storage totals are summed from the object
+// rows, and "pending since last sync" is a filter over those same objects — so
+// a tile and the list under it cannot drift apart.
+
+/** Aurora holds `documents`; Bedrock and S3 hold everything else in this file. */
+const mockDocs = (): boolean => config.mock.aurora;
+const mockAws = (): boolean => config.mock.agentcore;
+
+function mockBucket(): string {
+  return config.foundation.documentsBucket || MOCK_DOCUMENTS_BUCKET;
+}
+
+/**
+ * A job's statistics, counted rather than stored.
+ *
+ * A Bedrock S3 sync scans the whole data source every run, so `scanned` is the
+ * corpus as of the moment the job settled and a COMPLETE run indexes all of it.
+ * `documentsFailed` is the number of failures the job actually names — a job
+ * cannot report a failure count it has no reason for.
+ */
+function mockJobSummary(job: {
+  jobId: string; dataSourceId: string; status: string;
+  startedAt: string; finishedAt: string | null; description: string; failureReasons: string[];
+}): IngestionJobSummary {
+  const updatedAt = job.finishedAt ?? clock.nowIso();
+  const startMs = Date.parse(job.startedAt);
+  const endMs = Date.parse(updatedAt);
+  const settled = job.status === 'COMPLETE' || job.status === 'FAILED';
+  const corpus = settled
+    ? kbDocumentRows.rows().filter((d) => {
+        const ms = Date.parse(String(d.ingestedAt ?? ''));
+        return Number.isFinite(ms) && ms <= endMs;
+      })
+    : [];
+  return {
+    jobId: job.jobId,
+    dataSourceId: job.dataSourceId,
+    status: job.status,
+    startedAt: job.startedAt,
+    updatedAt,
+    description: job.description,
+    durationMs: Number.isFinite(startMs) ? Math.max(0, endMs - startMs) : 0,
+    documentsScanned: corpus.length,
+    documentsIndexed: job.status === 'COMPLETE' ? corpus.length : 0,
+    documentsFailed: job.failureReasons.length,
+    documentsDeleted: 0,
+    failureReasons: job.failureReasons,
+  };
+}
+
+function mockListIngestionJobs(dataSourceId: string | undefined, limit: number): IngestionJobSummary[] {
+  return kbIngestionJobRows
+    .rows()
+    .filter((j) => !dataSourceId || j.dataSourceId === dataSourceId)
+    .map(mockJobSummary)
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+    .slice(0, limit);
+}
+
+/**
+ * Start a job in the mock world. `rows()` hands back the live array, so the
+ * new job shows up in the next GET — a demo "Sync now" that leaves the job
+ * list unchanged reads as a broken button. `resetAll()` takes it away again.
+ */
+let mockJobSeq = 100;
+function mockStartJob(dataSourceId: string, description: string): IngestionJobSummary {
+  const row = {
+    jobId: `IJMOCK${String(++mockJobSeq).padStart(4, '0')}`,
+    dataSourceId,
+    status: 'STARTING',
+    startedAt: clock.nowIso(),
+    finishedAt: null,
+    description,
+    failureReasons: [] as string[],
+  };
+  kbIngestionJobRows.rows().unshift(row);
+  return mockJobSummary(row);
+}
+
+/** ListObjectsV2 over the mock bucket. */
+function mockObjects(): KbObjectRow[] {
+  return kbObjectRows.rows();
+}
+
+function extensionOf(key: string): string {
+  return extname(key).toLowerCase() || '(none)';
+}
+
+function topPrefixOf(key: string): string {
+  return key.split('/')[0] || '(root)';
+}
+
 const _client = (): BedrockAgentClient =>
   new BedrockAgentClient({ region: config.region });
 
@@ -189,6 +325,16 @@ export interface KbLookup {
 
 export async function lookupKb(): Promise<KbLookup> {
   const kbId = config.knowledgeBase.id;
+  if (mockAws()) {
+    const kb = kbSummaryRows.rows()[0] ?? null;
+    // The `empty` scenario is a knowledge base that was deleted upstream, not
+    // one that was never configured — the two need different operator action,
+    // which is the distinction this function exists to draw.
+    return kb
+      ? { kb, state: 'ok', kbId: kb.id, problem: null }
+      : { kb: null, state: 'missing', kbId: kbId || 'KBMOCK0001AB',
+          problem: `knowledge base ${kbId || 'KBMOCK0001AB'} does not exist in AWS — it was deleted upstream; redeploy OrgIQ-KnowledgeBase and refresh middleware/.env.aws` };
+  }
   if (!kbId) {
     return {
       kb: null, state: 'unconfigured', kbId: null,
@@ -213,6 +359,7 @@ export async function lookupKb(): Promise<KbLookup> {
 
 export async function getKb(): Promise<KbSummary | null> {
   const kbId = config.knowledgeBase.id;
+  if (mockAws()) return kbSummaryRows.rows()[0] ?? null;
   if (!kbId) return null;
   try {
     const resp = await _client().send(new GetKnowledgeBaseCommand({ knowledgeBaseId: kbId }));
@@ -239,6 +386,7 @@ export async function getKb(): Promise<KbSummary | null> {
 
 export async function listDataSources(): Promise<DataSourceSummary[]> {
   const kbId = config.knowledgeBase.id;
+  if (mockAws()) return kbDataSourceRows.rows().slice();
   if (!kbId) return [];
   try {
     const list = await _client().send(new ListDataSourcesCommand({ knowledgeBaseId: kbId, maxResults: 50 }));
@@ -276,6 +424,7 @@ export async function listDataSources(): Promise<DataSourceSummary[]> {
 
 export async function listIngestionJobs(dataSourceId?: string, limit = 20): Promise<IngestionJobSummary[]> {
   const kbId = config.knowledgeBase.id;
+  if (mockAws()) return mockListIngestionJobs(dataSourceId, limit);
   if (!kbId) return [];
   try {
     // If no dsId specified, fan out across all data sources.
@@ -324,13 +473,36 @@ export async function listIngestionJobs(dataSourceId?: string, limit = 20): Prom
   }
 }
 
-export async function startIngestionJob(dataSourceId: string, description?: string): Promise<{ jobId: string; status: string } | null> {
-  const kbId = config.knowledgeBase.id;
-  if (!kbId) return null;
+/**
+ * Trigger an ingestion job.
+ *
+ * `kbId` overrides `config.knowledgeBase.id` — the configured KB is the
+ * default, not the only possibility. Without the override this function read
+ * the configured id unconditionally, so a caller that had already resolved a
+ * *second* knowledge base out of the `knowledge_bases` registry could pass
+ * that KB's data source id and still sync the first KB. StartIngestionJob
+ * pairs (knowledgeBaseId, dataSourceId); passing a mismatched pair is either a
+ * ValidationException or, worse, a successful sync of the wrong corpus.
+ *
+ * The returned `knowledgeBaseId`/`dataSourceId` are the pair the job actually
+ * ran against, so a caller never has to infer them from what it hoped it
+ * passed — and `/ingest/stream` needs the data source id to poll the job.
+ */
+export async function startIngestionJob(
+  dataSourceId: string,
+  description?: string,
+  kbId?: string,
+): Promise<{ jobId: string; status: string; knowledgeBaseId: string; dataSourceId: string } | null> {
+  const targetKbId = kbId || config.knowledgeBase.id;
+  if (mockAws()) {
+    const job = mockStartJob(dataSourceId, description ?? 'Manual sync triggered from portal');
+    return { jobId: job.jobId, status: job.status, knowledgeBaseId: targetKbId, dataSourceId };
+  }
+  if (!targetKbId) return null;
   try {
     const resp = await _client().send(
       new StartIngestionJobCommand({
-        knowledgeBaseId: kbId,
+        knowledgeBaseId: targetKbId,
         dataSourceId,
         description: description ?? `Manual sync triggered from portal at ${new Date().toISOString()}`,
       }),
@@ -338,6 +510,8 @@ export async function startIngestionJob(dataSourceId: string, description?: stri
     return {
       jobId: resp.ingestionJob?.ingestionJobId ?? '',
       status: String(resp.ingestionJob?.status ?? 'UNKNOWN'),
+      knowledgeBaseId: targetKbId,
+      dataSourceId,
     };
   } catch (err) {
     console.warn('[kb] startIngestionJob failed:', (err as Error).message);
@@ -347,6 +521,10 @@ export async function startIngestionJob(dataSourceId: string, description?: stri
 
 export async function getIngestionJob(jobId: string, dataSourceId: string): Promise<IngestionJobSummary | null> {
   const kbId = config.knowledgeBase.id;
+  if (mockAws()) {
+    const row = kbIngestionJobRows.rows().find((j) => j.jobId === jobId && j.dataSourceId === dataSourceId);
+    return row ? mockJobSummary(row) : null;
+  }
   if (!kbId) return null;
   try {
     const resp = await _client().send(
@@ -393,12 +571,18 @@ export async function uploadDocument(
   contentType: string,
   prefix = 'uploads',
 ): Promise<UploadResult> {
-  const bucket = config.foundation.documentsBucket;
+  const bucket = mockAws() ? mockBucket() : config.foundation.documentsBucket;
   if (!bucket) throw new Error('DOCUMENTS_BUCKET not configured');
-  const s3 = new S3Client({ region: config.region });
   const date = new Date().toISOString().slice(0, 10);
   const safe = basename(filename).replace(/[^a-zA-Z0-9._-]/g, '_');
   const key = `${prefix}/${date}/${safe}`;
+  if (mockAws()) {
+    // The object joins the live rows, so the upload shows up in the storage
+    // breakdown and in "pending since last sync" on the very next read.
+    kbObjectRows.rows().push({ key, sizeBytes: body.length, lastModified: clock.nowIso() });
+    return { key, bucket, size: body.length, contentType, url: `s3://${bucket}/${key}` };
+  }
+  const s3 = new S3Client({ region: config.region });
   await s3.send(new PutObjectCommand({
     Bucket: bucket,
     Key: key,
@@ -427,6 +611,39 @@ export interface IngestStats {
 }
 
 export async function getIngestStats(): Promise<IngestStats> {
+  if (mockAws()) {
+    const objects = mockObjects();
+    const byExtension: IngestStats['s3']['byExtension'] = {};
+    for (const [ext, rows] of groupBy(objects, (o) => extensionOf(o.key))) {
+      byExtension[ext] = { count: rows.length, sizeBytes: sumBy(rows, 'sizeBytes') };
+    }
+    const byPrefix: Record<string, number> = {};
+    for (const [prefix, rows] of groupBy(objects, (o) => topPrefixOf(o.key))) {
+      byPrefix[prefix] = rows.length;
+    }
+    const newest = objects.reduce<KbObjectRow | null>(
+      (best, o) => (best === null || o.lastModified > best.lastModified ? o : best), null);
+    const [kb, recentJobs] = await Promise.all([getKb(), listIngestionJobs(undefined, 5)]);
+    const lastComplete = recentJobs.find(j => j.status === 'COMPLETE');
+    return {
+      s3: {
+        bucket: mockBucket(),
+        total: objects.length,
+        totalSizeBytes: sumBy(objects, 'sizeBytes'),
+        byExtension,
+        byPrefix,
+        newestKey: newest?.key ?? null,
+        newestAt: newest?.lastModified ?? null,
+      },
+      kb,
+      recentJobs,
+      lastSync: {
+        completedAt: lastComplete?.updatedAt ?? null,
+        documentsIndexed: lastComplete?.documentsIndexed ?? 0,
+        documentsFailed: lastComplete?.documentsFailed ?? 0,
+      },
+    };
+  }
   const bucket = config.foundation.documentsBucket;
   const s3Stats: IngestStats['s3'] = {
     bucket: bucket ?? '',
@@ -490,7 +707,32 @@ export interface S3QueueSummary {
   bucket: string;
 }
 
-export async function countS3Documents(lastSyncAt?: string): Promise<S3QueueSummary> {
+/**
+ * Count what is sitting in the documents bucket, optionally scoped to one
+ * knowledge base's `s3_prefix`.
+ *
+ * The prefix is the only thing that separates one registered KB's corpus from
+ * another's inside a shared bucket, so a per-KB queue count that ignores it is
+ * just the whole-bucket count wearing a KB's name.
+ */
+export async function countS3Documents(lastSyncAt?: string, s3Prefix?: string): Promise<S3QueueSummary> {
+  const prefix = s3Prefix?.trim() || undefined;
+  if (mockAws()) {
+    const objects = prefix ? mockObjects().filter((o) => o.key.startsWith(prefix)) : mockObjects();
+    const cutoffMs = lastSyncAt ? Date.parse(lastSyncAt) : Number.NaN;
+    const newest = objects.reduce<string | null>(
+      (best, o) => (best === null || o.lastModified > best ? o.lastModified : best), null);
+    return {
+      total: objects.length,
+      // No cutoff means nothing has been synced, so everything is pending —
+      // the same rule the real scan applies below.
+      pendingSinceLastSync: Number.isFinite(cutoffMs)
+        ? objects.filter((o) => Date.parse(o.lastModified) > cutoffMs).length
+        : objects.length,
+      lastModified: newest,
+      bucket: mockBucket(),
+    };
+  }
   const bucket = config.foundation.documentsBucket;
   if (!bucket) return { total: 0, pendingSinceLastSync: 0, lastModified: null, bucket: '' };
   const syncCutoff = lastSyncAt ? new Date(lastSyncAt) : null;
@@ -502,7 +744,12 @@ export async function countS3Documents(lastSyncAt?: string): Promise<S3QueueSumm
     let continuationToken: string | undefined;
     do {
       const resp = await s3.send(
-        new ListObjectsV2Command({ Bucket: bucket, MaxKeys: 1000, ContinuationToken: continuationToken }),
+        new ListObjectsV2Command({
+          Bucket: bucket,
+          MaxKeys: 1000,
+          ContinuationToken: continuationToken,
+          ...(prefix ? { Prefix: prefix } : {}),
+        }),
       );
       for (const obj of resp.Contents ?? []) {
         total++;
@@ -554,7 +801,31 @@ export async function triggerKbSyncForCrawl(
 // Aggregates the documents bucket by extension and by first-level prefix, and
 // reports the KB document count from the most recent COMPLETE ingestion job.
 
-export async function getStorageBreakdown(): Promise<StorageBreakdown> {
+export async function getStorageBreakdown(s3Prefix?: string): Promise<StorageBreakdown> {
+  // Scoped to one KB's `s3_prefix` when given — see countS3Documents.
+  const prefix = s3Prefix?.trim() || undefined;
+  if (mockAws()) {
+    const objects = prefix ? mockObjects().filter((o) => o.key.startsWith(prefix)) : mockObjects();
+    const byType = [...groupBy(objects, (o) => extensionOf(o.key))]
+      .map(([extension, rows]) => ({ extension, count: rows.length, bytes: sumBy(rows, 'sizeBytes') }))
+      .sort((a, b) => b.bytes - a.bytes);
+    const byPrefix = [...groupBy(objects, (o) => topPrefixOf(o.key))]
+      .map(([prefix, rows]) => ({ prefix, count: rows.length, bytes: sumBy(rows, 'sizeBytes') }))
+      .sort((a, b) => b.count - a.count);
+    // Same proxy the real path uses: the newest COMPLETE job's indexed count.
+    const lastComplete = (await listIngestionJobs(undefined, 10)).find(j => j.status === 'COMPLETE');
+    return {
+      bucket: mockBucket(),
+      totalObjects: objects.length,
+      totalBytes: sumBy(objects, 'sizeBytes'),
+      byType,
+      byPrefix,
+      kb: {
+        totalDocuments: lastComplete?.documentsIndexed ?? 0,
+        lastIngestedAt: lastComplete?.updatedAt ?? null,
+      },
+    };
+  }
   const bucket = config.foundation.documentsBucket ?? '';
   const byTypeMap = new Map<string, { count: number; bytes: number }>();
   const byPrefixMap = new Map<string, { count: number; bytes: number }>();
@@ -570,6 +841,7 @@ export async function getStorageBreakdown(): Promise<StorageBreakdown> {
           Bucket: bucket,
           MaxKeys: 1000,
           ContinuationToken: token,
+          ...(prefix ? { Prefix: prefix } : {}),
         }));
         for (const obj of resp.Contents ?? []) {
           const size = obj.Size ?? 0;

@@ -10,6 +10,7 @@ import {
   isValidNewPrompt,
 } from './promptFormat';
 import { createPrompt } from '../../../components/canary/usePromptLibrary.js';
+import { T } from '../Text';
 
 /** New-prompt form. Creates a DRAFT in the Bedrock Prompt Library; publishing a
  *  numbered version is a separate step in EditPanel. */
@@ -60,7 +61,7 @@ export function CreatePanel({
 
   return (
     <Stack gap="lg" className="flex-1 overflow-auto p-6">
-      <div className="border-b border-border pb-4">
+      <Stack gap="none" className="border-b border-border pb-4">
         <DetailHeader
           as="h2"
           title="New prompt"
@@ -68,7 +69,7 @@ export function CreatePanel({
           aside={<Button variant="secondary" onClick={onCancel} disabled={saving}>Cancel</Button>}
           asideWidth={110}
         />
-      </div>
+      </Stack>
 
       <Stack gap="md" className="flex-1">
         <FormRow stackBelow="md">
@@ -104,7 +105,7 @@ export function CreatePanel({
           <Inline gap="sm" justify="between">
             <SectionLabel>Template *</SectionLabel>
             <Inline gap="xs" justify="end">
-              <span className="text-[10px] text-text-tertiary">Start from</span>
+              <T className="text-[10px] text-text-tertiary">Start from</T>
               {STARTER_TEMPLATES.map(t => (
                 <FilterChip
                   key={t.label}

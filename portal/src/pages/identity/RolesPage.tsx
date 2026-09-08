@@ -1,6 +1,23 @@
 import { useMemo } from 'react';
-import { PageSection } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Card,
+  CardHeader,
+  Chip,
+  ErrorState,
+  Inline,
+  LoadingState,
+  PageSection,
+  SectionLabel,
+  Stack,
+  Table,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableTd,
+  TableTh,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { matrixActions } from './identityFormat';
 
 interface RoleInfo {
   id: string;
@@ -25,18 +42,25 @@ function RolesPage() {
   // added an action.
   const { data: schemaData } = useFetch<SchemaResponse>('/api/identity/schema');
 
-  const actions = useMemo(() => {
-    const live = Object.keys(schemaData?.schema?.OrgIQ?.actions ?? {});
-    if (live.length > 0) return live.sort();
-    // Schema unavailable (mock mode / AVP down) — derive rows from the roles'
-    // own capability lists so the matrix still says something true.
-    const union = new Set<string>();
-    for (const r of data ?? []) for (const c of r.capabilities) union.add(c);
-    return [...union].sort();
-  }, [schemaData, data]);
+  const actions = useMemo(
+    () => matrixActions(Object.keys(schemaData?.schema?.OrgIQ?.actions ?? {}), data ?? []),
+    [schemaData, data],
+  );
 
-  if (isLoading) return <div style={{ color: 'var(--color-text-tertiary)' }}>Loading roles…</div>;
-  if (error) return <div style={{ color: 'var(--color-error, #ef4444)' }}>Error: {error}</div>;
+  if (isLoading) {
+    return (
+      <PageSection title="Roles">
+        <LoadingState label="Loading roles…" />
+      </PageSection>
+    );
+  }
+  if (error) {
+    return (
+      <PageSection title="Roles">
+        <ErrorState title="Could not load roles" body={error} />
+      </PageSection>
+    );
+  }
   if (!data) return null;
 
   return (
@@ -44,73 +68,49 @@ function RolesPage() {
       title="Roles"
       description="Cedar policies enforced by Verified Permissions on every middleware request."
     >
-      <section style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-        gap: 16,
-      }}>
+      <Inline gap="md" wrap>
         {data.map(role => (
-          <article key={role.id} style={{
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-md)',
-            padding: 16,
-          }}>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>{role.label}</div>
-            <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginTop: 2 }}>{role.id}</div>
-            <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', margin: '10px 0' }}>
-              {role.summary}
-            </p>
-            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {role.capabilities.map(c => (
-                <li key={c} style={{
-                  fontSize: 11,
-                  padding: '2px 8px',
-                  background: 'var(--color-surface-hover)',
-                  border: '1px solid var(--color-border)',
-                  borderRadius: 999,
-                  color: 'var(--color-text-primary)',
-                }}>{c}</li>
-              ))}
-            </ul>
-          </article>
-        ))}
-      </section>
-
-      <section>
-        <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 12px' }}>Permission matrix</h3>
-        <div style={{
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)',
-          overflow: 'auto',
-        }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-            <thead>
-              <tr style={{ background: 'var(--color-surface-hover)' }}>
-                <th style={{ textAlign: 'left', padding: '8px 12px', fontWeight: 600 }}>Action</th>
-                {data.map(r => (
-                  <th key={r.id} style={{ textAlign: 'center', padding: '8px 12px', fontWeight: 600 }}>{r.label}</th>
+          <Card key={role.id} className="w-[280px]">
+            <CardHeader title={role.label} subtitle={role.id} />
+            <Stack gap="sm" className="mt-2">
+              <Stack as="p" gap="none" className="m-0 text-[12px] text-text-secondary">{role.summary}</Stack>
+              <Inline gap="xs" wrap>
+                {role.capabilities.map(c => (
+                  <Chip key={c} size="xs">{c}</Chip>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {actions.map(action => (
-                <tr key={action} style={{ borderTop: '1px solid var(--color-border)' }}>
-                  <td style={{ padding: '8px 12px', color: 'var(--color-text-primary)' }}>{action}</td>
-                  {data.map(r => (
-                    <td key={r.id} style={{ textAlign: 'center', padding: '8px 12px' }}>
-                      {r.capabilities.includes(action)
-                        ? <span style={{ color: 'var(--color-success, #10b981)' }}>✓</span>
-                        : <span style={{ color: 'var(--color-text-tertiary)' }}>—</span>}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+              </Inline>
+            </Stack>
+          </Card>
+        ))}
+      </Inline>
+
+      <Stack gap="sm">
+        <SectionLabel as="h3" className="text-[14px] normal-case tracking-normal text-text-primary">
+          Permission matrix
+        </SectionLabel>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableTh>Action</TableTh>
+              {data.map(r => <TableTh key={r.id} className="text-center">{r.label}</TableTh>)}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {actions.map(action => (
+              <TableRow key={action}>
+                <TableTd className="font-mono text-[12px]">{action}</TableTd>
+                {data.map(r => (
+                  <TableTd key={r.id} className="text-center">
+                    <Chip size="xs" tone={r.capabilities.includes(action) ? 'success' : 'neutral'}>
+                      {r.capabilities.includes(action) ? '✓' : '—'}
+                    </Chip>
+                  </TableTd>
+                ))}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Stack>
     </PageSection>
   );
 }

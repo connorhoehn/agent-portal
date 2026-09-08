@@ -1,0 +1,14 @@
+surface: dashboard
+role: program-lead
+user: u-farah
+url: /assessment/teams
+pages: portal/src/pages/assessment/DashboardPage.tsx,portal/src/pages/assessment/dashboard/CohortLanding.tsx,portal/src/pages/assessment/dashboard/TeamList.tsx,portal/src/pages/assessment/dashboard/NewTeamModal.tsx,portal/src/pages/assessment/dashboard/LevelBadge.tsx
+audited: 2026-09-06 18:31 local, Chrome viewport 1560x913, middleware dev:mock (re-audit after the teal-brand / PageHeader change to CohortLanding)
+screenshot: dashboard.jpg
+verdict: pass
+console errors: 0 — cleared before the surface, re-read after the cohort click, Back, "View all teams" and the New team modal.
+layout: pass — content col left 224px w 1312px; scrollWidth 1560 = innerWidth 1560 (no horizontal scroll); body scrollHeight 913 = innerHeight 913. "Engineering maturity cohorts" is an `<h1>` at 20px/600 with its box top at 125px — the same size and offset as Submissions and the team detail, so the tenant's page titles now agree. The three cohort cards hold one row and the seven-row table needs no horizontal scrolling.
+keyboard: pass — 12 visible, enabled interactive controls in `<main>` ("+ New team", three cohort cards, "View all teams", seven team-name buttons); a document-order `.focus()` sweep reached all 12, 0 unreachable, and each is a real `<button type="button">` so Enter/Space activation is native. Escape closed the "+ New team" modal, whose Name field is auto-focused on open. Workaround used (no display session): `.focus()` sweep instead of physical Tab, `.click()` and dispatched `keydown` for activation/Escape, two screenshots per state so a frame painted before each DOM read.
+empty-state: pass — TEAM-007 "Internal Tools" renders unassessed cleanly: muted "Not yet assessed", 0/17, "—" follow-ups, "New" pill with an em-dash lead in the all-teams table. (TEAM-006 no longer serves as the second example — this session's wizard passes scored it to 17/17. Session data in the in-memory mock, not a page change.)
+role-gating: this is the only role whose rail carries **Configuration** — 11 items (Dashboard, Submissions, Reports, Feedback, Enterprise, Workspace, Prompts, Rules, Activity, Configuration, Settings) against the assessor's and lead-assessor's 10. On the dashboard itself the control set is the same as the other roles: "+ New team", the cohort cards, "View all teams", the team links.
+notes: The teal chrome (rail selection, "+ New team", cohort-card arrows) sits against indigo L3 badges and amber follow-up counts without any of the three fighting. White Glove → `?cohort=white_glove` shows the 2-team cohort view and browser Back restores the landing; "View all teams" lists all seven at `?cohort=all`. Same self-contradiction visible here as in the lead-assessor pass: TEAM-006 reads "New · — · 17/17 · 16 open" because processing a submission scores dimensions without advancing the team's status (lead-assessor/DEFECTS.md Open #2).

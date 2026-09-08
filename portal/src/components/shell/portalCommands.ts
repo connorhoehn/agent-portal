@@ -19,7 +19,7 @@ import type { Command } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../../lib/auth';
 import { openShell, useComputeOptional } from '@connorhoehnslalom/ui-components/compute';
 
-type PageTenant = 'orgiq' | 'newsroom' | 'admin' | 'universal';
+type PageTenant = 'orgiq' | 'assessment' | 'admin' | 'universal';
 
 interface PageEntry {
   label: string;
@@ -44,31 +44,61 @@ interface RecentRun {
 // The full navigable surface, grouped the way the rail groups it. Every page
 // with a rail or sub-rail entry is here; gates mirror the routes' RequireRole
 // so the palette never offers a jump that bounces.
+// Each list mirrors the Cedar grant behind the route (middleware/seeds/roles/orgiq/*.cedar)
+// and the matching RequireRole in App.tsx — the palette never offers a jump that bounces.
 const PLATFORM = ['org-leader', 'hr-admin'];
 const BUILD = ['hr-admin'];
+const BUDGETS = ['program-owner', 'org-leader', 'hr-admin'];   // ManageBudgets
+const BOTS = ['sme', 'program-owner', 'org-leader', 'hr-admin']; // ManageBots
+const DEVBOX = ['sme', 'hr-admin'];                              // ManageDevbox
+const CHANGES = ['program-owner', 'hr-admin'];
+
+// Rail group order per tenant (top → bottom): the org tenant reads along its
+// SDLC arc; the assessment tenant top-down through its own programme. The
+// rail and the palette share this so ⌘K lists pages in the order the rail
+// shows them — a group a tenant doesn't list sorts last, never vanishes.
+export const GROUP_ORDER_BY_TENANT: Record<string, string[]> = {
+  orgiq: ['Plan', 'Design', 'Build', 'Release', 'Operate', 'Org', 'System'],
+  assessment: ['Assess', 'Analyze', 'Informatics', 'System'],
+};
+export function groupRank(tenant: string, group?: string): number {
+  const order = GROUP_ORDER_BY_TENANT[tenant] ?? GROUP_ORDER_BY_TENANT['orgiq']!;
+  const n = order.indexOf(group ?? 'System');
+  return n < 0 ? order.length : n;
+}
 
 const PAGES: PageEntry[] = [
   // ── Build — the SDLC loop ──
   { label: 'Work',               hint: 'Findings, jobs, proposals',           path: '/iq/work',                                    tenant: 'orgiq',  group: 'Build' },
   { label: 'Graph updates',      hint: 'What reached the org graph',          path: '/iq/work/changes',                            tenant: 'orgiq',  group: 'Build' },
   { label: 'Initiatives',        hint: 'Epics, decisions, contributors',      path: '/iq/projects',                                tenant: 'orgiq',  group: 'Build' },
-  { label: 'Budgets',            hint: 'Agent spend vs allocation',           path: '/admin/budgets',                              tenant: 'admin',  group: 'Build',   roles: PLATFORM },
-  { label: 'Bots',               hint: 'Mission-configured agents',           path: '/admin/bots',                                 tenant: 'admin',  group: 'Build',   roles: BUILD },
+  { label: 'Library',            hint: 'Skills, runbooks, distilled assets', path: '/iq/library',                                 tenant: 'orgiq',  group: 'Design' },
+  { label: 'Promotions',         hint: 'Candidate skills awaiting approval',  path: '/iq/promotions',                              tenant: 'orgiq',  group: 'Design' },
+  { label: 'Designs',            hint: 'Design threads and sign-off',         path: '/iq/designs',                                 tenant: 'orgiq',  group: 'Design' },
+  { label: 'Session config',     hint: 'The skill bundle agents start with',  path: '/iq/release',                                 tenant: 'orgiq',  group: 'Release' },
+  { label: 'Budgets',            hint: 'Agent spend vs allocation',           path: '/admin/budgets',                              tenant: 'admin',  group: 'Build',   roles: BUDGETS },
+  { label: 'Bots',               hint: 'Mission-configured agents',           path: '/admin/bots',                                 tenant: 'admin',  group: 'Build',   roles: BOTS },
   { label: 'Codebases',          hint: 'Repos agents work on + runs',         path: '/admin/projects',                             tenant: 'admin',  group: 'Build',   roles: BUILD },
-  { label: 'Changes',            hint: 'Code review queue + policies',        path: '/admin/changes',                              tenant: 'admin',  group: 'Build',   roles: BUILD },
-  { label: 'Computers',          hint: 'MicroVM fleet + task runner',         path: '/admin/devbox',                               tenant: 'admin',  group: 'Build',   roles: BUILD },
+  { label: 'Changes',            hint: 'Code review queue + policies',        path: '/admin/changes',                              tenant: 'admin',  group: 'Build',   roles: CHANGES },
+  { label: 'Computers',          hint: 'MicroVM fleet + task runner',         path: '/admin/devbox',                               tenant: 'admin',  group: 'Build',   roles: DEVBOX },
+  { label: 'Distillation overview',    hint: 'Tier health, ingest, sampling', path: '/iq/distillation/overview',                   tenant: 'orgiq',  group: 'Build' },
+  { label: 'Distillation tiers',       hint: 'L0 observations · L1 clusters · L2 artifacts', path: '/iq/distillation/tiers',       tenant: 'orgiq',  group: 'Build' },
+  { label: 'Distillation artifacts',   hint: 'L2 runbooks, insights, conventions', path: '/iq/distillation/artifacts',            tenant: 'orgiq',  group: 'Build' },
+  { label: 'Distillation lineage',     hint: 'Observation → cluster → artifact → library', path: '/iq/distillation/lineage',      tenant: 'orgiq',  group: 'Build' },
+  { label: 'Distillation compactions', hint: 'Job history + Compact L0→L1 / L1→L2', path: '/iq/distillation/compactions',         tenant: 'orgiq',  group: 'Build' },
+  { label: 'Distillation review',      hint: 'Human sample queue + calibration', path: '/iq/distillation/review',                 tenant: 'orgiq',  group: 'Build' },
   // ── Org — organizational intelligence ──
   { label: 'Ask',                hint: 'Ask the org-search agent',            path: '/iq/invoke',                                  tenant: 'orgiq',  group: 'Org' },
   { label: 'Explore',            hint: 'Force-directed org graph',            path: '/iq/explore',                                 tenant: 'orgiq',  group: 'Org' },
-  { label: 'Scores',             hint: 'Per-person influence leaderboard',    path: '/iq/scores',                                  tenant: 'orgiq',  group: 'Org' },
-  { label: 'Score cohorts',      hint: 'Scores grouped by team',              path: '/iq/scores/cohorts',                          tenant: 'orgiq',  group: 'Org' },
-  { label: 'Score compare',      hint: 'Radar overlay of people',             path: '/iq/scores/compare',                          tenant: 'orgiq',  group: 'Org' },
+  { label: 'Scores',             hint: 'Per-person influence leaderboard',    path: '/iq/scores',                                  tenant: 'orgiq',  group: 'Org', roles: PLATFORM },
+  { label: 'Score cohorts',      hint: 'Scores grouped by team',              path: '/iq/scores/cohorts',                          tenant: 'orgiq',  group: 'Org', roles: PLATFORM },
+  { label: 'Score compare',      hint: 'Radar overlay of people',             path: '/iq/scores/compare',                          tenant: 'orgiq',  group: 'Org', roles: PLATFORM },
   // ── Operate — prompts, health, platform ──
-  { label: 'Prompt Ops',         hint: 'Prompt management overview',          path: '/iq/prompt-ops',                              tenant: 'orgiq',  group: 'Operate' },
+  { label: 'Prompt Ops',         hint: 'Prompt management overview',          path: '/iq/prompt-ops',                              tenant: 'orgiq',  group: 'Operate', roles: PLATFORM },
   { label: 'Prompt Studio',      hint: 'Managed prompt registry',             path: '/iq/prompts',                                 tenant: 'admin',  group: 'Operate', roles: PLATFORM },
   { label: 'Prompt History',     hint: 'Version timeline per prompt',         path: '/iq/history',                                 tenant: 'admin',  group: 'Operate', roles: PLATFORM },
   { label: 'Prompt Diff',        hint: 'Compare two prompt versions',         path: '/iq/diff',                                    tenant: 'admin',  group: 'Operate', roles: PLATFORM },
-  { label: 'Canary',             hint: 'Live A/B prompt rollout',             path: '/iq/canary',                                  tenant: 'orgiq',  group: 'Operate' },
+  { label: 'Canary',             hint: 'Live A/B prompt rollout',             path: '/iq/canary',                                  tenant: 'orgiq',  group: 'Operate', roles: PLATFORM },
   { label: 'Evaluations',        hint: 'LLM-as-judge configuration',          path: '/iq/evaluations',                             tenant: 'admin',  group: 'Operate', roles: PLATFORM },
   { label: 'Architecture',       hint: 'A2A agent topology',                  path: '/iq/agents',                                  tenant: 'admin',  group: 'Operate', roles: PLATFORM },
   { label: 'Knowledge',          hint: 'Pipeline health + registry',          path: '/admin/knowledge',                            tenant: 'admin',  group: 'Operate', roles: PLATFORM },
@@ -100,14 +130,19 @@ const PAGES: PageEntry[] = [
   { label: 'Identity',           hint: 'Users, roles, Cedar policies',        path: '/admin/identity',                             tenant: 'admin',  group: 'System',  roles: BUILD },
   { label: 'Policy sandbox',     hint: 'Dry-run an authz decision',           path: '/admin/identity/test',                        tenant: 'admin',  group: 'System',  roles: BUILD },
   { label: 'Settings',           hint: 'User preferences',                    path: '/settings',                                   tenant: 'universal', group: 'System' },
-  // ── Newsroom tenant ──
-  { label: 'Newsroom',           hint: 'Today at a glance',                   path: '/newsroom',                                   tenant: 'newsroom', group: 'Newsroom' },
-  { label: 'Articles',           hint: 'Browse articles + filters',           path: '/newsroom/articles',                          tenant: 'newsroom', group: 'Newsroom' },
-  { label: 'Beats',              hint: 'Coverage heatmap by topic',           path: '/newsroom/beats',                             tenant: 'newsroom', group: 'Newsroom' },
-  { label: 'Researcher',         hint: 'Story research agent',                path: '/newsroom/researcher',                        tenant: 'newsroom', group: 'Newsroom' },
-  { label: 'Briefs',             hint: 'Generated digests',                   path: '/newsroom/briefs',                            tenant: 'newsroom', group: 'Newsroom' },
-  { label: 'Headlines',          hint: 'A/B variants for any draft',          path: '/newsroom/headlines',                         tenant: 'newsroom', group: 'Newsroom' },
-  { label: 'Pitches',            hint: 'Story backlog + desk decisions',      path: '/newsroom/pitches',                           tenant: 'newsroom', group: 'Newsroom' },
+  // Assessment tenant — its own map (Assess / Analyze / Informatics / System),
+  // mirroring NAV_ITEMS in Layout.tsx. Without these an assessment session's
+  // palette listed nothing but Settings.
+  { label: 'Dashboard',          hint: 'Cohorts, teams, scorecards',          path: '/assessment/teams',                           tenant: 'assessment', group: 'Assess' },
+  { label: 'Submissions',        hint: 'Forms intake wizard',                 path: '/assessment/submissions',                     tenant: 'assessment', group: 'Assess' },
+  { label: 'Reports',            hint: 'Program rollup, where to start',      path: '/assessment/reports',                         tenant: 'assessment', group: 'Analyze' },
+  { label: 'Feedback',           hint: 'Open follow-ups across teams',        path: '/assessment/feedback',                        tenant: 'assessment', group: 'Analyze' },
+  { label: 'Enterprise',         hint: 'Governance context',                  path: '/assessment/enterprise',                      tenant: 'assessment', group: 'Informatics' },
+  { label: 'Workspace',          hint: 'Document explorer',                   path: '/assessment/workspace',                       tenant: 'assessment', group: 'Informatics' },
+  { label: 'Prompts',            hint: 'Agent slash commands',                path: '/assessment/prompts',                         tenant: 'assessment', group: 'Informatics' },
+  { label: 'Rules',              hint: 'Scoring stance + archetypes',         path: '/assessment/rules',                           tenant: 'assessment', group: 'Informatics' },
+  { label: 'Activity',           hint: 'Agent run ledger',                    path: '/assessment/runs',                            tenant: 'assessment', group: 'System' },
+  { label: 'Configuration',      hint: 'Motions, cohorts, target level',      path: '/assessment/configuration',                   tenant: 'assessment', group: 'System', roles: ['program-lead'] },
 ];
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
@@ -115,7 +150,7 @@ const UUID_RE = /^[0-9a-f-]{36}$/i;
 function isPageVisible(page: PageEntry, tenant: string, role: string): boolean {
   if (page.tenant === 'universal') return true;
   // Platform pages (tenant 'admin') are org-tenant surfaces — same scoping as
-  // the rail: a session parked on newsroom doesn't get org platform jumps.
+  // the rail: a session parked on another tenant doesn't get org platform jumps.
   if (page.tenant === 'admin') {
     if (tenant !== 'orgiq') return false;
     if (role === 'admin') return true;
@@ -126,28 +161,50 @@ function isPageVisible(page: PageEntry, tenant: string, role: string): boolean {
   return !page.roles || page.roles.includes(role);
 }
 
-// Lazy-fetch recent harness runs the first time something asks for them.
-// Results refresh once per session; the palette is reopened often enough
-// that a manual refresh affordance isn't worth the surface.
-function useRecentHarnessRuns(): RecentRun[] {
-  const [runs, setRuns] = useState<RecentRun[]>([]);
-  const [loaded, setLoaded] = useState(false);
+// Recent harness runs for the palette's "Recent runs" group. The endpoint is
+// an orgiq observability surface: from any other tenant it 403s, and the
+// old hook refetched on every remount (its "loaded" flag was component
+// state), so an assessment session logged a 403 on every navigation. Now
+// gated on the tenant and cached at module level — one fetch per session
+// per tenant, shared by every palette instance.
+let harnessRunsCache: { tenant: string; runs: RecentRun[]; promise: Promise<RecentRun[]> | null } | null = null;
+
+function fetchRecentHarnessRuns(tenant: string | null, role: string | null): Promise<RecentRun[]> {
+  // Null = the session hasn't resolved yet. Defaulting that to orgiq is how
+  // an assessment tab still fired (and 403'd) this request once per load.
+  // The harness is a platform surface: a member could see real run rows in
+  // the palette and be bounced away on selecting one (member audit #7).
+  if (tenant !== 'orgiq') return Promise.resolve([]);
+  if (role !== 'admin' && !PLATFORM.includes(role ?? '')) return Promise.resolve([]);
+  if (harnessRunsCache?.tenant === tenant) {
+    return harnessRunsCache.promise ?? Promise.resolve(harnessRunsCache.runs);
+  }
+  const entry = { tenant, runs: [] as RecentRun[], promise: null as Promise<RecentRun[]> | null };
+  harnessRunsCache = entry;
+  entry.promise = fetch('/api/observability/harness/runs?limit=5', { credentials: 'include' })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((j: unknown) => {
+      const raw = j == null ? [] : Array.isArray(j) ? j : ((j as { runs?: unknown }).runs ?? []);
+      const list = Array.isArray(raw) ? (raw as RecentRun[]) : [];
+      entry.runs = list.slice(0, 5);
+      return entry.runs;
+    })
+    .catch(() => entry.runs)
+    .finally(() => { entry.promise = null; });
+  return entry.promise;
+}
+
+/** Test seam: forget the cached runs (a sign-out / tenant switch hard-navigates anyway). */
+export function resetRecentHarnessRunsCache(): void { harnessRunsCache = null; }
+
+function useRecentHarnessRuns(tenant: string | null, role: string | null): RecentRun[] {
+  const [runs, setRuns] = useState<RecentRun[]>(() => (harnessRunsCache?.tenant === tenant ? harnessRunsCache.runs : []));
 
   useEffect(() => {
-    if (loaded) return;
     let cancelled = false;
-    fetch('/api/observability/harness/runs?limit=5', { credentials: 'include' })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j: unknown) => {
-        if (cancelled || !j) return;
-        const raw = Array.isArray(j) ? j : ((j as { runs?: unknown }).runs ?? []);
-        const list = Array.isArray(raw) ? (raw as RecentRun[]) : [];
-        setRuns(list.slice(0, 5));
-      })
-      .catch(() => { /* silent */ })
-      .finally(() => { if (!cancelled) setLoaded(true); });
+    void fetchRecentHarnessRuns(tenant, role).then((list) => { if (!cancelled) setRuns(list); });
     return () => { cancelled = true; };
-  }, [loaded]);
+  }, [tenant, role]);
 
   return runs;
 }
@@ -161,11 +218,14 @@ export function usePortalCommands(): Command[] {
   const { session } = useSession();
   const tenant = session?.tenant ?? 'orgiq';
   const role = session?.role ?? 'member';
-  const runs = useRecentHarnessRuns();
+  const runs = useRecentHarnessRuns(session?.tenant ?? null, session?.role ?? null);
 
   return useMemo<Command[]>(() => {
+    // Stable sort: the tenant's rail order between groups, definition order
+    // within one — so the palette never leads with Settings.
     const pageCommands: Command[] = PAGES
       .filter((p) => isPageVisible(p, tenant, role))
+      .sort((a, b) => groupRank(tenant, a.group) - groupRank(tenant, b.group))
       .map((p) => ({
         id: `page:${p.path}`,
         label: p.label,

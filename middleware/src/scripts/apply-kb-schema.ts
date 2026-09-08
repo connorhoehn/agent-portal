@@ -1,6 +1,6 @@
 // apply-kb-schema.ts
 // Creates the knowledge_bases table, indexes, trigger, backfills documents,
-// and seeds the default + newsroom KB rows.
+// and seeds the default KB row.
 //
 // Safe to re-run — all DDL uses CREATE IF NOT EXISTS; all INSERTs use
 // ON CONFLICT DO NOTHING; UPDATE backfill is idempotent.
@@ -141,21 +141,7 @@ INSERT INTO knowledge_bases (
   ${kbRoleVal}
 ) ON CONFLICT (slug) DO NOTHING`, 'SEED default KB (orgiq)');
 
-  // ── 6. Seed: newsroom KB (PENDING until wizard provisions it) ────────────
-  await sql(`
-INSERT INTO knowledge_bases (
-  bedrock_kb_id, data_source_id, name, slug, tenant, purpose,
-  description, s3_prefix, aurora_table, embedding_model,
-  chunking_strategy, max_tokens, status
-) VALUES (
-  NULL, NULL,
-  'Newsroom Articles', 'newsroom', 'newsroom', 'articles',
-  'News articles, entity clusters, and editorial research ingested by news-researcher',
-  'newsroom/', 'bedrock_kb_newsroom',
-  'amazon.titan-embed-text-v2:0', 'SEMANTIC', 512, 'PENDING'
-) ON CONFLICT (slug) DO NOTHING`, 'SEED newsroom KB');
-
-  // ── 7. Backfill existing documents → default KB ──────────────────────────
+  // ── 6. Backfill existing documents → default KB ──────────────────────────
   await sql(`
 UPDATE documents
    SET kb_registry_slug = 'default'

@@ -157,18 +157,6 @@ export function flattenByType(nodes: WorkItemTree[], types: WorkItemType[]): Wor
   return acc;
 }
 
-/** Bucket an epic's stories and bugs into the four board lanes. An item in a
- *  lane the board doesn't show (cancelled) falls back to Open rather than
- *  vanishing off the swimlane entirely. */
-export function bucketByStatus(epic: WorkItemTree): Map<WorkItemStatus, WorkItemTree[]> {
-  const byStatus = new Map<WorkItemStatus, WorkItemTree[]>();
-  BOARD_STATUSES.forEach((s) => byStatus.set(s, []));
-  for (const item of flattenByType([epic], ['story', 'bug'])) {
-    (byStatus.get(item.status) ?? byStatus.get('open')!).push(item);
-  }
-  return byStatus;
-}
-
 // ─── Run selection ────────────────────────────────────────────────────────────
 
 /** Aurora timestamps arrive without T/Z — same normalization as the bots pages. */
@@ -202,4 +190,210 @@ export function hasActiveGrantOnInitiative(
   initiativeId: string,
 ): boolean {
   return sprints.some((s) => s.isGrantee && s.status === 'active' && s.orgProjectId === initiativeId);
+}
+
+// ─── One board, one table ────────────────────────────────────────────────────
+//
+// The work column used to render a card per epic, and the board rendered a
+// separate four-lane swimlane per epic stacked vertically. Both are the same
+// mistake: an initiative has ONE backlog, and an epic is a way of FILTERING it,
+// not a reason to draw another board. Ten epics gave you ten boards to scroll
+// past instead of one board you could actually read.
+//
+// So everything below flattens to a single list of dispatchable items (stories
+// and bugs — epics are containers, never work), carrying enough of their epic
+// with them to be filtered and grouped by it.
+
+/** A dispatchable item that remembers which epic it came from. */
+export interface FlatWorkItem extends WorkItemTree {
+  epicId: string;
+  epicTitle: string;
+}
+
+export function flattenWorkItems(epics: WorkItemTree[]): FlatWorkItem[] {
+  const out: FlatWorkItem[] = [];
+  for (const epic of epics) {
+    const walk = (nodes: WorkItemTree[]): void => {
+      for (const n of nodes) {
+        if (n.type !== 'epic') out.push({ ...n, epicId: epic.id, epicTitle: epic.title });
+        if (n.children?.length) walk(n.children);
+      }
+    };
+    walk(epic.children ?? []);
+  }
+  return out;
+}
+
+export interface WorkFilters {
+  epicId?: string;
+  status?: string;
+  type?: string;
+  assigneeId?: string;
+  q?: string;
+}
+
+/**
+ * Filter the flat backlog. Every facet is `all`-tolerant so the caller can
+ * pass its raw control state, and the search covers the fields somebody
+ * actually types — title, labels, assignee, epic — rather than only the title.
+ */
+export function filterWorkItems(items: FlatWorkItem[], f: WorkFilters): FlatWorkItem[] {
+  const q = (f.q ?? '').trim().toLowerCase();
+  return items.filter((i) => {
+    if (f.epicId && f.epicId !== 'all' && i.epicId !== f.epicId) return false;
+    if (f.status && f.status !== 'all' && i.status !== f.status) return false;
+    if (f.type && f.type !== 'all' && i.type !== f.type) return false;
+    if (f.assigneeId && f.assigneeId !== 'all' && (i.assigneeId ?? '') !== f.assigneeId) return false;
+    if (!q) return true;
+    return [i.title, i.epicTitle, i.assigneeName ?? '', ...(i.labels ?? [])]
+      .join(' ').toLowerCase().includes(q);
+  });
+}
+
+/**
+ * One board for the whole (filtered) backlog, not one per epic.
+ *
+ * An item in a status the board doesn't draw a lane for (cancelled) falls back
+ * to Open rather than vanishing off the board entirely.
+ */
+export function bucketItemsByStatus(items: FlatWorkItem[]): Map<WorkItemStatus, FlatWorkItem[]> {
+  const byStatus = new Map<WorkItemStatus, FlatWorkItem[]>();
+  BOARD_STATUSES.forEach((s) => byStatus.set(s, []));
+  for (const item of items) {
+    (byStatus.get(item.status) ?? byStatus.get('open')!).push(item);
+  }
+  return byStatus;
+}
+
+export interface FacetOption { value: string; label: string; count: number }
+
+export function epicFacets(epics: WorkItemTree[], items: FlatWorkItem[]): FacetOption[] {
+  return epics.map((e) => ({
+    value: e.id,
+    label: e.title,
+    count: items.filter((i) => i.epicId === e.id).length,
+  }));
+}
+
+/** Only people who actually hold work here — an assignee filter listing the
+ *  whole org is a filter nobody can use. */
+export function assigneeFacets(items: FlatWorkItem[]): FacetOption[] {
+  const by = new Map<string, FacetOption>();
+  for (const i of items) {
+    if (!i.assigneeId) continue;
+    const found = by.get(i.assigneeId);
+    if (found) found.count += 1;
+    else by.set(i.assigneeId, { value: i.assigneeId, label: i.assigneeName ?? i.assigneeId, count: 1 });
+  }
+  return [...by.values()].sort((a, b) => b.count - a.count);
+}
+
+// ─── Initiative age ───────────────────────────────────────────────────────────
+//
+// "Running since" is one of the two questions people ask of an initiative that
+// the rollup never answered (the other is how many repos it spans). Both come
+// from data the page already holds, so neither needs inventing.
+
+/** Whole days between `iso` and `now`, or null when the date is unusable. */
+export function daysRunning(iso: string | null, now: number = Date.now()): number | null {
+  if (!iso) return null;
+  const started = new Date(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`).getTime();
+  if (Number.isNaN(started)) return null;
+  // A start date in the future is bad data, not a negative age.
+  return Math.max(0, Math.floor((now - started) / 86_400_000));
+}
+
+/**
+ * The age as a person would say it. Days up to a month, then months, then
+ * years — an initiative running for 14 months is "1y 2m", never "428 days",
+ * which is precision nobody asked for and nobody can picture.
+ */
+export function runningLabel(days: number | null): string {
+  if (days == null) return '—';
+  if (days === 0) return 'today';
+  if (days === 1) return '1 day';
+  if (days < 31) return `${days} days`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months} mo`;
+  const years = Math.floor(months / 12);
+  const rem = months % 12;
+  return rem === 0 ? `${years}y` : `${years}y ${rem}m`;
+}
+
+// ─── Activity over time ──────────────────────────────────────────────────────
+//
+// Computed from what the page already holds — the initiative's bot runs and
+// its work tree — rather than from a dedicated endpoint. The numbers a graph
+// draws should be the same numbers the rest of the page is showing, and the
+// surest way to guarantee that is to derive them from the same objects.
+
+export interface ActivityBuckets {
+  /** Day labels, oldest first, YYYY-MM-DD. */
+  labels: string[];
+  runs: number[];
+  spendUsd: number[];
+  completed: number[];
+  totals: { runs: number; spendUsd: number; completed: number };
+}
+
+/** UTC day key for a timestamp, tolerating Aurora's "YYYY-MM-DD HH:MM:SS". */
+function dayKey(iso: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+}
+
+/**
+ * Bucket runs and completed work into one entry PER DAY, oldest first.
+ *
+ * Every day in the window gets an entry, including the quiet ones. A sparkline
+ * reads its array positionally, so omitting empty days would compress the gaps
+ * and draw a busier, smoother initiative than the real one.
+ */
+export function activityBuckets(
+  runs: Array<{ startedAt: string; costUsd: number | null }>,
+  items: Array<{ completedAt: string | null }>,
+  days = 30,
+  now: number = Date.now(),
+): ActivityBuckets {
+  const span = Math.max(1, Math.min(180, Math.floor(days)));
+  const labels: string[] = [];
+  const index = new Map<string, number>();
+  // Anchor on today's UTC midnight so the last bucket is today, not "now
+  // minus 30 x 24h", which would slide the whole window by the time of day.
+  const end = Date.parse(`${new Date(now).toISOString().slice(0, 10)}T00:00:00Z`);
+  for (let i = span - 1; i >= 0; i -= 1) {
+    const key = new Date(end - i * 86_400_000).toISOString().slice(0, 10);
+    index.set(key, labels.length);
+    labels.push(key);
+  }
+
+  const runCounts = new Array<number>(span).fill(0);
+  const spend = new Array<number>(span).fill(0);
+  const completed = new Array<number>(span).fill(0);
+
+  for (const r of runs) {
+    const i = index.get(dayKey(r.startedAt) ?? '');
+    if (i == null) continue;            // outside the window
+    runCounts[i] += 1;
+    spend[i] += r.costUsd ?? 0;
+  }
+  for (const it of items) {
+    const i = index.get(dayKey(it.completedAt) ?? '');
+    if (i == null) continue;
+    completed[i] += 1;
+  }
+
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  return {
+    labels,
+    runs: runCounts,
+    spendUsd: spend.map(round2),
+    completed,
+    totals: {
+      runs: runCounts.reduce((a, b) => a + b, 0),
+      spendUsd: round2(spend.reduce((a, b) => a + b, 0)),
+      completed: completed.reduce((a, b) => a + b, 0),
+    },
+  };
 }

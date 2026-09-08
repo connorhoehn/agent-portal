@@ -9,12 +9,16 @@ export function VariableInput({
   onChange,
   personOptions,
   skillOptions,
+  autoFocus,
 }: {
   name: string;
   value: string;
   onChange: (v: string) => void;
   personOptions: string[];
   skillOptions: string[];
+  /** The panel that renders this replaced the button that opened it, so its
+   *  first field claims focus rather than leaving it on `<body>`. */
+  autoFocus?: boolean;
 }) {
   switch (detectVarType(name)) {
     case 'person':
@@ -24,6 +28,7 @@ export function VariableInput({
           onChange={onChange}
           options={personOptions}
           placeholder="Select or type a person…"
+          autoFocus={autoFocus}
         />
       );
     case 'skill':
@@ -33,6 +38,7 @@ export function VariableInput({
           onChange={onChange}
           options={skillOptions}
           placeholder="Select or type a topic / skill…"
+          autoFocus={autoFocus}
         />
       );
     case 'textarea':
@@ -43,6 +49,7 @@ export function VariableInput({
           placeholder={`Value for ${name}…`}
           rows={3}
           aria-label={name}
+          autoFocus={autoFocus}
         />
       );
     default:
@@ -52,6 +59,7 @@ export function VariableInput({
           onChange={e => onChange(e.target.value)}
           placeholder={`Value for ${name}…`}
           aria-label={name}
+          autoFocus={autoFocus}
         />
       );
   }

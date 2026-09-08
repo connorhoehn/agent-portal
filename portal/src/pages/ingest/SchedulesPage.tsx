@@ -1,13 +1,13 @@
-import React, { useId, useState } from 'react';
+import { useState } from 'react';
 import {
-  Card, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip,
-  PageSection,
+  Button, Card, CardHeader, Chip, FormField, FormRow, Input, PageSection,
+  Select, Stack, Switch, Table, TableBody, TableHead, TableRow, TableTd,
+  TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
-import {
-  Button, EmptyState, Toggle, labelStyle,
-} from '../../components/ingest/ui';
+import { EmptyState } from '../../components/ingest/ui';
+import { T } from './Text';
 
 interface DataSource {
   id: string; name: string; status: string; description: string;
@@ -32,6 +32,18 @@ const CRON_PRESETS = [
   { label: 'Weekly Mon 9 AM',  expr: '0 9 * * 1'    },
   { label: 'Custom…',          expr: '__custom__'   },
 ];
+
+// What a FormField's render-prop wiring may be spread onto a library
+// control. The library hands `labelId` along for controls that take
+// `aria-labelledby`; spreading it onto Select/Input makes React warn "does
+// not recognize the `labelId` prop" on every load. Keep the id + aria
+// wiring, drop the label id — same gap `bots/botsFormat.ts` and
+// `identity/identityFormat.ts` work around locally.
+function inputWiring<W extends { labelId: string }>(wiring: W): Omit<W, 'labelId'> {
+  const { labelId: _labelId, ...rest } = wiring;
+  void _labelId;
+  return rest;
+}
 
 function SchedulesPage() {
   const { data: sourcesData } = useFetch<{ sources: DataSource[] }>('/api/ingest/data-sources', 30_000);
@@ -71,70 +83,74 @@ function SchedulesPanel({ sources }: { sources: DataSource[] }) {
 
   return (
     <Card padding="md">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <h3 style={{ fontSize: 13, fontWeight: 600 }}>KB Sync Schedules</h3>
-        {canManage && (
-          <Button variant="secondary" onClick={() => setShowForm(v => !v)}>
-            {showForm ? 'Cancel' : '+ New Schedule'}
-          </Button>
+      <CardHeader
+        title="KB Sync Schedules"
+        action={canManage
+          ? (
+            <Button variant="secondary" onClick={() => setShowForm(v => !v)}>
+              {showForm ? 'Cancel' : '+ New Schedule'}
+            </Button>
+          )
+          : undefined}
+      />
+
+      <Stack gap="md">
+        {showForm && (
+          <ScheduleForm
+            sources={sources}
+            onCreated={() => { setShowForm(false); refresh(); }}
+          />
         )}
-      </div>
 
-      {showForm && (
-        <ScheduleForm
-          sources={sources}
-          onCreated={() => { setShowForm(false); refresh(); }}
-        />
-      )}
-
-      {schedules.length === 0 && !showForm ? (
-        <EmptyState title="No schedules configured" body={'Ingestion runs only on manual "Sync now" trigger.'} />
-      ) : schedules.length > 0 ? (
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableTh>Label</TableTh><TableTh>Cron</TableTh><TableTh>Data Source</TableTh>
-              <TableTh>Last Run</TableTh><TableTh>Last Status</TableTh>
-              <TableTh>Enabled</TableTh><TableTh></TableTh>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {schedules.map(s => (
-              <TableRow key={s.id}>
-                <TableTd style={{ fontWeight: 500 }}>{s.label}</TableTd>
-                <TableTd style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--color-text-secondary)' }}>{s.cronExpr}</TableTd>
-                <TableTd style={{ fontSize: 12 }}>{s.dataSourceName}</TableTd>
-                <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }}>
-                  {s.lastRunAt ? new Date(s.lastRunAt).toLocaleString() : '—'}
-                </TableTd>
-                <TableTd>
-                  {s.lastStatus
-                    ? <Chip tone={JOB_STATUS_TONE[s.lastStatus] ?? 'neutral'} size="xs">{s.lastStatus}</Chip>
-                    : <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>—</span>}
-                </TableTd>
-                <TableTd>
-                  {canManage ? (
-                    <Toggle
-                      checked={s.enabled}
-                      onChange={v => onToggle(s.id, v)}
-                      aria-label={`Enable schedule ${s.label}`}
-                    />
-                  ) : (
-                    <Chip tone={s.enabled ? 'success' : 'neutral'} size="xs">{s.enabled ? 'on' : 'off'}</Chip>
-                  )}
-                </TableTd>
-                <TableTd>
-                  {canManage && (
-                    <Button variant="danger" size="sm" onClick={() => onDelete(s.id)}>
-                      Remove
-                    </Button>
-                  )}
-                </TableTd>
+        {schedules.length === 0 && !showForm ? (
+          <EmptyState title="No schedules configured" body={'Ingestion runs only on manual "Sync now" trigger.'} />
+        ) : schedules.length > 0 ? (
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableTh>Label</TableTh><TableTh>Cron</TableTh><TableTh>Data Source</TableTh>
+                <TableTh>Last Run</TableTh><TableTh>Last Status</TableTh>
+                <TableTh>Enabled</TableTh><TableTh></TableTh>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      ) : null}
+            </TableHead>
+            <TableBody>
+              {schedules.map(s => (
+                <TableRow key={s.id}>
+                  <TableTd className="font-medium">{s.label}</TableTd>
+                  <TableTd className="font-mono text-[11px] text-text-secondary">{s.cronExpr}</TableTd>
+                  <TableTd className="text-[12px]">{s.dataSourceName}</TableTd>
+                  <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
+                    {s.lastRunAt ? new Date(s.lastRunAt).toLocaleString() : '—'}
+                  </TableTd>
+                  <TableTd>
+                    {s.lastStatus
+                      ? <Chip tone={JOB_STATUS_TONE[s.lastStatus] ?? 'neutral'} size="xs">{s.lastStatus}</Chip>
+                      : <T className="text-[11px] text-text-tertiary">—</T>}
+                  </TableTd>
+                  <TableTd>
+                    {canManage ? (
+                      <Switch
+                        checked={s.enabled}
+                        onChange={v => onToggle(s.id, v)}
+                        aria-label={`Enable schedule ${s.label}`}
+                      />
+                    ) : (
+                      <Chip tone={s.enabled ? 'success' : 'neutral'} size="xs">{s.enabled ? 'on' : 'off'}</Chip>
+                    )}
+                  </TableTd>
+                  <TableTd>
+                    {canManage && (
+                      <Button variant="danger" size="sm" onClick={() => onDelete(s.id)}>
+                        Remove
+                      </Button>
+                    )}
+                  </TableTd>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        ) : null}
+      </Stack>
     </Card>
   );
 }
@@ -146,11 +162,6 @@ function ScheduleForm({ sources, onCreated }: { sources: DataSource[]; onCreated
   const [label, setLabel] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-
-  const dsId_id = useId();
-  const preset_id = useId();
-  const label_id = useId();
-  const custom_id = useId();
 
   const cronExpr = preset === '__custom__' ? custom : preset;
 
@@ -175,55 +186,63 @@ function ScheduleForm({ sources, onCreated }: { sources: DataSource[]; onCreated
     }
   }
 
-  const inputStyle: React.CSSProperties = {
-    fontSize: 12, padding: '5px 8px', border: '1px solid var(--color-border)',
-    borderRadius: 'var(--radius-sm)', width: '100%', boxSizing: 'border-box',
-  };
-
   return (
-    <div style={{ background: 'var(--color-surface-raised)', borderRadius: 'var(--radius-md)', padding: 16, marginBottom: 16 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
-        <div>
-          <label htmlFor={dsId_id} style={labelStyle}>Data Source</label>
-          <select id={dsId_id} value={dsId} onChange={e => setDsId(e.target.value)} style={inputStyle}>
-            {sources.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-        </div>
-        <div>
-          <label htmlFor={preset_id} style={labelStyle}>Schedule</label>
-          <select id={preset_id} value={preset} onChange={e => setPreset(e.target.value)} style={inputStyle}>
-            {CRON_PRESETS.map(p => <option key={p.expr} value={p.expr}>{p.label}</option>)}
-          </select>
-        </div>
-        <div>
-          <label htmlFor={label_id} style={labelStyle}>Label (optional)</label>
-          <input id={label_id} value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. Nightly sync" style={inputStyle} />
-        </div>
-      </div>
+    <Card padding="md" className="bg-surface-raised">
+      <Stack gap="md">
+        <FormRow stackBelow="md">
+          <FormField label="Data Source">
+            {(wiring) => (
+              <Select
+                {...inputWiring(wiring)}
+                value={dsId}
+                onChange={e => setDsId(e.target.value)}
+                options={sources.map(s => ({ value: s.id, label: s.name }))}
+              />
+            )}
+          </FormField>
+          <FormField label="Schedule">
+            {(wiring) => (
+              <Select
+                {...inputWiring(wiring)}
+                value={preset}
+                onChange={e => setPreset(e.target.value)}
+                options={CRON_PRESETS.map(p => ({ value: p.expr, label: p.label }))}
+              />
+            )}
+          </FormField>
+          <FormField label="Label (optional)">
+            {(wiring) => (
+              <Input
+                {...inputWiring(wiring)}
+                value={label}
+                onChange={e => setLabel(e.target.value)}
+                placeholder="e.g. Nightly sync"
+              />
+            )}
+          </FormField>
+        </FormRow>
 
-      {preset === '__custom__' && (
-        <div style={{ marginBottom: 12 }}>
-          <label htmlFor={custom_id} style={labelStyle}>Cron Expression (UTC)</label>
-          <input
-            id={custom_id}
-            value={custom} onChange={e => setCustom(e.target.value)}
-            placeholder="e.g. 0 */4 * * *"
-            style={{ ...inputStyle, fontFamily: 'monospace' }}
-          />
-          <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginTop: 3 }}>
-            Format: minute hour day month weekday — all times UTC
-          </div>
-        </div>
-      )}
+        {preset === '__custom__' && (
+          <FormField label="Cron Expression (UTC)" hint="Format: minute hour day month weekday — all times UTC">
+            {(wiring) => (
+              <Input
+                {...inputWiring(wiring)}
+                mono
+                value={custom}
+                onChange={e => setCustom(e.target.value)}
+                placeholder="e.g. 0 */4 * * *"
+              />
+            )}
+          </FormField>
+        )}
 
-      {error && (
-        <div style={{ fontSize: 12, color: 'var(--color-danger)', marginBottom: 8 }}>{error}</div>
-      )}
+        {error && <T className="text-[12px] text-danger">{error}</T>}
 
-      <Button variant="primary" onClick={submit} disabled={saving}>
-        {saving ? 'Saving…' : 'Create Schedule'}
-      </Button>
-    </div>
+        <Button variant="primary" onClick={submit} disabled={saving}>
+          {saving ? 'Saving…' : 'Create Schedule'}
+        </Button>
+      </Stack>
+    </Card>
   );
 }
 

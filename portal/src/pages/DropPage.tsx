@@ -9,8 +9,13 @@
 // and gives them nothing to act on — they cannot fix it, so the page says who
 // can.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useParams } from 'react-router';
+import {
+  Banner, Card, CardHeader, ErrorState, FileUploadDrop, Inline, LoadingState,
+  MetaLine, Stack, StatusDot,
+} from '@connorhoehnslalom/ui-components/shared';
+import { T } from './Text';
 
 interface LinkView {
   label: string;
@@ -40,14 +45,27 @@ const DEAD_MESSAGE: Record<string, string> = {
   exhausted: 'This link has already received all the files it allows.',
 };
 
+const STATE_TONE: Record<FileState, string> = {
+  done: 'var(--color-success)',
+  failed: 'var(--color-danger)',
+  uploading: 'var(--color-warning)',
+  pending: 'var(--color-text-tertiary)',
+};
+
+function shell(children: ReactNode) {
+  return (
+    <Stack align="center" className="min-h-screen bg-bg px-4 py-14">
+      <Stack className="w-full max-w-xl">{children}</Stack>
+    </Stack>
+  );
+}
+
 export default function DropPage() {
   const { token = '' } = useParams();
   const [link, setLink] = useState<LinkView | null>(null);
   const [loading, setLoading] = useState(true);
   const [invalid, setInvalid] = useState(false);
   const [uploads, setUploads] = useState<Upload[]>([]);
-  const [dragging, setDragging] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -121,105 +139,78 @@ export default function DropPage() {
     } catch { /* the uploads already reported themselves */ }
   }, [token, link?.maxBytes]);
 
-  const shell = (children: React.ReactNode) => (
-    <div className="min-h-screen bg-bg flex items-start justify-center px-4 py-14">
-      <div className="w-full max-w-xl">{children}</div>
-    </div>
-  );
-
   if (loading) {
-    return shell(<div className="text-[13px] text-text-tertiary">Checking this link…</div>);
+    return shell(<LoadingState label="Checking this link…" />);
   }
 
   if (invalid || !link) {
     return shell(
-      <div className="rounded-lg border border-border bg-surface p-6">
-        <div className="text-[15px] font-bold text-text-primary">This link isn’t valid</div>
-        <div className="text-[13px] text-text-secondary mt-2 leading-relaxed">
-          It may have been mistyped, or turned off. Ask whoever sent it for a new one — nothing you can do
-          on this page will fix it.
-        </div>
-      </div>,
+      <Card>
+        <ErrorState
+          icon={null}
+          title="This link isn’t valid"
+          body="It may have been mistyped, or turned off. Ask whoever sent it for a new one — nothing you can do on this page will fix it."
+        />
+      </Card>,
     );
   }
 
   if (link.status !== 'live') {
     return shell(
-      <div className="rounded-lg border border-border bg-surface p-6">
-        <div className="text-[15px] font-bold text-text-primary">{DEAD_MESSAGE[link.status]}</div>
-        <div className="text-[13px] text-text-secondary mt-2 leading-relaxed">
-          It was for <strong>{link.label}</strong>. Ask whoever sent it for a new one.
-        </div>
-      </div>,
+      <Card>
+        <ErrorState
+          icon={null}
+          title={DEAD_MESSAGE[link.status] ?? 'This link is no longer active.'}
+          description={<>It was for <strong>{link.label}</strong>. Ask whoever sent it for a new one.</>}
+        />
+      </Card>,
     );
   }
 
   const done = uploads.filter((u) => u.state === 'done').length;
 
   return shell(
-    <div className="rounded-lg border border-border bg-surface overflow-hidden">
-      <div className="px-5 py-4 border-b border-border">
-        <div className="text-[15px] font-bold text-text-primary">Add documents</div>
-        <div className="text-[13px] text-text-secondary mt-1 leading-snug">
-          {link.label}
-        </div>
-      </div>
+    <Card padding="none">
+      <CardHeader title="Add documents" subtitle={link.label} />
 
-      <div
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(e) => { e.preventDefault(); setDragging(false); void send(Array.from(e.dataTransfer.files)); }}
-        onClick={() => inputRef.current?.click()}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click(); }}
-        className={`m-5 rounded-lg border-2 border-dashed px-4 py-10 text-center cursor-pointer transition-colors ${
-          dragging ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
-        }`}
-      >
-        <div className="text-[14px] font-semibold text-text-primary">
-          {dragging ? 'Drop to upload' : 'Drag files here, or click to choose'}
-        </div>
-        <div className="text-[11px] text-text-tertiary mt-2">
-          {link.allowedExtensions.join(' · ')}
-        </div>
-        <div className="text-[11px] text-text-tertiary mt-1">
-          Up to {link.filesRemaining} more {link.filesRemaining === 1 ? 'file' : 'files'} · {bytes(link.maxBytes)} each
-        </div>
-        <input
-          ref={inputRef}
-          type="file"
-          multiple
+      <Stack gap="sm" className="p-5">
+        <FileUploadDrop
           accept={link.allowedExtensions.join(',')}
-          className="hidden"
-          onChange={(e) => { void send(Array.from(e.target.files ?? [])); e.target.value = ''; }}
+          multiple
+          onFiles={(files) => { void send(files); }}
+          label="Drag files here, or click to choose"
         />
-      </div>
+        <MetaLine
+          items={[
+            link.allowedExtensions.join(' · '),
+            `Up to ${link.filesRemaining} more ${link.filesRemaining === 1 ? 'file' : 'files'}`,
+            `${bytes(link.maxBytes)} each`,
+          ]}
+        />
+      </Stack>
 
       {uploads.length > 0 && (
-        <div className="border-t border-border">
+        <Stack gap="none" className="border-t border-border">
           {uploads.map((u) => (
-            <div key={u.id} className="px-5 py-2.5 border-b border-border last:border-b-0 flex items-center gap-2.5">
-              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                u.state === 'done' ? 'bg-success'
-                  : u.state === 'failed' ? 'bg-danger'
-                  : u.state === 'uploading' ? 'bg-warning animate-pulse'
-                  : 'bg-text-tertiary'
-              }`} />
-              <span className="text-[12px] text-text-primary truncate flex-1">{u.name}</span>
+            <Inline
+              key={u.id} gap="sm" align="center"
+              className="px-5 py-2.5 border-b border-border last:border-b-0"
+            >
+              <StatusDot color={STATE_TONE[u.state]} pulse={u.state === 'uploading'} />
+              <T className="text-[12px] text-text-primary truncate flex-1">{u.name}</T>
               {u.error
-                ? <span className="text-[11px] text-danger truncate max-w-[50%]" title={u.error}>{u.error}</span>
-                : <span className="text-[11px] text-text-tertiary shrink-0">{bytes(u.size)}</span>}
-            </div>
+                ? <T className="text-[11px] text-danger truncate max-w-[50%]" title={u.error}>{u.error}</T>
+                : <T className="text-[11px] text-text-tertiary shrink-0">{bytes(u.size)}</T>}
+            </Inline>
           ))}
           {done > 0 && (
-            <div className="px-5 py-3 text-[12px] text-text-secondary leading-snug">
+            <Banner variant="success" className="m-0 rounded-none border-0">
               {done} {done === 1 ? 'file is' : 'files are'} in. Someone on the team still has to index them
               before they can be searched — you don’t need to do anything else.
-            </div>
+            </Banner>
           )}
-        </div>
+        </Stack>
       )}
-    </div>,
+    </Card>,
   );
 }

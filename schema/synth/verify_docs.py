@@ -124,7 +124,7 @@ def run_one_planner(name: str, planner) -> None:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--only", choices=["postmortem", "perf_review", "slack_thread", "all_hands", "news_article", "all"],
+    parser.add_argument("--only", choices=["postmortem", "perf_review", "slack_thread", "all_hands", "all"],
                         default="all")
     args = parser.parse_args()
     planners = {
@@ -132,7 +132,6 @@ def main():
         "perf_review":  generate.plan_perf_reviews,
         "slack_thread": generate.plan_slack_threads,
         "all_hands":    generate.plan_all_hands,
-        "news_article": generate.plan_news_articles,
     }
     if args.only == "all":
         for name, planner in planners.items():

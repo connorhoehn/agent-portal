@@ -2,9 +2,10 @@
 // board cards so the two views can never drift apart.
 
 import { Link } from 'react-router';
-import { Button, Chip, StatusDot } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Chip, Inline, StatusDot } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import type { BotRun } from '../bots/BotsPage';
+import { ExternalLink } from './ExternalLinkFrame';
 import { PR_ICONS, PR_TONE, STATUS_DOT_COLOR, STATUS_TONE } from './projectFormat';
 import type { PrStatus, WorkItemStatus, WorkItemTree } from './types';
 
@@ -12,12 +13,12 @@ import type { PrStatus, WorkItemStatus, WorkItemTree } from './types';
  *  the chip carries the word. */
 export function StatusChip({ status }: { status: WorkItemStatus }) {
   return (
-    <span className="inline-flex items-center gap-1 shrink-0">
+    <Inline gap="xs" align="center" wrap={false} className="shrink-0">
       <StatusDot color={STATUS_DOT_COLOR[status]} size="xs" />
       <Chip tone={STATUS_TONE[status] ?? 'neutral'} size="xs">
         {status.replace('_', ' ')}
       </Chip>
-    </span>
+    </Inline>
   );
 }
 
@@ -30,15 +31,13 @@ export function PrBadge({ prStatus, prUrl }: { prStatus: PrStatus; prUrl: string
   );
   if (!prUrl) return chip;
   return (
-    <a
+    <ExternalLink
       href={prUrl}
-      target="_blank"
-      rel="noreferrer"
       className="no-underline shrink-0"
       onClick={(e) => e.stopPropagation()}
     >
       {chip}
-    </a>
+    </ExternalLink>
   );
 }
 
@@ -59,6 +58,12 @@ export function EstimateChip({
       variant="secondary"
       className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide text-primary"
       title="Estimate cost & duration, then authorize an agent run"
+      // A stable, re-queryable handle for the Estimate drawer to refocus on
+      // close — see the comment on EstimateDrawer's handleClose. Button isn't
+      // forwardRef, so a captured DOM ref would go stale the moment whatever
+      // opened this row (e.g. the WorkItemDrawer) unmounts; a re-query by id
+      // survives that.
+      data-estimate-trigger={item.id}
       onClick={(e) => { e.stopPropagation(); onEstimate(item); }}
     >
       ⚡ Estimate

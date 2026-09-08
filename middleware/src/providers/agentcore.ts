@@ -51,7 +51,7 @@ import type {
 } from './types.js';
 
 import { mockAgents } from '../mock/agent-statuses.js';
-import { mockCodeSessions, mockBrowserSessions } from '../mock/capabilities.js';
+import { browserSessions, codeSessions } from '../mock/capabilities.js';
 import { selectMockResponse } from '../mock/responses.js';
 
 // ─── Clients (lazy, shared) ───────────────────────────────────────────────────
@@ -991,10 +991,19 @@ export const realAgentCore: AgentCoreProvider = {
 
 // ─── Mock provider ────────────────────────────────────────────────────────────
 
-// In-memory mutable copies so create/close/terminate calls feel real to the
-// portal during offline dev.
-const _mockCode: CodeSession[] = mockCodeSessions.map((s) => ({ ...s }));
-const _mockBrowser: BrowserSession[] = mockBrowserSessions.map((s) => ({ ...s }));
+// Create/close/terminate calls mutate the fixture's own rows, so they feel
+// real to the portal during offline dev and `POST /api/__mock/reset` is what
+// takes them back.
+//
+// These used to be module-scope COPIES of the fixture arrays. That worked
+// while the fixtures were frozen literals, but it makes a fixture that can be
+// switched or reset invisible here: asking the control plane for the `empty`
+// world left both lists exactly as they were at import, and a reset never
+// dropped an audit's terminated session. Resolved per call instead — `rows()`
+// hands back the live array, and `reset()` replaces it, so a stale reference
+// is never held.
+const _mockCode = (): CodeSession[] => codeSessions.rows();
+const _mockBrowser = (): BrowserSession[] => browserSessions.rows();
 
 export const mockAgentCore: AgentCoreProvider = {
   async listRuntimes(): Promise<AgentRuntimeSummary[]> {
@@ -1050,13 +1059,14 @@ export const mockAgentCore: AgentCoreProvider = {
   },
 
   async listCodeSessions(): Promise<CodeSession[]> {
-    return _mockCode.map((s) => ({ ...s }));
+    return _mockCode().map((s) => ({ ...s }));
   },
 
   async terminateCodeSession(sessionId: string): Promise<boolean> {
-    const i = _mockCode.findIndex((s) => s.sessionId === sessionId);
+    const rows = _mockCode();
+    const i = rows.findIndex((s) => s.sessionId === sessionId);
     if (i < 0) return false;
-    _mockCode[i] = { ..._mockCode[i]!, status: 'TERMINATED' };
+    rows[i] = { ...rows[i]!, status: 'TERMINATED' };
     return true;
   },
 
@@ -1071,7 +1081,7 @@ export const mockAgentCore: AgentCoreProvider = {
   },
 
   async listBrowserSessions(): Promise<BrowserSession[]> {
-    return _mockBrowser.map((s) => ({ ...s }));
+    return _mockBrowser().map((s) => ({ ...s }));
   },
 
   async createBrowserSession(opts: { agentName: string; url?: string }): Promise<BrowserSession> {
@@ -1087,33 +1097,34 @@ export const mockAgentCore: AgentCoreProvider = {
       requestCount: 0,
       profileId: config.agentcore.browserProfileId || 'bp-default',
     };
-    _mockBrowser.push(session);
+    _mockBrowser().push(session);
     return { ...session };
   },
 
   async closeBrowserSession(sessionId: string): Promise<boolean> {
-    const i = _mockBrowser.findIndex((s) => s.sessionId === sessionId);
+    const rows = _mockBrowser();
+    const i = rows.findIndex((s) => s.sessionId === sessionId);
     if (i < 0) return false;
-    _mockBrowser[i] = { ..._mockBrowser[i]!, status: 'CLOSED' };
+    rows[i] = { ...rows[i]!, status: 'CLOSED' };
     return true;
   },
 
   async navigateBrowser(sessionId: string, url: string): Promise<BrowserSession | null> {
-    const i = _mockBrowser.findIndex((s) => s.sessionId === sessionId);
+    const rows = _mockBrowser();
+    const i = rows.findIndex((s) => s.sessionId === sessionId);
     if (i < 0) return null;
-    const now = new Date().toISOString();
-    _mockBrowser[i] = {
-      ..._mockBrowser[i]!,
+    rows[i] = {
+      ...rows[i]!,
       currentUrl: url,
       pageTitle: `Mock page at ${new URL(url).hostname}`,
-      lastActivityAt: now,
-      requestCount: _mockBrowser[i]!.requestCount + 1,
+      lastActivityAt: new Date().toISOString(),
+      requestCount: rows[i]!.requestCount + 1,
     };
-    return { ..._mockBrowser[i]! };
+    return { ...rows[i]! };
   },
 
   async screenshotBrowser(sessionId: string): Promise<BrowserScreenshot | null> {
-    if (!_mockBrowser.some((s) => s.sessionId === sessionId)) return null;
+    if (!_mockBrowser().some((s) => s.sessionId === sessionId)) return null;
     // 1x1 transparent PNG as a placeholder
     const onePx = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
     return {
@@ -1124,7 +1135,7 @@ export const mockAgentCore: AgentCoreProvider = {
   },
 
   async evaluateInBrowser(sessionId: string, _expression: string): Promise<unknown> {
-    const s = _mockBrowser.find((x) => x.sessionId === sessionId);
+    const s = _mockBrowser().find((x) => x.sessionId === sessionId);
     if (!s) return null;
     return JSON.stringify({
       title: `Mock page at ${new URL(s.currentUrl).hostname}`,
@@ -1134,6 +1145,6 @@ export const mockAgentCore: AgentCoreProvider = {
   },
 
   async clickBrowser(sessionId: string, _x: number, _y: number): Promise<boolean> {
-    return _mockBrowser.some((s) => s.sessionId === sessionId);
+    return _mockBrowser().some((s) => s.sessionId === sessionId);
   },
 };

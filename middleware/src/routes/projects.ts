@@ -14,19 +14,41 @@ import {
   type GovernanceWriteResult,
 } from '../providers/projects.js';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
-import { requireAction } from '../lib/authz.js';
+import { requireAction, resolveSession } from '../lib/authz.js';
+import { getUser } from '../providers/identity.js';
 
 export const projectsRouter = Router();
 
 const governGate = requireAction('DispatchAgentRun');
 
-// GET /api/graph/projects?status=&limit=N
+// GET /api/graph/projects?status=&limit=N&scope=mine|all
+//
+// `scope=mine` narrows to initiatives the session's linked person owns or
+// contributes to — the same person-keyed "mine" /api/sprints resolves, so the
+// two Delivery surfaces agree about whose work is whose. Default is `all`
+// (this list has always been tenant-open); an unlinked account asking for
+// `mine` gets an empty list, and the portal's empty state names the fix.
 projectsRouter.get('/', asyncHandler(async (req, res) => {
   const status = req.query['status'] as string | undefined;
   const rawLimit = parseInt(req.query['limit'] as string ?? '50', 10);
   const limit = Number.isNaN(rawLimit) ? 50 : Math.min(Math.max(rawLimit, 1), 200);
 
-  const projects = await listProjects({ status: status || undefined, limit });
+  const scope = String(req.query['scope'] ?? 'all').trim();
+  if (scope !== 'mine' && scope !== 'all') {
+    throw new ValidationError("scope must be 'mine' or 'all'");
+  }
+  let personId: string | null = null;
+  if (scope === 'mine') {
+    const session = resolveSession(req);
+    personId = session ? ((await getUser(session.sub))?.personId ?? null) : null;
+  }
+
+  const projects = await listProjects({
+    status: status || undefined,
+    limit,
+    mineOnly: scope === 'mine',
+    personId,
+  });
   res.json(projects);
 }));
 

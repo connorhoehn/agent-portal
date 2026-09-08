@@ -13,23 +13,28 @@
 //   5. Neutral section (collapsed by default)
 
 import { useEffect, useMemo, useState } from 'react';
-import type { CSSProperties } from 'react';
 import { Link, useParams } from 'react-router';
 import {
+  Button,
   Card,
+  CardHeader,
+  Chip,
+  CodeBlock,
+  Inline,
+  Modal,
+  PageSection,
+  Stack,
   Table,
-  TableHead,
   TableBody,
+  TableHead,
   TableRow,
   TableTh,
   TableTd,
-  Chip,
-  PageSection,
-  Modal,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
 import { CostChip } from '../../../components/observability/CostChip';
 import { ModeChip } from '../../../components/observability/ModeChip';
+import { T } from '../Text';
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
@@ -212,9 +217,9 @@ function CompareRunsPage() {
     return (
       <PageSection title="Compare Runs">
         <Card padding="md">
-          <div style={{ color: 'var(--color-text-tertiary)', fontSize: 12 }}>
+          <T className="text-text-tertiary text-[12px]">
             Loading comparison…
-          </div>
+          </T>
         </Card>
       </PageSection>
     );
@@ -237,105 +242,100 @@ function CompareRunsPage() {
     <PageSection title="Compare Runs">
       {/* Header */}
       <Card padding="md">
-        <div style={headerRow}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <h2 style={h2title}>
-                Comparing <span style={monoInline}>{shortRunId(runA.runId)}</span> →{' '}
-                <span style={monoInline}>{shortRunId(runB.runId)}</span>
-              </h2>
-            </div>
-            <div style={subline}>
-              <span style={runLabelChip} title={`run A: ${runA.runId}`}>
-                A: <strong>{runA.label}</strong>
-              </span>
+        <Inline justify="between" align="start" gap="md" className="mb-3">
+          <Stack gap="xs">
+            <T as="div" className="text-base font-semibold">
+              Comparing <T className="font-mono text-[11.5px]">{shortRunId(runA.runId)}</T> →{' '}
+              <T className="font-mono text-[11.5px]">{shortRunId(runB.runId)}</T>
+            </T>
+            <Inline gap="sm" align="center" className="text-[12px] text-text-secondary">
+              <T title={`run A: ${runA.runId}`}>A: <strong>{runA.label}</strong></T>
               <ModeChip mode={summary.modeA} />
-              <span style={dot}>→</span>
-              <span style={runLabelChip} title={`run B: ${runB.runId}`}>
-                B: <strong>{runB.label}</strong>
-              </span>
+              <T className="text-text-tertiary">→</T>
+              <T title={`run B: ${runB.runId}`}>B: <strong>{runB.label}</strong></T>
               <ModeChip mode={summary.modeB} />
-            </div>
-            <div style={subline}>
-              pass rate:&nbsp;
+            </Inline>
+            <Inline gap="sm" align="center" className="text-[12px] text-text-secondary">
+              <T>pass rate:</T>
               <Chip tone="neutral" size="xs">{fmtPct(summary.passRateA)}</Chip>
-              <span style={dot}>→</span>
+              <T className="text-text-tertiary">→</T>
               <Chip tone="neutral" size="xs">{fmtPct(summary.passRateB)}</Chip>
-              <span style={dot}>·</span>
+              <T className="text-text-tertiary">·</T>
               <Chip tone={passRateDeltaTone(summary.passRateDelta)} size="xs">
                 {summary.passRateDelta >= 0 ? '▲' : '▼'} {fmtSignedPct(summary.passRateDelta)}
               </Chip>
-              <span style={dot}>·</span>
-              cost Δ:&nbsp;
+              <T className="text-text-tertiary">·</T>
+              <T>cost Δ:</T>
               <Chip tone={costDeltaTone(summary.costDeltaUsd)} size="xs">
                 {fmtSignedCost(summary.costDeltaUsd)}
               </Chip>
-              <span style={dot}>·</span>
-              duration Δ:&nbsp;
+              <T className="text-text-tertiary">·</T>
+              <T>duration Δ:</T>
               <Chip tone={durationDeltaTone(summary.durationDeltaMs)} size="xs">
                 {fmtSignedDuration(summary.durationDeltaMs)}
               </Chip>
-            </div>
-            <div style={subline}>
-              judge A: <span style={monoInline}>{summary.judgeModelA}</span>
+            </Inline>
+            <Inline gap="sm" align="center" className="text-[12px] text-text-secondary">
+              <T>judge A:</T> <T className="font-mono text-[11.5px]">{summary.judgeModelA}</T>
               {summary.judgeModelA !== summary.judgeModelB && (
                 <>
-                  <span style={dot}>·</span>
-                  judge B: <span style={monoInline}>{summary.judgeModelB}</span>
+                  <T className="text-text-tertiary">·</T>
+                  <T>judge B:</T> <T className="font-mono text-[11.5px]">{summary.judgeModelB}</T>
                   <Chip tone="warning" size="xs">judges differ</Chip>
                 </>
               )}
-              <span style={dot}>·</span>
-              tests A: <strong>{runA.passed}/{runA.totalCases}</strong>
-              <span style={dot}>·</span>
-              tests B: <strong>{runB.passed}/{runB.totalCases}</strong>
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Link to={`/admin/observability/harness/runs/${encodeURIComponent(runIdA)}`} style={btnLink}>
+              <T className="text-text-tertiary">·</T>
+              <T>tests A: <strong>{runA.passed}/{runA.totalCases}</strong></T>
+              <T className="text-text-tertiary">·</T>
+              <T>tests B: <strong>{runB.passed}/{runB.totalCases}</strong></T>
+            </Inline>
+          </Stack>
+          <Inline gap="sm">
+            <Link
+              to={`/admin/observability/harness/runs/${encodeURIComponent(runIdA)}`}
+              className="text-[12px] text-primary no-underline px-2 py-0.5 rounded hover:underline"
+            >
               ← Run A
             </Link>
-            <Link to={`/admin/observability/harness/runs/${encodeURIComponent(runIdB)}`} style={btnLink}>
+            <Link
+              to={`/admin/observability/harness/runs/${encodeURIComponent(runIdB)}`}
+              className="text-[12px] text-primary no-underline px-2 py-0.5 rounded hover:underline"
+            >
               Run B →
             </Link>
-          </div>
-        </div>
+          </Inline>
+        </Inline>
       </Card>
 
       {/* Prompt version delta */}
       {summary.promptVersionDelta.length > 0 && (
         <Card padding="md">
-          <div style={headerRow}>
-            <h2 style={h2}>
-              Prompt version changes{' '}
-              <span style={hint}>
-                {summary.promptVersionDelta.length} agent
-                {summary.promptVersionDelta.length === 1 ? '' : 's'} updated · click a version to
-                diff
-              </span>
-            </h2>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <CardHeader
+            title="Prompt version changes"
+            subtitle={`${summary.promptVersionDelta.length} agent${summary.promptVersionDelta.length === 1 ? '' : 's'} updated · click a version to diff`}
+          />
+          <Stack gap="xs">
             {summary.promptVersionDelta.map((d) => (
-              <div key={d.agentId} style={pvRow}>
-                <span style={agentCell}>{d.agentId}</span>
-                <span style={{ ...monoInline, color: 'var(--color-text-tertiary)' }}>
+              <Inline key={d.agentId} gap="sm" wrap align="center" className="py-1.5 border-b border-border">
+                <T className="text-[12px] font-medium whitespace-nowrap">{d.agentId}</T>
+                <T className="font-mono text-[11.5px] text-text-tertiary">
                   p:{shortPv(d.fromVersion)}
-                </span>
-                <span style={dot}>→</span>
-                <button
+                </T>
+                <T className="text-text-tertiary">→</T>
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setDiffEntry(d)}
-                  style={pvBtn}
                   title="Diff the two prompt versions"
                 >
                   <Chip tone="neutral" size="xs">
-                    <span style={monoInline}>p:{shortPv(d.toVersion)}</span>
+                    <T className="font-mono text-[11.5px]">p:{shortPv(d.toVersion)}</T>
                   </Chip>
-                </button>
-              </div>
+                </Button>
+              </Inline>
             ))}
-          </div>
+          </Stack>
         </Card>
       )}
 
@@ -369,20 +369,19 @@ function CompareRunsPage() {
 
       {/* Neutral */}
       <Card padding="md">
-        <div style={headerRow}>
-          <h2 style={h2}>
-            <button
-              onClick={() => setNeutralOpen(!neutralOpen)}
-              style={collapseBtn}
-              aria-expanded={neutralOpen}
-            >
-              {neutralOpen ? '▾' : '▸'} Neutral
-            </button>{' '}
-            <span style={hint}>
-              {neutral.length} test{neutral.length === 1 ? '' : 's'} within ±0.05
-            </span>
-          </h2>
-        </div>
+        <Inline justify="between" align="center" className="mb-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setNeutralOpen(!neutralOpen)}
+            aria-expanded={neutralOpen}
+          >
+            {neutralOpen ? '▾' : '▸'} Neutral
+          </Button>
+          <T className="text-[11px] text-text-tertiary">
+            {neutral.length} test{neutral.length === 1 ? '' : 's'} within ±0.05
+          </T>
+        </Inline>
         {neutralOpen && (
           neutral.length === 0 ? (
             <EmptyState text="No neutral results." />
@@ -427,19 +426,14 @@ interface ResultsSectionProps {
 function ResultsSection({
   title, tone, hint, results, runIdA, runIdB, expanded, onToggleExpand, emptyText,
 }: ResultsSectionProps) {
-  const cardTint: CSSProperties = tone === 'danger'
-    ? { borderTop: '2px solid var(--color-danger, #ef4444)' }
+  const toneClass = tone === 'danger'
+    ? 'border-t-2 border-danger'
     : tone === 'success'
-      ? { borderTop: '2px solid var(--color-success, #22c55e)' }
-      : {};
+      ? 'border-t-2 border-success'
+      : undefined;
   return (
-    <Card padding="md" style={cardTint}>
-      <div style={headerRow}>
-        <h2 style={h2}>
-          {title}{' '}
-          <span style={hintLine}>{hint}</span>
-        </h2>
-      </div>
+    <Card padding="md" className={toneClass}>
+      <CardHeader title={title} subtitle={hint} />
       {results.length === 0 ? (
         <EmptyState text={emptyText} />
       ) : (
@@ -506,13 +500,13 @@ function ResultsTable({
               <TableRow
                 key={r.testId}
                 onClick={() => onToggleExpand(r.testId)}
-                style={{ cursor: 'pointer' }}
+                className="cursor-pointer"
               >
-                <TableTd style={monoCell}>{r.testId}</TableTd>
-                <TableTd style={agentCell}>{r.agentId || '—'}</TableTd>
-                <TableTd style={{ whiteSpace: 'nowrap' }}>
+                <TableTd className="text-[11px] text-text-tertiary font-mono whitespace-nowrap">{r.testId}</TableTd>
+                <TableTd className="text-[12px] font-medium whitespace-nowrap">{r.agentId || '—'}</TableTd>
+                <TableTd className="whitespace-nowrap">
                   <Chip tone={judgeTone(r.scoreA)} size="xs">{fmt(r.scoreA)}</Chip>
-                  <span style={{ ...dot, margin: '0 4px' }}>→</span>
+                  <T className="text-text-tertiary mx-1">→</T>
                   <Chip tone={judgeTone(r.scoreB)} size="xs">{fmt(r.scoreB)}</Chip>
                 </TableTd>
                 <TableTd>
@@ -525,28 +519,28 @@ function ResultsTable({
                     {fmtSignedCost(r.costDeltaUsd)}
                   </Chip>
                 </TableTd>
-                <TableTd style={numCell}>
+                <TableTd className="text-[12px] text-text-secondary whitespace-nowrap">
                   {fmtSignedDuration(r.durationDeltaMs)}
                 </TableTd>
-                <TableTd style={{ whiteSpace: 'nowrap' }}>
+                <TableTd className="whitespace-nowrap">
                   <PassChip passed={r.passedA} />
-                  <span style={{ ...dot, margin: '0 4px' }}>→</span>
+                  <T className="text-text-tertiary mx-1">→</T>
                   <PassChip passed={r.passedB} />
                 </TableTd>
-                <TableTd style={{ whiteSpace: 'nowrap' }}>
+                <TableTd className="whitespace-nowrap">
                   <Link
                     to={`/admin/observability/harness/runs/${encodeURIComponent(runIdA)}`}
                     onClick={(e) => e.stopPropagation()}
-                    style={smallLink}
+                    className="text-[11px] text-primary no-underline hover:underline"
                     title="Open run A"
                   >
                     view A
                   </Link>
-                  <span style={{ ...dot, margin: '0 4px' }}>·</span>
+                  <T className="text-text-tertiary mx-1">·</T>
                   <Link
                     to={`/admin/observability/harness/runs/${encodeURIComponent(runIdB)}`}
                     onClick={(e) => e.stopPropagation()}
-                    style={smallLink}
+                    className="text-[11px] text-primary no-underline hover:underline"
                     title="Open run B"
                   >
                     view B
@@ -555,7 +549,7 @@ function ResultsTable({
               </TableRow>
               {isOpen && (
                 <TableRow key={`${r.testId}-detail`}>
-                  <TableTd colSpan={8} style={detailRowCell}>
+                  <TableTd colSpan={8} className="p-3 bg-bg">
                     <ResponseDiff result={r} />
                   </TableTd>
                 </TableRow>
@@ -570,16 +564,16 @@ function ResultsTable({
 
 function ResponseDiff({ result }: { result: ComparedResult }) {
   return (
-    <div style={diffGrid}>
-      <div>
-        <div style={detailLabel}>RESPONSE A</div>
-        <pre style={detailPre}>{result.responseA ?? '(no response captured)'}</pre>
-      </div>
-      <div>
-        <div style={detailLabel}>RESPONSE B</div>
-        <pre style={detailPre}>{result.responseB ?? '(no response captured)'}</pre>
-      </div>
-    </div>
+    <Inline gap="md" align="start">
+      <Stack gap="xs" className="flex-1 min-w-0">
+        <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">RESPONSE A</T>
+        <CodeBlock code={result.responseA ?? '(no response captured)'} language="text" />
+      </Stack>
+      <Stack gap="xs" className="flex-1 min-w-0">
+        <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">RESPONSE B</T>
+        <CodeBlock code={result.responseB ?? '(no response captured)'} language="text" />
+      </Stack>
+    </Inline>
   );
 }
 
@@ -638,31 +632,33 @@ function PromptDiffModal({
 
   return (
     <Modal open onClose={onClose} title={title} maxWidth={1200} rawChildren>
-      {loading && <div style={modalBody}>Loading…</div>}
+      {loading && (
+        <T as="div" className="p-4 overflow-y-auto text-[12px]">Loading…</T>
+      )}
 
       {err && (
-        <div style={{ ...modalBody, color: 'var(--color-danger, #ef4444)' }}>
+        <T as="div" className="p-4 overflow-y-auto text-[12px] text-danger">
           Could not load prompt versions: {err}
-        </div>
+        </T>
       )}
 
       {!loading && !err && (
-        <div style={modalBody}>
-          <div style={modalDiffGrid}>
-            <div>
-              <div style={detailLabel}>
-                FROM — <span style={monoInline}>p:{shortPv(entry.fromVersion)}</span>
-              </div>
-              <pre style={modalPre}>{fromDetail?.content ?? '(not registered)'}</pre>
-            </div>
-            <div>
-              <div style={detailLabel}>
-                TO — <span style={monoInline}>p:{shortPv(entry.toVersion)}</span>
-              </div>
-              <pre style={modalPre}>{toDetail?.content ?? '(not registered)'}</pre>
-            </div>
-          </div>
-        </div>
+        <Stack gap="md" className="p-4 overflow-y-auto text-[12px]">
+          <Inline gap="md" align="start">
+            <Stack gap="xs" className="flex-1 min-w-0">
+              <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">
+                FROM — <T className="font-mono text-[11.5px]">p:{shortPv(entry.fromVersion)}</T>
+              </T>
+              <CodeBlock code={fromDetail?.content ?? '(not registered)'} language="text" />
+            </Stack>
+            <Stack gap="xs" className="flex-1 min-w-0">
+              <T as="div" className="text-[10px] font-bold text-text-tertiary tracking-wide">
+                TO — <T className="font-mono text-[11.5px]">p:{shortPv(entry.toVersion)}</T>
+              </T>
+              <CodeBlock code={toDetail?.content ?? '(not registered)'} language="text" />
+            </Stack>
+          </Inline>
+        </Stack>
       )}
     </Modal>
   );
@@ -683,20 +679,23 @@ function ErrorBlock({
     <PageSection
       title={title}
       actions={
-        <Link to="/admin/observability/harness" style={btnLink}>
+        <Link
+          to="/admin/observability/harness"
+          className="text-[12px] text-primary no-underline px-2 py-0.5 rounded hover:underline"
+        >
           ← Back to harness
         </Link>
       }
     >
       <Card padding="md">
         {(runIdA || runIdB) && (
-          <div style={subline}>
-            runIdA: <span style={monoInline}>{runIdA ?? '—'}</span>
-            <span style={dot}>·</span>
-            runIdB: <span style={monoInline}>{runIdB ?? '—'}</span>
-          </div>
+          <Inline gap="sm" wrap className="text-[12px] text-text-secondary">
+            <T>runIdA:</T> <T className="font-mono text-[11.5px]">{runIdA ?? '—'}</T>
+            <T className="text-text-tertiary">·</T>
+            <T>runIdB:</T> <T className="font-mono text-[11.5px]">{runIdB ?? '—'}</T>
+          </Inline>
         )}
-        <div style={{ ...subline, color: 'var(--color-text-secondary)' }}>{detail}</div>
+        <T as="div" className="text-[12px] text-text-secondary">{detail}</T>
       </Card>
     </PageSection>
   );
@@ -704,167 +703,10 @@ function ErrorBlock({
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div
-      style={{
-        padding: 24,
-        textAlign: 'center',
-        fontSize: 12,
-        color: 'var(--color-text-tertiary)',
-      }}
-    >
+    <T as="div" className="p-6 text-center text-[12px] text-text-tertiary">
       {text}
-    </div>
+    </T>
   );
 }
-
-// ── styles ────────────────────────────────────────────────────────────────────
-
-const headerRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'flex-start',
-  justifyContent: 'space-between',
-  marginBottom: 12,
-  gap: 12,
-  flexWrap: 'wrap',
-};
-const h2: CSSProperties = { fontSize: 14, fontWeight: 600, margin: 0 };
-const h2title: CSSProperties = { fontSize: 16, fontWeight: 600, margin: 0 };
-const subline: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary)',
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  flexWrap: 'wrap',
-};
-const dot: CSSProperties = { color: 'var(--color-text-tertiary)' };
-const hint: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  fontWeight: 400,
-};
-const hintLine: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  fontWeight: 400,
-  marginLeft: 6,
-};
-const monoInline: CSSProperties = {
-  fontFamily: 'ui-monospace, monospace',
-  fontSize: 11.5,
-};
-const monoCell: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  fontFamily: 'ui-monospace, monospace',
-  whiteSpace: 'nowrap',
-};
-const agentCell: CSSProperties = {
-  fontSize: 12,
-  fontWeight: 500,
-  whiteSpace: 'nowrap',
-};
-const numCell: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary)',
-  whiteSpace: 'nowrap',
-};
-const collapseBtn: CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  padding: 0,
-  margin: 0,
-  fontSize: 14,
-  fontWeight: 600,
-  color: 'var(--color-text-primary)',
-  cursor: 'pointer',
-};
-const btnLink: CSSProperties = {
-  padding: '2px 8px',
-  fontSize: 12,
-  color: 'var(--color-primary, #6366f1)',
-  textDecoration: 'none',
-  border: '1px solid transparent',
-  borderRadius: 4,
-};
-const smallLink: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-primary, #6366f1)',
-  textDecoration: 'none',
-};
-const runLabelChip: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary)',
-};
-const pvRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  flexWrap: 'wrap',
-  padding: '6px 0',
-  borderBottom: '1px solid var(--color-border)',
-};
-const pvBtn: CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  padding: 0,
-  margin: 0,
-  cursor: 'pointer',
-};
-const detailRowCell: CSSProperties = {
-  padding: 12,
-  background: 'var(--color-bg)',
-};
-const diffGrid: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '1fr 1fr',
-  gap: 12,
-};
-const detailLabel: CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
-  color: 'var(--color-text-tertiary)',
-  marginBottom: 4,
-  letterSpacing: 0.5,
-};
-const detailPre: CSSProperties = {
-  fontFamily: '"Fira Code", "Cascadia Code", monospace',
-  fontSize: 11.5,
-  lineHeight: 1.55,
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
-  margin: 0,
-  padding: '10px 12px',
-  borderRadius: 4,
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  maxHeight: 320,
-  overflowY: 'auto',
-};
-const modalBody: CSSProperties = {
-  padding: 16,
-  overflowY: 'auto',
-  fontSize: 12,
-};
-const modalDiffGrid: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '1fr 1fr',
-  gap: 12,
-};
-const modalPre: CSSProperties = {
-  fontFamily: '"Fira Code", "Cascadia Code", monospace',
-  fontSize: 11.5,
-  lineHeight: 1.55,
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
-  margin: 0,
-  padding: '10px 12px',
-  borderRadius: 4,
-  background: 'var(--color-bg)',
-  border: '1px solid var(--color-border)',
-  maxHeight: '65vh',
-  overflowY: 'auto',
-  color: 'var(--color-text-primary)',
-};
 
 export default CompareRunsPage;

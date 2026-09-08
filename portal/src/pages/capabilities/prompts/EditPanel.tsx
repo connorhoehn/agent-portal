@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Button, Card, Chip, DetailHeader, FormField, Inline, InlineAlert, Input, SectionLabel, SkeletonCard, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { useCallback, useEffect, useState } from 'react';
+import { Button, Card, Chip, DetailHeader, FormField, Inline, InlineAlert, InlinePlaceholder, Input, SectionLabel, SkeletonCard, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { InferenceSettings, type InferenceSettingsValue } from './InferenceSettings';
 import { LineNumberedTextarea } from './LineNumberedTextarea';
 import { TemplateHighlighted } from './TemplateHighlighted';
@@ -15,6 +15,7 @@ import {
   usePromptVersionDetail,
 } from '../../../components/canary/usePromptLibrary.js';
 import type { Selection } from './types';
+import { T } from '../Text';
 
 /** Side-by-side baseline / challenger editor. Saves to DRAFT or publishes a
  *  numbered version. */
@@ -31,6 +32,7 @@ export function EditPanel({
 }) {
   const { detail, loading } = usePromptVersionDetail(selection.promptId, selection.version);
 
+
   const baselineText = detail?.variant?.templateText ?? '';
   const baselineModelId = detail?.variant?.modelId ?? '';
   const baselineInf = detail?.variant?.inferenceConfig;
@@ -43,6 +45,31 @@ export function EditPanel({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  // Switching modes REPLACES the "Edit / new version" button with this panel,
+  // so focus would land on <body> both ways: the editor claims it on mount
+  // (autoFocus below), and leaving hands it back to the trigger by its stable
+  // data attribute — the button is a fresh node by then, so a captured ref
+  // would point at a detached one (same fix as EstimateDrawer.handleClose).
+  const close = useCallback(() => {
+    onCancel();
+    requestAnimationFrame(() => {
+      const trigger = document.querySelector<HTMLElement>('[data-prompt-edit-trigger]');
+      trigger?.focus();
+    });
+  }, [onCancel]);
+
+  // Escape leaves the editor, the way it leaves every other panel in the app.
+  // Ignored while saving: a half-published version is not a thing to abandon
+  // on a keystroke.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || saving) return;
+      e.stopPropagation();
+      close();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [close, saving]);
 
   useEffect(() => {
     if (!detail) return;
@@ -99,23 +126,23 @@ export function EditPanel({
 
   return (
     <Stack gap="lg" className="flex-1 overflow-auto p-6">
-      <div className="border-b border-border pb-4">
+      <Stack gap="none" className="border-b border-border pb-4">
         <DetailHeader
           as="h2"
-          title={<span className="font-mono">{selection.promptName}</span>}
+          title={<T className="font-mono">{selection.promptName}</T>}
           description={`Creating new version from ${from}`}
-          aside={<Button variant="secondary" onClick={onCancel} disabled={saving}>Cancel</Button>}
+          aside={<Button variant="secondary" onClick={close} disabled={saving}>Cancel</Button>}
           asideWidth={120}
         />
-      </div>
+      </Stack>
 
-      <div className="flex min-h-[280px] flex-1 flex-col gap-4 md:flex-row">
+      <Stack gap="md" className="min-h-[280px] flex-1 md:flex-row">
         <Stack gap="xs" className="min-w-0 flex-1">
           <SectionLabel>Baseline — {from}</SectionLabel>
           <Card padding="none" className="flex-1 overflow-auto bg-surface-panel">
             {baselineText
               ? <TemplateHighlighted text={baselineText} />
-              : <span className="block px-6 py-5 font-mono text-[13px] italic text-text-tertiary">(empty)</span>}
+              : <InlinePlaceholder size="sm" className="px-6 py-5 font-mono italic">(empty)</InlinePlaceholder>}
           </Card>
           {(baselineModelId || baselineInf) && (
             <Inline gap="xs">
@@ -129,12 +156,13 @@ export function EditPanel({
         <Stack gap="xs" className="min-w-0 flex-1">
           <SectionLabel>New version</SectionLabel>
           <LineNumberedTextarea
+            autoFocus
             value={challengerText}
             onChange={setChallengerText}
             placeholder="Edit the prompt template here…"
           />
         </Stack>
-      </div>
+      </Stack>
 
       <InferenceSettings
         title="Inference settings (new version)"

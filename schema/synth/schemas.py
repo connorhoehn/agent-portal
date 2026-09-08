@@ -121,56 +121,6 @@ class AllHandsRecap(AllHandsRecapGen):
     quarter: str
 
 
-# ── News ──────────────────────────────────────────────────────────────────────
-
-class NewsArticleGen(BaseModel):
-    """News articles don't have a `mentions` field — entity extraction happens
-    in a separate Nova-Lite NER pass that writes into newsroom tables."""
-    headline: str
-    byline: str = Field(..., description="Fictional reporter name.")
-    lede: str = Field(..., min_length=80)
-    body_markdown: str = Field(..., min_length=600)
-    topic_tags: list[str] = Field(..., min_length=1, max_length=6)
-
-
-class NewsArticle(NewsArticleGen):
-    dateline: str = Field(..., description="ISO date.")
-
-
-class ExtractedEntity(BaseModel):
-    """Two-field shape for Nova-Lite reliability. Canonical IDs are slugified
-    in post-processing."""
-    name: str
-    entity_type: Literal["person", "organization", "location", "topic"]
-
-
-class NERResultGen(BaseModel):
-    entities: list[ExtractedEntity] = Field(..., max_length=20)
-
-
-class ClusterMetaGen(BaseModel):
-    """Title is derived from the first headline in post-processing — Nova-Lite
-    consistently elides it."""
-    description: str = Field(..., min_length=40, max_length=500)
-    primary_beat: str = Field(..., min_length=3, max_length=40, description="Editorial beat, e.g. 'AI infrastructure', 'enterprise'.")
-
-
-class ClusterMeta(ClusterMetaGen):
-    title: str
-
-
-class EditorPitchGen(BaseModel):
-    angle: str = Field(..., min_length=60)
-    hook: str = Field(..., min_length=40)
-    target_outcome: str
-    suggested_sources: list[str] = Field(..., min_length=1, max_length=6)
-    body_markdown: str = Field(..., min_length=200)
-
-
-class EditorPitch(EditorPitchGen):
-    cluster_id: str
-
-
 # ── Registry ──────────────────────────────────────────────────────────────────
 
 DOC_SCHEMAS: dict[str, type[BaseModel]] = {
@@ -179,6 +129,4 @@ DOC_SCHEMAS: dict[str, type[BaseModel]] = {
     "perf_review": PerfReview,
     "slack_thread": SlackThread,
     "all_hands": AllHandsRecap,
-    "news_article": NewsArticle,
-    "pitch": EditorPitch,
 }

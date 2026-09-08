@@ -36,13 +36,15 @@ import {
   mockListCases, mockGetCase, mockUpsertCase, mockPatchCase, mockDeleteCase,
   mockListRuns, mockGetRun, mockGetResults, mockCreateRun, mockCoverage,
 } from '../mock/harness.js';
+import { mockListPromotedVersions } from '../mock/prompt-versions.js';
 
 export const harnessRouter = Router();
 
-// Canary/harness telemetry is an orgiq surface. Tenant-scope every route so a
-// newsroom session can't read another tenant's eval runs, cases or results —
-// EXCEPT the agent-facing `/trace` callback below, which is sessionless by
-// design and so has no tenant to check (it self-gates via requireTraceAuth).
+// Canary/harness telemetry is an orgiq surface. Tenant-scope every route so
+// an assessment-tenant session can't read another tenant's eval runs, cases
+// or results — EXCEPT the agent-facing `/trace` callback below, which is
+// sessionless by design and so has no tenant to check (it self-gates via
+// requireTraceAuth).
 harnessRouter.use((req, res, next) => {
   if (req.path === '/trace') { next(); return; }
   requireTenant('orgiq')(req, res, next);
@@ -1475,6 +1477,15 @@ function rowToPromotedVersion(r: Record<string, unknown>): PromotedPromptVersion
 }
 
 harnessRouter.get('/promoted-versions', requireAction('ViewObservability'), asyncHandler(async (_req, res) => {
+  // Same registry the prompt-version chip reads (mock/prompt-versions.ts),
+  // filtered to the SHAs a human promoted. A raw exec() here reached the RDS
+  // Data API whatever config.mock.aurora said, so the promote list 500'd
+  // offline and there was no way to audit it.
+  if (config.mock.aurora) {
+    const versions: PromotedPromptVersion[] = mockListPromotedVersions(200);
+    res.json({ versions });
+    return;
+  }
   const rows = await exec(
     `SELECT prompt_version, agent_id, content, content_sha256,
             registered_at::text AS registered_at,

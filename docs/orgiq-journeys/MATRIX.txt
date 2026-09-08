@@ -1,0 +1,25 @@
+# surface | url | list-surface (L = first-row-top rule applies, - = not a list page) | roles that can see it (comma-separated)
+# Roles: member sme program-owner org-leader hr-admin. A role not listed must NOT see the surface (rail hidden, route redirects or 403) — that is checked in <role>/RAIL.md, not here.
+initiatives | /iq/projects | L | member,sme,program-owner,org-leader,hr-admin
+initiative-detail | /iq/projects/p-observability | L | member,sme,program-owner,org-leader,hr-admin
+automate | /iq/work | L | member,sme,program-owner,org-leader,hr-admin
+automate-findings | /iq/work/findings | L | member,sme,program-owner,org-leader,hr-admin
+ask | /iq/invoke | - | member,sme,program-owner,org-leader,hr-admin
+explore | /iq/explore | - | member,sme,program-owner,org-leader,hr-admin
+library | /iq/library | L | member,sme,program-owner,org-leader,hr-admin
+promotions | /iq/promotions | L | member,sme,program-owner,org-leader,hr-admin
+designs | /iq/designs | L | member,sme,program-owner,org-leader,hr-admin
+session-config | /iq/release | - | member,sme,program-owner,org-leader,hr-admin
+computer-lab | /admin/devbox | L | sme,hr-admin
+budgets | /admin/budgets | L | program-owner,org-leader,hr-admin
+scores | /iq/scores | L | org-leader,hr-admin
+scores-cohorts | /iq/scores/cohorts | L | org-leader,hr-admin
+architecture | /iq/agents | - | org-leader,hr-admin
+health | /admin/observability/summary | L | org-leader,hr-admin
+invocations | /admin/observability/invocations | L | org-leader,hr-admin
+knowledge | /admin/knowledge | L | org-leader,hr-admin
+capabilities | /admin/capabilities | - | org-leader,hr-admin
+prompt-studio | /iq/prompts | L | org-leader,hr-admin
+codebases | /admin/projects | L | hr-admin
+bots | /admin/bots | L | sme,program-owner,org-leader,hr-admin
+identity-users | /admin/identity/users | L | hr-admin

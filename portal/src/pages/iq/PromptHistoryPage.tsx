@@ -6,8 +6,13 @@
 // Separate "Experiments" tab shows all runs across all prompts.
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { CSSProperties } from 'react';
+import {
+  Checkbox, Chip, CodeBlock, EmptyState, Select, SelectableCard, Stack, Inline, Tabs,
+} from '@connorhoehnslalom/ui-components/shared';
 import { usePromptList, usePromptVersions } from '../../components/canary/usePromptLibrary.js';
+import { diffStats, lineDiff } from './diffFormat';
+import { DiffFrame } from './DiffFrame';
+import { T } from './Text';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -54,13 +59,15 @@ interface ExperimentSummary {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const STATUS_COLOR: Record<string, string> = {
-  promoted:     'var(--color-success)',
-  deployed:     'var(--color-primary)',
-  published:    'var(--color-text-secondary)',
-  rolled_back:  'var(--color-danger)',
-  superseded:   'var(--color-text-tertiary)',
-  draft:        'var(--color-warning)',
+// Chip tones per lifecycle status — replaces the old hex-color lookup now
+// that StatusChip renders through the library's <Chip>.
+const STATUS_TONE: Record<string, 'success' | 'accent' | 'neutral' | 'danger' | 'warning'> = {
+  promoted:     'success',
+  deployed:     'accent',
+  published:    'neutral',
+  rolled_back:  'danger',
+  superseded:   'neutral',
+  draft:        'warning',
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -72,11 +79,11 @@ const STATUS_LABEL: Record<string, string> = {
   draft:       'DRAFT',
 };
 
-const ACTION_COLOR: Record<string, { bg: string; text: string }> = {
-  PROMOTE:     { bg: 'var(--color-success-bg)', text: 'var(--color-success)' },
-  ROLLBACK:    { bg: 'var(--color-danger-bg)', text: 'var(--color-danger)' },
-  HALTED:      { bg: 'var(--color-warning-bg)', text: 'var(--color-warning)' },
-  IN_PROGRESS: { bg: '#ede9fe', text: 'var(--color-optimize-hover)' },
+const ACTION_TONE: Record<string, 'success' | 'danger' | 'warning' | 'accent'> = {
+  PROMOTE:     'success',
+  ROLLBACK:    'danger',
+  HALTED:      'warning',
+  IN_PROGRESS: 'accent',
 };
 
 function fmtDate(iso: string): string {
@@ -95,136 +102,79 @@ function fmtDelta(n: number | null): string {
   return (n >= 0 ? '+' : '') + n.toFixed(3);
 }
 
-// ── Simple LCS-based line diff ────────────────────────────────────────────────
-
-type DiffLine = { kind: 'same' | 'add' | 'remove'; text: string };
-
-function lineDiff(a: string, b: string): DiffLine[] {
-  const la = a.split('\n');
-  const lb = b.split('\n');
-  const m = la.length, n = lb.length;
-  // DP table for LCS lengths
-  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
-  for (let i = m - 1; i >= 0; i--) {
-    for (let j = n - 1; j >= 0; j--) {
-      dp[i]![j] = la[i] === lb[j]
-        ? 1 + (dp[i + 1]?.[j + 1] ?? 0)
-        : Math.max(dp[i + 1]?.[j] ?? 0, dp[i]?.[j + 1] ?? 0);
-    }
-  }
-  const result: DiffLine[] = [];
-  let i = 0, j = 0;
-  while (i < m || j < n) {
-    if (i < m && j < n && la[i] === lb[j]) {
-      result.push({ kind: 'same', text: la[i]! });
-      i++; j++;
-    } else if (j < n && (i >= m || (dp[i + 1]?.[j] ?? 0) <= (dp[i]?.[j + 1] ?? 0))) {
-      result.push({ kind: 'add', text: lb[j]! });
-      j++;
-    } else {
-      result.push({ kind: 'remove', text: la[i]! });
-      i++;
-    }
-  }
-  return result;
-}
-
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function StatusChip({ status }: { status: string }): React.ReactElement {
-  const color = STATUS_COLOR[status] ?? 'var(--color-text-tertiary)';
   return (
-    <span style={{
-      fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em',
-      padding: '2px 6px', borderRadius: 3, border: `1px solid ${color}`,
-      color, background: `${color}18`,
-    }}>
+    <Chip tone={STATUS_TONE[status] ?? 'neutral'} size="xs" uppercase>
       {STATUS_LABEL[status] ?? status}
-    </span>
+    </Chip>
   );
 }
 
 function ActionBadge({ action }: { action: string }): React.ReactElement {
-  const c = ACTION_COLOR[action] ?? { bg: 'var(--color-surface-hover)', text: 'var(--color-text-secondary)' };
   return (
-    <span style={{
-      fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 3,
-      background: c.bg, color: c.text,
-    }}>
+    <Chip tone={ACTION_TONE[action] ?? 'neutral'} size="xs" solid>
       {action}
-    </span>
+    </Chip>
   );
 }
 
 function ExperimentCard({ exp, role }: { exp: ExperimentRef; role: 'a' | 'b' }): React.ReactElement {
   const deltaPositive = (exp.scoreDelta ?? 0) >= 0;
   return (
-    <div style={expCardStyle}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+    <Stack gap="none" className="rounded-md border border-border bg-surface-panel px-3.5 py-3">
+      <Inline gap="sm" align="center" wrap>
         <ActionBadge action={exp.finalAction || 'IN_PROGRESS'} />
-        <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>
+        <T className="text-[11px] text-text-secondary">
           v{exp.versionA} vs v{exp.versionB} · used as {role.toUpperCase()}
-        </span>
-        <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginLeft: 'auto' }}>
-          {fmtDate(exp.startedAt)}
-        </span>
-      </div>
-      <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
-        <div style={scoreBoxStyle}>
-          <div style={scoreLabelStyle}>Score A</div>
-          <div style={scoreValStyle}>{fmtScore(exp.scoreA)}</div>
-        </div>
-        <div style={scoreBoxStyle}>
-          <div style={scoreLabelStyle}>Score B</div>
-          <div style={scoreValStyle}>{fmtScore(exp.scoreB)}</div>
-        </div>
-        <div style={scoreBoxStyle}>
-          <div style={scoreLabelStyle}>Δ</div>
-          <div style={{ ...scoreValStyle, color: deltaPositive ? 'var(--color-success)' : 'var(--color-danger)', fontWeight: 700 }}>
+        </T>
+        <T className="ml-auto text-[11px] text-text-tertiary">{fmtDate(exp.startedAt)}</T>
+      </Inline>
+      <Inline gap="md" className="mt-2">
+        <Stack gap="none" align="center" className="min-w-[48px]">
+          <T className="text-[9px] font-bold uppercase tracking-wide text-text-tertiary">Score A</T>
+          <T className="font-mono text-[14px] font-semibold text-text-primary">{fmtScore(exp.scoreA)}</T>
+        </Stack>
+        <Stack gap="none" align="center" className="min-w-[48px]">
+          <T className="text-[9px] font-bold uppercase tracking-wide text-text-tertiary">Score B</T>
+          <T className="font-mono text-[14px] font-semibold text-text-primary">{fmtScore(exp.scoreB)}</T>
+        </Stack>
+        <Stack gap="none" align="center" className="min-w-[48px]">
+          <T className="text-[9px] font-bold uppercase tracking-wide text-text-tertiary">Δ</T>
+          <T className={`font-mono text-[14px] font-bold ${deltaPositive ? 'text-success' : 'text-danger'}`}>
             {fmtDelta(exp.scoreDelta)}
-          </div>
-        </div>
-        <div style={scoreBoxStyle}>
-          <div style={scoreLabelStyle}>Decisions</div>
-          <div style={scoreValStyle}>{exp.decisionCount}</div>
-        </div>
-      </div>
-    </div>
+          </T>
+        </Stack>
+        <Stack gap="none" align="center" className="min-w-[48px]">
+          <T className="text-[9px] font-bold uppercase tracking-wide text-text-tertiary">Decisions</T>
+          <T className="font-mono text-[14px] font-semibold text-text-primary">{exp.decisionCount}</T>
+        </Stack>
+      </Inline>
+    </Stack>
   );
 }
 
 function DiffView({ textA, textB, labelA, labelB }: { textA: string; textB: string; labelA: string; labelB: string }): React.ReactElement {
-  const lines = lineDiff(textA, textB);
-  const added = lines.filter(l => l.kind === 'add').length;
-  const removed = lines.filter(l => l.kind === 'remove').length;
+  const lines = useMemo(() => lineDiff(textA, textB), [textA, textB]);
+  const stats = useMemo(() => diffStats(lines), [lines]);
+  const identical = stats.added === 0 && stats.removed === 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary)' }}>{labelA} → {labelB}</span>
-        <span style={{ fontSize: 11, color: 'var(--color-success)' }}>+{added}</span>
-        <span style={{ fontSize: 11, color: 'var(--color-danger)' }}>−{removed}</span>
-      </div>
-      <div style={{ fontFamily: 'monospace', fontSize: 12, lineHeight: 1.6, border: '1px solid var(--color-border)', borderRadius: 4, overflow: 'auto', flex: 1 }}>
-        {lines.map((line, i) => (
-          <div
-            key={i}
-            style={{
-              display: 'flex',
-              gap: 8,
-              padding: '1px 12px',
-              background: line.kind === 'add' ? 'var(--color-success-bg)' : line.kind === 'remove' ? 'var(--color-danger-bg)' : 'transparent',
-              color: line.kind === 'same' ? 'var(--color-text-primary)' : line.kind === 'add' ? 'var(--color-success)' : 'var(--color-danger)',
-            }}
-          >
-            <span style={{ width: 12, flexShrink: 0, userSelect: 'none', opacity: 0.6 }}>
-              {line.kind === 'add' ? '+' : line.kind === 'remove' ? '−' : ' '}
-            </span>
-            <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{line.text}</span>
-          </div>
-        ))}
-      </div>
-    </div>
+    <Stack gap="sm" className="flex-1">
+      <Inline gap="sm" align="center">
+        <T className="text-[11px] font-semibold text-text-secondary">{labelA} → {labelB}</T>
+        <Chip tone="success" size="xs" mono>+{stats.added}</Chip>
+        <Chip tone="danger" size="xs" mono>−{stats.removed}</Chip>
+      </Inline>
+      {identical ? (
+        <T className="p-6 text-center text-[13px] text-text-tertiary">✓ Templates are identical.</T>
+      ) : (
+        <Stack gap="none" className="min-h-0 flex-1 overflow-auto">
+          <DiffFrame lines={lines} />
+        </Stack>
+      )}
+    </Stack>
   );
 }
 
@@ -378,103 +328,97 @@ export default function PromptHistoryPage(): React.ReactElement {
   if (promptsError) {
     const denied = /403|forbidden/i.test(promptsError);
     return (
-      <div style={{ padding: 40, maxWidth: 560 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>
-          {denied ? 'Prompt history access needed' : 'Could not load prompt history'}
-        </h2>
-        <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
-          {denied
+      <Stack gap="none" className="max-w-xl p-10">
+        <EmptyState
+          title={denied ? 'Prompt history access needed' : 'Could not load prompt history'}
+          description={denied
             ? 'Prompt history is limited to the org-leader and HR Admin roles. Switch role from the identity menu, top right.'
             : <>The prompt library did not load. {promptsError}</>}
-        </p>
-      </div>
+        />
+      </Stack>
     );
   }
 
   return (
-    <div style={pageStyle}>
+    <Inline gap="none" className="-m-6 h-full min-h-0">
       {/* ── Left: prompt selector + version timeline ── */}
-      <div style={leftRailStyle}>
+      <Stack gap="none" className="w-[260px] shrink-0 overflow-y-auto border-r border-border bg-surface">
         {/* Prompt picker */}
-        <div style={promptPickerStyle}>
-          <select
+        <Stack gap="none" className="shrink-0 border-b border-border px-3 pb-2.5 pt-3.5">
+          <Select
             value={selectedPromptId ?? ''}
             onChange={e => setSelectedPromptId(e.target.value || null)}
-            style={promptSelectStyle}
-          >
-            <option value="">Select a prompt…</option>
-            {prompts.map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        </div>
+            placeholder="Select a prompt…"
+            options={prompts.map(p => ({ value: p.id, label: p.name }))}
+            size="sm"
+            aria-label="Select a prompt"
+          />
+        </Stack>
 
         {/* Tabs */}
-        <div style={tabBarStyle}>
-          <button type="button" style={tab === 'versions' ? activeTabStyle : inactiveTabStyle} onClick={() => setTab('versions')}>
-            Versions
-          </button>
-          <button type="button" style={tab === 'experiments' ? activeTabStyle : inactiveTabStyle} onClick={() => setTab('experiments')}>
-            All Experiments
-          </button>
-        </div>
+        <Stack gap="none" className="shrink-0 border-b border-border px-2 pt-2">
+          <Tabs
+            items={[
+              { id: 'versions', label: 'Versions' },
+              { id: 'experiments', label: 'All Experiments' },
+            ]}
+            value={tab}
+            onValueChange={id => setTab(id as Tab)}
+            variant="underline"
+            size="sm"
+          />
+        </Stack>
 
         {tab === 'versions' && (
           <>
             {/* Compare toggle */}
-            <div style={compareToggleBarStyle}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--color-text-secondary)', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
+            <Inline gap="sm" align="center" justify="between" className="shrink-0 border-b border-border bg-surface-panel px-3 py-2">
+              <Inline as="label" gap="xs" align="center" className="cursor-pointer text-[11px] text-text-secondary">
+                <Checkbox
                   checked={compareMode}
-                  onChange={e => { setCompareMode(e.target.checked); setSelectedVersions([]); }}
+                  onChange={checked => { setCompareMode(checked); setSelectedVersions([]); }}
                 />
                 Compare two versions
-              </label>
+              </Inline>
               {compareMode && selectedVersions.length === 2 && (
-                <span style={{ fontSize: 10, color: 'var(--color-optimize)' }}>
+                <T className="text-[10px] text-optimize">
                   {selectedVersions[0]} ↔ {selectedVersions[1]}
-                </span>
+                </T>
               )}
-            </div>
+            </Inline>
 
-            {versionsLoading && <div style={listMsgStyle}>Loading…</div>}
-            {versionsError && <div style={{ ...listMsgStyle, color: 'var(--color-danger)' }}>{versionsError}</div>}
+            {versionsLoading && <T className="block px-3.5 py-3 text-[12px] text-text-tertiary">Loading…</T>}
+            {versionsError && <T className="block px-3.5 py-3 text-[12px] text-danger">{versionsError}</T>}
             {!versionsLoading && !versionsError && versions.length === 0 && (
-              <div style={listMsgStyle}>No version history yet.</div>
+              <T className="block px-3.5 py-3 text-[12px] text-text-tertiary">No version history yet.</T>
             )}
 
             {versions.map(v => {
-              const color = STATUS_COLOR[v.lifecycleStatus] ?? 'var(--color-text-tertiary)';
               const isSelected = selectedVersions.includes(v.version);
               return (
-                <button
+                <SelectableCard
                   key={v.version}
-                  type="button"
-                  onClick={() => toggleVersion(v.version)}
-                  style={{
-                    ...versionRowStyle,
-                    borderLeft: `3px solid ${isSelected ? color : 'transparent'}`,
-                    background: isSelected ? `${color}12` : 'transparent',
-                  }}
+                  selected={isSelected}
+                  onSelect={() => toggleVersion(v.version)}
+                  padding="sm"
+                  className="block w-full rounded-none border-x-0 border-t-0 text-left"
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                    <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'monospace', color: 'var(--color-text-primary)' }}>
+                  <Inline gap="sm" align="center">
+                    <T className="font-mono text-[12px] font-bold text-text-primary">
                       {v.version === 'DRAFT' ? 'DRAFT' : `v${v.version}`}
-                    </span>
+                    </T>
                     <StatusChip status={v.lifecycleStatus} />
-                  </div>
+                  </Inline>
                   {v.description && (
-                    <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 4, paddingLeft: 16, lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <T className="mt-1 block truncate pl-0.5 text-[11px] leading-snug text-text-secondary">
                       {v.description}
-                    </div>
+                    </T>
                   )}
-                  <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginTop: 2, paddingLeft: 16 }}>
+                  <T className="mt-0.5 block pl-0.5 text-[10px] text-text-tertiary">
                     {v.publishedAt ? fmtDate(v.publishedAt) : '—'}
                     {v.experiments.length > 0 && ` · ${v.experiments.length} exp`}
-                  </div>
-                </button>
+                  </T>
+                </SelectableCard>
               );
             })}
           </>
@@ -482,81 +426,78 @@ export default function PromptHistoryPage(): React.ReactElement {
 
         {tab === 'experiments' && (
           <>
-            {expLoading && <div style={listMsgStyle}>Loading…</div>}
-            {expError && <div style={{ ...listMsgStyle, color: 'var(--color-danger)' }}>{expError}</div>}
+            {expLoading && <T className="block px-3.5 py-3 text-[12px] text-text-tertiary">Loading…</T>}
+            {expError && <T className="block px-3.5 py-3 text-[12px] text-danger">{expError}</T>}
             {!expLoading && !expError && experiments.length === 0 && (
-              <div style={listMsgStyle}>No experiments recorded yet.</div>
+              <T className="block px-3.5 py-3 text-[12px] text-text-tertiary">No experiments recorded yet.</T>
             )}
             {experiments.map(exp => (
-              <div key={exp.experimentId} style={expListRowStyle}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <Stack key={exp.experimentId} gap="none" className="border-b border-border px-3.5 py-2.5">
+                <Inline gap="sm" align="center" wrap>
                   <ActionBadge action={exp.finalAction || 'IN_PROGRESS'} />
-                  <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--color-text-secondary)' }}>
+                  <T className="font-mono text-[11px] text-text-secondary">
                     v{exp.versionA}→v{exp.versionB}
-                  </span>
-                </div>
+                  </T>
+                </Inline>
                 {exp.descriptionB && (
-                  <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 3, lineHeight: 1.4 }}>{exp.descriptionB}</div>
+                  <T className="mt-0.5 block text-[11px] leading-snug text-text-secondary">{exp.descriptionB}</T>
                 )}
-                <div style={{ display: 'flex', gap: 10, marginTop: 4, fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-                  <span>{fmtDate(exp.startedAt)}</span>
+                <Inline gap="sm" className="mt-1 text-[11px] text-text-tertiary">
+                  <T className="text-[11px] text-text-tertiary">{fmtDate(exp.startedAt)}</T>
                   {exp.scoreDelta !== null && (
-                    <span style={{ color: (exp.scoreDelta ?? 0) >= 0 ? 'var(--color-success)' : 'var(--color-danger)', fontWeight: 600 }}>
+                    <T className={`text-[11px] font-semibold ${(exp.scoreDelta ?? 0) >= 0 ? 'text-success' : 'text-danger'}`}>
                       {fmtDelta(exp.scoreDelta)}
-                    </span>
+                    </T>
                   )}
-                </div>
-              </div>
+                </Inline>
+              </Stack>
             ))}
           </>
         )}
-      </div>
+      </Stack>
 
       {/* ── Right: detail or diff pane ── */}
-      <div style={detailPaneStyle}>
+      <Stack gap="none" className="min-w-0 flex-1 overflow-hidden bg-surface">
         {/* No selection */}
         {!selectedPromptId && (
-          <div style={emptyDetailStyle}>
-            <p style={emptyMsgStyle}>Select a prompt to view its version history.</p>
-          </div>
+          <EmptyState title="No prompt selected" description="Select a prompt to view its version history." />
         )}
 
         {selectedPromptId && !selectedVersion && !inDiffMode && (
-          <div style={emptyDetailStyle}>
-            <p style={emptyMsgStyle}>
-              {compareMode
-                ? 'Select two versions to compare.'
-                : 'Click a version in the timeline to view its detail.'}
-            </p>
-          </div>
+          <EmptyState
+            title={compareMode ? 'Select two versions' : 'No version selected'}
+            description={compareMode
+              ? 'Select two versions to compare.'
+              : 'Click a version in the timeline to view its detail.'}
+          />
         )}
 
         {/* Single version detail */}
         {selectedVersion && versionDetail && !inDiffMode && (
-          <div style={detailScrollStyle}>
-            <div style={detailHeaderStyle}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 16, fontWeight: 700, fontFamily: 'monospace' }}>
+          <Stack gap="none" className="flex-1 overflow-y-auto">
+            <Stack gap="none" className="shrink-0 border-b border-border px-6 pb-4 pt-5">
+              <Inline gap="sm" align="center">
+                <T className="font-mono text-[16px] font-bold">
                   {selectedVersion === 'DRAFT' ? 'DRAFT' : `v${selectedVersion}`}
-                </span>
+                </T>
                 <StatusChip status={versionDetail.lifecycleStatus} />
-              </div>
+              </Inline>
               {versionDetail.description && (
-                <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', margin: '8px 0 0', lineHeight: 1.5 }}>
+                <T className="mt-2 block text-[13px] leading-relaxed text-text-secondary">
                   {versionDetail.description}
-                </p>
+                </T>
               )}
-              <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 11, color: 'var(--color-text-tertiary)', flexWrap: 'wrap' }}>
-                {versionDetail.publishedAt && <span>Published {fmtDate(versionDetail.publishedAt)}</span>}
-                {versionDetail.deployedAt && <span>Deployed {fmtDate(versionDetail.deployedAt)}</span>}
-                {versionDetail.supersededAt && <span>Superseded {fmtDate(versionDetail.supersededAt)}</span>}
-                {versionDetail.authorEmail && <span>by {versionDetail.authorEmail}</span>}
-              </div>
-            </div>
+              <Inline gap="md" wrap className="mt-2 text-[11px] text-text-tertiary">
+                {versionDetail.publishedAt && <T className="text-[11px] text-text-tertiary">Published {fmtDate(versionDetail.publishedAt)}</T>}
+                {versionDetail.deployedAt && <T className="text-[11px] text-text-tertiary">Deployed {fmtDate(versionDetail.deployedAt)}</T>}
+                {versionDetail.supersededAt && <T className="text-[11px] text-text-tertiary">Superseded {fmtDate(versionDetail.supersededAt)}</T>}
+                {versionDetail.authorEmail && <T className="text-[11px] text-text-tertiary">by {versionDetail.authorEmail}</T>}
+              </Inline>
+            </Stack>
 
             {/* Lifecycle timeline */}
             {(versionDetail.publishedAt || versionDetail.deployedAt) && (
-              <div style={lifecycleBarStyle}>
+              <Inline gap="none" align="center" className="shrink-0 border-b border-border px-6 pb-3 pt-4">
                 <LifecycleMilestone label="Published" date={versionDetail.publishedAt} active={!!versionDetail.publishedAt} />
                 <LifecycleConnector active={!!versionDetail.deployedAt} />
                 <LifecycleMilestone label="Deployed" date={versionDetail.deployedAt} active={!!versionDetail.deployedAt} />
@@ -565,25 +506,25 @@ export default function PromptHistoryPage(): React.ReactElement {
                   label={versionDetail.lifecycleStatus === 'rolled_back' ? 'Rolled Back' : 'Promoted'}
                   date={versionDetail.lifecycleStatus === 'promoted' ? versionDetail.supersededAt : ''}
                   active={versionDetail.lifecycleStatus === 'promoted' || versionDetail.lifecycleStatus === 'rolled_back'}
-                  color={versionDetail.lifecycleStatus === 'rolled_back' ? 'var(--color-danger)' : 'var(--color-success)'}
+                  tone={versionDetail.lifecycleStatus === 'rolled_back' ? 'danger' : 'success'}
                 />
-              </div>
+              </Inline>
             )}
 
             {/* Template text */}
-            <div style={templateSectionStyle}>
-              <div style={sectionTitleStyle}>Template</div>
+            <Stack gap="none" className="shrink-0 border-b border-border px-6 py-4">
+              <T className="mb-2.5 block text-[10px] font-bold uppercase tracking-wide text-text-tertiary">Template</T>
               {text0 ? (
-                <pre style={templatePreStyle}>{text0}</pre>
+                <CodeBlock code={text0} language="text" />
               ) : (
-                <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)', fontStyle: 'italic', margin: 0 }}>Template not available.</p>
+                <T className="block text-[12px] italic text-text-tertiary">Template not available.</T>
               )}
-            </div>
+            </Stack>
 
             {/* Experiments */}
             {versionDetail.experiments.length > 0 && (
-              <div style={expSectionStyle}>
-                <div style={sectionTitleStyle}>Experiments using this version</div>
+              <Stack gap="sm" className="px-6 py-4">
+                <T className="text-[10px] font-bold uppercase tracking-wide text-text-tertiary">Experiments using this version</T>
                 {versionDetail.experiments.map(exp => (
                   <ExperimentCard
                     key={exp.experimentId}
@@ -591,277 +532,68 @@ export default function PromptHistoryPage(): React.ReactElement {
                     role={exp.versionA === selectedVersion ? 'a' : 'b'}
                   />
                 ))}
-              </div>
+              </Stack>
             )}
 
             {versionDetail.experiments.length === 0 && (
-              <div style={expSectionStyle}>
-                <div style={sectionTitleStyle}>Experiments</div>
-                <p style={{ fontSize: 12, color: 'var(--color-text-tertiary)', margin: 0 }}>
+              <Stack gap="sm" className="px-6 py-4">
+                <T className="text-[10px] font-bold uppercase tracking-wide text-text-tertiary">Experiments</T>
+                <T className="text-[12px] text-text-tertiary">
                   This version hasn't been used in a canary experiment yet.
-                </p>
-              </div>
+                </T>
+              </Stack>
             )}
-          </div>
+          </Stack>
         )}
 
         {/* Diff mode */}
         {inDiffMode && (
-          <div style={detailScrollStyle}>
-            <div style={detailHeaderStyle}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary)' }}>
+          <Stack gap="none" className="flex-1 overflow-y-auto">
+            <Stack gap="none" className="shrink-0 border-b border-border px-6 pb-4 pt-5">
+              <T className="text-[14px] font-bold text-text-primary">
                 Comparing v{selectedVersions[0]} → v{selectedVersions[1]}
-              </div>
-              <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', margin: '4px 0 0' }}>
+              </T>
+              <T className="mt-1 block text-[12px] text-text-secondary">
                 Lines added in green, removed in red.
-              </p>
-            </div>
-            <div style={{ padding: '0 24px 24px', flex: 1, display: 'flex', flexDirection: 'column' }}>
+              </T>
+            </Stack>
+            <Stack gap="none" className="flex-1 px-6 pb-6 pt-0">
               <DiffView
                 textA={text0}
                 textB={text1}
                 labelA={`v${selectedVersions[0]}`}
                 labelB={`v${selectedVersions[1]}`}
               />
-            </div>
-          </div>
+            </Stack>
+          </Stack>
         )}
-      </div>
-    </div>
+      </Stack>
+    </Inline>
   );
 }
 
 // ── Lifecycle milestone ───────────────────────────────────────────────────────
 
-function LifecycleMilestone({ label, date, active, color }: { label: string; date: string; active: boolean; color?: string }): React.ReactElement {
-  const c = color ?? (active ? 'var(--color-primary)' : 'var(--color-border)');
+function LifecycleMilestone({ label, date, active, tone }: { label: string; date: string; active: boolean; tone?: 'success' | 'danger' }): React.ReactElement {
+  const dotClass = !active
+    ? 'border-border-emphasis bg-border'
+    : tone === 'danger'
+      ? 'border-danger bg-danger'
+      : tone === 'success'
+        ? 'border-success bg-success'
+        : 'border-primary bg-primary';
+  const labelClass = !active ? 'text-text-tertiary' : tone === 'danger' ? 'text-danger' : tone === 'success' ? 'text-success' : 'text-primary';
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-      <div style={{ width: 12, height: 12, borderRadius: '50%', background: active ? c : 'var(--color-border)', border: `2px solid ${active ? c : 'var(--color-border-emphasis)'}` }} />
-      <span style={{ fontSize: 10, fontWeight: 600, color: active ? c : 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }}>{label}</span>
-      {date && <span style={{ fontSize: 9, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }}>{fmtDate(date)}</span>}
-    </div>
+    <Stack gap="xs" align="center">
+      <Inline as="span" gap="none" className={`h-3 w-3 rounded-full border-2 ${dotClass}`} />
+      <T className={`whitespace-nowrap text-[10px] font-semibold ${labelClass}`}>{label}</T>
+      {date && <T className="whitespace-nowrap text-[9px] text-text-tertiary">{fmtDate(date)}</T>}
+    </Stack>
   );
 }
 
 function LifecycleConnector({ active }: { active: boolean }): React.ReactElement {
   return (
-    <div style={{ flex: 1, height: 2, background: active ? 'var(--color-primary)' : 'var(--color-border)', marginBottom: 24, minWidth: 20 }} />
+    <Inline as="span" gap="none" className={`mb-6 h-0.5 min-w-[20px] flex-1 ${active ? 'bg-primary' : 'bg-border'}`} />
   );
 }
-
-// ── Styles ────────────────────────────────────────────────────────────────────
-
-const pageStyle: CSSProperties = {
-  display: 'flex',
-  height: '100%',
-  minHeight: 0,
-  margin: -24,
-};
-
-const leftRailStyle: CSSProperties = {
-  width: 260,
-  flexShrink: 0,
-  borderRight: '1px solid var(--color-border)',
-  display: 'flex',
-  flexDirection: 'column',
-  background: 'var(--color-surface)',
-  overflowY: 'auto',
-};
-
-const promptPickerStyle: CSSProperties = {
-  padding: '14px 12px 10px',
-  borderBottom: '1px solid var(--color-border)',
-  flexShrink: 0,
-};
-
-const promptSelectStyle: CSSProperties = {
-  width: '100%',
-  padding: '7px 10px',
-  fontSize: 12,
-  border: '1px solid var(--color-border)',
-  borderRadius: 5,
-  background: 'var(--color-surface-panel)',
-  color: 'var(--color-text-primary)',
-  outline: 'none',
-  fontFamily: 'inherit',
-  boxSizing: 'border-box',
-};
-
-const tabBarStyle: CSSProperties = {
-  display: 'flex',
-  borderBottom: '1px solid var(--color-border)',
-  flexShrink: 0,
-};
-
-const activeTabStyle: CSSProperties = {
-  flex: 1,
-  padding: '9px 0',
-  fontSize: 11,
-  fontWeight: 700,
-  border: 'none',
-  borderBottom: '2px solid var(--color-primary)',
-  background: 'transparent',
-  color: 'var(--color-primary)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-};
-
-const inactiveTabStyle: CSSProperties = {
-  flex: 1,
-  padding: '9px 0',
-  fontSize: 11,
-  fontWeight: 500,
-  border: 'none',
-  borderBottom: '2px solid transparent',
-  background: 'transparent',
-  color: 'var(--color-text-tertiary)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-};
-
-const compareToggleBarStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: '8px 12px',
-  borderBottom: '1px solid var(--color-border)',
-  background: 'var(--color-surface-panel)',
-  flexShrink: 0,
-};
-
-const listMsgStyle: CSSProperties = {
-  padding: '12px 14px',
-  fontSize: 12,
-  color: 'var(--color-text-tertiary)',
-};
-
-const versionRowStyle: CSSProperties = {
-  display: 'block',
-  width: '100%',
-  padding: '10px 12px',
-  background: 'transparent',
-  border: 'none',
-  borderBottom: '1px solid var(--color-border)',
-  cursor: 'pointer',
-  textAlign: 'left',
-  fontFamily: 'inherit',
-  transition: 'background 0.1s',
-};
-
-const expListRowStyle: CSSProperties = {
-  padding: '10px 14px',
-  borderBottom: '1px solid var(--color-border)',
-};
-
-const detailPaneStyle: CSSProperties = {
-  flex: 1,
-  minWidth: 0,
-  display: 'flex',
-  flexDirection: 'column',
-  background: 'var(--color-surface)',
-  overflow: 'hidden',
-};
-
-const emptyDetailStyle: CSSProperties = {
-  flex: 1,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: 40,
-};
-
-const emptyMsgStyle: CSSProperties = {
-  fontSize: 13,
-  color: 'var(--color-text-tertiary)',
-  margin: 0,
-  textAlign: 'center',
-};
-
-const detailScrollStyle: CSSProperties = {
-  flex: 1,
-  overflowY: 'auto',
-  display: 'flex',
-  flexDirection: 'column',
-};
-
-const detailHeaderStyle: CSSProperties = {
-  padding: '20px 24px 16px',
-  borderBottom: '1px solid var(--color-border)',
-  flexShrink: 0,
-};
-
-const lifecycleBarStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 0,
-  padding: '16px 24px 12px',
-  borderBottom: '1px solid var(--color-border)',
-  flexShrink: 0,
-};
-
-const templateSectionStyle: CSSProperties = {
-  padding: '16px 24px',
-  borderBottom: '1px solid var(--color-border)',
-  flexShrink: 0,
-};
-
-const expSectionStyle: CSSProperties = {
-  padding: '16px 24px',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 10,
-};
-
-const sectionTitleStyle: CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
-  color: 'var(--color-text-tertiary)',
-  marginBottom: 10,
-};
-
-const templatePreStyle: CSSProperties = {
-  fontFamily: 'monospace',
-  fontSize: 12,
-  lineHeight: 1.7,
-  padding: '14px 16px',
-  margin: 0,
-  background: 'var(--color-surface-panel)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 4,
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
-  color: 'var(--color-text-primary)',
-};
-
-const expCardStyle: CSSProperties = {
-  padding: '12px 14px',
-  background: 'var(--color-surface-panel)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 6,
-};
-
-const scoreBoxStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  gap: 2,
-  minWidth: 48,
-};
-
-const scoreLabelStyle: CSSProperties = {
-  fontSize: 9,
-  fontWeight: 700,
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
-  color: 'var(--color-text-tertiary)',
-};
-
-const scoreValStyle: CSSProperties = {
-  fontSize: 14,
-  fontWeight: 600,
-  fontFamily: 'monospace',
-  color: 'var(--color-text-primary)',
-};

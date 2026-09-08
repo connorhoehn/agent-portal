@@ -1,7 +1,30 @@
-import { useState } from 'react';
-import { Card, PageSection, Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip, StatCard } from '@connorhoehnslalom/ui-components/shared';
+import { Fragment, useState } from 'react';
+import {
+  Button,
+  CardHeader,
+  Card,
+  CatalogGrid,
+  Chip,
+  CodeBlock,
+  CollapsibleSection,
+  InlineAlert,
+  InlinePlaceholder,
+  MetaLine,
+  PageSection,
+  SectionLabel,
+  Stack,
+  StatStrip,
+  Table,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableTh,
+  TableTd,
+  Textarea,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
+import { T } from './Text';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -62,7 +85,6 @@ function CodeInterpreterPage() {
     '/api/observability/recent-invocations?limit=50',
     10000,
   );
-  const [expanded, setExpanded] = useState<string | null>(null);
   const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
   const [expandedExec, setExpandedExec] = useState<string | null>(null);
   const [code, setCode] = useState<string>(`# Sandbox starts fresh each run — no network, but has numpy/pandas.
@@ -128,145 +150,134 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
       title="Code Interpreter"
       description="Run Python in isolated AgentCore sandboxes. Every execution is captured for replay."
     >
-        <div className="grid grid-cols-3 gap-4">
-          <StatCard label="Active Sessions" value={String(active.length)} accent />
-          <StatCard label="Sessions (lifetime)" value={String(sessions.length)} />
-          <StatCard label="Last Activity" value={lastEverActive ? formatAge(lastEverActive.lastActivityAt) : '—'} />
-        </div>
+      <StatStrip
+        className="mb-4"
+        items={[
+          { label: 'Active Sessions', value: active.length, tone: 'accent' },
+          { label: 'Sessions (lifetime)', value: sessions.length },
+          { label: 'Last Activity', value: lastEverActive ? formatAge(lastEverActive.lastActivityAt) : '—' },
+        ]}
+      />
 
-        {canManage && (
-        <Card padding="md">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-semibold">
-              Run Python{' '}
-              <span className="text-[11px] text-text-tertiary font-normal">
-                isolated AgentCore sandbox · no network · ~$0.10/hr while running
-              </span>
-            </h2>
-            <button
-              onClick={runCode}
-              disabled={running || !code.trim()}
-              className={`px-[18px] py-1.5 text-xs bg-primary text-white border-none rounded-sm ${running ? 'cursor-wait opacity-60' : 'cursor-pointer opacity-100'}`}
-            >
-              {running ? 'Running…' : 'Run'}
-            </button>
-          </div>
-          <textarea
-            value={code}
-            onChange={e => setCode(e.target.value)}
-            spellCheck={false}
-            className="w-full min-h-40 p-3 text-xs font-mono border border-border rounded-sm bg-surface text-text-primary resize-y outline-none"
+      {canManage && (
+        <Card padding="none" className="mb-4 overflow-hidden">
+          <CardHeader
+            title="Run Python"
+            subtitle="isolated AgentCore sandbox · no network · ~$0.10/hr while running"
+            action={(
+              <Button variant="primary" size="sm" onClick={runCode} disabled={running || !code.trim()}>
+                {running ? 'Running…' : 'Run'}
+              </Button>
+            )}
           />
-          {result && (
-            <div className="mt-2.5">
-              <div className="flex items-center justify-between mb-1">
-                <div className="text-[11px] text-text-tertiary">
-                  {result.error ? (
-                    <span className="text-danger">Error · {result.durationMs}ms</span>
-                  ) : (
-                    <>Output · {result.durationMs}ms{result.sessionId ? <> · <code>{result.sessionId}</code></> : null}</>
-                  )}
-                </div>
-                <button
-                  onClick={clearResult}
-                  className="text-[11px] px-2 py-0.5 bg-transparent border border-border text-text-secondary rounded-sm cursor-pointer"
-                >
-                  Clear
-                </button>
-              </div>
-              <pre className={`m-0 p-3 text-xs font-mono border border-border rounded-sm whitespace-pre-wrap break-words max-h-[240px] overflow-auto ${result.error ? 'bg-danger-bg text-[#991b1b]' : 'bg-surface-hover text-text-primary'}`}>{result.error ?? result.output}</pre>
-            </div>
-          )}
-        </Card>
-        )}
-
-        {active.length > 0 && (
-          <Card padding="md">
-            <h2 className="text-sm font-semibold mb-3">Active Sessions</h2>
-            {active.map(session => (
-              <div
-                key={session.sessionId}
-                className="border border-border rounded-md mb-2.5 overflow-hidden"
-              >
-                <div
-                  onClick={() => setExpanded(expanded === session.sessionId ? null : session.sessionId)}
-                  className="flex items-center gap-3 px-3.5 py-2.5 cursor-pointer bg-surface-hover"
-                >
-                  <Chip tone={session.status === 'ACTIVE' ? 'success' : 'neutral'} size="xs">{session.status}</Chip>
-                  <span className="font-medium text-[13px]">{session.agentName}</span>
-                  <span className="text-[11px] text-text-tertiary flex-1 font-mono">
-                    {session.sessionId}
-                  </span>
-                  <span className="text-[11px] text-text-tertiary">
-                    Last active {formatAge(session.lastActivityAt)}
-                  </span>
-                  {canManage && (
-                    <button
-                      onClick={e => { e.stopPropagation(); terminateSession(session.sessionId); }}
-                      className="text-[11px] px-2 py-0.5 bg-transparent border border-danger text-danger rounded-sm cursor-pointer"
-                    >
-                      Terminate
-                    </button>
-                  )}
-                </div>
-
-                {expanded === session.sessionId && (
-                  <div className="px-3.5 py-3 grid grid-cols-2 gap-3">
-                    <div>
-                      <div className="text-[11px] font-semibold text-text-tertiary mb-1">LAST EXECUTED CODE</div>
-                      <pre className="m-0 text-[11px] bg-surface p-2.5 rounded-sm overflow-auto max-h-[120px]">{session.lastCode || '(no recorded code)'}</pre>
-                    </div>
-                    <div>
-                      <div className="text-[11px] font-semibold text-text-tertiary mb-1">LAST OUTPUT</div>
-                      <pre className="m-0 text-[11px] bg-surface p-2.5 rounded-sm overflow-auto max-h-[120px]">{session.lastOutput || '(no recorded output)'}</pre>
-                    </div>
-                  </div>
+          <Stack gap="sm" className="px-3.5 py-3">
+            <Textarea
+              value={code}
+              onChange={e => setCode(e.target.value)}
+              spellCheck={false}
+              minRows={6}
+              autoResize
+              className="font-mono text-xs"
+            />
+            {result && (
+              <Stack gap="xs">
+                <MetaLine
+                  items={[
+                    result.error
+                      ? <T className="text-danger">Error · {result.durationMs}ms</T>
+                      : <>Output · {result.durationMs}ms{result.sessionId ? <> · <T className="font-mono">{result.sessionId}</T></> : null}</>,
+                  ]}
+                />
+                {result.error ? (
+                  <InlineAlert tone="error">{result.error}</InlineAlert>
+                ) : (
+                  <CodeBlock code={result.output || '(no output)'} language="text" theme="light" />
                 )}
-              </div>
-            ))}
-          </Card>
-        )}
+                <Button variant="ghost" size="sm" onClick={clearResult}>Clear</Button>
+              </Stack>
+            )}
+          </Stack>
+        </Card>
+      )}
 
-        <Card padding="md">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-semibold">
-              Code Execution Traces{' '}
-              <span className="text-[11px] font-normal text-text-tertiary">
-                every code_execute capability event · in-memory ring (last 50)
-              </span>
-            </h2>
-            <span className="text-[11px] text-text-tertiary">
-              {codeEvents.length} event{codeEvents.length === 1 ? '' : 's'}
-            </span>
-          </div>
-          {codeEvents.length === 0 ? (
-            <div className="p-6 text-center text-xs text-text-tertiary">
-              No code executions recorded yet. Use the Run Python panel above or invoke an agent that calls the sandbox.
-            </div>
-          ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableTh>When</TableTh>
-                  <TableTh>Session</TableTh>
-                  <TableTh>Language</TableTh>
-                  <TableTh>Duration</TableTh>
-                  <TableTh>Status</TableTh>
-                  <TableTh>Code / Output</TableTh>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {codeEvents.map(ev => {
-                  const isOpen = expandedEvent === ev.id;
-                  const codeSnippet = String(ev.detail['codeSnippet'] ?? '');
-                  const outputSnippet = String(ev.detail['outputSnippet'] ?? '');
-                  const language = String(ev.detail['language'] ?? 'python');
-                  return (
-                    <TableRow key={ev.id}>
-                      <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
+      {active.length > 0 && (
+        <Card padding="md" className="mb-4">
+          <SectionLabel as="div" className="mb-3">Active Sessions</SectionLabel>
+          <Stack gap="sm">
+            {active.map(session => (
+              <CollapsibleSection
+                key={session.sessionId}
+                title={(
+                  <MetaLine
+                    items={[
+                      <Chip tone={session.status === 'ACTIVE' ? 'success' : 'neutral'} size="xs">{session.status}</Chip>,
+                      <T className="text-[13px] font-medium">{session.agentName}</T>,
+                      <T className="font-mono text-[11px] text-text-tertiary">{session.sessionId}</T>,
+                      <T className="text-[11px] text-text-tertiary">Last active {formatAge(session.lastActivityAt)}</T>,
+                    ]}
+                  />
+                )}
+                badge={canManage && (
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={(e) => { e.stopPropagation(); terminateSession(session.sessionId); }}
+                  >
+                    Terminate
+                  </Button>
+                )}
+              >
+                <CatalogGrid columns={2} dense>
+                  <Stack gap="xs">
+                    <SectionLabel>Last executed code</SectionLabel>
+                    <CodeBlock code={session.lastCode || '(no recorded code)'} language="text" theme="light" />
+                  </Stack>
+                  <Stack gap="xs">
+                    <SectionLabel>Last output</SectionLabel>
+                    <CodeBlock code={session.lastOutput || '(no recorded output)'} language="text" theme="light" />
+                  </Stack>
+                </CatalogGrid>
+              </CollapsibleSection>
+            ))}
+          </Stack>
+        </Card>
+      )}
+
+      <Card padding="none" className="mb-4 overflow-hidden">
+        <CardHeader
+          title="Code Execution Traces"
+          subtitle="every code_execute capability event · in-memory ring (last 50)"
+          action={<T className="text-[11px] text-text-tertiary">{codeEvents.length} event{codeEvents.length === 1 ? '' : 's'}</T>}
+        />
+        {codeEvents.length === 0 ? (
+          <InlinePlaceholder size="sm" align="center" className="px-3.5 py-6">
+            No code executions recorded yet. Use the Run Python panel above or invoke an agent that calls the sandbox.
+          </InlinePlaceholder>
+        ) : (
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableTh>When</TableTh>
+                <TableTh>Session</TableTh>
+                <TableTh>Language</TableTh>
+                <TableTh>Duration</TableTh>
+                <TableTh>Status</TableTh>
+                <TableTh>Code / Output</TableTh>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {codeEvents.map(ev => {
+                const isOpen = expandedEvent === ev.id;
+                const codeSnippet = String(ev.detail['codeSnippet'] ?? '');
+                const outputSnippet = String(ev.detail['outputSnippet'] ?? '');
+                const language = String(ev.detail['language'] ?? 'python');
+                return (
+                  <Fragment key={ev.id}>
+                    <TableRow>
+                      <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
                         {formatAge(ev.startedAt)}
                       </TableTd>
-                      <TableTd className="text-[10px] font-mono text-text-tertiary">
+                      <TableTd className="font-mono text-[10px] text-text-tertiary">
                         {ev.sessionId ? (ev.sessionId.length > 18 ? ev.sessionId.slice(0, 14) + '…' : ev.sessionId) : '—'}
                       </TableTd>
                       <TableTd className="text-[11px]">{language}</TableTd>
@@ -275,72 +286,73 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
                         <Chip tone={ev.ok ? 'success' : 'danger'} size="xs">{ev.ok ? 'ok' : 'error'}</Chip>
                       </TableTd>
                       <TableTd>
-                        <button
-                          onClick={() => setExpandedEvent(isOpen ? null : ev.id)}
-                          className="text-[11px] px-2 py-0.5 bg-transparent border border-border text-text-secondary rounded-sm cursor-pointer"
-                        >
+                        <Button variant="ghost" size="sm" onClick={() => setExpandedEvent(isOpen ? null : ev.id)}>
                           {isOpen ? 'Hide' : 'View'}
-                        </button>
-                        {isOpen && (
-                          <div className="mt-2 grid grid-cols-2 gap-2">
-                            <div>
-                              <div className="text-[10px] font-semibold text-text-tertiary mb-1">CODE</div>
-                              <pre className="m-0 text-[11px] bg-surface p-2 rounded-sm overflow-auto max-h-[160px] whitespace-pre-wrap">{codeSnippet || '(no snippet)'}</pre>
-                            </div>
-                            <div>
-                              <div className="text-[10px] font-semibold text-text-tertiary mb-1">OUTPUT</div>
-                              <pre className={`m-0 text-[11px] p-2 rounded-sm overflow-auto max-h-[160px] whitespace-pre-wrap ${ev.ok ? 'bg-surface text-text-primary' : 'bg-danger-bg text-[#991b1b]'}`}>{ev.error || outputSnippet || '(no output)'}</pre>
-                            </div>
-                          </div>
-                        )}
+                        </Button>
                       </TableTd>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </Card>
+                    {isOpen && (
+                      <TableRow>
+                        <TableTd colSpan={6}>
+                          <CatalogGrid columns={2} dense>
+                            <Stack gap="xs">
+                              <SectionLabel>Code</SectionLabel>
+                              <CodeBlock code={codeSnippet || '(no snippet)'} language="text" theme="light" />
+                            </Stack>
+                            <Stack gap="xs">
+                              <SectionLabel>Output</SectionLabel>
+                              {ev.error ? (
+                                <InlineAlert tone="error">{ev.error}</InlineAlert>
+                              ) : (
+                                <CodeBlock code={outputSnippet || '(no output)'} language="text" theme="light" />
+                              )}
+                            </Stack>
+                          </CatalogGrid>
+                        </TableTd>
+                      </TableRow>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </Card>
 
-        <Card padding="md">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-semibold">
-              Agent Sandbox Executions{' '}
-              <span className="text-[11px] font-normal text-text-tertiary">
-                code the agents themselves ran during recent invocations
-              </span>
-            </h2>
-            <span className="text-[11px] text-text-tertiary">
-              {agentSandboxRows.length} execution{agentSandboxRows.length === 1 ? '' : 's'}
-            </span>
-          </div>
-          {agentSandboxRows.length === 0 ? (
-            <div className="p-6 text-center text-xs text-text-tertiary">
-              No agent-driven sandbox executions in the last 50 invocations.
-            </div>
-          ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableTh>When</TableTh>
-                  <TableTh>Agent</TableTh>
-                  <TableTh>Session</TableTh>
-                  <TableTh>Duration</TableTh>
-                  <TableTh>Status</TableTh>
-                  <TableTh>Code / Output</TableTh>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {agentSandboxRows.map((exec, i) => {
-                  const key = `${exec.invocationId}-${i}`;
-                  const isOpen = expandedExec === key;
-                  return (
-                    <TableRow key={key}>
-                      <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
+      <Card padding="none" className="mb-4 overflow-hidden">
+        <CardHeader
+          title="Agent Sandbox Executions"
+          subtitle="code the agents themselves ran during recent invocations"
+          action={<T className="text-[11px] text-text-tertiary">{agentSandboxRows.length} execution{agentSandboxRows.length === 1 ? '' : 's'}</T>}
+        />
+        {agentSandboxRows.length === 0 ? (
+          <InlinePlaceholder size="sm" align="center" className="px-3.5 py-6">
+            No agent-driven sandbox executions in the last 50 invocations.
+          </InlinePlaceholder>
+        ) : (
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableTh>When</TableTh>
+                <TableTh>Agent</TableTh>
+                <TableTh>Session</TableTh>
+                <TableTh>Duration</TableTh>
+                <TableTh>Status</TableTh>
+                <TableTh>Code / Output</TableTh>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {agentSandboxRows.map((exec, i) => {
+                const key = `${exec.invocationId}-${i}`;
+                const isOpen = expandedExec === key;
+                return (
+                  <Fragment key={key}>
+                    <TableRow>
+                      <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
                         {formatAge(exec.timestamp)}
                       </TableTd>
                       <TableTd className="text-xs">{exec.agentName}</TableTd>
-                      <TableTd className="text-[10px] font-mono text-text-tertiary">
+                      <TableTd className="font-mono text-[10px] text-text-tertiary">
                         {exec.sessionId ? (exec.sessionId.length > 18 ? exec.sessionId.slice(0, 14) + '…' : exec.sessionId) : '—'}
                       </TableTd>
                       <TableTd className="text-[11px] text-text-tertiary">{exec.durationMs}ms</TableTd>
@@ -348,83 +360,83 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
                         <Chip tone={exec.error ? 'danger' : 'success'} size="xs">{exec.error ? 'error' : 'ok'}</Chip>
                       </TableTd>
                       <TableTd>
-                        <button
-                          onClick={() => setExpandedExec(isOpen ? null : key)}
-                          className="text-[11px] px-2 py-0.5 bg-transparent border border-border text-text-secondary rounded-sm cursor-pointer"
-                        >
+                        <Button variant="ghost" size="sm" onClick={() => setExpandedExec(isOpen ? null : key)}>
                           {isOpen ? 'Hide' : 'View'}
-                        </button>
-                        {isOpen && (
-                          <div className="mt-2 grid grid-cols-2 gap-2">
-                            <div>
-                              <div className="text-[10px] font-semibold text-text-tertiary mb-1">CODE</div>
-                              <pre className="m-0 text-[11px] bg-surface p-2 rounded-sm overflow-auto max-h-[160px] whitespace-pre-wrap">{exec.code || '(no code captured)'}</pre>
-                            </div>
-                            <div>
-                              <div className="text-[10px] font-semibold text-text-tertiary mb-1">OUTPUT</div>
-                              <pre className={`m-0 text-[11px] p-2 rounded-sm overflow-auto max-h-[160px] whitespace-pre-wrap ${exec.error ? 'bg-danger-bg text-[#991b1b]' : 'bg-surface text-text-primary'}`}>{exec.error || exec.output || '(no output)'}</pre>
-                            </div>
-                          </div>
-                        )}
+                        </Button>
                       </TableTd>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </Card>
+                    {isOpen && (
+                      <TableRow>
+                        <TableTd colSpan={6}>
+                          <CatalogGrid columns={2} dense>
+                            <Stack gap="xs">
+                              <SectionLabel>Code</SectionLabel>
+                              <CodeBlock code={exec.code || '(no code captured)'} language="text" theme="light" />
+                            </Stack>
+                            <Stack gap="xs">
+                              <SectionLabel>Output</SectionLabel>
+                              {exec.error ? (
+                                <InlineAlert tone="error">{exec.error}</InlineAlert>
+                              ) : (
+                                <CodeBlock code={exec.output || '(no output)'} language="text" theme="light" />
+                              )}
+                            </Stack>
+                          </CatalogGrid>
+                        </TableTd>
+                      </TableRow>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </Card>
 
-        <Card padding="md">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-semibold">
-              Past Sessions{' '}
-              <span className="text-[11px] font-normal text-text-tertiary">
-                from AgentCore Data Plane · code interpreter sessions auto-terminate after execution
-              </span>
-            </h2>
-            <span className="text-[11px] text-text-tertiary">
-              {terminated.length} terminated
-            </span>
-          </div>
-          {terminated.length === 0 ? (
-            <div className="p-6 text-center text-xs text-text-tertiary">
-              No past sessions yet. Run code above or invoke the scoring agent to trigger one.
-            </div>
-          ) : (
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableTh>Started</TableTh>
-                  <TableTh>Session</TableTh>
-                  <TableTh>Name</TableTh>
-                  <TableTh>Duration</TableTh>
-                  <TableTh>Status</TableTh>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {terminated.slice(0, 20).map(s => {
-                  const dur = new Date(s.lastActivityAt).getTime() - new Date(s.startedAt).getTime();
-                  return (
-                    <TableRow key={s.sessionId}>
-                      <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
-                        {new Date(s.startedAt).toLocaleString()}
-                      </TableTd>
-                      <TableTd className="text-[10px] font-mono text-text-tertiary">
-                        {s.sessionId.length > 22 ? s.sessionId.slice(0, 16) + '…' : s.sessionId}
-                      </TableTd>
-                      <TableTd className="text-xs">{s.agentName}</TableTd>
-                      <TableTd className="text-[11px] text-text-tertiary">
-                        {dur > 0 ? `${(dur / 1000).toFixed(1)}s` : '—'}
-                      </TableTd>
-                      <TableTd><Chip tone="neutral" size="xs">{s.status}</Chip></TableTd>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </Card>
+      <Card padding="none" className="overflow-hidden">
+        <CardHeader
+          title="Past Sessions"
+          subtitle="from AgentCore Data Plane · code interpreter sessions auto-terminate after execution"
+          action={<T className="text-[11px] text-text-tertiary">{terminated.length} terminated</T>}
+        />
+        {terminated.length === 0 ? (
+          <InlinePlaceholder size="sm" align="center" className="px-3.5 py-6">
+            No past sessions yet. Run code above or invoke the scoring agent to trigger one.
+          </InlinePlaceholder>
+        ) : (
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableTh>Started</TableTh>
+                <TableTh>Session</TableTh>
+                <TableTh>Name</TableTh>
+                <TableTh>Duration</TableTh>
+                <TableTh>Status</TableTh>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {terminated.slice(0, 20).map(s => {
+                const dur = new Date(s.lastActivityAt).getTime() - new Date(s.startedAt).getTime();
+                return (
+                  <TableRow key={s.sessionId}>
+                    <TableTd className="whitespace-nowrap text-[11px] text-text-tertiary">
+                      {new Date(s.startedAt).toLocaleString()}
+                    </TableTd>
+                    <TableTd className="font-mono text-[10px] text-text-tertiary">
+                      {s.sessionId.length > 22 ? s.sessionId.slice(0, 16) + '…' : s.sessionId}
+                    </TableTd>
+                    <TableTd className="text-xs">{s.agentName}</TableTd>
+                    <TableTd className="text-[11px] text-text-tertiary">
+                      {dur > 0 ? `${(dur / 1000).toFixed(1)}s` : '—'}
+                    </TableTd>
+                    <TableTd><Chip tone="neutral" size="xs">{s.status}</Chip></TableTd>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </Card>
     </PageSection>
   );
 }

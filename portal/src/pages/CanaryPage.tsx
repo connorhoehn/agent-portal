@@ -7,7 +7,6 @@
 // Right rail: DecisionHistoryPanel.
 
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
 import { useSearchParams } from 'react-router';
 import {
   ReactFlow,
@@ -19,7 +18,26 @@ import {
 } from '@xyflow/react';
 import type { Node, Edge } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { ThinkingDots } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button,
+  Card,
+  Chip,
+  EmptyState,
+  Inline,
+  Select,
+  Stack,
+  StatusPill,
+  Switch,
+  Table,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableTd,
+  TableTh,
+  ThinkingDots,
+  Toolbar,
+} from '@connorhoehnslalom/ui-components/shared';
+import { T } from './Text';
 import { nodeTypes, edgeTypes } from '../components/canary/index.js';
 import { useCanaryStream } from '../components/canary/useCanaryStream.js';
 import {
@@ -233,68 +251,59 @@ function ScenarioPanel({ open }: { open: boolean }): React.ReactElement | null {
   const anyRunning = rows.some((r) => r.phase === 'running');
 
   return (
-    <div style={panelStyle}>
+    <Stack gap="none" className="min-h-0 max-h-[320px] flex-shrink-0 border-t border-border bg-surface">
       {/* Toolbar row */}
-      <div style={panelToolbarStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <label style={countLabelStyle}>
-            Scenarios:
-            <select
-              value={count}
-              onChange={(e) => setCount(Number(e.target.value))}
-              style={selectStyle}
-            >
-              {[4, 6, 8, 10, 16, 20].map((n) => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
-          </label>
-          <button style={genBtnStyle} onClick={() => { void generate(); }} disabled={loading}>
-            {loading ? 'Loading…' : '⟳ Generate from graph'}
-          </button>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {rows.length > 0 && (
-            <>
-              <button
-                style={{ ...actionBtnStyle, opacity: anyIdle ? 1 : 0.45, cursor: anyIdle ? 'pointer' : 'not-allowed' }}
-                onClick={runAll}
-                disabled={!anyIdle}
-              >
-                ▶ Run all
-              </button>
-              <button style={{ ...actionBtnStyle, background: 'transparent', color: 'var(--color-text-secondary, #475569)' }} onClick={clearRows}>
-                Clear
-              </button>
-            </>
-          )}
-          {anyRunning && (
-            <span style={{ fontSize: 11, color: 'var(--color-text-tertiary, #94a3b8)', fontStyle: 'italic' }}>
-              Running…
-            </span>
-          )}
-        </div>
-      </div>
+      <Toolbar
+        aria-label="Scenario controls"
+        end={
+          <Inline gap="sm" align="center">
+            {rows.length > 0 && (
+              <>
+                <Button variant="primary" size="sm" onClick={runAll} disabled={!anyIdle}>▶ Run all</Button>
+                <Button variant="ghost" size="sm" onClick={clearRows}>Clear</Button>
+              </>
+            )}
+            {anyRunning && (
+              <T className="text-[11px] italic text-text-tertiary">Running…</T>
+            )}
+          </Inline>
+        }
+      >
+        <Inline as="label" gap="xs" align="center" className="text-[11px] text-text-secondary">
+          Scenarios:
+          <Select
+            value={String(count)}
+            onChange={(e) => setCount(Number(e.target.value))}
+            options={[4, 6, 8, 10, 16, 20].map((n) => ({ value: String(n), label: String(n) }))}
+            size="sm"
+            aria-label="Scenario count"
+          />
+        </Inline>
+        <Button variant="secondary" size="sm" onClick={() => { void generate(); }} disabled={loading}>
+          {loading ? 'Loading…' : '⟳ Generate from graph'}
+        </Button>
+      </Toolbar>
 
       {/* Table */}
       {rows.length === 0 ? (
-        <div style={emptyStyle}>
-          Click "Generate from graph" to load people from the knowledge graph and create scenarios.
-        </div>
+        <EmptyState
+          title="No scenarios yet"
+          body='Click "Generate from graph" to load people from the knowledge graph and create scenarios.'
+        />
       ) : (
-        <div style={tableWrapStyle}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-            <thead>
-              <tr style={theadRowStyle}>
-                <th style={{ ...thStyle, width: 180 }}>Person</th>
-                <th style={{ ...thStyle, width: 160 }}>Topic</th>
-                <th style={{ ...thStyle, width: 52, textAlign: 'center' }}>Ver</th>
-                <th style={{ ...thStyle, width: 60, textAlign: 'center' }}>Score</th>
-                <th style={{ ...thStyle, width: 220, textAlign: 'left' }}>Status</th>
-                <th style={{ ...thStyle }}>Run</th>
-              </tr>
-            </thead>
-            <tbody>
+        <Stack gap="none" className="flex-1 overflow-y-auto overflow-x-hidden">
+          <Table className="w-full border-collapse text-[12px]">
+            <TableHead>
+              <TableRow className="sticky top-0 z-[1]">
+                <TableTh className="w-[180px]">Person</TableTh>
+                <TableTh className="w-[160px]">Topic</TableTh>
+                <TableTh className="w-[52px] text-center">Ver</TableTh>
+                <TableTh className="w-[60px] text-center">Score</TableTh>
+                <TableTh className="w-[220px] text-left">Status</TableTh>
+                <TableTh>Run</TableTh>
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {rows.map((row) => {
                 const score = row.requestId ? judgeScores[row.requestId] : undefined;
                 return (
@@ -307,11 +316,11 @@ function ScenarioPanel({ open }: { open: boolean }): React.ReactElement | null {
                   />
                 );
               })}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </Stack>
       )}
-    </div>
+    </Stack>
   );
 }
 
@@ -326,107 +335,82 @@ function ScenarioTableRow({
   onRun: () => void;
   onReset: () => void;
 }): React.ReactElement {
-  const bg = row.phase === 'running' ? 'rgba(99,102,241,0.04)'
-    : row.phase === 'done' ? 'rgba(22,163,74,0.04)'
-    : row.phase === 'error' ? 'rgba(220,38,38,0.04)'
-    : 'transparent';
+  const rowBg = row.phase === 'running' ? 'bg-primary/5'
+    : row.phase === 'done' ? 'bg-success/5'
+    : row.phase === 'error' ? 'bg-danger/5'
+    : '';
 
   return (
-    <tr style={{ borderBottom: '1px solid var(--color-border, #e2e8f0)', background: bg, transition: 'background 0.2s' }}>
+    <TableRow className={rowBg}>
       {/* Person */}
-      <td style={tdStyle}>
-        <div style={{ fontWeight: 500, color: 'var(--color-text-primary, #0f172a)', lineHeight: 1.3 }}>
-          {row.personName}
-        </div>
-        {row.personMeta && (
-          <div style={{ fontSize: 10, color: 'var(--color-text-tertiary, #94a3b8)', marginTop: 1 }}>
-            {row.personMeta}
-          </div>
-        )}
-      </td>
+      <TableTd>
+        <Stack gap="none">
+          <T className="font-medium leading-[1.3] text-text-primary">{row.personName}</T>
+          {row.personMeta && (
+            <T className="mt-px text-[10px] text-text-tertiary">{row.personMeta}</T>
+          )}
+        </Stack>
+      </TableTd>
       {/* Topic */}
-      <td style={{ ...tdStyle, color: 'var(--color-text-secondary, #475569)' }}>
+      <TableTd className="text-text-secondary">
         {row.topic}
-      </td>
+      </TableTd>
       {/* Version */}
-      <td style={{ ...tdStyle, textAlign: 'center' }}>
+      <TableTd className="text-center">
         {row.version ? (
-          <span style={{
-            fontSize: 10,
-            fontWeight: 700,
-            padding: '1px 7px',
-            borderRadius: 999,
-            background: row.version === 'B' ? '#f3e8ff' : '#eff6ff',
-            color: row.version === 'B' ? 'var(--color-optimize)' : '#1d4ed8',
-            border: `1px solid ${row.version === 'B' ? '#d8b4fe' : '#bfdbfe'}`,
-          }}>
+          <Chip tone={row.version === 'B' ? 'accent' : 'info'} size="xs">
             {row.version}
-          </span>
-        ) : <span style={{ color: 'var(--color-text-tertiary, #94a3b8)' }}>—</span>}
-      </td>
+          </Chip>
+        ) : <T className="text-text-tertiary">—</T>}
+      </TableTd>
       {/* Score */}
-      <td style={{ ...tdStyle, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>
+      <TableTd className="text-center tabular-nums">
         {score !== undefined ? (
-          <span style={{
-            fontWeight: 600,
-            fontSize: 12,
-            color: score >= 0.7 ? 'var(--color-success)' : score >= 0.4 ? 'var(--color-warning)' : 'var(--color-danger)',
-          }}>
+          <T className={`text-[12px] font-semibold ${score >= 0.7 ? 'text-success' : score >= 0.4 ? 'text-warning' : 'text-danger'}`}>
             {score.toFixed(2)}
-          </span>
+          </T>
         ) : row.phase === 'running' ? (
-          <ThinkingDots size="sm" color="var(--color-primary, #6366f1)" />
+          <ThinkingDots size="sm" color="var(--color-primary)" />
         ) : (
-          <span style={{ color: 'var(--color-text-tertiary, #94a3b8)' }}>—</span>
+          <T className="text-text-tertiary">—</T>
         )}
-      </td>
+      </TableTd>
       {/* Status */}
-      <td style={{ ...tdStyle, verticalAlign: 'top' }}>
+      <TableTd className="align-top">
         <StatusPip phase={row.phase} hasScore={score !== undefined} errorMsg={row.errorMsg} />
-      </td>
+      </TableTd>
       {/* Run button */}
-      <td style={{ ...tdStyle }}>
+      <TableTd>
         {row.phase === 'idle' && (
-          <button style={runCellBtnStyle} onClick={onRun}>Run</button>
+          <Button variant="secondary" size="sm" onClick={onRun}>Run</Button>
         )}
         {row.phase === 'running' && (
-          <span style={{ fontSize: 10, color: 'var(--color-text-tertiary, #94a3b8)' }}>Running</span>
+          <T className="text-[10px] text-text-tertiary">Running</T>
         )}
         {(row.phase === 'done' || row.phase === 'error') && (
-          <button style={{ ...runCellBtnStyle, color: 'var(--color-text-secondary, #475569)', borderColor: 'var(--color-border, #e2e8f0)' }} onClick={onReset}>
-            Reset
-          </button>
+          <Button variant="ghost" size="sm" onClick={onReset}>Reset</Button>
         )}
-      </td>
-    </tr>
+      </TableTd>
+    </TableRow>
   );
 }
 
 function StatusPip({ phase, hasScore, errorMsg }: { phase: RowPhase; hasScore: boolean; errorMsg: string }): React.ReactElement {
-  if (phase === 'idle') return <span style={{ fontSize: 10, color: 'var(--color-text-tertiary, #94a3b8)' }}>idle</span>;
+  if (phase === 'idle') return <T className="text-[10px] text-text-tertiary">idle</T>;
   if (phase === 'error') return (
-    <div style={{ textAlign: 'left' }}>
-      <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-danger)' }}>● error</span>
+    <Stack gap="none" align="start">
+      <T className="text-[10px] font-semibold text-danger">● error</T>
       {errorMsg && (
-        <div style={{
-          fontSize: 10,
-          color: 'var(--color-danger)',
-          opacity: 0.8,
-          marginTop: 2,
-          maxWidth: 200,
-          whiteSpace: 'normal',
-          lineHeight: 1.4,
-          wordBreak: 'break-word',
-        }}>
+        <T className="mt-0.5 max-w-[200px] text-[10px] leading-[1.4] text-danger/80" wrap>
           {errorMsg}
-        </div>
+        </T>
       )}
-    </div>
+    </Stack>
   );
-  if (phase === 'running') return <span style={{ fontSize: 10, color: 'var(--color-primary)' }}>streaming</span>;
+  if (phase === 'running') return <T className="text-[10px] text-primary">streaming</T>;
   // done
-  if (!hasScore) return <span style={{ fontSize: 10, color: 'var(--color-warning)' }}>judging…</span>;
-  return <span style={{ fontSize: 10, color: 'var(--color-success)', fontWeight: 600 }}>✓ scored</span>;
+  if (!hasScore) return <T className="text-[10px] text-warning">judging…</T>;
+  return <T className="text-[10px] font-semibold text-success">✓ scored</T>;
 }
 
 // ── Focus map ─────────────────────────────────────────────────────────────────
@@ -478,8 +462,8 @@ function CanaryFlowInner({
       <Background />
       <Controls showInteractive={false} />
       <MiniMap
-        style={{ width: 120, height: 80 }}
-        nodeColor="#6366f1"
+        className="!w-[120px] !h-[80px]"
+        nodeColor="var(--color-brand)"
         maskColor="rgba(0,0,0,0.06)"
         pannable
         zoomable
@@ -511,58 +495,60 @@ function CanaryPage(): React.ReactElement {
   // a full-page table of past controller decisions (from Aurora via SSE replay).
   if (focusId === 'decisions') {
     return (
-      <div style={pageStyle}>
+      <Stack gap="none" className="h-full min-h-0 w-full">
         <CanaryDeploymentsView />
-      </div>
+      </Stack>
     );
   }
 
   // ── Setup phase ─────────────────────────────────────────────────────────────
   if (experimentState === 'setup') {
     return (
-      <div style={pageStyle}>
-        <div style={setupToolbarStyle}>
-          <span style={setupTitleStyle}>Canary</span>
-          <span style={setupSubtitleStyle}>Configure a new experiment</span>
-        </div>
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'var(--color-bg, #f8fafc)' }}>
+      <Stack gap="none" className="h-full min-h-0 w-full">
+        <Toolbar aria-label="Canary setup">
+          <Inline gap="sm" align="baseline">
+            <T className="text-sm font-bold text-text-primary">Canary</T>
+            <T className="text-xs text-text-tertiary">Configure a new experiment</T>
+          </Inline>
+        </Toolbar>
+        <Stack align="center" justify="center" className="min-h-0 flex-1 bg-bg p-6">
           {canManage ? (
-            <React.Suspense fallback={<div style={{ fontSize: 13, color: 'var(--color-text-tertiary, #94a3b8)' }}>Loading…</div>}>
+            <React.Suspense fallback={<T className="text-[13px] text-text-tertiary">Loading…</T>}>
               <CanarySetupFlow onStarted={() => { /* store handles state transition */ }} />
             </React.Suspense>
           ) : (
-            <div style={{ fontSize: 13, color: 'var(--color-text-tertiary, #94a3b8)', maxWidth: 380, textAlign: 'center', lineHeight: 1.6 }}>
+            <Inline as="p" gap="none" className="m-0 max-w-[380px] text-center text-[13px] leading-relaxed text-text-tertiary">
               No experiment is running. Viewing only — your role can&apos;t start a canary experiment.
-            </div>
+            </Inline>
           )}
-        </div>
-      </div>
+        </Stack>
+      </Stack>
     );
   }
 
   // ── Terminal phase ──────────────────────────────────────────────────────────
   if (experimentState === 'terminal') {
     return (
-      <div style={pageStyle}>
-        <div style={bodyStyle}>
-          <div style={mainColStyle}>
+      <Stack gap="none" className="h-full min-h-0 w-full">
+        <Inline gap="none" align="stretch" wrap={false} className="min-h-0 flex-1">
+          <Stack gap="none" className="min-h-0 min-w-0 flex-1">
             <ExperimentCompleteBanner onReset={() => { /* store handles reset */ }} />
-            <div style={{ ...flowWrapStyle, opacity: 0.7 }}>
+            <Stack gap="none" className="relative min-h-0 flex-1 opacity-70">
               <ReactFlowProvider>
                 <CanaryFlowInner focusId={focusId} nodes={nodes} edges={edges} />
               </ReactFlowProvider>
-            </div>
-          </div>
+            </Stack>
+          </Stack>
           <DecisionHistoryPanel />
-        </div>
-      </div>
+        </Inline>
+      </Stack>
     );
   }
 
   // ── Running phase (default) ─────────────────────────────────────────────────
   return (
-    <div style={pageStyle}>
-      <Toolbar
+    <Stack gap="none" className="h-full min-h-0 w-full">
+      <CanaryToolbar
         halted={halted}
         lastJudgedAt={lastJudgedAt}
         debug={debug}
@@ -571,9 +557,9 @@ function CanaryPage(): React.ReactElement {
         onScenariosToggle={() => setScenariosOpen((v) => !v)}
         canManage={canManage}
       />
-      <div style={bodyStyle}>
-        <div style={mainColStyle}>
-          <div style={{ ...flowWrapStyle, position: 'relative' }}>
+      <Inline gap="none" align="stretch" wrap={false} className="min-h-0 flex-1">
+        <Stack gap="none" className="min-h-0 min-w-0 flex-1">
+          <Stack gap="none" className="relative min-h-0 flex-1">
             <ReactFlowProvider>
               <CanaryFlowInner focusId={focusId} nodes={nodes} edges={edges} />
             </ReactFlowProvider>
@@ -581,46 +567,37 @@ function CanaryPage(): React.ReactElement {
                 yet is just an empty diagram — point straight at the next step
                 instead of assuming the operator knows the Scenarios flow. */}
             {!lastJudgedAt && !scenariosOpen && (
-              <div style={{
-                position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                pointerEvents: 'none', zIndex: 10,
-              }}>
-                <div style={{
-                  pointerEvents: 'auto', maxWidth: 380, textAlign: 'center',
-                  background: 'var(--color-surface, #fff)', border: '1px solid var(--color-border, #e2e8f0)',
-                  borderRadius: 12, boxShadow: '0 8px 28px rgba(0,0,0,0.10)', padding: '20px 24px',
-                }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary, #0f172a)' }}>
+              <Stack align="center" justify="center" className="pointer-events-none absolute inset-0 z-10">
+                <Card padding="md" className="pointer-events-auto max-w-[380px] text-center shadow-lg">
+                  <T className="text-sm font-bold text-text-primary">
                     Experiment is live — no traffic yet
-                  </div>
-                  <p style={{ margin: '8px 0 0', fontSize: 12.5, lineHeight: 1.6, color: 'var(--color-text-secondary, #475569)' }}>
+                  </T>
+                  <Inline as="p" gap="none" className="mt-2 mb-0 text-[12.5px] leading-relaxed text-text-secondary">
                     The router splits traffic A/B and the judge scores every answer,
                     but nothing flows until you send requests. Generate test scenarios from your
                     org graph and run them to see scores and controller decisions appear.
-                  </p>
-                  <button
+                  </Inline>
+                  <Button
+                    variant="primary"
+                    size="md"
+                    className="mt-3.5"
                     onClick={() => setScenariosOpen(true)}
-                    style={{
-                      marginTop: 14, padding: '8px 18px', borderRadius: 8, border: 'none',
-                      background: 'var(--color-primary, #6366f1)', color: '#fff',
-                      fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-                    }}
                   >
                     ▶ Generate scenarios
-                  </button>
-                </div>
-              </div>
+                  </Button>
+                </Card>
+              </Stack>
             )}
-          </div>
+          </Stack>
           <ScenarioPanel open={scenariosOpen} />
-        </div>
+        </Stack>
         <DecisionHistoryPanel />
-      </div>
-    </div>
+      </Inline>
+    </Stack>
   );
 }
 
-function Toolbar({
+function CanaryToolbar({
   halted,
   lastJudgedAt,
   debug,
@@ -639,100 +616,51 @@ function Toolbar({
   canManage: boolean;
 }): React.ReactElement {
   return (
-    <div style={toolbarStyle}>
-      <div style={leftGroupStyle}>
-        <span style={{ ...statusPillStyle, background: halted ? 'var(--color-danger-bg)' : 'var(--color-success-bg)', color: halted ? 'var(--color-danger)' : 'var(--color-success)' }}>
-          {halted ? '● Halted' : '● Active'}
-        </span>
-        <span style={refreshTextStyle}>
+    <Toolbar
+      aria-label="Canary controls"
+      end={
+        <Inline gap="sm" align="center">
+          {canManage && (
+            <>
+              {debug && <ManualWeightSlider />}
+              <Inline gap="xs" align="center">
+                <Switch checked={debug} onChange={onDebugChange} aria-label="Debug" size="sm" />
+                <T className="text-[11px] text-text-secondary">Debug</T>
+              </Inline>
+              <Button
+                variant="secondary"
+                size="sm"
+                title="End this experiment and return to the setup wizard (traffic pins back to A)"
+                onClick={() => {
+                  if (!window.confirm('End this experiment and start a new one?\nTraffic pins back to 100% A; decision history is kept.')) return;
+                  void fetch('/api/observability/canary/reset', { method: 'POST', credentials: 'include' })
+                    .catch(() => { /* store reset still returns the UI to the wizard */ })
+                    .finally(() => resetExperiment());
+                }}
+              >
+                ＋ New experiment
+              </Button>
+              {!halted && <HaltButton />}
+            </>
+          )}
+          <Button
+            variant={scenariosOpen ? 'primary' : 'ghost'}
+            size="sm"
+            onClick={onScenariosToggle}
+          >
+            {scenariosOpen ? '✕ Scenarios' : '▶ Scenarios'}
+          </Button>
+        </Inline>
+      }
+    >
+      <Inline gap="md" align="center">
+        <StatusPill state={halted ? 'error' : 'success'} label={halted ? 'Halted' : 'Active'} size="sm" />
+        <T className="text-[11px] text-text-tertiary">
           {lastJudgedAt ? `Last judged ${new Date(lastJudgedAt).toLocaleTimeString()}` : 'Awaiting first judgement…'}
-        </span>
-      </div>
-      <div style={rightGroupStyle}>
-        {canManage && (
-          <>
-            {debug && <ManualWeightSlider />}
-            <label style={debugLabelStyle}>
-              <input type="checkbox" checked={debug} onChange={(e) => onDebugChange(e.target.checked)} />
-              <span>Debug</span>
-            </label>
-            <button
-              style={scenarioBtnStyle}
-              title="End this experiment and return to the setup wizard (traffic pins back to A)"
-              onClick={() => {
-                if (!window.confirm('End this experiment and start a new one?\nTraffic pins back to 100% A; decision history is kept.')) return;
-                void fetch('/api/observability/canary/reset', { method: 'POST', credentials: 'include' })
-                  .catch(() => { /* store reset still returns the UI to the wizard */ })
-                  .finally(() => resetExperiment());
-              }}
-            >
-              ＋ New experiment
-            </button>
-            {!halted && <HaltButton />}
-          </>
-        )}
-        <button
-          style={{
-            ...scenarioBtnStyle,
-            background: scenariosOpen ? 'var(--color-primary, #6366f1)' : 'transparent',
-            color: scenariosOpen ? '#fff' : 'var(--color-text-secondary, #475569)',
-          }}
-          onClick={onScenariosToggle}
-        >
-          {scenariosOpen ? '✕ Scenarios' : '▶ Scenarios'}
-        </button>
-      </div>
-    </div>
+        </T>
+      </Inline>
+    </Toolbar>
   );
 }
-
-// ── Styles ────────────────────────────────────────────────────────────────────
-
-const pageStyle: CSSProperties = { display: 'flex', flexDirection: 'column', width: '100%', height: '100%', minHeight: 0 };
-const bodyStyle: CSSProperties = { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'row' };
-
-// Setup-phase simplified header styles
-const setupToolbarStyle: CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 10,
-  padding: '10px 14px', borderBottom: '1px solid var(--color-border, #e2e8f0)',
-  background: 'var(--color-surface, #fff)', flexShrink: 0, zIndex: 10,
-};
-const setupTitleStyle: CSSProperties = { fontSize: 14, fontWeight: 700, color: 'var(--color-text-primary, #0f172a)' };
-const setupSubtitleStyle: CSSProperties = { fontSize: 12, color: 'var(--color-text-tertiary, #94a3b8)' };
-const mainColStyle: CSSProperties = { flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' };
-const flowWrapStyle: CSSProperties = { flex: 1, minHeight: 0, position: 'relative' };
-
-const toolbarStyle: CSSProperties = {
-  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-  padding: '10px 14px', borderBottom: '1px solid var(--color-border, #e2e8f0)',
-  background: 'var(--color-surface, #fff)', gap: 16, flexShrink: 0, zIndex: 10,
-};
-const leftGroupStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 12 };
-const rightGroupStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 10 };
-const statusPillStyle: CSSProperties = { fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, letterSpacing: '0.02em' };
-const refreshTextStyle: CSSProperties = { fontSize: 11, color: 'var(--color-text-tertiary, #94a3b8)' };
-const debugLabelStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--color-text-secondary, #475569)', cursor: 'pointer' };
-const scenarioBtnStyle: CSSProperties = { fontSize: 12, fontWeight: 600, padding: '5px 14px', borderRadius: 6, border: '1px solid var(--color-border, #e2e8f0)', cursor: 'pointer', transition: 'background 0.15s' };
-
-// Panel
-const panelStyle: CSSProperties = {
-  flexShrink: 0, borderTop: '1px solid var(--color-border, #e2e8f0)',
-  background: 'var(--color-surface, #fff)', display: 'flex', flexDirection: 'column',
-  maxHeight: 320, minHeight: 0,
-};
-const panelToolbarStyle: CSSProperties = {
-  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-  padding: '8px 14px', borderBottom: '1px solid var(--color-border, #e2e8f0)', flexShrink: 0, gap: 10,
-};
-const countLabelStyle: CSSProperties = { fontSize: 11, color: 'var(--color-text-secondary, #475569)', display: 'flex', alignItems: 'center', gap: 6 };
-const selectStyle: CSSProperties = { fontSize: 12, padding: '2px 4px', border: '1px solid var(--color-border, #e2e8f0)', borderRadius: 4, background: 'var(--color-bg, #f8fafc)' };
-const genBtnStyle: CSSProperties = { fontSize: 12, fontWeight: 500, padding: '4px 12px', borderRadius: 6, border: '1px solid var(--color-border, #e2e8f0)', background: 'var(--color-bg, #f8fafc)', cursor: 'pointer', color: 'var(--color-text-primary, #0f172a)' };
-const actionBtnStyle: CSSProperties = { fontSize: 12, fontWeight: 600, padding: '4px 14px', borderRadius: 6, border: 'none', background: 'var(--color-primary, #6366f1)', color: '#fff', cursor: 'pointer' };
-const emptyStyle: CSSProperties = { padding: '20px 16px', fontSize: 12, color: 'var(--color-text-tertiary, #94a3b8)', fontStyle: 'italic' };
-const tableWrapStyle: CSSProperties = { flex: 1, overflowY: 'auto', overflowX: 'hidden' };
-const theadRowStyle: CSSProperties = { background: 'var(--color-surface-raised, #f8fafc)', borderBottom: '1px solid var(--color-border, #e2e8f0)', position: 'sticky', top: 0 };
-const thStyle: CSSProperties = { padding: '6px 12px', textAlign: 'left', fontSize: 10, fontWeight: 600, color: 'var(--color-text-tertiary, #94a3b8)', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' };
-const tdStyle: CSSProperties = { padding: '7px 12px', verticalAlign: 'middle' };
-const runCellBtnStyle: CSSProperties = { fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 5, border: '1px solid var(--color-primary, #6366f1)', background: 'transparent', color: 'var(--color-primary, #6366f1)', cursor: 'pointer' };
 
 export default CanaryPage;

@@ -2,7 +2,7 @@
 // recall by repo, consults block until answered — and the auth floors hold.
 
 import express from 'express';
-import request from 'supertest';
+import request from '../../test-support/http.js';
 
 // The real authz stack is open-mode permissive in dev (cookie-less callers
 // get the demo identity), so the auth-floor assertions here mock it to the

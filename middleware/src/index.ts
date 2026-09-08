@@ -12,9 +12,15 @@ import { rosterRouter } from './routes/roster.js';
 import { scoresRouter } from './routes/scores.js';
 import { decisionsRouter } from './routes/decisions.js';
 import { projectsRouter } from './routes/projects.js';
+import { designsRouter } from './routes/designs.js';
+import { libraryRouter } from './routes/library.js';
+import { promotionsRouter } from './routes/promotions.js';
+import { sessionBundleRouter } from './routes/session-bundle.js';
+import { rediscoveryRouter } from './routes/rediscovery.js';
+import { promptEvalsRouter } from './routes/prompt-evals.js';
+import { distillationRouter } from './routes/distillation.js';
 import { knowledgeBaseRouter } from './routes/knowledge-base.js';
-import { newsroomArticlesRouter } from './routes/newsroom-articles.js';
-import { newsroomBeatsRouter } from './routes/newsroom-beats.js';
+import { assessmentRouter } from './routes/assessment.js';
 import { ingestRouter } from './routes/ingest.js';
 import { observabilityRouter } from './routes/observability.js';
 import { approvalsRouter } from './routes/approvals.js';
@@ -60,6 +66,7 @@ import { budgetsRouter } from './routes/budgets.js';
 import { sprintsRouter } from './routes/sprints.js';
 import { grantsRouter } from './routes/grants.js';
 import { botsRouter } from './routes/bots.js';
+import { mockControlRouter } from './routes/mock-control.js';
 import { requireAction, requireTenant, readForRolesElseAction, requireSession } from './lib/authz.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
 import { initBotScheduler } from './lib/bot-scheduler.js';
@@ -110,6 +117,11 @@ function healthHandler(_req: express.Request, res: express.Response): void {
 app.get('/health', healthHandler);
 app.get('/api/health', healthHandler);
 
+// Dev-only mock control plane (/api/__mock/*). Mounted at the root so it can
+// stamp X-Mock-Scenario on every response; 404s every route, and stamps
+// nothing, unless the mock providers are on and NODE_ENV !== 'production'.
+app.use(mockControlRouter);
+
 app.use('/api/session', sessionRouter);
 // Enterprise SSO (Cognito OIDC). Inert unless COGNITO_* are configured.
 app.use('/api/auth', authRouter);
@@ -124,6 +136,31 @@ app.use('/api/agents', requireSession('ViewAgents'), agentsRouter);
 // are rejected here (the cross-tenant admin role passes any tenant guard).
 app.use('/api/graph/decisions', requireTenant('orgiq'), decisionsRouter);
 app.use('/api/graph/projects', requireTenant('orgiq'), projectsRouter);
+// Design reviews — the ADR threads that gate initiative designs. Session
+// floor: readable by every signed-in orgiq role, writes gated per-route.
+app.use('/api/designs', requireTenant('orgiq'), requireSession('ViewDesigns'), designsRouter);
+// The asset library — prompts, evaluators, skills and insights in one
+// catalog. Read-open to the tenant; authoring/deploy stay gated elsewhere.
+app.use('/api/library', requireTenant('orgiq'), requireSession('ViewLibrary'), libraryRouter);
+// The promotion ladder's inbox: session observations clustered into patterns,
+// and the candidates a human turns into insights, runbooks and skills.
+app.use('/api/promotions', requireTenant('orgiq'), requireSession('ViewPromotions'), promotionsRouter);
+// What every Claude Code devbox session is configured with — hooks, bundled
+// skills, settings. A release target in its own right: the SessionStart hook
+// runs on every session, so publishing one is the widest-blast-radius action
+// in the product.
+app.use('/api/session-bundle', requireTenant('orgiq'), requireSession('ViewSessionConfig'), sessionBundleRouter);
+// Look before you spend: prior experience matched on the PROBLEM's shape
+// rather than on the repo it was learned in, so knowledge from another project
+// is reachable. Open to any signed-in session — gating this would defeat it at
+// exactly the moment it matters.
+app.use('/api/rediscovery', requireTenant('orgiq'), requireSession('ViewRediscovery'), rediscoveryRouter);
+// Per-asset eval sets — the thing that produces the pass rate decideDeploy
+// gates on. Until this existed the gate judged a number nothing computed.
+app.use('/api/library/evals', requireTenant('orgiq'), requireSession('ViewLibrary'), promptEvalsRouter);
+// The distillation pipeline's operational log + corpus health. Read-open: how
+// the org's shared memory is doing is everyone's business.
+app.use('/api/distillation', requireTenant('orgiq'), requireSession('ViewDistillation'), distillationRouter);
 // Work-items: mounted at /api/graph so its sub-paths (/work, /projects/:id/work,
 // /people/:id/work, /work-items) resolve before the gated graphRouter. Reads
 // are tenant-open; the router gates its POST/PATCH per-route on
@@ -144,13 +181,11 @@ app.use('/api/roster', requireTenant('orgiq'), requireSession('Roster'), rosterR
 // Tenant guard alone previously let any orgiq member — and any anonymous
 // caller — read it.
 app.use('/api/scores', requireTenant('orgiq'), requireAction('ViewLeaderboard'), scoresRouter);
-// The knowledge base belongs to the orgiq tenant; scope it so a newsroom
-// session (even one holding ManageKB) cannot read or mutate it.
+// The knowledge base belongs to the orgiq tenant; scope it to that tenant.
 app.use('/api/knowledge-base', requireTenant('orgiq'), knowledgeBaseRouter);
 // KB Registry admin — CRUD + async provisioning for multi-KB support.
-// Tenant-scoped to orgiq first (the KB belongs to orgiq; a newsroom editor
-// holds ManageKB but must not reach it — its DELETE/provision routes are
-// destructive, and admin bypasses the tenant guard). Then: reading the registry
+// Tenant-scoped to orgiq first (its DELETE/provision routes are destructive,
+// and admin bypasses the tenant guard). Then: reading the registry
 // is operational visibility (org-leader + hr-admin, like Health), while
 // create/adopt/provision/sync/delete still require ManageKB (hr-admin). Mounted
 // before the gated observability router so the portal wizard can reach it.
@@ -159,11 +194,12 @@ app.use('/api/admin/kb-registry', requireTenant('orgiq'), readForRolesElseAction
 // whole authority, which is why the router exposes no bucket, prefix or id
 // and every limit is enforced server-side per link.
 app.use('/api/drop', dropRouter);
-// Newsroom — beats mounted BEFORE articles so /beats doesn't get swallowed.
-// Tenant-guarded: an orgiq session cannot read newsroom data (and vice versa
-// via the orgiq guards above). This is the no-cross-pollination boundary.
-app.use('/api/newsroom/beats', requireTenant('newsroom'), newsroomBeatsRouter);
-app.use('/api/newsroom', requireTenant('newsroom'), newsroomArticlesRouter);
+// Assessment — tenant-guarded, but NOT at the mount: assessmentRouter applies
+// requireTenant('assessment') itself so it can exempt the agent-facing
+// POST /runs/:runId/complete callback (sessionless, self-gated by a service
+// secret) the same way harnessRouter exempts /trace. Mounting requireTenant
+// here would 401 that callback before the router ever saw the request.
+app.use('/api/assessment', assessmentRouter);
 // Ingest — reading jobs/storage/crawl status is operational visibility that the
 // Knowledge page surfaces to org-leaders; starting crawls, editing schedules and
 // other mutations still require ManageIngest (hr-admin).
@@ -226,14 +262,14 @@ app.use('/api/observability/prompt-versions', ...viewObs, promptVersionsRouter);
 // Every observability aggregate below carries the ViewObservability gate AND a
 // tenant scope. ViewObservability is an ALL-HANDS read within orgiq (member and
 // sme hold it too, deliberately — a member labels answer quality), so the gate
-// is really the tenant scope: a newsroom editor holding ViewObservability must
-// not read orgiq agent telemetry. Admin bypasses the tenant guard. Note the
-// telemetry is not partitioned by tenant, which is why the tenant scope matters.
-// Mutations that would otherwise ride this read tier (invocation replay,
-// calibration CRUD/runs, memory writes) are gated higher on ManageCanary.
-// (In dev the cookie-less demo session is orgiq and holds every grant, so
-// these render without login; in production a newsroom or anonymous session
-// is denied.)
+// is really the tenant scope: an assessment-tenant session holding
+// ViewObservability must not read orgiq agent telemetry. Admin bypasses the
+// tenant guard. Note the telemetry is not partitioned by tenant, which is why
+// the tenant scope matters. Mutations that would otherwise ride this read tier
+// (invocation replay, calibration CRUD/runs, memory writes) are gated higher
+// on ManageCanary. (In dev the cookie-less demo session is orgiq and holds
+// every grant, so these render without login; in production an out-of-tenant
+// or anonymous session is denied.)
 // Cost aggregation routes — read-only aggregates over invocation_traces cost
 // columns.
 app.use('/api/observability/cost', viewObs, costRouter);
@@ -279,7 +315,19 @@ app.use('/api/sessions', requireTenant('orgiq'), requireSession('ViewSessions'),
 // a future portal page (no UI ships yet). Cedar-gated: the ManageDevbox
 // action must be allowed for the caller's role (open mode when no policy
 // store is configured, matching every other requireAction guard).
-app.use('/api/devbox', requireAction('ManageDevbox'), devboxRouter);
+// Reads for every role that directs agent work; writes still need
+// ManageDevbox (readForRolesElseAction fast-paths GET only, so POST /task,
+// /command and DELETE stay gated). This closes a contradiction: devbox-visibility.ts
+// already lists org-leader in FLEET_WIDE_ROLES — it had decided what a leader
+// should SEE on the fleet — while this mount refused them the router outright,
+// making that visibility branch dead code and the nav item a door onto a wall.
+// A program-owner is deliberately NOT fleet-wide: they fall through to the
+// scoped path and see the computers on initiatives they run.
+app.use(
+  '/api/devbox',
+  readForRolesElseAction(['org-leader', 'hr-admin', 'program-owner'], 'ManageDevbox'),
+  devboxRouter,
+);
 // Work — the agentic loop: queue → devbox workers → review, scheduled sweeps
 // that produce findings, and agent-proposed graph writes gated on approval.
 // Reads are open so the overview renders for any role; mutations are gated

@@ -37,9 +37,13 @@ import { type SqlParameter } from '@aws-sdk/client-rds-data';
 // The attribution model of record for "what did this initiative spend" — one
 // predicate, shared with the ledger, so a sprint's window spend and the Budgets
 // page's window spend can never be computed two different ways.
-import { spendPredicateSql } from './budgets.js';
+import { mockInitiativeWindowSpendUsd, spendPredicateSql } from './budgets.js';
+import { sprints as sprintsFixture, type MockSprint } from './sprintWindows.js';
 import { mergedMockGrants } from './grantOverlay.js';
 import { searchWorkItems } from './work-items.js';
+// The one clock. A created sprint's id carries an instant, and a fixture
+// instant is read through the clock so a frozen test freezes it too.
+import { clock } from '../mock/core/index.js';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
 function nul(name: string): SqlParameter { return { name, value: { isNull: true } }; }
@@ -116,87 +120,32 @@ export interface CreateSprintInput {
 
 // ─── Mock fixtures (config.mock.aurora === true) ─────────────────────────────
 //
-// Covers exactly the sprints the rest of mock mode already references: the
-// three observability sprints carried by providers/work-items.ts
-// MOCK_PROGRAM_FIELDS, plus the sprints budgets' MOCK_GRANTS hands an envelope
-// to. Inventing sprints beyond that union would put rows on this page that the
-// Budgets grants table and the work board both deny exist.
+// The sprint table is the REGISTERED `sprints` fixture (mock/sprints.ts), read
+// here through providers/sprintWindows.ts — the seam that stops budgets.ts and
+// this module importing each other. It used to be two module-level arrays right
+// here: `MOCK_SPRINTS` (the seeded cadence) and `MOCK_CREATED_SPRINTS` (every
+// sprint this process created), plus a third table of dates keyed by sprint id
+// one module over. Nothing could put any of them back — `POST /api/__mock/reset`
+// walks the fixture registry — so a sprint created in dev:mock lived until the
+// process restarted and the write-capture sweep had to refuse `POST /api/sprints`
+// rather than replay it. A create pushes to the fixture now, and a reset takes
+// it out again.
 //
-// Envelope figures are READ FROM MOCK_GRANTS rather than restated, so the
-// Sprints page and the Budgets grants table cannot disagree about the same
-// envelope; work rollups are computed from searchWorkItems() for the same
-// reason against the board.
+// Coverage, and why it is exactly this union rather than a longer list, is on
+// the fixture. Two things stay derived here rather than stored there:
+// envelope figures are read from `mergedMockGrants()` — the seed WITH mutations
+// applied — so the Sprints page and the Budgets grants table cannot disagree
+// about one envelope; and work rollups come from `searchWorkItems()` for the
+// same reason against the board.
 
-interface MockSprint {
-  id: string;
-  orgProjectId: string;
-  orgProjectName: string;
-  name: string;
-  goal: string;
-  stewardPersonId: string;
-  stewardName: string;
-  /** Days ago the sprint opened / closes. Negative end = still in the future. */
-  startDaysAgo: number;
-  endDaysAgo: number;
-  status: SprintStatus;
-}
+/** The rollup shape every sprint row — seeded or created — resolves to before
+ *  its counts are computed. */
+type MockSprintBase = MockSprint;
 
-/** Mirrors schema/seed_program.sql, which dates every sprint relative to NOW(). */
-const MOCK_SPRINTS: MockSprint[] = [
-  { id: 'spr-obs-s1', orgProjectId: 'p-observability', orgProjectName: 'Observability Platform',
-    name: 'Sprint 96 — Ingest hardening', goal: 'Collector fleet stable at 2x peak ingest.',
-    stewardPersonId: 'p-008', stewardName: 'Layla Hassan', startDaysAgo: 42, endDaysAgo: 28, status: 'done' },
-  { id: 'spr-obs-s2', orgProjectId: 'p-observability', orgProjectName: 'Observability Platform',
-    name: 'Sprint 97 — Burn-rate alerts', goal: 'Tier-1 services alert on error-budget burn, not raw error rate.',
-    stewardPersonId: 'p-011', stewardName: 'Eli Garcia', startDaysAgo: 28, endDaysAgo: 14, status: 'done' },
-  { id: 'spr-obs-s3', orgProjectId: 'p-observability', orgProjectName: 'Observability Platform',
-    name: 'Sprint 98 — Span metrics + decom', goal: 'RED dashboards from span metrics; two services off StatsD.',
-    stewardPersonId: 'p-008', stewardName: 'Layla Hassan', startDaysAgo: 14, endDaysAgo: 0, status: 'active' },
-  { id: 'spr-auth-s2', orgProjectId: 'p-auth-migration', orgProjectName: 'Auth Migration',
-    name: 'Sprint 42 — Session hygiene', goal: 'Sessions expire server-side; revoked grants bite within a minute.',
-    stewardPersonId: 'p-051', stewardName: 'Nora Chang', startDaysAgo: 14, endDaysAgo: 0, status: 'active' },
-  { id: 'spr-llm-s2', orgProjectId: 'p-llm-platform', orgProjectName: 'LLM Application Platform',
-    name: 'Sprint 8 — Judge + evals', goal: 'Canary judge scores every ask; rubric weights are editable.',
-    stewardPersonId: 'p-013', stewardName: 'Caleb Turner', startDaysAgo: 14, endDaysAgo: 0, status: 'active' },
-  { id: 'spr-cost-s2', orgProjectId: 'p-cost-opt', orgProjectName: 'Cost Optimization',
-    name: 'Sprint 24 — Attribution', goal: 'Every running resource carries an initiative tag.',
-    stewardPersonId: 'p-017', stewardName: 'Daniel Chang', startDaysAgo: 14, endDaysAgo: 0, status: 'active' },
-];
-
-const DAY_MS = 86_400_000;
-function dateDaysAgo(days: number): string {
-  return new Date(Date.now() - days * DAY_MS).toISOString().slice(0, 10);
-}
-
-/** The normalized shape both the dated seed fixtures and the in-memory
- *  created-sprint store resolve to before rollups are computed. */
-interface MockSprintBase {
-  id: string;
-  orgProjectId: string;
-  orgProjectName: string | null;
-  name: string;
-  goal: string | null;
-  stewardPersonId: string | null;
-  stewardName: string | null;
-  startsOn: string | null;
-  endsOn: string | null;
-  status: SprintStatus;
-}
-
-// Sprints created in mock mode (dev:mock) live here so the same process that
-// created one also lists it — the in-memory analogue of the sprints table.
-// Grant rollups read `mergedMockGrants()` — the seed WITH the mutation overlay
-// applied — so a sprint's envelope reflects grants created or patched in this
-// process. It used to read the raw seed, because the overlay lived in
-// providers/grants.ts and this module cannot import that (grants.ts imports
-// getSprint from here, so it would close a cycle). The visible symptom was a
-// grant PATCH that /api/grants reported and /api/sprints did not. The overlay
-// now lives in providers/grantOverlay.ts, which imports neither of us.
-// A freshly created sprint still reads with a $0 envelope until one is granted.
-const MOCK_CREATED_SPRINTS: MockSprintBase[] = [];
-
-/** Test-only: drop the in-memory created-sprint store between cases. */
-export function _resetMockSprints(): void { MOCK_CREATED_SPRINTS.length = 0; }
+/** Test-only: put the sprint calendar back, dropping anything this process
+ *  created. `fixtureRegistry.resetAll()` (POST /api/__mock/reset) does the same
+ *  thing, which is the point of the fixture. */
+export function _resetMockSprints(): void { sprintsFixture.reset(); }
 
 async function buildMockSprintRow(m: MockSprintBase, personId: string | null): Promise<SprintRow> {
   const items = await searchWorkItems({ sprintId: m.id, limit: 200 });
@@ -220,27 +169,16 @@ async function buildMockSprintRow(m: MockSprintBase, personId: string | null): P
     estimatedCostUsd: Number(items.reduce((n, i) => n + (i.estimatedCostUsd ?? 0), 0).toFixed(2)),
     grantedUsd: grants.reduce((n, g) => n + g.allocatedUsd, 0),
     grantCount: grants.length,
-    initiativeSpendInWindowUsd: grants.reduce((n, g) => n + g.initiativeSpendInWindowUsd, 0),
+    // The SQL sums bot_runs for the INITIATIVE over the sprint window once —
+    // independent of how many grants the sprint carries. Summing each grant's
+    // own window spend counted one initiative's money twice on spr-auth-s2
+    // (two grants), and counted a lifetime total rather than the window.
+    initiativeSpendInWindowUsd: mockInitiativeWindowSpendUsd(m.orgProjectId, m.startsOn, m.endsOn),
     isSteward: personId != null && m.stewardPersonId === personId,
     isGrantee: personId != null && grants.some((g) => g.granteePersonId === personId),
     myItemCount: mine.length,
     myOpenItemCount: mine.filter((i) => i.status !== 'done' && i.status !== 'cancelled').length,
   };
-}
-
-function mockSprintRow(m: MockSprint, personId: string | null): Promise<SprintRow> {
-  return buildMockSprintRow({
-    id: m.id,
-    orgProjectId: m.orgProjectId,
-    orgProjectName: m.orgProjectName,
-    name: m.name,
-    goal: m.goal,
-    stewardPersonId: m.stewardPersonId,
-    stewardName: m.stewardName,
-    startsOn: dateDaysAgo(m.startDaysAgo),
-    endsOn: dateDaysAgo(m.endDaysAgo),
-    status: m.status,
-  }, personId);
 }
 
 // ─── Read plumbing ───────────────────────────────────────────────────────────
@@ -297,10 +235,11 @@ export async function listSprints(opts: ListSprintsOpts = {}): Promise<SprintRow
   const limit = Math.min(Math.max(opts.limit ?? 100, 1), 300);
 
   if (config.mock.aurora) {
-    let rows = await Promise.all([
-      ...MOCK_SPRINTS.map((m) => mockSprintRow(m, personId)),
-      ...MOCK_CREATED_SPRINTS.map((m) => buildMockSprintRow(m, personId)),
-    ]);
+    // One list: the seeded cadence and anything created in this process are
+    // rows in the same fixture, exactly as they are rows in the same table.
+    let rows = await Promise.all(
+      sprintsFixture.rows().map((m) => buildMockSprintRow(m, personId)),
+    );
     if (opts.sprintId) rows = rows.filter((r) => r.id === opts.sprintId);
     if (opts.status) rows = rows.filter((r) => r.status === opts.status);
     if (opts.orgProjectId) rows = rows.filter((r) => r.orgProjectId === opts.orgProjectId);
@@ -434,7 +373,12 @@ export async function personExists(personId: string): Promise<boolean> {
 export async function createSprint(input: CreateSprintInput): Promise<SprintRow> {
   const status: SprintStatus = input.status ?? 'planned';
   if (config.mock.aurora) {
-    const id = `spr-mock-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    // The instant comes from the mock clock, not `Date.now()` — a fixture id is
+    // a fixture timestamp with a prefix, and a frozen test that cannot predict
+    // the id it just created cannot assert on it. The random suffix is what
+    // keeps two creates in the same millisecond (or under one frozen instant)
+    // apart, so routing the clock half through the clock costs no uniqueness.
+    const id = `spr-mock-${clock.now().getTime()}-${Math.floor(Math.random() * 1e6)}`;
     const base: MockSprintBase = {
       id,
       orgProjectId: input.orgProjectId,
@@ -447,7 +391,11 @@ export async function createSprint(input: CreateSprintInput): Promise<SprintRow>
       endsOn: input.endsOn,
       status,
     };
-    MOCK_CREATED_SPRINTS.push(base);
+    // Into the fixture, beside the seeded cadence — one `sprints` table, so
+    // the sprint is listed by the same read that lists the seeded ones, carries
+    // a window the grants side can bound a burn with, and is dropped by
+    // `POST /api/__mock/reset` rather than living until the process restarts.
+    sprintsFixture.rows().push(base);
     return buildMockSprintRow(base, null);
   }
 

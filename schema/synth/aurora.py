@@ -1,7 +1,7 @@
 """Aurora RDS Data API wrapper for the synth pipeline.
 
 Reads the seed graph (populated by schema/seed.py) and provides batched upserts
-for documents/mentions/newsroom tables. Cluster ARNs are resolved once from the
+for the documents/mentions tables. Cluster ARNs are resolved once from the
 OrgIQ-Aurora CloudFormation stack.
 """
 from __future__ import annotations

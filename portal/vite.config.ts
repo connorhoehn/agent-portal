@@ -3,7 +3,24 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
 
-export default defineConfig({
+// The API target. Node resolves `localhost` to ::1 first, and another
+// project's server listening on IPv6 :3001 silently answers every /api call
+// with 404s — so this probes candidates for the OrgIQ middleware's own health
+// signature and picks the first that IS ours. API_PROXY_TARGET still wins.
+async function apiTarget(): Promise<string> {
+  if (process.env.API_PROXY_TARGET) return process.env.API_PROXY_TARGET;
+  const candidates = ['http://127.0.0.1:3001', 'http://127.0.0.1:3011'];
+  for (const base of candidates) {
+    try {
+      const res = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(800) });
+      const body = (await res.json()) as { service?: string };
+      if (body.service === 'orgiq-middleware') return base;
+    } catch { /* not ours, or not up */ }
+  }
+  return candidates[0]!;
+}
+
+export default defineConfig(async () => ({
   define: {
     global: 'globalThis',
   },
@@ -25,9 +42,9 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: process.env.API_PROXY_TARGET ?? 'http://localhost:3001',
+        target: await apiTarget(),
         changeOrigin: true,
       },
     },
   },
-});
+}));

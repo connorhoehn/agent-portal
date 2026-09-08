@@ -10,10 +10,11 @@
 //   GET /interventions?ruleName=&limit=   — drill-down for one rule
 
 import { useMemo, useState } from 'react';
-import type { CSSProperties } from 'react';
 import { Link } from 'react-router';
 import {
+  Button,
   Card,
+  CardHeader,
   Table,
   TableHead,
   TableBody,
@@ -21,11 +22,13 @@ import {
   TableTh,
   TableTd,
   Chip,
+  Inline,
   PageSection,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { GuardrailRuleBadge } from '../../components/observability/GuardrailRuleBadge';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
+import { T } from './Text';
 
 // ── Types (mirrored from middleware/src/routes/guardrails-detail.ts) ───────
 
@@ -137,26 +140,24 @@ function GuardrailRulesPage() {
                   <TableRow
                     key={r.ruleName}
                     onClick={() => setSelectedRule(focused ? null : r.ruleName)}
-                    style={focused
-                      ? { background: 'var(--color-surface-hover)', cursor: 'pointer' }
-                      : { cursor: 'pointer' }}
+                    className={focused ? 'bg-surface-hover cursor-pointer' : 'cursor-pointer'}
                   >
-                    <TableTd style={ruleCell}>{r.ruleName}</TableTd>
+                    <TableTd className="text-[12px] font-medium font-mono">{r.ruleName}</TableTd>
                     <TableTd>
                       {r.ruleCategory ? (
                         <Chip tone={categoryTone(r.ruleCategory)} size="xs">
                           {r.ruleCategory}
                         </Chip>
                       ) : (
-                        <span style={mutedSmall}>—</span>
+                        <T className="text-[11px] text-text-tertiary">—</T>
                       )}
                     </TableTd>
-                    <TableTd style={numCell}>{r.count}</TableTd>
+                    <TableTd className="text-[12px] text-text-secondary">{r.count}</TableTd>
                     <SeverityCell n={r.severityCounts.LOW} tone="neutral" />
                     <SeverityCell n={r.severityCounts.MEDIUM} tone="warning" />
                     <SeverityCell n={r.severityCounts.HIGH} tone="danger" />
-                    <TableTd style={{ textAlign: 'right' }}>
-                      <span style={mutedSmall}>{focused ? '▾' : '▸'}</span>
+                    <TableTd className="text-right">
+                      <T className="text-[11px] text-text-tertiary">{focused ? '▾' : '▸'}</T>
                     </TableTd>
                   </TableRow>
                 );
@@ -168,21 +169,19 @@ function GuardrailRulesPage() {
 
       {selectedRule && (
         <Card padding="md">
-          <div style={headerRow}>
-            <h2 style={h2}>
-              Interventions for <span style={mono}>{selectedRule}</span>{' '}
-              <span style={hint}>
-                {interventions.length} row{interventions.length === 1 ? '' : 's'} · newest first
-              </span>
-            </h2>
-            <button
-              type="button"
-              onClick={() => setSelectedRule(null)}
-              style={btnSecondary}
-            >
-              Clear
-            </button>
-          </div>
+          <CardHeader
+            title={`Interventions for ${selectedRule}`}
+            subtitle={`${interventions.length} row${interventions.length === 1 ? '' : 's'} · newest first`}
+            action={
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setSelectedRule(null)}
+              >
+                Clear
+              </Button>
+            }
+          />
           {interventions.length === 0 ? (
             <EmptyState text="No interventions captured for this rule yet." />
           ) : (
@@ -199,10 +198,10 @@ function GuardrailRulesPage() {
               <TableBody>
                 {interventions.map((i) => (
                   <TableRow key={i.interventionId}>
-                    <TableTd style={tsCell}>
+                    <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
                       {new Date(i.ts).toLocaleString()}
                     </TableTd>
-                    <TableTd style={agentCell}>{i.agentId}</TableTd>
+                    <TableTd className="text-[12px] font-medium whitespace-nowrap">{i.agentId}</TableTd>
                     <TableTd>
                       <GuardrailRuleBadge
                         ruleName={i.ruleName}
@@ -210,18 +209,18 @@ function GuardrailRulesPage() {
                         severity={i.severity}
                       />
                     </TableTd>
-                    <TableTd style={matchedCell} title={i.matchedText ?? ''}>
+                    <TableTd className="text-[12px] max-w-[380px] truncate" title={i.matchedText ?? ''}>
                       {i.matchedText ? (
-                        <span style={mono}>{i.matchedText}</span>
+                        <T className="font-mono text-[11.5px]">{i.matchedText}</T>
                       ) : (
-                        <span style={mutedSmall}>(no excerpt)</span>
+                        <T className="text-[11px] text-text-tertiary">(no excerpt)</T>
                       )}
                     </TableTd>
-                    <TableTd style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <TableTd className="text-right whitespace-nowrap">
                       {i.invocationId ? (
                         <Link
                           to={`/admin/observability/invocations/${i.invocationId}`}
-                          style={btnLink}
+                          className="px-2 py-0.5 text-[14px] text-primary no-underline"
                           title="Open invocation detail"
                         >
                           →
@@ -245,7 +244,7 @@ function SeverityCell({ n, tone }: { n: number; tone: Tone }) {
       {n > 0 ? (
         <Chip tone={tone} size="xs">{n}</Chip>
       ) : (
-        <span style={mutedSmall}>0</span>
+        <T className="text-[11px] text-text-tertiary">0</T>
       )}
     </TableTd>
   );
@@ -253,68 +252,27 @@ function SeverityCell({ n, tone }: { n: number; tone: Tone }) {
 
 function WindowPicker({ value, onChange }: { value: number; onChange: (i: number) => void }) {
   return (
-    <div style={{ display: 'inline-flex', gap: 4 }}>
+    <Inline gap="xs">
       {WINDOW_OPTIONS.map((w, i) => (
-        <button
+        <Button
           key={w.label}
+          variant={i === value ? 'primary' : 'secondary'}
+          size="sm"
           onClick={() => onChange(i)}
-          style={{
-            fontSize: 11,
-            padding: '4px 10px',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-sm)',
-            background: i === value ? 'var(--color-primary)' : 'var(--color-surface)',
-            color: i === value ? 'white' : 'var(--color-text-secondary)',
-            cursor: 'pointer',
-            fontWeight: i === value ? 500 : 400,
-          }}
         >
           {w.label}
-        </button>
+        </Button>
       ))}
-    </div>
+    </Inline>
   );
 }
 
 function EmptyState({ text }: { text: string }) {
   return (
-    <div style={{ padding: 24, textAlign: 'center', fontSize: 12, color: 'var(--color-text-tertiary)' }}>
+    <T as="div" className="p-6 text-center text-[12px] text-text-tertiary">
       {text}
-    </div>
+    </T>
   );
 }
-
-// ── styles ────────────────────────────────────────────────────────────────
-
-const headerRow: CSSProperties = {
-  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-  marginBottom: 12, gap: 12, flexWrap: 'wrap',
-};
-const h2: CSSProperties = { fontSize: 14, fontWeight: 600, margin: 0 };
-const hint: CSSProperties = { fontSize: 11, color: 'var(--color-text-tertiary)', fontWeight: 400 };
-const ruleCell: CSSProperties = { fontSize: 12, fontWeight: 500, fontFamily: 'ui-monospace, monospace' };
-const numCell: CSSProperties = { fontSize: 12, color: 'var(--color-text-secondary)' };
-const tsCell: CSSProperties = { fontSize: 11, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' };
-const agentCell: CSSProperties = { fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' };
-const matchedCell: CSSProperties = {
-  fontSize: 12, maxWidth: 380, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-};
-const mutedSmall: CSSProperties = { fontSize: 11, color: 'var(--color-text-tertiary)' };
-const mono: CSSProperties = { fontFamily: 'ui-monospace, monospace', fontSize: 11.5 };
-const btnSecondary: CSSProperties = {
-  padding: '4px 10px',
-  fontSize: 12,
-  background: 'var(--color-surface)',
-  color: 'var(--color-text-secondary)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm, 4px)',
-  cursor: 'pointer',
-};
-const btnLink: CSSProperties = {
-  padding: '2px 8px',
-  fontSize: 14,
-  color: 'var(--color-primary, #6366f1)',
-  textDecoration: 'none',
-};
 
 export default GuardrailRulesPage;

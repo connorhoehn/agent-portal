@@ -1,12 +1,10 @@
-import { useState } from 'react';
-import { Link } from 'react-router';
-import { Button, Card } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, CollapsibleSection } from '@connorhoehnslalom/ui-components/shared';
 import { PersonDetail, formatRelativeTime } from './types';
+import { formatScore } from './scoresFormat';
 import { RadarChart, type RadarAxes } from './RadarChart';
 import { TrendLine } from './TrendLine';
-import { WhyDrawer, type ContributionsResponse } from './WhyDrawer';
+import { ScoreContributions, type ContributionsResponse } from './ScoreContributions';
 import { useFetch } from '../../hooks/useFetch';
-import { useSession } from '../../lib/auth';
 
 interface RadarResponse {
   personId: string;
@@ -22,6 +20,19 @@ interface HistoryResponse {
 
 interface Props {
   detail: PersonDetail;
+  /** The row's composite, already 0-100 (see Leaderboard.tsx) — null while
+   * the matching leaderboard row hasn't loaded yet (e.g. opened via a
+   * connection the current filter/search excludes). */
+  compositeScore: number | null;
+  /** The row's influence, same units and same null case as `compositeScore`
+   * above — DEFECTS.md org-leader #11. This panel used to show
+   * `detail.influenceScore` from `/api/graph/people/:id`, a raw PageRank
+   * value from a different endpoint than the leaderboard's `influence`
+   * field; the two are genuinely different numbers; not just different
+   * scales, so no amount of `formatScore` normalizing made them agree. The
+   * fix is to stop reading a second source for a number the leaderboard
+   * already showed, and show that same figure here. */
+  influenceScore: number | null;
   deptColors: Record<string, string>;
   onClose: () => void;
   onSelectConnection: (id: string) => void;
@@ -29,20 +40,22 @@ interface Props {
 
 const SECTION_HEADER = 'text-[11px] font-semibold text-text-tertiary uppercase tracking-wider mt-4 mb-1.5';
 
-export function PersonDetailCard({ detail, deptColors, onClose, onSelectConnection }: Props) {
-  const { session } = useSession();
+export function PersonDetailCard({ detail, compositeScore, influenceScore, deptColors, onClose, onSelectConnection }: Props) {
   const { data: radar } = useFetch<RadarResponse>(
     detail.id ? `/api/scores/${encodeURIComponent(detail.id)}/radar` : '',
   );
   const { data: history } = useFetch<HistoryResponse>(
     detail.id ? `/api/scores/${encodeURIComponent(detail.id)}/history?days=30` : '',
   );
-  const [whyOpen, setWhyOpen] = useState(false);
+  // Fetched as soon as the panel is up, same as `radar`/`history` above, not
+  // gated on the "Why this score?" disclosure being open — see
+  // ScoreContributions.tsx for why the old open-gated fetch left the section
+  // showing "Loading…" (or, worse, nothing) on every first expand.
   const { data: contributions } = useFetch<ContributionsResponse>(
-    whyOpen && detail.id ? `/api/scores/${encodeURIComponent(detail.id)}/contributions` : '',
+    detail.id ? `/api/scores/${encodeURIComponent(detail.id)}/contributions` : '',
   );
   return (
-    <Card padding="md">
+    <Card padding="md" className="mt-4">
       <div className="flex items-start justify-between mb-2">
         <div>
           <h2 className="text-base font-semibold">{detail.name}</h2>
@@ -98,28 +111,36 @@ export function PersonDetailCard({ detail, deptColors, onClose, onSelectConnecti
         Scored {formatRelativeTime(detail.scoredAt)}
       </div>
 
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => setWhyOpen(o => !o)}
-        className="mt-2"
-      >
-        Why this score? {whyOpen ? '▴' : '▾'}
-      </Button>
-      <WhyDrawer open={whyOpen} onClose={() => setWhyOpen(false)} contributions={contributions} />
-      {session?.tenant === 'orgiq' && (
-        <Link
-          to={`/newsroom/articles?byline=${encodeURIComponent(detail.id)}`}
-          className="text-[11px] text-primary no-underline mt-2 inline-block"
-        >
-          Articles by this person → Newsroom
-        </Link>
-      )}
+      {/* One control, one surface (see ScoreContributions.tsx): this used to
+          be a `▾` disclosure toggle that opened a separate `Drawer` of the
+          same name, fetched lazily on open. It's the same `CollapsibleSection`
+          every other disclosure on this page uses, and `contributions` is
+          already loaded above by the time someone expands it. */}
+      <CollapsibleSection title="Why this score?" className="mt-2">
+        <ScoreContributions contributions={contributions} />
+      </CollapsibleSection>
 
-      <div className="flex justify-between items-center mt-3 pt-3 border-t border-border text-[13px]">
-        <span className="text-text-secondary">Influence (PageRank)</span>
-        <span className="font-semibold">{Math.round(detail.influenceScore * 100)}</span>
-      </div>
+      {/* Both figures below go through the same `formatScore` the leaderboard
+          row and stat strip use, on the same 0-100 scale, sourced from the
+          same `ScoreEntry` the row rendered — DEFECTS.md org-leader #11 was
+          this panel showing a different metric (raw PageRank from a second
+          endpoint) beside the row it was opened from. Both are null together
+          in the one case the row itself is unavailable (opened via a
+          connection outside the current filter/search), so both hide
+          together rather than one showing a number that no longer has a row
+          to agree with. */}
+      {compositeScore !== null && influenceScore !== null && (
+        <div className="mt-3 pt-3 border-t border-border">
+          <div className="flex justify-between items-center text-[13px]">
+            <span className="text-text-secondary">Composite</span>
+            <span className="font-semibold">{formatScore(compositeScore)}</span>
+          </div>
+          <div className="flex justify-between items-center text-[13px] mt-1">
+            <span className="text-text-secondary">Influence</span>
+            <span className="font-semibold">{formatScore(influenceScore)}</span>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }

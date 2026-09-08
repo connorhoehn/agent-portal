@@ -17,6 +17,10 @@ import { config } from '../config.js';
 // the budget period is a single fact and this rollup must not have its own copy
 // of it. See PERIOD_START_SQL for why the windows were unified.
 import { PERIOD_START_SQL, MOCK_BUDGETS, mockBudgetRow } from './budgets.js';
+// Same reasoning: the work-item rollup (points/open counts) is one fact,
+// owned by work-items.ts's own mock fixture, so the Initiatives list can't
+// restate a different number than the initiative-detail Work tab reads.
+import { mockWorkItemRollup } from './work-items.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -79,10 +83,20 @@ export interface ProjectDetail {
   name: string;
   status: string | null;
   createdAt: string | null;
+  /** 1–3 sentences of prose: what this initiative is for. Null when unset or
+      when the column predates the summary/sponsor migration. */
+  summary: string | null;
   /** The one person running this initiative (projects.owner_id) — null when
       unset or when the column predates the work-items schema. */
   ownerId: string | null;
   ownerName: string | null;
+  /** The VP-like authorizer/originator who signed off on this initiative
+      existing (projects.sponsor_person_id) — distinct from the owner who runs
+      it day to day and the SMEs who attach to it. Null when unset or when the
+      column predates the summary/sponsor migration. */
+  sponsorId: string | null;
+  sponsorName: string | null;
+  sponsorTitle: string | null;
   contributors: Array<{
     personId: string;
     name: string;
@@ -156,7 +170,9 @@ const CAST: Record<string, CastMember> = {
   'p-001': { personId: 'p-001', name: 'Theo Chang',      title: 'Engineer' },
   'p-002': { personId: 'p-002', name: 'Vera Green',      title: 'Principal Engineer' },
   'p-004': { personId: 'p-004', name: 'Nora DaSilva',    title: 'Senior Engineer' },
+  'p-006': { personId: 'p-006', name: 'Maria Johnson',   title: 'Principal Engineer' },
   'p-008': { personId: 'p-008', name: 'Layla Hassan',    title: 'SRE Lead' },
+  'p-012': { personId: 'p-012', name: 'Rachel Kowalski', title: 'Principal Engineer' },
   'p-011': { personId: 'p-011', name: 'Eli Garcia',      title: 'Senior SRE' },
   'p-013': { personId: 'p-013', name: 'Caleb Turner',    title: 'Senior Engineer' },
   'p-015': { personId: 'p-015', name: 'Raj Mehta',       title: 'Data Engineer' },
@@ -168,6 +184,7 @@ const CAST: Record<string, CastMember> = {
   'p-030': { personId: 'p-030', name: 'Mia Singh',       title: 'Group PM' },
   'p-034': { personId: 'p-034', name: 'Asher Wright',    title: 'Accessibility Specialist' },
   'p-035': { personId: 'p-035', name: 'Ben Okafor',      title: 'Staff Designer' },
+  'p-036': { personId: 'p-036', name: 'David Tanaka',    title: 'Head of Design' },
   'p-038': { personId: 'p-038', name: 'Isabel Vasquez',  title: 'Design Engineer' },
   'p-042': { personId: 'p-042', name: 'Vera Petrov',     title: 'Staff ML Engineer' },
   'p-043': { personId: 'p-043', name: 'Bria Petrov',     title: 'Staff ML Engineer' },
@@ -188,6 +205,12 @@ interface MockInitiative {
   createdAt: string;
   owner: string;
   smes: string[];
+  /** The VP-like authorizer who signed off on this initiative — mirrors
+      schema/seeds/generate_program_seed.py's INITIATIVES[*].sponsor. */
+  sponsor: string;
+  /** 1–3 sentences of prose, verbatim from the same generator's `description`
+      (also written to projects.summary — see the seed's UPDATE statement). */
+  summary: string;
   /** Hours since the last agent run on this initiative. */
   activeHoursAgo: number;
   /** `owner/repo` under connorhoehnslalom/ — mirrors the agent_projects rows
@@ -201,29 +224,28 @@ interface MockInitiative {
       (activeHoursAgo ≲ a working morning) carry live runs, so the mock's live
       signal agrees with its own freshness stamps. */
   activeAgents: number;
-  /** Work rollups, plausible against schema/seed_program.sql's volumes, so the
-      dashboard's progress bars and open-work counts render in dev:mock. */
-  openStories: number;
-  openBugs: number;
-  pointsDone: number;
-  pointsTotal: number;
+  // openStories / openBugs / pointsDone / pointsTotal are NOT restated here —
+  // they are derived from the actual wi-* items in providers/work-items.ts
+  // (mockWorkItemRollup) at read time in listProjects() below, so the
+  // Initiatives-list rollup and the initiative-detail Work tab can never
+  // independently drift apart (org-leader.md #2 / program-owner #3).
 }
 
 const MOCK_INITIATIVES: MockInitiative[] = [
-  { id: 'p-observability',     name: 'Observability Platform',       status: 'in_progress', createdAt: '2026-05-24T12:00:00Z', owner: 'p-004', smes: ['p-008', 'p-011'], activeHoursAgo: 1,  repo: 'connorhoehnslalom/orgiq-observability' , priority: 'critical', activeAgents: 2, openStories: 6, openBugs: 2, pointsDone: 34, pointsTotal: 72 },
-  { id: 'p-auth-migration',    name: 'Auth Migration',               status: 'in_progress', createdAt: '2026-06-05T12:00:00Z', owner: 'p-002', smes: ['p-051', 'p-004'], activeHoursAgo: 3,  repo: 'connorhoehnslalom/orgiq-auth-service' , priority: 'critical', activeAgents: 1, openStories: 4, openBugs: 3, pointsDone: 21, pointsTotal: 55 },
-  { id: 'p-llm-platform',      name: 'LLM Application Platform',     status: 'in_progress', createdAt: '2026-06-19T12:00:00Z', owner: 'p-047', smes: ['p-042', 'p-013'], activeHoursAgo: 2,  repo: 'connorhoehnslalom/orgiq-llm-platform' , priority: 'high', activeAgents: 2, openStories: 7, openBugs: 1, pointsDone: 18, pointsTotal: 64 },
-  { id: 'p-cost-opt',          name: 'Cost Optimization',            status: 'in_progress', createdAt: '2026-05-30T12:00:00Z', owner: 'p-008', smes: ['p-011', 'p-017'], activeHoursAgo: 5,  repo: 'connorhoehnslalom/orgiq-finops' , priority: 'high', activeAgents: 1, openStories: 3, openBugs: 2, pointsDone: 26, pointsTotal: 48 },
-  { id: 'p-realtime-analytics', name: 'Real-time Analytics Pipeline', status: 'in_progress', createdAt: '2026-06-24T12:00:00Z', owner: 'p-017', smes: ['p-019', 'p-024'], activeHoursAgo: 9,  repo: 'connorhoehnslalom/orgiq-stream-analytics' , priority: 'high', activeAgents: 1, openStories: 5, openBugs: 1, pointsDone: 15, pointsTotal: 46 },
-  { id: 'p-data-lake',         name: 'Data Lake Migration',          status: 'planning',    createdAt: '2026-08-01T12:00:00Z', owner: 'p-025', smes: ['p-017', 'p-015'], activeHoursAgo: 40, repo: 'connorhoehnslalom/orgiq-data-lake' , priority: 'medium', activeAgents: 0, openStories: 6, openBugs: 0, pointsDone: 0, pointsTotal: 38 },
-  { id: 'p-feature-store',     name: 'ML Feature Store',             status: 'in_progress', createdAt: '2026-06-28T12:00:00Z', owner: 'p-042', smes: ['p-019', 'p-044'], activeHoursAgo: 12, repo: 'connorhoehnslalom/orgiq-feature-store' , priority: 'high', activeAgents: 0, openStories: 4, openBugs: 1, pointsDone: 19, pointsTotal: 42 },
-  { id: 'p-mobile-redesign',   name: 'Mobile App Redesign',          status: 'in_progress', createdAt: '2026-06-12T12:00:00Z', owner: 'p-030', smes: ['p-035', 'p-026'], activeHoursAgo: 18, repo: 'connorhoehnslalom/orgiq-mobile-app' , priority: 'medium', activeAgents: 0, openStories: 5, openBugs: 2, pointsDone: 23, pointsTotal: 51 },
-  { id: 'p-design-v3',         name: 'Design System v3',             status: 'in_progress', createdAt: '2026-07-03T12:00:00Z', owner: 'p-035', smes: ['p-038', 'p-034'], activeHoursAgo: 26, repo: 'connorhoehnslalom/orgiq-design-system' , priority: 'medium', activeAgents: 0, openStories: 3, openBugs: 1, pointsDone: 28, pointsTotal: 44 },
-  { id: 'p-design-system-api', name: 'Design System API',            status: 'in_progress', createdAt: '2026-07-10T12:00:00Z', owner: 'p-038', smes: ['p-035', 'p-001'], activeHoursAgo: 30, repo: 'connorhoehnslalom/orgiq-design-system-api' , priority: 'low', activeAgents: 0, openStories: 2, openBugs: 0, pointsDone: 12, pointsTotal: 26 },
-  { id: 'p-inference-platform', name: 'Inference Platform',          status: 'in_progress', createdAt: '2026-06-15T12:00:00Z', owner: 'p-049', smes: ['p-013', 'p-043'], activeHoursAgo: 7,  repo: 'connorhoehnslalom/orgiq-inference-platform' , priority: 'high', activeAgents: 1, openStories: 5, openBugs: 2, pointsDone: 20, pointsTotal: 58 },
-  { id: 'p-rag-search',        name: 'RAG Knowledge Search',         status: 'completed',   createdAt: '2026-04-18T12:00:00Z', owner: 'p-048', smes: ['p-047'],          activeHoursAgo: 22, repo: 'connorhoehnslalom/orgiq-rag-search' , priority: null, activeAgents: 0, openStories: 0, openBugs: 0, pointsDone: 40, pointsTotal: 40 },
-  { id: 'p-soc2',              name: 'SOC2 Compliance',              status: 'in_progress', createdAt: '2026-06-22T12:00:00Z', owner: 'p-052', smes: ['p-055', 'p-051'], activeHoursAgo: 14, repo: 'connorhoehnslalom/orgiq-compliance' , priority: 'high', activeAgents: 0, openStories: 4, openBugs: 1, pointsDone: 17, pointsTotal: 36 },
-  { id: 'p-zero-trust',        name: 'Zero Trust Network',           status: 'planning',    createdAt: '2026-08-08T12:00:00Z', owner: 'p-051', smes: ['p-052', 'p-056'], activeHoursAgo: 48, repo: 'connorhoehnslalom/orgiq-zero-trust' , priority: 'medium', activeAgents: 0, openStories: 5, openBugs: 0, pointsDone: 2, pointsTotal: 30 },
+  { id: 'p-observability',     name: 'Observability Platform',       status: 'in_progress', createdAt: '2026-05-24T12:00:00Z', owner: 'p-004', smes: ['p-008', 'p-011'], sponsor: 'p-002', summary: 'Unified telemetry: OpenTelemetry collection, SLO/error-budget alerting, and cost-aware retention across every service.', activeHoursAgo: 1,  repo: 'connorhoehnslalom/orgiq-observability' , priority: 'critical', activeAgents: 2 },
+  { id: 'p-auth-migration',    name: 'Auth Migration',               status: 'in_progress', createdAt: '2026-06-05T12:00:00Z', owner: 'p-002', smes: ['p-051', 'p-004'], sponsor: 'p-052', summary: 'Consolidate every login path onto Cognito + BFF OIDC and retire the legacy SAML shim, tenant by tenant, with zero forced logouts.', activeHoursAgo: 3,  repo: 'connorhoehnslalom/orgiq-auth-service' , priority: 'critical', activeAgents: 1 },
+  { id: 'p-llm-platform',      name: 'LLM Application Platform',     status: 'in_progress', createdAt: '2026-06-19T12:00:00Z', owner: 'p-047', smes: ['p-042', 'p-013'], sponsor: 'p-049', summary: 'The paved road for LLM features: managed prompts, canary evaluation, guardrail regression, and efficient serving.', activeHoursAgo: 2,  repo: 'connorhoehnslalom/orgiq-llm-platform' , priority: 'high', activeAgents: 2 },
+  { id: 'p-cost-opt',          name: 'Cost Optimization',            status: 'in_progress', createdAt: '2026-05-30T12:00:00Z', owner: 'p-008', smes: ['p-011', 'p-017'], sponsor: 'p-006', summary: 'Idle capacity teardown and per-initiative showback: every dollar of infra and agent spend attributable, every floor justified.', activeHoursAgo: 5,  repo: 'connorhoehnslalom/orgiq-finops' , priority: 'high', activeAgents: 1 },
+  { id: 'p-realtime-analytics', name: 'Real-time Analytics Pipeline', status: 'in_progress', createdAt: '2026-06-24T12:00:00Z', owner: 'p-017', smes: ['p-019', 'p-024'], sponsor: 'p-025', summary: 'Exactly-once event pipeline on Flink: schema-governed ingest, checkpointed processing, and replayable backfills.', activeHoursAgo: 9,  repo: 'connorhoehnslalom/orgiq-stream-analytics' , priority: 'high', activeAgents: 1 },
+  { id: 'p-data-lake',         name: 'Data Lake Migration',          status: 'planning',    createdAt: '2026-08-01T12:00:00Z', owner: 'p-025', smes: ['p-017', 'p-015'], sponsor: 'p-012', summary: 'Lakehouse foundation on Iceberg: contract-governed ingest zones and time-travel access for analytics and ML.', activeHoursAgo: 40, repo: 'connorhoehnslalom/orgiq-data-lake' , priority: 'medium', activeAgents: 0 },
+  { id: 'p-feature-store',     name: 'ML Feature Store',             status: 'in_progress', createdAt: '2026-06-28T12:00:00Z', owner: 'p-042', smes: ['p-019', 'p-044'], sponsor: 'p-049', summary: 'Online feature serving GA: point-in-time correct training data and freshness-SLA\'d online lookups.', activeHoursAgo: 12, repo: 'connorhoehnslalom/orgiq-feature-store' , priority: 'high', activeAgents: 0 },
+  { id: 'p-mobile-redesign',   name: 'Mobile App Redesign',          status: 'in_progress', createdAt: '2026-06-12T12:00:00Z', owner: 'p-030', smes: ['p-035', 'p-026'], sponsor: 'p-036', summary: 'Navigation-first redesign of the mobile app: new IA, deep-link routing, and gesture-safe interactions.', activeHoursAgo: 24, repo: 'connorhoehnslalom/orgiq-mobile-app' , priority: 'medium', activeAgents: 0 },
+  { id: 'p-design-v3',         name: 'Design System v3',             status: 'in_progress', createdAt: '2026-07-03T12:00:00Z', owner: 'p-035', smes: ['p-038', 'p-034'], sponsor: 'p-036', summary: 'Design System v3: semantic token pipeline from Figma to code with accessibility gates built in.', activeHoursAgo: 26, repo: 'connorhoehnslalom/orgiq-design-system' , priority: 'medium', activeAgents: 0 },
+  { id: 'p-design-system-api', name: 'Design System API',            status: 'in_progress', createdAt: '2026-07-10T12:00:00Z', owner: 'p-038', smes: ['p-035', 'p-001'], sponsor: 'p-036', summary: 'Programmatic access to the design system: typed component contracts, versioned release channels, and codemod-assisted upgrades.', activeHoursAgo: 30, repo: 'connorhoehnslalom/orgiq-design-system-api' , priority: 'low', activeAgents: 0 },
+  { id: 'p-inference-platform', name: 'Inference Platform',          status: 'in_progress', createdAt: '2026-06-15T12:00:00Z', owner: 'p-049', smes: ['p-013', 'p-043'], sponsor: 'p-012', summary: 'Shared model serving: queue-depth autoscaling, warm pools, and per-model canary rollout for every team shipping inference.', activeHoursAgo: 7,  repo: 'connorhoehnslalom/orgiq-inference-platform' , priority: 'high', activeAgents: 1 },
+  { id: 'p-rag-search',        name: 'RAG Knowledge Search',         status: 'completed',   createdAt: '2026-04-18T12:00:00Z', owner: 'p-048', smes: ['p-047'], sponsor: 'p-006', summary: 'Retrieval-augmented org search — shipped. Hybrid retrieval with grounded citations; in maintenance.',          activeHoursAgo: 22, repo: 'connorhoehnslalom/orgiq-rag-search' , priority: null, activeAgents: 0 },
+  { id: 'p-soc2',              name: 'SOC2 Compliance',              status: 'in_progress', createdAt: '2026-06-22T12:00:00Z', owner: 'p-052', smes: ['p-055', 'p-051'], sponsor: 'p-012', summary: 'SOC 2 Type II readiness: controls mapped to owners, evidence collection automated, access reviews on cadence.', activeHoursAgo: 14, repo: 'connorhoehnslalom/orgiq-compliance' , priority: 'high', activeAgents: 0 },
+  { id: 'p-zero-trust',        name: 'Zero Trust Network',           status: 'planning',    createdAt: '2026-08-08T12:00:00Z', owner: 'p-051', smes: ['p-052', 'p-056'], sponsor: 'p-052', summary: 'Zero-trust segmentation blueprint: service identity everywhere, mTLS by default, policy-engine enforced.', activeHoursAgo: 48, repo: 'connorhoehnslalom/orgiq-zero-trust' , priority: 'medium', activeAgents: 0 },
 ];
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -246,6 +268,26 @@ export function mockProjectExists(projectId: string): boolean {
   return MOCK_INITIATIVES.some((p) => p.id === projectId);
 }
 
+/**
+ * What this initiative is CALLED, in mock mode — the one place a `p-*` id
+ * resolves to a display name.
+ *
+ * Exported because `work-items.ts` used to store a `projectName` string on
+ * every fixture row, and 19 of them stored the *wrong* one: the wi-otel-*
+ * family said "Unified Observability Stack" while sitting on
+ * p-inference-platform, and wi-cedar-* said "Cedar Auth Policy Migration"
+ * while sitting on p-rag-search. The Work tab renders that string directly
+ * under an initiative header rendered from THIS list, so the reader saw two
+ * names for one initiative. A derived name cannot drift; a copied one always
+ * eventually does.
+ *
+ * Returns null for an id no initiative carries, so a caller can decide
+ * whether that is an empty label or a bug.
+ */
+export function mockProjectName(projectId: string): string | null {
+  return MOCK_INITIATIVES.find((p) => p.id === projectId)?.name ?? null;
+}
+
 const MOCK_PROJECTS: Array<Omit<ProjectSummary, keyof typeof EMPTY_ROLLUPS>> = MOCK_INITIATIVES.map((p) => ({
   id: p.id,
   name: p.name,
@@ -256,14 +298,15 @@ const MOCK_PROJECTS: Array<Omit<ProjectSummary, keyof typeof EMPTY_ROLLUPS>> = M
   lastActivityAt: new Date(Date.now() - p.activeHoursAgo * HOUR_MS).toISOString(),
 }));
 
-// Owner fields are defaulted at the return site so the fixtures don't need
-// per-entry churn every time the detail shape grows.
-const MOCK_PROJECT_DETAILS: Record<string, Omit<ProjectDetail, 'ownerId' | 'ownerName'>> =
+// Owner and sponsor fields are defaulted at the return site so the fixtures
+// don't need per-entry churn every time the detail shape grows.
+const MOCK_PROJECT_DETAILS: Record<string, Omit<ProjectDetail, 'ownerId' | 'ownerName' | 'sponsorId' | 'sponsorName' | 'sponsorTitle'>> =
   Object.fromEntries(MOCK_INITIATIVES.map((p) => [p.id, {
     id: p.id,
     name: p.name,
     status: p.status,
     createdAt: p.createdAt,
+    summary: p.summary,
     contributors: [
       { ...CAST[p.owner]!, role: 'owner', weight: 1.0 },
       ...p.smes.map((id) => ({ ...CAST[id]!, role: 'sme', weight: 0.8 })),
@@ -305,6 +348,9 @@ export async function listProjects(opts: {
       // it reads $0 / never — the same answer Aurora gives, not null.
       const ledger = MOCK_BUDGETS.find((b) => b.id === p.id);
       const row = ledger ? mockBudgetRow(ledger) : null;
+      // Derived from the SAME wi-* items providers/work-items.ts serves to the
+      // initiative-detail Work tab, not restated here — see mockWorkItemRollup.
+      const rollup = mockWorkItemRollup(p.id);
       return {
         ...p, ...EMPTY_ROLLUPS,
         ownerId: cast?.owner ?? null,
@@ -314,12 +360,15 @@ export async function listProjects(opts: {
         agentSpendUsd: row ? row.spentThisPeriodUsd : 0,
         lastAgentActivityAt: row ? row.lastAgentActivityAt : null,
         activeAgentRuns: cast?.activeAgents ?? 0,
-        priority: cast?.priority ?? null,
+        // Derived from the board where there is one; the hand-typed value is
+        // the fallback for an initiative whose seeded work this fixture does
+        // not carry, so a badge can never contradict the items under it.
+        priority: rollup.highestOpenPriority ?? cast?.priority ?? null,
         allocatedUsd: row ? row.allocatedUsd : null,
-        openStories: cast?.openStories ?? null,
-        openBugs: cast?.openBugs ?? null,
-        pointsDone: cast?.pointsDone ?? null,
-        pointsTotal: cast?.pointsTotal ?? null,
+        openStories: rollup.openStories,
+        openBugs: rollup.openBugs,
+        pointsDone: rollup.pointsDone,
+        pointsTotal: rollup.pointsTotal,
         // Aurora derives lastActivityAt as `lastAgent ?? createdAt`, so where
         // the ledger has activity the two fields are one timestamp, not two
         // fixtures a second apart.
@@ -494,7 +543,16 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
     if (!mock) return null;
     // contributors[0] is the owner by construction (see MOCK_INITIATIVES).
     const owner = mock.contributors[0];
-    return { ...mock, ownerId: owner?.personId ?? null, ownerName: owner?.name ?? null };
+    const cast = MOCK_INITIATIVES.find((m) => m.id === id);
+    const sponsor = cast ? CAST[cast.sponsor] : undefined;
+    return {
+      ...mock,
+      ownerId: owner?.personId ?? null,
+      ownerName: owner?.name ?? null,
+      sponsorId: sponsor?.personId ?? null,
+      sponsorName: sponsor?.name ?? null,
+      sponsorTitle: sponsor?.title ?? null,
+    };
   }
 
   const projectRows = await exec(
@@ -537,13 +595,42 @@ export async function getProject(id: string): Promise<ProjectDetail | null> {
     }
   } catch { /* column absent — pre-work-items schema */ }
 
+  // Summary + sponsor in one guarded query: both columns arrive in the same
+  // migration (schema/orgiq_schema.sql), so a cluster missing one is missing
+  // both. Degrades to nulls, not a 500, on a pre-migration cluster.
+  let summary: string | null = null;
+  let sponsorId: string | null = null;
+  let sponsorName: string | null = null;
+  let sponsorTitle: string | null = null;
+  try {
+    const sponsorRows = await exec(
+      `SELECT p.summary, p.sponsor_person_id, pe.name AS sponsor_name, pe.title AS sponsor_title
+         FROM projects p LEFT JOIN people pe ON pe.id = p.sponsor_person_id
+        WHERE p.id = :id LIMIT 1`,
+      [strParam('id', id)],
+    );
+    const row = sponsorRows[0];
+    if (row) {
+      summary = row['summary'] != null ? String(row['summary']) : null;
+      if (row['sponsor_person_id'] != null) {
+        sponsorId = String(row['sponsor_person_id']);
+        sponsorName = row['sponsor_name'] != null ? String(row['sponsor_name']) : null;
+        sponsorTitle = row['sponsor_title'] != null ? String(row['sponsor_title']) : null;
+      }
+    }
+  } catch { /* columns absent — pre-summary/sponsor schema */ }
+
   return {
     id: String(proj['id'] ?? ''),
     name: String(proj['name'] ?? ''),
     status: proj['status'] != null ? String(proj['status']) : null,
     createdAt: proj['created_at'] != null ? String(proj['created_at']) : null,
+    summary,
     ownerId,
     ownerName,
+    sponsorId,
+    sponsorName,
+    sponsorTitle,
     contributors: contribRows.map((r) => ({
       personId: String(r['person_id'] ?? ''),
       name: String(r['name'] ?? ''),

@@ -11,6 +11,7 @@
 
 import { Router } from 'express';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
+import { config } from '../config.js';
 import {
   listConnectedSources, connectApiKeySource, disconnectSource, borrowApiKey,
   type SourceKind,
@@ -85,7 +86,11 @@ connectionsRouter.get('/:name/check', asyncHandler(async (req, res) => {
 
 connectionsRouter.get('/:name/github/orgs', asyncHandler(async (req, res) => {
   const name = String(req.params['name'] ?? '');
-  const token = await borrowApiKey(name);
+  // listOrgs takes a token directly rather than a provider name (see its own
+  // doc comment), so in mock mode — where there is no vault to borrow one
+  // from — this passes the empty string it would otherwise never send: the
+  // mock branch inside listOrgs ignores it and never reaches api.github.com.
+  const token = config.mock.agentcore ? '' : await borrowApiKey(name);
   res.json({ orgs: await listOrgs(token) });
 }));
 

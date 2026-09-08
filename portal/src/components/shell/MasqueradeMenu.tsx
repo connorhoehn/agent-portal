@@ -6,8 +6,6 @@ const ROLE_LABELS: Record<string, string> = {
   sme: 'SME',
   'org-leader': 'Org Leader',
   'hr-admin': 'HR Admin',
-  reporter: 'Reporter',
-  editor: 'Editor',
   admin: 'Admin',
 };
 
@@ -16,12 +14,10 @@ const ROLE_HINTS: Record<string, string> = {
   sme: 'Dispatches agent runs against a sprint envelope.',
   'org-leader': 'VP / Director. + leaderboards, approvals.',
   'hr-admin': 'Sees salary + perf. Edits guardrails.',
-  reporter: 'Files stories + pitches.',
-  editor: 'Publishes. Manages newsroom KB.',
   admin: 'Cross-tenant operator. Every role, both accounts.',
 };
 
-const TENANT_LABELS: Record<string, string> = { orgiq: 'Org', newsroom: 'Newsroom' };
+const TENANT_LABELS: Record<string, string> = { orgiq: 'Org', assessment: 'Assessment' };
 
 function roleLabel(role: string): string {
   return ROLE_LABELS[role] ?? role;
@@ -339,8 +335,6 @@ function roleColor(role: SessionRole | string): string {
     case 'member': return 'var(--color-text-secondary)';
     case 'org-leader': return 'var(--color-info)';
     case 'hr-admin': return 'var(--color-warning)';
-    case 'reporter': return 'var(--color-text-secondary)';
-    case 'editor': return 'var(--color-info)';
     case 'admin': return 'var(--color-danger)';
     default: return 'var(--color-text-tertiary)';
   }
