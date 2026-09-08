@@ -54,6 +54,7 @@ export const CAPABILITY_ACTIONS = [
   'ManageSprints',       // sprints.ts — create sprints, move work between them (org-leader + sme)
   'EnterEnvironment',    // environments.ts — reach a deployed environment from a devbox
   'ManageEnvironments',  // environments.ts — describe/edit/remove an environment
+  'ConnectLocalCompute', // local-compute.ts — pair/manage your own machine as a fleet node
   // Assessment tenant — routes/assessment.ts. Missing from this list, every
   // assessment control hid for every role: the portal's can() read undefined
   // for actions the server never evaluated. See docs/assessment-tenant.md.

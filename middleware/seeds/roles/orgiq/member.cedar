@@ -12,7 +12,12 @@ permit (
     OrgIQ::Action::"Search",
     OrgIQ::Action::"ViewOrgChart",
     OrgIQ::Action::"ViewObservability",
-    OrgIQ::Action::"LabelFeedback"
+    OrgIQ::Action::"LabelFeedback",
+    // Pair their OWN machine as a presence node. This is personal, not fleet
+    // authority: the routes bind every node to the pairing session's sub, and
+    // a member only ever sees or manages their own machines. Dispatching work
+    // TO a machine stays behind DispatchAgentRun, which members do not hold.
+    OrgIQ::Action::"ConnectLocalCompute"
   ],
   resource
 )

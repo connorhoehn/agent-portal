@@ -35,6 +35,7 @@ export type Action =
   | 'Masquerade'
   | 'ManageBudgets'
   | 'ManageSprints'
+  | 'ConnectLocalCompute'
   // Assessment tenant (docs/assessment-tenant.md)
   | 'ViewAssessment'
   | 'ScoreAssessment'

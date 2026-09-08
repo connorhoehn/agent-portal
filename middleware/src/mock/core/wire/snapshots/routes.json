@@ -1028,7 +1028,7 @@
     {
       "method": "GET",
       "path": "/api/health",
-      "source": "src/index.ts:118"
+      "source": "src/index.ts:119"
     },
     {
       "method": "GET",
@@ -1364,6 +1364,56 @@
       "method": "GET",
       "path": "/api/library/evals/runs/:runId",
       "source": "src/routes/prompt-evals.ts:51"
+    },
+    {
+      "method": "POST",
+      "path": "/api/local-compute/announce",
+      "source": "src/routes/local-compute.ts:182"
+    },
+    {
+      "method": "POST",
+      "path": "/api/local-compute/heartbeat",
+      "source": "src/routes/local-compute.ts:193"
+    },
+    {
+      "method": "GET",
+      "path": "/api/local-compute/nodes",
+      "source": "src/routes/local-compute.ts:229"
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/local-compute/nodes/:id",
+      "source": "src/routes/local-compute.ts:299"
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/local-compute/nodes/:id",
+      "source": "src/routes/local-compute.ts:278"
+    },
+    {
+      "method": "GET",
+      "path": "/api/local-compute/nodes/all",
+      "source": "src/routes/local-compute.ts:240"
+    },
+    {
+      "method": "POST",
+      "path": "/api/local-compute/pair/claim",
+      "source": "src/routes/local-compute.ts:122"
+    },
+    {
+      "method": "POST",
+      "path": "/api/local-compute/pair/start",
+      "source": "src/routes/local-compute.ts:112"
+    },
+    {
+      "method": "POST",
+      "path": "/api/local-compute/sessions/:sessionId/end",
+      "source": "src/routes/local-compute.ts:199"
+    },
+    {
+      "method": "GET",
+      "path": "/api/local-compute/stream",
+      "source": "src/routes/local-compute.ts:259"
     },
     {
       "method": "GET",
@@ -2203,7 +2253,7 @@
     {
       "method": "GET",
       "path": "/health",
-      "source": "src/index.ts:117"
+      "source": "src/index.ts:118"
     }
   ],
   "unresolved": []

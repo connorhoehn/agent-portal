@@ -36,7 +36,10 @@ permit (
     // Keep the environment record straight — this is the administrative half of
     // the domain, and hr-admin already holds every other registry-editing
     // authority here. Note it is the RECORD, not the environment.
-    OrgIQ::Action::"ManageEnvironments"
+    OrgIQ::Action::"ManageEnvironments",
+    // Pair their own machine as a local presence node (see member.cedar for
+    // why this is personal, not fleet, authority).
+    OrgIQ::Action::"ConnectLocalCompute"
   ],
   resource
 )

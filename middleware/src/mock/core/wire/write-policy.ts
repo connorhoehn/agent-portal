@@ -278,6 +278,17 @@ const UNRESETTABLE: Family[] = [
   { pattern: 'POST /api/promotions/*/promote', what: 'providers/promotions.ts MOCK_CANDIDATES registers no fixture' },
   { pattern: 'POST /api/promotions/*/dismiss', what: 'providers/promotions.ts MOCK_CANDIDATES registers no fixture' },
   { pattern: 'POST /api/session-bundle/*/publish', what: 'providers/session-bundle.ts MOCK_BUNDLES registers no fixture, and publishing supersedes the live bundle' },
+  // Local compute. `lib/local-compute-fleet.ts` keeps presence in a module
+  // `Map` on purpose — it is ephemeral and rebuilds within one heartbeat — and
+  // `providers/local-compute.ts` keeps mockNodes/mockTokenIndex/mockCodes the
+  // same way. Neither registers a fixture, so reset cannot put a claimed node,
+  // a spent pairing code or an announced session back.
+  { pattern: 'POST /api/local-compute/announce', what: 'lib/local-compute-fleet.ts holds presence in a module Map; reset cannot restore it' },
+  { pattern: 'POST /api/local-compute/heartbeat', what: 'same module Map — a heartbeat moves a node from stale back to connected with no way back' },
+  { pattern: 'POST /api/local-compute/sessions/*/end', what: 'drops a session from the module-level presence registry' },
+  { pattern: 'POST /api/local-compute/pair/start', what: 'providers/local-compute.ts mockCodes registers no fixture; a minted pairing code outlives the sweep' },
+  { pattern: 'POST /api/local-compute/pair/claim', what: 'spends a pairing code and mints a node token into mockNodes/mockTokenIndex, none of which reset restores' },
+  { pattern: 'PATCH /api/local-compute/nodes/*', what: 'renames a row in mockNodes, which registers no fixture' },
 ];
 
 const family = (list: Family[]) => ({

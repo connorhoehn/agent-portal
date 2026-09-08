@@ -133,7 +133,10 @@ function role(key: string): Role {
 const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
   'orgiq/member': {
     tenant: 'orgiq',
-    granted: ['Search', 'ViewOrgChart', 'ViewObservability', 'LabelFeedback'],
+    // ConnectLocalCompute is personal, not fleet, authority: every node a
+    // member pairs is bound to their own sub, and dispatching work TO a
+    // machine stays behind DispatchAgentRun.
+    granted: ['Search', 'ViewOrgChart', 'ViewObservability', 'LabelFeedback', 'ConnectLocalCompute'],
   },
   'orgiq/sme': {
     tenant: 'orgiq',
@@ -146,7 +149,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       'DispatchAgentRun', 'ManageSprints', 'ManageDevbox', 'EnterEnvironment',
       // Standing up template bots / loop crons for mundane work is the SME's
       // own job — the dispatch pipeline's money brakes still govern the spend.
-      'ManageBots',
+      'ManageBots', 'ConnectLocalCompute',
     ],
   },
   'orgiq/program-owner': {
@@ -165,7 +168,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
     granted: [
       'Search', 'ViewOrgChart', 'ViewLeaderboard', 'ViewObservability', 'LabelFeedback',
       'ManageCanary', 'DispatchAgentRun', 'ManageBudgets', 'ManageSprints', 'ManageBots',
-      'ApproveTransaction', 'EnterEnvironment', 'ManageEnvironments',
+      'ApproveTransaction', 'EnterEnvironment', 'ManageEnvironments', 'ConnectLocalCompute',
     ],
   },
   'orgiq/hr-admin': {
@@ -175,6 +178,7 @@ const MATRIX: Record<string, { tenant: string | null; granted: string[] }> = {
       'EditGuardrail', 'EditPolicy', 'EditSchema', 'ViewIdentityAdmin', 'ViewObservability',
       'LabelFeedback', 'ManageIngest', 'ManageCanary', 'ManageKB', 'ManageDevbox',
       'ManageBots', 'ManageUsers', 'DispatchAgentRun', 'ManageBudgets', 'ManageEnvironments',
+      'ConnectLocalCompute',
     ],
   },
   'assessment/assessor': {

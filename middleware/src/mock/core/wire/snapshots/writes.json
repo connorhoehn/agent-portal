@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-08T01:06:01.251Z",
-  "baseUrl": "http://127.0.0.1:3043",
+  "capturedAt": "2026-09-08T01:47:45.133Z",
+  "baseUrl": "http://127.0.0.1:3026",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "routes": {
     "DELETE /api/admin/kb-registry/:id": {
@@ -118,6 +118,12 @@
       }
     },
     "DELETE /api/ingest/schedules/:id": {
+      "refused": {
+        "rule": "destructive",
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+      }
+    },
+    "DELETE /api/local-compute/nodes/:id": {
       "refused": {
         "rule": "destructive",
         "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
@@ -361,6 +367,12 @@
       "refused": {
         "rule": "fires",
         "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: writes ingest-schedules.json and starts or stops a node-cron task."
+      }
+    },
+    "PATCH /api/local-compute/nodes/:id": {
+      "refused": {
+        "rule": "unresettable",
+        "reason": "Flips a seeded row that lives in module-level provider state registering no fixture, so `POST /api/__mock/reset` cannot put it back. Appending a row to such a provider is fine and several specs do it; changing one the seed shipped is not. `defineFixture` is the fix, not an exemption. Here: renames a row in mockNodes, which registers no fixture."
       }
     },
     "PATCH /api/observability/calibration/cases/:id": {
@@ -1647,6 +1659,36 @@
       "sent": [
         "version"
       ]
+    },
+    "POST /api/local-compute/announce": {
+      "refused": {
+        "rule": "unresettable",
+        "reason": "Flips a seeded row that lives in module-level provider state registering no fixture, so `POST /api/__mock/reset` cannot put it back. Appending a row to such a provider is fine and several specs do it; changing one the seed shipped is not. `defineFixture` is the fix, not an exemption. Here: lib/local-compute-fleet.ts holds presence in a module Map; reset cannot restore it."
+      }
+    },
+    "POST /api/local-compute/heartbeat": {
+      "refused": {
+        "rule": "unresettable",
+        "reason": "Flips a seeded row that lives in module-level provider state registering no fixture, so `POST /api/__mock/reset` cannot put it back. Appending a row to such a provider is fine and several specs do it; changing one the seed shipped is not. `defineFixture` is the fix, not an exemption. Here: same module Map — a heartbeat moves a node from stale back to connected with no way back."
+      }
+    },
+    "POST /api/local-compute/pair/claim": {
+      "refused": {
+        "rule": "unresettable",
+        "reason": "Flips a seeded row that lives in module-level provider state registering no fixture, so `POST /api/__mock/reset` cannot put it back. Appending a row to such a provider is fine and several specs do it; changing one the seed shipped is not. `defineFixture` is the fix, not an exemption. Here: spends a pairing code and mints a node token into mockNodes/mockTokenIndex, none of which reset restores."
+      }
+    },
+    "POST /api/local-compute/pair/start": {
+      "refused": {
+        "rule": "unresettable",
+        "reason": "Flips a seeded row that lives in module-level provider state registering no fixture, so `POST /api/__mock/reset` cannot put it back. Appending a row to such a provider is fine and several specs do it; changing one the seed shipped is not. `defineFixture` is the fix, not an exemption. Here: providers/local-compute.ts mockCodes registers no fixture; a minted pairing code outlives the sweep."
+      }
+    },
+    "POST /api/local-compute/sessions/:sessionId/end": {
+      "refused": {
+        "rule": "unresettable",
+        "reason": "Flips a seeded row that lives in module-level provider state registering no fixture, so `POST /api/__mock/reset` cannot put it back. Appending a row to such a provider is fine and several specs do it; changing one the seed shipped is not. `defineFixture` is the fix, not an exemption. Here: drops a session from the module-level presence registry."
+      }
     },
     "POST /api/observability/approvals/:id/decision": {
       "skipped": "no value found for :id under /api/observability/approvals (orgiq/admin)"

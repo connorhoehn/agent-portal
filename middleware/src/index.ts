@@ -56,6 +56,7 @@ import { workItemsRouter } from './routes/work-items.js';
 import { kbAdminRouter } from './routes/kb-admin.js';
 import { gatewayProxyRouter } from './routes/gateway-proxy.js';
 import { devboxRouter } from './routes/devbox.js';
+import { localComputeRouter } from './routes/local-compute.js';
 import { dropRouter } from './routes/drop.js';
 import { agentDetailRouter } from './routes/agent-detail.js';
 import { connectionsRouter } from './routes/connections.js';
@@ -328,6 +329,12 @@ app.use(
   readForRolesElseAction(['org-leader', 'hr-admin', 'program-owner'], 'ManageDevbox'),
   devboxRouter,
 );
+// Local compute — developers' own machines announcing presence (and later,
+// claiming work). Mounted UNGATED: the machine routes authenticate with a
+// node token (no session — a blanket session mount would 401 every laptop's
+// presence writes, the same trap as approvals/harness), and the browser
+// routes carry their own requireSession/ConnectLocalCompute gates per-route.
+app.use('/api/local-compute', localComputeRouter);
 // Work — the agentic loop: queue → devbox workers → review, scheduled sweeps
 // that produce findings, and agent-proposed graph writes gated on approval.
 // Reads are open so the overview renders for any role; mutations are gated

@@ -39,7 +39,10 @@ permit (
     //
     // The grant is reachability only. Getting in still means assuming the
     // environment's access_role_arn, and IAM decides what that role may do.
-    OrgIQ::Action::"EnterEnvironment"
+    OrgIQ::Action::"EnterEnvironment",
+    // Pair their own machine as a local presence node (see member.cedar for
+    // why this is personal, not fleet, authority).
+    OrgIQ::Action::"ConnectLocalCompute"
   ],
   resource
 )

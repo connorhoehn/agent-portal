@@ -364,6 +364,16 @@
             "Application"
           ]
         }
+      },
+      "ConnectLocalCompute": {
+        "appliesTo": {
+          "principalTypes": [
+            "User"
+          ],
+          "resourceTypes": [
+            "Application"
+          ]
+        }
       }
     }
   }

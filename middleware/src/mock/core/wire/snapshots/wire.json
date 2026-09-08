@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-08T01:06:00.235Z",
-  "baseUrl": "http://127.0.0.1:3043",
+  "capturedAt": "2026-09-08T01:47:44.628Z",
+  "baseUrl": "http://127.0.0.1:3026",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -906,13 +906,11 @@
           "ms_forms_export"
         ],
         "envelopes[].status": [
-          "committed",
           "processed",
           "staged",
           "superseded"
         ],
         "groups[].status": [
-          "committed",
           "processed",
           "staged"
         ]
@@ -3409,6 +3407,47 @@
     "GET /api/library/evals/runs/:runId": {
       "skipped": "no value found for :runId under /api/library/evals/runs (orgiq/admin); no value found for :runId under /api/library/evals/runs (assessment/admin); no value found for :runId under /api/library/evals/runs (anonymous)"
     },
+    "GET /api/local-compute/nodes": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "nodes": "array"
+      },
+      "values": {}
+    },
+    "GET /api/local-compute/nodes/all": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "nodes": "array",
+        "nodes[]": "object",
+        "nodes[].acceptJobs": "boolean",
+        "nodes[].createdAt": "string",
+        "nodes[].id": "string",
+        "nodes[].label": "string",
+        "nodes[].lastSeenAt": "null",
+        "nodes[].localModels": "array",
+        "nodes[].localModels[]": "string",
+        "nodes[].ownerId": "string",
+        "nodes[].platform": "string",
+        "nodes[].presence": "object",
+        "nodes[].presence.lastSeenAt": "string",
+        "nodes[].presence.nodeId": "string",
+        "nodes[].presence.sessionCount": "number",
+        "nodes[].presence.status": "string",
+        "nodes[].revokedAt": "null"
+      },
+      "values": {
+        "nodes[].presence.status": [
+          "connected"
+        ]
+      }
+    },
+    "GET /api/local-compute/stream": {
+      "skipped": "timed out after 6s — never sent response headers (orgiq/admin); timed out after 6s — never sent response headers (assessment/admin); server-sent event stream (anonymous)"
+    },
     "GET /api/observability/approvals": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -4888,6 +4927,7 @@
         "actions": [
           "ApproveException",
           "ApproveTransaction",
+          "ConnectLocalCompute",
           "DispatchAgentRun",
           "EditGuardrail",
           "EditPolicy",
@@ -5348,6 +5388,7 @@
       "values": [
         "ApproveException",
         "ApproveTransaction",
+        "ConnectLocalCompute",
         "DispatchAgentRun",
         "EditGuardrail",
         "EditPolicy",
@@ -5634,8 +5675,8 @@
         "candidate",
         "changes_requested",
         "claim_open",
-        "committed",
         "completed",
+        "connected",
         "current",
         "degraded",
         "delivered",
