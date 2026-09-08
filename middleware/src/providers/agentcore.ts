@@ -38,6 +38,8 @@ import { HttpRequest } from '@smithy/protocol-http';
 import { defaultProvider } from '@aws-sdk/credential-provider-node';
 import { Sha256 } from '@aws-crypto/sha256-js';
 
+import { randomUUID } from 'node:crypto';
+
 import { config } from '../config.js';
 import type {
   AgentCoreProvider,
@@ -55,6 +57,100 @@ import { attempt, reached, unreachable, type Upstream } from '../lib/upstream.js
 import { mockAgents } from '../mock/agent-statuses.js';
 import { browserSessions, codeSessions } from '../mock/capabilities.js';
 import { selectMockResponse } from '../mock/responses.js';
+
+// ─── Non-streaming agents → AG-UI events ────────────────────────────
+//
+// Only the supervisor speaks AG-UI over SSE. The other seven Strands agents
+// (search, scoring, advisor, ingestion, graph-builder, assessment-scorer,
+// assessment-drafter) answer with a SINGLE JSON envelope —
+// `{agent, response, invocationId, toolCalls[]}`, or `{agent, error}` — which
+// AgentCore returns as `contentType: application/json`, not
+// `text/event-stream`.
+//
+// That framing difference silently ate every direct invoke of those seven. The
+// reader in invokeAgentStreaming only forwards lines starting with `data: `, so
+// a bare JSON body matched nothing and the generator ended having yielded zero
+// events; the route in `routes/agents.ts` then wrapped its own
+// RUN_STARTED/RUN_FINISHED around nothing and the caller got an empty,
+// successful-looking answer. Verified against the deployed fleet: orgiq_search
+// answered correctly, naming a real person with a real expertise score, and the
+// middleware discarded it. Nothing logged, HTTP 200 — an empty that lies.
+//
+// So framing is normalized HERE, in the transport, and the envelope is
+// projected onto the AG-UI events the route and portal already implement.
+// Every downstream consumer stays unchanged.
+function* envelopeToAguiEvents(raw: string): Generator<unknown> {
+  const trimmed = raw.trim();
+  if (!trimmed) return;
+
+  let env: Record<string, unknown>;
+  try {
+    env = JSON.parse(trimmed) as Record<string, unknown>;
+  } catch {
+    // Neither SSE nor JSON. Report the body rather than nothing — a truncated
+    // response or an HTML error page is exactly what the silent path hid.
+    yield { type: 'RUN_ERROR', message: `Agent returned an unparseable response: ${trimmed.slice(0, 300)}` };
+    return;
+  }
+
+  // The agents' own failure shape. The route re-throws on RUN_ERROR, so this
+  // reaches the caller as an error instead of a blank answer.
+  const err = env['error'];
+  if (typeof err === 'string' && err) {
+    yield { type: 'RUN_ERROR', message: err };
+    return;
+  }
+
+  // Tool calls first, so citation chips are in place before the text lands —
+  // the order the streaming agent produces and the portal expects.
+  const toolCalls = Array.isArray(env['toolCalls']) ? env['toolCalls'] : [];
+  for (const entry of toolCalls) {
+    const tc = (entry ?? {}) as Record<string, unknown>;
+    const id = typeof tc['id'] === 'string' && tc['id'] ? tc['id'] : randomUUID();
+    const name = typeof tc['name'] === 'string' && tc['name'] ? tc['name'] : 'unknown';
+    yield { type: 'TOOL_CALL_START', toolCallId: id, toolCallName: name };
+    const args = tc['args'];
+    if (args !== undefined && args !== null) {
+      yield {
+        type: 'TOOL_CALL_ARGS',
+        toolCallId: id,
+        delta: typeof args === 'string' ? args : JSON.stringify(args),
+      };
+    }
+    yield { type: 'TOOL_CALL_END', toolCallId: id };
+    if (tc['result'] !== undefined) {
+      yield { type: 'TOOL_CALL_RESULT', toolCallId: id, content: tc['result'] };
+    }
+  }
+
+  // `response` is the field all seven set; the others are accepted so an agent
+  // spelling it differently degrades to "renders anyway" rather than "blank".
+  let text = '';
+  for (const key of ['response', 'message', 'text', 'output'] as const) {
+    const v = env[key];
+    if (typeof v === 'string' && v) { text = v; break; }
+  }
+
+  if (text) {
+    const messageId = randomUUID();
+    yield { type: 'TEXT_MESSAGE_START', messageId, role: 'assistant' };
+    yield { type: 'TEXT_MESSAGE_CONTENT', messageId, delta: text };
+    yield { type: 'TEXT_MESSAGE_END', messageId };
+    return;
+  }
+
+  // Parsed cleanly, no error, and still no answer. That is a contract break by
+  // the agent, not an empty answer — say so, rather than return the blank this
+  // function exists to prevent. A tool-call-only turn is legitimate, so it is
+  // not treated as an anomaly.
+  if (toolCalls.length === 0) {
+    yield {
+      type: 'RUN_ERROR',
+      message: `Agent returned no answer field (keys: ${Object.keys(env).join(', ') || 'none'})`,
+    };
+  }
+}
+
 
 // ─── Clients (lazy, shared) ───────────────────────────────────────────────────
 
@@ -670,9 +766,19 @@ export const realAgentCore: AgentCoreProvider = {
     const stream = resp.response;
     if (!stream) return;
 
+    // The raw body is kept alongside the line buffer because a non-SSE agent
+    // (see envelopeToAguiEvents) sends one JSON object with no `data: ` prefix
+    // and no trailing newline — the line walk below discards every byte of it.
+    // `sawSse` records whether the response ACTUALLY was an event stream, which
+    // is the only reliable signal: `accept` is a request header, and asking for
+    // text/event-stream does not make an agent produce one.
     let buffer = '';
+    let raw = '';
+    let sawSse = false;
     for await (const chunk of stream as AsyncIterable<Uint8Array>) {
-      buffer += new TextDecoder().decode(chunk);
+      const text = new TextDecoder().decode(chunk);
+      raw += text;
+      buffer += text;
       const lines = buffer.split('\n');
       buffer = lines.pop() ?? '';
       for (const line of lines) {
@@ -680,7 +786,9 @@ export const realAgentCore: AgentCoreProvider = {
         const jsonStr = line.slice(6).trim();
         if (!jsonStr) continue;
         try {
-          yield JSON.parse(jsonStr);
+          const ev = JSON.parse(jsonStr);
+          sawSse = true;
+          yield ev;
         } catch {
           // Malformed SSE line — skip.
         }
@@ -690,8 +798,18 @@ export const realAgentCore: AgentCoreProvider = {
     if (buffer.startsWith('data: ')) {
       const jsonStr = buffer.slice(6).trim();
       if (jsonStr) {
-        try { yield JSON.parse(jsonStr); } catch { /* skip */ }
+        try {
+          const ev = JSON.parse(jsonStr);
+          sawSse = true;
+          yield ev;
+        } catch { /* skip */ }
       }
+    }
+
+    // Not an event stream after all: project the single JSON envelope onto the
+    // same AG-UI events an SSE agent would have emitted.
+    if (!sawSse) {
+      yield* envelopeToAguiEvents(raw);
     }
   },
 

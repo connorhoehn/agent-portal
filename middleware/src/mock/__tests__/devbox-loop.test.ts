@@ -29,6 +29,7 @@ import {
   stageWork, workspaceFor,
 } from '../devbox-workspace.js';
 import { staticReview } from '../static-review.js';
+import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 
 const SESSION = 'orgiq-devbox-test-session-000000000000000';
 
@@ -203,19 +204,32 @@ describe('reviewDiff in real mode', () => {
   it('still degrades a thrown Bedrock call to request_changes', async () => {
     // The mock branch was added ABOVE the try/catch, so with the flag off the
     // outage path is exactly what it was: ask a human, never approve.
+    //
+    // The outage is SIMULATED, and has to be. This test used to turn the mock
+    // flag off and simply call the real reviewer, which meant it asserted the
+    // failure path while depending on the ambient environment to produce the
+    // failure — it passed only on a machine with no working AWS credentials.
+    // Run it after `aws-azure-login` and the Converse call succeeds, returning
+    // a real review, and the assertion on "could not be completed" fails. A
+    // test for the outage path must create the outage.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { config } = require('../../config.js') as { config: { mock: { agentcore: boolean } } };
+    const send = jest
+      .spyOn(BedrockRuntimeClient.prototype, 'send')
+      .mockRejectedValue(new Error('simulated Bedrock outage'));
     config.mock.agentcore = false;
     try {
       const out = await reviewDiff({
         title: 't', truncated: false,
         diff: selectWorkProduct('Make trace sampling deterministic')!.diff,
       });
+      expect(send).toHaveBeenCalled();
       expect(out.verdict).toBe('request_changes');
       expect(out.summary).toMatch(/could not be completed/);
       expect(out.model).not.toBe('offline/static-diff-review');
     } finally {
       config.mock.agentcore = true;
+      send.mockRestore();
     }
   }, 30_000);
 });
