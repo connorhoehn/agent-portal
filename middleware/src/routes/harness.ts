@@ -22,8 +22,8 @@
 //
 // All Aurora I/O uses the RDS Data API via providers/aurora.ts exec().
 
-import { Router, type Request, type Response, type NextFunction } from 'express';
-import { randomUUID, timingSafeEqual } from 'node:crypto';
+import { Router } from 'express';
+import { randomUUID } from 'node:crypto';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
 import { exec } from '../providers/aurora.js';
@@ -31,6 +31,7 @@ import { processTrace, type TraceInput } from '../lib/trace-sink.js';
 import { judgeResponse } from '../lib/judge.js';
 import { executeRun, loadCasesForRun } from '../lib/harness-runner.js';
 import { requireAction, requireTenant } from '../lib/authz.js';
+import { HARNESS_TRACE_SERVICE_AUTH, requireServiceAuth } from '../lib/service-auth.js';
 import { config } from '../config.js';
 import {
   mockListCases, mockGetCase, mockUpsertCase, mockPatchCase, mockDeleteCase,
@@ -57,15 +58,12 @@ harnessRouter.use((req, res, next) => {
 // and cost and would poison telemetry. Same shape as approvals' service auth:
 // open when HARNESS_TRACE_SECRET is unset (dev), a constant-time header check
 // when it is set. The stdout+CloudWatch path is unaffected by any of this.
-function requireTraceAuth(req: Request, res: Response, next: NextFunction): void {
-  const secret = process.env['HARNESS_TRACE_SECRET'];
-  if (!secret) { next(); return; }
-  const got = typeof req.headers['x-harness-auth'] === 'string' ? req.headers['x-harness-auth'] as string : '';
-  const a = Buffer.from(got);
-  const b = Buffer.from(secret);
-  if (a.length === b.length && timingSafeEqual(a, b)) { next(); return; }
-  res.status(401).json({ error: 'service authentication required' });
-}
+//
+// This used to be a private copy of the compare that lib/service-auth.ts
+// already owns. Same behaviour, one implementation — see that module's "ONE
+// COMPARE, ONE PLACE". Still applied PER ROUTE, never at the mount: a blanket
+// guard over this router 401s the fleet's trace emission.
+const requireTraceAuth = requireServiceAuth(HARNESS_TRACE_SERVICE_AUTH);
 
 // ── Shared types ───────────────────────────────────────────────────────────
 

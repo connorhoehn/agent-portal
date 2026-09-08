@@ -47,6 +47,21 @@ import {
 } from '../providers/upload-links.js';
 import { listLandingZoneFiles, uploadToLandingZone } from '../providers/landing-zones.js';
 
+/**
+ * Marks a response whose query failed — the wrapper from routes/cost.ts, kept
+ * local so each router owns its own copy.
+ *
+ * Every read below answers 200 with an empty payload rather than failing the
+ * page, which is the right call. What it cost was the difference between
+ * "nothing happened in this window" and "the query blew up": both rendered as
+ * an empty panel. The marker restores it without touching the healthy shape —
+ * a quiet window answers exactly as it did before, and only a caught failure
+ * carries `degraded` + the first line of the error.
+ */
+function degraded<T extends object>(body: T, err: unknown): T & { degraded: true; error: string } {
+  return { ...body, degraded: true, error: (err as Error).message.split('\n')[0]?.slice(0, 160) ?? 'query failed' };
+}
+
 export const kbAdminRouter = Router();
 
 // Lazy singleton Bedrock Agent client
@@ -636,7 +651,11 @@ kbAdminRouter.get('/:id/jobs', asyncHandler(async (req, res) => {
     res.json({ jobs });
   } catch (err) {
     console.warn(`[kb-admin] GET /:id/jobs failed:`, (err as Error).message);
-    res.json({ jobs: [] });
+    // An unmarked empty list here says "this knowledge base has never
+    // synced", which is the opposite diagnosis from "Bedrock refused the
+    // listing" — and the operator is on this page precisely to tell them
+    // apart.
+    res.json(degraded({ jobs: [] }, err));
   }
 }));
 
@@ -673,6 +692,8 @@ kbAdminRouter.get('/:id/docs', asyncHandler(async (req, res) => {
     res.json({ documents, total: documents.length });
   } catch (err) {
     console.warn(`[kb-admin] GET /:id/docs failed:`, (err as Error).message);
-    res.json({ documents: [], total: 0 });
+    // Same, with a number attached: `total: 0` over a failed query is an
+    // empty knowledge base, which is the symptom being investigated.
+    res.json(degraded({ documents: [], total: 0 }, err));
   }
 }));

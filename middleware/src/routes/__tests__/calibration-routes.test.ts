@@ -32,6 +32,15 @@ jest.mock('../../lib/authz.js', () => ({
   },
 }));
 jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn() }));
+// The router now has an offline branch gated on `config.mock.aurora`, so it
+// imports config.ts — which reaches `import.meta` and is unloadable under the
+// CJS test build (the same trap drift-routes.test.ts documents). Mocked with
+// `aurora: false` on purpose: every case in this file is about the LIVE SQL
+// path, and the offline branch is pinned separately in
+// observability-mock-branch.test.ts.
+jest.mock('../../config.js', () => ({
+  config: { region: 'us-east-1', mock: { aurora: false } },
+}));
 jest.mock('../../lib/judge.js', () => ({
   judgeResponse: jest.fn(),
   NOVA_PRO_MODEL_ID: 'amazon.nova-pro-v1:0',
@@ -109,11 +118,20 @@ describe('GET /cases', () => {
     expect(sqlOf(2)).toMatch(/WHERE active = true/);
   });
 
-  it('degrades to an empty list before the migration has been applied', async () => {
+  it('says the migration is missing rather than reporting an empty case set', async () => {
+    // An unseeded calibration set and an unapplied migration both leave the
+    // page with nothing to show; only one of them is something to go fix.
+    execMock.mockResolvedValue([]);
+    const unseeded = await request(buildApp()).get('/api/observability/calibration/cases');
+    expect(unseeded.body).toEqual({ cases: [] });
+
     execMock.mockRejectedValue(new Error('relation "observability.calibration_set" does not exist'));
     const res = await request(buildApp()).get('/api/observability/calibration/cases');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ cases: [] });
+    expect(res.body).toEqual({
+      cases: [], degraded: true,
+      error: 'relation "observability.calibration_set" does not exist',
+    });
   });
 });
 
@@ -359,9 +377,13 @@ describe('GET /runs', () => {
     expect(sqlOf(0)).toMatch(/ORDER BY started_at DESC/);
     expect(valOf(0, 'lim')!['longValue']).toBeGreaterThan(0);
 
+    execMock.mockResolvedValue([]);
+    const neverRun = await request(buildApp()).get('/api/observability/calibration/runs');
+    expect(neverRun.body).toEqual({ runs: [] });
+
     execMock.mockRejectedValue(new Error('boom'));
     const degraded = await request(buildApp()).get('/api/observability/calibration/runs');
-    expect(degraded.body).toEqual({ runs: [] });
+    expect(degraded.body).toEqual({ runs: [], degraded: true, error: 'boom' });
   });
 });
 

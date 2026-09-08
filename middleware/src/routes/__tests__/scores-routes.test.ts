@@ -239,13 +239,22 @@ describe('GET /api/scores/:personId/history', () => {
     expect(historyMock.mock.calls.map((c) => c[1])).toEqual([30, 1, 90, 30]);
   });
 
-  it('degrades to an EMPTY history rather than erroring when the table is missing', async () => {
+  it('degrades to an EMPTY history rather than erroring — and SAYS it did', async () => {
     // The samples table is created by a later migration than the route; a
-    // throw here used to 500 the whole person drawer.
+    // throw here used to 500 the whole person drawer. Still 200 — but an
+    // unmarked `samples: []` is a claim about the PERSON ("no score history"),
+    // not about us, and a newly-scored person answers exactly that.
+    historyMock.mockResolvedValue({ personId: 'p-004', samples: [], deltaVs7d: null });
+    const newcomer = await request(buildApp()).get('/api/scores/p-004/history');
+    expect(newcomer.body).toEqual({ personId: 'p-004', samples: [], deltaVs7d: null });
+
     historyMock.mockRejectedValue(new Error('relation "score_samples" does not exist'));
     const res = await request(buildApp()).get('/api/scores/p-004/history');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ personId: 'p-004', samples: [], deltaVs7d: null });
+    expect(res.body).toEqual({
+      personId: 'p-004', samples: [], deltaVs7d: null, degraded: true,
+      error: 'relation "score_samples" does not exist',
+    });
   });
 
   it('passes the provider payload through with its delta', async () => {

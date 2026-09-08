@@ -17,7 +17,6 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { filterAndSortTeams, formatTeamStatus, statusOptions, summarizeTeamList } from '../assessmentFormat';
 import { fmtDate, teamCertificationCellLabel, type Cohort, type TeamSummary } from '../types';
-import { PersonRef } from '../../project-detail/PersonRef';
 
 interface TeamListProps {
   teams: TeamSummary[];
@@ -113,8 +112,15 @@ export function TeamList({ teams, cohortTitle, onSelectTeam }: TeamListProps) {
           { key: 'name', header: 'Name', sortable: true },
           { key: 'cohort_label', header: 'Cohort' },
           { key: 'status', header: 'Status', render: (t) => <Chip size="xs">{formatTeamStatus(t.status)}</Chip> },
+          // A lead is a name, not a link: this tenant has no org-graph person
+          // to link to (see the note on TeamSummary in ../types.ts), and
+          // PersonRef would render exactly this string anyway. The one thing
+          // it did that a bare key cannot: `assessment_lead` is '' on a team
+          // with no lead yet (TEAM-006/007), and an empty cell reads as a
+          // rendering bug rather than as "nobody" — so keep the em dash the
+          // rest of this table uses for an empty.
           { key: 'assessment_lead', header: 'Lead', render: (t) => (
-            <PersonRef personId={t.assessment_lead_person_id ?? null} name={t.assessment_lead} showAvatar={false} />
+            t.assessment_lead ? t.assessment_lead : <MetaLine items={['—']} />
           ) },
           { key: 'dimensions', header: 'Assessed', sortable: true, render: (t) => (
             <Inline gap="none">

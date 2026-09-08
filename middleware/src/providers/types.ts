@@ -4,6 +4,8 @@
 //
 // Shapes deliberately mirror the existing mock types so route swaps are minimal-diff.
 
+import type { Upstream } from '../lib/upstream.js';
+
 // ── Aurora (graph + scores) ───────────────────────────────────────────────────
 
 export type PresenceStatus =
@@ -312,7 +314,25 @@ export interface CodeExecutionResult {
 }
 
 export interface AgentCoreProvider {
+  /**
+   * The fleet, with the failure discarded.
+   *
+   * Kept because `GET /api/agents` answers a BARE ARRAY that five portal call
+   * sites read as `AgentDef[]`, so there is nowhere in that response to put a
+   * marker without a coordinated portal change. Every caller that has an
+   * object to mark should use `listRuntimesResult` instead — an empty array
+   * from here means "the fleet is empty OR we could not ask", and nothing
+   * downstream can tell which.
+   */
   listRuntimes(): Promise<AgentRuntimeSummary[]>;
+  /**
+   * The fleet, and whether this is a reading of the control plane.
+   *
+   * See lib/upstream.ts. An empty `items` with `degraded: true` is
+   * "ListAgentRuntimes failed"; an empty `items` without it is "nothing is
+   * deployed" — the distinction agent-detail's 404 used to destroy.
+   */
+  listRuntimesResult(): Promise<Upstream<AgentRuntimeSummary[]>>;
   getRuntime(agentId: string): Promise<AgentRuntimeSummary | null>;
   getRuntimeMetrics(agentId: string): Promise<AgentMetrics | null>;
   invokeAgent(agentId: string, payload: {
@@ -329,10 +349,16 @@ export interface AgentCoreProvider {
     auth?: { sub: string; role: string };
     history?: { role: string; content: string }[];
   }): AsyncIterable<unknown>;
+  /** Sessions, failure discarded — prefer `listCodeSessionsResult`. */
   listCodeSessions(): Promise<CodeSession[]>;
+  /** Sessions, and whether the data plane could be reached. */
+  listCodeSessionsResult(): Promise<Upstream<CodeSession[]>>;
   terminateCodeSession(sessionId: string): Promise<boolean>;
   executeCode(code: string, language?: 'python'): Promise<CodeExecutionResult>;
+  /** Sessions, failure discarded — prefer `listBrowserSessionsResult`. */
   listBrowserSessions(): Promise<BrowserSession[]>;
+  /** Sessions, and whether the data plane could be reached. */
+  listBrowserSessionsResult(): Promise<Upstream<BrowserSession[]>>;
   createBrowserSession(opts: { agentName: string; url?: string }): Promise<BrowserSession>;
   closeBrowserSession(sessionId: string): Promise<boolean>;
   navigateBrowser(sessionId: string, url: string): Promise<BrowserSession | null>;

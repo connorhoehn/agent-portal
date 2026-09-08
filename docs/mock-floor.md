@@ -368,9 +368,31 @@ Capture takes about four minutes. It prints every route it could **not** reach
 and why — that list is part of the output, not a failure, and it belongs in the
 snapshot so the gaps are visible rather than assumed away. The write sweep
 prints the same for every write it **refused**, naming the rule that refused it
-(`spends`, `destructive`, `fires`, `session`, `unresettable`, `control-plane`).
-A refusal is a decision on the record; an `unclassified` route is the one thing
-that means somebody has not looked yet.
+(`spends`, `not-intercepted`, `destructive`, `fires`, `session`, `unresettable`,
+`control-plane`). A refusal is a decision on the record; an `unclassified` route
+is the one thing that means somebody has not looked yet.
+
+**`not-intercepted`, and why the policy asks the server.** Some routes spend
+only because a real provider is behind them — and `MOCK_AGENTCORE` /
+`MOCK_GUARDRAILS` genuinely intercept several of those, so they are safe to
+replay *in the configuration the sweep is actually running against*. The route
+property, true everywhere, is "this spends unless the process serving it
+intercepts the provider it spends through". Whether **this** process does is a
+fact about the server, and `WIRE_BASE_URL` can point anywhere, so neither the
+policy file nor the laptop's own environment is entitled to answer it. The
+sweep therefore asks: `GET /api/health` already reports
+`mocks: { aurora, agentcore, guardrails, cloudwatch }`, and a spec declaring
+`intercepts: ['agentcore']` is admitted only when the server says of itself
+that it runs those providers. No report means nothing is known to be
+intercepted, and the write is refused — silence stays a refusal. An unreadable
+`/api/health` fails the capture outright rather than degrading into a hundred
+look-alike refusals.
+
+A distinct rule id alone would not have done: naming an assumption is not
+checking it, and the whole point of the `spends` comment is that a policy
+leaning on the laptop is one `WIRE_BASE_URL` away from being wrong. `writes.json`
+records the `intercepted` set the server reported, so a snapshot says which
+world produced it.
 
 Run the sweep on demand without regenerating anything:
 
@@ -493,7 +515,8 @@ POST or DELETE against a live server during a validation run, because the
 writes are real and they mutate the world the next check reads. The scan walks
 the call graph from each write route's handler through `src/routes`, `src/lib`
 and `src/providers`, and reports the routes that reach a function calling the
-RDS Data API or an AWS SDK client with no offline branch above it.
+RDS Data API, an AWS SDK client, or an outbound `fetch`, with no offline branch
+above it.
 
 It walked all three directories from the start but only ever *reported* a leaf
 in `src/providers/**`, and that under-reporting is documented below as one of
@@ -518,6 +541,39 @@ Two things came with the widening, both recorded in `mock-branches.ts`:
   through its own auth check, which names the guard rather than a gap. Four
   spellings of "this has an offline path" is drift waiting to happen;
   consolidating them is a separate slice.
+
+**It was widened a second time, in 2026-09, to count an outbound `fetch`.**
+Counting only `.send()` and `exec()` meant "reaches a backend `dev:mock` cannot
+answer" really meant "reaches AWS" — anything spoken over plain HTTP was
+structurally invisible, and this document said so: `lib/github-connector.ts`
+reaches github.com with `fetch` and nothing reported it. **The budget went from
+78 pairs to 79** and that rise is, again, the scan seeing more. The new pair is
+`POST /api/ingest/survey` → `lib/site-survey.ts disallowedPrefixes()`, which
+GETs the surveyed origin's `robots.txt` and does nothing else, so no earlier
+rule could name it. From this baseline the ratchet only goes down.
+
+The widening also turns `github-connector.ts` from a blind spot into a **proven
+negative**, which is the more interesting half of the result. Every function in
+it that a *write* route reaches has a real offline path: `identify`, `listOrgs`,
+`listRepos` and `readRepoSignal` each branch on `config.mock.agentcore`, and
+`openPullRequest` — which genuinely fetches unguarded — is only ever reached
+through `lib/change-delivery.ts`, which branches above the call and hands back a
+fixture PR. The scan is now silent there because there is nothing to say, not
+because it cannot look, and `src/lib/__tests__/mock-branches-fetch-scan.test.ts`
+fails if that stops being true.
+
+Two rules keep the `fetch` half from crying wolf, both mirroring the precedent
+the AWS half already set:
+
+- **Self-origin is not outbound.** A `fetch` at a loopback host, or at a
+  string/template literal starting with `/`, is answered by the same mock
+  middleware the caller runs inside. A template whose *first* element is an
+  interpolation (`` `${origin}/robots.txt` ``) is deliberately **not**
+  self-origin — that origin is the site being surveyed.
+- **`gh()` in `github-connector.ts` is excluded by name as transport**, exactly
+  as `exec` is, and — exactly as with `exec` — a *call to* it counts as reaching
+  the network for whoever makes the call. The exclusion is module-qualified,
+  because `gh` is a two-letter name another file could plausibly reuse.
 
 Both scans live in `middleware/src/mock/core/wire/mock-branches.ts` and are
 runnable on their own:
@@ -591,10 +647,26 @@ Say it out loud so nobody over-trusts it.
     here used to warn about: `POST /api/agent-projects/:id/runs` answered
     **503 "the devbox runtime is not deployed"** offline because
     `lib/devbox-arn.ts` lists real AgentCore runtimes, and neither it nor
-    `lib/project-runner.ts` is a provider, so neither was scanned. What remains
-    invisible is a route broken offline for a reason that is not an AWS call at
-    all: a missing env var, a file read, a `fetch`. `lib/github-connector.ts`
-    reaches github.com with `fetch` and is not reported by anything.
+    `lib/project-runner.ts` is a provider, so neither was scanned. The second
+    widening closed the `fetch` half of that: an outbound `fetch` now counts,
+    so `lib/github-connector.ts` and `lib/site-survey.ts` are in scope. What
+    remains invisible is a route broken offline for a reason that is neither an
+    AWS call nor an HTTP call: a missing env var, a file read, a spawned
+    process, a socket. Three narrower `fetch` gaps also survive, all of them
+    consequences of where the scan looks rather than of what it counts:
+    - **GET routes are not in the write half at all**, so an unguarded outbound
+      `fetch` on a read route is still nobody's finding. `GET /api/environments/:id/runs`
+      → `listWorkflowRuns` → `gh` → api.github.com has no
+      mock branch of its own, and the route swallows the failure into
+      `{ runs: [], note }`, so the GET capture records a cheerful `200` too.
+    - **A `fetch` in a route handler itself is not reported**, because findings
+      may only name a leaf in `src/lib/**` or `src/providers/**`. Nothing in
+      `src/routes/**` fetches today; the day one does, the scan stays quiet.
+    - **Self-origin is decided lexically.** A `fetch` at a variable that happens
+      to hold our own base URL is counted as outbound (over-report); a `fetch`
+      at a literal `/`-prefixed path that a proxy rewrites to somewhere else is
+      not (under-report). Both are the same trade the rest of the scan makes:
+      it resolves names, not values.
   - **A client passed in as a parameter is not analysed, so a route can be on
     the list and work.** `lib/devbox-runner.ts`'s `executeDevboxTask` takes its
     `BedrockAgentCoreClient` from its caller, and offline that caller hands it
@@ -616,8 +688,9 @@ Say it out loud so nobody over-trusts it.
     two AWS calls reads as fully guarded, and a guard spelled some third way
     reads as absent.
   - **`providers/aurora.ts` and functions named `exec`/`safeExec`/`execWrite`/
-    `execOne` are excluded by name** as transport. A provider that genuinely
-    named a surface function `exec` would be skipped.
+    `execOne` are excluded by name** as transport, as are `runDevboxShell` and
+    — module-qualified — `gh` in `lib/github-connector.ts`. A provider that
+    genuinely named a surface function `exec` would be skipped.
 - **Rule 5 is static.** It proves a fixture module is *loaded* at boot, not that
   its rows ever reach a route: a provider can import a fixture and then ignore
   it. It also reads the key from the two lines after `defineFixture`, so a

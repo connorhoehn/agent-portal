@@ -110,11 +110,24 @@ describe('GET /summary', () => {
     expect([0, 1, 2].map((i) => longOf(i, 'hours'))).toEqual([1, 24 * 7, 1]);
   });
 
-  it('degrades to an empty ARRAY — the same type the portal maps over', async () => {
+  it('answers a bare EMPTY ARRAY for a quiet window and an OBJECT for a failure', async () => {
+    // The asymmetry is deliberate and it is the whole fix. A quiet window is
+    // still the bare array the portal maps over, byte for byte. A failure
+    // cannot be marked inside an array, so it answers the object form — which
+    // every consumer already tolerates, because all three guard with
+    // `Array.isArray(x) ? x : []` and render the same empty rollup.
+    execMock.mockResolvedValue([]);
+    const quiet = await request(buildApp()).get('/api/observability/drift/summary');
+    expect(quiet.status).toBe(200);
+    expect(quiet.body).toEqual([]);
+
     execMock.mockRejectedValue(new Error('type "vector" does not exist'));
     const res = await request(buildApp()).get('/api/observability/drift/summary');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual([]);
+    expect(Array.isArray(res.body)).toBe(false);
+    expect(res.body).toEqual({
+      agents: [], degraded: true, error: 'type "vector" does not exist',
+    });
   });
 });
 
@@ -170,10 +183,15 @@ describe('GET /outliers', () => {
     expect([0, 1, 2].map((i) => longOf(i, 'lim'))).toEqual([50, 500, 50]);
   });
 
-  it('degrades to an empty outlier list', async () => {
+  it('marks a failed outlier read, and leaves a genuinely quiet tail unmarked', async () => {
+    execMock.mockResolvedValue([]);
+    const quiet = await request(buildApp()).get('/api/observability/drift/outliers');
+    expect(quiet.body).toEqual({ outliers: [] });
+
     execMock.mockRejectedValue(new Error('boom'));
     const res = await request(buildApp()).get('/api/observability/drift/outliers');
-    expect(res.body).toEqual({ outliers: [] });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ outliers: [], degraded: true, error: 'boom' });
   });
 });
 
@@ -202,11 +220,18 @@ describe('GET /timeseries', () => {
     expect([0, 1, 2].map((i) => longOf(i, 'bucket'))).toEqual([60, 360, 60]);
   });
 
-  it('degrades to empty points while echoing bucket + window', async () => {
+  it('marks a failed series while still echoing bucket + window', async () => {
+    execMock.mockResolvedValue([]);
+    const quiet = await request(buildApp())
+      .get('/api/observability/drift/timeseries?windowHours=6&bucketMin=30');
+    expect(quiet.body).toEqual({ points: [], bucketMin: 30, windowHours: 6 });
+
     execMock.mockRejectedValue(new Error('boom'));
     const res = await request(buildApp())
       .get('/api/observability/drift/timeseries?windowHours=6&bucketMin=30');
-    expect(res.body).toEqual({ points: [], bucketMin: 30, windowHours: 6 });
+    expect(res.body).toEqual({
+      points: [], bucketMin: 30, windowHours: 6, degraded: true, error: 'boom',
+    });
   });
 });
 
@@ -235,10 +260,14 @@ describe('GET /templates', () => {
     expect(sqlOf(0)).toMatch(/HAVING COUNT\(\*\) >= :mincnt/);
   });
 
-  it('degrades to an empty breakdown', async () => {
+  it('marks a failed breakdown; an unbusy window stays a plain empty one', async () => {
+    execMock.mockResolvedValue([]);
+    const quiet = await request(buildApp()).get('/api/observability/drift/templates');
+    expect(quiet.body).toEqual({ templates: [] });
+
     execMock.mockRejectedValue(new Error('boom'));
     const res = await request(buildApp()).get('/api/observability/drift/templates');
-    expect(res.body).toEqual({ templates: [] });
+    expect(res.body).toEqual({ templates: [], degraded: true, error: 'boom' });
   });
 });
 
@@ -273,10 +302,19 @@ describe('GET /neighbors/:invocationId', () => {
     expect([0, 1, 2, 3].map((i) => longOf(i, 'lim'))).toEqual([3, 20, 3, 3]);
   });
 
-  it('degrades to an empty neighbour list', async () => {
+  it('marks a failed neighbour lookup — "no neighbours" is a real answer too', async () => {
+    // An outlier with no near neighbours is genuinely interesting; a malformed
+    // id that never reached the index is not the same finding.
+    execMock.mockResolvedValue([]);
+    const quiet = await request(buildApp())
+      .get('/api/observability/drift/neighbors/11111111-2222-3333-4444-555555555555');
+    expect(quiet.body).toEqual({ neighbors: [] });
+
     execMock.mockRejectedValue(new Error('invalid input syntax for type uuid'));
     const res = await request(buildApp()).get('/api/observability/drift/neighbors/not-a-uuid');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ neighbors: [] });
+    expect(res.body).toEqual({
+      neighbors: [], degraded: true, error: 'invalid input syntax for type uuid',
+    });
   });
 });

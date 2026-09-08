@@ -5,6 +5,7 @@ import {
   ConverseCommand,
 } from '@aws-sdk/client-bedrock-runtime';
 import { asyncHandler } from '../lib/async-handler.js';
+import { degradedFields } from '../lib/upstream.js';
 import { guardrails, agentcore, cloudwatch } from '../providers/index.js';
 import { config } from '../config.js';
 import {
@@ -83,9 +84,26 @@ capabilitiesRouter.delete('/guardrail/topics/:name', requireAction('EditGuardrai
 
 // ── Code Interpreter Sessions ─────────────────────────────────────────────────
 
+/**
+ * Running Code Interpreter sandboxes.
+ *
+ * `{ sessions: [] }` used to mean two incompatible things — no sandbox is
+ * running, or `ListCodeInterpreterSessions` failed — and the provider had
+ * already thrown that distinction away before the handler saw it. It answers
+ * an envelope now (lib/upstream.ts), so a healthy empty list is byte-identical
+ * to what this route always sent and only a failure changes shape:
+ *
+ *   { sessions: [] }                            nothing is running
+ *   { sessions: [], degraded: true, error }     we could not ask
+ *
+ * Still a 200 either way. A dead CODE_INTERPRETER_ID is an ordinary state of
+ * this account (CLAUDE.md: capability ids are minted fresh on every rebuild
+ * and .env.aws is not regenerated), and failing the Capabilities page over one
+ * panel would be a worse answer than showing the panel with its reason.
+ */
 capabilitiesRouter.get('/code-sessions', asyncHandler(async (_req, res) => {
-  const sessions = await agentcore.listCodeSessions();
-  res.json({ sessions });
+  const result = await agentcore.listCodeSessionsResult();
+  res.json({ sessions: result.items, ...degradedFields(result) });
 }));
 
 capabilitiesRouter.delete('/code-sessions/:sessionId', asyncHandler(async (req, res) => {
@@ -121,9 +139,13 @@ capabilitiesRouter.post('/code-interpreter/execute', asyncHandler(async (req, re
 
 // ── Browser Sessions ──────────────────────────────────────────────────────────
 
+/** Open browser sessions. Same two answers as `/code-sessions` above, for the
+ *  same reason — and this is the panel where it matters most, because a stale
+ *  BROWSER_ID fails SOFT: site-survey's browser fallback cannot tell a dead
+ *  browser from a site with no JavaScript-only pages. */
 capabilitiesRouter.get('/browser-sessions', asyncHandler(async (_req, res) => {
-  const sessions = await agentcore.listBrowserSessions();
-  res.json({ sessions });
+  const result = await agentcore.listBrowserSessionsResult();
+  res.json({ sessions: result.items, ...degradedFields(result) });
 }));
 
 capabilitiesRouter.post('/browser-sessions', asyncHandler(async (req, res) => {

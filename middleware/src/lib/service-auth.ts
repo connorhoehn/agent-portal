@@ -30,6 +30,18 @@
 //     a human-readable surface into an anonymous one. That is the whole reason
 //     the approval long-poll could not simply reuse requireServiceAuth.
 //
+// ONE COMPARE, ONE PLACE. `routes/harness.ts` (`requireTraceAuth`) and
+// `routes/assessment.ts` (`requireRunCompleteAuth`) each carried their own
+// byte-identical copy of the compare below until 2026-09. All three were
+// correct, which is precisely the argument for folding them: a timing-safe
+// comparison written three times is one primitive with three chances to drift,
+// and only one of the three was covered by
+// `lib/__tests__/service-auth-guard.test.ts`. The specs above are now the
+// canonical list — a new machine callback adds a `ServiceAuthSpec` here, never
+// another compare. All five callbacks now go through this module; there is no
+// second implementation of the comparison left in the tree, and a test pins
+// that no route file reintroduces `timingSafeEqual`.
+//
 // Secrets are read live from process.env on every request (an env lookup is
 // free next to the work the route does) and trimmed — an operator pasting from
 // `aws secretsmanager get-secret-value --output text` picks up a trailing
@@ -55,6 +67,21 @@ export const APPROVALS_SERVICE_AUTH: ServiceAuthSpec = {
 export const HARNESS_TRACE_SERVICE_AUTH: ServiceAuthSpec = {
   envVar: 'HARNESS_TRACE_SECRET',
   header: 'x-harness-auth',
+};
+
+export const ASSESSMENT_RUN_COMPLETE_SERVICE_AUTH: ServiceAuthSpec = {
+  envVar: 'ASSESSMENT_RUN_COMPLETE_SECRET',
+  header: 'x-assessment-run-auth',
+};
+
+export const LAB_CALLBACK_SERVICE_AUTH: ServiceAuthSpec = {
+  envVar: 'LAB_CALLBACK_SECRET',
+  header: 'x-lab-auth',
+};
+
+export const MOCK_CONTROL_SERVICE_AUTH: ServiceAuthSpec = {
+  envVar: 'MOCK_CONTROL_SECRET',
+  header: 'x-mock-control-auth',
 };
 
 /** The configured secret, or '' when unset/blank. */
@@ -90,11 +117,15 @@ export function hasServiceAuth(req: Request, spec: ServiceAuthSpec): boolean {
  * Write-only machine endpoint: open when unconfigured, constant-time compare
  * when configured. 401 on mismatch.
  */
-export function requireServiceAuth(spec: ServiceAuthSpec): RequestHandler {
+export function requireServiceAuth(
+  spec: ServiceAuthSpec,
+  /** Override the 401 body where a caller already had its own wording. */
+  message = 'service authentication required',
+): RequestHandler {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!serviceAuthConfigured(spec)) { next(); return; } // open when unconfigured
     if (hasServiceAuth(req, spec)) { next(); return; }
-    res.status(401).json({ error: 'service authentication required' });
+    res.status(401).json({ error: message });
   };
 }
 

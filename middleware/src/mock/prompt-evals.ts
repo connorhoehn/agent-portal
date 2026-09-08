@@ -139,12 +139,21 @@ function seedCases(): EvalCase[] {
  *           `gateVerdict(null)` refuse a deploy for want of a suite, which is
  *           the state every asset above `sandbox` was permanently in before
  *           this module existed.
+ * `error` — the eval corpus cannot be read. Declared for the same reason
+ *           `empty` is: `/api/library/evals/:assetId/cases` and `/runs` are
+ *           mounted under the library, and without this the drawer's
+ *           failed-load state was the one state on that surface no
+ *           `POST /api/__mock/scenario` could reach — `{"scenario":"error"}`
+ *           left both routes byte-identical to `default`.
  */
 export const promptEvalCases = defineFixture<EvalCase>({
   key: 'prompt-eval-cases',
   scenarios: {
     default: seedCases,
     empty: () => [],
+    error: (): never => {
+      throw new Error('eval corpus unavailable: observability.prompt_version_meta read failed');
+    },
   },
 });
 

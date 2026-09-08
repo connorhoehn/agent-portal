@@ -5,7 +5,7 @@ import { RequireRole, RequireTenant } from './lib/auth';
 import { RouteErrorBoundary } from './components/shell/RouteErrorBoundary';
 import { useSession } from './lib/auth';
 import { ASSESSMENT_ENABLED } from './lib/features';
-import { hasChosenContext } from './lib/contextChoice';
+import { resolveHome } from './lib/tenantHome';
 import { GatewaySocketProvider } from '@connorhoehnslalom/realtime-modules/client/ws';
 import { ComputeHost } from './components/compute/ComputeHost';
 
@@ -152,25 +152,24 @@ function KbDetailRedirect() {
   return <Navigate to={`/admin/knowledge/registry/${id ?? ''}`} replace />;
 }
 
-function RootRedirect() {
+/**
+ * Send this identity home — the one resolution in lib/tenantHome.ts, used
+ * both for `/` and for every guard that refuses entry to a route tree.
+ *
+ * A guard's fallback must never point back inside the tree it guards. That is
+ * exactly how /iq/projects became a blank page for an assessor: the guard
+ * denied, the fallback re-entered, the guard denied again, and the URL never
+ * moved. So if the home we resolved is the page we are already standing on,
+ * this identity has no home to send them to — render not-found and say so,
+ * rather than bouncing forever behind an empty content column.
+ */
+function HomeRedirect() {
   const { session, isLoading } = useSession();
+  const { pathname } = useLocation();
   if (isLoading) return null;
-  // Count the workspaces (tenant, role) actually usable to this identity.
-  // A multi-context identity that hasn't picked yet this session lands on
-  // the chooser first (AWS-style); a single-context or already-chosen
-  // identity goes straight in. Masqueraders skip the chooser — the operator
-  // deliberately chose who to view as.
-  const usable = Object.entries(session?.grants ?? {})
-    .filter(([t]) => ASSESSMENT_ENABLED || t !== 'assessment')
-    .reduce((n, [, roles]) => n + (roles?.length ?? 0), 0);
-  if (usable > 1 && !session?.masquerading && !hasChosenContext(session?.sub ?? '')) {
-    return <Navigate to="/select" replace />;
-  }
-  const toAssessment = session?.tenant === 'assessment' && ASSESSMENT_ENABLED;
-  // Land on Plan's front door (the program wall), not the Automate loop — a
-  // member's first screen should be the work of the org, not an ops queue
-  // that is legitimately all-zeros on a quiet morning.
-  return <Navigate to={toAssessment ? '/assessment/teams' : '/iq/projects'} replace />;
+  const home = resolveHome(session);
+  if (home === pathname) return <Page element={<NotFoundPage />} />;
+  return <Navigate to={home} replace />;
 }
 
 export function App() {
@@ -213,7 +212,7 @@ export function App() {
       <Route path="select" element={<Page element={<SelectContextPage />} />} />
 
       <Route element={<Layout />}>
-        <Route index element={<RootRedirect />} />
+        <Route index element={<HomeRedirect />} />
         <Route path="settings" element={<Page element={<SettingsPage />} />} />
 
         {/* ── /assessment/* — the second tenant, ported from
@@ -224,7 +223,7 @@ export function App() {
           <Route
             path="assessment"
             element={(
-              <RequireTenant tenant="assessment" fallback={<Navigate to="/iq/projects" replace />}>
+              <RequireTenant tenant="assessment" fallback={<HomeRedirect />}>
                 <Page element={<AssessmentLayout />} />
               </RequireTenant>
             )}
@@ -253,7 +252,7 @@ export function App() {
         <Route
           path="iq"
           element={(
-            <RequireTenant tenant="orgiq" fallback={<Navigate to="/iq/projects" replace />}>
+            <RequireTenant tenant="orgiq" fallback={<HomeRedirect />}>
               <Page element={<IqLayout />} />
             </RequireTenant>
           )}
@@ -262,14 +261,14 @@ export function App() {
           {/* Architecture is a platform surface — nav shows it to platform
               roles only, so the route matches (it was URL-open to anyone). */}
           <Route path="agents" element={
-            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<HomeRedirect />}>
               <Page element={<AgentFlowPage />} />
             </RequireRole>
           } />
           {/* One agent in depth. Architecture answers "what is the fleet";
               this answers "what is this one doing". */}
           <Route path="agents/:agentId" element={
-            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<HomeRedirect />}>
               <Page element={<AgentDetailPage />} />
             </RequireRole>
           } />
@@ -292,12 +291,12 @@ export function App() {
               (same execute endpoint) and had no inbound link anywhere. */}
           <Route path="code-interpreter" element={<Navigate to="/admin/capabilities/code-interpreter" replace />} />
           <Route path="canary" element={
-            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<HomeRedirect />}>
               <Page element={<CanaryPage />} />
             </RequireRole>
           } />
           <Route path="prompt-ops" element={
-            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<HomeRedirect />}>
               <Page element={<PromptOpsHomePage />} />
             </RequireRole>
           } />
@@ -343,22 +342,22 @@ export function App() {
               straight into /iq/prompts and the Library linked there. Same
               guard the Architecture routes carry. */}
           <Route path="prompts" element={
-            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<HomeRedirect />}>
               <Page element={<PromptStudioPage />} />
             </RequireRole>
           } />
           <Route path="history" element={
-            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<HomeRedirect />}>
               <Page element={<PromptHistoryPage />} />
             </RequireRole>
           } />
           <Route path="diff" element={
-            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<HomeRedirect />}>
               <Page element={<DiffPage />} />
             </RequireRole>
           } />
           <Route path="evaluations" element={
-            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<HomeRedirect />}>
               <Page element={<EvaluationsPage />} />
             </RequireRole>
           } />
@@ -370,7 +369,7 @@ export function App() {
         <Route
           path="admin"
           element={(
-            <RequireTenant tenant="orgiq" fallback={<Navigate to="/iq/projects" replace />}>
+            <RequireTenant tenant="orgiq" fallback={<HomeRedirect />}>
               <Page element={<AdminLayout />} />
             </RequireTenant>
           )}
@@ -386,7 +385,7 @@ export function App() {
               org-leader/hr-admin visibility. Without this the route rendered for
               any role and then showed a raw 403 from the hr-admin-only API. */}
           <Route path="knowledge" element={
-            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<HomeRedirect />}>
               <Page element={<KnowledgeLayout />} />
             </RequireRole>
           }>
@@ -408,7 +407,7 @@ export function App() {
               so the route is guarded to match, keeping the page out of a role that
               would only hit 403s. */}
           <Route path="projects" element={
-            <RequireRole roles={['hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
+            <RequireRole roles={['hr-admin']} fallback={<HomeRedirect />}>
               <Page element={<AgentProjectsPage />} />
             </RequireRole>
           } />
@@ -417,7 +416,7 @@ export function App() {
               (org-leader + hr-admin, like observability); writes are gated
               per-affordance on ManageBudgets inside the page. */}
           <Route path="budgets" element={
-            <RequireRole roles={['org-leader', 'hr-admin', 'program-owner']} fallback={<Navigate to="/iq/projects" replace />}>
+            <RequireRole roles={['org-leader', 'hr-admin', 'program-owner']} fallback={<HomeRedirect />}>
               <Page element={<BudgetsPage />} />
             </RequireRole>
           } />
@@ -426,25 +425,25 @@ export function App() {
               setting up template bots / loop crons for mundane work is their
               job, and the API gates the writes. */}
           <Route path="bots" element={
-            <RequireRole roles={['hr-admin', 'sme', 'program-owner', 'org-leader']} fallback={<Navigate to="/iq/projects" replace />}>
+            <RequireRole roles={['hr-admin', 'sme', 'program-owner', 'org-leader']} fallback={<HomeRedirect />}>
               <Page element={<BotsPage />} />
             </RequireRole>
           } />
           <Route path="bots/:id" element={
-            <RequireRole roles={['hr-admin', 'sme', 'program-owner', 'org-leader']} fallback={<Navigate to="/iq/projects" replace />}>
+            <RequireRole roles={['hr-admin', 'sme', 'program-owner', 'org-leader']} fallback={<HomeRedirect />}>
               <Page element={<BotDetailPage />} />
             </RequireRole>
           } />
           {/* The governance queue for code agents wrote — review, approve, deliver. */}
           <Route path="changes" element={
-            <RequireRole roles={['hr-admin', 'program-owner']} fallback={<Navigate to="/iq/projects" replace />}>
+            <RequireRole roles={['hr-admin', 'program-owner']} fallback={<HomeRedirect />}>
               <Page element={<ChangesPage />} />
             </RequireRole>
           } />
           {/* One change, reviewed properly: the diff with findings pinned to
               lines, authorship, gates, and the decision. */}
           <Route path="changes/:id" element={
-            <RequireRole roles={['hr-admin', 'program-owner']} fallback={<Navigate to="/iq/projects" replace />}>
+            <RequireRole roles={['hr-admin', 'program-owner']} fallback={<HomeRedirect />}>
               <Page element={<ChangeReviewPage />} />
             </RequireRole>
           } />
@@ -455,13 +454,13 @@ export function App() {
               their initiatives (middleware lib/devbox-visibility.ts), so this
               opens a door rather than handing over a key. */}
           <Route path="devbox" element={
-            <RequireRole roles={['hr-admin', 'sme']} fallback={<Navigate to="/iq/projects" replace />}>
+            <RequireRole roles={['hr-admin', 'sme']} fallback={<HomeRedirect />}>
               <Page element={<DevboxPage />} />
             </RequireRole>
           } />
 
           <Route path="ingest" element={
-            <RequireRole roles={['hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
+            <RequireRole roles={['hr-admin']} fallback={<HomeRedirect />}>
               <Page element={<IngestLayout />} />
             </RequireRole>
           }>
@@ -477,7 +476,7 @@ export function App() {
           </Route>
 
           <Route path="observability" element={
-            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<HomeRedirect />}>
               <Page element={<ObservabilityLayout />} />
             </RequireRole>
           }>
@@ -512,7 +511,7 @@ export function App() {
               app depends on it; the pages below are the diagnostics behind
               that, reached from the cards rather than from a rail. */}
           <Route path="capabilities" element={
-            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<HomeRedirect />}>
               <Outlet />
             </RequireRole>
           }>
@@ -532,7 +531,7 @@ export function App() {
           </Route>
 
           <Route path="identity" element={
-            <RequireRole roles={['hr-admin']} fallback={<Navigate to="/iq/projects" replace />}>
+            <RequireRole roles={['hr-admin']} fallback={<HomeRedirect />}>
               <Page element={<IdentityLayout />} />
             </RequireRole>
           }>

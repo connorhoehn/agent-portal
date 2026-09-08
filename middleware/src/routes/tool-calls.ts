@@ -19,6 +19,27 @@ import { Router } from 'express';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { asyncHandler } from '../lib/async-handler.js';
 import { exec } from '../providers/aurora.js';
+import { config } from '../config.js';
+import {
+  mockToolErrors,
+  mockToolLatency,
+  mockToolTimeseries,
+} from '../mock/observability-queries.js';
+
+/**
+ * Marks a response whose query failed — the wrapper from routes/cost.ts, kept
+ * local so each router owns its own copy.
+ *
+ * Every read below answers 200 with an empty payload rather than failing the
+ * page, which is the right call. What it cost was the difference between
+ * "nothing happened in this window" and "the query blew up": both rendered as
+ * an empty panel. The marker restores it without touching the healthy shape —
+ * a quiet window answers exactly as it did before, and only a caught failure
+ * carries `degraded` + the first line of the error.
+ */
+function degraded<T extends object>(body: T, err: unknown): T & { degraded: true; error: string } {
+  return { ...body, degraded: true, error: (err as Error).message.split('\n')[0]?.slice(0, 160) ?? 'query failed' };
+}
 
 export const toolCallsRouter = Router();
 
@@ -91,7 +112,9 @@ toolCallsRouter.get('/latency', asyncHandler(async (req, res) => {
      ORDER BY cnt DESC, tc.tool_name ASC`;
 
   try {
-    const rows = await exec(sql, params);
+    const rows = config.mock.aurora
+      ? mockToolLatency(windowHours, agentId)
+      : await exec(sql, params);
     const byTool: ToolLatencyRow[] = rows.map((r) => ({
       toolName: String(r['tool_name'] ?? ''),
       count: Number(r['cnt'] ?? 0),
@@ -104,7 +127,7 @@ toolCallsRouter.get('/latency', asyncHandler(async (req, res) => {
     res.json({ byTool });
   } catch (err) {
     console.warn('[tool-calls] /latency failed:', (err as Error).message);
-    res.json({ byTool: [] });
+    res.json(degraded({ byTool: [] as ToolLatencyRow[] }, err));
   }
 }));
 
@@ -150,7 +173,9 @@ toolCallsRouter.get('/timeseries', asyncHandler(async (req, res) => {
   ];
 
   try {
-    const rows = await exec(sql, params);
+    const rows = config.mock.aurora
+      ? mockToolTimeseries(windowHours, bucketMin)
+      : await exec(sql, params);
     const points: ToolTimeseriesPoint[] = rows.map((r) => ({
       bucketStart: String(r['bucket_start'] ?? ''),
       toolName: String(r['tool_name'] ?? ''),
@@ -162,7 +187,7 @@ toolCallsRouter.get('/timeseries', asyncHandler(async (req, res) => {
     res.json({ points, bucketMin, windowHours });
   } catch (err) {
     console.warn('[tool-calls] /timeseries failed:', (err as Error).message);
-    res.json({ points: [], bucketMin, windowHours });
+    res.json(degraded({ points: [] as ToolTimeseriesPoint[], bucketMin, windowHours }, err));
   }
 }));
 
@@ -200,9 +225,9 @@ toolCallsRouter.get('/errors', asyncHandler(async (req, res) => {
      LIMIT :lim`;
 
   try {
-    const rows = await exec(sql, [
-      { name: 'lim', value: { longValue: limit } },
-    ]);
+    const rows = config.mock.aurora
+      ? mockToolErrors(limit)
+      : await exec(sql, [{ name: 'lim', value: { longValue: limit } }]);
     const errors: ToolErrorRow[] = rows.map((r) => ({
       toolCallId: String(r['tool_call_id'] ?? ''),
       invocationId: String(r['invocation_id'] ?? ''),
@@ -214,6 +239,8 @@ toolCallsRouter.get('/errors', asyncHandler(async (req, res) => {
     res.json({ errors });
   } catch (err) {
     console.warn('[tool-calls] /errors failed:', (err as Error).message);
-    res.json({ errors: [] });
+    // The most misleading empty in the tree: "no tool errors" is exactly
+    // what someone opens this route to confirm.
+    res.json(degraded({ errors: [] as ToolErrorRow[] }, err));
   }
 }));

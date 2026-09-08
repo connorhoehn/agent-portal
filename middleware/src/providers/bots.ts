@@ -30,6 +30,10 @@ import { mockProjectName } from './projects.js';
 import { clock, DAY_MS, HOUR_MS } from '../mock/core/index.js';
 import type { RunPercentiles } from '../lib/bot-estimate.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
+// One vocabulary for "this answer is not a reading of the world", shared with
+// providers/agentcore.ts and with the `degraded` marker routes/cost.ts put on
+// the wire. See lib/upstream.ts for why an envelope and not a throw.
+import { reached, unreachable, type Upstream } from '../lib/upstream.js';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
 function nul(name: string): SqlParameter { return { name, value: { isNull: true } }; }
@@ -173,17 +177,49 @@ const BOT_SELECT = `
        WHERE r.bot_id = b.id AND r.started_at >= date_trunc('day', NOW())
     ) t ON TRUE`;
 
-/** Reads degrade to empty until the bots schema is applied — a cluster that
- * predates agent_bots_schema.sql should render an empty roster, not a 500.
- * Writes stay loud: creating a bot against a missing table is a real error. */
-async function safeExec(sql: string, params: SqlParameter[] = []): Promise<Record<string, unknown>[]> {
+/**
+ * A read that survives a cluster which predates `agent_bots_schema.sql`.
+ *
+ * WHAT IT IS AND IS NOT. Read the filter before judging it: this swallows ONE
+ * class of error — the relation not existing — and rethrows everything else.
+ * A timeout, a permission failure, a syntax error and a dead cluster all still
+ * propagate. That narrowness is why the helper is worth keeping; the name
+ * `safeExec` oversells it, and the contract below is the real one.
+ *
+ * WHAT WAS STILL WRONG. Even the one swallowed class produced two answers
+ * spelled the same way. `[]` from here meant "no bots are configured" and
+ * "this cluster has no bots table", and the roster rendered both as an empty
+ * page with an invitation to create a bot — on a cluster where creating one
+ * will fail. So the honest primitive is `safeExecResult`, which says which
+ * happened; `safeExec` is the lossy view, kept for the callers that have
+ * nowhere to put the marker.
+ *
+ * WHERE IT MUST NOT BE USED. Anywhere the rows become a NUMBER a decision is
+ * made against. `countRunningRuns` used this and turned a missing table into
+ * "0 runs in flight", which is the value the global concurrency ceiling is
+ * judged against — a brake reading its own blindness as headroom. It uses
+ * `exec` now and fails loudly; see that function.
+ */
+async function safeExecResult(
+  sql: string,
+  params: SqlParameter[] = [],
+): Promise<Upstream<Record<string, unknown>[]>> {
   try {
-    return await exec(sql, params);
+    return reached(await exec(sql, params));
   } catch (err) {
     const msg = (err as Error).message ?? '';
-    if (/does not exist|relation/i.test(msg)) return [];
+    if (/does not exist|relation/i.test(msg)) {
+      return unreachable([] as Record<string, unknown>[], err, 'bots schema not applied');
+    }
     throw err;
   }
+}
+
+/** The lossy view of `safeExecResult` — an empty result that cannot say
+ *  whether the table was empty or absent. Only for reads whose caller has no
+ *  response field to carry the marker. */
+async function safeExec(sql: string, params: SqlParameter[] = []): Promise<Record<string, unknown>[]> {
+  return (await safeExecResult(sql, params)).items;
 }
 
 // ─── Dispatch attribution (bot_runs.dispatched_by) ────────────────────────────
@@ -408,10 +444,26 @@ function countMockRunningRuns(): number {
   ).length;
 }
 
+/**
+ * The roster, and whether it is a reading of the bots table.
+ *
+ * An empty roster is a real and ordinary state — a fresh tenant has no bots —
+ * and it is rendered with an invitation to create one. On a cluster that has
+ * not had `agent_bots_schema.sql` applied the read ALSO produced an empty
+ * roster, so the page invited the operator to create a bot into a table that
+ * does not exist. Two answers, one shape; this is the one that says which.
+ */
+export async function listBotsResult(): Promise<Upstream<Bot[]>> {
+  if (config.mock.aurora) return reached(MOCK_BOTS);
+  const rows = await safeExecResult(`${BOT_SELECT} ORDER BY b.created_at DESC LIMIT 200`);
+  const bots = rows.items.map(rowToBot);
+  return rows.degraded ? unreachable(bots, rows.error) : reached(bots);
+}
+
+/** The lossy view. Kept for lib/bot-scheduler.ts (which registers cron bots at
+ *  boot and has no response to mark) and for the parity harness. */
 export async function listBots(): Promise<Bot[]> {
-  if (config.mock.aurora) return MOCK_BOTS;
-  const rows = await safeExec(`${BOT_SELECT} ORDER BY b.created_at DESC LIMIT 200`);
-  return rows.map(rowToBot);
+  return (await listBotsResult()).items;
 }
 
 export async function getBot(id: string): Promise<Bot | null> {
@@ -606,6 +658,25 @@ export async function listBotRuns(botId: string, limit = 50): Promise<BotRun[]> 
     [s('bid', botId), int('lim', Math.min(Math.max(limit, 1), 200))],
   );
   return rows.map(rowToRun);
+}
+
+/**
+ * The same run history, saying whether it could be read.
+ *
+ * "This bot has never fired" is the single most common thing an operator comes
+ * to the detail page to check, and a missing `bot_runs` table answered it with
+ * a confident yes. Same envelope as `listBotsResult`; `listBotRuns` above
+ * stays as the lossy view for the derivations that only want rows.
+ */
+export async function listBotRunsResult(botId: string, limit = 50): Promise<Upstream<BotRun[]>> {
+  if (config.mock.aurora || !isUuid(botId)) return reached(await listBotRuns(botId, limit));
+  const rows = await safeExecResult(
+    `SELECT * FROM bot_runs WHERE bot_id = :bid::uuid
+      ORDER BY started_at DESC LIMIT :lim`,
+    [s('bid', botId), int('lim', Math.min(Math.max(limit, 1), 200))],
+  );
+  const runs = rows.items.map(rowToRun);
+  return rows.degraded ? unreachable(runs, rows.error) : reached(runs);
 }
 
 /**
@@ -854,7 +925,19 @@ export async function countRunningRuns(): Promise<number> {
   // slot forever. The boot sweep and reconcile arms fail such rows properly;
   // this window just caps the damage until they do.
   if (config.mock.aurora) return countMockRunningRuns();
-  const rows = await safeExec(
+  // `exec`, NOT `safeExec` — the one caller that must not swallow.
+  //
+  // This number is the global concurrency ceiling's whole input
+  // (lib/bot-runner.ts `checkConcurrency` → `decideConcurrency`). Through
+  // safeExec a missing `bot_runs` table returned no rows, `toNum(undefined)`
+  // made that 0, and the ceiling read its own blindness as full headroom and
+  // admitted every dispatch — a brake that disengages precisely when the
+  // schema is in a state nobody has verified. There is no degraded answer to
+  // return here: a count is a scalar and `unknown` is not a number, so the
+  // read fails loudly and the dispatch fails with it, which is the same rule
+  // this module already applies to writes. Cheap to be wrong about: if
+  // bot_runs is missing, `createBotRun` cannot record the run either.
+  const rows = await exec(
     `SELECT COUNT(*)::int AS n FROM bot_runs
       WHERE status = 'running' AND started_at > NOW() - INTERVAL '24 hours'`,
   );

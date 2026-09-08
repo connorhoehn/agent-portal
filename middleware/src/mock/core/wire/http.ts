@@ -105,7 +105,7 @@ export interface Fetched {
 export async function send(
   url: string,
   persona: Persona,
-  init: { method?: string; body?: unknown; timeoutMs?: number } = {},
+  init: { method?: string; body?: unknown; timeoutMs?: number; headers?: Readonly<Record<string, string>> } = {},
 ): Promise<Fetched> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), init.timeoutMs ?? 6_000);
@@ -115,6 +115,10 @@ export async function send(
       headers: {
         ...(persona.cookie ? { cookie: persona.cookie } : {}),
         ...(init.body !== undefined ? { 'content-type': 'application/json' } : {}),
+        // Last, so a spec's own header wins: the machine-callback routes in
+        // this app authenticate with a bearer token INSTEAD of a session, and
+        // a persona cookie must never be able to shadow it.
+        ...(init.headers ?? {}),
       },
       ...(init.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
       signal: controller.signal,
@@ -161,6 +165,16 @@ export function get(url: string, persona: Persona): Promise<Fetched> {
  * (`tasks[].task_id` for `:taskId`). A path of `.` means "GET the filled prefix
  * itself" and `^` means "GET its parent", which is how a nested collection is
  * read once its parent id is known.
+ *
+ * A `#field` containing a dot or a `[]` is a KEY PATH into the response —
+ * `#deniedTopics[].name` — resolved exactly, top down, instead of by the
+ * fuzzy search `firstIdIn` does. That distinction is load-bearing rather than
+ * cosmetic: `firstIdIn` tries the param name and then `id`/`key`/`slug`/`name`
+ * on every object it walks, so on `GET /api/capabilities/guardrail` it returns
+ * the GUARDRAIL's own `name` (`orgiq-guardrail`) and `PATCH
+ * /guardrail/topics/:name` 404s against a topic that does not exist. The same
+ * shadowing hides `presence.sessions[].sessionId` behind the node's `id`.
+ * Where a fuzzy match is ambiguous, name the path and the ambiguity is gone.
  */
 export const PARAM_SOURCES: Record<string, string> = {
   'personId@/api/graph/people': '/api/scores/leaderboard#personId',
@@ -183,7 +197,17 @@ export const PARAM_SOURCES: Record<string, string> = {
   'id@/api/work/findings': '/api/work/findings?sweep=stale_docs#id',
   'id@/api/work/jobs': '/api/work/jobs?status=awaiting_review#id',
   'id@/api/work/proposals': '/api/work/proposals#id',
+  // The status filter is the point: promote and dismiss both refuse a terminal
+  // candidate, so an unfiltered read that happened to list the seeded
+  // `promoted` one first would capture a 409 instead of the write. The server
+  // does the filtering — `GET /api/promotions?status=` — so this is still a
+  // real id off a real response, not a hand-picked one.
+  'id@/api/promotions': '/api/promotions?status=candidate#id',
   'id@/api/graph/work-items': '/api/graph/work#id',
+  // Key paths, not fuzzy searches — see the note above on why each of these
+  // two resolves to the wrong string without one.
+  'name@/api/capabilities/guardrail/topics': '/api/capabilities/guardrail#deniedTopics[].name',
+  'sessionId@/api/local-compute/sessions': '/api/local-compute/nodes#nodes[].presence.sessions[].sessionId',
   'id@/api/distillation/review': '/api/distillation/review?verdict=pending#id',
   'id@/api/observability/calibration/cases': '/api/observability/calibration/cases#calibrationId',
   'id@/api/observability/harness/cases': '/api/observability/harness/cases#testId',
@@ -234,6 +258,42 @@ export function firstIdIn(body: Json, param: string): string | null {
   return search(body, 0);
 }
 
+/** Does this `#field` name a key path rather than a bare field name? */
+export function isKeyPath(field: string): boolean {
+  return field.includes('.') || field.includes('[]');
+}
+
+/**
+ * The first non-empty string at an exact key path — `deniedTopics[].name`,
+ * `nodes[].presence.sessions[].sessionId`. `[]` descends into an array and
+ * takes the first element that yields a value, so a path still resolves when
+ * the first row happens to carry an empty collection (the offline node whose
+ * sessions are hidden is exactly that case).
+ *
+ * Unlike `firstIdIn` this NEVER falls back to another field: a caller that
+ * spelled a path asked for that path, and a silent fallback to `id` is how a
+ * `:name` gets filled with a guardrail's name instead of a topic's.
+ */
+export function firstAtPath(body: Json, path: string): string | null {
+  const segments = path.split('.');
+  const walk = (v: Json, i: number): string | null => {
+    if (i === segments.length) return typeof v === 'string' && v.length > 0 ? v : null;
+    if (v === null || typeof v !== 'object' || Array.isArray(v)) return null;
+    const seg = segments[i]!;
+    const intoArray = seg.endsWith('[]');
+    const next = (v as { [k: string]: Json })[intoArray ? seg.slice(0, -2) : seg];
+    if (next === undefined) return null;
+    if (!intoArray) return walk(next, i + 1);
+    if (!Array.isArray(next)) return null;
+    for (const item of next) {
+      const hit = walk(item, i + 1);
+      if (hit !== null) return hit;
+    }
+    return null;
+  };
+  return walk(body, 0);
+}
+
 /** `/api/ingest/crawl` -> `/api/ingest/crawls`: the collection beside the item. */
 export function pluralCandidate(prefix: string): string | null {
   const m = /^(.*\/)([A-Za-z-]+)$/.exec(prefix);
@@ -281,7 +341,9 @@ export async function resolvePath(
           : rawPath;
         const res = await get(`${BASE}${sourcePath}`, persona).catch(() => null);
         if (res && res.status === 200 && res.body !== undefined) {
-          value = firstIdIn(res.body, field ?? param);
+          value = field !== undefined && isKeyPath(field)
+            ? firstAtPath(res.body, field)
+            : firstIdIn(res.body, field ?? param);
           if (value !== null) break;
         }
       }

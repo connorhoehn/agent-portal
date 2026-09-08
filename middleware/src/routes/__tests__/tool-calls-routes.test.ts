@@ -16,6 +16,15 @@
 //     preserved so the chart axis still knows what it asked for.
 
 jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn() }));
+// The router now has an offline branch gated on `config.mock.aurora`, so it
+// imports config.ts — which reaches `import.meta` and is unloadable under the
+// CJS test build (the same trap drift-routes.test.ts documents). Mocked with
+// `aurora: false` on purpose: every case in this file is about the LIVE SQL
+// path, and the offline branch is pinned separately in
+// observability-mock-branch.test.ts.
+jest.mock('../../config.js', () => ({
+  config: { region: 'us-east-1', mock: { aurora: false } },
+}));
 
 import express from 'express';
 import request from '../../test-support/http.js';
@@ -95,11 +104,18 @@ describe('GET /latency', () => {
     expect([0, 1, 2, 3].map((i) => longOf(i, 'hours'))).toEqual([24, 336, 24, 24]);
   });
 
-  it('degrades to an empty rollup on a DB error', async () => {
+  it('marks a DB error; a window with no tool calls stays unmarked', async () => {
+    execMock.mockResolvedValue([]);
+    const quiet = await request(buildApp()).get('/api/observability/tools/latency');
+    expect(quiet.body).toEqual({ byTool: [] });
+
     execMock.mockRejectedValue(new Error('relation "observability.tool_calls" does not exist'));
     const res = await request(buildApp()).get('/api/observability/tools/latency');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ byTool: [] });
+    expect(res.body).toEqual({
+      byTool: [], degraded: true,
+      error: 'relation "observability.tool_calls" does not exist',
+    });
   });
 });
 
@@ -139,12 +155,19 @@ describe('GET /timeseries', () => {
     expect(sqlOf(0)).toMatch(/it\.template_id NOT LIKE 'test:%'/);
   });
 
-  it('degrades to empty points while still echoing bucket + window', async () => {
+  it('marks a failed series while still echoing bucket + window', async () => {
+    execMock.mockResolvedValue([]);
+    const quiet = await request(buildApp())
+      .get('/api/observability/tools/timeseries?windowHours=6&bucketMin=30');
+    expect(quiet.body).toEqual({ points: [], bucketMin: 30, windowHours: 6 });
+
     execMock.mockRejectedValue(new Error('boom'));
     const res = await request(buildApp())
       .get('/api/observability/tools/timeseries?windowHours=6&bucketMin=30');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ points: [], bucketMin: 30, windowHours: 6 });
+    expect(res.body).toEqual({
+      points: [], bucketMin: 30, windowHours: 6, degraded: true, error: 'boom',
+    });
   });
 });
 
@@ -185,9 +208,18 @@ describe('GET /errors', () => {
     expect([0, 1, 2, 3].map((i) => longOf(i, 'lim'))).toEqual([50, 500, 50, 50]);
   });
 
-  it('degrades to an empty tail on a DB error', async () => {
+  it('NEVER answers a bare empty error list on a DB error', async () => {
+    // The most misleading empty in the tree. "No tool errors" is precisely
+    // what someone opens this route to confirm, so a failed read that answers
+    // `{errors: []}` does not merely lose information — it asserts the
+    // reassuring thing.
+    execMock.mockResolvedValue([]);
+    const clean = await request(buildApp()).get('/api/observability/tools/errors');
+    expect(clean.body).toEqual({ errors: [] });
+
     execMock.mockRejectedValue(new Error('boom'));
     const res = await request(buildApp()).get('/api/observability/tools/errors');
-    expect(res.body).toEqual({ errors: [] });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ errors: [], degraded: true, error: 'boom' });
   });
 });

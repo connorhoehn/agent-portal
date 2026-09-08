@@ -11,7 +11,30 @@
 import { Router } from 'express';
 import { asyncHandler } from '../lib/async-handler.js';
 import { exec } from '../providers/aurora.js';
+import { config } from '../config.js';
+import {
+  mockDriftNeighbors,
+  mockDriftOutliers,
+  mockDriftSummary,
+  mockDriftTemplates,
+  mockDriftTimeseries,
+} from '../mock/observability-queries.js';
 import { EMBEDDING_DIMENSIONS } from '../lib/embedding.js';
+
+/**
+ * Marks a response whose query failed — the wrapper from routes/cost.ts, kept
+ * local so each router owns its own copy.
+ *
+ * Every read below answers 200 with an empty payload rather than failing the
+ * page, which is the right call. What it cost was the difference between
+ * "nothing happened in this window" and "the query blew up": both rendered as
+ * an empty panel. The marker restores it without touching the healthy shape —
+ * a quiet window answers exactly as it did before, and only a caught failure
+ * carries `degraded` + the first line of the error.
+ */
+function degraded<T extends object>(body: T, err: unknown): T & { degraded: true; error: string } {
+  return { ...body, degraded: true, error: (err as Error).message.split('\n')[0]?.slice(0, 160) ?? 'query failed' };
+}
 
 export const driftRouter = Router();
 
@@ -74,9 +97,9 @@ driftRouter.get('/summary', asyncHandler(async (req, res) => {
      ORDER BY cnt DESC`;
 
   try {
-    const rows = await exec(sql, [
-      { name: 'hours', value: { longValue: windowHours } },
-    ]);
+    const rows = config.mock.aurora
+      ? mockDriftSummary(windowHours)
+      : await exec(sql, [{ name: 'hours', value: { longValue: windowHours } }]);
     const out: DriftSummaryRow[] = rows.map((r) => ({
       agentId: String(r['agent_id'] ?? 'unknown'),
       count: Number(r['cnt'] ?? 0),
@@ -88,8 +111,14 @@ driftRouter.get('/summary', asyncHandler(async (req, res) => {
     res.json(out);
   } catch (err) {
     console.warn('[drift] /summary failed:', (err as Error).message);
-    // Empty array — the portal renders an empty state without breaking.
-    res.json([]);
+    // The healthy answer here is a BARE ARRAY — the portal maps over it
+    // directly and drift-routes.test.ts pins that — and an array cannot
+    // carry a marker. So a FAILURE answers the object form instead. Every
+    // consumer already guards with `Array.isArray(x) ? x : []`
+    // (DriftPage, QualityPage, InvocationSearchPage), so the page still
+    // renders the same empty rollup it renders today — but a reader, and
+    // the wire capture, can finally tell it from a quiet hour.
+    res.json(degraded({ agents: [] as DriftSummaryRow[] }, err));
   }
 }));
 
@@ -149,7 +178,9 @@ driftRouter.get('/outliers', asyncHandler(async (req, res) => {
   if (agentId) params.push({ name: 'agent', value: { stringValue: agentId } });
 
   try {
-    const rows = await exec(sql, params);
+    const rows = config.mock.aurora
+      ? mockDriftOutliers(agentId, limit)
+      : await exec(sql, params);
     const out: DriftOutlierRow[] = rows.map((r) => ({
       invocationId: String(r['invocation_id'] ?? ''),
       agentId: String(r['agent_id'] ?? ''),
@@ -166,7 +197,7 @@ driftRouter.get('/outliers', asyncHandler(async (req, res) => {
     res.json({ outliers: out });
   } catch (err) {
     console.warn('[drift] /outliers failed:', (err as Error).message);
-    res.json({ outliers: [] });
+    res.json(degraded({ outliers: [] as DriftOutlierRow[] }, err));
   }
 }));
 
@@ -236,7 +267,9 @@ driftRouter.get('/timeseries', asyncHandler(async (req, res) => {
   if (agentId) params.push({ name: 'agent', value: { stringValue: agentId } });
 
   try {
-    const rows = await exec(sql, params);
+    const rows = config.mock.aurora
+      ? mockDriftTimeseries(windowHours, bucketMin, agentId)
+      : await exec(sql, params);
     const out: DriftTimePoint[] = rows.map((r) => ({
       bucketStart: String(r['bucket_start'] ?? ''),
       agentId: String(r['agent_id'] ?? ''),
@@ -247,7 +280,7 @@ driftRouter.get('/timeseries', asyncHandler(async (req, res) => {
     res.json({ points: out, bucketMin, windowHours });
   } catch (err) {
     console.warn('[drift] /timeseries failed:', (err as Error).message);
-    res.json({ points: [], bucketMin, windowHours });
+    res.json(degraded({ points: [] as DriftTimePoint[], bucketMin, windowHours }, err));
   }
 }));
 
@@ -312,7 +345,9 @@ driftRouter.get('/templates', asyncHandler(async (req, res) => {
   ];
 
   try {
-    const rows = await exec(sql, params);
+    const rows = config.mock.aurora
+      ? mockDriftTemplates(windowHours, minCount)
+      : await exec(sql, params);
     const out: DriftTemplateRow[] = rows.map((r) => ({
       agentId: String(r['agent_id'] ?? ''),
       templateId: String(r['template_id'] ?? '(none)'),
@@ -325,7 +360,7 @@ driftRouter.get('/templates', asyncHandler(async (req, res) => {
     res.json({ templates: out });
   } catch (err) {
     console.warn('[drift] /templates failed:', (err as Error).message);
-    res.json({ templates: [] });
+    res.json(degraded({ templates: [] as DriftTemplateRow[] }, err));
   }
 }));
 
@@ -367,10 +402,12 @@ driftRouter.get('/neighbors/:invocationId', asyncHandler(async (req, res) => {
      LIMIT :lim`;
 
   try {
-    const rows = await exec(sql, [
-      { name: 'id',  value: { stringValue: id } },
-      { name: 'lim', value: { longValue: limit } },
-    ]);
+    const rows = config.mock.aurora
+      ? mockDriftNeighbors(id, limit)
+      : await exec(sql, [
+          { name: 'id',  value: { stringValue: id } },
+          { name: 'lim', value: { longValue: limit } },
+        ]);
     const out: DriftNeighbor[] = rows.map((r) => ({
       invocationId: String(r['invocation_id'] ?? ''),
       ts: String(r['ts'] ?? ''),
@@ -381,7 +418,7 @@ driftRouter.get('/neighbors/:invocationId', asyncHandler(async (req, res) => {
     res.json({ neighbors: out });
   } catch (err) {
     console.warn('[drift] /neighbors failed:', (err as Error).message);
-    res.json({ neighbors: [] });
+    res.json(degraded({ neighbors: [] as DriftNeighbor[] }, err));
   }
 }));
 

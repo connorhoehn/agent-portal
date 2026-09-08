@@ -599,4 +599,193 @@ export const SURFACE_INVARIANTS: SurfaceInvariant[] = [
       return out;
     },
   },
+
+  // ── identity & tenancy ─────────────────────────────────────────────────────
+  {
+    name: 'every grant names a role its tenant actually has',
+    replaces: 'new — the half of "providers/identity.ts mirrors the seed" that no row comparison can reach',
+    lesson:
+      'A grant is a (user, tenant, role) triple and the role half is validated against nothing: `user_tenant_roles.role` is plain TEXT, the seed says only "must match a seeded Cedar role for the tenant", and the roles themselves live in `middleware/seeds/roles/{tenant}/{role}.cedar`. A grant naming a role that does not exist is a login that half-works — the switch is accepted because the grant is present, and then every Cedar decision for that role denies.',
+    async check() {
+      const { listUsers } = await import('../../../providers/identity.js');
+      const { crossTenantRoles, rolesByTenant } = await import('./cedar-roles.js');
+      // A cross-tenant role (a .cedar directly under seeds/roles/ — `admin` is
+      // the only one) is valid in every tenant; a tenant-scoped one only in its
+      // own directory's tenant.
+      const crossTenant = crossTenantRoles();
+      const byTenant = rolesByTenant();
+
+      const out: string[] = [];
+      const held = new Set<string>();
+      for (const u of await listUsers()) {
+        for (const [tenant, granted] of Object.entries(u.grants)) {
+          for (const role of granted as string[]) {
+            held.add(`${tenant}:${role}`);
+            if (crossTenant.has(role)) continue;
+            const known = byTenant.get(tenant);
+            if (!known) {
+              out.push(`${u.id}: granted '${role}' in tenant '${tenant}', but seeds/roles/ defines no roles for that tenant at all`);
+            } else if (!known.has(role)) {
+              out.push(
+                `${u.id}: granted '${role}' in '${tenant}', which has no seeds/roles/${tenant}/${role}.cedar — ` +
+                `the tenant's roles are ${[...known].sort().join(', ')}`,
+              );
+            }
+          }
+        }
+      }
+      // And the other direction: a role nobody in the seeded cast holds cannot
+      // be picked in the user picker, so no audit can ever exercise its policy.
+      for (const [tenant, known] of byTenant) {
+        for (const role of known) {
+          if (!held.has(`${tenant}:${role}`)) {
+            out.push(`seeds/roles/${tenant}/${role}.cedar defines a role no seeded user holds — nothing in dev:mock can sign in as it`);
+          }
+        }
+      }
+      return out;
+    },
+  },
+
+  // ── the assessment tenant ──────────────────────────────────────────────────
+  {
+    name: 'the assessment fixtures join the way their foreign keys do',
+    replaces: 'new — the tenant that produced `enterprise` vs `enterprise_context`, on the ids rather than the keys',
+    lesson:
+      'The assessment tenant has NO SQL seed: its fifteen fixtures are the seed, and they are separate modules-worth of rows that `schema/assessment_schema.sql` joins with real REFERENCES. Nothing was checking those joins, so a team id, dimension id or envelope id could be typed into one fixture and nowhere else — which is the same defect as `enterprise` vs `enterprise_context`, one table over.',
+    async check() {
+      const A = await import('../../assessment.js');
+      const out: string[] = [];
+
+      const teamIds = new Set(A.teamsFixture.rows('default').map((t) => t.id));
+      const dimensionIds = new Set(A.DIMENSION_IDS);
+      // A reference this check actually resolved. Counted so an empty fixture
+      // cannot make the whole rule pass by having nothing to check — the same
+      // near-vacuous guard the initiative rollup carries.
+      let resolved = 0;
+      const need = (where: string, id: string | null | undefined, set: Set<string>, what: string): void => {
+        if (id == null) return;
+        resolved += 1;
+        if (!set.has(id)) out.push(`${where}: ${what} '${id}' is in no ${what === 'team_id' ? 'team the roster carries' : 'rubric dimension'}`);
+      };
+
+      // Every team-scoped fixture points at a team on the roster.
+      for (const s of A.scoresFixture.rows('default')) need(`assessment-scores`, s.team_id, teamIds, 'team_id');
+      for (const p of A.provenanceFixture.rows('default')) need('assessment-provenance', p.team_id, teamIds, 'team_id');
+      for (const e of A.evidenceLogFixture.rows('default')) need('assessment-evidence-log', e.team_id, teamIds, 'team_id');
+      for (const e of A.submissionsFixture.rows('default')) need(`assessment-submissions ${e.envelope_id}`, e.team_id, teamIds, 'team_id');
+      for (const r of A.runsFixture.rows('default')) need(`assessment-runs ${r.id}`, r.team_id, teamIds, 'team_id');
+      for (const l of A.scoringLogsFixture.rows('default')) need(`assessment-scoring-logs ${l.stamp}`, l.team_id, teamIds, 'team_id');
+      for (const f of A.feedbackFixture.rows('default')) need(`assessment-feedback ${f.task_id}`, f.team_id, teamIds, 'team_id');
+      for (const s of A.storiesFixture.rows('default')) need(`assessment-stories ${s.filename}`, s.team_id, teamIds, 'team_id');
+
+      // Every dimension id is one of the rubric's seventeen. A dimension the
+      // rubric has never heard of renders as a blank row with a score on it.
+      const evidenceIds = new Set<string>();
+      for (const t of A.scoresFixture.rows('default')) {
+        for (const [key, d] of Object.entries(t.dimensions)) {
+          if (key !== d.dimension_id) {
+            out.push(`assessment-scores ${t.team_id}: keyed under '${key}' but the row says dimension_id '${d.dimension_id}'`);
+          }
+          need(`assessment-scores ${t.team_id}`, d.dimension_id, dimensionIds, 'dimension_id');
+          for (const e of d.evidence) {
+            evidenceIds.add(e.evidence_id);
+            if (e.dimension_id !== d.dimension_id) {
+              out.push(`assessment-scores ${t.team_id}/${d.dimension_id}: evidence ${e.evidence_id} claims dimension '${e.dimension_id}'`);
+            }
+          }
+          for (const q of d.follow_up_questions) {
+            need(`assessment-scores ${t.team_id} follow-up ${q.question_id}`, q.dimension_id, dimensionIds, 'dimension_id');
+          }
+        }
+      }
+      for (const r of A.evidenceLogFixture.rows('default')) {
+        for (const i of r.items) {
+          evidenceIds.add(i.evidence_id);
+          need(`assessment-evidence-log ${i.evidence_id}`, i.dimension_id, dimensionIds, 'dimension_id');
+        }
+      }
+      for (const t of A.teamsFixture.rows('default')) {
+        for (const e of t.exceptions) need(`assessment-teams ${t.id} exception`, e.dimension_id, dimensionIds, 'dimension_id');
+      }
+      for (const f of A.feedbackFixture.rows('default')) {
+        need(`assessment-feedback ${f.task_id}`, f.dimension_id, dimensionIds, 'dimension_id');
+      }
+      for (const s of A.storiesFixture.rows('default')) {
+        need(`assessment-stories ${s.filename}`, s.dimension_id, dimensionIds, 'dimension_id');
+      }
+      for (const l of A.scoringLogsFixture.rows('default')) {
+        for (const e of l.scores) need(`assessment-scoring-logs ${l.stamp}`, e.dimension_id, dimensionIds, 'dimension_id');
+      }
+
+      // An evidence id is what "How it was assessed" cites; a history entry
+      // citing one that exists nowhere renders a rationale with no excerpt.
+      for (const t of A.scoresFixture.rows('default')) {
+        for (const d of Object.values(t.dimensions)) {
+          for (const h of d.history) {
+            for (const id of h.evidence_ids) {
+              if (!evidenceIds.has(id)) {
+                out.push(`assessment-scores ${t.team_id}/${d.dimension_id}: history cites evidence '${id}' that no fixture carries`);
+              }
+            }
+          }
+        }
+      }
+
+      // Envelope references: `supersedes` and a scoring log's `envelope_id`
+      // are both REFERENCES assessment_submissions(envelope_id) in the DDL.
+      const envelopeIds = new Set(A.submissionsFixture.rows('default').map((e) => e.envelope_id));
+      for (const e of A.submissionsFixture.rows('default')) {
+        if (e.supersedes != null && !envelopeIds.has(e.supersedes)) {
+          out.push(`assessment-submissions ${e.envelope_id}: supersedes '${e.supersedes}', an envelope no fixture carries`);
+        }
+      }
+      for (const l of A.scoringLogsFixture.rows('default')) {
+        if (l.envelope_id != null && !envelopeIds.has(l.envelope_id)) {
+          out.push(`assessment-scoring-logs ${l.team_id}@${l.stamp}: names envelope '${l.envelope_id}', which no fixture carries`);
+        }
+      }
+      const runIds = new Set(A.runsFixture.rows('default').map((r) => r.id));
+      for (const l of A.scoringLogsFixture.rows('default')) {
+        if (l.run_id != null && !runIds.has(l.run_id)) {
+          out.push(`assessment-scoring-logs ${l.team_id}@${l.stamp}: names run '${l.run_id}', which the Activity ledger does not carry`);
+        }
+      }
+
+      // The knowledge tree: every non-directory node must resolve to a doc, and
+      // every version list must belong to a doc. This is the join the
+      // `enterprise` / `enterprise_context` bug broke at the section level.
+      const docIds = new Set(A.knowledgeDocsFixture.rows('default').map((d) => d.id));
+      const nodeIds = new Set<string>();
+      for (const s of A.knowledgeSectionsFixture.rows('default')) {
+        for (const n of s.nodes) nodeIds.add(n.id);
+      }
+      for (const s of A.knowledgeSectionsFixture.rows('default')) {
+        for (const n of s.nodes) {
+          if (n.parent_id != null && !nodeIds.has(n.parent_id)) {
+            out.push(`assessment-knowledge-sections ${s.key}: node '${n.id}' hangs off parent '${n.parent_id}', which no section carries`);
+          }
+          // A synced section mirrors a remote provider, so its leaves carry a
+          // page_id rather than a local document.
+          if (!n.is_dir && s.kind === 'local' && !docIds.has(n.id)) {
+            out.push(`assessment-knowledge-sections ${s.key}: leaf '${n.id}' opens a document no fixture carries`);
+          }
+        }
+      }
+      for (const v of A.knowledgeVersionsFixture.rows('default')) {
+        if (!docIds.has(v.doc_id)) {
+          out.push(`assessment-knowledge-versions: snapshots for doc '${v.doc_id}', which no fixture carries`);
+        }
+      }
+
+      if (teamIds.size < 7 || dimensionIds.size < 17 || docIds.size < 10 || resolved < 200) {
+        out.push(
+          `near-vacuous: ${teamIds.size} teams, ${dimensionIds.size} rubric dimensions, ${docIds.size} docs, ` +
+          `${resolved} references resolved — the seeded corpus is 7 / 17 / 18 and resolves hundreds, so this rule ` +
+          `is not actually exercising the joins it claims to check`,
+        );
+      }
+      return out;
+    },
+  },
 ];

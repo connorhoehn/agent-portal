@@ -135,3 +135,46 @@ This is a materially different (and more honest) log than Before's single "Mock 
 ### Summary
 
 Both halves of "agent end-to-end" now work. The ledger/SSE mechanics were already solid in Before and still are. The scoring half is fixed: `score-dimensions` against a genuinely untouched team (TEAM-007) produced a full 17-dimension score set, advanced the workflow step from Intake to Score, set a real ASSESSED 17/17 and a derived L2 certification, and opened 17 explicit follow-ups — and the scoring log's per-dimension rationale (self-attested floor estimate, no evidence) matches what's shown on the scorecard exactly. A user watching the ledger and then opening the scorecard now sees a consistent story, unlike Before's split between "ledger says done" and "scorecard says untouched."
+
+--- freshness re-observation, 2026-09-08 (the Lead cell) ---
+Why: `portal/src/pages/assessment/dashboard/TeamScorecard.tsx` changed, which moved this
+log's `pages:` digest. The change is narrow and is the portal half of the
+assessment wire-field correction: `TeamSummary.assessment_lead_person_id`,
+`TeamDetail.assessment_lead_person_id` and `contributors[].person_id` were
+deleted from `pages/assessment/types.ts` because the server sends none of them
+(verified live across all 7 teams, and asserted absent by
+`middleware/src/providers/__tests__/assessment-declared-fields.test.ts`). The two
+places that read them therefore stopped wrapping the lead's name in `PersonRef`.
+Nothing was lost by that: `PersonRef` was always being handed a null personId
+here, and with a null id it returns its plain, NON-focusable branch before any of
+its hover/pin machinery — and in this tenant it would refuse to link anyway
+(`linkable = session?.tenant === 'orgiq'`). The lead was already a name, not a
+control; it is now a name written as one.
+Re-observed live at 1552px on `npm run dev:mock` (127.0.0.1:3011 behind a pinned
+Vite proxy), signed in through /select as Asha Nair, Jonas Lindqvist, Farah Osei and Platform Operator in turn — all four gave the same numbers:
+  - the team header now renders `Lead: Priya Natarajan` as text, with **0**
+    focusable controls inside it.
+  - `/assessment/teams?cohort=all` (TeamList, the other reader of the deleted
+    field): the Lead column is plain text, **0** focusable controls per cell.
+  - CORRECTION TO THE `keyboard:` LINE ABOVE, and it is not caused by this
+    change. The sweep now finds **34** visible, enabled controls in `<main>` on
+    the Certification tab, not 26, and a document-order `.focus()` sweep reaches
+    all 34 (0 unreachable), so the surface still passes its keyboard criterion.
+    The 34 itemise as: the "Dashboard" breadcrumb link (1), the header actions
+    Exceptions / How it was assessed / Report / + Add evidence / the overflow
+    menu (5), the five outer tabs (5), the dimension-rail collapse chevron (1),
+    the seventeen `role="option"` dimension rows (17), and the five inner tabs of
+    the dimension detail — Progress & follow-ups / How it was assessed / Evidence
+    / Definition & rubric / History (5). Deleting a wire field can only remove
+    controls, never add eight, so the earlier 26 was taken against a different
+    control set; which eight that sweep excluded is for a real re-audit of this
+    surface to settle, not for a freshness note. Recorded here rather than left
+    to be re-discovered.
+The em dash matters and was preserved deliberately: `assessment_lead` is the
+empty string on TEAM-006 and TEAM-007, and `PersonRef`'s "no name" branch used to
+render "—" for them. A bare data key would have left those cells blank, which
+reads as a rendering fault rather than as "nobody yet", so the column keeps the
+em dash the rest of this table uses for an empty. Verified: the seven Lead cells
+read Dana Whitfield, Sam Okafor, —, —, Elena Marsh, Priya Natarajan, Jordan Lee,
+and each one contains 0 focusable controls.
+Console errors: 0 on both surfaces.

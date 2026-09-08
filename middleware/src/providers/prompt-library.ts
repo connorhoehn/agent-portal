@@ -19,9 +19,14 @@
 // disclosure is the same question ("which of these matches what I'm doing?")
 // asked by a model instead of a person.
 //
-// Mock-first, like design-reviews: MOCK_ASSETS is the offline demo (dev:mock
-// exercises every surface without Bedrock or Aurora) and it stays exactly as
-// written below — other work depends on those fixtures verbatim.
+// Mock-first, like design-reviews: the offline demo catalog (dev:mock
+// exercises every surface without Bedrock or Aurora) lives in
+// mock/prompt-library.ts behind the `library-assets` fixture, so a reader
+// can ask for the empty or the failed-load world instead of editing rows.
+// The asset ids and their fields are unchanged — other work depends on them
+// verbatim — but `derivedFrom` is now DERIVED from the distillation store
+// rather than stored, because the stored copies cited observation ids that
+// existed nowhere. That file says why.
 //
 // LIVE MODE is a merge of two sources that each know half the story:
 //
@@ -55,6 +60,12 @@ import { exec as auroraExec } from './aurora.js';
 import {
   EMPTY_CONTRACT, type PromptContract, type PromptKind, type PromptTier,
 } from '../lib/prompt-contract.js';
+// The offline catalog is a registered fixture (`library-assets`), so
+// `GET /api/__mock/state` can see it and an auditor can ask for the empty
+// or the failed-load world over HTTP. `mockLibraryAssets` is where a stored
+// row meets the provenance derived from the distillation store — see
+// mock/prompt-library.ts for why `derivedFrom` is not a field on a row.
+import { mockLibraryAssets } from '../mock/prompt-library.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -93,6 +104,19 @@ export interface LibraryAsset {
   designReviewId?: string | null;
 }
 
+/**
+ * An asset as it is STORED offline — everything a reader sees except the one
+ * field that is a COUNT over rows this module does not own. `derivedFrom`
+ * carries `supportCount`/`sessionCount` beside three citations and the drawer
+ * renders that pair as a banner above those citations, which is rule 1 of the
+ * mock floor with the cards right there to contradict it — and the stored
+ * copies had already drifted into citing ids no surface could open. It is
+ * computed per read by `mock/prompt-library.ts` `derivationFor`, walking the
+ * distillation store's real lineage. Same split, and same reason, as
+ * `SeededCandidate` in promotions.ts.
+ */
+export type LibraryAssetRow = Omit<LibraryAsset, 'derivedFrom'>;
+
 /** Where a derived asset came from. Ranked support, not just a link: a runbook
  *  standing on nine observations across four sessions is a different claim
  *  from one standing on three. */
@@ -119,169 +143,6 @@ export interface LibraryFacets {
   role: Record<string, number>;
 }
 
-// ─── Mock catalog ────────────────────────────────────────────────────────────
-// Deliberately spans every kind, so the facets are exercised offline and the
-// "all kinds of use case for all the different system roles" claim is visible
-// rather than asserted.
-
-const HOUR = 3_600_000;
-const ago = (h: number) => new Date(Date.now() - h * HOUR).toISOString();
-
-function asset(a: Partial<LibraryAsset> & Pick<LibraryAsset, 'id' | 'name' | 'description' | 'kind'>): LibraryAsset {
-  return {
-    tier: 'sandbox', roles: [], tags: [], ownerName: null, version: '1',
-    lifecycleStatus: 'published', contract: EMPTY_CONTRACT, evalPassRate: null,
-    usedBy: [], updatedAt: ago(48), template: '', signoffs: 0, designReviewId: null, ...a,
-  };
-}
-
-function contract(
-  kind: PromptKind, tier: PromptTier,
-  variables: PromptContract['variables'],
-  guardrailId: string | null = null,
-): PromptContract {
-  return { kind, tier, variables, guardrailId };
-}
-
-const MOCK_ASSETS: LibraryAsset[] = [
-  // ── system: the six that exist today ──
-  asset({
-    id: 'orgiq-supervisor-system-prompt', name: 'Supervisor · system prompt',
-    description: 'Routes an org question to the right sub-agent and composes the answer.',
-    kind: 'system', tier: 'internal', roles: ['member', 'sme', 'org-leader'],
-    tags: ['agent', 'routing'], ownerName: 'Rachel Kowalski', version: '7',
-    lifecycleStatus: 'promoted', evalPassRate: 0.94, usedBy: ['orgiq-supervisor'],
-    updatedAt: ago(30),
-  }),
-  asset({
-    id: 'orgiq-search-system-prompt', name: 'Search · system prompt',
-    description: 'Finds people, skills and decisions in the org graph and cites them.',
-    kind: 'system', tier: 'internal', roles: ['member', 'sme'], tags: ['agent', 'graph'],
-    ownerName: 'Rachel Kowalski', version: '4', lifecycleStatus: 'promoted',
-    evalPassRate: 0.91, usedBy: ['orgiq-search'], updatedAt: ago(72),
-  }),
-
-  // ── prompt: a person runs it with inputs ──
-  asset({
-    id: 'lib-stakeholder-email', name: 'Stakeholder update email',
-    description: 'Draft an initiative status email from the board state and a tone.',
-    kind: 'prompt', tier: 'internal', roles: ['program-owner', 'org-leader', 'sme'],
-    tags: ['writing', 'comms'], ownerName: 'Mia Singh', version: '3',
-    lifecycleStatus: 'published', evalPassRate: 0.88, usedBy: ['portal:studio'],
-    updatedAt: ago(6), signoffs: 1,
-    template: 'Write a status email about {{initiative}} for {{audience}}, in a {{tone}} register.\n\nBoard state:\n{{board_state}}',
-    contract: contract('prompt', 'internal', [
-      { name: 'initiative', type: 'text', required: true, source: 'caller',
-        description: 'Initiative the update is about' },
-      { name: 'audience', type: 'enum', required: true, source: 'caller',
-        options: ['execs', 'the team', 'a customer'] },
-      { name: 'tone', type: 'text', required: false, source: 'literal', default: 'plain and direct' },
-      { name: 'board_state', type: 'longtext', required: true, source: 'retrieved',
-        description: 'Sprint/board rollup pulled at render time — fenced, never inlined' },
-    ]),
-  }),
-  asset({
-    id: 'lib-adr-summary', name: 'Design decision summary',
-    description: 'Turn a design thread into an ADR-shaped decision record.',
-    kind: 'prompt', tier: 'internal', roles: ['sme', 'program-owner'],
-    tags: ['design', 'writing'], ownerName: 'Nora DaSilva', version: '2',
-    lifecycleStatus: 'published', evalPassRate: 0.9, usedBy: ['portal:designs'],
-    updatedAt: ago(20),
-    contract: contract('prompt', 'internal', [
-      { name: 'thread', type: 'longtext', required: true, source: 'retrieved' },
-    ]),
-  }),
-
-  // ── evaluator: a pipeline runs it, no human, abbreviated governance ──
-  asset({
-    id: 'lib-csrf-check', name: 'CSRF risk evaluator',
-    description: 'Given a request change, judge whether it weakens CSRF protection. Returns a verdict + evidence.',
-    kind: 'evaluator', tier: 'endpoint', roles: ['sme', 'hr-admin'],
-    tags: ['security', 'review', 'classifier'], ownerName: 'Nora Chang', version: '5',
-    lifecycleStatus: 'deployed', evalPassRate: 0.96,
-    usedBy: ['bot:inference-canary-nightly', 'endpoint:/v1/checks/csrf'], updatedAt: ago(3),
-    signoffs: 2, designReviewId: 'des-auth-rotation',
-    template: 'Assess the {{framework}} change below for CSRF weakening.\n\n{{diff}}',
-    contract: contract('evaluator', 'endpoint', [
-      { name: 'diff', type: 'longtext', required: true, source: 'untrusted',
-        description: 'The PR diff — attacker-controllable, always fenced' },
-      { name: 'framework', type: 'enum', required: false, source: 'caller',
-        options: ['express', 'django', 'rails', 'spring'], default: 'express' },
-    ], 'gr-security-1'),
-  }),
-  asset({
-    id: 'lib-pii-scan', name: 'PII leak evaluator',
-    description: 'Flag personal data in a document before it reaches the knowledge base.',
-    kind: 'evaluator', tier: 'internal', roles: ['hr-admin'], tags: ['security', 'privacy'],
-    ownerName: 'Priya Desai', version: '2', lifecycleStatus: 'published', evalPassRate: 0.93,
-    usedBy: ['pipeline:ingestion'], updatedAt: ago(50), signoffs: 1,
-    template: 'Flag personal data in the document below.\n\n{{document}}',
-    contract: contract('evaluator', 'internal', [
-      { name: 'document', type: 'longtext', required: true, source: 'untrusted' },
-    ]),
-  }),
-
-  // ── skill: the model discovers and loads it ──
-  asset({
-    id: 'skill-flaky-test-triage', name: 'Triage a flaky test',
-    description: 'Use when a test passes and fails without a code change. Reruns, diffs the outcomes, and files a bug with both logs.',
-    kind: 'skill', tier: 'internal', roles: ['sme'], tags: ['testing', 'runbook'],
-    ownerName: 'Layla Hassan', version: '3', lifecycleStatus: 'published', evalPassRate: 0.89,
-    usedBy: ['devbox', 'bot:obs-nightly-maintenance'], updatedAt: ago(14),
-    derivedFrom: {
-      fromKind: 'pattern', supportCount: 11, sessionCount: 6,
-      top: [
-        { id: 'exp-441', kind: 'gotcha', title: 'kube-apiserver test flakes only under parallel run', repo: 'orgiq-observability', weight: 0.94 },
-        { id: 'exp-388', kind: 'worked', title: 'Rerunning twice and diffing isolates the flake', repo: 'orgiq-observability', weight: 0.91 },
-        { id: 'exp-352', kind: 'failed', title: 'Quarantining without evidence hid a real regression', repo: 'orgiq-auth-service', weight: 0.77 },
-      ],
-    },
-  }),
-  asset({
-    id: 'skill-cold-start-aurora', name: 'Recover a cold Aurora Data API',
-    description: 'Use when the first Data API call after idle fails with HttpEndpointNotEnabled. Warms the endpoint and retries with backoff.',
-    kind: 'skill', tier: 'internal', roles: ['sme', 'hr-admin'], tags: ['aurora', 'runbook', 'infra'],
-    ownerName: 'Eli Garcia', version: '2', lifecycleStatus: 'published', evalPassRate: 0.97,
-    usedBy: ['devbox'], updatedAt: ago(26),
-    derivedFrom: {
-      fromKind: 'pattern', supportCount: 8, sessionCount: 4,
-      top: [
-        { id: 'exp-501', kind: 'gotcha', title: 'First Data API call to a 0.5-ACU cluster always fails', repo: 'aws-agentcore', weight: 0.96 },
-        { id: 'exp-498', kind: 'worked', title: 'SELECT 1 warm-up then 6x3s retry clears it', repo: 'aws-agentcore', weight: 0.93 },
-      ],
-    },
-  }),
-  asset({
-    id: 'skill-pr-review-scoped', name: 'Review a PR diff-scoped',
-    description: 'Use when reviewing a pull request. Comments only on changed lines and posts one risk summary.',
-    kind: 'skill', tier: 'internal', roles: ['sme', 'program-owner'], tags: ['review', 'runbook'],
-    ownerName: 'Caleb Turner', version: '1', lifecycleStatus: 'draft', evalPassRate: null,
-    usedBy: [], updatedAt: ago(2), signoffs: 0,
-    template: 'Review the pull request. Comment only on changed lines.',
-    derivedFrom: {
-      fromKind: 'observation', supportCount: 4, sessionCount: 2,
-      top: [
-        { id: 'exp-577', kind: 'convention', title: 'Reviews that touch unchanged code get ignored', repo: 'orgiq-inference-platform', weight: 0.82 },
-        { id: 'exp-570', kind: 'decision', title: 'One summary comment beats twenty inline nits', repo: 'orgiq-inference-platform', weight: 0.8 },
-      ],
-    },
-  }),
-
-  // ── insight: a fact injected, never run ──
-  asset({
-    id: 'insight-arm64-fargate', name: 'Fargate tasks here are ARM64',
-    description: 'The middleware image is built on Apple Silicon; x86 tasks die with exec format error.',
-    kind: 'insight', tier: 'internal', roles: ['sme', 'hr-admin'], tags: ['infra', 'gotcha'],
-    ownerName: 'Eli Garcia', version: '1', lifecycleStatus: 'published',
-    usedBy: ['devbox:SessionStart'], updatedAt: ago(96),
-    derivedFrom: {
-      fromKind: 'observation', supportCount: 3, sessionCount: 3,
-      top: [
-        { id: 'exp-233', kind: 'failed', title: 'Task replaced in a loop: exec format error', repo: 'aws-agentcore', weight: 0.88 },
-      ],
-    },
-  }),
-];
 
 // ─── Live sources ────────────────────────────────────────────────────────────
 
@@ -503,7 +364,7 @@ async function buildLiveAssets(): Promise<LibraryAsset[]> {
 }
 
 async function loadAllAssets(): Promise<LibraryAsset[]> {
-  return config.mock.aurora ? MOCK_ASSETS : buildLiveAssets();
+  return config.mock.aurora ? mockLibraryAssets() : buildLiveAssets();
 }
 
 // ─── Provider ────────────────────────────────────────────────────────────────

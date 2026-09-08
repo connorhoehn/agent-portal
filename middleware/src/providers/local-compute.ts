@@ -14,12 +14,34 @@
 //
 // Schema: schema/local_compute_schema.sql. Live sessions on a node are NOT
 // here — they are presence, held in lib/local-compute-fleet.ts.
+//
+// The offline half of every function below lives in mock/local-compute.ts,
+// behind `defineFixture`. It used to be three module-level `Map`s here
+// (`mockNodes`, `mockTokenIndex`, `mockCodes`), which registered no fixture,
+// so `POST /api/__mock/reset` could not undo a claimed node, a spent pairing
+// code or a rename — the reason six of these routes are refused as
+// `unresettable` by mock/core/wire/write-policy.ts.
 
 import { createHash, randomBytes } from 'node:crypto';
 import { exec } from './aurora.js';
 import { config } from '../config.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 import { clock } from '../mock/core/index.js';
+import {
+  MOCK_NODE_TOKEN,
+  computeNodes,
+  pairingCodes,
+  mockClaimPairingCode,
+  mockCreatePairingCode,
+  mockGetNode,
+  mockListAllNodes,
+  mockListNodesByOwner,
+  mockNodeByTokenHash,
+  mockRenameNode,
+  mockRevokeNode,
+  mockSetAcceptJobs,
+  mockTouchNode,
+} from '../mock/local-compute.js';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
 function b(name: string, value: boolean): SqlParameter { return { name, value: { booleanValue: value } }; }
@@ -76,33 +98,13 @@ function rowToNode(r: Record<string, unknown>): ComputeNode {
 }
 
 // ─── Mock fallback (dev:mock / MOCK_AURORA) ──────────────────────────────────
-// One pre-paired fixture node owned by the dev demo identity, so the presence
-// badge and the pairing-free announce path are exercisable offline. Its token
-// is a fixed dev-only string — meaningless outside mock mode, where every
-// token is random and unstored.
+// The seeded machines, their pairing codes and the token that authenticates
+// the pre-paired one all live in mock/local-compute.ts, so a reset restores
+// them. Re-exported here because that token is this module's contract with the
+// offline world — a caller that needs it should not have to know which file
+// the rows sit in.
 
-export const MOCK_NODE_TOKEN = `${TOKEN_PREFIX}mock-local-node-token`;
-
-const mockNodes = new Map<string, ComputeNode>();
-const mockTokenIndex = new Map<string, string>(); // token_hash → nodeId
-const mockCodes = new Map<string, { ownerId: string; expiresAt: number; claimedAt: number | null }>();
-
-function seedMockNode(): void {
-  if (mockNodes.size > 0) return;
-  const node: ComputeNode = {
-    id: 'node-demo-macbook',
-    ownerId: 'demo-user',
-    label: 'demo-macbook',
-    platform: 'darwin/arm64',
-    acceptJobs: false,
-    localModels: ['qwen2.5-coder:14b'],
-    createdAt: clock.nowIso(),
-    lastSeenAt: null,
-    revokedAt: null,
-  };
-  mockNodes.set(node.id, node);
-  mockTokenIndex.set(hashToken(MOCK_NODE_TOKEN), node.id);
-}
+export { MOCK_NODE_TOKEN };
 
 // ─── Pairing ─────────────────────────────────────────────────────────────────
 
@@ -112,8 +114,7 @@ export async function createPairingCode(ownerId: string): Promise<PairingCode> {
   const code = Array.from(randomBytes(8), (byte) => alphabet[byte % alphabet.length]).join('');
   const expiresAt = new Date(clock.now().getTime() + PAIRING_TTL_MS).toISOString();
   if (config.mock.aurora) {
-    seedMockNode();
-    mockCodes.set(code, { ownerId, expiresAt: clock.now().getTime() + PAIRING_TTL_MS, claimedAt: null });
+    mockCreatePairingCode(code, ownerId, expiresAt);
     return { code, expiresAt };
   }
   await exec(
@@ -138,18 +139,10 @@ export async function claimPairingCode(
   const nodeId = node.nodeId?.trim() || `node-${randomBytes(6).toString('hex')}`;
 
   if (config.mock.aurora) {
-    seedMockNode();
-    const pending = mockCodes.get(code.toUpperCase());
-    if (!pending || pending.claimedAt !== null || pending.expiresAt < clock.now().getTime()) return null;
-    pending.claimedAt = clock.now().getTime();
-    const created: ComputeNode = {
-      id: nodeId, ownerId: pending.ownerId, label: node.label, platform: node.platform ?? null,
-      acceptJobs: false, localModels: [], createdAt: clock.nowIso(),
-      lastSeenAt: null, revokedAt: null,
-    };
-    mockNodes.set(nodeId, created);
-    mockTokenIndex.set(tokenHash, nodeId);
-    return { nodeId, nodeToken: token };
+    const claimed = mockClaimPairingCode(code.toUpperCase(), {
+      nodeId, label: node.label, platform: node.platform ?? null, tokenHash,
+    });
+    return claimed ? { nodeId: claimed.id, nodeToken: token } : null;
   }
 
   const claimed = await exec(
@@ -183,12 +176,7 @@ export async function claimPairingCode(
 export async function getNodeByToken(token: string): Promise<ComputeNode | null> {
   if (!token.startsWith(TOKEN_PREFIX)) return null;
   const tokenHash = hashToken(token);
-  if (config.mock.aurora) {
-    seedMockNode();
-    const id = mockTokenIndex.get(tokenHash);
-    const node = id ? mockNodes.get(id) : null;
-    return node && !node.revokedAt ? node : null;
-  }
+  if (config.mock.aurora) return mockNodeByTokenHash(tokenHash);
   const rows = await exec(
     `SELECT * FROM compute_nodes WHERE token_hash = :hash AND revoked_at IS NULL`,
     [s('hash', tokenHash)],
@@ -197,10 +185,7 @@ export async function getNodeByToken(token: string): Promise<ComputeNode | null>
 }
 
 export async function listNodesByOwner(ownerId: string): Promise<ComputeNode[]> {
-  if (config.mock.aurora) {
-    seedMockNode();
-    return [...mockNodes.values()].filter((n) => n.ownerId === ownerId && !n.revokedAt);
-  }
+  if (config.mock.aurora) return mockListNodesByOwner(ownerId);
   const rows = await exec(
     `SELECT * FROM compute_nodes
       WHERE owner_id = :owner AND revoked_at IS NULL
@@ -213,10 +198,7 @@ export async function listNodesByOwner(ownerId: string): Promise<ComputeNode[]> 
 /** Every live node, for fleet-wide operational visibility — the route pairs
  *  this with a session-count summary, never the session detail. */
 export async function listAllNodes(): Promise<ComputeNode[]> {
-  if (config.mock.aurora) {
-    seedMockNode();
-    return [...mockNodes.values()].filter((n) => !n.revokedAt);
-  }
+  if (config.mock.aurora) return mockListAllNodes();
   const rows = await exec(
     `SELECT * FROM compute_nodes WHERE revoked_at IS NULL ORDER BY created_at LIMIT 200`,
   );
@@ -224,10 +206,7 @@ export async function listAllNodes(): Promise<ComputeNode[]> {
 }
 
 export async function getNode(id: string): Promise<ComputeNode | null> {
-  if (config.mock.aurora) {
-    seedMockNode();
-    return mockNodes.get(id) ?? null;
-  }
+  if (config.mock.aurora) return mockGetNode(id);
   const rows = await exec(`SELECT * FROM compute_nodes WHERE id = :id`, [s('id', id)]);
   return rows[0] ? rowToNode(rows[0]) : null;
 }
@@ -235,21 +214,12 @@ export async function getNode(id: string): Promise<ComputeNode | null> {
 // ─── Writes ──────────────────────────────────────────────────────────────────
 
 export async function touchNode(id: string): Promise<void> {
-  if (config.mock.aurora) {
-    const node = mockNodes.get(id);
-    if (node) node.lastSeenAt = clock.nowIso();
-    return;
-  }
+  if (config.mock.aurora) { mockTouchNode(id); return; }
   await exec(`UPDATE compute_nodes SET last_seen_at = NOW() WHERE id = :id`, [s('id', id)]);
 }
 
 export async function renameNode(id: string, ownerId: string, label: string): Promise<ComputeNode | null> {
-  if (config.mock.aurora) {
-    const node = mockNodes.get(id);
-    if (!node || node.ownerId !== ownerId) return null;
-    node.label = label;
-    return node;
-  }
+  if (config.mock.aurora) return mockRenameNode(id, ownerId, label);
   const rows = await exec(
     `UPDATE compute_nodes SET label = :label
       WHERE id = :id AND owner_id = :owner RETURNING *`,
@@ -259,12 +229,7 @@ export async function renameNode(id: string, ownerId: string, label: string): Pr
 }
 
 export async function setAcceptJobs(id: string, ownerId: string, acceptJobs: boolean): Promise<ComputeNode | null> {
-  if (config.mock.aurora) {
-    const node = mockNodes.get(id);
-    if (!node || node.ownerId !== ownerId) return null;
-    node.acceptJobs = acceptJobs;
-    return node;
-  }
+  if (config.mock.aurora) return mockSetAcceptJobs(id, ownerId, acceptJobs);
   const rows = await exec(
     `UPDATE compute_nodes SET accept_jobs = :accept
       WHERE id = :id AND owner_id = :owner RETURNING *`,
@@ -276,12 +241,10 @@ export async function setAcceptJobs(id: string, ownerId: string, acceptJobs: boo
 /** Soft revoke: the token stops authenticating immediately; the row stays for
  *  audit. Re-pairing the same machine mints a fresh token and clears it. */
 export async function revokeNode(id: string, ownerId: string): Promise<boolean> {
-  if (config.mock.aurora) {
-    const node = mockNodes.get(id);
-    if (!node || node.ownerId !== ownerId) return false;
-    node.revokedAt = clock.nowIso();
-    return true;
-  }
+  // `AND revoked_at IS NULL` is part of the statement, not decoration: a
+  // second revoke must match no row (so the route 404s) and must never
+  // re-stamp the audit instant. The Map this replaced did both.
+  if (config.mock.aurora) return mockRevokeNode(id, ownerId);
   const rows = await exec(
     `UPDATE compute_nodes SET revoked_at = NOW()
       WHERE id = :id AND owner_id = :owner AND revoked_at IS NULL RETURNING id`,
@@ -290,9 +253,10 @@ export async function revokeNode(id: string, ownerId: string): Promise<boolean> 
   return rows.length > 0;
 }
 
-/** Test hook — wipe mock state. */
+/** Test hook — put the seeded machines and pairing codes back. Identical to
+ *  what `POST /api/__mock/reset` does for these two fixtures, which is the
+ *  point: a test and an auditor undo a write the same way. */
 export function _resetLocalComputeMocks(): void {
-  mockNodes.clear();
-  mockTokenIndex.clear();
-  mockCodes.clear();
+  computeNodes.reset();
+  pairingCodes.reset();
 }

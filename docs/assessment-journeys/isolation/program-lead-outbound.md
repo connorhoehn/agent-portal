@@ -1,13 +1,48 @@
 role: program-lead
 user: u-farah
 pages: portal/src/App.tsx,portal/src/components/shell/Layout.tsx,portal/src/pages/SelectContextPage.tsx
-audited: 2026-09-05 08:39 local, Chrome 1440px, gateway mode, middleware dev:mock (freshness re-sweep)
-orgiq-nav-visible: no              # rail on /assessment/teams adds Configuration under System for this role (11 entries); zero anchors matching ^/(iq|admin|newsroom)
-orgiq-route-result: redirect       # /iq/projects → RequireTenant(orgiq) → "/" → /select ("Choose a workspace")
-orgiq-api-status: 403              # /api/graph/people, /api/scores/leaderboard, /api/work/queue, /api/newsroom/articles all 403; tenant switch to orgiq/newsroom 403
-newsroom-route-result: redirect    # /newsroom/articles → /select
-screenshot: program-lead-outbound.jpg
+audited: 2026-09-07 23:37 EDT, Chrome 1552px, middleware dev:mock on :3011, portal :5185 (re-audit after the home-resolution fix for isolation/DEFECTS.md #1)
+orgiq-nav-visible: no              # rail on /assessment/teams: Dashboard, Submissions, Reports, Feedback, Enterprise, Workspace, Prompts, Rules, Activity, Configuration, Settings (11 anchors — Configuration is this role's extra) — 0 matching ^/(iq|admin|newsroom)
+orgiq-route-result: redirect       # measured this pass: /iq/projects → /assessment/teams (main 1068 chars); /iq/scores → /assessment/teams (1068); /admin/observability → /assessment/teams (1068); /admin/identity/users → /assessment/teams; / → /assessment/teams (1068). The URL always moves and the landing page is populated.
+orgiq-api-status: 403              # /api/graph/people?limit=1 → 403, /api/scores/leaderboard → 403, /api/work/queue → 403, /api/local-compute/nodes → 403, POST /api/session/tenant {orgiq} → 403 (session stayed on assessment)
+newsroom-route-result: n/a         # the newsroom tenant was deleted 2026-09-05; there is no /newsroom route left to test, so this line is history, not a claim re-observed in this pass
+screenshot: program-lead-outbound.jpg  # what typing /iq/projects gets you now: the assessment dashboard under the assessment breadcrumb, signed in as Farah · program-lead
 verdict: pass
-notes: grants in /me are {assessment:[program-lead, lead-assessor]}. A first load of /assessment/teams during this audit showed "Couldn't load teams" while the middleware was restarting under a concurrent edit; reloaded a minute later the teams API is 200 and the page renders (screenshot). program-lead holds ManageUsers in this tenant; the grants write path is being scoped to the caller's tenant in the middleware fix pass so that capability cannot mint a cross-tenant grant.
+notes: Signed in from /select → "Sign in as" → Farah Osei, then the Assessment tile's Program Lead row; `/api/session/me` = sub u-farah, tenant assessment, role program-lead, grants {assessment:[program-lead, lead-assessor]}. `.shell-header` 61px, innerWidth 1552 = scrollWidth 1552, console errors 0 throughout. The fix under test: portal/src/lib/tenantHome.ts is now the single home resolution (`resolveHome`), and App.tsx's guards all fall back to one `<HomeRedirect />` that uses it — so a refused tree sends you where `/` would send you, and if that resolves to the page you are already on it renders not-found instead of bouncing. The two orgiq trees no longer name `/iq/projects` as their own fallback. Farah, like Jonas, holds two contexts, so she also depended on the `markContextChosen` re-mark described in lead-assessor-outbound.md; the marker read "u-farah" for every measurement above.
+defect #2 (LocalComputeBadge) is closed as observed here: `GET /api/local-compute/nodes` → 403 for this session, and `demo-macbook` occurs nowhere in the document.
 re-verified 2026-09-05 04:21: rail as program-lead still has zero `<a href>` matching `^/(iq|admin|newsroom)`; `/iq/projects` redirected to `/select`; `fetch('/api/graph/people?limit=1')` returned 403.
 re-verified 2026-09-05 08:39: rail as program-lead still has 0 anchors matching ^/(iq|admin|newsroom); /iq/projects redirected to /select; fetch('/api/graph/people?limit=1') returned 403.
+re-verified 2026-09-07 22:20 (local-compute presence merge, Layout.tsx): the pass that filed DEFECTS #1 — /iq/projects did not redirect, the URL stayed put and the content column was empty under the orgiq breadcrumb "Plan › Initiatives". Kept here as the before-state.
+
+--- freshness re-observation, 2026-09-08 (the LocalComputeBadge tenant gate) ---
+Why: `portal/src/components/shell/Layout.tsx` changed — `LocalComputeBadge` is
+now mounted as `{session?.tenant === 'orgiq' && <LocalComputeBadge />}`, the fix
+for DEFECTS.md #2 — and that file is part of this log's `pages:` digest. Every
+field above was re-taken rather than carried forward. `npm run dev:mock` on
+127.0.0.1:3011, portal on a Vite proxy pinned to it (:5186, then :5183 after this
+box SIGTERMed the first dev server mid-pass), Chrome innerWidth 1552.
+Method, stated because it is not the picker: except where noted, the identity was
+established with `POST /api/session/login` (+ `POST /api/session/role` where the
+persona holds more than one) — the same call the "Sign in as" card makes — and,
+for an identity with more than one context, `sessionStorage['orgiq.contextChosen']`
+was set to the sub, which is exactly what the chooser's `markContextChosen()`
+does. That second step matters and is worth writing down: without it
+`resolveHome` correctly routes a multi-context identity to /select, and a pass
+that skipped it would have recorded a chooser stop as if it were the product's
+answer to a cross-tenant URL. It is not.
+Measured this pass:
+  - identity: sub u-farah, tenant assessment, role program-lead, grants
+    {assessment:[program-lead, lead-assessor]}.
+  - orgiq-nav-visible: **no** — 11 anchors on /assessment/teams (Dashboard,
+    Submissions, Reports, Feedback, Enterprise, Workspace, Prompts, Rules,
+    Activity, Configuration, Settings — Configuration is this role's extra),
+    **0** matching ^/(iq|admin|newsroom).
+  - orgiq-route-result: **redirect** — /iq/projects → /assessment/teams (h1
+    "Engineering maturity cohorts", 1068 chars) and /admin/identity/users → the
+    same, 1068 chars. The URL always moves and the landing page is populated.
+  - orgiq-api-status: **403** — /api/graph/people?limit=1,
+    /api/scores/leaderboard, /api/work/queue and /api/local-compute/nodes; POST
+    /api/session/tenant {orgiq} 403, session still `assessment` afterwards.
+  - the badge: no machine chip in the header and 403 on the endpoint, from both
+    the per-route server gate and the new shell gate.
+Console errors: 0 across every navigation in this pass.

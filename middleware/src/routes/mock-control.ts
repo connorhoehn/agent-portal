@@ -31,7 +31,6 @@
 // rather than pretending the world is empty.
 
 import { Router, type Request, type Response, type NextFunction } from 'express';
-import { timingSafeEqual } from 'node:crypto';
 import { config } from '../config.js';
 
 import {
@@ -44,6 +43,9 @@ import {
   type Scenario,
   type ScenarioName,
 } from '../mock/core/index.js';
+import { requireServiceAuth, MOCK_CONTROL_SERVICE_AUTH } from '../lib/service-auth.js';
+import { join } from 'node:path';
+import { handlerSha, handlerSourceFiles } from '../mock/core/wire/handler-sha.js';
 
 export const mockControlRouter = Router();
 
@@ -116,15 +118,10 @@ function requireMockPlane(_req: Request, res: Response, next: NextFunction): voi
  * constant-time header check when it is set. Runs after requireMockPlane so a
  * production probe still gets 404 rather than 401.
  */
-function requireControlSecret(req: Request, res: Response, next: NextFunction): void {
-  const secret = process.env['MOCK_CONTROL_SECRET'];
-  if (!secret) { next(); return; }
-  const got = typeof req.headers['x-mock-control-auth'] === 'string' ? req.headers['x-mock-control-auth'] : '';
-  const a = Buffer.from(got);
-  const b = Buffer.from(secret);
-  if (a.length === b.length && timingSafeEqual(a, b)) { next(); return; }
-  res.status(401).json({ error: 'mock control authentication required' });
-}
+const requireControlSecret = requireServiceAuth(
+  MOCK_CONTROL_SERVICE_AUTH,
+  'mock control authentication required',
+);
 
 const gate = [requireMockPlane, requireControlSecret];
 
@@ -352,8 +349,39 @@ mockControlRouter.post('/api/__mock/reset', ...gate, (req, res) => {
  * per-fixture worlds, and a row count for each so "empty" is visibly empty.
  */
 mockControlRouter.get('/api/__mock/state', ...gate, (_req, res) => {
-  res.json(readState(resolveRegistry()));
+  res.json({ ...readState(resolveRegistry()), handlerSha: bootHandlerSha() });
 });
+
+/**
+ * The digest of the handler sources THIS PROCESS booted from, computed once.
+ *
+ * The wire capture records it so the snapshot can prove which code produced
+ * it. Without that, freshness was an mtime comparison, and a sweep run against
+ * a server booted before an edit wrote a file whose mtime was newer than the
+ * source it disagreed with — the check passed over a snapshot that held the
+ * pre-change shape. Computed lazily and cached: it is only ever asked for by
+ * the capture, and hashing the tree costs nothing once.
+ */
+let _bootSha: string | null = null;
+function bootHandlerSha(): string | null {
+  if (_bootSha !== null) return _bootSha;
+  try {
+    // `process.cwd()`, NOT `import.meta.url`: this module is compiled by the
+    // CJS jest config, where `import.meta` is a hard TS1343 error that takes
+    // the whole suite down — the same trap the env-read note at the top of
+    // this file describes. The server is started from `middleware/`, and if it
+    // ever is not, `handlerSourceFiles` finds nothing and we report null
+    // rather than a digest of the wrong tree.
+    const srcDir = join(process.cwd(), 'src');
+    if (handlerSourceFiles(srcDir).length === 0) { _bootSha = ''; return null; }
+    _bootSha = handlerSha(srcDir);
+  } catch {
+    // Running from a build with no sources beside it: say nothing rather than
+    // report a digest of the wrong thing.
+    _bootSha = '';
+  }
+  return _bootSha || null;
+}
 
 /** Resolve a fixture key, answering the request itself when it is not one. */
 function findFixture(registry: FixtureRegistry, key: unknown, res: Response): Fixture<unknown> | null {

@@ -139,6 +139,16 @@ export interface CodeSession {
  *           and the one the "start a session" affordance is written for; the
  *           page previously could not be seen in it without terminating both
  *           seeded sessions and telling the next auditor in a log.
+ * `error` — the AgentCore data plane cannot be listed. Throwing is the point:
+ *           it is how an auditor reaches `listCodeSessionsResult`'s degraded
+ *           branch over HTTP (`POST /api/__mock/scenario
+ *           {"scenario":"error","fixture":"code-sessions"}`) rather than by
+ *           unplugging a network, and it is what proves the degraded answer
+ *           and the `empty` answer are two different responses. The message is
+ *           the one a STALE `CODE_INTERPRETER_ID` really produces — CLAUDE.md
+ *           records that every rebuild of OrgIQ-AgentCoreCapabilities mints
+ *           fresh ids and leaves .env.aws pointing at the dead ones — because
+ *           an invented failure would teach the reader the wrong symptom.
  */
 export const codeSessions = defineFixture<CodeSession>({
   key: 'code-sessions',
@@ -168,6 +178,9 @@ export const codeSessions = defineFixture<CodeSession>({
       },
     ],
     empty: () => [],
+    error: () => {
+      throw new Error('ResourceNotFoundException: code interpreter ci-mock-stale not found');
+    },
   },
 });
 
@@ -196,6 +209,11 @@ export interface BrowserSession {
  *           site-survey fallback cannot tell "no browser" from "this page
  *           needed no JavaScript"), so the empty rendering is the one an
  *           operator will be looking at when something is actually wrong.
+ * `error` — and this is the other half of that same sentence: the listing
+ *           itself fails. Until `listBrowserSessionsResult` existed the two
+ *           were the same `{ sessions: [] }`, which is precisely why the soft
+ *           failure was undiagnosable. The message is the real one a stale
+ *           BROWSER_PROFILE_ID produces.
  */
 export const browserSessions = defineFixture<BrowserSession>({
   key: 'browser-sessions',
@@ -225,6 +243,9 @@ export const browserSessions = defineFixture<BrowserSession>({
       },
     ],
     empty: () => [],
+    error: () => {
+      throw new Error('ValidationException: Browser profile not found');
+    },
   },
 });
 

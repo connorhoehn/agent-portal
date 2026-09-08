@@ -15,6 +15,7 @@ import { join } from 'node:path';
 
 import { snapshotDir, WIRE_SNAPSHOT, WRITES_SNAPSHOT } from './paths.js';
 import { fieldName, keyNamesOf, type Shape } from './shape.js';
+import { type MockProvider } from './write-policy.js';
 
 export interface CapturedRoute {
   persona?: string;
@@ -62,6 +63,15 @@ export interface WritesSnapshotFile {
   capturedAt: string;
   baseUrl: string;
   policy: string;
+  /**
+   * Which mock providers the captured SERVER reported for itself. Half of the
+   * write decision lives here: a route recorded as `not-intercepted` is only
+   * readable beside the answer that refused it, and a snapshot taken against a
+   * server running fewer mocks is a different snapshot rather than a stale one.
+   * Optional only so a snapshot taken before this field existed still parses —
+   * the policy test asserts it is present, which is the prompt to recapture.
+   */
+  intercepted?: MockProvider[];
   routes: Record<string, CapturedWrite>;
 }
 

@@ -219,16 +219,48 @@ async function recentLogs(runtimeId: string, limit: number): Promise<{
 
 // ─── GET /:agentId ────────────────────────────────────────────────────────────
 
+/**
+ * One agent, resolved out of the fleet listing.
+ *
+ * THE 404 THAT WAS A LIE. This read `agentcore.listRuntimes()`, which returned
+ * `[]` when `ListAgentRuntimes` failed, and then said
+ * `404 No agent runtime matching "orgiq-supervisor"` — a sentence asserting
+ * the runtime is not deployed, about a call that never completed. CLAUDE.md
+ * records a rebuild where exactly that empty listing was read as "nothing is
+ * deployed". The listing carries its own failure now (lib/upstream.ts), so the
+ * two answers are told apart before the 404 is written:
+ *
+ *   a match                        200 the agent
+ *   no match, listing was read     404 there is no such agent   (unchanged)
+ *   no match, listing FAILED       503 we could not ask, and why
+ *
+ * 503 rather than a 200 with a marker because there is no agent to render: the
+ * whole response is `{ runtime, prompt, metrics, log, invocations }` about one
+ * runtime, and inventing a null one would push the same ambiguity into the
+ * page. It is not a `200 → 5xx` regression either — this path answered 404
+ * before, and "could not reach the control plane" is a strictly better 4-to-5
+ * than "that agent does not exist".
+ */
 agentDetailRouter.get('/:agentId', asyncHandler(async (req, res) => {
   const wanted = String(req.params['agentId'] ?? '');
-  const runtimes = await agentcore.listRuntimes();
+  const listing = await agentcore.listRuntimesResult();
 
   // Accept the runtime id, its name, or the hyphenated slug, because all three
   // appear in links across the app and guessing wrong lands on a 404 that
   // looks like the agent is gone.
-  const runtime = runtimes.find((r: { id: string; name: string }) =>
+  const runtime = listing.items.find((r: { id: string; name: string }) =>
     r.id === wanted || r.name === wanted || agentSlug(r.name) === agentSlug(wanted));
-  if (!runtime) throw new NotFoundError(`No agent runtime matching "${wanted}"`);
+  if (!runtime) {
+    if (listing.degraded) {
+      res.status(503).json({
+        error: `Could not read the agent fleet, so "${wanted}" cannot be resolved.`,
+        degraded: true,
+        reason: listing.error,
+      });
+      return;
+    }
+    throw new NotFoundError(`No agent runtime matching "${wanted}"`);
+  }
 
   const logLimit = Math.min(Number(req.query['logLimit'] ?? 100) || 100, 500);
 

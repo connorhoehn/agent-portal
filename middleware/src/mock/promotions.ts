@@ -187,11 +187,21 @@ function seedCandidates(): SeededCandidate[] {
  *           explicitly: an undeclared scenario falls back to `default`, and
  *           "nothing to review" is the state the inbox's empty copy is written
  *           for — the one state a four-candidate seed can never show.
+ * `error` — the inbox cannot be read. Also declared explicitly, and for the
+ *           same reason `empty` is: without it `{"scenario":"error"}` left
+ *           `/api/promotions` byte-identical to `default`, so the queue's
+ *           failed-load state was unreachable over HTTP. `lab_experiences`
+ *           is the one real relation underneath this ladder (the clustering
+ *           and candidate tables do not exist yet — see providers/
+ *           promotions.ts), so that is what the message names.
  */
 export const promotionCandidates = defineFixture<SeededCandidate>({
   key: 'promotion-candidates',
   scenarios: {
     default: seedCandidates,
     empty: () => [],
+    error: (): never => {
+      throw new Error('promotion inbox unavailable: lab_experiences read failed');
+    },
   },
 });

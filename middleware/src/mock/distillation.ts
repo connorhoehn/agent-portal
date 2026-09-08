@@ -1484,6 +1484,31 @@ function largeIngestWriters(): IngestWriter[] {
   });
 }
 
+/**
+ * The `error` world for this domain: the shared-memory store is unreadable.
+ *
+ * Throwing is the POINT, and it is the one scenario the whole distillation +
+ * library + promotions ladder was missing. Every fixture here declared
+ * `default`, `empty`, `fresh` and `large`, and an undeclared scenario falls
+ * back to `default` — so `POST /api/__mock/scenario {"scenario":"error"}`
+ * changed *nothing* on `/iq/distillation`, byte for byte, and the degraded
+ * branch of the flagship surface could not be reached at all without
+ * unplugging a database that isn't there offline anyway. One throw per table
+ * rather than one for the domain, so an auditor can pin a single fixture
+ * (`{"scenario":"error","fixture":"distillation-artifacts"}`) and watch the
+ * artifacts panel fail while levels and ingest keep answering — which is what
+ * a partial outage actually looks like.
+ *
+ * The message names the READ, spelled as `schema/distillation_schema.sql` and
+ * `schema/lab_loop_schema.sql` spell it where a relation exists, so a reader
+ * of the 500 knows which one failed. Three of these have no Aurora table yet
+ * (the provider says so: there is no compaction-job or level-rollup table),
+ * so they are named for the read rather than given an invented relation.
+ */
+const unreadable = (source: string) => (): never => {
+  throw new Error(`distillation store unavailable: ${source} read failed`);
+};
+
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 //
 // Every collection below declares `empty` explicitly: an undeclared scenario
@@ -1504,6 +1529,7 @@ export const observations = defineFixture<Observation>({
     default: seedObservations,
     empty: () => [],
     large: () => [...seedObservations(), ...largeObservations()],
+    error: unreadable('lab_experiences'),
   },
 });
 
@@ -1516,6 +1542,7 @@ export const clusters = defineFixture<Cluster>({
     empty: () => [],
     fresh: () => [],
     large: () => [...seedClusters(seedObservationGroups()), ...largeClusters()],
+    error: unreadable('distillation_clusters'),
   },
 });
 
@@ -1527,6 +1554,7 @@ export const artifacts = defineFixture<ArtifactRow>({
     empty: () => [],
     fresh: () => [],
     large: () => [...seedArtifacts(), ...largeArtifacts()],
+    error: unreadable('distillation_artifacts'),
   },
 });
 
@@ -1538,6 +1566,7 @@ export const facts = defineFixture<Fact>({
     empty: () => [],
     fresh: () => [],
     large: () => [...seedFacts(seedObservationGroups()), ...largeFacts()],
+    error: unreadable('distillation_facts'),
   },
 });
 
@@ -1550,6 +1579,7 @@ export const libraryLinks = defineFixture<LibraryLink>({
     default: seedLibraryLinks,
     empty: () => [],
     fresh: () => [],
+    error: unreadable('distillation_artifacts.library_item_id'),
   },
 });
 
@@ -1563,6 +1593,7 @@ export const compactionJobs = defineFixture<CompactionJobRow>({
     empty: () => [],
     fresh: () => [],
     large: () => [...seedCompactionJobs(), ...largeCompactionJobs()],
+    error: unreadable('compaction job history'),
   },
 });
 
@@ -1575,6 +1606,7 @@ export const reviewSamples = defineFixture<ReviewSample>({
     empty: () => [],
     fresh: () => [],
     large: () => [...seedReviewSamples(), ...largeReviewSamples()],
+    error: unreadable('distillation_review_samples'),
   },
 });
 
@@ -1586,6 +1618,7 @@ export const ingestWriters = defineFixture<IngestWriter>({
     default: seedIngestWriters,
     empty: () => [],
     large: () => [...seedIngestWriters(), ...largeIngestWriters()],
+    error: unreadable('L0 write-stream rollup'),
   },
 });
 

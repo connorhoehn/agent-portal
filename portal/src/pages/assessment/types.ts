@@ -82,15 +82,18 @@ export type CertificationBasis = string;
 export interface TeamCertification {
   target_level: number;
   at_or_above_target: number;
-  below_target?: number;
-  above_target?: number;
+  /** The other two halves of the same count, over the dimensions verification
+   *  has reached a level on: `at_or_above_target + below_target === assessed`,
+   *  and `above_target <= at_or_above_target`. The server counts both on every
+   *  team rollup (`teamCertification` in middleware/src/providers/assessment.ts),
+   *  so neither is optional. */
+  below_target: number;
+  above_target: number;
   assessed: number;
   applicable: number;
   not_applicable?: number;
   /** Dimensions whose claim sits above what verification reached. */
   claims_open?: number;
-  /** Pre-amendment name for `claims_open`; read only as a fallback. */
-  contested?: number;
   /** Highest verified level across the team's dimensions. The server spells
    *  this `highest_verified_level`; `max_verified_level` is the client-derived
    *  name. Read both through `highestVerifiedLevel()`. */
@@ -100,10 +103,9 @@ export interface TeamCertification {
   status?: CertificationStatus | string;
   /** Server-rendered headline, e.g. "Verified to Level 3 on 13 of 17 dimensions". */
   headline?: string;
-  /** Server-rendered sub-line. The server sends `sub_line`; `subline` is the
-   *  client-derived name. */
-  subline?: string;
-  sub_line?: string;
+  /** Server-rendered sub-line. `sub_line` is the SOURCE APP's spelling; this
+   *  port has always sent `subline`, and only `subline`. */
+  subline?: string | null;
 }
 
 export const highestVerifiedLevel = (
@@ -185,7 +187,7 @@ export const certificationBasisMeaning = (
   }
 };
 
-const openClaimCount = (cert: TeamCertification): number => cert.claims_open ?? cert.contested ?? 0;
+const openClaimCount = (cert: TeamCertification): number => cert.claims_open ?? 0;
 
 /** "Verified to Level 3 on 13 of 17 dimensions" — counts against target, never a scalar. */
 export const teamCertificationHeadline = (
@@ -209,7 +211,7 @@ export const teamCertificationSubline = (
   dimensionsTotal?: number,
 ): string | null => {
   if (!cert) return null;
-  if (cert.subline || cert.sub_line) return cert.subline ?? cert.sub_line ?? null;
+  if (cert.subline) return cert.subline;
   const parts: string[] = [];
   const open = openClaimCount(cert);
   if (open > 0) {
@@ -242,6 +244,13 @@ export const certificationSortKey = (
 
 // ─── Teams ──────────────────────────────────────────────────────────────────
 
+// ⚠️ No person ids on a team, deliberately. `assessment_teams`
+// (schema/assessment_schema.sql) carries `assessment_lead TEXT` and
+// `contributors JSONB {initials,name}[]` — there is no person column to send;
+// all three assessment `app_users` carry `personId: null`; and PersonRef sets
+// `linkable = session?.tenant === 'orgiq'`, so in this tenant it renders a
+// plain name whatever id you hand it (its hover card reads /api/graph/people,
+// which requireTenant('orgiq') 403s here). A lead is a name.
 export interface TeamSummary {
   id: string;
   name: string;
@@ -249,7 +258,6 @@ export interface TeamSummary {
   cohort_label: string;
   status: string;
   assessment_lead: string;
-  assessment_lead_person_id?: string | null;
   workflow_step: number;
   workflow_step_label: string;
   certification?: TeamCertification;
@@ -257,7 +265,7 @@ export interface TeamSummary {
   dimensions_total: number;
   followups_open: number;
   updated_at: string;
-  contributors?: { initials: string; name: string; person_id?: string | null }[];
+  contributors?: { initials: string; name: string }[];
 }
 
 export interface RepoRef {
@@ -272,7 +280,6 @@ export interface TeamDetail {
   cohort_label: string;
   status: string;
   assessment_lead: string;
-  assessment_lead_person_id?: string | null;
   contacts: string[];
   repos: RepoRef[];
   workflow_step: number;
@@ -307,6 +314,14 @@ export interface Provenance {
   captured_at: string;
 }
 
+/** The whole vocabulary an evidence row's `status` can hold: `PENDING` at
+ *  intake, `CLASSIFIED` once it has been attached to a dimension, `SCORED`
+ *  once it has informed a level. It is not an open string — the Aurora column
+ *  carries `CHECK (status IN ('PENDING','CLASSIFIED','SCORED'))`
+ *  (schema/assessment_schema.sql) and the mock provider writes only those
+ *  three. */
+export type EvidenceStatus = 'PENDING' | 'CLASSIFIED' | 'SCORED';
+
 export interface Evidence {
   evidence_id: string;
   source_type: string;
@@ -318,7 +333,7 @@ export interface Evidence {
   provenance: Provenance | null;
   /** true = informed a dimension's level; false = raw intake, awaiting scoring. */
   scored: boolean;
-  status: string;
+  status: EvidenceStatus;
 }
 
 export interface FollowUpQuestion {
@@ -375,6 +390,19 @@ export interface TeamDetailResponse {
 // Approve/Deny (lead-assessor / program-lead only — see docs/assessment-tenant.md).
 
 export type ExceptionStatus = 'requested' | 'approved' | 'denied';
+/**
+ * All four are legal — `assessment_exceptions.source` in
+ * schema/assessment_schema.sql carries
+ * `CHECK (source IN ('archetype','known_exception','submission','manual'))`,
+ * and the mock provider declares the same union.
+ *
+ * ⚠️ But only two of them are ever *produced* by this port: `archetype` (the
+ * pre-approved rows synthesized on read from a team's archetype) and `manual`
+ * (a scoring run asking for an N/A, which lands `requested` and waits for a
+ * human Approve/Deny). Nothing here writes `known_exception` or `submission`.
+ * Keep them in the union — the column accepts them and a source-app import
+ * would carry them — but do not build UI that assumes they will appear.
+ */
 export type ExceptionSource = 'archetype' | 'known_exception' | 'submission' | 'manual';
 
 export interface TeamException {

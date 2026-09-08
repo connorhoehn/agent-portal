@@ -1,6 +1,7 @@
 {
-  "capturedAt": "2026-09-08T01:47:44.628Z",
-  "baseUrl": "http://127.0.0.1:3026",
+  "capturedAt": "2026-09-08T06:29:24.083Z",
+  "serverHandlerSha": "a576ea8c40ec6915462f91f77f69260fd0a1e2b45ccab13f961e9cd6f11fc6cb",
+  "baseUrl": "http://127.0.0.1:3043",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -50,11 +51,15 @@
           "bots",
           "browser-sessions",
           "budget-grants",
+          "calibration-cases",
+          "calibration-runs",
           "canary-weight",
           "capability-config",
           "capability-inventory",
           "chat-responses",
           "code-sessions",
+          "compute-nodes",
+          "compute-pairing-codes",
           "connected-sources",
           "design-reviews",
           "devbox-deliveries",
@@ -72,6 +77,7 @@
           "github-orgs",
           "github-repos",
           "github-signal",
+          "github-workflow-runs",
           "graph-decision-participants",
           "graph-decisions",
           "guardrail",
@@ -88,6 +94,11 @@
           "kb-summary",
           "lab-consults",
           "lab-experiences",
+          "library-assets",
+          "local-presence",
+          "observability-agent-profiles",
+          "observability-human-labels",
+          "observability-memory-writes",
           "org-findings",
           "promotion-candidates",
           "prompt-eval-cases",
@@ -118,6 +129,7 @@
         "fixtures[].pinned": "boolean",
         "fixtures[].rows": "number",
         "fixtures[].scenario": "string",
+        "handlerSha": "string",
         "registryLoaded": "boolean",
         "scenario": "string"
       },
@@ -146,11 +158,15 @@
           "bots",
           "browser-sessions",
           "budget-grants",
+          "calibration-cases",
+          "calibration-runs",
           "canary-weight",
           "capability-config",
           "capability-inventory",
           "chat-responses",
           "code-sessions",
+          "compute-nodes",
+          "compute-pairing-codes",
           "connected-sources",
           "design-reviews",
           "devbox-deliveries",
@@ -168,6 +184,7 @@
           "github-orgs",
           "github-repos",
           "github-signal",
+          "github-workflow-runs",
           "graph-decision-participants",
           "graph-decisions",
           "guardrail",
@@ -184,6 +201,11 @@
           "kb-summary",
           "lab-consults",
           "lab-experiences",
+          "library-assets",
+          "local-presence",
+          "observability-agent-profiles",
+          "observability-human-labels",
+          "observability-memory-writes",
           "org-findings",
           "promotion-candidates",
           "prompt-eval-cases",
@@ -282,7 +304,9 @@
       "status": 200,
       "shape": {
         "$": "object",
+        "degraded": "boolean",
         "documents": "array",
+        "error": "string",
         "total": "number"
       },
       "values": {}
@@ -292,6 +316,8 @@
       "status": 200,
       "shape": {
         "$": "object",
+        "degraded": "boolean",
+        "error": "string",
         "jobs": "array"
       },
       "values": {}
@@ -970,10 +996,12 @@
         "$[]": "object",
         "$[].assessment_lead": "string",
         "$[].certification": "object",
+        "$[].certification.above_target": "number",
         "$[].certification.applicable": "number",
         "$[].certification.assessed": "number",
         "$[].certification.at_or_above_target": "number",
         "$[].certification.basis": "string",
+        "$[].certification.below_target": "number",
         "$[].certification.claims_open": "number",
         "$[].certification.headline": "string",
         "$[].certification.highest_verified_level": "null|number",
@@ -1030,6 +1058,12 @@
         "dimensions[].certification.verified_level": "null|number",
         "dimensions[].confidence": "string",
         "dimensions[].criteria_progress": "array",
+        "dimensions[].criteria_progress[]": "object",
+        "dimensions[].criteria_progress[].evidence_ids": "array",
+        "dimensions[].criteria_progress[].evidence_ids[]": "string",
+        "dimensions[].criteria_progress[].met": "boolean",
+        "dimensions[].criteria_progress[].target_level": "number",
+        "dimensions[].criteria_progress[].text": "string",
         "dimensions[].current_level": "null|number",
         "dimensions[].definition": "string",
         "dimensions[].evidence": "array",
@@ -1038,6 +1072,11 @@
         "dimensions[].evidence[].dimension_id": "string",
         "dimensions[].evidence[].evidence_id": "string",
         "dimensions[].evidence[].excerpt": "string",
+        "dimensions[].evidence[].provenance": "object",
+        "dimensions[].evidence[].provenance.captured_at": "string",
+        "dimensions[].evidence[].provenance.captured_by": "string",
+        "dimensions[].evidence[].provenance.provenance_id": "string",
+        "dimensions[].evidence[].provenance.source_uri": "string",
         "dimensions[].evidence[].scored": "boolean",
         "dimensions[].evidence[].source_ref": "string",
         "dimensions[].evidence[].source_type": "string",
@@ -1082,10 +1121,12 @@
         "team": "object",
         "team.assessment_lead": "string",
         "team.certification": "object",
+        "team.certification.above_target": "number",
         "team.certification.applicable": "number",
         "team.certification.assessed": "number",
         "team.certification.at_or_above_target": "number",
         "team.certification.basis": "string",
+        "team.certification.below_target": "number",
         "team.certification.claims_open": "number",
         "team.certification.headline": "string",
         "team.certification.highest_verified_level": "number",
@@ -2248,11 +2289,26 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "note": "string",
-        "repo": "null",
-        "runs": "array"
+        "repo": "string",
+        "runs": "array",
+        "runs[]": "object",
+        "runs[].actor": "string",
+        "runs[].branch": "string",
+        "runs[].conclusion": "null|string",
+        "runs[].createdAt": "string",
+        "runs[].durationMs": "null|number",
+        "runs[].id": "number",
+        "runs[].name": "string",
+        "runs[].sha": "string",
+        "runs[].status": "string",
+        "runs[].url": "string"
       },
-      "values": {}
+      "values": {
+        "runs[].status": [
+          "completed",
+          "in_progress"
+        ]
+      }
     },
     "GET /api/gateway/activity/:channel/history": {
       "skipped": "no value found for :channel under /api/gateway/activity (orgiq/admin); no value found for :channel under /api/gateway/activity (assessment/admin); no value found for :channel under /api/gateway/activity (anonymous)"
@@ -3257,17 +3313,6 @@
         "asset.contract.kind": "string",
         "asset.contract.tier": "string",
         "asset.contract.variables": "array",
-        "asset.derivedFrom": "object",
-        "asset.derivedFrom.fromKind": "string",
-        "asset.derivedFrom.sessionCount": "number",
-        "asset.derivedFrom.supportCount": "number",
-        "asset.derivedFrom.top": "array",
-        "asset.derivedFrom.top[]": "object",
-        "asset.derivedFrom.top[].id": "string",
-        "asset.derivedFrom.top[].kind": "string",
-        "asset.derivedFrom.top[].repo": "string",
-        "asset.derivedFrom.top[].title": "string",
-        "asset.derivedFrom.top[].weight": "number",
         "asset.description": "string",
         "asset.designReviewId": "null",
         "asset.evalPassRate": "null",
@@ -3352,10 +3397,6 @@
         "asset.contract.kind": [
           "prompt"
         ],
-        "asset.derivedFrom.top[].kind": [
-          "convention",
-          "decision"
-        ],
         "asset.kind": [
           "skill"
         ],
@@ -3372,6 +3413,8 @@
           "longtext"
         ],
         "related[].asset.derivedFrom.top[].kind": [
+          "convention",
+          "decision",
           "failed",
           "gotcha",
           "worked"
@@ -3412,9 +3455,52 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "nodes": "array"
+        "nodes": "array",
+        "nodes[]": "object",
+        "nodes[].acceptJobs": "boolean",
+        "nodes[].createdAt": "string",
+        "nodes[].id": "string",
+        "nodes[].label": "string",
+        "nodes[].lastSeenAt": "string",
+        "nodes[].localModels": "array",
+        "nodes[].localModels[]": "string",
+        "nodes[].ownerId": "string",
+        "nodes[].platform": "string",
+        "nodes[].presence": "object",
+        "nodes[].presence.lastSeenAt": "string",
+        "nodes[].presence.nodeId": "string",
+        "nodes[].presence.sessions": "array",
+        "nodes[].presence.sessions[]": "object",
+        "nodes[].presence.sessions[].branch": "string",
+        "nodes[].presence.sessions[].contextUsed": "number",
+        "nodes[].presence.sessions[].harness": "string",
+        "nodes[].presence.sessions[].intent": "string",
+        "nodes[].presence.sessions[].lastSeenAt": "string",
+        "nodes[].presence.sessions[].memory": "object",
+        "nodes[].presence.sessions[].memory.lastPushAt": "number",
+        "nodes[].presence.sessions[].memory.mode": "string",
+        "nodes[].presence.sessions[].memory.pullCursorAgeS": "number",
+        "nodes[].presence.sessions[].model": "string",
+        "nodes[].presence.sessions[].modelProvider": "string",
+        "nodes[].presence.sessions[].projectId": "string",
+        "nodes[].presence.sessions[].repo": "string",
+        "nodes[].presence.sessions[].sessionId": "string",
+        "nodes[].presence.sessions[].startedAt": "number",
+        "nodes[].presence.sessions[].touching": "array",
+        "nodes[].presence.sessions[].touching[]": "string",
+        "nodes[].presence.sessions[].worktree": "string",
+        "nodes[].presence.status": "string",
+        "nodes[].revokedAt": "null"
       },
-      "values": {}
+      "values": {
+        "nodes[].presence.sessions[].memory.mode": [
+          "synced"
+        ],
+        "nodes[].presence.status": [
+          "offline",
+          "stale"
+        ]
+      }
     },
     "GET /api/local-compute/nodes/all": {
       "persona": "orgiq/admin",
@@ -3427,7 +3513,7 @@
         "nodes[].createdAt": "string",
         "nodes[].id": "string",
         "nodes[].label": "string",
-        "nodes[].lastSeenAt": "null",
+        "nodes[].lastSeenAt": "string",
         "nodes[].localModels": "array",
         "nodes[].localModels[]": "string",
         "nodes[].ownerId": "string",
@@ -3441,12 +3527,14 @@
       },
       "values": {
         "nodes[].presence.status": [
-          "connected"
+          "connected",
+          "offline",
+          "stale"
         ]
       }
     },
     "GET /api/local-compute/stream": {
-      "skipped": "timed out after 6s — never sent response headers (orgiq/admin); timed out after 6s — never sent response headers (assessment/admin); server-sent event stream (anonymous)"
+      "skipped": "server-sent event stream (orgiq/admin); server-sent event stream (assessment/admin); server-sent event stream (anonymous)"
     },
     "GET /api/observability/approvals": {
       "persona": "orgiq/admin",
@@ -3516,19 +3604,56 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "cases": "array"
+        "cases": "array",
+        "cases[]": "object",
+        "cases[].active": "boolean",
+        "cases[].agentId": "string",
+        "cases[].calibrationId": "string",
+        "cases[].createdAt": "string",
+        "cases[].humanRationale": "string",
+        "cases[].humanScore": "number",
+        "cases[].notes": "null|string",
+        "cases[].prompt": "string",
+        "cases[].response": "string",
+        "cases[].updatedAt": "string"
       },
       "values": {}
     },
     "GET /api/observability/calibration/cases/:id": {
-      "skipped": "no value found for :id under /api/observability/calibration/cases (orgiq/admin); no value found for :id under /api/observability/calibration/cases (assessment/admin); no value found for :id under /api/observability/calibration/cases (anonymous)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "case": "object",
+        "case.active": "boolean",
+        "case.agentId": "string",
+        "case.calibrationId": "string",
+        "case.createdAt": "string",
+        "case.humanRationale": "string",
+        "case.humanScore": "number",
+        "case.notes": "string",
+        "case.prompt": "string",
+        "case.response": "string",
+        "case.updatedAt": "string"
+      },
+      "values": {}
     },
     "GET /api/observability/calibration/runs": {
       "persona": "orgiq/admin",
       "status": 200,
       "shape": {
         "$": "object",
-        "runs": "array"
+        "runs": "array",
+        "runs[]": "object",
+        "runs[].calibrationRunId": "string",
+        "runs[].finishedAt": "string",
+        "runs[].judgeModelId": "string",
+        "runs[].label": "string",
+        "runs[].maxAbsError": "number",
+        "runs[].meanAbsError": "number",
+        "runs[].notes": "null|string",
+        "runs[].startedAt": "string",
+        "runs[].totalCases": "number"
       },
       "values": {}
     },
@@ -3763,7 +3888,14 @@
       "persona": "orgiq/admin",
       "status": 200,
       "shape": {
-        "$": "array"
+        "$": "array",
+        "$[]": "object",
+        "$[].agentId": "string",
+        "$[].count": "number",
+        "$[].embeddingDriftP95": "number",
+        "$[].judgeP05": "null",
+        "$[].judgeP50": "null",
+        "$[].schemaConformance": "number"
       },
       "values": {}
     },
@@ -3783,6 +3915,12 @@
         "$": "object",
         "bucketMin": "number",
         "points": "array",
+        "points[]": "object",
+        "points[].agentId": "string",
+        "points[].bucketStart": "string",
+        "points[].count": "number",
+        "points[].driftP95": "number",
+        "points[].judgeP50": "null|number",
         "windowHours": "number"
       },
       "values": {}
@@ -3827,6 +3965,14 @@
       "shape": {
         "$": "object",
         "byRule": "array",
+        "byRule[]": "object",
+        "byRule[].count": "number",
+        "byRule[].ruleCategory": "string",
+        "byRule[].ruleName": "string",
+        "byRule[].severityCounts": "object",
+        "byRule[].severityCounts.HIGH": "number",
+        "byRule[].severityCounts.LOW": "number",
+        "byRule[].severityCounts.MEDIUM": "number",
         "windowHours": "number"
       },
       "values": {}
@@ -3836,7 +3982,8 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "interventions": "array"
+        "interventions": "array",
+        "interventions[]": "object(dictionary)"
       },
       "values": {}
     },
@@ -4044,42 +4191,42 @@
         "invocation.agentId": "string",
         "invocation.agentName": "string",
         "invocation.durationMs": "number",
-        "invocation.estCostUsd": "null",
+        "invocation.estCostUsd": "number",
         "invocation.guardrailAction": "null",
-        "invocation.humanLabel": "null",
-        "invocation.humanNote": "null",
-        "invocation.inputTokens": "null",
+        "invocation.humanLabel": "string",
+        "invocation.humanNote": "string",
+        "invocation.inputTokens": "number",
         "invocation.invocationId": "string",
         "invocation.judgeCostUsd": "null",
         "invocation.judgeInputTokens": "null",
         "invocation.judgeOutputTokens": "null",
         "invocation.judgeRationale": "null",
         "invocation.judgeScore": "null",
-        "invocation.modelId": "null",
-        "invocation.outputTokens": "null",
+        "invocation.modelId": "string",
+        "invocation.outputTokens": "number",
         "invocation.parentInvocationId": "null",
         "invocation.piiDetected": "boolean",
         "invocation.promptSnippet": "string",
-        "invocation.promptVersion": "null",
+        "invocation.promptVersion": "string",
         "invocation.responseSnippet": "string",
-        "invocation.runtimeImageDigest": "null",
+        "invocation.runtimeImageDigest": "string",
         "invocation.schemaValid": "boolean",
-        "invocation.sessionId": "null",
-        "invocation.templateId": "null",
-        "invocation.totalCostUsd": "null",
+        "invocation.sessionId": "string",
+        "invocation.templateId": "string",
+        "invocation.totalCostUsd": "number",
         "invocation.ts": "string",
-        "invocation.userId": "null",
+        "invocation.userId": "string",
         "parent": "null",
         "toolCalls": "array",
         "toolCalls[]": "object",
         "toolCalls[].durationMs": "number",
-        "toolCalls[].errorMessage": "string",
+        "toolCalls[].errorMessage": "null|string",
         "toolCalls[].errored": "boolean",
         "toolCalls[].estCostUsd": "null",
-        "toolCalls[].inputSample": "null",
-        "toolCalls[].inputSize": "null",
+        "toolCalls[].inputSample": "string",
+        "toolCalls[].inputSize": "number",
         "toolCalls[].outputSample": "null",
-        "toolCalls[].outputSize": "null",
+        "toolCalls[].outputSize": "number",
         "toolCalls[].startedAt": "string",
         "toolCalls[].toolCallId": "string",
         "toolCalls[].toolName": "string"
@@ -4092,7 +4239,23 @@
       "shape": {
         "$": "object",
         "count": "number",
-        "invocations": "array"
+        "invocations": "array",
+        "invocations[]": "object",
+        "invocations[].agentId": "string",
+        "invocations[].agentName": "string",
+        "invocations[].durationMs": "number",
+        "invocations[].invocationId": "string",
+        "invocations[].judgeScore": "null|number",
+        "invocations[].modelId": "string",
+        "invocations[].parentInvocationId": "null|string",
+        "invocations[].promptSnippet": "string",
+        "invocations[].promptVersion": "null|string",
+        "invocations[].responseSnippet": "string",
+        "invocations[].schemaValid": "boolean",
+        "invocations[].templateId": "string",
+        "invocations[].totalCostUsd": "number",
+        "invocations[].ts": "string",
+        "invocations[].userId": "null|string"
       },
       "values": {}
     },
@@ -4101,9 +4264,28 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "events": "array"
+        "events": "array",
+        "events[]": "object",
+        "events[].agentId": "string",
+        "events[].durationMs": "number",
+        "events[].errorMessage": "null|string",
+        "events[].errored": "boolean",
+        "events[].invocationId": "string",
+        "events[].kind": "string",
+        "events[].memoryEventId": "string",
+        "events[].memoryId": "string",
+        "events[].queryText": "null|string",
+        "events[].resultCount": "null|number",
+        "events[].retrievedSummary": "null|string",
+        "events[].sessionId": "string",
+        "events[].ts": "string"
       },
-      "values": {}
+      "values": {
+        "events[].kind": [
+          "retrieve",
+          "write"
+        ]
+      }
     },
     "GET /api/observability/memory/stats": {
       "persona": "orgiq/admin",
@@ -4111,6 +4293,14 @@
       "shape": {
         "$": "object",
         "byAgent": "array",
+        "byAgent[]": "object",
+        "byAgent[].agentId": "string",
+        "byAgent[].coldSessions": "number",
+        "byAgent[].errorRate": "number",
+        "byAgent[].p50RetrieveMs": "number",
+        "byAgent[].p99RetrieveMs": "number",
+        "byAgent[].retrieves": "number",
+        "byAgent[].writes": "number",
         "windowHours": "number"
       },
       "values": {}
@@ -4229,7 +4419,14 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "points": "array"
+        "points": "array",
+        "points[]": "object",
+        "points[].agentId": "string",
+        "points[].humanLabel": "null|string",
+        "points[].invocationId": "string",
+        "points[].judgeScore": "null|number",
+        "points[].schemaValid": "boolean",
+        "points[].ts": "string"
       },
       "values": {}
     },
@@ -4271,7 +4468,14 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "errors": "array"
+        "errors": "array",
+        "errors[]": "object",
+        "errors[].agentId": "string",
+        "errors[].errorMessage": "string",
+        "errors[].invocationId": "string",
+        "errors[].toolCallId": "string",
+        "errors[].toolName": "string",
+        "errors[].ts": "string"
       },
       "values": {}
     },
@@ -4280,7 +4484,15 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "byTool": "array"
+        "byTool": "array",
+        "byTool[]": "object",
+        "byTool[].count": "number",
+        "byTool[].errorRate": "number",
+        "byTool[].p50DurationMs": "number",
+        "byTool[].p99DurationMs": "number",
+        "byTool[].toolName": "string",
+        "byTool[].totalCostUsd": "number",
+        "byTool[].withCost": "number"
       },
       "values": {}
     },
@@ -4291,6 +4503,13 @@
         "$": "object",
         "bucketMin": "number",
         "points": "array",
+        "points[]": "object",
+        "points[].bucketStart": "string",
+        "points[].count": "number",
+        "points[].errorRate": "number",
+        "points[].p99DurationMs": "number",
+        "points[].toolName": "string",
+        "points[].totalCostUsd": "number",
         "windowHours": "number"
       },
       "values": {}
@@ -4426,6 +4645,10 @@
       "shape": {
         "$": "object",
         "cells": "array",
+        "cells[]": "object",
+        "cells[].count": "number",
+        "cells[].dayOfWeek": "number",
+        "cells[].hourOfDay": "number",
         "days": "number"
       },
       "values": {}
@@ -4436,6 +4659,15 @@
       "shape": {
         "$": "object",
         "byAgent": "array",
+        "byAgent[]": "object",
+        "byAgent[].agentId": "string",
+        "byAgent[].errorRate": "number",
+        "byAgent[].invocations": "number",
+        "byAgent[].lowQualityRate": "number",
+        "byAgent[].p50DurationMs": "number",
+        "byAgent[].p99DurationMs": "number",
+        "byAgent[].rps": "number",
+        "byAgent[].totalCostUsd": "number",
         "windowHours": "number"
       },
       "values": {}
@@ -4447,6 +4679,12 @@
         "$": "object",
         "bucketMin": "number",
         "points": "array",
+        "points[]": "object",
+        "points[].agentId": "string",
+        "points[].bucketStart": "string",
+        "points[].invocations": "number",
+        "points[].uniqueSessions": "number",
+        "points[].uniqueUsers": "number",
         "windowHours": "number"
       },
       "values": {}
@@ -4457,6 +4695,12 @@
       "shape": {
         "$": "object",
         "users": "array",
+        "users[]": "object",
+        "users[].invocations": "number",
+        "users[].lastSeenAt": "string",
+        "users[].totalCostUsd": "number",
+        "users[].uniqueAgents": "number",
+        "users[].userId": "string",
         "windowHours": "number"
       },
       "values": {}
@@ -4564,7 +4808,9 @@
       "status": 200,
       "shape": {
         "$": "object",
+        "degraded": "boolean",
         "deltaVs7d": "null",
+        "error": "string",
         "personId": "string",
         "samples": "array"
       },
@@ -5460,12 +5706,16 @@
         "browser-sessions",
         "browserProfile",
         "budget-grants",
+        "calibration-cases",
+        "calibration-runs",
         "canary-weight",
         "capability-config",
         "capability-inventory",
         "chat-responses",
         "code-sessions",
         "codeInterpreter",
+        "compute-nodes",
+        "compute-pairing-codes",
         "conciseness",
         "confluence-eng",
         "confluence/auth-migration-prd.pdf",
@@ -5489,6 +5739,7 @@
         "github-orgs",
         "github-repos",
         "github-signal",
+        "github-workflow-runs",
         "graph-decision-participants",
         "graph-decisions",
         "guardrail",
@@ -5510,8 +5761,13 @@
         "kb-summary",
         "lab-consults",
         "lab-experiences",
+        "library-assets",
+        "local-presence",
         "memory",
         "no-prod-service",
+        "observability-agent-profiles",
+        "observability-human-labels",
+        "observability-memory-writes",
         "org-findings",
         "promotion-candidates",
         "prompt-eval-cases",
@@ -5573,13 +5829,15 @@
         "question",
         "require_review",
         "retrieval",
+        "retrieve",
         "session",
         "skill",
         "synced",
         "system",
         "task",
         "tool",
-        "worked"
+        "worked",
+        "write"
       ]
     },
     "level": {
@@ -5593,7 +5851,8 @@
     "mode": {
       "open": false,
       "values": [
-        "sim"
+        "sim",
+        "synced"
       ]
     },
     "outcome": {
@@ -5693,6 +5952,7 @@
         "live",
         "needs_approval",
         "not_applicable",
+        "offline",
         "ok",
         "open",
         "pending",

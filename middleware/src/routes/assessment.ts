@@ -16,10 +16,10 @@
 // order, so a literal segment could otherwise be swallowed by a param at the
 // same depth.
 
-import express, { Router, type Request, type Response, type NextFunction } from 'express';
-import { timingSafeEqual } from 'node:crypto';
+import express, { Router } from 'express';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
 import { requireAction, requireTenant } from '../lib/authz.js';
+import { ASSESSMENT_RUN_COMPLETE_SERVICE_AUTH, requireServiceAuth } from '../lib/service-auth.js';
 import { ADMIN_ROLE } from '../lib/session.js';
 import { logAuthz } from '../lib/audit.js';
 import { initSSE, writeSSE, endSSE } from '../lib/sse.js';
@@ -37,7 +37,15 @@ export const assessmentRouter: Router = Router();
 // to apply requireTenant('assessment') ahead of this router at the mount,
 // which would 401 that callback before requireRunCompleteAuth ever ran; the
 // gate now lives here so the one exemption is possible.
-const RUN_COMPLETE_PATH = /^\/runs\/[^/]+\/complete$/;
+// ⚠️ This pattern must match every path Express will route to the handler,
+// or the exemption is narrower than the route it exempts. Express defaults to
+// `strict: false, caseSensitive: false`, so `/runs/:id/complete/` and
+// `/runs/:id/COMPLETE` both reach the handler — but an anchored, case-sensitive
+// regex refused them, and the machine caller got a 403 blaming a tenant it does
+// not have. A proxy that normalises a trailing slash would have turned a
+// working agent callback into that 403 with nothing in the message to explain
+// it. Hence `\/?$` and the `i` flag: same matching rules as the router.
+const RUN_COMPLETE_PATH = /^\/runs\/[^/]+\/complete\/?$/i;
 assessmentRouter.use((req, res, next) => {
   if (req.method === 'POST' && RUN_COMPLETE_PATH.test(req.path)) { next(); return; }
   requireTenant('assessment')(req, res, next);
@@ -387,15 +395,13 @@ assessmentRouter.get('/runs/:runId', viewGate, asyncHandler(async (req, res) => 
 // timer: completeRun's "must still be running" guard is the same one the
 // timer's own completion closure already checks, so whichever finishes the
 // run first wins and the other is a no-op 409.
-function requireRunCompleteAuth(req: Request, res: Response, next: NextFunction): void {
-  const secret = process.env['ASSESSMENT_RUN_COMPLETE_SECRET'];
-  if (!secret) { next(); return; }
-  const got = typeof req.headers['x-assessment-run-auth'] === 'string' ? req.headers['x-assessment-run-auth'] as string : '';
-  const a = Buffer.from(got);
-  const b = Buffer.from(secret);
-  if (a.length === b.length && timingSafeEqual(a, b)) { next(); return; }
-  res.status(401).json({ error: 'service authentication required' });
-}
+//
+// The compare itself is lib/service-auth.ts's — this was a private copy of it
+// until 2026-09 (see that module's "ONE COMPARE, ONE PLACE"). Applied PER
+// ROUTE, which is also why the requireTenant mount above has to skip this
+// path: a blanket gate ahead of the router 401s the agent before this ever
+// runs.
+const requireRunCompleteAuth = requireServiceAuth(ASSESSMENT_RUN_COMPLETE_SERVICE_AUTH);
 
 assessmentRouter.post('/runs/:runId/complete', requireRunCompleteAuth, asyncHandler(async (req, res) => {
   const runId = String(req.params['runId'] ?? '');

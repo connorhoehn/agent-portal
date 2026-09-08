@@ -50,6 +50,8 @@ import type {
   BrowserSession,
 } from './types.js';
 
+import { attempt, reached, unreachable, type Upstream } from '../lib/upstream.js';
+
 import { mockAgents } from '../mock/agent-statuses.js';
 import { browserSessions, codeSessions } from '../mock/capabilities.js';
 import { selectMockResponse } from '../mock/responses.js';
@@ -460,7 +462,23 @@ function extractToolCalls(raw: unknown): import('./types.js').AgentInvokeToolCal
 // ─── Real provider ────────────────────────────────────────────────────────────
 
 export const realAgentCore: AgentCoreProvider = {
-  async listRuntimes(): Promise<AgentRuntimeSummary[]> {
+  /**
+   * The fleet, and whether the control plane answered.
+   *
+   * This used to `return []` on a failed `ListAgentRuntimes`, which is how a
+   * rebuilt account came to read as "nothing is deployed" (CLAUDE.md records
+   * that incident) and how `GET /api/agent-detail/:id` came to answer
+   * `404 No agent runtime matching "orgiq-supervisor"` — a sentence claiming
+   * the agent was deleted, about a call that never completed.
+   *
+   * The paging catch is now the only thing that degrades. The METRIC
+   * hydration catch below deliberately does not: CloudWatch failing leaves a
+   * true list of runtimes carrying zeroed counters, which is a partial answer
+   * about a fleet we did successfully enumerate, and marking the whole listing
+   * degraded for it would cry wolf on every account where the metrics have
+   * simply not been published yet.
+   */
+  async listRuntimesResult(): Promise<Upstream<AgentRuntimeSummary[]>> {
     const client = controlClient();
     const out: AgentRuntimeSummary[] = [];
     let nextToken: string | undefined = undefined;
@@ -492,9 +510,10 @@ export const realAgentCore: AgentCoreProvider = {
         nextToken = resp.nextToken;
       } while (nextToken);
     } catch (err) {
-      // Don't propagate — empty list is the contract when nothing is deployed.
+      // Still an empty list for anyone who only wants rows — but the caller
+      // can now tell this empty from a fleet that is genuinely not deployed.
       console.warn('[agentcore] listRuntimes failed:', (err as Error).message);
-      return [];
+      return unreachable([] as AgentRuntimeSummary[], err, 'ListAgentRuntimes failed');
     }
 
     // Hydrate metrics in a single GetMetricData call (one call total instead
@@ -514,7 +533,14 @@ export const realAgentCore: AgentCoreProvider = {
       console.warn('[agentcore] listRuntimes metric hydration failed:', (err as Error).message);
     }
 
-    return out;
+    return reached(out);
+  },
+
+  /** The lossy view — see the interface. Byte-identical to what this method
+   *  returned before `listRuntimesResult` existed, including the empty list on
+   *  failure, so no unconverted caller changes behaviour. */
+  async listRuntimes(): Promise<AgentRuntimeSummary[]> {
+    return (await this.listRuntimesResult()).items;
   },
 
   async getRuntime(agentId: string): Promise<AgentRuntimeSummary | null> {
@@ -669,9 +695,21 @@ export const realAgentCore: AgentCoreProvider = {
     }
   },
 
-  async listCodeSessions(): Promise<CodeSession[]> {
+  /**
+   * Code Interpreter sessions, and whether the data plane answered.
+   *
+   * An unset `CODE_INTERPRETER_ID` is NOT degraded: nothing is misconfigured
+   * and nothing failed, the capability is simply not wired here, and reporting
+   * that as a failure would put a red banner on every laptop running without
+   * `.env.aws`. A failed `ListCodeInterpreterSessions` is degraded — and this
+   * is the surface where that matters most, because CLAUDE.md's own gotcha
+   * list records that a stale `CODE_INTERPRETER_ID` surviving a rebuild fails
+   * as a bare "not found", which the old empty list rendered as "no sandbox is
+   * running".
+   */
+  async listCodeSessionsResult(): Promise<Upstream<CodeSession[]>> {
     const ciId = config.agentcore.codeInterpreterId;
-    if (!ciId) return [];
+    if (!ciId) return reached([]);
 
     const out: CodeSession[] = [];
     let nextToken: string | undefined = undefined;
@@ -706,9 +744,14 @@ export const realAgentCore: AgentCoreProvider = {
       } while (nextToken);
     } catch (err) {
       console.warn('[agentcore] listCodeSessions failed:', (err as Error).message);
-      return [];
+      return unreachable(out, err, 'ListCodeInterpreterSessions failed');
     }
-    return out;
+    return reached(out);
+  },
+
+  /** The lossy view — see the interface. */
+  async listCodeSessions(): Promise<CodeSession[]> {
+    return (await this.listCodeSessionsResult()).items;
   },
 
   async terminateCodeSession(sessionId: string): Promise<boolean> {
@@ -803,9 +846,18 @@ export const realAgentCore: AgentCoreProvider = {
     }
   },
 
-  async listBrowserSessions(): Promise<BrowserSession[]> {
+  /**
+   * Browser sessions, and whether the data plane answered.
+   *
+   * Same split as the code sessions: an unset `BROWSER_ID` is a fact about
+   * this deployment, a failed `ListBrowserSessions` is a failure. The second
+   * one is the documented soft failure — a `BROWSER_ID` left behind by a
+   * rebuilt `OrgIQ-AgentCoreCapabilities` answers "Browser profile not found",
+   * and until now the page rendered that as an idle browser.
+   */
+  async listBrowserSessionsResult(): Promise<Upstream<BrowserSession[]>> {
     const browserId = config.agentcore.browserId;
-    if (!browserId) return [];
+    if (!browserId) return reached([]);
 
     const out: BrowserSession[] = [];
     let nextToken: string | undefined = undefined;
@@ -839,9 +891,14 @@ export const realAgentCore: AgentCoreProvider = {
       } while (nextToken);
     } catch (err) {
       console.warn('[agentcore] listBrowserSessions failed:', (err as Error).message);
-      return [];
+      return unreachable(out, err, 'ListBrowserSessions failed');
     }
-    return out;
+    return reached(out);
+  },
+
+  /** The lossy view — see the interface. */
+  async listBrowserSessions(): Promise<BrowserSession[]> {
+    return (await this.listBrowserSessionsResult()).items;
   },
 
   async createBrowserSession(opts: { agentName: string; url?: string }): Promise<BrowserSession> {
@@ -1006,6 +1063,34 @@ const _mockCode = (): CodeSession[] => codeSessions.rows();
 const _mockBrowser = (): BrowserSession[] => browserSessions.rows();
 
 export const mockAgentCore: AgentCoreProvider = {
+  /**
+   * The offline half of the degraded answer.
+   *
+   * `agentFleet`'s `error` scenario THROWS when its rows are read
+   * (mock/agent-statuses.ts), which is how an auditor reaches this branch over
+   * HTTP — `POST /api/__mock/scenario {"scenario":"error","fixture":"agent-fleet"}`
+   * — instead of unplugging a network. Catching it here is what makes the
+   * degraded answer and the `empty`-scenario answer two DIFFERENT responses
+   * from one route rather than one response with two meanings.
+   */
+  async listRuntimesResult(): Promise<Upstream<AgentRuntimeSummary[]>> {
+    return attempt(
+      async () => mockAgents.map((a) => ({ ...a })),
+      [] as AgentRuntimeSummary[],
+      'ListAgentRuntimes failed',
+    );
+  },
+
+  /**
+   * Deliberately NOT `(await listRuntimesResult()).items`.
+   *
+   * The lossy read has one caller left, `GET /api/agents`, whose bare-array
+   * wire has nowhere to put a marker. Routing it through the catch above would
+   * turn today's loud `500` under the `error` scenario into a silent
+   * `200 []` — trading a visible failure for exactly the invisible one this
+   * whole change exists to remove. So it keeps reading the fixture directly
+   * and keeps throwing until that route's shape can change.
+   */
   async listRuntimes(): Promise<AgentRuntimeSummary[]> {
     return mockAgents.map((a) => ({ ...a }));
   },
@@ -1058,6 +1143,14 @@ export const mockAgentCore: AgentCoreProvider = {
     yield { type: 'RUN_FINISHED' };
   },
 
+  async listCodeSessionsResult(): Promise<Upstream<CodeSession[]>> {
+    return attempt(
+      async () => _mockCode().map((s) => ({ ...s })),
+      [] as CodeSession[],
+      'ListCodeInterpreterSessions failed',
+    );
+  },
+
   async listCodeSessions(): Promise<CodeSession[]> {
     return _mockCode().map((s) => ({ ...s }));
   },
@@ -1078,6 +1171,14 @@ export const mockAgentCore: AgentCoreProvider = {
       output: lines > 0 ? `(mock) Would have printed ${lines} line(s).` : '(mock) Code accepted; no print() calls detected.',
       durationMs: 120,
     };
+  },
+
+  async listBrowserSessionsResult(): Promise<Upstream<BrowserSession[]>> {
+    return attempt(
+      async () => _mockBrowser().map((s) => ({ ...s })),
+      [] as BrowserSession[],
+      'ListBrowserSessions failed',
+    );
   },
 
   async listBrowserSessions(): Promise<BrowserSession[]> {

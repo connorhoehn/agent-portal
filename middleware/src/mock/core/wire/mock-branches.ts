@@ -19,10 +19,16 @@
 // source, with the TypeScript parser, and follows the call graph instead.
 //
 // WHAT IT IS AND IS NOT. This is a REACHABILITY argument, not an execution
-// trace: "some path from this handler reaches a provider function that calls
-// the RDS Data API or an AWS SDK client with no `config.mock` branch". It can
-// be wrong in both directions and `docs/mock-floor.md § What the judge cannot
-// see` says how. It is a ratchet, not a gate.
+// trace: "some path from this handler reaches a function that calls the RDS
+// Data API, an AWS SDK client, or an outbound `fetch`, with no `config.mock`
+// branch". It can be wrong in both directions and `docs/mock-floor.md § What
+// the judge cannot see` says how. It is a ratchet, not a gate.
+//
+// `fetch` was the third thing it could not see, added 2026-09. Counting only
+// `.send()` and `exec()` meant "reaches a backend" was really "reaches AWS":
+// `lib/github-connector.ts` talks to api.github.com over plain HTTP and no
+// check in the repo could name it. Widening the scan raised the budget by one
+// pair, which is the scan seeing more — not the code getting worse.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
@@ -67,6 +73,8 @@ interface FnDecl {
   /** Source text of the body — cheap enough, and the guard tests read it. */
   text: string;
   line: number;
+  /** Does the body call `fetch()` at a URL that is not this app's own origin? */
+  outboundFetch: boolean;
 }
 
 interface Module {
@@ -105,6 +113,45 @@ function collectCalls(node: ts.Node, sf: ts.SourceFile): Set<string> {
   return calls;
 }
 
+/**
+ * A `fetch()` whose URL points at this process's own origin.
+ *
+ * The scan asks "does this reach a backend that `dev:mock` cannot stand in
+ * for". A call to our own server is not that: it is either the SSE/proxy shape
+ * (`fetch('/api/...')`) or a loopback probe, and both are answered by the same
+ * mock middleware the caller is running inside. Only two shapes count as
+ * self-origin, and both are lexical because that is all a name-resolving scan
+ * can honestly claim:
+ *
+ *   * a loopback host anywhere in the URL expression — `localhost`, `127.0.0.1`,
+ *     `[::1]`;
+ *   * a string/template literal that STARTS with `/`, i.e. an origin-relative
+ *     path with no host of its own.
+ *
+ * Deliberately NOT self-origin: a template whose first thing is an
+ * interpolation (`` `${origin}/robots.txt` `` in lib/site-survey.ts). That
+ * origin is the site being surveyed, not ours.
+ */
+export function isSameOriginFetch(argText: string): boolean {
+  if (/localhost|127\.0\.0\.1|\[::1\]/.test(argText)) return true;
+  return /^['"`]\//.test(argText);
+}
+
+/** Does this node contain a `fetch()` to somewhere that is not our own origin? */
+export function hasOutboundFetch(node: ts.Node, sf: ts.SourceFile): boolean {
+  let found = false;
+  const visit = (n: ts.Node): void => {
+    if (found) return;
+    if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === 'fetch') {
+      const arg = n.arguments[0];
+      if (!arg || !isSameOriginFetch(arg.getText(sf))) { found = true; return; }
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(node);
+  return found;
+}
+
 function loadModule(root: string, rel: string): Module {
   const abs = join(root, rel);
   const sourceFile = ts.createSourceFile(abs, readFileSync(abs, 'utf8'), ts.ScriptTarget.ES2022, true);
@@ -124,7 +171,10 @@ function loadModule(root: string, rel: string): Module {
   const fns = new Map<string, FnDecl>();
   const add = (name: string, node: ts.Node): void => {
     const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
-    fns.set(name, { name, node, calls: collectCalls(node, sourceFile), text: node.getText(sourceFile), line });
+    fns.set(name, {
+      name, node, calls: collectCalls(node, sourceFile), text: node.getText(sourceFile), line,
+      outboundFetch: hasOutboundFetch(node, sourceFile),
+    });
   };
   for (const stmt of sourceFile.statements) {
     if (ts.isFunctionDeclaration(stmt) && stmt.name) add(stmt.name.text, stmt);
@@ -261,9 +311,44 @@ const inReportedLayer = (modRel: string): boolean => REPORTED_LAYERS.some((l) =>
  */
 const TRANSPORT_LIB_FNS = new Set(['runDevboxShell']);
 
-/** Does this function body reach live AWS — the Data API, or an SDK client? */
-function callsLiveAws(fn: FnDecl): boolean {
-  return fn.calls.has('exec') || fn.calls.has('execWrite') || fn.calls.has('send');
+/**
+ * HTTP transport wrappers, module-qualified.
+ *
+ * The same argument as TRANSPORT_FNS, applied to `fetch`: `gh()` in
+ * lib/github-connector.ts IS the GitHub wire — it takes a path and a token and
+ * does nothing a mock could branch on. Reporting it would print "the wire is
+ * the wire" once per caller and bury the function above it that actually
+ * decides whether there is an offline path (`listGithubOrgs` has one,
+ * `openPullRequest` has not).
+ *
+ * So the wrapper is not reported, and — exactly as `callsLiveAws` treats a call
+ * to `exec` — a call TO the wrapper counts as reaching the network for whoever
+ * makes it. Qualified by module rather than by bare name because `gh` is a
+ * two-letter name that some other file could plausibly reuse for something
+ * local; `exec` earned its unqualified entry by being spelled the same way in
+ * five providers on purpose.
+ */
+const OUTBOUND_TRANSPORT_FNS = new Map<string, Set<string>>([
+  ['src/lib/github-connector.ts', new Set(['gh'])],
+]);
+
+/**
+ * Does this function body reach a backend `dev:mock` cannot answer — the RDS
+ * Data API, an AWS SDK client, or an outbound `fetch`?
+ *
+ * `fetch` was added 2026-09. Until then the scan counted only `.send(...)` and
+ * `exec(...)`, so anything reached over plain HTTP was structurally invisible:
+ * `lib/github-connector.ts` talks to api.github.com and nothing in the judge
+ * could see it, which `docs/mock-floor.md § What the judge cannot see` said out
+ * loud. That is why the budget rose again — the scan sees more, the code did
+ * not get worse.
+ */
+function callsLiveAws(fn: FnDecl, modRel: string): boolean {
+  if (fn.calls.has('exec') || fn.calls.has('execWrite') || fn.calls.has('send')) return true;
+  if (fn.outboundFetch) return true;
+  const wrappers = OUTBOUND_TRANSPORT_FNS.get(modRel);
+  if (wrappers) { for (const w of wrappers) if (fn.calls.has(w)) return true; }
+  return false;
 }
 
 /**
@@ -367,9 +452,10 @@ export function scanWriteRoutesWithoutMockBranch(root = middlewareRoot()): Write
 
     const hits: string[] = [];
     const guarded = isGuarded(fn, mod);
-    if (!guarded && !TRANSPORT_MODULES.has(modRel)
-        && !TRANSPORT_FNS.has(name) && !TRANSPORT_LIB_FNS.has(name)
-        && inReportedLayer(modRel) && callsLiveAws(fn)) {
+    const isTransport = TRANSPORT_MODULES.has(modRel)
+      || TRANSPORT_FNS.has(name) || TRANSPORT_LIB_FNS.has(name)
+      || (OUTBOUND_TRANSPORT_FNS.get(modRel)?.has(name) ?? false);
+    if (!guarded && !isTransport && inReportedLayer(modRel) && callsLiveAws(fn, modRel)) {
       hits.push(`${modRel}:${fn.line} ${name}()`);
     }
     // A guarded function is where mock mode is decided, so the search stops

@@ -16,7 +16,7 @@
 // constant-time x-lab-auth header check when set.
 
 import { Router, type Request, type Response, type NextFunction } from 'express';
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { asyncHandler, ValidationError } from '../lib/async-handler.js';
 import { requireAction, requireSession } from '../lib/authz.js';
 import { rateLimit } from '../lib/rate-limit.js';
@@ -25,21 +25,18 @@ import {
   recordExperience, listExperiences, EXPERIENCE_KINDS, type ExperienceKind,
   openConsult, getConsult, listConsults, answerConsult,
 } from '../providers/lab.js';
+import { requireServiceAuth, LAB_CALLBACK_SERVICE_AUTH } from '../lib/service-auth.js';
 
 export const labRouter = Router();
 
 const callbackLimit = rateLimit('lab-callback', 120, 60_000);
 
-function requireLabAuth(req: Request, res: Response, next: NextFunction): void {
-  const secret = process.env['LAB_CALLBACK_SECRET'];
-  if (!secret) { next(); return; }
-  const got = req.headers['x-lab-auth'];
-  const presented = typeof got === 'string' ? got : '';
-  const a = Buffer.from(presented);
-  const b = Buffer.from(secret);
-  if (a.length === b.length && timingSafeEqual(a, b)) { next(); return; }
-  res.status(401).json({ error: 'service authentication required' });
-}
+// One implementation of the compare, in lib/service-auth.ts — a timing-safe
+// comparison copied per route is a security primitive with a fresh chance to be
+// subtly wrong in each copy, and copies inherit no test written against the
+// shared one. Same contract as before: open when LAB_CALLBACK_SECRET is unset,
+// constant-time when it is set.
+const requireLabAuth = requireServiceAuth(LAB_CALLBACK_SERVICE_AUTH);
 
 /** Session OR service header — for reads both the portal and the fleet make. */
 function sessionOrLabAuth(req: Request, res: Response, next: NextFunction): void {

@@ -73,7 +73,18 @@ function team(partial: Partial<TeamSummary> & { id: string }): TeamSummary {
 }
 
 function cert(partial: Partial<TeamCertification>): TeamCertification {
-  return { target_level: 3, at_or_above_target: 0, assessed: 0, applicable: 17, ...partial };
+  // `below_target` / `above_target` are required on the wire (the server
+  // counts both on every rollup), so the fixture states them; `...partial`
+  // still lets a case override either.
+  const base: TeamCertification = {
+    target_level: 3, at_or_above_target: 0, below_target: 0, above_target: 0,
+    assessed: 0, applicable: 17,
+  };
+  const merged = { ...base, ...partial };
+  // Keep the identity the server guarantees — at_or_above + below === assessed
+  // — unless the case pinned `below_target` itself.
+  if (partial.below_target === undefined) merged.below_target = merged.assessed - merged.at_or_above_target;
+  return merged;
 }
 
 function dimCert(partial: Partial<DimensionCertification>): DimensionCertification {

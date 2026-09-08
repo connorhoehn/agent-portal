@@ -20,6 +20,24 @@ import { requireAction } from '../lib/authz.js';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { asyncHandler } from '../lib/async-handler.js';
 import { exec } from '../providers/aurora.js';
+import { config } from '../config.js';
+import { mockMemoryEvents, mockMemoryStats } from '../mock/observability-queries.js';
+import { mockInsertMemoryEvent } from '../mock/observability.js';
+
+/**
+ * Marks a response whose query failed — the wrapper from routes/cost.ts, kept
+ * local so each router owns its own copy.
+ *
+ * Every read below answers 200 with an empty payload rather than failing the
+ * page, which is the right call. What it cost was the difference between
+ * "nothing happened in this window" and "the query blew up": both rendered as
+ * an empty panel. The marker restores it without touching the healthy shape —
+ * a quiet window answers exactly as it did before, and only a caught failure
+ * carries `degraded` + the first line of the error.
+ */
+function degraded<T extends object>(body: T, err: unknown): T & { degraded: true; error: string } {
+  return { ...body, degraded: true, error: (err as Error).message.split('\n')[0]?.slice(0, 160) ?? 'query failed' };
+}
 
 export const memoryRouter = Router();
 
@@ -102,6 +120,12 @@ memoryRouter.get('/events', asyncHandler(async (req, res) => {
   const invocationId = isValidUuid(req.query['invocationId'] as string | undefined)
     ? (req.query['invocationId'] as string)
     : null;
+  // Same reason as guardrails-detail: the UUID guard protects the `:iid::uuid`
+  // bind, and the offline corpus is keyed on the invocation tail's non-UUID
+  // ids. Filtering the mock branch on the raw value keeps "memory ops for THIS
+  // invocation" working from a mock detail page instead of silently listing
+  // every event in the fleet.
+  const mockInvocationFilter = (req.query['invocationId'] as string | undefined)?.trim() || null;
   const agentId = (req.query['agentId'] as string | undefined)?.trim() || null;
   const kindRaw = (req.query['kind'] as string | undefined)?.trim();
   const kind = isValidKind(kindRaw) ? kindRaw : null;
@@ -136,7 +160,9 @@ memoryRouter.get('/events', asyncHandler(async (req, res) => {
      LIMIT :lim`;
 
   try {
-    const rows = await exec(sql, params);
+    const rows = config.mock.aurora
+      ? mockMemoryEvents(mockInvocationFilter, agentId, kind, limit)
+      : await exec(sql, params);
     const events: MemoryEvent[] = rows.map((r) => ({
       memoryEventId: String(r['memory_event_id'] ?? ''),
       invocationId: r['invocation_id'] == null ? null : String(r['invocation_id']),
@@ -155,7 +181,7 @@ memoryRouter.get('/events', asyncHandler(async (req, res) => {
     res.json({ events });
   } catch (err) {
     console.warn('[memory] /events failed:', (err as Error).message);
-    res.json({ events: [] });
+    res.json(degraded({ events: [] as MemoryEvent[] }, err));
   }
 }));
 
@@ -215,7 +241,9 @@ memoryRouter.get('/stats', asyncHandler(async (req, res) => {
      ORDER BY p.retrieves DESC, p.writes DESC`;
 
   try {
-    const rows = await exec(sql, [longParam('hours', windowHours)]);
+    const rows = config.mock.aurora
+      ? mockMemoryStats(windowHours)
+      : await exec(sql, [longParam('hours', windowHours)]);
     const byAgent: MemoryAgentStat[] = rows.map((r) => {
       const total = Number(r['total'] ?? 0);
       const errors = Number(r['errors'] ?? 0);
@@ -232,7 +260,7 @@ memoryRouter.get('/stats', asyncHandler(async (req, res) => {
     res.json({ byAgent, windowHours });
   } catch (err) {
     console.warn('[memory] /stats failed:', (err as Error).message);
-    res.json({ byAgent: [], windowHours });
+    res.json(degraded({ byAgent: [] as MemoryAgentStat[], windowHours }, err));
   }
 }));
 
@@ -292,6 +320,27 @@ memoryRouter.post('/events', requireAction('ManageCanary'), asyncHandler(async (
   if (invocationId) params.push(strParam('iid', invocationId));
 
   try {
+    // Offline the row goes into the `observability-memory-writes` fixture,
+    // which the events feed concatenates onto the fleet's derived ops — so a
+    // manual insert shows up in the next GET and `POST /api/__mock/reset`
+    // drops it without touching the seeded corpus.
+    if (config.mock.aurora) {
+      const memoryEventId = mockInsertMemoryEvent({
+        invocation_id: invocationId,
+        agent_id: agentId,
+        session_id: sessionId,
+        kind,
+        memory_id: memoryId,
+        query_text: queryText,
+        result_count: resultCount,
+        duration_ms: durationMs,
+        retrieved_summary: retrievedSummary,
+        errored,
+        error_message: errorMessage,
+      });
+      res.status(201).json({ memoryEventId });
+      return;
+    }
     const rows = await exec(sql, params);
     const memoryEventId = String(rows[0]?.['memory_event_id'] ?? '');
     res.status(201).json({ memoryEventId });

@@ -24,6 +24,15 @@ jest.mock('../../lib/authz.js', () => ({
   },
 }));
 jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn() }));
+// The router now has an offline branch gated on `config.mock.aurora`, so it
+// imports config.ts — which reaches `import.meta` and is unloadable under the
+// CJS test build (the same trap drift-routes.test.ts documents). Mocked with
+// `aurora: false` on purpose: every case in this file is about the LIVE SQL
+// path, and the offline branch is pinned separately in
+// observability-mock-branch.test.ts.
+jest.mock('../../config.js', () => ({
+  config: { region: 'us-east-1', mock: { aurora: false } },
+}));
 
 import express from 'express';
 import request from '../../test-support/http.js';
@@ -123,11 +132,18 @@ describe('GET /events', () => {
     expect([0, 1, 2].map((i) => valueOf(i, 'lim')!['longValue'])).toEqual([50, 500, 50]);
   });
 
-  it('degrades to an empty list when the memory_events table is missing', async () => {
+  it('says so when the memory_events table is missing, and not when it is idle', async () => {
+    execMock.mockResolvedValue([]);
+    const idle = await request(buildApp()).get('/api/observability/memory/events');
+    expect(idle.body).toEqual({ events: [] });
+
     execMock.mockRejectedValue(new Error('relation "observability.memory_events" does not exist'));
     const res = await request(buildApp()).get('/api/observability/memory/events');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ events: [] });
+    expect(res.body).toEqual({
+      events: [], degraded: true,
+      error: 'relation "observability.memory_events" does not exist',
+    });
   });
 });
 
@@ -169,10 +185,16 @@ describe('GET /stats', () => {
     expect([0, 1, 2].map((i) => valueOf(i, 'hours')!['longValue'])).toEqual([24, 24 * 14, 24]);
   });
 
-  it('degrades to an empty rollup while echoing the window', async () => {
+  it('marks a failed rollup while echoing the window; a quiet one is unmarked', async () => {
+    execMock.mockResolvedValue([]);
+    const quiet = await request(buildApp()).get('/api/observability/memory/stats?windowHours=6');
+    expect(quiet.body).toEqual({ byAgent: [], windowHours: 6 });
+
     execMock.mockRejectedValue(new Error('boom'));
     const res = await request(buildApp()).get('/api/observability/memory/stats?windowHours=6');
-    expect(res.body).toEqual({ byAgent: [], windowHours: 6 });
+    expect(res.body).toEqual({
+      byAgent: [], windowHours: 6, degraded: true, error: 'boom',
+    });
   });
 });
 

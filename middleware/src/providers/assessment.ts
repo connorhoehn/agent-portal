@@ -30,6 +30,22 @@ export type CertificationStatus = 'verified' | 'claim_open' | 'not_applicable' |
 export interface TeamCertification {
   target_level: number;
   at_or_above_target: number;
+  /**
+   * The other two halves of `at_or_above_target`, over the SAME set (the
+   * dimensions verification has actually reached a level on): `below_target`
+   * = assessed − at_or_above_target, `above_target` = strictly above it.
+   * Both are in the source app's own team rollup
+   * (sdlcd/assessment/certification.py `certify_team`) and were dropped in
+   * the port, so the portal declared them and read nothing — a team that has
+   * cleared the bar on some dimensions and fallen short on others could
+   * state the first count and not the second.
+   *
+   * Selectors over the same level list `at_or_above_target` counts, never a
+   * stored number: `at_or_above_target + below_target === assessed` holds by
+   * construction, and `above_target <= at_or_above_target`.
+   */
+  below_target: number;
+  above_target: number;
   assessed: number;
   applicable: number;
   not_applicable: number;
@@ -111,6 +127,45 @@ export interface WorkflowStepInfo {
   active: boolean;
 }
 
+/**
+ * A scored evidence row as the scorecard renders it: the stored row plus the
+ * lineage record its `source_ref` names, resolved against the team's
+ * provenance ledger. `null` when the ref points at nothing the ledger holds
+ * (free-text refs, and rows whose PROV- id predates the ledger) — a missing
+ * record is stated, never faked.
+ *
+ * The portal has declared `Evidence.provenance` as REQUIRED since the port
+ * and the server sent no such key, so every evidence card fell back to the
+ * bare `source_ref` string. The source app resolves it the same way
+ * (`_provenance_out` in sdlcd/workflows/team_dashboard/api/assessment.py).
+ */
+export interface EvidenceOut extends M.Evidence {
+  provenance: M.Provenance | null;
+}
+
+/**
+ * One "Criteria to Level Up" bullet, and whether this dimension has reached
+ * the level that bullet unlocks. Shape ported verbatim from the source app's
+ * `CriterionStatus` (sdlcd/assessment/models.py).
+ *
+ * ⚠️ `met` is derived from the VERIFIED LEVEL, not from a per-bullet
+ * judgement — nothing in this port judges bullets individually, and the
+ * source app's own field is a model default that no command ever fills
+ * (every `workspace/teams/TEAM-NNN/assessment.json` there carries
+ * `criteria_progress: []`).
+ * The derivation is sound because the rubric defines level N as exactly the
+ * level-up criteria listed at level N−1: verifying N is the finding that
+ * those bullets hold. It says nothing stronger than the level already says.
+ */
+export interface CriterionProgress {
+  text: string;
+  /** The level this bullet unlocks — i.e. the bullet is listed at `target_level - 1`. */
+  target_level: number;
+  met: boolean;
+  /** The scored evidence that carried verification to `target_level`. Empty for an open bullet. */
+  evidence_ids: string[];
+}
+
 export interface DimensionOut {
   id: string;
   title: string;
@@ -123,9 +178,9 @@ export interface DimensionOut {
   level_name: string | null;
   rubric_levels: M.RubricLevel[];
   next_level_criteria: string[];
-  evidence: M.Evidence[];
+  evidence: EvidenceOut[];
   follow_up_questions: M.FollowUpQuestion[];
-  criteria_progress: { text: string; target_level: number; met: boolean; evidence_ids: string[] }[];
+  criteria_progress: CriterionProgress[];
   history: M.DimensionHistoryEntry[];
 }
 
@@ -251,6 +306,7 @@ export function teamCertification(dims: M.MockDimensionScore[], targetLevel: num
   const applicable = dims.filter((d) => !d.is_na);
   const assessedDims = applicable.filter((d) => d.current_level !== null);
   const atOrAbove = assessedDims.filter((d) => (d.current_level as number) >= targetLevel).length;
+  const above = assessedDims.filter((d) => (d.current_level as number) > targetLevel).length;
   const claimsOpen = dims.filter((d) => dimensionStatus(d) === 'claim_open').length;
   const notApplicable = dims.filter((d) => d.is_na).length;
   const verifiedLevels = assessedDims.map((d) => d.current_level as number);
@@ -291,6 +347,10 @@ export function teamCertification(dims: M.MockDimensionScore[], targetLevel: num
   return {
     target_level: targetLevel,
     at_or_above_target: atOrAbove,
+    // Counted here, not stored: `below_target` is the rest of `assessed`, so
+    // the two can never disagree with the number they partition.
+    below_target: assessed - atOrAbove,
+    above_target: above,
     assessed,
     applicable: applicableCount,
     not_applicable: notApplicable,
@@ -372,24 +432,99 @@ function emptyScore(dimensionId: string): M.MockDimensionScore {
   };
 }
 
-function buildDimensionOut(score: M.MockDimensionScore, targetLevel: number): DimensionOut {
+/**
+ * The bullets a dimension has to clear to reach `level`. The rubric lists
+ * them at the level BELOW the one they unlock — level 0's `level_up_criteria`
+ * are what takes a team from 0 to 1 — so reaching `level` means clearing the
+ * list at `level - 1`. Same lookup the source app does
+ * (`assessment.py`'s `next_level_criteria`: `lv.level == da.current_level`).
+ */
+function criteriaToReach(def: M.RubricDimensionDef, level: number): string[] {
+  return def.levels.find((l) => l.level === level - 1)?.level_up_criteria ?? [];
+}
+
+/**
+ * "Criteria checked" — what verification has cleared on this dimension, and
+ * what is immediately in front of it. Two blocks, never a wall of every
+ * rubric bullet:
+ *
+ *   met  — the list that reaching the verified level required. Reaching
+ *          level N under this rubric IS clearing the bullets at N−1, so this
+ *          restates the level rather than adding a claim to it. Its
+ *          `evidence_ids` are the scored rows that actually carried the
+ *          dimension to that level (`supports_level >= verified`), so a
+ *          reader can go from the bullet to the artifact.
+ *   open  — the list for the next level up. `met: false` and no evidence:
+ *          nothing has been shown for these yet.
+ *
+ * Empty for an approved N/A (nothing to reach) and for a dimension verified
+ * at Level 5 with nothing above it — the source app's `to_verify_higher`
+ * takes the same "nothing above this" stance.
+ */
+function criteriaProgress(def: M.RubricDimensionDef, score: M.MockDimensionScore): CriterionProgress[] {
+  if (score.is_na) return [];
+  const verified = score.current_level;
+  const out: CriterionProgress[] = [];
+  if (verified !== null && verified >= 1) {
+    const evidenceIds = score.evidence
+      .filter((e) => e.scored && e.supports_level !== null && e.supports_level >= verified)
+      .map((e) => e.evidence_id);
+    for (const text of criteriaToReach(def, verified)) {
+      out.push({ text, target_level: verified, met: true, evidence_ids: evidenceIds });
+    }
+  }
+  // One above what evidence has reached — never one above the claim. An
+  // unassessed dimension's next rung is Level 1, not Level 0: level 0 is
+  // "Below Baseline", which has no criteria to have met.
+  const nextLevel = verified === null ? 1 : verified + 1;
+  if (nextLevel <= MAX_LEVEL) {
+    for (const text of criteriaToReach(def, nextLevel)) {
+      out.push({ text, target_level: nextLevel, met: false, evidence_ids: [] });
+    }
+  }
+  return out;
+}
+
+function buildDimensionOut(
+  score: M.MockDimensionScore, targetLevel: number, provenance: M.Provenance[],
+): DimensionOut {
   const def = M.rubricDimension(score.dimension_id)!;
-  const nextLevel = score.current_level === null
-    ? def.levels.find((l) => l.level === 0)
-    : def.levels.find((l) => l.level === (score.current_level as number) + 1);
+  // What it would take to go up ONE level from where verification stands —
+  // the criteria listed at the current level, which is the rung above it.
+  // This read `current_level + 1` and so answered with the rung after next:
+  // a dimension verified at Level 2 was told to "establish and monitor CI
+  // performance metrics" (the Level 3→4 ask) instead of what Level 3 needs.
+  // An approved N/A has no rung above it, so it gets no ask — the same
+  // stance `to_verify_higher` and `criteria_progress` take. It used to
+  // answer with Level 0's list, offering a route to Level 1 on a dimension
+  // that had been excused from the rubric.
+  const nextLevel = score.is_na
+    ? undefined
+    : score.current_level === null
+      ? def.levels.find((l) => l.level === 0)
+      : def.levels.find((l) => l.level === score.current_level);
   return {
     id: def.id, title: def.title, definition: def.definition, na_description: def.na_description,
     current_level: score.current_level, is_na: score.is_na, confidence: score.confidence,
     certification: dimensionCertification(score, targetLevel),
     level_name: M.levelName(def.id, score.current_level),
     rubric_levels: def.levels, next_level_criteria: nextLevel?.level_up_criteria ?? [],
-    evidence: score.evidence, follow_up_questions: score.follow_up_questions,
-    criteria_progress: [], history: score.history,
+    evidence: score.evidence.map((e) => ({
+      ...e,
+      provenance: provenance.find((p) => p.provenance_id === e.source_ref) ?? null,
+    })),
+    follow_up_questions: score.follow_up_questions,
+    criteria_progress: criteriaProgress(def, score), history: score.history,
   };
 }
 
-function assembleTeamDetail(team: M.MockTeam, dims: Record<string, M.MockDimensionScore>, targetLevel: number): TeamDetailResponse {
-  const dimensions = M.RUBRIC_DIMENSIONS.map((def) => buildDimensionOut(dims[def.id] ?? emptyScore(def.id), targetLevel));
+function assembleTeamDetail(
+  team: M.MockTeam, dims: Record<string, M.MockDimensionScore>, targetLevel: number,
+  provenance: M.Provenance[],
+): TeamDetailResponse {
+  const dimensions = M.RUBRIC_DIMENSIONS.map(
+    (def) => buildDimensionOut(dims[def.id] ?? emptyScore(def.id), targetLevel, provenance),
+  );
   const workflow_steps: WorkflowStepInfo[] = WORKFLOW_STEP_LABELS.map((label, i) => ({
     step: i + 1, label, done: i + 1 < team.workflow_step, active: i + 1 === team.workflow_step,
   }));
@@ -411,12 +546,17 @@ export async function getTeamDetail(id: string): Promise<TeamDetailResponse | nu
   if (config.mock.aurora) {
     const team = M.teams().find((t) => t.id === id);
     if (!team) return null;
-    return assembleTeamDetail(team, M.scoresFor(id) ?? {}, M.configuration().target_level);
+    return assembleTeamDetail(team, M.scoresFor(id) ?? {}, M.configuration().target_level, M.provenanceFor(id));
   }
   const team = await A.fetchTeam(id);
   if (!team) return null;
-  const [dims, cfg] = await Promise.all([A.fetchDimensionScores(id), A.fetchConfiguration()]);
-  return assembleTeamDetail(team, dims, cfg.target_level);
+  // `fetchProvenanceRaw` is the existing ledger read; only `.historical` is
+  // wanted here (the scored evidence comes from fetchDimensionScores), and it
+  // is reused rather than adding a narrower query to assessment-aurora.ts.
+  const [dims, cfg, prov] = await Promise.all([
+    A.fetchDimensionScores(id), A.fetchConfiguration(), A.fetchProvenanceRaw(id),
+  ]);
+  return assembleTeamDetail(team, dims, cfg.target_level, prov.historical);
 }
 
 export async function patchTeam(

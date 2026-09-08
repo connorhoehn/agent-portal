@@ -1,162 +1,173 @@
 {
-  "capturedAt": "2026-09-08T01:47:45.133Z",
-  "baseUrl": "http://127.0.0.1:3026",
+  "capturedAt": "2026-09-08T06:29:25.001Z",
+  "serverHandlerSha": "a576ea8c40ec6915462f91f77f69260fd0a1e2b45ccab13f961e9cd6f11fc6cb",
+  "baseUrl": "http://127.0.0.1:3043",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
+  "intercepted": [
+    "agentcore",
+    "aurora",
+    "cloudwatch",
+    "guardrails"
+  ],
   "routes": {
     "DELETE /api/admin/kb-registry/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/admin/kb-registry/upload-links/:linkId": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/agent-projects/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/assessment/submissions/:team/:envelope": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/assessment/teams/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/bots/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/budgets/:orgProjectId": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/capabilities/browser-sessions/:sessionId": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/capabilities/browser-sessions/:sessionId/journey": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/capabilities/code-sessions/:sessionId": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/capabilities/guardrail/topics/:name": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/connections/:name": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/devbox/:sessionId": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/devbox/boxes/:boxId": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/environments/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/grants/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/identity/policies/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/ingest/crawl-targets/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/ingest/crawl/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/ingest/schedules/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/local-compute/nodes/:id": {
-      "refused": {
-        "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean"
+      },
+      "values": {},
+      "sent": []
     },
     "DELETE /api/observability/calibration/cases/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/observability/harness/cases/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/sdlc/policies/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/sprints/:sprintId/items/:itemId": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "DELETE /api/work/jobs/:id": {
       "refused": {
         "rule": "destructive",
-        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it."
+        "reason": "DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED fixtures only, and a good deal of mock state is a module-level array that registers nothing — so a delete is not reliably undoable, and an un-undone one silently shrinks every shape captured after it. The one exception is a delete somebody has read and proved restorable, named in RESTORABLE_DELETES with the reason; that only lets it reach the allowlist, where it still needs a full entry like anything else."
       }
     },
     "PATCH /api/admin/kb-registry/:id": {
@@ -229,21 +240,49 @@
       }
     },
     "PATCH /api/capabilities/guardrail/pii": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: edits a live Bedrock Guardrail."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "filter": "object",
+        "filter.action": "string",
+        "filter.enabled": "boolean",
+        "filter.type": "string",
+        "ok": "boolean"
+      },
+      "values": {
+        "filter.action": [
+          "BLOCK"
+        ],
+        "filter.type": [
+          "EMAIL"
+        ]
+      },
+      "sent": [
+        "action",
+        "type"
+      ]
     },
     "PATCH /api/capabilities/guardrail/topics/:name": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: edits a live Bedrock Guardrail."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean",
+        "topic": "object",
+        "topic.definition": "string",
+        "topic.enabled": "boolean",
+        "topic.name": "string"
+      },
+      "values": {},
+      "sent": [
+        "enabled"
+      ]
     },
     "PATCH /api/devbox/boxes/:boxId": {
       "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: drives a devbox microVM."
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
     },
     "PATCH /api/environments/:id": {
@@ -370,13 +409,44 @@
       }
     },
     "PATCH /api/local-compute/nodes/:id": {
-      "refused": {
-        "rule": "unresettable",
-        "reason": "Flips a seeded row that lives in module-level provider state registering no fixture, so `POST /api/__mock/reset` cannot put it back. Appending a row to such a provider is fine and several specs do it; changing one the seed shipped is not. `defineFixture` is the fix, not an exemption. Here: renames a row in mockNodes, which registers no fixture."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "acceptJobs": "boolean",
+        "createdAt": "string",
+        "id": "string",
+        "label": "string",
+        "lastSeenAt": "string",
+        "localModels": "array",
+        "ownerId": "string",
+        "platform": "string",
+        "presence": "object",
+        "presence.lastSeenAt": "string",
+        "presence.nodeId": "string",
+        "presence.sessions": "array",
+        "presence.status": "string",
+        "revokedAt": "null"
+      },
+      "values": {
+        "presence.status": [
+          "offline"
+        ]
+      },
+      "sent": [
+        "label"
+      ]
     },
     "PATCH /api/observability/calibration/cases/:id": {
-      "skipped": "no value found for :id under /api/observability/calibration/cases (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "changed": "number",
+        "ok": "boolean"
+      },
+      "values": {},
+      "sent": []
     },
     "PATCH /api/observability/harness/cases/:id": {
       "persona": "orgiq/admin",
@@ -413,11 +483,10 @@
         "workItem.completedAt": "null",
         "workItem.createdAt": "string",
         "workItem.description": "null",
-        "workItem.estimatedCostUsd": "number",
+        "workItem.estimatedCostUsd": "null",
         "workItem.id": "string",
         "workItem.labels": "array",
-        "workItem.labels[]": "string",
-        "workItem.parentId": "string",
+        "workItem.parentId": "null",
         "workItem.prStatus": "null",
         "workItem.prUrl": "null",
         "workItem.priority": "string",
@@ -425,7 +494,7 @@
         "workItem.projectName": "string",
         "workItem.sprintId": "string",
         "workItem.status": "string",
-        "workItem.storyPoints": "number",
+        "workItem.storyPoints": "null",
         "workItem.title": "string",
         "workItem.type": "string",
         "workItem.updatedAt": "string"
@@ -435,7 +504,7 @@
           "in_progress"
         ],
         "workItem.type": [
-          "story"
+          "epic"
         ]
       },
       "sent": [
@@ -485,11 +554,15 @@
           "bots",
           "browser-sessions",
           "budget-grants",
+          "calibration-cases",
+          "calibration-runs",
           "canary-weight",
           "capability-config",
           "capability-inventory",
           "chat-responses",
           "code-sessions",
+          "compute-nodes",
+          "compute-pairing-codes",
           "connected-sources",
           "design-reviews",
           "devbox-deliveries",
@@ -507,6 +580,7 @@
           "github-orgs",
           "github-repos",
           "github-signal",
+          "github-workflow-runs",
           "graph-decision-participants",
           "graph-decisions",
           "guardrail",
@@ -523,6 +597,11 @@
           "kb-summary",
           "lab-consults",
           "lab-experiences",
+          "library-assets",
+          "local-presence",
+          "observability-agent-profiles",
+          "observability-human-labels",
+          "observability-memory-writes",
           "org-findings",
           "promotion-candidates",
           "prompt-eval-cases",
@@ -560,13 +639,13 @@
     "POST /api/admin/kb-registry": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: INSERTs through the RDS Data API with no mock branch."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: INSERTs through the RDS Data API with no mock branch."
       }
     },
     "POST /api/admin/kb-registry/:id/landing-zone/upload": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: writes the uploaded object to S3."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: writes the uploaded object to S3."
       }
     },
     "POST /api/admin/kb-registry/:id/provision": {
@@ -578,7 +657,7 @@
     "POST /api/admin/kb-registry/:id/sync": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: calls Bedrock Agent StartIngestionJob directly from the handler."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: calls Bedrock Agent StartIngestionJob directly from the handler."
       }
     },
     "POST /api/admin/kb-registry/reconcile/adopt": {
@@ -587,43 +666,43 @@
     "POST /api/admin/kb-registry/upload-links": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: INSERTs through the RDS Data API with no mock branch."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: INSERTs through the RDS Data API with no mock branch."
       }
     },
     "POST /api/agent-projects": {
       "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: drives a devbox microVM (lib/project-runner.ts)."
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
     },
     "POST /api/agent-projects/:id/clone-command": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: drives a devbox microVM (lib/project-runner.ts)."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: borrows the connection's real API key through AgentCore Identity (providers/connected-sources.ts borrowApiKey) whenever the project carries one."
       }
     },
     "POST /api/agent-projects/:id/cloned": {
       "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: drives a devbox microVM (lib/project-runner.ts)."
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
     },
     "POST /api/agent-projects/:id/runs": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: drives a devbox microVM (lib/project-runner.ts)."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: drives a devbox microVM (lib/project-runner.ts)."
       }
     },
     "POST /api/agent-projects/runs/:runId/finish": {
       "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: drives a devbox microVM (lib/project-runner.ts)."
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
     },
     "POST /api/agents/:agentId/invoke": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: invokes an AgentCore runtime."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: invokes an AgentCore runtime."
       }
     },
     "POST /api/assessment/feedback": {
@@ -1090,52 +1169,115 @@
       }
     },
     "POST /api/capabilities/browser-sessions": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: opens a real Browser or Code Interpreter session."
-      }
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "ok": "boolean",
+        "session": "object",
+        "session.agentName": "string",
+        "session.currentUrl": "string",
+        "session.lastActivityAt": "string",
+        "session.pageTitle": "string",
+        "session.profileId": "string",
+        "session.requestCount": "number",
+        "session.sessionId": "string",
+        "session.startedAt": "string",
+        "session.status": "string"
+      },
+      "values": {
+        "session.status": [
+          "ACTIVE"
+        ]
+      },
+      "sent": [
+        "agentName"
+      ]
     },
     "POST /api/capabilities/browser-sessions/:sessionId/navigate": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: opens a real Browser or Code Interpreter session."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "imageDataUrl": "null",
+        "ok": "boolean",
+        "session": "object",
+        "session.agentName": "string",
+        "session.currentUrl": "string",
+        "session.lastActivityAt": "string",
+        "session.pageTitle": "string",
+        "session.profileId": "string",
+        "session.requestCount": "number",
+        "session.sessionId": "string",
+        "session.startedAt": "string",
+        "session.status": "string"
+      },
+      "values": {
+        "session.status": [
+          "ACTIVE"
+        ]
+      },
+      "sent": [
+        "url"
+      ]
     },
     "POST /api/capabilities/browser-sessions/:sessionId/screenshot": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: opens a real Browser or Code Interpreter session."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "imageDataUrl": "string",
+        "sessionId": "string",
+        "takenAt": "string"
+      },
+      "values": {},
+      "sent": []
     },
     "POST /api/capabilities/browser/crawl": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: opens a real Browser or Code Interpreter session."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: starts a crawl loop (lib/crawler.ts) that fetches the start URL and every page it discovers."
       }
     },
     "POST /api/capabilities/browser/crawl/:crawlId/cancel": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: opens a real Browser or Code Interpreter session."
-      }
+      "skipped": "no value found for :crawlId under /api/capabilities/browser/crawl (orgiq/admin)"
     },
     "POST /api/capabilities/browser/web-qa": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: opens a real Browser or Code Interpreter session."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: builds its own BedrockRuntimeClient in the handler and Converses with Nova Lite — `_bedrockRt` is module-scope in routes/capabilities.ts, with no provider and no mock branch above it."
       }
     },
     "POST /api/capabilities/code-interpreter/execute": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: opens a real Browser or Code Interpreter session."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "durationMs": "number",
+        "output": "string",
+        "sessionId": "string"
+      },
+      "values": {},
+      "sent": [
+        "code"
+      ]
     },
     "POST /api/capabilities/guardrail/topics": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: opens a real Browser or Code Interpreter session."
-      }
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "ok": "boolean",
+        "topic": "object",
+        "topic.definition": "string",
+        "topic.enabled": "boolean",
+        "topic.name": "string"
+      },
+      "values": {},
+      "sent": [
+        "definition",
+        "name"
+      ]
     },
     "POST /api/connections": {
       "persona": "orgiq/admin",
@@ -1286,32 +1428,36 @@
     "POST /api/devbox/:sessionId/command": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: drives a devbox microVM."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: invokes the devbox runtime to run a shell command."
       }
     },
     "POST /api/devbox/:sessionId/shell-url": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: drives a devbox microVM."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: resolves the devbox runtime via ListAgentRuntimes, then presigns a live socket into the microVM."
       }
     },
     "POST /api/devbox/:sessionId/task": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: drives a devbox microVM."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: invokes the devbox runtime to run a Claude Code task."
       }
     },
     "POST /api/devbox/boxes": {
       "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: drives a devbox microVM."
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: registers a box the already-running devbox reaper will stop, through the runtime transport, twenty idle minutes later."
       }
     },
     "POST /api/devbox/sessions": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: drives a devbox microVM."
-      }
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "sessionId": "string"
+      },
+      "values": {},
+      "sent": []
     },
     "POST /api/distillation/compact": {
       "refused": {
@@ -1344,19 +1490,19 @@
     "POST /api/drop/:token/upload": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: reaches the RDS Data API unguarded, then S3."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: reaches the RDS Data API unguarded, then S3."
       }
     },
     "POST /api/environments": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: INSERTs through the RDS Data API with no mock branch."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: INSERTs through the RDS Data API with no mock branch."
       }
     },
     "POST /api/gateway/channels/:id/messages": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: signs and POSTs to the real MCP gateway when a gateway URL is set."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: signs and POSTs to the real MCP gateway when a gateway URL is set."
       }
     },
     "POST /api/grants": {
@@ -1457,7 +1603,7 @@
     "POST /api/ingest/crawl": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: fetches the target URL and runs the Bedrock vision extractor."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: fetches the target URL and runs the Bedrock vision extractor."
       }
     },
     "POST /api/ingest/crawl-targets": {
@@ -1506,7 +1652,7 @@
     "POST /api/ingest/survey": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: fetches robots.txt and every discovered page."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: fetches robots.txt and every discovered page."
       }
     },
     "POST /api/ingest/survey/:id/target": {
@@ -1518,13 +1664,13 @@
     "POST /api/ingest/upload": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: writes an uploaded object to S3."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: writes an uploaded object to S3."
       }
     },
     "POST /api/iq/prompts/experiments/:experimentId/complete": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: upserts through the RDS Data API with no mock branch."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: upserts through the RDS Data API with no mock branch."
       }
     },
     "POST /api/knowledge-base/sync": {
@@ -1661,34 +1807,64 @@
       ]
     },
     "POST /api/local-compute/announce": {
-      "refused": {
-        "rule": "unresettable",
-        "reason": "Flips a seeded row that lives in module-level provider state registering no fixture, so `POST /api/__mock/reset` cannot put it back. Appending a row to such a provider is fine and several specs do it; changing one the seed shipped is not. `defineFixture` is the fix, not an exemption. Here: lib/local-compute-fleet.ts holds presence in a module Map; reset cannot restore it."
-      }
+      "persona": "anonymous",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "nodeId": "string",
+        "ok": "boolean",
+        "sessions": "number"
+      },
+      "values": {},
+      "sent": [
+        "sessions"
+      ]
     },
     "POST /api/local-compute/heartbeat": {
-      "refused": {
-        "rule": "unresettable",
-        "reason": "Flips a seeded row that lives in module-level provider state registering no fixture, so `POST /api/__mock/reset` cannot put it back. Appending a row to such a provider is fine and several specs do it; changing one the seed shipped is not. `defineFixture` is the fix, not an exemption. Here: same module Map — a heartbeat moves a node from stale back to connected with no way back."
-      }
+      "persona": "anonymous",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean"
+      },
+      "values": {},
+      "sent": []
     },
     "POST /api/local-compute/pair/claim": {
-      "refused": {
-        "rule": "unresettable",
-        "reason": "Flips a seeded row that lives in module-level provider state registering no fixture, so `POST /api/__mock/reset` cannot put it back. Appending a row to such a provider is fine and several specs do it; changing one the seed shipped is not. `defineFixture` is the fix, not an exemption. Here: spends a pairing code and mints a node token into mockNodes/mockTokenIndex, none of which reset restores."
-      }
+      "persona": "anonymous",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "nodeId": "string",
+        "nodeToken": "string"
+      },
+      "values": {},
+      "sent": [
+        "code",
+        "node"
+      ]
     },
     "POST /api/local-compute/pair/start": {
-      "refused": {
-        "rule": "unresettable",
-        "reason": "Flips a seeded row that lives in module-level provider state registering no fixture, so `POST /api/__mock/reset` cannot put it back. Appending a row to such a provider is fine and several specs do it; changing one the seed shipped is not. `defineFixture` is the fix, not an exemption. Here: providers/local-compute.ts mockCodes registers no fixture; a minted pairing code outlives the sweep."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "code": "string",
+        "expiresAt": "string"
+      },
+      "values": {},
+      "sent": []
     },
     "POST /api/local-compute/sessions/:sessionId/end": {
-      "refused": {
-        "rule": "unresettable",
-        "reason": "Flips a seeded row that lives in module-level provider state registering no fixture, so `POST /api/__mock/reset` cannot put it back. Appending a row to such a provider is fine and several specs do it; changing one the seed shipped is not. `defineFixture` is the fix, not an exemption. Here: drops a session from the module-level presence registry."
-      }
+      "persona": "anonymous",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean",
+        "removed": "boolean"
+      },
+      "values": {},
+      "sent": []
     },
     "POST /api/observability/approvals/:id/decision": {
       "skipped": "no value found for :id under /api/observability/approvals (orgiq/admin)"
@@ -1709,19 +1885,19 @@
     "POST /api/observability/calibration/cases": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: INSERTs through the RDS Data API with no mock branch."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: INSERTs through the RDS Data API with no mock branch."
       }
     },
     "POST /api/observability/calibration/runs": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: runs the Nova judge once per active case."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: runs the Nova judge once per active case."
       }
     },
     "POST /api/observability/canary/ask": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: streams from a Bedrock prompt ARN and fires the judge."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: streams from a Bedrock prompt ARN and fires the judge."
       }
     },
     "POST /api/observability/canary/halt": {
@@ -1737,25 +1913,25 @@
     "POST /api/observability/canary/library": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: creates a real Bedrock managed prompt."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: creates a real Bedrock managed prompt."
       }
     },
     "POST /api/observability/canary/library/:promptId/invoke": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: publishes, invokes or optimizes a real Bedrock managed prompt."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: publishes, invokes or optimizes a real Bedrock managed prompt."
       }
     },
     "POST /api/observability/canary/library/:promptId/optimize": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: publishes, invokes or optimizes a real Bedrock managed prompt."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: publishes, invokes or optimizes a real Bedrock managed prompt."
       }
     },
     "POST /api/observability/canary/library/:promptId/publish": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: publishes, invokes or optimizes a real Bedrock managed prompt."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: publishes, invokes or optimizes a real Bedrock managed prompt."
       }
     },
     "POST /api/observability/canary/reset": {
@@ -1771,7 +1947,7 @@
     "POST /api/observability/canary/start": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: writes both subject ARNs to SSM."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: writes both subject ARNs to SSM."
       }
     },
     "POST /api/observability/harness/cases": {
@@ -1790,13 +1966,13 @@
     "POST /api/observability/harness/promote": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: writes through the RDS Data API with no mock branch."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: writes through the RDS Data API with no mock branch."
       }
     },
     "POST /api/observability/harness/results/:invocationId/rejudge": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: re-judges with three Nova calls."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: re-judges with three Nova calls."
       }
     },
     "POST /api/observability/harness/runs": {
@@ -1817,31 +1993,31 @@
     "POST /api/observability/harness/runs/:id/execute": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: invokes the fleet and the judge per case."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: invokes the fleet and the judge per case."
       }
     },
     "POST /api/observability/harness/runs/:runId/results": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: invokes the fleet and the judge per case."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: upserts through the RDS Data API with no mock branch."
       }
     },
     "POST /api/observability/harness/trace": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: runs Titan embedding AND the Nova judge — it spends even with Aurora down."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: runs Titan embedding AND the Nova judge — it spends even with Aurora down."
       }
     },
     "POST /api/observability/invocations/:invocationId/replay": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: resolves and invokes a deployed agent, then embeds and judges the reply."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: resolves and invokes a deployed agent, then embeds and judges the reply."
       }
     },
     "POST /api/observability/memory/events": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: INSERTs through the RDS Data API with no mock branch."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: INSERTs through the RDS Data API with no mock branch."
       }
     },
     "POST /api/observability/prompt-versions": {
@@ -1860,32 +2036,70 @@
     "POST /api/observability/quality/feedback": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: UPDATEs through the RDS Data API with no mock branch."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: UPDATEs through the RDS Data API with no mock branch."
       }
     },
     "POST /api/observability/test-fixtures/refresh-seed-timestamps": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: DELETEs and UPDATEs through the RDS Data API with no mock branch."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: DELETEs and UPDATEs through the RDS Data API with no mock branch."
       }
     },
     "POST /api/observability/test-fixtures/reset-approvals": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: DELETEs and UPDATEs through the RDS Data API with no mock branch."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: DELETEs and UPDATEs through the RDS Data API with no mock branch."
       }
     },
     "POST /api/promotions/:id/dismiss": {
-      "refused": {
-        "rule": "unresettable",
-        "reason": "Flips a seeded row that lives in module-level provider state registering no fixture, so `POST /api/__mock/reset` cannot put it back. Appending a row to such a provider is fine and several specs do it; changing one the seed shipped is not. `defineFixture` is the fix, not an exemption. Here: providers/promotions.ts MOCK_CANDIDATES registers no fixture."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "dryRunPassed": "null",
+        "id": "string",
+        "observations": "array",
+        "observations[]": "object(dictionary)",
+        "proposedKind": "string",
+        "rationale": "string",
+        "sessionCount": "number",
+        "status": "string",
+        "supportCount": "number",
+        "title": "string"
+      },
+      "values": {
+        "status": [
+          "dismissed"
+        ]
+      },
+      "sent": [
+        "reason"
+      ]
     },
     "POST /api/promotions/:id/promote": {
-      "refused": {
-        "rule": "unresettable",
-        "reason": "Flips a seeded row that lives in module-level provider state registering no fixture, so `POST /api/__mock/reset` cannot put it back. Appending a row to such a provider is fine and several specs do it; changing one the seed shipped is not. `defineFixture` is the fix, not an exemption. Here: providers/promotions.ts MOCK_CANDIDATES registers no fixture."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "dryRunPassed": "boolean",
+        "id": "string",
+        "observations": "array",
+        "observations[]": "object(dictionary)",
+        "proposedKind": "string",
+        "rationale": "string",
+        "sessionCount": "number",
+        "status": "string",
+        "supportCount": "number",
+        "title": "string"
+      },
+      "values": {
+        "status": [
+          "promoted"
+        ]
+      },
+      "sent": [
+        "dryRunPassed"
+      ]
     },
     "POST /api/rediscovery/check": {
       "persona": "orgiq/admin",
@@ -1921,7 +2135,7 @@
     "POST /api/sdlc/changes/:id/address": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: resolves the devbox runtime via ListAgentRuntimes, then invokes it."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: resolves the devbox runtime via ListAgentRuntimes, then invokes it."
       }
     },
     "POST /api/sdlc/changes/:id/decide": {
@@ -1944,13 +2158,13 @@
     "POST /api/sdlc/changes/:id/deliver": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: resolves the devbox runtime via ListAgentRuntimes."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: resolves the devbox runtime via ListAgentRuntimes."
       }
     },
     "POST /api/sdlc/changes/:id/rereview": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: sends the diff to Bedrock Converse (lib/change-reviewer.ts, no mock branch)."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: sends the diff to Bedrock Converse (lib/change-reviewer.ts, no mock branch)."
       }
     },
     "POST /api/sdlc/policies": {
@@ -1980,10 +2194,49 @@
       ]
     },
     "POST /api/session-bundle/:id/publish": {
-      "refused": {
-        "rule": "unresettable",
-        "reason": "Flips a seeded row that lives in module-level provider state registering no fixture, so `POST /api/__mock/reset` cannot put it back. Appending a row to such a provider is fine and several specs do it; changing one the seed shipped is not. `defineFixture` is the fix, not an exemption. Here: providers/session-bundle.ts MOCK_BUNDLES registers no fixture, and publishing supersedes the live bundle."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "appliesTo": "array",
+        "appliesTo[]": "string",
+        "hooks": "array",
+        "hooks[]": "object",
+        "hooks[].command": "string",
+        "hooks[].description": "string",
+        "hooks[].enabled": "boolean",
+        "hooks[].event": "string",
+        "id": "string",
+        "publishedAt": "string",
+        "publishedBy": "string",
+        "sessionsAffected": "number",
+        "settings": "object",
+        "settings.ANTHROPIC_MODEL": "string",
+        "settings.ANTHROPIC_SMALL_FAST_MODEL": "string",
+        "settings.CLAUDE_CODE_USE_BEDROCK": "boolean",
+        "settings.DISABLE_AUTOUPDATER": "boolean",
+        "skills": "array",
+        "skills[]": "object",
+        "skills[].description": "string",
+        "skills[].id": "string",
+        "skills[].name": "string",
+        "skills[].source": "string",
+        "skills[].status": "string",
+        "skills[].version": "string",
+        "status": "string",
+        "version": "string"
+      },
+      "values": {
+        "skills[].status": [
+          "current"
+        ],
+        "status": [
+          "live"
+        ]
+      },
+      "sent": [
+        "dryRunBoxId"
+      ]
     },
     "POST /api/session/login": {
       "refused": {
@@ -2241,13 +2494,13 @@
     "PUT /api/iq/prompts/meta/:promptId/:version": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: upserts through the RDS Data API with no mock branch."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: upserts through the RDS Data API with no mock branch."
       }
     },
     "PUT /api/observability/canary/library/:promptId/draft": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: updates a real Bedrock managed prompt."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: updates a real Bedrock managed prompt."
       }
     },
     "PUT /api/observability/canary/weight": {
@@ -2266,7 +2519,7 @@
     "PUT /api/observability/evaluations/config": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, a Browser or Code Interpreter session, a devbox microVM, S3, or an outbound fetch. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. Here: writes the judge config to SSM, changing live judging for the whole fleet."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: writes the judge config to SSM, changing live judging for the whole fleet."
       }
     }
   }

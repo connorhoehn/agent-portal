@@ -37,7 +37,8 @@ jest.mock('../../lib/authz.js', () => ({
   },
 }));
 jest.mock('../../providers/bots.js', () => ({
-  listBots: jest.fn(), getBot: jest.fn(), createBot: jest.fn(), updateBot: jest.fn(),
+  listBots: jest.fn(), listBotsResult: jest.fn(), listBotRunsResult: jest.fn(),
+  getBot: jest.fn(), createBot: jest.fn(), updateBot: jest.fn(),
   deleteBot: jest.fn(), setPausedReason: jest.fn(), listBotRuns: jest.fn(),
   listMarketplaceRuns: jest.fn(), runCostSamples: jest.fn(), perPointCostSamples: jest.fn(),
 }));
@@ -57,7 +58,7 @@ import request from '../../test-support/http.js';
 import { botsRouter } from '../bots.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import {
-  listBots, getBot, createBot, updateBot, deleteBot, listBotRuns,
+  listBotsResult, getBot, createBot, updateBot, deleteBot, listBotRunsResult,
   runCostSamples, perPointCostSamples,
 } from '../../providers/bots.js';
 import { fireBot, decideRunBudget } from '../../lib/bot-runner.js';
@@ -120,15 +121,18 @@ describe('the gate tiers', () => {
 
 describe('GET /api/bots', () => {
   it('wraps the roster', async () => {
-    m(listBots).mockResolvedValue([BOT]);
+    m(listBotsResult).mockResolvedValue({ items: [BOT] });
     const res = await request(buildApp()).get('/api/bots');
     expect(res.status).toBe(200);
     expect(Object.keys(res.body)).toEqual(['bots']);
     expect(res.body.bots[0].id).toBe('bot-1');
   });
 
+  // A healthy empty roster is byte-identical to what this route always sent —
+  // the degraded marker appears only on a failure, which is what makes the two
+  // tellable apart. See bots-roster-degraded.test.ts for the other half.
   it('serves an empty roster as an empty list', async () => {
-    m(listBots).mockResolvedValue([]);
+    m(listBotsResult).mockResolvedValue({ items: [] });
     expect((await request(buildApp()).get('/api/bots')).body).toEqual({ bots: [] });
   });
 });
@@ -369,15 +373,15 @@ describe('POST /api/bots/:id/run', () => {
 
 describe('GET /api/bots/:id/runs', () => {
   it('wraps the firing history for THAT bot, bounded', async () => {
-    m(listBotRuns).mockResolvedValue([{ id: 'run-1', status: 'succeeded' }]);
+    m(listBotRunsResult).mockResolvedValue({ items: [{ id: 'run-1', status: 'succeeded' }] });
     const res = await request(buildApp()).get('/api/bots/bot-1/runs');
     expect(res.status).toBe(200);
     expect(Object.keys(res.body)).toEqual(['runs']);
-    expect(listBotRuns).toHaveBeenCalledWith('bot-1', 50);
+    expect(listBotRunsResult).toHaveBeenCalledWith('bot-1', 50);
   });
 
   it('returns an empty history for a bot that has never fired', async () => {
-    m(listBotRuns).mockResolvedValue([]);
+    m(listBotRunsResult).mockResolvedValue({ items: [] });
     expect((await request(buildApp()).get('/api/bots/bot-9/runs')).body).toEqual({ runs: [] });
   });
 });

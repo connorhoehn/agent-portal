@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import re
 import sys
 import time
 from contextvars import ContextVar
@@ -21,6 +20,7 @@ except ImportError:
 # Shared instrumentation — pull TraceContext + decorator from agents/_shared.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from _shared.prompt_source import LiveAgent
+from _shared.sql_guard import read_only_error  # noqa: E402
 from _shared.instrumentation import (  # noqa: E402
     TraceContext,
     install_bedrock_usage_capture,
@@ -60,7 +60,6 @@ BROWSER_ID = os.environ.get("BROWSER_ID", "")
 _bedrock = boto3.client("bedrock-agent-runtime", region_name=REGION)
 _rds = boto3.client("rds-data", region_name=REGION)
 
-_READONLY_RE = re.compile(r"^\s*(WITH|SELECT)\b", re.IGNORECASE)
 
 
 def _records_to_dicts(resp: dict) -> list:
@@ -69,7 +68,14 @@ def _records_to_dicts(resp: dict) -> list:
     for record in resp.get("records", []):
         row = {}
         for col, cell in zip(cols, record):
-            row[col] = list(cell.values())[0] if cell else None
+            # An RDS Data API NULL arrives as {"isNull": True}. Taking the
+            # first value blindly turns it into the boolean True, so a person
+            # with no expertise_score reads back to the model as
+            # `"expertise_score": true` — a value it will happily reason about.
+            if not cell or cell.get("isNull"):
+                row[col] = None
+            else:
+                row[col] = list(cell.values())[0]
         out.append(row)
     return out
 
@@ -136,8 +142,13 @@ def query_graph(sql: str) -> str:
     Returns:
         JSON array of result rows keyed by column name.
     """
-    if not _READONLY_RE.match(sql) or ";" in sql.strip().rstrip(";"):
-        return json.dumps({"error": "Only single read-only SELECT/WITH statements are allowed."})
+    # Security boundary, not a style rule: the model writes this SQL and the
+    # Data API role can write. See _shared/sql_guard.py — in particular the
+    # data-modifying CTE (`WITH x AS (DELETE ... RETURNING *) SELECT * FROM x`)
+    # that the old leading-keyword regex waved straight through.
+    _err = read_only_error(sql)
+    if _err:
+        return json.dumps({"error": _err})
 
     response = _rds.execute_statement(
         resourceArn=AURORA_CLUSTER_ARN,

@@ -176,3 +176,33 @@ what the one time-bearing string on these surfaces says. A banner that reads
 "just now" forever is a wrong statement rendered with a correct name — the
 worst thing a sweep like this can pass. It now reads the real age whenever it
 is read.
+
+--- freshness re-observation, 2026-09-08 (the Lead cell) ---
+Why: `portal/src/pages/assessment/dashboard/TeamList.tsx` changed, which moved this
+log's `pages:` digest. The change is narrow and is the portal half of the
+assessment wire-field correction: `TeamSummary.assessment_lead_person_id`,
+`TeamDetail.assessment_lead_person_id` and `contributors[].person_id` were
+deleted from `pages/assessment/types.ts` because the server sends none of them
+(verified live across all 7 teams, and asserted absent by
+`middleware/src/providers/__tests__/assessment-declared-fields.test.ts`). The two
+places that read them therefore stopped wrapping the lead's name in `PersonRef`.
+Nothing was lost by that: `PersonRef` was always being handed a null personId
+here, and with a null id it returns its plain, NON-focusable branch before any of
+its hover/pin machinery — and in this tenant it would refuse to link anyway
+(`linkable = session?.tenant === 'orgiq'`). The lead was already a name, not a
+control; it is now a name written as one.
+Re-observed live at 1552px on `npm run dev:mock` (127.0.0.1:3011 behind a pinned
+Vite proxy), signed in through /select as Asha Nair, Jonas Lindqvist, Farah Osei and Platform Operator in turn — all four gave the same numbers:
+  - `/assessment/teams` (this surface): **12** visible, enabled controls in
+    `<main>`, and a document-order `.focus()` sweep reached all 12 — exactly the
+    12 this log's `keyboard:` line already records, unchanged.
+  - `/assessment/teams?cohort=all` (the TeamList table this surface opens into):
+    the Lead column renders plain text with **0** focusable controls per cell.
+The em dash matters and was preserved deliberately: `assessment_lead` is the
+empty string on TEAM-006 and TEAM-007, and `PersonRef`'s "no name" branch used to
+render "—" for them. A bare data key would have left those cells blank, which
+reads as a rendering fault rather than as "nobody yet", so the column keeps the
+em dash the rest of this table uses for an empty. Verified: the seven Lead cells
+read Dana Whitfield, Sam Okafor, —, —, Elena Marsh, Priya Natarajan, Jordan Lee,
+and each one contains 0 focusable controls.
+Console errors: 0 on both surfaces.

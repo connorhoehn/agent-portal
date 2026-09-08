@@ -164,10 +164,30 @@ environmentsRouter.get('/:id/access', requireSession('EnterEnvironment'), asyncH
  * The latest GitHub Actions runs for the repository that delivers this
  * environment's initiative. Reporting only — see the file header.
  *
- * Errors from GitHub are reported as an empty list plus a `note`, not a 5xx: a
- * missing credential or a repo with no Actions is an ordinary state of the
- * world, and failing the whole environment view over it would be a worse
- * answer than "no runs to show, here's why".
+ * Errors from GitHub are reported as an empty list, not a 5xx: a missing
+ * credential or a repo with no Actions is an ordinary state of the world, and
+ * failing the whole environment view over it would be a worse answer than "no
+ * runs to show, here's why".
+ *
+ * But an empty list is only half an answer, and for a long time it was the
+ * only half. Every outcome below — no repository, no history, GitHub
+ * unreachable — came back as `{ runs: [] }` with a `note` that was sometimes a
+ * fact about the org and sometimes an exception message, so a reader could not
+ * tell a broken integration from an idle repository and neither could any
+ * check we have: the wire capture recorded a cheerful `200` for the failure
+ * too. `degraded` is the fix, borrowed verbatim from routes/cost.ts, which
+ * lost the same distinction between "no spend in this window" and "the
+ * database is gone" and rendered $0.0000 for both.
+ *
+ * Four distinguishable answers, and the marker appears on exactly one:
+ *
+ *   { runs: [], repo: null, note }             nothing is linked — a fact
+ *   { runs: [], repo, note }                   linked, no history — a fact
+ *   { runs: [...], repo }                      history
+ *   { runs: [], repo, degraded: true, error }  we could not ask
+ *
+ * The upstream being unreachable is a STATED degraded state, never an empty
+ * list, and never a 500 in a reader's face either.
  */
 environmentsRouter.get('/:id/runs', readGate, asyncHandler(async (req, res) => {
   const env = await getEnvironment(String(req.params['id'] ?? ''));
@@ -186,9 +206,22 @@ environmentsRouter.get('/:id/runs', readGate, asyncHandler(async (req, res) => {
     const runs = await listWorkflowRuns(repo.repoFullName, limit, {
       connectionName: repo.connectionName,
     });
+    if (runs.length === 0) {
+      // Said out loud rather than left to inference, because the shape of this
+      // response is otherwise byte-identical to the degraded one above it.
+      res.json({
+        runs: [], repo: repo.repoFullName,
+        note: `${repo.repoFullName} has no workflow runs to report.`,
+      });
+      return;
+    }
     res.json({ runs, repo: repo.repoFullName });
   } catch (err) {
-    res.json({ runs: [], repo: repo.repoFullName, note: (err as Error).message });
+    // First line only, so a multi-line upstream error stays a label — same
+    // trim as cost.ts, for the same reason.
+    const error = (err as Error).message.split('\n')[0]?.slice(0, 160) ?? 'workflow runs unavailable';
+    console.warn(`[environments] workflow runs for ${repo.repoFullName} failed:`, error);
+    res.json({ runs: [], repo: repo.repoFullName, degraded: true, error });
   }
 }));
 

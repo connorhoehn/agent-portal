@@ -1,6 +1,7 @@
 import { useLocation } from 'react-router';
 import { EmptyState } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../lib/auth';
+import { resolveHome } from '../lib/tenantHome';
 
 // Catch-all for unmatched paths. Before this existed, a typo'd URL or a link
 // to a removed route rendered a blank document — indistinguishable from the
@@ -9,7 +10,8 @@ import { useSession } from '../lib/auth';
 export default function NotFoundPage() {
   const { pathname } = useLocation();
   const { session } = useSession();
-  const home = session?.tenant === 'assessment' ? '/assessment/teams' : '/iq/work';
+  // Wherever `/` would send them — one home resolution, not a local guess.
+  const home = resolveHome(session);
 
   return (
     <EmptyState

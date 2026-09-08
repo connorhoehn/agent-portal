@@ -18,6 +18,41 @@ fail() { printf '  ✗ %s\n' "$1"; FAILS+=("$1"); }
 note() { printf '      %s\n' "$1"; }
 section() { printf '\n== %s ==\n' "$1"; }
 
+# Snapshot freshness, by CONTENT.
+#
+# The snapshot records `serverHandlerSha` — the digest of the handler sources
+# the capturing SERVER booted from, as that server reported it. We recompute
+# the digest from disk, through the SAME implementation the server used
+# (middleware/src/mock/core/wire/handler-sha.ts), and compare. One
+# implementation on purpose: the last time this repo answered one question with
+# two hash functions they disagreed, and a seal got written that nothing could
+# reproduce.
+#
+# A snapshot with no digest is stale, not exempt — it was taken before this
+# check existed, or against a process that could not report one, and either way
+# nothing vouches for it.
+snapsha_check() {
+  snap="$1"; label="$2"
+  recorded=$(node -e '
+    const fs = require("fs");
+    try {
+      const v = JSON.parse(fs.readFileSync(process.argv[1], "utf8")).serverHandlerSha;
+      process.stdout.write(typeof v === "string" ? v : "");
+    } catch { process.stdout.write(""); }
+  ' "$snap")
+  actual=$(cd "$MW" && npx tsx src/mock/core/wire/print-handler-sha.ts 2>/dev/null)
+  if [ -z "$actual" ]; then
+    fail "$label: could not compute the handler digest — is middleware/node_modules present?"
+  elif [ -z "$recorded" ]; then
+    fail "$label records no serverHandlerSha — recapture it (docs/mock-floor.md § Regenerating the snapshots)"
+  elif [ "$recorded" = "$actual" ]; then
+    ok "$label was captured from the handler sources on disk"
+  else
+    fail "$label was captured from DIFFERENT handler sources than are on disk — recapture it (docs/mock-floor.md § Regenerating the snapshots)"
+    note "recorded ${recorded%%????????????????????????????????????????????????????????}… vs on disk ${actual%%????????????????????????????????????????????????????????}…"
+  fi
+}
+
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 
 # The static scanner behind the widened halves of rules 3 and 4. One run, two
@@ -451,28 +486,19 @@ if [ -f "$WIRE" ]; then
     fail "wire.json is missing $(printf '%s\n' "$missing" | wc -l | tr -d ' ') GET route(s) — recapture"
     printf '%s\n' "$missing" | head -10 | while read -r l; do note "$l"; done
   fi
-  # Freshness: any handler source newer than the capture invalidates it.
-  # `core/wire` and `core/parity` are the harnesses themselves — they read the
-  # capture, they never change what the server sends, so editing them does not
-  # invalidate it. Everything else that shapes a response does.
-  newer=$(find "$MW/src/routes" "$MW/src/providers" "$MW/src/mock" "$MW/src/index.ts" \
-            -name '*.ts' ! -path '*__tests__*' ! -path '*/core/wire/*' ! -path '*/core/parity/*' \
-            -newer "$WIRE" 2>/dev/null | head -8)
-  if [ -z "$newer" ]; then ok "wire.json is newer than every route/provider/mock source"; else
-    fail "wire.json predates $(printf '%s\n' "$newer" | wc -l | tr -d ' ')+ handler source(s) — recapture it (docs/mock-floor.md § Regenerating the snapshots)"
-    printf '%s\n' "$newer" | while read -r l; do note "$(rel "$l")"; done
-  fi
+  # Freshness is a CONTENT question, not a time one. It used to be
+  # `find -newer wire.json`, and a real capture fell through that: a sweep run
+  # at 22:27 recorded responses from a server booted at 02:24, before a route
+  # change, so the snapshot FILE was newer than the source it disagreed with
+  # and the check passed over a stale shape. The server now hashes the handler
+  # sources it booted from and the capture records that digest, so a sweep
+  # against a stale process is caught however new the file is.
+  snapsha_check "$WIRE" wire.json
 fi
 # The write snapshot rots the same way and for the same reason: it is a record
 # of what handlers sent back, and rule 2 above believes it.
 if [ -f "$WRITES" ]; then
-  wnewer=$(find "$MW/src/routes" "$MW/src/providers" "$MW/src/mock" "$MW/src/index.ts" \
-            -name '*.ts' ! -path '*__tests__*' ! -path '*/core/wire/*' ! -path '*/core/parity/*' \
-            -newer "$WRITES" 2>/dev/null | head -8)
-  if [ -z "$wnewer" ]; then ok "writes.json is newer than every route/provider/mock source"; else
-    fail "writes.json predates $(printf '%s\n' "$wnewer" | wc -l | tr -d ' ')+ handler source(s) — recapture it"
-    printf '%s\n' "$wnewer" | while read -r l; do note "$(rel "$l")"; done
-  fi
+  snapsha_check "$WRITES" writes.json
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────

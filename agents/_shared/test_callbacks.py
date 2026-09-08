@@ -104,9 +104,18 @@ def setUpModule() -> None:  # noqa: N802 - unittest hook
     from _shared import approval_tool as _approval_tool  # noqa: PLC0415
 
     approval_tool = _approval_tool
+    # `import httpx` inside approval_tool binds whichever module object was in
+    # sys.modules the FIRST time it was imported — which may have been another
+    # test file's double if that file loaded first. Rebind it explicitly so
+    # these tests are independent of import order.
+    _SAVED_MODULES["approval_tool.httpx"] = getattr(approval_tool, "httpx", None)
+    approval_tool.httpx = httpx_stub
 
 
 def tearDownModule() -> None:  # noqa: N802 - unittest hook
+    saved_httpx = _SAVED_MODULES.pop("approval_tool.httpx", None)
+    if saved_httpx is not None:
+        approval_tool.httpx = saved_httpx
     for name, mod in _SAVED_MODULES.items():
         if mod is None:
             sys.modules.pop(name, None)

@@ -294,8 +294,14 @@ export function Layout() {
             <div className="flex items-center gap-3">
               <CommandPaletteHint />
               {/* The user's own machine in the fleet — renders nothing until
-                  a machine is paired, so most sessions never see it. */}
-              <LocalComputeBadge />
+                  a machine is paired, so most sessions never see it.
+                  orgiq only, like DevboxQuickSwitch and ComputeDock below:
+                  unguarded, it put an orgiq machine (and the initiative and
+                  branch it was working on) in the assessment header, with an
+                  "Open Computer Lab" action leading out of the tenant. The
+                  server filters these nodes by OWNER, which is not the same
+                  question as which workspace you are standing in. */}
+              {session?.tenant === 'orgiq' && <LocalComputeBadge />}
               <GatewayStatusBadge />
               <MasqueradeMenu />
             </div>

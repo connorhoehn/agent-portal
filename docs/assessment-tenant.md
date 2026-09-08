@@ -1,6 +1,7 @@
 # Assessment tenant — reverse-engineering `agentic-assessment-accelerator`
 
-The third tenant. Source repo: `~/Projects/agentic-assessment-accelerator`
+The second tenant (it was the third until the newsroom tenant was removed —
+see `docs/newsroom-removal.md`). Source repo: `~/Projects/agentic-assessment-accelerator`
 (SDLC Assessment Dashboard). This doc is the contract every piece of the port
 builds against — the domain model, the two layouts worth keeping, the Cedar
 roles, the mock-route surface, and the agentic seam. Read this before touching

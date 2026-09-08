@@ -107,7 +107,14 @@ CREATE TABLE IF NOT EXISTS assessment_evidence (
   captured_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   source_ref      TEXT NOT NULL DEFAULT '',         -- provenance_id or free text
   scored          BOOLEAN NOT NULL DEFAULT FALSE,
-  status          TEXT NOT NULL DEFAULT 'pending',
+  -- Uppercase, and constrained. Every writer supplies this column explicitly
+  -- ('PENDING' at intake, 'SCORED' after scoring, 'CLASSIFIED' from the
+  -- classifier), so the lowercase 'pending' default was unreachable — and an
+  -- unreachable default that disagrees with the values in the table is worse
+  -- than none: it is the spelling the next person copies. The CHECK makes the
+  -- vocabulary the column's own, rather than a convention held only in TS.
+  status          TEXT NOT NULL DEFAULT 'PENDING'
+                    CHECK (status IN ('PENDING', 'CLASSIFIED', 'SCORED')),
   title           TEXT,                             -- intake metadata (optional)
   captured_by     TEXT
 );

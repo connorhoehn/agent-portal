@@ -17,6 +17,7 @@
 import { borrowApiKey } from '../providers/connected-sources.js';
 import { config } from '../config.js';
 import { githubIdentityRow, githubOrgRows, githubRepoRows, githubSignalRows } from '../mock/github.js';
+import { mockWorkflowRuns } from '../mock/github-runs.js';
 
 const API = 'https://api.github.com';
 
@@ -372,9 +373,18 @@ export async function listWorkflowRuns(
   limit = 10,
   opts: { token?: string; connectionName?: string | null } = {},
 ): Promise<WorkflowRun[]> {
+  const per = Math.min(Math.max(limit, 1), 50);
+
+  // Fixture floor, not a network call — and the last read in this connector to
+  // get one. Every other function here already branched; this one did not, and
+  // because its only caller catches, the gap surfaced as an empty list rather
+  // than as an error, which is why no check ever saw it. The branch is above
+  // the token borrow for the same reason identify()'s is: there is no vault
+  // offline, so asking for a credential first would fail for the wrong reason.
+  if (config.mock.agentcore) return mockWorkflowRuns(repoFullName, per);
+
   const token = opts.token
     ?? (opts.connectionName ? await borrowApiKey(opts.connectionName) : '');
-  const per = Math.min(Math.max(limit, 1), 50);
 
   const body = await gh<{
     workflow_runs?: Array<{

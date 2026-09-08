@@ -71,6 +71,14 @@ interface Capture {
 
 export interface WireSnapshot {
   capturedAt: string;
+  /**
+   * The digest of the handler sources the SERVER booted from, as it reports
+   * them. This is what makes freshness a content question: a sweep run against
+   * a process started before an edit records the old digest, and the validator
+   * catches it however new the snapshot FILE is. `null` when the server does
+   * not report one (an older build, or a non-mock process).
+   */
+  serverHandlerSha: string | null;
   baseUrl: string;
   personas: string[];
   routes: Record<string, Capture>;
@@ -166,11 +174,24 @@ export async function capture(log: (s: string) => void = () => {}): Promise<Wire
 
   return {
     capturedAt: new Date().toISOString(),
+    serverHandlerSha: await serverHandlerSha(),
     baseUrl: BASE,
     personas: personaNames,
     routes: Object.fromEntries(Object.keys(routes).sort().map((k) => [k, routes[k]!])),
     vocabulary,
   };
+}
+
+/** Ask the running server which sources it booted from. */
+async function serverHandlerSha(): Promise<string | null> {
+  try {
+    const res = await fetch(`${BASE}/api/__mock/state`);
+    if (!res.ok) return null;
+    const body = (await res.json()) as { handlerSha?: unknown };
+    return typeof body.handlerSha === 'string' && body.handlerSha ? body.handlerSha : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function main(): Promise<void> {

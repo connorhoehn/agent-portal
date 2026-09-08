@@ -21,6 +21,7 @@
 
 import { exec } from './aurora.js';
 import { config } from '../config.js';
+import { agentProjects } from '../mock/agent-projects.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
@@ -282,11 +283,31 @@ export async function updateEnvironment(
  * the two disagree about which repository ships an initiative. The workflow-run
  * report (GET /api/environments/:id/runs) resolves the repo through the
  * initiative for exactly that reason.
+ *
+ * The offline branch reads the SAME fixture the linked-codebase surface reads
+ * (mock/agent-projects.ts), rather than a second copy of the mapping. It used
+ * to return `null` unconditionally, which made every environment in `dev:mock`
+ * claim "No repository is linked to this initiative" — a statement the seed
+ * flatly contradicts: `schema/seed_program.sql` links one repository to each
+ * of the fourteen initiatives, including all three that have an environment.
+ * A mock that answers a question wrongly is worse than one that cannot answer
+ * it, because the wrong answer looks like a finding.
  */
 export async function repoForInitiative(
   orgProjectId: string,
 ): Promise<{ repoFullName: string; connectionName: string | null } | null> {
-  if (config.mock.aurora) return null;
+  if (config.mock.aurora) {
+    // `ORDER BY created_at ASC LIMIT 1` — the oldest link wins, matching the
+    // statement below, so the offline answer and the live one pick the same
+    // repository when an initiative has more than one.
+    const linked = agentProjects.rows()
+      .filter((p) => p.orgProjectId === orgProjectId)
+      .slice()
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
+    return linked
+      ? { repoFullName: linked.repoFullName, connectionName: linked.connectionName }
+      : null;
+  }
   const rows = await exec(
     `SELECT repo_full_name, connection_name
        FROM agent_projects

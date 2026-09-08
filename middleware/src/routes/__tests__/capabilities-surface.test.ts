@@ -65,8 +65,10 @@ jest.mock('../../providers/index.js', () => ({
     addDeniedTopic: jest.fn(), removeDeniedTopic: jest.fn(),
   },
   agentcore: {
-    listCodeSessions: jest.fn(), terminateCodeSession: jest.fn(), executeCode: jest.fn(),
-    listBrowserSessions: jest.fn(), createBrowserSession: jest.fn(),
+    listCodeSessions: jest.fn(), listCodeSessionsResult: jest.fn(),
+    terminateCodeSession: jest.fn(), executeCode: jest.fn(),
+    listBrowserSessions: jest.fn(), listBrowserSessionsResult: jest.fn(),
+    createBrowserSession: jest.fn(),
     closeBrowserSession: jest.fn(), navigateBrowser: jest.fn(), screenshotBrowser: jest.fn(),
   },
   cloudwatch: { getGuardrailMetrics: jest.fn() },
@@ -127,7 +129,7 @@ describe('GET /guardrail/metrics', () => {
 
 describe('code interpreter', () => {
   it('GET /code-sessions wraps the live sessions', async () => {
-    ac['listCodeSessions']!.mockResolvedValue([{ sessionId: 'ci-1', status: 'READY' }]);
+    ac['listCodeSessionsResult']!.mockResolvedValue({ items: [{ sessionId: 'ci-1', status: 'READY' }] });
     const res = await request(buildApp()).get('/api/capabilities/code-sessions');
     expect(res.status).toBe(200);
     expect(Object.keys(res.body)).toEqual(['sessions']);
@@ -181,7 +183,7 @@ describe('code interpreter', () => {
 
 describe('browser sessions', () => {
   it('GET /browser-sessions wraps the live microVMs', async () => {
-    ac['listBrowserSessions']!.mockResolvedValue([{ sessionId: 'br-1', currentUrl: 'about:blank' }]);
+    ac['listBrowserSessionsResult']!.mockResolvedValue({ items: [{ sessionId: 'br-1', currentUrl: 'about:blank' }] });
     const res = await request(buildApp()).get('/api/capabilities/browser-sessions');
     expect(res.status).toBe(200);
     expect(Object.keys(res.body)).toEqual(['sessions']);

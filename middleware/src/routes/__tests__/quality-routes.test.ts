@@ -24,6 +24,15 @@ jest.mock('../../lib/authz.js', () => ({
   },
 }));
 jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn() }));
+// The router now has an offline branch gated on `config.mock.aurora`, so it
+// imports config.ts — which reaches `import.meta` and is unloadable under the
+// CJS test build (the same trap drift-routes.test.ts documents). Mocked with
+// `aurora: false` on purpose: every case in this file is about the LIVE SQL
+// path, and the offline branch is pinned separately in
+// observability-mock-branch.test.ts.
+jest.mock('../../config.js', () => ({
+  config: { region: 'us-east-1', mock: { aurora: false } },
+}));
 
 import express from 'express';
 import request from '../../test-support/http.js';
@@ -120,11 +129,19 @@ describe('GET /scores', () => {
     expect(paramsOf(0)).toContainEqual({ name: 'agent', value: { stringValue: 'orgiq-search' } });
   });
 
-  it('degrades to an empty series when the observability schema is missing', async () => {
+  it('marks a missing schema, and leaves an unjudged window unmarked', async () => {
+    execMock.mockResolvedValue([]);
+    const quiet = await request(buildApp()).get('/api/observability/quality/scores');
+    expect(quiet.status).toBe(200);
+    expect(quiet.body).toEqual({ points: [] });
+
     execMock.mockRejectedValue(new Error('relation "observability.invocation_traces" does not exist'));
     const res = await request(buildApp()).get('/api/observability/quality/scores');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ points: [] });
+    expect(res.body).toEqual({
+      points: [], degraded: true,
+      error: 'relation "observability.invocation_traces" does not exist',
+    });
   });
 });
 

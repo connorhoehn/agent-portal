@@ -40,20 +40,105 @@
 //   5. It leaves no SEEDED row in a state the sweep cannot put back. The sweep
 //      calls `POST /api/__mock/reset` before every replay, which restores every
 //      REGISTERED fixture — so a route backed by one may change whatever it
-//      likes. Eight provider domains (bots, sprints, grants, work-items,
-//      promotions, session-bundle, lab, prompt-evals) hold their mock rows in
-//      module-level arrays that register no fixture, and reset cannot touch
-//      those. Against one of those a replay may APPEND a row (harmless — the
-//      shape is unchanged and nothing seeded moved) or write a value back
-//      UNCHANGED (an echo-back patch: it exercises the write path and returns
-//      the real response shape while leaving the row byte-identical). It may
-//      not flip a seeded row's state: that is the exact damage the control
-//      plane exists to prevent — "promo-aurora-cold-start is now Promoted until
-//      the middleware restarts", quoted in docs/mock-floor.md. Registering the
-//      fixture is what makes such a route replayable.
+//      likes. Against a provider whose rows are a bare module-level array a
+//      replay may only APPEND (harmless — the shape is unchanged and nothing
+//      seeded moved) or write a value back UNCHANGED (an echo-back patch: it
+//      exercises the write path and returns the real response shape while
+//      leaving the row byte-identical). It may not flip a seeded row's state:
+//      that is the exact damage the control plane exists to prevent —
+//      "promo-aurora-cold-start is now Promoted until the middleware restarts",
+//      quoted in docs/mock-floor.md.
+//
+//      WHAT CHANGED. This paragraph used to name eight provider domains (bots,
+//      sprints, grants, work-items, promotions, session-bundle, lab,
+//      prompt-evals) as holding their rows in arrays that register no fixture.
+//      All eight register one now — `bots`/`bot-runs`, `sprints`,
+//      `budget-grants`/`initiative-budgets`, `work-items`,
+//      `promotion-candidates`, `session-bundles`, `lab-experiences`/
+//      `lab-consults`, `prompt-eval-cases`/`prompt-eval-runs` — so reset puts
+//      each of them back and the echo-back workaround is no longer needed
+//      there. `defineFixture` is what moved those routes onto the allowlist,
+//      and the same migration has since emptied the `unresettable` rule's list
+//      entirely — the rule stays stated, for a provider that goes back to a
+//      bare array. A refusal whose stated reason has stopped being true is
+//      worse than no refusal: it reads as a considered decision.
 //   6. Its body can be synthesised from the route's OWN validation and from
 //      rows the server itself hands back. Never from imagination: an invented
 //      body is the same class of fiction this whole harness exists to stop.
+//
+// ── "It spends" vs "it would spend, but this process intercepts it" ─────────
+//
+// Rules 1 and 2 say a route may be replayed only when it spends nothing and
+// reaches nothing real, and the `spends` refusal below adds the sentence that
+// makes that rule honest: a call is harmless on a laptop only because this
+// process has no cluster and no credentials, "which is a property of the
+// laptop, not of the route, and a policy that leans on it is one
+// `WIRE_BASE_URL` away from being wrong."
+//
+// That sentence is right, and it was also being used to refuse a family of
+// routes it does not describe. `POST /api/capabilities/browser-sessions` does
+// not fail offline for want of credentials: `providers/index.ts` binds
+// `agentcore` to `mockAgentCore` at module load when MOCK_AGENTCORE is set, so
+// the handler's `agentcore.createBrowserSession(...)` IS the fixture write —
+// there is no AWS call to fail. Same for `mockGuardrails` under the guardrail
+// patches, and for the whole local-compute surface under MOCK_AURORA. Refusing
+// those with "replaying it costs money" states something untrue about the
+// process being captured, and a refusal whose stated reason is false reads as
+// a considered decision when it is a mistake.
+//
+// So which is it — a property of the route, or of the configuration?
+//
+// BOTH, and the policy now says which half is which. The route property is:
+// *this route spends unless the process serving it intercepts the provider it
+// spends through.* That is true everywhere and needs no laptop to hold. The
+// configuration question — is THIS process intercepting it? — is not something
+// this file may assume, and it is not something the laptop's own environment
+// can answer either, because the capture may be pointed anywhere with
+// `WIRE_BASE_URL`. It is a fact about the server, so it is ASKED OF THE SERVER:
+// `GET /api/health` reports `mocks: { aurora, agentcore, guardrails,
+// cloudwatch }`, and `capture-writes.ts` reads it before it replays anything.
+//
+// A spec that leans on interception declares it (`intercepts: ['agentcore']`)
+// and is REFUSED BY DEFAULT — rule `not-intercepted`. It is admitted only when
+// the server the capture is talking to has said, of itself, that it is running
+// those mock providers. Point the capture at a real deployment and every one
+// of these refuses itself, by mechanism rather than by the author having
+// remembered; lose the health endpoint and the capture stops rather than
+// guessing (`capture-writes.ts` treats an unreadable `/api/health` as fatal).
+//
+// WHY A PRECONDITION AND NOT JUST A RULE ID. A distinct refusal id — "spends,
+// unless the mock providers intercept it" — would have been the smaller
+// change, and it would have left the same hole: it is still this file
+// ASSERTING something about a configuration it cannot see, which is exactly
+// the failure mode the `spends` sentence warns about. Naming the assumption
+// does not check it. A precondition checked against the server's own statement
+// about itself is the same discipline every `build` below already follows,
+// where every value in a request body comes from the server rather than from
+// memory. The reasoning belongs in the same place as the reason.
+//
+// WHAT THIS DOES NOT DO. It does not make a spend safe. Routes that spend in
+// EVERY configuration stay in `SPENDS` and are enumerated there rather than
+// wildcarded — `POST /api/capabilities/browser/web-qa` builds its own
+// `BedrockRuntimeClient` in the handler and calls Converse with no mock branch
+// above it; `POST /api/capabilities/browser/crawl` starts a loop that fetches
+// real pages. The wildcards over `/api/capabilities/*` said both of those
+// things about the guardrail patches too: of the ten writes under that prefix
+// they actually caught (the four DELETEs hit `destructive` first), exactly two
+// were what they described.
+//
+// WHAT IS STILL UNDECLARED. `intercepts` was retrofitted onto every entry
+// already on this list whose own `safe` sentence NAMES the flag it leans on —
+// `MOCK_AGENTCORE`, `MOCK_AURORA`, `config.mock.aurora`; fifteen of them — so
+// each label is copied from the reading that entry was written from rather
+// than from a fresh guess. Four entries say only "under the mock providers"
+// (`POST /api/assessment/teams/:id/intake/text`, `POST
+// /api/assessment/knowledge/doc/comment`, `POST
+// /api/work/findings/analyze-batch`, `POST /api/designs/:id/signoff`). Those
+// are very likely `aurora`, and "very likely" is not the standard this file
+// holds a `safe` string to, so they are left undeclared and named here
+// instead — a printed gap, and a small one to close by reading four
+// providers. Undeclared means they replay exactly as they did before; it does
+// NOT mean somebody checked and found them independent of the mocks.
 //
 // ── How a future route gets classified ──────────────────────────────────────
 //
@@ -70,8 +155,16 @@
 // A visible gap beats an assumed-away one — the same rule the GET sweep's
 // `skipped` list already follows.
 
+import { MOCK_NODE_TOKEN, pairingCodes } from '../../local-compute.js';
 import { type PersonaName } from './http.js';
 import { type Json } from './shape.js';
+
+// The two imports above are the only VALUES this policy takes from outside
+// itself, and both are credentials-shaped things that must not be retyped:
+// the seeded node token and the seeded pairing code are defined in
+// mock/local-compute.ts, which is also what the server serves them from. A
+// copy here would be a second source of truth for a string whose whole job is
+// to match — the `enterprise` / `enterprise_context` bug, with a bearer token.
 
 // ---------------------------------------------------------------------------
 // Building a body
@@ -128,6 +221,16 @@ export function str(v: Json | undefined): string | null {
   return typeof v === 'string' && v.length > 0 ? v : null;
 }
 
+/**
+ * A provider domain `providers/index.ts` can swap for a mock, exactly as
+ * `GET /api/health` spells it under `mocks`. Not retyped from memory: the
+ * union below is checked against a live `/api/health` by
+ * `wire/__tests__`-adjacent code paths and by `capture-writes.ts`, which
+ * refuses to replay an interception-dependent spec when the server does not
+ * report the flag.
+ */
+export type MockProvider = 'aurora' | 'agentcore' | 'guardrails' | 'cloudwatch';
+
 export interface WriteSpec {
   /** `POST /api/bots` — as `routeKey()` spells it. */
   route: string;
@@ -137,6 +240,21 @@ export interface WriteSpec {
   safe: string;
   /** Which of the handler's own validation the body is derived from. Required. */
   bodyFrom: string;
+  /**
+   * Provider domains that must be INTERCEPTED on the server being captured
+   * for `safe` to hold — see the header's "it spends vs it would spend"
+   * section. Declaring one makes the spec refused by default (`not-intercepted`)
+   * and replayable only against a server whose own `GET /api/health` reports
+   * every named flag true. Omit it only for a route that reaches nothing real
+   * in ANY configuration.
+   */
+  intercepts?: readonly MockProvider[];
+  /**
+   * Extra request headers. The one use is machine-callback auth: a handful of
+   * routes authenticate with `Authorization: Bearer <node token>` INSTEAD of a
+   * session, so a persona cookie alone gets a 401 from them.
+   */
+  headers?: Readonly<Record<string, string>>;
   /** Build the request body. Omit for a route that takes none. */
   build?(ctx: BodyContext): Promise<Json | Unsynthesisable>;
   /**
@@ -190,15 +308,57 @@ interface Family {
  * harmless on a laptop only because this process has no cluster and no
  * credentials — which is a property of the laptop, not of the route, and a
  * policy that leans on it is one `WIRE_BASE_URL` away from being wrong.
+ *
+ * That sentence is what keeps this list honest, and it is ALSO what keeps this
+ * list from growing to cover routes it does not describe. "No credentials, so
+ * it fails" and "this process binds a mock provider, so there is nothing to
+ * call" are not the same claim: the first is about the laptop, the second is
+ * about the server, and only the first is unknowable from here. A route of the
+ * second kind belongs in `intercepts` on its allowlist entry, where the claim
+ * is CHECKED against `GET /api/health` on whatever `WIRE_BASE_URL` names,
+ * rather than in this list under a reason that is false wherever the mock is
+ * bound. See the header's "it spends vs it would spend" section.
  */
 const SPENDS: Family[] = [
   { pattern: 'POST /api/agents/*', what: 'invokes an AgentCore runtime' },
-  { pattern: 'POST /api/capabilities/*', what: 'opens a real Browser or Code Interpreter session' },
-  { pattern: 'PATCH /api/capabilities/*', what: 'edits a live Bedrock Guardrail' },
-  { pattern: 'POST /api/devbox/*', what: 'drives a devbox microVM' },
-  { pattern: 'PATCH /api/devbox/*', what: 'drives a devbox microVM' },
-  { pattern: 'POST /api/agent-projects', what: 'drives a devbox microVM (lib/project-runner.ts)' },
-  { pattern: 'POST /api/agent-projects/*', what: 'drives a devbox microVM (lib/project-runner.ts)' },
+
+  // Capabilities, narrowed. This used to be a bare `POST /api/capabilities/*`
+  // ("opens a real Browser or Code Interpreter session") plus `PATCH
+  // /api/capabilities/*` ("edits a live Bedrock Guardrail"), which between
+  // them described TWO of the fourteen writes under this prefix. The rest go
+  // through `providers/index.ts`, which binds `agentcore`/`guardrails` to the
+  // mock implementations when their flags are set — so under the mock
+  // providers there is no Browser, no Code Interpreter and no Bedrock
+  // Guardrail to reach, and the handler's call IS a fixture write. Those now
+  // carry `intercepts` and are refused unless the server says so itself. These
+  // two stay, because neither has a mock branch in any configuration:
+  { pattern: 'POST /api/capabilities/browser/web-qa', what: "builds its own BedrockRuntimeClient in the handler and Converses with Nova Lite — `_bedrockRt` is module-scope in routes/capabilities.ts, with no provider and no mock branch above it" },
+  { pattern: 'POST /api/capabilities/browser/crawl', what: 'starts a crawl loop (lib/crawler.ts) that fetches the start URL and every page it discovers' },
+
+  // Devbox, narrowed for the same reason. `POST /api/devbox/*` and `PATCH
+  // /api/devbox/*` both read "drives a devbox microVM"; that is true of the
+  // three routes below and of none of the others. `POST /sessions` mints a
+  // session id from a pure function and is on the allowlist; `POST /boxes`
+  // registers a box the reaper will later act on, which is `fires`, not
+  // `spends`; `PATCH /boxes/:boxId` renames a row in an in-memory registry and
+  // falls to `unclassified` — the honest answer, since no spec has been
+  // written for it.
+  { pattern: 'POST /api/devbox/*/task', what: 'invokes the devbox runtime to run a Claude Code task' },
+  { pattern: 'POST /api/devbox/*/command', what: 'invokes the devbox runtime to run a shell command' },
+  { pattern: 'POST /api/devbox/*/shell-url', what: 'resolves the devbox runtime via ListAgentRuntimes, then presigns a live socket into the microVM' },
+  // Agent projects, narrowed. This used to be `POST /api/agent-projects` plus a
+  // bare `POST /api/agent-projects/*`, both reading "drives a devbox microVM
+  // (lib/project-runner.ts)". That is true of ONE of the five write routes
+  // under this prefix. `POST /` (linkAgentProject), `POST /:id/cloned`
+  // (markCloned) and `POST /runs/:runId/finish` (finishRun) are an INSERT and
+  // two UPDATEs — in real mode they reach Aurora, in mock mode they take a
+  // `config.mock.aurora` branch into the registered `agent-projects` /
+  // `agent-project-runs` fixtures. No microVM in any mode. They now fall to
+  // `unclassified`, which is the honest answer: nobody has written a WriteSpec
+  // for them yet. That is a printed gap, and a printed gap beats a refusal
+  // whose stated reason is fiction.
+  { pattern: 'POST /api/agent-projects/*/runs', what: 'drives a devbox microVM (lib/project-runner.ts)' },
+  { pattern: 'POST /api/agent-projects/*/clone-command', what: "borrows the connection's real API key through AgentCore Identity (providers/connected-sources.ts borrowApiKey) whenever the project carries one" },
   { pattern: 'POST /api/drop/*', what: 'reaches the RDS Data API unguarded, then S3' },
   { pattern: 'POST /api/gateway/channels/*', what: 'signs and POSTs to the real MCP gateway when a gateway URL is set' },
 
@@ -220,10 +380,19 @@ const SPENDS: Family[] = [
   { pattern: 'POST /api/environments', what: 'INSERTs through the RDS Data API with no mock branch' },
 
   { pattern: 'POST /api/observability/harness/trace', what: 'runs Titan embedding AND the Nova judge — it spends even with Aurora down' },
-  { pattern: 'POST /api/observability/harness/runs/*', what: 'invokes the fleet and the judge per case' },
+  // `POST /runs/*` used to be one wildcard reading "invokes the fleet and the
+  // judge per case". Only `/execute` does that; `/runs/:runId/results` is a
+  // single INSERT ... ON CONFLICT into observability.test_results through the
+  // RDS Data API, with no mock branch and no model call anywhere in it. Two
+  // routes, two different reasons, so two patterns.
+  { pattern: 'POST /api/observability/harness/runs/*/execute', what: 'invokes the fleet and the judge per case' },
+  { pattern: 'POST /api/observability/harness/runs/*/results', what: 'upserts through the RDS Data API with no mock branch' },
   { pattern: 'POST /api/observability/harness/results/*', what: 're-judges with three Nova calls' },
   { pattern: 'POST /api/observability/harness/promote', what: 'writes through the RDS Data API with no mock branch' },
-  { pattern: 'PATCH /api/observability/harness/runs/*/results', what: 'writes through the RDS Data API with no mock branch' },
+  // `PATCH /api/observability/harness/runs/*/results` was here too and matched
+  // nothing: the only PATCH under /runs is `PATCH /runs/:id`, which the
+  // allowlist covers. A pattern that matches no live route is dead weight that
+  // reads like a guarded surface.
   { pattern: 'POST /api/observability/calibration/cases', what: 'INSERTs through the RDS Data API with no mock branch' },
   { pattern: 'POST /api/observability/calibration/runs', what: 'runs the Nova judge once per active case' },
   { pattern: 'POST /api/observability/quality/feedback', what: 'UPDATEs through the RDS Data API with no mock branch' },
@@ -247,6 +416,17 @@ const SPENDS: Family[] = [
  * cron armed behind it.
  */
 const FIRES: Family[] = [
+  // Moved here out of `spends`, where it read "drives a devbox microVM" — it
+  // does not drive one, it hands one to the reaper. `startReaper` is running
+  // from the moment routes/devbox.ts is imported, and a registered box enters
+  // its sweep: twenty idle minutes later the reaper sends
+  // StopRuntimeSessionCommand for that box's session, through whatever
+  // transport `dataClient()` resolved to. `lib/devbox-fleet.ts` holds the
+  // registry in a module Map that registers no fixture, so `POST
+  // /api/__mock/reset` cannot take the box back either — the capture would
+  // leave a timer's worth of work behind it, which is rule 4 exactly.
+  { pattern: 'POST /api/devbox/boxes', what: 'registers a box the already-running devbox reaper will stop, through the runtime transport, twenty idle minutes later' },
+
   { pattern: 'POST /api/bots/*/run', what: 'fires the bot now' },
   { pattern: 'POST /api/bots/*/resume', what: 'arms the bot on the live cron scheduler' },
   { pattern: 'PATCH /api/bots/*', what: 'calls registerBot, which re-arms the patched bot on the live cron scheduler' },
@@ -275,20 +455,62 @@ const FIRES: Family[] = [
  * the control plane was built to end.
  */
 const UNRESETTABLE: Family[] = [
-  { pattern: 'POST /api/promotions/*/promote', what: 'providers/promotions.ts MOCK_CANDIDATES registers no fixture' },
-  { pattern: 'POST /api/promotions/*/dismiss', what: 'providers/promotions.ts MOCK_CANDIDATES registers no fixture' },
-  { pattern: 'POST /api/session-bundle/*/publish', what: 'providers/session-bundle.ts MOCK_BUNDLES registers no fixture, and publishing supersedes the live bundle' },
-  // Local compute. `lib/local-compute-fleet.ts` keeps presence in a module
-  // `Map` on purpose — it is ephemeral and rebuilds within one heartbeat — and
-  // `providers/local-compute.ts` keeps mockNodes/mockTokenIndex/mockCodes the
-  // same way. Neither registers a fixture, so reset cannot put a claimed node,
-  // a spent pairing code or an announced session back.
-  { pattern: 'POST /api/local-compute/announce', what: 'lib/local-compute-fleet.ts holds presence in a module Map; reset cannot restore it' },
-  { pattern: 'POST /api/local-compute/heartbeat', what: 'same module Map — a heartbeat moves a node from stale back to connected with no way back' },
-  { pattern: 'POST /api/local-compute/sessions/*/end', what: 'drops a session from the module-level presence registry' },
-  { pattern: 'POST /api/local-compute/pair/start', what: 'providers/local-compute.ts mockCodes registers no fixture; a minted pairing code outlives the sweep' },
-  { pattern: 'POST /api/local-compute/pair/claim', what: 'spends a pairing code and mints a node token into mockNodes/mockTokenIndex, none of which reset restores' },
-  { pattern: 'PATCH /api/local-compute/nodes/*', what: 'renames a row in mockNodes, which registers no fixture' },
+  // EMPTY, ON PURPOSE — and that is a fact about the providers, not a
+  // relaxation of the rule. Everything this list used to name has since been
+  // put behind `defineFixture`, which is the fix the rule always pointed at:
+  //
+  //   * promotions      -> `promotion-candidates` (mock/promotions.ts). Promote
+  //                        and dismiss are replayed by the allowlist below.
+  //   * session bundles -> `session-bundles` (mock/session-bundle.ts). Publish
+  //                        is replayed, predecessor supersession included.
+  //   * local compute   -> `compute-nodes`, `compute-pairing-codes` and
+  //                        `local-presence` (mock/local-compute.ts), read by
+  //                        providers/local-compute.ts and
+  //                        lib/local-compute-fleet.ts. The module `Map`s this
+  //                        list described are gone; a rename, an announce, a
+  //                        heartbeat, a session end and a spent pairing code
+  //                        all come back on `POST /api/__mock/reset` (verified
+  //                        by hand against a running dev:mock).
+  //
+  // The six local-compute routes fell to `unclassified` after that migration —
+  // "nobody has written a WriteSpec for them yet", which was true and is now
+  // not: all six are on the allowlist below, plus the soft revoke that the
+  // `destructive` rule used to swallow. Each carries `intercepts: ['aurora']`,
+  // because the fixtures those routes reach are read only inside
+  // `if (config.mock.aurora)` in providers/local-compute.ts. The RULE stays,
+  // stated, so a provider that goes back to a bare array can be tested against
+  // it.
+];
+
+/**
+ * Rule 3, and its one carve-out. The `destructive` rule refuses every DELETE
+ * because a delete is "not reliably undoable" — reset restores registered
+ * fixtures and a good deal of mock state registers none.
+ *
+ * That is a true statement about DELETE in general and it was a false one
+ * about `DELETE /api/local-compute/nodes/:id`. That route does not remove a
+ * row: `revokeNode` is a soft revoke (`UPDATE compute_nodes SET revoked_at =
+ * NOW() ... AND revoked_at IS NULL`, mirrored by `mockRevokeNode` against the
+ * REGISTERED `compute-nodes` fixture), the row survives for audit by design,
+ * and `POST /api/__mock/reset` puts `revoked_at` back to null. Verified by
+ * hand against a running mock server: revoke, `GET /nodes` lists one machine,
+ * reset, it lists two again with `revokedAt: null`.
+ *
+ * So the rule keeps its statement and gains a named exception list rather than
+ * a per-route escape hatch. Being on this list is NOT permission — it only
+ * lets the route reach the allowlist, where it still needs a full `WriteSpec`
+ * with `safe` and `bodyFrom` like everything else. Two gates, and the first
+ * one is a sentence someone had to write about a handler they read.
+ *
+ * A DELETE that is absent from this list is refused as `destructive` whether
+ * or not it happens to be restorable — the list means "someone has read this
+ * handler and proved it", not "everything else destroys something".
+ */
+const RESTORABLE_DELETES: Family[] = [
+  {
+    pattern: 'DELETE /api/local-compute/nodes/:id',
+    what: 'a SOFT revoke — providers/local-compute.ts `revokeNode` stamps `revoked_at` on a row that stays for audit, and the row lives in the registered `compute-nodes` fixture, so reset clears the stamp',
+  },
 ];
 
 const family = (list: Family[]) => ({
@@ -301,6 +523,14 @@ const family = (list: Family[]) => ({
  * the allowlist, so no entry can smuggle a route past a rule. `unclassified`
  * is last and matches everything left, which is what makes this an allowlist:
  * silence is a refusal, not a permission.
+ *
+ * TWO of the rules below are deliberately evaluated OUT of that loop, and
+ * `classifyWrite` names both. `unclassified` runs last, after the allowlist
+ * lookup, because it means "no entry". `not-intercepted` runs last too,
+ * because it is not a question about the route string at all — it is a
+ * question about the server this capture is pointed at, and it can only be
+ * asked once a spec has said which providers it leans on. Neither can widen
+ * anything: both run strictly after the four route rules, and both refuse.
  */
 export const REFUSAL_RULES: readonly RefusalRule[] = [
   {
@@ -309,8 +539,12 @@ export const REFUSAL_RULES: readonly RefusalRule[] = [
       'DELETE removes a row. `POST /api/__mock/reset` restores REGISTERED ' +
       'fixtures only, and a good deal of mock state is a module-level array ' +
       'that registers nothing — so a delete is not reliably undoable, and an ' +
-      'un-undone one silently shrinks every shape captured after it.',
-    applies: (route) => route.startsWith('DELETE '),
+      'un-undone one silently shrinks every shape captured after it. The one ' +
+      'exception is a delete somebody has read and proved restorable, named ' +
+      'in RESTORABLE_DELETES with the reason; that only lets it reach the ' +
+      'allowlist, where it still needs a full entry like anything else.',
+    applies: (route) =>
+      route.startsWith('DELETE ') && !RESTORABLE_DELETES.some((f) => routeMatches(f.pattern, route)),
   },
   {
     id: 'session',
@@ -334,10 +568,14 @@ export const REFUSAL_RULES: readonly RefusalRule[] = [
   {
     id: 'spends',
     because:
-      'Reaches a real cloud resource: a Bedrock model, an AgentCore runtime, ' +
-      'a Browser or Code Interpreter session, a devbox microVM, S3, or an ' +
-      'outbound fetch. Replaying it costs money or mutates something outside ' +
-      'this process, neither of which a snapshot script gets to do.',
+      'Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, ' +
+      'an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or ' +
+      'an outbound fetch, with no mock branch above it. Replaying it costs ' +
+      'money or mutates something outside this process, neither of which a ' +
+      'snapshot script gets to do. A route that would spend but whose provider ' +
+      'the serving process INTERCEPTS is a different question and a different ' +
+      'rule — see `not-intercepted`, which asks the server rather than ' +
+      'assuming; this one is for routes no configuration makes safe.',
     ...family(SPENDS),
   },
   {
@@ -357,6 +595,22 @@ export const REFUSAL_RULES: readonly RefusalRule[] = [
       'row to such a provider is fine and several specs do it; changing one the ' +
       'seed shipped is not. `defineFixture` is the fix, not an exemption.',
     ...family(UNRESETTABLE),
+  },
+  {
+    id: 'not-intercepted',
+    because:
+      'This route spends unless the process serving it intercepts the provider ' +
+      'it spends through, and the server being captured has not said it does. ' +
+      'Whether a mock provider is bound is a fact about that server, not about ' +
+      'this laptop — `WIRE_BASE_URL` can point anywhere — so it is asked of the ' +
+      'server (`GET /api/health` reports `mocks`) rather than assumed here, and ' +
+      'the answer must be yes before the replay happens. Silence, an ' +
+      'unreachable health endpoint and a real deployment all refuse alike.',
+    applies: (route) => (specFor(route)?.intercepts ?? []).length > 0,
+    detail: (route) => {
+      const want = specFor(route)?.intercepts ?? [];
+      return want.length > 0 ? `it needs ${want.join(' + ')} intercepted` : null;
+    },
   },
   {
     id: 'unclassified',
@@ -594,7 +848,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
   {
     route: 'POST /api/graph/work-items',
     persona: 'orgiq/admin',
-    safe: 'Appends to the in-memory work-item cache. Nothing seeded moves, so reset having no fixture here does not matter.',
+    safe: 'Appends to the registered `work-items` fixture (mock/work-items.ts); reset drops the created row. No AWS, no fs, no timer.',
     bodyFrom: "routes/work-items.ts: `projectId`, `type` ∈ {'epic','story','bug'}, `title`; any key outside CREATE_KEYS is a 400.",
     build: async (ctx) => {
       const projectId = await ctx.pick('/api/graph/projects', 'id');
@@ -605,15 +859,18 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
   {
     route: 'PATCH /api/graph/work-items/:id',
     persona: 'orgiq/admin',
-    safe: "An echo-back patch: it writes the item's OWN current priority, so the row ends unchanged. work-items registers no fixture, so a real edit here would not be undoable.",
-    bodyFrom: "routes/work-items.ts: PATCH_KEYS, `priority` ∈ {'critical','high','medium','low'}; the value is read off GET /api/graph/work.",
+    safe: 'A REAL edit, not an echo-back: it moves the item to a different priority. `work-items` is a registered fixture (mock/work-items.ts), so reset puts the seeded priority back — which is what stopped this from having to be an echo-back that proved nothing about the write. Priority is a plain column: no transition matrix, no re-parenting, no cost or point recalculation.',
+    bodyFrom: "routes/work-items.ts: PATCH_KEYS, `priority` ∈ VALID_PRIORITIES ('critical'|'high'|'medium'|'low'). The value is not typed from that list — it is a priority some OTHER row on GET /api/graph/work already carries, chosen because it differs from this item's own, so the value comes off the server and the write cannot be a no-op.",
     build: async (ctx) => {
-      const id = ctx.path.split('/').pop() ?? '';
-      const item = objectsWith(await ctx.get('/api/graph/work'), 'id', 'priority')
-        .find((w) => w['id'] === decodeURIComponent(id));
-      const priority = str(item?.['priority']);
-      if (priority === null) return unsynthesisable(`GET /api/graph/work does not list ${id} with a priority to echo back`);
-      return { priority };
+      const id = decodeURIComponent(ctx.path.split('/').pop() ?? '');
+      const board = objectsWith(await ctx.get('/api/graph/work'), 'id', 'priority');
+      const mine = str(board.find((w) => w['id'] === id)?.['priority']);
+      if (mine === null) return unsynthesisable(`GET /api/graph/work does not list ${id} with a priority`);
+      const other = board.map((w) => str(w['priority'])).find((p) => p !== null && p !== mine);
+      if (other === undefined || other === null) {
+        return unsynthesisable(`every work item on GET /api/graph/work carries priority '${mine}', so no different value is readable off the server`);
+      }
+      return { priority: other };
     },
   },
   {
@@ -621,6 +878,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     persona: 'orgiq/admin',
     safe: "`updateProjectOwner` is mock-branched and answers 503 without touching anything, so this pins the refusal shape rather than the success one.",
     bodyFrom: 'routes/projects.ts: `ownerId` is required as a key and may be null.',
+    intercepts: ['aurora'],
     build: ok({ ownerId: null }),
   },
   {
@@ -628,12 +886,13 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     persona: 'orgiq/admin',
     safe: 'The contribution-role update is mock-branched and answers 503 without touching anything, so this pins the refusal shape.',
     bodyFrom: 'routes/projects.ts: `role` is required as a key and may be null.',
+    intercepts: ['aurora'],
     build: ok({ role: null }),
   },
   {
     route: 'POST /api/sprints',
     persona: 'orgiq/admin',
-    safe: 'Appends to the in-memory sprint list. Nothing seeded moves, so the missing fixture only means the new row outlives a reset.',
+    safe: 'Appends to the registered `sprints` fixture (mock/sprints.ts); reset drops the created sprint. No AWS, no timer.',
     bodyFrom: 'routes/sprints.ts: `initiativeId`, `name`, `startsOn`/`endsOn` as YYYY-MM-DD with endsOn > startsOn. The dates are copied off an existing sprint rather than minted, so no clock enters a request body.',
     build: async (ctx) => {
       const sprint = objectsWith(await ctx.get('/api/sprints'), 'id', 'orgProjectId', 'startsOn', 'endsOn')[0];
@@ -649,21 +908,27 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
   {
     route: 'PATCH /api/sprints/:sprintId/items',
     persona: 'orgiq/admin',
-    safe: 'An echo-back move: the work item chosen is one already IN this sprint, so the row ends unchanged.',
-    bodyFrom: 'routes/sprints.ts: `workItemId` whose projectId equals the sprint’s orgProjectId; read off GET /api/graph/work.',
+    safe: 'A REAL move, not an echo-back: the item chosen is on the sprint’s initiative but NOT already in it, so `updateWorkItem` genuinely rewrites `sprintId`. It edits the registered `work-items` fixture, so reset puts the item back where the seed had it — which is what stopped this from having to be a move onto the sprint the item was already in.',
+    bodyFrom: 'routes/sprints.ts: `workItemId` non-blank, and the item’s projectId must equal the sprint’s orgProjectId (a 400 otherwise). Both the sprint’s initiative and the candidate item are read off GET /api/sprints and GET /api/graph/work.',
     build: async (ctx) => {
       const sprintId = decodeURIComponent(ctx.path.split('/').slice(-2)[0] ?? '');
-      const item = objectsWith(await ctx.get('/api/graph/work'), 'id', 'sprintId')
-        .find((w) => w['sprintId'] === sprintId);
+      const sprint = objectsWith(await ctx.get('/api/sprints'), 'id', 'orgProjectId')
+        .find((s) => s['id'] === sprintId);
+      const initiativeId = str(sprint?.['orgProjectId']);
+      if (initiativeId === null) return unsynthesisable(`GET /api/sprints does not list ${sprintId} with an initiative`);
+      const item = objectsWith(await ctx.get('/api/graph/work'), 'id', 'projectId', 'sprintId')
+        .find((w) => w['projectId'] === initiativeId && w['sprintId'] !== sprintId);
       const workItemId = str(item?.['id']);
-      if (workItemId === null) return unsynthesisable(`no work item is already in sprint ${sprintId}, so no move is an echo-back`);
+      if (workItemId === null) {
+        return unsynthesisable(`GET /api/graph/work lists no item on ${initiativeId} that is outside sprint ${sprintId}, so no move would change anything`);
+      }
       return { workItemId };
     },
   },
   {
     route: 'POST /api/grants',
     persona: 'orgiq/admin',
-    safe: 'Appends to the in-memory grant overlay. Nothing seeded moves.',
+    safe: 'Appends to the registered `budget-grants` fixture (mock/budgets.ts); reset drops the created envelope. The side-Map overlay this used to write into is gone — providers/grantOverlay.ts mutates the fixture directly now.',
     bodyFrom: 'routes/grants.ts: `initiativeId`+`sprintId` must agree (both off GET /api/sprints), `granteePersonId` off GET /api/roster, `amountUsd` a finite number >= 0 (copied off an existing grant on GET /api/budgets/grants, which spells it `allocatedUsd`).',
     build: async (ctx) => {
       const sprint = objectsWith(await ctx.get('/api/sprints'), 'id', 'orgProjectId')[0];
@@ -680,28 +945,40 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
   {
     route: 'PATCH /api/grants/:id',
     persona: 'orgiq/admin',
-    safe: "An echo-back patch: it writes the grant's OWN current amount, so the row ends unchanged.",
-    bodyFrom: 'routes/grants.ts: at least one of `amountUsd` (finite >= 0) / `note`; the amount is read off GET /api/budgets/grants, which spells it `allocatedUsd`.',
+    safe: 'A REAL re-allocation, not an echo-back: it writes an amount different from the envelope’s own. `budget-grants` is a registered fixture (mock/budgets.ts) and providers/grantOverlay.ts mutates it in place, so reset restores the seeded amount — and with it every headroom figure and dispatch brake derived from it.',
+    bodyFrom: 'routes/grants.ts: at least one of `amountUsd` (finite >= 0) / `note`. The amount is not invented: it is a different envelope’s `allocatedUsd` off GET /api/budgets/grants, picked because it differs from this one’s.',
     build: async (ctx) => {
       const id = decodeURIComponent(ctx.path.split('/').pop() ?? '');
-      const grant = objectsWith(await ctx.get('/api/budgets/grants'), 'id', 'allocatedUsd').find((g) => g['id'] === id);
-      const allocatedUsd = grant?.['allocatedUsd'];
-      if (typeof allocatedUsd !== 'number') {
-        return unsynthesisable(`GET /api/budgets/grants does not list ${id} with an amount to echo back`);
+      const grants = objectsWith(await ctx.get('/api/budgets/grants'), 'id', 'allocatedUsd');
+      const mine = grants.find((g) => g['id'] === id)?.['allocatedUsd'];
+      if (typeof mine !== 'number') {
+        return unsynthesisable(`GET /api/budgets/grants does not list ${id} with an amount`);
       }
-      return { amountUsd: allocatedUsd };
+      const other = grants.map((g) => g['allocatedUsd']).find((v) => typeof v === 'number' && v !== mine);
+      if (typeof other !== 'number') {
+        return unsynthesisable(`every envelope on GET /api/budgets/grants is allocated $${mine}, so no different amount is readable off the server`);
+      }
+      return { amountUsd: other };
     },
   },
   {
     route: 'PUT /api/budgets/:orgProjectId',
     persona: 'orgiq/admin',
-    safe: '`upsertAllocation` is mock-branched and returns null, so the route answers 503 without writing; the allocation echoed back would be a no-op anyway.',
-    bodyFrom: 'routes/budgets.ts: `allocatedUsd` a finite number >= 0, read off GET /api/budgets.',
+    safe: 'A REAL allocation write. The old reason here — "`upsertAllocation` is mock-branched and returns null, so the route answers 503 without writing" — has been false since providers/budgets.ts gave the mock branch a body: it evaluates the same upsert against the registered `initiative-budgets` fixture and answers 200. That is fine to replay precisely because the fixture is registered: reset puts the seeded allocation back.',
+    bodyFrom: 'routes/budgets.ts: `allocatedUsd` a finite number >= 0. The number is another initiative’s allocation off GET /api/budgets, picked because it differs from this one’s, so the value comes off the server and the write is not a no-op.',
+    intercepts: ['aurora'],
     build: async (ctx) => {
       const id = decodeURIComponent(ctx.path.split('/').pop() ?? '');
-      const budget = objectsWith(await ctx.get('/api/budgets'), 'orgProjectId', 'allocatedUsd').find((b) => b['orgProjectId'] === id);
-      const allocatedUsd = budget?.['allocatedUsd'];
-      return { allocatedUsd: typeof allocatedUsd === 'number' ? allocatedUsd : 0 };
+      const budgets = objectsWith(await ctx.get('/api/budgets'), 'orgProjectId', 'allocatedUsd');
+      const mine = budgets.find((b) => b['orgProjectId'] === id)?.['allocatedUsd'];
+      if (typeof mine !== 'number') {
+        return unsynthesisable(`GET /api/budgets does not list ${id} with an allocation`);
+      }
+      const other = budgets.map((b) => b['allocatedUsd']).find((v) => typeof v === 'number' && v !== mine);
+      if (typeof other !== 'number') {
+        return unsynthesisable(`every initiative on GET /api/budgets is allocated $${mine}, so no different amount is readable off the server`);
+      }
+      return { allocatedUsd: other };
     },
   },
 
@@ -718,6 +995,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     persona: 'orgiq/admin',
     safe: "`analyzeDocumentLinks` short-circuits on `config.mock.aurora` with problem 'Aurora is mocked' before the S3 read and the model call.",
     bodyFrom: 'routes/work.ts: `dryRun` optional boolean; the finding must be a document one (GET /api/work/findings?sweep=stale_docs).',
+    intercepts: ['aurora'],
     build: ok({ dryRun: true }),
   },
   {
@@ -745,6 +1023,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     persona: 'orgiq/admin',
     safe: '`proposeGraphChange` is mock-branched and returns null, so the route answers 503 without writing.',
     bodyFrom: 'routes/work.ts: `kind` + `targetId`, neither validated at run time.',
+    intercepts: ['aurora'],
     build: async () =>
       unsynthesisable(
         '`kind` is a ProposalKind union with no run-time validation, and no GET route enumerates its members — ' +
@@ -756,6 +1035,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     persona: 'orgiq/admin',
     safe: '`decideProposal` is mock-branched and returns null, so the route answers 404 without writing.',
     bodyFrom: "routes/work.ts: `decision` ∈ {'approve','reject'}.",
+    intercepts: ['aurora'],
     build: ok({ decision: 'approve' }),
   },
 
@@ -820,6 +1100,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     persona: 'orgiq/admin',
     safe: 'Under MOCK_AGENTCORE the key is dropped on the floor and a row is appended to the registered `connected-sources` fixture; no AgentCore credential provider is created and api.github.com is never called.',
     bodyFrom: "routes/connections.ts: `kind` ∈ KINDS ('github'|'confluence'|'jira'), `label` and `apiKey` non-blank (the key is never stored).",
+    intercepts: ['agentcore'],
     build: async (ctx) => ({ kind: 'github', label: ctx.label(), apiKey: ctx.label() }),
   },
 
@@ -834,22 +1115,22 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
   {
     route: 'POST /api/lab/experiences',
     persona: 'orgiq/admin',
-    safe: 'Appends a row to providers/lab.ts MOCK_EXPERIENCES. Nothing seeded moves, so the missing fixture only means the row outlives a reset.',
+    safe: 'Appends a row to the registered `lab-experiences` fixture (mock/lab.ts — the rows left providers/lab.ts); reset drops it.',
     bodyFrom: "routes/lab.ts: `title` non-blank; `kind` ∈ {'worked','failed','gotcha','decision','convention'} optional.",
     build: async (ctx) => ({ title: ctx.label(), kind: 'gotcha' }),
   },
   {
     route: 'POST /api/lab/consults',
     persona: 'orgiq/admin',
-    safe: 'Appends a row to providers/lab.ts MOCK_CONSULTS. Nothing seeded moves.',
+    safe: 'Appends a row to the registered `lab-consults` fixture (mock/lab.ts — the rows left providers/lab.ts); reset drops it.',
     bodyFrom: 'routes/lab.ts: `question` non-blank.',
     build: async (ctx) => ({ question: `${ctx.label()}?` }),
   },
   {
     route: 'POST /api/lab/consults/:id/answer',
     persona: 'orgiq/admin',
-    safe: 'MOCK_CONSULTS ships empty, so there is no seeded consult to flip; only a row this capture created could be answered.',
-    bodyFrom: 'routes/lab.ts: `answer` non-blank; the consult must still be pending.',
+    safe: 'Answers the seeded pending consult and leaves it `answered`. The old reason here — "MOCK_CONSULTS ships empty, so there is no seeded consult to flip" — stopped being true when mock/lab.ts gave the fixture two seeded rows; what makes the flip replayable now is that `lab-consults` is REGISTERED, so reset puts the pending consult back.',
+    bodyFrom: 'routes/lab.ts: `answer` non-blank (free text, not a wire value); the consult must still be pending, which the seeded `con-mock-1` is.',
     build: async (ctx) => ({ answer: ctx.label() }),
   },
   {
@@ -889,7 +1170,34 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     persona: 'orgiq/admin',
     safe: '`analyzeScores` short-circuits on `config.mock.aurora` before it reads Aurora or opens a Code Interpreter session.',
     bodyFrom: 'routes/scores.ts: body ignored.',
+    intercepts: ['aurora'],
     build: ok({}),
+  },
+
+  // ── promotions, session bundles ───────────────────────────────────────────
+  //
+  // All three were refused as `unresettable` until the rows they flip moved
+  // behind registered fixtures. They are the reason that rule's list shrank.
+  {
+    route: 'POST /api/promotions/:id/promote',
+    persona: 'orgiq/admin',
+    safe: 'Promotes a seeded candidate — a real ladder step, `candidate` -> `promoted`, not an append. Replayable because `promotion-candidates` (mock/promotions.ts) is a registered fixture: reset puts the status and the `dryRunPassed` flag back. No AWS, no model, no timer; the ladder is pure in-process bookkeeping.',
+    bodyFrom: "routes/promotions.ts: `dryRunPassed` is optional and must be a boolean when present. `true` is the one value that reaches the success path — providers/promotions.ts `decidePromotion` refuses a `skill` outright unless a dry run passed — and the candidate resolved for `:id` is the seeded `skill` one, which GET /api/promotions?status=candidate lists first.",
+    build: ok({ dryRunPassed: true }),
+  },
+  {
+    route: 'POST /api/promotions/:id/dismiss',
+    persona: 'orgiq/admin',
+    safe: 'Dismisses a seeded candidate and appends the reason to its rationale — deliberately not idempotent, which is exactly why it needed a fixture. `promotion-candidates` is registered, so reset restores both the status and the un-appended rationale.',
+    bodyFrom: 'routes/promotions.ts: `reason` must be a non-blank string. It is free text appended to `rationale`, not a wire-shaped value, so `ctx.label()` invents nothing any fixture is measured against.',
+    build: async (ctx) => ({ reason: ctx.label() }),
+  },
+  {
+    route: 'POST /api/session-bundle/:id/publish',
+    persona: 'orgiq/admin',
+    safe: 'Publishes the pending bundle to the fleet: it goes `live`, the previously-live one is SUPERSEDED, and its `publishedAt`/`publishedBy` are re-stamped. `session-bundles` (mock/session-bundle.ts) is a registered fixture, so reset restores both rows — the predecessor included, which is the half a per-row undo would have missed. Nothing reaches a box: publishBundle only rewrites those rows.',
+    bodyFrom: 'routes/session-bundle.ts + providers/session-bundle.ts `decidePublish`: `dryRunBoxId` is only checked for presence (it gates `hasHooks`), never resolved against the fleet and never stored. `GET /api/devbox/boxes` is empty offline — no box exists to name — so this is `ctx.label()`, an open-set id the shape check never asserts on, and the publish it unlocks is real.',
+    build: async (ctx) => ({ dryRunBoxId: ctx.label() }),
   },
 
   // ── identity ──────────────────────────────────────────────────────────────
@@ -977,6 +1285,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     persona: 'orgiq/admin',
     safe: '`startIngestionJob` takes its MOCK_AGENTCORE branch and appends a job row to the registered knowledge-base fixture; no Bedrock call is made.',
     bodyFrom: 'routes/ingest.ts: `dataSourceId` off GET /api/ingest/data-sources.',
+    intercepts: ['agentcore'],
     build: async (ctx) => {
       const dataSourceId = await ctx.pick('/api/ingest/data-sources', 'id');
       if (dataSourceId === null) return unsynthesisable('GET /api/ingest/data-sources listed no data source');
@@ -1005,6 +1314,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     persona: 'orgiq/admin',
     safe: '`startSync` short-circuits to the mock job under MOCK_AGENTCORE and unshifts a row into the registered knowledge-base fixture.',
     bodyFrom: 'routes/knowledge-base.ts: `dataSourceId` off GET /api/knowledge-base/data-sources.',
+    intercepts: ['agentcore'],
     build: async (ctx) => {
       const dataSourceId = await ctx.pick('/api/knowledge-base/data-sources', 'id');
       if (dataSourceId === null) return unsynthesisable('GET /api/knowledge-base/data-sources listed no data source');
@@ -1023,6 +1333,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     persona: 'orgiq/admin',
     safe: '`adoptKnowledgeBase` refuses under `config.mock.aurora` before any Bedrock or Aurora call.',
     bodyFrom: 'routes/kb-admin.ts: `slug` off GET /api/admin/kb-registry, `kbId` is a live Bedrock knowledge-base id.',
+    intercepts: ['aurora'],
     build: async () =>
       unsynthesisable(
         '`kbId` is a live Bedrock knowledge-base id. Nothing offline enumerates one — GET /reconcile does not surface ' +
@@ -1043,6 +1354,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     persona: 'orgiq/admin',
     safe: 'Upserts into the registered `harness` fixture under MOCK_AURORA; no model, no AWS.',
     bodyFrom: 'routes/harness.ts: `agentId` and `prompt` non-empty; the agent id is read off GET /api/agents.',
+    intercepts: ['aurora'],
     build: async (ctx) => {
       const agentId = await ctx.pick('/api/agents', 'id');
       if (agentId === null) return unsynthesisable('GET /api/agents listed no agent');
@@ -1054,6 +1366,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     persona: 'orgiq/admin',
     safe: 'Mutates the registered `harness` fixture under MOCK_AURORA; no model, no AWS, and reset restores the case.',
     bodyFrom: 'routes/harness.ts: every field optional.',
+    intercepts: ['aurora'],
     build: ok({}),
   },
   {
@@ -1061,6 +1374,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     persona: 'orgiq/admin',
     safe: "Inserts into the registered `harness` fixture under MOCK_AURORA. `mode` is left unset so it collapses to 'sim' — 'live' is the one that would drive the fleet.",
     bodyFrom: "routes/harness.ts: `{}` is valid; `mode` must be the literal 'live' to mean anything.",
+    intercepts: ['aurora'],
     build: ok({}),
   },
   {
@@ -1082,6 +1396,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     persona: 'orgiq/admin',
     safe: 'Fully in-memory under MOCK_AURORA (`mockRegisterPromptVersion`); appends a version, moves nothing.',
     bodyFrom: 'routes/prompt-versions.ts: `agentId` and `content` non-empty; the agent id is read off GET /api/agents.',
+    intercepts: ['aurora'],
     build: async (ctx) => {
       const agentId = await ctx.pick('/api/agents', 'id');
       if (agentId === null) return unsynthesisable('GET /api/agents listed no agent');
@@ -1129,6 +1444,198 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     bodyFrom: "routes/approvals.ts: `decision` ∈ {'APPROVED','REJECTED'}.",
     build: ok({ decision: 'APPROVED' }),
   },
+
+  // ── capabilities: the guardrail ───────────────────────────────────────────
+  //
+  // All three were refused by a wildcard reading "edits a live Bedrock
+  // Guardrail". Under
+  // MOCK_GUARDRAILS `providers/index.ts` binds `guardrails` to `mockGuardrails`,
+  // which mutates the registered `guardrail` fixture (mock/capabilities.ts) in
+  // place — there is no Bedrock guardrail in the process to edit. Hence
+  // `intercepts: ['guardrails']`: the claim is checked against the server
+  // rather than asserted here.
+  {
+    route: 'PATCH /api/capabilities/guardrail/pii',
+    persona: 'orgiq/admin',
+    safe: 'A REAL edit to a seeded PII filter, not an echo-back: `mockGuardrails.togglePiiFilter` finds the filter in the registered `guardrail` fixture and rewrites its action in place, so reset puts the seeded action back. No AWS, no model, no timer.',
+    bodyFrom: "routes/capabilities.ts: `{ type, action?, enabled? }`; the type must name a filter that exists. Both values come off GET /api/capabilities/guardrail — the type is the first filter's, and the action is a DIFFERENT filter's action, chosen because it differs from this one's, so the value is one the server itself sends (`mapPiiAction` in providers/guardrails.ts is what narrows it) and the write cannot be a no-op.",
+    intercepts: ['guardrails'],
+    build: async (ctx) => {
+      const filters = objectsWith(await ctx.get('/api/capabilities/guardrail'), 'type', 'action');
+      const type = str(filters[0]?.['type']);
+      const mine = str(filters[0]?.['action']);
+      if (type === null || mine === null) {
+        return unsynthesisable('GET /api/capabilities/guardrail listed no PII filter with a type and an action');
+      }
+      const other = filters.map((f) => str(f['action'])).find((a) => a !== null && a !== mine);
+      if (other === undefined || other === null) {
+        return unsynthesisable(`every PII filter on GET /api/capabilities/guardrail is set to '${mine}', so no different action is readable off the server`);
+      }
+      return { type, action: other };
+    },
+  },
+  {
+    route: 'PATCH /api/capabilities/guardrail/topics/:name',
+    persona: 'orgiq/admin',
+    safe: 'A REAL flip of a seeded denied topic. `mockGuardrails.updateDeniedTopic` edits the row inside the registered `guardrail` fixture, so reset restores both the flag and `updatedAt`.',
+    bodyFrom: "routes/capabilities.ts: `{ enabled?, definition? }`; the topic named by `:name` must exist. `enabled` is not typed from a list — it is a DIFFERENT topic's `enabled` off GET /api/capabilities/guardrail, chosen because it differs from this topic's, so the write moves the row rather than rewriting it unchanged. `:name` itself is resolved by key path (`#deniedTopics[].name` in http.ts) because a fuzzy id search returns the guardrail's own name instead.",
+    intercepts: ['guardrails'],
+    build: async (ctx) => {
+      const name = decodeURIComponent(ctx.path.split('/').pop() ?? '');
+      const topics = objectsWith(await ctx.get('/api/capabilities/guardrail'), 'name', 'enabled');
+      const mine = topics.find((t) => t['name'] === name)?.['enabled'];
+      if (typeof mine !== 'boolean') {
+        return unsynthesisable(`GET /api/capabilities/guardrail does not list a denied topic '${name}'`);
+      }
+      const other = topics.map((t) => t['enabled']).find((v) => typeof v === 'boolean' && v !== mine);
+      if (typeof other !== 'boolean') {
+        return unsynthesisable(`every denied topic on GET /api/capabilities/guardrail is enabled=${String(mine)}, so no different value is readable off the server`);
+      }
+      return { enabled: other };
+    },
+  },
+  {
+    route: 'POST /api/capabilities/guardrail/topics',
+    persona: 'orgiq/admin',
+    safe: 'Appends a topic to the registered `guardrail` fixture; reset drops it and nothing seeded moves. `mockGuardrails.addDeniedTopic` is a push onto the row it already holds — no UpdateGuardrail, no AWS call of any kind.',
+    bodyFrom: 'routes/capabilities.ts: `name` and `definition` both required and non-empty; a topic name and its definition are free text (the shape check never asserts on either), so `ctx.label()` invents no wire value.',
+    intercepts: ['guardrails'],
+    build: async (ctx) => ({ name: ctx.label(), definition: ctx.label() }),
+  },
+
+  // ── capabilities: browser + code interpreter ──────────────────────────────
+  {
+    route: 'POST /api/capabilities/code-interpreter/execute',
+    persona: 'orgiq/admin',
+    safe: '`mockAgentCore.executeCode` runs nothing and writes nothing: it counts `print(` occurrences in the string and returns a canned line. No sandbox is opened, no fixture is touched, so there is nothing for reset to undo.',
+    bodyFrom: 'routes/capabilities.ts: `code` must be a non-blank string; `language` is optional and defaults to python. The code is free text — under interception it is never executed and the shape check never asserts on it — so `ctx.label()` is the smallest thing that passes validation.',
+    intercepts: ['agentcore'],
+    build: async (ctx) => ({ code: ctx.label() }),
+  },
+  {
+    route: 'POST /api/capabilities/browser-sessions',
+    persona: 'orgiq/admin',
+    safe: 'Appends a session to the registered `browser-sessions` fixture (mock/capabilities.ts); reset drops it. `url` is deliberately omitted: the handler auto-navigates on launch when one is given, and the point here is the create response, not a second write.',
+    bodyFrom: 'routes/capabilities.ts: `{ agentName, url? }`. `agentName` is free text echoed back onto the session row, so `ctx.label()` invents no wire value; omitting `url` takes the `about:blank` default the provider spells.',
+    intercepts: ['agentcore'],
+    build: async (ctx) => ({ agentName: ctx.label() }),
+  },
+  {
+    route: 'POST /api/capabilities/browser-sessions/:sessionId/navigate',
+    persona: 'orgiq/admin',
+    safe: 'An echo-back navigation: it navigates the session to the URL it is ALREADY on, read off GET /api/capabilities/browser-sessions. `mockAgentCore.navigateBrowser` rewrites the row inside the registered `browser-sessions` fixture — pageTitle, lastActivityAt and requestCount move, and reset puts all three back. Nothing is fetched: the mock derives the title from the URL string.',
+    bodyFrom: 'routes/capabilities.ts: `{ url, captureScreenshot? }`. `captureScreenshot` is omitted so no screenshot is taken and no journey step is appended. The URL is the session’s own `currentUrl`, so no address this harness made up is ever handed to a navigator.',
+    intercepts: ['agentcore'],
+    build: async (ctx) => {
+      const sessionId = decodeURIComponent(ctx.path.split('/').slice(-2)[0] ?? '');
+      const sessions = objectsWith(await ctx.get('/api/capabilities/browser-sessions'), 'sessionId', 'currentUrl');
+      const url = str(sessions.find((s) => s['sessionId'] === sessionId)?.['currentUrl']);
+      if (url === null) {
+        return unsynthesisable(`GET /api/capabilities/browser-sessions does not list ${sessionId} with a currentUrl to navigate back to`);
+      }
+      return { url };
+    },
+  },
+  {
+    route: 'POST /api/capabilities/browser-sessions/:sessionId/screenshot',
+    persona: 'orgiq/admin',
+    safe: '`mockAgentCore.screenshotBrowser` checks the session exists in the registered fixture and returns a 1x1 PNG data URL. It mutates no row. The one lasting effect is a capability event appended to the in-memory ring in lib/invocations.ts — an append to an event log, never a seeded row moved.',
+    bodyFrom: 'routes/capabilities.ts: no body; the session id comes from the path.',
+    intercepts: ['agentcore'],
+  },
+  {
+    route: 'POST /api/capabilities/browser/crawl/:crawlId/cancel',
+    persona: 'orgiq/admin',
+    safe: '`cancelCrawl` flips one in-memory crawl to cancelled and reaches nothing. Its sibling `POST /browser/crawl` is refused as `spends`, so this sweep never creates a crawl — the crawl registry ships empty and stays empty, which means in practice this records as uncaptured with the resolver’s own reason rather than as a replay. That is the honest state: the route is safe, and there is nothing here to run it against.',
+    bodyFrom: 'routes/capabilities.ts: no body; `:crawlId` comes from GET /api/capabilities/browser/crawl, which lists nothing offline.',
+  },
+
+  // ── devbox ────────────────────────────────────────────────────────────────
+  {
+    route: 'POST /api/devbox/sessions',
+    persona: 'orgiq/admin',
+    safe: 'The whole handler is `normalizeRuntimeSessionId` — pad a caller-supplied id, or mint one from randomUUID — and a 201. No client is constructed, no ARN is resolved, no registry is touched, in mock mode or out of it. It is the one write on this surface that needs no interception to be safe, which is why it carries no `intercepts`.',
+    bodyFrom: 'routes/devbox.ts: `sessionId` is optional; an absent one is minted. `{}` is the whole valid body.',
+    build: ok({}),
+  },
+
+  // ── local compute ─────────────────────────────────────────────────────────
+  //
+  // The six writes here were refused as `unresettable` until mock/local-compute.ts
+  // put `compute-nodes`, `compute-pairing-codes` and `local-presence` behind
+  // registered fixtures; after that they sat at `unclassified` because nobody
+  // had written the entries. These are the entries.
+  //
+  // Every one carries `intercepts: ['aurora']`, and that is not boilerplate:
+  // providers/local-compute.ts reads the fixtures only inside
+  // `if (config.mock.aurora)`, so without it these are INSERTs and UPDATEs
+  // through the RDS Data API against a real `compute_nodes`, and the seeded
+  // node tokens below authenticate nothing.
+  {
+    route: 'POST /api/local-compute/pair/start',
+    persona: 'orgiq/admin',
+    safe: 'Appends one pairing code to the registered `compute-pairing-codes` fixture; reset drops it. Nothing seeded moves, no timer is armed — the code expires by comparison against the clock, not by a scheduled sweep.',
+    bodyFrom: 'routes/local-compute.ts: no body at all; the owner is the session, never the request. Persona is orgiq/admin because the route is behind requireTenant(‘orgiq’) + ConnectLocalCompute.',
+    intercepts: ['aurora'],
+  },
+  {
+    route: 'POST /api/local-compute/pair/claim',
+    persona: 'anonymous',
+    safe: 'Spends the seeded unclaimed code and appends the machine it mints to the registered `compute-nodes` fixture. Both rows come back on reset — verified by hand: claim, `GET /nodes/all` lists four machines, reset, three. The route takes no session (a pairing code is the entire credential), so the persona is `anonymous`.',
+    bodyFrom: 'routes/local-compute.ts: `code` non-blank and `node.label` non-blank are the two requirements; `nodeId`/`platform` are optional and omitted so the provider mints the id. The code is the seeded one, read from `pairingCodes` — the fixture module that DEFINES it — rather than retyped here, which is the same rule the fixtures are held to. Against a server built from different fixtures the claim simply 404s, which is a refusal, not damage.',
+    intercepts: ['aurora'],
+    build: async (ctx) => {
+      const seeded = pairingCodes.rows().find((row) => row.claimedAt === null)?.code;
+      if (!seeded) return unsynthesisable('the `compute-pairing-codes` fixture seeds no unclaimed code to present');
+      return { code: seeded, node: { label: ctx.label() } };
+    },
+  },
+  {
+    route: 'POST /api/local-compute/announce',
+    persona: 'anonymous',
+    safe: 'An echo-back announce: it re-announces the sessions the demo machine is ALREADY reporting, so the registered `local-presence` fixture ends with the same session on the same node. `lastSeenAt` on the presence row and on the node are re-stamped, and reset restores both. No session is created or dropped.',
+    bodyFrom: 'routes/local-compute.ts `parseSessions`: `sessions` is an array of at most 20 records, each needing a non-empty `sessionId`; every other field is optional and `lastSeenAt` is stamped server-side. The records are the node’s own, read off GET /api/local-compute/nodes as the same cookie-less caller the demo machine belongs to. Auth is the node token, not a cookie — the seeded value from `MOCK_NODE_TOKEN` in mock/local-compute.ts, which is where it is defined.',
+    intercepts: ['aurora'],
+    headers: { authorization: `Bearer ${MOCK_NODE_TOKEN}` },
+    build: async (ctx) => {
+      const sessions = objectsWith(await ctx.get('/api/local-compute/nodes'), 'sessionId', 'harness');
+      if (sessions.length === 0) {
+        return unsynthesisable('GET /api/local-compute/nodes reported no announced session to echo back');
+      }
+      return { sessions };
+    },
+  },
+  {
+    route: 'POST /api/local-compute/heartbeat',
+    persona: 'anonymous',
+    safe: 'Re-stamps `lastSeenAt` on the demo machine’s presence row and on its node row, both in registered fixtures, and touches nothing else. Reset restores the seeded ages — which matters, because those ages are the ONLY input to the connected/stale/offline derivation the fleet page renders.',
+    bodyFrom: 'routes/local-compute.ts: no body; the node is identified entirely by its bearer token, taken from `MOCK_NODE_TOKEN` in mock/local-compute.ts.',
+    intercepts: ['aurora'],
+    headers: { authorization: `Bearer ${MOCK_NODE_TOKEN}` },
+  },
+  {
+    route: 'POST /api/local-compute/sessions/:sessionId/end',
+    persona: 'anonymous',
+    safe: 'Ends a REAL session — the seeded `demo-local-session-…` on the demo machine — so the response carries `removed: true` rather than the empty-handed shape a made-up id would produce. The session lives in the registered `local-presence` fixture, so reset announces it back.',
+    bodyFrom: 'routes/local-compute.ts: no body. `:sessionId` is resolved by key path (`#nodes[].presence.sessions[].sessionId` in http.ts) off GET /api/local-compute/nodes as the same cookie-less caller that owns the machine — a fuzzy id search returns the NODE’s id there and the end would silently remove nothing. The bearer token is that machine’s, so the node and the session agree.',
+    intercepts: ['aurora'],
+    headers: { authorization: `Bearer ${MOCK_NODE_TOKEN}` },
+  },
+  {
+    route: 'PATCH /api/local-compute/nodes/:id',
+    persona: 'orgiq/admin',
+    safe: 'A REAL rename of a seeded machine the sweep’s own persona owns: `u-operator` holds `node-operator-mini` and `node-operator-thinkpad` (mock/local-compute.ts splits ownership precisely so this route has a row it may edit). `renameNode` rewrites the label in the registered `compute-nodes` fixture and reset puts `retired-mac-mini` back.',
+    bodyFrom: "routes/local-compute.ts: at least one of `label` (non-blank, trimmed to 80) / `acceptJobs` (boolean), or the route 400s with 'nothing to update'. A label is free text — the shape check never asserts on it — so `ctx.label()` invents no wire value.",
+    intercepts: ['aurora'],
+    build: async (ctx) => ({ label: ctx.label() }),
+  },
+  {
+    route: 'DELETE /api/local-compute/nodes/:id',
+    persona: 'orgiq/admin',
+    safe: 'The one delete on the allowlist, and it deletes nothing: `revokeNode` is a soft revoke that stamps `revoked_at` on a row kept for audit, inside the registered `compute-nodes` fixture, so reset clears the stamp and the machine is listed again. See RESTORABLE_DELETES for why the `destructive` rule lets it through — and note the rule itself is unchanged for every other DELETE.',
+    bodyFrom: 'routes/local-compute.ts: no body; `:id` is a node off GET /api/local-compute/nodes, which lists only machines this persona owns, so the ownership clause in the UPDATE is satisfied by construction.',
+    intercepts: ['aurora'],
+  },
 ];
 
 /**
@@ -1156,18 +1663,48 @@ export type Classification =
 
 const byRoute = new Map<string, WriteSpec>(WRITE_SPECS.map((s) => [s.route, s]));
 
-/** The one decision. Refusals win; an unlisted route is refused, never replayed. */
-export function classifyWrite(route: string): Classification {
+const ruleById = (id: string): RefusalRule => {
+  const rule = REFUSAL_RULES.find((r) => r.id === id);
+  if (!rule) throw new Error(`write-policy: no refusal rule '${id}'`);
+  return rule;
+};
+
+const refuse = (rule: RefusalRule, route: string): Classification => {
+  const extra = rule.detail?.(route);
+  return { kind: 'refused', rule: rule.id, reason: extra ? `${rule.because} Here: ${extra}.` : rule.because };
+};
+
+/**
+ * What the server being captured says it is running, from its own
+ * `GET /api/health`. `capture-writes.ts` reads it once and passes it here.
+ */
+export type Intercepted = ReadonlySet<MockProvider>;
+
+/**
+ * The one decision. Refusals win; an unlisted route is refused, never
+ * replayed.
+ *
+ * `intercepted` is what the SERVER reported about itself. Omitting it — which
+ * is what every caller that is reasoning about the policy rather than running
+ * it does, the tests included — means "nothing is known to be intercepted",
+ * and every spec that leans on interception is refused. That default is the
+ * point: this file never decides on its own that a provider is mocked.
+ */
+export function classifyWrite(route: string, intercepted?: Intercepted): Classification {
   for (const rule of REFUSAL_RULES) {
-    if (rule.id === 'unclassified') break;
-    if (!rule.applies(route)) continue;
-    const extra = rule.detail?.(route);
-    return { kind: 'refused', rule: rule.id, reason: extra ? `${rule.because} Here: ${extra}.` : rule.because };
+    // Both of these are answered below, once the allowlist has been consulted:
+    // `unclassified` means "no entry", and `not-intercepted` is a question
+    // about the server rather than about the route.
+    if (rule.id === 'unclassified' || rule.id === 'not-intercepted') continue;
+    if (rule.applies(route)) return refuse(rule, route);
   }
   const spec = byRoute.get(route);
-  if (spec) return { kind: 'replay', spec };
-  const last = REFUSAL_RULES[REFUSAL_RULES.length - 1]!;
-  return { kind: 'refused', rule: last.id, reason: last.because };
+  if (!spec) return refuse(ruleById('unclassified'), route);
+  const needs = spec.intercepts ?? [];
+  if (needs.some((provider) => !intercepted?.has(provider))) {
+    return refuse(ruleById('not-intercepted'), route);
+  }
+  return { kind: 'replay', spec };
 }
 
 /** Exported for the test that proves every spec is reachable and reasoned. */

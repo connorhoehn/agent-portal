@@ -19,6 +19,15 @@
 //     payload rather than 500ing the page.
 
 jest.mock('../../providers/aurora.js', () => ({ exec: jest.fn() }));
+// The router now has an offline branch gated on `config.mock.aurora`, so it
+// imports config.ts — which reaches `import.meta` and is unloadable under the
+// CJS test build (the same trap drift-routes.test.ts documents). Mocked with
+// `aurora: false` on purpose: every case in this file is about the LIVE SQL
+// path, and the offline branch is pinned separately in
+// observability-mock-branch.test.ts.
+jest.mock('../../config.js', () => ({
+  config: { region: 'us-east-1', mock: { aurora: false } },
+}));
 
 import express from 'express';
 import request from '../../test-support/http.js';
@@ -70,6 +79,30 @@ describe('the whole router', () => {
       expect(res.status).toBe(200);
       const rows = (res.body.points ?? res.body.cells ?? res.body.users ?? res.body.byAgent) as unknown[];
       expect(rows).toEqual([]);
+    }
+  });
+
+  it('says WHICH of the two empties it is — degraded on failure, silent on quiet', async () => {
+    // All four reads answer the same empty collection whether the fleet was
+    // idle or the table is gone. The marker is the only thing that separates
+    // them, so it is asserted on every one of the four rather than a sample.
+    const app = buildApp();
+
+    execMock.mockResolvedValue([]);
+    for (const path of READS) {
+      const quiet = await request(app).get(path);
+      expect({ path, degraded: quiet.body.degraded, error: quiet.body.error })
+        .toEqual({ path, degraded: undefined, error: undefined });
+    }
+
+    execMock.mockRejectedValue(new Error('relation "observability.invocation_traces" does not exist'));
+    for (const path of READS) {
+      const res = await request(app).get(path);
+      expect({ path, ...res.body as Record<string, unknown> }).toMatchObject({
+        path,
+        degraded: true,
+        error: 'relation "observability.invocation_traces" does not exist',
+      });
     }
   });
 });

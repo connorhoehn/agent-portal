@@ -29,7 +29,33 @@ import { randomUUID } from 'node:crypto';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
 import { exec } from '../providers/aurora.js';
+import { config } from '../config.js';
+import {
+  mockCalibrationCase,
+  mockCalibrationCases,
+  mockCalibrationResults,
+  mockCalibrationRun,
+  mockCalibrationRuns,
+  mockDeactivateCalibrationCase,
+  mockInsertCalibrationCase,
+  mockUpdateCalibrationCase,
+} from '../mock/calibration.js';
 import { judgeResponse, NOVA_PRO_MODEL_ID } from '../lib/judge.js';
+
+/**
+ * Marks a response whose query failed — the wrapper from routes/cost.ts, kept
+ * local so each router owns its own copy.
+ *
+ * Every read below answers 200 with an empty payload rather than failing the
+ * page, which is the right call. What it cost was the difference between
+ * "nothing happened in this window" and "the query blew up": both rendered as
+ * an empty panel. The marker restores it without touching the healthy shape —
+ * a quiet window answers exactly as it did before, and only a caught failure
+ * carries `degraded` + the first line of the error.
+ */
+function degraded<T extends object>(body: T, err: unknown): T & { degraded: true; error: string } {
+  return { ...body, degraded: true, error: (err as Error).message.split('\n')[0]?.slice(0, 160) ?? 'query failed' };
+}
 
 export const calibrationRouter = Router();
 
@@ -176,11 +202,13 @@ calibrationRouter.get('/cases', asyncHandler(async (req, res) => {
      ${includeInactive ? '' : 'WHERE active = true'}
      ORDER BY agent_id ASC, created_at ASC`;
   try {
-    const rows = await exec(sql, []);
+    const rows = config.mock.aurora
+      ? mockCalibrationCases(includeInactive)
+      : await exec(sql, []);
     res.json({ cases: rows.map(rowToCase) });
   } catch (err) {
     console.warn('[calibration] /cases failed:', (err as Error).message);
-    res.json({ cases: [] });
+    res.json(degraded({ cases: [] as CalibrationCase[] }, err));
   }
 }));
 
@@ -188,18 +216,20 @@ calibrationRouter.get('/cases', asyncHandler(async (req, res) => {
 
 calibrationRouter.get('/cases/:id', asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
-  const rows = await exec(
-    `SELECT calibration_id::text   AS calibration_id,
-            agent_id, prompt, response,
-            human_score::text      AS human_score,
-            human_rationale, active,
-            created_at::text       AS created_at,
-            updated_at::text       AS updated_at,
-            notes
-       FROM observability.calibration_set
-      WHERE calibration_id = CAST(:id AS uuid)`,
-    [strParam('id', id)],
-  );
+  const rows = config.mock.aurora
+    ? mockCalibrationCase(id)
+    : await exec(
+      `SELECT calibration_id::text   AS calibration_id,
+              agent_id, prompt, response,
+              human_score::text      AS human_score,
+              human_rationale, active,
+              created_at::text       AS created_at,
+              updated_at::text       AS updated_at,
+              notes
+         FROM observability.calibration_set
+        WHERE calibration_id = CAST(:id AS uuid)`,
+      [strParam('id', id)],
+    );
   if (rows.length === 0) {
     res.status(404).json({ error: 'calibration case not found' });
     return;
@@ -236,6 +266,14 @@ calibrationRouter.post('/cases', requireAction('ManageCanary'), asyncHandler(asy
   const active = typeof body.active === 'boolean' ? body.active : true;
 
   const calibrationId = randomUUID();
+  if (config.mock.aurora) {
+    mockInsertCalibrationCase({
+      calibrationId, agentId, prompt, response, humanScore,
+      humanRationale: body.humanRationale ?? null, active, notes: body.notes ?? null,
+    });
+    res.status(201).json({ calibrationId });
+    return;
+  }
   await exec(
     `INSERT INTO observability.calibration_set
        (calibration_id, agent_id, prompt, response, human_score,
@@ -301,6 +339,22 @@ calibrationRouter.patch('/cases/:id', requireAction('ManageCanary'), asyncHandle
   }
   sets.push('updated_at = now()');
 
+  if (config.mock.aurora) {
+    const patch: Parameters<typeof mockUpdateCalibrationCase>[1] = {};
+    if (typeof body.agentId === 'string') patch.agentId = body.agentId;
+    if (typeof body.prompt === 'string') patch.prompt = body.prompt;
+    if (typeof body.response === 'string') patch.response = body.response;
+    if (typeof body.humanScore === 'number' && Number.isFinite(body.humanScore)) {
+      patch.humanScore = clamp01(body.humanScore);
+    }
+    if ('humanRationale' in body) patch.humanRationale = body.humanRationale ?? null;
+    if (typeof body.active === 'boolean') patch.active = body.active;
+    if ('notes' in body) patch.notes = body.notes ?? null;
+    if (!mockUpdateCalibrationCase(id, patch)) throw new NotFoundError('calibration case not found');
+    res.json({ ok: true });
+    return;
+  }
+
   const rows = await exec(
     `UPDATE observability.calibration_set
         SET ${sets.join(', ')}
@@ -316,6 +370,11 @@ calibrationRouter.patch('/cases/:id', requireAction('ManageCanary'), asyncHandle
 
 calibrationRouter.delete('/cases/:id', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
+  if (config.mock.aurora) {
+    if (!mockDeactivateCalibrationCase(id)) throw new NotFoundError('calibration case not found');
+    res.json({ ok: true });
+    return;
+  }
   const rows = await exec(
     `UPDATE observability.calibration_set
         SET active = false, updated_at = now()
@@ -354,7 +413,7 @@ calibrationRouter.post('/runs', requireAction('ManageCanary'), asyncHandler(asyn
   //    cases is always operator error.
   let activeCases: CalibrationCase[] = [];
   try {
-    const rows = await exec(
+    const rows = config.mock.aurora ? mockCalibrationCases(false) : await exec(
       `SELECT calibration_id::text AS calibration_id,
               agent_id, prompt, response,
               human_score::text AS human_score,
@@ -376,6 +435,23 @@ calibrationRouter.post('/runs', requireAction('ManageCanary'), asyncHandler(asyn
 
   if (activeCases.length === 0) {
     res.status(400).json({ error: 'no active calibration cases — seed the set first' });
+    return;
+  }
+
+  // THE ONE READ/WRITE ON THIS SURFACE THAT STAYS DEGRADED OFFLINE, with its
+  // true reason. A calibration run is not a query: it re-invokes the Nova-Pro
+  // judge once per active case (lib/judge.ts → bedrock-runtime Converse) and
+  // records what the judge actually said. There is no Bedrock in `dev:mock`,
+  // and a synthesised MAE would be a number about a judge nobody ran — which
+  // is exactly the fabrication this page exists to detect. The reads around it
+  // (`GET /cases`, `GET /runs`, `GET /runs/:id`) are fully seeded, so the
+  // surface is legible; only the button that spends money is refused.
+  if (config.mock.aurora) {
+    res.status(503).json({
+      error: 'calibration runs invoke the Nova-Pro judge — no Bedrock in dev:mock',
+      detail: `${activeCases.length} active case(s) would be re-judged against amazon.nova-pro-v1:0. `
+        + 'Run this against a deployed stack; the seeded run history is readable offline.',
+    });
     return;
   }
 
@@ -465,23 +541,25 @@ calibrationRouter.post('/runs', requireAction('ManageCanary'), asyncHandler(asyn
 calibrationRouter.get('/runs', asyncHandler(async (req, res) => {
   const limit = clampLimit(req.query['limit'] as string | undefined);
   try {
-    const rows = await exec(
-      `SELECT calibration_run_id::text AS calibration_run_id,
-              label, judge_model_id, total_cases,
-              mean_abs_error::text AS mean_abs_error,
-              max_abs_error::text  AS max_abs_error,
-              started_at::text     AS started_at,
-              finished_at::text    AS finished_at,
-              notes
-         FROM observability.calibration_runs
-        ORDER BY started_at DESC
-        LIMIT :lim`,
-      [{ name: 'lim', value: { longValue: limit } }],
-    );
+    const rows = config.mock.aurora
+      ? mockCalibrationRuns(limit)
+      : await exec(
+        `SELECT calibration_run_id::text AS calibration_run_id,
+                label, judge_model_id, total_cases,
+                mean_abs_error::text AS mean_abs_error,
+                max_abs_error::text  AS max_abs_error,
+                started_at::text     AS started_at,
+                finished_at::text    AS finished_at,
+                notes
+           FROM observability.calibration_runs
+          ORDER BY started_at DESC
+          LIMIT :lim`,
+        [{ name: 'lim', value: { longValue: limit } }],
+      );
     res.json({ runs: rows.map(rowToRun) });
   } catch (err) {
     console.warn('[calibration] /runs failed:', (err as Error).message);
-    res.json({ runs: [] });
+    res.json(degraded({ runs: [] as CalibrationRun[] }, err));
   }
 }));
 
@@ -490,7 +568,7 @@ calibrationRouter.get('/runs', asyncHandler(async (req, res) => {
 calibrationRouter.get('/runs/:id', asyncHandler(async (req, res) => {
   const id = String(req.params['id'] ?? '');
 
-  const runRows = await exec(
+  const runRows = config.mock.aurora ? mockCalibrationRun(id) : await exec(
     `SELECT calibration_run_id::text AS calibration_run_id,
             label, judge_model_id, total_cases,
             mean_abs_error::text AS mean_abs_error,
@@ -507,7 +585,7 @@ calibrationRouter.get('/runs/:id', asyncHandler(async (req, res) => {
     return;
   }
 
-  const resultRows = await exec(
+  const resultRows = config.mock.aurora ? mockCalibrationResults(id) : await exec(
     `SELECT r.calibration_run_id::text AS calibration_run_id,
             r.calibration_id::text     AS calibration_id,
             r.judge_score::text        AS judge_score,

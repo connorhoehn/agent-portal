@@ -35,6 +35,7 @@ import { createBotRun } from '../providers/bots.js';
 import { checkConcurrency, botMaxConcurrent } from './bot-runner.js';
 import { listPulls, getPullStatus, type PullSummary } from './github-connector.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
+import { firstLine } from './upstream.js';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
 function toStr(v: unknown, f = ''): string { return typeof v === 'string' ? v : v == null ? f : String(v); }
@@ -446,20 +447,172 @@ export async function pollOnce(): Promise<{ dispatched: number; settled: number;
   };
 }
 
+// ─── Health ───────────────────────────────────────────────────────────────────
+//
+// WHY A POLLER NEEDS ITS OWN SHAPE. Everything else in this slice hands a
+// caller an `Upstream<T>` and lets the caller decide (lib/upstream.ts). A
+// poller has no caller. Nobody is waiting on `pollOnce`, there is no response
+// to mark `degraded`, and the two per-item catches below already do the only
+// sensible local thing — count the failure and move to the next repo, because
+// one unreachable repository must not stop the other thirteen.
+//
+// So the question is not "how does it say it failed" but "who ever finds out",
+// and the honest answer today was NOBODY:
+//
+//   * `runPollTick`'s catch wrote one `console.warn` and returned. A poller
+//     that has thrown on every tick for a day and one with nothing to do are
+//     both silent afterwards, because the success line is deliberately only
+//     printed when work happened.
+//   * `pollOnce`'s `errors` count was computed, printed, and dropped. There is
+//     no counter, no last-run timestamp, nothing any surface could read to
+//     answer "is PR watch actually running?".
+//   * The per-tick warn is not actionable BECAUSE it repeats: a revoked GitHub
+//     token produces an identical line every two minutes forever, which is how
+//     a log line stops being read.
+//
+// Two things, then. A RECORDED STATE — in memory, deliberately: this poller's
+// most likely failure is Aurora being unreachable, so a durable record would
+// be written to the one place it cannot be written when it matters. And a log
+// that ESCALATES: the first failure, then silence, then one line when a streak
+// crosses the point where it is no longer a blip, then one line when it
+// recovers. "It started working again" is the half nobody ever logs, and it is
+// the half that tells you whether the thing you fixed was the thing.
+
+/** After this many consecutive failed ticks, say so again — and say for how
+ *  long. Eight ticks is ~16 minutes at the default cadence: past a token
+ *  refresh, past a deploy, into "somebody should look". */
+const FAILURE_STREAK_ALERT = 8;
+
+export interface PrWatchHealth {
+  /** Has the poller been started in this process at all? */
+  running: boolean;
+  /** When the last tick finished, whichever way it went. */
+  lastTickAt: string | null;
+  /** Did the last tick complete? Null before the first one. */
+  lastTickOk: boolean | null;
+  /** First line of the last thrown failure, and when. Kept after recovery so
+   *  a reader can see what it was, paired with `consecutiveFailures: 0`. */
+  lastError: string | null;
+  lastErrorAt: string | null;
+  /** Consecutive whole-tick failures. 0 means the last tick completed. */
+  consecutiveFailures: number;
+  /** Per-item failures inside the last completed tick — an unreachable repo or
+   *  a borrow that failed. Distinct from a tick that threw. */
+  lastTickItemErrors: number;
+  dispatchedLastTick: number;
+  settledLastTick: number;
+}
+
+const health: PrWatchHealth = {
+  running: false,
+  lastTickAt: null,
+  lastTickOk: null,
+  lastError: null,
+  lastErrorAt: null,
+  consecutiveFailures: 0,
+  lastTickItemErrors: 0,
+  dispatchedLastTick: 0,
+  settledLastTick: 0,
+};
+
+/**
+ * What the poller has actually been doing. A copy, so a reader cannot mutate
+ * the record it is reading.
+ *
+ * Not wired to a route here on purpose: adding one changes the HTTP surface
+ * and the wire snapshot, which is a separate decision from making the state
+ * exist. The state is the part that was missing.
+ */
+export function prWatchHealth(): PrWatchHealth {
+  return { ...health };
+}
+
+/** Test seam — forget everything, as a fresh process would. */
+export function resetPrWatchHealth(): void {
+  Object.assign(health, {
+    running: false, lastTickAt: null, lastTickOk: null, lastError: null,
+    lastErrorAt: null, consecutiveFailures: 0, lastTickItemErrors: 0,
+    dispatchedLastTick: 0, settledLastTick: 0,
+  });
+}
+
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
 
 let _intervalHandle: NodeJS.Timeout | null = null;
 
-async function safePoll(): Promise<void> {
+/**
+ * One tick, with the failure recorded rather than thrown away.
+ *
+ * Exported so the health record and the escalation rule can be tested without
+ * waiting out a two-minute interval — the state machine is the point of this
+ * section, and an untested state machine that only runs on a timer is a state
+ * machine nobody has ever seen run.
+ */
+export async function runPollTick(): Promise<void> {
   try {
     const r = await pollOnce();
+    const recovered = health.consecutiveFailures;
+    const failedFor = recovered > 0 ? sinceFirstFailure() : null;
+    Object.assign(health, {
+      lastTickAt: new Date().toISOString(),
+      lastTickOk: true,
+      consecutiveFailures: 0,
+      lastTickItemErrors: r.errors,
+      dispatchedLastTick: r.dispatched,
+      settledLastTick: r.settled,
+    });
+    if (recovered > 0) {
+      // The recovery line. Without it the log's last word on this poller is
+      // whatever went wrong, and a reader cannot tell a fixed problem from a
+      // live one without waiting out another interval.
+      console.log(`[pr-watch] recovered after ${recovered} failed tick(s)${failedFor ? ` over ${failedFor}` : ''}`);
+    }
     // Log only when work happened — a quiet repo must not write a line every
     // two minutes.
     if (r.dispatched > 0 || r.settled > 0 || r.errors > 0) {
       console.log(`[pr-watch] dispatched ${r.dispatched} PR run(s), settled ${r.settled} work item(s), errors ${r.errors}`);
     }
   } catch (err) {
-    console.warn('[pr-watch] poll failed:', (err as Error).message);
+    noteTickFailure(err);
+  }
+}
+
+let _firstFailureAtMs: number | null = null;
+
+function sinceFirstFailure(): string | null {
+  if (_firstFailureAtMs == null) return null;
+  const mins = Math.round((Date.now() - _firstFailureAtMs) / 60_000);
+  return mins >= 1 ? `${mins}m` : '<1m';
+}
+
+/**
+ * Record a whole-tick failure, and decide whether to say anything.
+ *
+ * The first one is logged, because a first failure is news. The rest are not,
+ * until the streak reaches FAILURE_STREAK_ALERT and then every multiple of it
+ * — so a permanently broken poller re-states itself occasionally with the
+ * streak length and elapsed time attached, instead of writing the same
+ * contextless line 720 times a day.
+ */
+function noteTickFailure(err: unknown): void {
+  const message = firstLine(err, 'poll failed');
+  const now = new Date();
+  health.consecutiveFailures++;
+  if (health.consecutiveFailures === 1) _firstFailureAtMs = now.getTime();
+  Object.assign(health, {
+    lastTickAt: now.toISOString(),
+    lastTickOk: false,
+    lastError: message,
+    lastErrorAt: now.toISOString(),
+  });
+
+  const n = health.consecutiveFailures;
+  if (n === 1) {
+    console.warn('[pr-watch] poll failed:', message);
+  } else if (n % FAILURE_STREAK_ALERT === 0) {
+    console.warn(
+      `[pr-watch] poll has failed ${n} consecutive tick(s)${sinceFirstFailure() ? ` over ${sinceFirstFailure()}` : ''} — no PR has been dispatched or settled in that time. Last error: ${message}`,
+    );
   }
 }
 
@@ -486,10 +639,11 @@ export function startPrWatchPoller(): void {
   // Cold-start poll after a short delay rather than immediately: GitHub and
   // the credential vault are not on boot's critical path, and the delay lets
   // schema loading and the schedulers settle first.
-  setTimeout(() => { void safePoll(); }, COLD_START_DELAY_MS).unref();
+  setTimeout(() => { void runPollTick(); }, COLD_START_DELAY_MS).unref();
 
-  _intervalHandle = setInterval(() => { void safePoll(); }, intervalMs);
+  _intervalHandle = setInterval(() => { void runPollTick(); }, intervalMs);
   _intervalHandle.unref();
+  health.running = true;
 }
 
 /** Stop the background poller. Safe to call when not running. */
@@ -498,4 +652,5 @@ export function stopPrWatchPoller(): void {
     clearInterval(_intervalHandle);
     _intervalHandle = null;
   }
+  health.running = false;
 }

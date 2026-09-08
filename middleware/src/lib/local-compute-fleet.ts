@@ -7,11 +7,28 @@
 // within one heartbeat after a middleware restart, so persisting sessions would
 // only produce rows that lie about liveness.
 //
+// EPHEMERAL, AND STILL RESETTABLE. That argument is about durability and it is
+// intact — nothing here reaches a database, and the store still dies with the
+// process. It is not an argument for being unresettable: an auditor who ends a
+// session or heartbeats a node back from `stale` has changed the world for
+// whoever looks next, and the only way back used to be restarting the
+// middleware. So the rows live in the `local-presence` fixture
+// (mock/local-compute.ts), which is in-memory too and costs nothing at run
+// time, and `POST /api/__mock/reset` puts the world back.
+//
+// `subscribers` below stays a module-level `Set` deliberately. It holds live
+// SSE callbacks — open HTTP responses, not data — and a reset that cleared
+// them would silently detach every `/api/local-compute/stream` with no error
+// and no reconnect. Data is resettable; connections are not data.
+//
 // Status is DERIVED from last_seen, never claimed by the client:
 //   ≤ 90s    connected
 //   ≤ 5min   stale       (missed heartbeats; machine may be asleep)
 //   beyond   offline     (sessions dropped from listings)
 // The 5-minute horizon matches the announce protocol's idle heartbeat.
+
+import { clock } from '../mock/core/index.js';
+import { localPresence, presenceRowFor, upsertPresenceRow } from '../mock/local-compute.js';
 
 export type NodePresenceStatus = 'connected' | 'stale' | 'offline';
 
@@ -61,16 +78,13 @@ const STALE_HORIZON_MS = 5 * 60_000;
 const INTENT_MAX = 200;
 const TOUCHING_MAX = 20;
 
-interface NodeState {
-  lastSeenAt: string;
-  sessions: Map<string, LocalSession>;
-}
-
-const nodes = new Map<string, NodeState>();
 const subscribers = new Set<(nodeId: string) => void>();
 
+/** Presence reads the same clock its fixture writes with, so a test can freeze
+ *  one instant and assert the derived status exactly. Unfrozen it is
+ *  `Date.now()`. */
 function now(): string {
-  return new Date().toISOString();
+  return clock.nowIso();
 }
 
 function notify(nodeId: string): void {
@@ -97,55 +111,72 @@ function sanitize(s: LocalSession): LocalSession {
  * announces is covered by the staleness horizon, not by tombstones.)
  */
 export function recordAnnounce(nodeId: string, sessions: LocalSession[]): NodePresence {
-  const state: NodeState = { lastSeenAt: now(), sessions: new Map() };
+  // Deduplicated by sessionId, last write winning at the first position the id
+  // appeared — what the `Map` this replaced did, kept because an announce
+  // carrying one id twice must not produce two rows for one session.
+  const deduped: LocalSession[] = [];
+  const seen = new Map<string, number>();
   for (const s of sessions) {
     if (!s.sessionId) continue;
-    state.sessions.set(s.sessionId, sanitize(s));
+    const at = seen.get(s.sessionId);
+    if (at === undefined) {
+      seen.set(s.sessionId, deduped.length);
+      deduped.push(sanitize(s));
+    } else {
+      deduped[at] = sanitize(s);
+    }
   }
-  nodes.set(nodeId, state);
+  upsertPresenceRow({ nodeId, lastSeenAt: now(), sessions: deduped });
   notify(nodeId);
   return presenceOf(nodeId);
 }
 
 /** A heartbeat with no session changes — just proof of life. */
 export function recordHeartbeat(nodeId: string): void {
-  const state = nodes.get(nodeId);
-  if (!state) return;
-  state.lastSeenAt = now();
+  const row = presenceRowFor(nodeId);
+  if (!row) return;
+  row.lastSeenAt = now();
   notify(nodeId);
 }
 
 export function endSession(nodeId: string, sessionId: string): boolean {
-  const state = nodes.get(nodeId);
-  if (!state) return false;
-  const removed = state.sessions.delete(sessionId);
-  if (removed) {
-    state.lastSeenAt = now();
-    notify(nodeId);
-  }
-  return removed;
+  const row = presenceRowFor(nodeId);
+  if (!row) return false;
+  const i = row.sessions.findIndex((s) => s.sessionId === sessionId);
+  if (i < 0) return false;
+  row.sessions.splice(i, 1);
+  row.lastSeenAt = now();
+  notify(nodeId);
+  return true;
 }
 
 export function statusOfNode(lastSeenAt: string | null): NodePresenceStatus {
   if (!lastSeenAt) return 'offline';
-  const age = Date.now() - Date.parse(lastSeenAt);
+  const age = clock.now().getTime() - Date.parse(lastSeenAt);
   if (age <= CONNECTED_HORIZON_MS) return 'connected';
   if (age <= STALE_HORIZON_MS) return 'stale';
   return 'offline';
 }
 
 export function presenceOf(nodeId: string): NodePresence {
-  const state = nodes.get(nodeId);
-  if (!state) return { nodeId, status: 'offline', lastSeenAt: null, sessions: [] };
-  const status = statusOfNode(state.lastSeenAt);
+  const row = presenceRowFor(nodeId);
+  if (!row) return { nodeId, status: 'offline', lastSeenAt: null, sessions: [] };
+  const status = statusOfNode(row.lastSeenAt);
   return {
     nodeId,
     status,
-    lastSeenAt: state.lastSeenAt,
+    lastSeenAt: row.lastSeenAt,
     // An offline node's sessions are gone as far as anyone watching is
     // concerned — reporting them would offer presence the machine can't back.
-    sessions: status === 'offline' ? [] : [...state.sessions.values()],
+    sessions: status === 'offline' ? [] : row.sessions.map(copySession),
   };
+}
+
+/** Rows are the live fixture array now, so a reader that got the stored object
+ *  could edit presence by reference — and a `touching` array by reference
+ *  survives even a shallow copy. */
+function copySession(s: LocalSession): LocalSession {
+  return { ...s, ...(s.touching ? { touching: [...s.touching] } : {}) };
 }
 
 /** Presence change feed. The callback receives the nodeId that changed; the
@@ -155,8 +186,15 @@ export function subscribePresence(cb: (nodeId: string) => void): () => void {
   return () => { subscribers.delete(cb); };
 }
 
-/** Test hook — wipe all presence state. */
+/**
+ * Test hook — put the seeded presence back and drop every subscriber.
+ *
+ * `POST /api/__mock/reset` does the first half only: it resets the fixture and
+ * leaves open SSE streams attached, which is the difference between a test
+ * tearing down a process-shaped world and an auditor restoring a data-shaped
+ * one.
+ */
 export function _resetLocalFleet(): void {
-  nodes.clear();
+  localPresence.reset();
   subscribers.clear();
 }

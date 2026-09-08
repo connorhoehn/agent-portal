@@ -27,6 +27,7 @@ import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-r
 import { agentcore } from '../providers/index.js';
 import { extractFromScreenshot } from './vision-extractor.js';
 import { config } from '../config.js';
+import { reached, unreachable, type Upstream } from './upstream.js';
 
 const MODEL_ID = process.env['SURVEY_MODEL_ID'] ?? 'amazon.nova-pro-v1:0';
 
@@ -96,6 +97,13 @@ export interface Survey {
   robotsExcluded: number;
   /** Set when classification could not run; the tree is still valid. */
   classificationProblem?: string;
+  /**
+   * Set when robots.txt could not be READ — not when it was read and imposed
+   * nothing. The crawl still ran, unrestricted, so this is the sentence that
+   * separates "this site asks nothing of crawlers" from "we fetched it without
+   * knowing what it asks."
+   */
+  robotsProblem?: string;
   startedAt: string;
   completedAt: string | null;
   error: string | null;
@@ -178,14 +186,32 @@ interface RawPage { title: string; text: string; links: string[] }
  * `User-agent: *` group's Disallow prefixes. Anything unparseable is treated
  * as "no restrictions" rather than blocking the survey outright — a site with
  * an odd robots.txt should still be surveyable.
+ *
+ * THE EMPTY LIST MEANT THREE THINGS. "This site restricts nothing", "robots.txt
+ * is 404 so there are no rules", and "the fetch timed out / the server
+ * answered 503, so we have no idea what the rules are" all came back as `[]`,
+ * and the crawler then fetched everything with equal confidence. Of the three
+ * that is the one worth telling apart, because it is the only one where the
+ * survey did something it might not have been allowed to do — and it is
+ * invisible: robots.txt failing does not fail the crawl, so nothing else in
+ * the run report would ever mention it.
+ *
+ * A 404 is still `reached([])`. That is not a failure; it is the standard's
+ * own way of saying "no restrictions", and marking it degraded would put a
+ * warning on the majority of ordinary sites. Any other non-2xx, and any
+ * thrown fetch, is degraded — same permissive BEHAVIOUR as before (the survey
+ * proceeds), now with the fact recorded.
  */
-async function disallowedPrefixes(origin: string): Promise<string[]> {
+export async function disallowedPrefixes(origin: string): Promise<Upstream<string[]>> {
   try {
     const res = await fetch(`${origin}/robots.txt`, {
       headers: { 'User-Agent': 'OrgIQ-Survey/1.0' },
       signal: AbortSignal.timeout(8000),
     });
-    if (!res.ok) return [];
+    if (res.status === 404) return reached([]);
+    if (!res.ok) {
+      return unreachable([] as string[], new Error(`HTTP ${res.status}`), `${origin}/robots.txt`);
+    }
     const out: string[] = [];
     let inStar = false;
     for (const raw of (await res.text()).split('\n')) {
@@ -200,9 +226,9 @@ async function disallowedPrefixes(origin: string): Promise<string[]> {
         out.push(value);
       }
     }
-    return out;
-  } catch {
-    return [];
+    return reached(out);
+  } catch (err) {
+    return unreachable([] as string[], err, `${origin}/robots.txt`);
   }
 }
 
@@ -511,8 +537,15 @@ async function runSurvey(
   const visited = new Set<string>([survey.startUrl]);
   const queue: Array<{ url: string; depth: number }> = [{ url: survey.startUrl, depth: 0 }];
 
-  // Asked once per origin, before anything is fetched.
-  const disallowed = await disallowedPrefixes(survey.origin);
+  // Asked once per origin, before anything is fetched. A failure here does not
+  // stop the crawl — it is recorded on the survey, so the report says the site
+  // was crawled without its rules rather than implying it had none.
+  const robots = await disallowedPrefixes(survey.origin);
+  const disallowed = robots.items;
+  if (robots.degraded) {
+    survey.robotsProblem = `Could not read robots.txt (${robots.error}) — crawled without it.`;
+    console.warn(`[site-survey] ${survey.robotsProblem}`);
+  }
 
   // Opened lazily: most sites never need it, and a browser session costs money
   // from the moment it exists.

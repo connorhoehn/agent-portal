@@ -34,8 +34,28 @@ import { asyncHandler } from '../lib/async-handler.js';
 import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import { processTrace } from '../lib/trace-sink.js';
-import { getRecentInvocations } from '../lib/invocations.js';
-import type { InvocationRecord } from '../lib/invocations.js';
+import {
+  mockInvocationChildren,
+  mockInvocationDetailRow,
+  mockInvocationSearch,
+  mockInvocationSummaryRow,
+  mockInvocationToolCalls,
+} from '../mock/observability-queries.js';
+
+/**
+ * Marks a response whose query failed — the wrapper from routes/cost.ts, kept
+ * local so each router owns its own copy.
+ *
+ * Every read below answers 200 with an empty payload rather than failing the
+ * page, which is the right call. What it cost was the difference between
+ * "nothing happened in this window" and "the query blew up": both rendered as
+ * an empty panel. The marker restores it without touching the healthy shape —
+ * a quiet window answers exactly as it did before, and only a caught failure
+ * carries `degraded` + the first line of the error.
+ */
+function degraded<T extends object>(body: T, err: unknown): T & { degraded: true; error: string } {
+  return { ...body, degraded: true, error: (err as Error).message.split('\n')[0]?.slice(0, 160) ?? 'query failed' };
+}
 
 export const invocationsRouter = Router();
 
@@ -206,7 +226,9 @@ invocationsRouter.get('/search', asyncHandler(async (req, res) => {
      LIMIT :lim`;
 
   try {
-    const rows = await exec(sql, params);
+    const rows = config.mock.aurora
+      ? mockInvocationSearch({ q, agentId, minScore, maxScore, since, until, promptVersion, userId, limit })
+      : await exec(sql, params);
     const invocations: InvocationSearchRow[] = rows.map((r) => ({
       invocationId: String(r['invocation_id'] ?? ''),
       agentId: String(r['agent_id'] ?? ''),
@@ -224,10 +246,25 @@ invocationsRouter.get('/search', asyncHandler(async (req, res) => {
       userId: r['user_id'] == null ? null : String(r['user_id']),
       ts: String(r['ts'] ?? ''),
     }));
+    // `mode` joins observability.test_runs, the harness's own table, and the
+    // offline corpus holds no harness runs at all — so rather than answer as
+    // if the filter had been applied, say it was not. A silently-ignored
+    // filter is the same class of lie as an empty list that means "broken".
+    if (config.mock.aurora && mode) {
+      res.json({
+        invocations,
+        count: invocations.length,
+        degraded: true,
+        error: `mode=${mode} filters on observability.test_runs, which dev:mock does not seed — results are unfiltered`,
+      });
+      return;
+    }
     res.json({ invocations, count: invocations.length });
   } catch (err) {
     console.warn('[invocations] /search failed:', (err as Error).message);
-    res.json({ invocations: [], count: 0 });
+    // `count: 0` beside an empty list reads as a real zero — a search that
+    // matched nothing. Marked, it reads as what it is: we could not search.
+    res.json(degraded({ invocations: [] as InvocationSearchRow[], count: 0 }, err));
   }
 }));
 
@@ -302,92 +339,33 @@ interface ParentSummary {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Mock branch for GET /:invocationId — dev:mock has no Aurora, so the tail
-// `getRecentInvocations` (recent-invocations, and the Runs list it backs)
-// serves is a fixture (mock/invocations.ts) with ids like `mock-inv-33`, not
-// UUIDs. Before this, `isUuid(id)` failed for every one of them and this
-// route 404'd unconditionally — the persona sent from Health to "read the
-// failures" could open the list but never a single row (org-leader.md #22).
+// GET /:invocationId under dev:mock.
 //
-// Resolves from the SAME tail the list route reads (recent-invocations
-// merges live ring + mock fixture; a wide limit here covers the whole mock
-// tail even though the list view itself is windowed to 50/100). Maps onto
-// the identical InvocationDetail/ToolCallRow shape the real Aurora path
-// returns, leaving every DB-only field (judge score, tokens, cost, model,
-// etc.) null rather than inventing values invocation_traces would actually
-// carry. invocation_traces has no error-message column of its own (only
-// tool_calls and memory_operations do — see the sprint2/4 schemas), so a
-// mock row's `error` is surfaced the same way a real agent-level tool
-// failure would be: as a single errored tool_calls entry, not a fabricated
-// top-level field.
+// WHY IT IS NOT A SEPARATE MAPPING ANY MORE. This route used to carry a second
+// hand-written projection: it looked the id up in `getRecentInvocations` and
+// built an InvocationDetail with every DB-only field (judge score, tokens,
+// cost, model) nulled, "rather than inventing values invocation_traces would
+// actually carry" (org-leader.md #22). That was the right call while nothing
+// else offline had those values. It is the wrong one now that the whole
+// observability surface is seeded from the same fleet: the search list would
+// show this row scoring 0.83 and costing $0.0021 while its own detail page
+// showed a dash for both — the count-vs-list defect, one click apart.
+//
+// So the mock branch is no longer a second projection. `mock/observability-
+// queries.ts` returns the same snake_case rows `exec()` returns for each of
+// these four statements, and the SAME `rows.map(...)` below builds the wire
+// body on both paths. There is one mapping, and the detail page shows exactly
+// what the list that linked to it showed.
+//
+// The id shape check stays for the live path only: `:id::uuid` requires a
+// UUID, while the offline corpus is keyed on the invocation tail's ids
+// (`mock-inv-33`). An id neither path can resolve still 404s.
 // ─────────────────────────────────────────────────────────────────────────────
-function findMockInvocation(id: string): InvocationRecord | null {
-  if (!config.mock.agentcore) return null;
-  return getRecentInvocations(500).find((r) => r.id === id) ?? null;
-}
-
-function mockInvocationDetail(rec: InvocationRecord): {
-  invocation: InvocationDetail;
-  toolCalls: ToolCallRow[];
-  parent: ParentSummary | null;
-  children: ChildSummary[];
-} {
-  const invocation: InvocationDetail = {
-    invocationId: rec.id,
-    agentId: rec.agentId,
-    agentName: rec.agentName,
-    templateId: rec.templateId ?? null,
-    promptSnippet: rec.promptSnippet,
-    responseSnippet: rec.responseSnippet,
-    judgeScore: null,
-    judgeRationale: null,
-    schemaValid: rec.error ? false : null,
-    piiDetected: false,
-    guardrailAction: rec.guardrailIntervened ? 'BLOCKED' : null,
-    durationMs: rec.durationMs,
-    inputTokens: null,
-    outputTokens: null,
-    judgeInputTokens: null,
-    judgeOutputTokens: null,
-    estCostUsd: null,
-    judgeCostUsd: null,
-    totalCostUsd: null,
-    promptVersion: null,
-    modelId: null,
-    runtimeImageDigest: null,
-    parentInvocationId: null,
-    userId: null,
-    sessionId: null,
-    humanLabel: null,
-    humanNote: null,
-    ts: rec.startedAt,
-  };
-  const toolCalls: ToolCallRow[] = rec.error
-    ? [{
-        toolCallId: `${rec.id}-tc0`,
-        toolName: 'agent_run',
-        startedAt: rec.startedAt,
-        durationMs: rec.durationMs,
-        inputSize: null,
-        outputSize: null,
-        errored: true,
-        errorMessage: rec.error,
-        inputSample: null,
-        outputSample: null,
-        estCostUsd: null,
-      }]
-    : [];
-  return { invocation, toolCalls, parent: null, children: [] };
-}
 
 invocationsRouter.get('/:invocationId', asyncHandler(async (req, res) => {
   const id = String(req.params['invocationId'] ?? '').trim();
-  if (!isUuid(id)) {
-    const mock = findMockInvocation(id);
-    if (mock) {
-      res.json(mockInvocationDetail(mock));
-      return;
-    }
+  const useMock = config.mock.aurora;
+  if (!useMock && !isUuid(id)) {
     res.status(404).json({ error: 'invocation not found' });
     return;
   }
@@ -395,7 +373,7 @@ invocationsRouter.get('/:invocationId', asyncHandler(async (req, res) => {
   // 1) Pull the trace row itself.
   let invocation: InvocationDetail | null = null;
   try {
-    const rows = await exec(
+    const rows = useMock ? mockInvocationDetailRow(id) : await exec(
       `SELECT invocation_id::text                  AS invocation_id,
               agent_id, agent_name, template_id,
               COALESCE(prompt_snippet, '')         AS prompt_snippet,
@@ -459,7 +437,7 @@ invocationsRouter.get('/:invocationId', asyncHandler(async (req, res) => {
   // return an empty array rather than 500.
   let toolCalls: ToolCallRow[] = [];
   try {
-    const rows = await exec(
+    const rows = useMock ? mockInvocationToolCalls(id) : await exec(
       `SELECT tool_call_id::text                   AS tool_call_id,
               tool_name,
               started_at::text                     AS started_at,
@@ -497,13 +475,15 @@ invocationsRouter.get('/:invocationId', asyncHandler(async (req, res) => {
   let parent: ParentSummary | null = null;
   if (invocation.parentInvocationId) {
     try {
-      const rows = await exec(
-        `SELECT invocation_id::text AS invocation_id,
-                agent_id, agent_name, ts::text AS ts
-           FROM observability.invocation_traces
-          WHERE invocation_id = :pid::uuid`,
-        [{ name: 'pid', value: { stringValue: invocation.parentInvocationId } }],
-      );
+      const rows = useMock
+        ? mockInvocationSummaryRow(invocation.parentInvocationId)
+        : await exec(
+          `SELECT invocation_id::text AS invocation_id,
+                  agent_id, agent_name, ts::text AS ts
+             FROM observability.invocation_traces
+            WHERE invocation_id = :pid::uuid`,
+          [{ name: 'pid', value: { stringValue: invocation.parentInvocationId } }],
+        );
       if (rows.length > 0) {
         const r = rows[0]!;
         parent = {
@@ -537,7 +517,7 @@ invocationsRouter.get('/:invocationId', asyncHandler(async (req, res) => {
   // the call to Aurora to two round-trips total instead of N+1.
   let children: ChildSummary[] = [];
   try {
-    const directRows = await exec(
+    const directRows = useMock ? mockInvocationChildren([id]) : await exec(
       `SELECT invocation_id::text AS invocation_id,
               agent_id, agent_name,
               judge_score, duration_ms,
@@ -565,7 +545,9 @@ invocationsRouter.get('/:invocationId', asyncHandler(async (req, res) => {
         name: `c${i}`,
         value: { stringValue: c.invocationId },
       }));
-      const grandRows = await exec(
+      const grandRows = useMock
+        ? mockInvocationChildren(children.map((c) => c.invocationId))
+        : await exec(
         `SELECT invocation_id::text AS invocation_id,
                 agent_id, agent_name,
                 judge_score, duration_ms,

@@ -56,6 +56,26 @@ def _documents_bucket() -> str:
     return f"{PREFIX}-documents-{account}-{REGION}"
 
 
+def _converse_text(resp: dict) -> str:
+    """Concatenate the text blocks of a Bedrock Converse response.
+
+    Why Converse and not InvokeModel: ``MODEL_ID`` is an AWS-native model
+    (``amazon.nova-pro-v1:0`` by default) and the raw InvokeModel body is
+    model-family specific — the Anthropic-shaped payload this used to send
+    (``anthropic_version`` + a flat string ``content`` + ``max_tokens``) is a
+    ValidationException against Nova, and the matching
+    ``response["content"][0]["text"]`` read is the Anthropic response shape
+    too. Converse is model-agnostic, and it is the operation
+    ``install_bedrock_usage_capture()`` watches — so these tokens now reach
+    the trace instead of vanishing.
+    """
+    blocks = ((resp.get("output") or {}).get("message") or {}).get("content") or []
+    text = "".join(
+        b.get("text", "") for b in blocks if isinstance(b, dict) and b.get("text")
+    )
+    return text or "{}"
+
+
 def _get_data_source_id() -> str:
     """Look up the first S3 data source for the knowledge base."""
     response = _bedrock_agent.list_data_sources(knowledgeBaseId=KB_ID)
@@ -137,24 +157,36 @@ def sync_knowledge_base(kb_slug: str = "default") -> str:
     Returns:
         JSON with {job_id, status, knowledge_base_id, data_source_id}
     """
-    # Resolve KB ID and data source ID from registry when a non-default slug is requested.
+    # Resolve the KB from the registry when a non-default slug is requested.
     resolved_kb_id = KB_ID  # module-level default
-    resolved_ds_id = None  # will be looked up below
     if kb_slug != "default":
-        resolved_kb_id = _resolve_kb_id_by_slug(kb_slug) or KB_ID
-    # Re-resolve data source for whichever KB we landed on.
-    if resolved_kb_id != KB_ID or resolved_ds_id is None:
-        def _get_ds_for(kb_id: str) -> str:
-            response = _bedrock_agent.list_data_sources(knowledgeBaseId=kb_id)
-            sources = response.get("dataSourceSummaries", [])
-            if not sources:
-                raise RuntimeError(f"No data sources found for knowledge base {kb_id}")
-            return sources[0]["dataSourceId"]
-        resolved_ds_id = _get_ds_for(resolved_kb_id)
-    else:
-        resolved_ds_id = _get_data_source_id()
+        resolved_kb_id = _resolve_kb_id_by_slug(kb_slug)
+        if not resolved_kb_id:
+            # Do NOT quietly fall back to the main KB. This tool starts a job
+            # that re-indexes a knowledge base and costs real money; syncing a
+            # different KB than the caller named — because they typo'd a slug,
+            # or because the registry row has drifted — is an expensive,
+            # entirely invisible mistake. Naming the miss is the only honest
+            # answer.
+            return json.dumps({
+                "error": f"no ACTIVE knowledge base registered for slug {kb_slug!r}",
+                "hint": "check the knowledge_bases registry (/admin/knowledge) "
+                        "or pass kb_slug='default' for the main OrgIQ KB",
+            })
 
-    data_source_id = resolved_ds_id
+    if not resolved_kb_id:
+        return json.dumps({
+            "error": "no knowledge base id available — KB_ID is unset and the "
+                     "registry returned nothing",
+        })
+
+    response = _bedrock_agent.list_data_sources(knowledgeBaseId=resolved_kb_id)
+    sources = response.get("dataSourceSummaries", [])
+    if not sources:
+        return json.dumps({
+            "error": f"no data sources found for knowledge base {resolved_kb_id}",
+        })
+    data_source_id = sources[0]["dataSourceId"]
     response = _bedrock_agent.start_ingestion_job(
         knowledgeBaseId=resolved_kb_id,
         dataSourceId=data_source_id,
@@ -231,17 +263,12 @@ Return JSON with these keys:
 
 JSON:"""
 
-    response = _bedrock_runtime.invoke_model(
+    response = _bedrock_runtime.converse(
         modelId=MODEL_ID,
-        body=json.dumps({
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 1024,
-            "anthropic_version": "bedrock-2023-05-31",
-        }),
-        contentType="application/json",
+        messages=[{"role": "user", "content": [{"text": prompt}]}],
+        inferenceConfig={"maxTokens": 1024},
     )
-    raw = json.loads(response["body"].read())
-    content = raw.get("content", [{}])[0].get("text", "{}")
+    content = _converse_text(response)
 
     # Extract JSON from response
     start = content.find("{")

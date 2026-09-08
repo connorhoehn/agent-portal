@@ -6,6 +6,7 @@ or:   cd agents/_shared && python -m unittest test_prompt_source
 
 from __future__ import annotations
 
+import importlib
 import os
 import sys
 import unittest
@@ -236,5 +237,325 @@ class LiveAgentTests(unittest.TestCase):
             used_text = la("q")                  # then invoked
         self.assertEqual(sha_before, ps.prompt_sha(used_text))
 
+# ── Documented hazards the tests above do not reach ──────────────────────────
+
+
+def _paged_client(pages, get_result=None):
+    """bedrock-agent stand-in whose ListPrompts is genuinely multi-page.
+
+    ``client.list_prompts`` (the UN-paginated call) is wired to return ONLY the
+    first page, so a regression away from the paginator resolves nothing and
+    the test fails instead of passing on a lucky one-page fixture.
+    """
+    client = mock.Mock()
+
+    class _Paginator:
+        def paginate(self):
+            for page in pages:
+                yield {"promptSummaries": page}
+
+    client.get_paginator.return_value = _Paginator()
+    client.list_prompts.return_value = {"promptSummaries": pages[0]}
+    client.get_prompt.return_value = get_result or {}
+    return client
+
+
+class PaginationTests(unittest.TestCase):
+    """CLAUDE.md: "ListPrompts must be paginated: the un-paginated call returns
+    only the first page and silently misses prompts." Silently is the problem —
+    the agent falls back to its baked literal and looks perfectly healthy while
+    every Prompt Studio edit is ignored."""
+
+    def setUp(self):
+        ps.reset_cache()
+        ps.DISABLED = False
+        os.environ.pop("SYSTEM_PROMPT_NAME", None)
+        os.environ.pop("SYSTEM_PROMPT_VERSION", None)
+
+    def test_finds_a_prompt_on_a_later_page(self):
+        client = _paged_client(
+            pages=[
+                [{"name": "orgiq-advisor-system-prompt", "id": "P1"}],
+                [{"name": "orgiq-ingestion-system-prompt", "id": "P2"}],
+                [{"name": "orgiq-search-system-prompt", "id": "P3"}],
+            ],
+            get_result=_prompt_detail(LIVE),
+        )
+        with mock.patch.object(ps, "_bedrock_agent", return_value=client):
+            got = ps.resolve_system_prompt(BAKED, agent_name="search")
+        self.assertEqual(got.text, LIVE)
+        self.assertEqual(got.source, "bedrock")
+        client.get_prompt.assert_called_once()
+        self.assertEqual(client.get_prompt.call_args.kwargs["promptIdentifier"], "P3")
+        client.list_prompts.assert_not_called()
+
+    def test_uses_the_paginator_not_the_bare_call(self):
+        client = _paged_client(
+            pages=[[{"name": "orgiq-search-system-prompt", "id": "P1"}]],
+            get_result=_prompt_detail(LIVE),
+        )
+        with mock.patch.object(ps, "_bedrock_agent", return_value=client):
+            ps.resolve_system_prompt(BAKED, agent_name="search")
+        client.get_paginator.assert_called_once_with("list_prompts")
+
+    def test_a_prompt_missing_from_every_page_falls_back(self):
+        client = _paged_client(
+            pages=[[{"name": "orgiq-advisor-system-prompt", "id": "P1"}], []],
+        )
+        with mock.patch.object(ps, "_bedrock_agent", return_value=client):
+            got = ps.resolve_system_prompt(BAKED, agent_name="search")
+        self.assertEqual(got.source, "baked")
+        client.get_prompt.assert_not_called()
+
+    def test_listprompts_failure_falls_back_rather_than_raising(self):
+        client = mock.Mock()
+        client.get_paginator.side_effect = ClientError(
+            {"Error": {"Code": "AccessDeniedException"}}, "ListPrompts"
+        )
+        with mock.patch.object(ps, "_bedrock_agent", return_value=client):
+            got = ps.resolve_system_prompt(BAKED, agent_name="search")
+        self.assertEqual(got.text, BAKED)
+
+
+class CacheTtlTests(unittest.TestCase):
+    """The cache is what keeps this cheap enough to call per invocation; the
+    TTL is what makes a Prompt Studio edit reach the fleet in ~a minute without
+    a redeploy. Both halves are behaviour, not incidental."""
+
+    def setUp(self):
+        ps.reset_cache()
+        ps.DISABLED = False
+        self._refresh = ps.REFRESH_S
+        self.addCleanup(lambda: setattr(ps, "REFRESH_S", self._refresh))
+
+    def _client(self, text=LIVE):
+        return _fake_client(
+            prompts=[{"name": "orgiq-search-system-prompt", "id": "P1"}],
+            get_result=_prompt_detail(text),
+        )
+
+    def test_default_ttl_is_sixty_seconds(self):
+        self.assertEqual(self._refresh, 60)
+
+    def test_a_hot_cache_serves_without_touching_bedrock(self):
+        client = self._client()
+        ps.REFRESH_S = 3600
+        with mock.patch.object(ps, "_bedrock_agent", return_value=client):
+            for _ in range(20):
+                ps.resolve_system_prompt(BAKED, agent_name="search")
+        self.assertEqual(client.get_prompt.call_count, 1)
+
+    def test_an_expired_entry_is_refetched(self):
+        client = self._client()
+        ps.REFRESH_S = -1  # everything is already stale
+        with mock.patch.object(ps, "_bedrock_agent", return_value=client):
+            ps.resolve_system_prompt(BAKED, agent_name="search")
+            ps.resolve_system_prompt(BAKED, agent_name="search")
+        self.assertEqual(client.get_prompt.call_count, 2)
+
+    def test_a_fallback_is_cached_too_so_an_outage_is_not_amplified(self):
+        # An agent under load resolves per invocation. If the failure path
+        # re-queried every time, a throttled control plane would be hammered
+        # by the whole fleet at request rate.
+        err = ClientError({"Error": {"Code": "ThrottlingException"}}, "GetPrompt")
+        client = _fake_client(
+            prompts=[{"name": "orgiq-search-system-prompt", "id": "P1"}], raises=err
+        )
+        ps.REFRESH_S = 3600
+        with mock.patch.object(ps, "_bedrock_agent", return_value=client):
+            for _ in range(5):
+                got = ps.resolve_system_prompt(BAKED, agent_name="search")
+        self.assertEqual(got.source, "baked")
+        self.assertEqual(client.get_prompt.call_count, 1)
+
+
+class VersionPinTests(unittest.TestCase):
+    def setUp(self):
+        ps.reset_cache()
+        ps.DISABLED = False
+        os.environ.pop("SYSTEM_PROMPT_VERSION", None)
+        self.addCleanup(lambda: os.environ.pop("SYSTEM_PROMPT_VERSION", None))
+        self.client = _fake_client(
+            prompts=[{"name": "orgiq-search-system-prompt", "id": "P1"}],
+            get_result=_prompt_detail(LIVE, version="3"),
+        )
+
+    def test_unset_version_reads_the_draft_working_copy(self):
+        # No promptVersion kwarg == DRAFT, which is the whole reason a studio
+        # edit applies without cutting a version.
+        with mock.patch.object(ps, "_bedrock_agent", return_value=self.client):
+            ps.resolve_system_prompt(BAKED, agent_name="search")
+        self.assertNotIn("promptVersion", self.client.get_prompt.call_args.kwargs)
+
+    def test_the_literal_string_DRAFT_is_also_not_sent(self):
+        os.environ["SYSTEM_PROMPT_VERSION"] = "draft"
+        with mock.patch.object(ps, "_bedrock_agent", return_value=self.client):
+            ps.resolve_system_prompt(BAKED, agent_name="search")
+        self.assertNotIn("promptVersion", self.client.get_prompt.call_args.kwargs)
+
+    def test_a_numbered_version_pins_the_fetch(self):
+        os.environ["SYSTEM_PROMPT_VERSION"] = "3"
+        with mock.patch.object(ps, "_bedrock_agent", return_value=self.client):
+            got = ps.resolve_system_prompt(BAKED, agent_name="search")
+        self.assertEqual(self.client.get_prompt.call_args.kwargs["promptVersion"], "3")
+        self.assertEqual(got.version, "3")
+
+
+class VariantSelectionTests(unittest.TestCase):
+    def setUp(self):
+        ps.reset_cache()
+        ps.DISABLED = False
+
+    def _resolve(self, detail):
+        client = _fake_client(
+            prompts=[{"name": "orgiq-search-system-prompt", "id": "P1"}],
+            get_result=detail,
+        )
+        with mock.patch.object(ps, "_bedrock_agent", return_value=client):
+            return ps.resolve_system_prompt(BAKED, agent_name="search")
+
+    def test_the_named_default_variant_wins_over_the_first(self):
+        detail = {
+            "version": "DRAFT",
+            "defaultVariant": "b",
+            "variants": [
+                {"name": "a", "templateConfiguration": {"text": {"text": "variant A"}}},
+                {"name": "b", "templateConfiguration": {"text": {"text": LIVE}}},
+            ],
+        }
+        self.assertEqual(self._resolve(detail).text, LIVE)
+
+    def test_an_unmatched_default_falls_back_to_the_first_variant(self):
+        detail = {
+            "version": "DRAFT",
+            "defaultVariant": "gone",
+            "variants": [
+                {"name": "a", "templateConfiguration": {"text": {"text": LIVE}}},
+            ],
+        }
+        self.assertEqual(self._resolve(detail).text, LIVE)
+
+    def test_no_variants_at_all_falls_back_to_baked(self):
+        self.assertEqual(
+            self._resolve({"version": "DRAFT", "variants": []}).source, "baked"
+        )
+
+    def test_a_malformed_template_config_falls_back_to_baked(self):
+        detail = {
+            "version": "DRAFT",
+            "defaultVariant": "a",
+            "variants": [{"name": "a", "templateConfiguration": {"chat": {}}}],
+        }
+        self.assertEqual(self._resolve(detail).source, "baked")
+
+
+class UnexpandedVariableTests(unittest.TestCase):
+    """A system prompt is finished text — there is no substitution step on this
+    path. A ``{{tenant}}`` that survives to the model ships the braces verbatim
+    and quietly means something other than what its author wrote, so the
+    mistake is made loud rather than guessed at."""
+
+    def setUp(self):
+        ps.reset_cache()
+        ps.DISABLED = False
+
+    def test_finds_placeholders_and_deduplicates(self):
+        # Deduplication is on the literal matched text, so two spellings of the
+        # same variable are reported separately — which is the right answer for
+        # a warning whose job is to show the author exactly what they wrote.
+        self.assertEqual(
+            ps.unexpanded_variables("Hi {{tenant}}, you are {{role}} in {{tenant}}."),
+            ["{{role}}", "{{tenant}}"],
+        )
+        self.assertEqual(
+            ps.unexpanded_variables("{{ tenant }} and {{tenant}}"),
+            ["{{ tenant }}", "{{tenant}}"],
+        )
+
+    def test_clean_text_reports_nothing(self):
+        self.assertEqual(ps.unexpanded_variables("You are the Search agent."), [])
+
+    def test_a_template_is_still_served_but_warns(self):
+        # Loud, not fatal: a half-templated live prompt is still closer to what
+        # its author meant than a stale baked literal.
+        text = "You are the {{agent}} agent."
+        client = _fake_client(
+            prompts=[{"name": "orgiq-search-system-prompt", "id": "P1"}],
+            get_result=_prompt_detail(text),
+        )
+        with mock.patch.object(ps, "_bedrock_agent", return_value=client):
+            with self.assertLogs(ps.log, level="WARNING") as logs:
+                got = ps.resolve_system_prompt(BAKED, agent_name="search")
+        self.assertEqual(got.text, text)
+        self.assertIn("{{agent}}", "\n".join(logs.output))
+
+
+class EnvContractTests(unittest.TestCase):
+    """These four env vars are read at import, so the only honest test is to
+    re-import the module with them set."""
+
+    def _reload(self, **env):
+        with mock.patch.dict(os.environ, env, clear=False):
+            for key, value in env.items():
+                if value is None:
+                    os.environ.pop(key, None)
+            importlib.reload(ps)
+
+    def tearDown(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            for key in ("PROMPT_SOURCE_DISABLED", "PROMPT_REFRESH_S"):
+                os.environ.pop(key, None)
+            importlib.reload(ps)
+        ps.reset_cache()
+
+    def test_kill_switch_reads_PROMPT_SOURCE_DISABLED(self):
+        self._reload(PROMPT_SOURCE_DISABLED="1")
+        self.assertTrue(ps.DISABLED)
+
+    def test_only_the_exact_value_1_arms_the_kill_switch(self):
+        # A half-on kill switch is worse than none: "true" looking like "off"
+        # would leave an operator convinced the fleet was pinned when it wasn't.
+        for value in ("true", "yes", "0", "", "TRUE"):
+            self._reload(PROMPT_SOURCE_DISABLED=value)
+            self.assertFalse(ps.DISABLED, value)
+
+    def test_refresh_interval_reads_PROMPT_REFRESH_S(self):
+        self._reload(PROMPT_REFRESH_S="5")
+        self.assertEqual(ps.REFRESH_S, 5)
+
+    def test_kill_switch_pins_the_baked_literal_and_skips_bedrock(self):
+        self._reload(PROMPT_SOURCE_DISABLED="1")
+        with mock.patch.object(ps, "_bedrock_agent") as client:
+            got = ps.resolve_system_prompt(BAKED, agent_name="search")
+        self.assertEqual(got.text, BAKED)
+        self.assertEqual(got.source, "baked")
+        self.assertFalse(got.is_live)
+        client.assert_not_called()
+
+
+class NoAgentNameTests(unittest.TestCase):
+    def setUp(self):
+        ps.reset_cache()
+        ps.DISABLED = False
+
+    def test_an_unnameable_agent_uses_the_baked_prompt_without_calling_bedrock(self):
+        # AGENT_NAME unset and no explicit name: there is nothing to look up,
+        # and a wildcard guess would serve another agent's prompt.
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("AGENT_NAME", None)
+            os.environ.pop("SYSTEM_PROMPT_NAME", None)
+            self.assertEqual(ps.default_prompt_name(), "")
+            with mock.patch.object(ps, "_bedrock_agent") as client:
+                got = ps.resolve_system_prompt(BAKED)
+            self.assertEqual(got.source, "baked")
+            client.assert_not_called()
+
+    def test_agent_name_env_is_used_when_no_argument_is_given(self):
+        with mock.patch.dict(os.environ, {"AGENT_NAME": "scoring"}, clear=False):
+            os.environ.pop("SYSTEM_PROMPT_NAME", None)
+            self.assertEqual(ps.default_prompt_name(), "orgiq-scoring-system-prompt")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+

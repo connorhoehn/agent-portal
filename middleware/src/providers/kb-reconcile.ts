@@ -26,6 +26,7 @@ import { config } from '../config.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 import { mockKbRegistry } from '../mock/kb-registry.js';
 import { clock } from '../mock/core/index.js';
+import { problemFrom, reached, unreachable, type Upstream } from '../lib/upstream.js';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
 function toStr(v: unknown, f = ''): string { return typeof v === 'string' ? v : v == null ? f : String(v); }
@@ -139,9 +140,21 @@ async function syncState(kbId: string): Promise<{
   }
 }
 
-/** Documents attributed to a registry slug. */
-async function documentCounts(): Promise<Record<string, number>> {
-  if (config.mock.aurora) return {};
+/**
+ * Documents attributed to a registry slug — and whether they could be counted.
+ *
+ * This returned a bare `{}` on a failed query, and the caller then wrote
+ * `documentCount: docs[slug] ?? 0`. So an unreadable `documents` table became
+ * a confident **0 documents** on every row of a page whose entire job is to
+ * find knowledge bases that are not holding what they claim to hold — the
+ * failure and the finding are the same number. `documentCount` is already
+ * `number | null` on the wire, so the honest answer costs nothing: null, plus
+ * a sentence in `problem`.
+ */
+async function documentCounts(): Promise<Upstream<Record<string, number>>> {
+  // Not degraded: offline there is no documents table to read, which is a fact
+  // about this process rather than a failure to report on the page.
+  if (config.mock.aurora) return reached({});
   try {
     const rows = await exec(
       `SELECT COALESCE(kb_registry_slug, 'default') AS slug, count(*)::int AS n
@@ -149,9 +162,9 @@ async function documentCounts(): Promise<Record<string, number>> {
     );
     const out: Record<string, number> = {};
     for (const r of rows) out[toStr(r['slug'])] = Number(r['n'] ?? 0);
-    return out;
-  } catch {
-    return {};
+    return reached(out);
+  } catch (err) {
+    return unreachable({} as Record<string, number>, err, 'document counts unavailable');
   }
 }
 
@@ -215,7 +228,8 @@ export async function reconcileKnowledgeBases(): Promise<{
     }
   }
 
-  const docs = await documentCounts();
+  const counted = await documentCounts();
+  const docs = counted.items;
   const liveById = new Map(live.map((k) => [k.id, k]));
   const claimed = new Set<string>();
   const entries: ReconciledKb[] = [];
@@ -250,7 +264,9 @@ export async function reconcileKnowledgeBases(): Promise<{
       liveKbId: match?.id ?? null,
       liveStatus: match?.status ?? null,
       ...sync,
-      documentCount: docs[slug] ?? 0,
+      // Null, not 0, when the count could not be read — "we did not count" is
+      // not "there are none", and on this page the difference is the diagnosis.
+      documentCount: counted.degraded ? null : docs[slug] ?? 0,
       drift, detail,
     });
   }
@@ -272,7 +288,12 @@ export async function reconcileKnowledgeBases(): Promise<{
     });
   }
 
-  return { entries };
+  // `problem` is this surface's existing marker and routes/kb-admin.ts already
+  // passes the whole envelope through with `res.json(await
+  // reconcileKnowledgeBases())`, so a partial reconciliation reaches the wire
+  // with no route change at all.
+  const problem = problemFrom(counted.error);
+  return { entries, ...(problem ? { problem } : {}) };
 }
 
 /**

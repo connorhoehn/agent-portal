@@ -20,6 +20,28 @@ import { Router } from 'express';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { asyncHandler } from '../lib/async-handler.js';
 import { exec } from '../providers/aurora.js';
+import { config } from '../config.js';
+import {
+  mockTrafficHeatmap,
+  mockTrafficPerAgentSummary,
+  mockTrafficRps,
+  mockTrafficTopUsers,
+} from '../mock/observability-queries.js';
+
+/**
+ * Marks a response whose query failed — the wrapper from routes/cost.ts, kept
+ * local so each router owns its own copy.
+ *
+ * Every read below answers 200 with an empty payload rather than failing the
+ * page, which is the right call. What it cost was the difference between
+ * "nothing happened in this window" and "the query blew up": both rendered as
+ * an empty panel. The marker restores it without touching the healthy shape —
+ * a quiet window answers exactly as it did before, and only a caught failure
+ * carries `degraded` + the first line of the error.
+ */
+function degraded<T extends object>(body: T, err: unknown): T & { degraded: true; error: string } {
+  return { ...body, degraded: true, error: (err as Error).message.split('\n')[0]?.slice(0, 160) ?? 'query failed' };
+}
 
 export const trafficRouter = Router();
 
@@ -84,10 +106,12 @@ trafficRouter.get('/rps', asyncHandler(async (req, res) => {
      ORDER BY bucket_start ASC, agent_id ASC`;
 
   try {
-    const rows = await exec(sql, [
-      { name: 'hours',  value: { longValue: windowHours } },
-      { name: 'bucket', value: { longValue: bucketMin } },
-    ]);
+    const rows = config.mock.aurora
+      ? mockTrafficRps(windowHours, bucketMin)
+      : await exec(sql, [
+          { name: 'hours',  value: { longValue: windowHours } },
+          { name: 'bucket', value: { longValue: bucketMin } },
+        ]);
     const points: RpsPoint[] = rows.map((r) => ({
       bucketStart: String(r['bucket_start'] ?? ''),
       agentId: String(r['agent_id'] ?? ''),
@@ -99,7 +123,7 @@ trafficRouter.get('/rps', asyncHandler(async (req, res) => {
     res.json(out);
   } catch (err) {
     console.warn('[traffic] /rps failed:', (err as Error).message);
-    res.json({ points: [], bucketMin, windowHours } satisfies RpsResponse);
+    res.json(degraded({ points: [], bucketMin, windowHours } satisfies RpsResponse, err));
   }
 }));
 
@@ -137,9 +161,9 @@ trafficRouter.get('/heatmap', asyncHandler(async (req, res) => {
      ORDER BY dow ASC, hod ASC`;
 
   try {
-    const rows = await exec(sql, [
-      { name: 'days', value: { longValue: days } },
-    ]);
+    const rows = config.mock.aurora
+      ? mockTrafficHeatmap(days)
+      : await exec(sql, [{ name: 'days', value: { longValue: days } }]);
     const cells: HeatmapCell[] = rows.map((r) => ({
       dayOfWeek: Number(r['dow'] ?? 0),
       hourOfDay: Number(r['hod'] ?? 0),
@@ -149,7 +173,7 @@ trafficRouter.get('/heatmap', asyncHandler(async (req, res) => {
     res.json(out);
   } catch (err) {
     console.warn('[traffic] /heatmap failed:', (err as Error).message);
-    res.json({ cells: [], days } satisfies HeatmapResponse);
+    res.json(degraded({ cells: [], days } satisfies HeatmapResponse, err));
   }
 }));
 
@@ -192,10 +216,12 @@ trafficRouter.get('/top-users', asyncHandler(async (req, res) => {
      LIMIT :lim`;
 
   try {
-    const rows = await exec(sql, [
-      { name: 'hours', value: { longValue: windowHours } },
-      { name: 'lim',   value: { longValue: limit } },
-    ]);
+    const rows = config.mock.aurora
+      ? mockTrafficTopUsers(windowHours, limit)
+      : await exec(sql, [
+          { name: 'hours', value: { longValue: windowHours } },
+          { name: 'lim',   value: { longValue: limit } },
+        ]);
     const users: TopUserRow[] = rows.map((r) => ({
       userId: String(r['user_id'] ?? ''),
       invocations: Number(r['invocations'] ?? 0),
@@ -207,7 +233,7 @@ trafficRouter.get('/top-users', asyncHandler(async (req, res) => {
     res.json(out);
   } catch (err) {
     console.warn('[traffic] /top-users failed:', (err as Error).message);
-    res.json({ users: [], windowHours } satisfies TopUsersResponse);
+    res.json(degraded({ users: [], windowHours } satisfies TopUsersResponse, err));
   }
 }));
 
@@ -272,7 +298,9 @@ trafficRouter.get('/per-agent-summary', asyncHandler(async (req, res) => {
   const windowSeconds = windowHours * 3600;
 
   try {
-    const rows = await exec(sql, params);
+    const rows = config.mock.aurora
+      ? mockTrafficPerAgentSummary(windowHours)
+      : await exec(sql, params);
     const byAgent: PerAgentSummaryRow[] = rows.map((r) => {
       const invocations = Number(r['invocations'] ?? 0);
       const errorCount = Number(r['error_count'] ?? 0);
@@ -292,6 +320,6 @@ trafficRouter.get('/per-agent-summary', asyncHandler(async (req, res) => {
     res.json(out);
   } catch (err) {
     console.warn('[traffic] /per-agent-summary failed:', (err as Error).message);
-    res.json({ byAgent: [], windowHours } satisfies PerAgentSummaryResponse);
+    res.json(degraded({ byAgent: [], windowHours } satisfies PerAgentSummaryResponse, err));
   }
 }));

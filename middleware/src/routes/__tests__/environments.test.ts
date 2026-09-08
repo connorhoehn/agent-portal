@@ -288,14 +288,19 @@ describe('workflow runs are reported, never triggered', () => {
     expect(runsMock).not.toHaveBeenCalled();
   });
 
-  test('a GitHub failure degrades to an empty list with a note, not a 5xx', async () => {
+  test('a GitHub failure degrades to a MARKED empty list, not a 5xx', async () => {
     getMock.mockResolvedValue(PROD);
     repoMock.mockResolvedValue({ repoFullName: 'acme/obs', connectionName: null });
     runsMock.mockRejectedValue(new Error('GitHub rate limit reached'));
     const res = await request(app('member')).get(`/api/environments/${PROD.id}/runs`);
     expect(res.status).toBe(200);
     expect(res.body.runs).toEqual([]);
-    expect(String(res.body.note)).toContain('rate limit');
+    // The reason moved from `note` to `degraded` + `error`: `note` used to
+    // carry both an exception message and ordinary facts about the org, which
+    // is what made a broken integration read as an idle repository. The full
+    // contract is pinned in environments-runs-degraded.test.ts.
+    expect(res.body.degraded).toBe(true);
+    expect(String(res.body.error)).toContain('rate limit');
   });
 
   test('the router exposes no route that could trigger a run', async () => {

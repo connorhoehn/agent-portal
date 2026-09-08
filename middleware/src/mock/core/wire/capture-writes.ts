@@ -22,6 +22,18 @@
 //     back (`BodyContext`), which is the same rule the fixtures themselves are
 //     held to — a harness that made up its request bodies would be checking
 //     fiction against fiction.
+//
+// AND ONE PRECONDITION, read before anything is replayed. Several specs are
+// safe only because the process being captured binds a mock provider in place
+// of a real one — `mockAgentCore` instead of a Browser session, `mockGuardrails`
+// instead of a Bedrock guardrail, the local-compute fixtures instead of the RDS
+// Data API. Whether that is true is a fact about the SERVER, and this script
+// can be pointed at any server with `WIRE_BASE_URL`, so it is asked rather than
+// assumed: `GET /api/health` reports `mocks`, and a spec's `intercepts` list is
+// checked against it. An unreadable or shapeless `/api/health` is FATAL here,
+// not a shrug — with no answer, every interception-dependent spec would be
+// refused and the run would quietly produce a snapshot that looks like a policy
+// decision instead of a broken connection.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -44,6 +56,8 @@ import {
   classifyWrite,
   isUnsynthesisable,
   type BodyContext,
+  type Intercepted,
+  type MockProvider,
   type WriteSpec,
 } from './write-policy.js';
 
@@ -65,9 +79,47 @@ export interface WriteCapture {
 
 export interface WritesSnapshot {
   capturedAt: string;
+  /** See WireSnapshot.serverHandlerSha — same contract, same reason. */
+  serverHandlerSha: string | null;
   baseUrl: string;
   policy: string;
+  /**
+   * Which providers the captured server said IT was intercepting, from its own
+   * `GET /api/health`. Recorded because it is half of the decision: a route
+   * refused as `not-intercepted` is only explicable beside the answer that
+   * refused it, and a snapshot taken against a server running fewer mocks is a
+   * different snapshot, not a stale one.
+   */
+  intercepted: MockProvider[];
   routes: Record<string, WriteCapture>;
+}
+
+const MOCK_PROVIDERS: readonly MockProvider[] = ['aurora', 'agentcore', 'guardrails', 'cloudwatch'];
+
+/**
+ * Ask the server what it is running. Throws rather than degrading: see the
+ * precondition note at the top of this file.
+ */
+export async function readIntercepted(): Promise<Intercepted> {
+  const fail = (why: string): never => {
+    throw new Error(
+      `could not read ${BASE}/api/health, so no write that depends on a mock provider may be replayed: ${why}`,
+    );
+  };
+  let body: unknown;
+  try {
+    const res = await fetch(`${BASE}/api/health`);
+    if (!res.ok) fail(`HTTP ${res.status}`);
+    body = await res.json();
+  } catch (err) {
+    fail((err as Error).message);
+  }
+  const mocks = (body as { mocks?: unknown } | null)?.mocks;
+  if (mocks === null || typeof mocks !== 'object' || Array.isArray(mocks)) {
+    fail('the response carries no `mocks` object');
+  }
+  const on = mocks as Record<string, unknown>;
+  return new Set(MOCK_PROVIDERS.filter((p) => on[p] === true));
 }
 
 /** The `BodyContext` a spec's `build` is handed. Reads only. */
@@ -107,6 +159,17 @@ function why(status: number, body: Json | undefined, note: string): string {
   return `HTTP ${status}`;
 }
 
+async function writeServerHandlerSha(): Promise<string | null> {
+  try {
+    const res = await fetch(`${BASE}/api/__mock/state`);
+    if (!res.ok) return null;
+    const body = (await res.json()) as { handlerSha?: unknown };
+    return typeof body.handlerSha === 'string' && body.handlerSha ? body.handlerSha : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function captureWrites(log: (s: string) => void = () => {}): Promise<WritesSnapshot> {
   const table = enumerateRoutes();
   const writes = table.routes
@@ -114,6 +177,10 @@ export async function captureWrites(log: (s: string) => void = () => {}): Promis
     .map(routeKey)
     .filter((k, i, all) => all.indexOf(k) === i)
     .sort();
+
+  // Before anything is replayed: what does this server say it is running?
+  const intercepted = await readIntercepted();
+  log(`  writes: ${BASE} reports mocks ${[...intercepted].sort().join(', ') || '(none)'}`);
 
   const routes: Record<string, WriteCapture> = {};
   const personas = new Map<PersonaName, Persona>();
@@ -137,7 +204,7 @@ export async function captureWrites(log: (s: string) => void = () => {}): Promis
   let refused = 0;
   try {
     for (const route of writes) {
-      const verdict = classifyWrite(route);
+      const verdict = classifyWrite(route, intercepted);
       if (verdict.kind === 'refused') {
         routes[route] = { refused: { rule: verdict.rule, reason: verdict.reason } };
         refused += 1;
@@ -178,7 +245,12 @@ export async function captureWrites(log: (s: string) => void = () => {}): Promis
 
       let res;
       try {
-        res = await send(`${BASE}${resolved.path}`, persona, { method, body, timeoutMs: 10_000 });
+        res = await send(`${BASE}${resolved.path}`, persona, {
+          method,
+          body,
+          timeoutMs: 10_000,
+          ...(spec.headers ? { headers: spec.headers } : {}),
+        });
       } catch (err) {
         const msg = (err as Error).name === 'AbortError'
           ? 'timed out after 10s — never sent response headers'
@@ -215,8 +287,10 @@ export async function captureWrites(log: (s: string) => void = () => {}): Promis
 
   return {
     capturedAt: new Date().toISOString(),
+    serverHandlerSha: await writeServerHandlerSha(),
     baseUrl: BASE,
     policy: 'middleware/src/mock/core/wire/write-policy.ts',
+    intercepted: [...intercepted].sort(),
     routes: Object.fromEntries(Object.keys(routes).sort().map((k) => [k, routes[k]!])),
   };
 }

@@ -232,13 +232,33 @@ done
 [ "$ibad" = 0 ] && ok "every isolation log passes" || fail "$ibad isolation logs fail a required field"
 # The shell and the pages must not open doors into another tenant's product.
 # Tenants share a BFF, not journeys: no orgiq paths inside assessment
-# pages, the palette must know the tenant's own pages, and orgiq-only chrome
-# (Computer Lab dock / quick-switch) must be gated on the orgiq tenant.
+# pages, the palette must know the tenant's own pages, and every piece of
+# orgiq-only Computer-Lab chrome must be gated on the orgiq tenant.
 leaks=$(grep -rnE "['\"]/(iq|admin)(/|['\"])" portal/src/pages/assessment --include='*.tsx' | wc -l | tr -d ' ')
 [ "$leaks" = 0 ] && ok "no orgiq paths inside assessment pages" || { fail "$leaks cross-tenant paths inside assessment pages:"; grep -rnE "['\"]/(iq|admin)(/|['\"])" portal/src/pages/assessment --include='*.tsx' | head -5 | sed 's/^/      /'; }
 pal=$(grep -c "tenant: 'assessment'" portal/src/components/shell/portalCommands.ts)
 [ "$pal" -ge 10 ] && ok "command palette knows $pal assessment pages" || fail "command palette lists only $pal assessment pages (expect ≥10)"
-if grep -qE "session\?\.tenant === 'orgiq' && <DevboxQuickSwitch" portal/src/components/shell/Layout.tsx && grep -qE "session\?\.tenant === 'orgiq' && <ComputeDock" portal/src/components/shell/Layout.tsx; then ok "Computer Lab chrome gated on the orgiq tenant"; else fail "DevboxQuickSwitch/ComputeDock mount in every tenant's shell — gate them on session.tenant === 'orgiq'"; fi
+# Named by what it IS, not by a list of two: EVERY Computer-Lab / local-compute
+# component the shell mounts has to be gated on the orgiq tenant. The old check
+# spelled out DevboxQuickSwitch and ComputeDock, so when LocalComputeBadge was
+# added to the header it shipped into the assessment shell ungated and this
+# ratchet said nothing. The vocabulary (Devbox|Compute|Machine) is what makes a
+# component Computer-Lab chrome; the ≥3 floor is here so a rename OUT of that
+# vocabulary fails loudly instead of emptying the check.
+SHELL_LAYOUT=portal/src/components/shell/Layout.tsx
+compute_mounts=$(grep -oE '<[A-Za-z]*(Devbox|Compute|Machine)[A-Za-z]*' "$SHELL_LAYOUT" | tr -d '<' | sort -u)
+n_compute=$(printf '%s\n' "$compute_mounts" | grep -c . | tr -d ' ')
+ungated=""
+for c in $compute_mounts; do
+  grep -qE "session\?\.tenant === 'orgiq' && <$c\b" "$SHELL_LAYOUT" || ungated="$ungated $c"
+done
+if [ "$n_compute" -lt 3 ]; then
+  fail "only $n_compute Computer-Lab component(s) found in $SHELL_LAYOUT (expect >=3 — the dock, the quick-switch and the presence badge); a rename out of the Devbox/Compute/Machine vocabulary would hide an ungated one"
+elif [ -z "$ungated" ]; then
+  ok "every Computer-Lab component the shell mounts is gated on the orgiq tenant ($n_compute: $(printf '%s' "$compute_mounts" | tr '\n' ' '))"
+else
+  fail "Computer-Lab chrome mounts in every tenant's shell — gate on session?.tenant === 'orgiq':$ungated"
+fi
 # Both product trees, not just the "other" one: an assessor at
 # /iq/projects got the assessment shell around an orgiq page dying with 403.
 rt_missing=""

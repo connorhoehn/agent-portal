@@ -94,6 +94,27 @@ def _safe_id(value: str) -> str:
     return re.sub(r"[^a-z0-9_]", "_", value.lower().strip())
 
 
+def _converse_text(resp: dict) -> str:
+    """Concatenate the text blocks of a Bedrock Converse response.
+
+    Why Converse and not InvokeModel: this agent's ``MODEL_ID`` is an
+    AWS-native model (``amazon.nova-pro-v1:0`` by default), and the raw
+    InvokeModel body is model-family specific — the Anthropic-shaped payload
+    this used to send (``anthropic_version`` + a flat string ``content`` +
+    ``max_tokens``) is a ValidationException against Nova, and the matching
+    ``response["content"][0]["text"]`` read is the Anthropic response shape
+    too. Converse is the model-agnostic surface, so this works for any model
+    the fleet is pointed at, and it is the operation
+    ``install_bedrock_usage_capture()`` watches — so these tokens now show up
+    on the trace instead of vanishing.
+    """
+    blocks = ((resp.get("output") or {}).get("message") or {}).get("content") or []
+    text = "".join(
+        b.get("text", "") for b in blocks if isinstance(b, dict) and b.get("text")
+    )
+    return text or "{}"
+
+
 @tool
 @instrumented_tool(_current_ctx.get)
 def merge_person(person_id: str, name: str, email: str = "", team: str = "", role: str = "") -> str:
@@ -323,16 +344,12 @@ Rules:
 
 JSON:"""
 
-    resp = _bedrock_runtime.invoke_model(
+    resp = _bedrock_runtime.converse(
         modelId=MODEL_ID,
-        body=json.dumps({
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 2048,
-            "anthropic_version": "bedrock-2023-05-31",
-        }),
-        contentType="application/json",
+        messages=[{"role": "user", "content": [{"text": prompt}]}],
+        inferenceConfig={"maxTokens": 2048},
     )
-    raw_text = json.loads(resp["body"].read()).get("content", [{}])[0].get("text", "{}")
+    raw_text = _converse_text(resp)
 
     start = raw_text.find("{")
     end = raw_text.rfind("}") + 1

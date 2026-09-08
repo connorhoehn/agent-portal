@@ -1,5 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { clearContextChosen } from './contextChoice';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { clearContextChosen, markContextChosen } from './contextChoice';
+import { tenantHome } from './tenantHome';
 import { clearTenantScopedCaches } from './tenantCaches';
 
 export type Role = 'member' | 'sme' | 'program-owner' | 'org-leader' | 'hr-admin';
@@ -63,9 +64,6 @@ interface SessionContextValue {
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
-// A tenant's landing route. Switching account redirects here so the whole app
-// re-drives from the freshly re-minted session cookie.
-const TENANT_HOME: Record<string, string> = { orgiq: '/iq/work', assessment: '/assessment/teams' };
 
 // Fail closed. When /api/session/me is unreachable we do NOT know who the user
 // is, so we grant nothing: an empty grants map, no switchable roles/tenants.
@@ -107,6 +105,9 @@ const SSO_REDIRECT_KEY = 'orgiq.ssoAutoRedirected';
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  // The current identity, readable from the stable ([]-dep) callbacks below
+  // without making every one of them churn on each session refresh.
+  const subRef = useRef<string>('');
   const [ssoRequired, setSsoRequired] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -130,6 +131,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       try { sessionStorage.removeItem(SSO_REDIRECT_KEY); } catch { /* private mode */ }
       // Take grants and switch lists only from the server — never inherit them
       // from a client-side default, so a malformed /me can't fabricate access.
+      subRef.current = raw.sub ?? '';
       setSession({
         sub: raw.sub ?? 'unknown',
         name: raw.name ?? raw.sub ?? 'unknown',
@@ -218,7 +220,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // Crossing the tenant boundary: drop the previous workspace's cached data
     // before the new tenant re-drives from its freshly re-minted cookie.
     clearTenantScopedCaches();
-    window.location.assign(TENANT_HOME[tenant] ?? '/');
+    // …and then re-mark the pick. The chooser calls markContextChosen() just
+    // before calling us, but that marker lives in the sessionStorage the scrub
+    // above wipes — so the call was dead, and a person who had just chosen a
+    // workspace was sent straight back to the chooser by the very next home
+    // resolution (`/`, or any guard fallback landing them there). Same `sub`
+    // only: a different identity carries a different one, and login/logout
+    // still clearContextChosen() outright.
+    if (subRef.current) markContextChosen(subRef.current);
+    // Switching account redirects to that tenant's front door so the whole
+    // app re-drives from the freshly re-minted session cookie. The route is
+    // lib/tenantHome's, not a second opinion about where people belong.
+    window.location.assign(tenantHome(tenant));
   }, []);
 
   const login = useCallback(async (userId: string) => {

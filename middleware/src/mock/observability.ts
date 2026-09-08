@@ -1,0 +1,923 @@
+// The observability data plane, as `dev:mock` sees it.
+//
+// WHY THIS FILE EXISTS. Eight routers — traffic, drift, tool-calls, quality,
+// calibration, guardrails-detail, invocations, memory — read Aurora through
+// `providers/aurora.ts` `exec()` and nothing else. `exec()` has no mock branch,
+// so in `dev:mock` every one of those twenty reads threw, was caught, and
+// answered an empty collection. An empty observability page looks like a quiet
+// system, so nobody noticed: a broken query and a fleet that had not been
+// called rendered identically. Marking the caught failures `degraded` made the
+// gap visible; this file is the other half — the data that makes the surface
+// answer for real offline.
+//
+// THERE IS ONE FLEET. Every row below is derived from `mock/invocations.ts`'s
+// `invocationTail` — the same 24 hours the Invocations list, Health's summary
+// and the Architecture graph already count. Nothing here stores a total: a
+// per-agent error count, a p99, an intervention tally and a tool error rate are
+// all selectors over the rows this module projects, so "25 errors over a list
+// that can only produce 6" cannot happen a second time. (contract.ts bug #1.)
+//
+// WHAT IS AUTHORED AND WHAT IS DERIVED. Authored — and therefore a registered
+// fixture — is what the tail does not already say: which prompt templates an
+// agent serves, how well it scores, how far its outputs sit from their own
+// centroid, whether it uses AgentCore Memory, and what a token costs it. Every
+// other value on a trace row is a deterministic function of the tail row plus
+// that profile, so a change to either moves every rollup together.
+//
+// WIRE STRINGS ARE NOT INVENTED.
+//   * Column names are the ones in schema/observability_schema.sql and its
+//     sprint1/sprint2 ALTERs — the selectors here return SNAKE_CASE rows in the
+//     exact shape `exec()` returns, so the route's own `rows.map(...)` still
+//     produces the wire body and the mock cannot drift into a second shape.
+//   * `rule_category` is PII / TOPIC / CONTENT / PROMPT_ATTACK, copied from the
+//     comment on `observability.guardrail_interventions` and from the switch in
+//     portal/src/pages/observability/GuardrailRulesPage.tsx.
+//   * Guardrail RULE names are read from the guardrail fixture in
+//     mock/capabilities.ts — the rules the Guardrails page shows as configured
+//     in this same process. A rule that fires is a rule you can go and look at.
+//   * `prompt_version` is the short SHA of the newest revision that agent has
+//     in mock/prompt-versions.ts, so the Prompt Versions page and a trace's
+//     provenance chip agree.
+//   * `user_id` values are `app_users.id` from the identity seed
+//     (providers/identity.ts), not invented logins.
+//   * Timestamps rendered into `::text` columns use the Postgres text form
+//     (`2026-09-08 14:03:11+00`), which is what the RDS Data API actually hands
+//     back — an ISO string here would be a second shape the server never sends.
+//
+// THE ONE MODELLED SCALAR. `output_embedding` is a vector(1024) and the drift
+// queries compute `embedding <=> centroid` in the database. There are no
+// embeddings offline, so `modelledDistance()` stands in for that expression: a
+// deterministic per-row scalar drawn from the agent's authored drift band. It
+// is not presented as a column and nothing stores a p95 — the rollups compute
+// PERCENTILE_CONT over these per-row values exactly as Postgres would. This is
+// the only number on this surface that is modelled rather than counted, and it
+// is called out again where it is used.
+
+import { clock, defineFixture, type ScenarioName } from './core/index.js';
+import { agentFleet } from './agent-statuses.js';
+import { invocationsInWindow, mockInvocationRows } from './invocations.js';
+import { mockListPromptVersions } from './prompt-versions.js';
+import { mockGuardrailRow } from './capabilities.js';
+
+// ── Deterministic pseudo-randomness ────────────────────────────────────────
+//
+// Every "varying" value below is a pure function of the row's id. Nothing here
+// calls Math.random: two reads of the same world must produce the same corpus,
+// or a detail page could disagree with the list that linked to it.
+
+function hash32(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
+
+/** A stable value in [0, 1) for a key. */
+function unit(key: string): number {
+  return hash32(key) / 4294967296;
+}
+
+function pick<T>(list: readonly T[], key: string): T | undefined {
+  if (list.length === 0) return undefined;
+  return list[hash32(key) % list.length];
+}
+
+function round(n: number, places: number): number {
+  const f = 10 ** places;
+  return Math.round(n * f) / f;
+}
+
+// ── Time rendering ─────────────────────────────────────────────────────────
+
+/**
+ * The Postgres text form of a timestamptz, which is what a `::text` cast comes
+ * back as through the RDS Data API — `2026-09-08 14:03:11+00`, not an ISO
+ * string. The mock has to speak the server's dialect here: the portal parses
+ * whatever it is given, so a divergence would be invisible until something
+ * compared two of them.
+ */
+export function pgTimestamp(iso: string | number | Date): string {
+  const d = iso instanceof Date ? iso : new Date(iso);
+  return `${d.toISOString().slice(0, 19).replace('T', ' ')}+00`;
+}
+
+/**
+ * `to_timestamp(floor(EXTRACT(EPOCH FROM ts) / (bucket*60)) * (bucket*60))` —
+ * the epoch-floor bucketing every timeseries read in these routers uses, so a
+ * bucket boundary lands on the same wall-clock instant offline as it does in
+ * the database.
+ */
+export function bucketStart(iso: string, bucketMin: number): string {
+  const seconds = Math.floor(new Date(iso).getTime() / 1000);
+  const width = Math.max(1, bucketMin) * 60;
+  return pgTimestamp(Math.floor(seconds / width) * width * 1000);
+}
+
+// ── Statistics ─────────────────────────────────────────────────────────────
+
+/**
+ * Postgres `PERCENTILE_CONT(p) WITHIN GROUP (ORDER BY x)` — linear
+ * interpolation between the two nearest ranks, and NULL over no rows.
+ *
+ * Deliberately NOT the nearest-rank `durationPercentile` in mock/invocations.ts:
+ * these routes' live branch uses PERCENTILE_CONT, and a mock that answered the
+ * discrete percentile would disagree with the deployed surface by a few
+ * milliseconds for reasons no reader could ever reconstruct.
+ */
+export function percentileCont(values: readonly number[], p: number): number | null {
+  const sorted = values.filter((v) => Number.isFinite(v)).slice().sort((a, b) => a - b);
+  if (sorted.length === 0) return null;
+  if (sorted.length === 1) return sorted[0]!;
+  const idx = p * (sorted.length - 1);
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  const frac = idx - lo;
+  return sorted[lo]! + (sorted[hi]! - sorted[lo]!) * frac;
+}
+
+// ── The authored half: per-agent telemetry profiles ────────────────────────
+
+/**
+ * What the invocation tail does not say about an agent.
+ *
+ * No field here is a count or a total. `judgeCentre`/`judgeSpread` describe a
+ * BAND that individual rows are drawn from — the reported p50 and p05 are then
+ * percentiles over the rows actually drawn, not these numbers echoed back.
+ */
+export interface AgentTelemetryProfile {
+  agentId: string;
+  /** Prompt templates this agent serves. `template_id` is free text in the schema. */
+  templates: string[];
+  /** Centre of the judge-score band for an answer that got graded at all. */
+  judgeCentre: number;
+  /** Half-width of that band. */
+  judgeSpread: number;
+  /** Centre of the modelled distance-to-centroid band. See modelledDistance(). */
+  driftCentre: number;
+  /** Half-width of that band. */
+  driftSpread: number;
+  /** Whether this agent calls AgentCore Memory. */
+  usesMemory: boolean;
+  /** USD per 1k input tokens. */
+  usdPer1kIn: number;
+  /** USD per 1k output tokens. */
+  usdPer1kOut: number;
+}
+
+/**
+ * The fleet's telemetry character.
+ *
+ * The bands are chosen so each agent's `status` in mock/agent-statuses.ts is
+ * legible from its own numbers as well as its own traffic: ingestion, the one
+ * agent marked `degraded`, is the one whose judge band dips under 0.3 and whose
+ * drift band is wide. Everyone else scores well and sits close to its centroid.
+ * Scoring never fails and never drifts, which is what makes "no findings" on
+ * the drift page worth trusting when you see it.
+ *
+ * `empty` — the span projector has written nothing. Every observability read
+ *           answers a real, honest zero: no traces, no tool calls, no
+ *           interventions, no memory ops. This is the state of a fleet that is
+ *           deployed but whose spans have not landed in Aurora yet, and it is
+ *           the world the "no data in this window" copy is written for.
+ * `error` — the observability schema is unreachable. Reading throws, which is
+ *           how an auditor reaches every one of these routes' `degraded`
+ *           answers over HTTP —
+ *           `POST /api/__mock/scenario {"scenario":"error","fixture":"observability-agent-profiles"}`
+ *           — instead of unplugging a network, and what proves the degraded
+ *           answer and the empty answer read differently.
+ */
+export const agentTelemetryProfiles = defineFixture<AgentTelemetryProfile>({
+  key: 'observability-agent-profiles',
+  scenarios: {
+    default: (): AgentTelemetryProfile[] => [
+      {
+        agentId: 'orgiq-supervisor',
+        templates: ['orgiq.supervisor.route', 'orgiq.supervisor.summarize'],
+        judgeCentre: 0.84, judgeSpread: 0.11,
+        driftCentre: 0.09, driftSpread: 0.05,
+        usesMemory: true,
+        usdPer1kIn: 0.0008, usdPer1kOut: 0.0032,
+      },
+      {
+        agentId: 'orgiq-search',
+        templates: ['orgiq.search.retrieve', 'orgiq.search.people', 'orgiq.search.decisions'],
+        judgeCentre: 0.81, judgeSpread: 0.13,
+        driftCentre: 0.12, driftSpread: 0.06,
+        usesMemory: true,
+        usdPer1kIn: 0.0008, usdPer1kOut: 0.0032,
+      },
+      {
+        agentId: 'orgiq-scoring',
+        templates: ['orgiq.scoring.recompute'],
+        judgeCentre: 0.88, judgeSpread: 0.06,
+        driftCentre: 0.05, driftSpread: 0.02,
+        usesMemory: false,
+        usdPer1kIn: 0.00006, usdPer1kOut: 0.00024,
+      },
+      {
+        agentId: 'orgiq-advisor',
+        templates: ['orgiq.advisor.gaps', 'orgiq.advisor.pairing'],
+        judgeCentre: 0.76, judgeSpread: 0.16,
+        driftCentre: 0.18, driftSpread: 0.08,
+        usesMemory: true,
+        usdPer1kIn: 0.0008, usdPer1kOut: 0.0032,
+      },
+      {
+        // The degraded one. Its band reaches under 0.3, so `lowQualityRate` is
+        // non-zero for exactly the agent whose status already says `degraded` —
+        // and it is non-zero because rows scored low, not because a rate was
+        // typed next to them.
+        agentId: 'orgiq-ingestion',
+        templates: ['orgiq.ingestion.extract', 'orgiq.ingestion.sync'],
+        judgeCentre: 0.44, judgeSpread: 0.28,
+        driftCentre: 0.34, driftSpread: 0.14,
+        usesMemory: false,
+        usdPer1kIn: 0.00006, usdPer1kOut: 0.00024,
+      },
+      {
+        agentId: 'orgiq-graph-builder',
+        templates: ['orgiq.graph.merge', 'orgiq.graph.embed'],
+        judgeCentre: 0.83, judgeSpread: 0.09,
+        driftCentre: 0.08, driftSpread: 0.04,
+        usesMemory: false,
+        usdPer1kIn: 0.00006, usdPer1kOut: 0.00024,
+      },
+    ],
+    empty: () => [],
+    error: () => {
+      throw new Error('observability.invocation_traces unavailable: relation does not exist');
+    },
+  },
+});
+
+// ── The authored half: human labels ────────────────────────────────────────
+
+/**
+ * A researcher's verdict on one invocation — `invocation_traces.human_label`
+ * and `human_note`, which are the only two columns on a trace row a human
+ * writes rather than an agent.
+ *
+ * This is its own fixture rather than a field on the projection because it is
+ * the one thing on this surface that is WRITTEN at run time:
+ * `POST /api/observability/quality/feedback` upserts here, so a demo label
+ * survives to the next GET and `POST /api/__mock/reset` takes it away again.
+ * A projection cannot hold a mutation; a fixture can.
+ *
+ * `empty` — nobody has labelled anything, which is where every deployment
+ *           starts and what the label column's `—` is for.
+ */
+export interface HumanLabelRow {
+  invocationId: string;
+  label: string;
+  note: string | null;
+}
+
+const ALLOWED_HUMAN_LABELS = new Set(['good', 'bad', 'fixed']);
+
+export const humanLabels = defineFixture<HumanLabelRow>({
+  key: 'observability-human-labels',
+  scenarios: {
+    default: (): HumanLabelRow[] => [
+      { invocationId: 'mock-inv-0', label: 'bad', note: 'Timed out mid-route; the sub-agent never answered.' },
+      { invocationId: 'mock-inv-2', label: 'bad', note: 'Blocked on a question the guardrail should not have caught.' },
+      { invocationId: 'mock-inv-14', label: 'good', note: null },
+      { invocationId: 'mock-inv-40', label: 'good', note: 'Correct owner, correct citation.' },
+      { invocationId: 'mock-inv-77', label: 'fixed', note: 'Re-ran after the KB sync; answer is now grounded.' },
+    ],
+    empty: () => [],
+  },
+});
+
+/**
+ * Upsert a label. Returns false when the id is not one the tail serves, which
+ * is how the route reproduces the real query's `RETURNING` miss → 404.
+ */
+export function mockSetHumanLabel(invocationId: string, label: string, note: string | null): boolean {
+  if (!ALLOWED_HUMAN_LABELS.has(label)) return false;
+  if (!traceRows().some((r) => r.invocation_id === invocationId)) return false;
+  const rows = humanLabels.rows();
+  const existing = rows.find((r) => r.invocationId === invocationId);
+  if (existing) {
+    existing.label = label;
+    existing.note = note;
+  } else {
+    rows.push({ invocationId, label, note });
+  }
+  return true;
+}
+
+// ── Trace rows ─────────────────────────────────────────────────────────────
+
+/**
+ * One row of `observability.invocation_traces`, in the shape `exec()` returns
+ * it: snake_case keys, the same nullability the schema declares. The routes
+ * map this to the wire, so there is exactly one mapping and the mock cannot
+ * introduce a second.
+ */
+export interface MockTraceRow {
+  invocation_id: string;
+  agent_id: string;
+  agent_name: string;
+  template_id: string | null;
+  prompt_snippet: string;
+  response_snippet: string;
+  judge_score: number | null;
+  judge_rationale: string | null;
+  schema_valid: boolean | null;
+  pii_detected: boolean;
+  guardrail_action: string | null;
+  duration_ms: number;
+  input_tokens: number;
+  output_tokens: number;
+  judge_input_tokens: number | null;
+  judge_output_tokens: number | null;
+  est_cost_usd: number;
+  judge_cost_usd: number | null;
+  total_cost_usd: number;
+  prompt_version: string | null;
+  model_id: string;
+  runtime_image_digest: string;
+  parent_invocation_id: string | null;
+  user_id: string | null;
+  session_id: string | null;
+  human_label: string | null;
+  human_note: string | null;
+  ts: string;
+  /** ISO form of `ts`, for windowing. Not a column — never sent to a route. */
+  tsIso: string;
+  /** The agent's authored profile, for the selectors. Not a column either. */
+  profile: AgentTelemetryProfile;
+}
+
+/**
+ * `app_users.id` values from the identity seed (providers/identity.ts). Only
+ * the orgiq-tenant cast: an assessment-tenant user has no reason to appear in
+ * the org fleet's traffic, and one would make `top-users` a cross-tenant leak
+ * that the real `user_id` column could never produce here.
+ */
+const TRAFFIC_USERS = [
+  'u-theo', 'u-vera', 'u-nora', 'u-eli', 'u-layla', 'u-caleb', 'u-mia', 'u-release',
+] as const;
+
+/** Three rationales, banded, so the text a reader sees matches the score beside it. */
+function rationaleFor(score: number): string {
+  if (score >= 0.8) return 'Grounded in retrieved evidence, answers the question asked, cites its sources.';
+  if (score >= 0.5) return 'Answers the question but leaves one claim uncited; a reader would have to verify it.';
+  return 'Does not answer the question asked and cites nothing retrievable.';
+}
+
+/**
+ * `runtime_image_digest` — the ECR digest the runtime was pinned to when it
+ * served the request. One per agent, stable across the day: a fleet whose rows
+ * carried a different digest each is a fleet that redeployed on every call,
+ * which is not what this column is recording.
+ */
+function imageDigestFor(agentId: string): string {
+  let hex = '';
+  for (let i = 0; hex.length < 64; i++) {
+    hex += hash32(`${agentId}:image:${i}`).toString(16).padStart(8, '0');
+  }
+  return `sha256:${hex.slice(0, 64)}`;
+}
+
+/** `model_id` — the Bedrock id for the display model name the fleet fixture carries. */
+function modelIdFor(displayModel: string): string {
+  return `amazon.${displayModel}:0`;
+}
+
+/** Newest registered prompt revision for an agent, or null when it has none. */
+function promptVersionFor(agentId: string): string | null {
+  const mine = mockListPromptVersions(200).filter((r) => r.agentId === agentId);
+  return mine[0]?.promptVersion ?? null;
+}
+
+/**
+ * The modelled `output_embedding <=> centroid`.
+ *
+ * THIS IS THE ONE NUMBER ON THIS SURFACE THAT IS NOT COUNTED. There are no
+ * 1024-dimension embeddings in `dev:mock`, so there is no cosine distance to
+ * take; the drift queries' whole subject is that expression. Rather than leave
+ * four reads permanently degraded, each row gets a deterministic scalar from
+ * its agent's authored drift band, and every drift rollup is then a real
+ * PERCENTILE_CONT over those per-row values — so the p95 a page shows is still
+ * the p95 of the rows it can list, and switching an agent's band moves the
+ * headline and the outlier list together.
+ *
+ * A row with no graded output (an error, or a blocked answer) has no embedding
+ * to compare, exactly as it would have none in the database: null, and the
+ * drift queries skip it via their `output_embedding IS NOT NULL` predicate.
+ */
+export function modelledDistance(row: MockTraceRow): number | null {
+  if (row.response_snippet === '') return null;
+  const { driftCentre, driftSpread } = row.profile;
+  const jitter = (unit(`${row.invocation_id}:dist`) - 0.5) * 2 * driftSpread;
+  return round(Math.max(0, driftCentre + jitter), 4);
+}
+
+/**
+ * The day of traffic as `observability.invocation_traces` holds it.
+ *
+ * Every row here corresponds one-to-one with a row of `invocationTail`, so the
+ * Invocations list, Health's summary, the Architecture graph and every rollup
+ * on this surface are four readings of one fleet. An agent with no telemetry
+ * profile contributes nothing — that is what makes the `empty` profile
+ * scenario a true "the projector has written nothing" rather than a half-world.
+ */
+export function traceRows(scenario?: ScenarioName): MockTraceRow[] {
+  const profiles = new Map(agentTelemetryProfiles.rows(scenario).map((p) => [p.agentId, p]));
+  if (profiles.size === 0) return [];
+
+  const fleet = new Map(agentFleet.rows(scenario).map((a) => [a.id, a]));
+  const labels = new Map(humanLabels.rows(scenario).map((l) => [l.invocationId, l]));
+
+  const rows: MockTraceRow[] = [];
+  for (const src of mockInvocationRows(scenario)) {
+    const profile = profiles.get(src.agentId);
+    if (!profile) continue;
+
+    const id = src.id;
+    const blocked = !!src.guardrailIntervened;
+    const errored = !!src.error;
+    // A row with no answer has nothing to grade. Null here rather than zero:
+    // `judge_score` is nullable in the schema precisely so "not judged" and
+    // "judged badly" stay different, and PERCENTILE_CONT skips a NULL while
+    // it would happily average a 0 into the fleet's median.
+    const graded = !blocked && !errored;
+    const judge = graded
+      ? round(
+          Math.min(1, Math.max(0, profile.judgeCentre + (unit(`${id}:judge`) - 0.5) * 2 * profile.judgeSpread)),
+          3,
+        )
+      : null;
+
+    const estCost = round(
+      (src.tokensIn / 1000) * profile.usdPer1kIn + (src.tokensOut / 1000) * profile.usdPer1kOut,
+      6,
+    );
+    // The judge is a second model call over the prompt and the response, so it
+    // reads roughly what the invocation produced and writes a short verdict.
+    const judgeIn = graded ? Math.round((src.tokensIn + src.tokensOut) * 0.6) : null;
+    const judgeOut = graded ? 48 : null;
+    const judgeCost = judgeIn !== null && judgeOut !== null
+      ? round((judgeIn / 1000) * 0.0008 + (judgeOut / 1000) * 0.0032, 6)
+      : null;
+
+    const u = unit(`${id}:user`);
+    // ~1 row in 12 carries no user — a scheduled or agent-to-agent call. This
+    // is what `top-users`' "skip rows with no user_id" is actually for, and
+    // with every row attributed the filter would be untestable offline.
+    const userId = u < 1 / 12 ? null : pick(TRAFFIC_USERS, `${id}:who`) ?? null;
+    // A session is a few hours of one user's work, so several rows share one —
+    // which is what makes `unique_sessions` differ from `invocations` and what
+    // gives memory's cold-session rollup something to group by.
+    const sessionId = userId
+      ? `sess-${userId}-${Math.floor(src.hoursAgo / 3)}`
+      : null;
+
+    const label = labels.get(id) ?? null;
+    const displayModel = fleet.get(src.agentId)?.model ?? 'nova-lite-v1';
+
+    rows.push({
+      invocation_id: id,
+      agent_id: src.agentId,
+      agent_name: src.agentName,
+      template_id: pick(profile.templates, `${id}:tpl`) ?? null,
+      prompt_snippet: src.promptSnippet,
+      response_snippet: src.responseSnippet,
+      judge_score: judge,
+      judge_rationale: judge === null ? null : rationaleFor(judge),
+      // Non-conforming output is what `schema_valid = false` means, and it is
+      // half of what `errorRate` counts. A run that threw produced nothing that
+      // could conform; a run that answered did.
+      schema_valid: errored ? false : true,
+      pii_detected: blocked && unit(`${id}:pii`) < 0.5,
+      guardrail_action: blocked ? 'BLOCKED' : null,
+      duration_ms: src.durationMs,
+      input_tokens: src.tokensIn,
+      output_tokens: src.tokensOut,
+      judge_input_tokens: judgeIn,
+      judge_output_tokens: judgeOut,
+      est_cost_usd: estCost,
+      judge_cost_usd: judgeCost,
+      total_cost_usd: round(estCost + (judgeCost ?? 0), 6),
+      prompt_version: promptVersionFor(src.agentId),
+      model_id: modelIdFor(displayModel),
+      runtime_image_digest: imageDigestFor(src.agentId),
+      parent_invocation_id: null, // linked below
+      user_id: userId,
+      session_id: sessionId,
+      human_label: label?.label ?? null,
+      human_note: label?.note ?? null,
+      ts: pgTimestamp(src.startedAt),
+      tsIso: src.startedAt,
+      profile,
+    });
+  }
+
+  linkA2aParents(rows);
+  return rows;
+}
+
+/**
+ * Attach a quarter of the specialist rows to the supervisor call that could
+ * have made them.
+ *
+ * The supervisor fans out over A2A, so a real `invocation_traces` table has a
+ * populated `parent_invocation_id` on the rows it delegated to — and the whole
+ * point of the CLAUDE.md A2A gotcha is that when that column is NULL the
+ * topology has no edges and the drill-down has no tree. A mock corpus with
+ * every parent NULL would reproduce the bug rather than the fix.
+ *
+ * The candidate is the LATEST supervisor row at or before the child's own
+ * instant, never merely the nearest: a parent that starts after its child is
+ * not a parent, and picking by absolute distance produced exactly that — a
+ * detail page whose "called by" link went forward in time.
+ */
+function linkA2aParents(rows: MockTraceRow[]): void {
+  const supervisors = rows
+    .filter((r) => r.agent_id === 'orgiq-supervisor')
+    .sort((a, b) => a.tsIso.localeCompare(b.tsIso));
+  if (supervisors.length === 0) return;
+
+  const at = supervisors.map((r) => new Date(r.tsIso).getTime());
+  for (const row of rows) {
+    if (row.agent_id === 'orgiq-supervisor') continue;
+    if (unit(`${row.invocation_id}:a2a`) >= 0.25) continue;
+    const t = new Date(row.tsIso).getTime();
+    let best = -1;
+    for (let i = 0; i < at.length; i++) {
+      if (at[i]! <= t) best = i;
+      else break;
+    }
+    // Nothing had run yet when this one did — an orphan, which is also what a
+    // real table holds for the oldest rows in any window.
+    if (best < 0) continue;
+    row.parent_invocation_id = supervisors[best]!.invocation_id;
+  }
+}
+
+/**
+ * The window every windowed read applies: `ts > now() - INTERVAL hours`, and
+ * bounded above at `now` for the reason mock/invocations.ts states — a row
+ * stamped in the future did not happen in the last day.
+ */
+export function tracesInWindow(hours: number, scenario?: ScenarioName): MockTraceRow[] {
+  const ids = new Set(invocationsInWindow(hours, scenario).map((r) => r.id));
+  return traceRows(scenario).filter((r) => ids.has(r.invocation_id));
+}
+
+/**
+ * `(template_id NOT LIKE 'test:%' OR template_id IS NULL)` — the live-traffic
+ * filter every read in these routers applies except the tool-error tail, which
+ * deliberately keeps test rows so a researcher can debug a failing test case.
+ */
+export function excludeTestTraffic(rows: readonly MockTraceRow[]): MockTraceRow[] {
+  return rows.filter((r) => r.template_id === null || !r.template_id.startsWith('test:'));
+}
+
+// ── Tool calls ─────────────────────────────────────────────────────────────
+
+/** One row of `observability.tool_calls`, in `exec()` shape. */
+export interface MockToolCallRow {
+  tool_call_id: string;
+  invocation_id: string;
+  tool_name: string;
+  started_at: string;
+  duration_ms: number;
+  input_size: number;
+  output_size: number;
+  errored: boolean;
+  error_message: string | null;
+  input_sample: string | null;
+  output_sample: string | null;
+  est_cost_usd: number | null;
+  ts: string;
+  /** Windowing + the join back to the trace. Not columns. */
+  tsIso: string;
+  trace: MockTraceRow;
+}
+
+/**
+ * The tools each invocation called.
+ *
+ * Tool NAMES are not authored here — they are `agentFleet`'s `tools` array, the
+ * same list the Architecture page shows on the agent card. An agent cannot call
+ * a tool it is not documented as having, which is the sort of disagreement that
+ * only shows up when somebody clicks through.
+ *
+ * An errored invocation's LAST tool call carries the invocation's own error
+ * message. That is the same convention `routes/invocations.ts`'s detail branch
+ * already used — `invocation_traces` has no error column, so an agent-level
+ * failure surfaces as an errored tool row — and it means `GET /tools/errors`
+ * and the Invocations list are showing the same failures, not two sets.
+ */
+export function toolCallRows(scenario?: ScenarioName): MockToolCallRow[] {
+  const fleet = new Map(agentFleet.rows(scenario).map((a) => [a.id, a]));
+  const out: MockToolCallRow[] = [];
+
+  for (const trace of traceRows(scenario)) {
+    const tools = fleet.get(trace.agent_id)?.tools ?? [];
+    if (tools.length === 0) continue;
+
+    // One to three calls, deterministic per invocation, always starting from
+    // the agent's first tool so a fleet-wide latency panel has a stable spine.
+    const calls = 1 + (hash32(`${trace.invocation_id}:tools`) % Math.min(3, tools.length));
+    const errored = trace.schema_valid === false;
+    let offsetMs = Math.round(trace.duration_ms * 0.08);
+
+    for (let i = 0; i < calls; i++) {
+      const toolName = tools[(hash32(`${trace.invocation_id}:t${i}`) + i) % tools.length]!;
+      // Each call takes a slice of the invocation it belongs to, so a tool p99
+      // can never exceed the invocation p99 that contains it.
+      const share = 0.18 + unit(`${trace.invocation_id}:d${i}`) * 0.35;
+      const durationMs = Math.max(1, Math.round(trace.duration_ms * share / calls));
+      const isLast = i === calls - 1;
+      const thisErrored = errored && isLast;
+      const startedIso = new Date(new Date(trace.tsIso).getTime() + offsetMs).toISOString();
+      offsetMs += durationMs;
+
+      // Retrieval and embedding tools spend Bedrock money; a graph merge or a
+      // score computation does not. `with_cost` on the latency rollup counts
+      // the rows that carry one, so this has to be a real mix.
+      const billable = /retrieve|search|embed|knowledge/i.test(toolName);
+
+      out.push({
+        tool_call_id: `${trace.invocation_id}-tc${i}`,
+        invocation_id: trace.invocation_id,
+        tool_name: toolName,
+        started_at: pgTimestamp(startedIso),
+        duration_ms: durationMs,
+        input_size: 120 + (hash32(`${trace.invocation_id}:is${i}`) % 3800),
+        output_size: thisErrored ? 0 : 80 + (hash32(`${trace.invocation_id}:os${i}`) % 9000),
+        errored: thisErrored,
+        error_message: thisErrored ? errorMessageFor(trace) : null,
+        input_sample: trace.prompt_snippet.slice(0, 500) || null,
+        output_sample: thisErrored ? null : (trace.response_snippet.slice(0, 500) || null),
+        est_cost_usd: billable ? round(0.00004 + unit(`${trace.invocation_id}:c${i}`) * 0.0004, 6) : null,
+        ts: pgTimestamp(startedIso),
+        tsIso: startedIso,
+        trace,
+      });
+    }
+  }
+  return out;
+}
+
+/**
+ * The invocation's own failure text.
+ *
+ * It lives on the tail row (`MockInvocation.error`), not on the projected trace
+ * — `invocation_traces` genuinely has no column for it — so it is looked up
+ * from the one place that holds it rather than copied onto every projection.
+ */
+function errorMessageFor(trace: MockTraceRow): string | null {
+  const src = mockInvocationRows().find((r) => r.id === trace.invocation_id);
+  return src?.error ?? null;
+}
+
+// ── Guardrail interventions ────────────────────────────────────────────────
+
+/** One row of `observability.guardrail_interventions`, in `exec()` shape. */
+export interface MockInterventionRow {
+  intervention_id: string;
+  invocation_id: string;
+  agent_id: string;
+  rule_name: string;
+  rule_category: string;
+  severity: string;
+  action: string;
+  matched_text: string | null;
+  ts: string;
+  tsIso: string;
+}
+
+interface ConfiguredRule {
+  ruleName: string;
+  ruleCategory: 'PII' | 'TOPIC' | 'CONTENT' | 'PROMPT_ATTACK';
+  severity: 'LOW' | 'MEDIUM' | 'HIGH';
+  action: 'BLOCKED' | 'ANONYMIZED';
+}
+
+/**
+ * The rules that can fire — read from the guardrail the Guardrails page shows
+ * as attached in this same process (mock/capabilities.ts), never authored here.
+ *
+ * A rule that appears in the by-rule breakdown is therefore one an operator can
+ * go and look at, toggle, and see disappear. Switch the `guardrail` fixture to
+ * `empty` — a guardrail with no filters and no topics — and the breakdown
+ * empties with it, which is the true reading of "nothing is configured to fire".
+ */
+function configuredRules(): ConfiguredRule[] {
+  const guardrail = mockGuardrailRow();
+  if (!guardrail) return [];
+  const rules: ConfiguredRule[] = [];
+
+  for (const filter of guardrail.piiFilters) {
+    if (!filter.enabled) continue;
+    rules.push({
+      ruleName: filter.type,
+      ruleCategory: 'PII',
+      severity: filter.action === 'BLOCK' ? 'HIGH' : 'MEDIUM',
+      action: filter.action === 'BLOCK' ? 'BLOCKED' : 'ANONYMIZED',
+    });
+  }
+  for (const topic of guardrail.deniedTopics) {
+    if (!topic.enabled) continue;
+    rules.push({ ruleName: topic.name, ruleCategory: 'TOPIC', severity: 'HIGH', action: 'BLOCKED' });
+  }
+  if (guardrail.contentPolicy.promptAttackEnabled) {
+    rules.push({ ruleName: 'PROMPT_ATTACK', ruleCategory: 'PROMPT_ATTACK', severity: 'HIGH', action: 'BLOCKED' });
+  }
+  if (guardrail.contentPolicy.misconductEnabled) {
+    rules.push({ ruleName: 'MISCONDUCT', ruleCategory: 'CONTENT', severity: 'MEDIUM', action: 'BLOCKED' });
+  }
+  return rules;
+}
+
+/**
+ * One row per fired rule. A single invocation can trip more than one — that is
+ * why this table exists beside the opaque `invocation_traces.guardrail_action`
+ * — so a blocked row trips one or two.
+ */
+export function interventionRows(scenario?: ScenarioName): MockInterventionRow[] {
+  const rules = configuredRules();
+  if (rules.length === 0) return [];
+  const out: MockInterventionRow[] = [];
+
+  for (const trace of traceRows(scenario)) {
+    if (trace.guardrail_action === null) continue;
+    const fired = 1 + (hash32(`${trace.invocation_id}:fired`) % Math.min(2, rules.length));
+    for (let i = 0; i < fired; i++) {
+      const rule = rules[(hash32(`${trace.invocation_id}:r${i}`) + i) % rules.length]!;
+      out.push({
+        intervention_id: `${trace.invocation_id}-gi${i}`,
+        invocation_id: trace.invocation_id,
+        agent_id: trace.agent_id,
+        rule_name: rule.ruleName,
+        rule_category: rule.ruleCategory,
+        severity: rule.severity,
+        action: rule.action,
+        // The writer truncates at 200 chars; the prompt is what matched.
+        matched_text: trace.prompt_snippet.slice(0, 200) || null,
+        ts: trace.ts,
+        tsIso: trace.tsIso,
+      });
+    }
+  }
+  return out;
+}
+
+// ── Memory events ──────────────────────────────────────────────────────────
+
+/** One row of `observability.memory_events`, in `exec()` shape. */
+export interface MockMemoryEventRow {
+  memory_event_id: string;
+  invocation_id: string | null;
+  agent_id: string;
+  session_id: string | null;
+  kind: string;
+  memory_id: string | null;
+  query_text: string | null;
+  /** Derived from `retrieved.length` — never stored beside it. */
+  result_count: number | null;
+  duration_ms: number | null;
+  retrieved_summary: string | null;
+  errored: boolean;
+  error_message: string | null;
+  ts: string;
+  tsIso: string;
+}
+
+/**
+ * A memory operation as the fixture holds it: what came BACK, not how many.
+ *
+ * `result_count` is projected as `retrieved.length` rather than stored, which
+ * is rule 1 at the smallest scale that still matters — a stored 4 beside a list
+ * of 3 summaries is the same defect as a summary claiming 25 errors over 6
+ * rows, and `/stats`' cold-session rollup is computed from exactly this field.
+ */
+interface MemoryOp {
+  invocationId: string;
+  agentId: string;
+  sessionId: string | null;
+  kind: 'retrieve' | 'write' | 'summarize' | 'expire';
+  queryText: string | null;
+  retrieved: string[];
+  durationMs: number;
+  errored: boolean;
+  errorMessage: string | null;
+  tsIso: string;
+}
+
+/** Manual inserts from `POST /api/observability/memory/events`. */
+export const memoryEventWrites = defineFixture<MockMemoryEventRow>({
+  key: 'observability-memory-writes',
+  scenarios: {
+    // Nothing is seeded here on purpose: the seeded feed is the one DERIVED
+    // from the fleet's own invocations below. This fixture holds only what a
+    // caller has POSTed in this process, so `POST /api/__mock/reset` drops a
+    // demo insert and leaves the real corpus intact.
+    default: () => [],
+  },
+});
+
+const MEMORY_ID = 'orgiq-memory-mock';
+
+/**
+ * The fleet's memory ops, derived from the invocations that made them.
+ *
+ * An agent whose profile says `usesMemory` retrieves before it answers and
+ * writes after it succeeds. A retrieve that comes back with nothing is a COLD
+ * session — the thing `/stats` exists to count — and it happens for the first
+ * invocation of a session, which is exactly when it happens in production.
+ */
+function derivedMemoryOps(scenario?: ScenarioName): MemoryOp[] {
+  const ops: MemoryOp[] = [];
+  const seenSession = new Set<string>();
+
+  // Oldest first, so "the first invocation of a session" means the first one.
+  const traces = traceRows(scenario)
+    .slice()
+    .sort((a, b) => a.tsIso.localeCompare(b.tsIso));
+
+  for (const trace of traces) {
+    if (!trace.profile.usesMemory) continue;
+    const sessionKey = `${trace.agent_id}|${trace.session_id ?? ''}`;
+    const cold = trace.session_id !== null && !seenSession.has(sessionKey);
+    if (trace.session_id !== null) seenSession.add(sessionKey);
+
+    const retrieved = cold
+      ? []
+      : Array.from(
+          { length: 1 + (hash32(`${trace.invocation_id}:mem`) % 4) },
+          (_, i) => `${trace.agent_name} recalled: ${trace.prompt_snippet.slice(0, 60)} (#${i + 1})`,
+        );
+
+    // The degraded agent's memory calls fail sometimes too; that is what makes
+    // `/stats`' errorRate non-zero for one agent and zero for the rest.
+    const failed = trace.schema_valid === false && unit(`${trace.invocation_id}:memerr`) < 0.4;
+
+    ops.push({
+      invocationId: trace.invocation_id,
+      agentId: trace.agent_id,
+      sessionId: trace.session_id,
+      kind: 'retrieve',
+      queryText: trace.prompt_snippet.slice(0, 200),
+      retrieved: failed ? [] : retrieved,
+      durationMs: 18 + (hash32(`${trace.invocation_id}:mr`) % 240),
+      errored: failed,
+      errorMessage: failed ? 'AgentCore Memory RetrieveMemoryRecords timed out after 2000ms' : null,
+      tsIso: trace.tsIso,
+    });
+
+    if (trace.schema_valid !== false && trace.guardrail_action === null) {
+      ops.push({
+        invocationId: trace.invocation_id,
+        agentId: trace.agent_id,
+        sessionId: trace.session_id,
+        kind: 'write',
+        queryText: null,
+        retrieved: [],
+        durationMs: 9 + (hash32(`${trace.invocation_id}:mw`) % 60),
+        errored: false,
+        errorMessage: null,
+        tsIso: new Date(new Date(trace.tsIso).getTime() + trace.duration_ms).toISOString(),
+      });
+    }
+  }
+  return ops;
+}
+
+function toMemoryRow(op: MemoryOp, index: number): MockMemoryEventRow {
+  return {
+    memory_event_id: `${op.invocationId}-me${index}-${op.kind}`,
+    invocation_id: op.invocationId,
+    agent_id: op.agentId,
+    session_id: op.sessionId,
+    kind: op.kind,
+    memory_id: MEMORY_ID,
+    query_text: op.queryText,
+    // Counted from the rows it summarises — see the MemoryOp doc.
+    result_count: op.kind === 'retrieve' ? op.retrieved.length : null,
+    duration_ms: op.durationMs,
+    retrieved_summary: op.retrieved.length > 0 ? op.retrieved.join('; ').slice(0, 500) : null,
+    errored: op.errored,
+    error_message: op.errorMessage,
+    ts: pgTimestamp(op.tsIso),
+    tsIso: op.tsIso,
+  };
+}
+
+/** The whole memory feed: the fleet's own ops plus anything POSTed here. */
+export function memoryEventRows(scenario?: ScenarioName): MockMemoryEventRow[] {
+  const derived = derivedMemoryOps(scenario).map(toMemoryRow);
+  return [...derived, ...memoryEventWrites.rows(scenario)];
+}
+
+/** `POST /events` — append one manual row and hand back its id. */
+export function mockInsertMemoryEvent(input: Omit<MockMemoryEventRow, 'memory_event_id' | 'ts' | 'tsIso'>): string {
+  const rows = memoryEventWrites.rows();
+  const iso = clock.nowIso();
+  const id = `mock-me-${rows.length + 1}`;
+  rows.push({ ...input, memory_event_id: id, ts: pgTimestamp(iso), tsIso: iso });
+  return id;
+}

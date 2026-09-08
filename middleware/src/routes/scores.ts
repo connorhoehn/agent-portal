@@ -4,6 +4,21 @@ import { getPersonHistory } from '../providers/scores-history.js';
 import { asyncHandler } from '../lib/async-handler.js';
 import { analyzeScores } from '../lib/score-analysis.js';
 
+/**
+ * Marks a response whose query failed — the wrapper from routes/cost.ts, kept
+ * local so each router owns its own copy.
+ *
+ * Every read below answers 200 with an empty payload rather than failing the
+ * page, which is the right call. What it cost was the difference between
+ * "nothing happened in this window" and "the query blew up": both rendered as
+ * an empty panel. The marker restores it without touching the healthy shape —
+ * a quiet window answers exactly as it did before, and only a caught failure
+ * carries `degraded` + the first line of the error.
+ */
+function degraded<T extends object>(body: T, err: unknown): T & { degraded: true; error: string } {
+  return { ...body, degraded: true, error: (err as Error).message.split('\n')[0]?.slice(0, 160) ?? 'query failed' };
+}
+
 export const scoresRouter = Router();
 
 scoresRouter.get('/leaderboard', asyncHandler(async (req, res) => {
@@ -78,9 +93,13 @@ scoresRouter.get('/:personId/history', asyncHandler(async (req, res) => {
   try {
     const history = await getPersonHistory(personId, days);
     res.json(history);
-  } catch {
-    // Missing table, no creds — return empty so the UI handles it gracefully.
-    res.json({ personId, samples: [], deltaVs7d: null });
+  } catch (err) {
+    // Missing table, no creds — still 200, because a profile page that
+    // cannot draw a sparkline should still draw the profile. But it is
+    // SAID: `samples: []` on its own reads as "this person has no score
+    // history", which is a claim about the person rather than about us.
+    console.warn(`[scores] history for ${personId} failed:`, (err as Error).message);
+    res.json(degraded({ personId, samples: [], deltaVs7d: null }, err));
   }
 }));
 

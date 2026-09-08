@@ -5,12 +5,27 @@
 // /admin/observability/invocations?status=error, which lists rows from the
 // dev:mock tail (mock/invocations.ts, ids like `mock-inv-33`) served by
 // GET /api/observability/recent-invocations. Every row there links to
-// GET /api/observability/invocations/:id for the drill-down. Before this fix
-// that route only ever queried Aurora and 404'd anything that wasn't a UUID
+// GET /api/observability/invocations/:id for the drill-down. Before that fix
+// this route only ever queried Aurora and 404'd anything that wasn't a UUID
 // — i.e. every mock id — so the persona sent to "read the failures" could
-// open the list but never a single row. This pins: every id the tail
-// actually serves resolves 200 with the real path's detail shape, and an
-// unknown id still 404s with the same error body as before.
+// open the list but never a single row. This pins: every id the tail actually
+// serves resolves 200 with the real path's detail shape, and an unknown id
+// still 404s with the same error body as before.
+//
+// WHAT CHANGED, AND WHY THIS FILE MOVED WITH IT. The original fix answered
+// from a SECOND hand-written projection that nulled every DB-only field —
+// judge score, tokens, cost, model — because at the time nothing offline had
+// those values, and inventing them here would have been a fabrication. That is
+// no longer true: mock/observability.ts seeds the whole `invocation_traces`
+// corpus from this same tail, so `GET /search` now shows this row scoring 0.83
+// and costing $0.0002. A detail page still answering "—" for both would be the
+// count-vs-list defect one click apart.
+//
+// So the assertions below moved from "these fields are null" to the stronger
+// claim: the detail page shows EXACTLY what the list that linked to it showed.
+// The route no longer holds a projection of its own — both paths run the same
+// `rows.map(...)` over `exec()`-shaped rows — and this file is what keeps that
+// true.
 
 jest.mock('../../config.js', () => ({
   config: { region: 'us-east-1', mock: { aurora: true, agentcore: true, guardrails: false, cloudwatch: true } },
@@ -21,6 +36,24 @@ import request from '../../test-support/http.js';
 import { invocationsRouter } from '../invocations.js';
 import { errorHandler } from '../../lib/async-handler.js';
 import { getRecentInvocations } from '../../lib/invocations.js';
+import { mockInvocationSearch } from '../../mock/observability-queries.js';
+import { fixtureRegistry, freezeClock, unfreezeClock } from '../../mock/core/index.js';
+
+// The corpus dates itself relative to `now` on every read, so the list and the
+// detail page were being built a second apart and their `ts` disagreed by a
+// second. Freezing is the fix, not rounding: the two surfaces have to be
+// describing the same instant, and a test that tolerated a second of slack
+// would tolerate a real divergence too.
+let restoreClock: () => void;
+beforeEach(() => {
+  restoreClock = freezeClock('2026-09-08T15:20:00.000Z');
+  fixtureRegistry.resetAll('default');
+});
+afterEach(() => {
+  restoreClock();
+  unfreezeClock();
+  fixtureRegistry.resetAll('default');
+});
 
 function buildApp() {
   const app = express();
@@ -36,7 +69,16 @@ describe('GET /api/observability/invocations/:invocationId — mock branch', () 
     const tail = getRecentInvocations(500);
     expect(tail.length).toBeGreaterThan(0);
 
-    // Sampling all of them would be slow across 50+ rows — cover an error
+    // The same rows the Invocations LIST renders, keyed by id — this is the
+    // page the reader clicked through from, and the detail must agree with it.
+    const listed = new Map(
+      mockInvocationSearch({
+        q: '', agentId: '', minScore: null, maxScore: null,
+        since: null, until: null, promptVersion: '', userId: '', limit: 500,
+      }).map((r) => [r['invocation_id'] as string, r]),
+    );
+
+    // Sampling all of them would be slow across 300+ rows — cover an error
     // row, a guardrail-intervened row, and a plain success row explicitly,
     // plus a handful more for breadth.
     const errorRow = tail.find((r) => r.error)!;
@@ -50,31 +92,44 @@ describe('GET /api/observability/invocations/:invocationId — mock branch', () 
       const res = await request(app)
         .get(`/api/observability/invocations/${encodeURIComponent(row.id)}`)
         .expect(200);
-      expect(res.body.invocation.invocationId).toBe(row.id);
-      expect(res.body.invocation.agentId).toBe(row.agentId);
-      expect(res.body.invocation.promptSnippet).toBe(row.promptSnippet);
-      expect(res.body.invocation.responseSnippet).toBe(row.responseSnippet);
-      // Real-shape fields the mock tail has no data for stay null, not invented.
-      expect(res.body.invocation.judgeScore).toBeNull();
-      expect(res.body.invocation.totalCostUsd).toBeNull();
-      expect(res.body.invocation.modelId).toBeNull();
+      const detail = res.body.invocation;
+      expect(detail.invocationId).toBe(row.id);
+      expect(detail.agentId).toBe(row.agentId);
+      expect(detail.promptSnippet).toBe(row.promptSnippet);
+      expect(detail.responseSnippet).toBe(row.responseSnippet);
+
+      // The load-bearing half: every field the list also carries reads the
+      // same on both surfaces. A future change that gives one of them a value
+      // the other cannot produce fails here.
+      const fromList = listed.get(row.id)!;
+      expect(fromList).toBeDefined();
+      expect(detail.judgeScore).toBe(fromList['judge_score']);
+      expect(detail.totalCostUsd).toBe(fromList['total_cost_usd']);
+      expect(detail.modelId).toBe(fromList['model_id']);
+      expect(detail.promptVersion).toBe(fromList['prompt_version']);
+      expect(detail.templateId).toBe(fromList['template_id']);
+      expect(detail.schemaValid).toBe(fromList['schema_valid']);
+      expect(detail.ts).toBe(fromList['ts']);
+
       expect(Array.isArray(res.body.toolCalls)).toBe(true);
-      expect(res.body.parent).toBeNull();
       expect(Array.isArray(res.body.children)).toBe(true);
 
       if (row.error) {
-        expect(res.body.invocation.schemaValid).toBe(false);
-        expect(res.body.toolCalls).toHaveLength(1);
-        expect(res.body.toolCalls[0].errored).toBe(true);
-        expect(res.body.toolCalls[0].errorMessage).toBe(row.error);
+        // invocation_traces has no error-message column of its own, so an
+        // agent-level failure still surfaces as an errored tool_calls entry —
+        // carrying the invocation's own message, not a fabricated one.
+        expect(detail.schemaValid).toBe(false);
+        const errored = res.body.toolCalls.filter((t: { errored: boolean }) => t.errored);
+        expect(errored).toHaveLength(1);
+        expect(errored[0].errorMessage).toBe(row.error);
       } else {
-        expect(res.body.toolCalls).toHaveLength(0);
+        expect(res.body.toolCalls.every((t: { errored: boolean }) => !t.errored)).toBe(true);
       }
 
       if (row.guardrailIntervened) {
-        expect(res.body.invocation.guardrailAction).toBe('BLOCKED');
+        expect(detail.guardrailAction).toBe('BLOCKED');
       } else {
-        expect(res.body.invocation.guardrailAction).toBeNull();
+        expect(detail.guardrailAction).toBeNull();
       }
     }
   });

@@ -23,7 +23,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { asyncHandler } from '../lib/async-handler.js';
 import { initSSE, writeSSE } from '../lib/sse.js';
 import { rateLimit } from '../lib/rate-limit.js';
-import { requireAction, requireSession, resolveSession } from '../lib/authz.js';
+import { requireAction, requireSession, requireTenant, resolveSession } from '../lib/authz.js';
 import { FLEET_WIDE_ROLES } from '../lib/devbox-visibility.js';
 import {
   createPairingCode,
@@ -46,33 +46,37 @@ import {
   type LocalSession,
   type NodePresence,
 } from '../lib/local-compute-fleet.js';
+import { DEMO_NODE_ID, demoPresenceSessions } from '../mock/local-compute.js';
 
 export const localComputeRouter = Router();
 
 const MAX_SESSIONS_PER_ANNOUNCE = 20;
 
+// The BROWSER half of this router is orgiq-only.
+//
+// Applied per route, never at the mount: `/announce`, `/heartbeat`,
+// `/sessions/:id/end` and `/pair/claim` are machine callers with no session at
+// all, and a blanket tenant gate would 401/403 every laptop's presence write —
+// the trap CLAUDE.md's auth-floor gotcha describes.
+//
+// It is needed because filtering by OWNER is not the same question as which
+// workspace you are standing in. An assessment user who also happens to own an
+// orgiq machine saw it, and the initiative and branch it was working on, in
+// the assessment header — with an action leading out of the tenant. `admin` is
+// cross-tenant by design and still passes.
+const browserTenant = requireTenant('orgiq');
+
 // Mock-mode demo presence: dev:mock has no laptop announcing, so the seeded
-// fixture node (providers/local-compute.ts) announces itself here — one
-// session mixing a platform model with a local one, re-announced every
-// minute so the derived status stays honestly 'connected' rather than the
-// node looking broken ninety seconds after boot. Env-read directly, like
-// every flag in devbox.ts, to stay importable under the CJS jest config.
+// fixture node re-announces itself every minute, keeping its derived status
+// honestly 'connected' rather than looking broken ninety seconds after boot.
+// The session comes FROM the fixture (mock/local-compute.ts) rather than being
+// retyped here: this block used to carry its own copy naming `p-realtime` and
+// `realtime-platform`, two ids no seed creates, and because it overwrites the
+// node every 60s those invented strings beat the fixture's real ones in a live
+// dev:mock. Env-read directly, like every flag in devbox.ts, to stay importable
+// under the CJS jest config.
 if (process.env['MOCK_AURORA'] === 'true') {
-  const announceDemo = () => recordAnnounce('node-demo-macbook', [
-    {
-      sessionId: 'demo-local-session-0000000000000000000',
-      harness: 'claude-code',
-      projectId: 'p-realtime',
-      repo: 'realtime-platform',
-      branch: 'feat/presence-mesh',
-      intent: 'wire the presence mesh into the gateway',
-      modelProvider: 'ollama',
-      model: 'qwen2.5-coder:14b',
-      contextUsed: 0.31,
-      memory: { mode: 'pending', pendingOps: 7 },
-      lastSeenAt: '',
-    },
-  ]);
+  const announceDemo = () => recordAnnounce(DEMO_NODE_ID, demoPresenceSessions());
   announceDemo();
   setInterval(announceDemo, 60_000).unref();
 }
@@ -111,6 +115,7 @@ function requireNodeToken(
 
 localComputeRouter.post(
   '/pair/start',
+  browserTenant,
   requireAction('ConnectLocalCompute'),
   asyncHandler(async (req, res) => {
     const session = resolveSession(req)!;
@@ -228,6 +233,7 @@ function summarize(node: ComputeNode): Omit<NodeView, 'presence'> & {
 
 localComputeRouter.get(
   '/nodes',
+  browserTenant,
   requireSession('ViewLocalCompute'),
   asyncHandler(async (req, res) => {
     const session = resolveSession(req)!;
@@ -239,6 +245,10 @@ localComputeRouter.get(
 
 localComputeRouter.get(
   '/nodes/all',
+  // Tenant check runs AFTER the fleet-wide role check here, deliberately: the
+  // bespoke gate below answers a cookie-less caller 403 rather than 401, which
+  // is this route's documented contract and pinned by its test. Putting the
+  // tenant gate first would turn that into a 401.
   (req: Request, res: Response, next: NextFunction) => {
     const session = resolveSession(req);
     const role = session?.role ?? '';
@@ -248,6 +258,7 @@ localComputeRouter.get(
     }
     res.status(403).json({ error: 'Forbidden', action: 'ViewLocalComputeFleet' });
   },
+  browserTenant,
   asyncHandler(async (_req, res) => {
     // Operational visibility for fleet-wide roles: which machines are
     // contributing and how much — never the session detail.
@@ -256,7 +267,7 @@ localComputeRouter.get(
   }),
 );
 
-localComputeRouter.get('/stream', requireSession('ViewLocalCompute'), asyncHandler(async (req, res) => {
+localComputeRouter.get('/stream', browserTenant, requireSession('ViewLocalCompute'), asyncHandler(async (req, res) => {
   const session = resolveSession(req)!;
   const own = await listNodesByOwner(session.sub);
   const ownIds = new Set(own.map((n) => n.id));
@@ -277,6 +288,7 @@ localComputeRouter.get('/stream', requireSession('ViewLocalCompute'), asyncHandl
 
 localComputeRouter.patch(
   '/nodes/:id',
+  browserTenant,
   requireAction('ConnectLocalCompute'),
   asyncHandler(async (req, res) => {
     const session = resolveSession(req)!;
@@ -298,6 +310,7 @@ localComputeRouter.patch(
 
 localComputeRouter.delete(
   '/nodes/:id',
+  browserTenant,
   requireAction('ConnectLocalCompute'),
   asyncHandler(async (req, res) => {
     const session = resolveSession(req)!;

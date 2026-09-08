@@ -17,9 +17,10 @@
 
 import { Router } from 'express';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
+import { degradedFields } from '../lib/upstream.js';
 import { readForRolesElseAction, requireAction } from '../lib/authz.js';
 import {
-  listBots, getBot, createBot, updateBot, deleteBot, setPausedReason, listBotRuns,
+  listBotsResult, getBot, createBot, updateBot, deleteBot, setPausedReason, listBotRunsResult,
   listMarketplaceRuns, runCostSamples, perPointCostSamples,
   type BotTemplate, type BotTrigger, type BotPatch,
 } from '../providers/bots.js';
@@ -405,8 +406,24 @@ botsRouter.get('/marketplace-runs', marketReadGate, asyncHandler(async (req, res
 
 // ─── CRUD ────────────────────────────────────────────────────────────────────
 
+/**
+ * The bot roster.
+ *
+ * `{ bots: [] }` meant two things and rendered as one: no bots are configured
+ * (ordinary, and the "create a bot" affordance is written for it), or the
+ * `bots` table does not exist on this cluster (providers/bots.ts `safeExec`
+ * swallows a missing relation so a pre-migration cluster renders a page rather
+ * than a 500). The second one is a page inviting an operator to create a bot
+ * into a table that is not there. The provider says which now, and only the
+ * failure changes shape — a healthy empty roster is byte-identical to what
+ * this route always sent:
+ *
+ *   { bots: [] }                             nothing is configured
+ *   { bots: [], degraded: true, error }      we could not read the roster
+ */
 botsRouter.get('/', readGate, asyncHandler(async (_req, res) => {
-  res.json({ bots: await listBots() });
+  const roster = await listBotsResult();
+  res.json({ bots: roster.items, ...degradedFields(roster) });
 }));
 
 botsRouter.post('/', manageGate, asyncHandler(async (req, res) => {
@@ -592,6 +609,10 @@ botsRouter.post('/:id/resume', manageGate, asyncHandler(async (req, res) => {
   res.json({ bot: bot ?? await getBot(id) });
 }));
 
+/** One bot's firing history. Same two empties as the roster above — and here
+ *  the swallowed one is worse, because "this bot has never fired" is the exact
+ *  question the page is opened to answer. */
 botsRouter.get('/:id/runs', readGate, asyncHandler(async (req, res) => {
-  res.json({ runs: await listBotRuns(String(req.params['id'] ?? ''), 50) });
+  const history = await listBotRunsResult(String(req.params['id'] ?? ''), 50);
+  res.json({ runs: history.items, ...degradedFields(history) });
 }));

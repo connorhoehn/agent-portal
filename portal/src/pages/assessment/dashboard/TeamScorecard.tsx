@@ -33,7 +33,6 @@ import { StoriesPanel } from './StoriesPanel';
 import { TeamActionsMenu } from './TeamActionsMenu';
 import { useTeamDetail } from './useTeamDetail';
 import { fmtDate, teamCertificationHeadline, teamCertificationSubline } from '../types';
-import { PersonRef } from '../../project-detail/PersonRef';
 
 type ScorecardTab = 'scorecard' | 'plan' | 'stories' | 'evidence' | 'documents';
 
@@ -136,9 +135,10 @@ export function TeamScorecard({ teamId, tab, onTabChange }: TeamScorecardProps) 
         }
       />
 
+      {/* A name, not a link — this tenant has no org-graph person behind it
+          (see the note on TeamSummary in ../types.ts). */}
       <Inline gap="xs" align="center" className="text-xs text-text-secondary">
-        Lead:{' '}
-        <PersonRef personId={team.assessment_lead_person_id ?? null} name={team.assessment_lead || 'Unassigned'} showAvatar={false} />
+        Lead: {team.assessment_lead || 'Unassigned'}
       </Inline>
 
       <StatStrip

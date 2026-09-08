@@ -27,6 +27,7 @@ import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-r
 import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import { getJudgeConfig, weightedComposite } from './judge-config.js';
+import { firstLine } from './upstream.js';
 import { getRuntimeArn } from '../routes/invocations.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 
@@ -52,6 +53,15 @@ export interface TestCase {
   prompt: string;
   referenceOutput: string | null;
   expectedTags: string[];
+  /**
+   * Set when `expected_tags` could not be parsed, so `expectedTags` above is a
+   * fallback and not the case's real expectation. Null or absent on a case that
+   * was read cleanly — including one that genuinely expects no tags.
+   *
+   * Optional so a hand-built case (a test, a future in-memory suite) does not
+   * have to assert an absence; `loadCasesForRun` always sets it explicitly.
+   */
+  expectationProblem?: string | null;
   rubricOverride: string | null;
   passThreshold: number;
 }
@@ -95,15 +105,41 @@ export async function loadCasesForRun(agentId?: string): Promise<TestCase[]> {
     agentId: toStr(r['agent_id']),
     prompt: toStr(r['prompt']),
     referenceOutput: r['reference_output'] ? toStr(r['reference_output']) : null,
-    expectedTags: (() => {
-      try {
-        const parsed: unknown = JSON.parse(toStr(r['expected_tags'], '[]'));
-        return Array.isArray(parsed) ? parsed.map(String) : [];
-      } catch { return []; }
-    })(),
+    ...readExpectedTags(r['expected_tags']),
     rubricOverride: r['rubric_override'] ? toStr(r['rubric_override']) : null,
     passThreshold: Number(r['pass_threshold'] ?? 0.7),
   }));
+}
+
+/**
+ * `expected_tags` as a list, and whether that list is the case's expectation.
+ *
+ * THE SILENT PASS. This was an inline `catch { return []; }`. A malformed
+ * `expected_tags` therefore became "this case expects no tags", `checkTags`
+ * found nothing missing, and a case written to REQUIRE that the answer mention
+ * Aurora and pgvector was quietly relaxed into one that requires nothing — and
+ * then reported as **passed**. An evaluation harness scoring a green run off
+ * an expectation it could not read is the worst failure mode this file has,
+ * because the whole point of it is to be the thing that notices.
+ *
+ * The empty list is still what it hands back — there is no better guess — but
+ * it says so, and `runCase` refuses to pass a case whose expectation is
+ * unreadable. Note the two are distinguishable: `expected_tags` of `[]` is a
+ * perfectly ordinary case that expects no particular vocabulary, and it parses
+ * fine and carries no problem.
+ */
+function readExpectedTags(raw: unknown): { expectedTags: string[]; expectationProblem: string | null } {
+  const text = toStr(raw, '[]');
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (Array.isArray(parsed)) return { expectedTags: parsed.map(String), expectationProblem: null };
+    return {
+      expectedTags: [],
+      expectationProblem: `expected_tags is ${typeof parsed}, not a list`,
+    };
+  } catch (err) {
+    return { expectedTags: [], expectationProblem: firstLine(err, 'expected_tags is not valid JSON') };
+  }
 }
 
 // ── Deterministic checks ─────────────────────────────────────────────────────
@@ -247,6 +283,25 @@ export async function runCase(testCase: TestCase, judgeModelId: string): Promise
   let answer = '';
   let durationMs = 0;
 
+  // BEFORE the agent is invoked, and before the judge is paid: a case whose
+  // expectation could not be read cannot produce a verdict about the agent, so
+  // running it buys nothing and spends real Bedrock money to reach a result
+  // that must be discarded anyway. It used to reach here as `expectedTags: []`
+  // and be reported as a PASS.
+  if (testCase.expectationProblem) {
+    return {
+      testId: testCase.testId,
+      passed: false,
+      judgeScore: null,
+      judgeRationale: null,
+      tagHits: {},
+      referenceSimilarity: null,
+      responseSnippet: '',
+      failReasons: [`expectation unreadable: ${testCase.expectationProblem}`],
+      durationMs: 0,
+    };
+  }
+
   try {
     const invoked = await invokeAgent(testCase.agentId, testCase.prompt);
     answer = invoked.answer;
@@ -383,7 +438,13 @@ export async function executeRun(
       if (!testCase) return;
       try {
         const outcome = await runCase(testCase, judgeModelId);
-        if (outcome.failReasons.some((r) => r.startsWith('invocation failed'))) errors++;
+        // Both prefixes mean "this case did not produce a verdict about the
+        // agent" — the agent would not answer, or the expectation could not be
+        // read. Counting only the first made a suite full of corrupt rows
+        // report zero errors.
+        if (outcome.failReasons.some(
+          (r) => r.startsWith('invocation failed') || r.startsWith('expectation unreadable'),
+        )) errors++;
         await recordOutcome(runId, outcome);
       } catch (err) {
         // Recording failed (not the case itself) — log and keep going so one

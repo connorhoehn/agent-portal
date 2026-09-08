@@ -18,10 +18,21 @@ import {
   classifyWrite,
   objectsWith,
   str,
+  type Intercepted,
+  type MockProvider,
 } from '../write-policy.js';
-import { PERSONAS } from '../http.js';
+import { PERSONAS, firstAtPath } from '../http.js';
 
 const writeRoutes = enumerateRoutes().routes.filter((r) => r.method !== 'GET').map(routeKey);
+
+/**
+ * A server running every mock provider — what `dev:mock` is, and the world the
+ * committed snapshot was captured against. Passed explicitly wherever a test
+ * is asking "would this replay on a mock server?", because `classifyWrite`
+ * with no second argument deliberately means "nothing is known to be
+ * intercepted" and refuses every spec that leans on one.
+ */
+const FULLY_MOCKED: Intercepted = new Set<MockProvider>(['aurora', 'agentcore', 'guardrails', 'cloudwatch']);
 
 describe('write policy — the decision', () => {
   it('classifies every write route on the live surface, with no gap', () => {
@@ -32,19 +43,69 @@ describe('write policy — the decision', () => {
     expect(unclassifiable).toEqual([]);
     // Sanity: the surface is big and the split is real, not "refuse everything".
     expect(writeRoutes.length).toBeGreaterThan(150);
-    expect(writeRoutes.filter((r) => classifyWrite(r).kind === 'replay').length).toBeGreaterThan(50);
+    expect(writeRoutes.filter((r) => classifyWrite(r, FULLY_MOCKED).kind === 'replay').length)
+      .toBeGreaterThan(50);
   });
 
-  it('refuses every DELETE — reset restores fixtures, not module-level arrays', () => {
+  it('refuses every DELETE but the ones proved restorable, which still need an entry', () => {
     const deletes = writeRoutes.filter((r) => r.startsWith('DELETE '));
     expect(deletes.length).toBeGreaterThan(0);
+
+    // The carve-out is deliberately tiny and deliberately named: a delete is
+    // only spared when someone has read the handler and shown that reset puts
+    // it back (RESTORABLE_DELETES in write-policy.ts). Anything not on that
+    // list is refused whether or not it happens to be restorable, because the
+    // list means "somebody proved this", not "everything else destroys".
+    const spared = new Set(WRITE_SPECS.filter((s) => s.route.startsWith('DELETE ')).map((s) => s.route));
+    expect([...spared]).toEqual(['DELETE /api/local-compute/nodes/:id']);
+
     for (const r of deletes) {
-      const v = classifyWrite(r);
+      const v = classifyWrite(r, FULLY_MOCKED);
+      if (spared.has(r)) {
+        expect(v.kind).toBe('replay');
+        continue;
+      }
       expect(v.kind).toBe('refused');
       if (v.kind === 'refused') expect(v.rule).toBe('destructive');
     }
-    // …and no entry can smuggle one back in, because refusals are checked first.
-    expect(WRITE_SPECS.some((s) => s.route.startsWith('DELETE '))).toBe(false);
+  });
+
+  it('refuses an interception-dependent write until the SERVER says it is intercepted', () => {
+    const leaning = WRITE_SPECS.filter((s) => (s.intercepts ?? []).length > 0);
+    // If this ever empties, the mechanism has quietly stopped being used.
+    expect(leaning.length).toBeGreaterThan(10);
+
+    for (const spec of leaning) {
+      // No report at all — the default, and the one this file cares about
+      // most: nothing here may decide on its own that a provider is mocked.
+      const blind = classifyWrite(spec.route);
+      expect(blind.kind).toBe('refused');
+      if (blind.kind === 'refused') expect(blind.rule).toBe('not-intercepted');
+
+      // A server running everything EXCEPT what this spec needs.
+      const without: Intercepted = new Set(
+        [...FULLY_MOCKED].filter((p) => !(spec.intercepts ?? []).includes(p)),
+      );
+      expect(classifyWrite(spec.route, without).kind).toBe('refused');
+
+      // And the mock server it was written for.
+      expect(classifyWrite(spec.route, FULLY_MOCKED).kind).toBe('replay');
+    }
+  });
+
+  it('a route that spends in every configuration is refused even by a fully mocked server', () => {
+    // The interception carve-out must not have leaked into the family that has
+    // no mock branch at all. web-qa builds its own BedrockRuntimeClient in the
+    // handler; crawl fetches real pages.
+    for (const r of [
+      'POST /api/capabilities/browser/web-qa',
+      'POST /api/capabilities/browser/crawl',
+      'POST /api/devbox/:sessionId/task',
+    ]) {
+      const v = classifyWrite(r, FULLY_MOCKED);
+      expect(v.kind).toBe('refused');
+      if (v.kind === 'refused') expect(v.rule).toBe('spends');
+    }
   });
 
   it('never replays a route that mutates the capture’s own session', () => {
@@ -90,7 +151,9 @@ describe('write policy — the decision', () => {
   it('no allowlist entry is shadowed by a refusal rule', () => {
     // A shadowed spec is dead code that reads like a decision — the worst kind
     // of stale entry, because it says a route is replayed when it is not.
-    const shadowed = WRITE_SPECS.filter((s) => classifyWrite(s.route).kind !== 'replay').map((s) => s.route);
+    const shadowed = WRITE_SPECS
+      .filter((s) => classifyWrite(s.route, FULLY_MOCKED).kind !== 'replay')
+      .map((s) => s.route);
     expect(shadowed).toEqual([]);
   });
 
@@ -108,6 +171,29 @@ describe('write policy — the body helpers', () => {
     expect(objectsWith(body, 'id', 'kind')).toHaveLength(1);
     expect(objectsWith(body, 'nope')).toEqual([]);
     expect(objectsWith(null, 'key')).toEqual([]);
+  });
+
+  it('firstAtPath resolves an exact key path and never falls back to another field', () => {
+    // The shape that made this necessary: a fuzzy id search over the guardrail
+    // returns the GUARDRAIL's `name`, and `PATCH /guardrail/topics/:name` then
+    // 404s against a topic that does not exist.
+    const guardrail = {
+      name: 'orgiq-guardrail',
+      deniedTopics: [{ name: 'Competitor Analysis' }, { name: 'Legal Advice' }],
+    };
+    expect(firstAtPath(guardrail, 'deniedTopics[].name')).toBe('Competitor Analysis');
+    expect(firstAtPath(guardrail, 'piiFilters[].type')).toBeNull();
+
+    // `[]` skips a row that yields nothing rather than giving up on it — the
+    // offline node whose sessions are hidden sits in front of the one that is
+    // actually announcing.
+    const nodes = {
+      nodes: [
+        { id: 'node-a', presence: { sessions: [] } },
+        { id: 'node-b', presence: { sessions: [{ sessionId: 'local-session-1' }] } },
+      ],
+    };
+    expect(firstAtPath(nodes, 'nodes[].presence.sessions[].sessionId')).toBe('local-session-1');
   });
 
   it('str accepts only a non-empty string', () => {
@@ -164,11 +250,22 @@ describe('write snapshot', () => {
   });
 
   it('a route this policy refuses was not replayed anyway', () => {
+    // Judged against the world the capture RECORDED, not against a world this
+    // test assumed: a snapshot taken on a server running fewer mock providers
+    // is a different snapshot, and re-judging it under `dev:mock`'s flags
+    // would report every honest `not-intercepted` refusal as a contradiction.
+    const world: Intercepted = new Set(snapshot?.intercepted ?? []);
     for (const [route, cap] of Object.entries(snapshot?.routes ?? {})) {
-      if (classifyWrite(route).kind !== 'refused') continue;
+      if (classifyWrite(route, world).kind !== 'refused') continue;
       expect(cap.shape).toBeUndefined();
       expect(cap.status).toBeUndefined();
     }
+  });
+
+  it('records which providers the captured server said it was intercepting', () => {
+    // Half of the decision. Without it a `not-intercepted` refusal in the
+    // snapshot cannot be told from a policy change.
+    expect(Array.isArray(snapshot?.intercepted)).toBe(true);
   });
 
   it('was taken against the same server the GET snapshot was', () => {

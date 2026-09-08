@@ -549,10 +549,18 @@ describe('GET /:id/jobs', () => {
     expect(agentSend.mock.calls.map((c) => (c[0] as { input: { maxResults: number } }).input.maxResults))
       .toEqual([20, 100]);
 
+    // A KB that has genuinely never synced answers a plain empty list…
+    const neverSynced = await request(app).get('/api/admin/kb-registry/kb-row-1/jobs');
+    expect(neverSynced.body).toEqual({ jobs: [] });
+
+    // …and a Bedrock refusal says so, because "never synced" is the opposite
+    // diagnosis and this page exists to tell them apart.
     agentSend.mockRejectedValue(new Error('AccessDeniedException'));
     const degraded = await request(app).get('/api/admin/kb-registry/kb-row-1/jobs');
     expect(degraded.status).toBe(200);
-    expect(degraded.body).toEqual({ jobs: [] });
+    expect(degraded.body).toEqual({
+      jobs: [], degraded: true, error: 'AccessDeniedException',
+    });
   });
 });
 
@@ -588,10 +596,18 @@ describe('GET /:id/docs', () => {
         .find((p) => p.name === 'lim')!.value['longValue']);
     expect(lims).toEqual([50, 500]);
 
+    // An empty knowledge base is exactly the symptom an operator opens this
+    // page to investigate, so `total: 0` must not be able to mean two things.
+    const reallyEmpty = await request(app).get('/api/admin/kb-registry/kb-row-1/docs');
+    expect(reallyEmpty.body).toEqual({ documents: [], total: 0 });
+
     m(exec).mockRejectedValue(new Error('column "kb_registry_slug" does not exist'));
     const degraded = await request(app).get('/api/admin/kb-registry/kb-row-1/docs');
     expect(degraded.status).toBe(200);
-    expect(degraded.body).toEqual({ documents: [], total: 0 });
+    expect(degraded.body).toEqual({
+      documents: [], total: 0, degraded: true,
+      error: 'column "kb_registry_slug" does not exist',
+    });
   });
 
   it('404s the documents of an unknown KB', async () => {
