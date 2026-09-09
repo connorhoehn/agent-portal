@@ -13,7 +13,32 @@ hr-admin, or are new to this role's write/admin surfaces, are listed.
 
 ## Open
 
-_(Nothing is open for hr-admin. The Prompt Studio header squeeze that was
+32. **Computer Lab: the terminal pane is a keyboard trap, and it strands the
+    user before the Broadcast instruction box.** `/admin/devbox` — the surface
+    is `ComputerLab` from `@connorhoehnslalom/ui-components/compute`
+    (`portal/src/pages/admin/DevboxPage.tsx` is 86 lines of wiring around it),
+    so the fix belongs to the library; also queued in
+    `docs/ui-components-queue.md`.
+
+    Repro (hr-admin, 1552px, `middleware dev:mock`): with an EMPTY fleet the
+    surface is clean — 35 tabbable controls, all 35 reached in a 36-press Tab
+    sweep. Provision one computer (`POST /api/devbox/boxes {"label":"kbd-probe"}`,
+    or the "+ new computer" button), which opens a pane, then sweep again:
+    40 tabbable controls and only **37** reached in 55 presses. The three never
+    reached are "⌘K Search", "▶ focused pane" and the "Broadcast instruction"
+    textarea — the last being the one control the surface exists for.
+
+    Cause, isolated rather than inferred: focus seated on
+    `textarea.xterm-helper-textarea` inside the pane never leaves it.
+    Tab, Shift+Tab, Escape, Ctrl+Tab and Alt+Tab were each pressed with focus
+    in that textarea and `document.activeElement` was identical before and
+    after every one of them. A terminal consuming Tab is correct — that is
+    shell completion — but there is no escape hatch, so a keyboard user who
+    tabs into a pane cannot reach the broadcast bar, the pane switcher, or
+    back out to the rail. The mouse is the only exit. WCAG 2.1.2 (No Keyboard
+    Trap).
+
+_(Otherwise nothing is open for hr-admin. The Prompt Studio header squeeze that was
 filed under org-leader as **#29** was re-audited and closed there on
 2026-09-06; `hr-admin/prompt-studio.md` still records the measurement in its
 `layout:` line and keeps `verdict: pass`, because the surface answers its

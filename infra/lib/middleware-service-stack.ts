@@ -43,7 +43,15 @@ export interface MiddlewareServiceStackProps extends cdk.StackProps {
   readonly auroraCredentialsSecretArn?: string;
 
   // ── WebSocket gateway URL ─────────────────────────────────────────────────
-  /** HTTP base URL for the websocket-gateway service. Defaults to empty (mock). */
+  /**
+   * HTTP base URL for the websocket-gateway service. Defaults to empty (mock).
+   *
+   * The gateway is NOT an AWS component: it is a separate service deployed on
+   * Kubernetes (Helm in-cluster, Tilt on :18080 locally) — see
+   * docs/deploy-via-operator.md. Nothing here builds or hosts it; this stack
+   * only tells the middleware where it lives. Pair it with
+   * `gatewayServiceAuthSecretArn` or the gateway rejects every signed call.
+   */
   readonly websocketGatewayUrl?: string;
 
   // ── AgentCore (optional — middleware can run with MOCK_AGENTCORE=true) ─────
@@ -65,6 +73,18 @@ export interface MiddlewareServiceStackProps extends cdk.StackProps {
   readonly cognitoClientId?: string;
   readonly cognitoDomain?: string;
   readonly cognitoClientSecretArn?: string;
+  /**
+   * ARN of an EXISTING Secrets Manager secret holding the shared HMAC secret
+   * the middleware signs gateway requests with (`GATEWAY_SERVICE_AUTH_SECRET`).
+   *
+   * Imported, never generated. The value has to equal the `orgiq-middleware`
+   * entry in the gateway's own `SERVICE_AUTH_ALLOWED_SERVICES` config, so a
+   * freshly-generated secret would be guaranteed WRONG — every signed request
+   * would fail the gateway's envelope check. The operator creates the secret
+   * with the agreed value (the same one the k8s `orgiq-service-auth` secret
+   * carries) and passes its ARN here.
+   */
+  readonly gatewayServiceAuthSecretArn?: string;
 }
 
 /**
@@ -103,6 +123,13 @@ export class MiddlewareServiceStack extends cdk.Stack {
    * agent-runtime half — see the ⚠️ note beside `HarnessRunnerSecret`.
    */
   public readonly harnessRunnerSecretArn!: string;
+  /**
+   * The devbox lab loop's credential. Its client is `agents/devbox/lab`, a
+   * script already in the devbox image that sends the header only when it has
+   * the value — so this and `DevboxStack`'s `labCallbackSecret` must be set
+   * together, or the loop authenticates against a guard that has just closed.
+   */
+  public readonly labCallbackSecretArn!: string;
 
   constructor(scope: Construct, id: string, props: MiddlewareServiceStackProps) {
     super(scope, id, props);
@@ -246,6 +273,36 @@ export class MiddlewareServiceStack extends cdk.Stack {
     });
     assessmentRunCompleteSecret.grantRead(taskRole);
 
+    // Secrets Manager — the devbox lab loop's machine identity
+    // (LAB_CALLBACK_SECRET / x-lab-auth, lib/service-auth.ts).
+    //
+    // WHY IT WAS MISSING. `service-auth.ts` has always declared this spec and
+    // `routes/lab.ts` has always guarded on it, but nothing minted it — so of
+    // the five specs the module defines, this was the one whose guard could
+    // never close in a deployed environment. `requireServiceAuth` is OPEN when
+    // its env var is unset, which is the correct default for a laptop and the
+    // wrong one for a deployed middleware: `POST /api/lab/consults` and the
+    // reads beside it were reachable by anyone who could route to the service.
+    //
+    // SAFE TO MINT, unlike the three agent-callback secrets above. Their agent
+    // halves had to ship first because a pre-`callbacks.py` image sends no
+    // header whatever env it is handed. The lab client is `agents/devbox/lab`,
+    // a shell script already in the image, and it has always sent the header
+    // conditionally:
+    //     [ -n "${LAB_CALLBACK_SECRET:-}" ] && auth=(-H "x-lab-auth: ...")
+    // Unset it sends byte-for-byte the old request; set it sends the header. So
+    // the two halves are independent here too — but the ORDER still matters,
+    // for a different reason: the devbox runtime must receive this value (and
+    // LAB_API_BASE) or the lab loop starts failing auth the moment this stack
+    // deploys. See DevboxStack's labApiBase/labCallbackSecret props, and note
+    // the loop is inert until LAB_API_BASE is set at all.
+    const labCallbackSecret = new secretsmanager.Secret(this, 'LabCallbackSecret', {
+      secretName: `${prefix}-lab-callback-secret`,
+      description: 'Shared secret for x-lab-auth on the devbox lab loop — POST /api/lab/consults, GET /api/lab/consults/:id, GET /api/lab/experiences (requireServiceAuth)',
+      generateSecretString: { excludePunctuation: true, passwordLength: 40 },
+    });
+    labCallbackSecret.grantRead(taskRole);
+
     // Secrets Manager — the harness runner's own machine identity
     // (HARNESS_RUNNER_SECRET / x-harness-runner-auth, lib/service-auth.ts).
     //
@@ -283,6 +340,7 @@ export class MiddlewareServiceStack extends cdk.Stack {
     this.harnessTraceSecretArn = harnessTraceSecret.secretArn;
     this.assessmentRunCompleteSecretArn = assessmentRunCompleteSecret.secretArn;
     this.harnessRunnerSecretArn = harnessRunnerSecret.secretArn;
+    this.labCallbackSecretArn = labCallbackSecret.secretArn;
 
     // Exported so a future stack (or an operator script) can look these up
     // by stable name instead of hunting through the console. NOTE: these
@@ -310,6 +368,16 @@ export class MiddlewareServiceStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'HarnessRunnerSecretArnOutput', {
       value: harnessRunnerSecret.secretArn,
       exportName: `${prefix}-harness-runner-secret-arn`,
+    });
+
+    // The operator copies this value onto the devbox runtime by hand, the same
+    // way the three agent-callback secrets are copied onto the agent runtimes —
+    // AgentCore's EnvironmentVariables is a bare string map with no
+    // Secrets-Manager reference, and DevboxStack is instantiated before this
+    // stack in app.ts with no dependency edge.
+    new cdk.CfnOutput(this, 'LabCallbackSecretArnOutput', {
+      value: labCallbackSecret.secretArn,
+      exportName: `${prefix}-lab-callback-secret-arn`,
     });
 
     // DynamoDB — scores + sessions tables
@@ -576,7 +644,18 @@ export class MiddlewareServiceStack extends cdk.Stack {
       // valid header and otherwise runs the Cedar gate unchanged, so setting
       // this only ADDS a way in — see the ⚠️ beside HarnessRunnerSecret.
       HARNESS_RUNNER_SECRET: ecs.Secret.fromSecretsManager(harnessRunnerSecret),
+      // Closes the fifth service-auth guard. The devbox `lab` script sends
+      // x-lab-auth only when it has the value, so the devbox runtime needs it
+      // too — DevboxStack takes it as `labCallbackSecret`.
+      LAB_CALLBACK_SECRET: ecs.Secret.fromSecretsManager(labCallbackSecret),
     };
+    if (props.gatewayServiceAuthSecretArn) {
+      const gatewaySecretRef = secretsmanager.Secret.fromSecretCompleteArn(
+        this, 'GatewayServiceAuthSecretRef', props.gatewayServiceAuthSecretArn,
+      );
+      gatewaySecretRef.grantRead(taskRole);
+      containerSecrets['GATEWAY_SERVICE_AUTH_SECRET'] = ecs.Secret.fromSecretsManager(gatewaySecretRef);
+    }
     if (props.cognitoClientSecretArn) {
       const cognitoSecretRef = secretsmanager.Secret.fromSecretCompleteArn(
         this, 'CognitoClientSecretRef', props.cognitoClientSecretArn,

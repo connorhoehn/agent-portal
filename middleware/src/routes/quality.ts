@@ -12,6 +12,7 @@ import { requireAction } from '../lib/authz.js';
 import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import { mockQualityScores } from '../mock/observability-queries.js';
+import { clock } from '../mock/core/clock.js';
 import { mockSetHumanLabel } from '../mock/observability.js';
 
 /**
@@ -50,7 +51,18 @@ qualityRouter.get('/scores', asyncHandler(async (req, res) => {
   // The same cutoff the SQL expresses as an INTERVAL, in ms, for the offline
   // branch. Computed from the SAME parse below so the two windows cannot
   // disagree about what `since=60m` means.
-  let sinceMs = Date.now() - 24 * 3_600_000;
+  //
+  // "Now" is the MOCK clock's now when the offline branch is the one that will
+  // answer, and real time otherwise. Against Aurora the SQL says `now()` and
+  // this value is unused; against the fixtures the rows are stamped from
+  // mock/core/clock.ts, so measuring their age with `Date.now()` compares two
+  // different clocks. That is not hypothetical: a test freezing the mock clock
+  // at a fixed instant kept passing only while real time stayed within 24h of
+  // it, then began returning zero rows for every window once wall-clock passed
+  // the hard-coded date — a suite with a 24-hour shelf life. `clock.now()`
+  // returns real time when nothing is frozen, so this is a no-op in production.
+  const nowMs = (): number => (config.mock.aurora ? clock.now().getTime() : Date.now());
+  let sinceMs = nowMs() - 24 * 3_600_000;
 
   if (sinceRaw) {
     const minutesMatch = sinceRaw.match(/^(\d+)m$/);
@@ -58,7 +70,7 @@ qualityRouter.get('/scores', asyncHandler(async (req, res) => {
       const mins = parseInt(minutesMatch[1]!, 10);
       params.push({ name: 'mins', value: { longValue: mins } });
       sinceClause = `ts > now() - (INTERVAL '1 minute' * :mins)`;
-      sinceMs = Date.now() - mins * 60_000;
+      sinceMs = nowMs() - mins * 60_000;
     } else {
       // ISO timestamp
       const d = new Date(sinceRaw);

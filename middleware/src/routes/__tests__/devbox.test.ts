@@ -16,7 +16,8 @@ import express from 'express';
 import request from '../../test-support/http.js';
 import { devboxRouter, _internal, validateCommand, buildContainerCommand, validateCwd, CWD_MARKER } from '../devbox.js';
 import { type Session } from '../../lib/session.js';
-import { registerBox, _resetFleet } from '../../lib/devbox-fleet.js';
+import { registerBox, _resetFleet, getBoxBySession } from '../../lib/devbox-fleet.js';
+import { decideReaping, MAX_LIFETIME_MS } from '../../lib/devbox-reaper.js';
 
 const SESSION = 'devbox-0123456789abcdef0123456789abcdef';
 const ARN = 'arn:aws:bedrock-agentcore:us-east-1:111122223333:runtime/orgiq_devbox-abc123';
@@ -272,6 +273,32 @@ describe('DELETE /api/devbox/:sessionId', () => {
     expect(input.agentRuntimeArn).toBe(ARN);
     expect(input.runtimeSessionId).toBe(SESSION);
   });
+
+  // Both of these reached the operator as a bare "Internal server error"
+  // before, about a session that had actually stopped.
+
+  it('treats an already-terminated session as stopped, not as an error', async () => {
+    mockDataClient(async () => {
+      const err = new Error('Session not found or has been terminated');
+      err.name = 'ResourceNotFoundException';
+      throw err;
+    });
+    const res = await request(buildApp()).delete(`/api/devbox/${SESSION}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ stopped: true, alreadyStopped: true });
+  });
+
+  it('reports an unreadable stop response as unconfirmed, not as success', async () => {
+    // The service answered with an HTML error page, so the SDK threw while
+    // deserializing. The stop may or may not have taken — say so.
+    mockDataClient(async () => {
+      throw new SyntaxError('Unexpected token \'<\', "<html>" is not valid JSON');
+    });
+    const res = await request(buildApp()).delete(`/api/devbox/${SESSION}`);
+    expect(res.status).toBe(502);
+    expect(res.body.stopped).toBeUndefined();
+    expect(String(res.body.error)).toMatch(/did not confirm/);
+  });
 });
 
 
@@ -411,6 +438,27 @@ describe('per-computer scoping', () => {
       .send({ command: 'rm -rf /' });
     // Refused on the allowlist, not on ownership — it got past the access gate.
     expect(res.status).toBe(400);
+  });
+
+  it('adopting an unregistered session REGISTERS it, so the reaper can stop it', async () => {
+    // The cost leak this closes: the fleet registry is in memory, so a
+    // middleware restart drops every box while the AgentCore sessions keep
+    // running. The reaper only iterates listBoxes(), and there is no AgentCore
+    // API that enumerates live runtime sessions to reconcile against — so a
+    // session the registry has forgotten was outside both the idle timeout and
+    // the max-lifetime ceiling for good. Using it had to also reclaim it.
+    const LOST = 'devbox-8888888888888888888888888888';
+    expect(getBoxBySession(LOST)).toBeNull();
+
+    await request(buildApp({ role: 'hr-admin' }))
+      .post(`/api/devbox/${LOST}/command`)
+      .send({ command: 'ls' });
+
+    const adopted = getBoxBySession(LOST);
+    expect(adopted).not.toBeNull();
+    // Back under BOTH timers — that is the whole point of adopting it.
+    const [decision] = decideReaping([adopted!], Date.now() + MAX_LIFETIME_MS + 1);
+    expect(decision?.reason).toBe('max-lifetime');
   });
 
   it('refuses to charge a new computer to an initiative the SME is not on', async () => {

@@ -24,6 +24,34 @@ export interface DevboxStackProps extends cdk.StackProps {
   readonly auroraClusterArn?: string;
   readonly auroraCredentialsSecretArn?: string;
   readonly knowledgeBaseId?: string;
+  /**
+   * Origin the in-container `lab` CLI calls back to, e.g.
+   * `https://orgiq.example.com`. Until this is set the lab loop is INERT: the
+   * script soft-exits at session start with "LAB_API_BASE is not set — the lab
+   * loop is not wired in this environment", which is what every deployed
+   * session has printed to date, because nothing ever set it.
+   *
+   * Deliberately a prop rather than a hard-coded value: the middleware has to
+   * be reachable from inside the microVM, which means a real origin for the
+   * ECS service — and OrgIQ-MiddlewareService leaves its ALB non-public by
+   * default (the account's custodian revokes 0.0.0.0/0 ingress), so there is
+   * no origin to bake in until an operator has one.
+   */
+  readonly labApiBase?: string;
+  /**
+   * Value of `orgiq-lab-callback-secret`, minted by OrgIQ-MiddlewareService.
+   * The `lab` script sends it as `x-lab-auth` when set and omits the header
+   * when unset, so this is safe to leave off — but once the middleware stack
+   * has deployed, its lab routes REQUIRE the header, and a devbox without this
+   * value gets 401s instead of consults.
+   *
+   * Passed as a plain string because `AWS::BedrockAgentCore::Runtime` takes a
+   * bare string map for EnvironmentVariables — there is no ECS-style
+   * `Secret.fromSecretsManager` equivalent — so the operator reads the value
+   * out of Secrets Manager and hands it in via `--context`, exactly as the
+   * three agent-callback secrets are handed to OrgIQ-AgentCoreRuntime.
+   */
+  readonly labCallbackSecret?: string;
 }
 
 /**
@@ -220,6 +248,14 @@ export class DevboxStack extends cdk.Stack {
         OTEL_SERVICE_NAME: `${prefix}-devbox`,
         OTEL_PYTHON_LOG_CORRELATION: 'true',
         OTEL_RESOURCE_ATTRIBUTES: `deployment.environment=dev,service.namespace=${prefix},agent.id=${prefix}-devbox`,
+        // The lab loop. Both are omitted rather than set empty when absent: the
+        // `lab` script branches on `-n "${LAB_API_BASE:-}"` and on
+        // `-n "${LAB_CALLBACK_SECRET:-}"`, so an empty string and an unset var
+        // behave the same for it — but an empty value in the runtime's env map
+        // reads, to anyone inspecting it, like a configured-but-broken loop
+        // rather than one that was never turned on.
+        ...(props.labApiBase ? { LAB_API_BASE: props.labApiBase } : {}),
+        ...(props.labCallbackSecret ? { LAB_CALLBACK_SECRET: props.labCallbackSecret } : {}),
       },
     });
 

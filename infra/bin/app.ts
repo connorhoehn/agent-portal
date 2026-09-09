@@ -330,6 +330,22 @@ new DevboxStack(app, 'OrgIQ-Devbox', {
     auroraCredentialsSecretArn: cdk.Fn.importValue(`${prefix}-aurora-secret-arn`),
     knowledgeBaseId: cdk.Fn.importValue(`${prefix}-knowledge-base-id`),
   }),
+  // The lab loop, off unless an operator turns it on. Same hand-copied shape as
+  // the three agent-callback secrets above, and for the same reason: an
+  // AgentCore runtime's EnvironmentVariables is a bare string map, so neither
+  // value can be a Secrets-Manager reference resolved at deploy time.
+  //
+  //   aws secretsmanager get-secret-value --secret-id orgiq-lab-callback-secret \
+  //     --query SecretString --output text
+  //   cdk deploy OrgIQ-Devbox --context deployDevbox=true \
+  //     --context labApiBase=https://<middleware-origin> \
+  //     --context labCallbackSecret=<value>
+  //
+  // Without labApiBase the in-container `lab` CLI soft-exits at every session
+  // start and the loop does nothing — the state every deployed devbox has been
+  // in so far.
+  labApiBase: app.node.tryGetContext('labApiBase') as string | undefined,
+  labCallbackSecret: app.node.tryGetContext('labCallbackSecret') as string | undefined,
   description: 'OrgIQ Devbox: Claude Code hosted on AgentCore Runtime with persistent session workspace',
 });
 
@@ -350,12 +366,24 @@ new DevboxStack(app, 'OrgIQ-Devbox', {
 // -------------------------------------------------------------------
 const middlewareCertArn = app.node.tryGetContext('certificateArn') as string | undefined;
 const websocketGatewayUrl = app.node.tryGetContext('websocketGatewayUrl') as string | undefined;
+// ARN of an EXISTING secret holding the shared HMAC value the gateway knows the
+// `orgiq-middleware` client by. Imported rather than generated on purpose — the
+// value must equal the gateway's own SERVICE_AUTH_ALLOWED_SERVICES entry (the
+// same value the k8s `orgiq-service-auth` secret carries), so a generated one
+// would fail every envelope check. Without it the URL alone is not enough: the
+// middleware signs nothing and the gateway refuses the call.
+//   cdk deploy OrgIQ-MiddlewareService \
+//     --context websocketGatewayUrl=https://ws.example.com \
+//     --context gatewayServiceAuthSecretArn=arn:aws:secretsmanager:...
+const gatewayServiceAuthSecretArn =
+  app.node.tryGetContext('gatewayServiceAuthSecretArn') as string | undefined;
 
 const middlewareService = new MiddlewareServiceStack(app, 'OrgIQ-MiddlewareService', {
   env,
   prefix,
   certificateArn: middlewareCertArn,
   websocketGatewayUrl,
+  gatewayServiceAuthSecretArn,
 
   // Foundation DynamoDB table names + ARNs
   scoresTableName: cdk.Fn.importValue(`${prefix}-scores-table-name`),

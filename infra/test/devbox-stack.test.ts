@@ -101,3 +101,43 @@ describe('org data access is opt-in', () => {
     }
   });
 });
+
+// ─── The lab loop ────────────────────────────────────────────────────────────
+//
+// `agents/devbox/lab` calls back into the middleware, and until this wiring
+// existed nothing set LAB_API_BASE — so every deployed session printed
+// "LAB_API_BASE is not set — the lab loop is not wired in this environment"
+// and the loop did nothing at all. Observed on the deployed runtime 2026-09-09.
+
+describe('lab loop wiring', () => {
+  const envOf = (t: Template) =>
+    Object.values<any>(t.findResources('AWS::BedrockAgentCore::Runtime'))[0]
+      .Properties.EnvironmentVariables as Record<string, string>;
+
+  test('neither var is present when the operator has not supplied them', () => {
+    // Absent, not empty. The `lab` script branches on `-n "${VAR:-}"`, so an
+    // empty string behaves identically for it — but in the runtime's env map an
+    // empty value reads as a configured-but-broken loop rather than one nobody
+    // turned on.
+    const env = envOf(phaseTwo);
+    assert.equal('LAB_API_BASE' in env, false);
+    assert.equal('LAB_CALLBACK_SECRET' in env, false);
+  });
+
+  test('both are set through when supplied, so the loop can authenticate', () => {
+    const env = envOf(Template.fromStack(devboxStack(
+      { deployDevbox: 'true' },
+      { labApiBase: 'https://orgiq.example.com', labCallbackSecret: 'lab-secret-value' },
+    )));
+    assert.equal(env['LAB_API_BASE'], 'https://orgiq.example.com');
+    assert.equal(env['LAB_CALLBACK_SECRET'], 'lab-secret-value');
+  });
+
+  test('an origin without a secret is still wired — the guard is open until the middleware mints one', () => {
+    const env = envOf(Template.fromStack(devboxStack(
+      { deployDevbox: 'true' }, { labApiBase: 'https://orgiq.example.com' },
+    )));
+    assert.equal(env['LAB_API_BASE'], 'https://orgiq.example.com');
+    assert.equal('LAB_CALLBACK_SECRET' in env, false);
+  });
+});

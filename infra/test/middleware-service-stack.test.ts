@@ -144,15 +144,22 @@ describe('two-phase deploy: the repo exists before anything tries to pull from i
 });
 
 describe('machine-callback secrets are injected, never baked into the task definition', () => {
-  // These three flip requireServiceAuth / requireTraceAuth /
-  // requireRunCompleteAuth from open to required the moment this stack
-  // deploys. They must arrive as ECS secrets (pulled at task start by the
-  // execution role), not as plaintext env in the task definition — a task
-  // definition is readable by anyone with ecs:DescribeTaskDefinition.
+  // These flip requireServiceAuth / requireTraceAuth / requireRunCompleteAuth
+  // and the lab guard from open to required the moment this stack deploys.
+  // They must arrive as ECS secrets (pulled at task start by the execution
+  // role), not as plaintext env in the task definition — a task definition is
+  // readable by anyone with ecs:DescribeTaskDefinition.
+  //
+  // LAB_CALLBACK_SECRET was the late addition: `lib/service-auth.ts` had always
+  // declared the spec and `routes/lab.ts` had always guarded on it, but nothing
+  // minted it — so of the five specs the module defines, it was the one whose
+  // guard could never close in a deployed environment, leaving the lab consult
+  // routes reachable by anything that could route to the service.
   const names = [
     'APPROVALS_REQUEST_SECRET',
     'HARNESS_TRACE_SECRET',
     'ASSESSMENT_RUN_COMPLETE_SECRET',
+    'LAB_CALLBACK_SECRET',
   ];
   for (const name of names) {
     test(`${name} is an ECS secret and absent from plaintext Environment`, () => {
@@ -169,6 +176,7 @@ describe('machine-callback secrets are injected, never baked into the task defin
       'orgiq-approvals-request-secret',
       'orgiq-harness-trace-secret',
       'orgiq-assessment-run-complete-secret',
+      'orgiq-lab-callback-secret',
     ]) {
       closedTemplate.hasResourceProperties('AWS::SecretsManager::Secret', {
         Name: secretName,
@@ -263,5 +271,58 @@ describe('IAM scoping that is easy to widen by accident', () => {
       );
       assert.deepEqual(s.Condition?.StringEquals?.['iam:PassedToService'], 'bedrock.amazonaws.com');
     }
+  });
+});
+
+// ─── Realtime gateway wiring ─────────────────────────────────────────────────
+//
+// The websocket-gateway is NOT an AWS component — it is a separate service on
+// Kubernetes (docs/deploy-via-operator.md). This stack's only job is telling
+// the middleware where it is and how to sign for it. The URL half already
+// existed; the signing half did not, so a middleware on ECS could be pointed at
+// the gateway and still have every call refused.
+
+describe('websocket-gateway wiring', () => {
+  const wired = Template.fromStack(middlewareServiceStack(
+    { deployMiddlewareService: 'true' },
+    {
+      websocketGatewayUrl: 'http://gateway.platform.svc.cluster.local',
+      gatewayServiceAuthSecretArn:
+        'arn:aws:secretsmanager:us-east-1:111111111111:secret:orgiq-service-auth-AbCdEf',
+    },
+  ));
+
+  test('the gateway origin is plaintext env — it is a location, not a credential', () => {
+    const env = (containerDefinition(wired).Environment ?? []) as any[];
+    const found = env.find((e) => e.Name === 'WEBSOCKET_GATEWAY_URL');
+    assert.equal(found?.Value, 'http://gateway.platform.svc.cluster.local');
+  });
+
+  test('the shared HMAC secret arrives as an ECS secret, never plaintext', () => {
+    const container = containerDefinition(wired);
+    const secretNames = ((container.Secrets ?? []) as any[]).map((s) => s.Name);
+    const envNames = ((container.Environment ?? []) as any[]).map((e) => e.Name);
+    assert.ok(secretNames.includes('GATEWAY_SERVICE_AUTH_SECRET'));
+    assert.ok(!envNames.includes('GATEWAY_SERVICE_AUTH_SECRET'));
+  });
+
+  test('the secret is IMPORTED, not generated — a fresh value could never match the gateway', () => {
+    // Every generated secret in this stack is one this stack owns. The gateway's
+    // shared secret is owned by the gateway, so it must appear as a reference
+    // and never as an AWS::SecretsManager::Secret resource of ours.
+    const generated = Object.values<any>(wired.findResources('AWS::SecretsManager::Secret'))
+      .map((r) => r.Properties?.Name)
+      .filter(Boolean);
+    assert.ok(!generated.some((n: string) => /service-auth/.test(n)),
+      'the gateway HMAC secret must be imported by ARN, not minted here');
+  });
+
+  test('unset leaves the proxy disabled rather than half-configured', () => {
+    const bare = Template.fromStack(middlewareServiceStack({ deployMiddlewareService: 'true' }));
+    const container = containerDefinition(bare);
+    const envNames = ((container.Environment ?? []) as any[]).map((e) => e.Name);
+    const secretNames = ((container.Secrets ?? []) as any[]).map((s) => s.Name);
+    assert.ok(!envNames.includes('WEBSOCKET_GATEWAY_URL'));
+    assert.ok(!secretNames.includes('GATEWAY_SERVICE_AUTH_SECRET'));
   });
 });
