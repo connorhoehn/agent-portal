@@ -1,5 +1,5 @@
 import {
-  Button, Card, Chip, CollapsibleSection, Inline, MetaLine, SectionLabel, Stack,
+  Button, Card, Chip, CollapsibleSection, EntityCell, Inline, MetaLine, SectionLabel, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { PersonDetail, formatRelativeTime } from './types';
 import { formatScore } from './scoresFormat';
@@ -60,7 +60,7 @@ export function PersonDetailCard({ detail, compositeScore, influenceScore, deptC
     <Card padding="md" className="mt-4">
       <Inline align="start" justify="between" className="mb-2">
         <Stack gap="none">
-          <SectionLabel as="h2" className="text-base">{detail.name}</SectionLabel>
+          <EntityCell label={detail.name} labelClassName="text-base" />
           <MetaLine size="sm" tone="secondary" items={[detail.title]} />
           {/* Department colour is data, not design: it comes from the graph's
               own per-department palette, so it stays a style rather than
@@ -138,11 +138,11 @@ export function PersonDetailCard({ detail, compositeScore, influenceScore, deptC
         <Stack gap="xs" className="mt-3 pt-3 border-t border-border">
           <Inline justify="between" align="center">
             <MetaLine size="sm" tone="secondary" items={['Composite']} />
-            <SectionLabel>{formatScore(compositeScore)}</SectionLabel>
+            <EntityCell label={String(formatScore(compositeScore))} />
           </Inline>
           <Inline justify="between" align="center">
             <MetaLine size="sm" tone="secondary" items={['Influence']} />
-            <SectionLabel>{formatScore(influenceScore)}</SectionLabel>
+            <EntityCell label={String(formatScore(influenceScore))} />
           </Inline>
         </Stack>
       )}

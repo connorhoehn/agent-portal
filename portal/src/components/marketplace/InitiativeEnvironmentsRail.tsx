@@ -28,7 +28,7 @@ import { useEffect, useState } from 'react';
 import { readDegraded } from '../../lib/degraded';
 import { Link } from 'react-router';
 import {
-  Button, Card, Chip, CodeBlock, Inline, InlineAlert, MetaLine, SectionLabel, Stack,
+  Button, Card, Chip, CodeBlock, EntityCell, Inline, InlineAlert, MetaLine, SectionLabel, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 
 interface Environment {
@@ -143,7 +143,7 @@ function EnvironmentRow({ env }: { env: Environment }) {
           <Chip tone={STATUS_TONE[env.status] ?? 'neutral'} size="xs" dot={env.status === 'provisioning' ? 'pulse' : 'static'}>
             {env.status}
           </Chip>
-          <SectionLabel>{env.name}</SectionLabel>
+          <EntityCell label={env.name} />
           <Chip tone="neutral" size="xs" mono>{env.kind}</Chip>
           {env.clusterName && (
             <MetaLine

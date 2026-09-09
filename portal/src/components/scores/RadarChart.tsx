@@ -1,4 +1,6 @@
-import { Card, EmptyState, MetaLine, SectionLabel, Stack } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Card, EmptyState, EntityCell, MetaLine, Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 import {
   Radar,
   RadarChart as RechartsRadarChart,
@@ -72,7 +74,7 @@ function CustomTooltip({
   return (
     <Card padding="sm">
       <Stack gap="none">
-        <SectionLabel as="div">{entry.subject}</SectionLabel>
+        <EntityCell label={entry.subject} />
         <MetaLine size="sm" tone="secondary" items={[`${Math.round(entry.pct)}% of peer max`]} />
         <MetaLine size="xs" items={[`raw: ${entry.raw}`]} />
       </Stack>

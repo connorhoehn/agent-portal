@@ -1,5 +1,5 @@
 import {
-  Card, Chip, Inline, MetaLine, SectionLabel, Stack, StatusDot,
+  Card, Chip, EntityCell, Inline, MetaLine, SectionLabel, Stack, StatusDot,
 } from '@connorhoehnslalom/ui-components/shared';
 import { DEPT_COLORS } from './types';
 import { HistogramBar } from './HistogramBar';
@@ -50,7 +50,7 @@ export function CohortCard({ cohort }: CohortCardProps) {
       <Stack gap="none" className="flex-1 py-4 px-[18px] min-w-0">
         <Inline align="start" justify="between" gap="md" className="mb-3">
           <Stack gap="none" className="min-w-0">
-            <SectionLabel as="div" className="text-[15px] truncate">{cohort.department}</SectionLabel>
+            <EntityCell label={cohort.department} labelClassName="text-[15px]" className="min-w-0" />
             <MetaLine
               size="sm"
               tone="secondary"

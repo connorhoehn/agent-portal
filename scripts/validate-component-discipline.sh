@@ -142,7 +142,7 @@ AREAS=(
   "portal/src/components/scores:0:0:4"
   "portal/src/components/marketplace:49:3:0"
   "portal/src/components/ingest:70:11:119"
-  "portal/src/components/canary:53:17:90"
+  "portal/src/components/canary:53:16:64"
   "portal/src/components/org-graph:45:7:8"
   "portal/src/components/shell:27:6:40"
   "portal/src/components/knowledge:0:0:0"

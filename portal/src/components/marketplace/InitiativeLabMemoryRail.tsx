@@ -8,7 +8,7 @@
 // next agent will start with.
 
 import {
-  Card, Chip, Inline, MetaLine, SectionLabel, Stack,
+  Card, Chip, EntityCell, Inline, MetaLine, SectionLabel, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 
@@ -50,7 +50,7 @@ export function LabMemoryRailCard({ initiativeId }: { initiativeId: string | und
         <Stack key={e.id} gap="none" className="px-3 py-2 border-b border-border last:border-b-0">
           <Inline gap="xs" align="center" className="min-w-0">
             <Chip tone={KIND_TONE[e.kind] ?? 'neutral'} size="xs">{e.kind}</Chip>
-            <SectionLabel className="truncate"><span title={e.title}>{e.title}</span></SectionLabel>
+            <EntityCell label={e.title} className="min-w-0" />
             {e.repo && (
               <MetaLine
                 size="xs"
