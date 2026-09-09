@@ -25,8 +25,8 @@ import { ObservabilityStack } from '../../lib/observability-stack';
 import { AgentCoreCapabilitiesStack } from '../../lib/agentcore-capabilities-stack';
 import { AgentCoreRuntimeStack } from '../../lib/agentcore-runtime-stack';
 import { AgentCoreTelemetryStack } from '../../lib/agentcore-telemetry-stack';
-import { DevboxStack } from '../../lib/devbox-stack';
-import { MiddlewareServiceStack } from '../../lib/middleware-service-stack';
+import { DevboxStack, type DevboxStackProps } from '../../lib/devbox-stack';
+import { MiddlewareServiceStack, type MiddlewareServiceStackProps } from '../../lib/middleware-service-stack';
 import { SpanProjectorStack } from '../../lib/span-projector-stack';
 
 export const PREFIX = 'orgiq';
@@ -135,7 +135,10 @@ export function telemetryStack(context: Record<string, unknown> = {}): AgentCore
   });
 }
 
-export function devboxStack(context: Record<string, unknown> = {}): DevboxStack {
+export function devboxStack(
+  context: Record<string, unknown> = {},
+  props: Partial<DevboxStackProps> = {},
+): DevboxStack {
   return withoutEcrLookup(
     () =>
       new DevboxStack(newApp(context), 'OrgIQ-Devbox', {
@@ -143,6 +146,7 @@ export function devboxStack(context: Record<string, unknown> = {}): DevboxStack 
         auroraClusterArn: CLUSTER_ARN,
         auroraCredentialsSecretArn: SECRET_ARN,
         knowledgeBaseId: 'KBTEST0001',
+        ...props,
       }),
   );
 }
@@ -216,11 +220,11 @@ export function runtimeStack(
 
 export function middlewareServiceStack(
   context: Record<string, unknown> = {},
-  props: Partial<{ certificateArn: string }> = {},
+  props: Partial<MiddlewareServiceStackProps> = {},
 ): MiddlewareServiceStack {
   return new MiddlewareServiceStack(newApp(context), 'OrgIQ-MiddlewareService', {
     prefix: PREFIX,
-    ...(props.certificateArn ? { certificateArn: props.certificateArn } : {}),
+    ...props,
     scoresTableName: `${PREFIX}-scores`,
     sessionsTableName: `${PREFIX}-sessions`,
     scoresTableArn: SCORES_TABLE_ARN,
