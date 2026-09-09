@@ -208,6 +208,11 @@ def main():
         'agent_sdlc_schema.sql',
         # The lab loop: fleet memory + human consults for computer-lab agents.
         'lab_loop_schema.sql',
+        # The fleet itself — which computers exist. Standalone (no FKs): the
+        # registry it backs is in-process memory, and a cluster missing this
+        # table degrades to exactly the old behaviour rather than failing, so
+        # it does not gate anything that loads after it.
+        'devbox_fleet_schema.sql',
         # L1 clusters + L2 artifacts distilled from lab_experiences (L0).
         # Loads right after it: distillation_cluster_members FKs
         # lab_experiences directly.

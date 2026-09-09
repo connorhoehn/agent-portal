@@ -116,6 +116,18 @@ export async function sweepOnce(deps: ReaperDeps, now = Date.now()): Promise<Rea
       markStopped(d.box.id);
       console.warn(`[devbox-reaper] stopped ${d.box.label} (${d.reason}, ${d.minutes}m)`);
     } catch (err) {
+      // "Already gone" is the goal, not a failure. AgentCore expires a session
+      // on its own (14-day idle, and every runtime version update), so a box
+      // restored from the registry can easily outlive the session it names.
+      // Treating that as an error left the reaper retrying the same dead box on
+      // every sweep, forever, and — now that boxes survive restarts — its row
+      // would never be pruned either, because pruning keys off `stopped`.
+      // Settling it converges instead.
+      if ((err as { name?: string }).name === 'ResourceNotFoundException') {
+        markStopped(d.box.id);
+        console.warn(`[devbox-reaper] ${d.box.label} was already gone — settled`);
+        continue;
+      }
       // A box that cannot be stopped is worth knowing about — it is the one
       // still costing money.
       console.warn(`[devbox-reaper] could not stop ${d.box.label}:`, (err as Error).message);

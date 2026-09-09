@@ -72,6 +72,7 @@ import { requireAction, requireTenant, readForRolesElseAction, requireSession } 
 import { HARNESS_RUNNER_SERVICE_AUTH, serviceAuthOr } from './lib/service-auth.js';
 import { initScheduler } from './lib/ingest-scheduler.js';
 import { initBotScheduler } from './lib/bot-scheduler.js';
+import { initFleetPersistence } from './providers/devbox-fleet-store.js';
 import { initCrawlTargets } from './lib/crawl-targets.js';
 import { ensureSchema, seedPoliciesIfMissing } from './lib/policy-seeds.js';
 import { startTracePoller } from './lib/cw-trace-ingest.js';
@@ -359,6 +360,22 @@ app.use(errorHandler);
 
 initScheduler();
 initCrawlTargets();
+
+// Restore the devbox fleet before anything sweeps it.
+//
+// The registry is in-memory, so without this a restart dropped every box while
+// the AgentCore sessions kept running — and `devbox-reaper` only reaps what
+// `listBoxes()` returns, which left forgotten sessions outside both the idle
+// timeout and the lifetime ceiling with nothing able to find them again (no
+// AgentCore API enumerates live runtime sessions). Hydrating here also puts
+// the boxes back on the Computers page instead of showing an empty fleet while
+// the microVMs are still up.
+//
+// Fire-and-forget, and deliberately not awaited: `routes/devbox.ts` starts the
+// reaper at import time, but its first sweep is a full interval away, so the
+// load lands first in practice — and an Aurora that is slow, mocked, or
+// missing the table must not delay the listen() below or fail the boot.
+void initFleetPersistence();
 // Cron bots + the bot-run reconciler. Aurora-backed, so it awaits nothing at
 // boot — a missing bots table logs and stands down.
 void initBotScheduler();

@@ -723,57 +723,57 @@
     {
       "method": "DELETE",
       "path": "/api/devbox/:sessionId",
-      "source": "src/routes/devbox.ts:680"
+      "source": "src/routes/devbox.ts:742"
     },
     {
       "method": "POST",
       "path": "/api/devbox/:sessionId/command",
-      "source": "src/routes/devbox.ts:549"
+      "source": "src/routes/devbox.ts:591"
     },
     {
       "method": "POST",
       "path": "/api/devbox/:sessionId/shell-url",
-      "source": "src/routes/devbox.ts:626"
+      "source": "src/routes/devbox.ts:668"
     },
     {
       "method": "POST",
       "path": "/api/devbox/:sessionId/task",
-      "source": "src/routes/devbox.ts:476"
+      "source": "src/routes/devbox.ts:518"
     },
     {
       "method": "GET",
       "path": "/api/devbox/boxes",
-      "source": "src/routes/devbox.ts:373"
+      "source": "src/routes/devbox.ts:402"
     },
     {
       "method": "POST",
       "path": "/api/devbox/boxes",
-      "source": "src/routes/devbox.ts:386"
+      "source": "src/routes/devbox.ts:415"
     },
     {
       "method": "DELETE",
       "path": "/api/devbox/boxes/:boxId",
-      "source": "src/routes/devbox.ts:427"
+      "source": "src/routes/devbox.ts:456"
     },
     {
       "method": "PATCH",
       "path": "/api/devbox/boxes/:boxId",
-      "source": "src/routes/devbox.ts:414"
+      "source": "src/routes/devbox.ts:443"
     },
     {
       "method": "GET",
       "path": "/api/devbox/boxes/:boxId/tail",
-      "source": "src/routes/devbox.ts:459"
+      "source": "src/routes/devbox.ts:495"
     },
     {
       "method": "POST",
       "path": "/api/devbox/sessions",
-      "source": "src/routes/devbox.ts:362"
+      "source": "src/routes/devbox.ts:391"
     },
     {
       "method": "GET",
       "path": "/api/devbox/status",
-      "source": "src/routes/devbox.ts:348"
+      "source": "src/routes/devbox.ts:377"
     },
     {
       "method": "GET",
@@ -1028,7 +1028,7 @@
     {
       "method": "GET",
       "path": "/api/health",
-      "source": "src/index.ts:120"
+      "source": "src/index.ts:121"
     },
     {
       "method": "GET",
@@ -1313,12 +1313,12 @@
     {
       "method": "GET",
       "path": "/api/lab/consults/:id",
-      "source": "src/routes/lab.ts:142"
+      "source": "src/routes/lab.ts:153"
     },
     {
       "method": "POST",
       "path": "/api/lab/consults/:id/answer",
-      "source": "src/routes/lab.ts:149"
+      "source": "src/routes/lab.ts:160"
     },
     {
       "method": "GET",
@@ -1833,12 +1833,12 @@
     {
       "method": "POST",
       "path": "/api/observability/quality/feedback",
-      "source": "src/routes/quality.ts:115"
+      "source": "src/routes/quality.ts:127"
     },
     {
       "method": "GET",
       "path": "/api/observability/quality/scores",
-      "source": "src/routes/quality.ts:43"
+      "source": "src/routes/quality.ts:44"
     },
     {
       "method": "GET",
@@ -2258,7 +2258,7 @@
     {
       "method": "GET",
       "path": "/health",
-      "source": "src/index.ts:119"
+      "source": "src/index.ts:120"
     }
   ],
   "unresolved": []
