@@ -8,7 +8,9 @@
 
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { Card, Chip } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Card, Chip, Inline, InlineAlert, MetaLine, SectionLabel, Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 import { readDegraded } from '../../lib/degraded';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
@@ -155,43 +157,45 @@ export function AgentsRailCard({ activity }: { activity: InitiativeAgentActivity
 
   return (
     <Card padding="none" className="overflow-hidden">
-      <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
-        <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">AGENTS</span>
-        <div className="flex-1" />
+      <Inline gap="sm" align="center" className="px-3 py-2.5 border-b border-border">
+        <SectionLabel>AGENTS</SectionLabel>
         {canManageBots && (
-          <Link to="/admin/bots" className="text-[11px] font-semibold text-primary no-underline hover:underline">
+          <Link to="/admin/bots" className="ml-auto text-[11px] font-semibold text-primary no-underline hover:underline">
             + New bot
           </Link>
         )}
-      </div>
+      </Inline>
 
       {botsError ? (
         /403|401|forbidden/i.test(botsError) ? (
           // Not a failure — a denial. /api/bots is org-leader/hr-admin (or
           // ManageDevbox) territory, and "Failed to load bots" read as a
           // broken page to every SME and member who opened an initiative.
-          <div className="px-3 py-2.5 text-[11px] text-text-tertiary leading-relaxed">
-            The bot roster is not visible to this role, so this list is unknown, not empty —
-            standing missions may well be pointed at this initiative.
-          </div>
+          <MetaLine
+            size="xs"
+            className="px-3 py-2.5 leading-relaxed"
+            items={['The bot roster is not visible to this role, so this list is unknown, not empty — standing missions may well be pointed at this initiative.']}
+          />
         ) : (
-          <div className="px-3 py-2.5 text-[11px] text-danger leading-relaxed">
+          <InlineAlert tone="warning" className="m-3">
             Could not load the bot roster ({botsError}) — this list is unknown, not empty.
-          </div>
+          </InlineAlert>
         )
       ) : bots.length === 0 ? (
-        <div className="px-3 py-3 text-[11.5px] text-text-tertiary leading-relaxed">
-          {botsLoading
+        <MetaLine
+          size="xs"
+          className="px-3 py-3 leading-relaxed"
+          items={[botsLoading
             ? 'Loading bots…'
-            : 'No bots target this initiative yet — point a standing mission here from the Bots page.'}
-        </div>
+            : 'No bots target this initiative yet — point a standing mission here from the Bots page.']}
+        />
       ) : (
         bots.map((bot) => {
           // Paused is either half: operator-disabled OR self-paused (budget).
           const paused = !bot.enabled || bot.pausedReason != null;
           return (
-            <div key={bot.id} className="px-3 py-2 border-b border-border last:border-b-0">
-              <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+            <Stack key={bot.id} gap="none" className="px-3 py-2 border-b border-border last:border-b-0">
+              <Inline gap="xs" align="center" wrap className="min-w-0">
                 {canManageBots ? (
                   <Link
                     to={`/admin/bots/${bot.id}`}
@@ -200,34 +204,33 @@ export function AgentsRailCard({ activity }: { activity: InitiativeAgentActivity
                     {bot.name}
                   </Link>
                 ) : (
-                  <span className="text-[12px] font-semibold text-text-primary truncate" title={bot.name}>
-                    {bot.name}
-                  </span>
+                  <SectionLabel className="truncate"><span title={bot.name}>{bot.name}</span></SectionLabel>
                 )}
                 <Chip tone={TEMPLATE_TONE[bot.template]} size="xs">{bot.template}</Chip>
-                <div className="flex-1" />
                 {paused ? (
-                  <Chip tone="warning" size="xs" dot="static" title={bot.pausedReason ?? undefined}>paused</Chip>
+                  <Chip tone="warning" size="xs" dot="static" className="ml-auto" title={bot.pausedReason ?? undefined}>paused</Chip>
                 ) : (
-                  <Chip tone="success" size="xs" dot="static">on</Chip>
+                  <Chip tone="success" size="xs" dot="static" className="ml-auto">on</Chip>
                 )}
-              </div>
-              <div className="mt-0.5 text-[10.5px] text-text-tertiary">
-                {triggerSummary(bot)} · today ${bot.todaySpendUsd.toFixed(2)}
-              </div>
-            </div>
+              </Inline>
+              <MetaLine
+                size="xs"
+                className="mt-0.5"
+                items={[`${triggerSummary(bot)} · today $${bot.todaySpendUsd.toFixed(2)}`]}
+              />
+            </Stack>
           );
         })
       )}
 
       {/* What's on the clock right now — one pulsing row per active run */}
       {runningNow.length > 0 && (
-        <div className="border-t border-border bg-surface-inset">
+        <Stack gap="none" className="border-t border-border bg-surface-inset">
           {runningNow.map((r) => (
-            <div key={r.id} className="px-3 py-1.5 flex items-center gap-2 flex-wrap text-[11px]">
+            <Inline key={r.id} gap="sm" align="center" wrap className="px-3 py-1.5">
               <Chip tone="info" size="xs" dot="pulse">running now</Chip>
-              <span className="text-text-tertiary">{r.trigger}</span>
-              <div className="flex-1" />
+              <MetaLine size="xs" items={[r.trigger]} />
+              <span className="flex-1" />
               {/* Computers is another hr-admin route — same reasoning as the
                   bot links above. */}
               {canManageBots && r.outcome?.boxId && (
@@ -239,9 +242,9 @@ export function AgentsRailCard({ activity }: { activity: InitiativeAgentActivity
                   watch →
                 </Link>
               )}
-            </div>
+            </Inline>
           ))}
-        </div>
+        </Stack>
       )}
     </Card>
   );
@@ -260,49 +263,56 @@ export function OutcomesRailCard({ activity }: { activity: InitiativeAgentActivi
 
   return (
     <Card padding="none" className="overflow-hidden">
-      <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
-        <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">OUTCOMES</span>
-        <div className="flex-1" />
-        <span className="text-[10.5px] text-text-tertiary whitespace-nowrap">
-          ${spendUsd.toFixed(2)} agent spend (listed runs)
-          {runsError ? ' — at least' : ''}
-        </span>
-      </div>
+      <Inline gap="sm" align="center" className="px-3 py-2.5 border-b border-border">
+        <SectionLabel>OUTCOMES</SectionLabel>
+        <MetaLine
+          size="xs"
+          className="ml-auto whitespace-nowrap"
+          items={[`$${spendUsd.toFixed(2)} agent spend (listed runs)${runsError ? ' — at least' : ''}`]}
+        />
+      </Inline>
       {runsError && (
-        <div className="px-3 py-2 text-[11px] text-danger leading-relaxed border-b border-border">
+        <InlineAlert tone="warning" className="m-3">
           A run history could not be read ({runsError}) — this list and the spend
           above are a floor, not a total.
-        </div>
+        </InlineAlert>
       )}
       {listed.length === 0 && !runsError ? (
-        <div className="px-3 py-3 text-[11.5px] text-text-tertiary leading-relaxed">
-          No agent runs yet — authorize one from an open story or bug, or let a targeting bot fire.
-        </div>
+        <MetaLine
+          size="xs"
+          className="px-3 py-3 leading-relaxed"
+          items={['No agent runs yet — authorize one from an open story or bug, or let a targeting bot fire.']}
+        />
       ) : (
         listed.map((r) => (
-          <div key={r.id} className="px-3 py-2 border-b border-border last:border-b-0 text-[11px]">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-text-secondary">{r.trigger}</span>
+          <Stack key={r.id} gap="none" className="px-3 py-2 border-b border-border last:border-b-0">
+            <Inline gap="xs" align="center" wrap>
+              <MetaLine size="xs" tone="secondary" items={[r.trigger]} />
               <Chip tone={RUN_STATUS_TONE[r.status]} size="xs" dot={r.status === 'running' ? 'pulse' : undefined}>
                 {r.status}
               </Chip>
-              <div className="flex-1" />
+              <span className="flex-1" />
               <CostVsEstimate costUsd={r.costUsd} estimate={runEstimate(r)} />
-              <span className="text-text-tertiary whitespace-nowrap" title={r.startedAt}>
-                {when(r.startedAt)}
-              </span>
-            </div>
+              <MetaLine
+                size="xs"
+                className="whitespace-nowrap"
+                items={[<span key="w" title={r.startedAt}>{when(r.startedAt)}</span>]}
+              />
+            </Inline>
             {(r.outcome?.changeId || r.outcome?.prUrl || r.outcome?.boxId) && (
-              <div className="mt-0.5 flex items-center gap-2.5 flex-wrap">
+              <Inline gap="sm" align="center" wrap className="mt-0.5">
                 {r.outcome?.changeId && (
                   canManageBots ? (
                     <Link to="/admin/changes" className="text-primary no-underline hover:underline">
                       change {r.outcome.changeId.slice(0, 8)}
                     </Link>
                   ) : (
-                    <span className="text-text-secondary font-mono text-[10.5px]" title="The review queue needs the ManageDevbox authority">
-                      change {r.outcome.changeId.slice(0, 8)}
-                    </span>
+                    <MetaLine
+                      size="xs"
+                      tone="secondary"
+                      className="font-mono"
+                      items={[<span key="c" title="The review queue needs the ManageDevbox authority">change {r.outcome.changeId.slice(0, 8)}</span>]}
+                    />
                   )
                 )}
                 {r.outcome?.prUrl && (
@@ -324,14 +334,16 @@ export function OutcomesRailCard({ activity }: { activity: InitiativeAgentActivi
                       box {r.outcome.boxId.slice(0, 8)}
                     </Link>
                   ) : (
-                    <span className="text-text-tertiary font-mono text-[10.5px]" title="Computers needs the ManageDevbox authority">
-                      box {r.outcome.boxId.slice(0, 8)}
-                    </span>
+                    <MetaLine
+                      size="xs"
+                      className="font-mono"
+                      items={[<span key="b" title="Computers needs the ManageDevbox authority">box {r.outcome.boxId.slice(0, 8)}</span>]}
+                    />
                   )
                 )}
-              </div>
+              </Inline>
             )}
-          </div>
+          </Stack>
         ))
       )}
     </Card>

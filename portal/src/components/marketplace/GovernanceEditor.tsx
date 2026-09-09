@@ -17,7 +17,9 @@
 // class as the rest of this codebase's popovers, not a one-off.
 
 import { useState } from 'react';
-import { Button, Chip, DropdownMenu, type DropdownMenuSection } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button, Chip, DropdownMenu, MetaLine, type DropdownMenuSection,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastInfo } from '../../lib/toastStore';
 
@@ -175,7 +177,7 @@ export function RoleCycleChip({
     ) : norm === 'sme' ? (
       <Chip tone="info" size="xs">sme</Chip>
     ) : (
-      <span className="text-[13px] text-text-secondary">{role ?? '—'}</span>
+      <MetaLine size="sm" tone="secondary" items={[role ?? '—']} />
     );
   }
 
@@ -211,9 +213,12 @@ export function RoleCycleChip({
       ) : norm === 'sme' ? (
         <Chip tone="info" size="xs">sme</Chip>
       ) : (
-        <span className="border-b border-dashed border-border-emphasis text-[13px] text-text-secondary">
-          {role ?? '—'}
-        </span>
+        <MetaLine
+          size="sm"
+          tone="secondary"
+          className="border-b border-dashed border-border-emphasis"
+          items={[role ?? '—']}
+        />
       )}
     </Button>
   );

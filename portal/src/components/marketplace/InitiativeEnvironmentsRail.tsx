@@ -27,7 +27,9 @@ import { useEffect, useState } from 'react';
 
 import { readDegraded } from '../../lib/degraded';
 import { Link } from 'react-router';
-import { Card, Chip, CodeBlock } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button, Card, Chip, CodeBlock, Inline, InlineAlert, MetaLine, SectionLabel, Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 
 interface Environment {
   id: string;
@@ -129,45 +131,49 @@ function EnvironmentRow({ env }: { env: Environment }) {
   }, [open, access, env.id]);
 
   return (
-    <div className="border-b border-border last:border-b-0">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
+    <Stack gap="none" className="border-b border-border last:border-b-0">
+      <Button
+        variant="ghost"
+        fullWidth
         aria-expanded={open}
-        className="w-full text-left px-3 py-2 flex items-center gap-1.5 bg-transparent border-0 cursor-pointer hover:bg-surface-hover"
+        className="!justify-start text-left px-3 py-2"
+        onClick={() => setOpen((v) => !v)}
       >
-        <Chip tone={STATUS_TONE[env.status] ?? 'neutral'} size="xs" dot={env.status === 'provisioning' ? 'pulse' : 'static'}>
-          {env.status}
-        </Chip>
-        <span className="text-[12px] font-semibold text-text-primary">{env.name}</span>
-        <Chip tone="neutral" size="xs" mono>{env.kind}</Chip>
-        <div className="flex-1" />
-        {env.clusterName && (
-          <span className="text-[10.5px] text-text-tertiary font-mono truncate max-w-[140px]" title={env.clusterName}>
-            {env.clusterName}
-          </span>
-        )}
-        <span aria-hidden className="text-[10px] text-text-tertiary">{open ? '▾' : '▸'}</span>
-      </button>
+        <Inline gap="xs" align="center" className="w-full min-w-0">
+          <Chip tone={STATUS_TONE[env.status] ?? 'neutral'} size="xs" dot={env.status === 'provisioning' ? 'pulse' : 'static'}>
+            {env.status}
+          </Chip>
+          <SectionLabel>{env.name}</SectionLabel>
+          <Chip tone="neutral" size="xs" mono>{env.kind}</Chip>
+          {env.clusterName && (
+            <MetaLine
+              size="xs"
+              className="ml-auto font-mono truncate max-w-[140px]"
+              items={[<span key="c" title={env.clusterName}>{env.clusterName}</span>]}
+            />
+          )}
+          <MetaLine size="xs" className={env.clusterName ? '' : 'ml-auto'} items={[open ? '▾' : '▸']} />
+        </Inline>
+      </Button>
 
       {open && (
-        <div className="px-3 pb-2.5 flex flex-col gap-2">
+        <Stack gap="sm" className="px-3 pb-2.5">
           {retired ? (
             // Recorded so a postmortem can ask where something used to run —
             // not so somebody can shell into it. Cedar forbids Enter here, so
             // the UI offers nothing it would only have to refuse.
-            <div className="text-[11px] text-text-tertiary">
-              Retired — kept for the record; no access.
-            </div>
+            <MetaLine size="xs" items={['Retired — kept for the record; no access.']} />
           ) : access === null ? (
-            <div className="text-[11px] text-text-tertiary">Checking access…</div>
+            <MetaLine size="xs" items={['Checking access…']} />
           ) : access.allowed ? (
             <>
-              <div className="text-[11px] text-text-secondary">
-                You can enter this environment. From a computer in the Lab:
-              </div>
+              <MetaLine
+                size="xs"
+                tone="secondary"
+                items={['You can enter this environment. From a computer in the Lab:']}
+              />
               <CodeBlock code={entryCommand(env, access)} language="bash" />
-              <div>
+              <Stack gap="none">
                 <Link
                   to="/admin/devbox"
                   className="text-primary no-underline hover:underline text-[11px]"
@@ -175,25 +181,26 @@ function EnvironmentRow({ env }: { env: Environment }) {
                 >
                   open a computer →
                 </Link>
-              </div>
+              </Stack>
             </>
           ) : (
-            <div className="text-[11px] text-text-tertiary">
-              You can see where this runs, but not enter it{access.reason ? ` — ${access.reason}` : '.'}
-            </div>
+            <MetaLine
+              size="xs"
+              items={[`You can see where this runs, but not enter it${access.reason ? ` — ${access.reason}` : '.'}`]}
+            />
           )}
 
           {runsError && (
-            <div className="text-[11px] text-danger leading-relaxed">
+            <InlineAlert tone="warning">
               Latest runs unknown — {runsError}. This environment may well be building.
-            </div>
+            </InlineAlert>
           )}
 
           {!runsError && runs && runs.length > 0 && (
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-semibold text-text-tertiary tracking-wide uppercase">Latest runs</span>
+            <Stack gap="xs">
+              <SectionLabel as="div">Latest runs</SectionLabel>
               {runs.map((r) => (
-                <div key={r.id} className="flex items-center gap-1.5 min-w-0">
+                <Inline key={r.id} gap="xs" align="center" className="min-w-0">
                   <Chip
                     tone={r.conclusion === 'success' ? 'success' : r.conclusion === 'failure' ? 'danger' : 'neutral'}
                     size="xs"
@@ -210,15 +217,15 @@ function EnvironmentRow({ env }: { env: Environment }) {
                       {r.displayTitle ?? r.name ?? `run ${r.id}`}
                     </a>
                   ) : (
-                    <span className="text-[11px] text-text-secondary truncate">{r.displayTitle ?? r.name ?? `run ${r.id}`}</span>
+                    <MetaLine size="xs" tone="secondary" className="truncate" items={[r.displayTitle ?? r.name ?? `run ${r.id}`]} />
                   )}
-                </div>
+                </Inline>
               ))}
-            </div>
+            </Stack>
           )}
-        </div>
+        </Stack>
       )}
-    </div>
+    </Stack>
   );
 }
 
@@ -244,11 +251,10 @@ export function EnvironmentsRailCard({ initiativeId }: { initiativeId: string | 
 
   return (
     <Card padding="none" className="overflow-hidden">
-      <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
-        <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">ENVIRONMENTS</span>
-        <div className="flex-1" />
-        <Chip tone="neutral" size="xs" mono>{envs.length}</Chip>
-      </div>
+      <Inline gap="sm" align="center" className="px-3 py-2.5 border-b border-border">
+        <SectionLabel>ENVIRONMENTS</SectionLabel>
+        <Chip tone="neutral" size="xs" mono className="ml-auto">{envs.length}</Chip>
+      </Inline>
       {envs.map((env) => <EnvironmentRow key={env.id} env={env} />)}
     </Card>
   );
