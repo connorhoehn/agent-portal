@@ -51,7 +51,7 @@ QUEUED_FILES=$(grep -oE "Composed locally in \`portal/src/[A-Za-z0-9_/.-]+\.tsx\
 # "hand-roll it".
 QUEUED_MAX_PER_FILE=8
 
-count_re() { # count_re <regex> <files...>
+count_re() { # count_re <regex> <files...> — single-line patterns only
   local re="$1"; shift
   local n=0 c
   for f in "$@"; do
@@ -60,6 +60,43 @@ count_re() { # count_re <regex> <files...>
     n=$((n + c))
   done
   printf '%s' "$n"
+}
+
+# Raw styled elements, counted across LINE BREAKS.
+#
+# `grep` matches a line at a time, and JSX opening tags routinely span several:
+#
+#     <input
+#       type="range"
+#       className="w-full accent-primary"
+#     />
+#
+# A line-based regex cannot see that element at all. Measured when this gate was
+# first written: 45 raw elements portal-wide — about 9% — were invisible, and
+# "converting" a file could mean nothing more than pushing its className onto
+# its own line. A budget guarding a number that can be gamed by reformatting is
+# not a budget.
+#
+# So the raw count is multi-line aware. `<button` and `style={{` stay on grep:
+# both are single tokens with no such blind spot.
+#
+# (The assessment tenant's own gate has the same line-based regex. Its zero was
+# checked against this counter when this was written and is a true zero, so
+# nothing there is hiding behind the same gap.)
+count_raw() { # count_raw <files...>
+  [ $# -eq 0 ] && { printf '0'; return; }
+  python3 - "$@" <<'PY'
+import re, sys
+EL = r'div|p|span|h[1-6]|ul|ol|li|section|nav|article|table|tr|td|th|button|a|label|input|textarea|select|form|code|pre'
+rx = re.compile(rf'<({EL})(\s[^>]*?)?\sclassName=', re.S)
+total = 0
+for path in sys.argv[1:]:
+    try:
+        total += len(rx.findall(open(path, encoding='utf-8', errors='ignore').read()))
+    except OSError:
+        pass
+print(total, end='')
+PY
 }
 
 is_queued() {
@@ -84,6 +121,14 @@ area_files() { # area_files <dir>
 #
 # Format: <path>:<raw budget>
 # ─────────────────────────────────────────────────────────────────────────────
+# ⚠️ ONE-TIME RE-BASELINE, and the only raise this file will ever carry.
+# The first version of this gate counted with a line-based grep, which cannot
+# see a JSX tag whose className sits on a later line — 45 elements portal-wide,
+# ~9%, were invisible, and a file could be "converted" by reformatting alone.
+# `count_raw` is multi-line aware now, so these raw numbers went UP without any
+# code getting worse. The never-raise rule exists to stop new debt hiding, not
+# to protect a measurement known to be wrong. From here they only go down.
+#
 # Format: <path>:<raw>:<button>:<inline-style>
 #
 # `portal/src` is the catch-all so no directory can escape by not being listed;
@@ -91,15 +136,15 @@ area_files() { # area_files <dir>
 # Raw counts nest (an entry covers its subdirectories), which is deliberate —
 # converting a leaf lowers both its own budget and its parent's.
 AREAS=(
-  "portal/src:421:65:357"
+  "portal/src:450:65:357"
   "portal/src/components/runs:0:0:0"
   "portal/src/components/codebases:0:0:0"
-  "portal/src/components/scores:134:1:17"
-  "portal/src/components/marketplace:112:4:0"
-  "portal/src/components/ingest:68:11:119"
-  "portal/src/components/canary:41:17:90"
-  "portal/src/components/org-graph:39:7:8"
-  "portal/src/components/shell:25:6:40"
+  "portal/src/components/scores:138:1:17"
+  "portal/src/components/marketplace:115:4:0"
+  "portal/src/components/ingest:70:11:119"
+  "portal/src/components/canary:53:17:90"
+  "portal/src/components/org-graph:45:7:8"
+  "portal/src/components/shell:27:6:40"
   "portal/src/components/knowledge:0:0:0"
   "portal/src/components/sdlc:0:0:0"
   "portal/src/components/kb:0:3:54"
@@ -124,7 +169,7 @@ for entry in "${AREAS[@]}"; do
     fail "${dir#portal/src/}: no .tsx files found — the gate is not measuring anything"
     continue
   fi
-  n_raw=$(count_re "$RAW_RE" "${files[@]}")
+  n_raw=$(count_raw "${files[@]}")
   n_btn=$(count_re '<button' "${files[@]}")
   n_sty=$(count_re 'style=\{\{' "${files[@]}")
   label="${dir#portal/src/}"; [ "$label" = "portal/src" ] && label="portal/src (all)"
@@ -135,7 +180,7 @@ for entry in "${AREAS[@]}"; do
   [ "$n_sty" -le "$b_sty" ] || { fail "$label: $n_sty inline style={{}} > budget $b_sty"; over=1; }
   if [ "$over" = 1 ]; then
     for f in "${files[@]}"; do
-      c=$(count_re "$RAW_RE" "$f")
+      c=$(count_raw "$f")
       [ "$c" -gt 0 ] && printf '      %4d  %s\n' "$c" "${f#$dir/}"
     done | sort -rn | head -6
     continue
@@ -156,7 +201,7 @@ q_over=""; q_n=0
 for f in $QUEUED_FILES; do
   [ -f "$f" ] || continue
   q_n=$((q_n + 1))
-  c=$(count_re "$RAW_RE" "$f")
+  c=$(count_raw "$f")
   [ "$c" -le "$QUEUED_MAX_PER_FILE" ] || q_over="$q_over ${f#portal/src/}($c)"
 done
 [ -z "$q_over" ] \
@@ -182,7 +227,7 @@ if [ "$REPORT" = 1 ]; then
     files=()
     while IFS= read -r f; do files+=("$f"); done < <(area_files "$dir")
     [ ${#files[@]} -eq 0 ] && continue
-    n=$(count_re "$RAW_RE" "${files[@]}")
+    n=$(count_raw "${files[@]}")
     d=$(count_re '<div( [^>]*)?className=' "${files[@]}")
     b=$(count_re '<button' "${files[@]}")
     s=$(count_re 'style=\{\{' "${files[@]}")
