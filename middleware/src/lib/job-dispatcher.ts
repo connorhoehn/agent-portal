@@ -25,8 +25,19 @@ import { runDevboxTask } from '../routes/devbox.js';
 const TICK_MS = Number(process.env['JOB_DISPATCH_INTERVAL_MS'] ?? 10_000);
 const STALE_MINUTES = Number(process.env['JOB_STALE_MINUTES'] ?? 30);
 
-/** Emits 'job' events so SSE consumers can watch the queue without polling. */
+/**
+ * Emits 'job' events so SSE consumers can watch the queue without polling.
+ *
+ * One listener is added per open `GET /api/work/events` stream, and three
+ * portal pages subscribe (Queue, Findings, Work home). Node's default ceiling
+ * is 10 listeners, past which it prints a MaxListenersExceededWarning and
+ * names this emitter as a probable leak — so a handful of people with the work
+ * pages open is enough to fill the log with a warning about entirely correct
+ * behaviour. Raised to a number no legitimate audience reaches, which keeps
+ * the warning meaningful: if it ever does fire, it really is a leak.
+ */
 export const dispatcherEvents = new EventEmitter();
+dispatcherEvents.setMaxListeners(256);
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let ticking = false;

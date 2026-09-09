@@ -36,6 +36,13 @@ export type TimelineItem =
   | { id: string; kind: 'end'; exitCode: number | null; timedOut: boolean; stderr?: string }
   | { id: string; kind: 'error'; text: string };
 
+/** Liveness of the box's event tail — see the watchdog in the tail effect. */
+type TailState = 'idle' | 'connecting' | 'live' | 'retrying' | 'unavailable';
+
+/** No heartbeat for this long means the stream is dead, whatever the socket says. */
+const STALL_AFTER_MS = 60_000;
+const WATCHDOG_EVERY_MS = 10_000;
+
 // ─── Rendering helpers ───────────────────────────────────────────────────────
 
 const mono = 'font-["Fira_Code","Cascadia_Code","JetBrains_Mono",monospace]';
@@ -105,6 +112,10 @@ export const RunTimeline = forwardRef<RunTimelineHandle, RunTimelineProps>(funct
   // ── Per-box streams (in-memory; switching boxes preserves each stream) ─────
   const [timelines, setTimelines] = useState<Record<string, TimelineItem[]>>({});
   const timeline = boxId ? (timelines[boxId] ?? []) : [];
+
+  // Whether the live tail is actually live. A frozen timeline and a quiet one
+  // look identical, so this is the only thing that tells them apart.
+  const [tailState, setTailState] = useState<TailState>('idle');
 
   const idRef = useRef(0);
   const nextId = useCallback(() => String(++idRef.current), []);
@@ -188,19 +199,78 @@ export const RunTimeline = forwardRef<RunTimelineHandle, RunTimelineProps>(funct
   onEventRef.current = onEvent;
   useEffect(() => {
     if (!boxId) return;
-    const es = new EventSource(`/api/devbox/boxes/${encodeURIComponent(boxId)}/tail`);
-    es.onopen = () => {
-      // Replay rebuilds the full history — clear so reconnects don't duplicate.
-      setTimelines((all) => ({ ...all, [boxId]: [] }));
+    let es: EventSource | null = null;
+    let lastSeen = Date.now();
+    let disposed = false;
+
+    const open = () => {
+      es?.close();
+      if (disposed) return;
+      es = new EventSource(`/api/devbox/boxes/${encodeURIComponent(boxId)}/tail`);
+      lastSeen = Date.now();
+      setTailState('connecting');
+
+      es.onopen = () => {
+        lastSeen = Date.now();
+        setTailState('live');
+        // Replay rebuilds the full history — clear so reconnects don't duplicate.
+        setTimelines((all) => ({ ...all, [boxId]: [] }));
+      };
+      // The server sends a NAMED heartbeat every 25s precisely so a quiet
+      // stream is distinguishable from a dead one (see middleware lib/sse.ts).
+      // Listening for it is the whole reason the watchdog below can be honest.
+      es.addEventListener('heartbeat', () => {
+        lastSeen = Date.now();
+        setTailState('live');
+      });
+      es.onmessage = (evt: MessageEvent) => {
+        lastSeen = Date.now();
+        setTailState('live');
+        try {
+          const ev = JSON.parse(evt.data) as Record<string, unknown>;
+          // The server sends this once, as the last frame, when the computer is
+          // removed. Take it at its word and stop: the stream is not coming
+          // back, so reconnecting would only spend a round-trip to be told 404,
+          // and the watchdog must not treat the silence that follows as a stall
+          // worth healing.
+          if (ev['type'] === 'box_removed') {
+            disposed = true;
+            setTailState('unavailable');
+            es?.close();
+            return;
+          }
+          onEventRef.current?.(ev);
+          handleTaskEvent(boxId, ev);
+        } catch { /* non-JSON frame — skip */ }
+      };
+      // EventSource hides the HTTP status but not the outcome: the browser
+      // gives up and closes on a 404 — the box is gone, which after a
+      // middleware restart is every box, since the fleet registry is in
+      // memory — whereas a transient blip returns to CONNECTING and retries
+      // itself. Saying "reconnecting" about a log that is never coming back
+      // is exactly the lie this is here to avoid.
+      es.onerror = () => {
+        setTailState(es?.readyState === EventSource.CLOSED ? 'unavailable' : 'retrying');
+      };
     };
-    es.onmessage = (evt: MessageEvent) => {
-      try {
-        const ev = JSON.parse(evt.data) as Record<string, unknown>;
-        onEventRef.current?.(ev);
-        handleTaskEvent(boxId, ev);
-      } catch { /* non-JSON frame — skip */ }
+
+    // Watchdog. EventSource reconnects itself when the socket breaks, but a
+    // stream can die without the socket breaking: Vite's dev proxy holds the
+    // browser side open after the upstream middleware goes away, so `onerror`
+    // never fires and the timeline simply stops updating while still looking
+    // healthy. Missing heartbeats is the only evidence of that, so treat a
+    // heartbeat drought as a dead stream and rebuild it.
+    const watchdog = window.setInterval(() => {
+      if (Date.now() - lastSeen > STALL_AFTER_MS) open();
+    }, WATCHDOG_EVERY_MS);
+
+    open();
+    return () => {
+      disposed = true;
+      window.clearInterval(watchdog);
+      es?.close();
+      setTailState('idle');
     };
-    return () => es.close();
   }, [boxId, handleTaskEvent]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -211,6 +281,18 @@ export const RunTimeline = forwardRef<RunTimelineHandle, RunTimelineProps>(funct
       <div className="px-3.5 py-3 border-b border-border flex items-center gap-2">
         <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">{title}</span>
         {headerExtra}
+        {/* Only shown when the tail is NOT healthy. A working stream needs no
+            chrome; a dead one must not be able to pass for a quiet one. */}
+        {(tailState === 'retrying' || tailState === 'unavailable') && (
+          <span
+            className={`ml-auto text-[11px] font-semibold ${tailState === 'unavailable' ? 'text-danger' : 'text-text-tertiary'}`}
+            title={tailState === 'unavailable'
+              ? 'The server is no longer streaming this computer\'s log — it was removed, or the middleware restarted (the event buffer lives in its memory).'
+              : 'Lost the log stream — retrying.'}
+          >
+            {tailState === 'unavailable' ? 'LOG UNAVAILABLE' : 'RECONNECTING…'}
+          </span>
+        )}
       </div>
       <div ref={scrollRef} className={`overflow-y-auto overflow-x-hidden min-h-[280px] ${maxHeightClass} px-3.5 py-2`}>
         {timeline.length === 0 ? (

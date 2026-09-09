@@ -278,12 +278,41 @@ function requireSessionId(raw: string, res: Response): string | null {
  * through would make the whole check optional — you would just pass an id the
  * registry has never seen. A fleet-wide role keeps the escape hatch, because
  * adopting a session the registry lost is a real operator move.
+ *
+ * Taking that hatch REGISTERS the session rather than merely waving it
+ * through, and that is the point of it. The fleet registry is in memory, so
+ * every middleware restart drops it while the AgentCore sessions themselves
+ * carry on — verified on 2026-09-09, when a restart left `GET /boxes`
+ * reporting an empty fleet and the orphaned microVM still answering commands
+ * with its workspace intact. The reaper only ever sees `listBoxes()`
+ * (lib/devbox-reaper.ts), so an unregistered session is outside BOTH the idle
+ * timeout and the max-lifetime ceiling — permanently, since there is no
+ * AgentCore API that enumerates live runtime sessions to reconcile against
+ * (`list-sessions` is Memory, not Runtime). Waving the session through let an
+ * operator work on a box that nothing would ever stop paying for. Registering
+ * it puts it back under both timers, which is the whole reason they exist.
+ *
+ * `/task` already re-adopted this way (its own `getBoxBySession ?? registerBox`
+ * line); doing it here means `/command` and `/shell-url` stop being the paths
+ * where an orphan gets used but never reclaimed.
  */
 async function requireBoxAccess(req: Request, res: Response, sessionId: string): Promise<boolean> {
   const box = getBoxBySession(sessionId);
   const session = req.session ?? null;
   if (!box) {
-    if (session?.role && FLEET_WIDE_ROLES.includes(session.role)) return true;
+    if (session?.role && FLEET_WIDE_ROLES.includes(session.role)) {
+      // A fresh createdAt restarts the lifetime clock, which is the honest
+      // reading: the registry cannot know when a session it has never seen
+      // began, and a clock that restarts bounds the box, where no clock at
+      // all does not.
+      registerBox({
+        sessionId,
+        label: `adopted ${sessionId.slice(-8)}`,
+        ...(session.sub ? { ownerId: session.sub } : {}),
+      });
+      console.warn(`[devbox] adopted unregistered session ${sessionId} — the reaper can see it again`);
+      return true;
+    }
     res.status(403).json({ error: 'no computer here you can reach', sessionId });
     return false;
   }
@@ -452,10 +481,17 @@ devboxRouter.delete('/boxes/:boxId', asyncHandler(async (req, res) => {
 // Read-only live tail: replay the box's event buffer, then stream new events
 // as they land. This is what lets a second browser (or an operator who
 // reloaded) watch a run some other actor started.
-// Tailing is reading someone's work, so it is scoped like everything else —
-// asyncHandler is deliberately NOT used: its error path writes a JSON body,
-// which is the wrong thing to do once the SSE head has gone out. The access
-// check therefore runs entirely before initSSE.
+// Tailing is reading someone's work, so it is scoped like everything else, and
+// the ORDER matters: the whole access check runs before `initSSE`, because
+// after the SSE head goes out there is no status code left to refuse with.
+//
+// asyncHandler wraps this for the sake of that check and nothing else — the
+// `canSee` call reaches Aurora to resolve initiative attachment, so it can
+// reject, and at that point no head has been written and a JSON error is still
+// the right answer. Everything AFTER `initSSE` must therefore not throw:
+// `replayEvents` and `subscribeFleet` are pure map reads and `writeSSE`
+// no-ops on an ended stream, so nothing there hands asyncHandler an error it
+// would try to answer with a second set of headers.
 devboxRouter.get('/boxes/:boxId/tail', asyncHandler(async (req, res) => {
   const boxId = String(req.params['boxId'] ?? '');
   const box = getBox(boxId);
@@ -466,7 +502,13 @@ devboxRouter.get('/boxes/:boxId/tail', asyncHandler(async (req, res) => {
   }
   initSSE(res);
   for (const ev of replayEvents(boxId)) writeSSE(res, ev);
-  const unsubscribe = subscribeFleet(boxId, (ev) => writeSSE(res, ev));
+  // `box_removed` is terminal: forward it so the client can say why the log
+  // stopped, then end the response. Without this the stream stays open and
+  // keeps heartbeating for a box that no longer exists (see removeBox).
+  const unsubscribe = subscribeFleet(boxId, (ev) => {
+    writeSSE(res, ev);
+    if (ev['type'] === 'box_removed') endSSE(res);
+  });
   req.on('close', () => { unsubscribe(); endSSE(res); });
 }));
 
@@ -677,6 +719,26 @@ devboxRouter.post('/:sessionId/shell-url', asyncHandler(async (req, res) => {
   }
 }));
 
+/**
+ * Stop a runtime session.
+ *
+ * Two failure shapes get handled here rather than escaping as a bare 500,
+ * because both were observed against the deployed runtime on 2026-09-09 and
+ * both told the operator "Internal server error" about a session that had in
+ * fact stopped:
+ *
+ *   ResourceNotFoundException — "not found or has been terminated". Asking a
+ *     stopped session to stop is not a failure, it is the goal already met.
+ *     Same stance the teardown scripts take on an already-deleting cluster.
+ *
+ *   A response the SDK cannot parse — the service answered with an HTML error
+ *     page, so the client threw `SyntaxError: Unexpected token '<'` while
+ *     deserializing. The stop itself had gone through; only the reply was
+ *     unreadable. We genuinely do not know the outcome in this case, so it is
+ *     reported as unconfirmed rather than claimed as success — and because a
+ *     retry then lands on ResourceNotFoundException, saying so leaves the
+ *     operator with a next step that resolves it.
+ */
 devboxRouter.delete('/:sessionId', asyncHandler(async (req, res) => {
   const sessionId = requireSessionId(String(req.params['sessionId'] ?? ''), res);
   if (!sessionId) return;
@@ -684,12 +746,34 @@ devboxRouter.delete('/:sessionId', asyncHandler(async (req, res) => {
   const arn = await requireArn(res);
   if (!arn) return;
 
-  await dataClient().send(new StopRuntimeSessionCommand({
-    agentRuntimeArn: arn,
-    runtimeSessionId: sessionId,
-  }));
-  const box = getBoxBySession(sessionId);
-  if (box) markStopped(box.id);
+  const settle = (): void => {
+    const box = getBoxBySession(sessionId);
+    if (box) markStopped(box.id);
+  };
+
+  try {
+    await dataClient().send(new StopRuntimeSessionCommand({
+      agentRuntimeArn: arn,
+      runtimeSessionId: sessionId,
+    }));
+  } catch (err) {
+    const name = (err as { name?: string }).name ?? '';
+    const message = (err as Error).message ?? String(err);
+    if (name === 'ResourceNotFoundException') {
+      settle();
+      res.json({ stopped: true, sessionId, alreadyStopped: true });
+      return;
+    }
+    console.warn(`[devbox] stop session ${sessionId} failed:`, message);
+    res.status(502).json({
+      error: 'the runtime did not confirm the stop — retry to check whether it took',
+      sessionId,
+      detail: message,
+    });
+    return;
+  }
+
+  settle();
   res.json({ stopped: true, sessionId });
 }));
 

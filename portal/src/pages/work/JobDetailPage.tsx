@@ -101,6 +101,10 @@ function toEntries(ev: Record<string, unknown>): ActivityEntry[] {
   return [];
 }
 
+/** No heartbeat for this long means the tail is dead, whatever the socket says. */
+const STALL_AFTER_MS = 60_000;
+const WATCHDOG_EVERY_MS = 10_000;
+
 export default function JobDetailPage() {
   const { jobId = '' } = useParams();
   const navigate = useNavigate();
@@ -132,39 +136,71 @@ export default function JobDetailPage() {
   // previous run's output would appear as if it were ours.
   useEffect(() => {
     if (!job?.boxId || !isLive) return;
-    const es = new EventSource(`/api/devbox/boxes/${job.boxId}/tail`);
+    let es: EventSource;
     let inOurJob = false;
-    setTailState('open');
+    let lastSeen = Date.now();
+    let disposed = false;
 
-    es.onmessage = (msg) => {
-      let ev: Record<string, unknown>;
-      try { ev = JSON.parse(msg.data) as Record<string, unknown>; } catch { return; }
+    const open = () => {
+      if (disposed) return;
+      es = new EventSource(`/api/devbox/boxes/${job.boxId}/tail`);
+      inOurJob = false;
+      lastSeen = Date.now();
+      setTailState('open');
 
-      const type = String(ev['type'] ?? '');
-      if (type === 'job_started') {
-        inOurJob = ev['jobId'] === job.id;
-        if (inOurJob) setLive([]);   // replayed buffer may hold an earlier attempt
-        return;
-      }
-      if (type === 'job_finished') {
-        if (ev['jobId'] === job.id) { inOurJob = false; void refresh(); }
-        return;
-      }
-      if (!inOurJob) return;
+      // The server heartbeats every 25s (middleware lib/sse.ts) so that a quiet
+      // stream can be told apart from a dead one. Without this listener the
+      // watchdog below would tear down a perfectly healthy idle tail.
+      es.addEventListener('heartbeat', () => { lastSeen = Date.now(); setTailState('open'); });
 
-      const entries = toEntries(ev);
-      if (entries.length) setLive((prev) => [...prev, ...entries]);
+      es.onmessage = (msg) => {
+        lastSeen = Date.now();
+        let ev: Record<string, unknown>;
+        try { ev = JSON.parse(msg.data) as Record<string, unknown>; } catch { return; }
+
+        const type = String(ev['type'] ?? '');
+        if (type === 'job_started') {
+          inOurJob = ev['jobId'] === job.id;
+          if (inOurJob) setLive([]);   // replayed buffer may hold an earlier attempt
+          return;
+        }
+        if (type === 'job_finished') {
+          if (ev['jobId'] === job.id) { inOurJob = false; void refresh(); }
+          return;
+        }
+        if (!inOurJob) return;
+
+        const entries = toEntries(ev);
+        if (entries.length) setLive((prev) => [...prev, ...entries]);
+      };
+      // EventSource hides the HTTP status, but not the outcome: the browser
+      // gives up and closes on a 404 (the box is no longer registered — its log
+      // died with a middleware restart), whereas a transient blip goes back to
+      // CONNECTING and retries on its own. Saying "retrying" for a log that is
+      // never coming back is the kind of lie that costs someone ten minutes.
+      es.onerror = () => {
+        setTailState(es.readyState === EventSource.CLOSED ? 'unavailable' : 'retrying');
+      };
     };
-    // EventSource hides the HTTP status, but not the outcome: the browser
-    // gives up and closes on a 404 (the box is no longer registered — its log
-    // died with a middleware restart), whereas a transient blip goes back to
-    // CONNECTING and retries on its own. Saying "retrying" for a log that is
-    // never coming back is the kind of lie that costs someone ten minutes.
-    es.onerror = () => {
-      setTailState(es.readyState === EventSource.CLOSED ? 'unavailable' : 'retrying');
-    };
 
-    return () => { es.close(); setTailState('idle'); };
+    // A stream can die without the socket breaking — Vite's dev proxy keeps
+    // the browser side open after the upstream goes away, so `onerror` never
+    // fires and this page would sit on 'open' forever showing a transcript
+    // that stopped growing. Missing heartbeats is the only evidence, so a
+    // drought means rebuild. Reconnecting is safe here: the server replays the
+    // box's buffer, and `inOurJob` is re-derived from the replayed
+    // job_started marker rather than carried across.
+    const watchdog = window.setInterval(() => {
+      if (Date.now() - lastSeen > STALL_AFTER_MS) open();
+    }, WATCHDOG_EVERY_MS);
+
+    open();
+    return () => {
+      disposed = true;
+      window.clearInterval(watchdog);
+      es?.close();
+      setTailState('idle');
+    };
   }, [job?.boxId, job?.id, isLive, refresh]);
 
   // Follow the tail as it grows, but only while live — nobody wants a stored

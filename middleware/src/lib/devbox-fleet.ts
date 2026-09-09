@@ -63,17 +63,25 @@ export interface FleetBox {
    * shapes the real CLI stream uses). Real deployments get this from the
    * runtime's own token accounting; the mock sums the scripted runs' usage
    * fields so the same accrual path is exercised offline.
+   *
+   * Counts input + cache-creation + output. Cache READS are deliberately
+   * excluded: a cached prefix is re-sent every turn, so adding it each time
+   * would grow this counter without any new tokens being processed.
    */
   tokensUsed?: number;
   /**
    * Fraction (0-1) of the model's context window in use on the CURRENT
    * task — unlike `spendUsd`/`tokensUsed` this resets at `task_started`,
    * because a new task is a new conversation from the model's point of view
-   * even though lifetime spend keeps accumulating. Derived here from tokens
-   * burned this task against a nominal 200k-token window (Claude's window);
-   * a real runtime would report its own usage against its own window
-   * directly, but the derivation keeps the mock's number in the same
-   * ballpark without inventing a second protocol just for this field.
+   * even though lifetime spend keeps accumulating. Measured against a nominal
+   * 200k-token window (Claude's).
+   *
+   * The PEAK prompt size seen this task, not a sum of the task's turns — the
+   * prompt a turn reports already contains the whole conversation so far
+   * (mostly as cache reads), so summing turns double-counts the same tokens
+   * and marches the gauge to its clamp on any multi-turn run. This is what an
+   * operator reads to decide a box needs recycling, so it has to mean
+   * occupancy, not throughput.
    */
   contextUsed?: number;
   /**
@@ -101,16 +109,86 @@ interface BoxState {
   /** Final assistant text of the last run — drives the `waiting` heuristic. */
   lastResultText: string;
   /**
-   * Tokens burned in the box's CURRENT task, separate from the lifetime
-   * `box.tokensUsed` counter — this is the numerator behind `contextUsed`
-   * and gets zeroed at `task_started` while the lifetime counter keeps
-   * climbing.
+   * Peak prompt size seen in the box's CURRENT task, separate from the
+   * lifetime `box.tokensUsed` counter — this is the numerator behind
+   * `contextUsed` and gets zeroed at `task_started` while the lifetime counter
+   * keeps climbing. A high-water mark, not a running total: context is a level.
    */
   contextTokens: number;
 }
 
 const boxes = new Map<string, BoxState>();
 const bySession = new Map<string, string>(); // sessionId → boxId
+
+/**
+ * Optional durable mirror of the registry.
+ *
+ * The maps above are the running process's source of truth and stay
+ * SYNCHRONOUS — `registerBox` is called from request handlers, the dispatcher
+ * and the reaper, and making it async would ripple through every one of them.
+ * So persistence is a seam rather than a rewrite: the store is told what
+ * changed, fire-and-forget, and a store that is absent (no Aurora, mocked
+ * Aurora, a laptop) leaves this module behaving exactly as it always did.
+ *
+ * Why it exists at all: without it a middleware restart drops every box while
+ * the AgentCore sessions keep running. `devbox-reaper` reaps only what
+ * `listBoxes()` returns, so a forgotten session sits outside BOTH the idle
+ * timeout and the max-lifetime ceiling, permanently — and no AgentCore API
+ * enumerates live runtime sessions to reconcile against
+ * (`list-sessions` is Memory, not Runtime). Verified live on 2026-09-09:
+ * after a restart `GET /boxes` returned an empty fleet while the orphan still
+ * answered commands with its workspace intact.
+ */
+export interface FleetStore {
+  /** A box was created, renamed, or changed status. Full row, upserted. */
+  upsert(box: FleetBox): void;
+  /** A box is gone for good. */
+  remove(id: string): void;
+  /**
+   * A box's activity clock (and accrued cost) moved. Called on EVERY event, so
+   * an implementation must throttle — a short real run emits tens of events and
+   * `thinking_tokens` alone can fire several times a second.
+   */
+  touch(box: FleetBox): void;
+}
+
+let store: FleetStore | null = null;
+
+/** Attach (or, with null, detach) the durable mirror. */
+export function setFleetStore(next: FleetStore | null): void {
+  store = next;
+}
+
+/**
+ * Load persisted boxes into the registry at boot.
+ *
+ * Writes straight into the maps rather than going through `registerBox`,
+ * because `registerBox` stamps a FRESH `lastActivityAt` and runs `createdAt`
+ * through `trustedCreatedAt`. Re-stamping here would hand every hydrated box a
+ * brand-new idle clock on every restart — which is precisely the bug this
+ * whole mechanism exists to remove, only quieter: the box would be visible and
+ * still never age out. The stored timestamps ARE the truth; use them.
+ *
+ * Event buffers are deliberately not restored. They are a cache of a stream
+ * that has already ended, capped at 500, and a tail that replays a dead run
+ * from before the restart is worse than one that starts empty.
+ */
+export function hydrateBoxes(rows: readonly FleetBox[]): number {
+  let loaded = 0;
+  for (const box of rows) {
+    if (boxes.has(box.id)) continue;      // a live box always wins over a stored one
+    boxes.set(box.id, {
+      box: { ...box },
+      events: [],
+      subscribers: new Set(),
+      lastResultText: '',
+      contextTokens: 0,
+    });
+    bySession.set(box.sessionId, box.id);
+    loaded++;
+  }
+  return loaded;
+}
 
 function now(): string {
   return new Date().toISOString();
@@ -166,6 +244,7 @@ export function registerBox(opts: {
   };
   boxes.set(id, { box, events: [], subscribers: new Set(), lastResultText: '', contextTokens: 0 });
   bySession.set(opts.sessionId, id);
+  store?.upsert(box);
   return box;
 }
 
@@ -187,19 +266,45 @@ export function renameBox(id: string, label: string): FleetBox | null {
   const s = boxes.get(id);
   if (!s) return null;
   s.box.label = label;
+  store?.upsert(s.box);
   return s.box;
 }
 
 export function markStopped(id: string): void {
   const s = boxes.get(id);
-  if (s) { s.box.status = 'stopped'; s.box.lastActivityAt = now(); }
+  if (!s) return;
+  s.box.status = 'stopped';
+  s.box.lastActivityAt = now();
+  store?.upsert(s.box);
 }
 
+/**
+ * Remove a box, telling anyone tailing it that this is the end of the stream.
+ *
+ * The terminal event is the point. Removing a box drops the registry entry but
+ * cannot by itself close the SSE responses already attached to it, and an
+ * abandoned tail does not look abandoned: `initSSE`'s 25s heartbeat keeps
+ * arriving, so the socket stays healthy, `onerror` never fires, and a
+ * heartbeat-watchdog client (portal RunTimeline / JobDetailPage) is reassured
+ * by the very signal that is supposed to catch a dead stream. Observed on
+ * 2026-09-09 against the running middleware: a box was removed at 15:46:04 and
+ * its tail went on heartbeating every 25s until the CLIENT gave up at 15:47:44.
+ * A viewer would have sat in front of a live-looking log that could never
+ * produce another line.
+ *
+ * So say so explicitly, and only here: `markStopped` deliberately does NOT emit
+ * this, because a stopped box still exists and is still worth watching.
+ */
 export function removeBox(id: string): boolean {
   const s = boxes.get(id);
   if (!s) return false;
+  for (const cb of s.subscribers) {
+    try { cb({ type: 'box_removed', boxId: id, ts: now() }); } catch { /* one bad subscriber must not block the rest */ }
+  }
+  s.subscribers.clear();
   bySession.delete(s.box.sessionId);
   boxes.delete(id);
+  store?.remove(id);
   return true;
 }
 
@@ -216,22 +321,60 @@ export function subscribe(id: string, cb: (ev: FleetEvent) => void): () => void 
 }
 
 /**
- * Tokens carried by an event, from whichever shape the CLI stream actually
- * uses: a `result` event carries `usage` inline; an `assistant` event nests
- * it under `message.usage` (same nested shape `says()`/`uses()` in
- * mock-bot-runner.ts model). Sums input+output — both burn against cost and
- * the context window alike. Returns 0 for an event with no usage block at
+ * The two token numbers an event carries, from whichever shape the CLI stream
+ * actually uses: a `result` event carries `usage` inline; an `assistant` event
+ * nests it under `message.usage` (the same nested shape `says()`/`uses()` in
+ * mock-bot-runner.ts model). Returns nulls for an event with no usage block at
  * all, which is most of them (tool calls, status events).
+ *
+ * Both numbers must count the CACHE fields, and that is the whole point of
+ * this function. Claude Code sends the system prompt and conversation prefix
+ * as a prompt cache, so on a real run `cache_creation_input_tokens` /
+ * `cache_read_input_tokens` are where nearly all the tokens live and
+ * `input_tokens` is a rounding error. Measured against the deployed devbox on
+ * 2026-09-09, a one-sentence no-tool task reported
+ * `input_tokens: 10, cache_creation_input_tokens: 21931, output_tokens: 55` —
+ * so summing only input+output counted 65 tokens from that event out of
+ * ~22k actually processed (91 across the whole run, once the assistant turn
+ * was added). The box's context gauge read 0.05% when true occupancy was
+ * ~11%. That gauge is the signal for "this box needs recycling", so
+ * undercounting it ~240x does not make it merely imprecise, it makes it
+ * useless.
+ *
+ * The two numbers are genuinely different and must not be conflated:
+ *
+ *   prompt  — how big the conversation was on this turn. A LEVEL. Includes
+ *             cache_read, because a re-read prefix still occupies the window.
+ *   fresh   — tokens new to the conversation this turn. A FLOW. Excludes
+ *             cache_read, because those tokens were already counted on the
+ *             turn that created them; adding them every turn would inflate a
+ *             long run's lifetime burn without any new tokens being processed.
  */
-function extractUsageTokens(ev: FleetEvent): number {
-  const direct = ev['usage'] as { input_tokens?: unknown; output_tokens?: unknown } | undefined;
-  const nested = (ev['message'] as { usage?: { input_tokens?: unknown; output_tokens?: unknown } } | undefined)
-    ?.usage;
+function extractUsage(ev: FleetEvent): { prompt: number; fresh: number } | null {
+  interface UsageBlock {
+    input_tokens?: unknown;
+    output_tokens?: unknown;
+    cache_creation_input_tokens?: unknown;
+    cache_read_input_tokens?: unknown;
+  }
+  const direct = ev['usage'] as UsageBlock | undefined;
+  const nested = (ev['message'] as { usage?: UsageBlock } | undefined)?.usage;
   const usage = direct ?? nested;
-  if (!usage) return 0;
-  const input = Number(usage.input_tokens ?? 0);
-  const output = Number(usage.output_tokens ?? 0);
-  return (Number.isFinite(input) ? input : 0) + (Number.isFinite(output) ? output : 0);
+  if (!usage) return null;
+
+  const n = (v: unknown): number => {
+    const x = Number(v ?? 0);
+    return Number.isFinite(x) ? x : 0;
+  };
+  const input = n(usage.input_tokens);
+  const output = n(usage.output_tokens);
+  const cacheWrite = n(usage.cache_creation_input_tokens);
+  const cacheRead = n(usage.cache_read_input_tokens);
+
+  return {
+    prompt: input + cacheWrite + cacheRead + output,
+    fresh: input + cacheWrite + output,
+  };
 }
 
 /**
@@ -255,17 +398,30 @@ export function appendEvent(id: string, ev: FleetEvent): void {
   s.events.push(ev);
   if (s.events.length > EVENT_BUFFER_CAP) s.events.shift();
   s.box.lastActivityAt = now();
+  // Every event moves the idle clock, so this is the hot path — the store is
+  // responsible for throttling, not the caller.
+  store?.touch(s.box);
 
   const type = ev['type'];
 
   // Tokens accrue from ANY event carrying a usage block, not just `result` —
-  // a long run's intermediate `assistant` turns burn context too, and
-  // waiting for the final result would make contextUsed jump from 0 to its
-  // true value instead of climbing as the run progresses.
-  const usageTokens = extractUsageTokens(ev);
-  if (usageTokens > 0) {
-    s.box.tokensUsed = (s.box.tokensUsed ?? 0) + usageTokens;
-    s.contextTokens += usageTokens;
+  // a long run's intermediate `assistant` turns burn context too, and waiting
+  // for the final result would make contextUsed jump from 0 to its true value
+  // instead of climbing as the run progresses.
+  //
+  // The two counters move differently on purpose (see extractUsage): lifetime
+  // burn SUMS the fresh tokens of every turn, while context occupancy TRACKS
+  // THE PEAK prompt size rather than summing. Summing prompt sizes was the
+  // old behaviour and is wrong by construction — a conversation's context is
+  // how big it currently is, not the total of how big it has ever been, so on
+  // a multi-turn run the sum races past the window and pins the gauge at 99%
+  // while the box is nowhere near full. Peak rather than last, because a
+  // `result` event's usage can report a smaller prompt than the assistant turn
+  // that preceded it, and a gauge that walks backwards mid-run reads as a bug.
+  const usage = extractUsage(ev);
+  if (usage) {
+    if (usage.fresh > 0) s.box.tokensUsed = (s.box.tokensUsed ?? 0) + usage.fresh;
+    if (usage.prompt > s.contextTokens) s.contextTokens = usage.prompt;
     s.box.contextUsed = Math.min(0.99, s.contextTokens / NOMINAL_CONTEXT_WINDOW);
   }
 
@@ -320,4 +476,5 @@ export function appendEvent(id: string, ev: FleetEvent): void {
 export function _resetFleet(): void {
   boxes.clear();
   bySession.clear();
+  store = null;
 }
