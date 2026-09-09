@@ -343,6 +343,20 @@ else
     CLUSTER_STATUS=$(cluster_status)
     case "$CLUSTER_STATUS" in
       available|not-found|None) break ;;
+      # `deleting` is not a state to wait out — it is the goal, already in
+      # progress. Treating it as transitional made this loop poll for its full
+      # ten minutes and then record a FAILURE ("stuck at deleting"), so the
+      # script exited non-zero over a cluster that was deleting correctly and
+      # would be gone minutes later. That is a false *failure*, and it is worth
+      # naming as the exact inverse of the false-success this file already
+      # guards against elsewhere: both leave the operator unable to trust the
+      # verdict, and this direction is the more expensive mistake — it invites
+      # someone to go hunting for a billing resource that is already going away,
+      # or to re-run a destroy that never needed re-running.
+      #
+      # Same rule the runtime pre-drain above already applies: a delete that is
+      # already in flight is success, not an error.
+      deleting) echo "  Cluster already deleting — nothing to do"; break ;;
       stopped)
         echo "  Starting cluster so instances can be deleted..."
         aws rds start-db-cluster --db-cluster-identifier "$CLUSTER_ID" \
@@ -353,7 +367,10 @@ else
     sleep 10
   done
 
-  if [[ "$CLUSTER_STATUS" != "available" && "$CLUSTER_STATUS" != "not-found" && "$CLUSTER_STATUS" != "None" ]]; then
+  if [[ "$CLUSTER_STATUS" == "deleting" ]]; then
+    # Already going away under its own steam; cdk destroy below sees it as gone.
+    echo "  Aurora cluster is deleting — leaving it to finish"
+  elif [[ "$CLUSTER_STATUS" != "available" && "$CLUSTER_STATUS" != "not-found" && "$CLUSTER_STATUS" != "None" ]]; then
     echo "  ✗ Cluster never reached 'available' (stuck at ${CLUSTER_STATUS}) — cannot delete"
     FAILURES+=("Aurora cluster not deleted (stuck ${CLUSTER_STATUS})")
   else
