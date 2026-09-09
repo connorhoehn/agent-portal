@@ -212,9 +212,29 @@ export class AuroraStack extends cdk.Stack {
       code: lambda.Code.fromInline(`
 import boto3, time
 
+# The physical resource id must be IDENTICAL on every response, including the
+# Delete. CloudFormation rejects a change during deletion outright — "cannot
+# change the physical resource ID from X to Y during deletion" — which lands the
+# resource, and therefore the whole stack, in DELETE_FAILED.
+#
+# This handler used to return 'aurora-deleter' on Create and the cluster id on
+# Delete, so EVERY teardown failed here: OrgIQ-Aurora hit DELETE_FAILED, which
+# aborted the whole cdk destroy run before it reached the stacks behind Aurora,
+# left the operator to force-delete by hand with --retain-resources. Since one
+# id has to serve both paths and Create has no cluster id to hand, it is a
+# constant, and Delete echoes back whatever it was created with rather than
+# inventing one.
+DELETER_ID = 'aurora-deleter'
+
+
+def _pid(event):
+    """Echo the id we were created with; fall back to the constant."""
+    return event.get('PhysicalResourceId') or DELETER_ID
+
+
 def handler(event, context):
     if event['RequestType'] != 'Delete':
-        return {'PhysicalResourceId': event.get('PhysicalResourceId', 'aurora-deleter')}
+        return {'PhysicalResourceId': _pid(event)}
     cluster_id = event['ResourceProperties']['ClusterId']
     rds = boto3.client('rds')
     try:
@@ -224,10 +244,16 @@ def handler(event, context):
             DeleteAutomatedBackups=True,
         )
     except rds.exceptions.DBClusterNotFoundFault:
-        return {'PhysicalResourceId': cluster_id}
+        return {'PhysicalResourceId': _pid(event)}
     except Exception as e:
-        if 'DBClusterNotFoundFault' in str(e):
-            return {'PhysicalResourceId': cluster_id}
+        msg = str(e)
+        if 'DBClusterNotFoundFault' in msg:
+            return {'PhysicalResourceId': _pid(event)}
+        # A delete already in flight is success, not an error — the cluster is
+        # going away, which is all this resource exists to accomplish. Same rule
+        # the runtime and cluster pre-drains in scripts/destroy.sh apply.
+        if 'InvalidDBClusterStateFault' in msg and 'deleting' in msg.lower():
+            return {'PhysicalResourceId': _pid(event)}
         raise
     for _ in range(80):
         time.sleep(10)
@@ -235,7 +261,7 @@ def handler(event, context):
             rds.describe_db_clusters(DBClusterIdentifier=cluster_id)
         except Exception as e:
             if 'DBClusterNotFoundFault' in str(e) or 'not found' in str(e).lower():
-                return {'PhysicalResourceId': cluster_id}
+                return {'PhysicalResourceId': _pid(event)}
     raise Exception(f'Timed out waiting for cluster {cluster_id} to delete')
 `),
     });
