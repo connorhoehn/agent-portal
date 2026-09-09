@@ -14,8 +14,10 @@
 // landed — whereas per-file requests let the list show exactly what happened
 // to each.
 
-import { useCallback, useRef, useState } from 'react';
-import { Card } from '@connorhoehnslalom/ui-components/shared';
+import { useCallback, useState } from 'react';
+import {
+  Card, EmptyState, FileUploadDrop, Inline, MetaLine, SectionLabel, Stack, StatusDot,
+} from '@connorhoehnslalom/ui-components/shared';
 
 export interface DropTarget {
   /** Registry row id, used for the authenticated upload path. */
@@ -55,8 +57,6 @@ export function DocumentDropzone({ target, onUploaded }: {
   onUploaded?: (count: number) => void;
 }) {
   const [uploads, setUploads] = useState<Upload[]>([]);
-  const [dragging, setDragging] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const send = useCallback(async (files: File[]) => {
     if (!target || files.length === 0) return;
@@ -100,20 +100,13 @@ export function DocumentDropzone({ target, onUploaded }: {
     if (succeeded > 0) onUploaded?.(succeeded);
   }, [target, onUploaded]);
 
-  const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragging(false);
-    void send(Array.from(e.dataTransfer.files));
-  }, [send]);
-
   if (!target) {
     return (
       <Card padding="md">
-        <div className="text-[13px] font-semibold text-text-primary">Nowhere to put documents yet</div>
-        <div className="text-[12px] text-text-secondary mt-1 leading-snug">
-          Uploading needs a knowledge base that exists and is in sync with the account. Resolve the
-          disagreements above first.
-        </div>
+        <EmptyState
+          title="Nowhere to put documents yet"
+          description="Uploading needs a knowledge base that exists and is in sync with the account. Resolve the disagreements above first."
+        />
       </Card>
     );
   }
@@ -123,70 +116,58 @@ export function DocumentDropzone({ target, onUploaded }: {
 
   return (
     <Card padding="none" className="overflow-hidden">
-      <div className="px-3.5 py-3 border-b border-border flex items-center gap-2">
-        <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">ADD DOCUMENTS</span>
-        <span className="text-[11px] text-text-tertiary">
-          into <span className="font-mono">{target.name}</span>
-        </span>
-        <div className="flex-1" />
+      <Inline gap="sm" align="center" className="px-3.5 py-3 border-b border-border">
+        <SectionLabel>ADD DOCUMENTS</SectionLabel>
+        <MetaLine size="xs" items={[`into ${target.name}`]} />
         {uploads.length > 0 && (
-          <span className="text-[11px] text-text-tertiary">
-            {done} uploaded{failed > 0 ? `, ${failed} failed` : ''}
-          </span>
+          <MetaLine
+            size="xs"
+            className="ml-auto"
+            items={[`${done} uploaded${failed > 0 ? `, ${failed} failed` : ''}`]}
+          />
         )}
-      </div>
+      </Inline>
 
-      <div
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={onDrop}
-        onClick={() => inputRef.current?.click()}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click(); }}
-        className={`m-3.5 rounded-lg border-2 border-dashed px-4 py-7 text-center cursor-pointer transition-colors ${
-          dragging ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
-        }`}
-      >
-        <div className="text-[13px] font-semibold text-text-primary">
-          {dragging ? 'Drop to upload' : 'Drag documents here, or click to choose'}
-        </div>
-        <div className="text-[11px] text-text-tertiary mt-1.5">
-          {ALLOWED.join(' · ')}
-        </div>
-        <div className="text-[11px] text-text-tertiary mt-1">
-          Uploaded files sit in storage until the knowledge base syncs — this page will offer that once they land.
-        </div>
-        <input
-          ref={inputRef}
-          type="file"
+      {/* The library's drop zone owns the whole interaction — drag state, the
+          click-to-choose affordance, keyboard activation and the hidden file
+          input. The three lines of guidance that used to sit inside the dashed
+          box now sit under it: FileUploadDrop takes one `label`, and copy that
+          long belongs beside the control rather than inside its target. */}
+      <Stack gap="xs" className="m-3.5">
+        <FileUploadDrop
           multiple
           accept={ALLOWED.join(',')}
-          className="hidden"
-          onChange={(e) => {
-            void send(Array.from(e.target.files ?? []));
-            e.target.value = '';
-          }}
+          label="Drag documents here, or click to choose"
+          onFiles={(files) => void send(files)}
         />
-      </div>
+        <MetaLine size="xs" items={[ALLOWED.join(' · ')]} />
+        <MetaLine
+          size="xs"
+          items={['Uploaded files sit in storage until the knowledge base syncs — this page will offer that once they land.']}
+        />
+      </Stack>
 
       {uploads.length > 0 && (
-        <div className="border-t border-border max-h-52 overflow-y-auto">
+        <Stack gap="none" className="border-t border-border max-h-52 overflow-y-auto">
           {uploads.map((u) => (
-            <div key={u.id} className="px-3.5 py-2 border-b border-border last:border-b-0 flex items-center gap-2.5">
-              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                u.state === 'done' ? 'bg-success'
-                  : u.state === 'failed' ? 'bg-danger'
-                  : u.state === 'uploading' ? 'bg-warning animate-pulse'
-                  : 'bg-text-tertiary'
-              }`} />
-              <span className="text-[12px] text-text-primary font-mono truncate flex-1">{u.name}</span>
+            <Inline key={u.id} gap="sm" align="center" className="px-3.5 py-2 border-b border-border last:border-b-0">
+              <StatusDot
+                size="sm"
+                pulse={u.state === 'uploading'}
+                color={
+                  u.state === 'done' ? 'var(--color-success)'
+                    : u.state === 'failed' ? 'var(--color-danger)'
+                    : u.state === 'uploading' ? 'var(--color-warning)'
+                    : 'var(--color-text-tertiary)'
+                }
+              />
+              <MetaLine size="sm" className="font-mono truncate flex-1" items={[u.name]} />
               {u.error
-                ? <span className="text-[11px] text-danger truncate max-w-[45%]" title={u.error}>{u.error}</span>
-                : <span className="text-[11px] text-text-tertiary shrink-0">{bytes(u.size)}</span>}
-            </div>
+                ? <MetaLine size="xs" className="truncate max-w-[45%] text-danger" items={[u.error]} />
+                : <MetaLine size="xs" className="shrink-0" items={[bytes(u.size)]} />}
+            </Inline>
           ))}
-        </div>
+        </Stack>
       )}
     </Card>
   );

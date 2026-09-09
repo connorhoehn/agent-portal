@@ -10,7 +10,10 @@
 // API deliberately has no endpoint that returns one.
 
 import { useCallback, useState } from 'react';
-import { Card, ConfirmDialog } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button, Card, CardHeader, Chip, ConfirmDialog, FormField, InlineAlert, Inline, Input,
+  MetaLine, Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
 
@@ -100,97 +103,100 @@ export function ConnectionSetup({ sources, onChanged }: Props) {
     }
   }, [onChanged, verified]);
 
+  const slug = label.trim()
+    ? label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'default'
+    : '<slug>';
+
   return (
     <Card padding="md" className="mb-4">
-      <div className="flex items-center gap-2">
-        <div className="text-[13px] font-semibold text-text-primary">GitHub connections</div>
-        <div className="flex-1" />
-        {canManage && (
-          <button
+      <CardHeader
+        title="GitHub connections"
+        subtitle="Personal access tokens, held in the credential vault — never stored or shown here. Knowledge → Sources manages the same connections; ingest shares this vault."
+        action={canManage ? (
+          <Button
+            variant="primary"
+            size="sm"
             onClick={() => { setAdding((v) => !v); setVerified(null); }}
-            className="px-2.5 py-1 rounded-md border-none bg-primary text-white text-[11px] font-semibold cursor-pointer"
           >
             {adding ? 'Cancel' : 'Connect GitHub'}
-          </button>
-        )}
-      </div>
-      <div className="text-[11px] text-text-tertiary mt-1">
-        Personal access tokens, held in the credential vault — never stored or shown here.
-        Knowledge → Sources manages the same connections; ingest shares this vault.
-      </div>
+          </Button>
+        ) : undefined}
+      />
 
       {adding && (
-        <div className="mt-3 pt-3 border-t border-border flex flex-wrap items-end gap-2.5">
-          <label>
-            <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">
-              Label
-            </span>
-            <input
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="acme"
-              className="px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary font-mono"
-            />
-            <span className="block text-[10px] text-text-tertiary mt-1">
-              becomes orgiq-github-{label.trim()
-                ? label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'default'
-                : '<slug>'}
-            </span>
-          </label>
-          <label className="flex-1 min-w-[240px]">
-            <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">
-              Personal access token
-            </span>
-            <input
-              type="password"
-              autoComplete="off"
-              value={pat}
-              onChange={(e) => setPat(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') void connect(); }}
-              placeholder="ghp_… or github_pat_…"
-              className="w-full px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary font-mono"
-            />
-          </label>
-          <button
+        <Inline gap="md" align="end" wrap className="mt-3 pt-3 border-t border-border">
+          {/* `labelId` is pulled out of the wiring bag deliberately: FormField
+              hands it to the consumer but it is not a DOM prop, and spreading
+              it onto Input reaches the element and makes React warn on every
+              render. Queued against the library in ui-components-queue.md. */}
+          <FormField label="Label" hint={`becomes orgiq-github-${slug}`}>
+            {({ labelId: _labelId, ...wiring }) => (
+              <Input
+                {...wiring}
+                mono
+                size="sm"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="acme"
+              />
+            )}
+          </FormField>
+          <FormField label="Personal access token" className="flex-1 min-w-[240px]">
+            {({ labelId: _labelId, ...wiring }) => (
+              <Input
+                {...wiring}
+                mono
+                size="sm"
+                type="password"
+                autoComplete="off"
+                value={pat}
+                onChange={(e) => setPat(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void connect(); }}
+                placeholder="ghp_… or github_pat_…"
+              />
+            )}
+          </FormField>
+          <Button
+            variant="primary"
+            size="sm"
             disabled={busy || !label.trim() || !pat.trim()}
             onClick={() => void connect()}
-            className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-40"
           >
             {busy ? 'verifying…' : 'Connect'}
-          </button>
-        </div>
+          </Button>
+        </Inline>
       )}
 
       {verified && (
-        <div className="mt-2 text-[11px] text-success">
+        <InlineAlert tone="success" className="mt-2">
           Connected as {verified.identity.login}
           {verified.identity.scopes.length > 0 && ` (${verified.identity.scopes.join(', ')})`}
-        </div>
+        </InlineAlert>
       )}
 
-      <div className="mt-3">
+      <Stack gap="none" className="mt-3">
         {github.length === 0 ? (
-          <div className="text-[11px] text-text-tertiary">
-            No GitHub connections yet. A token lets discovery browse what it can see, and
-            lets private repositories be cloned.
-          </div>
+          <MetaLine
+            size="xs"
+            items={['No GitHub connections yet. A token lets discovery browse what it can see, and lets private repositories be cloned.']}
+          />
         ) : (
           github.map((c) => (
-            <div key={c.name} className="flex items-center gap-2 py-1.5 border-t border-border first:border-t-0">
-              <span className="text-[12px] font-mono text-text-primary truncate">{c.name}</span>
-              <div className="flex-1" />
+            <Inline
+              key={c.name}
+              gap="sm"
+              align="center"
+              justify="between"
+              className="py-1.5 border-t border-border first:border-t-0"
+            >
+              <Chip size="xs" mono>{c.name}</Chip>
               {canManage && (
-                <button
-                  onClick={() => setDeleting(c.name)}
-                  className="text-[11px] text-text-tertiary hover:text-danger bg-transparent border-none cursor-pointer"
-                >
-                  delete
-                </button>
+                <Button variant="ghost" size="sm" onClick={() => setDeleting(c.name)}>delete</Button>
               )}
-            </div>
+            </Inline>
           ))
         )}
-      </div>
+      </Stack>
 
       <ConfirmDialog
         open={!!deleting}

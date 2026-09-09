@@ -1,0 +1,20 @@
+/* Component keyframes.
+ *
+ * Deliberately NOT in app.css. That file is the brand: `@theme` tokens, the
+ * shell's painted surfaces, the light/dark palettes — and
+ * scripts/validate-branding.sh hashes it, so every edit stales all four brand
+ * journey logs and asks for a re-walk that measures contrast and rhythm. A
+ * toast's slide-in has nothing to say about any of that.
+ *
+ * Tailwind v4 here is CSS-first with no config file, so there is no
+ * `theme.extend.keyframes` to put these in; a plain stylesheet imported
+ * alongside app.css is the remaining honest home. Consumers reference them
+ * through an arbitrary-value class (`[animation:toast-in_0.18s_ease-out]`)
+ * rather than a JSX `style=` prop, which is what the component-discipline
+ * gate is about.
+ */
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}

@@ -6,6 +6,7 @@ import { App } from './App';
 import { SessionProvider } from './lib/auth';
 import { initTheme } from './lib/preferences';
 import './app.css';
+import './animations.css';
 
 // Day/night before first paint — a saved dark pref flashing light is a bug.
 initTheme();

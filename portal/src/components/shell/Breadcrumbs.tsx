@@ -8,7 +8,8 @@
 // they render unlinked. Everything else links except the current page.
 
 import { useMemo } from 'react';
-import { Link, useLocation } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
+import { Breadcrumbs as UIBreadcrumbs } from '@connorhoehnslalom/ui-components/shared';
 
 import { resolveBreadcrumbs } from './breadcrumbResolve';
 export type { Crumb } from './breadcrumbResolve';
@@ -16,43 +17,46 @@ export type { Crumb } from './breadcrumbResolve';
 
 export function Breadcrumbs() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const crumbs = useMemo(() => resolveBreadcrumbs(pathname), [pathname]);
-  // Two levels is what the rail already shows; the trail earns its row at three.
-  // Every route with a section and a page gets the trail — not only 3+ levels.
-  // The trail is part of the header rhythm: with it on every page, a title
-  // always sits the same 16px under the same rule, so a list page and a
-  // detail page line up instead of the detail title landing 16px lower.
-  if (crumbs.length < 2) return null;
+
+  // Group crumbs (Build/Org/Operate/System) are context, not destinations, so
+  // they carry no href and the library renders them as plain text. The last
+  // crumb is the current page and is never a link either.
+  //
+  // Both href AND onClick: the href keeps it a real link — middle-click,
+  // open-in-new-tab, and what a screen reader announces — while the handler
+  // does the SPA navigation. href alone would full-page reload this app.
+  const items = useMemo(
+    () => crumbs.map((crumb, i) => {
+      const last = i === crumbs.length - 1;
+      if (!crumb.path || last) return { label: crumb.label };
+      const path = crumb.path;
+      return {
+        label: crumb.label,
+        href: path,
+        onClick: (e: React.MouseEvent) => {
+          // Leave the modified clicks to the browser — they mean "somewhere else".
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || (e as React.MouseEvent).button !== 0) return;
+          e.preventDefault();
+          void navigate(path);
+        },
+      };
+    }),
+    [crumbs, navigate],
+  );
+
   return (
-    <nav
-      aria-label="Breadcrumb"
-      // Aligned with the page title, not indented past it. This was styled as
-      // a full-width bar — px-4, bg-surface, its own bottom border — but it is
-      // mounted INSIDE the content column, so the bar spanned only that column
-      // while pushing the trail 16px right of the <h1> directly beneath it,
-      // and the title sat flush against the hairline with zero gap. Dropping
-      // the horizontal padding and the fill puts the trail where a label
-      // belongs (same left edge as the thing it names); mb-4 gives the title
-      // room to breathe under the rule.
-      className="shrink-0 mb-4 flex items-center gap-1.5 pb-1.5 border-b border-border text-[11.5px] overflow-x-auto whitespace-nowrap"
-    >
-      {crumbs.map((crumb, i) => {
-        const last = i === crumbs.length - 1;
-        return (
-          <span key={`${crumb.label}-${i}`} className="flex items-center gap-1.5 min-w-0">
-            {i > 0 && <span aria-hidden="true" className="text-text-tertiary">›</span>}
-            {crumb.path && !last ? (
-              <Link to={crumb.path} className="text-text-secondary no-underline hover:text-primary hover:underline">
-                {crumb.label}
-              </Link>
-            ) : (
-              <span className={last ? 'text-text-primary font-semibold' : 'text-text-tertiary'}>
-                {crumb.label}
-              </span>
-            )}
-          </span>
-        );
-      })}
-    </nav>
+    <UIBreadcrumbs
+      items={items}
+      separator="›"
+      // Two levels is what the rail already shows; the trail earns its row at
+      // three — but every route with a section and a page gets it, because the
+      // trail is part of the header rhythm. With it on every page a title
+      // always sits the same distance under the same rule, so a list page and
+      // a detail page line up instead of the detail title landing lower.
+      minItems={2}
+      className="shrink-0 mb-4 pb-1.5 border-b border-border text-[11.5px] overflow-x-auto whitespace-nowrap"
+    />
   );
 }

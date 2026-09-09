@@ -296,6 +296,7 @@ whole backlog. Most take `--quick` to skip the slow suites (jest, vite build).
 | `branding.md`, `branding-goal.md` | The token/colour system the portal paints from | `validate-branding.sh` |
 | `distillation.md`, `distillation-goal.md` | `/iq/distillation` — the fleet's shared memory | `validate-distillation.sh` |
 | `route-test-coverage.md` | Route ↔ test parity across every router | `validate-route-coverage.sh` |
+| `ui-components-queue.md` | Composites the library is missing — and, since it is the ledger the component-discipline gate reads, the ONLY thing that exempts a file from it. A row must say "Composed locally in `<file>`" to mint an exemption. | `validate-component-discipline.sh` |
 | `agentcore-preview-surface.md` | Verified preview-API research + the machine-callback operator runbook (§6a) | — |
 | `agentcore-preview-plan.md` | The sequenced work plan against that research | — |
 | `bots-and-work-marketplace.md` | Bots, the work marketplace, authorize → review → gate | — |
@@ -304,13 +305,13 @@ whole backlog. Most take `--quick` to skip the slow suites (jest, vite build).
 | `local-compute-presence.md` | A developer's machine as a fleet participant | — |
 | `devbox-interactive-terminal.md`, `handoff-computer-lab.md` | Devbox terminals and the environments domain | — |
 | `deploy-via-operator.md`, `researcher-pipeline-crd.md` | Kubernetes deployment via `dc-k8s-operator` CRDs | — |
-| `ui-components-queue.md` | Composites the library is missing — the TODO list, not a licence to cross-repo edit | — |
+
 
 ⚠️ This table is not the whole set — one further goal-doc/validator pair records
 the removal of a retired tenant, and it deliberately asserts that the removed
 tenant's name appears **nowhere** in `CLAUDE.md`, so it cannot be listed here by
 name without failing its own check. `ls docs/*-goal.md scripts/validate-*.sh`
-(7 validators) is always the authoritative list.
+(8 validators) is always the authoritative list.
 
 ---
 

@@ -9,7 +9,10 @@
 // list is for.
 
 import { useCallback, useState } from 'react';
-import { Card } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button, Card, Chip, FormField, Inline, Input, MetaLine, SectionLabel,
+  Select, Stack, Textarea,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
 
@@ -181,154 +184,156 @@ export function PolicyEditor() {
 
   const policies = data?.policies ?? [];
 
+  // `labelId` is pulled out of every wiring bag on purpose: FormField hands it
+  // to the consumer but it is not a DOM prop, so spreading it onto an input
+  // reaches the element and React warns. Queued against the library.
   return (
     <Card padding="none" className="overflow-hidden">
-      <div className="px-3.5 py-3 border-b border-border flex items-center gap-2">
-        <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">GOVERNANCE POLICIES</span>
-        <span className="text-[11px] text-text-tertiary">
-          decide when an agent's change can ship on its own and when it needs a human — every change is
-          evaluated against all enabled policies
-        </span>
-        <div className="flex-1" />
-        <button
-          onClick={() => setCreating((v) => !v)}
-          className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] font-semibold text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors"
-        >
+      <Inline gap="sm" align="center" className="px-3.5 py-3 border-b border-border">
+        <SectionLabel>GOVERNANCE POLICIES</SectionLabel>
+        <MetaLine
+          size="xs"
+          items={["decide when an agent's change can ship on its own and when it needs a human — every change is evaluated against all enabled policies"]}
+        />
+        <Button variant="secondary" size="sm" className="ml-auto" onClick={() => setCreating((v) => !v)}>
           {creating ? 'Cancel' : '+ Add policy'}
-        </button>
-      </div>
+        </Button>
+      </Inline>
 
       {creating && (
-        <div className="px-3.5 py-3 border-b border-border flex flex-wrap items-end gap-2.5">
-          <label className="flex-1 min-w-[200px]">
-            <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">
-              Name
-            </span>
-            <input
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="No unreviewed infra changes"
-              className="w-full px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary"
-            />
-          </label>
-          <label>
-            <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">
-              Kind
-            </span>
-            <select
-              value={form.kind}
-              onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value as PolicyKind }))}
-              className="px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary"
-            >
-              <option value="require_review">Require review</option>
-              <option value="protected_paths">Protected paths</option>
-              <option value="max_files">Max files changed</option>
-              <option value="model_allowlist">Model allowlist</option>
-            </select>
-          </label>
+        <Inline gap="md" align="end" wrap className="px-3.5 py-3 border-b border-border">
+          <FormField label="Name" className="flex-1 min-w-[200px]">
+            {({ labelId: _l, ...w }) => (
+              <Input
+                {...w}
+                size="sm"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="No unreviewed infra changes"
+              />
+            )}
+          </FormField>
+          <FormField label="Kind">
+            {({ labelId: _l, ...w }) => (
+              <Select
+                {...w}
+                size="sm"
+                value={form.kind}
+                onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value as PolicyKind }))}
+                options={[
+                  { value: 'require_review', label: 'Require review' },
+                  { value: 'protected_paths', label: 'Protected paths' },
+                  { value: 'max_files', label: 'Max files changed' },
+                  { value: 'model_allowlist', label: 'Model allowlist' },
+                ]}
+              />
+            )}
+          </FormField>
           {!FIXED_ACTION[form.kind] && (
-            <label>
-              <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">
-                Action
-              </span>
-              <select
-                value={form.action}
-                onChange={(e) => setForm((f) => ({ ...f, action: e.target.value as PolicyAction }))}
-                className="px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary"
-              >
-                <option value="require_approval">Require approval</option>
-                <option value="block">Block</option>
-              </select>
-            </label>
+            <FormField label="Action">
+              {({ labelId: _l, ...w }) => (
+                <Select
+                  {...w}
+                  size="sm"
+                  value={form.action}
+                  onChange={(e) => setForm((f) => ({ ...f, action: e.target.value as PolicyAction }))}
+                  options={[
+                    { value: 'require_approval', label: 'Require approval' },
+                    { value: 'block', label: 'Block' },
+                  ]}
+                />
+              )}
+            </FormField>
           )}
 
           {form.kind === 'protected_paths' && (
-            <label className="w-full">
-              <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">
-                Path globs (comma or newline separated)
-              </span>
-              <textarea
-                value={form.globsText}
-                onChange={(e) => setForm((f) => ({ ...f, globsText: e.target.value }))}
-                placeholder="infra/**, **/auth/**"
-                rows={2}
-                className="w-full px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] font-mono text-text-primary"
-              />
-            </label>
+            <FormField label="Path globs (comma or newline separated)" className="w-full">
+              {({ labelId: _l, ...w }) => (
+                <Textarea
+                  {...w}
+                  className="font-mono"
+                  rows={2}
+                  value={form.globsText}
+                  onChange={(e) => setForm((f) => ({ ...f, globsText: e.target.value }))}
+                  placeholder="infra/**, **/auth/**"
+                />
+              )}
+            </FormField>
           )}
           {form.kind === 'max_files' && (
-            <label>
-              <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">
-                Max files
-              </span>
-              <input
-                type="number"
-                min={0}
-                value={form.maxText}
-                onChange={(e) => setForm((f) => ({ ...f, maxText: e.target.value }))}
-                placeholder="40"
-                className="w-24 px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary"
-              />
-            </label>
+            <FormField label="Max files">
+              {({ labelId: _l, ...w }) => (
+                <Input
+                  {...w}
+                  type="number"
+                  size="sm"
+                  min={0}
+                  className="w-24"
+                  value={form.maxText}
+                  onChange={(e) => setForm((f) => ({ ...f, maxText: e.target.value }))}
+                  placeholder="40"
+                />
+              )}
+            </FormField>
           )}
           {form.kind === 'model_allowlist' && (
-            <label className="w-full">
-              <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">
-                Allowed models (comma or newline separated)
-              </span>
-              <textarea
-                value={form.modelsText}
-                onChange={(e) => setForm((f) => ({ ...f, modelsText: e.target.value }))}
-                placeholder="amazon.nova-pro-v1:0"
-                rows={2}
-                className="w-full px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] font-mono text-text-primary"
-              />
-            </label>
+            <FormField label="Allowed models (comma or newline separated)" className="w-full">
+              {({ labelId: _l, ...w }) => (
+                <Textarea
+                  {...w}
+                  className="font-mono"
+                  rows={2}
+                  value={form.modelsText}
+                  onChange={(e) => setForm((f) => ({ ...f, modelsText: e.target.value }))}
+                  placeholder="amazon.nova-pro-v1:0"
+                />
+              )}
+            </FormField>
           )}
 
-          <button
+          <Button
+            variant="primary"
+            size="sm"
             disabled={busy || !form.name.trim()}
             onClick={() => void create()}
-            className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-40"
           >
             {busy ? 'saving…' : 'Add policy'}
-          </button>
-        </div>
+          </Button>
+        </Inline>
       )}
 
       {policies.length === 0 ? (
-        <div className="px-3.5 py-4 text-[12px] text-text-tertiary">
-          No policies yet. Every change ships without review until one is added.
-        </div>
+        <MetaLine
+          size="sm"
+          className="px-3.5 py-4"
+          items={['No policies yet. Every change ships without review until one is added.']}
+        />
       ) : (
         policies.map((p) => (
-          <div key={p.id} className="px-3.5 py-2.5 border-b border-border last:border-b-0 flex items-center gap-3">
-            <button
-              onClick={() => toggle(p)}
+          <Inline key={p.id} gap="md" align="center" className="px-3.5 py-2.5 border-b border-border last:border-b-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="shrink-0"
               title={p.enabled ? 'Disable policy' : 'Enable policy'}
-              className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded cursor-pointer border-none transition-colors ${
-                p.enabled ? 'bg-success-bg text-success' : 'bg-surface-hover text-text-tertiary'
-              }`}
+              onClick={() => toggle(p)}
             >
-              {p.enabled ? 'enabled' : 'disabled'}
-            </button>
-            <div className="flex-1 min-w-0">
-              <div className="text-[12px] font-semibold text-text-primary truncate">
-                {p.name}
-                <span className="ml-2 text-[10px] font-normal text-text-tertiary">{KIND_LABEL[p.kind]}</span>
-              </div>
-              <div className="text-[11px] text-text-tertiary truncate">{describe(p)}</div>
-            </div>
-            <span className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded ${ACTION_TONE[p.action]}`}>
-              {ACTION_LABEL[p.action]}
-            </span>
-            <button
-              onClick={() => void remove(p)}
-              className="shrink-0 px-2 py-1 rounded-md border border-border bg-surface text-[11px] text-text-secondary cursor-pointer hover:border-danger hover:text-danger transition-colors"
-            >
+              <Chip size="xs" tone={p.enabled ? 'success' : 'neutral'}>
+                {p.enabled ? 'enabled' : 'disabled'}
+              </Chip>
+            </Button>
+            <Stack gap="none" className="flex-1 min-w-0">
+              <Inline gap="xs" align="baseline" className="min-w-0">
+                <SectionLabel className="truncate">{p.name}</SectionLabel>
+                <MetaLine size="xs" items={[KIND_LABEL[p.kind]]} />
+              </Inline>
+              <MetaLine size="xs" className="truncate" items={[describe(p)]} />
+            </Stack>
+            <Chip size="xs" className={`shrink-0 ${ACTION_TONE[p.action]}`}>{ACTION_LABEL[p.action]}</Chip>
+            <Button variant="secondary" size="sm" className="shrink-0" onClick={() => void remove(p)}>
               Delete
-            </button>
-          </div>
+            </Button>
+          </Inline>
         ))
       )}
     </Card>
