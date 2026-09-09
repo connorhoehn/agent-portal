@@ -141,7 +141,7 @@ AREAS=(
   "portal/src/components/codebases:0:0:0"
   "portal/src/components/scores:0:0:4"
   "portal/src/components/marketplace:49:3:0"
-  "portal/src/components/ingest:70:11:102"
+  "portal/src/components/ingest:70:9:58"
   "portal/src/components/canary:53:16:64"
   "portal/src/components/org-graph:45:7:8"
   "portal/src/components/shell:27:6:40"
