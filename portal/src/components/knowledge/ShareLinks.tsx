@@ -12,7 +12,9 @@
 // from" later, which anonymous credentials can never tell you.
 
 import { useCallback, useState } from 'react';
-import { Card } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button, Card, Chip, FormField, Inline, Input, MetaLine, SectionLabel, Select, Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
 
@@ -100,130 +102,132 @@ export function ShareLinks({ kbSlug }: { kbSlug: string | null }) {
   if (!kbSlug) return null;
   const links = data?.links ?? [];
 
+  // `labelId` comes out of every FormField wiring bag — it is not a DOM prop
+  // and spreading it onto an input makes React warn. Queued against the library.
   return (
     <Card padding="none" className="overflow-hidden">
-      <div className="px-3.5 py-3 border-b border-border flex items-center gap-2">
-        <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">SHARE LINKS</span>
-        <span className="text-[11px] text-text-tertiary">
-          let someone add documents without an account
-        </span>
-        <div className="flex-1" />
-        <button
-          onClick={() => setCreating((v) => !v)}
-          className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] font-semibold text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors"
-        >
+      <Inline gap="sm" align="center" className="px-3.5 py-3 border-b border-border">
+        <SectionLabel>SHARE LINKS</SectionLabel>
+        <MetaLine size="xs" items={['let someone add documents without an account']} />
+        <Button variant="secondary" size="sm" className="ml-auto" onClick={() => setCreating((v) => !v)}>
           {creating ? 'Cancel' : '+ New link'}
-        </button>
-      </div>
+        </Button>
+      </Inline>
 
       {/* The token, once. */}
       {fresh && (
-        <div className="px-3.5 py-3 border-b border-border bg-primary/5">
-          <div className="text-[12px] font-semibold text-text-primary">
-            Link for “{fresh.label}” — copy it now
-          </div>
-          <div className="text-[11px] text-text-secondary mt-1 mb-2 leading-snug">
-            This is the only time it is shown. The server keeps a hash, not the link, so it cannot be
-            looked up again — make a new one if you lose it.
-          </div>
-          <div className="flex gap-2">
-            <input
+        <Stack gap="sm" className="px-3.5 py-3 border-b border-border bg-primary/5">
+          <SectionLabel as="div">Link for “{fresh.label}” — copy it now</SectionLabel>
+          <MetaLine
+            size="xs"
+            className="leading-snug"
+            items={['This is the only time it is shown. The server keeps a hash, not the link, so it cannot be looked up again — make a new one if you lose it.']}
+          />
+          <Inline gap="sm">
+            <Input
               readOnly
+              mono
+              size="sm"
+              className="flex-1"
               value={fresh.url}
               onFocus={(e) => e.target.select()}
-              className="flex-1 px-2 py-1.5 rounded-md border border-border bg-surface text-[11px] font-mono text-text-primary"
+              aria-label="Share link"
             />
-            <button
+            <Button
+              variant="primary"
+              size="sm"
               onClick={() => {
                 void navigator.clipboard.writeText(fresh.url);
                 toastSuccess(null, 'Copied', 'The link is on your clipboard.');
               }}
-              className="px-2.5 py-1.5 rounded-md border-none bg-primary text-white text-[11px] font-semibold cursor-pointer"
             >
               Copy
-            </button>
-            <button
-              onClick={() => setFresh(null)}
-              className="px-2 py-1.5 rounded-md border border-border bg-surface text-[11px] text-text-secondary cursor-pointer"
-            >
-              Done
-            </button>
-          </div>
-        </div>
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setFresh(null)}>Done</Button>
+          </Inline>
+        </Stack>
       )}
 
       {creating && (
-        <div className="px-3.5 py-3 border-b border-border flex flex-wrap items-end gap-2.5">
-          <label className="flex-1 min-w-[220px]">
-            <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">
-              Who is this for
-            </span>
-            <input
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="Finance — Q3 vendor contracts"
-              className="w-full px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary"
-            />
-          </label>
-          <label>
-            <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">
-              Expires
-            </span>
-            <select
-              value={hours}
-              onChange={(e) => setHours(Number(e.target.value))}
-              className="px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary"
-            >
-              <option value={24}>24 hours</option>
-              <option value={72}>3 days</option>
-              <option value={168}>7 days</option>
-              <option value={720}>30 days</option>
-            </select>
-          </label>
-          <button
+        <Inline gap="md" align="end" wrap className="px-3.5 py-3 border-b border-border">
+          <FormField label="Who is this for" className="flex-1 min-w-[220px]">
+            {({ labelId: _l, ...w }) => (
+              <Input
+                {...w}
+                size="sm"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="Finance — Q3 vendor contracts"
+              />
+            )}
+          </FormField>
+          <FormField label="Expires">
+            {({ labelId: _l, ...w }) => (
+              <Select
+                {...w}
+                size="sm"
+                value={String(hours)}
+                onChange={(e) => setHours(Number(e.target.value))}
+                options={[
+                  { value: '24', label: '24 hours' },
+                  { value: '72', label: '3 days' },
+                  { value: '168', label: '7 days' },
+                  { value: '720', label: '30 days' },
+                ]}
+              />
+            )}
+          </FormField>
+          <Button
+            variant="primary"
+            size="sm"
             disabled={busy || !label.trim()}
             onClick={() => void create()}
-            className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-40"
           >
             {busy ? 'creating…' : 'Create link'}
-          </button>
+          </Button>
           {/* Naming it is required server-side too — an unlabelled link is
               untraceable the moment there is more than one. */}
-          <div className="w-full text-[11px] text-text-tertiary">
-            Anyone with the link can upload up to 25 files of 25 MB each into this knowledge base, until it
-            expires or you revoke it.
-          </div>
-        </div>
+          <MetaLine
+            size="xs"
+            className="w-full"
+            items={['Anyone with the link can upload up to 25 files of 25 MB each into this knowledge base, until it expires or you revoke it.']}
+          />
+        </Inline>
       )}
 
       {links.length === 0 ? (
-        <div className="px-3.5 py-4 text-[12px] text-text-tertiary">
-          No share links. Create one to let someone drop documents in without giving them an account.
-        </div>
+        <MetaLine
+          size="sm"
+          className="px-3.5 py-4"
+          items={['No share links. Create one to let someone drop documents in without giving them an account.']}
+        />
       ) : (
         links.map((l) => (
-          <div key={l.id} className="px-3.5 py-2.5 border-b border-border last:border-b-0 flex items-center gap-3">
-            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded shrink-0 ${STATUS_TONE[l.status]}`}>
-              {l.status}
-            </span>
-            <div className="flex-1 min-w-0">
-              <div className="text-[12px] font-semibold text-text-primary truncate">{l.label}</div>
-              <div className="text-[11px] text-text-tertiary">
-                {l.filesUsed}/{l.maxFiles} files
-                {l.lastUsedAt ? ` · last used ${when(l.lastUsedAt)}` : ' · never used'}
-                {l.status === 'live' ? ` · expires ${when(l.expiresAt)}` : ''}
-                {l.createdBy ? ` · by ${l.createdBy}` : ''}
-              </div>
-            </div>
+          <Inline key={l.id} gap="md" align="center" className="px-3.5 py-2.5 border-b border-border last:border-b-0">
+            <Chip size="xs" className={`shrink-0 ${STATUS_TONE[l.status]}`}>{l.status}</Chip>
+            <Stack gap="none" className="flex-1 min-w-0">
+              <SectionLabel className="truncate">{l.label}</SectionLabel>
+              <MetaLine
+                size="xs"
+                items={[
+                  `${l.filesUsed}/${l.maxFiles} files`,
+                  l.lastUsedAt ? `last used ${when(l.lastUsedAt)}` : 'never used',
+                  l.status === 'live' ? `expires ${when(l.expiresAt)}` : null,
+                  l.createdBy ? `by ${l.createdBy}` : null,
+                ]}
+              />
+            </Stack>
             {l.status === 'live' && (
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
+                className="shrink-0"
                 onClick={() => void revoke(l.id, l.label)}
-                className="shrink-0 px-2 py-1 rounded-md border border-border bg-surface text-[11px] text-text-secondary cursor-pointer hover:border-danger hover:text-danger transition-colors"
               >
                 Revoke
-              </button>
+              </Button>
             )}
-          </div>
+          </Inline>
         ))
       )}
     </Card>

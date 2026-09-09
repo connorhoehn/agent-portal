@@ -22,8 +22,11 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { Card } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Card, Chip, CodeBlock, EmptyState, Inline, InlineAlert, MetaLine, SectionLabel, Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 import { Markdown } from '../Markdown';
+import { ScrollRegion } from '../ScrollRegion';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -74,6 +77,24 @@ function resultText(content: unknown): string {
       .join('\n');
   }
   return content == null ? '' : JSON.stringify(content);
+}
+
+/**
+ * The empty-state glyph — a terminal with a prompt caret.
+ *
+ * An `<svg>` rather than a library component on purpose: the icon set has no
+ * "terminal" mark, and inline SVG is not what the component-discipline rule is
+ * about. It counts styled text and layout elements, which is where hand-rolled
+ * UI actually diverges from the design system; an icon path does not.
+ */
+function TimelineGlyph() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <path d="m7 9 3 3-3 3" />
+      <path d="M13 15h4" />
+    </svg>
+  );
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -277,78 +298,99 @@ export const RunTimeline = forwardRef<RunTimelineHandle, RunTimelineProps>(funct
 
   return (
     <Card className="!p-0 overflow-hidden">
-      <style>{`@keyframes runtl-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }`}</style>
-      <div className="px-3.5 py-3 border-b border-border flex items-center gap-2">
-        <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">{title}</span>
+      <Inline gap="sm" align="center" className="px-3.5 py-3 border-b border-border">
+        <SectionLabel>{title}</SectionLabel>
         {headerExtra}
         {/* Only shown when the tail is NOT healthy. A working stream needs no
             chrome; a dead one must not be able to pass for a quiet one. */}
         {(tailState === 'retrying' || tailState === 'unavailable') && (
-          <span
-            className={`ml-auto text-[11px] font-semibold ${tailState === 'unavailable' ? 'text-danger' : 'text-text-tertiary'}`}
+          <Chip
+            size="xs"
+            tone={tailState === 'unavailable' ? 'danger' : 'neutral'}
+            className="ml-auto"
             title={tailState === 'unavailable'
               ? 'The server is no longer streaming this computer\'s log — it was removed, or the middleware restarted (the event buffer lives in its memory).'
               : 'Lost the log stream — retrying.'}
           >
             {tailState === 'unavailable' ? 'LOG UNAVAILABLE' : 'RECONNECTING…'}
-          </span>
+          </Chip>
         )}
-      </div>
-      <div ref={scrollRef} className={`overflow-y-auto overflow-x-hidden min-h-[280px] ${maxHeightClass} px-3.5 py-2`}>
+      </Inline>
+      <ScrollRegion className={`overflow-y-auto overflow-x-hidden min-h-[280px] ${maxHeightClass} px-3.5 py-2`} ref={scrollRef}>
         {timeline.length === 0 ? (
-          <div className="py-10 text-center select-none">
-            <svg aria-hidden="true" viewBox="0 0 24 24" className="w-8 h-8 mx-auto mb-2.5 text-text-tertiary" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="4" width="20" height="16" rx="2" />
-              <path d="m7 9 3 3-3 3" />
-              <path d="M13 15h4" />
-            </svg>
-            <div className="text-[13px] font-semibold text-text-secondary">No executions yet</div>
-            <div className="text-[12px] text-text-tertiary mt-1">
-              {emptyHint ?? 'Every tool call Claude Code makes streams here live.'}
-            </div>
-          </div>
+          <EmptyState
+            icon={<TimelineGlyph />}
+            title="No executions yet"
+            description={emptyHint ?? 'Every tool call Claude Code makes streams here live.'}
+          />
         ) : timeline.map((item) => {
           if (item.kind === 'meta') return (
-            <div key={item.id} className={`py-1 text-[11px] text-text-tertiary ${mono}`}>── {item.text}</div>
+            <MetaLine key={item.id} size="xs" className={`py-1 ${mono}`} items={[`── ${item.text}`]} />
           );
           if (item.kind === 'text') return (
-            <div key={item.id} className="py-1.5 text-[13px] text-text-primary [&_pre]:overflow-x-auto [&_pre]:text-[12px] [&_code]:text-[12px] [&_h1]:text-[15px] [&_h2]:text-[14px] [&_h3]:text-[13.5px]">
+            <Stack key={item.id} gap="none" className="py-1.5 text-[13px] text-text-primary [&_pre]:overflow-x-auto [&_pre]:text-[12px] [&_code]:text-[12px] [&_h1]:text-[15px] [&_h2]:text-[14px] [&_h3]:text-[13.5px]">
               <Markdown>{item.text}</Markdown>
-            </div>
+            </Stack>
           );
           if (item.kind === 'tool') return (
-            <div key={item.id} className="my-1.5 border border-border rounded-md overflow-hidden">
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-surface-hover min-w-0">
-                <span className={`text-[12px] font-bold ${item.isError ? 'text-danger' : 'text-primary'}`}>{toolIcon(item.name)}</span>
-                <span className="text-[11px] font-semibold text-text-secondary">{item.name}</span>
-                <span className={`flex-1 min-w-0 text-[12px] text-text-primary overflow-hidden text-ellipsis whitespace-nowrap ${mono}`} title={item.summary}>{item.summary}</span>
-              </div>
+            <Stack key={item.id} gap="none" className="my-1.5 border border-border rounded-md overflow-hidden">
+              <Inline gap="sm" align="center" className="px-3 py-1.5 bg-surface-hover min-w-0">
+                <Chip size="xs" tone={item.isError ? 'danger' : 'accent'}>{toolIcon(item.name)}</Chip>
+                <SectionLabel>{item.name}</SectionLabel>
+                {/* The one-line argument summary. Truncation is the point — a
+                    Read of a long path must not push the tool name off-screen —
+                    so the full text lives in the title attribute. */}
+                <MetaLine
+                  size="sm"
+                  className={`flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap ${mono}`}
+                  items={[<span key="s" title={item.summary}>{item.summary}</span>]}
+                />
+              </Inline>
               {item.detail && (
-                <div className="px-3 py-1 text-[11px] text-text-tertiary border-t border-border">{item.detail}</div>
+                <MetaLine size="xs" className="px-3 py-1 border-t border-border" items={[item.detail]} />
               )}
               {item.output !== undefined && (
-                <pre className={`m-0 px-3 py-2 text-[11.5px] leading-snug border-t border-border overflow-x-auto max-h-48 overflow-y-auto whitespace-pre-wrap ${mono} ${item.isError ? 'text-danger' : 'text-text-secondary'}`}>
-                  {item.output || '(no output)'}
-                </pre>
+                <CodeBlock
+                  language="text"
+                  copyButton={false}
+                  className={`border-t border-border max-h-48 overflow-auto ${item.isError ? 'text-danger' : ''}`}
+                  code={item.output || '(no output)'}
+                />
               )}
-            </div>
+            </Stack>
           );
           if (item.kind === 'result') return (
-            <div key={item.id} className="my-2 px-3 py-2 rounded-md bg-success-bg text-[12px] text-success">
-              {item.subtype} · {item.turns} turns · {(item.durationMs / 1000).toFixed(0)}s · ${item.costUsd.toFixed(4)}
-            </div>
+            <InlineAlert key={item.id} tone="success" className="my-2">
+              <MetaLine
+                size="sm"
+                items={[
+                  item.subtype,
+                  `${item.turns} turns`,
+                  `${(item.durationMs / 1000).toFixed(0)}s`,
+                  `$${item.costUsd.toFixed(4)}`,
+                ]}
+              />
+            </InlineAlert>
           );
           if (item.kind === 'end') return (
-            <div key={item.id} className={`py-1 text-[11px] ${mono} ${item.exitCode === 0 ? 'text-text-tertiary' : 'text-danger'}`}>
-              ── exit {String(item.exitCode)}{item.timedOut ? ' (timed out)' : ''}
-              {item.stderr && item.exitCode !== 0 ? ` · ${item.stderr.slice(0, 300)}` : ''}
-            </div>
+            <MetaLine
+              key={item.id}
+              size="xs"
+              tone="tertiary"
+              // MetaLineTone is tertiary|secondary only — severity is not one of
+              // its axes — so a non-zero exit takes its colour from a class.
+              className={`py-1 ${mono} ${item.exitCode === 0 ? '' : 'text-danger'}`}
+              items={[
+                `── exit ${String(item.exitCode)}${item.timedOut ? ' (timed out)' : ''}`,
+                item.stderr && item.exitCode !== 0 ? item.stderr.slice(0, 300) : null,
+              ]}
+            />
           );
           return (
-            <div key={item.id} className="my-2 px-3 py-2 rounded-md bg-danger-bg text-[12px] text-danger">{item.text}</div>
+            <InlineAlert key={item.id} tone="error" className="my-2">{item.text}</InlineAlert>
           );
         })}
-      </div>
+      </ScrollRegion>
     </Card>
   );
 });

@@ -9,7 +9,9 @@
 // The chevron style matches the workspace tree on the Devbox page.
 
 import { useCallback, useState } from 'react';
-import { Drawer } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button, Chip, Drawer, Inline, MetaLine, SectionLabel, Select, Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
 
@@ -52,6 +54,53 @@ function describeFailure(status: number, body: { error?: string }): string {
 
 const CHEVRON = 'text-[9px] w-2 shrink-0';
 const NODE = 'flex items-center gap-1.5 text-[12px] cursor-pointer hover:underline py-1';
+
+/**
+ * Row indent as a class rather than a computed `paddingLeft`.
+ *
+ * The tree is exactly three levels by construction — connection → owner →
+ * repository — and both `renderOwner` call sites pass depth 1, so the padding
+ * values are a closed set {14, 28, 42, 50}. Tailwind cannot build a class from
+ * a runtime number, but it does not have to: a bounded set of depths is a
+ * bounded set of classes, and that keeps the component-discipline rule (no JSX
+ * `style=`) without pretending the tree is arbitrarily deep.
+ */
+const INDENT: Record<number, string> = {
+  14: 'pl-3.5',
+  28: 'pl-7',
+  42: 'pl-[42px]',
+  50: 'pl-[50px]',
+};
+const indent = (px: number): string => INDENT[px] ?? 'pl-3.5';
+
+/**
+ * One expandable row of the discovery tree: chevron, label, optional hint.
+ *
+ * The owner row and the connection row were the same three elements written
+ * twice. One component means the tree's row shape is stated once, and the
+ * chevron/label/hint stop being three loose spans per call site.
+ */
+function TreeRow({ open, label, hint, indentClass, onToggle }: {
+  open: boolean;
+  label: string;
+  hint?: string | null;
+  indentClass?: string;
+  onToggle: () => void;
+}) {
+  return (
+    <Inline
+      gap="xs"
+      align="center"
+      onClick={onToggle}
+      className={`${NODE} text-text-primary ${indentClass ?? ''}`}
+      title={hint ?? undefined}
+    >
+      <Chip size="xs" tone="neutral" aria-hidden="true" className={CHEVRON}>{open ? '▾' : '▸'}</Chip>
+      <SectionLabel className="truncate">{label}</SectionLabel>
+      {hint && <MetaLine size="xs" className="truncate" items={[hint]} />}
+    </Inline>
+  );
+}
 
 export function RepoDiscovery({ open, onClose, connections, orgProjects, linkedFullNames, onLinked }: Props) {
   // Linking POSTs /api/agent-projects (ManageDevbox); browsing rides
@@ -153,13 +202,13 @@ export function RepoDiscovery({ open, onClose, connections, orgProjects, linkedF
     const level = reposByOwner[key];
     const pad = 14 + depth * 14;
     if (!level || level.loading) {
-      return <div className="text-[11px] text-text-tertiary py-1" style={{ paddingLeft: pad }}>loading…</div>;
+      return <MetaLine size="xs" className={`py-1 ${indent(pad)}`} items={['loading…']} />;
     }
     if (level.error) {
-      return <div className="text-[11px] text-danger py-1" style={{ paddingLeft: pad }}>{level.error}</div>;
+      return <MetaLine size="xs" className={`py-1 text-danger ${indent(pad)}`} items={[level.error]} />;
     }
     if ((level.items ?? []).length === 0) {
-      return <div className="text-[11px] text-text-tertiary py-1" style={{ paddingLeft: pad }}>no repositories visible here</div>;
+      return <MetaLine size="xs" className={`py-1 ${indent(pad)}`} items={['no repositories visible here']} />;
     }
     return (level.items ?? []).map((r) => {
       const rowKey = `${conn}|${r.fullName}`;
@@ -167,42 +216,45 @@ export function RepoDiscovery({ open, onClose, connections, orgProjects, linkedF
       const confirming = confirmFor === rowKey;
       const pushed = ago(r.pushedAt);
       return (
-        <div key={rowKey}>
-          <div className="flex items-center gap-2 py-1" style={{ paddingLeft: pad }}>
-            <span className="text-[12px] font-mono text-text-primary truncate" title={r.fullName}>{r.name}</span>
-            {pushed && <span className="text-[10px] text-text-tertiary shrink-0">pushed {pushed}</span>}
-            <div className="flex-1" />
+        <Stack key={rowKey} gap="none">
+          <Inline gap="sm" align="center" justify="between" className={`py-1 ${indent(pad)}`}>
+            <Chip size="xs" mono title={r.fullName} className="truncate">{r.name}</Chip>
+            {pushed && <MetaLine size="xs" className="shrink-0" items={[`pushed ${pushed}`]} />}
             {isLinked ? (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-success-bg text-success shrink-0">linked</span>
+              <Chip size="xs" tone="success" className="shrink-0">linked</Chip>
             ) : !canLink ? null : (
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
+                className="shrink-0"
                 onClick={() => { setConfirmFor(confirming ? null : rowKey); setOrgProject(''); }}
-                className="px-2 py-0.5 rounded-md border border-border bg-surface text-[11px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors shrink-0"
               >
                 {confirming ? 'cancel' : 'Link'}
-              </button>
+              </Button>
             )}
-          </div>
+          </Inline>
           {confirming && !isLinked && (
-            <div className="flex items-center gap-2 pb-1.5" style={{ paddingLeft: pad + 8 }}>
-              <select
+            <Inline gap="sm" align="center" className={`pb-1.5 ${indent(pad + 8)}`}>
+              <Select
+                size="sm"
                 value={orgProject}
                 onChange={(e) => setOrgProject(e.target.value)}
-                className="px-2 py-1 rounded-md border border-border bg-surface text-[11px] text-text-primary"
-              >
-                <option value="">no initiative</option>
-                {orgProjects.map((op) => <option key={op.id} value={op.id}>{op.name}</option>)}
-              </select>
-              <button
+                options={[
+                  { value: '', label: 'no initiative' },
+                  ...orgProjects.map((op) => ({ value: op.id, label: op.name })),
+                ]}
+              />
+              <Button
+                variant="primary"
+                size="sm"
                 disabled={linking}
                 onClick={() => void link(conn, r)}
-                className="px-2.5 py-1 rounded-md border-none bg-primary text-white text-[11px] font-semibold cursor-pointer disabled:opacity-40"
               >
                 {linking ? 'linking…' : `Link ${r.fullName}`}
-              </button>
-            </div>
+              </Button>
+            </Inline>
           )}
-        </div>
+        </Stack>
       );
     });
   };
@@ -211,61 +263,64 @@ export function RepoDiscovery({ open, onClose, connections, orgProjects, linkedF
     const key = `${conn}|${org}`;
     const isOpen = expandedOwners.has(key);
     return (
-      <div key={key}>
-        <div
-          onClick={() => toggleOwner(conn, org)}
-          className={`${NODE} text-text-primary`}
-          style={{ paddingLeft: depth * 14 }}
-          title={hint ?? undefined}
-        >
-          <span aria-hidden="true" className={CHEVRON}>{isOpen ? '▾' : '▸'}</span>
-          <span className="truncate">{label}</span>
-          {hint && <span className="text-[10px] text-text-tertiary truncate">{hint}</span>}
-        </div>
+      <Stack key={key} gap="none">
+        <TreeRow
+          open={isOpen}
+          label={label}
+          hint={hint}
+          indentClass={indent(depth * 14)}
+          onToggle={() => toggleOwner(conn, org)}
+        />
         {isOpen && renderRepos(conn, org, depth + 1)}
-      </div>
+      </Stack>
     );
   };
 
   return (
     <Drawer open={open} onClose={onClose} title="Discover repositories" width={480}>
-      <div className="text-[11px] text-text-tertiary mb-2 leading-snug">
-        What each credential can see on GitHub — expand a connection, pick an owner, link a
-        repository. Pasting a URL on the page still works; this is the browsable route.
-      </div>
+      <MetaLine
+        size="xs"
+        className="mb-2 leading-snug"
+        items={['What each credential can see on GitHub — expand a connection, pick an owner, link a repository. Pasting a URL on the page still works; this is the browsable route.']}
+      />
       {connections.length === 0 ? (
-        <div className="text-[12px] text-text-tertiary">
-          No GitHub connections yet — add one from the Connections section on this page.
-        </div>
+        <MetaLine
+          size="sm"
+          items={['No GitHub connections yet — add one from the Connections section on this page.']}
+        />
       ) : (
         connections.map((c) => {
           const isOpen = expandedConns.has(c.name);
           const orgs = orgsByConn[c.name];
           return (
-            <div key={c.name}>
-              <div onClick={() => toggleConn(c.name)} className={`${NODE} font-mono text-primary`}>
-                <span aria-hidden="true" className={CHEVRON}>{isOpen ? '▾' : '▸'}</span>
-                <span className="truncate">{c.name}</span>
-              </div>
+            <Stack key={c.name} gap="none">
+              <TreeRow
+                open={isOpen}
+                label={c.name}
+                indentClass="font-mono text-primary"
+                onToggle={() => toggleConn(c.name)}
+              />
               {isOpen && (
                 !orgs || orgs.loading ? (
-                  <div className="text-[11px] text-text-tertiary py-1 pl-3.5">loading…</div>
+                  <MetaLine size="xs" className="py-1 pl-3.5" items={['loading…']} />
                 ) : orgs.error ? (
-                  <div className="text-[11px] text-danger py-1 pl-3.5">{orgs.error}</div>
+                  <MetaLine size="xs" className="py-1 pl-3.5 text-danger" items={[orgs.error]} />
                 ) : (
                   <>
                     {renderOwner(c.name, '', 'Personal', 'repositories the token’s user can see', 1)}
                     {(orgs.items ?? []).map((o) =>
                       renderOwner(c.name, o.login, o.login, o.description, 1))}
                     {(orgs.items ?? []).length === 0 && (
-                      <div className="text-[11px] text-text-tertiary py-1" style={{ paddingLeft: 28 }}>
-                        no organizations — only Personal is browsable
-                      </div>
+                      <MetaLine
+                        size="xs"
+                        className="py-1 pl-7"
+                        items={['no organizations — only Personal is browsable']}
+                      />
                     )}
                   </>
                 )
               )}
-            </div>
+            </Stack>
           );
         })
       )}

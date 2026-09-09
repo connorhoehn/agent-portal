@@ -1,110 +1,54 @@
-import type { CSSProperties } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+// Read-only markdown for assistant responses, crawl summaries, and any other
+// LLM-produced text.
+//
+// This was 110 lines of hand-rolled `react-markdown` with a `components={{}}`
+// override and twenty inline `CSSProperties` objects for every element — its
+// own h1..h4, list, link, table, blockquote and code styling, none of it
+// reachable by the design system. The library ships `MarkdownView`, built on
+// the SAME react-markdown + remark-gfm stack, styling with design tokens; two
+// pages in this portal (`distillation/ArtifactsPage`, `assessment/knowledge/
+// DocPane`) were already using it directly, so the portal had a library
+// renderer and a private clone of it rendering the same kind of text
+// differently.
+//
+// What is kept, and why this file still exists at all: the local renderer
+// deliberately DE-EMPHASISED headings — h1 at 17px rather than a page title —
+// because this markdown is assistant prose inside a card, not a document.
+// `MarkdownView` renders a real `<h1>` at `text-xl`, and exposes no prop for a
+// reduced scale, so that intent survives here as class overrides on the one
+// wrapper instead of as a second markdown implementation. If the library grows
+// a `scale`/`density` prop, this file becomes a direct re-export.
 
-// Read-only markdown renderer for assistant responses, crawl summaries, and
-// any other LLM-produced text. Styling matches the rest of the portal —
-// modest headings (not page-dominating), tight spacing, code-blocks with the
-// same surface tone as Card.
+import { MarkdownView } from '@connorhoehnslalom/ui-components/shared';
 
 interface MarkdownProps {
   children: string;
-  /** Tweak the base font size (default 14, matching MessageContent). */
+  /**
+   * Base font size in px. Only the sizes actually used are mapped — Tailwind
+   * cannot build a class from a runtime number, and inventing arbitrary
+   * `text-[Npx]` strings at call time would defeat the purge step. Anything
+   * else falls back to the body scale, which is what every caller but one
+   * already wanted.
+   */
   size?: number;
 }
 
+const SCALE: Record<number, string> = {
+  13: 'text-[13px]',
+  14: 'text-sm',
+};
+
+/**
+ * Assistant-prose scale: headings stepped down so a model's `#` heading reads
+ * as a section inside a card rather than competing with the page title. Sizes
+ * match the ones the hand-rolled renderer used (17/15/14/13px).
+ */
+const PROSE =
+  '[&_h1]:text-[17px] [&_h1]:mt-3.5 [&_h1]:mb-1.5 '
+  + '[&_h2]:text-[15px] [&_h2]:mt-3 [&_h2]:mb-1.5 '
+  + '[&_h3]:text-sm [&_h3]:mt-2.5 [&_h3]:mb-1 '
+  + '[&_h4]:text-[13px] [&_h4]:mt-2 [&_h4]:mb-1';
+
 export function Markdown({ children, size = 14 }: MarkdownProps) {
-  return (
-    <div style={{ ...root, fontSize: size }}>
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          h1: ({ node, ...p }) => <h3 style={h1} {...p} />,
-          h2: ({ node, ...p }) => <h4 style={h2} {...p} />,
-          h3: ({ node, ...p }) => <h5 style={h3} {...p} />,
-          h4: ({ node, ...p }) => <h6 style={h4} {...p} />,
-          p:  ({ node, ...p }) => <p  style={para} {...p} />,
-          ul: ({ node, ...p }) => <ul style={list} {...p} />,
-          ol: ({ node, ...p }) => <ol style={list} {...p} />,
-          li: ({ node, ...p }) => <li style={li}   {...p} />,
-          a:  ({ node, ...p }) => <a  style={link} target="_blank" rel="noreferrer" {...p} />,
-          code: ({ node, className, children, ...p }) => {
-            const inline = !className?.startsWith('language-');
-            return inline ? (
-              <code style={inlineCode} {...p}>{children}</code>
-            ) : (
-              <code className={className} style={blockCodeInner} {...p}>{children}</code>
-            );
-          },
-          pre:        ({ node, ...p }) => <pre   style={pre}   {...p} />,
-          blockquote: ({ node, ...p }) => <blockquote style={quote} {...p} />,
-          table:      ({ node, ...p }) => <div style={tableWrap}><table style={table} {...p} /></div>,
-          th:         ({ node, ...p }) => <th    style={th}    {...p} />,
-          td:         ({ node, ...p }) => <td    style={td}    {...p} />,
-          hr:         () => <hr style={hr} />,
-          strong:     ({ node, ...p }) => <strong style={strong} {...p} />,
-          em:         ({ node, ...p }) => <em     style={em}     {...p} />,
-        }}
-      >
-        {children}
-      </ReactMarkdown>
-    </div>
-  );
+  return <MarkdownView markdown={children} className={`${SCALE[size] ?? 'text-sm'} ${PROSE}`} />;
 }
-
-// ── styles ────────────────────────────────────────────────────────────────────
-
-const root: CSSProperties = { lineHeight: 1.6, color: 'var(--color-text-primary)' };
-const h1: CSSProperties = { fontSize: 17, fontWeight: 700, margin: '14px 0 6px' };
-const h2: CSSProperties = { fontSize: 15, fontWeight: 700, margin: '12px 0 6px' };
-const h3: CSSProperties = { fontSize: 14, fontWeight: 600, margin: '10px 0 4px' };
-const h4: CSSProperties = { fontSize: 13, fontWeight: 600, margin: '8px 0 4px',  color: 'var(--color-text-secondary)' };
-const para: CSSProperties = { margin: '6px 0' };
-const list: CSSProperties = { margin: '6px 0 6px 22px', padding: 0 };
-const li: CSSProperties = { margin: '2px 0' };
-const link: CSSProperties = { color: 'var(--color-primary)', textDecoration: 'underline' };
-const strong: CSSProperties = { fontWeight: 600 };
-const em: CSSProperties = { fontStyle: 'italic' };
-const inlineCode: CSSProperties = {
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-  fontSize: '0.9em',
-  background: 'var(--color-surface-hover)',
-  padding: '1px 5px',
-  borderRadius: 4,
-  border: '1px solid var(--color-border)',
-};
-const pre: CSSProperties = {
-  margin: '8px 0',
-  padding: 12,
-  background: 'var(--color-surface-hover)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 6,
-  overflow: 'auto',
-  fontSize: '0.9em',
-};
-const blockCodeInner: CSSProperties = {
-  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-};
-const quote: CSSProperties = {
-  margin: '8px 0',
-  padding: '4px 12px',
-  borderLeft: '3px solid var(--color-border)',
-  color: 'var(--color-text-secondary)',
-};
-const tableWrap: CSSProperties = { overflowX: 'auto', margin: '8px 0' };
-const table: CSSProperties = {
-  borderCollapse: 'collapse',
-  fontSize: '0.95em',
-};
-const th: CSSProperties = {
-  padding: '4px 10px',
-  borderBottom: '1px solid var(--color-border)',
-  textAlign: 'left',
-  fontWeight: 600,
-  background: 'var(--color-surface-hover)',
-};
-const td: CSSProperties = {
-  padding: '4px 10px',
-  borderBottom: '1px solid var(--color-border)',
-};
-const hr: CSSProperties = { border: 0, borderTop: '1px solid var(--color-border)', margin: '12px 0' };

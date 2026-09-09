@@ -3,27 +3,20 @@
 
 import { useSyncExternalStore } from 'react';
 import {
+  Button, Inline, MetaLine, SectionLabel, Spinner, Stack,
+} from '@connorhoehnslalom/ui-components/shared';
+import {
   subscribeToasts,
   getToasts,
   dismissToast,
   type Toast,
 } from '../../lib/toastStore';
 
-function Spinner() {
-  return (
-    <span
-      aria-hidden="true"
-      className="inline-block w-3.5 h-3.5 rounded-full border-2 border-primary border-t-transparent shrink-0"
-      style={{ animation: 'toast-spin 0.8s linear infinite' }}
-    />
-  );
-}
-
 function iconFor(t: Toast) {
-  if (t.kind === 'pending') return <Spinner />;
-  if (t.kind === 'success') return <span className="text-success font-bold text-[13px] shrink-0">✓</span>;
-  if (t.kind === 'error') return <span className="text-danger font-bold text-[13px] shrink-0">✗</span>;
-  return <span className="text-primary font-bold text-[13px] shrink-0">ℹ</span>;
+  if (t.kind === 'pending') return <Spinner size="sm" />;
+  if (t.kind === 'success') return <SectionLabel className="text-success shrink-0">✓</SectionLabel>;
+  if (t.kind === 'error') return <SectionLabel className="text-danger shrink-0">✗</SectionLabel>;
+  return <SectionLabel className="text-primary shrink-0">ℹ</SectionLabel>;
 }
 
 export function ToastHost() {
@@ -31,36 +24,37 @@ export function ToastHost() {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed top-14 right-4 z-[200] flex flex-col gap-2 w-[320px] pointer-events-none">
-      <style>{`
-        @keyframes toast-spin { to { transform: rotate(360deg); } }
-        @keyframes toast-in { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }
-      `}</style>
+    <Stack gap="sm" className="fixed top-14 right-4 z-[200] w-[320px] pointer-events-none">
       {toasts.map((t) => (
-        <div
+        <Inline
           key={t.id}
+          gap="sm"
+          align="start"
           role="status"
-          className={`pointer-events-auto flex items-start gap-2.5 px-3.5 py-2.5 rounded-lg border shadow-lg bg-surface min-w-0 ${
+          // The entrance keyframes live in app.css; this is the arbitrary-value
+          // class that plays them, so no JSX `style=` prop is needed.
+          className={`pointer-events-auto px-3.5 py-2.5 rounded-lg border shadow-lg bg-surface min-w-0 [animation:toast-in_0.18s_ease-out] ${
             t.kind === 'error' ? 'border-danger/40' : t.kind === 'success' ? 'border-success/40' : 'border-border'
           }`}
-          style={{ animation: 'toast-in 0.18s ease-out' }}
         >
-          <span className="mt-0.5">{iconFor(t)}</span>
-          <div className="flex-1 min-w-0">
-            <div className="text-[12.5px] font-semibold text-text-primary leading-snug">{t.title}</div>
+          <Stack gap="none" className="mt-0.5">{iconFor(t)}</Stack>
+          <Stack gap="none" className="flex-1 min-w-0">
+            <SectionLabel className="leading-snug">{t.title}</SectionLabel>
             {t.detail && (
-              <div className="text-[11px] text-text-tertiary leading-snug mt-0.5 break-words">{t.detail}</div>
+              <MetaLine size="xs" className="leading-snug mt-0.5 break-words" items={[t.detail]} />
             )}
-          </div>
-          <button
-            onClick={() => dismissToast(t.id)}
+          </Stack>
+          <Button
+            variant="ghost"
+            size="sm"
             aria-label="Dismiss"
-            className="border-none bg-transparent cursor-pointer text-text-tertiary hover:text-text-primary text-[13px] leading-none p-0.5 shrink-0"
+            className="shrink-0"
+            onClick={() => dismissToast(t.id)}
           >
             ×
-          </button>
-        </div>
+          </Button>
+        </Inline>
       ))}
-    </div>
+    </Stack>
   );
 }
