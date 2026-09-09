@@ -5,7 +5,9 @@
 // the Computer Lab.
 
 import { Link } from 'react-router';
-import { Card, Chip } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Card, Chip, Inline, MetaLine, SectionLabel, Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 import { COMPUTE_STATUS, useComputeOptional } from '@connorhoehnslalom/ui-components/compute';
 import { computersForInitiative, truncateTask } from '../../lib/computeInitiative';
 
@@ -23,36 +25,34 @@ export function ComputersRailCard({ initiativeId }: { initiativeId: string | und
 
   return (
     <Card padding="none" className="overflow-hidden">
-      <div className="px-3 py-2.5 border-b border-border flex items-center gap-2">
-        <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">COMPUTERS</span>
-        <div className="flex-1" />
-        {mine.length > 0 && (
-          <Chip tone="neutral" size="xs" mono>{mine.length}</Chip>
-        )}
-      </div>
+      <Inline gap="sm" align="center" className="px-3 py-2.5 border-b border-border">
+        <SectionLabel>COMPUTERS</SectionLabel>
+        {mine.length > 0 && <Chip tone="neutral" size="xs" mono className="ml-auto">{mine.length}</Chip>}
+      </Inline>
 
       {mine.length === 0 ? (
-        <div className="px-3 py-3 text-[11.5px] text-text-tertiary leading-relaxed">
-          No computers charged to this initiative.
-        </div>
+        <MetaLine
+          size="xs"
+          className="px-3 py-3 leading-relaxed"
+          items={['No computers charged to this initiative.']}
+        />
       ) : (
         mine.map((c) => {
           const meta = COMPUTE_STATUS[c.status ?? 'idle'];
           const task = truncateTask(c.currentTask);
           return (
-            <div key={c.id} className="px-3 py-2 border-b border-border last:border-b-0">
-              <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+            <Stack key={c.id} gap="none" className="px-3 py-2 border-b border-border last:border-b-0">
+              <Inline gap="xs" align="center" wrap className="min-w-0">
                 <Chip tone={meta.tone} size="xs" dot={meta.pulse ? 'pulse' : 'static'} title={meta.help}>
                   {meta.label}
                 </Chip>
-                <span className="text-[12px] font-semibold text-text-primary truncate" title={c.label}>
-                  {c.label}
-                </span>
-                <div className="flex-1" />
+                <SectionLabel className="truncate"><span title={c.label}>{c.label}</span></SectionLabel>
                 {c.spendUsd != null && (
-                  <span className="text-[10.5px] text-text-tertiary tabular-nums whitespace-nowrap">
-                    ${c.spendUsd.toFixed(2)}
-                  </span>
+                  <MetaLine
+                    size="xs"
+                    className="ml-auto tabular-nums whitespace-nowrap"
+                    items={[`$${c.spendUsd.toFixed(2)}`]}
+                  />
                 )}
                 <Link
                   to={`/admin/devbox?box=${encodeURIComponent(c.id)}`}
@@ -61,13 +61,11 @@ export function ComputersRailCard({ initiativeId }: { initiativeId: string | und
                 >
                   open in lab →
                 </Link>
-              </div>
+              </Inline>
               {task && (
-                <div className="mt-0.5 text-[10.5px] text-text-tertiary truncate" title={c.currentTask}>
-                  {task}
-                </div>
+                <MetaLine size="xs" className="mt-0.5 truncate" items={[<span key="t" title={c.currentTask}>{task}</span>]} />
               )}
-            </div>
+            </Stack>
           );
         })
       )}
