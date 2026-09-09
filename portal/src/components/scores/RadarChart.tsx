@@ -1,3 +1,4 @@
+import { Card, EmptyState, MetaLine, SectionLabel, Stack } from '@connorhoehnslalom/ui-components/shared';
 import {
   Radar,
   RadarChart as RechartsRadarChart,
@@ -69,24 +70,20 @@ function CustomTooltip({
   const entry = payload[0]?.payload;
   if (!entry) return null;
   return (
-    <div className="bg-surface border border-border rounded-md py-1.5 px-2.5 text-xs">
-      <div className="font-semibold mb-0.5">{entry.subject}</div>
-      <div className="text-text-secondary">
-        {Math.round(entry.pct)}% of peer max
-      </div>
-      <div className="text-text-tertiary text-[10px]">
-        raw: {entry.raw}
-      </div>
-    </div>
+    <Card padding="sm">
+      <Stack gap="none">
+        <SectionLabel as="div">{entry.subject}</SectionLabel>
+        <MetaLine size="sm" tone="secondary" items={[`${Math.round(entry.pct)}% of peer max`]} />
+        <MetaLine size="xs" items={[`raw: ${entry.raw}`]} />
+      </Stack>
+    </Card>
   );
 }
 
 export function RadarChart({ radar }: RadarChartProps) {
   if (!radar) {
     return (
-      <div className="h-[220px] flex items-center justify-center text-text-tertiary text-xs">
-        No radar data
-      </div>
+      <EmptyState title="No radar data" className="h-[220px]" />
     );
   }
 

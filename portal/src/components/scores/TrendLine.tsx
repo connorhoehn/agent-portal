@@ -1,4 +1,6 @@
-import { Sparkline } from '@connorhoehnslalom/ui-components/shared';
+import {
+  EmptyState, ErrorState, Inline, MetaLine, SectionLabel, Sparkline, Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 
 export interface HistorySample {
   ts: string;
@@ -26,36 +28,23 @@ export interface TrendLineProps {
 export function TrendLine({ history, degraded }: TrendLineProps) {
   if (degraded) {
     return (
-      <div className="py-3 rounded-md">
-        <div className="text-[13px] font-semibold text-danger mb-1">
-          Could not load the score trend
-        </div>
-        <div className="text-xs text-text-secondary leading-relaxed">
-          {degraded.replace(/\.\s*$/, '')}. Score history lives in Aurora, so this
-          is unknown rather than empty — the trend may be perfectly healthy.
-        </div>
-      </div>
+      <ErrorState
+        title="Could not load the score trend"
+        description={`${degraded.replace(/\.\s*$/, '')}. Score history lives in Aurora, so this is unknown rather than empty — the trend may be perfectly healthy.`}
+      />
     );
   }
 
   if (history === undefined) {
-    return (
-      <div className="text-xs text-text-tertiary py-2">
-        Loading trend...
-      </div>
-    );
+    return <MetaLine size="xs" className="py-2" items={['Loading trend...']} />;
   }
 
   if (history === null || history.samples.length === 0) {
     return (
-      <div className="py-3 rounded-md">
-        <div className="text-[13px] font-semibold text-text-primary mb-1">
-          No trend data
-        </div>
-        <div className="text-xs text-text-secondary leading-relaxed">
-          Run the scoring agent to start tracking scores over time.
-        </div>
-      </div>
+      <EmptyState
+        title="No trend data"
+        description="Run the scoring agent to start tracking scores over time."
+      />
     );
   }
 
@@ -75,17 +64,15 @@ export function TrendLine({ history, degraded }: TrendLineProps) {
       : `${deltaVs7d >= 0 ? '↑' : '↓'} ${Math.abs(Math.round(deltaVs7d))}`;
 
   return (
-    <div className="flex items-center gap-3">
-      <div className="flex-[0_0_200px] h-[60px]">
+    <Inline align="center" gap="md">
+      <Stack gap="none" className="flex-[0_0_200px] h-[60px]">
         <Sparkline data={series} width={200} height={60} color="var(--color-primary, #6366f1)" />
-      </div>
+      </Stack>
 
-      <div className="flex flex-col items-start gap-0.5">
-        <span className={`text-sm font-bold leading-none ${deltaClass}`}>
-          {deltaLabel}
-        </span>
-        <span className="text-[10px] text-text-tertiary">vs 7d ago</span>
-      </div>
-    </div>
+      <Stack gap="none" align="start">
+        <SectionLabel className={`text-sm leading-none ${deltaClass}`}>{deltaLabel}</SectionLabel>
+        <MetaLine size="xs" items={['vs 7d ago']} />
+      </Stack>
+    </Inline>
   );
 }

@@ -15,6 +15,8 @@
 // PersonDetailCard fetches `contributions` eagerly, the same way it already
 // fetches `radar` and `history`, so the section has real content as soon as
 // it's expanded instead of racing a fetch that only starts on open.
+import { Inline, MetaLine, SectionLabel } from '@connorhoehnslalom/ui-components/shared';
+
 export interface CollaboratorContribution {
   otherId: string;
   otherName: string;
@@ -44,60 +46,63 @@ export interface ScoreContributionsProps {
   contributions: ContributionsResponse | null | undefined;
 }
 
-const SECTION_HEADER = 'text-[11px] font-semibold uppercase tracking-wider text-text-tertiary mb-1 mt-2.5 first:mt-0';
-const ROW = 'flex justify-between items-center py-[3px]';
-const ROW_LABEL = 'text-xs text-text-primary';
-const ROW_META = 'text-[10.5px] text-text-tertiary';
-const NO_DATA = 'text-[11px] text-text-tertiary';
+const SECTION_HEADER = 'mb-1 mt-2.5 first:mt-0';
+
+/**
+ * One `label — weight` line. All three sections below are the same shape, so
+ * they share it rather than repeating a two-span row three times.
+ */
+function ContributionRow({ label, meta }: { label: string; meta: string }) {
+  return (
+    <Inline justify="between" align="center" className="py-[3px]">
+      <MetaLine size="sm" items={[label]} />
+      <MetaLine size="xs" items={[meta]} />
+    </Inline>
+  );
+}
+
+function Section({ title, rows }: { title: string; rows: { key: string; label: string; meta: string }[] }) {
+  return (
+    <>
+      <SectionLabel as="div" className={SECTION_HEADER}>{title}</SectionLabel>
+      {rows.length === 0
+        ? <MetaLine size="xs" items={['No data yet']} />
+        : rows.map((r) => <ContributionRow key={r.key} label={r.label} meta={r.meta} />)}
+    </>
+  );
+}
 
 export function ScoreContributions({ contributions }: ScoreContributionsProps) {
   if (contributions === undefined) {
-    return <span className={NO_DATA}>Loading contributions…</span>;
+    return <MetaLine size="xs" items={['Loading contributions…']} />;
   }
   if (contributions === null) {
-    return <span className={NO_DATA}>No contribution data for this person yet.</span>;
+    return <MetaLine size="xs" items={['No contribution data for this person yet.']} />;
   }
   return (
     <>
-      <div className={SECTION_HEADER}>Collaborators</div>
-      {contributions.collaborators.length === 0 ? (
-        <span className={NO_DATA}>No data yet</span>
-      ) : (
-        contributions.collaborators.map((c) => (
-          <div key={c.otherId} className={ROW}>
-            <span className={ROW_LABEL}>{c.otherName}</span>
-            <span className={ROW_META}>{c.weight.toFixed(2)}</span>
-          </div>
-        ))
-      )}
-
-      <div className={SECTION_HEADER}>Projects</div>
-      {contributions.projects.length === 0 ? (
-        <span className={NO_DATA}>No data yet</span>
-      ) : (
-        contributions.projects.map((p, i) => (
-          <div key={`${p.projectName}-${i}`} className={ROW}>
-            <span className={ROW_LABEL}>{p.projectName}</span>
-            <span className={ROW_META}>
-              {p.role ? `${p.role} · ` : ''}{p.weight.toFixed(2)}
-            </span>
-          </div>
-        ))
-      )}
-
-      <div className={SECTION_HEADER}>Decisions</div>
-      {contributions.decisions.length === 0 ? (
-        <span className={NO_DATA}>No data yet</span>
-      ) : (
-        contributions.decisions.map((d, i) => (
-          <div key={`${d.topic}-${i}`} className={ROW}>
-            <span className={ROW_LABEL}>{d.topic}</span>
-            <span className={ROW_META}>
-              {d.role ? `${d.role} · ` : ''}{d.weight.toFixed(2)}
-            </span>
-          </div>
-        ))
-      )}
+      <Section
+        title="Collaborators"
+        rows={contributions.collaborators.map((c) => ({
+          key: c.otherId, label: c.otherName, meta: c.weight.toFixed(2),
+        }))}
+      />
+      <Section
+        title="Projects"
+        rows={contributions.projects.map((pr, i) => ({
+          key: `${pr.projectName}-${i}`,
+          label: pr.projectName,
+          meta: `${pr.role ? `${pr.role} · ` : ''}${pr.weight.toFixed(2)}`,
+        }))}
+      />
+      <Section
+        title="Decisions"
+        rows={contributions.decisions.map((d, i) => ({
+          key: `${d.topic}-${i}`,
+          label: d.topic,
+          meta: `${d.role ? `${d.role} · ` : ''}${d.weight.toFixed(2)}`,
+        }))}
+      />
     </>
   );
 }

@@ -139,7 +139,7 @@ AREAS=(
   "portal/src:450:65:357"
   "portal/src/components/runs:0:0:0"
   "portal/src/components/codebases:0:0:0"
-  "portal/src/components/scores:138:1:17"
+  "portal/src/components/scores:0:0:4"
   "portal/src/components/marketplace:115:4:0"
   "portal/src/components/ingest:70:11:119"
   "portal/src/components/canary:53:17:90"

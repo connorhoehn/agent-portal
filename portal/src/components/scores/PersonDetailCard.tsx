@@ -1,4 +1,6 @@
-import { Button, Card, CollapsibleSection } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button, Card, Chip, CollapsibleSection, Inline, MetaLine, SectionLabel, Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 import { PersonDetail, formatRelativeTime } from './types';
 import { formatScore } from './scoresFormat';
 import { RadarChart, type RadarAxes } from './RadarChart';
@@ -56,60 +58,63 @@ export function PersonDetailCard({ detail, compositeScore, influenceScore, deptC
   );
   return (
     <Card padding="md" className="mt-4">
-      <div className="flex items-start justify-between mb-2">
-        <div>
-          <h2 className="text-base font-semibold">{detail.name}</h2>
-          <div className="text-xs text-text-secondary">{detail.title}</div>
-          <div
-            className="text-[11px] mt-0.5"
-            style={{ color: deptColors[detail.department] ?? 'var(--color-text-tertiary)' }}
-          >
-            {detail.department}
-          </div>
-        </div>
+      <Inline align="start" justify="between" className="mb-2">
+        <Stack gap="none">
+          <SectionLabel as="h2" className="text-base">{detail.name}</SectionLabel>
+          <MetaLine size="sm" tone="secondary" items={[detail.title]} />
+          {/* Department colour is data, not design: it comes from the graph's
+              own per-department palette, so it stays a style rather than
+              becoming a class Tailwind could not build from a runtime key. */}
+          <MetaLine
+            size="xs"
+            className="mt-0.5"
+            items={[<span key="d" style={{ color: deptColors[detail.department] ?? 'var(--color-text-tertiary)' }}>{detail.department}</span>]}
+          />
+        </Stack>
         <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>
-      </div>
+      </Inline>
 
-      <div className={SECTION_HEADER}>Skills</div>
-      <div className="flex flex-wrap gap-1">
+      <SectionLabel as="div" className={SECTION_HEADER}>Skills</SectionLabel>
+      <Inline gap="xs" wrap>
         {detail.skills.length === 0 ? (
-          <span className="text-xs text-text-tertiary">none recorded</span>
+          <MetaLine size="xs" items={['none recorded']} />
         ) : (
-          detail.skills.map(s => (
-            <span key={s} className="text-[11px] py-0.5 px-2 bg-surface-hover rounded">{s}</span>
-          ))
+          detail.skills.map((sk) => <Chip key={sk} size="xs">{sk}</Chip>)
         )}
-      </div>
+      </Inline>
 
-      <div className={SECTION_HEADER}>Radar</div>
+      <SectionLabel as="div" className={SECTION_HEADER}>Radar</SectionLabel>
       <RadarChart radar={radar} />
 
-      <div className={SECTION_HEADER}>Trend</div>
+      <SectionLabel as="div" className={SECTION_HEADER}>Trend</SectionLabel>
       <TrendLine history={history} degraded={historyDegraded} />
 
-      <div className={SECTION_HEADER}>Top Connections ({detail.connections.length} total)</div>
-      <div className="flex flex-col gap-1 max-h-[280px] overflow-y-auto">
+      <SectionLabel as="div" className={SECTION_HEADER}>
+        Top Connections ({detail.connections.length} total)
+      </SectionLabel>
+      <Stack gap="xs" className="max-h-[280px] overflow-y-auto">
         {detail.connections
           .slice()
           .sort((a, b) => b.strength - a.strength)
           .slice(0, 12)
           .map((c, i) => (
-            <div
+            <Inline
               key={`${c.source}-${c.target}-${i}`}
+              justify="between"
+              align="center"
               onClick={() => c.otherPerson && onSelectConnection(c.otherPerson.id)}
-              className={`flex justify-between items-center text-xs py-1 px-2 rounded-[3px] ${c.otherPerson ? 'cursor-pointer' : 'cursor-default'}`}
+              className={`py-1 px-2 rounded-[3px] ${c.otherPerson ? 'cursor-pointer' : 'cursor-default'}`}
             >
-              <span>{c.otherPerson?.name ?? c.target}</span>
-              <span className="text-[10px] text-text-tertiary">
-                {c.type.replace(/_/g, ' ')} · {Math.round(c.strength * 100)}%
-              </span>
-            </div>
+              <MetaLine size="sm" items={[c.otherPerson?.name ?? c.target]} />
+              <MetaLine
+                size="xs"
+                items={[`${c.type.replace(/_/g, ' ')} · ${Math.round(c.strength * 100)}%`]}
+              />
+            </Inline>
           ))}
-      </div>
+      </Stack>
 
-      <div className="text-[11px] text-text-tertiary mt-3">
-        Scored {formatRelativeTime(detail.scoredAt)}
-      </div>
+      <MetaLine size="xs" className="mt-3" items={[`Scored ${formatRelativeTime(detail.scoredAt)}`]} />
 
       {/* One control, one surface (see ScoreContributions.tsx): this used to
           be a `▾` disclosure toggle that opened a separate `Drawer` of the
@@ -130,16 +135,16 @@ export function PersonDetailCard({ detail, compositeScore, influenceScore, deptC
           together rather than one showing a number that no longer has a row
           to agree with. */}
       {compositeScore !== null && influenceScore !== null && (
-        <div className="mt-3 pt-3 border-t border-border">
-          <div className="flex justify-between items-center text-[13px]">
-            <span className="text-text-secondary">Composite</span>
-            <span className="font-semibold">{formatScore(compositeScore)}</span>
-          </div>
-          <div className="flex justify-between items-center text-[13px] mt-1">
-            <span className="text-text-secondary">Influence</span>
-            <span className="font-semibold">{formatScore(influenceScore)}</span>
-          </div>
-        </div>
+        <Stack gap="xs" className="mt-3 pt-3 border-t border-border">
+          <Inline justify="between" align="center">
+            <MetaLine size="sm" tone="secondary" items={['Composite']} />
+            <SectionLabel>{formatScore(compositeScore)}</SectionLabel>
+          </Inline>
+          <Inline justify="between" align="center">
+            <MetaLine size="sm" tone="secondary" items={['Influence']} />
+            <SectionLabel>{formatScore(influenceScore)}</SectionLabel>
+          </Inline>
+        </Stack>
       )}
     </Card>
   );

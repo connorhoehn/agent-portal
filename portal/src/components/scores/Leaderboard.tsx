@@ -1,4 +1,6 @@
-import { Button, Card, Checkbox, Table, TableHead, TableBody, TableRow, TableTh, TableTd } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button, Card, Checkbox, Chip, Inline, MetaLine, SectionLabel, Stack, Table, TableBody, TableHead, TableRow, TableTd, TableTh,
+} from '@connorhoehnslalom/ui-components/shared';
 import { ScoreEntry } from './types';
 import { formatScore } from './scoresFormat';
 
@@ -23,18 +25,17 @@ interface Props {
 export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedBy, weight = 0.55, comparisonIds, onToggleCompare, compareDisabled }: Props) {
   return (
     <Card padding="md">
-      <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <h2 className="text-sm font-semibold m-0">Leaderboard</h2>
+      <Inline gap="sm" align="center" wrap className="mb-3">
+        <SectionLabel as="h2" className="text-sm">Leaderboard</SectionLabel>
         {rankedBy ? (
-          <span className="text-[11px] py-0.5 px-2 rounded-full bg-primary-soft text-primary font-medium">
-            Ranked by: {rankedBy}
-          </span>
+          <Chip size="xs" tone="accent">Ranked by: {rankedBy}</Chip>
         ) : (
-          <span className="text-[11px] font-normal text-text-tertiary">
-            composite = {Math.round(weight * 100)}% × influence + {Math.round((1 - weight) * 100)}% × expertise
-          </span>
+          <MetaLine
+            size="xs"
+            items={[`composite = ${Math.round(weight * 100)}% × influence + ${Math.round((1 - weight) * 100)}% × expertise`]}
+          />
         )}
-      </div>
+      </Inline>
       <Table>
         <TableHead>
           <TableRow>
@@ -97,9 +98,13 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
                   </Button>
                 </TableTd>
                 <TableTd>
-                  <span className="text-xs" style={{ color: deptColors[s.department] ?? 'var(--color-text-secondary)' }}>
-                    {s.department}
-                  </span>
+                  {/* Department colour is graph data, not a design token, so
+                      it stays a style — Tailwind cannot build a class from a
+                      runtime key. */}
+                  <MetaLine
+                    size="sm"
+                    items={[<span key="d" style={{ color: deptColors[s.department] ?? 'var(--color-text-secondary)' }}>{s.department}</span>]}
+                  />
                 </TableTd>
                 <TableTd className="text-right text-xs text-text-secondary">
                   {infScore}
@@ -109,12 +114,12 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
                 </TableTd>
                 <TableTd className="text-right font-semibold">
                   {compositeScore}
-                  <div title={tooltip} className="mt-1">
+                  <Stack gap="none" title={tooltip} className="mt-1">
                     <svg width={60} height={6} className="block ml-auto">
                       <rect x={0}    y={0} width={infW} height={6} rx={2} fill="var(--color-primary, #6366f1)" />
                       <rect x={infW} y={0} width={expW} height={6} rx={2} fill="var(--color-success)" />
                     </svg>
-                  </div>
+                  </Stack>
                 </TableTd>
               </TableRow>
             );

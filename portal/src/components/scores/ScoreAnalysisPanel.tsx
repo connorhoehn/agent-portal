@@ -12,7 +12,10 @@
 // the answer.
 
 import { useCallback, useState } from 'react';
-import { Card } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button, Card, Inline, InlineAlert, MetaLine, ProgressBar, SectionLabel, Stack,
+  Table, TableBody, TableHead, TableRow, TableTd, TableTh,
+} from '@connorhoehnslalom/ui-components/shared';
 
 interface Distribution {
   signal: string; n: number; mean: number; median: number; stdev: number;
@@ -77,195 +80,176 @@ export function ScoreAnalysisPanel() {
 
   return (
     <Card padding="none" className="overflow-hidden mb-4">
-      <div className="px-3.5 py-3 border-b border-border flex items-center gap-2 flex-wrap">
-        <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">
-          WHAT THE SCORE IS DOING
-        </span>
-        <span className="text-[11px] text-text-tertiary">
-          the stored composite_score, fitted in the Code Interpreter
-        </span>
-        <div className="flex-1" />
+      <Inline gap="sm" align="center" wrap className="px-3.5 py-3 border-b border-border">
+        <SectionLabel>WHAT THE SCORE IS DOING</SectionLabel>
+        <MetaLine size="xs" items={['the stored composite_score, fitted in the Code Interpreter']} />
         {analysis && (
-          <span className="text-[11px] text-text-tertiary">
-            {analysis.people} people · {(analysis.durationMs / 1000).toFixed(1)}s
-          </span>
+          <MetaLine
+            size="xs"
+            className="ml-auto"
+            items={[`${analysis.people} people`, `${(analysis.durationMs / 1000).toFixed(1)}s`]}
+          />
         )}
-        <button
-          disabled={running}
-          onClick={() => void run()}
-          className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] font-semibold text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
-        >
+        <Button variant="secondary" size="sm" disabled={running} onClick={() => void run()}>
           {running ? 'computing…' : analysis ? 'Recompute' : 'Analyse scores'}
-        </button>
-      </div>
+        </Button>
+      </Inline>
 
-      {error && (
-        <div className="px-3.5 py-3 text-[12px] text-danger leading-snug">{error}</div>
-      )}
+      {error && <InlineAlert tone="error" className="m-3.5">{error}</InlineAlert>}
 
       {!analysis && !error && (
-        <div className="px-3.5 py-3 text-[12px] text-text-secondary leading-snug">
-          Fits the composite against expertise and PageRank to show what it actually weights, how much the
-          signals overlap, and who is ranked somewhere the signals don’t justify. Runs on demand — it costs
-          a Code Interpreter session.
-        </div>
+        <MetaLine
+          size="sm"
+          className="px-3.5 py-3 leading-snug"
+          items={['Fits the composite against expertise and PageRank to show what it actually weights, how much the signals overlap, and who is ranked somewhere the signals don’t justify. Runs on demand — it costs a Code Interpreter session.']}
+        />
       )}
 
       {analysis && (
         <>
-          <div className="px-3.5 py-2 border-b border-border text-[11px] text-text-tertiary leading-snug">
-            This describes <span className="font-mono">people.composite_score</span> as stored — the number
-            agents and every other surface use. The ranking below is re-weighted live by the slider from
-            influence and expertise, so it is a different number on a different scale.
-          </div>
+          <MetaLine
+            size="xs"
+            className="px-3.5 py-2 border-b border-border leading-snug"
+            items={['This describes people.composite_score as stored — the number agents and every other surface use. The ranking below is re-weighted live by the slider from influence and expertise, so it is a different number on a different scale.']}
+          />
 
           {/* A null fit is a real outcome, not a rendering gap: it happens when
               the two signals are collinear, so no unique blend explains the
               composite. Saying nothing looked like the panel had failed. */}
           {!analysis.weights && (
-            <div className="px-3.5 py-3 border-b border-border text-[12px] text-text-secondary leading-snug">
-              No unique blend fits. Expertise and PageRank move together closely enough here that many
-              different weightings would reproduce the composite equally well — the correlations below
-              still hold, but the split cannot be pinned down.
-            </div>
+            <MetaLine
+              size="sm"
+              className="px-3.5 py-3 border-b border-border leading-snug"
+              items={['No unique blend fits. Expertise and PageRank move together closely enough here that many different weightings would reproduce the composite equally well — the correlations below still hold, but the split cannot be pinned down.']}
+            />
           )}
 
           {analysis.weights && (
-            <div className="px-3.5 py-3 border-b border-border">
-              <div className="text-[13px] font-semibold text-text-primary leading-snug">
-                {analysis.weights.reading}
-              </div>
-              <div className="mt-2.5 flex items-center gap-2">
-                <div className="flex-1 h-2 rounded-full overflow-hidden bg-surface-hover flex">
-                  <div
-                    className="bg-primary h-full"
-                    style={{ width: `${Math.round(analysis.weights.expertiseShare * 100)}%` }}
-                    title={`Expertise ${Math.round(analysis.weights.expertiseShare * 100)}%`}
-                  />
-                  <div
-                    className="bg-warning h-full"
-                    style={{ width: `${Math.round((1 - analysis.weights.expertiseShare) * 100)}%` }}
-                    title={`PageRank ${Math.round((1 - analysis.weights.expertiseShare) * 100)}%`}
-                  />
-                </div>
-                <span className="text-[11px] text-text-tertiary shrink-0 tabular-nums">
-                  R² {num(analysis.weights.r2)}
-                </span>
-              </div>
-              <div className="flex gap-4 mt-2 text-[11px] text-text-tertiary">
-                <span><span className="inline-block w-2 h-2 rounded-full bg-primary mr-1" />Expertise</span>
-                <span><span className="inline-block w-2 h-2 rounded-full bg-warning mr-1" />PageRank</span>
-                <span className="font-mono">
-                  composite ≈ {num(analysis.weights.expertise, 3)}·expertise
-                  {analysis.weights.pagerank >= 0 ? ' + ' : ' − '}
-                  {num(Math.abs(analysis.weights.pagerank), 3)}·pagerank
-                  {analysis.weights.intercept >= 0 ? ' + ' : ' − '}
-                  {num(Math.abs(analysis.weights.intercept), 2)}
-                </span>
-              </div>
+            <Stack gap="sm" className="px-3.5 py-3 border-b border-border">
+              <SectionLabel as="div" className="leading-snug">{analysis.weights.reading}</SectionLabel>
+              <Inline gap="sm" align="center">
+                {/* One bar, expertise's share of it. The old markup was two
+                    absolutely-sized divs whose widths were inline styles; a
+                    ProgressBar states the same split as a value out of 100. */}
+                <ProgressBar
+                  className="flex-1"
+                  value={Math.round(analysis.weights.expertiseShare * 100)}
+                  max={100}
+                  size="sm"
+                  showRatio={false}
+                  aria-label={`Expertise ${Math.round(analysis.weights.expertiseShare * 100)}%, PageRank ${Math.round((1 - analysis.weights.expertiseShare) * 100)}%`}
+                />
+                <MetaLine size="xs" className="shrink-0 tabular-nums" items={[`R² ${num(analysis.weights.r2)}`]} />
+              </Inline>
+              <Inline gap="md" wrap>
+                <MetaLine size="xs" className="text-primary" items={[`Expertise ${Math.round(analysis.weights.expertiseShare * 100)}%`]} />
+                <MetaLine size="xs" className="text-warning" items={[`PageRank ${Math.round((1 - analysis.weights.expertiseShare) * 100)}%`]} />
+                <MetaLine
+                  size="xs"
+                  className="font-mono"
+                  items={[`composite ≈ ${num(analysis.weights.expertise, 3)}·expertise ${analysis.weights.pagerank >= 0 ? '+' : '−'} ${num(Math.abs(analysis.weights.pagerank), 3)}·pagerank ${analysis.weights.intercept >= 0 ? '+' : '−'} ${num(Math.abs(analysis.weights.intercept), 2)}`]}
+                />
+              </Inline>
               {analysis.weights.r2 > 0.999 && (
-                <div className="text-[11px] text-warning mt-2 leading-snug">
+                <InlineAlert tone="warning">
                   An exact fit means this column is derived, not measured. Showing it beside its own inputs
                   invites double-counting the same evidence.
-                </div>
+                </InlineAlert>
               )}
               {analysis.weights.r2 < 0.5 && (
-                <div className="text-[11px] text-warning mt-2 leading-snug">
+                <InlineAlert tone="warning">
                   A low R² means the composite is not mostly a function of these two signals — treat the
                   split above as a weak description.
-                </div>
+                </InlineAlert>
               )}
-            </div>
+            </Stack>
           )}
 
           {/* ── How much the signals overlap ─────────────────────────────── */}
-          <div className="px-3.5 py-3 border-b border-border">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-2">
-              Do the signals say different things?
-            </div>
-            <div className="grid gap-2 grid-cols-1 sm:grid-cols-3">
+          <Stack gap="sm" className="px-3.5 py-3 border-b border-border">
+            <SectionLabel as="div">Do the signals say different things?</SectionLabel>
+            <Inline gap="md" wrap className="grid gap-2 grid-cols-1 sm:grid-cols-3">
               {analysis.correlations.map((c) => (
-                <div key={`${c.a}-${c.b}`} className="text-[11px]">
-                  <div className="text-text-secondary">
-                    {SIGNAL_LABEL[c.a] ?? c.a} ↔ {SIGNAL_LABEL[c.b] ?? c.b}
-                  </div>
-                  <div className="text-[15px] font-bold text-text-primary tabular-nums leading-tight mt-0.5">
+                <Stack key={`${c.a}-${c.b}`} gap="none">
+                  <MetaLine size="xs" tone="secondary" items={[`${SIGNAL_LABEL[c.a] ?? c.a} ↔ ${SIGNAL_LABEL[c.b] ?? c.b}`]} />
+                  <SectionLabel as="div" className="text-[15px] tabular-nums leading-tight mt-0.5">
                     {num(c.spearman)}
-                  </div>
-                  <div className="text-text-tertiary">{strength(c.spearman)}</div>
-                </div>
+                  </SectionLabel>
+                  <MetaLine size="xs" items={[strength(c.spearman)]} />
+                </Stack>
               ))}
-            </div>
-            <div className="text-[11px] text-text-tertiary mt-2 leading-snug">
-              Rank correlation. Two signals that agree completely are one signal counted twice.
-            </div>
-          </div>
+            </Inline>
+            <MetaLine
+              size="xs"
+              className="leading-snug"
+              items={['Rank correlation. Two signals that agree completely are one signal counted twice.']}
+            />
+          </Stack>
 
           {/* ── Shape of each signal ─────────────────────────────────────── */}
-          <div className="overflow-x-auto border-b border-border">
-            <table className="w-full text-[11px]">
-              <thead>
-                <tr className="text-[10px] uppercase tracking-wide text-text-tertiary">
-                  <th className="text-left font-semibold px-3.5 py-2">Signal</th>
-                  <th className="text-right font-semibold px-3.5 py-2">Median</th>
-                  <th className="text-right font-semibold px-3.5 py-2">p90</th>
-                  <th className="text-right font-semibold px-3.5 py-2">Max</th>
-                  <th className="text-right font-semibold px-3.5 py-2">Top 10% hold</th>
-                  <th className="text-right font-semibold px-3.5 py-2">Gini</th>
-                </tr>
-              </thead>
-              <tbody>
+          <Stack gap="none" className="overflow-x-auto border-b border-border">
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableTh align="left">Signal</TableTh>
+                  <TableTh align="right">Median</TableTh>
+                  <TableTh align="right">p90</TableTh>
+                  <TableTh align="right">Max</TableTh>
+                  <TableTh align="right">Top 10% hold</TableTh>
+                  <TableTh align="right">Gini</TableTh>
+                </TableRow>
+              </TableHead>
+              <TableBody>
                 {analysis.distributions.map((d) => (
-                  <tr key={d.signal} className="border-t border-border">
-                    <td className="px-3.5 py-2 font-semibold text-text-primary">
-                      {SIGNAL_LABEL[d.signal] ?? d.signal}
-                    </td>
-                    <td className="px-3.5 py-2 text-right tabular-nums">{num(d.median)}</td>
-                    <td className="px-3.5 py-2 text-right tabular-nums">{num(d.p90)}</td>
-                    <td className="px-3.5 py-2 text-right tabular-nums">{num(d.max)}</td>
-                    <td className="px-3.5 py-2 text-right tabular-nums">
-                      {(d.topDecileShare * 100).toFixed(0)}%
-                    </td>
-                    <td className="px-3.5 py-2 text-right tabular-nums">{num(d.gini)}</td>
-                  </tr>
+                  <TableRow key={d.signal}>
+                    <TableTd>{SIGNAL_LABEL[d.signal] ?? d.signal}</TableTd>
+                    <TableTd align="right">{num(d.median)}</TableTd>
+                    <TableTd align="right">{num(d.p90)}</TableTd>
+                    <TableTd align="right">{num(d.max)}</TableTd>
+                    <TableTd align="right">{(d.topDecileShare * 100).toFixed(0)}%</TableTd>
+                    <TableTd align="right">{num(d.gini)}</TableTd>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </TableBody>
+            </Table>
+          </Stack>
 
           {/* ── Where the ranking disagrees with its own inputs ──────────── */}
           {analysis.disagreements.length === 0 && analysis.weights && analysis.weights.r2 > 0.999 && (
-            <div className="px-3.5 py-3 text-[12px] text-text-secondary leading-snug">
-              Nobody is ranked differently than the signals imply — the composite reproduces them exactly,
-              so there is nothing here to disagree with.
-            </div>
+            <MetaLine
+              size="sm"
+              className="px-3.5 py-3 leading-snug"
+              items={['Nobody is ranked differently than the signals imply — the composite reproduces them exactly, so there is nothing here to disagree with.']}
+            />
           )}
 
           {analysis.disagreements.length > 0 && (
-            <div>
-              <div className="px-3.5 py-2 text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">
-                Ranked differently than the signals imply
-              </div>
+            <Stack gap="none">
+              <SectionLabel as="div" className="px-3.5 py-2">Ranked differently than the signals imply</SectionLabel>
               {analysis.disagreements.slice(0, 8).map((d) => (
-                <div key={d.personId} className="px-3.5 py-2 border-t border-border flex items-center gap-3">
-                  <span className={`text-[11px] font-semibold tabular-nums shrink-0 w-12 text-right ${
-                    d.rankDelta > 0 ? 'text-success' : 'text-warning'}`}>
-                    {d.rankDelta > 0 ? '+' : ''}{d.rankDelta}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[12px] text-text-primary truncate">{d.name}</div>
-                    {d.team && <div className="text-[11px] text-text-tertiary truncate">{d.team}</div>}
-                  </div>
-                  <span className="text-[11px] text-text-tertiary tabular-nums shrink-0">
-                    ranked #{d.compositeRank}, signals say #{d.predictedRank}
-                  </span>
-                </div>
+                <Inline key={d.personId} gap="md" align="center" className="px-3.5 py-2 border-t border-border">
+                  <MetaLine
+                    size="xs"
+                    className={`tabular-nums shrink-0 w-12 text-right ${d.rankDelta > 0 ? 'text-success' : 'text-warning'}`}
+                    items={[`${d.rankDelta > 0 ? '+' : ''}${d.rankDelta}`]}
+                  />
+                  <Stack gap="none" className="flex-1 min-w-0">
+                    <MetaLine size="sm" className="truncate" items={[d.name]} />
+                    {d.team && <MetaLine size="xs" className="truncate" items={[d.team]} />}
+                  </Stack>
+                  <MetaLine
+                    size="xs"
+                    className="tabular-nums shrink-0"
+                    items={[`ranked #${d.compositeRank}, signals say #${d.predictedRank}`]}
+                  />
+                </Inline>
               ))}
-              <div className="px-3.5 py-2.5 text-[11px] text-text-tertiary leading-snug border-t border-border">
-                A large gap means the composite places someone where expertise and PageRank alone would not.
-                That is worth looking at — it is either a scoring bug or a signal the model cannot see.
-              </div>
-            </div>
+              <MetaLine
+                size="xs"
+                className="px-3.5 py-2.5 leading-snug border-t border-border"
+                items={['A large gap means the composite places someone where expertise and PageRank alone would not. That is worth looking at — it is either a scoring bug or a signal the model cannot see.']}
+              />
+            </Stack>
           )}
 
           {analysis.stderr && (
@@ -273,9 +257,11 @@ export function ScoreAnalysisPanel() {
               <summary className="px-3.5 py-2 text-[11px] text-text-tertiary cursor-pointer select-none">
                 Sandbox output
               </summary>
-              <pre className="px-3.5 pb-3 text-[10px] text-text-tertiary font-mono whitespace-pre-wrap">
-                {analysis.stderr}
-              </pre>
+              <MetaLine
+                size="xs"
+                className="px-3.5 pb-3 font-mono whitespace-pre-wrap"
+                items={[analysis.stderr]}
+              />
             </details>
           )}
         </>
