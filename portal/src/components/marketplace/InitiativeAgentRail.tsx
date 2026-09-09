@@ -9,7 +9,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import {
-  Card, Chip, Inline, InlineAlert, MetaLine, SectionLabel, Stack,
+  Card, Chip, EntityCell, Inline, InlineAlert, MetaLine, SectionLabel, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { readDegraded } from '../../lib/degraded';
 import { useFetch } from '../../hooks/useFetch';
@@ -204,7 +204,7 @@ export function AgentsRailCard({ activity }: { activity: InitiativeAgentActivity
                     {bot.name}
                   </Link>
                 ) : (
-                  <SectionLabel className="truncate"><span title={bot.name}>{bot.name}</span></SectionLabel>
+                  <EntityCell label={bot.name} className="min-w-0" />
                 )}
                 <Chip tone={TEMPLATE_TONE[bot.template]} size="xs">{bot.template}</Chip>
                 {paused ? (

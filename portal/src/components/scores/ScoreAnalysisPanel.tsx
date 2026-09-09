@@ -13,8 +13,7 @@
 
 import { useCallback, useState } from 'react';
 import {
-  Button, Card, Inline, InlineAlert, MetaLine, ProgressBar, SectionLabel, Stack,
-  Table, TableBody, TableHead, TableRow, TableTd, TableTh,
+  Button, Card, EntityCell, Inline, InlineAlert, MetaLine, ProgressBar, SectionLabel, Stack, Table, TableBody, TableHead, TableRow, TableTd, TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 
 interface Distribution {
@@ -126,7 +125,7 @@ export function ScoreAnalysisPanel() {
 
           {analysis.weights && (
             <Stack gap="sm" className="px-3.5 py-3 border-b border-border">
-              <SectionLabel as="div" className="leading-snug">{analysis.weights.reading}</SectionLabel>
+              <EntityCell label={analysis.weights.reading} className="min-w-0" />
               <Inline gap="sm" align="center">
                 {/* One bar, expertise's share of it. The old markup was two
                     absolutely-sized divs whose widths were inline styles; a
@@ -172,9 +171,7 @@ export function ScoreAnalysisPanel() {
               {analysis.correlations.map((c) => (
                 <Stack key={`${c.a}-${c.b}`} gap="none">
                   <MetaLine size="xs" tone="secondary" items={[`${SIGNAL_LABEL[c.a] ?? c.a} ↔ ${SIGNAL_LABEL[c.b] ?? c.b}`]} />
-                  <SectionLabel as="div" className="text-[15px] tabular-nums leading-tight mt-0.5">
-                    {num(c.spearman)}
-                  </SectionLabel>
+                  <EntityCell label={num(c.spearman)} labelClassName="text-[15px] tabular-nums" className="mt-0.5" />
                   <MetaLine size="xs" items={[strength(c.spearman)]} />
                 </Stack>
               ))}

@@ -1,5 +1,5 @@
 import {
-  Button, Card, Checkbox, Chip, Inline, MetaLine, SectionLabel, Stack, Table, TableBody, TableHead, TableRow, TableTd, TableTh,
+  Button, Card, Checkbox, Chip, EntityCell, Inline, MetaLine, Stack, Table, TableBody, TableHead, TableRow, TableTd, TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { ScoreEntry } from './types';
 import { formatScore } from './scoresFormat';
@@ -26,7 +26,7 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
   return (
     <Card padding="md">
       <Inline gap="sm" align="center" wrap className="mb-3">
-        <SectionLabel as="h2" className="text-sm">Leaderboard</SectionLabel>
+        <EntityCell label="Leaderboard" labelClassName="text-sm" />
         {rankedBy ? (
           <Chip size="xs" tone="accent">Ranked by: {rankedBy}</Chip>
         ) : (

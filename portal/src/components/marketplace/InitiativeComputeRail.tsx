@@ -6,7 +6,7 @@
 
 import { Link } from 'react-router';
 import {
-  Card, Chip, Inline, MetaLine, SectionLabel, Stack,
+  Card, Chip, EntityCell, Inline, MetaLine, SectionLabel, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { COMPUTE_STATUS, useComputeOptional } from '@connorhoehnslalom/ui-components/compute';
 import { computersForInitiative, truncateTask } from '../../lib/computeInitiative';
@@ -46,7 +46,7 @@ export function ComputersRailCard({ initiativeId }: { initiativeId: string | und
                 <Chip tone={meta.tone} size="xs" dot={meta.pulse ? 'pulse' : 'static'} title={meta.help}>
                   {meta.label}
                 </Chip>
-                <SectionLabel className="truncate"><span title={c.label}>{c.label}</span></SectionLabel>
+                <EntityCell label={c.label} className="min-w-0" />
                 {c.spendUsd != null && (
                   <MetaLine
                     size="xs"

@@ -1,5 +1,5 @@
 import {
-  EmptyState, ErrorState, Inline, MetaLine, SectionLabel, Sparkline, Stack,
+  EmptyState, EntityCell, ErrorState, Inline, MetaLine, Sparkline, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 
 export interface HistorySample {
@@ -70,7 +70,7 @@ export function TrendLine({ history, degraded }: TrendLineProps) {
       </Stack>
 
       <Stack gap="none" align="start">
-        <SectionLabel className={`text-sm leading-none ${deltaClass}`}>{deltaLabel}</SectionLabel>
+        <EntityCell label={deltaLabel} labelClassName={`text-sm ${deltaClass}`} />
         <MetaLine size="xs" items={['vs 7d ago']} />
       </Stack>
     </Inline>

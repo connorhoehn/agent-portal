@@ -3,7 +3,7 @@
 
 import { useSyncExternalStore } from 'react';
 import {
-  Button, Inline, MetaLine, SectionLabel, Spinner, Stack,
+  Button, Chip, EntityCell, Inline, MetaLine, Spinner, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
   subscribeToasts,
@@ -14,9 +14,9 @@ import {
 
 function iconFor(t: Toast) {
   if (t.kind === 'pending') return <Spinner size="sm" />;
-  if (t.kind === 'success') return <SectionLabel className="text-success shrink-0">✓</SectionLabel>;
-  if (t.kind === 'error') return <SectionLabel className="text-danger shrink-0">✗</SectionLabel>;
-  return <SectionLabel className="text-primary shrink-0">ℹ</SectionLabel>;
+  if (t.kind === 'success') return <Chip size="xs" tone="success" className="shrink-0">✓</Chip>;
+  if (t.kind === 'error') return <Chip size="xs" tone="danger" className="shrink-0">✗</Chip>;
+  return <Chip size="xs" tone="info" className="shrink-0">ℹ</Chip>;
 }
 
 export function ToastHost() {
@@ -39,7 +39,7 @@ export function ToastHost() {
         >
           <Stack gap="none" className="mt-0.5">{iconFor(t)}</Stack>
           <Stack gap="none" className="flex-1 min-w-0">
-            <SectionLabel className="leading-snug">{t.title}</SectionLabel>
+            <EntityCell label={t.title} className="min-w-0" />
             {t.detail && (
               <MetaLine size="xs" className="leading-snug mt-0.5 break-words" items={[t.detail]} />
             )}

@@ -10,20 +10,25 @@
 // Empty table shown when Aurora has no decisions recorded yet.
 
 import { useState } from 'react';
-import type { CSSProperties } from 'react';
+import {
+  Button, Card, Chip, EmptyState, EntityCell, Inline, MetaLine, Stack, Table, TableBody, TableHead, TableRow, TableTd, TableTh,
+} from '@connorhoehnslalom/ui-components/shared';
 import { Link } from 'react-router';
 import { useCanaryStore } from './canaryStore.js';
 import type { ControllerAction, Decision } from './types.js';
 
 // ── Action metadata ───────────────────────────────────────────────────────────
 
-const ACTION_META: Record<ControllerAction, { label: string; bg: string; fg: string }> = {
-  PROMOTE:            { label: 'Promote',           bg: 'var(--color-success-bg)',  fg: 'var(--color-success)' },
-  ROLLBACK:           { label: 'Rollback',           bg: 'var(--color-danger-bg)',   fg: 'var(--color-danger)' },
-  HOLD:               { label: 'Hold',               bg: 'var(--color-warning-bg)',  fg: 'var(--color-warning)' },
-  SKIPPED_OVERRIDE:   { label: 'Skip — override',    bg: '#e0e7ff',                  fg: '#3730a3' },
-  SKIPPED_COOLDOWN:   { label: 'Skip — cooldown',    bg: 'var(--color-border)',       fg: 'var(--color-text-secondary)' },
-  SKIPPED_NO_SAMPLES: { label: 'Skip — no data',     bg: 'var(--color-border)',       fg: 'var(--color-text-secondary)' },
+const ACTION_META: Record<ControllerAction, { label: string; tone: 'success' | 'danger' | 'warning' | 'info' | 'neutral' }> = {
+  PROMOTE:            { label: 'Promote',        tone: 'success' },
+  ROLLBACK:           { label: 'Rollback',       tone: 'danger' },
+  HOLD:               { label: 'Hold',           tone: 'warning' },
+  // These carried literal light-mode hex (#e0e7ff / #3730a3), which paints
+  // the same in dark mode and read as a bright card on a dark table. A tone
+  // follows the theme.
+  SKIPPED_OVERRIDE:   { label: 'Skip — override', tone: 'info' },
+  SKIPPED_COOLDOWN:   { label: 'Skip — cooldown', tone: 'neutral' },
+  SKIPPED_NO_SAMPLES: { label: 'Skip — no data',  tone: 'neutral' },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -39,17 +44,13 @@ function fmtDate(ts: string): string {
 }
 
 function DeltaCell({ delta }: { delta: number | undefined }): React.ReactElement {
-  if (delta === undefined) {
-    return <span style={{ color: 'var(--color-text-tertiary, #94a3b8)' }}>—</span>;
-  }
-  const color =
-    delta > 0.005 ? 'var(--color-success)' :
-    delta < -0.005 ? 'var(--color-danger)' :
-    'var(--color-text-secondary, #475569)';
+  if (delta === undefined) return <MetaLine size="xs" items={['—']} />;
+  const cls =
+    delta > 0.005 ? 'text-success' :
+    delta < -0.005 ? 'text-danger' :
+    'text-text-secondary';
   return (
-    <span style={{ fontWeight: 600, color, fontVariantNumeric: 'tabular-nums' }}>
-      {delta >= 0 ? '+' : ''}{delta.toFixed(3)}
-    </span>
+    <EntityCell label={`${delta >= 0 ? '+' : ''}${delta.toFixed(3)}`} labelClassName={`tabular-nums ${cls}`} />
   );
 }
 
@@ -60,85 +61,51 @@ function DecisionRow({ decision, index }: { decision: Decision; index: number })
   const meta = ACTION_META[decision.action];
   const hasReason = !!decision.reason;
 
-  const trafficColor =
-    decision.to > decision.from ? 'var(--color-success)' :
-    decision.to < decision.from ? 'var(--color-danger)' :
-    'var(--color-text-secondary, #475569)';
+  const trafficClass =
+    decision.to > decision.from ? 'text-success' :
+    decision.to < decision.from ? 'text-danger' :
+    'text-text-secondary';
 
   return (
     <>
-      <tr
-        aria-expanded={hasReason ? expanded : undefined}
-        style={{
-          borderBottom: expanded ? 'none' : '1px solid var(--color-border, #e2e8f0)',
-          transition: 'background 0.15s',
-        }}
-        onMouseEnter={e => { if (hasReason) (e.currentTarget as HTMLTableRowElement).style.background = 'var(--color-bg, #f8fafc)'; }}
-        onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'; }}
-      >
-        {/* Time */}
-        <td style={tdStyle}>
-          <span style={timeStyle}>{fmtDate(decision.ts)}</span>
-        </td>
-        {/* Outcome chip */}
-        <td style={tdStyle}>
-          <span style={{ ...chipStyle, background: meta.bg, color: meta.fg }}>
-            {meta.label}
-          </span>
-        </td>
-        {/* Traffic B: before → after */}
-        <td style={{ ...tdStyle, fontVariantNumeric: 'tabular-nums' }}>
-          <span style={{ color: 'var(--color-text-secondary, #475569)', fontWeight: 500 }}>
-            {decision.from}%
-          </span>
-          <span style={{ margin: '0 6px', color: 'var(--color-text-tertiary, #94a3b8)' }}>→</span>
-          <span style={{ color: trafficColor, fontWeight: 700 }}>
-            {decision.to}%
-          </span>
-        </td>
-        {/* Score delta */}
-        <td style={{ ...tdStyle, textAlign: 'center' }}>
-          <DeltaCell delta={decision.deltaScore} />
-        </td>
-        {/* Reason preview */}
-        <td style={{ ...tdStyle, maxWidth: 0 }}>
-          {hasReason ? (
-            <span style={reasonPreviewStyle}>
-              {decision.reason}
-            </span>
-          ) : (
-            <span style={{ color: 'var(--color-text-tertiary, #94a3b8)', fontSize: 11 }}>—</span>
-          )}
-        </td>
-        {/* Expand caret */}
-        <td style={{ ...tdStyle, width: 28, textAlign: 'center', paddingLeft: 0 }}>
+      {/* Hover used to be two imperative handlers assigning
+          `currentTarget.style.background`; the library's row owns that. */}
+      <TableRow aria-expanded={hasReason ? expanded : undefined}>
+        <TableTd><MetaLine size="xs" className="tabular-nums" items={[fmtDate(decision.ts)]} /></TableTd>
+        <TableTd><Chip size="xs" tone={meta.tone}>{meta.label}</Chip></TableTd>
+        <TableTd>
+          <Inline gap="xs" align="center" className="tabular-nums">
+            <MetaLine size="sm" tone="secondary" items={[`${decision.from}%`]} />
+            <MetaLine size="xs" items={['→']} />
+            <EntityCell label={`${decision.to}%`} labelClassName={trafficClass} />
+          </Inline>
+        </TableTd>
+        <TableTd align="center"><DeltaCell delta={decision.deltaScore} /></TableTd>
+        <TableTd className="max-w-0">
+          {hasReason
+            ? <MetaLine size="xs" className="truncate italic" items={[decision.reason]} />
+            : <MetaLine size="xs" items={['—']} />}
+        </TableTd>
+        <TableTd align="center" className="w-7">
           {hasReason && (
-            <button
-              type="button"
-              onClick={() => setExpanded(v => !v)}
+            <Button
+              variant="ghost"
+              size="sm"
               aria-expanded={expanded}
               aria-label={expanded ? 'Collapse reason' : 'Expand reason'}
-              style={{
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                width: '100%', background: 'transparent', border: 'none',
-                cursor: 'pointer', padding: 0,
-                fontSize: 10, color: 'var(--color-text-tertiary, #94a3b8)',
-              }}
+              onClick={() => setExpanded(v => !v)}
             >
               <span aria-hidden="true">{expanded ? '▲' : '▼'}</span>
-            </button>
+            </Button>
           )}
-        </td>
-      </tr>
-      {/* Expanded reason */}
+        </TableTd>
+      </TableRow>
       {expanded && hasReason && (
-        <tr style={{ borderBottom: '1px solid var(--color-border, #e2e8f0)', background: 'var(--color-bg, #f8fafc)' }}>
-          <td colSpan={6} style={{ padding: '8px 16px 12px 16px' }}>
-            <p style={{ margin: 0, fontSize: 12.5, color: 'var(--color-text-secondary, #475569)', lineHeight: 1.65, fontStyle: 'italic' }}>
-              {decision.reason}
-            </p>
-          </td>
-        </tr>
+        <TableRow>
+          <TableTd colSpan={6}>
+            <MetaLine size="sm" tone="secondary" className="italic leading-relaxed" items={[decision.reason]} />
+          </TableTd>
+        </TableRow>
       )}
     </>
   );
@@ -146,24 +113,18 @@ function DecisionRow({ decision, index }: { decision: Decision; index: number })
 
 // ── Empty state ───────────────────────────────────────────────────────────────
 
-function EmptyState(): React.ReactElement {
+function DecisionsEmpty(): React.ReactElement {
   return (
-    <tr>
-      <td colSpan={6} style={{ padding: '56px 24px', textAlign: 'center' }}>
-        <div style={emptyInnerStyle}>
-          <span style={emptyIconStyle}>🧪</span>
-          <p style={emptyHeadStyle}>No canary decisions recorded yet</p>
-          <p style={emptySubStyle}>
-            Start a canary experiment to let the automated controller evaluate A/B prompt
-            performance. Each PROMOTE, ROLLBACK, or HOLD decision appears here as a row,
-            sourced from <code style={{ fontFamily: 'monospace', fontSize: 11 }}>observability.canary_decisions</code> in Aurora.
-          </p>
-          <Link to="/iq/canary" style={emptyBtnStyle}>
-            Configure experiment →
-          </Link>
-        </div>
-      </td>
-    </tr>
+    <TableRow>
+      <TableTd colSpan={6}>
+        <EmptyState
+          icon="🧪"
+          title="No canary decisions recorded yet"
+          description="Start a canary experiment to let the automated controller evaluate A/B prompt performance. Each PROMOTE, ROLLBACK, or HOLD decision appears here as a row, sourced from observability.canary_decisions in Aurora."
+          action={<Link to="/iq/canary" className="text-primary no-underline hover:underline">Configure experiment →</Link>}
+        />
+      </TableTd>
+    </TableRow>
   );
 }
 
@@ -176,254 +137,59 @@ export function CanaryDeploymentsView(): React.ReactElement {
   const sorted = [...decisions].reverse();
 
   return (
-    <div style={wrapStyle}>
-      {/* Page header */}
-      <div style={pageHeaderStyle}>
-        <div>
-          <h2 style={pageTitleStyle}>Canary Deployments</h2>
-          <p style={pageSubtitleStyle}>
-            Controller decisions from{' '}
-            <code style={codeStyle}>observability.canary_decisions</code>
-            {decisions.length > 0 && (
-              <span style={{ marginLeft: 6 }}>— {decisions.length} decision{decisions.length !== 1 ? 's' : ''} loaded</span>
-            )}
-          </p>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+    <Stack gap="md" className="p-6">
+      <Inline gap="md" align="start" justify="between">
+        <Stack gap="none">
+          <EntityCell label="Canary Deployments" labelClassName="text-base" />
+          <MetaLine
+            size="sm"
+            tone="secondary"
+            items={[
+              'Controller decisions from observability.canary_decisions',
+              decisions.length > 0
+                ? `${decisions.length} decision${decisions.length !== 1 ? 's' : ''} loaded`
+                : null,
+            ]}
+          />
+        </Stack>
+        <Inline gap="sm" align="center">
           {experimentState === 'running' && (
-            <Link to="/iq/canary" style={liveBtnStyle}>
-              ● Live view
-            </Link>
+            <Link to="/iq/canary" className="text-primary no-underline hover:underline text-[12px]">● Live view</Link>
           )}
-          <Link
-            to={experimentState === 'running' ? '/iq/canary' : '/iq/canary'}
-            style={newBtnStyle}
-          >
+          <Link to="/iq/canary" className="text-primary no-underline hover:underline text-[12px]">
             {experimentState === 'setup' ? '+ New experiment' : 'View experiment'}
           </Link>
-        </div>
-      </div>
+        </Inline>
+      </Inline>
 
-      {/* Table */}
-      <div style={tableWrapStyle}>
-        <table style={tableStyle}>
-          <thead>
-            <tr style={theadRowStyle}>
-              <th style={{ ...thStyle, width: 170 }}>Time</th>
-              <th style={{ ...thStyle, width: 150 }}>Outcome</th>
-              <th style={{ ...thStyle, width: 130 }}>Traffic B</th>
-              <th style={{ ...thStyle, width: 90, textAlign: 'center' }}>Δ Score</th>
-              <th style={{ ...thStyle }}>Reason</th>
-              <th style={{ ...thStyle, width: 28 }} />
-            </tr>
-          </thead>
-          <tbody>
+      <Card padding="none" className="overflow-hidden">
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableTh className="w-[170px]">Time</TableTh>
+              <TableTh className="w-[150px]">Outcome</TableTh>
+              <TableTh className="w-[130px]">Traffic B</TableTh>
+              <TableTh align="center" className="w-[90px]">Δ Score</TableTh>
+              <TableTh>Reason</TableTh>
+              <TableTh className="w-7" />
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {sorted.length === 0 ? (
-              <EmptyState />
+              <DecisionsEmpty />
             ) : (
-              sorted.map((d, i) => (
-                <DecisionRow key={`${d.ts}-${i}`} decision={d} index={i} />
-              ))
+              sorted.map((d, i) => <DecisionRow key={`${d.ts}-${i}`} decision={d} index={i} />)
             )}
-          </tbody>
-        </table>
-      </div>
+          </TableBody>
+        </Table>
+      </Card>
 
       {decisions.length > 0 && (
-        <div style={footerStyle}>
-          Showing {decisions.length} most recent decision{decisions.length !== 1 ? 's' : ''}.
-          Decisions older than the current session are loaded from Aurora on connect.
-        </div>
+        <MetaLine
+          size="xs"
+          items={[`Showing ${decisions.length} most recent decision${decisions.length !== 1 ? 's' : ''}. Decisions older than the current session are loaded from Aurora on connect.`]}
+        />
       )}
-    </div>
+    </Stack>
   );
 }
-
-// ── Styles ────────────────────────────────────────────────────────────────────
-
-const wrapStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  width: '100%',
-  height: '100%',
-  minHeight: 0,
-  background: 'var(--color-bg, #f8fafc)',
-};
-
-const pageHeaderStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'flex-start',
-  justifyContent: 'space-between',
-  padding: '20px 24px 16px',
-  background: 'var(--color-surface, #fff)',
-  borderBottom: '1px solid var(--color-border, #e2e8f0)',
-  flexShrink: 0,
-  gap: 16,
-};
-
-const pageTitleStyle: CSSProperties = {
-  margin: 0,
-  fontSize: 18,
-  fontWeight: 700,
-  color: 'var(--color-text-primary, #0f172a)',
-  lineHeight: 1.2,
-};
-
-const pageSubtitleStyle: CSSProperties = {
-  margin: '4px 0 0',
-  fontSize: 12,
-  color: 'var(--color-text-tertiary, #94a3b8)',
-};
-
-const codeStyle: CSSProperties = {
-  fontFamily: 'monospace',
-  fontSize: 11,
-  background: 'var(--color-bg, #f8fafc)',
-  border: '1px solid var(--color-border, #e2e8f0)',
-  borderRadius: 3,
-  padding: '1px 4px',
-  color: 'var(--color-text-secondary, #475569)',
-};
-
-const newBtnStyle: CSSProperties = {
-  display: 'inline-block',
-  padding: '6px 16px',
-  fontSize: 13,
-  fontWeight: 600,
-  borderRadius: 6,
-  border: '1px solid var(--color-border, #e2e8f0)',
-  background: 'var(--color-surface, #fff)',
-  color: 'var(--color-text-primary, #0f172a)',
-  textDecoration: 'none',
-  whiteSpace: 'nowrap',
-  cursor: 'pointer',
-};
-
-const liveBtnStyle: CSSProperties = {
-  display: 'inline-block',
-  padding: '6px 14px',
-  fontSize: 12,
-  fontWeight: 600,
-  borderRadius: 6,
-  border: '1px solid var(--color-success-border)',
-  background: 'var(--color-success-bg)',
-  color: 'var(--color-success)',
-  textDecoration: 'none',
-  whiteSpace: 'nowrap',
-};
-
-const tableWrapStyle: CSSProperties = {
-  flex: 1,
-  overflowY: 'auto',
-  overflowX: 'auto',
-};
-
-const tableStyle: CSSProperties = {
-  width: '100%',
-  borderCollapse: 'collapse',
-  fontSize: 13,
-  background: 'var(--color-surface, #fff)',
-};
-
-const theadRowStyle: CSSProperties = {
-  borderBottom: '2px solid var(--color-border, #e2e8f0)',
-  position: 'sticky',
-  top: 0,
-  background: 'var(--color-surface, #fff)',
-  zIndex: 2,
-};
-
-const thStyle: CSSProperties = {
-  padding: '10px 16px',
-  textAlign: 'left',
-  fontSize: 11,
-  fontWeight: 600,
-  color: 'var(--color-text-tertiary, #94a3b8)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
-  whiteSpace: 'nowrap',
-};
-
-const tdStyle: CSSProperties = {
-  padding: '10px 16px',
-  verticalAlign: 'middle',
-};
-
-const timeStyle: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary, #475569)',
-  fontVariantNumeric: 'tabular-nums',
-  whiteSpace: 'nowrap',
-};
-
-const chipStyle: CSSProperties = {
-  display: 'inline-block',
-  padding: '2px 9px',
-  fontSize: 11,
-  fontWeight: 700,
-  borderRadius: 4,
-  letterSpacing: '0.02em',
-  whiteSpace: 'nowrap',
-};
-
-const reasonPreviewStyle: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary, #475569)',
-  display: '-webkit-box',
-  WebkitLineClamp: 1,
-  WebkitBoxOrient: 'vertical' as const,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  fontStyle: 'italic',
-  lineHeight: 1.5,
-};
-
-const emptyInnerStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  maxWidth: 440,
-  margin: '0 auto',
-};
-
-const emptyIconStyle: CSSProperties = {
-  fontSize: 36,
-  marginBottom: 12,
-  opacity: 0.6,
-};
-
-const emptyHeadStyle: CSSProperties = {
-  margin: '0 0 8px',
-  fontSize: 15,
-  fontWeight: 600,
-  color: 'var(--color-text-primary, #0f172a)',
-};
-
-const emptySubStyle: CSSProperties = {
-  margin: '0 0 20px',
-  fontSize: 13,
-  color: 'var(--color-text-tertiary, #94a3b8)',
-  lineHeight: 1.65,
-  textAlign: 'center',
-};
-
-const emptyBtnStyle: CSSProperties = {
-  display: 'inline-block',
-  padding: '8px 20px',
-  fontSize: 13,
-  fontWeight: 600,
-  borderRadius: 7,
-  background: 'var(--color-primary, #6366f1)',
-  color: 'var(--color-surface)',
-  textDecoration: 'none',
-  cursor: 'pointer',
-};
-
-const footerStyle: CSSProperties = {
-  flexShrink: 0,
-  padding: '10px 24px',
-  fontSize: 11,
-  color: 'var(--color-text-tertiary, #94a3b8)',
-  borderTop: '1px solid var(--color-border, #e2e8f0)',
-  background: 'var(--color-surface, #fff)',
-};

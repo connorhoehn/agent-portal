@@ -13,7 +13,7 @@
 
 import { useCallback, useState } from 'react';
 import {
-  Button, Card, Chip, FormField, Inline, Input, MetaLine, SectionLabel, Select, Stack,
+  Button, Card, Chip, EntityCell, FormField, Inline, Input, MetaLine, SectionLabel, Select, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
@@ -117,7 +117,7 @@ export function ShareLinks({ kbSlug }: { kbSlug: string | null }) {
       {/* The token, once. */}
       {fresh && (
         <Stack gap="sm" className="px-3.5 py-3 border-b border-border bg-primary/5">
-          <SectionLabel as="div">Link for “{fresh.label}” — copy it now</SectionLabel>
+          <EntityCell label={`Link for “${fresh.label}” — copy it now`} className="min-w-0" />
           <MetaLine
             size="xs"
             className="leading-snug"
