@@ -1,3 +1,6 @@
+import {
+  Stack, Table, TableBody, TableHead, TableRow, TableTd, TableTh,
+} from '@connorhoehnslalom/ui-components/shared';
 import { RadarBatchEntry, RadarAxes } from './OverlayRadar';
 
 const AXIS_ORDER: Array<{ key: keyof RadarAxes; label: string }> = [
@@ -22,24 +25,24 @@ export function CompareDeltaTable({ entries }: CompareDeltaTableProps) {
     FALLBACK_COLORS[index % FALLBACK_COLORS.length] ?? '#6366f1';
 
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-        <thead>
-          <tr>
-            <th style={{ textAlign: 'left', padding: '6px 12px', fontWeight: 600, color: 'var(--color-text-secondary)', borderBottom: '1px solid var(--color-border, #3f3f5f)', minWidth: 100 }}>
-              Axis
-            </th>
+    <Stack gap="none" className="overflow-x-auto">
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableTh align="left" className="min-w-[100px]">Axis</TableTh>
             {entries.map((e, i) => (
-              <th key={e.personId} style={{ textAlign: 'right', padding: '6px 12px', fontWeight: 600, color: colorFor(i), borderBottom: '1px solid var(--color-border, #3f3f5f)', minWidth: 80 }}>
-                {e.name}
-              </th>
+              // The per-series colour is data — it identifies which person a
+              // column belongs to and matches that series in the radar beside
+              // it — so it stays a style. Everything else the table used to
+              // paint by hand (padding, borders, weights) is the library's.
+              <TableTh key={e.personId} align="right" className="min-w-[80px]">
+                <span style={{ color: colorFor(i) }}>{e.name}</span>
+              </TableTh>
             ))}
-            <th style={{ textAlign: 'right', padding: '6px 12px', fontWeight: 600, color: 'var(--color-text-tertiary)', borderBottom: '1px solid var(--color-border, #3f3f5f)', minWidth: 70 }}>
-              &#916; (max-min)
-            </th>
-          </tr>
-        </thead>
-        <tbody>
+            <TableTh align="right" className="min-w-[70px]">&#916; (max-min)</TableTh>
+          </TableRow>
+        </TableHead>
+        <TableBody>
           {AXIS_ORDER.map(({ key, label }) => {
             const values = entries.map(e => e.person[key]);
             const maxVal = Math.max(...values);
@@ -47,40 +50,33 @@ export function CompareDeltaTable({ entries }: CompareDeltaTableProps) {
             const delta = maxVal - minVal;
 
             return (
-              <tr key={key} style={{ borderBottom: '1px solid var(--color-border-subtle, #2a2a3f)' }}>
-                <td style={{ padding: '6px 12px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>
-                  {label}
-                </td>
+              <TableRow key={key}>
+                <TableTd>{label}</TableTd>
                 {entries.map((e, i) => {
                   const val = e.person[key];
                   const isMax = val === maxVal && delta > 0;
                   const isMin = val === minVal && delta > 0;
                   return (
-                    <td
+                    <TableTd
                       key={e.personId}
-                      style={{
-                        textAlign: 'right',
-                        padding: '6px 12px',
-                        fontWeight: isMax ? 700 : 400,
-                        color: isMax
-                          ? colorFor(i)
-                          : isMin
-                          ? 'var(--color-text-tertiary, #6b6b8a)'
-                          : 'var(--color-text-primary)',
-                      }}
+                      align="right"
+                      className={isMax ? 'font-bold' : isMin ? 'text-text-tertiary' : ''}
                     >
-                      {Math.round(val)}
-                    </td>
+                      {/* The leader in a row is tinted with its own series
+                          colour, which is the only reason this cell carries a
+                          style at all. */}
+                      {isMax ? <span style={{ color: colorFor(i) }}>{Math.round(val)}</span> : Math.round(val)}
+                    </TableTd>
                   );
                 })}
-                <td style={{ textAlign: 'right', padding: '6px 12px', fontSize: 11, color: 'var(--color-text-tertiary, #6b6b8a)' }}>
+                <TableTd align="right" className="text-[11px] text-text-tertiary">
                   {Math.round(delta)}
-                </td>
-              </tr>
+                </TableTd>
+              </TableRow>
             );
           })}
-        </tbody>
-      </table>
-    </div>
+        </TableBody>
+      </Table>
+    </Stack>
   );
 }

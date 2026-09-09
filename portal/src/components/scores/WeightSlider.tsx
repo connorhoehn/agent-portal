@@ -1,4 +1,4 @@
-import { Button, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Inline, MetaLine, SectionLabel, Stack } from '@connorhoehnslalom/ui-components/shared';
 
 interface WeightSliderProps {
   value: number;
@@ -16,11 +16,13 @@ export function WeightSlider({ value, onChange, label = 'Composite weighting: in
   return (
     <Stack gap="xs">
       <Inline align="center" justify="between">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-text-tertiary">
-          Composite weighting
-        </span>
+        <SectionLabel>Composite weighting</SectionLabel>
         <Button variant="ghost" size="sm" onClick={() => onChange(0.55)}>Reset</Button>
       </Inline>
+      {/* A raw range input because `Slider` is exported only from the package
+          root, and importing the root pulls @tiptap/react — a peer dep this
+          portal never installed — into `vite build`. Queued; this file is on
+          the ledger as a local composite for exactly that reason. */}
       <input
         type="range"
         aria-label={label}
@@ -31,8 +33,8 @@ export function WeightSlider({ value, onChange, label = 'Composite weighting: in
         className="w-full cursor-pointer accent-primary"
       />
       <Inline justify="between">
-        <span className="text-[11px] font-medium text-primary">Influence {infPct}%</span>
-        <span className="text-[11px] font-medium text-success">Expertise {expPct}%</span>
+        <MetaLine size="xs" className="text-primary" items={[`Influence ${infPct}%`]} />
+        <MetaLine size="xs" className="text-success" items={[`Expertise ${expPct}%`]} />
       </Inline>
     </Stack>
   );

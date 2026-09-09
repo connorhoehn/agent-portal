@@ -1,3 +1,4 @@
+import { EmptyState } from '@connorhoehnslalom/ui-components/shared';
 import {
   Radar,
   RadarChart as RechartsRadarChart,
@@ -86,9 +87,7 @@ interface OverlayRadarProps {
 export function OverlayRadar({ entries, deptColors = {} }: OverlayRadarProps) {
   if (entries.length === 0) {
     return (
-      <div className="h-[380px] flex items-center justify-center text-text-tertiary text-xs">
-        No radar data
-      </div>
+      <EmptyState title="No radar data" className="h-[380px]" />
     );
   }
 
