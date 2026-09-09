@@ -13,7 +13,7 @@ import { ActiveRunsStrip } from '../../components/ingest/ActiveRunsStrip';
 import { RunDetailDrawer } from '../../components/ingest/RunDetailDrawer';
 import { NewTargetModal } from '../../components/ingest/NewTargetModal';
 import type { TargetDraft } from '../../components/ingest/NewTargetModal';
-import { PulseDot } from '../../components/ingest/ui';
+import { StatusDot } from '../../components/ingest/ui';
 import { T } from './Text';
 
 function CrawlTargetsPage() {
@@ -176,7 +176,7 @@ function CrawlTargetsPage() {
         {activeCrawls.length > 0 && (
           <Card padding="md" className="border-l-[3px] border-l-warning">
             <Inline gap="sm" align="baseline" className="mb-3">
-              <PulseDot active color="var(--color-warning)" />
+              <StatusDot pulse color="var(--color-warning)" />
               <T className="text-[14px] font-semibold">Active Crawls</T>
               <T className="text-[11px] font-normal text-text-tertiary">· {activeCrawls.length} running</T>
             </Inline>

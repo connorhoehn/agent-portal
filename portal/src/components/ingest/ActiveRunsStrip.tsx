@@ -4,7 +4,7 @@ import { CRAWL_STATUS_TONE, durationOf, formatDuration } from './types';
 import type { CrawlSession } from './types';
 import { useCrawlStream } from './useCrawlStream';
 import { Thumbnail } from './Thumbnail';
-import { Button, PulseDot } from './ui';
+import { Button, StatusDot } from './ui';
 
 export function ActiveRunsStrip({
   sessions,
@@ -84,7 +84,7 @@ function ActiveRunCard({
         {/* Body */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-            <PulseDot active={isRunning} color="var(--color-warning)" />
+            <StatusDot pulse={isRunning} color="var(--color-warning)" />
             <span
               style={{
                 fontSize: 13,

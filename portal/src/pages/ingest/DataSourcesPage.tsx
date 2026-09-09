@@ -6,7 +6,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
-import { EmptyState, PulseDot } from '../../components/ingest/ui';
+import { EmptyState, StatusDot } from '../../components/ingest/ui';
 import { T } from './Text';
 
 interface DataSource {
@@ -211,7 +211,7 @@ function LiveJobMonitor({
       <Stack gap="sm">
         <Inline justify="between" align="center">
           <Inline gap="sm" align="center">
-            <PulseDot active={!streamDone} color={barColor} />
+            <StatusDot pulse={!streamDone} color={barColor} />
             <T className={`text-[13px] font-semibold ${streamDone ? 'text-success' : 'text-warning'}`}>
               {streamDone ? 'Sync complete' : 'Sync in progress'}
             </T>

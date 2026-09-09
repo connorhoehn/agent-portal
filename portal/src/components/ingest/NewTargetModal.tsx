@@ -1,7 +1,10 @@
 import { useId, useState } from 'react';
 import { Card, Modal } from '@connorhoehnslalom/ui-components/shared';
 import type { CrawlMode, CrawlTarget } from './types';
-import { Button, inputStyle, labelStyle } from './ui';
+import { Button } from './ui';
+import {
+  Checkbox, FormField, InlineAlert, Inline, Input, MetaLine, SectionLabel, Select, Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 
 const CRON_PRESETS = [
   { label: 'On-demand only',  expr: ''               },
@@ -105,145 +108,157 @@ export function NewTargetModal({
   return (
     <Modal open={true} onClose={onCancel} maxWidth={560}>
       <Card padding="md" style={{ width: 'min(560px, 92vw)' }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>
+        <SectionLabel as="h3" className="text-sm mb-4">
           {isEdit ? 'Edit Crawl Target' : 'New Crawl Target'}
-        </h3>
+        </SectionLabel>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div>
-            <label htmlFor={labelInputId} style={labelStyle}>Label</label>
-            <input
-              id={labelInputId}
-              value={draft.label}
-              onChange={e => patch('label', e.target.value)}
-              placeholder="Engineering wiki"
-              style={inputStyle}
-            />
-          </div>
-
-          <div>
-            <label htmlFor={startUrlId} style={labelStyle}>Start URL</label>
-            <input
-              id={startUrlId}
-              value={draft.startUrl}
-              onChange={e => patch('startUrl', e.target.value)}
-              placeholder="https://example.com/docs"
-              style={{ ...inputStyle, fontFamily: 'monospace' }}
-            />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div>
-              <label htmlFor={modeId} style={labelStyle}>Mode</label>
-              <select
-                id={modeId}
-                value={draft.mode}
-                onChange={e => patch('mode', e.target.value as CrawlMode)}
-                style={inputStyle}
-              >
-                {MODES.map(m => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
-                ))}
-              </select>
-              <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginTop: 3 }}>
-                {MODES.find(m => m.value === draft.mode)?.desc}
-              </div>
-            </div>
-
-            <div>
-              <label style={labelStyle}>
-                Max pages: <strong>{draft.maxPages}</strong>
-              </label>
-              <input
-                type="range"
-                min={1}
-                max={50}
-                value={draft.maxPages}
-                onChange={e => patch('maxPages', Number(e.target.value))}
-                aria-label="Maximum pages to crawl"
-                style={{ width: '100%' }}
-              />
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--color-text-tertiary)' }}>
-                <span>1</span><span>50</span>
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input
-              id="sameOrigin"
-              type="checkbox"
-              checked={draft.sameOriginOnly}
-              onChange={e => patch('sameOriginOnly', e.target.checked)}
-            />
-            <label htmlFor="sameOrigin" style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
-              Same-origin only (block links to other domains)
-            </label>
-          </div>
-
-          <div>
-            <label htmlFor={includePatternId} style={labelStyle}>Include pattern (regex, optional)</label>
-            <input
-              id={includePatternId}
-              value={draft.includePattern ?? ''}
-              onChange={e => patch('includePattern', e.target.value || null)}
-              placeholder="e.g. /docs/.*"
-              style={{ ...inputStyle, fontFamily: 'monospace' }}
-            />
-          </div>
-
-          <div>
-            <label htmlFor={scheduleId} style={labelStyle}>Schedule</label>
-            <select
-              id={scheduleId}
-              value={preset}
-              onChange={e => setPreset(e.target.value)}
-              style={inputStyle}
-            >
-              {CRON_PRESETS.map(p => (
-                <option key={p.expr || p.label} value={p.expr}>{p.label}</option>
-              ))}
-            </select>
-            {preset === '__custom__' && (
-              <input
-                id={customCronId}
-                value={custom}
-                onChange={e => setCustom(e.target.value)}
-                placeholder="e.g. 0 */4 * * *"
-                aria-label="Custom cron expression"
-                style={{ ...inputStyle, fontFamily: 'monospace', marginTop: 6 }}
+        {/* `labelId` is dropped from every wiring bag: FormField hands it to the
+            consumer but it is not a DOM prop, so spreading it onto a control
+            makes React warn. Queued against the library. */}
+        <Stack gap="md">
+          <FormField label="Label">
+            {({ labelId: _l, ...w }) => (
+              <Input
+                {...w}
+                size="sm"
+                value={draft.label}
+                onChange={e => patch('label', e.target.value)}
+                placeholder="Engineering wiki"
               />
             )}
-            {preset === '__custom__' && (
-              <div style={{ fontSize: 10, color: 'var(--color-text-tertiary)', marginTop: 3 }}>
-                Format: minute hour day month weekday — all times UTC
-              </div>
+          </FormField>
+
+          <FormField label="Start URL">
+            {({ labelId: _l, ...w }) => (
+              <Input
+                {...w}
+                mono
+                size="sm"
+                value={draft.startUrl}
+                onChange={e => patch('startUrl', e.target.value)}
+                placeholder="https://example.com/docs"
+              />
             )}
-          </div>
+          </FormField>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input
-              id="enabled"
-              type="checkbox"
-              checked={draft.enabled}
-              onChange={e => patch('enabled', e.target.checked)}
-            />
-            <label htmlFor="enabled" style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>
-              Enabled (run on schedule)
-            </label>
-          </div>
+          <Inline gap="md" className="grid grid-cols-2">
+            <FormField label="Mode" hint={MODES.find(m => m.value === draft.mode)?.desc}>
+              {({ labelId: _l, ...w }) => (
+                <Select
+                  {...w}
+                  size="sm"
+                  value={draft.mode}
+                  onChange={e => patch('mode', e.target.value as CrawlMode)}
+                  options={MODES.map(m => ({ value: m.value, label: m.label }))}
+                />
+              )}
+            </FormField>
 
-          {error && (
-            <div style={{ fontSize: 12, color: 'var(--color-danger)' }}>{error}</div>
-          )}
+            <FormField label={`Max pages: ${draft.maxPages}`}>
+              {({ labelId: _l, ...w }) => (
+                <Stack gap="none">
+                  {/* Raw range input: `Slider` is exported only from the package
+                      root, and importing the root pulls @tiptap/react — a peer
+                      dep this portal never installed — into `vite build`.
+                      Already queued. */}
+                  <input
+                    {...w}
+                    type="range"
+                    min={1}
+                    max={50}
+                    value={draft.maxPages}
+                    onChange={e => patch('maxPages', Number(e.target.value))}
+                    aria-label="Maximum pages to crawl"
+                    className="w-full accent-primary"
+                  />
+                  <Inline justify="between">
+                    <MetaLine size="xs" items={['1']} />
+                    <MetaLine size="xs" items={['50']} />
+                  </Inline>
+                </Stack>
+              )}
+            </FormField>
+          </Inline>
 
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
+          {/* Checkbox takes no `label`; its own docs prefer `aria-labelledby`
+              over a hand-written aria-label when a visible label exists but
+              cannot wrap the control — which is exactly what FormField's
+              `labelId` is. */}
+          <FormField label="Same-origin only (block links to other domains)" layout="inline">
+            {({ labelId, id }) => (
+              <Checkbox
+                id={id}
+                checked={draft.sameOriginOnly}
+                onChange={(checked) => patch('sameOriginOnly', checked)}
+                aria-labelledby={labelId}
+              />
+            )}
+          </FormField>
+
+          <FormField label="Include pattern (regex, optional)">
+            {({ labelId: _l, ...w }) => (
+              <Input
+                {...w}
+                mono
+                size="sm"
+                value={draft.includePattern ?? ''}
+                onChange={e => patch('includePattern', e.target.value || null)}
+                placeholder="e.g. /docs/.*"
+              />
+            )}
+          </FormField>
+
+          <FormField
+            label="Schedule"
+            hint={preset === '__custom__' ? 'Format: minute hour day month weekday — all times UTC' : undefined}
+          >
+            {({ labelId: _l, ...w }) => (
+              <Stack gap="xs">
+                <Select
+                  {...w}
+                  size="sm"
+                  value={preset}
+                  onChange={e => setPreset(e.target.value)}
+                  options={CRON_PRESETS.map(pr => ({ value: pr.expr, label: pr.label }))}
+                />
+                {preset === '__custom__' && (
+                  <Input
+                    mono
+                    size="sm"
+                    value={custom}
+                    onChange={e => setCustom(e.target.value)}
+                    placeholder="e.g. 0 */4 * * *"
+                    aria-label="Custom cron expression"
+                  />
+                )}
+              </Stack>
+            )}
+          </FormField>
+
+          {/* Checkbox takes no `label`; its own docs prefer `aria-labelledby`
+              over a hand-written aria-label when a visible label exists but
+              cannot wrap the control — which is exactly what FormField's
+              `labelId` is. */}
+          <FormField label="Enabled (run on schedule)" layout="inline">
+            {({ labelId, id }) => (
+              <Checkbox
+                id={id}
+                checked={draft.enabled}
+                onChange={(checked) => patch('enabled', checked)}
+                aria-labelledby={labelId}
+              />
+            )}
+          </FormField>
+
+          {error && <InlineAlert tone="error">{error}</InlineAlert>}
+
+          <Inline gap="sm" justify="end" className="mt-2">
             <Button variant="secondary" onClick={onCancel}>Cancel</Button>
             <Button variant="primary" onClick={submit} disabled={saving}>
               {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Create target'}
             </Button>
-          </div>
-        </div>
+          </Inline>
+        </Stack>
       </Card>
     </Modal>
   );
