@@ -1,4 +1,6 @@
-import { Card, Chip } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Card, Chip, EntityCell, Inline, MetaLine, ProgressBar, Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { CRAWL_STATUS_TONE, durationOf, formatDuration } from './types';
 import type { CrawlSession } from './types';
@@ -82,101 +84,52 @@ function ActiveRunCard({
         )}
 
         {/* Body */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+        <Stack gap="sm" className="flex-1 min-w-0">
+          <Inline gap="md" align="center" className="min-w-0">
             <StatusDot pulse={isRunning} color="var(--color-warning)" />
-            <span
-              style={{
-                fontSize: 13,
-                fontWeight: 600,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-              title={session.startUrl}
-            >
-              {session.startUrl}
-            </span>
+            <EntityCell label={session.startUrl} className="min-w-0" />
             <Chip tone={tone} size="xs">{session.status}</Chip>
             <Chip tone="neutral" size="xs">{session.mode}</Chip>
-          </div>
+          </Inline>
 
-          <div
-            style={{
-              fontSize: 11,
-              color: 'var(--color-text-tertiary)',
-              marginBottom: 8,
-              fontFamily: 'monospace',
-            }}
-          >
-            {session.id.slice(0, 12)}… · started {formatDuration(durationOf(session))} ago
-          </div>
+          <MetaLine
+            size="xs"
+            className="font-mono"
+            items={[`${session.id.slice(0, 12)}… · started ${formatDuration(durationOf(session))} ago`]}
+          />
 
-          {/* Progress bar */}
-          <div
-            style={{
-              height: 5,
-              background: 'rgba(0,0,0,.08)',
-              borderRadius: 3,
-              overflow: 'hidden',
-              marginBottom: 6,
-            }}
-          >
-            <div
-              style={{
-                height: '100%',
-                width: `${pct}%`,
-                background: 'var(--color-warning)',
-                transition: 'width 0.5s ease',
-              }}
-            />
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
-            {pagesDone} / {session.maxPages} pages
-            {session.queued > 0 && (
-              <span style={{ color: 'var(--color-text-tertiary)' }}> · {session.queued} queued</span>
-            )}
-            {latestPage && (
-              <span style={{ color: 'var(--color-text-tertiary)' }}>
-                {' · current: '}<span style={{ fontFamily: 'monospace' }}>{latestPage.status}</span>
-              </span>
-            )}
-          </div>
+          {/* The bar was two nested divs with a percentage width literal. */}
+          <ProgressBar value={pct} max={100} size="sm" showRatio={false} aria-label="Crawl progress" />
+
+          <MetaLine
+            size="xs"
+            tone="secondary"
+            items={[
+              `${pagesDone} / ${session.maxPages} pages`,
+              session.queued > 0 ? `${session.queued} queued` : null,
+              latestPage ? `current: ${latestPage.status}` : null,
+            ]}
+          />
 
           {latestPage?.summary && (
-            <div
-              style={{
-                fontSize: 12,
-                color: 'var(--color-text-secondary)',
-                fontStyle: 'italic',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                display: '-webkit-box',
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: 'vertical',
-              }}
-              title={latestPage.summary}
-            >
-              {latestPage.summary}
-            </div>
+            <MetaLine
+              size="sm"
+              tone="secondary"
+              className="italic line-clamp-2"
+              items={[<span key="s" title={latestPage.summary}>{latestPage.summary}</span>]}
+            />
           )}
-        </div>
+        </Stack>
 
         {/* Actions */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
-          <button onClick={() => onOpen(session.id)} style={{
-            fontSize: 11, padding: '4px 10px', background: 'var(--color-surface-raised)',
-            color: 'var(--color-text-primary)', border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-sm)', cursor: 'pointer',
-          }}>
-            Open
-          </button>
+        <Stack gap="xs" align="end">
+          <Button variant="secondary" size="sm" onClick={() => onOpen(session.id)}>Open</Button>
           {isRunning && canManage && (
             <Button variant="danger" onClick={() => onCancel(session.id)}>
               Cancel
             </Button>
           )}
-        </div>
+        </Stack>
       </div>
     </Card>
   );

@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Card, Chip, Modal, Table, TableHead, TableBody, TableRow, TableTh, TableTd } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button, Card, Chip, CodeBlock, EmptyState, EntityCell, Inline, LoadingState, MetaLine, Modal, Stack, Table, TableBody, TableHead, TableRow, TableTd, TableTh, Tabs,
+} from '@connorhoehnslalom/ui-components/shared';
 import { PAGE_STATUS_TONE, formatBytes, formatDuration } from './types';
 import type { CrawlPage } from './types';
-import { Button } from './ui';
 import { Markdown } from '../Markdown';
 
 type Tab = 'screenshot' | 'markdown' | 'analysis' | 'links';
@@ -40,122 +41,75 @@ export function PageDetailModal({
 
   const page = detail?.page ?? fallback;
 
+  const TABS = [
+    { id: 'screenshot', label: 'Screenshot' },
+    { id: 'markdown',   label: 'Markdown' },
+    { id: 'analysis',   label: 'Vision Analysis' },
+    {
+      id: 'links',
+      label: 'Links Discovered',
+      // The count rode in as a dimmed <span> inside the button's own label;
+      // TabItem has a badge slot for exactly this.
+      ...(page.discoveredLinks.length > 0 ? { badge: page.discoveredLinks.length } : {}),
+    },
+  ];
+
   return (
     <Modal open={true} onClose={onClose} maxWidth={960}>
-      <Card
-        padding="md"
-        style={{
-          width: 'min(960px, 92vw)',
-          maxHeight: '88vh',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12, gap: 12 }}>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <h3 style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {page.title || page.url}
-              </h3>
+      <Card padding="md" className="w-[min(960px,92vw)] max-h-[88vh] flex flex-col">
+        <Inline align="start" justify="between" gap="md" className="mb-3">
+          <Stack gap="none" className="min-w-0 flex-1">
+            <Inline gap="sm" align="center" className="mb-1 min-w-0">
+              <EntityCell label={page.title || page.url} labelClassName="text-sm" className="min-w-0" />
               <Chip tone={PAGE_STATUS_TONE[page.status]} size="xs">{page.status}</Chip>
-            </div>
-            <div
-              style={{
-                fontSize: 11,
-                fontFamily: 'monospace',
-                color: 'var(--color-text-tertiary)',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-              title={page.url}
-            >
-              {page.url}
-            </div>
-          </div>
+            </Inline>
+            <MetaLine
+              size="xs"
+              className="font-mono truncate"
+              items={[<span key="u" title={page.url}>{page.url}</span>]}
+            />
+          </Stack>
           <Button variant="secondary" onClick={onClose}>Close</Button>
-        </div>
+        </Inline>
 
-        {/* Tab bar */}
-        <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--color-border)', marginBottom: 12 }}>
-          <TabButton active={tab === 'screenshot'} onClick={() => setTab('screenshot')}>Screenshot</TabButton>
-          <TabButton active={tab === 'markdown'}   onClick={() => setTab('markdown')}>Markdown</TabButton>
-          <TabButton active={tab === 'analysis'}   onClick={() => setTab('analysis')}>Vision Analysis</TabButton>
-          <TabButton active={tab === 'links'}      onClick={() => setTab('links')}>
-            Links Discovered {page.discoveredLinks.length > 0 && <span style={{ opacity: 0.6 }}>({page.discoveredLinks.length})</span>}
-          </TabButton>
-        </div>
+        <Tabs
+          idPrefix="page-detail"
+          aria-label="Page detail"
+          variant="underline"
+          size="sm"
+          items={TABS}
+          value={tab}
+          onValueChange={(id) => setTab(id as typeof tab)}
+          className="mb-3"
+        />
 
-        {/* Body */}
-        <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+        <Stack gap="none" className="flex-1 overflow-auto min-h-0">
           {tab === 'screenshot' && (
             <ScreenshotTab crawlId={crawlId} pageIdx={pageIdx} hasScreenshot={!!page.s3ScreenshotKey} />
           )}
-          {tab === 'markdown' && (
-            <MarkdownTab text={page.mainText} />
-          )}
-          {tab === 'analysis' && (
-            <AnalysisTab detail={detail} loading={loading} page={page} />
-          )}
-          {tab === 'links' && (
-            <LinksTab links={page.discoveredLinks} />
-          )}
-        </div>
+          {tab === 'markdown' && <MarkdownTab text={page.mainText} />}
+          {tab === 'analysis' && <AnalysisTab detail={detail} loading={loading} page={page} />}
+          {tab === 'links' && <LinksTab links={page.discoveredLinks} />}
+        </Stack>
 
-        {/* Footer: metrics + S3 keys */}
-        <div
-          style={{
-            borderTop: '1px solid var(--color-border)',
-            marginTop: 12,
-            paddingTop: 10,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 6,
-          }}
-        >
-          <div style={{ display: 'flex', gap: 18, fontSize: 11, color: 'var(--color-text-tertiary)', flexWrap: 'wrap' }}>
-            <span>screenshot: {formatBytes(page.screenshotBytes)}</span>
-            <span>content: {formatBytes(page.contentLength)}</span>
-            <span>vision: {page.visionTokensIn}→{page.visionTokensOut} tok · {formatDuration(page.visionLatencyMs)}</span>
-            {page.kbIngestedAt && <span>KB ingested {new Date(page.kbIngestedAt).toLocaleString()}</span>}
-          </div>
+        <Stack gap="xs" className="border-t border-border mt-3 pt-2.5">
+          <MetaLine
+            size="xs"
+            separator="   "
+            items={[
+              `screenshot: ${formatBytes(page.screenshotBytes)}`,
+              `content: ${formatBytes(page.contentLength)}`,
+              `vision: ${page.visionTokensIn}→${page.visionTokensOut} tok · ${formatDuration(page.visionLatencyMs)}`,
+              page.kbIngestedAt ? `KB ingested ${new Date(page.kbIngestedAt).toLocaleString()}` : null,
+            ]}
+          />
           <S3KeysList page={page} />
-        </div>
+        </Stack>
       </Card>
     </Modal>
   );
 }
 
-// ── Tabs ────────────────────────────────────────────────────────────────────
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        fontSize: 12,
-        padding: '6px 14px',
-        background: 'transparent',
-        color: active ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-        border: 'none',
-        borderBottom: active ? '2px solid var(--color-primary)' : '2px solid transparent',
-        cursor: 'pointer',
-        marginBottom: -1,
-      }}
-    >
-      {children}
-    </button>
-  );
-}
 
 function ScreenshotTab({
   crawlId,
@@ -170,16 +124,9 @@ function ScreenshotTab({
 
   if (!hasScreenshot || errored) {
     return (
-      <div
-        style={{
-          padding: 40,
-          textAlign: 'center',
-          color: 'var(--color-text-tertiary)',
-          fontSize: 13,
-        }}
-      >
-        {errored ? 'Failed to load screenshot.' : 'Screenshot has not been uploaded yet.'}
-      </div>
+      <EmptyState
+        title={errored ? 'Failed to load screenshot.' : 'Screenshot has not been uploaded yet.'}
+      />
     );
   }
 
@@ -188,13 +135,7 @@ function ScreenshotTab({
       src={`/api/ingest/crawl/${encodeURIComponent(crawlId)}/page/${pageIdx}/screenshot`}
       alt="Page screenshot"
       onError={() => setErrored(true)}
-      style={{
-        width: '100%',
-        height: 'auto',
-        borderRadius: 4,
-        border: '1px solid var(--color-border)',
-        display: 'block',
-      }}
+      className="block w-full h-auto rounded border border-border"
     />
   );
 }
@@ -202,15 +143,11 @@ function ScreenshotTab({
 function MarkdownTab({ text }: { text: string }) {
   if (!text) {
     return (
-      <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-text-tertiary)', fontSize: 13 }}>
-        No extracted text for this page.
-      </div>
+      <EmptyState title="No extracted text for this page." />
     );
   }
   return (
-    <div style={{ padding: 12, background: 'var(--color-surface-raised)', borderRadius: 4 }}>
-      <Markdown size={13}>{text}</Markdown>
-    </div>
+    <Card padding="sm"><Markdown size={13}>{text}</Markdown></Card>
   );
 }
 
@@ -225,9 +162,7 @@ function AnalysisTab({
 }) {
   if (loading) {
     return (
-      <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-text-tertiary)', fontSize: 13 }}>
-        Loading analysis…
-      </div>
+      <LoadingState label="Loading analysis…" />
     );
   }
   const analysis = detail?.analysis ?? {
@@ -236,30 +171,14 @@ function AnalysisTab({
     discoveredLinks: page.discoveredLinks,
   };
   return (
-    <pre
-      style={{
-        whiteSpace: 'pre-wrap',
-        wordBreak: 'break-word',
-        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-        fontSize: 12,
-        color: 'var(--color-text-primary)',
-        background: 'var(--color-surface-raised)',
-        padding: 12,
-        borderRadius: 4,
-        margin: 0,
-      }}
-    >
-      {JSON.stringify(analysis, null, 2)}
-    </pre>
+    <CodeBlock language="json" copyButton={false} code={JSON.stringify(analysis, null, 2)} />
   );
 }
 
 function LinksTab({ links }: { links: CrawlPage['discoveredLinks'] }) {
   if (links.length === 0) {
     return (
-      <div style={{ padding: 40, textAlign: 'center', color: 'var(--color-text-tertiary)', fontSize: 13 }}>
-        No links discovered on this page.
-      </div>
+      <EmptyState title="No links discovered on this page." />
     );
   }
   return (

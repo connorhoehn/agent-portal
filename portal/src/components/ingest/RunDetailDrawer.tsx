@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Chip, Drawer } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Chip, Drawer, EmptyState, Inline, InlineAlert, LoadingState, MetaLine, SectionLabel, Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 import {
   CRAWL_STATUS_TONE,
   PAGE_STATUS_TONE,
@@ -91,48 +93,28 @@ export function RunDetailDrawer({
         width={720}
       >
         {!session ? (
-          <div style={{ padding: 24, color: 'var(--color-text-tertiary)', fontSize: 13 }}>
-            Loading…
-          </div>
+          <LoadingState label="Loading…" />
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <Stack gap="none" className="h-full">
             {/* Header */}
-            <div style={{ padding: 16, borderBottom: '1px solid var(--color-border)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <Stack gap="sm" className="p-4 border-b border-border">
+              <Inline gap="sm" align="center">
                 <Chip tone={CRAWL_STATUS_TONE[session.status]} size="xs">{session.status}</Chip>
                 <Chip tone="neutral" size="xs">{session.mode}</Chip>
-              </div>
+              </Inline>
 
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(4, 1fr)',
-                  gap: 10,
-                  marginTop: 10,
-                }}
-              >
+              <Inline gap="md" className="grid grid-cols-4">
                 <Metric label="Pages" value={`${session.pages.length} / ${session.maxPages}`} />
                 <Metric label="Duration" value={formatDuration(durationOf(session))} />
                 <Metric label="Cost" value={formatCost(session.estimatedCostUsd)} mono />
                 <Metric label="Stored" value={formatBytes(session.totalScreenshotBytes + session.totalMarkdownBytes)} />
-              </div>
+              </Inline>
 
               {session.error && (
-                <div
-                  style={{
-                    marginTop: 10,
-                    padding: 8,
-                    borderRadius: 4,
-                    background: 'var(--color-danger-bg)',
-                    color: 'var(--color-danger)',
-                    fontSize: 11,
-                  }}
-                >
-                  {session.error}
-                </div>
+                <InlineAlert tone="error">{session.error}</InlineAlert>
               )}
 
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12 }}>
+              <Inline gap="sm" align="center">
                 <Button
                   variant="primary"
                   onClick={triggerKbSync}
@@ -142,38 +124,22 @@ export function RunDetailDrawer({
                   {syncing ? 'Syncing…' : 'Trigger KB Sync'}
                 </Button>
                 {syncMsg && (
-                  <span
-                    style={{
-                      fontSize: 11,
-                      color: syncMsg.tone === 'ok' ? 'var(--color-success)' : 'var(--color-danger)',
-                    }}
-                  >
-                    {syncMsg.text}
-                  </span>
+                  <MetaLine
+                    size="xs"
+                    className={syncMsg.tone === 'ok' ? 'text-success' : 'text-danger'}
+                    items={[syncMsg.text]}
+                  />
                 )}
-              </div>
-            </div>
+              </Inline>
+            </Stack>
 
             {/* Timeline */}
-            <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
-              <div
-                style={{
-                  fontSize: 11,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  fontWeight: 600,
-                  color: 'var(--color-text-tertiary)',
-                  marginBottom: 10,
-                }}
-              >
-                Pages ({session.pages.length})
-              </div>
+            <Stack gap="sm" className="flex-1 overflow-auto p-4">
+              <SectionLabel as="div">Pages ({session.pages.length})</SectionLabel>
               {session.pages.length === 0 ? (
-                <div style={{ padding: 24, textAlign: 'center', color: 'var(--color-text-tertiary)', fontSize: 13 }}>
-                  No pages yet.
-                </div>
+                <EmptyState title="No pages yet." />
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <Stack gap="md">
                   {session.pages.map((p, idx) => (
                     <TimelineRow
                       key={`${p.url}-${idx}`}
@@ -183,10 +149,10 @@ export function RunDetailDrawer({
                       onOpen={() => setActivePageIdx(idx)}
                     />
                   ))}
-                </div>
+                </Stack>
               )}
-            </div>
-          </div>
+            </Stack>
+          </Stack>
         )}
       </Drawer>
 
