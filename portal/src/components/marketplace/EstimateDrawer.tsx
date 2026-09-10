@@ -27,10 +27,21 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Drawer,
-  ConfirmDialog,
+  Button,
+  Card,
   Chip,
+  ConfirmDialog,
+  Drawer,
+  EntityCell,
+  FormField,
+  Inline,
   InlineAlert,
+  Input,
+  MetaLine,
+  SectionLabel,
+  Select,
+  Stack,
+  Textarea,
 } from '@connorhoehnslalom/ui-components/shared';
 import { DEVBOX_MODELS, DEFAULT_DEVBOX_MODEL } from '../../lib/devboxModels';
 import { useCapabilities } from '../../lib/capabilities';
@@ -112,9 +123,9 @@ export function runEstimate(run: Pick<BotRun, 'outcome'>): WorkEstimate | undefi
     when it ran over p75 and success when it came in under p25, with the range
     appended muted. Falls back to a plain actual (or —) without an estimate. */
 export function CostVsEstimate({ costUsd, estimate }: { costUsd: number | null; estimate: WorkEstimate | undefined }) {
-  if (costUsd == null) return <span className="text-text-tertiary whitespace-nowrap">—</span>;
+  if (costUsd == null) return <Inline as="span" gap="none" className="text-text-tertiary whitespace-nowrap">—</Inline>;
   const actual = `$${costUsd.toFixed(4)}`;
-  if (!estimate) return <span className="text-text-tertiary whitespace-nowrap">{actual}</span>;
+  if (!estimate) return <Inline as="span" gap="none" className="text-text-tertiary whitespace-nowrap">{actual}</Inline>;
   const over = costUsd > estimate.costUsdP75;
   const under = costUsd < estimate.costUsdP25;
   const range = `${money(estimate.costUsdP25)}–${money(estimate.costUsdP75)}`;
@@ -124,10 +135,13 @@ export function CostVsEstimate({ costUsd, estimate }: { costUsd: number | null; 
       ? `Actual ${actual} came in under the authorize-time estimate (${range}, p25–p75)`
       : `Actual ${actual} landed inside the authorize-time estimate (${range}, p25–p75)`;
   return (
-    <span className="whitespace-nowrap" title={title}>
-      <span className={over ? 'text-danger' : under ? 'text-success' : 'text-text-tertiary'}>{actual}</span>
-      <span className="text-text-tertiary opacity-70"> est {range}</span>
-    </span>
+    // `gap="none"` throughout: the leading space in " est " is deliberate
+    // spacing between the actual and its range, and a flex gap here would
+    // double it.
+    <Inline as="span" gap="none" className="whitespace-nowrap" title={title}>
+      <Inline as="span" gap="none" className={over ? 'text-danger' : under ? 'text-success' : 'text-text-tertiary'}>{actual}</Inline>
+      <Inline as="span" gap="none" className="text-text-tertiary opacity-70"> est {range}</Inline>
+    </Inline>
   );
 }
 
@@ -508,18 +522,13 @@ export function EstimateDrawer({
         title="Estimate & authorize"
         subtitle="A governed agent run, bound to this work item — its change still passes review."
         footer={
-          <div className="flex items-center gap-2 w-full">
-            <span className="text-[11px] text-text-tertiary flex-1">
-              {estimate ? `model: ${modelLabel}` : ''}
-            </span>
-            <button
-              onClick={handleClose}
-              className="px-3 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-secondary cursor-pointer"
-            >
-              Cancel
-            </button>
+          <Inline gap="sm" wrap={false} className="w-full">
+            <MetaLine size="xs" className="flex-1" items={[estimate ? `model: ${modelLabel}` : '']} />
+            <Button variant="secondary" size="sm" onClick={handleClose}>Cancel</Button>
             {canDispatch && (
-              <button
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={() => {
                   // A fresh authorize attempt confirms nothing yet — a stale
                   // confirmation from an abandoned attempt must not carry over.
@@ -527,75 +536,85 @@ export function EstimateDrawer({
                   setConfirmOpen(true);
                 }}
                 disabled={estLoading || estimate == null || dispatching}
-                className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-40"
               >
                 {dispatching ? 'dispatching…' : 'Authorize'}
-              </button>
+              </Button>
             )}
-          </div>
+          </Inline>
         }
       >
-        <div className="flex flex-col gap-4">
+        <Stack gap="lg">
           {/* The work item under estimate */}
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
+          <Stack gap="none">
+            <Inline gap="sm" wrap>
               <Chip tone={item.type === 'bug' ? 'danger' : 'info'} size="xs">{item.type}</Chip>
-              <span className="text-[13px] font-semibold text-text-primary">{item.title}</span>
-            </div>
-            <div className="mt-1 text-[11px] text-text-tertiary">
-              {item.storyPoints != null ? `${item.storyPoints} ${item.storyPoints === 1 ? 'point' : 'points'}` : 'unpointed'}
-            </div>
-          </div>
+              <EntityCell label={item.title} labelClassName="text-[13px] font-semibold" />
+            </Inline>
+            <MetaLine
+              size="xs"
+              className="mt-1"
+              items={[item.storyPoints != null
+                ? `${item.storyPoints} ${item.storyPoints === 1 ? 'point' : 'points'}`
+                : 'unpointed']}
+            />
+          </Stack>
 
           {/* Model — the estimate recomputes live as this changes */}
-          <label className="flex flex-col gap-1 text-[12px] text-text-secondary">
-            <span className="font-semibold">Model</span>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary"
-            >
-              {DEVBOX_MODELS.map((m) => (
-                <option key={m.id} value={m.id} title={m.hint}>{m.label} — {m.hint}</option>
-              ))}
-            </select>
-          </label>
+          {/* `labelId` is dropped from each wiring bag — FormField hands it over
+              but it is not a DOM prop, so spreading it makes React warn. */}
+          <FormField label="Model">
+            {({ labelId: _l, ...w }) => (
+              <Select
+                {...w}
+                size="sm"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                options={DEVBOX_MODELS.map((m) => ({ value: m.id, label: `${m.label} — ${m.hint}` }))}
+              />
+            )}
+          </FormField>
 
           {/* Target codebase — optional; the server 409s if it needs a pick */}
           {codebases.length > 1 && (
-            <label className="flex flex-col gap-1 text-[12px] text-text-secondary">
-              <span className="font-semibold">Codebase</span>
-              <select
-                value={agentProjectId ?? ''}
-                onChange={(e) => setAgentProjectId(e.target.value || null)}
-                className="px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary font-mono"
-              >
-                <option value="">choose at dispatch</option>
-                {codebases.map((cb) => (
-                  <option key={cb.id} value={cb.id}>{cb.repoFullName}</option>
-                ))}
-              </select>
-            </label>
+            <FormField label="Codebase">
+              {({ labelId: _l, ...w }) => (
+                <Select
+                  {...w}
+                  size="sm"
+                  className="font-mono"
+                  value={agentProjectId ?? ''}
+                  onChange={(e) => setAgentProjectId(e.target.value || null)}
+                  options={[
+                    { value: '', label: 'choose at dispatch' },
+                    ...codebases.map((cb) => ({ value: cb.id, label: cb.repoFullName })),
+                  ]}
+                />
+              )}
+            </FormField>
           )}
 
           {/* The estimate — always a range, with its basis stated plainly */}
-          <div className="px-3 py-2.5 rounded-md border border-border bg-surface-inset">
-            <div className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wide mb-1">Estimate</div>
+          <Card className="px-3 py-2.5 bg-surface-inset">
+            <SectionLabel className="mb-1">Estimate</SectionLabel>
             {estLoading ? (
-              <div className="text-[12px] text-text-tertiary">estimating…</div>
+              <MetaLine items={['estimating…']} />
             ) : estError ? (
-              <div className="text-[12px] text-danger">Estimate unavailable: {estError}</div>
+              // The failure is loud on purpose: an unavailable estimate must
+              // never read like a cheap one.
+              <InlineAlert tone="error">Estimate unavailable: {estError}</InlineAlert>
             ) : estimate ? (
               <>
-                <div className="text-[13px] text-text-primary leading-relaxed">{estimateLine(estimate)}</div>
+                <Inline as="span" gap="none" className="text-[13px] text-text-primary leading-relaxed">
+                  {estimateLine(estimate)}
+                </Inline>
                 {estimate.basis === 'prior' && (
-                  <div className="mt-1 text-[11px] text-text-tertiary">≈ {rangeText(estimate)}</div>
+                  <MetaLine size="xs" className="mt-1" items={[`≈ ${rangeText(estimate)}`]} />
                 )}
               </>
             ) : (
-              <div className="text-[12px] text-text-tertiary">—</div>
+              <MetaLine items={['—']} />
             )}
-          </div>
+          </Card>
 
           {/* What is left of the operator's own sprint envelope, read before
               they commit. Sits directly under the estimate because the only
@@ -613,54 +632,59 @@ export function EstimateDrawer({
               it is a cap rather than a refusal. Its own confirmation flag, so
               waving it through says nothing about the initiative's allocation
               or the sprint envelope. */}
-          <label className="flex flex-col gap-1 text-[12px] text-text-secondary">
-            <span className="font-semibold">
-              Cap this run <span className="font-normal text-text-tertiary">(optional)</span>
-            </span>
-            <div className="flex items-center gap-1.5">
-              <span className="text-text-tertiary">$</span>
-              <input
-                type="number"
-                min="0"
-                step="0.25"
-                inputMode="decimal"
-                value={capText}
-                onChange={(e) => setCapText(e.target.value)}
-                placeholder={estimate ? estimate.costUsdP75.toFixed(2) : 'no cap'}
-                className="w-28 px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary"
-              />
-              <span className="text-[11px] text-text-tertiary">
-                don't start it if it's forecast over this
-              </span>
-            </div>
-            {capBelowForecast && (
-              <span className="text-[11px] text-warning">
-                The high end of the current forecast is over this cap — you'll be asked to confirm.
-              </span>
+          <FormField label="Cap this run" hint="optional">
+            {({ labelId: _l, ...w }) => (
+              <Stack gap="xs">
+                <Inline gap="xs" wrap={false}>
+                  {/* The `$` is Input's own prefix slot rather than a sibling
+                      span, so it sits inside the field's border where it
+                      belongs. */}
+                  <Input
+                    {...w}
+                    type="number"
+                    size="sm"
+                    prefix="$"
+                    min="0"
+                    step="0.25"
+                    inputMode="decimal"
+                    value={capText}
+                    onChange={(e) => setCapText(e.target.value)}
+                    placeholder={estimate ? estimate.costUsdP75.toFixed(2) : 'no cap'}
+                    className="w-28"
+                  />
+                  <MetaLine size="xs" items={["don't start it if it's forecast over this"]} />
+                </Inline>
+                {capBelowForecast && (
+                  <InlineAlert tone="warning">
+                    The high end of the current forecast is over this cap — you'll be asked to confirm.
+                  </InlineAlert>
+                )}
+              </Stack>
             )}
-          </label>
+          </FormField>
 
           {/* Optional one-shot steering, without editing any standing mission */}
-          <label className="flex flex-col gap-1 text-[12px] text-text-secondary">
-            <span className="font-semibold">Instruction <span className="font-normal text-text-tertiary">(optional, this run only)</span></span>
-            <textarea
-              value={instruction}
-              onChange={(e) => setInstruction(e.target.value)}
-              rows={3}
-              placeholder="e.g. 'prefer the existing retry helper — do not add a new dependency'"
-              className="w-full px-2.5 py-2 rounded-md border border-border bg-surface text-[12px] text-text-primary resize-y box-border"
-            />
-          </label>
+          <FormField label="Instruction" hint="optional, this run only">
+            {({ labelId: _l, ...w }) => (
+              <Textarea
+                {...w}
+                rows={3}
+                value={instruction}
+                onChange={(e) => setInstruction(e.target.value)}
+                placeholder="e.g. 'prefer the existing retry helper — do not add a new dependency'"
+                className="w-full resize-y"
+              />
+            )}
+          </FormField>
 
           {/* 429 — the concurrency ceiling is full; wait or raise it */}
           {concurrencyMsg && (
-            <div className="px-3 py-2.5 rounded-md border border-danger/50 bg-danger-bg/40">
-              <div className="text-[12px] font-semibold text-danger mb-0.5">Concurrency ceiling reached</div>
-              <div className="text-[12px] text-text-primary leading-relaxed">
-                {concurrencyMsg} — raise <code className="font-mono text-[11px]">BOT_MAX_CONCURRENT</code> or
-                wait for a run to finish, then authorize again.
-              </div>
-            </div>
+            <InlineAlert tone="error">
+              <strong>Concurrency ceiling reached.</strong>{' '}
+              {concurrencyMsg} — raise{' '}
+              <Inline as="span" gap="none" className="font-mono text-[11px]">BOT_MAX_CONCURRENT</Inline> or
+              wait for a run to finish, then authorize again.
+            </InlineAlert>
           )}
 
           {/* 403 — grant-scoped dispatch: no active sprint grant on this
@@ -668,43 +692,48 @@ export function EstimateDrawer({
               money gate: nothing to confirm or retry here, so no button —
               just the server's guidance and who to ask. */}
           {grantGapMsg && (
-            <div className="px-3 py-2.5 rounded-md border border-warning/50 bg-warning-bg/40">
-              <div className="text-[12px] font-semibold text-text-primary mb-0.5">No sprint grant on this initiative</div>
-              <div className="text-[12px] text-text-primary leading-relaxed">
-                {grantGapMsg}
-              </div>
-              <div className="mt-1.5 text-[11px] text-text-tertiary">
-                This isn't a failed run — the run was never started. Ask the release
-                manager for a sprint grant on this initiative, then authorize again.
-              </div>
-            </div>
+            // warning, not error: nothing failed and nothing is retryable here
+            // — it is an authorization gap with a person to ask.
+            <InlineAlert tone="warning">
+              <strong>No sprint grant on this initiative.</strong> {grantGapMsg}
+              <MetaLine
+                size="xs"
+                className="mt-1.5"
+                items={["This isn't a failed run — the run was never started. Ask the release "
+                  + 'manager for a sprint grant on this initiative, then authorize again.']}
+              />
+            </InlineAlert>
           )}
 
           {/* 409 fallback — the server wants a codebase before it will run */}
           {pickerOptions && (
-            <div className="px-3 py-2.5 rounded-md border border-warning/50 bg-warning-bg/40">
-              <div className="text-[12px] text-text-primary font-semibold mb-1.5">
-                Several codebases deliver this initiative — pick where the agent works:
-              </div>
-              <div className="flex flex-col gap-1.5">
+            <InlineAlert tone="warning">
+              <strong>Several codebases deliver this initiative — pick where the agent works:</strong>
+              <Stack gap="xs" className="mt-1.5">
                 {pickerOptions.map((o) => (
-                  <button
+                  // Each of these DISPATCHES on click — a real run against a
+                  // real repo — so they stay full-width, left-aligned targets
+                  // rather than becoming a compact row of chips.
+                  <Button
                     key={o.id}
+                    variant="secondary"
+                    size="sm"
+                    fullWidth
                     disabled={dispatching}
+                    className="font-mono justify-start text-left"
                     onClick={() => {
                       setAgentProjectId(o.id);
                       setPickerOptions(null);
                       void dispatch(o.id);
                     }}
-                    className="px-2.5 py-1.5 rounded-md border border-border bg-surface text-[12px] font-mono text-text-primary cursor-pointer text-left hover:border-primary hover:text-primary disabled:opacity-50"
                   >
                     {o.repoFullName}
-                  </button>
+                  </Button>
                 ))}
-              </div>
-            </div>
+              </Stack>
+            </InlineAlert>
           )}
-        </div>
+        </Stack>
       </Drawer>
 
       <ConfirmDialog
