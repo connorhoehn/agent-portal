@@ -4,7 +4,9 @@
 
 import { memo } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
-import { Card, Chip } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Card, Chip, EntityCell, Inline, InlineAlert, MetaLine, Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 import type {
   ControllerNodeData,
   ControllerAction,
@@ -37,6 +39,9 @@ const STATE_LABEL: Record<ControllerNodeData['state'], string> = {
   rolled_back: '✕ rolled back',
 };
 
+// Six actions onto six colours, and there is no Chip tone for
+// SKIPPED_OVERRIDE's `--color-optimize`, so this stays a class map applied to
+// a library element rather than becoming a tone.
 const ACTION_COLOR_CLASS: Record<ControllerAction, string> = {
   PROMOTE: 'text-success',
   ROLLBACK: 'text-danger',
@@ -70,30 +75,32 @@ function DecisionRow({ d }: { d: Decision }) {
           ? 'text-danger'
           : 'text-text-tertiary';
   return (
-    <div className="flex flex-col gap-px py-1 border-t border-border">
-      <div className="flex items-center gap-1.5 text-[10.5px]">
-        <span className="text-text-tertiary font-mono">
+    <Stack gap="none" className="gap-px py-1 border-t border-border">
+      <Inline gap="xs" wrap={false} className="text-[10.5px]">
+        <Inline as="span" gap="none" className="text-text-tertiary font-mono">
           {formatTs(d.ts)}
-        </span>
-        <span className={`${ACTION_COLOR_CLASS[d.action]} font-semibold`}>
+        </Inline>
+        <Inline as="span" gap="none" className={`${ACTION_COLOR_CLASS[d.action]} font-semibold`}>
           {d.action}
-        </span>
-        <span className="text-text-secondary font-mono">
+        </Inline>
+        <Inline as="span" gap="none" className="text-text-secondary font-mono">
           {arrow}
-        </span>
+        </Inline>
         {d.deltaScore !== undefined && (
-          <span className={`${deltaClass} tabular-nums`}>
+          <Inline as="span" gap="none" className={`${deltaClass} tabular-nums`}>
             Δ{d.deltaScore >= 0 ? '+' : ''}{d.deltaScore.toFixed(3)}
-          </span>
+          </Inline>
         )}
-      </div>
-      <div
-        className="text-[10px] text-text-tertiary overflow-hidden text-ellipsis whitespace-nowrap"
+      </Inline>
+      <Inline
+        as="span"
+        gap="none"
         title={d.reason}
+        className="text-[10px] text-text-tertiary overflow-hidden text-ellipsis whitespace-nowrap"
       >
         {d.reason}
-      </div>
-    </div>
+      </Inline>
+    </Stack>
   );
 }
 
@@ -101,43 +108,52 @@ function ControllerNodeImpl({ data }: NodeProps<ControllerNodeType>) {
   const recent = data.lastDecisions.slice(0, 3);
   return (
     <Card padding="sm" className="w-[280px] text-xs">
-      <div className="flex items-center justify-between gap-2 mb-1.5">
-        <span className="text-xs font-semibold text-text-primary">
-          Controller
-        </span>
+      <Inline gap="sm" justify="between" wrap={false} className="mb-1.5">
+        <EntityCell label="Controller" labelClassName="text-xs font-semibold" />
         <Chip tone={STATE_TONE[data.state]} size="xs">{STATE_LABEL[data.state]}</Chip>
-      </div>
+      </Inline>
 
       {data.executionArn && (
-        <div
-          className="text-[10px] font-mono text-text-tertiary overflow-hidden text-ellipsis whitespace-nowrap mb-1"
+        <Inline
+          as="span"
+          gap="none"
           title={data.executionArn}
+          className="text-[10px] font-mono text-text-tertiary overflow-hidden text-ellipsis whitespace-nowrap mb-1"
         >
           {data.executionArn}
-        </div>
+        </Inline>
       )}
 
+      {/* These were hand-tinted boxes carrying their own bg/border/text triple.
+          InlineAlert already owns that vocabulary, and a terminal experiment
+          outcome is exactly the thing an alert is for. */}
       {data.state === 'promoted' && (
-        <div className="bg-success-bg border border-[var(--color-success-border)] rounded p-1.5 px-2 mb-1.5 text-[11px] text-success leading-snug">
+        <InlineAlert tone="success" className="mb-1.5">
           Version B is now serving 100% of traffic. The experiment is complete — B has been fully promoted.
-        </div>
+        </InlineAlert>
       )}
       {data.state === 'rolled_back' && (
-        <div className="bg-danger-bg border border-[var(--color-danger-border)] rounded p-1.5 px-2 mb-1.5 text-[11px] text-danger leading-snug">
+        <InlineAlert tone="error" className="mb-1.5">
           Rolled back to 100% A. B underperformed and has been fully removed from traffic.
-        </div>
+        </InlineAlert>
       )}
 
-      <div className="flex flex-col">
+      <Stack gap="none">
         {recent.length === 0 ? (
-          <div className="text-[11px] text-text-tertiary pt-1 leading-normal">
-            Watches A/B judge scores and fires PROMOTE / ROLLBACK / HOLD once enough samples arrive.
-            Run <b className="text-text-secondary">Scenarios</b> to generate traffic.
-          </div>
+          <MetaLine
+            size="xs"
+            className="pt-1 leading-normal"
+            items={[
+              <>
+                Watches A/B judge scores and fires PROMOTE / ROLLBACK / HOLD once enough samples
+                arrive. Run <Inline as="span" gap="none" className="text-text-secondary font-semibold">Scenarios</Inline> to generate traffic.
+              </>,
+            ]}
+          />
         ) : (
           recent.map((d, i) => <DecisionRow key={`${d.ts}-${i}`} d={d} />)
         )}
-      </div>
+      </Stack>
 
       <Handle type="target" position={Position.Top} id="in" />
       {/* feedback handle is invisible — it exists only as an edge anchor for the

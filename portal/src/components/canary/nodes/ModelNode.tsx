@@ -3,7 +3,7 @@
 
 import { memo } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
-import { Card, Chip } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Chip, EntityCell, Inline } from '@connorhoehnslalom/ui-components/shared';
 import type { ModelNodeData } from '../types.js';
 
 export type ModelNodeType = Node<ModelNodeData & Record<string, unknown>, 'modelNode'>;
@@ -11,12 +11,10 @@ export type ModelNodeType = Node<ModelNodeData & Record<string, unknown>, 'model
 function ModelNodeImpl({ data }: NodeProps<ModelNodeType>) {
   return (
     <Card padding="sm" className="w-[180px] text-xs">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-semibold text-text-primary">
-          Model
-        </span>
+      <Inline gap="sm" justify="between" wrap={false}>
+        <EntityCell label="Model" labelClassName="text-xs font-semibold" />
         <Chip tone="neutral" size="xs">{data.name || 'Nova Pro'}</Chip>
-      </div>
+      </Inline>
 
       <Handle type="target" position={Position.Left} id="a" />
       <Handle type="target" position={Position.Right} id="b" />

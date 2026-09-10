@@ -4,7 +4,7 @@
 import { memo, useEffect, useState, useCallback } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { useNavigate } from 'react-router';
-import { Card, Chip } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Chip, Inline, ProgressBar, Stack } from '@connorhoehnslalom/ui-components/shared';
 import type { JudgeNodeData } from '../types.js';
 
 export type JudgeNodeType = Node<JudgeNodeData & Record<string, unknown>, 'judgeNode'>;
@@ -15,23 +15,33 @@ interface BarProps {
   color: string;
 }
 
+/**
+ * One scoring axis.
+ *
+ * The track is `ProgressBar` with no `label`, which renders the bar alone —
+ * and unlike the hand-rolled pair of divs it came from, it carries
+ * `role="progressbar"` with `aria-valuenow`/`min`/`max`, so a screen reader
+ * gets the number instead of two anonymous boxes. The surrounding label and
+ * readout stay here because ProgressBar's own `label` slot puts them above the
+ * track, not on either side of it.
+ */
 function Bar({ label, value, color }: BarProps) {
   const pct = Math.max(0, Math.min(100, value));
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="w-16 text-[10px] text-text-tertiary flex-shrink-0">
+    <Inline gap="xs" wrap={false}>
+      <Inline as="span" gap="none" className="w-16 text-[10px] text-text-tertiary shrink-0">
         {label}
-      </span>
-      <div className="flex-1 h-1.5 bg-black/10 rounded-[3px] overflow-hidden">
-        <div
-          className="h-full transition-[width] duration-[400ms] ease"
-          style={{ width: `${pct}%`, background: color }}
-        />
-      </div>
-      <span className="w-[26px] text-[10px] tabular-nums text-text-secondary text-right">
+      </Inline>
+      <ProgressBar value={pct} size="sm" color={color} aria-label={label} className="flex-1" />
+      <Inline
+        as="span"
+        gap="none"
+        justify="end"
+        className="w-[26px] text-[10px] tabular-nums text-text-secondary"
+      >
         {Math.round(pct)}
-      </span>
-    </div>
+      </Inline>
+    </Inline>
   );
 }
 
@@ -67,27 +77,29 @@ function JudgeNodeImpl({ data }: NodeProps<JudgeNodeType>) {
       onClick={handleClick}
       title="Open Evaluations — configure judge + view scores"
     >
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <div className="flex items-center gap-1.5 min-w-0">
+      <Inline gap="sm" justify="between" wrap={false} className="mb-2">
+        <Inline gap="xs" wrap={false} className="min-w-0">
           <Chip tone="info" size="xs">LLM-as-judge</Chip>
-          <span
-            className="text-[10.5px] font-mono text-text-tertiary overflow-hidden text-ellipsis whitespace-nowrap"
+          <Inline
+            as="span"
+            gap="none"
             title={data.judgeVersion}
+            className="text-[10.5px] font-mono text-text-tertiary overflow-hidden text-ellipsis whitespace-nowrap"
           >
             {data.judgeVersion}
-          </span>
-        </div>
-        <span className="text-[10px] text-text-tertiary">
+          </Inline>
+        </Inline>
+        <Inline as="span" gap="none" className="text-[10px] text-text-tertiary">
           {formatRelative(data.lastJudgedAt, now)}
-        </span>
-      </div>
+        </Inline>
+      </Inline>
 
-      <div className="flex flex-col gap-1">
+      <Stack gap="xs">
         <Bar label="helpfulness" value={(s?.helpfulness ?? 0) * 100} color="#6366f1" />
         <Bar label="factuality"  value={(s?.factuality  ?? 0) * 100} color="#16a34a" />
         <Bar label="tone"        value={(s?.tone        ?? 0) * 100} color="#0891b2" />
         <Bar label="conciseness" value={(s?.conciseness ?? 0) * 100} color="#f59e0b" />
-      </div>
+      </Stack>
 
       <Handle type="target" position={Position.Top} id="in" />
       <Handle type="source" position={Position.Bottom} id="out" />

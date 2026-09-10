@@ -3,7 +3,7 @@
 
 import { memo } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
-import { Card, Chip } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Chip, EntityCell, Inline, MetaLine, Stack } from '@connorhoehnslalom/ui-components/shared';
 import type { InputNodeData } from '../types.js';
 
 // React Flow's Node<T> requires T to satisfy Record<string, unknown>; plain
@@ -19,32 +19,32 @@ function InputNodeImpl({ data }: NodeProps<InputNodeType>) {
   const recent = data.recentRequests.slice(-5).reverse();
   return (
     <Card padding="sm" className="w-[260px] text-xs">
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <span className="text-xs font-semibold text-text-primary">
-          Input
-        </span>
+      <Inline gap="sm" justify="between" wrap={false} className="mb-2">
+        <EntityCell label="Input" labelClassName="text-xs font-semibold" />
         <Chip tone="neutral" size="xs">
           {`${Math.round(data.rps * 60)} req/min`}
         </Chip>
-      </div>
+      </Inline>
 
-      <div className="flex flex-col gap-1">
+      <Stack gap="xs">
         {recent.length === 0 ? (
-          <div className="text-[11px] text-text-tertiary italic">
-            Waiting for traffic…
-          </div>
+          <MetaLine size="xs" items={['Waiting for traffic…']} className="italic" />
         ) : (
+          // `title` carries the untruncated request; Inline forwards it because
+          // StackProps extends HTMLAttributes.
           recent.map((r) => (
-            <div
+            <Inline
               key={r.id}
+              as="span"
+              gap="none"
               title={r.text}
               className="text-[11px] text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis font-mono"
             >
               {truncate(r.text, 60)}
-            </div>
+            </Inline>
           ))
         )}
-      </div>
+      </Stack>
 
       <Handle type="source" position={Position.Bottom} id="out" />
     </Card>

@@ -10,29 +10,17 @@ import {
   type Edge,
   type EdgeProps,
 } from '@xyflow/react';
+import { Inline } from '@connorhoehnslalom/ui-components/shared';
 import type { WeightedEdgeData } from '../types.js';
 
 // React Flow's Edge<T> requires T to satisfy Record<string, unknown>; the
 // sibling-owned interface doesn't satisfy that by default, so we widen.
 export type WeightedEdgeType = Edge<WeightedEdgeData & Record<string, unknown>, 'weighted'>;
 
-// One module-level <style> for the dashflow animation. Cheaper than a
-// CSS-in-JS dep and shared across every weighted edge.
-const STYLE_ID = 'canary-weighted-edge-keyframes';
-if (typeof document !== 'undefined' && !document.getElementById(STYLE_ID)) {
-  const el = document.createElement('style');
-  el.id = STYLE_ID;
-  el.textContent = `
-@keyframes canary-edge-dashflow {
-  from { stroke-dashoffset: 16; }
-  to   { stroke-dashoffset: 0; }
-}
-.canary-weighted-edge--animated {
-  stroke-dasharray: 6 4;
-  animation: canary-edge-dashflow 0.8s linear infinite;
-}`;
-  document.head.appendChild(el);
-}
+// The dashflow keyframes and `.canary-weighted-edge--animated` live in
+// `src/animations.css`. They used to be injected into document.head at
+// module scope, which meant importing this file mutated the document before
+// anything rendered.
 
 function WeightedEdgeImpl({
   sourceX,
@@ -71,24 +59,19 @@ function WeightedEdgeImpl({
         }}
       />
       <EdgeLabelRenderer>
-        <div
-          className="nodrag nopan"
+        {/* Everything static about this label is a class now; only the
+            transform is left in `style`, because labelX/labelY come from
+            getBezierPath at render time and Tailwind cannot build a class
+            from them. */}
+        <Inline
+          gap="none"
+          className="nodrag nopan absolute rounded-[10px] border border-border bg-surface px-1.5 py-px text-[10px] font-semibold tabular-nums text-text-secondary pointer-events-auto"
           style={{
-            position: 'absolute',
             transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY - 18}px)`,
-            background: 'var(--color-surface, #fff)',
-            border: '1px solid var(--color-border, #e2e8f0)',
-            borderRadius: 10,
-            padding: '1px 6px',
-            fontSize: 10,
-            fontWeight: 600,
-            fontVariantNumeric: 'tabular-nums',
-            color: 'var(--color-text-secondary, #475569)',
-            pointerEvents: 'all',
           }}
         >
           {`${Math.round(weight)}%`}
-        </div>
+        </Inline>
       </EdgeLabelRenderer>
     </>
   );
