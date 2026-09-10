@@ -33,6 +33,20 @@ export interface WorkItem {
   assigneeDept: string | null;
   labels: string[];
   storyPoints: number | null;
+  /**
+   * Estimate provenance, straight off the wire
+   * (schema/work_item_estimate_schema.sql). All null until somebody authorizes
+   * a dispatch — that is the ordinary state, not a gap.
+   */
+  estimatedCostUsd?: number | null;
+  estimatedBy?: string | null;
+  estimatedByName?: string | null;
+  estimatedAt?: string | null;
+  estimateModel?: string | null;
+  estimateForecast?: Record<string, unknown> | null;
+  estimateReviewedBy?: string | null;
+  estimateReviewedByName?: string | null;
+  estimateReviewedAt?: string | null;
   prUrl: string | null;
   prStatus: PrStatus | null;
   createdAt: string;

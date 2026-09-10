@@ -19,6 +19,7 @@ jest.mock('../../config.js', () => ({
 jest.mock('../../lib/authz.js', () => ({
   readForRolesElseAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
   requireAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  requireSession: () => (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 // The devbox runtime genuinely is not deployed in this test process — force
 // the same fast, clean "not deployed" answer resolveDevboxArn gives against a

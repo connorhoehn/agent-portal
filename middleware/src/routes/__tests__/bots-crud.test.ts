@@ -25,6 +25,7 @@
 
 const readGateArgs: Array<[string[], string]> = [];
 const actionGates: string[] = [];
+const sessionGates: string[] = [];
 
 jest.mock('../../lib/authz.js', () => ({
   readForRolesElseAction: (roles: string[], action: string) => {
@@ -35,8 +36,16 @@ jest.mock('../../lib/authz.js', () => ({
     actionGates.push(action);
     return (_req: unknown, _res: unknown, next: () => void) => next();
   },
+  // The authentication floor — a label, not a capability. Recorded separately
+  // from actionGates so a route that only needs a session is never mistaken
+  // for one that carries a capability gate.
+  requireSession: (label: string) => {
+    sessionGates.push(label);
+    return (_req: unknown, _res: unknown, next: () => void) => next();
+  },
 }));
 jest.mock('../../providers/bots.js', () => ({
+  listActiveRuns: jest.fn(),
   listBots: jest.fn(), listBotsResult: jest.fn(), listBotRunsResult: jest.fn(),
   getBot: jest.fn(), createBot: jest.fn(), updateBot: jest.fn(),
   deleteBot: jest.fn(), setPausedReason: jest.fn(), listBotRuns: jest.fn(),

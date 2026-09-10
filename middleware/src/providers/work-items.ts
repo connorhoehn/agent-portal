@@ -5,6 +5,7 @@
 // the portal is fully navigable in offline / local dev without Aurora.
 
 import { randomUUID } from 'node:crypto';
+import { displayNameForSubject } from './identity.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 import { exec } from './aurora.js';
 import { config } from '../config.js';
@@ -63,6 +64,27 @@ export interface WorkItem {
    */
   sprintId: string | null;
   estimatedCostUsd: number | null;
+  /**
+   * Estimate provenance (schema/work_item_estimate_schema.sql). Who stood
+   * behind the forecast, when, and — critically — which model it was computed
+   * against: a stored Haiku figure must never be shown while Opus is selected,
+   * because the two were measured 20x apart on identical points.
+   *
+   * All null for every item predating that migration, and for any item whose
+   * estimate was never authorized. That is attribution starting going forward,
+   * the same reasoning `bot_runs.dispatched_by` records.
+   */
+  estimatedBy: string | null;
+  /** `estimatedBy` resolved through app_users; null when the subject has no
+   *  account row (deleted, or a machine subject). Render falls back to the id. */
+  estimatedByName: string | null;
+  estimatedAt: string | null;
+  estimateModel: string | null;
+  estimateForecast: Record<string, unknown> | null;
+  /** Advisory SME sign-off. Never gates dispatch. */
+  estimateReviewedBy: string | null;
+  estimateReviewedByName: string | null;
+  estimateReviewedAt: string | null;
   prUrl: string | null;
   prStatus: PrStatus | null;
   createdAt: string;
@@ -227,6 +249,9 @@ const ITEM_COLUMNS = `
       wi.parent_id, wi.type, wi.title, wi.description,
       wi.status, wi.priority, wi.labels,
       wi.story_points, wi.sprint_id, wi.estimated_cost_usd,
+      wi.estimated_by, wi.estimated_at, wi.estimate_model, wi.estimate_forecast,
+      wi.estimate_reviewed_by, wi.estimate_reviewed_at,
+
       wi.pr_url, wi.pr_status,
       wi.created_at, wi.updated_at, wi.completed_at,
       a.id AS assignee_id, a.name AS assignee_name, a.team AS assignee_dept,
@@ -237,6 +262,60 @@ const ITEM_FROM = `
     FROM work_items wi
     JOIN projects p ON p.id = wi.project_id
     LEFT JOIN people a ON a.id = wi.assignee_id`;
+
+// ─── Estimate-attribution names (app_users) ───────────────────────────────────
+//
+// `estimated_by` / `estimate_reviewed_by` hold a SESSION SUBJECT, so resolving
+// them to a person means joining app_users (identity_schema.sql), not people:
+// an account with no linked org-graph person still authorized the spend.
+//
+// The join is OPTIONAL, and that is the load-bearing part. safeExec swallows
+// `relation ... does not exist` so a pre-schema cluster reads empty rather than
+// 500ing — which means an unconditional `JOIN app_users` on a cluster that has
+// work_items but not identity_schema would blank the ENTIRE work board and
+// report it as "no work". A missing name must cost the name, never the rows.
+//
+// Probed once per process against information_schema, mirroring
+// providers/bots.ts::attributionAvailable — the same problem (middleware ships
+// ahead of schema) already solved the same way there.
+
+let _appUsers: boolean | null = null;
+
+async function appUsersAvailable(): Promise<boolean> {
+  // Mock mode stands in for a fully-migrated cluster; the mock write paths
+  // resolve names themselves via displayNameForSubject.
+  if (config.mock.aurora) return true;
+  if (_appUsers !== null) return _appUsers;
+  try {
+    const rows = await exec(
+      `SELECT 1 AS ok FROM information_schema.tables
+        WHERE table_name = 'app_users' LIMIT 1`,
+    );
+    _appUsers = rows.length > 0;
+  } catch {
+    _appUsers = false;
+  }
+  return _appUsers;
+}
+
+/** Test seam: forget the probe so the next call re-asks. */
+export function resetAppUsersProbe(): void { _appUsers = null; }
+
+/** The name columns, or nothing when identity_schema is not on this cluster. */
+function nameColumns(withNames: boolean): string {
+  return withNames
+    ? `, eb.display_name AS estimated_by_name, rb.display_name AS estimate_reviewed_by_name`
+    : '';
+}
+
+/** The name joins, or nothing. Paired with nameColumns — never use one alone. */
+function nameJoins(withNames: boolean): string {
+  return withNames
+    ? `
+    LEFT JOIN app_users eb ON eb.id = wi.estimated_by
+    LEFT JOIN app_users rb ON rb.id = wi.estimate_reviewed_by`
+    : '';
+}
 
 // ─── Aurora query wrapper — degrades gracefully if work_items table is missing ─
 
@@ -295,9 +374,10 @@ async function dbSearchWorkItems(opts: SearchWorkItemsOpts): Promise<WorkItem[]>
 
   const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
 
+  const withNames = await appUsersAvailable();
   const sql = `
-    SELECT ${ITEM_COLUMNS}
-    ${ITEM_FROM}
+    SELECT ${ITEM_COLUMNS}${nameColumns(withNames)}
+    ${ITEM_FROM}${nameJoins(withNames)}
     ${where}
     ORDER BY wi.updated_at DESC
     LIMIT :lim
@@ -307,9 +387,10 @@ async function dbSearchWorkItems(opts: SearchWorkItemsOpts): Promise<WorkItem[]>
 }
 
 async function dbGetProjectWorkItems(projectId: string): Promise<WorkItem[]> {
+  const withNames = await appUsersAvailable();
   const sql = `
-    SELECT ${ITEM_COLUMNS}
-    ${ITEM_FROM}
+    SELECT ${ITEM_COLUMNS}${nameColumns(withNames)}
+    ${ITEM_FROM}${nameJoins(withNames)}
     WHERE wi.project_id = :pid
     ORDER BY wi.type DESC, wi.created_at ASC
   `;
@@ -323,9 +404,10 @@ async function dbGetPersonWorkItems(personId: string, opts: { status?: string; l
   const extra = opts.status ? `AND wi.status = :status` : '';
   if (opts.status) params.push(strParam('status', opts.status));
 
+  const withNames = await appUsersAvailable();
   const sql = `
-    SELECT ${ITEM_COLUMNS}
-    ${ITEM_FROM}
+    SELECT ${ITEM_COLUMNS}${nameColumns(withNames)}
+    ${ITEM_FROM}${nameJoins(withNames)}
     WHERE wi.assignee_id = :pid ${extra}
     ORDER BY wi.updated_at DESC
     LIMIT :lim
@@ -413,6 +495,11 @@ async function dbCreateWorkItem(data: CreateWorkItemInput): Promise<WorkItem> {
       assigneeId: data.assigneeId ?? null, assigneeName: null, assigneeDept: null,
       labels: data.labels ?? [], storyPoints: data.storyPoints ?? null,
       sprintId: data.sprintId ?? null, estimatedCostUsd: data.estimatedCostUsd ?? null,
+      // A just-created item has no authorized estimate. Nobody has dispatched
+      // it, so nobody has stood behind a forecast for it.
+      estimatedBy: null, estimatedByName: null, estimatedAt: null, estimateModel: null, estimateForecast: null,
+      estimateReviewedByName: null,
+      estimateReviewedBy: null, estimateReviewedAt: null,
       prUrl: null, prStatus: null,
       createdAt: now, updatedAt: now, completedAt: null, childCount: 0, childDoneCount: 0,
     };
@@ -512,6 +599,32 @@ async function dbWouldCreateParentCycle(id: string, newParentId: string): Promis
 
 // ─── Row mapper ───────────────────────────────────────────────────────────────
 
+/**
+ * TIMESTAMPTZ comes back from the RDS Data API as a NAIVE string, and
+ * `new Date()` reads that shape as LOCAL time — the same trap that once made a
+ * devbox look four hours old in the future (lib/devbox-fleet-rows.ts::utcIso).
+ * Estimates are compared against "how long ago", so the same care applies.
+ */
+function utcIso(raw: unknown): string {
+  const text = String(raw ?? '').trim();
+  if (!text) return '';
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/.test(text);
+  const isoish = text.includes('T') ? text : text.replace(' ', 'T');
+  const d = new Date(hasZone ? isoish : `${isoish}Z`);
+  return Number.isFinite(d.getTime()) ? d.toISOString() : text;
+}
+
+function parseForecast(raw: unknown): Record<string, unknown> | null {
+  if (raw == null) return null;
+  if (typeof raw === 'object') return raw as Record<string, unknown>;
+  try {
+    const parsed: unknown = JSON.parse(String(raw));
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
 function rowToWorkItem(r: Record<string, unknown>): WorkItem {
   // readField now converts arrayValue → string[]; guard for both array and legacy string forms
   let labels: string[] = [];
@@ -539,6 +652,17 @@ function rowToWorkItem(r: Record<string, unknown>): WorkItem {
     // NUMERIC arrives from the Data API as a string; Number() is the same
     // treatment story_points already gets.
     estimatedCostUsd: r['estimated_cost_usd'] != null ? Number(r['estimated_cost_usd']) : null,
+    estimatedBy: r['estimated_by'] != null ? String(r['estimated_by']) : null,
+    estimatedByName: r['estimated_by_name'] != null ? String(r['estimated_by_name']) : null,
+    estimatedAt: r['estimated_at'] != null ? utcIso(r['estimated_at']) : null,
+    estimateModel: r['estimate_model'] != null ? String(r['estimate_model']) : null,
+    // JSONB arrives from the Data API as a string; a malformed one must not
+    // take the whole row down, so a parse failure reads as "no stored forecast"
+    // rather than throwing — the caller then re-estimates, which is safe.
+    estimateForecast: parseForecast(r['estimate_forecast']),
+    estimateReviewedBy: r['estimate_reviewed_by'] != null ? String(r['estimate_reviewed_by']) : null,
+    estimateReviewedByName: r['estimate_reviewed_by_name'] != null ? String(r['estimate_reviewed_by_name']) : null,
+    estimateReviewedAt: r['estimate_reviewed_at'] != null ? utcIso(r['estimate_reviewed_at']) : null,
     prUrl: r['pr_url'] != null ? String(r['pr_url']) : null,
     prStatus: r['pr_status'] != null ? (r['pr_status'] as PrStatus) : null,
     createdAt: String(r['created_at'] ?? ''),
@@ -813,6 +937,13 @@ export async function createWorkItem(data: CreateWorkItemInput): Promise<WorkIte
     storyPoints: data.storyPoints ?? null,
     sprintId: data.sprintId ?? null,
     estimatedCostUsd: data.estimatedCostUsd ?? null,
+    // Same as the Aurora path: a new item has no estimator.
+    estimatedBy: null, estimatedByName: null,
+    estimatedAt: null,
+    estimateModel: null,
+    estimateForecast: null,
+    estimateReviewedBy: null, estimateReviewedByName: null,
+    estimateReviewedAt: null,
     prUrl: null,
     prStatus: null,
     createdAt: now,
@@ -924,14 +1055,113 @@ export async function personExists(personId: string): Promise<boolean> {
 }
 
 /** One work item by id — the marketplace's dispatch precondition read. */
+/**
+ * Record the forecast an operator actually authorized against.
+ *
+ * Called on a SUCCESSFUL dispatch only. A drawer that was opened and cancelled
+ * writes nothing: recomputing a number and then walking away is not an estimate
+ * anybody made, and storing it would put a decision in the record that nobody
+ * took. Same reasoning `bot_runs.dispatched_by` uses for cron firings.
+ *
+ * `actor` comes from the session subject at the call site and is never read
+ * from a request body — the whole point of attribution is that the subject
+ * cannot be chosen by the caller.
+ *
+ * The model is stored WITH the forecast because a forecast is only valid for
+ * its own model: Haiku and Opus were measured 20x apart on identical points.
+ */
+export async function recordWorkItemEstimate(
+  id: string,
+  actor: string,
+  model: string,
+  forecast: Record<string, unknown>,
+  costUsd: number | null,
+): Promise<void> {
+  if (config.mock.aurora) {
+    const item = mockWorkItems().find((i) => i.id === id);
+    if (item) {
+      item.estimatedBy = actor;
+      item.estimatedByName = displayNameForSubject(actor);
+      item.estimatedAt = clock.nowIso();
+      item.estimateModel = model;
+      item.estimateForecast = forecast;
+      if (costUsd != null) item.estimatedCostUsd = costUsd;
+      // A NEW estimate supersedes any prior review — somebody signed off on a
+      // different number, and carrying that approval forward would attribute an
+      // opinion they never gave.
+      item.estimateReviewedBy = null;
+      item.estimateReviewedByName = null;
+      item.estimateReviewedAt = null;
+    }
+    return;
+  }
+  await safeExec(
+    `UPDATE work_items
+        SET estimated_by         = :actor,
+            estimated_at         = NOW(),
+            estimate_model       = :model,
+            estimate_forecast    = :forecast::jsonb,
+            estimated_cost_usd   = COALESCE(:cost, estimated_cost_usd),
+            estimate_reviewed_by = NULL,
+            estimate_reviewed_at = NULL,
+            updated_at           = NOW()
+      WHERE id = :id`,
+    [
+      strParam('id', id),
+      strParam('actor', actor),
+      strParam('model', model),
+      strParam('forecast', JSON.stringify(forecast)),
+      // NUMERIC as doubleValue, and an explicit isNull when there is no cost —
+      // COALESCE in the SQL then keeps whatever was already stored rather than
+      // wiping it. There is no doubleParam/nullParam helper in this repo.
+      costUsd != null
+        ? { name: 'cost', value: { doubleValue: costUsd } }
+        : { name: 'cost', value: { isNull: true } },
+    ],
+  );
+}
+
+/**
+ * Advisory SME sign-off on the stored estimate.
+ *
+ * Deliberately does not gate anything. Dispatch already refuses four ways
+ * (grant-scoped 403, per-run cap, initiative allocation, sprint envelope); a
+ * fifth hard gate is how a fleet stops because a reviewer is on holiday. This
+ * records that somebody looked. Turning it into a gate later is one predicate
+ * in the dispatch path — the column is already here.
+ */
+export async function reviewWorkItemEstimate(id: string, actor: string): Promise<boolean> {
+  if (config.mock.aurora) {
+    const item = mockWorkItems().find((i) => i.id === id);
+    if (!item || !item.estimatedAt) return false;
+    item.estimateReviewedBy = actor;
+    item.estimateReviewedByName = displayNameForSubject(actor);
+    item.estimateReviewedAt = clock.nowIso();
+    return true;
+  }
+  // Guarded on estimated_at: reviewing an item that has no estimate would
+  // record approval of nothing.
+  const rows = await safeExec(
+    `UPDATE work_items
+        SET estimate_reviewed_by = :actor,
+            estimate_reviewed_at = NOW(),
+            updated_at           = NOW()
+      WHERE id = :id AND estimated_at IS NOT NULL
+      RETURNING id`,
+    [strParam('id', id), strParam('actor', actor)],
+  );
+  return rows.length > 0;
+}
+
 export async function getWorkItem(id: string): Promise<WorkItem | null> {
   if (config.mock.aurora) {
     const item = mockWorkItems().find((i) => i.id === id);
     return item ? { ...item } : null;
   }
+  const withNames = await appUsersAvailable();
   const sql = `
-    SELECT ${ITEM_COLUMNS}
-    ${ITEM_FROM}
+    SELECT ${ITEM_COLUMNS}${nameColumns(withNames)}
+    ${ITEM_FROM}${nameJoins(withNames)}
     WHERE wi.id = :id
   `;
   const rows = await safeExec(sql, [strParam('id', id)]);

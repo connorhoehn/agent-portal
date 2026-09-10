@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-10T13:43:04.429Z",
-  "serverHandlerSha": "0e539e788d72fd73d1156b2ca5f24fb079e003d08c99ab32111c5172a1d1813f",
+  "capturedAt": "2026-09-10T18:30:51.535Z",
+  "serverHandlerSha": "fc37ecf71fff0d26ac89939fa7e4aa329404ca9878454a8b939d2e8079ad5941",
   "baseUrl": "http://127.0.0.1:3001",
   "personas": [
     "orgiq/admin",
@@ -1522,6 +1522,15 @@
         ]
       }
     },
+    "GET /api/bots/active-runs": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "runs": "array"
+      },
+      "values": {}
+    },
     "GET /api/bots/estimate": {
       "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
     },
@@ -1908,12 +1917,38 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "boxes": "array"
+        "boxes": "array",
+        "boxes[]": "object",
+        "boxes[].activeModel": "string",
+        "boxes[].contextUsed": "number",
+        "boxes[].createdAt": "string",
+        "boxes[].currentTask": "string",
+        "boxes[].id": "string",
+        "boxes[].idleMsLeft": "number",
+        "boxes[].label": "string",
+        "boxes[].lastActivityAt": "string",
+        "boxes[].lastResult": "object",
+        "boxes[].lastResult.costUsd": "number",
+        "boxes[].lastResult.durationMs": "number",
+        "boxes[].lastResult.subtype": "string",
+        "boxes[].lastResult.turns": "number",
+        "boxes[].lifetimeMsLeft": "number",
+        "boxes[].ownerId": "string",
+        "boxes[].sessionId": "string",
+        "boxes[].spendUsd": "number",
+        "boxes[].status": "string",
+        "boxes[].stopsInMs": "number",
+        "boxes[].tokensUsed": "number"
       },
-      "values": {}
+      "values": {
+        "boxes[].status": [
+          "idle",
+          "waiting"
+        ]
+      }
     },
     "GET /api/devbox/boxes/:boxId/tail": {
-      "skipped": "no value found for :boxId under /api/devbox/boxes (orgiq/admin); no value found for :boxId under /api/devbox/boxes (assessment/admin); no value found for :boxId under /api/devbox/boxes (anonymous)"
+      "skipped": "server-sent event stream (orgiq/admin); server-sent event stream (assessment/admin); no value found for :boxId under /api/devbox/boxes (anonymous)"
     },
     "GET /api/devbox/status": {
       "persona": "orgiq/admin",
@@ -2680,6 +2715,14 @@
         "$[].children[].completedAt": "null|string",
         "$[].children[].createdAt": "string",
         "$[].children[].description": "null|string",
+        "$[].children[].estimateForecast": "null",
+        "$[].children[].estimateModel": "null",
+        "$[].children[].estimateReviewedAt": "null",
+        "$[].children[].estimateReviewedBy": "null",
+        "$[].children[].estimateReviewedByName": "null",
+        "$[].children[].estimatedAt": "null",
+        "$[].children[].estimatedBy": "null",
+        "$[].children[].estimatedByName": "null",
         "$[].children[].estimatedCostUsd": "number",
         "$[].children[].id": "string",
         "$[].children[].labels": "array",
@@ -2699,6 +2742,14 @@
         "$[].completedAt": "null",
         "$[].createdAt": "string",
         "$[].description": "string",
+        "$[].estimateForecast": "null",
+        "$[].estimateModel": "null",
+        "$[].estimateReviewedAt": "null",
+        "$[].estimateReviewedBy": "null",
+        "$[].estimateReviewedByName": "null",
+        "$[].estimatedAt": "null",
+        "$[].estimatedBy": "null",
+        "$[].estimatedByName": "null",
         "$[].estimatedCostUsd": "null",
         "$[].id": "string",
         "$[].labels": "array",
@@ -2784,6 +2835,14 @@
         "$[].completedAt": "null|string",
         "$[].createdAt": "string",
         "$[].description": "null|string",
+        "$[].estimateForecast": "null",
+        "$[].estimateModel": "null",
+        "$[].estimateReviewedAt": "null",
+        "$[].estimateReviewedBy": "null",
+        "$[].estimateReviewedByName": "null",
+        "$[].estimatedAt": "null",
+        "$[].estimatedBy": "null",
+        "$[].estimatedByName": "null",
         "$[].estimatedCostUsd": "null|number",
         "$[].id": "string",
         "$[].labels": "array",
@@ -3519,12 +3578,35 @@
         "nodes[].presence.lastSeenAt": "string",
         "nodes[].presence.nodeId": "string",
         "nodes[].presence.sessions": "array",
+        "nodes[].presence.sessions[]": "object",
+        "nodes[].presence.sessions[].branch": "string",
+        "nodes[].presence.sessions[].contextUsed": "number",
+        "nodes[].presence.sessions[].harness": "string",
+        "nodes[].presence.sessions[].intent": "string",
+        "nodes[].presence.sessions[].lastSeenAt": "string",
+        "nodes[].presence.sessions[].memory": "object",
+        "nodes[].presence.sessions[].memory.lastPushAt": "number",
+        "nodes[].presence.sessions[].memory.mode": "string",
+        "nodes[].presence.sessions[].memory.pullCursorAgeS": "number",
+        "nodes[].presence.sessions[].model": "string",
+        "nodes[].presence.sessions[].modelProvider": "string",
+        "nodes[].presence.sessions[].projectId": "string",
+        "nodes[].presence.sessions[].repo": "string",
+        "nodes[].presence.sessions[].sessionId": "string",
+        "nodes[].presence.sessions[].startedAt": "number",
+        "nodes[].presence.sessions[].touching": "array",
+        "nodes[].presence.sessions[].touching[]": "string",
+        "nodes[].presence.sessions[].worktree": "string",
         "nodes[].presence.status": "string",
         "nodes[].revokedAt": "null"
       },
       "values": {
+        "nodes[].presence.sessions[].memory.mode": [
+          "synced"
+        ],
         "nodes[].presence.status": [
-          "offline"
+          "offline",
+          "stale"
         ]
       }
     },
@@ -3554,7 +3636,8 @@
       "values": {
         "nodes[].presence.status": [
           "connected",
-          "offline"
+          "offline",
+          "stale"
         ]
       }
     },
@@ -3593,7 +3676,9 @@
       },
       "values": {
         "events[].action": [
+          "DispatchAgentRun",
           "Login",
+          "ManageDevbox",
           "ManageIngest",
           "ViewAssessment",
           "ViewIdentityAdmin",
@@ -5496,10 +5581,10 @@
         "jobs": "array",
         "jobs[]": "object",
         "jobs[].attempts": "number",
-        "jobs[].botId": "string",
-        "jobs[].botName": "string",
-        "jobs[].botTrigger": "string",
-        "jobs[].boxId": "null",
+        "jobs[].botId": "null|string",
+        "jobs[].botName": "null|string",
+        "jobs[].botTrigger": "null|string",
+        "jobs[].boxId": "null|string",
         "jobs[].claimedAt": "string",
         "jobs[].createdAt": "string",
         "jobs[].createdBy": "string",
@@ -5518,7 +5603,9 @@
         "jobs[].result.costUsd": "number",
         "jobs[].result.durationMs": "number",
         "jobs[].result.summary": "string",
-        "jobs[].sessionId": "null",
+        "jobs[].result.toolCalls": "number",
+        "jobs[].result.turns": "number",
+        "jobs[].sessionId": "null|string",
         "jobs[].startedAt": "string",
         "jobs[].status": "string",
         "jobs[].title": "string"
@@ -5538,10 +5625,10 @@
       "shape": {
         "$": "object",
         "attempts": "number",
-        "botId": "string",
-        "botName": "string",
-        "botTrigger": "string",
-        "boxId": "null",
+        "botId": "null",
+        "botName": "null",
+        "botTrigger": "null",
+        "boxId": "string",
         "claimedAt": "string",
         "createdAt": "string",
         "createdBy": "string",
@@ -5551,7 +5638,6 @@
         "kind": "string",
         "maxAttempts": "number",
         "payload": "object",
-        "payload.botId": "string",
         "payload.model": "string",
         "payload.prompt": "string",
         "payload.requiresReview": "boolean",
@@ -5560,7 +5646,9 @@
         "result.costUsd": "number",
         "result.durationMs": "number",
         "result.summary": "string",
-        "sessionId": "null",
+        "result.toolCalls": "number",
+        "result.turns": "number",
+        "sessionId": "string",
         "startedAt": "string",
         "status": "string",
         "title": "string"
@@ -5664,7 +5752,9 @@
       "values": [
         "ANONYMIZE",
         "BLOCK",
+        "DispatchAgentRun",
         "Login",
+        "ManageDevbox",
         "ManageIngest",
         "ViewAssessment",
         "ViewIdentityAdmin",
@@ -5898,7 +5988,8 @@
     "mode": {
       "open": false,
       "values": [
-        "sim"
+        "sim",
+        "synced"
       ]
     },
     "outcome": {
@@ -5994,6 +6085,7 @@
         "failed",
         "healthy",
         "ideating",
+        "idle",
         "in_progress",
         "in_review",
         "live",
@@ -6018,7 +6110,8 @@
         "stalled",
         "succeeded",
         "superseded",
-        "verified"
+        "verified",
+        "waiting"
       ]
     },
     "tenant": {

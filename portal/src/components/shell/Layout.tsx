@@ -15,6 +15,7 @@ import { useSession } from '../../lib/auth';
 import { Breadcrumbs } from './Breadcrumbs';
 import { MasqueradeMenu } from './MasqueradeMenu';
 import { GatewayStatusBadge } from './GatewayStatusBadge';
+import { ActiveRunsBadge } from './ActiveRunsBadge';
 import { LocalComputeBadge } from './LocalComputeBadge';
 import { usePortalCommands, usePortalDynamicCommands, groupRank } from './portalCommands';
 import { DevboxQuickSwitch } from './DevboxQuickSwitch';
@@ -303,6 +304,11 @@ export function Layout() {
                   "Open Computer Lab" action leading out of the tenant. The
                   server filters these nodes by OWNER, which is not the same
                   question as which workspace you are standing in. */}
+              {/* What the fleet is running right now. Not tenant-guarded like
+                  LocalComputeBadge: the runs are the caller's own org work
+                  either way, and losing track of a live run is the failure
+                  this exists to prevent. Renders nothing when nothing runs. */}
+              <ActiveRunsBadge />
               {session?.tenant === 'orgiq' && <LocalComputeBadge />}
               <GatewayStatusBadge />
               <MasqueradeMenu />

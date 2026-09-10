@@ -15,6 +15,7 @@ jest.mock('../../config.js', () => ({
 jest.mock('../../lib/authz.js', () => ({
   readForRolesElseAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
   requireAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  requireSession: () => (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 // The live cron registry is a different concern (pinned in bot-scheduler's
 // own tests) — no-op it so this suite is purely about the persisted state.

@@ -81,8 +81,16 @@ const D = (days: number): string =>
 // `projectName` is NOT a seed field: it is derived from the initiative list in
 // providers/projects.ts inside the rows factory below. Storing it
 // is what let 19 rows label their initiative with a name it does not have.
-type MockSeed = Omit<WorkItem, 'projectName' | 'sprintId' | 'estimatedCostUsd'>
-  & Partial<Pick<WorkItem, 'sprintId' | 'estimatedCostUsd'>>;
+// The estimate-provenance fields join sprintId/estimatedCostUsd as optional on
+// a seed: no seeded item has an authorized estimate, which is the same truth
+// the migration states — an item nobody has dispatched has no estimator, and
+// inventing one here would put a fabricated decision in front of a reader.
+type EstimateFields =
+  | 'estimatedBy' | 'estimatedByName' | 'estimatedAt' | 'estimateModel' | 'estimateForecast'
+  | 'estimateReviewedBy' | 'estimateReviewedByName' | 'estimateReviewedAt';
+
+type MockSeed = Omit<WorkItem, 'projectName' | 'sprintId' | 'estimatedCostUsd' | EstimateFields>
+  & Partial<Pick<WorkItem, 'sprintId' | 'estimatedCostUsd' | EstimateFields>>;
 
 const MOCK_WORK_ITEM_SEEDS: MockSeed[] = [
   // The "Kubernetes Cluster Upgrade" family that used to open here (wi-k8s-*,
@@ -335,6 +343,15 @@ export const workItems = defineFixture<WorkItem>({
       // A missing name falls back to the id rather than to '': an id with no
       // initiative is a bug worth seeing on the page, not a blank label.
       projectName: mockProjectName(seed.projectId) ?? seed.projectId,
+      // No seeded item has an authorized estimate — see the MockSeed note.
+      estimatedBy: null,
+      estimatedByName: null,
+      estimatedAt: null,
+      estimateModel: null,
+      estimateForecast: null,
+      estimateReviewedBy: null,
+      estimateReviewedByName: null,
+      estimateReviewedAt: null,
     })),
     empty: () => [],
   },

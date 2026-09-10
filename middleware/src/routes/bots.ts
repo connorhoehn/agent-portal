@@ -18,17 +18,20 @@
 import { Router } from 'express';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
 import { degradedFields } from '../lib/upstream.js';
-import { readForRolesElseAction, requireAction } from '../lib/authz.js';
+import { readForRolesElseAction, requireAction, requireSession } from '../lib/authz.js';
 import {
   listBotsResult, getBot, createBot, updateBot, deleteBot, setPausedReason, listBotRunsResult,
-  listMarketplaceRuns, runCostSamples, perPointCostSamples,
+  listMarketplaceRuns,
+  listActiveRuns, runCostSamples, perPointCostSamples,
   type BotTemplate, type BotTrigger, type BotPatch,
 } from '../providers/bots.js';
 import {
   fireBot, dispatchWorkItem, preflightWorkItem, decideRunBudget, decideAllocation,
   decideEnvelope, loadEnvelope, grantScopedDispatchVerdict,
 } from '../lib/bot-runner.js';
-import { getWorkItem } from '../providers/work-items.js';
+import {
+  getWorkItem, recordWorkItemEstimate, reviewWorkItemEstimate,
+} from '../providers/work-items.js';
 import { getBudget } from '../providers/budgets.js';
 import { registerBot, unregisterBot } from '../lib/bot-scheduler.js';
 import { validateCronExpr } from '../lib/ingest-scheduler.js';
@@ -395,7 +398,127 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
     });
     return;
   }
+  // The dispatch succeeded, so the forecast the operator was looking at is now
+  // a decision somebody took. Record it with the session subject — never the
+  // body — so the item can later say "estimated by X, <when>, on <model>"
+  // instead of recomputing a number with nobody's name on it.
+  //
+  // Deliberately AFTER the dispatch and deliberately not awaited into the
+  // response: a bookkeeping write must never be the reason a run that already
+  // started reports failure. A lost estimate is a missing label; a 500 here
+  // would be a phantom failure on a run that is live.
+  if (actor && body.estimate && typeof body.estimate === 'object') {
+    const forecast = body.estimate as Record<string, unknown>;
+    const p75 = Number(forecast['costUsdP75']);
+    void recordWorkItemEstimate(
+      workItemId, actor, model, forecast,
+      Number.isFinite(p75) ? p75 : null,
+    ).catch((err: unknown) => {
+      console.warn('[bots] estimate not recorded for', workItemId, err);
+    });
+  }
   res.status(202).json({ run: result.run });
+}));
+
+/**
+ * Record an estimate WITHOUT spending anything.
+ *
+ * This is the write path that makes a "standing estimate" a thing that can
+ * exist. Originally the only writer was a successful dispatch, on the theory —
+ * borrowed from `bot_runs.dispatched_by` — that only a real firing should be
+ * attributed. That analogy was wrong here, and provably so: dispatching moves
+ * the item `open -> in_progress`, so an estimate written by a dispatch belongs
+ * to a row that is already running. The estimate could never be READ before it
+ * was spent, which is the only moment it is worth anything.
+ *
+ * The distinction that actually matters is AUTHORIZED vs CANCELLED, not
+ * dispatched vs not. An operator who computes a forecast and saves it has made
+ * a decision somebody can be asked about; they simply have not spent yet.
+ * Closing the drawer still writes nothing.
+ *
+ * Gated on DispatchAgentRun, not on a softer read capability: putting your name
+ * on a number that authorizes spend is a spending-adjacent act, even though
+ * this call moves no money.
+ */
+botsRouter.post('/work-items/:id/estimate', dispatchGate, asyncHandler(async (req, res) => {
+  const id = String(req.params['id'] ?? '').trim();
+  if (!id) throw new ValidationError('work item id is required');
+  const actor = req.session?.sub;
+  if (!actor) { res.status(401).json({ error: 'a session is required to record an estimate' }); return; }
+
+  const body = req.body as { model?: unknown; estimate?: unknown };
+  const model = String(body.model ?? '').trim();
+  if (!model) throw new ValidationError('model is required — a forecast is only valid for the model it was computed against');
+  if (!body.estimate || typeof body.estimate !== 'object' || Array.isArray(body.estimate)) {
+    throw new ValidationError('estimate must be the forecast object that was shown');
+  }
+
+  // 404 before the write: recording an estimate against an id that does not
+  // exist would silently succeed as a no-op UPDATE and report success.
+  if (!await getWorkItem(id)) { res.status(404).json({ error: 'no such work item' }); return; }
+
+  const forecast = body.estimate as Record<string, unknown>;
+  const p75 = Number(forecast['costUsdP75']);
+  // Awaited, unlike the dispatch path's fire-and-forget: there, a bookkeeping
+  // failure must not fail a run that is already live. Here the bookkeeping IS
+  // the request, so a failure is the honest answer.
+  await recordWorkItemEstimate(id, actor, model, forecast, Number.isFinite(p75) ? p75 : null);
+  res.json({ item: await getWorkItem(id) });
+}));
+
+/**
+ * Advisory SME sign-off on a work item's stored estimate.
+ *
+ * Gated on ManageIngest-tier dispatch rights rather than a new capability: the
+ * people who can spend against an initiative are the people whose sign-off on a
+ * forecast means anything. Does NOT gate dispatch — see
+ * schema/work_item_estimate_schema.sql for why a fifth hard gate was refused.
+ */
+botsRouter.post('/work-items/:id/review-estimate', dispatchGate, asyncHandler(async (req, res) => {
+  const id = String(req.params['id'] ?? '').trim();
+  if (!id) throw new ValidationError('work item id is required');
+  const actor = req.session?.sub;
+  if (!actor) { res.status(401).json({ error: 'a session is required to review an estimate' }); return; }
+  const ok = await reviewWorkItemEstimate(id, actor);
+  if (!ok) {
+    // 409, not 404: the item may well exist. What is missing is an estimate to
+    // review, and saying so is more useful than "not found".
+    res.status(409).json({ error: 'this work item has no recorded estimate to review' });
+    return;
+  }
+  res.json({ item: await getWorkItem(id) });
+}));
+
+/**
+ * Everything the fleet is running right now.
+ *
+ * A session floor, not a capability gate: "what is currently burning money in
+ * my org" is a question every signed-in role may ask, and the runs it lists are
+ * already visible per-initiative to anyone who can open the initiative. The
+ * BOX behind a run is a separate authorization, enforced at the lab.
+ *
+ * Each row carries the ids the caller needs to get somewhere useful — the box
+ * to tail, and the work item it belongs to — because the failure this route
+ * exists for is "I ran a task and then I lost it".
+ */
+botsRouter.get('/active-runs', requireSession('ActiveRuns'), asyncHandler(async (_req, res) => {
+  const runs = await listActiveRuns();
+  // Titles resolved one by one through getWorkItem rather than joined in SQL.
+  // The list is capped at 25, and getWorkItem already carries the missing-table
+  // guard — a JOIN would take the whole query down on a cluster without
+  // work_items, turning "no titles" into "no runs", which is the exact failure
+  // this route exists to prevent.
+  const enriched = await Promise.all(runs.map(async (run) => {
+    if (!run.workItemId) return { ...run, workItemTitle: null, projectId: null };
+    const item = await getWorkItem(run.workItemId);
+    // projectId travels with the run because not every caller can open the
+    // Computer Lab: ManageDevbox is held by hr-admin and sme, NOT by
+    // org-leader, who can nonetheless dispatch. Without the initiative id
+    // there is no destination such a caller is allowed to reach, which is
+    // precisely how a dispatched run became unfindable.
+    return { ...run, workItemTitle: item?.title ?? null, projectId: item?.projectId ?? null };
+  }));
+  res.json({ runs: enriched });
 }));
 
 botsRouter.get('/marketplace-runs', marketReadGate, asyncHandler(async (req, res) => {
