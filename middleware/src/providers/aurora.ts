@@ -47,6 +47,9 @@ import {
   departments as mockDepartments,
 } from '../mock/people.js';
 import { mockScores } from '../mock/scores.js';
+import {
+  mockSkills, mockPersonSkills, mockProjects, mockProjectContributions,
+} from '../mock/graph-taxonomy.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -1090,9 +1093,71 @@ async function mockFetchGraph(): Promise<GraphSnapshot> {
   }));
   return {
     nodes,
-    edges: mockRelationships as Relationship[],
+    // `deriveHierarchyEdges` is the same call `realFetchGraph` makes, and
+    // leaving it out was a real bug rather than a shortcut: the fixture holds
+    // only `collaborates` rows, so Explore's Hierarchy view filtered to
+    // `reports_to`/`mentors`, matched nothing, and painted an empty canvas
+    // with no error. The function reads only id/title/department, all of which
+    // mock people carry, so it produces the same edges here as in production.
+    edges: [...(mockRelationships as Relationship[]), ...deriveHierarchyEdges(nodes)],
     departments: mockPeopleByDept(),
   };
+}
+
+// Both graph snapshots below mirror their `real*` siblings exactly, including
+// the `skill:`/`proj:` id prefixes the UI matches on. Counts are computed from
+// the rows rather than stored, so a fixture edit cannot leave a stale total
+// behind — see the header of mock/graph-taxonomy.ts.
+async function mockFetchSkillsGraph(): Promise<SkillsGraphSnapshot> {
+  const people = (mockPeople as Person[]).map(p => ({ ...p, presence: generatePresence(p.id) }));
+  const known = new Set(people.map(p => p.id));
+
+  const perSkill = new Map<string, number>();
+  const personSkillEdges = mockPersonSkills
+    .filter(r => known.has(r.personId))
+    .map(r => {
+      perSkill.set(r.skillId, (perSkill.get(r.skillId) ?? 0) + 1);
+      return { personId: r.personId, skillId: `skill:${r.skillId}`, weight: clamp01(r.weight) };
+    });
+
+  const skills = mockSkills.map(s => ({
+    id: `skill:${s.id}`,
+    name: s.name,
+    domain: s.domain || 'General',
+    personCount: perSkill.get(s.id) ?? 0,
+  }));
+
+  const domainMap = new Map<string, number>();
+  for (const s of skills) domainMap.set(s.domain, (domainMap.get(s.domain) ?? 0) + 1);
+  const domains = Array.from(domainMap.entries()).map(([name, skillCount]) => ({
+    id: `domain:${name}`,
+    name,
+    skillCount,
+  }));
+
+  return { domains, skills, people, personSkillEdges };
+}
+
+async function mockFetchProjectsGraph(): Promise<ProjectsGraphSnapshot> {
+  const people = (mockPeople as Person[]).map(p => ({ ...p, presence: generatePresence(p.id) }));
+  const known = new Set(people.map(p => p.id));
+
+  const perProject = new Map<string, number>();
+  const personProjectEdges = mockProjectContributions
+    .filter(r => known.has(r.personId))
+    .map(r => {
+      perProject.set(r.projectId, (perProject.get(r.projectId) ?? 0) + 1);
+      return { personId: r.personId, projectId: `proj:${r.projectId}`, weight: clamp01(r.weight) };
+    });
+
+  const projects = mockProjects.map(pr => ({
+    id: `proj:${pr.id}`,
+    name: pr.name,
+    status: pr.status || 'active',
+    contributorCount: perProject.get(pr.id) ?? 0,
+  }));
+
+  return { projects, people, personProjectEdges };
 }
 
 async function mockFetchPersonGraph(personId: string): Promise<PersonDetail | null> {
@@ -1208,8 +1273,8 @@ async function mockGetRadarBatch(_personIds: string[]): Promise<RadarBatchEntry[
 
 export const mockAurora: AuroraProvider = {
   fetchGraph: mockFetchGraph,
-  fetchSkillsGraph: async () => ({ domains: [], skills: [], people: [], personSkillEdges: [] }),
-  fetchProjectsGraph: async () => ({ projects: [], people: [], personProjectEdges: [] }),
+  fetchSkillsGraph: mockFetchSkillsGraph,
+  fetchProjectsGraph: mockFetchProjectsGraph,
   fetchPersonGraph: mockFetchPersonGraph,
   getLeaderboard: mockGetLeaderboard,
   getScore: mockGetScore,

@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-09T18:03:07.316Z",
-  "serverHandlerSha": "bb9c4d1d490011fdd46e0ed4dee273cccbc1d8abfcf7f64ad338a80e0dd67048",
-  "baseUrl": "http://127.0.0.1:3012",
+  "capturedAt": "2026-09-10T13:43:04.429Z",
+  "serverHandlerSha": "0e539e788d72fd73d1156b2ca5f24fb079e003d08c99ab32111c5172a1d1813f",
+  "baseUrl": "http://127.0.0.1:3001",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -933,13 +933,11 @@
           "ms_forms_export"
         ],
         "envelopes[].status": [
-          "committed",
           "processed",
           "staged",
           "superseded"
         ],
         "groups[].status": [
-          "committed",
           "processed",
           "staged"
         ]
@@ -2086,7 +2084,7 @@
       },
       "values": {
         "kind": [
-          "decision"
+          "convention"
         ],
         "level": [
           "L0"
@@ -2425,7 +2423,9 @@
       },
       "values": {
         "edges[].type": [
-          "collaborates"
+          "collaborates",
+          "mentors",
+          "reports_to"
         ]
       }
     },
@@ -2524,10 +2524,34 @@
       "shape": {
         "$": "object",
         "people": "array",
+        "people[]": "object",
+        "people[].department": "string",
+        "people[].id": "string",
+        "people[].influenceScore": "number",
+        "people[].name": "string",
+        "people[].presence": "string",
+        "people[].skills": "array",
+        "people[].skills[]": "string",
+        "people[].title": "string",
         "personProjectEdges": "array",
-        "projects": "array"
+        "personProjectEdges[]": "object",
+        "personProjectEdges[].personId": "string",
+        "personProjectEdges[].projectId": "string",
+        "personProjectEdges[].weight": "number",
+        "projects": "array",
+        "projects[]": "object",
+        "projects[].contributorCount": "number",
+        "projects[].id": "string",
+        "projects[].name": "string",
+        "projects[].status": "string"
       },
-      "values": {}
+      "values": {
+        "projects[].status": [
+          "completed",
+          "in_progress",
+          "planning"
+        ]
+      }
     },
     "GET /api/graph/projects/:id": {
       "persona": "orgiq/admin",
@@ -2718,9 +2742,31 @@
       "shape": {
         "$": "object",
         "domains": "array",
+        "domains[]": "object",
+        "domains[].id": "string",
+        "domains[].name": "string",
+        "domains[].skillCount": "number",
         "people": "array",
+        "people[]": "object",
+        "people[].department": "string",
+        "people[].id": "string",
+        "people[].influenceScore": "number",
+        "people[].name": "string",
+        "people[].presence": "string",
+        "people[].skills": "array",
+        "people[].skills[]": "string",
+        "people[].title": "string",
         "personSkillEdges": "array",
-        "skills": "array"
+        "personSkillEdges[]": "object",
+        "personSkillEdges[].personId": "string",
+        "personSkillEdges[].skillId": "string",
+        "personSkillEdges[].weight": "number",
+        "skills": "array",
+        "skills[]": "object",
+        "skills[].domain": "string",
+        "skills[].id": "string",
+        "skills[].name": "string",
+        "skills[].personCount": "number"
       },
       "values": {}
     },
@@ -3473,35 +3519,12 @@
         "nodes[].presence.lastSeenAt": "string",
         "nodes[].presence.nodeId": "string",
         "nodes[].presence.sessions": "array",
-        "nodes[].presence.sessions[]": "object",
-        "nodes[].presence.sessions[].branch": "string",
-        "nodes[].presence.sessions[].contextUsed": "number",
-        "nodes[].presence.sessions[].harness": "string",
-        "nodes[].presence.sessions[].intent": "string",
-        "nodes[].presence.sessions[].lastSeenAt": "string",
-        "nodes[].presence.sessions[].memory": "object",
-        "nodes[].presence.sessions[].memory.lastPushAt": "number",
-        "nodes[].presence.sessions[].memory.mode": "string",
-        "nodes[].presence.sessions[].memory.pullCursorAgeS": "number",
-        "nodes[].presence.sessions[].model": "string",
-        "nodes[].presence.sessions[].modelProvider": "string",
-        "nodes[].presence.sessions[].projectId": "string",
-        "nodes[].presence.sessions[].repo": "string",
-        "nodes[].presence.sessions[].sessionId": "string",
-        "nodes[].presence.sessions[].startedAt": "number",
-        "nodes[].presence.sessions[].touching": "array",
-        "nodes[].presence.sessions[].touching[]": "string",
-        "nodes[].presence.sessions[].worktree": "string",
         "nodes[].presence.status": "string",
         "nodes[].revokedAt": "null"
       },
       "values": {
-        "nodes[].presence.sessions[].memory.mode": [
-          "synced"
-        ],
         "nodes[].presence.status": [
-          "offline",
-          "stale"
+          "offline"
         ]
       }
     },
@@ -3531,8 +3554,7 @@
       "values": {
         "nodes[].presence.status": [
           "connected",
-          "offline",
-          "stale"
+          "offline"
         ]
       }
     },
@@ -3583,7 +3605,9 @@
           "ALLOW"
         ],
         "events[].role": [
-          "admin"
+          "admin",
+          "hr-admin",
+          "org-leader"
         ],
         "events[].tenant": [
           "orgiq"
@@ -5874,8 +5898,7 @@
     "mode": {
       "open": false,
       "values": [
-        "sim",
-        "synced"
+        "sim"
       ]
     },
     "outcome": {
@@ -5891,6 +5914,7 @@
         "admin",
         "contributor",
         "decider",
+        "hr-admin",
         "org-leader",
         "owner",
         "sme"
@@ -5957,7 +5981,6 @@
         "candidate",
         "changes_requested",
         "claim_open",
-        "committed",
         "completed",
         "connected",
         "current",
@@ -6023,6 +6046,8 @@
         "epic",
         "insight",
         "longtext",
+        "mentors",
+        "reports_to",
         "runbook",
         "sql",
         "story",
