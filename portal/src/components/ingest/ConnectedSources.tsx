@@ -15,7 +15,10 @@
 // inspected are how a system stops being trusted.
 
 import { useCallback, useState } from 'react';
-import { Card } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button, Card, Chip, EmptyState, EntityCell, FormField, Inline, Input,
+  MetaLine, SectionLabel, Select, Stack, Toolbar,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
@@ -142,178 +145,200 @@ export function ConnectedSources() {
 
   return (
     <Card padding="none" className="overflow-hidden mb-4">
-      <div className="px-3.5 py-3 border-b border-border flex items-center gap-2">
-        <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">CONNECTED SOURCES</span>
-        <span className="text-[11px] text-text-tertiary">systems that need a login</span>
-        <div className="flex-1" />
-        {canManage && (
-          <button
-            onClick={() => setAdding((v) => !v)}
-            className="px-2.5 py-1 rounded-md border border-border bg-surface text-[11px] font-semibold text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors"
-          >
+      <Toolbar
+        bordered
+        size="sm"
+        end={canManage ? (
+          <Button variant="secondary" size="sm" onClick={() => setAdding((v) => !v)}>
             {adding ? 'Cancel' : '+ Connect'}
-          </button>
-        )}
-      </div>
+          </Button>
+        ) : undefined}
+      >
+        <SectionLabel>Connected sources</SectionLabel>
+        <MetaLine size="xs" items={['systems that need a login']} />
+      </Toolbar>
 
       {adding && (
-        <div className="px-3.5 py-3 border-b border-border">
-          <div className="flex flex-wrap items-end gap-2.5">
-            <label>
-              <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">System</span>
-              <select
-                value={kind}
-                onChange={(e) => setKind(e.target.value as SourceKind)}
-                className="px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary"
-              >
-                <option value="github">GitHub</option>
-                <option value="confluence">Confluence</option>
-                <option value="jira">Jira</option>
-              </select>
-            </label>
-            <label className="flex-1 min-w-[160px]">
-              <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">Label</span>
-              <input
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                placeholder="acme-corp org"
-                className="w-full px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary"
-              />
-            </label>
-            <label className="flex-1 min-w-[220px]">
-              <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">
-                {kind === 'github' ? 'Personal access token' : 'API token'}
-              </span>
-              <input
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder={kind === 'github' ? 'ghp_… or github_pat_…' : 'API token'}
-                className="w-full px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary font-mono"
-              />
-            </label>
-            <button
+        <Stack gap="sm" className="px-3.5 py-3 border-b border-border">
+          {/* `labelId` is dropped from every wiring bag: FormField hands it to
+              the consumer but it is not a DOM prop, so spreading it onto a
+              control makes React warn. Queued against the library. */}
+          <Inline gap="sm" align="end" wrap>
+            <FormField label="System">
+              {({ labelId: _l, ...w }) => (
+                <Select
+                  {...w}
+                  size="sm"
+                  value={kind}
+                  onChange={(e) => setKind(e.target.value as SourceKind)}
+                  options={[
+                    { value: 'github', label: 'GitHub' },
+                    { value: 'confluence', label: 'Confluence' },
+                    { value: 'jira', label: 'Jira' },
+                  ]}
+                />
+              )}
+            </FormField>
+
+            <FormField label="Label" className="flex-1 min-w-[160px]">
+              {({ labelId: _l, ...w }) => (
+                <Input
+                  {...w}
+                  size="sm"
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                  placeholder="acme-corp org"
+                />
+              )}
+            </FormField>
+
+            <FormField
+              label={kind === 'github' ? 'Personal access token' : 'API token'}
+              className="flex-1 min-w-[220px]"
+            >
+              {({ labelId: _l, ...w }) => (
+                <Input
+                  {...w}
+                  type="password"
+                  mono
+                  size="sm"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder={kind === 'github' ? 'ghp_… or github_pat_…' : 'API token'}
+                />
+              )}
+            </FormField>
+
+            <Button
+              variant="primary"
+              size="sm"
               disabled={busy || !label.trim() || !apiKey.trim()}
               onClick={() => void connect()}
-              className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-40"
             >
               {busy ? 'connecting…' : 'Connect'}
-            </button>
-          </div>
-          <div className="text-[11px] text-text-tertiary mt-2 leading-snug">
-            The token goes straight into the AgentCore credential vault and is never stored here or shown
-            again — not even to you. Rotating it later is a change in the vault, not a redeploy.
-            {kind === 'github' && ' A read-only token with repo access is enough.'}
-            {kind !== 'github' && ' Stored now; there is no reader for this system yet.'}
-          </div>
-        </div>
+            </Button>
+          </Inline>
+
+          <MetaLine
+            size="xs"
+            items={[
+              'The token goes straight into the AgentCore credential vault and is never stored here or '
+              + 'shown again — not even to you. Rotating it later is a change in the vault, not a redeploy.'
+              + (kind === 'github'
+                ? ' A read-only token with repo access is enough.'
+                : ' Stored now; there is no reader for this system yet.'),
+            ]}
+          />
+        </Stack>
       )}
 
       {sources.length === 0 ? (
-        <div className="px-3.5 py-4 text-[12px] text-text-tertiary leading-snug">
-          Nothing connected. Crawl targets reach public pages and uploads need a manual export — this is how
-          you reach Confluence, Jira or GitHub.
-        </div>
+        <EmptyState
+          size="sm"
+          title="Nothing connected"
+          body={'Crawl targets reach public pages and uploads need a manual export — this is how you '
+            + 'reach Confluence, Jira or GitHub.'}
+        />
       ) : sources.map((s) => (
-        <div key={s.name} className="border-b border-border last:border-b-0">
-          <div className="px-3.5 py-2.5 flex items-center gap-3">
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-surface-hover text-text-secondary shrink-0">
-              {KIND_LABEL[s.kind]}
-            </span>
-            <span className="text-[12px] font-mono text-text-primary truncate flex-1">{s.name}</span>
+        <Stack key={s.name} gap="none" className="border-b border-border last:border-b-0">
+          <Inline gap="sm" className="px-3.5 py-2.5">
+            <Chip tone="neutral" size="xs" className="shrink-0">{KIND_LABEL[s.kind]}</Chip>
+            <EntityCell mono label={s.name} className="flex-1 min-w-0" />
             {!READY_KINDS.has(s.kind) && (
-              <span className="text-[11px] text-text-tertiary shrink-0">no reader yet</span>
+              <MetaLine size="xs" items={['no reader yet']} className="shrink-0" />
             )}
             {READY_KINDS.has(s.kind) && (
-              <button
-                onClick={() => void inspect(s.name)}
-                className="px-2 py-1 rounded-md border border-border bg-surface text-[11px] text-text-secondary cursor-pointer hover:border-primary hover:text-primary transition-colors shrink-0"
-              >
+              <Button variant="secondary" size="sm" onClick={() => void inspect(s.name)}>
                 {openSource === s.name ? 'Hide' : 'Inspect'}
-              </button>
+              </Button>
             )}
             {canManage && (
-              <button
-                onClick={() => void disconnect(s.name)}
-                className="px-2 py-1 rounded-md border border-border bg-surface text-[11px] text-text-secondary cursor-pointer hover:border-danger hover:text-danger transition-colors shrink-0"
-              >
+              <Button variant="danger" size="sm" onClick={() => void disconnect(s.name)}>
                 Remove
-              </button>
+              </Button>
             )}
-          </div>
+          </Inline>
 
           {openSource === s.name && (
-            <div className="px-3.5 pb-3 bg-surface-hover/30">
+            <Stack gap="sm" className="px-3.5 pb-3 bg-surface-hover/30">
               {identity && (
-                <div className="text-[11px] text-text-secondary mb-2">
-                  Authenticated as <span className="font-mono text-text-primary">{identity.login}</span>
-                  {identity.name ? ` (${identity.name})` : ''}
-                  {identity.scopes.length > 0
-                    ? ` · scopes: ${identity.scopes.join(', ')}`
-                    : ' · fine-grained token (scopes not advertised)'}
-                </div>
+                <MetaLine
+                  size="xs"
+                  tone="secondary"
+                  items={[
+                    <>Authenticated as <Chip tone="neutral" size="xs" mono>{identity.login}</Chip>{identity.name ? ` (${identity.name})` : ''}</>,
+                    identity.scopes.length > 0
+                      ? `scopes: ${identity.scopes.join(', ')}`
+                      : 'fine-grained token (scopes not advertised)',
+                  ]}
+                />
               )}
-              {loading === 'identity' && <div className="text-[11px] text-text-tertiary">checking the credential…</div>}
-              {loading === 'repos' && <div className="text-[11px] text-text-tertiary">reading repositories…</div>}
+              {loading === 'identity' && <MetaLine size="xs" items={['checking the credential…']} />}
+              {loading === 'repos' && <MetaLine size="xs" items={['reading repositories…']} />}
 
               {repos && repos.length === 0 && (
-                <div className="text-[11px] text-text-tertiary">
-                  This token can see no repositories — it may lack repo scope.
-                </div>
+                <MetaLine size="xs" items={['This token can see no repositories — it may lack repo scope.']} />
               )}
 
               {repos && repos.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mb-2">
+                <Inline gap="xs" wrap>
                   {repos.slice(0, 24).map((r) => (
-                    <button
+                    <Button
                       key={r.fullName}
+                      size="sm"
+                      variant={signals?.repo === r.fullName ? 'primary' : 'secondary'}
                       onClick={() => void preview(s.name, r.fullName)}
-                      className={`px-2 py-0.5 rounded-full border text-[11px] font-mono cursor-pointer transition-colors ${
-                        signals?.repo === r.fullName
-                          ? 'border-primary text-primary bg-primary/5'
-                          : 'border-border text-text-secondary hover:border-primary/50'}`}
                     >
                       {r.fullName}
-                    </button>
+                    </Button>
                   ))}
-                </div>
+                </Inline>
               )}
 
               {loading?.startsWith('signal:') && (
-                <div className="text-[11px] text-text-tertiary">reading commit history…</div>
+                <MetaLine size="xs" items={['reading commit history…']} />
               )}
 
               {signals && (
                 signals.rows.length === 0 ? (
-                  <div className="text-[11px] text-text-tertiary">
-                    No attributable commits in the last 180 days. Commits with no linked GitHub account are
-                    skipped rather than guessed at from the email address.
-                  </div>
+                  <MetaLine
+                    size="xs"
+                    items={['No attributable commits in the last 180 days. Commits with no linked GitHub '
+                      + 'account are skipped rather than guessed at from the email address.']}
+                  />
                 ) : (
-                  <div className="rounded-md border border-border overflow-hidden bg-surface">
-                    <div className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-text-tertiary border-b border-border">
-                      Contribution signal · {signals.repo} · last 180 days
-                    </div>
+                  <Card padding="none" className="overflow-hidden">
+                    <Toolbar bordered size="sm">
+                      <SectionLabel>
+                        {`Contribution signal · ${signals.repo} · last 180 days`}
+                      </SectionLabel>
+                    </Toolbar>
                     {signals.rows.slice(0, 10).map((row) => (
-                      <div key={row.login} className="px-2.5 py-1.5 border-b border-border last:border-b-0 flex items-center gap-2.5">
-                        <span className="text-[11px] font-mono text-text-primary w-36 truncate">{row.login}</span>
-                        <span className="text-[11px] text-text-secondary tabular-nums w-16">{row.commits} commits</span>
-                        <span className="text-[11px] text-text-tertiary truncate flex-1">
-                          {Object.keys(row.languages).slice(0, 4).join(', ') || '—'}
-                          {row.areas.length > 0 ? ` · ${row.areas.slice(0, 3).join(', ')}` : ''}
-                        </span>
-                      </div>
+                      <Inline key={row.login} gap="sm" className="px-2.5 py-1.5 border-b border-border last:border-b-0">
+                        <EntityCell mono label={row.login} className="w-36 shrink-0" />
+                        <MetaLine size="xs" tone="secondary" className="w-16 shrink-0 tabular-nums" items={[`${row.commits} commits`]} />
+                        <MetaLine
+                          size="xs"
+                          className="flex-1 min-w-0"
+                          items={[
+                            Object.keys(row.languages).slice(0, 4).join(', ') || '—',
+                            ...(row.areas.length > 0 ? [row.areas.slice(0, 3).join(', ')] : []),
+                          ]}
+                        />
+                      </Inline>
                     ))}
-                    <div className="px-2.5 py-2 text-[11px] text-text-tertiary leading-snug border-t border-border">
-                      Preview only — nothing here has been written to the graph. This is what real expertise
-                      evidence would look like against the scores, which are currently generated.
-                    </div>
-                  </div>
+                    <MetaLine
+                      size="xs"
+                      className="px-2.5 py-2 border-t border-border"
+                      items={['Preview only — nothing here has been written to the graph. This is what real '
+                        + 'expertise evidence would look like against the scores, which are currently generated.']}
+                    />
+                  </Card>
                 )
               )}
-            </div>
+            </Stack>
           )}
-        </div>
+        </Stack>
       ))}
     </Card>
   );
