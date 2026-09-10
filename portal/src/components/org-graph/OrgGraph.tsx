@@ -5,6 +5,7 @@ import { OrgGraphEdge } from './OrgGraphEdge';
 import { OrgGraphTooltip } from './OrgGraphTooltip';
 import { OrgGraphLegend } from './OrgGraphLegend';
 import type { GraphPerson, GraphRelationship, GraphDepartment, GraphNode as GNode } from './types';
+import { Button, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
 
 interface OrgGraphProps {
   people: GraphPerson[];
@@ -125,8 +126,9 @@ export function OrgGraph({
   const hoveredNode = hoveredId ? nodes.find(n => n.id === hoveredId) : null;
 
   return (
-    <div
+    <Stack
       ref={containerRef}
+      gap="none"
       className="w-full h-full relative overflow-hidden bg-surface"
     >
       <svg
@@ -192,24 +194,20 @@ export function OrgGraph({
         />
       )}
 
-      <div className="absolute bottom-3 right-3 flex gap-1">
-        <button
-          onClick={() => setTransform(t => ({ ...t, scale: Math.min(3, t.scale * 1.2) }))}
-          className={zoomBtnClass}
-        >+</button>
-        <button
-          onClick={() => setTransform(t => ({ ...t, scale: Math.max(0.3, t.scale * 0.8) }))}
-          className={zoomBtnClass}
-        >−</button>
-        <button
-          onClick={() => setTransform({ x: 0, y: 0, scale: 1 })}
-          className={zoomBtnClass}
-        >⟲</button>
-      </div>
-    </div>
+      <Inline gap="xs" wrap={false} className="absolute bottom-3 right-3">
+        <Button variant="secondary" size="sm" aria-label="Zoom in" className={zoomBtnClass}
+          onClick={() => setTransform(t => ({ ...t, scale: Math.min(3, t.scale * 1.2) }))}>+</Button>
+        <Button variant="secondary" size="sm" aria-label="Zoom out" className={zoomBtnClass}
+          onClick={() => setTransform(t => ({ ...t, scale: Math.max(0.3, t.scale * 0.8) }))}>−</Button>
+        <Button variant="secondary" size="sm" aria-label="Reset view" className={zoomBtnClass}
+          onClick={() => setTransform({ x: 0, y: 0, scale: 1 })}>⟲</Button>
+      </Inline>
+    </Stack>
   );
 }
 
-const zoomBtnClass =
-  'w-8 h-8 flex items-center justify-center bg-white border border-border rounded-md ' +
-  'text-base cursor-pointer shadow-[0_1px_3px_rgba(0,0,0,0.06)]';
+// Square, icon-sized. The `bg-white` these carried is gone with the raw
+// <button>: Button paints `bg-surface`, so the controls no longer stay white in
+// dark mode. They also gained aria-labels — "+" alone told a screen reader
+// nothing.
+const zoomBtnClass = 'w-8 h-8 p-0 justify-center text-base';

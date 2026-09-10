@@ -164,13 +164,13 @@ export function PersonDetailCard({ personId, onClose, onFocusPerson, onAsk }: Pe
                   {evidenceDocs.slice(0, 6).map((doc) => (
                     <Inline key={doc.id} gap="xs" align="center" wrap={false}>
                       <Chip size="xs" uppercase>{doc.source || 'doc'}</Chip>
-                      <span title={doc.title} className="min-w-0 flex-1 truncate text-[11px]">
+                      <Inline as="span" gap="none" title={doc.title} className="min-w-0 flex-1 truncate text-[11px]">
                         {doc.title}
-                      </span>
+                      </Inline>
                       {doc.mentionCount > 1 && (
-                        <span className="shrink-0 text-[10px] tabular-nums text-text-tertiary">
+                        <Inline as="span" gap="none" className="shrink-0 text-[10px] tabular-nums text-text-tertiary">
                           ×{doc.mentionCount}
-                        </span>
+                        </Inline>
                       )}
                     </Inline>
                   ))}

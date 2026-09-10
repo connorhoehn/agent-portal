@@ -16,7 +16,7 @@
 
 import { useCallback, useState } from 'react';
 import {
-  Button, Card, Chip, EmptyState, EntityCell, FormField, Inline, Input,
+  Button, Card, Chip, EmptyState, EntityCell, FilterChip, FormField, Inline, Input,
   MetaLine, SectionLabel, Select, Stack, Toolbar,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
@@ -283,14 +283,16 @@ export function ConnectedSources() {
               {repos && repos.length > 0 && (
                 <Inline gap="xs" wrap>
                   {repos.slice(0, 24).map((r) => (
-                    <Button
+                    // FilterChip, not Button: this is a one-of-many selection,
+                    // and at 24 repos the button's padding cost two extra rows.
+                    <FilterChip
                       key={r.fullName}
-                      size="sm"
-                      variant={signals?.repo === r.fullName ? 'primary' : 'secondary'}
+                      active={signals?.repo === r.fullName}
+                      size="xs"
                       onClick={() => void preview(s.name, r.fullName)}
                     >
                       {r.fullName}
-                    </Button>
+                    </FilterChip>
                   ))}
                 </Inline>
               )}

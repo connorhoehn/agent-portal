@@ -57,7 +57,7 @@ export function GraphSearchBox({ people, onPickPerson, onPickSkill }: GraphSearc
   // onKeyDown nor the combobox ARIA attributes, so the arrow-key navigation
   // this box is FOR could not survive the swap. Input passes both through.
   return (
-    <div ref={rootRef} className="relative">
+    <Stack ref={rootRef} gap="none" className="relative">
       <Input
         type="search"
         role="combobox"
@@ -94,9 +94,9 @@ export function GraphSearchBox({ people, onPickPerson, onPickSkill }: GraphSearc
           ))}
 
           {skillMatches.length > 0 && (
-            <div className="px-3 pb-1 pt-1.5">
+            <Stack gap="none" className="px-3 pb-1 pt-1.5">
               <OverlineLabel>Skills</OverlineLabel>
-            </div>
+            </Stack>
           )}
           {skillMatches.map((s, j) => {
             const i = personMatches.length + j;
@@ -129,6 +129,6 @@ export function GraphSearchBox({ people, onPickPerson, onPickSkill }: GraphSearc
           />
         </Stack>
       )}
-    </div>
+    </Stack>
   );
 }
