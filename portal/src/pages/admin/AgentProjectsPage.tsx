@@ -18,8 +18,21 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import {
-  Button, CatalogGrid, Card, Chip, EmptyState, Inline, Input, MetaLine, Modal,
-  PageSection, Select, SectionLabel, Stack, Textarea,
+  Button,
+  Card,
+  CatalogGrid,
+  Chip,
+  EmptyState,
+  Inline,
+  Input,
+  Link as ExternalLink,
+  MetaLine,
+  Modal,
+  PageSection,
+  SectionLabel,
+  Select,
+  Stack,
+  Textarea,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { redactUrlCredentials } from '../../lib/redactCredentials.ts';
@@ -29,7 +42,6 @@ import { openShell, useCompute, type Computer } from '@connorhoehnslalom/ui-comp
 import { DEVBOX_MODELS, DEFAULT_DEVBOX_MODEL } from '../../lib/devboxModels';
 import { ConnectionSetup } from '../../components/codebases/ConnectionSetup';
 import { RepoDiscovery } from '../../components/codebases/RepoDiscovery';
-import { ExternalLink } from './ExternalLinkFrame';
 
 
 interface Run {
@@ -452,7 +464,7 @@ export default function AgentProjectsPage() {
               >
                 <Inline align="center" gap="sm" wrap justify="between" className="border-b border-border px-3.5 py-2.5">
                   <Inline align="center" gap="sm" wrap>
-                    <ExternalLink
+                    <ExternalLink external
                       href={`https://github.com/${p.repoFullName}`}
                       title={`Open ${p.repoFullName} on GitHub`}
                       className="inline-flex items-center gap-1 truncate font-mono text-[13px] font-semibold text-text-primary hover:text-primary hover:underline"

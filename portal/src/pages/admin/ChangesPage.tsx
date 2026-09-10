@@ -15,14 +15,25 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import {
-  Button, Card, Chip, EmptyState, ErrorState, Inline, InlineAlert, LoadingState,
-  MetaLine, PageSection, SectionLabel, Stack, Tabs,
+  Button,
+  Card,
+  Chip,
+  EmptyState,
+  ErrorState,
+  Inline,
+  InlineAlert,
+  Link as ExternalLink,
+  LoadingState,
+  MetaLine,
+  PageSection,
+  SectionLabel,
+  Stack,
+  Tabs,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
 import { PolicyEditor } from '../../components/sdlc/PolicyEditor';
-import { ExternalLink } from './ExternalLinkFrame';
 
 type Verdict = 'approve' | 'request_changes' | 'reject';
 interface Review {
@@ -364,7 +375,7 @@ function ChangeCard({ change: c, busy, act, superseded }: {
 
         {c.error && <Inline as="span" gap="none" className="text-[11px] leading-snug text-danger">{c.error}</Inline>}
         {c.prUrl && (
-          <ExternalLink href={c.prUrl} className="inline-block text-[12px] text-primary no-underline hover:underline">
+          <ExternalLink external href={c.prUrl} className="inline-block text-[12px] text-primary no-underline hover:underline">
             View pull request →
           </ExternalLink>
         )}

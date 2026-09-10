@@ -25,13 +25,13 @@ import {
   Chip,
   Divider,
   Inline,
-  SectionLabel,
-  StatStrip,
+  Link as ExternalLink,
   PageHeader,
+  SectionLabel,
   Stack,
+  StatStrip,
 } from '@connorhoehnslalom/ui-components/shared';
 import { OwnerEditor } from '../../components/marketplace/GovernanceEditor';
-import { ExternalLink } from './ExternalLinkFrame';
 import { PersonRef } from './PersonRef';
 import { T } from './Text';
 import { agentSpendStripItem, type AgentSpendInputs } from './AgentSpendStat';
@@ -193,7 +193,7 @@ export function InitiativeHeader({
           </Inline>
         )}
         actions={repoUrl ? (
-          <ExternalLink
+          <ExternalLink external
             href={repoUrl}
             title={repoLabel ?? undefined}
             className="text-[12px] font-medium text-primary no-underline hover:underline"

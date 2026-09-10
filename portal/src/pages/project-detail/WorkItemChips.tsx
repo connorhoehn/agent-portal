@@ -2,10 +2,15 @@
 // board cards so the two views can never drift apart.
 
 import { Link } from 'react-router';
-import { Button, Chip, Inline, StatusDot } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button,
+  Chip,
+  Inline,
+  Link as ExternalLink,
+  StatusDot,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import type { BotRun } from '../bots/BotsPage';
-import { ExternalLink } from './ExternalLinkFrame';
 import { PR_ICONS, PR_TONE, STATUS_DOT_COLOR, STATUS_TONE } from './projectFormat';
 import type { PrStatus, WorkItemStatus, WorkItemTree } from './types';
 
@@ -31,7 +36,7 @@ export function PrBadge({ prStatus, prUrl }: { prStatus: PrStatus; prUrl: string
   );
   if (!prUrl) return chip;
   return (
-    <ExternalLink
+    <ExternalLink external
       href={prUrl}
       className="no-underline shrink-0"
       onClick={(e) => e.stopPropagation()}

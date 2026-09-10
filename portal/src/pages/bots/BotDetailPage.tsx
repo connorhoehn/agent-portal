@@ -17,17 +17,18 @@ import {
   FormField,
   Inline,
   Input,
+  Link as ExternalLink,
   MetaLine,
   PageSection,
   ProgressBar,
   Select,
   Stack,
   Table,
-  TableHead,
   TableBody,
+  TableHead,
   TableRow,
-  TableTh,
   TableTd,
+  TableTh,
   Textarea,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
@@ -38,7 +39,6 @@ import { CostVsEstimate, runEstimate } from '../../components/marketplace/Estima
 import { RunTimeline } from '../../components/runs/RunTimeline';
 import { DEVBOX_MODELS } from '../../lib/devboxModels';
 import { botRunSummary, inputWiring, lastRanText } from './botsFormat';
-import { ExternalLink } from './ExternalLinkFrame';
 import { TEMPLATE_TONE, triggerSummary, when, type Bot, type BotRun } from './BotsPage';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -568,7 +568,7 @@ export default function BotDetailPage() {
                         </Link>
                       )}
                       {o.prUrl && (
-                        <ExternalLink href={o.prUrl} className="text-primary no-underline hover:underline">
+                        <ExternalLink external href={o.prUrl} className="text-primary no-underline hover:underline">
                           PR ↗
                         </ExternalLink>
                       )}

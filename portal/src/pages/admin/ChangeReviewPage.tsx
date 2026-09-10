@@ -20,14 +20,23 @@ import type { ReactNode } from 'react';
 import { useCallback, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import {
-  Button, Card, Chip, DiffViewer, EmptyState, Inline, LoadingState, PageSection,
-  RailLayout, SectionLabel, Stack,
+  Button,
+  Card,
+  Chip,
+  DiffViewer,
+  EmptyState,
+  Inline,
+  Link as ExternalLink,
+  LoadingState,
+  PageSection,
+  RailLayout,
+  SectionLabel,
+  Stack,
   type DiffAnnotation,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
-import { ExternalLink } from './ExternalLinkFrame';
 
 type Verdict = 'approve' | 'request_changes' | 'reject';
 interface Review {
@@ -293,7 +302,7 @@ export default function ChangeReviewPage() {
           </Link>
         )}
         {c.prUrl && (
-          <ExternalLink href={c.prUrl} className="text-[11px] text-primary no-underline hover:underline">
+          <ExternalLink external href={c.prUrl} className="text-[11px] text-primary no-underline hover:underline">
             pull request →
           </ExternalLink>
         )}

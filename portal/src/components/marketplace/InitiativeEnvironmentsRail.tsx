@@ -28,7 +28,17 @@ import { useEffect, useState } from 'react';
 import { readDegraded } from '../../lib/degraded';
 import { Link } from 'react-router';
 import {
-  Button, Card, Chip, CodeBlock, EntityCell, Inline, InlineAlert, MetaLine, SectionLabel, Stack,
+  Button,
+  Card,
+  Chip,
+  CodeBlock,
+  EntityCell,
+  Inline,
+  InlineAlert,
+  Link as ExternalLink,
+  MetaLine,
+  SectionLabel,
+  Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 
 interface Environment {
@@ -208,14 +218,18 @@ function EnvironmentRow({ env }: { env: Environment }) {
                     {r.conclusion ?? r.status ?? '—'}
                   </Chip>
                   {r.htmlUrl ? (
-                    <a
+                    // `unstyled`: this link is deliberately secondary text,
+                    // not the primary link colour the default would paint it.
+                    // It also gains rel="noopener" — the hand-rolled anchor set
+                    // only noreferrer.
+                    <ExternalLink
+                      external
+                      unstyled
                       href={r.htmlUrl}
-                      target="_blank"
-                      rel="noreferrer"
                       className="text-[11px] text-text-secondary no-underline hover:underline truncate"
                     >
                       {r.displayTitle ?? r.name ?? `run ${r.id}`}
-                    </a>
+                    </ExternalLink>
                   ) : (
                     <MetaLine size="xs" tone="secondary" className="truncate" items={[r.displayTitle ?? r.name ?? `run ${r.id}`]} />
                   )}
