@@ -473,47 +473,47 @@
     {
       "method": "GET",
       "path": "/api/bots",
-      "source": "src/routes/bots.ts:468"
+      "source": "src/routes/bots.ts:514"
     },
     {
       "method": "POST",
       "path": "/api/bots",
-      "source": "src/routes/bots.ts:473"
+      "source": "src/routes/bots.ts:519"
     },
     {
       "method": "DELETE",
       "path": "/api/bots/:id",
-      "source": "src/routes/bots.ts:570"
+      "source": "src/routes/bots.ts:616"
     },
     {
       "method": "GET",
       "path": "/api/bots/:id",
-      "source": "src/routes/bots.ts:514"
+      "source": "src/routes/bots.ts:560"
     },
     {
       "method": "PATCH",
       "path": "/api/bots/:id",
-      "source": "src/routes/bots.ts:520"
+      "source": "src/routes/bots.ts:566"
     },
     {
       "method": "POST",
       "path": "/api/bots/:id/pause",
-      "source": "src/routes/bots.ts:627"
+      "source": "src/routes/bots.ts:673"
     },
     {
       "method": "POST",
       "path": "/api/bots/:id/resume",
-      "source": "src/routes/bots.ts:638"
+      "source": "src/routes/bots.ts:684"
     },
     {
       "method": "POST",
       "path": "/api/bots/:id/run",
-      "source": "src/routes/bots.ts:580"
+      "source": "src/routes/bots.ts:626"
     },
     {
       "method": "GET",
       "path": "/api/bots/:id/runs",
-      "source": "src/routes/bots.ts:659"
+      "source": "src/routes/bots.ts:705"
     },
     {
       "method": "POST",
@@ -528,12 +528,17 @@
     {
       "method": "GET",
       "path": "/api/bots/marketplace-runs",
-      "source": "src/routes/bots.ts:445"
+      "source": "src/routes/bots.ts:491"
+    },
+    {
+      "method": "POST",
+      "path": "/api/bots/work-items/:id/estimate",
+      "source": "src/routes/bots.ts:442"
     },
     {
       "method": "POST",
       "path": "/api/bots/work-items/:id/review-estimate",
-      "source": "src/routes/bots.ts:430"
+      "source": "src/routes/bots.ts:476"
     },
     {
       "method": "GET",

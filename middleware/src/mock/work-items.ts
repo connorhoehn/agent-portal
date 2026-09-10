@@ -86,8 +86,8 @@ const D = (days: number): string =>
 // the migration states — an item nobody has dispatched has no estimator, and
 // inventing one here would put a fabricated decision in front of a reader.
 type EstimateFields =
-  | 'estimatedBy' | 'estimatedAt' | 'estimateModel' | 'estimateForecast'
-  | 'estimateReviewedBy' | 'estimateReviewedAt';
+  | 'estimatedBy' | 'estimatedByName' | 'estimatedAt' | 'estimateModel' | 'estimateForecast'
+  | 'estimateReviewedBy' | 'estimateReviewedByName' | 'estimateReviewedAt';
 
 type MockSeed = Omit<WorkItem, 'projectName' | 'sprintId' | 'estimatedCostUsd' | EstimateFields>
   & Partial<Pick<WorkItem, 'sprintId' | 'estimatedCostUsd' | EstimateFields>>;
@@ -345,10 +345,12 @@ export const workItems = defineFixture<WorkItem>({
       projectName: mockProjectName(seed.projectId) ?? seed.projectId,
       // No seeded item has an authorized estimate — see the MockSeed note.
       estimatedBy: null,
+      estimatedByName: null,
       estimatedAt: null,
       estimateModel: null,
       estimateForecast: null,
       estimateReviewedBy: null,
+      estimateReviewedByName: null,
       estimateReviewedAt: null,
     })),
     empty: () => [],

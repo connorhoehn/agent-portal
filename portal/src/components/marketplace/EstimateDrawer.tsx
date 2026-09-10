@@ -49,7 +49,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { useSession } from '../../lib/auth';
 import { preflightEnvelope } from '../../lib/envelopeFormat';
 import type { EnvelopesResponse } from '../../lib/envelopeFormat';
-import { toastError, toastSuccess } from '../../lib/toastStore';
+import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import type { BotRun } from '../../pages/bots/BotsPage';
 
 // ─── Types (the /api/bots/estimate contract) ─────────────────────────────────
@@ -73,11 +73,76 @@ export interface WorkEstimate {
   confidence?: ForecastConfidence;
 }
 
+/** The provenance fields the save route echoes back, and all the row reads. */
+export interface EstimateProvenance {
+  estimatedBy?: string | null;
+  estimatedByName?: string | null;
+  estimatedAt?: string | null;
+  estimateModel?: string | null;
+  estimateForecast?: Record<string, unknown> | null;
+  estimatedCostUsd?: number | null;
+  // The review route echoes the same item shape, so these ride along and a
+  // sign-off updates the row without a refetch.
+  estimateReviewedBy?: string | null;
+  estimateReviewedByName?: string | null;
+  estimateReviewedAt?: string | null;
+}
+
 export interface EstimateItem {
   id: string;
   title: string;
   type: string;
   storyPoints: number | null;
+  /**
+   * The estimate somebody already stood behind, if any
+   * (schema/work_item_estimate_schema.sql). Null on every item that predates
+   * that migration and on any item nobody has dispatched — which is the
+   * ordinary case, not a warning.
+   *
+   * `estimateModel` is what makes the stored forecast usable: it is only valid
+   * for the model it was computed against. Haiku and Opus were measured 20x
+   * apart on identical points, so a stored Haiku figure shown while Opus is
+   * selected would be worse than showing none.
+   */
+  estimatedBy?: string | null;
+  estimatedByName?: string | null;
+  estimatedAt?: string | null;
+  estimateModel?: string | null;
+  estimateForecast?: Record<string, unknown> | null;
+  estimateReviewedBy?: string | null;
+  estimateReviewedByName?: string | null;
+  estimateReviewedAt?: string | null;
+}
+
+/** "20 minutes ago" — an estimate's age is the whole point of storing when. */
+function agoLabel(iso: string): string {
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return iso;
+  const secs = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (secs < 60) return 'just now';
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'} ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+/**
+ * Is the stored estimate usable for the model currently selected?
+ *
+ * The model check is the load-bearing half. Without it this would happily show
+ * a Haiku forecast above an Opus run and call it "estimated by Nora" — a wrong
+ * number with somebody's name lending it authority, which is worse than the
+ * unattributed recompute this replaces.
+ */
+function storedEstimateFor(item: EstimateItem | null, model: string): WorkEstimate | null {
+  if (!item?.estimateForecast || !item.estimatedAt) return null;
+  if (item.estimateModel !== model) return null;
+  const f = item.estimateForecast as Partial<WorkEstimate>;
+  return typeof f.costUsdP25 === 'number' && typeof f.costUsdP75 === 'number'
+    ? (f as WorkEstimate)
+    : null;
 }
 
 interface CodebaseOption {
@@ -100,6 +165,14 @@ export interface EstimateDrawerProps {
   orgProjectId?: string | null;
   /** Called on 202 so the page can flip the item to in_progress optimistically. */
   onDispatched: (workItemId: string, run: BotRun) => void;
+  /**
+   * A forecast was authorized without spending. Deliberately NOT folded into
+   * `onDispatched`: that callback's contract is "a run started", and it flips
+   * the row to in_progress. Saving an estimate must leave the row `open` —
+   * that is the entire point, since an item that is already running cannot be
+   * the thing a standing estimate is read for.
+   */
+  onEstimateSaved?: (workItemId: string, saved: EstimateProvenance) => void;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -250,7 +323,7 @@ export function estimateLine(est: WorkEstimate): string {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function EstimateDrawer({
-  open, onClose, item, codebases, orgProjectId = null, onDispatched,
+  open, onClose, item, codebases, orgProjectId = null, onDispatched, onEstimateSaved,
 }: EstimateDrawerProps) {
   // The library's Drawer restores focus to whatever was document.activeElement
   // when it MOUNTED. That's wrong here: the most common trigger is the
@@ -287,6 +360,8 @@ export function EstimateDrawer({
   const canDispatch = ready && can('DispatchAgentRun');
   const { session } = useSession();
   const [model, setModel] = useState<string>(DEFAULT_DEVBOX_MODEL);
+  const [saving, setSaving] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const [instruction, setInstruction] = useState('');
   const [agentProjectId, setAgentProjectId] = useState<string | null>(null);
   // The operator's own ceiling on this one run: "don't start it if it is
@@ -363,9 +438,16 @@ export function EstimateDrawer({
   const capUsd = capParsed != null && Number.isFinite(capParsed) && capParsed >= 0 ? capParsed : null;
   const capBelowForecast = capUsd != null && estimate != null && estimate.costUsdP75 > capUsd;
 
-  // Live estimate — on open and whenever the model or target codebase changes.
+  // The estimate somebody already authorized, if it is for THIS model.
+  const stored = useMemo(() => storedEstimateFor(item, model), [item, model]);
+
+  // Live estimate — on open and whenever the model or target codebase changes,
+  // BUT only when there is no stored estimate for the selected model. A stored
+  // one is a decision with an author; recomputing over it would quietly replace
+  // that with an anonymous number and lose the only thing worth having.
   useEffect(() => {
     if (!open || !item || item.storyPoints == null) return;
+    if (stored) { setEstimate(stored); setEstLoading(false); setEstError(null); return; }
     let cancelled = false;
     setEstLoading(true);
     setEstError(null);
@@ -384,7 +466,7 @@ export function EstimateDrawer({
         if (!cancelled) { setEstimate(null); setEstError(err.message); setEstLoading(false); }
       });
     return () => { cancelled = true; };
-  }, [open, item, model, agentProjectId]);
+  }, [open, item, model, agentProjectId, stored]);
 
   // ── The envelope, BEFORE the money is committed ────────────────────────────
   //
@@ -405,6 +487,69 @@ export function EstimateDrawer({
       : null,
     role: session?.role,
   }), [envelopeData, orgProjectId, estimate, session?.role]);
+
+  // Advisory SME sign-off on the stored estimate.
+  //
+  // Separate from saving because the two are different people's acts as often
+  // as not: whoever computed the forecast is not necessarily whoever is asked
+  // whether it is sane. Recording them together would attribute one person's
+  // opinion to the other.
+  async function reviewEstimate() {
+    if (!item || reviewing) return;
+    setReviewing(true);
+    const tid = toastPending('Recording review', item.title);
+    try {
+      const res = await fetch(`/api/bots/work-items/${encodeURIComponent(item.id)}/review-estimate`, {
+        method: 'POST', credentials: 'include',
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({})) as { error?: string };
+        toastError(tid, 'Review not recorded', detail.error ?? `HTTP ${res.status}`);
+        return;
+      }
+      const saved = (await res.json().catch(() => ({}))) as { item?: EstimateProvenance };
+      toastSuccess(tid, 'Estimate reviewed', item.title);
+      if (saved.item) onEstimateSaved?.(item.id, saved.item);
+      handleClose();
+    } catch (err) {
+      toastError(tid, 'Review not recorded', (err as Error).message);
+    } finally {
+      setReviewing(false);
+    }
+  }
+
+  // Record the forecast on the work item without dispatching anything.
+  //
+  // Awaited and surfaced, unlike the dispatch path's fire-and-forget persist:
+  // there the write is a label on a run that already started, so a failure must
+  // not read as the run failing. Here the write IS the action, so a failure has
+  // to be visible or the operator believes they signed off when they did not.
+  async function saveEstimate() {
+    if (!item || !estimate || saving) return;
+    setSaving(true);
+    const tid = toastPending('Saving estimate', item.title);
+    try {
+      const res = await fetch(`/api/bots/work-items/${encodeURIComponent(item.id)}/estimate`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, estimate }),
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({})) as { error?: string };
+        toastError(tid, 'Estimate not saved', detail.error ?? `HTTP ${res.status}`);
+        return;
+      }
+      const saved = (await res.json().catch(() => ({}))) as { item?: EstimateProvenance };
+      toastSuccess(tid, 'Estimate saved', `${item.title} — recorded on ${modelLabel}.`);
+      if (saved.item) onEstimateSaved?.(item.id, saved.item);
+      handleClose();
+    } catch (err) {
+      toastError(tid, 'Estimate not saved', (err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function dispatch(overrideAgentProjectId?: string) {
     if (!item || dispatching) return;
@@ -526,6 +671,21 @@ export function EstimateDrawer({
             <MetaLine size="xs" className="flex-1" items={[estimate ? `model: ${modelLabel}` : '']} />
             <Button variant="secondary" size="sm" onClick={handleClose}>Cancel</Button>
             {canDispatch && (
+              // Save the forecast without spending. This is what puts a name
+              // and a timestamp on the number, and what makes the work row's
+              // play action appear — authorizing an estimate and spending
+              // against it are separate acts, and only the second costs money.
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => { void saveEstimate(); }}
+                disabled={estLoading || estimate == null || dispatching || saving}
+                title="Record this estimate against the work item — no agent runs"
+              >
+                {saving ? 'saving…' : 'Save estimate'}
+              </Button>
+            )}
+            {canDispatch && (
               <Button
                 variant="primary"
                 size="sm"
@@ -595,7 +755,40 @@ export function EstimateDrawer({
 
           {/* The estimate — always a range, with its basis stated plainly */}
           <Card className="px-3 py-2.5 bg-surface-inset">
-            <SectionLabel className="mb-1">Estimate</SectionLabel>
+            <Inline gap="sm" justify="between" wrap>
+              <SectionLabel className="mb-1">Estimate</SectionLabel>
+              {/* Provenance, only when the stored estimate is the one on show.
+                  A recomputed forecast deliberately carries no name — nobody
+                  has stood behind it yet, and labelling it would invent an
+                  author. */}
+              {stored && item.estimatedAt && (
+                <MetaLine
+                  size="xs"
+                  items={[
+                    `estimated by ${item.estimatedByName ?? item.estimatedBy ?? 'unknown'} · ${agoLabel(item.estimatedAt)}`,
+                    ...(item.estimateReviewedBy
+                      ? [`reviewed by ${item.estimateReviewedByName ?? item.estimateReviewedBy}`]
+                      : []),
+                  ]}
+                />
+              )}
+              {/* Advisory sign-off. Offered only on a STORED estimate: there is
+                  nothing to review about a forecast that has not been saved,
+                  and reviewing one would sign off on a number that vanishes
+                  when this drawer closes. Reviewing does not gate dispatch —
+                  see schema/work_item_estimate_schema.sql. */}
+              {stored && item.estimatedAt && canDispatch && !item.estimateReviewedBy && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={reviewing}
+                  onClick={() => { void reviewEstimate(); }}
+                  title="Record that you have looked at this forecast"
+                >
+                  {reviewing ? 'reviewing…' : 'Mark reviewed'}
+                </Button>
+              )}
+            </Inline>
             {estLoading ? (
               <MetaLine items={['estimating…']} />
             ) : estError ? (
@@ -607,6 +800,17 @@ export function EstimateDrawer({
                 <Inline as="span" gap="none" className="text-[13px] text-text-primary leading-relaxed">
                   {estimateLine(estimate)}
                 </Inline>
+                {/* The stored estimate belongs to another model, so this one is
+                    fresh and unattributed. Said out loud, because silently
+                    swapping the number under a familiar name is the failure
+                    this whole change exists to prevent. */}
+                {!stored && item.estimatedAt && item.estimateModel !== model && (
+                  <MetaLine
+                    size="xs"
+                    className="mt-1"
+                    items={[`Recomputed for ${modelLabel} — the stored estimate was for a different model.`]}
+                  />
+                )}
                 {estimate.basis === 'prior' && (
                   <MetaLine size="xs" className="mt-1" items={[`≈ ${rangeText(estimate)}`]} />
                 )}

@@ -245,7 +245,15 @@ export function WorkPanel({
     {
       key: 'signals',
       header: '',
-      width: '112px',
+      // 112px was sized when this column held glyphs only. The estimate
+      // provenance chip ("Rachel Kowalski · just now") and the play action are
+      // both real content now, and at 112px the ▶ button rendered as "▶ Ru" —
+      // a clipped control on a money path, which is worse than no control.
+      // The chip truncates inside this width; its full text is in the tooltip.
+      // Sized so the table stays inside its overflow-x wrapper: the wrapper
+      // scrolls, so an oversized column hides a spend control off-screen
+      // rather than clipping it visibly, which is the worse failure.
+      width: '224px',
       filterable: false,
       render: (row: FlatWorkItem) => (
         <Inline gap="xs" align="center" justify="end" wrap={false}>

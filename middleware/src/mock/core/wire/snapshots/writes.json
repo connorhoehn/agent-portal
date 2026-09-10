@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-10T17:21:48.571Z",
-  "serverHandlerSha": "f18d1e09eb97fb9af06ec56a85679a4e13f941b0f1c8780c5114c31524864861",
+  "capturedAt": "2026-09-10T17:56:01.532Z",
+  "serverHandlerSha": "03c77cb785ae1bde95704771a0d327e72abe11dd2f758574842831900d53009e",
   "baseUrl": "http://127.0.0.1:3001",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -372,8 +372,10 @@
         "estimateModel": "null",
         "estimateReviewedAt": "null",
         "estimateReviewedBy": "null",
+        "estimateReviewedByName": "null",
         "estimatedAt": "null",
         "estimatedBy": "null",
+        "estimatedByName": "null",
         "estimatedCostUsd": "number",
         "id": "string",
         "labels": "array",
@@ -494,8 +496,10 @@
         "workItem.estimateModel": "null",
         "workItem.estimateReviewedAt": "null",
         "workItem.estimateReviewedBy": "null",
+        "workItem.estimateReviewedByName": "null",
         "workItem.estimatedAt": "null",
         "workItem.estimatedBy": "null",
+        "workItem.estimatedByName": "null",
         "workItem.estimatedCostUsd": "null",
         "workItem.id": "string",
         "workItem.labels": "array",
@@ -1182,6 +1186,12 @@
         "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: authorizes a run and enqueues it for the fleet dispatcher."
       }
     },
+    "POST /api/bots/work-items/:id/estimate": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
     "POST /api/bots/work-items/:id/review-estimate": {
       "refused": {
         "rule": "unclassified",
@@ -1570,8 +1580,10 @@
         "estimateModel": "null",
         "estimateReviewedAt": "null",
         "estimateReviewedBy": "null",
+        "estimateReviewedByName": "null",
         "estimatedAt": "null",
         "estimatedBy": "null",
+        "estimatedByName": "null",
         "estimatedCostUsd": "null",
         "id": "string",
         "labels": "array",

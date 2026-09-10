@@ -420,6 +420,52 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
 }));
 
 /**
+ * Record an estimate WITHOUT spending anything.
+ *
+ * This is the write path that makes a "standing estimate" a thing that can
+ * exist. Originally the only writer was a successful dispatch, on the theory —
+ * borrowed from `bot_runs.dispatched_by` — that only a real firing should be
+ * attributed. That analogy was wrong here, and provably so: dispatching moves
+ * the item `open -> in_progress`, so an estimate written by a dispatch belongs
+ * to a row that is already running. The estimate could never be READ before it
+ * was spent, which is the only moment it is worth anything.
+ *
+ * The distinction that actually matters is AUTHORIZED vs CANCELLED, not
+ * dispatched vs not. An operator who computes a forecast and saves it has made
+ * a decision somebody can be asked about; they simply have not spent yet.
+ * Closing the drawer still writes nothing.
+ *
+ * Gated on DispatchAgentRun, not on a softer read capability: putting your name
+ * on a number that authorizes spend is a spending-adjacent act, even though
+ * this call moves no money.
+ */
+botsRouter.post('/work-items/:id/estimate', dispatchGate, asyncHandler(async (req, res) => {
+  const id = String(req.params['id'] ?? '').trim();
+  if (!id) throw new ValidationError('work item id is required');
+  const actor = req.session?.sub;
+  if (!actor) { res.status(401).json({ error: 'a session is required to record an estimate' }); return; }
+
+  const body = req.body as { model?: unknown; estimate?: unknown };
+  const model = String(body.model ?? '').trim();
+  if (!model) throw new ValidationError('model is required — a forecast is only valid for the model it was computed against');
+  if (!body.estimate || typeof body.estimate !== 'object' || Array.isArray(body.estimate)) {
+    throw new ValidationError('estimate must be the forecast object that was shown');
+  }
+
+  // 404 before the write: recording an estimate against an id that does not
+  // exist would silently succeed as a no-op UPDATE and report success.
+  if (!await getWorkItem(id)) { res.status(404).json({ error: 'no such work item' }); return; }
+
+  const forecast = body.estimate as Record<string, unknown>;
+  const p75 = Number(forecast['costUsdP75']);
+  // Awaited, unlike the dispatch path's fire-and-forget: there, a bookkeeping
+  // failure must not fail a run that is already live. Here the bookkeeping IS
+  // the request, so a failure is the honest answer.
+  await recordWorkItemEstimate(id, actor, model, forecast, Number.isFinite(p75) ? p75 : null);
+  res.json({ item: await getWorkItem(id) });
+}));
+
+/**
  * Advisory SME sign-off on a work item's stored estimate.
  *
  * Gated on ManageIngest-tier dispatch rights rather than a new capability: the

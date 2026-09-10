@@ -1,6 +1,7 @@
 // The small affordances a work item carries, shared by the tree rows and the
 // board cards so the two views can never drift apart.
 
+import { useState } from 'react';
 import { Link } from 'react-router';
 import {
   Button,
@@ -10,6 +11,9 @@ import {
   StatusDot,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
+import { relativeTime } from '../../lib/relativeTime';
+import { DEFAULT_DEVBOX_MODEL } from '../../lib/devboxModels';
+import { toastError, toastPending, toastSuccess } from '../../lib/toastStore';
 import type { BotRun } from '../bots/BotsPage';
 import { PR_ICONS, PR_TONE, STATUS_DOT_COLOR, STATUS_TONE } from './projectFormat';
 import type { PrStatus, WorkItemStatus, WorkItemTree } from './types';
@@ -55,24 +59,122 @@ export function EstimateChip({
   onEstimate: (item: WorkItemTree) => void;
 }) {
   const { can, ready } = useCapabilities();
+  const [dispatching, setDispatching] = useState(false);
   if (item.status !== 'open' || item.storyPoints == null) return null;
   if (!ready || !can('DispatchAgentRun')) return null;
+
+  // A stored estimate is only "standing" if somebody authorized it AND it was
+  // computed for the model this run will actually use. Haiku and Opus were
+  // measured 20x apart on identical points, so re-running against a forecast
+  // from the other model would be a number nobody agreed to.
+  const standing = item.estimatedAt != null
+    && item.estimateModel === DEFAULT_DEVBOX_MODEL
+    && item.estimateForecast != null;
+
+  if (!standing) {
+    return (
+      <Button
+        size="sm"
+        variant="secondary"
+        className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide text-primary"
+        title="Estimate cost & duration, then authorize an agent run"
+        // A stable, re-queryable handle for the Estimate drawer to refocus on
+        // close — see the comment on EstimateDrawer's handleClose. A re-query
+        // by id survives whatever opened this row unmounting.
+        data-estimate-trigger={item.id}
+        onClick={(e) => { e.stopPropagation(); onEstimate(item); }}
+      >
+        ⚡ Estimate
+      </Button>
+    );
+  }
+
+  // Re-run against the estimate already on the record.
+  //
+  // This still spends money and still faces every gate — grant-scoped 403,
+  // per-run cap, allocation, envelope. It does not bypass them; it skips the
+  // DRAWER, which exists to produce an estimate this item already has. Any
+  // refusal hands off to that drawer, because it is the surface that knows how
+  // to explain all four and to collect the right confirm flag.
+  async function dispatchStanding(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (dispatching) return;
+    setDispatching(true);
+    const tid = toastPending('Dispatching', item.title);
+    try {
+      const res = await fetch('/api/bots/dispatch-work', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workItemId: item.id,
+          model: DEFAULT_DEVBOX_MODEL,
+          estimate: item.estimateForecast,
+        }),
+      });
+      if (res.ok) {
+        toastSuccess(tid, 'Agent dispatched', `${item.title} — on the standing estimate.`);
+        return;
+      }
+      // Every gate, and every shape refusal, goes to the drawer rather than a
+      // toast: a 409 that names a budget needs its confirm flag, and inventing
+      // a second place to answer that would be two surfaces disagreeing.
+      toastError(tid, 'Needs authorizing', 'Opening the estimate drawer.');
+      onEstimate(item);
+    } catch (err) {
+      toastError(tid, 'Could not dispatch', (err as Error).message);
+    } finally {
+      setDispatching(false);
+    }
+  }
+
+  // Who signed off, and when. The user's ask was explicit that a number on a
+  // money path needs a name against it — a `title` tooltip does not count,
+  // because nothing that matters should require hovering to discover.
+  const reviewed = item.estimateReviewedBy != null;
+  // Name if the subject still has an account row, else the raw subject. Never
+  // "unknown": the attribution exists, and only its label is missing.
+  const estBy = item.estimatedByName ?? item.estimatedBy ?? 'unknown';
+  const revBy = item.estimateReviewedByName ?? item.estimateReviewedBy;
   return (
-    <Button
-      size="sm"
-      variant="secondary"
-      className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide text-primary"
-      title="Estimate cost & duration, then authorize an agent run"
-      // A stable, re-queryable handle for the Estimate drawer to refocus on
-      // close — see the comment on EstimateDrawer's handleClose. Button isn't
-      // forwardRef, so a captured DOM ref would go stale the moment whatever
-      // opened this row (e.g. the WorkItemDrawer) unmounts; a re-query by id
-      // survives that.
-      data-estimate-trigger={item.id}
-      onClick={(e) => { e.stopPropagation(); onEstimate(item); }}
-    >
-      ⚡ Estimate
-    </Button>
+    <Inline gap="xs" wrap={false} className="shrink-0">
+      <Chip
+        size="sm"
+        // Truncate rather than wrap: this sits in a fixed-width table column,
+        // and a wrapped chip changes the row height for one row only.
+        className="min-w-0 max-w-[112px] truncate"
+        tone={reviewed ? 'success' : 'neutral'}
+        title={reviewed
+          ? `Estimate by ${estBy} ${relativeTime(item.estimatedAt)}; reviewed by ${revBy} ${relativeTime(item.estimateReviewedAt)}`
+          : `Estimate by ${estBy} ${relativeTime(item.estimatedAt)} — not yet reviewed`}
+      >
+        {/* Name inline, timing in the tooltip and in full in the drawer. The
+            whole sentence does not fit a dense table column without either
+            overflowing the panel or truncating the name away — and WHO is the
+            half that cannot be recovered from anywhere else on this row. */}
+        {reviewed ? '✓ ' : ''}{estBy}
+      </Chip>
+      <Button
+        size="sm"
+        variant="primary"
+        disabled={dispatching}
+        className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide"
+        title={`Run on the standing estimate — by ${estBy}`}
+        onClick={(e) => { void dispatchStanding(e); }}
+      >
+        {dispatching ? '…' : '▶ Run'}
+      </Button>
+      <Button
+        size="sm"
+        variant="secondary"
+        className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide text-primary"
+        title="Review or re-estimate before running"
+        data-estimate-trigger={item.id}
+        onClick={(e) => { e.stopPropagation(); onEstimate(item); }}
+      >
+        ⚡
+      </Button>
+    </Inline>
   );
 }
 

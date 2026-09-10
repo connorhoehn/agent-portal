@@ -23,7 +23,7 @@ import { useFetch } from '../hooks/useFetch';
 import { useCapabilities } from '../lib/capabilities';
 import { useSession } from '../lib/auth';
 import { githubRepoUrl } from '../lib/repoLink';
-import { EstimateDrawer } from '../components/marketplace/EstimateDrawer';
+import { EstimateDrawer, type EstimateProvenance } from '../components/marketplace/EstimateDrawer';
 import { useInitiativeAgentActivity } from '../components/marketplace/InitiativeAgentRail';
 import type { BotRun } from './bots/BotsPage';
 import { ContributorModal } from './project-detail/ContributorModal';
@@ -276,6 +276,32 @@ function ProjectDetailPage() {
       (n.id === workItemId ? { ...n, status: 'in_progress' as WorkItemStatus } : n)));
   }, [rawTree]);
 
+  // An estimate was authorized, not spent. The row must stay `open` — merging
+  // status here would hide the very play action the save exists to reveal.
+  const handleEstimateSaved = useCallback((workItemId: string, saved: EstimateProvenance) => {
+    setLocalItems((prev) => mapTree(prev ?? rawTree ?? [], (n) => (n.id === workItemId
+      ? {
+          ...n,
+          estimatedBy: saved.estimatedBy ?? null,
+          // Enumerating these by hand already dropped this one field once: the
+          // row rendered the raw subject `u-rachel` while a reload showed
+          // "Rachel Kowalski", because `...n` silently kept the stale null.
+          // Every provenance field the response carries must be listed here.
+          estimatedByName: saved.estimatedByName ?? null,
+          estimatedAt: saved.estimatedAt ?? null,
+          estimateModel: saved.estimateModel ?? null,
+          estimateForecast: saved.estimateForecast ?? null,
+          estimatedCostUsd: saved.estimatedCostUsd ?? n.estimatedCostUsd,
+          // Straight from the response, not `?? n.…`: a NEW estimate clears any
+          // prior review server-side, and preserving the old value here would
+          // show a sign-off that no longer exists in the database.
+          estimateReviewedBy: saved.estimateReviewedBy ?? null,
+          estimateReviewedByName: saved.estimateReviewedByName ?? null,
+          estimateReviewedAt: saved.estimateReviewedAt ?? null,
+        }
+      : n)));
+  }, [rawTree]);
+
   if (projLoading) {
     return <PageSection title="Project"><LoadingState label="Loading project…" /></PageSection>;
   }
@@ -442,6 +468,7 @@ function ProjectDetailPage() {
         // authorize, instead of leaving the envelope brake's 409 to say it.
         orgProjectId={id ?? null}
         onDispatched={handleDispatched}
+        onEstimateSaved={handleEstimateSaved}
       />
     </Stack>
   );

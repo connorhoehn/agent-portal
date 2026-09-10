@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-10T17:21:48.007Z",
-  "serverHandlerSha": "f18d1e09eb97fb9af06ec56a85679a4e13f941b0f1c8780c5114c31524864861",
+  "capturedAt": "2026-09-10T17:56:01.019Z",
+  "serverHandlerSha": "03c77cb785ae1bde95704771a0d327e72abe11dd2f758574842831900d53009e",
   "baseUrl": "http://127.0.0.1:3001",
   "personas": [
     "orgiq/admin",
@@ -933,13 +933,11 @@
           "ms_forms_export"
         ],
         "envelopes[].status": [
-          "committed",
           "processed",
           "staged",
           "superseded"
         ],
         "groups[].status": [
-          "committed",
           "processed",
           "staged"
         ]
@@ -1912,20 +1910,32 @@
         "$": "object",
         "boxes": "array",
         "boxes[]": "object",
+        "boxes[].activeModel": "string",
+        "boxes[].contextUsed": "number",
         "boxes[].createdAt": "string",
+        "boxes[].currentTask": "string",
         "boxes[].id": "string",
         "boxes[].idleMsLeft": "number",
         "boxes[].label": "string",
         "boxes[].lastActivityAt": "string",
+        "boxes[].lastResult": "object",
+        "boxes[].lastResult.costUsd": "number",
+        "boxes[].lastResult.durationMs": "number",
+        "boxes[].lastResult.subtype": "string",
+        "boxes[].lastResult.turns": "number",
         "boxes[].lifetimeMsLeft": "number",
         "boxes[].ownerId": "string",
         "boxes[].sessionId": "string",
+        "boxes[].spendUsd": "number",
         "boxes[].status": "string",
-        "boxes[].stopsInMs": "number"
+        "boxes[].stopsInMs": "number",
+        "boxes[].tokensUsed": "number"
       },
       "values": {
         "boxes[].status": [
-          "idle"
+          "error",
+          "idle",
+          "waiting"
         ]
       }
     },
@@ -2101,7 +2111,7 @@
       },
       "values": {
         "kind": [
-          "decision"
+          "worked"
         ],
         "level": [
           "L0"
@@ -2701,8 +2711,10 @@
         "$[].children[].estimateModel": "null",
         "$[].children[].estimateReviewedAt": "null",
         "$[].children[].estimateReviewedBy": "null",
+        "$[].children[].estimateReviewedByName": "null",
         "$[].children[].estimatedAt": "null",
         "$[].children[].estimatedBy": "null",
+        "$[].children[].estimatedByName": "null",
         "$[].children[].estimatedCostUsd": "number",
         "$[].children[].id": "string",
         "$[].children[].labels": "array",
@@ -2726,8 +2738,10 @@
         "$[].estimateModel": "null",
         "$[].estimateReviewedAt": "null",
         "$[].estimateReviewedBy": "null",
+        "$[].estimateReviewedByName": "null",
         "$[].estimatedAt": "null",
         "$[].estimatedBy": "null",
+        "$[].estimatedByName": "null",
         "$[].estimatedCostUsd": "null",
         "$[].id": "string",
         "$[].labels": "array",
@@ -2817,8 +2831,10 @@
         "$[].estimateModel": "null",
         "$[].estimateReviewedAt": "null",
         "$[].estimateReviewedBy": "null",
+        "$[].estimateReviewedByName": "null",
         "$[].estimatedAt": "null",
         "$[].estimatedBy": "null",
+        "$[].estimatedByName": "null",
         "$[].estimatedCostUsd": "null|number",
         "$[].id": "string",
         "$[].labels": "array",
@@ -3554,35 +3570,12 @@
         "nodes[].presence.lastSeenAt": "string",
         "nodes[].presence.nodeId": "string",
         "nodes[].presence.sessions": "array",
-        "nodes[].presence.sessions[]": "object",
-        "nodes[].presence.sessions[].branch": "string",
-        "nodes[].presence.sessions[].contextUsed": "number",
-        "nodes[].presence.sessions[].harness": "string",
-        "nodes[].presence.sessions[].intent": "string",
-        "nodes[].presence.sessions[].lastSeenAt": "string",
-        "nodes[].presence.sessions[].memory": "object",
-        "nodes[].presence.sessions[].memory.lastPushAt": "number",
-        "nodes[].presence.sessions[].memory.mode": "string",
-        "nodes[].presence.sessions[].memory.pullCursorAgeS": "number",
-        "nodes[].presence.sessions[].model": "string",
-        "nodes[].presence.sessions[].modelProvider": "string",
-        "nodes[].presence.sessions[].projectId": "string",
-        "nodes[].presence.sessions[].repo": "string",
-        "nodes[].presence.sessions[].sessionId": "string",
-        "nodes[].presence.sessions[].startedAt": "number",
-        "nodes[].presence.sessions[].touching": "array",
-        "nodes[].presence.sessions[].touching[]": "string",
-        "nodes[].presence.sessions[].worktree": "string",
         "nodes[].presence.status": "string",
         "nodes[].revokedAt": "null"
       },
       "values": {
-        "nodes[].presence.sessions[].memory.mode": [
-          "synced"
-        ],
         "nodes[].presence.status": [
-          "offline",
-          "stale"
+          "offline"
         ]
       }
     },
@@ -3612,8 +3605,7 @@
       "values": {
         "nodes[].presence.status": [
           "connected",
-          "offline",
-          "stale"
+          "offline"
         ]
       }
     },
@@ -3652,6 +3644,7 @@
       },
       "values": {
         "events[].action": [
+          "DispatchAgentRun",
           "Login",
           "ManageDevbox",
           "ManageIngest",
@@ -3665,7 +3658,8 @@
           "ALLOW"
         ],
         "events[].role": [
-          "admin"
+          "admin",
+          "org-leader"
         ],
         "events[].tenant": [
           "orgiq"
@@ -5554,10 +5548,10 @@
         "jobs": "array",
         "jobs[]": "object",
         "jobs[].attempts": "number",
-        "jobs[].botId": "string",
-        "jobs[].botName": "string",
-        "jobs[].botTrigger": "string",
-        "jobs[].boxId": "null",
+        "jobs[].botId": "null|string",
+        "jobs[].botName": "null|string",
+        "jobs[].botTrigger": "null|string",
+        "jobs[].boxId": "null|string",
         "jobs[].claimedAt": "string",
         "jobs[].createdAt": "string",
         "jobs[].createdBy": "string",
@@ -5576,7 +5570,10 @@
         "jobs[].result.costUsd": "number",
         "jobs[].result.durationMs": "number",
         "jobs[].result.summary": "string",
-        "jobs[].sessionId": "null",
+        "jobs[].result.toolCalls": "number",
+        "jobs[].result.transcript": "array",
+        "jobs[].result.turns": "number",
+        "jobs[].sessionId": "null|string",
         "jobs[].startedAt": "string",
         "jobs[].status": "string",
         "jobs[].title": "string"
@@ -5596,10 +5593,10 @@
       "shape": {
         "$": "object",
         "attempts": "number",
-        "botId": "string",
-        "botName": "string",
-        "botTrigger": "string",
-        "boxId": "null",
+        "botId": "null",
+        "botName": "null",
+        "botTrigger": "null",
+        "boxId": "string",
         "claimedAt": "string",
         "createdAt": "string",
         "createdBy": "string",
@@ -5609,7 +5606,6 @@
         "kind": "string",
         "maxAttempts": "number",
         "payload": "object",
-        "payload.botId": "string",
         "payload.model": "string",
         "payload.prompt": "string",
         "payload.requiresReview": "boolean",
@@ -5618,7 +5614,9 @@
         "result.costUsd": "number",
         "result.durationMs": "number",
         "result.summary": "string",
-        "sessionId": "null",
+        "result.toolCalls": "number",
+        "result.turns": "number",
+        "sessionId": "string",
         "startedAt": "string",
         "status": "string",
         "title": "string"
@@ -5722,6 +5720,7 @@
       "values": [
         "ANONYMIZE",
         "BLOCK",
+        "DispatchAgentRun",
         "Login",
         "ManageDevbox",
         "ManageIngest",
@@ -5957,8 +5956,7 @@
     "mode": {
       "open": false,
       "values": [
-        "sim",
-        "synced"
+        "sim"
       ]
     },
     "outcome": {
@@ -6040,7 +6038,6 @@
         "candidate",
         "changes_requested",
         "claim_open",
-        "committed",
         "completed",
         "connected",
         "current",
@@ -6079,7 +6076,8 @@
         "stalled",
         "succeeded",
         "superseded",
-        "verified"
+        "verified",
+        "waiting"
       ]
     },
     "tenant": {

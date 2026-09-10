@@ -27,8 +27,14 @@
 --   * an item whose estimate was never authorized keeps NULL: recomputing a
 --     forecast in a drawer someone then cancelled is not an estimate anybody
 --     made, and recording it would invent a decision;
---   * only an authorized dispatch writes these columns, and the subject comes
---     from the session, never from a request body.
+--   * the write is AUTHORIZING an estimate, which is a separate act from
+--     spending against it. This started out written only by a successful
+--     dispatch, by analogy with `bot_runs.dispatched_by`. That analogy was
+--     wrong and the UI proved it: dispatch moves the item `open ->
+--     in_progress`, so an estimate written by a dispatch is attached to a row
+--     that is already running and can never be read BEFORE the spend it was
+--     supposed to justify. Saving and dispatching are now separate routes.
+--   * the subject always comes from the session, never from a request body.
 --
 -- REVIEW IS ADVISORY, DELIBERATELY. `estimate_reviewed_by` records that an SME
 -- looked at the forecast; it does NOT gate dispatch. The dispatch path already

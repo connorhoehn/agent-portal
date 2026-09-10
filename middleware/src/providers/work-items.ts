@@ -5,6 +5,7 @@
 // the portal is fully navigable in offline / local dev without Aurora.
 
 import { randomUUID } from 'node:crypto';
+import { displayNameForSubject } from './identity.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 import { exec } from './aurora.js';
 import { config } from '../config.js';
@@ -74,11 +75,15 @@ export interface WorkItem {
    * the same reasoning `bot_runs.dispatched_by` records.
    */
   estimatedBy: string | null;
+  /** `estimatedBy` resolved through app_users; null when the subject has no
+   *  account row (deleted, or a machine subject). Render falls back to the id. */
+  estimatedByName: string | null;
   estimatedAt: string | null;
   estimateModel: string | null;
   estimateForecast: Record<string, unknown> | null;
   /** Advisory SME sign-off. Never gates dispatch. */
   estimateReviewedBy: string | null;
+  estimateReviewedByName: string | null;
   estimateReviewedAt: string | null;
   prUrl: string | null;
   prStatus: PrStatus | null;
@@ -246,6 +251,7 @@ const ITEM_COLUMNS = `
       wi.story_points, wi.sprint_id, wi.estimated_cost_usd,
       wi.estimated_by, wi.estimated_at, wi.estimate_model, wi.estimate_forecast,
       wi.estimate_reviewed_by, wi.estimate_reviewed_at,
+      eb.display_name AS estimated_by_name, rb.display_name AS estimate_reviewed_by_name,
       wi.pr_url, wi.pr_status,
       wi.created_at, wi.updated_at, wi.completed_at,
       a.id AS assignee_id, a.name AS assignee_name, a.team AS assignee_dept,
@@ -255,7 +261,15 @@ const ITEM_COLUMNS = `
 const ITEM_FROM = `
     FROM work_items wi
     JOIN projects p ON p.id = wi.project_id
-    LEFT JOIN people a ON a.id = wi.assignee_id`;
+    LEFT JOIN people a ON a.id = wi.assignee_id
+    -- Resolve the attributing subjects to names. LEFT, and app_users rather
+    -- than people, because these columns hold a session subject: an account
+    -- with no linked org-graph person still authorized the spend, and an
+    -- account since deleted must not make the row vanish. A null name falls
+    -- back to the raw subject at the edge rather than printing "unknown",
+    -- which would erase an attribution that does exist.
+    LEFT JOIN app_users eb ON eb.id = wi.estimated_by
+    LEFT JOIN app_users rb ON rb.id = wi.estimate_reviewed_by`;
 
 // ─── Aurora query wrapper — degrades gracefully if work_items table is missing ─
 
@@ -434,7 +448,8 @@ async function dbCreateWorkItem(data: CreateWorkItemInput): Promise<WorkItem> {
       sprintId: data.sprintId ?? null, estimatedCostUsd: data.estimatedCostUsd ?? null,
       // A just-created item has no authorized estimate. Nobody has dispatched
       // it, so nobody has stood behind a forecast for it.
-      estimatedBy: null, estimatedAt: null, estimateModel: null, estimateForecast: null,
+      estimatedBy: null, estimatedByName: null, estimatedAt: null, estimateModel: null, estimateForecast: null,
+      estimateReviewedByName: null,
       estimateReviewedBy: null, estimateReviewedAt: null,
       prUrl: null, prStatus: null,
       createdAt: now, updatedAt: now, completedAt: null, childCount: 0, childDoneCount: 0,
@@ -589,6 +604,7 @@ function rowToWorkItem(r: Record<string, unknown>): WorkItem {
     // treatment story_points already gets.
     estimatedCostUsd: r['estimated_cost_usd'] != null ? Number(r['estimated_cost_usd']) : null,
     estimatedBy: r['estimated_by'] != null ? String(r['estimated_by']) : null,
+    estimatedByName: r['estimated_by_name'] != null ? String(r['estimated_by_name']) : null,
     estimatedAt: r['estimated_at'] != null ? utcIso(r['estimated_at']) : null,
     estimateModel: r['estimate_model'] != null ? String(r['estimate_model']) : null,
     // JSONB arrives from the Data API as a string; a malformed one must not
@@ -596,6 +612,7 @@ function rowToWorkItem(r: Record<string, unknown>): WorkItem {
     // rather than throwing — the caller then re-estimates, which is safe.
     estimateForecast: parseForecast(r['estimate_forecast']),
     estimateReviewedBy: r['estimate_reviewed_by'] != null ? String(r['estimate_reviewed_by']) : null,
+    estimateReviewedByName: r['estimate_reviewed_by_name'] != null ? String(r['estimate_reviewed_by_name']) : null,
     estimateReviewedAt: r['estimate_reviewed_at'] != null ? utcIso(r['estimate_reviewed_at']) : null,
     prUrl: r['pr_url'] != null ? String(r['pr_url']) : null,
     prStatus: r['pr_status'] != null ? (r['pr_status'] as PrStatus) : null,
@@ -872,11 +889,11 @@ export async function createWorkItem(data: CreateWorkItemInput): Promise<WorkIte
     sprintId: data.sprintId ?? null,
     estimatedCostUsd: data.estimatedCostUsd ?? null,
     // Same as the Aurora path: a new item has no estimator.
-    estimatedBy: null,
+    estimatedBy: null, estimatedByName: null,
     estimatedAt: null,
     estimateModel: null,
     estimateForecast: null,
-    estimateReviewedBy: null,
+    estimateReviewedBy: null, estimateReviewedByName: null,
     estimateReviewedAt: null,
     prUrl: null,
     prStatus: null,
@@ -1015,6 +1032,7 @@ export async function recordWorkItemEstimate(
     const item = mockWorkItems().find((i) => i.id === id);
     if (item) {
       item.estimatedBy = actor;
+      item.estimatedByName = displayNameForSubject(actor);
       item.estimatedAt = clock.nowIso();
       item.estimateModel = model;
       item.estimateForecast = forecast;
@@ -1023,6 +1041,7 @@ export async function recordWorkItemEstimate(
       // different number, and carrying that approval forward would attribute an
       // opinion they never gave.
       item.estimateReviewedBy = null;
+      item.estimateReviewedByName = null;
       item.estimateReviewedAt = null;
     }
     return;
@@ -1067,6 +1086,7 @@ export async function reviewWorkItemEstimate(id: string, actor: string): Promise
     const item = mockWorkItems().find((i) => i.id === id);
     if (!item || !item.estimatedAt) return false;
     item.estimateReviewedBy = actor;
+    item.estimateReviewedByName = displayNameForSubject(actor);
     item.estimateReviewedAt = clock.nowIso();
     return true;
   }

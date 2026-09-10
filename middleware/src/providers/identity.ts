@@ -315,3 +315,16 @@ export async function setGrants(userId: string, grants: Grants): Promise<void> {
     }
   }
 }
+
+/**
+ * Session subject -> display name, for surfaces that store a subject and must
+ * render a person. Synchronous and fallback-only on purpose: this is used by
+ * the MOCK write paths, which cannot await, and the Aurora paths resolve the
+ * same thing with a LEFT JOIN on app_users instead. Returns null rather than a
+ * placeholder so the caller can fall back to the raw subject — printing
+ * "unknown" would erase an attribution that genuinely exists.
+ */
+export function displayNameForSubject(subject: string | null | undefined): string | null {
+  if (!subject) return null;
+  return FALLBACK_USERS.find((u) => u.id === subject)?.displayName ?? null;
+}
