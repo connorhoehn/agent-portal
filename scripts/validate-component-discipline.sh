@@ -122,7 +122,12 @@ for path in sys.argv[1:]:
         continue
     for m in tag_rx.finditer(s):
         end = tag_end(s, m.start())
-        if end > 0 and re.search(r'\sclassName=', s[m.start():end]):
+        # `className=` OR `style=`. A raw <div style={{...}}> with no class is
+        # just as hand-rolled as one with a class, and counting only the first
+        # was this counter's THIRD blind spot — after `[^>]*?` not crossing an
+        # arrow function, and the style counter ignoring hoisted consts. It was
+        # hiding 16.
+        if end > 0 and re.search(r'\s(className|style)=', s[m.start():end]):
             total += 1
 print(total, end='')
 PY
@@ -178,18 +183,18 @@ area_files() { # area_files <dir>
 # file has ever made, and it reflects counting that was always wrong rather than
 # work that regressed.
 AREAS=(
-  "portal/src:0:5:29"
+  "portal/src:0:4:26"
   "portal/src/components/runs:0:0:0"
   "portal/src/components/codebases:0:0:0"
   "portal/src/components/scores:0:0:4"
   "portal/src/components/marketplace:0:0:0"
   "portal/src/components/ingest:0:0:4"
-  "portal/src/components/canary:0:3:20"
+  "portal/src/components/canary:0:0:7"
   "portal/src/components/org-graph:0:2:6"
-  "portal/src/components/shell:0:1:4"
+  "portal/src/components/shell:0:1:1"
   "portal/src/components/knowledge:0:0:0"
   "portal/src/components/sdlc:0:0:0"
-  "portal/src/components/kb:0:1:12"
+  "portal/src/components/kb:0:0:2"
   "portal/src/components/observability:0:0:2"
   "portal/src/pages:0:0:0"
 )

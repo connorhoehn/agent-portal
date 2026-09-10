@@ -1,6 +1,4 @@
-import {
-  Button, Card, Checkbox, Chip, EntityCell, Inline, MetaLine, Stack, Table, TableBody, TableHead, TableRow, TableTd, TableTh,
-} from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, Checkbox, Chip, EntityCell, Inline, MetaLine, Stack, Table, TableBody, TableHead, TableRow, TableTd, TableTh } from '@connorhoehnslalom/ui-components/shared';
 import { ScoreEntry } from './types';
 import { formatScore } from './scoresFormat';
 
@@ -103,7 +101,7 @@ export function Leaderboard({ entries, selectedId, onSelect, deptColors, rankedB
                       runtime key. */}
                   <MetaLine
                     size="sm"
-                    items={[<span key="d" style={{ color: deptColors[s.department] ?? 'var(--color-text-secondary)' }}>{s.department}</span>]}
+                    items={[<Inline as="span" gap="none" key="d" style={{ color: deptColors[s.department] ?? 'var(--color-text-secondary)' }}>{s.department}</Inline>]}
                   />
                 </TableTd>
                 <TableTd className="text-right text-xs text-text-secondary">
