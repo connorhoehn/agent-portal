@@ -21,8 +21,10 @@
 // toast and a link to /observability/harness — keeps the modal context-free.
 
 import { useMemo, useRef, useState, useEffect } from 'react';
-import type { CSSProperties } from 'react';
-import { Modal } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button, Chip, FormField, Inline, InlineAlert, Input, MetaLine, Modal,
+  SectionLabel, Stack, Textarea,
+} from '@connorhoehnslalom/ui-components/shared';
 
 export interface SaveAsTestCaseSource {
   invocationId: string;
@@ -156,103 +158,90 @@ export function SaveAsTestCaseModal({
       title="Save as test case"
       maxWidth={560}
       footer={
-        <div style={modalFooter}>
-          <button
-            type="button"
-            onClick={onClose}
-            style={btnSecondary}
-            disabled={submitting}
-          >
+        <Inline gap="sm" justify="end" wrap={false} className="border-t border-border px-4 py-2.5">
+          <Button variant="secondary" size="sm" onClick={onClose} disabled={submitting}>
             Cancel
-          </button>
-          <button
-            type="button"
-            onClick={submit}
-            style={{ ...btnPrimary, opacity: submitting ? 0.6 : 1 }}
-            disabled={submitting}
-          >
+          </Button>
+          <Button variant="primary" size="sm" onClick={submit} disabled={submitting}>
             {submitting ? 'Saving…' : 'Save test case'}
-          </button>
-        </div>
+          </Button>
+        </Inline>
       }
     >
-      <div style={modalBody}>
-        <p style={modalHint}>
-          Captures this invocation as a regression test case in the harness suite.
-          Subsequent harness runs will replay it and judge the response.
-        </p>
-
-        <label style={modalFieldLabel}>TEST ID</label>
-        <input
-          type="text"
-          value={testId}
-          onChange={(e) => setTestId(e.target.value)}
-          style={modalInput}
-          disabled={submitting}
-          spellCheck={false}
+      <Stack gap="sm" className="p-4 overflow-y-auto text-[12px]">
+        <MetaLine
+          size="xs"
+          className="italic"
+          items={['Captures this invocation as a regression test case in the harness suite. '
+            + 'Subsequent harness runs will replay it and judge the response.']}
         />
 
-        <div style={twoCol}>
-          <div>
-            <label style={modalFieldLabel}>AGENT (locked)</label>
-            <input
-              type="text"
-              value={invocation.agentId}
-              readOnly
-              disabled
-              style={{ ...modalInput, opacity: 0.6 }}
-            />
-          </div>
-          <div>
-            <label style={modalFieldLabel}>TEMPLATE ID</label>
-            <input
-              type="text"
-              value={templateId}
-              onChange={(e) => setTemplateId(e.target.value)}
-              style={modalInput}
-              disabled={submitting}
-              placeholder="(optional)"
-              spellCheck={false}
-            />
-          </div>
-        </div>
+        {/* FormField binds each label to its control — the markup this replaces
+            used bare <label> elements with no htmlFor, so clicking one did
+            nothing and a screen reader got no association. `labelId` is dropped
+            from every bag: it is not a DOM prop. */}
+        <FormField label="Test ID">
+          {({ labelId: _l, ...w }) => (
+            <Input {...w} type="text" size="sm" value={testId}
+              onChange={(e) => setTestId(e.target.value)}
+              disabled={submitting} spellCheck={false} className="w-full" />
+          )}
+        </FormField>
 
-        <label style={modalFieldLabel}>PROMPT</label>
-        <textarea
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          style={modalTextarea}
-          rows={6}
-          disabled={submitting}
-        />
+        <Inline gap="sm" align="start" wrap={false}>
+          <FormField label="Agent (locked)" className="flex-1 min-w-0">
+            {({ labelId: _l, ...w }) => (
+              <Input {...w} type="text" size="sm" value={invocation.agentId}
+                readOnly disabled className="w-full opacity-60" />
+            )}
+          </FormField>
+          <FormField label="Template ID" className="flex-1 min-w-0">
+            {({ labelId: _l, ...w }) => (
+              <Input {...w} type="text" size="sm" value={templateId}
+                onChange={(e) => setTemplateId(e.target.value)}
+                disabled={submitting} placeholder="(optional)" spellCheck={false} className="w-full" />
+            )}
+          </FormField>
+        </Inline>
 
-        <label style={modalFieldLabel}>REFERENCE OUTPUT (optional)</label>
-        <textarea
-          value={referenceOutput}
-          onChange={(e) => setReferenceOutput(e.target.value)}
-          style={modalTextarea}
-          rows={5}
-          disabled={submitting}
-          placeholder="What does a known-good answer look like?"
-        />
+        <FormField label="Prompt">
+          {({ labelId: _l, ...w }) => (
+            <Textarea {...w} value={prompt} rows={6} disabled={submitting}
+              onChange={(e) => setPrompt(e.target.value)} className="w-full font-mono text-[11.5px]" />
+          )}
+        </FormField>
 
-        <label style={modalFieldLabel}>EXPECTED TAGS</label>
-        <div style={tagRow}>
+        <FormField label="Reference output" hint="optional">
+          {({ labelId: _l, ...w }) => (
+            <Textarea {...w} value={referenceOutput} rows={5} disabled={submitting}
+              onChange={(e) => setReferenceOutput(e.target.value)}
+              placeholder="What does a known-good answer look like?"
+              className="w-full font-mono text-[11.5px]" />
+          )}
+        </FormField>
+
+        <SectionLabel>Expected tags</SectionLabel>
+        {/* No tag-input primitive exists and Chip has no remove affordance, so
+            this row is composed from Chip + a ghost Button. Filed upstream. */}
+        <Inline gap="xs" wrap className="border border-border rounded px-1.5 py-1 bg-bg min-h-[30px]">
           {tags.map((t) => (
-            <span key={t} style={tagPill}>
+            <Chip key={t} tone="neutral" size="xs">
               {t}
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-1 p-0 leading-none text-text-tertiary"
                 onClick={() => removeTag(t)}
-                style={tagPillRemove}
                 aria-label={`remove ${t}`}
                 disabled={submitting}
               >
                 ×
-              </button>
-            </span>
+              </Button>
+            </Chip>
           ))}
-          <input
+          <Input
             type="text"
+            size="sm"
             value={tagInput}
             onChange={(e) => setTagInput(e.target.value)}
             onKeyDown={(e) => {
@@ -262,186 +251,48 @@ export function SaveAsTestCaseModal({
               }
             }}
             onBlur={addTag}
-            style={tagInputStyle}
             disabled={submitting}
             placeholder="type tag + enter"
             spellCheck={false}
+            aria-label="Add an expected tag"
+            className="flex-1 min-w-[100px] border-none bg-transparent"
           />
-        </div>
+        </Inline>
 
-        <div style={twoCol}>
-          <div>
-            <label style={modalFieldLabel}>PASS THRESHOLD</label>
-            <input
-              type="number"
-              min={0}
-              max={1}
-              step={0.05}
-              value={passThreshold}
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                if (Number.isFinite(v)) {
-                  setPassThreshold(Math.max(0, Math.min(1, v)));
-                }
-              }}
-              style={modalInput}
-              disabled={submitting}
-            />
-          </div>
-          <div>
-            <label style={modalFieldLabel}>NOTES (auto)</label>
-            <input
-              type="text"
-              value={notes}
-              readOnly
-              disabled
-              style={{ ...modalInput, opacity: 0.6, fontSize: 10.5 }}
-            />
-          </div>
-        </div>
+        <Inline gap="sm" align="start" wrap={false}>
+          <FormField label="Pass threshold" className="flex-1 min-w-0">
+            {({ labelId: _l, ...w }) => (
+              <Input
+                {...w}
+                type="number"
+                size="sm"
+                min={0}
+                max={1}
+                step={0.05}
+                value={passThreshold}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  if (Number.isFinite(v)) {
+                    setPassThreshold(Math.max(0, Math.min(1, v)));
+                  }
+                }}
+                disabled={submitting}
+                className="w-full"
+              />
+            )}
+          </FormField>
+          <FormField label="Notes" hint="auto" className="flex-1 min-w-0">
+            {({ labelId: _l, ...w }) => (
+              <Input {...w} type="text" value={notes} readOnly disabled size="sm"
+                className="w-full opacity-60 text-[10.5px]" />
+            )}
+          </FormField>
+        </Inline>
 
-        {error && <div style={errorBox}>{error}</div>}
-      </div>
+        {error && <InlineAlert tone="error">{error}</InlineAlert>}
+      </Stack>
     </Modal>
   );
 }
-
-const modalBody: CSSProperties = {
-  padding: 16,
-  overflowY: 'auto',
-  fontSize: 12,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 8,
-};
-
-const modalFooter: CSSProperties = {
-  borderTop: '1px solid var(--color-border)',
-  padding: '10px 16px',
-  display: 'flex',
-  justifyContent: 'flex-end',
-  gap: 8,
-};
-
-const modalHint: CSSProperties = {
-  margin: 0,
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  fontStyle: 'italic',
-};
-
-const modalFieldLabel: CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
-  color: 'var(--color-text-tertiary)',
-  letterSpacing: 0.5,
-  textTransform: 'uppercase',
-  marginTop: 4,
-};
-
-const modalInput: CSSProperties = {
-  fontFamily: 'inherit',
-  fontSize: 12,
-  padding: '6px 8px',
-  border: '1px solid var(--color-border)',
-  borderRadius: 4,
-  background: 'var(--color-bg)',
-  color: 'var(--color-text-primary)',
-  width: '100%',
-  boxSizing: 'border-box',
-};
-
-const modalTextarea: CSSProperties = {
-  fontFamily: '"Fira Code", "Cascadia Code", monospace',
-  fontSize: 11.5,
-  padding: '8px 10px',
-  border: '1px solid var(--color-border)',
-  borderRadius: 4,
-  background: 'var(--color-bg)',
-  color: 'var(--color-text-primary)',
-  resize: 'vertical',
-  width: '100%',
-  boxSizing: 'border-box',
-};
-
-const twoCol: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '1fr 1fr',
-  gap: 10,
-};
-
-const tagRow: CSSProperties = {
-  display: 'flex',
-  flexWrap: 'wrap',
-  alignItems: 'center',
-  gap: 6,
-  border: '1px solid var(--color-border)',
-  borderRadius: 4,
-  padding: '4px 6px',
-  background: 'var(--color-bg)',
-  minHeight: 30,
-};
-
-const tagPill: CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 4,
-  fontSize: 11,
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 999,
-  padding: '2px 8px',
-  color: 'var(--color-text-secondary)',
-};
-
-const tagPillRemove: CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  fontSize: 14,
-  lineHeight: 1,
-  color: 'var(--color-text-tertiary)',
-  cursor: 'pointer',
-  padding: 0,
-};
-
-const tagInputStyle: CSSProperties = {
-  flex: 1,
-  minWidth: 100,
-  border: 'none',
-  outline: 'none',
-  fontSize: 12,
-  background: 'transparent',
-  color: 'var(--color-text-primary)',
-};
-
-const errorBox: CSSProperties = {
-  padding: '6px 10px',
-  background: 'var(--color-danger-bg, #fef2f2)',
-  border: '1px solid var(--color-danger, #ef4444)',
-  borderRadius: 4,
-  color: 'var(--color-danger, #ef4444)',
-  fontSize: 11.5,
-};
-
-const btnPrimary: CSSProperties = {
-  padding: '6px 14px',
-  fontSize: 12,
-  fontWeight: 500,
-  background: 'var(--color-primary, #6366f1)',
-  color: '#fff',
-  border: '1px solid var(--color-primary, #6366f1)',
-  borderRadius: 4,
-  cursor: 'pointer',
-};
-
-const btnSecondary: CSSProperties = {
-  padding: '6px 14px',
-  fontSize: 12,
-  background: 'var(--color-surface)',
-  color: 'var(--color-text-secondary)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 4,
-  cursor: 'pointer',
-};
 
 export default SaveAsTestCaseModal;

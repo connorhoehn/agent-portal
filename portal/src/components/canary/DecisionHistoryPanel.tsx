@@ -2,17 +2,22 @@
 // first. Collapsible when empty (or manually toggled).
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import type { CSSProperties } from 'react';
+import {
+  Button, Chip, Inline, MetaLine, SectionLabel, Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useCanaryStore } from './canaryStore.js';
 import type { ControllerAction, Decision } from './types.js';
 
-const ACTION_COLORS: Record<ControllerAction, { bg: string; fg: string }> = {
-  PROMOTE:               { bg: 'var(--color-success-bg)',  fg: 'var(--color-success)' },
-  ROLLBACK:              { bg: 'var(--color-danger-bg)',   fg: 'var(--color-danger)' },
-  HOLD:                  { bg: 'var(--color-warning-bg)',  fg: 'var(--color-warning)' },
-  SKIPPED_OVERRIDE:      { bg: '#e0e7ff', fg: '#3730a3' },
-  SKIPPED_COOLDOWN:      { bg: 'var(--color-border)',      fg: 'var(--color-text-secondary)' },
-  SKIPPED_NO_SAMPLES:    { bg: 'var(--color-border)',      fg: 'var(--color-text-secondary)' },
+// A Chip tone per action, replacing a bg/fg colour pair each. SKIPPED_OVERRIDE
+// was a literal indigo with no tone to match; `accent` is the closest the scale
+// offers and it is the one entry that changes shade here.
+const ACTION_TONE: Record<ControllerAction, 'success' | 'danger' | 'warning' | 'accent' | 'neutral'> = {
+  PROMOTE: 'success',
+  ROLLBACK: 'danger',
+  HOLD: 'warning',
+  SKIPPED_OVERRIDE: 'accent',
+  SKIPPED_COOLDOWN: 'neutral',
+  SKIPPED_NO_SAMPLES: 'neutral',
 };
 
 function fmtTime(ts: string): string {
@@ -40,211 +45,108 @@ export function DecisionHistoryPanel(): React.ReactElement {
   const ordered: Decision[] = decisions.slice().reverse();
 
   return (
-    <div style={{ ...panelStyle, width: collapsed ? 44 : 320, transition: 'width 0.2s ease' }}>
-      <div
-        style={{ ...headerStyle, cursor: 'pointer', justifyContent: collapsed ? 'center' : 'space-between' }}
+    // The collapsed/expanded width is animated from state, so it stays a style;
+    // everything else about the panel is a class now.
+    <Stack
+      gap="none"
+      className="h-full bg-surface border-l border-border shrink-0 transition-[width] duration-200"
+      style={{ width: collapsed ? 44 : 320 }}
+    >
+      <Inline
+        gap="sm"
+        wrap={false}
+        justify={collapsed ? 'center' : 'between'}
+        className="px-3.5 py-2.5 border-b border-border cursor-pointer"
         onClick={() => setCollapsed((v) => !v)}
         title={collapsed ? 'Expand decision history' : 'Collapse'}
       >
         {collapsed ? (
-          <span style={{ fontSize: 13, color: 'var(--color-text-tertiary, #94a3b8)' }} title="Decision history">⟩</span>
+          <Inline as="span" gap="none" className="text-[13px] text-text-tertiary" title="Decision history">⟩</Inline>
         ) : (
           <>
-            <span style={titleStyle}>Decision history</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={countStyle}>{ordered.length}</span>
-              <span style={{ fontSize: 11, color: 'var(--color-text-tertiary, #94a3b8)' }}>⟨</span>
-            </div>
+            <Inline as="span" gap="none" className="text-[12px] font-semibold text-text-primary">
+              Decision history
+            </Inline>
+            <Inline gap="xs" wrap={false}>
+              <Chip tone="neutral" size="xs">{ordered.length}</Chip>
+              <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">⟨</Inline>
+            </Inline>
           </>
         )}
-      </div>
+      </Inline>
       {!collapsed && (
-        <div ref={scrollRef} style={listStyle}>
+        <Stack ref={scrollRef} gap="none" className="flex-1 overflow-y-auto py-2">
           {ordered.length === 0 ? (
-            <div style={emptyStyle}>
-              <p style={{ margin: '0 0 8px', lineHeight: 1.5 }}>
-                The controller compares rolling A/B judge scores and automatically adjusts traffic — PROMOTE shifts more to B, ROLLBACK pins back to A, HOLD waits for more data.
-              </p>
-              <p style={{ margin: 0, lineHeight: 1.5 }}>
-                Click <b>▶ Scenarios</b> in the toolbar, generate a set of people, then hit <b>Run all</b> to generate traffic and trigger decisions.
-              </p>
-            </div>
+            <Stack gap="sm" className="px-3.5 py-5 text-center">
+              <MetaLine
+                className="italic leading-normal"
+                items={['The controller compares rolling A/B judge scores and automatically adjusts '
+                  + 'traffic — PROMOTE shifts more to B, ROLLBACK pins back to A, HOLD waits for more data.']}
+              />
+              <MetaLine
+                className="italic leading-normal"
+                items={[<>Click <b>▶ Scenarios</b> in the toolbar, generate a set of people, then hit <b>Run all</b> to generate traffic and trigger decisions.</>]}
+              />
+            </Stack>
           ) : (
             ordered.map((d, i) => <DecisionRow key={`${d.ts}-${i}`} d={d} index={i} />)
           )}
-        </div>
+        </Stack>
       )}
-    </div>
+    </Stack>
   );
 }
 
 function DecisionRow({ d, index }: { d: Decision; index: number }): React.ReactElement {
   const [expanded, setExpanded] = useState(index === 0); // newest starts expanded
-  const palette = ACTION_COLORS[d.action];
   const toggle = useCallback(() => setExpanded(v => !v), []);
 
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      size="sm"
+      fullWidth
       onClick={toggle}
       aria-expanded={expanded}
-      style={{
-        ...rowStyle,
-        display: 'flex', flexDirection: 'column', gap: 4,
-        width: '100%', textAlign: 'left',
-        background: 'transparent', border: 'none',
-        borderBottom: '1px solid var(--color-border, #e2e8f0)',
-        cursor: 'pointer', padding: '8px 14px',
-      }}
+      className="flex-col items-start gap-1 justify-start text-left px-3.5 py-2 border-b border-border rounded-none"
     >
-      <div style={rowHeaderStyle}>
-        <span style={timeStyle}>{fmtTime(d.ts)}</span>
-        <span style={{ ...chipStyle, background: palette.bg, color: palette.fg }}>
-          {d.action}
-        </span>
-        <span aria-hidden="true" style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--color-text-tertiary, #94a3b8)' }}>
+      <Inline gap="sm" justify="between" wrap={false} className="w-full">
+        <Inline as="span" gap="none" className="text-[10.5px] text-text-tertiary tabular-nums">
+          {fmtTime(d.ts)}
+        </Inline>
+        <Chip tone={ACTION_TONE[d.action]} size="xs">{d.action}</Chip>
+        <Inline as="span" gap="none" aria-hidden className="ml-auto text-[10px] text-text-tertiary">
           {expanded ? '▲' : '▼'}
-        </span>
-      </div>
-      <div style={transitionStyle}>
-        <span style={transitionNumStyle}>B {d.from}%</span>
-        <span style={arrowStyle}>→</span>
-        <span style={transitionNumStyle}>{d.to}%</span>
+        </Inline>
+      </Inline>
+      <Inline gap="xs" wrap={false} className="w-full text-[11px] text-text-secondary tabular-nums">
+        <Inline as="span" gap="none" className="font-medium">B {d.from}%</Inline>
+        <Inline as="span" gap="none" className="text-text-tertiary">→</Inline>
+        <Inline as="span" gap="none" className="font-medium">{d.to}%</Inline>
         {d.deltaScore !== undefined && (
-          <span style={deltaStyle} title="composite_b - composite_a">
-            Δ {d.deltaScore >= 0 ? '+' : ''}
-            {d.deltaScore.toFixed(2)}
-          </span>
+          <Inline as="span" gap="none" title="composite_b - composite_a"
+            className="ml-auto text-[10.5px] text-text-tertiary">
+            Δ {d.deltaScore >= 0 ? '+' : ''}{d.deltaScore.toFixed(2)}
+          </Inline>
         )}
-      </div>
+      </Inline>
       {expanded && (
-        <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ ...reasonStyle, WebkitLineClamp: undefined, display: 'block', overflow: 'visible', fontSize: 11.5, color: 'var(--color-text-secondary, #475569)', fontStyle: 'italic' }}>
+        <Stack gap="xs" className="mt-1 w-full">
+          <Inline as="span" gap="none" className="text-[11.5px] text-text-secondary italic leading-snug">
             {d.reason}
-          </div>
+          </Inline>
           {d.deltaScore !== undefined && (
-            <div style={{ fontSize: 10.5, color: 'var(--color-text-tertiary, #94a3b8)' }}>
-              Score delta (composite_b − composite_a): <b style={{ fontVariantNumeric: 'tabular-nums' }}>{d.deltaScore >= 0 ? '+' : ''}{d.deltaScore.toFixed(4)}</b>
-            </div>
+            <Inline as="span" gap="none" className="text-[10.5px] text-text-tertiary">
+              Score delta (composite_b − composite_a):{' '}
+              <b className="tabular-nums">{d.deltaScore >= 0 ? '+' : ''}{d.deltaScore.toFixed(4)}</b>
+            </Inline>
           )}
-          <div style={{ fontSize: 10, color: 'var(--color-text-tertiary, #94a3b8)', fontVariantNumeric: 'tabular-nums' }}>
+          <Inline as="span" gap="none" className="text-[10px] text-text-tertiary tabular-nums">
             {new Date(d.ts).toLocaleString()}
-          </div>
-        </div>
+          </Inline>
+        </Stack>
       )}
-    </button>
+    </Button>
   );
 }
 
-// ── Styles (mirrors AgentFlowPage drawer) ────────────────────────────────────
-
-const panelStyle: CSSProperties = {
-  width: 320,
-  height: '100%',
-  background: 'var(--color-surface, #fff)',
-  borderLeft: '1px solid var(--color-border, #e2e8f0)',
-  display: 'flex',
-  flexDirection: 'column',
-  flexShrink: 0,
-};
-
-const headerStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  padding: '10px 14px',
-  borderBottom: '1px solid var(--color-border, #e2e8f0)',
-};
-
-const titleStyle: CSSProperties = {
-  fontSize: 12,
-  fontWeight: 600,
-  color: 'var(--color-text-primary, #0f172a)',
-};
-
-const countStyle: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary, #94a3b8)',
-  background: 'var(--color-bg, #f8fafc)',
-  border: '1px solid var(--color-border, #e2e8f0)',
-  padding: '1px 6px',
-  borderRadius: 8,
-};
-
-const listStyle: CSSProperties = {
-  flex: 1,
-  overflowY: 'auto',
-  padding: '8px 0',
-};
-
-const emptyStyle: CSSProperties = {
-  padding: '20px 14px',
-  fontSize: 12,
-  color: 'var(--color-text-tertiary, #94a3b8)',
-  fontStyle: 'italic',
-  textAlign: 'center',
-};
-
-const rowStyle: CSSProperties = {
-  padding: '8px 14px',
-  borderBottom: '1px solid var(--color-border, #e2e8f0)',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 4,
-};
-
-const rowHeaderStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: 8,
-};
-
-const timeStyle: CSSProperties = {
-  fontSize: 10.5,
-  color: 'var(--color-text-tertiary, #94a3b8)',
-  fontVariantNumeric: 'tabular-nums',
-};
-
-const chipStyle: CSSProperties = {
-  padding: '1px 6px',
-  fontSize: 10,
-  fontWeight: 600,
-  borderRadius: 4,
-  letterSpacing: '0.03em',
-};
-
-const transitionStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  fontSize: 11,
-  color: 'var(--color-text-secondary, #475569)',
-  fontVariantNumeric: 'tabular-nums',
-};
-
-const transitionNumStyle: CSSProperties = {
-  fontWeight: 500,
-};
-
-const arrowStyle: CSSProperties = {
-  color: 'var(--color-text-tertiary, #94a3b8)',
-};
-
-const deltaStyle: CSSProperties = {
-  marginLeft: 'auto',
-  fontSize: 10.5,
-  color: 'var(--color-text-tertiary, #94a3b8)',
-  fontVariantNumeric: 'tabular-nums',
-};
-
-const reasonStyle: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-secondary, #475569)',
-  lineHeight: 1.4,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  display: '-webkit-box',
-  WebkitLineClamp: 2,
-  WebkitBoxOrient: 'vertical',
-};
