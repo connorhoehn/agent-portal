@@ -9,7 +9,15 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import {
-  Card, Chip, EntityCell, Inline, InlineAlert, MetaLine, SectionLabel, Stack,
+  Card,
+  Chip,
+  EntityCell,
+  Inline,
+  InlineAlert,
+  Link as ExternalLink,
+  MetaLine,
+  SectionLabel,
+  Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { readDegraded } from '../../lib/degraded';
 import { useFetch } from '../../hooks/useFetch';
@@ -230,7 +238,7 @@ export function AgentsRailCard({ activity }: { activity: InitiativeAgentActivity
             <Inline key={r.id} gap="sm" align="center" wrap className="px-3 py-1.5">
               <Chip tone="info" size="xs" dot="pulse">running now</Chip>
               <MetaLine size="xs" items={[r.trigger]} />
-              <span className="flex-1" />
+              <Inline as="span" gap="none" className="flex-1" />
               {/* Computers is another hr-admin route — same reasoning as the
                   bot links above. */}
               {canManageBots && r.outcome?.boxId && (
@@ -291,7 +299,7 @@ export function OutcomesRailCard({ activity }: { activity: InitiativeAgentActivi
               <Chip tone={RUN_STATUS_TONE[r.status]} size="xs" dot={r.status === 'running' ? 'pulse' : undefined}>
                 {r.status}
               </Chip>
-              <span className="flex-1" />
+              <Inline as="span" gap="none" className="flex-1" />
               <CostVsEstimate costUsd={r.costUsd} estimate={runEstimate(r)} />
               <MetaLine
                 size="xs"
@@ -316,14 +324,13 @@ export function OutcomesRailCard({ activity }: { activity: InitiativeAgentActivi
                   )
                 )}
                 {r.outcome?.prUrl && (
-                  <a
+                  <ExternalLink
+                    external
                     href={r.outcome.prUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary no-underline hover:underline inline-flex items-center gap-0.5"
+                    className="inline-flex items-center gap-0.5"
                   >
-                    PR <span aria-hidden="true" className="text-[9px]">↗</span>
-                  </a>
+                    PR <Inline as="span" gap="none" aria-hidden className="text-[9px]">↗</Inline>
+                  </ExternalLink>
                 )}
                 {r.outcome?.boxId && (
                   canManageBots ? (

@@ -7,6 +7,7 @@ import {
   Inline,
   InlinePlaceholder,
   Input,
+  Link as ExternalLink,
   MetaLine,
   Stack,
   Table,
@@ -24,7 +25,6 @@ import { SESSIONS_URL, closeSession, launchSession } from './browserApi';
 import { closedSessions, isBlankUrl, openSessions, sessionTone } from './browserFormat';
 import type { BrowserSession } from './types';
 import { T } from '../Text';
-import { ExternalLink } from '../ExternalLinkFrame';
 
 const MAX_PAST_ROWS = 20;
 
@@ -93,7 +93,7 @@ export function SessionsTab() {
                       {isBlankUrl(session.currentUrl) ? (
                         <T className="text-text-tertiary">—</T>
                       ) : (
-                        <ExternalLink href={session.currentUrl}>{session.currentUrl}</ExternalLink>
+                        <ExternalLink external href={session.currentUrl}>{session.currentUrl}</ExternalLink>
                       )}
                     </TableTd>
                     <TableTd className="text-right tabular-nums whitespace-nowrap">{session.requestCount}</TableTd>

@@ -11,6 +11,7 @@ import {
   EmptyState,
   IconButton,
   Inline,
+  Link as ExternalLink,
   LoadingState,
   MetaLine,
   Select,
@@ -19,7 +20,6 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { escapeNestReducer, INITIAL_ESCAPE_NEST_STATE, shouldHostHandleEscape, topEscapeLayer } from './escapeNesting';
-import { ExternalLink } from './ExternalLinkFrame';
 import { T } from './Text';
 import { toastError, toastSuccess } from '../../lib/toastStore';
 import { sprintItemUrl, sprintItemsUrl } from './sprintForm';
@@ -159,7 +159,7 @@ function WorkItemCard({ item, isMine, canRemove, removing, onRemove }: {
             item.estimatedCostUsd != null ? `est ${usd(item.estimatedCostUsd)}` : null,
             item.assigneeName,
             item.prUrl
-              ? <ExternalLink key="pr" href={item.prUrl} className="text-primary">PR</ExternalLink>
+              ? <ExternalLink external key="pr" href={item.prUrl} className="text-primary">PR</ExternalLink>
               : null,
           ]}
         />

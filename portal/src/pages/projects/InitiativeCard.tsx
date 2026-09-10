@@ -1,7 +1,16 @@
-import { AvatarGroup, Card, Chip, Inline, ProgressBar, Spinner, Stack, StatusDot } from '@connorhoehnslalom/ui-components/shared';
+import {
+  AvatarGroup,
+  Card,
+  Chip,
+  Inline,
+  Link as ExternalLink,
+  ProgressBar,
+  Spinner,
+  Stack,
+  StatusDot,
+} from '@connorhoehnslalom/ui-components/shared';
 import { relativeTime } from '../../lib/relativeTime';
 import { githubRepoUrl } from '../../lib/repoLink';
-import { ExternalLink } from './ExternalLinkFrame';
 import { ProjectStatusChip } from './ProjectStatusChip';
 import { T } from './Text';
 import {
@@ -135,7 +144,7 @@ export function InitiativeCard({ project, onClick }: { project: ProjectSummary; 
         {repoUrl && (
           // The card itself navigates to the detail page, so clicking the
           // repo link must not also open the initiative.
-          <ExternalLink
+          <ExternalLink external
             href={repoUrl}
             onClick={e => e.stopPropagation()}
             title={project.repoFullName ?? undefined}
