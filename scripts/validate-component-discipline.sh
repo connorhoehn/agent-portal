@@ -77,7 +77,7 @@ count_re() { # count_re <regex> <files...> — single-line patterns only
 # its own line. A budget guarding a number that can be gamed by reformatting is
 # not a budget.
 #
-# So the raw count is multi-line aware. `<button` and `style={{` stay on grep:
+# So the raw count is multi-line aware. `<button` and `style={` stay on grep:
 # both are single tokens with no such blind spot.
 #
 # (The assessment tenant's own gate has the same line-based regex. Its zero was
@@ -164,20 +164,33 @@ area_files() { # area_files <dir>
 # the narrower entries exist so a regression names the area that caused it.
 # Raw counts nest (an entry covers its subdirectories), which is deliberate —
 # converting a leaf lowers both its own budget and its parent's.
+# STYLE COUNTING, and why the budgets below jumped once.
+#
+# This counted `style={{` — inline object literals only. Hoisting the identical
+# object to a module-level const and writing `style={rowStyle}` walked straight
+# past it, which is the same evasion ui-components' own CLAUDE.md records
+# against its demo guard: "a rule you can evade by naming a variable is not a
+# rule". It was hiding 59 props, 33 of them in two observability files that this
+# gate had already reported as nearly clean.
+#
+# It counts every `style=` prop now. The style budgets were re-baselined UPWARD
+# once, here, to the honest number — the only upward move any budget in this
+# file has ever made, and it reflects counting that was always wrong rather than
+# work that regressed.
 AREAS=(
-  "portal/src:0:21:168"
+  "portal/src:0:17:192"
   "portal/src/components/runs:0:0:0"
   "portal/src/components/codebases:0:0:0"
   "portal/src/components/scores:0:0:4"
   "portal/src/components/marketplace:0:0:0"
   "portal/src/components/ingest:0:1:58"
-  "portal/src/components/canary:0:3:9"
+  "portal/src/components/canary:0:3:20"
   "portal/src/components/org-graph:2:6:6"
-  "portal/src/components/shell:0:1:11"
+  "portal/src/components/shell:0:1:12"
   "portal/src/components/knowledge:0:0:0"
   "portal/src/components/sdlc:0:0:0"
-  "portal/src/components/kb:0:3:54"
-  "portal/src/components/observability:0:4:3"
+  "portal/src/components/kb:0:3:57"
+  "portal/src/components/observability:0:0:2"
   "portal/src/pages:0:0:0"
 )
 
@@ -200,13 +213,13 @@ for entry in "${AREAS[@]}"; do
   fi
   n_raw=$(count_raw "${files[@]}")
   n_btn=$(count_re '<button' "${files[@]}")
-  n_sty=$(count_re 'style=\{\{' "${files[@]}")
+  n_sty=$(count_re 'style=\{' "${files[@]}")
   label="${dir#portal/src/}"; [ "$label" = "portal/src" ] && label="portal/src (all)"
 
   over=0
   [ "$n_raw" -le "$b_raw" ] || { fail "$label: $n_raw raw styled elements > budget $b_raw"; over=1; }
   [ "$n_btn" -le "$b_btn" ] || { fail "$label: $n_btn raw <button> > budget $b_btn (use Button/IconButton/SelectableCard)"; over=1; }
-  [ "$n_sty" -le "$b_sty" ] || { fail "$label: $n_sty inline style={{}} > budget $b_sty"; over=1; }
+  [ "$n_sty" -le "$b_sty" ] || { fail "$label: $n_sty style= props > budget $b_sty"; over=1; }
   if [ "$over" = 1 ]; then
     for f in "${files[@]}"; do
       c=$(count_raw "$f")
@@ -259,7 +272,7 @@ if [ "$REPORT" = 1 ]; then
     n=$(count_raw "${files[@]}")
     d=$(count_re '<div( [^>]*)?className=' "${files[@]}")
     b=$(count_re '<button' "${files[@]}")
-    s=$(count_re 'style=\{\{' "${files[@]}")
+    s=$(count_re 'style=\{' "${files[@]}")
     [ "$n" = 0 ] && [ "$s" = 0 ] && continue
     printf '  %-34s %5s %5s %5s %5s\n' "${dir#portal/src/}" "$n" "$d" "$b" "$s"
   done < <(find "$SRC" -type d -not -path '*/node_modules/*' | sort)

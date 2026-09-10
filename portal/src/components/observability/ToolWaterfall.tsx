@@ -11,7 +11,9 @@
 // renders an empty-state message.
 
 import { useState } from 'react';
-import type { CSSProperties } from 'react';
+import {
+  Button, EmptyState, Inline, MetaLine, SectionLabel, Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 
 export interface ToolCall {
   toolCallId: string;
@@ -47,9 +49,7 @@ export function ToolWaterfall({ toolCalls }: Props) {
   const calls = Array.isArray(toolCalls) ? toolCalls : [];
 
   if (calls.length === 0) {
-    return (
-      <div style={empty}>No tool calls recorded for this invocation.</div>
-    );
+    return <EmptyState size="sm" title="No tool calls recorded for this invocation." />;
   }
 
   // Compute the overall time span. Defensive: parse may NaN.
@@ -78,40 +78,48 @@ export function ToolWaterfall({ toolCalls }: Props) {
     });
 
   return (
-    <div style={container}>
-      <div style={modeRow}>
-        <button
-          type="button"
+    // The markup this replaces used `gridTemplateColumns: '140px 1fr 80px'`.
+    // Fixed / flexible / fixed is what flex does natively, so the axis and bar
+    // rows are Inline with a w-[140px] gutter, a flex-1 track and a w-20
+    // duration — no grid needed and no style object.
+    <Stack gap="xs">
+      <Inline gap="xs" wrap className="mb-2">
+        <Button
+          variant={mode === 'timeline' ? 'primary' : 'secondary'}
+          size="sm"
           onClick={() => setMode('timeline')}
-          style={modeBtn(mode === 'timeline')}
           title="Positions bars on real time. Gaps between bars = agent thinking time between tool calls."
         >
           By time
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant={mode === 'duration' ? 'primary' : 'secondary'}
+          size="sm"
           onClick={() => setMode('duration')}
-          style={modeBtn(mode === 'duration')}
           title="Each bar starts at 0; width scaled to longest call. Use when you only care about which tool was slow."
         >
           By duration
-        </button>
-        <span style={modeHint}>
-          {mode === 'timeline'
+        </Button>
+        <MetaLine
+          size="xs"
+          className="italic"
+          items={[mode === 'timeline'
             ? 'Bars positioned on real time — gaps = agent deliberation.'
-            : 'Bars normalized to longest call — pure duration ranking.'}
-        </span>
-      </div>
-      <div style={axisRow}>
-        <div style={axisGutter} />
-        <div style={axisTrack}>
-          <span style={axisLabelLeft}>0ms</span>
-          <span style={axisLabelRight}>
+            : 'Bars normalized to longest call — pure duration ranking.']}
+        />
+      </Inline>
+
+      <Inline gap="sm" wrap={false}>
+        <Inline gap="none" className="w-[140px] shrink-0" />
+        <Inline gap="none" className="relative flex-1 h-3 border-t border-dashed border-border">
+          <SectionLabel className="absolute left-0">0ms</SectionLabel>
+          <SectionLabel className="absolute right-0">
             {fmtDur(mode === 'timeline' ? totalSpanMs : maxDurationMs)}
-          </span>
-        </div>
-        <div style={axisDuration}>Duration</div>
-      </div>
+          </SectionLabel>
+        </Inline>
+        <SectionLabel className="w-20 shrink-0 text-right">Duration</SectionLabel>
+      </Inline>
+
       {ordered.map(({ call, start, end }) => {
         const safeStart = Number.isFinite(start) ? start : t0;
         const safeEnd = Number.isFinite(end) ? end : safeStart;
@@ -128,9 +136,6 @@ export function ToolWaterfall({ toolCalls }: Props) {
         }
         // Even short calls get a small visible width so the bar is selectable.
         const widthPct = Math.max(rawPct, 0.5);
-        const bg = call.errored
-          ? 'var(--color-danger, #ef4444)'
-          : 'var(--color-success, #16a34a)';
         // Show label inside bar if width is decently large; otherwise outside.
         const labelInside = widthPct >= 18;
         const title = call.errored
@@ -138,186 +143,53 @@ export function ToolWaterfall({ toolCalls }: Props) {
           : `${call.toolName} (${fmtDur(call.durationMs)})`;
 
         return (
-          <div key={call.toolCallId} style={barRow} title={title}>
-            <div style={gutter} title={call.toolName}>
+          <Inline key={call.toolCallId} gap="sm" wrap={false} className="h-6 text-[11px]" title={title}>
+            <Inline
+              as="span"
+              gap="none"
+              title={call.toolName}
+              className="w-[140px] shrink-0 font-mono text-[11px] text-text-secondary truncate"
+            >
               {call.toolName}
-            </div>
-            <div style={track}>
-              <div
-                style={{
-                  ...bar,
-                  background: bg,
-                  left: `${leftPct}%`,
-                  width: `${widthPct}%`,
-                }}
+            </Inline>
+            <Inline gap="none" className="relative flex-1 h-[18px] bg-surface border border-border rounded-[3px] overflow-hidden">
+              {/* left/width are percentages computed per call, and the colour
+                  is pass/fail — all runtime, so they stay inline. */}
+              <Inline
+                gap="none"
+                className={`absolute inset-y-0 rounded-sm px-1.5 min-w-[2px] ${call.errored ? 'bg-danger' : 'bg-success'}`}
+                style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
               >
                 {labelInside && (
-                  <span style={barLabelInside}>{call.toolName}</span>
+                  <Inline as="span" gap="none" className="text-white text-[11px] font-medium font-mono truncate">
+                    {call.toolName}
+                  </Inline>
                 )}
-              </div>
+              </Inline>
               {!labelInside && (
-                <span
-                  style={{
-                    ...barLabelOutside,
-                    left: `calc(${leftPct + widthPct}% + 6px)`,
-                  }}
+                <Inline
+                  as="span"
+                  gap="none"
+                  className="absolute top-0.5 text-[11px] font-mono text-text-secondary whitespace-nowrap pointer-events-none"
+                  style={{ left: `calc(${leftPct + widthPct}% + 6px)` }}
                 >
                   {call.toolName}
-                </span>
+                </Inline>
               )}
-            </div>
-            <div style={duration}>{fmtDur(call.durationMs)}</div>
-          </div>
+            </Inline>
+            <Inline
+              as="span"
+              gap="none"
+              justify="end"
+              className="w-20 shrink-0 text-[11px] text-text-tertiary font-mono whitespace-nowrap"
+            >
+              {fmtDur(call.durationMs)}
+            </Inline>
+          </Inline>
         );
       })}
-    </div>
+    </Stack>
   );
 }
-
-// ── styles ────────────────────────────────────────────────────────────────────
-
-const container: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 4,
-};
-
-const modeRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  marginBottom: 8,
-};
-
-const modeHint: CSSProperties = {
-  fontSize: 10.5,
-  color: 'var(--color-text-tertiary)',
-  fontStyle: 'italic',
-};
-
-function modeBtn(active: boolean): CSSProperties {
-  return {
-    padding: '3px 10px',
-    fontSize: 11,
-    fontWeight: active ? 500 : 400,
-    background: active ? 'var(--color-primary)' : 'var(--color-surface)',
-    color: active ? 'white' : 'var(--color-text-secondary)',
-    border: '1px solid var(--color-border)',
-    borderRadius: 'var(--radius-sm)',
-    cursor: 'pointer',
-  };
-}
-
-const axisRow: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '140px 1fr 80px',
-  alignItems: 'center',
-  gap: 8,
-  fontSize: 10,
-  color: 'var(--color-text-tertiary)',
-  textTransform: 'uppercase',
-  letterSpacing: 0.5,
-  fontWeight: 600,
-  marginBottom: 4,
-};
-
-const axisGutter: CSSProperties = {};
-
-const axisTrack: CSSProperties = {
-  position: 'relative',
-  height: 12,
-  borderTop: '1px dashed var(--color-border)',
-};
-
-const axisLabelLeft: CSSProperties = {
-  position: 'absolute',
-  left: 0,
-  top: 0,
-};
-
-const axisLabelRight: CSSProperties = {
-  position: 'absolute',
-  right: 0,
-  top: 0,
-};
-
-const axisDuration: CSSProperties = {
-  textAlign: 'right',
-};
-
-const barRow: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '140px 1fr 80px',
-  alignItems: 'center',
-  gap: 8,
-  height: 24,
-  fontSize: 11,
-};
-
-const gutter: CSSProperties = {
-  fontFamily: 'ui-monospace, monospace',
-  fontSize: 11,
-  color: 'var(--color-text-secondary)',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-};
-
-const track: CSSProperties = {
-  position: 'relative',
-  height: 18,
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 3,
-  overflow: 'hidden',
-};
-
-const bar: CSSProperties = {
-  position: 'absolute',
-  top: 0,
-  bottom: 0,
-  borderRadius: 2,
-  display: 'flex',
-  alignItems: 'center',
-  paddingLeft: 6,
-  paddingRight: 6,
-  boxSizing: 'border-box',
-  minWidth: 2,
-};
-
-const barLabelInside: CSSProperties = {
-  color: '#fff',
-  fontSize: 11,
-  fontWeight: 500,
-  fontFamily: 'ui-monospace, monospace',
-  whiteSpace: 'nowrap',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-};
-
-const barLabelOutside: CSSProperties = {
-  position: 'absolute',
-  top: 2,
-  fontSize: 11,
-  fontFamily: 'ui-monospace, monospace',
-  color: 'var(--color-text-secondary)',
-  whiteSpace: 'nowrap',
-  pointerEvents: 'none',
-};
-
-const duration: CSSProperties = {
-  textAlign: 'right',
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  fontFamily: 'ui-monospace, monospace',
-  whiteSpace: 'nowrap',
-};
-
-const empty: CSSProperties = {
-  padding: 24,
-  textAlign: 'center',
-  fontSize: 12,
-  color: 'var(--color-text-tertiary)',
-};
 
 export default ToolWaterfall;

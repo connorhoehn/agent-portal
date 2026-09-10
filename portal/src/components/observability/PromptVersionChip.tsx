@@ -10,8 +10,9 @@
 // lands — render '—' chip with no click handler in that case.
 
 import { useEffect, useState } from 'react';
-import type { CSSProperties } from 'react';
-import { Chip, Modal } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button, Chip, CodeBlock, Inline, InlineAlert, MetaLine, Modal, SectionLabel, Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 
 interface PromptVersionDetail {
   promptVersion: string;
@@ -43,19 +44,23 @@ export function PromptVersionChip({ promptVersion, size = 'xs' }: Props) {
 
   return (
     <>
-      <button
-        type="button"
+      {/* A ghost Button stripped to nothing so the Chip is the whole visual —
+          the wrapper exists only to make the chip activatable, since Chip has
+          no onClick. */}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="inline-flex p-0 m-0 border-none bg-transparent h-auto"
         onClick={(e) => {
           e.stopPropagation();
           setOpen(true);
         }}
-        style={chipBtnStyle}
         title={`prompt version ${promptVersion} — click for details`}
       >
         <Chip tone="neutral" size={size} mono>
           {label}
         </Chip>
-      </button>
+      </Button>
       <Modal
         open={open}
         onClose={() => setOpen(false)}
@@ -110,112 +115,52 @@ function PromptVersionBody({ promptVersion }: { promptVersion: string }) {
 
   return (
     <>
-      <div style={versionSubtitle}>
-        <span style={monoStyle}>p:{promptVersion.slice(0, 12)}</span>
-      </div>
+      <MetaLine
+        className="mb-3 font-mono"
+        items={[`p:${promptVersion.slice(0, 12)}`]}
+      />
 
-      {loading && <div>Loading…</div>}
+      {loading && <MetaLine items={['Loading…']} />}
 
-      {err && (
-        <div style={{ color: 'var(--color-danger, #ef4444)' }}>
-          Could not load prompt version: {err}
-        </div>
-      )}
+      {err && <InlineAlert tone="error">Could not load prompt version: {err}</InlineAlert>}
 
       {detail && (
-        <div>
-          <div style={metaGrid}>
-            <div style={metaLabel}>AGENT</div>
-            <div style={metaValue}>
-              <span style={monoStyle}>{detail.agentId}</span>
-            </div>
-            <div style={metaLabel}>REGISTERED</div>
-            <div style={metaValue}>
-              {new Date(detail.registeredAt).toLocaleString()}
-            </div>
-            <div style={metaLabel}>SHA-256</div>
-            <div style={metaValue}>
-              <span style={monoStyle}>{detail.contentSha256}</span>
-            </div>
+        <Stack gap="none">
+          {/* Label/value pairs. The markup this replaces used a two-column CSS
+              grid; Inline rows read the same and keep each pair together when
+              a long sha wraps. */}
+          <Stack gap="xs" className="mb-4">
+            <Inline gap="md" align="baseline" wrap={false}>
+              <SectionLabel className="shrink-0 w-24">Agent</SectionLabel>
+              <MetaLine tone="secondary" className="font-mono" items={[detail.agentId]} />
+            </Inline>
+            <Inline gap="md" align="baseline" wrap={false}>
+              <SectionLabel className="shrink-0 w-24">Registered</SectionLabel>
+              <MetaLine tone="secondary" items={[new Date(detail.registeredAt).toLocaleString()]} />
+            </Inline>
+            <Inline gap="md" align="baseline" wrap={false}>
+              <SectionLabel className="shrink-0 w-24">SHA-256</SectionLabel>
+              <MetaLine tone="secondary" className="font-mono break-all" items={[detail.contentSha256]} />
+            </Inline>
             {detail.notes && (
-              <>
-                <div style={metaLabel}>NOTES</div>
-                <div style={metaValue}>{detail.notes}</div>
-              </>
+              <Inline gap="md" align="baseline" wrap={false}>
+                <SectionLabel className="shrink-0 w-24">Notes</SectionLabel>
+                <MetaLine tone="secondary" items={[detail.notes]} />
+              </Inline>
             )}
-          </div>
+          </Stack>
 
-          <div style={contentLabel}>SYSTEM PROMPT</div>
-          <pre style={contentPre}>{detail.content}</pre>
-        </div>
+          <SectionLabel className="mb-1">System prompt</SectionLabel>
+          {/* CodeBlock owns the mono face, the scroll and the wrapping. */}
+          <CodeBlock
+            code={detail.content}
+            className="max-h-[50vh] overflow-y-auto text-[11.5px] whitespace-pre-wrap break-words"
+            ariaLabel="System prompt content"
+          />
+        </Stack>
       )}
     </>
   );
 }
-
-// ── styles ────────────────────────────────────────────────────────────────────
-
-const chipBtnStyle: CSSProperties = {
-  background: 'transparent',
-  border: 'none',
-  padding: 0,
-  margin: 0,
-  cursor: 'pointer',
-  display: 'inline-flex',
-};
-
-const monoStyle: CSSProperties = {
-  fontFamily: 'ui-monospace, monospace',
-};
-
-const versionSubtitle: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-tertiary)',
-  marginBottom: 12,
-};
-
-const metaGrid: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'max-content 1fr',
-  gap: '6px 12px',
-  marginBottom: 16,
-  alignItems: 'baseline',
-};
-
-const metaLabel: CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
-  color: 'var(--color-text-tertiary)',
-  letterSpacing: 0.5,
-};
-
-const metaValue: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary)',
-};
-
-const contentLabel: CSSProperties = {
-  fontSize: 10,
-  fontWeight: 700,
-  color: 'var(--color-text-tertiary)',
-  letterSpacing: 0.5,
-  marginBottom: 4,
-};
-
-const contentPre: CSSProperties = {
-  fontFamily: '"Fira Code", "Cascadia Code", monospace',
-  fontSize: 11.5,
-  lineHeight: 1.55,
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
-  margin: 0,
-  padding: '10px 12px',
-  borderRadius: 4,
-  background: 'var(--color-bg)',
-  border: '1px solid var(--color-border)',
-  maxHeight: '50vh',
-  overflowY: 'auto',
-  color: 'var(--color-text-primary)',
-};
 
 export default PromptVersionChip;
