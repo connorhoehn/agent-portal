@@ -178,7 +178,7 @@ area_files() { # area_files <dir>
 # file has ever made, and it reflects counting that was always wrong rather than
 # work that regressed.
 AREAS=(
-  "portal/src:0:9:50"
+  "portal/src:0:5:29"
   "portal/src/components/runs:0:0:0"
   "portal/src/components/codebases:0:0:0"
   "portal/src/components/scores:0:0:4"

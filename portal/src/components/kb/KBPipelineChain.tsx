@@ -1,5 +1,5 @@
 import type { KbRegistryEntry } from '../../pages/admin/KBRegistryPage.js';
-import { Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Inline, SectionLabel, Stack, StatusDot } from '@connorhoehnslalom/ui-components/shared';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -10,22 +10,6 @@ export interface KBPipelineChainProps {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function StatusDot({ active }: { active: boolean }) {
-  return (
-    <span
-      style={{
-        display: 'inline-block',
-        width: 7,
-        height: 7,
-        borderRadius: '50%',
-        background: active ? 'var(--color-success)' : 'var(--color-warning)',
-        marginLeft: 5,
-        flexShrink: 0,
-      }}
-    />
-  );
-}
 
 function PipelineBox({
   title,
@@ -42,36 +26,28 @@ function PipelineBox({
     <Stack gap="none"
       className="min-w-[120px] p-3 border border-border rounded-md bg-surface flex flex-col gap-1"
     >
-      <div
-        style={{
-          fontSize: 11,
-          color: 'var(--color-text-tertiary)',
-          fontWeight: 500,
-          textTransform: 'uppercase',
-          letterSpacing: '0.03em',
-        }}
-      >
-        {title}
-      </div>
+      <SectionLabel className="text-[11px] font-medium tracking-[0.03em]">{title}</SectionLabel>
 
       <Inline gap="none"
         className="flex items-center gap-0 flex-nowrap"
       >
-        <span
-          style={{
-            fontSize: 13,
-            fontWeight: 500,
-            color: 'var(--color-text-primary)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            fontFamily: value === '—' ? 'inherit' : 'monospace',
-          }}
+        <Inline
+          as="span"
+          gap="none"
+          className={`text-[13px] font-medium text-text-primary truncate ${value === '—' ? '' : 'font-mono'}`}
           title={value}
         >
           {value}
-        </span>
-        {showDot && <StatusDot active={dotActive ?? false} />}
+        </Inline>
+        {showDot && (
+          // The library StatusDot, not the local one this file used to define
+          // and which shadowed it by the same name.
+          <StatusDot
+            size="xs"
+            className="ml-1.5 shrink-0"
+            color={dotActive ? 'var(--color-success)' : 'var(--color-warning)'}
+          />
+        )}
       </Inline>
     </Stack>
   );
@@ -79,18 +55,14 @@ function PipelineBox({
 
 function Arrow() {
   return (
-    <span
-      style={{
-        fontSize: 20,
-        margin: '0 8px',
-        color: 'var(--color-text-tertiary)',
-        alignSelf: 'center',
-        userSelect: 'none',
-        flexShrink: 0,
-      }}
+    <Inline
+      as="span"
+      gap="none"
+      aria-hidden
+      className="text-xl mx-2 text-text-tertiary self-center select-none shrink-0"
     >
       ──▶
-    </span>
+    </Inline>
   );
 }
 
@@ -111,15 +83,7 @@ export function KBPipelineChain({ kb, agentNames }: KBPipelineChainProps) {
     : '—';
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'stretch',
-        gap: 0,
-        overflowX: 'auto',
-        padding: '4px 0',
-      }}
-    >
+    <Inline gap="none" align="stretch" wrap={false} className="overflow-x-auto py-1">
       {/* S3 */}
       <PipelineBox
         title="S3 Prefix"
@@ -153,7 +117,7 @@ export function KBPipelineChain({ kb, agentNames }: KBPipelineChainProps) {
         title="Agents"
         value={agents.join(' · ')}
       />
-    </div>
+    </Inline>
   );
 }
 
