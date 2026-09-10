@@ -1,3 +1,4 @@
+import { Card, Chip, Inline } from '@connorhoehnslalom/ui-components/shared';
 import type { GraphNode, GraphDepartment } from './types';
 import { useSession } from '../../lib/auth';
 
@@ -20,26 +21,31 @@ export function OrgGraphTooltip({ node, departments, containerRect }: OrgGraphTo
   const top = Math.max(node.y - 40, 10);
 
   return (
-    <div
-      className="absolute bg-white border border-border rounded-lg px-4 py-3 shadow-[0_4px_12px_rgba(0,0,0,0.1)] z-[100] w-[220px] pointer-events-none"
+    // Card rather than a hand-rolled box, which also fixes a real bug: the
+    // original set `bg-white`, so in dark mode this card stayed white with
+    // light-on-light text. Card paints `bg-surface`, which follows the theme.
+    // `left`/`top` stay inline — they are computed from the node's position.
+    <Card
+      className="absolute px-4 py-3 shadow-[0_4px_12px_rgba(0,0,0,0.1)] z-[100] w-[220px] pointer-events-none"
       style={{ left, top }}
     >
-      <div className="font-semibold text-sm mb-0.5">{node.name}</div>
-      <div className="text-xs text-text-secondary">{node.title}</div>
-      <div className="text-[11px] mt-1 font-medium" style={{ color: dept?.color }}>{node.department}</div>
-      <div className="mt-2 flex flex-wrap gap-1">
+      <Inline as="div" gap="none" className="font-semibold text-sm mb-0.5">{node.name}</Inline>
+      <Inline as="div" gap="none" className="text-xs text-text-secondary">{node.title}</Inline>
+      {/* the department's own colour, straight off the row */}
+      <Inline as="div" gap="none" className="text-[11px] mt-1 font-medium" style={{ color: dept?.color }}>
+        {node.department}
+      </Inline>
+      <Inline gap="xs" wrap className="mt-2">
         {node.skills.slice(0, 4).map(skill => (
-          <span key={skill} className="text-[10px] px-1.5 py-0.5 bg-surface-hover rounded text-text-secondary">
-            {skill}
-          </span>
+          <Chip key={skill} tone="neutral" size="xs">{skill}</Chip>
         ))}
-      </div>
+      </Inline>
       {showAnalytics && (
-        <div className="mt-2 flex justify-between text-[11px]">
-          <span className="text-text-tertiary">Influence</span>
-          <span className="font-semibold">{Math.round(node.influenceScore * 100)}/100</span>
-        </div>
+        <Inline gap="sm" justify="between" wrap={false} className="mt-2 text-[11px]">
+          <Inline as="span" gap="none" className="text-text-tertiary">Influence</Inline>
+          <Inline as="span" gap="none" className="font-semibold">{Math.round(node.influenceScore * 100)}/100</Inline>
+        </Inline>
       )}
-    </div>
+    </Card>
   );
 }

@@ -39,7 +39,7 @@ export function DepartmentChips({
             onClick={() => onToggle(active ? null : d.name, members)}
           >
             {d.name}
-            <span className="ml-1 text-[10px] tabular-nums text-text-tertiary">{members.length}</span>
+            <Inline as="span" gap="none" className="ml-1 text-[10px] tabular-nums text-text-tertiary">{members.length}</Inline>
           </FilterChip>
         );
       })}
