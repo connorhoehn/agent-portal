@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Spinner } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button, Card, Chip, CodeBlock, Inline, InlineAlert, MetaLine, Spinner, Stack,
+  Table, TableBody, TableHead, TableRow, TableTd, TableTh,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -123,73 +126,23 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
 
   // ─── Shared table styles ────────────────────────────────────────────────────
 
-  const thStyle: React.CSSProperties = {
-    padding: '8px 12px',
-    fontSize: 11,
-    fontWeight: 600,
-    color: 'var(--color-text-tertiary)',
-    textAlign: 'left',
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-    borderBottom: '1px solid var(--color-border)',
-    background: 'var(--color-surface-panel)',
-    whiteSpace: 'nowrap',
-  };
 
-  const tdStyle: React.CSSProperties = {
-    padding: '8px 12px',
-    fontSize: 12,
-    color: 'var(--color-text-secondary)',
-    borderBottom: '1px solid var(--color-surface-hover)',
-    verticalAlign: 'middle',
-  };
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <Stack gap="md">
       {/* Header row */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: 8,
-        }}
-      >
-        <code
-          style={{
-            fontSize: 12,
-            background: 'var(--color-surface-hover)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 4,
-            padding: '4px 8px',
-            color: 'var(--color-text-secondary)',
-            wordBreak: 'break-all',
-          }}
-        >
-          s3://&lt;bucket&gt;/{s3Prefix}
-        </code>
+      <Inline gap="sm" justify="between" wrap>
+        <CodeBlock className="text-[12px]" code={`s3://<bucket>/${s3Prefix}`} />
 
         {canManage && (
-          <button
+          <Button
+            variant="primary"
+            size="sm"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '6px 14px',
-              fontSize: 12,
-              fontWeight: 600,
-              background: uploading ? 'var(--color-state-pending)' : 'var(--color-info)',
-              color: 'var(--color-surface)',
-              border: 'none',
-              borderRadius: 6,
-              cursor: uploading ? 'not-allowed' : 'pointer',
-              flexShrink: 0,
-            }}
+            className="shrink-0"
           >
             {uploading ? (
               <>
@@ -199,161 +152,93 @@ export function LandingZoneBrowser({ kbId, s3Prefix }: LandingZoneBrowserProps) 
             ) : (
               'Upload File'
             )}
-          </button>
+          </Button>
         )}
 
-        {/* Hidden file input */}
+        {/* Hidden file input — the HTML `hidden` attribute, not a class. It
+            is the only affordance behind the Upload button, there is nothing
+            for a primitive to own, and with no className it is not a styled
+            raw element either. */}
         <input
           ref={fileInputRef}
           type="file"
-          style={{ display: 'none' }}
+          hidden
           onChange={handleFileSelected}
         />
-      </div>
+      </Inline>
 
       {/* Error banner */}
-      {error && (
-        <div
-          style={{
-            padding: '8px 12px',
-            background: 'var(--color-danger-bg)',
-            border: '1px solid var(--color-danger-border)',
-            borderRadius: 6,
-            fontSize: 12,
-            color: 'var(--color-danger)',
-          }}
-        >
-          {error}
-        </div>
-      )}
+      {error && <InlineAlert tone="error">{error}</InlineAlert>}
 
       {/* Table */}
-      <div
-        style={{
-          border: '1px solid var(--color-border)',
-          borderRadius: 8,
-          overflow: 'hidden',
-        }}
-      >
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={thStyle}>Key</th>
-              <th style={{ ...thStyle, textAlign: 'right' }}>Size</th>
-              <th style={{ ...thStyle, textAlign: 'right' }}>Modified</th>
-            </tr>
-          </thead>
-          <tbody>
+      <Card padding="none">
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableTh>Key</TableTh>
+              <TableTh>Size</TableTh>
+              <TableTh>Modified</TableTh>
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {loading && files.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={3}
-                  style={{
-                    ...tdStyle,
-                    textAlign: 'center',
-                    color: 'var(--color-text-tertiary)',
-                    padding: '32px 0',
-                  }}
-                >
-                  Loading…
-                </td>
-              </tr>
+              <TableRow>
+                <TableTd colSpan={3}>
+                  <MetaLine className="text-center py-8" items={['Loading…']} />
+                </TableTd>
+              </TableRow>
             ) : files.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={3}
-                  style={{
-                    ...tdStyle,
-                    textAlign: 'center',
-                    color: 'var(--color-text-tertiary)',
-                    padding: '32px 16px',
-                    lineHeight: 1.5,
-                  }}
-                >
-                  No files in this landing zone yet.
-                  <br />
-                  <span style={{ fontSize: 11 }}>
-                    Upload a document to get started.
-                  </span>
-                </td>
-              </tr>
+              <TableRow>
+                <TableTd colSpan={3}>
+                  <Stack gap="none" align="center" className="py-8 px-4 text-center">
+                    <MetaLine className="leading-normal" items={['No files in this landing zone yet.']} />
+                    <MetaLine size="xs" items={['Upload a document to get started.']} />
+                  </Stack>
+                </TableTd>
+              </TableRow>
             ) : (
+              // Zebra striping was a per-row inline background computed from the
+              // index; `even:`/`odd:` is the same thing as a class.
               files.map((f, i) => (
-                <tr
-                  key={`${f.key}-${i}`}
-                  style={{ background: i % 2 === 0 ? 'var(--color-surface)' : 'var(--color-surface-inset)' }}
-                >
-                  <td style={tdStyle}>
-                    <span
-                      title={f.key}
-                      style={{ fontFamily: 'monospace', fontSize: 12 }}
-                    >
-                      {truncateKey(f.key)}
-                    </span>
-                    {f.extension && (
-                      <span
-                        style={{
-                          marginLeft: 6,
-                          padding: '1px 5px',
-                          background: 'var(--color-surface-hover)',
-                          border: '1px solid var(--color-border)',
-                          borderRadius: 3,
-                          fontSize: 10,
-                          color: 'var(--color-text-tertiary)',
-                          textTransform: 'uppercase',
-                        }}
-                      >
-                        {f.extension.replace(/^\./, '')}
-                      </span>
-                    )}
-                  </td>
-                  <td
-                    style={{
-                      ...tdStyle,
-                      textAlign: 'right',
-                      fontFamily: 'monospace',
-                      color: 'var(--color-text-tertiary)',
-                    }}
-                  >
-                    {humanSize(f.size)}
-                  </td>
-                  <td
-                    style={{
-                      ...tdStyle,
-                      textAlign: 'right',
-                      color: 'var(--color-text-tertiary)',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {relativeTime(f.lastModified)}
-                  </td>
-                </tr>
+                <TableRow key={`${f.key}-${i}`}>
+                  <TableTd>
+                    <Inline gap="xs" wrap={false}>
+                      <Inline as="span" gap="none" title={f.key} className="font-mono text-[12px]">
+                        {truncateKey(f.key)}
+                      </Inline>
+                      {f.extension && (
+                        <Chip tone="neutral" size="xs" uppercase>
+                          {f.extension.replace(/^\./, '')}
+                        </Chip>
+                      )}
+                    </Inline>
+                  </TableTd>
+                  <TableTd>
+                    <MetaLine className="text-right font-mono" items={[humanSize(f.size)]} />
+                  </TableTd>
+                  <TableTd>
+                    <MetaLine className="text-right whitespace-nowrap" items={[relativeTime(f.lastModified)]} />
+                  </TableTd>
+                </TableRow>
               ))
             )}
-          </tbody>
-        </table>
-      </div>
+          </TableBody>
+        </Table>
+      </Card>
 
       {/* Load More */}
       {nextToken && (
-        <button
+        <Button
+          variant="secondary"
+          size="sm"
           disabled={loading}
           onClick={() => void fetchFiles(nextToken)}
-          style={{
-            alignSelf: 'flex-start',
-            padding: '6px 14px',
-            fontSize: 12,
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border-emphasis)',
-            borderRadius: 6,
-            cursor: loading ? 'not-allowed' : 'pointer',
-            color: 'var(--color-text-secondary)',
-          }}
+          className="self-start"
         >
           {loading ? 'Loading…' : 'Load More'}
-        </button>
+        </Button>
       )}
-    </div>
+    </Stack>
   );
 }
 
