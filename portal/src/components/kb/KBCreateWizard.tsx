@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { Button, FormField, Modal } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button, Card, CodeBlock, FormField, Inline, InlineAlert, MetaLine, Modal,
+  SectionLabel, Stack, Textarea,
+} from '@connorhoehnslalom/ui-components/shared';
 import type { KbRegistryEntry } from '../../pages/admin/KBRegistryPage.js';
 import { ProvisioningProgress } from './ProvisioningProgress.js';
 
@@ -102,7 +105,7 @@ function Step1({
   return (
     <div>
       <FormField label="Name" required error={nameErr} hint={nameHint}>
-        {(p) => (
+        {({ labelId: _l, ...p }) => (
           <input
             {...p}
             value={state.name}
@@ -115,7 +118,7 @@ function Step1({
       </FormField>
 
       <FormField label="Slug" required error={slugErr} hint={slugHint}>
-        {(p) => (
+        {({ labelId: _l, ...p }) => (
           <input
             {...p}
             value={state.slug}
@@ -128,7 +131,7 @@ function Step1({
       </FormField>
 
       <FormField label="Tenant">
-        {(p) => (
+        {({ labelId: _l, ...p }) => (
           <select
             {...p}
             value={state.tenant}
@@ -140,7 +143,7 @@ function Step1({
       </FormField>
 
       <FormField label="Purpose">
-        {(p) => (
+        {({ labelId: _l, ...p }) => (
           <select
             {...p}
             value={state.purpose}
@@ -159,10 +162,15 @@ function Step1({
         label="Description"
         hint={state.description.length > 240 ? `${state.description.length}/300 chars` : undefined}
       >
-        {(p) => (
-          <textarea
+        {/* `labelId` is dropped from every wiring bag here. FormField hands it
+            to the consumer but it is NOT a DOM prop, so spreading the whole bag
+            onto a control makes React warn "does not recognize the labelId prop
+            on a DOM element" — which this wizard had been doing at all eight
+            call sites. */}
+        {({ labelId: _l, ...p }) => (
+          <Textarea
             {...p}
-            style={{ resize: 'vertical', minHeight: 64 }}
+            className="resize-y min-h-16"
             value={state.description}
             onChange={(e) => onChange({ description: e.target.value })}
             placeholder="Optional — used as the Bedrock KB description"
@@ -229,28 +237,26 @@ function Step2({
   return (
     <div>
       {/* Resource preview panel */}
-      <div
-        style={{
-          marginBottom: 18,
-          padding: '10px 14px',
-          background: 'var(--color-surface-panel)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 7,
-          fontSize: 12,
-        }}
-      >
-        <div style={{ fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 6, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-          Resources that will be created
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', rowGap: 4, columnGap: 10 }}>
-          <span style={{ color: 'var(--color-text-secondary)' }}>Bedrock KB name</span>
-          <code style={{ fontFamily: 'monospace', color: 'var(--color-text-primary)', fontSize: 12 }}>{bedrockName}</code>
-          <span style={{ color: 'var(--color-text-secondary)' }}>Aurora table</span>
-          <code style={{ fontFamily: 'monospace', color: 'var(--color-text-primary)', fontSize: 12 }}>{auroraTable}</code>
-          <span style={{ color: 'var(--color-text-secondary)' }}>S3 prefix</span>
-          <code style={{ fontFamily: 'monospace', color: 'var(--color-text-primary)', fontSize: 12 }}>{state.s3Prefix || '—'}</code>
-        </div>
-      </div>
+      <Card className="mb-4.5 px-3.5 py-2.5 bg-surface-panel text-[12px]">
+        <SectionLabel className="mb-1.5">Resources that will be created</SectionLabel>
+        {/* Label/value pairs. The two-column CSS grid this replaces kept the
+            value column flexible; Inline rows do the same and keep each pair
+            together when a long name wraps. */}
+        <Stack gap="xs">
+          <Inline gap="sm" align="baseline" wrap={false}>
+            <MetaLine tone="secondary" className="shrink-0 w-32" items={['Bedrock KB name']} />
+            <Inline as="code" gap="none" className="font-mono text-text-primary text-[12px] break-all">{bedrockName}</Inline>
+          </Inline>
+          <Inline gap="sm" align="baseline" wrap={false}>
+            <MetaLine tone="secondary" className="shrink-0 w-32" items={['Aurora table']} />
+            <Inline as="code" gap="none" className="font-mono text-text-primary text-[12px] break-all">{auroraTable}</Inline>
+          </Inline>
+          <Inline gap="sm" align="baseline" wrap={false}>
+            <MetaLine tone="secondary" className="shrink-0 w-32" items={['S3 prefix']} />
+            <Inline as="code" gap="none" className="font-mono text-text-primary text-[12px] break-all">{state.s3Prefix || '—'}</Inline>
+          </Inline>
+        </Stack>
+      </Card>
 
       <FormField
         label="S3 Prefix"
@@ -258,7 +264,7 @@ function Step2({
         error={s3PrefixErr}
         hint='Must end with "/". Documents synced here will be ingested into this KB.'
       >
-        {(p) => (
+        {({ labelId: _l, ...p }) => (
           <input
             {...p}
             value={state.s3Prefix}
@@ -270,7 +276,7 @@ function Step2({
       </FormField>
 
       <FormField label="Chunking Strategy">
-        {(p) => (
+        {({ labelId: _l, ...p }) => (
           <select
             {...p}
             value={state.chunkingStrategy}
@@ -292,7 +298,7 @@ function Step2({
           error={maxTokensErr}
           hint="64–2048. SEMANTIC: target size (actual may vary). FIXED: exact size."
         >
-          {(p) => (
+          {({ labelId: _l, ...p }) => (
             <input
               {...p}
               type="number"
@@ -309,19 +315,9 @@ function Step2({
       )}
 
       {/* Embedding model — fixed */}
-      <div
-        style={{
-          marginTop: 4,
-          padding: '8px 12px',
-          background: 'var(--color-primary-soft)',
-          border: '1px solid var(--color-info-border)',
-          borderRadius: 6,
-          fontSize: 12,
-          color: 'var(--color-primary)',
-        }}
-      >
+      <InlineAlert tone="info" className="mt-1">
         Embedding model: <strong>amazon.titan-embed-text-v2:0 (1024d)</strong> — fixed
-      </div>
+      </InlineAlert>
     </div>
   );
 }
@@ -339,21 +335,11 @@ function Step3({
 }) {
   return (
     <div>
-      <div
-        style={{
-          padding: '10px 14px',
-          background: 'var(--color-surface-panel)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 6,
-          marginBottom: 20,
-        }}
-      >
-        <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 2 }}>Creating</div>
-        <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--color-text-primary)' }}>{kb.name}</div>
-        <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', fontFamily: 'monospace', marginTop: 2 }}>
-          {kb.slug} · {kb.tenant}
-        </div>
-      </div>
+      <Card className="px-3.5 py-2.5 mb-5 bg-surface-panel">
+        <MetaLine tone="secondary" className="mb-0.5" items={['Creating']} />
+        <Inline as="div" gap="none" className="font-semibold text-[14px] text-text-primary">{kb.name}</Inline>
+        <MetaLine size="xs" className="mt-0.5 font-mono" items={[`${kb.slug} · ${kb.tenant}`]} />
+      </Card>
 
       <ProvisioningProgress
         registryId={kb.id}
@@ -587,18 +573,16 @@ export function KBCreateWizard({ open, onClose, onCreated }: KBCreateWizardProps
       footer={footer}
     >
       {/* Step indicator bar */}
-      <div style={{ display: 'flex', height: 3, marginBottom: 16 }}>
+      <Inline gap="none" wrap={false} className="h-[3px] mb-4">
         {([1, 2, 3] as const).map((n) => (
-          <div
+          <Inline
             key={n}
-            style={{
-              flex: 1,
-              background: n <= step ? 'var(--color-primary)' : 'var(--color-border)',
-              transition: 'background 0.3s',
-            }}
+            gap="none"
+            aria-hidden
+            className={`flex-1 transition-colors duration-300 ${n <= step ? 'bg-primary' : 'bg-border'}`}
           />
         ))}
-      </div>
+      </Inline>
 
       {step === 1 && (
         <Step1
@@ -626,19 +610,9 @@ export function KBCreateWizard({ open, onClose, onCreated }: KBCreateWizardProps
       )}
 
       {submitError && (
-        <div
-          style={{
-            margin: '10px 0',
-            padding: '8px 12px',
-            background: 'var(--color-danger-bg)',
-            border: '1px solid var(--color-danger-border)',
-            borderRadius: 6,
-            fontSize: 12,
-            color: 'var(--color-danger)',
-          }}
-        >
-          {submitError}
-        </div>
+        <Stack gap="none" className="my-2.5">
+          <InlineAlert tone="error">{submitError}</InlineAlert>
+        </Stack>
       )}
     </Modal>
   );
