@@ -5,6 +5,8 @@ import {
   CommandPalette,
   CommandPaletteHint,
   CommandPaletteProvider,
+  Inline,
+  Stack,
   SubNavLayout,
   type SubNavItem,
 } from '@connorhoehnslalom/ui-components/shared';
@@ -283,7 +285,7 @@ export function Layout() {
 
   return (
     <CommandPaletteProvider commands={commands} getDynamicCommands={getDynamicCommands}>
-      <div ref={shellRef} data-tenant={session?.tenant ?? 'orgiq'} className="flex flex-col h-screen">
+      <Stack ref={shellRef} gap="none" data-tenant={session?.tenant ?? 'orgiq'} className="h-screen">
         <ChannelHeader
           className="shell-header"
           avatarUrl={brandMark}
@@ -291,7 +293,7 @@ export function Layout() {
           description={statusLabel}
           online={mockedSubsystems.length === 0 && !!health && !credsExpired && !dbDown}
           actions={
-            <div className="flex items-center gap-3">
+            <Inline gap="md" wrap={false}>
               <CommandPaletteHint />
               {/* The user's own machine in the fleet — renders nothing until
                   a machine is paired, so most sessions never see it.
@@ -304,10 +306,10 @@ export function Layout() {
               {session?.tenant === 'orgiq' && <LocalComputeBadge />}
               <GatewayStatusBadge />
               <MasqueradeMenu />
-            </div>
+            </Inline>
           }
         />
-        <div className="flex-1 min-h-0" data-shell-nav>
+        <Stack gap="none" className="flex-1 min-h-0" data-shell-nav>
           <SubNavLayout
             title={tenantLabel}
             items={subNavItems}
@@ -345,16 +347,16 @@ export function Layout() {
               </NavLink>
             )}
           >
-            <div className="h-full flex flex-col bg-bg">
+            <Stack gap="none" className="h-full bg-bg">
               {/* Where you are, once you're 3+ levels deep — stacked rails say
                   what you can open, the trail says where you stand. */}
               <Breadcrumbs />
-              <div className="flex-1 min-h-0 overflow-auto">
+              <Stack gap="none" className="flex-1 min-h-0 overflow-auto">
                 <Outlet />
-              </div>
-            </div>
+              </Stack>
+            </Stack>
           </SubNavLayout>
-        </div>
+        </Stack>
         <CommandPalette placeholder={PALETTE_PLACEHOLDER[session?.tenant ?? 'orgiq'] ?? 'Jump to a page…'} />
         {/* The Computer Lab is an orgiq surface. Mounting its quick-switch and
             dock in every tenant's shell put orgiq journeys one click away from
@@ -364,7 +366,7 @@ export function Layout() {
         {session?.tenant === 'orgiq' && <DevboxQuickSwitch />}
         <ToastHost />
         {session?.tenant === 'orgiq' && <ComputeDock />}
-      </div>
+      </Stack>
     </CommandPaletteProvider>
   );
 }
