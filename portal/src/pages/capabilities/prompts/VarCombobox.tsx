@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Input } from '@connorhoehnslalom/ui-components/shared';
+import { Inline, Input, Stack } from '@connorhoehnslalom/ui-components/shared';
 
 const MAX_SUGGESTIONS = 8;
 
@@ -75,9 +75,11 @@ export function VarCombobox({
 
   return (
     // Raw div, not `Stack`/`Inline`: this needs a real DOM ref for the
-    // outside-click check below, and neither is `forwardRef` (see
-    // docs/ui-components-queue.md, the `Stack`/`Card`/`Inline` ref row).
-    <div ref={containerRef} className="relative">
+    // outside-click check below. That ref gap is CLOSED (2.233.0); what keeps
+    // this file local is the missing `Combobox` — an open suggestion list over
+    // a still-editable free-text field.
+    // Stack takes a ref as of 2.233.0, so this wrapper is no longer raw.
+    <Stack ref={containerRef} gap="none" className="relative">
       <Input
           autoFocus={autoFocus}
         value={value}
@@ -91,12 +93,16 @@ export function VarCombobox({
         className="w-full"
       />
       {open && filtered.length > 0 && (
-        <ul
+        <Stack
+          as="ul"
+          gap="none"
           role="listbox"
           className="absolute inset-x-0 top-full z-50 m-0 max-h-52 list-none overflow-y-auto rounded-b border border-t-0 border-border bg-surface p-0 shadow-lg"
         >
           {filtered.map((item, i) => (
-            <li
+            <Inline
+              as="li"
+              gap="none"
               key={item}
               role="option"
               aria-selected={i === highlighted}
@@ -107,10 +113,10 @@ export function VarCombobox({
               }`}
             >
               {item}
-            </li>
+            </Inline>
           ))}
-        </ul>
+        </Stack>
       )}
-    </div>
+    </Stack>
   );
 }

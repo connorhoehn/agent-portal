@@ -29,7 +29,7 @@ export function FilterBar({
     <Inline align="center" gap="md" wrap className="mb-3">
       <SkillFilter selectedSkill={skillFilter} onChange={onSkillChange} />
 
-      <span ref={weightTriggerRef} className="inline-flex">
+      <Inline as="span" ref={weightTriggerRef} gap="none" className="inline-flex">
         <Button
           variant="secondary"
           size="sm"
@@ -39,7 +39,7 @@ export function FilterBar({
         >
           Weighting: {infPct}% / {expPct}%
         </Button>
-      </span>
+      </Inline>
       <InlinePopover
         trigger={weightTriggerRef}
         open={weightOpen}

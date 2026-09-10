@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useReducer, useRef } from 'react';
 import type { KeyboardEvent } from 'react';
-import { Button, EmptyState, FilterChip, Inline, Input } from '@connorhoehnslalom/ui-components/shared';
+import { Button, EmptyState, FilterChip, Inline, Input, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { filterSkillSuggestions } from './scoresFormat';
 import { initialSkillComboboxState, skillComboboxReducer } from './skillComboboxState';
@@ -101,7 +101,7 @@ export function SkillFilter({ selectedSkill, onChange }: Props) {
 
   return (
     <Inline align="center" gap="xs">
-      <div ref={containerRef} className="relative w-[180px]">
+      <Stack ref={containerRef} gap="none" className="relative w-[180px]">
         <Input
           value={query}
           onChange={(e) => dispatch({ type: 'type', value: e.target.value })}
@@ -145,7 +145,7 @@ export function SkillFilter({ selectedSkill, onChange }: Props) {
           }
         />
         {showPanel && (
-          <div className="absolute inset-x-0 top-full z-50 mt-1 rounded-lg border border-border bg-surface p-1.5 shadow-lg">
+          <Stack gap="none" className="absolute inset-x-0 top-full z-50 mt-1 rounded-lg border border-border bg-surface p-1.5 shadow-lg">
             {suggestions.length === 0 ? (
               <EmptyState
                 title={`No skills match "${query}"`}
@@ -153,9 +153,11 @@ export function SkillFilter({ selectedSkill, onChange }: Props) {
                 onAction={() => dispatch({ type: 'clear' })}
               />
             ) : (
-              <ul id="skill-filter-listbox" role="listbox" aria-label="Skill suggestions" className="m-0 flex list-none flex-col gap-0.5 p-0">
+              <Stack as="ul" gap="none" id="skill-filter-listbox" role="listbox" aria-label="Skill suggestions" className="m-0 list-none gap-0.5 p-0">
                 {suggestions.map((s, i) => (
-                  <li
+                  <Inline
+                    as="li"
+                    gap="none"
                     key={s.id}
                     id={`skill-option-${i}`}
                     role="option"
@@ -169,13 +171,13 @@ export function SkillFilter({ selectedSkill, onChange }: Props) {
                     }`}
                   >
                     {s.name}
-                  </li>
+                  </Inline>
                 ))}
-              </ul>
+              </Stack>
             )}
-          </div>
+          </Stack>
         )}
-      </div>
+      </Stack>
       {selectedSkill && (
         <FilterChip active onClick={() => onChange('')}>
           Ranked by: {selectedSkill} ✕
