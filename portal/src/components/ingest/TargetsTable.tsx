@@ -1,5 +1,12 @@
 import {
-  Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip,
+  Chip,
+  Inline,
+  Table,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableTd,
+  TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { CRAWL_STATUS_TONE } from './types';
 import type { CrawlTarget } from './types';
@@ -34,7 +41,7 @@ export function TargetsTable({
           <TableTh>Cron</TableTh>
           <TableTh>Last Run</TableTh>
           <TableTh>Last Status</TableTh>
-          <TableTh style={{ textAlign: 'right' }}>Max Pages</TableTh>
+          <TableTh className="text-right">Max Pages</TableTh>
           <TableTh>Enabled</TableTh>
           <TableTh></TableTh>
         </TableRow>
@@ -45,19 +52,11 @@ export function TargetsTable({
           return (
             <TableRow key={t.id}>
               <TableTd>
-                <div style={{ fontWeight: 500 }}>{t.label}</div>
-                <div style={{ fontSize: 10, fontFamily: 'monospace', color: 'var(--color-text-tertiary)' }}>{t.id.slice(0, 12)}…</div>
+                <Inline gap="none" className="font-medium">{t.label}</Inline>
+                <Inline gap="none" className="text-[10px] font-mono text-text-tertiary">{t.id.slice(0, 12)}…</Inline>
               </TableTd>
               <TableTd
-                style={{
-                  fontSize: 11,
-                  fontFamily: 'monospace',
-                  color: 'var(--color-text-secondary)',
-                  maxWidth: 280,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
+                className="text-[11px] font-mono text-text-secondary max-w-[280px] overflow-hidden truncate whitespace-nowrap"
                 title={t.startUrl}
               >
                 {t.startUrl}
@@ -65,18 +64,18 @@ export function TargetsTable({
               <TableTd>
                 <Chip tone="neutral" size="xs">{t.mode}</Chip>
               </TableTd>
-              <TableTd style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--color-text-secondary)' }}>
-                {t.cronExpr ?? <span style={{ color: 'var(--color-text-tertiary)' }}>on-demand</span>}
+              <TableTd className="text-[11px] font-mono text-text-secondary">
+                {t.cronExpr ?? <Inline as="span" gap="none" className="text-text-tertiary">on-demand</Inline>}
               </TableTd>
-              <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)', whiteSpace: 'nowrap' }}>
+              <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
                 {t.lastRunAt ? new Date(t.lastRunAt).toLocaleString() : '—'}
               </TableTd>
               <TableTd>
                 {t.lastStatus
                   ? <Chip tone={CRAWL_STATUS_TONE[t.lastStatus]} size="xs">{t.lastStatus}</Chip>
-                  : <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>—</span>}
+                  : <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">—</Inline>}
               </TableTd>
-              <TableTd style={{ textAlign: 'right', fontSize: 12, fontWeight: 600 }}>{t.maxPages}</TableTd>
+              <TableTd className="text-right text-[12px] font-semibold">{t.maxPages}</TableTd>
               <TableTd>
                 {readOnly ? (
                   <Chip tone={t.enabled ? 'success' : 'neutral'} size="xs">{t.enabled ? 'on' : 'off'}</Chip>
@@ -90,13 +89,13 @@ export function TargetsTable({
               </TableTd>
               <TableTd>
                 {!readOnly && (
-                  <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                  <Inline gap="none" className="flex gap-1.5 justify-end">
                     <Button variant="secondary" size="sm" onClick={() => onRun(t)} disabled={isBusy}>
                       {isBusy ? 'Starting…' : 'Run now'}
                     </Button>
                     <Button variant="secondary" size="sm" onClick={() => onEdit(t)}>Edit</Button>
                     <Button variant="danger" size="sm" onClick={() => onDelete(t)}>Delete</Button>
-                  </div>
+                  </Inline>
                 )}
               </TableTd>
             </TableRow>

@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react';
 import {
-  Chip, Drawer, EmptyState, Inline, InlineAlert, LoadingState, MetaLine, SectionLabel, Stack,
+  Chip,
+  Drawer,
+  EmptyState,
+  Inline,
+  InlineAlert,
+  LoadingState,
+  MetaLine,
+  SectionLabel,
+  Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import {
   CRAWL_STATUS_TONE,
@@ -181,16 +189,8 @@ function TimelineRow({
   onOpen: () => void;
 }) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        gap: 12,
-        padding: 8,
-        borderRadius: 6,
-        border: '1px solid var(--color-border)',
-        background: 'var(--color-surface)',
-        alignItems: 'flex-start',
-      }}
+    <Inline gap="none"
+      className="flex gap-3 p-2 rounded-md border border-border bg-surface items-start"
     >
       <Thumbnail
         crawlId={crawlId}
@@ -199,92 +199,59 @@ function TimelineRow({
         width={120}
         onClick={onOpen}
       />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <span
-            style={{
-              fontSize: 12,
-              fontWeight: 600,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              cursor: 'pointer',
-            }}
+      <Inline gap="none" className="flex-1 min-w-0">
+        <Inline gap="none" className="flex items-center gap-2 mb-1">
+          <Inline as="span" gap="none"
+            className="text-[12px] font-semibold truncate cursor-pointer"
             onClick={onOpen}
             title={page.title || page.url}
           >
             {page.title || page.url}
-          </span>
+          </Inline>
           <Chip tone={PAGE_STATUS_TONE[page.status]} size="xs">{page.status}</Chip>
           {page.depth > 0 && (
-            <span style={{ fontSize: 10, color: 'var(--color-text-tertiary)' }}>depth {page.depth}</span>
+            <Inline as="span" gap="none" className="text-[10px] text-text-tertiary">depth {page.depth}</Inline>
           )}
-        </div>
-        <div
-          style={{
-            fontSize: 11,
-            fontFamily: 'monospace',
-            color: 'var(--color-text-tertiary)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            marginBottom: 4,
-          }}
+        </Inline>
+        <Inline gap="none"
+          className="text-[11px] font-mono text-text-tertiary overflow-hidden truncate whitespace-nowrap mb-1"
           title={page.url}
         >
           {page.url}
-        </div>
+        </Inline>
         {page.summary && (
-          <div
-            style={{
-              fontSize: 12,
-              color: 'var(--color-text-secondary)',
-              overflow: 'hidden',
-              display: '-webkit-box',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical',
-            }}
+          <Inline gap="none"
+            className="text-[12px] text-text-secondary overflow-hidden [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical]"
           >
             {page.summary}
-          </div>
+          </Inline>
         )}
         {page.error && (
-          <div style={{ fontSize: 11, color: 'var(--color-danger)', marginTop: 4 }}>
+          <Inline gap="none" className="text-[11px] text-danger mt-1">
             {page.error}
-          </div>
+          </Inline>
         )}
-        <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
+        <Inline gap="none" className="flex gap-2.5 mt-1.5">
           <Button variant="secondary" size="sm" onClick={onOpen}>Details</Button>
-        </div>
-      </div>
-    </div>
+        </Inline>
+      </Inline>
+    </Inline>
   );
 }
 
 function Metric({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div>
-      <div
-        style={{
-          fontSize: 10,
-          fontWeight: 600,
-          color: 'var(--color-text-tertiary)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.05em',
-        }}
+      <Inline gap="none"
+        className="text-[10px] font-semibold text-text-tertiary uppercase tracking-wide"
       >
         {label}
-      </div>
-      <div
-        style={{
-          fontSize: 13,
-          fontWeight: 600,
-          marginTop: 2,
-          fontFamily: mono ? 'ui-monospace, SFMono-Regular, Menlo, monospace' : undefined,
-        }}
+      </Inline>
+      <Inline gap="none"
+        className={`text-[13px] font-semibold mt-0.5 ${mono ? 'font-mono' : ''}`}
       >
         {value}
-      </div>
+      </Inline>
     </div>
   );
 }

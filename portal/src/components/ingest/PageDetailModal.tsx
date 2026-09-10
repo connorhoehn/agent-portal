@@ -1,6 +1,24 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Button, Card, Chip, CodeBlock, EmptyState, EntityCell, Inline, LoadingState, MetaLine, Modal, Stack, Table, TableBody, TableHead, TableRow, TableTd, TableTh, Tabs,
+  Button,
+  Card,
+  Chip,
+  CodeBlock,
+  EmptyState,
+  EntityCell,
+  Inline,
+  LoadingState,
+  MetaLine,
+  Modal,
+  SectionLabel,
+  Stack,
+  Table,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableTd,
+  TableTh,
+  Tabs,
 } from '@connorhoehnslalom/ui-components/shared';
 import { PAGE_STATUS_TONE, formatBytes, formatDuration } from './types';
 import type { CrawlPage } from './types';
@@ -188,23 +206,15 @@ function LinksTab({ links }: { links: CrawlPage['discoveredLinks'] }) {
           <TableTh>Label</TableTh>
           <TableTh>Target</TableTh>
           <TableTh>Type</TableTh>
-          <TableTh style={{ textAlign: 'right' }}>Coords</TableTh>
+          <TableTh className="text-right">Coords</TableTh>
         </TableRow>
       </TableHead>
       <TableBody>
         {links.map((l, i) => (
           <TableRow key={i}>
-            <TableTd style={{ fontSize: 12 }}>{l.label || <em style={{ color: 'var(--color-text-tertiary)' }}>(unlabeled)</em>}</TableTd>
+            <TableTd className="text-[12px]">{l.label || <em className="text-text-tertiary">(unlabeled)</em>}</TableTd>
             <TableTd
-              style={{
-                fontSize: 11,
-                fontFamily: 'monospace',
-                color: 'var(--color-text-secondary)',
-                maxWidth: 360,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
+              className="text-[11px] font-mono text-text-secondary max-w-[360px] overflow-hidden truncate whitespace-nowrap"
               title={l.targetUrl ?? ''}
             >
               {l.targetUrl ?? '—'}
@@ -215,12 +225,7 @@ function LinksTab({ links }: { links: CrawlPage['discoveredLinks'] }) {
                 : <Chip tone="neutral" size="xs">href</Chip>}
             </TableTd>
             <TableTd
-              style={{
-                textAlign: 'right',
-                fontSize: 11,
-                fontFamily: 'monospace',
-                color: 'var(--color-text-tertiary)',
-              }}
+              className="text-right text-[11px] font-mono text-text-tertiary"
             >
               {l.clickX != null && l.clickY != null ? `(${l.clickX}, ${l.clickY})` : '—'}
             </TableTd>
@@ -238,35 +243,28 @@ function S3KeysList({ page }: { page: CrawlPage }) {
     { label: 'analysis',   key: page.s3AnalysisKey },
   ];
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+    <Stack gap="none" className="flex flex-col gap-0.5">
       {entries.map(e => (
-        <div key={e.label} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 10 }}>
-          <span style={{ width: 80, color: 'var(--color-text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+        <Inline gap="none" key={e.label} className="flex items-center gap-2 text-[10px]">
+          <SectionLabel className="w-20 shrink-0">
             {e.label}
-          </span>
+          </SectionLabel>
           {e.key ? (
             <>
-              <code
-                style={{
-                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                  color: 'var(--color-text-secondary)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  flex: 1,
-                }}
+              <Inline as="code" gap="none"
+                className="font-mono text-text-secondary"
                 title={e.key}
               >
                 {e.key}
-              </code>
+              </Inline>
               <CopyButton text={e.key} />
             </>
           ) : (
-            <span style={{ color: 'var(--color-text-tertiary)' }}>—</span>
+            <Inline as="span" gap="none" className="text-text-tertiary">—</Inline>
           )}
-        </div>
+        </Inline>
       ))}
-    </div>
+    </Stack>
   );
 }
 
@@ -292,7 +290,7 @@ function CopyButton({ text }: { text: string }) {
     }
   }
   return (
-    <Button variant="secondary" size="sm" onClick={copy} style={{ padding: '1px 6px', fontSize: 10 }}>
+    <Button variant="secondary" size="sm" onClick={copy} className="px-1.5 py-px text-[10px]">
       {copied ? 'copied' : 'copy'}
     </Button>
   );

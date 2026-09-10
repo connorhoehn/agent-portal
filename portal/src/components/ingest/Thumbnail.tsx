@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Inline } from '@connorhoehnslalom/ui-components/shared';
 
 /**
  * Lazily renders a screenshot from
@@ -24,34 +25,25 @@ export function Thumbnail({
   const aspect = 16 / 10; // 16:10 placeholder; the actual image will set its own ratio
   const height = Math.round(width / aspect);
 
-  const baseStyle: React.CSSProperties = {
-    width,
-    minHeight: height,
-    borderRadius: 4,
-    border: '1px solid var(--color-border)',
-    background: 'var(--color-surface-raised)',
-    cursor: onClick ? 'pointer' : 'default',
-    overflow: 'hidden',
-    flexShrink: 0,
-    position: 'relative',
-  };
+  // Only the dimensions are runtime — they come from props. Everything else
+  // about the frame is a class, so `style` carries two numbers instead of a
+  // nine-property object.
+  const frameClass = [
+    'rounded border border-border bg-surface-raised overflow-hidden shrink-0 relative',
+    onClick ? 'cursor-pointer' : 'cursor-default',
+  ].join(' ');
 
   if (!hasScreenshot || errored) {
     return (
-      <div
-        style={{
-          ...baseStyle,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'var(--color-text-tertiary)',
-          fontSize: 10,
-          height,
-        }}
+      <Inline
+        gap="none"
+        justify="center"
+        className={`${frameClass} items-center text-text-tertiary text-[10px]`}
+        style={{ width, height }}
         onClick={onClick}
       >
         {errored ? 'image unavailable' : 'pending…'}
-      </div>
+      </Inline>
     );
   }
 
@@ -61,11 +53,8 @@ export function Thumbnail({
       alt={`Page ${pageIdx} screenshot`}
       onClick={onClick}
       onError={() => setErrored(true)}
-      style={{
-        ...baseStyle,
-        display: 'block',
-        height: 'auto',
-      }}
+      className={`${frameClass} block h-auto`}
+      style={{ width, minHeight: height }}
     />
   );
 }
