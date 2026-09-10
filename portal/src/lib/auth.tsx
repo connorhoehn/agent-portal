@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { clearContextChosen, markContextChosen } from './contextChoice';
 import { tenantHome } from './tenantHome';
 import { clearTenantScopedCaches } from './tenantCaches';
+import { Button, Inline, MetaLine, SectionLabel, Stack } from '@connorhoehnslalom/ui-components/shared';
 
 export type Role = 'member' | 'sme' | 'program-owner' | 'org-leader' | 'hr-admin';
 export type SessionRole = Role | 'admin';
@@ -289,37 +290,31 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
 function SsoGate({ ssoEnabled, onSignIn }: { ssoEnabled: boolean; onSignIn: () => void }) {
   return (
-    <div style={{
-      minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: 24, background: 'var(--color-bg, #0e1116)',
-    }}>
-      <div style={{ maxWidth: 420, textAlign: 'center' }}>
-        <div style={{
-          fontSize: 13, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase',
-          color: 'var(--color-primary)', marginBottom: 16,
-        }}>Org</div>
-        <h1 style={{ fontSize: 22, fontWeight: 700, margin: '0 0 8px', color: 'var(--color-text-primary)' }}>
+    <Inline
+      gap="none"
+      justify="center"
+      wrap={false}
+      className="min-h-screen items-center p-6 bg-bg"
+    >
+      <Stack gap="none" className="max-w-[420px] text-center">
+        <SectionLabel className="text-[13px] tracking-[0.14em] text-primary mb-4">Org</SectionLabel>
+        <SectionLabel as="h1" className="text-[22px] font-bold text-text-primary normal-case tracking-normal mb-2">
           Sign in required
-        </h1>
-        <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--color-text-secondary)', margin: '0 0 20px' }}>
-          {ssoEnabled
+        </SectionLabel>
+        <MetaLine
+          tone="secondary"
+          className="text-[14px] leading-relaxed mb-5"
+          items={[ssoEnabled
             ? 'This deployment uses enterprise sign-in. Continue with your identity provider.'
-            : 'No session and no sign-in method is available. Contact an administrator.'}
-        </p>
+            : 'No session and no sign-in method is available. Contact an administrator.']}
+        />
         {ssoEnabled && (
-          <button
-            type="button"
-            onClick={onSignIn}
-            style={{
-              padding: '10px 20px', fontSize: 14, fontWeight: 600, cursor: 'pointer',
-              borderRadius: 8, border: 'none', background: 'var(--color-primary)', color: '#fff',
-            }}
-          >
-            Sign in with SSO
-          </button>
+          <Inline gap="none" justify="center">
+            <Button variant="primary" onClick={onSignIn}>Sign in with SSO</Button>
+          </Inline>
         )}
-      </div>
-    </div>
+      </Stack>
+    </Inline>
   );
 }
 

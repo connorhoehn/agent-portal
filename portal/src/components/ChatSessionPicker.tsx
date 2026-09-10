@@ -4,7 +4,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useFetch } from '../hooks/useFetch';
-import { Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
 
 interface SessionSummary {
   sessionId: string;
@@ -43,29 +43,23 @@ export function ChatSessionPicker({ activeSessionId, onPick }: ChatSessionPicker
 
   return (
     <Stack gap="none" ref={rootRef} className="relative">
-      <button
+      <Button
+        variant="secondary"
+        size="sm"
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
         aria-haspopup="listbox"
         title={unavailable ? 'Previous conversations could not be loaded' : 'Previous conversations'}
-        style={{
-          border: '1px solid var(--color-border)', borderRadius: 4,
-          background: 'transparent', color: 'var(--color-text-secondary)',
-          fontSize: 11, padding: '3px 8px', cursor: 'pointer', fontFamily: 'inherit',
-          whiteSpace: 'nowrap',
-        }}
+        className="text-[11px] whitespace-nowrap"
       >
         {unavailable ? 'History ⚠' : 'History ▾'}
-      </button>
+      </Button>
       {open && (
-        <div role="listbox" style={{
-          position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 130,
-          width: 260, maxHeight: 320, overflowY: 'auto',
-          background: 'var(--color-surface, #fff)',
-          border: '1px solid var(--color-border, #e2e8f0)',
-          borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
-          padding: '4px 0',
-        }}>
+        <Stack
+          gap="none"
+          role="listbox"
+          className="absolute top-[calc(100%+6px)] right-0 z-[130] w-[260px] max-h-[320px] overflow-y-auto bg-surface border border-border rounded-lg shadow-[0_4px_16px_rgba(0,0,0,0.10)] py-1"
+        >
           {unavailable && (
             // Stack: three stacked lines, from a block <div>.
             <Stack gap="none" role="status" className="px-3 py-2 text-[11px] text-text-secondary">
@@ -75,48 +69,47 @@ export function ChatSessionPicker({ activeSessionId, onPick }: ChatSessionPicker
                   ? 'Your session expired — sign in to see them.'
                   : `The session list request failed (${error}).`}
               </Inline>
-              <button
-                type="button"
-                onClick={() => refresh()}
-                style={{
-                  marginTop: 6, fontSize: 11, padding: '2px 8px', borderRadius: 4,
-                  border: '1px solid var(--color-border)', background: 'var(--color-surface)',
-                  cursor: 'pointer', fontFamily: 'inherit',
-                }}
-              >
-                Retry
-              </button>
+              <Inline gap="none" className="mt-1.5">
+                <Button variant="secondary" size="sm" onClick={() => refresh()}>Retry</Button>
+              </Inline>
             </Stack>
           )}
           {sessions.map(s => {
             const active = s.sessionId === activeSessionId;
             return (
-              <button
+              <Button
                 key={s.sessionId}
+                variant="ghost"
+                size="sm"
+                fullWidth
                 role="option"
                 aria-selected={active}
                 onClick={() => { onPick(s.sessionId); setOpen(false); }}
-                style={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1,
-                  width: '100%', padding: '6px 12px', border: 'none', textAlign: 'left',
-                  background: active ? 'var(--color-primary-subtle, #eef2ff)' : 'transparent',
-                  color: 'var(--color-text-primary)', fontSize: 12, cursor: 'pointer',
-                  fontFamily: 'inherit',
-                }}
+                // `--color-primary-subtle` does not exist in this portal, so the
+                // #eef2ff fallback always won and this row stayed indigo under a
+                // non-orgiq tenant. `--color-primary-soft` is the token
+                // `[data-tenant]` actually overrides — same fix graphOverlay.tsx
+                // records.
+                className={[
+                  'flex flex-col items-start gap-px w-full px-3 py-1.5 border-none text-left',
+                  'text-text-primary text-[12px] cursor-pointer',
+                  active ? 'bg-[var(--color-primary-soft)]' : 'bg-transparent',
+                ].join(' ')}
               >
-                <span style={{
-                  fontWeight: active ? 700 : 500, maxWidth: '100%',
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                }}>
+                <Inline
+                  as="span"
+                  gap="none"
+                  className={`max-w-full truncate ${active ? 'font-bold' : 'font-medium'}`}
+                >
                   {s.title || 'Untitled conversation'}
-                </span>
+                </Inline>
                 <Inline as="span" gap="none" className="text-[10px] text-text-tertiary">
                   {new Date(s.createdAt).toLocaleString()}
                 </Inline>
-              </button>
+              </Button>
             );
           })}
-        </div>
+        </Stack>
       )}
     </Stack>
   );

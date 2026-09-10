@@ -41,16 +41,7 @@ export interface ProvisioningProgressProps {
 
 function PendingIcon() {
   return (
-    <span
-      style={{
-        display: 'inline-block',
-        width: 18,
-        height: 18,
-        borderRadius: '50%',
-        border: '2px solid var(--color-border)',
-        flexShrink: 0,
-      }}
-    />
+    <Inline gap="none" aria-hidden className="w-[18px] h-[18px] rounded-full border-2 border-border shrink-0" />
   );
 }
 
@@ -60,45 +51,27 @@ function RunningIcon() {
 
 function DoneIcon() {
   return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: 18,
-        height: 18,
-        borderRadius: '50%',
-        background: 'var(--color-success)',
-        flexShrink: 0,
-        fontSize: 11,
-        color: 'var(--color-surface)',
-        fontWeight: 700,
-      }}
+    <Inline
+      gap="none"
+      justify="center"
+      aria-hidden
+      className="w-[18px] h-[18px] rounded-full bg-success shrink-0 text-[11px] text-surface font-bold"
     >
       ✓
-    </span>
+    </Inline>
   );
 }
 
 function ErrorIcon() {
   return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: 18,
-        height: 18,
-        borderRadius: '50%',
-        background: 'var(--color-danger)',
-        flexShrink: 0,
-        fontSize: 11,
-        color: 'var(--color-surface)',
-        fontWeight: 700,
-      }}
+    <Inline
+      gap="none"
+      justify="center"
+      aria-hidden
+      className="w-[18px] h-[18px] rounded-full bg-danger shrink-0 text-[11px] text-surface font-bold"
     >
       ✗
-    </span>
+    </Inline>
   );
 }
 
@@ -211,27 +184,20 @@ export function ProvisioningProgress({
   const currentStep  = STEPS.find(s => stepStates[s.id] === 'running');
   const currentLabel = currentStep?.label ?? 'idle';
 
-  const srOnlyStyle: React.CSSProperties = {
-    position: 'absolute',
-    width: 1,
-    height: 1,
-    overflow: 'hidden',
-    clip: 'rect(0,0,0,0)',
-    whiteSpace: 'nowrap',
-    border: 0,
-    padding: 0,
-    margin: -1,
-  };
 
   return (
     <div role="region" aria-label="KB provisioning progress">
-      <div
+      {/* A screen-reader-only progressbar carrying the live step count. The
+          `srOnlyStyle` object it replaces was the classic clip-rect recipe;
+          `sr-only` is the same thing as a class. */}
+      <Inline
+        gap="none"
         role="progressbar"
         aria-valuenow={doneCount}
         aria-valuemin={0}
         aria-valuemax={totalCount}
         aria-valuetext={`Step ${doneCount + 1} of ${totalCount}: ${currentLabel}`}
-        style={srOnlyStyle}
+        className="sr-only"
       />
 
       <Stack gap="none" className="flex flex-col gap-3">
@@ -247,22 +213,19 @@ export function ProvisioningProgress({
               <StepIcon status={status} />
 
               <Stack gap="none" className="flex flex-col gap-0.5">
-                <span
-                  style={{
-                    fontSize: 13,
-                    fontWeight: status === 'running' ? 600 : 400,
-                    color:
-                      status === 'done'
-                        ? 'var(--color-success)'
-                        : status === 'error'
-                        ? 'var(--color-danger)'
-                        : status === 'running'
-                        ? 'var(--color-primary)'
-                        : 'var(--color-text-secondary)',
-                  }}
+                <Inline
+                  as="span"
+                  gap="none"
+                  className={[
+                    'text-[13px]',
+                    status === 'running' ? 'font-semibold' : 'font-normal',
+                    status === 'done' ? 'text-success'
+                      : status === 'error' ? 'text-danger'
+                      : status === 'running' ? 'text-text-primary' : 'text-text-tertiary',
+                  ].join(' ')}
                 >
                   {step.label}
-                </span>
+                </Inline>
                 {msg && (
                   <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">{msg}</Inline>
                 )}
