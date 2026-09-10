@@ -2,6 +2,7 @@
 // Props: events (newest-first array from useActivity), isLoading.
 
 import type { ActivityEvent } from '@connorhoehnslalom/realtime-modules/client';
+import { Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -26,41 +27,33 @@ export function ActivityFeedPanel({ events, isLoading = false, maxItems = 10 }: 
   // Library accumulates oldest-first; reverse slice so newest shows at top.
   const visible = events.slice(-maxItems).reverse();
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      <div style={{
-        fontSize: 11, fontWeight: 600, color: 'var(--color-text-tertiary, #9ca3af)',
-        textTransform: 'uppercase', letterSpacing: '0.05em',
-        padding: '8px 12px', borderBottom: '1px solid var(--color-border, #e5e7eb)',
-      }}>
+    <Stack gap="none" className="flex flex-col gap-0">
+      <Inline gap="none" className="text-[11px] font-semibold text-text-tertiary uppercase tracking-wide px-3 py-2 border-b border-border">
         Live Activity
-      </div>
+      </Inline>
       {isLoading && (
-        <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--color-text-tertiary, #9ca3af)' }}>
+        <Inline gap="none" className="px-3 py-2 text-[12px] text-text-tertiary">
           Loading…
-        </div>
+        </Inline>
       )}
       {!isLoading && visible.length === 0 && (
-        <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--color-text-tertiary, #9ca3af)' }}>
+        <Inline gap="none" className="px-3 py-2 text-[12px] text-text-tertiary">
           No recent activity
-        </div>
+        </Inline>
       )}
       {visible.map((e, idx) => (
-        <div key={eventKey(e, idx)} style={{
-          display: 'flex', alignItems: 'baseline', gap: 6,
-          padding: '5px 12px', borderBottom: '1px solid var(--color-border, #e5e7eb)',
-          fontSize: 12,
-        }}>
-          <span style={{ color: 'var(--color-text-tertiary, #9ca3af)', whiteSpace: 'nowrap', flexShrink: 0 }}>
+        <Inline gap="none" key={eventKey(e, idx)} className="flex items-baseline gap-1.5 px-3 py-[5px] border-b border-border text-[12px]">
+          <Inline as="span" gap="none" className="text-text-tertiary whitespace-nowrap shrink-0">
             {relativeTime(e.timestamp)}
-          </span>
-          <span style={{ fontWeight: 500, color: 'var(--color-text-secondary, #6b7280)', whiteSpace: 'nowrap' }}>
+          </Inline>
+          <Inline as="span" gap="none" className="font-medium text-text-secondary whitespace-nowrap">
             {e.displayName}
-          </span>
-          <span style={{ color: 'var(--color-text, #111827)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          </Inline>
+          <Inline as="span" gap="none" className="text-text-primary flex-1 overflow-hidden truncate whitespace-nowrap">
             {e.eventType}
-          </span>
-        </div>
+          </Inline>
+        </Inline>
       ))}
-    </div>
+    </Stack>
   );
 }

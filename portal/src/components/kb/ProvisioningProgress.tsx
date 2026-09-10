@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { Spinner } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Inline,
+  Spinner,
+  Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -230,19 +234,19 @@ export function ProvisioningProgress({
         style={srOnlyStyle}
       />
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <Stack gap="none" className="flex flex-col gap-3">
         {STEPS.map(step => {
           const status = stepStates[step.id];
           const msg    = stepMessages[step.id];
 
           return (
-            <div
+            <Inline gap="none"
               key={step.id}
-              style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}
+              className="flex items-start gap-2.5"
             >
               <StepIcon status={status} />
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Stack gap="none" className="flex flex-col gap-0.5">
                 <span
                   style={{
                     fontSize: 13,
@@ -260,13 +264,13 @@ export function ProvisioningProgress({
                   {step.label}
                 </span>
                 {msg && (
-                  <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{msg}</span>
+                  <Inline as="span" gap="none" className="text-[11px] text-text-tertiary">{msg}</Inline>
                 )}
-              </div>
-            </div>
+              </Stack>
+            </Inline>
           );
         })}
-      </div>
+      </Stack>
     </div>
   );
 }

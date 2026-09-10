@@ -1,4 +1,5 @@
 import type { KbRegistryEntry } from '../../pages/admin/KBRegistryPage.js';
+import { Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -38,17 +39,8 @@ function PipelineBox({
   dotActive?: boolean;
 }) {
   return (
-    <div
-      style={{
-        minWidth: 120,
-        padding: 12,
-        border: '1px solid var(--color-border)',
-        borderRadius: 6,
-        background: 'var(--color-surface)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 4,
-      }}
+    <Stack gap="none"
+      className="min-w-[120px] p-3 border border-border rounded-md bg-surface flex flex-col gap-1"
     >
       <div
         style={{
@@ -62,13 +54,8 @@ function PipelineBox({
         {title}
       </div>
 
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 0,
-          flexWrap: 'nowrap',
-        }}
+      <Inline gap="none"
+        className="flex items-center gap-0 flex-nowrap"
       >
         <span
           style={{
@@ -85,8 +72,8 @@ function PipelineBox({
           {value}
         </span>
         {showDot && <StatusDot active={dotActive ?? false} />}
-      </div>
-    </div>
+      </Inline>
+    </Stack>
   );
 }
 
