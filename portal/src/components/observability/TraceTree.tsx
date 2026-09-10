@@ -6,9 +6,8 @@
 // The row matching `currentInvocationId` is visually highlighted so the user
 // always knows where they are in the chain.
 
-import type { CSSProperties } from 'react';
 import { useNavigate } from 'react-router';
-import { Chip } from '@connorhoehnslalom/ui-components/shared';
+import { Chip, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { CostChip } from './CostChip';
 
 export interface TraceNode {
@@ -53,7 +52,7 @@ export function TraceTree({ parent, current, children, currentInvocationId }: Pr
   const kids = children ?? current.children ?? [];
 
   return (
-    <div style={treeBox}>
+    <Stack gap="xs" className="font-mono text-[12px]">
       {parent && (
         <Row
           node={parent}
@@ -84,7 +83,7 @@ export function TraceTree({ parent, current, children, currentInvocationId }: Pr
           onNavigate={(id) => navigate(`/admin/observability/invocations/${id}`)}
         />
       ))}
-    </div>
+    </Stack>
   );
 }
 
@@ -165,29 +164,27 @@ function Row({
   const isGhost =
     node.agentId === '(record not found)' || node.agentId === '(lookup failed)';
 
-  const rowStyle: CSSProperties = isGhost
-    ? {
-        ...row,
-        borderStyle: 'dashed',
-        borderColor: 'var(--color-border)',
-        background: 'var(--color-bg)',
-        opacity: 0.78,
-      }
-    : {
-        ...row,
-        background: isCurrent ? 'var(--color-surface-hover)' : undefined,
-        borderColor: isCurrent ? 'var(--color-primary, #6366f1)' : 'transparent',
-      };
+  // A ghost is a parent the poller has not ingested: dashed, dimmed, inert.
+  const rowClass = [
+    'gap-1.5 px-2 py-1.5 rounded border cursor-pointer select-none',
+    isGhost
+      ? 'border-dashed border-border bg-bg opacity-[0.78]'
+      : isCurrent
+        ? 'bg-surface-hover border-primary'
+        : 'border-transparent bg-transparent',
+  ].join(' ');
 
   return (
-    <div
+    <Inline
       role="button"
       tabIndex={0}
+      wrap={false}
+      gap="none"
       onClick={() => !isGhost && onNavigate(node.invocationId)}
       onKeyDown={(e) => {
         if ((e.key === 'Enter' || e.key === ' ') && !isGhost) onNavigate(node.invocationId);
       }}
-      style={rowStyle}
+      className={rowClass}
       title={
         isGhost
           ? 'Referenced parent has not been ingested yet. Likely the CW Logs poller has not caught its trace or the agent did not emit one.'
@@ -196,13 +193,13 @@ function Row({
             : 'Click to open'
       }
     >
-      <span style={connectorStyle}>{connector}</span>
-      <span style={isGhost ? ghostDot : dot} aria-hidden="true">
+      <Inline as="span" gap="none" className="whitespace-pre text-text-tertiary text-[12px]">{connector}</Inline>
+      <Inline as="span" gap="none" aria-hidden className={`text-[11px] ${isGhost ? 'text-text-tertiary' : 'text-primary'}`}>
         {isGhost ? '◌' : '◉'}
-      </span>
-      <span style={isGhost ? ghostName : agentName}>
+      </Inline>
+      <Inline as="span" gap="none" className={isGhost ? 'font-medium text-text-tertiary font-mono' : 'font-semibold text-text-primary'}>
         {isGhost ? `parent ${node.invocationId.slice(0, 8)}…` : name}
-      </span>
+      </Inline>
       {isGhost && (
         <Chip tone="warning" size="xs">
           not yet ingested
@@ -220,109 +217,34 @@ function Row({
       )}
       {!isGhost && (
         <>
-          <span style={metaSep}>·</span>
-          <span style={meta}>judge</span>
+          <Inline as="span" gap="none" className="text-text-tertiary text-[11px]">·</Inline>
+          <Inline as="span" gap="none" className="text-[11px] text-text-tertiary font-sans">judge</Inline>
           <Chip tone={judgeTone(node.judgeScore)} size="xs">
             {fmt(node.judgeScore)}
           </Chip>
-          <span style={metaSep}>·</span>
-          <span style={meta}>dur {fmtDur(node.durationMs)}</span>
+          <Inline as="span" gap="none" className="text-text-tertiary text-[11px]">·</Inline>
+          <Inline as="span" gap="none" className="text-[11px] text-text-tertiary font-sans">dur {fmtDur(node.durationMs)}</Inline>
           {node.totalCostUsd != null && (
             <>
-              <span style={metaSep}>·</span>
+              <Inline as="span" gap="none" className="text-text-tertiary text-[11px]">·</Inline>
               <CostChip cost={node.totalCostUsd} />
             </>
           )}
         </>
       )}
       {isGhost && (
-        <span style={ghostHint}>
+        <Inline as="span" gap="none" className="text-[10.5px] text-text-tertiary italic font-sans">
           referenced parent — poller has not caught its trace yet
-        </span>
+        </Inline>
       )}
-      <span style={spacer} />
+      <Inline as="span" gap="none" className="flex-1" />
       {!isGhost && (
-        <span style={viewArrow} aria-hidden="true">
+        <Inline as="span" gap="none" aria-hidden className="text-[11px] text-primary font-sans">
           view →
-        </span>
+        </Inline>
       )}
-    </div>
+    </Inline>
   );
 }
-
-// ── styles ────────────────────────────────────────────────────────────────────
-
-const treeBox: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 4,
-  fontFamily: 'ui-monospace, monospace',
-  fontSize: 12,
-};
-
-const row: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  padding: '6px 8px',
-  borderRadius: 4,
-  cursor: 'pointer',
-  border: '1px solid transparent',
-  background: 'transparent',
-  userSelect: 'none',
-};
-
-const connectorStyle: CSSProperties = {
-  whiteSpace: 'pre',
-  color: 'var(--color-text-tertiary)',
-  fontSize: 12,
-};
-
-const dot: CSSProperties = {
-  color: 'var(--color-primary, #6366f1)',
-  fontSize: 11,
-};
-
-const agentName: CSSProperties = {
-  fontWeight: 600,
-  color: 'var(--color-text-primary)',
-};
-
-const meta: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-  fontFamily: 'system-ui, sans-serif',
-};
-
-const metaSep: CSSProperties = {
-  color: 'var(--color-text-tertiary)',
-  fontSize: 11,
-};
-
-const spacer: CSSProperties = { flex: 1 };
-
-const viewArrow: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-primary, #6366f1)',
-  fontFamily: 'system-ui, sans-serif',
-};
-
-const ghostDot: CSSProperties = {
-  color: 'var(--color-text-tertiary)',
-  fontSize: 11,
-};
-
-const ghostName: CSSProperties = {
-  fontWeight: 500,
-  color: 'var(--color-text-tertiary)',
-  fontFamily: 'ui-monospace, monospace',
-};
-
-const ghostHint: CSSProperties = {
-  fontSize: 10.5,
-  color: 'var(--color-text-tertiary)',
-  fontStyle: 'italic',
-  fontFamily: 'system-ui, sans-serif',
-};
 
 export default TraceTree;

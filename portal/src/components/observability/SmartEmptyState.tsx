@@ -17,9 +17,11 @@
 // line, a retry — leaving the dashed neutral card to mean exactly one thing:
 // we looked, and there is genuinely nothing here.
 
-import { useEffect, useRef, useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
-import { Link } from 'react-router';
+import type { ReactNode } from 'react';
+import { Link as RouterLink } from 'react-router';
+import {
+  Card, CodeBlock, Inline, Link, MetaLine, Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 
 import { UnavailableNotice } from '../UnavailableNotice';
 
@@ -75,177 +77,67 @@ export function SmartEmptyState({
     );
   }
   return (
-    <div style={wrapperStyle}>
-      <div style={cardStyle}>
-        <div style={titleStyle}>{title}</div>
-        {detail && <div style={detailStyle}>{detail}</div>}
-        {actions.length > 0 && (
-          <div style={actionsListStyle}>
-            {actions.map((a, i) => (
-              <ActionRow key={i} action={a} />
-            ))}
-          </div>
-        )}
-        {children && <div style={childrenStyle}>{children}</div>}
-      </div>
-    </div>
+    <Inline gap="none" justify="center" className="px-4 py-6">
+      {/* Dashed border is load-bearing: it is what distinguishes "we looked and
+          there is nothing" from UnavailableNotice's solid danger border. */}
+      <Card className="max-w-[560px] w-full px-5.5 py-5 border-dashed">
+        <Stack gap="none" className="gap-2.5">
+          <Inline as="div" gap="none" className="text-[14px] font-semibold text-text-primary">{title}</Inline>
+          {detail && <MetaLine tone="secondary" className="leading-normal" items={[detail]} />}
+          {actions.length > 0 && (
+            <Stack gap="none" className="gap-2.5 mt-1">
+              {actions.map((a, i) => (
+                <ActionRow key={i} action={a} />
+              ))}
+            </Stack>
+          )}
+          {children && <Stack gap="none" className="mt-1">{children}</Stack>}
+        </Stack>
+      </Card>
+    </Inline>
   );
 }
 
 function ActionRow({ action }: { action: SmartEmptyAction }) {
-  const [copied, setCopied] = useState(false);
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  useEffect(
-    () => () => {
-      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
-    },
-    [],
-  );
-
-  function onCopy() {
-    if (!action.code) return;
-    try {
-      void navigator.clipboard.writeText(action.code);
-      setCopied(true);
-      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
-      copyTimerRef.current = setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // clipboard unavailable — silent failure is fine here
-    }
-  }
-
   const labelNode = action.href ? (
     action.href.startsWith('/') ? (
-      <Link to={action.href} style={linkStyle}>
+      <RouterLink to={action.href} className="text-primary font-medium no-underline hover:underline">
+        {action.label}
+      </RouterLink>
+    ) : (
+      // The library Link forces rel="noopener noreferrer"; the raw anchor this
+      // replaces set only rel="noreferrer".
+      <Link href={action.href} external className="font-medium">
         {action.label}
       </Link>
-    ) : (
-      <a href={action.href} target="_blank" rel="noreferrer" style={linkStyle}>
-        {action.label}
-      </a>
     )
   ) : (
-    <span style={labelStyle}>{action.label}</span>
+    <Inline as="span" gap="none" className="text-text-primary font-medium">{action.label}</Inline>
   );
 
   return (
-    <div style={actionRowStyle}>
-      <div style={actionHeadStyle}>
-        <span style={bulletStyle}>›</span>
+    <Stack gap="none" className="gap-1">
+      <Inline gap="xs" align="baseline" wrap={false} className="text-[12.5px]">
+        <Inline as="span" gap="none" className="text-text-tertiary font-mono">›</Inline>
         {labelNode}
-      </div>
-      {action.detail && <div style={actionDetailStyle}>{action.detail}</div>}
-      {action.code && (
-        <div style={codeWrapStyle}>
-          <pre style={codeStyle}>{action.code}</pre>
-          <button
-            type="button"
-            onClick={onCopy}
-            style={copyBtnStyle}
-            title="Copy command"
-          >
-            {copied ? '✓ copied' : 'Copy'}
-          </button>
-        </div>
+      </Inline>
+      {action.detail && (
+        <MetaLine size="xs" className="pl-3.5" items={[action.detail]} />
       )}
-    </div>
+      {action.code && (
+        // CodeBlock owns the copy affordance, so the clipboard write, the
+        // "✓ copied" flag and the timeout that reset it are all gone — along
+        // with the cleanup effect that existed only to clear that timer.
+        <CodeBlock
+          className="ml-3.5"
+          code={action.code}
+          copyButton
+          ariaLabel={`Command for ${action.label}`}
+        />
+      )}
+    </Stack>
   );
 }
 
-const wrapperStyle: CSSProperties = {
-  display: 'flex',
-  justifyContent: 'center',
-  padding: '24px 16px',
-};
-const cardStyle: CSSProperties = {
-  maxWidth: 560,
-  width: '100%',
-  padding: '20px 22px',
-  border: '1px dashed var(--color-border)',
-  borderRadius: 'var(--radius-md, 6px)',
-  background: 'var(--color-surface)',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 10,
-};
-const titleStyle: CSSProperties = {
-  fontSize: 14,
-  fontWeight: 600,
-  color: 'var(--color-text-primary)',
-};
-const detailStyle: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary)',
-  lineHeight: 1.5,
-};
-const actionsListStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 10,
-  marginTop: 4,
-};
-const actionRowStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 4,
-};
-const actionHeadStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'baseline',
-  gap: 6,
-  fontSize: 12.5,
-};
-const bulletStyle: CSSProperties = {
-  color: 'var(--color-text-tertiary)',
-  fontFamily: 'ui-monospace, monospace',
-};
-const labelStyle: CSSProperties = {
-  color: 'var(--color-text-primary)',
-  fontWeight: 500,
-};
-const linkStyle: CSSProperties = {
-  color: 'var(--color-primary, #6366f1)',
-  fontWeight: 500,
-  textDecoration: 'none',
-};
-const actionDetailStyle: CSSProperties = {
-  fontSize: 11.5,
-  color: 'var(--color-text-tertiary)',
-  paddingLeft: 14,
-};
-const codeWrapStyle: CSSProperties = {
-  position: 'relative',
-  marginLeft: 14,
-};
-const codeStyle: CSSProperties = {
-  margin: 0,
-  padding: '8px 64px 8px 10px',
-  fontFamily: '"Fira Code", "Cascadia Code", ui-monospace, monospace',
-  fontSize: 11.5,
-  lineHeight: 1.5,
-  background: 'var(--color-bg)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm, 4px)',
-  color: 'var(--color-text-primary)',
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-all',
-};
-const copyBtnStyle: CSSProperties = {
-  position: 'absolute',
-  top: 6,
-  right: 6,
-  padding: '2px 8px',
-  fontSize: 10.5,
-  fontFamily: 'inherit',
-  background: 'var(--color-surface)',
-  color: 'var(--color-text-secondary)',
-  border: '1px solid var(--color-border)',
-  borderRadius: 'var(--radius-sm, 4px)',
-  cursor: 'pointer',
-};
-const childrenStyle: CSSProperties = {
-  marginTop: 6,
-};
 
 export default SmartEmptyState;
