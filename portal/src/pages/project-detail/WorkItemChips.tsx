@@ -191,10 +191,17 @@ export function EstimateChip({
 /** Live marketplace state for a work item: a pulsing chip while an agent is on
  *  it (linking to its Computers box), and a review link once a change landed. */
 export function RunStateChips({ item, run }: { item: WorkItemTree; run: BotRun | undefined }) {
+  // The Computer Lab is gated on ManageDevbox (hr-admin, sme). org-leader can
+  // dispatch a run and cannot open the lab, so this link used to render for a
+  // role that RequireRole then bounced to /select — a chip that looked like a
+  // way in and was a dead end. Linked only when the door opens; otherwise the
+  // chip still says an agent is working, which was always the real message.
+  const { can } = useCapabilities();
+  const mayOpenLab = can('ManageDevbox');
   return (
     <>
       {run?.status === 'running' && (
-        run.outcome?.boxId ? (
+        run.outcome?.boxId && mayOpenLab ? (
           <Link
             to={`/admin/devbox?box=${encodeURIComponent(run.outcome.boxId)}`}
             className="no-underline shrink-0"
@@ -204,7 +211,7 @@ export function RunStateChips({ item, run }: { item: WorkItemTree; run: BotRun |
             <Chip tone="info" size="xs" dot="pulse">agent working</Chip>
           </Link>
         ) : (
-          <Chip tone="info" size="xs" dot="pulse">agent working</Chip>
+          <Chip tone="info" size="xs" dot="pulse" title="An agent is working this item">agent working</Chip>
         )
       )}
       {item.status === 'in_review' && run?.outcome?.changeId && (

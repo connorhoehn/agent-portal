@@ -711,6 +711,41 @@ export async function listMarketplaceRuns(orgProjectId: string, limit = 100): Pr
 }
 
 /**
+ * Every run that is still going, across the whole fleet.
+ *
+ * WHY THIS EXISTS. A dispatch was discoverable only from the initiative you
+ * launched it from: `/api/bots/marketplace-runs` needs an orgProjectId, and
+ * `/api/bots/:id/runs` needs a bot id, which a marketplace dispatch does not
+ * have. Navigate away after pressing Run and the run was gone — still burning
+ * money in a microVM, with no list anywhere that could lead you back to it.
+ * The devbox quick-switch lists COMPUTERS, which is a different question: a box
+ * with no run is idle, and a run whose box has been reaped is still a row.
+ *
+ * Scoped to RUNNING only and capped, because this backs a header widget that
+ * polls: it must answer "what is live right now", not carry history.
+ */
+export async function listActiveRuns(limit = 25): Promise<BotRun[]> {
+  const cap = Math.min(Math.max(limit, 1), 100);
+  if (config.mock.aurora) {
+    return liveBotRuns.rows()
+      .filter((r) => r.status === 'running')
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+      .slice(0, cap)
+      .map((r) => ({ ...r }));
+  }
+  // No attribution predicate: a run someone else dispatched is still a live
+  // cost centre, and hiding it from the operator watching the fleet is how one
+  // gets lost. Visibility of the BOX is filtered separately, at the lab.
+  const rows = await safeExec(
+    `SELECT * FROM bot_runs
+      WHERE status = 'running'
+      ORDER BY started_at DESC LIMIT :lim`,
+    [int('lim', cap)],
+  );
+  return rows.map(rowToRun);
+}
+
+/**
  * Every `bot_run` this process can see — the seeded cron history plus every
  * row `createBotRun` recorded. The mock analogue of a bare `FROM bot_runs`
  * with no attribution predicate at all, which is what the ORG-wide total sums

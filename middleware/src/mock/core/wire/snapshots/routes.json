@@ -473,72 +473,77 @@
     {
       "method": "GET",
       "path": "/api/bots",
-      "source": "src/routes/bots.ts:514"
+      "source": "src/routes/bots.ts:547"
     },
     {
       "method": "POST",
       "path": "/api/bots",
-      "source": "src/routes/bots.ts:519"
+      "source": "src/routes/bots.ts:552"
     },
     {
       "method": "DELETE",
       "path": "/api/bots/:id",
-      "source": "src/routes/bots.ts:616"
+      "source": "src/routes/bots.ts:649"
     },
     {
       "method": "GET",
       "path": "/api/bots/:id",
-      "source": "src/routes/bots.ts:560"
+      "source": "src/routes/bots.ts:593"
     },
     {
       "method": "PATCH",
       "path": "/api/bots/:id",
-      "source": "src/routes/bots.ts:566"
+      "source": "src/routes/bots.ts:599"
     },
     {
       "method": "POST",
       "path": "/api/bots/:id/pause",
-      "source": "src/routes/bots.ts:673"
+      "source": "src/routes/bots.ts:706"
     },
     {
       "method": "POST",
       "path": "/api/bots/:id/resume",
-      "source": "src/routes/bots.ts:684"
+      "source": "src/routes/bots.ts:717"
     },
     {
       "method": "POST",
       "path": "/api/bots/:id/run",
-      "source": "src/routes/bots.ts:626"
+      "source": "src/routes/bots.ts:659"
     },
     {
       "method": "GET",
       "path": "/api/bots/:id/runs",
-      "source": "src/routes/bots.ts:705"
+      "source": "src/routes/bots.ts:738"
+    },
+    {
+      "method": "GET",
+      "path": "/api/bots/active-runs",
+      "source": "src/routes/bots.ts:504"
     },
     {
       "method": "POST",
       "path": "/api/bots/dispatch-work",
-      "source": "src/routes/bots.ts:201"
+      "source": "src/routes/bots.ts:202"
     },
     {
       "method": "GET",
       "path": "/api/bots/estimate",
-      "source": "src/routes/bots.ts:188"
+      "source": "src/routes/bots.ts:189"
     },
     {
       "method": "GET",
       "path": "/api/bots/marketplace-runs",
-      "source": "src/routes/bots.ts:491"
+      "source": "src/routes/bots.ts:524"
     },
     {
       "method": "POST",
       "path": "/api/bots/work-items/:id/estimate",
-      "source": "src/routes/bots.ts:442"
+      "source": "src/routes/bots.ts:443"
     },
     {
       "method": "POST",
       "path": "/api/bots/work-items/:id/review-estimate",
-      "source": "src/routes/bots.ts:476"
+      "source": "src/routes/bots.ts:477"
     },
     {
       "method": "GET",

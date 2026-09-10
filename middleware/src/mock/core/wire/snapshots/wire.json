@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-10T17:56:01.019Z",
-  "serverHandlerSha": "03c77cb785ae1bde95704771a0d327e72abe11dd2f758574842831900d53009e",
+  "capturedAt": "2026-09-10T18:30:51.535Z",
+  "serverHandlerSha": "fc37ecf71fff0d26ac89939fa7e4aa329404ca9878454a8b939d2e8079ad5941",
   "baseUrl": "http://127.0.0.1:3001",
   "personas": [
     "orgiq/admin",
@@ -1522,6 +1522,15 @@
         ]
       }
     },
+    "GET /api/bots/active-runs": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "runs": "array"
+      },
+      "values": {}
+    },
     "GET /api/bots/estimate": {
       "skipped": "HTTP 400 (orgiq/admin); HTTP 400 (assessment/admin); HTTP 403 (anonymous)"
     },
@@ -1933,7 +1942,6 @@
       },
       "values": {
         "boxes[].status": [
-          "error",
           "idle",
           "waiting"
         ]
@@ -2111,7 +2119,7 @@
       },
       "values": {
         "kind": [
-          "worked"
+          "convention"
         ],
         "level": [
           "L0"
@@ -3570,12 +3578,35 @@
         "nodes[].presence.lastSeenAt": "string",
         "nodes[].presence.nodeId": "string",
         "nodes[].presence.sessions": "array",
+        "nodes[].presence.sessions[]": "object",
+        "nodes[].presence.sessions[].branch": "string",
+        "nodes[].presence.sessions[].contextUsed": "number",
+        "nodes[].presence.sessions[].harness": "string",
+        "nodes[].presence.sessions[].intent": "string",
+        "nodes[].presence.sessions[].lastSeenAt": "string",
+        "nodes[].presence.sessions[].memory": "object",
+        "nodes[].presence.sessions[].memory.lastPushAt": "number",
+        "nodes[].presence.sessions[].memory.mode": "string",
+        "nodes[].presence.sessions[].memory.pullCursorAgeS": "number",
+        "nodes[].presence.sessions[].model": "string",
+        "nodes[].presence.sessions[].modelProvider": "string",
+        "nodes[].presence.sessions[].projectId": "string",
+        "nodes[].presence.sessions[].repo": "string",
+        "nodes[].presence.sessions[].sessionId": "string",
+        "nodes[].presence.sessions[].startedAt": "number",
+        "nodes[].presence.sessions[].touching": "array",
+        "nodes[].presence.sessions[].touching[]": "string",
+        "nodes[].presence.sessions[].worktree": "string",
         "nodes[].presence.status": "string",
         "nodes[].revokedAt": "null"
       },
       "values": {
+        "nodes[].presence.sessions[].memory.mode": [
+          "synced"
+        ],
         "nodes[].presence.status": [
-          "offline"
+          "offline",
+          "stale"
         ]
       }
     },
@@ -3605,7 +3636,8 @@
       "values": {
         "nodes[].presence.status": [
           "connected",
-          "offline"
+          "offline",
+          "stale"
         ]
       }
     },
@@ -3659,6 +3691,7 @@
         ],
         "events[].role": [
           "admin",
+          "hr-admin",
           "org-leader"
         ],
         "events[].tenant": [
@@ -5571,7 +5604,6 @@
         "jobs[].result.durationMs": "number",
         "jobs[].result.summary": "string",
         "jobs[].result.toolCalls": "number",
-        "jobs[].result.transcript": "array",
         "jobs[].result.turns": "number",
         "jobs[].sessionId": "null|string",
         "jobs[].startedAt": "string",
@@ -5956,7 +5988,8 @@
     "mode": {
       "open": false,
       "values": [
-        "sim"
+        "sim",
+        "synced"
       ]
     },
     "outcome": {
@@ -5972,6 +6005,7 @@
         "admin",
         "contributor",
         "decider",
+        "hr-admin",
         "org-leader",
         "owner",
         "sme"

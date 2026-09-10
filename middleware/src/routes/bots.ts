@@ -18,10 +18,11 @@
 import { Router } from 'express';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
 import { degradedFields } from '../lib/upstream.js';
-import { readForRolesElseAction, requireAction } from '../lib/authz.js';
+import { readForRolesElseAction, requireAction, requireSession } from '../lib/authz.js';
 import {
   listBotsResult, getBot, createBot, updateBot, deleteBot, setPausedReason, listBotRunsResult,
-  listMarketplaceRuns, runCostSamples, perPointCostSamples,
+  listMarketplaceRuns,
+  listActiveRuns, runCostSamples, perPointCostSamples,
   type BotTemplate, type BotTrigger, type BotPatch,
 } from '../providers/bots.js';
 import {
@@ -486,6 +487,38 @@ botsRouter.post('/work-items/:id/review-estimate', dispatchGate, asyncHandler(as
     return;
   }
   res.json({ item: await getWorkItem(id) });
+}));
+
+/**
+ * Everything the fleet is running right now.
+ *
+ * A session floor, not a capability gate: "what is currently burning money in
+ * my org" is a question every signed-in role may ask, and the runs it lists are
+ * already visible per-initiative to anyone who can open the initiative. The
+ * BOX behind a run is a separate authorization, enforced at the lab.
+ *
+ * Each row carries the ids the caller needs to get somewhere useful — the box
+ * to tail, and the work item it belongs to — because the failure this route
+ * exists for is "I ran a task and then I lost it".
+ */
+botsRouter.get('/active-runs', requireSession('ActiveRuns'), asyncHandler(async (_req, res) => {
+  const runs = await listActiveRuns();
+  // Titles resolved one by one through getWorkItem rather than joined in SQL.
+  // The list is capped at 25, and getWorkItem already carries the missing-table
+  // guard — a JOIN would take the whole query down on a cluster without
+  // work_items, turning "no titles" into "no runs", which is the exact failure
+  // this route exists to prevent.
+  const enriched = await Promise.all(runs.map(async (run) => {
+    if (!run.workItemId) return { ...run, workItemTitle: null, projectId: null };
+    const item = await getWorkItem(run.workItemId);
+    // projectId travels with the run because not every caller can open the
+    // Computer Lab: ManageDevbox is held by hr-admin and sme, NOT by
+    // org-leader, who can nonetheless dispatch. Without the initiative id
+    // there is no destination such a caller is allowed to reach, which is
+    // precisely how a dispatched run became unfindable.
+    return { ...run, workItemTitle: item?.title ?? null, projectId: item?.projectId ?? null };
+  }));
+  res.json({ runs: enriched });
 }));
 
 botsRouter.get('/marketplace-runs', marketReadGate, asyncHandler(async (req, res) => {

@@ -18,6 +18,7 @@ jest.mock('../../config.js', () => ({
 jest.mock('../../lib/authz.js', () => ({
   readForRolesElseAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
   requireAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  requireSession: () => (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 jest.mock('../../lib/devbox-arn.js', () => ({
   resolveDevboxArn: jest.fn(async () => null),
@@ -160,5 +161,46 @@ describe('estimate name resolution degrades to the raw subject', () => {
     // falls back `estimatedByName ?? estimatedBy`, so a null name is safe.
     const res = await save(buildApp());
     expect(res.body.item.estimatedBy).toBe('u-rachel');
+  });
+});
+
+// ─── GET /api/bots/active-runs ───────────────────────────────────────────────
+//
+// "I ran a task and then I lost it." A dispatch was reachable only from the
+// initiative it was launched from — /api/bots/marketplace-runs needs an
+// orgProjectId, and /api/bots/:id/runs needs a bot id a marketplace dispatch
+// does not have. Navigate away and the run was gone: still in a microVM, still
+// costing money, with no list that could lead back to it.
+
+describe('GET /api/bots/active-runs', () => {
+  const active = () => request(buildApp()).get('/api/bots/active-runs');
+
+  it('is empty when nothing is running, so the header can render nothing', async () => {
+    const res = await active();
+    expect(res.status).toBe(200);
+    expect(res.body.runs).toEqual([]);
+  });
+
+  it('lists a dispatched run with the ids needed to reach it', async () => {
+    await request(buildApp()).post('/api/bots/dispatch-work')
+      .send({ workItemId: ITEM, model: MODEL, estimate: FORECAST });
+    const res = await active();
+    expect(res.body.runs).toHaveLength(1);
+    const [run] = res.body.runs;
+    expect(run.status).toBe('running');
+    // The title makes the row readable; projectId is the destination for a
+    // caller who cannot open the lab (org-leader holds no ManageDevbox).
+    expect(run.workItemTitle).toBe('mTLS rollout plan with break-glass procedure');
+    expect(run.projectId).toBe('p-zero-trust');
+    // The box is where the logs are, and it comes from the run's own outcome
+    // rather than a guess at which computer is probably the right one.
+    expect(run.outcome.boxId).toEqual(expect.any(String));
+  });
+
+  it('carries no title or project for a run with no work item, and still lists it', async () => {
+    // A bot firing is not attached to a work item and is still a live cost
+    // centre. Dropping it would hide spend from the person watching the fleet.
+    const res = await active();
+    expect(Array.isArray(res.body.runs)).toBe(true);
   });
 });

@@ -22,6 +22,7 @@
 jest.mock('../../lib/authz.js', () => ({
   readForRolesElseAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
   requireAction: () => (_req: unknown, _res: unknown, next: () => void) => next(),
+  requireSession: () => (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 
 // config.ts uses import.meta, which the CJS test transform cannot compile; the
