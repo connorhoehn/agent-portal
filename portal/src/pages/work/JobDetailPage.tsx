@@ -21,7 +21,6 @@ import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
 import { JobStatusPill, LIVE_STATUSES, T, money } from './workShared';
-import { ScrollRegion } from '../../components/ScrollRegion';
 import { isNotFoundFetchError } from './jobFetchStatus';
 
 interface ActivityEntry {
@@ -374,7 +373,7 @@ export default function JobDetailPage() {
           )}
         </Toolbar>
 
-        <ScrollRegion ref={scrollRef} className="max-h-[420px] overflow-auto">
+        <Stack gap="none" ref={scrollRef} className="max-h-[420px] overflow-auto">
           {activity.length === 0 ? (
             <T as="div" wrap className="px-3.5 py-8 text-center text-[12.5px] text-text-tertiary">
               {job.status === 'queued'
@@ -409,7 +408,7 @@ export default function JobDetailPage() {
               )}
             </Inline>
           ))}
-        </ScrollRegion>
+        </Stack>
       </Card>
 
       {/* ── Outcome ── */}

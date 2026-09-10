@@ -26,7 +26,6 @@ import {
   Card, Chip, CodeBlock, EmptyState, Inline, InlineAlert, MetaLine, SectionLabel, Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { Markdown } from '../Markdown';
-import { ScrollRegion } from '../ScrollRegion';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -316,7 +315,7 @@ export const RunTimeline = forwardRef<RunTimelineHandle, RunTimelineProps>(funct
           </Chip>
         )}
       </Inline>
-      <ScrollRegion className={`overflow-y-auto overflow-x-hidden min-h-[280px] ${maxHeightClass} px-3.5 py-2`} ref={scrollRef}>
+      <Stack gap="none" className={`overflow-y-auto overflow-x-hidden min-h-[280px] ${maxHeightClass} px-3.5 py-2`} ref={scrollRef}>
         {timeline.length === 0 ? (
           <EmptyState
             icon={<TimelineGlyph />}
@@ -390,7 +389,7 @@ export const RunTimeline = forwardRef<RunTimelineHandle, RunTimelineProps>(funct
             <InlineAlert key={item.id} tone="error" className="my-2">{item.text}</InlineAlert>
           );
         })}
-      </ScrollRegion>
+      </Stack>
     </Card>
   );
 });
