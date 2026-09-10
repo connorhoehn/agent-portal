@@ -3,8 +3,9 @@
 // surface the error via useToast().
 
 import { useState } from 'react';
-import type { CSSProperties } from 'react';
-import { Modal, useToast } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button, Inline, MetaLine, Modal, SectionLabel, Stack, useToast,
+} from '@connorhoehnslalom/ui-components/shared';
 import {
   closeHaltConfirm,
   openHaltConfirm,
@@ -53,11 +54,14 @@ export function HaltButton(): React.ReactElement {
 
   return (
     <>
-      <button
-        type="button"
+      {/* Button's `danger` variant is exactly the halted/live distinction the
+          two style objects were drawing by hand, and it owns the disabled
+          treatment. */}
+      <Button
+        variant="danger"
+        size="sm"
         onClick={openHaltConfirm}
         disabled={halted || isTerminal}
-        style={halted || isTerminal ? haltedBtnStyle : haltBtnStyle}
         title={
           isTerminal
             ? `Experiment complete (${controllerState === 'promoted' ? 'promoted' : 'rolled back'})`
@@ -67,106 +71,39 @@ export function HaltButton(): React.ReactElement {
         }
       >
         {isTerminal ? (controllerState === 'promoted' ? 'Promoted' : 'Rolled back') : halted ? 'Halted' : 'Halt canary'}
-      </button>
+      </Button>
 
       {confirming && (
         <Modal open={true} onClose={closeHaltConfirm} maxWidth={420}>
-          <div style={modalBodyStyle}>
-            <h3 style={modalTitleStyle}>Halt canary?</h3>
-            <p style={modalBodyTextStyle}>
-              Pins 100% of traffic to version A and freezes the controller. The current
-              experiment will pause until you manually resume it.
-            </p>
-            <div style={modalActionsStyle}>
-              <button
-                type="button"
-                onClick={closeHaltConfirm}
-                style={secondaryBtnStyle}
-                disabled={submitting}
-              >
+          <Stack gap="md" className="px-4.5 py-4">
+            <SectionLabel as="h3" className="text-[14px] font-semibold text-text-primary normal-case tracking-normal">
+              Halt canary?
+            </SectionLabel>
+            <MetaLine
+              tone="secondary"
+              className="leading-normal"
+              items={['Pins 100% of traffic to version A and freezes the controller. The current '
+                + 'experiment will pause until you manually resume it.']}
+            />
+            <Inline gap="sm" justify="end" wrap={false}>
+              <Button variant="secondary" size="sm" onClick={closeHaltConfirm} disabled={submitting}>
                 Cancel
-              </button>
-              <button
-                type="button"
-                onClick={onConfirm}
-                disabled={submitting}
-                style={confirmBtnStyle}
-              >
+              </Button>
+              <Button variant="danger" size="sm" onClick={onConfirm} disabled={submitting}>
                 {submitting ? 'Halting…' : 'Halt'}
-              </button>
-            </div>
-          </div>
+              </Button>
+            </Inline>
+          </Stack>
         </Modal>
       )}
     </>
   );
 }
 
-const haltBtnStyle: CSSProperties = {
-  padding: '6px 12px',
-  fontSize: 12,
-  fontWeight: 600,
-  border: '1px solid var(--color-danger)',
-  borderRadius: 4,
-  background: 'var(--color-danger)',
-  color: 'var(--color-surface)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-};
 
-const haltedBtnStyle: CSSProperties = {
-  ...haltBtnStyle,
-  background: 'var(--color-text-tertiary)',
-  borderColor: 'var(--color-text-tertiary)',
-  cursor: 'not-allowed',
-};
 
-const modalBodyStyle: CSSProperties = {
-  padding: '16px 18px',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 12,
-};
 
-const modalTitleStyle: CSSProperties = {
-  fontSize: 14,
-  fontWeight: 600,
-  margin: 0,
-  color: 'var(--color-text-primary, #0f172a)',
-};
 
-const modalBodyTextStyle: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-secondary, #475569)',
-  margin: 0,
-  lineHeight: 1.5,
-};
 
-const modalActionsStyle: CSSProperties = {
-  display: 'flex',
-  justifyContent: 'flex-end',
-  gap: 8,
-};
 
-const secondaryBtnStyle: CSSProperties = {
-  padding: '6px 12px',
-  fontSize: 12,
-  border: '1px solid var(--color-border, #e2e8f0)',
-  borderRadius: 4,
-  background: 'transparent',
-  color: 'var(--color-text-secondary, #475569)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-};
 
-const confirmBtnStyle: CSSProperties = {
-  padding: '6px 12px',
-  fontSize: 12,
-  fontWeight: 600,
-  border: '1px solid var(--color-danger)',
-  borderRadius: 4,
-  background: 'var(--color-danger)',
-  color: 'var(--color-surface)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-};
