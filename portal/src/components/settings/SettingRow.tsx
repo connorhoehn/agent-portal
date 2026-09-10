@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
 
 interface SettingRowProps {
   title: string;
@@ -8,26 +9,22 @@ interface SettingRowProps {
 
 export function SettingRow({ title, description, control }: SettingRowProps) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 16,
-        padding: '10px 0',
-      }}
+    <Inline gap="lg" justify="between" wrap={false} className="py-2.5"
     >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text-primary)' }}>
+      {/* Stack, not Inline: title and description are stacked block children.
+          The <div> they came from had no display:flex, so a flex ROW would put
+          them side by side. */}
+      <Stack gap="none" className="flex-1 min-w-0">
+        <Inline as="span" gap="none" className="text-[14px] font-medium text-text-primary">
           {title}
-        </div>
+        </Inline>
         {description && (
-          <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>
+          <Inline as="span" gap="none" className="text-[12px] text-text-secondary mt-0.5">
             {description}
-          </div>
+          </Inline>
         )}
-      </div>
-      <div style={{ flexShrink: 0 }}>{control}</div>
-    </div>
+      </Stack>
+      <Inline gap="none" className="shrink-0">{control}</Inline>
+    </Inline>
   );
 }

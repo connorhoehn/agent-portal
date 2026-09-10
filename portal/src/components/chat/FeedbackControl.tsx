@@ -27,43 +27,9 @@
 import { useState } from 'react';
 import { useCapabilities } from '../../lib/capabilities';
 import { buildFeedbackBody, type AskFeedbackLabel } from './feedbackBody';
+import { Button, Inline, MetaLine } from '@connorhoehnslalom/ui-components/shared';
 
 type Status = 'idle' | 'submitting' | 'submitted' | 'error';
-
-const wrapStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  marginTop: 6,
-} as const;
-
-const baseButtonStyle = {
-  fontSize: 12,
-  lineHeight: 1,
-  padding: '3px 7px',
-  borderRadius: 4,
-  border: '1px solid var(--color-border)',
-  background: 'var(--color-surface)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-} as const;
-
-const selectedButtonStyle = {
-  ...baseButtonStyle,
-  borderColor: 'var(--color-primary)',
-  background: 'var(--color-surface-hover)',
-};
-
-const disabledButtonStyle = {
-  ...baseButtonStyle,
-  opacity: 0.5,
-  cursor: 'default',
-};
-
-const noteStyle = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary)',
-} as const;
 
 export function FeedbackControl({ invocationId }: { invocationId?: string }) {
   const { can } = useCapabilities();
@@ -100,42 +66,30 @@ export function FeedbackControl({ invocationId }: { invocationId?: string }) {
   }
 
   return (
-    <div style={wrapStyle}>
-      <button
-        type="button"
+    <Inline gap="xs" wrap={false} className="mt-1.5">
+      <Button
+        variant={selected === 'good' && status === 'submitted' ? 'primary' : 'secondary'}
+        size="sm"
         aria-label="Good answer"
         aria-pressed={selected === 'good' && status === 'submitted'}
         disabled={submitting}
         onClick={() => submit('good')}
-        style={
-          selected === 'good' && status === 'submitted'
-            ? selectedButtonStyle
-            : submitting
-              ? disabledButtonStyle
-              : baseButtonStyle
-        }
       >
         👍
-      </button>
-      <button
-        type="button"
+      </Button>
+      <Button
+        variant={selected === 'bad' && status === 'submitted' ? 'primary' : 'secondary'}
+        size="sm"
         aria-label="Bad answer"
         aria-pressed={selected === 'bad' && status === 'submitted'}
         disabled={submitting}
         onClick={() => submit('bad')}
-        style={
-          selected === 'bad' && status === 'submitted'
-            ? selectedButtonStyle
-            : submitting
-              ? disabledButtonStyle
-              : baseButtonStyle
-        }
       >
         👎
-      </button>
-      {status === 'submitted' && <span style={noteStyle}>Thanks — feedback recorded.</span>}
-      {status === 'error' && <span style={noteStyle}>Couldn’t record feedback — try again.</span>}
-    </div>
+      </Button>
+      {status === 'submitted' && <MetaLine size="xs" items={['Thanks — feedback recorded.']} />}
+      {status === 'error' && <MetaLine size="xs" items={['Couldn’t record feedback — try again.']} />}
+    </Inline>
   );
 }
 

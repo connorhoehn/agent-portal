@@ -4,6 +4,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useFetch } from '../hooks/useFetch';
+import { Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
 
 interface SessionSummary {
   sessionId: string;
@@ -41,7 +42,7 @@ export function ChatSessionPicker({ activeSessionId, onPick }: ChatSessionPicker
   if (sessions.length === 0 && !unavailable) return null;
 
   return (
-    <div ref={rootRef} style={{ position: 'relative' }}>
+    <Stack gap="none" ref={rootRef} className="relative">
       <button
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
@@ -66,13 +67,14 @@ export function ChatSessionPicker({ activeSessionId, onPick }: ChatSessionPicker
           padding: '4px 0',
         }}>
           {unavailable && (
-            <div role="status" style={{ padding: '8px 12px', fontSize: 11, color: 'var(--color-text-secondary)' }}>
-              <div style={{ fontWeight: 600, marginBottom: 2 }}>Couldn’t load your conversations</div>
-              <div style={{ color: 'var(--color-text-tertiary)' }}>
+            // Stack: three stacked lines, from a block <div>.
+            <Stack gap="none" role="status" className="px-3 py-2 text-[11px] text-text-secondary">
+              <Inline as="span" gap="none" className="font-semibold mb-0.5">Couldn’t load your conversations</Inline>
+              <Inline as="span" gap="none" className="text-text-tertiary">
                 {needsAuth
                   ? 'Your session expired — sign in to see them.'
                   : `The session list request failed (${error}).`}
-              </div>
+              </Inline>
               <button
                 type="button"
                 onClick={() => refresh()}
@@ -84,7 +86,7 @@ export function ChatSessionPicker({ activeSessionId, onPick }: ChatSessionPicker
               >
                 Retry
               </button>
-            </div>
+            </Stack>
           )}
           {sessions.map(s => {
             const active = s.sessionId === activeSessionId;
@@ -108,14 +110,14 @@ export function ChatSessionPicker({ activeSessionId, onPick }: ChatSessionPicker
                 }}>
                   {s.title || 'Untitled conversation'}
                 </span>
-                <span style={{ fontSize: 10, color: 'var(--color-text-tertiary)' }}>
+                <Inline as="span" gap="none" className="text-[10px] text-text-tertiary">
                   {new Date(s.createdAt).toLocaleString()}
-                </span>
+                </Inline>
               </button>
             );
           })}
         </div>
       )}
-    </div>
+    </Stack>
   );
 }
