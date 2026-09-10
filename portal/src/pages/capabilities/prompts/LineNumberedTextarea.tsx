@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Stack, Textarea } from '@connorhoehnslalom/ui-components/shared';
 import { T } from '../Text';
 
 /**
@@ -52,7 +52,8 @@ export function LineNumberedTextarea({
       {/* Raw div, not `Stack`: needs a real DOM ref to sync scrollTop from the
           textarea below (see docs/ui-components-queue.md, the `Stack`/`Card`/
           `Inline` ref row). */}
-      <div
+      <Stack
+        gap="none"
         ref={gutterRef}
         aria-hidden
         // Scrollbar hidden on purpose — scrollTop is driven from the textarea.
@@ -63,8 +64,9 @@ export function LineNumberedTextarea({
             {String(i + 1).padStart(gutterWidth, ' ')}
           </T>
         ))}
-      </div>
-      <textarea
+      </Stack>
+      {/* Textarea is forwardRef'd, so the scroll-sync driver can hold it. */}
+      <Textarea
         ref={textareaRef}
         value={value}
         onChange={e => onChange(e.target.value)}
