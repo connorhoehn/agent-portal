@@ -2,7 +2,10 @@
 // Full-width editor for creating the challenger prompt by editing from baseline A.
 
 import { useState, useEffect } from 'react';
-import type { CSSProperties } from 'react';
+import {
+  Button, Chip, FormField, Inline, InlineAlert, Input, SectionLabel,
+  SkeletonCard, Stack, Textarea,
+} from '@connorhoehnslalom/ui-components/shared';
 import { usePromptVersionDetail, saveDraft, publishVersion } from '../usePromptLibrary.js';
 
 export interface PromptEditorStepProps {
@@ -19,18 +22,23 @@ export interface PromptEditorStepProps {
 function TemplateHighlighted({ text }: { text: string }): React.ReactElement {
   const parts = text.split(/({{[^}]+}})/g);
   return (
-    <pre style={preStyle}>
+    // `as="pre"` keeps the whitespace semantics a template needs without a
+    // styled raw <pre>. CodeBlock is the obvious alternative but it takes a
+    // plain string — this renders {{variables}} as highlighted children.
+    <Stack as="pre" gap="none" className="m-0 p-3 text-[12px] font-mono leading-relaxed whitespace-pre-wrap break-words text-text-primary">
       {parts.map((part, i) => {
         if (/^{{[^}]+}}$/.test(part)) {
           return (
-            <span key={i} style={{ color: 'var(--color-optimize)' }}>
+            <Inline as="span" key={i} gap="none" className="text-[var(--color-optimize)]">
               {part}
-            </span>
+            </Inline>
           );
         }
+        // No className, so this bare span is not a styled raw element — it is
+        // just a keyed text node between the highlighted ones.
         return <span key={i}>{part}</span>;
       })}
-    </pre>
+    </Stack>
   );
 }
 
@@ -105,329 +113,158 @@ export function PromptEditorStep({
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div style={skeletonStyle} />
-        <div style={{ ...skeletonStyle, height: 200 }} />
-      </div>
+      <Stack gap="sm">
+        <SkeletonCard />
+        <SkeletonCard height={200} />
+      </Stack>
     );
   }
 
   if (loadError) {
     return (
-      <div style={errorBoxStyle}>
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--color-danger)' }}>
-          Failed to load baseline template: {loadError}
-        </p>
-        <button type="button" onClick={onBack} style={secondaryBtnStyle}>
-          Back
-        </button>
-      </div>
+      <InlineAlert tone="error">
+        Failed to load baseline template: {loadError}
+        <Stack gap="none" className="mt-2 items-start">
+          <Button variant="secondary" size="sm" onClick={onBack}>Back</Button>
+        </Stack>
+      </InlineAlert>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 16 }}>
+    <Stack gap="none" className="h-full gap-4">
       {/* Two-pane editor */}
-      <div style={panesStyle}>
+      <Inline gap="md" align="stretch" wrap={false} className="flex-1 min-h-0">
         {/* Left — Baseline (A) readonly */}
-        <div style={paneStyle}>
-          <div style={sectionHeaderStyle}>Baseline (A) — Version {versionA === 'DRAFT' ? 'Draft' : versionA}</div>
-          <div style={{ flex: 1, minHeight: 0, overflow: 'auto', borderRadius: 4, border: '1px solid var(--color-border, #e2e8f0)', background: 'var(--color-bg, #f8fafc)' }}>
+        <Stack gap="none" className="flex-1 min-w-0">
+          <SectionLabel className="mb-1.5">
+            Baseline (A) — Version {versionA === 'DRAFT' ? 'Draft' : versionA}
+          </SectionLabel>
+          <Stack gap="none" className="flex-1 min-h-0 overflow-auto rounded border border-border bg-bg">
             {baselineText ? (
               <TemplateHighlighted text={baselineText} />
             ) : (
-              <pre style={{ ...preStyle, color: 'var(--color-text-tertiary, #94a3b8)', fontStyle: 'italic' }}>
+              <Inline as="span" gap="none" className="p-3 text-[12px] font-mono text-text-tertiary italic">
                 (no template text)
-              </pre>
+              </Inline>
             )}
-          </div>
+          </Stack>
           {/* Baseline inference info */}
           {(baselineModelId || baselineInference) && (
-            <div style={inferenceInfoStyle}>
-              {baselineModelId && (
-                <span style={inferenceChipStyle} title="Model ID">{baselineModelId}</span>
-              )}
+            <Inline gap="xs" wrap className="mt-1.5">
+              {baselineModelId && <Chip tone="neutral" size="xs" mono title="Model ID">{baselineModelId}</Chip>}
               {baselineInference?.temperature !== undefined && (
-                <span style={inferenceChipStyle}>temp {baselineInference.temperature}</span>
+                <Chip tone="neutral" size="xs">temp {baselineInference.temperature}</Chip>
               )}
               {baselineInference?.maxTokens !== undefined && (
-                <span style={inferenceChipStyle}>max {baselineInference.maxTokens} tokens</span>
+                <Chip tone="neutral" size="xs">max {baselineInference.maxTokens} tokens</Chip>
               )}
-            </div>
+            </Inline>
           )}
-        </div>
+        </Stack>
 
         {/* Right — Challenger (B) editable */}
-        <div style={paneStyle}>
-          <div style={sectionHeaderStyle}>Challenger (B) — new version</div>
-          <textarea
+        <Stack gap="none" className="flex-1 min-w-0">
+          <SectionLabel className="mb-1.5">Challenger (B) — new version</SectionLabel>
+          <Textarea
             value={challengerText}
             onChange={(e) => setChallengerText(e.target.value)}
-            style={textareaStyle}
             placeholder="Edit the prompt template here…"
             spellCheck={false}
             aria-label="Challenger prompt template"
+            className="flex-1 min-h-0 font-mono text-[12px] resize-none"
           />
-        </div>
-      </div>
+        </Stack>
+      </Inline>
 
       {/* Inference config row */}
-      <div style={inferenceRowStyle}>
-        <label style={fieldLabelStyle}>
-          Temperature
-          <input
-            type="number"
-            min={0}
-            max={1}
-            step={0.1}
-            value={temperature}
-            onChange={(e) => setTemperature(e.target.value)}
-            placeholder={baselineInference?.temperature !== undefined ? String(baselineInference.temperature) : '0.7'}
-            style={smallInputStyle}
-          />
-        </label>
-        <label style={fieldLabelStyle}>
-          Max tokens
-          <input
-            type="number"
-            min={1}
-            value={maxTokens}
-            onChange={(e) => setMaxTokens(e.target.value)}
-            placeholder={baselineInference?.maxTokens !== undefined ? String(baselineInference.maxTokens) : ''}
-            style={smallInputStyle}
-          />
-        </label>
-        <label style={{ ...fieldLabelStyle, flex: 2 }}>
-          Model ID
-          <input
-            type="text"
-            value={modelId}
-            onChange={(e) => setModelId(e.target.value)}
-            placeholder="amazon.nova-pro-v1:0"
-            style={{ ...smallInputStyle, fontFamily: 'monospace' }}
-          />
-        </label>
-      </div>
+      <Inline gap="sm" align="end" wrap>
+        {/* `labelId` dropped from each bag — FormField hands it over but it is
+            not a DOM prop. */}
+        <FormField label="Temperature" className="flex-1 min-w-0">
+          {({ labelId: _l, ...w }) => (
+            <Input
+              {...w}
+              type="number"
+              size="sm"
+              min={0}
+              max={1}
+              step={0.1}
+              value={temperature}
+              onChange={(e) => setTemperature(e.target.value)}
+              placeholder={baselineInference?.temperature !== undefined ? String(baselineInference.temperature) : '0.7'}
+            />
+          )}
+        </FormField>
+        <FormField label="Max tokens" className="flex-1 min-w-0">
+          {({ labelId: _l, ...w }) => (
+            <Input
+              {...w}
+              type="number"
+              size="sm"
+              min={1}
+              value={maxTokens}
+              onChange={(e) => setMaxTokens(e.target.value)}
+              placeholder={baselineInference?.maxTokens !== undefined ? String(baselineInference.maxTokens) : ''}
+            />
+          )}
+        </FormField>
+        <FormField label="Model ID" className="flex-[2] min-w-0">
+          {({ labelId: _l, ...w }) => (
+            <Input
+              {...w}
+              type="text"
+              size="sm"
+              mono
+              value={modelId}
+              onChange={(e) => setModelId(e.target.value)}
+              placeholder="amazon.nova-pro-v1:0"
+            />
+          )}
+        </FormField>
+      </Inline>
 
       {/* Action bar */}
-      <div style={actionBarStyle}>
-        <button type="button" onClick={onBack} style={backBtnStyle} disabled={saving}>
+      <Inline gap="sm" wrap className="pt-3 border-t border-border">
+        <Button variant="secondary" size="sm" onClick={onBack} disabled={saving}>
           Back to versions
-        </button>
+        </Button>
 
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <input
+        <Inline gap="none" className="flex-1 min-w-0">
+          <Input
             type="text"
+            size="sm"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="What changed? e.g. 'More concise instructions'"
-            style={{ ...smallInputStyle, width: '100%', boxSizing: 'border-box' }}
             disabled={saving}
             aria-label="Version description (what changed)"
+            className="w-full"
           />
-        </div>
+        </Inline>
 
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => { void handleUseDraft(); }}
-          style={secondaryBtnStyle}
           disabled={saving}
           title="Use the DRAFT version without publishing a numbered version"
         >
           Use DRAFT without publishing
-        </button>
+        </Button>
 
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="sm"
           onClick={() => { void handleSaveAndPublish(); }}
-          style={saving ? { ...primaryBtnStyle, opacity: 0.7, cursor: 'not-allowed' } : primaryBtnStyle}
           disabled={saving || !challengerText.trim()}
         >
           {saving ? 'Saving…' : 'Save to Prompt Library as new version'}
-        </button>
-      </div>
+        </Button>
+      </Inline>
 
-      {saveError && (
-        <div style={saveErrorStyle}>
-          {saveError}
-        </div>
-      )}
-    </div>
+      {saveError && <InlineAlert tone="error">{saveError}</InlineAlert>}
+    </Stack>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
-
-const sectionHeaderStyle: CSSProperties = {
-  fontSize: 12,
-  fontWeight: 600,
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
-  color: 'var(--color-text-tertiary, #94a3b8)',
-  marginBottom: 8,
-};
-
-const panesStyle: CSSProperties = {
-  display: 'flex',
-  gap: 16,
-  flex: 1,
-  minHeight: 300,
-};
-
-const paneStyle: CSSProperties = {
-  flex: 1,
-  minWidth: 0,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-};
-
-const preStyle: CSSProperties = {
-  fontFamily: 'monospace',
-  fontSize: 12,
-  lineHeight: 1.5,
-  padding: 12,
-  margin: 0,
-  whiteSpace: 'pre-wrap',
-  wordBreak: 'break-word',
-};
-
-const textareaStyle: CSSProperties = {
-  fontFamily: 'monospace',
-  fontSize: 12,
-  lineHeight: 1.5,
-  padding: 12,
-  border: '1px solid var(--color-border, #e2e8f0)',
-  borderRadius: 4,
-  resize: 'none',
-  width: '100%',
-  flex: 1,
-  background: 'var(--color-bg, #f8fafc)',
-  boxSizing: 'border-box',
-  minHeight: 200,
-  fontWeight: 400,
-  color: 'var(--color-text-primary, #0f172a)',
-  outline: 'none',
-};
-
-const inferenceInfoStyle: CSSProperties = {
-  display: 'flex',
-  flexWrap: 'wrap',
-  gap: 4,
-};
-
-const inferenceChipStyle: CSSProperties = {
-  fontSize: 10,
-  padding: '1px 6px',
-  background: 'var(--color-bg, #f8fafc)',
-  border: '1px solid var(--color-border, #e2e8f0)',
-  borderRadius: 3,
-  color: 'var(--color-text-tertiary, #94a3b8)',
-  fontFamily: 'monospace',
-};
-
-const inferenceRowStyle: CSSProperties = {
-  display: 'flex',
-  gap: 12,
-  alignItems: 'flex-end',
-  flexWrap: 'wrap',
-};
-
-const fieldLabelStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 4,
-  fontSize: 11,
-  fontWeight: 600,
-  color: 'var(--color-text-tertiary, #94a3b8)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-  flex: 1,
-};
-
-const smallInputStyle: CSSProperties = {
-  padding: '5px 8px',
-  fontSize: 12,
-  border: '1px solid var(--color-border, #e2e8f0)',
-  borderRadius: 4,
-  background: 'var(--color-surface)',
-  fontFamily: 'inherit',
-  outline: 'none',
-};
-
-const actionBarStyle: CSSProperties = {
-  display: 'flex',
-  gap: 8,
-  alignItems: 'center',
-  paddingTop: 12,
-  borderTop: '1px solid var(--color-border, #e2e8f0)',
-  flexWrap: 'wrap',
-};
-
-const backBtnStyle: CSSProperties = {
-  padding: '8px 16px',
-  fontSize: 13,
-  fontWeight: 500,
-  border: '1px solid var(--color-border, #e2e8f0)',
-  borderRadius: 4,
-  background: 'transparent',
-  color: 'var(--color-text-secondary, #475569)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  flexShrink: 0,
-  whiteSpace: 'nowrap',
-};
-
-const secondaryBtnStyle: CSSProperties = {
-  padding: '8px 16px',
-  fontSize: 13,
-  fontWeight: 500,
-  border: '1px solid var(--color-border, #e2e8f0)',
-  borderRadius: 4,
-  background: 'transparent',
-  color: 'var(--color-text-secondary, #475569)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  flexShrink: 0,
-  whiteSpace: 'nowrap',
-};
-
-const primaryBtnStyle: CSSProperties = {
-  padding: '8px 16px',
-  fontSize: 13,
-  fontWeight: 600,
-  border: 'none',
-  borderRadius: 4,
-  background: 'var(--color-primary, #6366f1)',
-  color: 'var(--color-surface)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  flexShrink: 0,
-  whiteSpace: 'nowrap',
-};
-
-const skeletonStyle: CSSProperties = {
-  height: 40,
-  borderRadius: 4,
-  background: 'var(--color-bg, #f8fafc)',
-  border: '1px solid var(--color-border, #e2e8f0)',
-};
-
-const errorBoxStyle: CSSProperties = {
-  padding: '12px 14px',
-  background: 'var(--color-danger-bg)',
-  border: '1px solid var(--color-danger-border)',
-  borderRadius: 4,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 8,
-};
-
-const saveErrorStyle: CSSProperties = {
-  padding: '8px 12px',
-  background: 'var(--color-danger-bg)',
-  border: '1px solid var(--color-danger-border)',
-  borderRadius: 4,
-  fontSize: 12,
-  color: 'var(--color-danger)',
-};

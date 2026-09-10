@@ -2,7 +2,9 @@
 // Summary of both versions and the launch control.
 
 import { useState, useId } from 'react';
-import type { CSSProperties } from 'react';
+import {
+  Button, Card, Inline, InlineAlert, MetaLine, SectionLabel, Slider, Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 import { startCanaryExperiment } from '../usePromptLibrary.js';
 
 export interface ExperimentConfigStepProps {
@@ -36,7 +38,6 @@ export function ExperimentConfigStep({
   const [initialWeight, setInitialWeight] = useState(10);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
-  const trafficSliderId = useId();
 
   async function handleStart(): Promise<void> {
     setStarting(true);
@@ -52,222 +53,96 @@ export function ExperimentConfigStep({
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <Stack gap="none" className="gap-6">
       {/* Summary */}
-      <div>
-        <div style={sectionHeaderStyle}>Experiment summary</div>
-        <div style={summaryCardStyle}>
-          {/* Baseline A */}
-          <div style={summaryColStyle}>
-            <div style={{ ...sideLabelStyle, color: '#3b82f6' }}>Baseline A</div>
-            <div style={summaryNameStyle}>{promptName}</div>
-            <div style={summaryVersionStyle}>{versionLabel(subjectAVersion)}</div>
-            <div style={summaryArnStyle} title={subjectAArn}>
-              {truncateArn(subjectAArn)}
-            </div>
-          </div>
+      <Stack gap="none">
+        <SectionLabel className="mb-2">Experiment summary</SectionLabel>
+        <Card className="px-4 py-3">
+          <Inline gap="none" align="stretch" wrap={false}>
+            {/* Baseline A */}
+            <Stack gap="none" className="flex-1 min-w-0">
+              {/* the A/B accents are literal brand colours, matched to the
+                  version picker and the score panels */}
+              <Inline as="div" gap="none" className="text-[11px] font-semibold uppercase tracking-wide mb-1 text-[#3b82f6]">
+                Baseline A
+              </Inline>
+              <Inline as="div" gap="none" className="text-[13px] font-semibold text-text-primary truncate">
+                {promptName}
+              </Inline>
+              <MetaLine size="xs" tone="secondary" items={[versionLabel(subjectAVersion)]} />
+              <Inline as="div" gap="none" title={subjectAArn} className="text-[10px] font-mono text-text-tertiary truncate">
+                {truncateArn(subjectAArn)}
+              </Inline>
+            </Stack>
 
-          {/* VS divider */}
-          <div style={vsDividerStyle}>
-            <div style={vsTextStyle}>VS</div>
-          </div>
+            {/* VS divider */}
+            <Inline gap="none" justify="center" className="px-4 self-stretch">
+              <Inline as="span" gap="none" className="text-[11px] font-bold text-text-tertiary self-center">
+                VS
+              </Inline>
+            </Inline>
 
-          {/* Challenger B */}
-          <div style={summaryColStyle}>
-            <div style={{ ...sideLabelStyle, color: '#a855f7' }}>Challenger B</div>
-            <div style={summaryNameStyle}>{promptName}</div>
-            <div style={summaryVersionStyle}>{versionLabel(subjectBVersion)}</div>
-            <div style={summaryArnStyle} title={subjectBArn}>
-              {truncateArn(subjectBArn)}
-            </div>
-          </div>
-        </div>
-      </div>
+            {/* Challenger B */}
+            <Stack gap="none" className="flex-1 min-w-0">
+              <Inline as="div" gap="none" className="text-[11px] font-semibold uppercase tracking-wide mb-1 text-[#a855f7]">
+                Challenger B
+              </Inline>
+              <Inline as="div" gap="none" className="text-[13px] font-semibold text-text-primary truncate">
+                {promptName}
+              </Inline>
+              <MetaLine size="xs" tone="secondary" items={[versionLabel(subjectBVersion)]} />
+              <Inline as="div" gap="none" title={subjectBArn} className="text-[10px] font-mono text-text-tertiary truncate">
+                {truncateArn(subjectBArn)}
+              </Inline>
+            </Stack>
+          </Inline>
+        </Card>
+      </Stack>
 
       {/* Traffic slider */}
-      <div>
-        <div style={sectionHeaderStyle}>Initial traffic split</div>
-        <div style={sliderRowStyle}>
-          <label htmlFor={trafficSliderId} style={sliderLabelStyle}>Initial B traffic</label>
-          <input
-            id={trafficSliderId}
-            type="range"
+      <Stack gap="none">
+        <SectionLabel className="mb-2">Initial traffic split</SectionLabel>
+        <Inline gap="sm" wrap={false}>
+          {/* A plain span, not a <label htmlFor>: Slider exposes no `id`, so
+              there is nothing to point `for` at. Its `aria-label` carries the
+              accessible name instead. Filed in ui-components-queue.md. */}
+          <Inline as="span" gap="none" className="text-[12px] text-text-secondary shrink-0">
+            Initial B traffic
+          </Inline>
+          {/* Slider became reachable from /shared in 2.241.0 — before that it
+              was root-barrel only, which is why this was a raw range input
+              with a hand-set accentColor. */}
+          <Slider
             min={1}
             max={50}
             value={initialWeight}
-            onChange={(e) => setInitialWeight(Number(e.target.value))}
-            style={{ flex: 1, accentColor: 'var(--color-primary, #6366f1)', cursor: 'pointer' }}
+            onChange={setInitialWeight}
             aria-label="Initial challenger (B) traffic percentage"
+            className="flex-1"
           />
-          <span style={sliderValueStyle}>{initialWeight}%</span>
-        </div>
-        <p style={helperTextStyle}>
-          The controller will auto-adjust based on judge scores.
-          A receives {100 - initialWeight}% of traffic initially.
-        </p>
-      </div>
+          <Inline as="span" gap="none" className="text-[13px] font-semibold tabular-nums text-text-primary w-10 text-right">
+            {initialWeight}%
+          </Inline>
+        </Inline>
+        <MetaLine
+          size="xs"
+          className="mt-1.5 leading-normal"
+          items={[`The controller will auto-adjust based on judge scores. `
+            + `A receives ${100 - initialWeight}% of traffic initially.`]}
+        />
+      </Stack>
 
       {/* Start button */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <button
-          type="button"
-          onClick={() => { void handleStart(); }}
-          disabled={starting}
-          style={starting ? { ...startBtnStyle, opacity: 0.7, cursor: 'not-allowed' } : startBtnStyle}
-        >
+      <Stack gap="sm">
+        <Button variant="primary" disabled={starting} onClick={() => { void handleStart(); }}>
           {starting ? 'Starting…' : 'Start experiment'}
-        </button>
+        </Button>
 
-        {startError && (
-          <div style={errorBoxStyle}>{startError}</div>
-        )}
+        {startError && <InlineAlert tone="error">{startError}</InlineAlert>}
 
-        <button
-          type="button"
-          onClick={onBack}
-          disabled={starting}
-          style={backBtnStyle}
-        >
-          Back
-        </button>
-      </div>
-    </div>
+        <Button variant="secondary" disabled={starting} onClick={onBack}>Back</Button>
+      </Stack>
+    </Stack>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
-
-const sectionHeaderStyle: CSSProperties = {
-  fontSize: 12,
-  fontWeight: 600,
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
-  color: 'var(--color-text-tertiary, #94a3b8)',
-  marginBottom: 12,
-};
-
-const summaryCardStyle: CSSProperties = {
-  display: 'flex',
-  border: '1px solid var(--color-border, #e2e8f0)',
-  borderRadius: 8,
-  overflow: 'hidden',
-};
-
-const summaryColStyle: CSSProperties = {
-  flex: 1,
-  padding: '16px 20px',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 4,
-};
-
-const sideLabelStyle: CSSProperties = {
-  fontSize: 11,
-  fontWeight: 700,
-  textTransform: 'uppercase',
-  letterSpacing: '0.08em',
-  marginBottom: 4,
-};
-
-const summaryNameStyle: CSSProperties = {
-  fontSize: 14,
-  fontWeight: 600,
-  color: 'var(--color-text-primary, #0f172a)',
-};
-
-const summaryVersionStyle: CSSProperties = {
-  fontSize: 13,
-  color: 'var(--color-text-secondary, #475569)',
-};
-
-const summaryArnStyle: CSSProperties = {
-  fontSize: 11,
-  fontFamily: 'monospace',
-  color: 'var(--color-text-tertiary, #94a3b8)',
-  marginTop: 4,
-  wordBreak: 'break-all',
-};
-
-const vsDividerStyle: CSSProperties = {
-  width: 1,
-  background: 'var(--color-border, #e2e8f0)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  position: 'relative',
-  flexShrink: 0,
-};
-
-const vsTextStyle: CSSProperties = {
-  position: 'absolute',
-  background: 'var(--color-surface)',
-  padding: '4px 6px',
-  fontSize: 11,
-  fontWeight: 700,
-  color: 'var(--color-text-tertiary, #94a3b8)',
-  letterSpacing: '0.05em',
-};
-
-const sliderRowStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 12,
-};
-
-const sliderLabelStyle: CSSProperties = {
-  fontSize: 13,
-  fontWeight: 500,
-  color: 'var(--color-text-secondary, #475569)',
-  flexShrink: 0,
-};
-
-const sliderValueStyle: CSSProperties = {
-  fontSize: 14,
-  fontWeight: 700,
-  color: 'var(--color-primary, #6366f1)',
-  minWidth: 36,
-  textAlign: 'right',
-};
-
-const helperTextStyle: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-tertiary, #94a3b8)',
-  margin: '8px 0 0',
-  lineHeight: 1.5,
-};
-
-const startBtnStyle: CSSProperties = {
-  width: '100%',
-  padding: '12px 16px',
-  fontSize: 14,
-  fontWeight: 700,
-  border: 'none',
-  borderRadius: 6,
-  background: 'var(--color-primary, #6366f1)',
-  color: 'var(--color-surface)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  letterSpacing: '0.02em',
-};
-
-const backBtnStyle: CSSProperties = {
-  width: '100%',
-  padding: '8px 16px',
-  fontSize: 13,
-  fontWeight: 500,
-  border: '1px solid var(--color-border, #e2e8f0)',
-  borderRadius: 4,
-  background: 'transparent',
-  color: 'var(--color-text-secondary, #475569)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-};
-
-const errorBoxStyle: CSSProperties = {
-  padding: '8px 12px',
-  background: 'var(--color-danger-bg)',
-  border: '1px solid var(--color-danger-border)',
-  borderRadius: 4,
-  fontSize: 12,
-  color: 'var(--color-danger)',
-};

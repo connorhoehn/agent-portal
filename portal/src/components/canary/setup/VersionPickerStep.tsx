@@ -3,7 +3,9 @@
 // which version is A (baseline) and which is B (challenger).
 
 import { useState } from 'react';
-import type { CSSProperties } from 'react';
+import {
+  Button, Divider, Inline, InlineAlert, MetaLine, SkeletonCard, Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 import { usePromptVersions } from '../usePromptLibrary.js';
 import type { PromptLibraryEntry } from '../types.js';
 
@@ -41,38 +43,49 @@ function VersionRow({ entry, selected, onSelect, radioName, side }: VersionRowPr
   const sideColor = side === 'A' ? '#3b82f6' : '#a855f7';
 
   return (
-    <label
-      style={{
-        ...rowStyle,
-        background: hovered || selected
-          ? 'var(--color-bg, #f8fafc)'
-          : '#fff',
-        cursor: 'pointer',
-        borderLeft: selected ? `3px solid ${sideColor}` : '3px solid transparent',
-      }}
+    // `as="label"` keeps the whole row a click target for its radio, which the
+    // native <label> gave for free. The radio itself keeps ONE style prop:
+    // `accentColor` is the A/B side colour, a runtime value Tailwind cannot
+    // build a class from. RadioGroup cannot express this row — its
+    // RadioOption.label is a plain string, and this row carries a version
+    // label, an "(editable)" tag, a description and a date.
+    <Inline
+      as="label"
+      gap="xs"
+      align="start"
+      wrap={false}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      className={[
+        'px-3 py-2 cursor-pointer border-l-[3px]',
+        hovered || selected ? 'bg-bg' : 'bg-surface',
+      ].join(' ')}
+      style={{ borderLeftColor: selected ? sideColor : 'transparent' }}
     >
       <input
         type="radio"
         name={radioName}
         checked={selected}
         onChange={onSelect}
-        style={{ marginRight: 8, flexShrink: 0, accentColor: sideColor }}
+        style={{ accentColor: sideColor }}
       />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={rowVersionStyle}>{versionLabel(entry.version)}</span>
+      <Stack gap="none" className="flex-1 min-w-0">
+        <Inline gap="xs" wrap={false}>
+          <Inline as="span" gap="none" className="text-[13px] font-semibold text-text-primary">
+            {versionLabel(entry.version)}
+          </Inline>
           {entry.isDraft && (
-            <span style={editableTagStyle}>(editable)</span>
+            <Inline as="span" gap="none" className="text-[11px] text-text-tertiary italic">
+              (editable)
+            </Inline>
           )}
-        </div>
+        </Inline>
         {entry.description && (
-          <div style={rowDescStyle}>{entry.description}</div>
+          <MetaLine size="xs" className="truncate" items={[entry.description]} />
         )}
-        <div style={rowDateStyle}>{fmtDate(entry.updatedAt)}</div>
-      </div>
-    </label>
+        <MetaLine size="xs" items={[fmtDate(entry.updatedAt)]} />
+      </Stack>
+    </Inline>
   );
 }
 
@@ -89,36 +102,34 @@ export function VersionPickerStep({
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {[0, 1, 2].map((i) => (
-          <div key={i} style={skeletonRowStyle} />
-        ))}
-      </div>
+      <Stack gap="sm">
+        {[0, 1, 2].map((i) => <SkeletonCard key={i} />)}
+      </Stack>
     );
   }
 
   if (error) {
-    return (
-      <div style={errorBoxStyle}>
-        <span style={{ fontSize: 12, color: 'var(--color-danger)' }}>{error}</span>
-      </div>
-    );
+    return <InlineAlert tone="error">{error}</InlineAlert>;
   }
 
   return (
-    <div>
-      <p style={stepDescStyle}>
-        Pick the baseline (A) and challenger (B) versions for <strong>{promptName}</strong>.
-      </p>
+    <Stack gap="none">
+      <MetaLine
+        tone="secondary"
+        className="mb-5 leading-normal"
+        items={[<>Pick the baseline (A) and challenger (B) versions for <strong>{promptName}</strong>.</>]}
+      />
 
-      <div style={columnsStyle}>
+      <Inline gap="none" align="start" wrap={false}>
         {/* Left column — Baseline A */}
-        <div style={columnStyle}>
-          <div style={{ ...sectionHeaderStyle, color: '#3b82f6' }}>Baseline (A)</div>
+        <Stack gap="none" className="flex-1 min-w-0 px-4">
+          <Inline as="div" gap="none" className="text-[12px] font-semibold uppercase tracking-wide mb-2 text-[#3b82f6]">
+            Baseline (A)
+          </Inline>
           {versions.length === 0 ? (
-            <div style={emptyStyle}>No versions found</div>
+            <MetaLine className="mt-6 text-center italic" items={['No versions found']} />
           ) : (
-            <div style={listStyle}>
+            <Stack gap="none" className="border border-border rounded-md overflow-hidden">
               {versions.map((v) => (
                 <VersionRow
                   key={v.version}
@@ -129,20 +140,22 @@ export function VersionPickerStep({
                   side="A"
                 />
               ))}
-            </div>
+            </Stack>
           )}
-        </div>
+        </Stack>
 
         {/* Divider */}
-        <div style={dividerStyle} />
+        <Divider className="self-stretch w-px" />
 
         {/* Right column — Challenger B */}
-        <div style={columnStyle}>
-          <div style={{ ...sectionHeaderStyle, color: '#a855f7' }}>Challenger (B)</div>
+        <Stack gap="none" className="flex-1 min-w-0 px-4">
+          <Inline as="div" gap="none" className="text-[12px] font-semibold uppercase tracking-wide mb-2 text-[#a855f7]">
+            Challenger (B)
+          </Inline>
           {versions.length === 0 ? (
-            <div style={emptyStyle}>No versions found</div>
+            <MetaLine className="mt-6 text-center italic" items={['No versions found']} />
           ) : (
-            <div style={listStyle}>
+            <Stack gap="none" className="border border-border rounded-md overflow-hidden">
               {versions.map((v) => (
                 <VersionRow
                   key={v.version}
@@ -153,142 +166,28 @@ export function VersionPickerStep({
                   side="B"
                 />
               ))}
-            </div>
+            </Stack>
           )}
           {/* Edit from A option */}
-          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--color-border, #e2e8f0)' }}>
-            <button
-              type="button"
+          <Stack gap="none" className="mt-3 pt-3 border-t border-border">
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={onEditFromA}
               disabled={!selectedVersionA}
-              style={selectedVersionA ? editBtnStyle : { ...editBtnStyle, opacity: 0.45, cursor: 'not-allowed' }}
               title={selectedVersionA ? 'Open editor to create a new version based on A' : 'Select a baseline (A) version first'}
             >
               Edit from A → publish new version
-            </button>
-            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--color-text-tertiary, #94a3b8)', lineHeight: 1.4 }}>
-              Opens an editor pre-filled with A's template. The new version is published and automatically used as B.
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+            </Button>
+            <MetaLine
+              size="xs"
+              className="mt-1.5 leading-snug"
+              items={["Opens an editor pre-filled with A's template. The new version is published and automatically used as B."]}
+            />
+          </Stack>
+        </Stack>
+      </Inline>
+    </Stack>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
-
-const stepDescStyle: CSSProperties = {
-  fontSize: 13,
-  color: 'var(--color-text-secondary, #475569)',
-  margin: '0 0 20px',
-  lineHeight: 1.5,
-};
-
-const columnsStyle: CSSProperties = {
-  display: 'flex',
-  gap: 0,
-  alignItems: 'flex-start',
-};
-
-const columnStyle: CSSProperties = {
-  flex: 1,
-  minWidth: 0,
-  padding: '0 16px',
-};
-
-const dividerStyle: CSSProperties = {
-  width: 1,
-  alignSelf: 'stretch',
-  background: 'var(--color-border, #e2e8f0)',
-  flexShrink: 0,
-};
-
-const sectionHeaderStyle: CSSProperties = {
-  fontSize: 12,
-  fontWeight: 600,
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
-  marginBottom: 10,
-};
-
-const listStyle: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 2,
-};
-
-const rowStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'flex-start',
-  padding: '8px 10px',
-  borderRadius: 4,
-  border: '1px solid transparent',
-  transition: 'background 0.1s',
-};
-
-const rowVersionStyle: CSSProperties = {
-  fontSize: 13,
-  fontWeight: 500,
-  color: 'var(--color-text-primary, #0f172a)',
-};
-
-const rowDescStyle: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-secondary, #475569)',
-  marginTop: 2,
-  lineHeight: 1.4,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-};
-
-const rowDateStyle: CSSProperties = {
-  fontSize: 10.5,
-  color: 'var(--color-text-tertiary, #94a3b8)',
-  marginTop: 2,
-};
-
-const editableTagStyle: CSSProperties = {
-  fontSize: 10,
-  color: 'var(--color-optimize)',
-  background: '#ede9fe',
-  padding: '1px 5px',
-  borderRadius: 3,
-  fontWeight: 500,
-};
-
-const skeletonRowStyle: CSSProperties = {
-  height: 52,
-  borderRadius: 4,
-  background: 'var(--color-bg, #f8fafc)',
-  border: '1px solid var(--color-border, #e2e8f0)',
-};
-
-const errorBoxStyle: CSSProperties = {
-  padding: '10px 12px',
-  background: 'var(--color-danger-bg)',
-  border: '1px solid var(--color-danger-border)',
-  borderRadius: 4,
-};
-
-const emptyStyle: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-tertiary, #94a3b8)',
-  fontStyle: 'italic',
-  padding: '8px 0',
-};
-
-const editBtnStyle: CSSProperties = {
-  width: '100%',
-  padding: '8px 12px',
-  fontSize: 12,
-  fontWeight: 600,
-  border: '1px solid var(--color-border, #e2e8f0)',
-  borderRadius: 4,
-  background: 'transparent',
-  color: 'var(--color-text-secondary, #475569)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  textAlign: 'left',
-};
