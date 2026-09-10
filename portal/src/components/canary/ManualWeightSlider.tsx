@@ -3,8 +3,7 @@
 // local update; toast on failure.
 
 import { useEffect, useRef, useState } from 'react';
-import type { CSSProperties } from 'react';
-import { useToast } from '@connorhoehnslalom/ui-components/shared';
+import { Inline, SectionLabel, Slider, useToast } from '@connorhoehnslalom/ui-components/shared';
 import { setWeight, useCanaryStore } from './canaryStore.js';
 
 const DEBOUNCE_MS = 250;
@@ -67,60 +66,34 @@ export function ManualWeightSlider(): React.ReactElement {
   }
 
   return (
-    <div style={wrapStyle}>
-      <span style={labelStyle}>Manual B%</span>
-      <input
-        type="range"
+    // The pointer handlers sit on the wrapper, not the Slider: SliderProps is a
+    // fixed set and takes no DOM events, so a drag-in-flight flag has to catch
+    // them as they bubble. Filed in ui-components-queue.md.
+    <Inline
+      gap="sm"
+      wrap={false}
+      className="px-2.5 py-1 border border-border rounded bg-surface"
+      onPointerDown={() => { draggingRef.current = true; }}
+      onPointerUp={() => { draggingRef.current = false; }}
+    >
+      <SectionLabel>Manual B%</SectionLabel>
+      <Slider
         min={0}
         max={100}
         step={5}
         value={local}
-        onPointerDown={() => {
-          draggingRef.current = true;
-        }}
-        onPointerUp={() => {
-          draggingRef.current = false;
-        }}
-        onChange={(e) => {
-          const v = Number(e.target.value);
+        onChange={(v) => {
           setLocal(v);
           commit(v);
         }}
-        style={rangeStyle}
+        className="w-[140px]"
         aria-label="Manual canary weight B"
       />
-      <span style={valueStyle}>{local}%</span>
-    </div>
+      <Inline as="span" gap="none" className="text-[12px] tabular-nums text-text-primary font-semibold min-w-8 text-right">{local}%</Inline>
+    </Inline>
   );
 }
 
-const wrapStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  padding: '4px 10px',
-  border: '1px solid var(--color-border, #e2e8f0)',
-  borderRadius: 4,
-  background: 'var(--color-surface, #fff)',
-};
 
-const labelStyle: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary, #94a3b8)',
-  fontWeight: 600,
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-};
 
-const rangeStyle: CSSProperties = {
-  width: 140,
-};
 
-const valueStyle: CSSProperties = {
-  fontSize: 12,
-  fontVariantNumeric: 'tabular-nums',
-  color: 'var(--color-text-primary, #0f172a)',
-  fontWeight: 600,
-  minWidth: 32,
-  textAlign: 'right',
-};

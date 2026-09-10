@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { GatewayProxyClient } from '@connorhoehnslalom/realtime-modules/proxy-client';
 import type { ConnectionState } from '@connorhoehnslalom/realtime-modules/client/ws';
 import { useGateway } from '@connorhoehnslalom/realtime-modules/client/ws';
+import { Inline, StatusDot } from '@connorhoehnslalom/ui-components/shared';
 
 // VITE_GATEWAY_URL is exposed to the browser bundle by Vite at build time.
 // We avoid `import.meta.env` typing concerns (no vite-env.d.ts in this repo)
@@ -71,29 +72,21 @@ export function GatewayStatusBadge() {
   }, []);
 
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-      <span
+    <Inline as="span" gap="none" className="inline-flex items-center gap-[3px]">
+      {/* StatusDot owns the dot; the colour stays runtime because it is keyed
+          off the live status. */}
+      <StatusDot
+        size="xs"
+        color={HTTP_COLORS[httpStatus]}
         title={`gateway HTTP (${GATEWAY_URL}): ${httpStatus}`}
         aria-label={`gateway HTTP status: ${httpStatus}`}
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: '50%',
-          background: HTTP_COLORS[httpStatus],
-          display: 'inline-block',
-        }}
       />
-      <span
+      <StatusDot
+        size="xs"
+        color={WS_COLORS[connectionState]}
         title={`gateway WS: ${connectionState}`}
         aria-label={`gateway WebSocket status: ${connectionState}`}
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: '50%',
-          background: WS_COLORS[connectionState],
-          display: 'inline-block',
-        }}
       />
-    </span>
+    </Inline>
   );
 }
