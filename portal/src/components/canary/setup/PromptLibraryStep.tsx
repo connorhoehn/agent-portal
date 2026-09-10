@@ -2,7 +2,10 @@
 // Lets the user pick which Bedrock prompt they want to experiment with.
 
 import { useState, useId } from 'react';
-import type { CSSProperties } from 'react';
+import {
+  Button, EmptyState, FormField, Inline, InlineAlert, Input,
+  MetaLine, SelectableCard, SkeletonCard, Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 import { usePromptList } from '../usePromptLibrary.js';
 import type { PromptLibraryEntry } from '../types.js';
 
@@ -44,255 +47,126 @@ export function PromptLibraryStep({ onSelect, selected }: PromptLibraryStepProps
   const bedrock503 = is503(error);
 
   return (
-    <div>
-      <p style={stepDescStyle}>
-        Choose a prompt from your Bedrock Prompt Library to run a canary experiment on.
-      </p>
+    <Stack gap="none">
+      <MetaLine
+        tone="secondary"
+        className="mb-4 leading-normal"
+        items={['Choose a prompt from your Bedrock Prompt Library to run a canary experiment on.']}
+      />
 
       {/* Search */}
-      <input
+      <Input
         type="text"
+        size="sm"
         placeholder="Search prompts…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        style={searchInputStyle}
         aria-label="Search prompts"
+        className="w-full"
       />
 
-      {/* Loading state */}
+      {/* Loading state — SkeletonCard owns the pulse, so the hand-rolled
+          `animation: pulse 1.5s` (and the @keyframes it assumed existed) is
+          gone. */}
       {loading && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-          {[0, 1, 2].map((i) => (
-            <div key={i} style={skeletonRowStyle} />
-          ))}
-        </div>
+        <Stack gap="sm" className="mt-3">
+          {[0, 1, 2].map((i) => <SkeletonCard key={i} />)}
+        </Stack>
       )}
 
       {/* Error state */}
       {!loading && error && !bedrock503 && (
-        <div style={errorBoxStyle}>
-          <span style={{ fontSize: 12, color: 'var(--color-danger)' }}>{error}</span>
-          <button type="button" onClick={refresh} style={retryBtnStyle}>
-            Retry
-          </button>
-        </div>
+        <Stack gap="none" className="mt-3">
+          <InlineAlert tone="error">
+            <Inline gap="sm" justify="between" wrap={false}>
+              <Inline as="span" gap="none">{error}</Inline>
+              <Button variant="danger" size="sm" onClick={refresh}>Retry</Button>
+            </Inline>
+          </InlineAlert>
+        </Stack>
       )}
 
       {/* 503 / credentials unavailable */}
       {!loading && bedrock503 && (
-        <div style={warningBoxStyle}>
-          <p style={warningTitleStyle}>
-            Bedrock Prompt Library unavailable — check AWS credentials
-          </p>
-          <p style={{ margin: '0 0 10px', fontSize: 12, color: 'var(--color-warning)', lineHeight: 1.5 }}>
-            Cannot reach the Bedrock API. You can enter a prompt ARN directly to continue.
-          </p>
-          <label htmlFor={manualArnId} style={labelStyle}>Enter ARN directly</label>
-          <input
-            id={manualArnId}
-            type="text"
-            placeholder="arn:aws:bedrock:us-east-1:123456789012:prompt/ABCDEFGHIJ"
-            value={manualArn}
-            onChange={(e) => setManualArn(e.target.value)}
-            style={{ ...searchInputStyle, marginTop: 4 }}
-          />
-          {manualArn.trim() && (
-            <button
-              type="button"
-              style={{ ...primaryBtnStyle, marginTop: 8 }}
-              onClick={() => {
-                const arn = manualArn.trim();
-                // Synthesize a minimal entry from the ARN
-                const parts = arn.split('/');
-                const id = parts[parts.length - 1] ?? arn;
-                onSelect({
-                  id,
-                  arn,
-                  name: arn,
-                  version: 'DRAFT',
-                  updatedAt: new Date().toISOString(),
-                });
-              }}
-            >
-              Use this ARN
-            </button>
-          )}
-        </div>
+        <Stack gap="none" className="mt-3">
+          <InlineAlert tone="warning">
+            <strong>Bedrock Prompt Library unavailable — check AWS credentials.</strong>
+            <MetaLine
+              size="xs"
+              className="mt-1.5 mb-2.5 leading-normal"
+              items={['Cannot reach the Bedrock API. You can enter a prompt ARN directly to continue.']}
+            />
+            <FormField label="Enter ARN directly">
+              {({ labelId: _l, ...w }) => (
+                <Input
+                  {...w}
+                  id={manualArnId}
+                  type="text"
+                  size="sm"
+                  mono
+                  placeholder="arn:aws:bedrock:us-east-1:123456789012:prompt/ABCDEFGHIJ"
+                  value={manualArn}
+                  onChange={(e) => setManualArn(e.target.value)}
+                  className="w-full"
+                />
+              )}
+            </FormField>
+            {manualArn.trim() && (
+              <Button
+                variant="primary"
+                size="sm"
+                className="mt-2"
+                onClick={() => {
+                  const arn = manualArn.trim();
+                  // Synthesize a minimal entry from the ARN
+                  const parts = arn.split('/');
+                  const id = parts[parts.length - 1] ?? arn;
+                  onSelect({
+                    id,
+                    arn,
+                    name: arn,
+                    version: 'DRAFT',
+                    updatedAt: new Date().toISOString(),
+                  });
+                }}
+              >
+                Use this ARN
+              </Button>
+            )}
+          </InlineAlert>
+        </Stack>
       )}
 
       {/* Empty state */}
       {!loading && !error && filtered.length === 0 && (
-        <div style={emptyStyle}>No prompts found in your Bedrock library</div>
+        <EmptyState size="sm" className="mt-6" title="No prompts found in your Bedrock library" />
       )}
 
       {/* Prompt list */}
       {!loading && !error && filtered.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-          {filtered.map((entry) => {
-            const isSelected = selected?.id === entry.id;
-            return (
-              <div
-                key={entry.id}
-                style={{
-                  ...cardStyle,
-                  border: isSelected
-                    ? '2px solid var(--color-primary, #6366f1)'
-                    : '1px solid var(--color-border, #e2e8f0)',
-                  background: isSelected ? '#f5f3ff' : 'var(--color-surface)',
-                  cursor: 'pointer',
-                }}
-                onClick={() => onSelect(entry)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') onSelect(entry);
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
-                  <span style={cardNameStyle}>{entry.name}</span>
-                  <span style={cardMetaStyle}>{relativeTime(entry.updatedAt)}</span>
-                </div>
-                {entry.description && (
-                  <div style={cardDescStyle}>{entry.description}</div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        <Stack gap="sm" className="mt-3">
+          {filtered.map((entry) => (
+            // SelectableCard also sets aria-pressed, which the hand-rolled
+            // role="button" div never did.
+            <SelectableCard
+              key={entry.id}
+              selected={selected?.id === entry.id}
+              onSelect={() => onSelect(entry)}
+            >
+              <Inline gap="sm" justify="between" align="baseline" wrap={false}>
+                <Inline as="span" gap="none" className="text-[13px] font-semibold text-text-primary flex-1 min-w-0 truncate">
+                  {entry.name}
+                </Inline>
+                <MetaLine size="xs" items={[relativeTime(entry.updatedAt)]} />
+              </Inline>
+              {entry.description && (
+                <MetaLine size="xs" className="truncate" items={[entry.description]} />
+              )}
+            </SelectableCard>
+          ))}
+        </Stack>
       )}
-    </div>
+    </Stack>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
-
-const stepDescStyle: CSSProperties = {
-  fontSize: 13,
-  color: 'var(--color-text-secondary, #475569)',
-  margin: '0 0 16px',
-  lineHeight: 1.5,
-};
-
-const searchInputStyle: CSSProperties = {
-  width: '100%',
-  boxSizing: 'border-box',
-  padding: '7px 10px',
-  fontSize: 13,
-  border: '1px solid var(--color-border, #e2e8f0)',
-  borderRadius: 4,
-  outline: 'none',
-  fontFamily: 'inherit',
-  background: 'var(--color-bg, #f8fafc)',
-};
-
-const skeletonRowStyle: CSSProperties = {
-  height: 60,
-  borderRadius: 4,
-  background: 'var(--color-bg, #f8fafc)',
-  border: '1px solid var(--color-border, #e2e8f0)',
-  animation: 'pulse 1.5s ease-in-out infinite',
-};
-
-const errorBoxStyle: CSSProperties = {
-  marginTop: 12,
-  padding: '10px 12px',
-  background: 'var(--color-danger-bg)',
-  border: '1px solid var(--color-danger-border)',
-  borderRadius: 4,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  gap: 8,
-};
-
-const warningBoxStyle: CSSProperties = {
-  marginTop: 12,
-  padding: '12px 14px',
-  background: 'var(--color-warning-bg)',
-  border: '1px solid var(--color-warning-border)',
-  borderRadius: 4,
-};
-
-const warningTitleStyle: CSSProperties = {
-  margin: '0 0 6px',
-  fontSize: 12,
-  fontWeight: 600,
-  color: 'var(--color-warning)',
-};
-
-const retryBtnStyle: CSSProperties = {
-  padding: '4px 10px',
-  fontSize: 12,
-  border: '1px solid var(--color-danger)',
-  borderRadius: 4,
-  background: 'transparent',
-  color: 'var(--color-danger)',
-  cursor: 'pointer',
-  flexShrink: 0,
-  fontFamily: 'inherit',
-};
-
-const emptyStyle: CSSProperties = {
-  marginTop: 24,
-  textAlign: 'center',
-  fontSize: 13,
-  color: 'var(--color-text-tertiary, #94a3b8)',
-  fontStyle: 'italic',
-};
-
-const cardStyle: CSSProperties = {
-  padding: '10px 14px',
-  borderRadius: 6,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 4,
-};
-
-const cardNameStyle: CSSProperties = {
-  fontSize: 13,
-  fontWeight: 600,
-  color: 'var(--color-text-primary, #0f172a)',
-  flex: 1,
-  minWidth: 0,
-  whiteSpace: 'nowrap',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-};
-
-const cardDescStyle: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--color-text-tertiary, #94a3b8)',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  display: '-webkit-box',
-  WebkitLineClamp: 1,
-  WebkitBoxOrient: 'vertical',
-};
-
-const cardMetaStyle: CSSProperties = {
-  fontSize: 11,
-  color: 'var(--color-text-tertiary, #94a3b8)',
-  whiteSpace: 'nowrap',
-  flexShrink: 0,
-};
-
-const labelStyle: CSSProperties = {
-  fontSize: 11,
-  fontWeight: 600,
-  color: 'var(--color-warning)',
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-  display: 'block',
-};
-
-const primaryBtnStyle: CSSProperties = {
-  padding: '8px 16px',
-  fontSize: 13,
-  fontWeight: 600,
-  border: 'none',
-  borderRadius: 4,
-  background: 'var(--color-primary, #6366f1)',
-  color: 'var(--color-surface)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-};
