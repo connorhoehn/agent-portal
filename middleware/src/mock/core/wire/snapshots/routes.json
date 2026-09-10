@@ -473,62 +473,67 @@
     {
       "method": "GET",
       "path": "/api/bots",
-      "source": "src/routes/bots.ts:424"
+      "source": "src/routes/bots.ts:468"
     },
     {
       "method": "POST",
       "path": "/api/bots",
-      "source": "src/routes/bots.ts:429"
+      "source": "src/routes/bots.ts:473"
     },
     {
       "method": "DELETE",
       "path": "/api/bots/:id",
-      "source": "src/routes/bots.ts:526"
+      "source": "src/routes/bots.ts:570"
     },
     {
       "method": "GET",
       "path": "/api/bots/:id",
-      "source": "src/routes/bots.ts:470"
+      "source": "src/routes/bots.ts:514"
     },
     {
       "method": "PATCH",
       "path": "/api/bots/:id",
-      "source": "src/routes/bots.ts:476"
+      "source": "src/routes/bots.ts:520"
     },
     {
       "method": "POST",
       "path": "/api/bots/:id/pause",
-      "source": "src/routes/bots.ts:583"
+      "source": "src/routes/bots.ts:627"
     },
     {
       "method": "POST",
       "path": "/api/bots/:id/resume",
-      "source": "src/routes/bots.ts:594"
+      "source": "src/routes/bots.ts:638"
     },
     {
       "method": "POST",
       "path": "/api/bots/:id/run",
-      "source": "src/routes/bots.ts:536"
+      "source": "src/routes/bots.ts:580"
     },
     {
       "method": "GET",
       "path": "/api/bots/:id/runs",
-      "source": "src/routes/bots.ts:615"
+      "source": "src/routes/bots.ts:659"
     },
     {
       "method": "POST",
       "path": "/api/bots/dispatch-work",
-      "source": "src/routes/bots.ts:199"
+      "source": "src/routes/bots.ts:201"
     },
     {
       "method": "GET",
       "path": "/api/bots/estimate",
-      "source": "src/routes/bots.ts:186"
+      "source": "src/routes/bots.ts:188"
     },
     {
       "method": "GET",
       "path": "/api/bots/marketplace-runs",
-      "source": "src/routes/bots.ts:401"
+      "source": "src/routes/bots.ts:445"
+    },
+    {
+      "method": "POST",
+      "path": "/api/bots/work-items/:id/review-estimate",
+      "source": "src/routes/bots.ts:430"
     },
     {
       "method": "GET",

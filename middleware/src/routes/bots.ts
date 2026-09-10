@@ -28,7 +28,9 @@ import {
   fireBot, dispatchWorkItem, preflightWorkItem, decideRunBudget, decideAllocation,
   decideEnvelope, loadEnvelope, grantScopedDispatchVerdict,
 } from '../lib/bot-runner.js';
-import { getWorkItem } from '../providers/work-items.js';
+import {
+  getWorkItem, recordWorkItemEstimate, reviewWorkItemEstimate,
+} from '../providers/work-items.js';
 import { getBudget } from '../providers/budgets.js';
 import { registerBot, unregisterBot } from '../lib/bot-scheduler.js';
 import { validateCronExpr } from '../lib/ingest-scheduler.js';
@@ -395,7 +397,49 @@ botsRouter.post('/dispatch-work', dispatchGate, asyncHandler(async (req, res) =>
     });
     return;
   }
+  // The dispatch succeeded, so the forecast the operator was looking at is now
+  // a decision somebody took. Record it with the session subject — never the
+  // body — so the item can later say "estimated by X, <when>, on <model>"
+  // instead of recomputing a number with nobody's name on it.
+  //
+  // Deliberately AFTER the dispatch and deliberately not awaited into the
+  // response: a bookkeeping write must never be the reason a run that already
+  // started reports failure. A lost estimate is a missing label; a 500 here
+  // would be a phantom failure on a run that is live.
+  if (actor && body.estimate && typeof body.estimate === 'object') {
+    const forecast = body.estimate as Record<string, unknown>;
+    const p75 = Number(forecast['costUsdP75']);
+    void recordWorkItemEstimate(
+      workItemId, actor, model, forecast,
+      Number.isFinite(p75) ? p75 : null,
+    ).catch((err: unknown) => {
+      console.warn('[bots] estimate not recorded for', workItemId, err);
+    });
+  }
   res.status(202).json({ run: result.run });
+}));
+
+/**
+ * Advisory SME sign-off on a work item's stored estimate.
+ *
+ * Gated on ManageIngest-tier dispatch rights rather than a new capability: the
+ * people who can spend against an initiative are the people whose sign-off on a
+ * forecast means anything. Does NOT gate dispatch — see
+ * schema/work_item_estimate_schema.sql for why a fifth hard gate was refused.
+ */
+botsRouter.post('/work-items/:id/review-estimate', dispatchGate, asyncHandler(async (req, res) => {
+  const id = String(req.params['id'] ?? '').trim();
+  if (!id) throw new ValidationError('work item id is required');
+  const actor = req.session?.sub;
+  if (!actor) { res.status(401).json({ error: 'a session is required to review an estimate' }); return; }
+  const ok = await reviewWorkItemEstimate(id, actor);
+  if (!ok) {
+    // 409, not 404: the item may well exist. What is missing is an estimate to
+    // review, and saying so is more useful than "not found".
+    res.status(409).json({ error: 'this work item has no recorded estimate to review' });
+    return;
+  }
+  res.json({ item: await getWorkItem(id) });
 }));
 
 botsRouter.get('/marketplace-runs', marketReadGate, asyncHandler(async (req, res) => {

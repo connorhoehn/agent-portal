@@ -74,7 +74,13 @@ const ITEM: WorkItem = {
   parentId: 'wi-obs-e1', type: 'story', title: 'Roll out collector fleet', description: null,
   status: 'in_progress', priority: 'high', assigneeId: 'p-008', assigneeName: 'Dana Okafor',
   assigneeDept: 'Platform Engineering', labels: ['otel'], storyPoints: 8,
-  sprintId: 'spr-obs-s3', estimatedCostUsd: 10.47, prUrl: null, prStatus: null,
+  sprintId: 'spr-obs-s3', estimatedCostUsd: 10.47,
+  // Estimated once, on Haiku, and not reviewed — the ordinary shape.
+  estimatedBy: 'u-rachel', estimatedAt: '2026-08-01T00:00:00Z',
+  estimateModel: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+  estimateForecast: { costUsdP25: 0.03, costUsdP75: 0.3, minutesP25: 1, minutesP75: 6 },
+  estimateReviewedBy: null, estimateReviewedAt: null,
+  prUrl: null, prStatus: null,
   createdAt: '2026-06-01T00:00:00Z', updatedAt: '2026-08-01T00:00:00Z', completedAt: null,
   childCount: 0, childDoneCount: 0,
 };

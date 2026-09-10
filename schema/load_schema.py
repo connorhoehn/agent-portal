@@ -237,6 +237,11 @@ def main():
         # per-SME budget_grants envelope be enforced. Additive ALTER, so it
         # loads after agent_bots_schema.sql creates the table.
         'agent_run_attribution_schema.sql',
+        # work_items estimate provenance — who stood behind a forecast, when,
+        # and for which model. Additive ALTER on work_items, so it loads after
+        # orgiq_work_items_schema.sql creates the table and after
+        # program_schema.sql adds estimated_cost_usd beside it.
+        'work_item_estimate_schema.sql',
         # NOTE: environments_schema.sql is deliberately NOT here. Its last
         # statement seeds environments for the p-* cast, and those ids are
         # created by seed_program.sql — which apply_all_seed.py applies, AFTER
