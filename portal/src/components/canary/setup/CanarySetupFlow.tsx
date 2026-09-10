@@ -2,7 +2,7 @@
 // Manages state across all steps: library → versions → (editor?) → config.
 
 import { useState } from 'react';
-import type { CSSProperties } from 'react';
+import { Button, Card, Inline, SectionLabel, Stack } from '@connorhoehnslalom/ui-components/shared';
 import type { PromptLibraryEntry } from '../types.js';
 import { PromptLibraryStep } from './PromptLibraryStep.js';
 import { VersionPickerStep } from './VersionPickerStep.js';
@@ -52,68 +52,67 @@ function StepIndicator({ currentStep }: StepIndicatorProps): React.ReactElement 
   const activeIndex = STEP_INDICES[currentStep];
 
   return (
-    <div style={stepIndicatorWrapStyle} aria-label="Setup progress">
+    <Inline gap="none" wrap={false} aria-label="Setup progress">
       {STEP_LABELS.map((label, i) => {
         const completed = i < activeIndex;
         const active = i === activeIndex;
+        const reached = completed || active;
 
         return (
-          <div key={label} style={{ display: 'flex', alignItems: 'center', flex: i < STEP_LABELS.length - 1 ? 1 : undefined }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-              <div
-                style={{
-                  width: 24,
-                  height: 24,
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: completed || active
-                    ? 'var(--color-primary, #6366f1)'
-                    : 'var(--color-bg, #f8fafc)',
-                  border: completed || active
-                    ? 'none'
-                    : '2px solid var(--color-border, #e2e8f0)',
-                  transition: 'all 0.2s',
-                }}
+          <Inline
+            key={label}
+            gap="none"
+            wrap={false}
+            className={i < STEP_LABELS.length - 1 ? 'flex-1' : undefined}
+          >
+            <Stack gap="none" align="center" className="gap-1">
+              <Inline
+                gap="none"
+                justify="center"
+                wrap={false}
+                className={[
+                  'w-6 h-6 rounded-full transition-all duration-200',
+                  reached ? 'bg-primary' : 'bg-bg border-2 border-border',
+                ].join(' ')}
               >
-                {completed ? (
-                  <CheckIcon />
-                ) : (
-                  <span style={{
-                    fontSize: 11,
-                    fontWeight: 700,
-                    color: active ? '#fff' : 'var(--color-text-tertiary, #94a3b8)',
-                  }}>
+                {completed ? <CheckIcon /> : (
+                  <Inline
+                    as="span"
+                    gap="none"
+                    className={`text-[11px] font-bold ${active ? 'text-white' : 'text-text-tertiary'}`}
+                  >
                     {i + 1}
-                  </span>
+                  </Inline>
                 )}
-              </div>
-              <span style={{
-                fontSize: 11,
-                fontWeight: active ? 600 : 400,
-                color: active
-                  ? 'var(--color-primary, #6366f1)'
-                  : completed
-                  ? 'var(--color-text-secondary, #475569)'
-                  : 'var(--color-text-tertiary, #94a3b8)',
-                whiteSpace: 'nowrap',
-              }}>
+              </Inline>
+              <Inline
+                as="span"
+                gap="none"
+                className={[
+                  'text-[11px] whitespace-nowrap',
+                  active ? 'font-semibold text-primary'
+                    : completed ? 'text-text-secondary' : 'text-text-tertiary',
+                ].join(' ')}
+              >
                 {label}
-              </span>
-            </div>
+              </Inline>
+            </Stack>
             {i < STEP_LABELS.length - 1 && (
-              <div style={{
-                ...connectorStyle,
-                background: i < activeIndex
-                  ? 'var(--color-primary, #6366f1)'
-                  : 'var(--color-border, #e2e8f0)',
-              }} />
+              // mb-[22px] lifts the connector to the dot's centre line: 24px
+              // dot + 4px gap + ~14px label, halved.
+              <Inline
+                gap="none"
+                aria-hidden
+                className={[
+                  'flex-1 h-0.5 rounded-sm mx-2 mb-[22px] transition-colors duration-200',
+                  i < activeIndex ? 'bg-primary' : 'bg-border',
+                ].join(' ')}
+              />
             )}
-          </div>
+          </Inline>
         );
       })}
-    </div>
+    </Inline>
   );
 }
 
@@ -189,24 +188,26 @@ export function CanarySetupFlow({ onStarted }: CanarySetupFlowProps): React.Reac
   const versionsNextEnabled = state.versionA !== null && state.versionB !== null;
 
   return (
-    <div style={outerStyle}>
-      <div style={cardStyle}>
+    <Inline gap="none" justify="center" align="start" wrap={false} className="min-h-full px-4 py-8 box-border">
+      <Card padding="none" className="w-full max-w-[860px]">
         {/* Header */}
-        <div style={cardHeaderStyle}>
-          <h2 style={titleStyle}>New canary experiment</h2>
-          <p style={subtitleStyle}>
+        <Stack gap="none" className="px-6 pt-6 pb-4 border-b border-border">
+          <SectionLabel as="h2" className="text-[18px] font-bold text-text-primary normal-case tracking-normal mb-1.5">
+            New canary experiment
+          </SectionLabel>
+          <Inline as="span" gap="none" className="text-[13px] text-text-secondary leading-normal">
             Compare two prompt versions head-to-head. The controller automatically adjusts
             traffic based on judge scores.
-          </p>
-        </div>
+          </Inline>
+        </Stack>
 
         {/* Step indicator */}
-        <div style={{ padding: '0 24px 20px' }}>
+        <Stack gap="none" className="px-6 pb-5">
           <StepIndicator currentStep={state.step} />
-        </div>
+        </Stack>
 
         {/* Step content */}
-        <div style={contentStyle}>
+        <Stack gap="none" className="p-6">
           {state.step === 'library' && (
             <PromptLibraryStep
               selected={state.selectedPrompt}
@@ -215,7 +216,7 @@ export function CanarySetupFlow({ onStarted }: CanarySetupFlowProps): React.Reac
           )}
 
           {(state.step === 'versions') && state.selectedPrompt && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <Stack gap="none" className="gap-5">
               <VersionPickerStep
                 promptId={state.selectedPrompt.id}
                 promptName={state.selectedPrompt.name}
@@ -225,24 +226,17 @@ export function CanarySetupFlow({ onStarted }: CanarySetupFlowProps): React.Reac
                 onSelectB={(v) => setState((s) => ({ ...s, versionB: v }))}
                 onEditFromA={goToEditor}
               />
-              <div style={stepNavStyle}>
-                <button
-                  type="button"
-                  onClick={() => setState((s) => ({ ...s, step: 'library' }))}
-                  style={backBtnStyle}
-                >
+              <Inline gap="sm" justify="between" wrap={false} className="pt-3 border-t border-border">
+                <Button variant="secondary" size="sm" onClick={() => setState((s) => ({ ...s, step: 'library' }))}>
                   Back
-                </button>
-                <button
-                  type="button"
-                  onClick={handleVersionsNext}
-                  disabled={!versionsNextEnabled}
-                  style={versionsNextEnabled ? primaryBtnStyle : { ...primaryBtnStyle, opacity: 0.45, cursor: 'not-allowed' }}
-                >
+                </Button>
+                {/* Button owns its own disabled styling; the old code hand-rolled
+                    opacity 0.45 + not-allowed onto a spread of the enabled style. */}
+                <Button variant="primary" size="sm" disabled={!versionsNextEnabled} onClick={handleVersionsNext}>
                   Next: Configure
-                </button>
-              </div>
-            </div>
+                </Button>
+              </Inline>
+            </Stack>
           )}
 
           {state.step === 'editor' && state.selectedPrompt && state.versionA && (
@@ -268,97 +262,9 @@ export function CanarySetupFlow({ onStarted }: CanarySetupFlowProps): React.Reac
               onStarted={onStarted}
             />
           )}
-        </div>
-      </div>
-    </div>
+        </Stack>
+      </Card>
+    </Inline>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
-
-const outerStyle: CSSProperties = {
-  display: 'flex',
-  justifyContent: 'center',
-  alignItems: 'flex-start',
-  minHeight: '100%',
-  padding: '32px 16px',
-  boxSizing: 'border-box',
-};
-
-const cardStyle: CSSProperties = {
-  width: '100%',
-  maxWidth: 860,
-  background: 'var(--color-surface)',
-  border: '1px solid var(--color-border, #e2e8f0)',
-  borderRadius: 8,
-  overflow: 'hidden',
-};
-
-const cardHeaderStyle: CSSProperties = {
-  padding: '24px 24px 16px',
-  borderBottom: '1px solid var(--color-border, #e2e8f0)',
-};
-
-const titleStyle: CSSProperties = {
-  fontSize: 18,
-  fontWeight: 700,
-  color: 'var(--color-text-primary, #0f172a)',
-  margin: '0 0 6px',
-};
-
-const subtitleStyle: CSSProperties = {
-  fontSize: 13,
-  color: 'var(--color-text-secondary, #475569)',
-  margin: 0,
-  lineHeight: 1.5,
-};
-
-const contentStyle: CSSProperties = {
-  padding: 24,
-};
-
-const stepIndicatorWrapStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-};
-
-const connectorStyle: CSSProperties = {
-  flex: 1,
-  height: 2,
-  borderRadius: 1,
-  margin: '0 8px',
-  marginBottom: 22, // align with dot center (24px dot + 4px gap + ~14px label / 2)
-  transition: 'background 0.2s',
-};
-
-const stepNavStyle: CSSProperties = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  paddingTop: 12,
-  borderTop: '1px solid var(--color-border, #e2e8f0)',
-};
-
-const backBtnStyle: CSSProperties = {
-  padding: '8px 16px',
-  fontSize: 13,
-  fontWeight: 500,
-  border: '1px solid var(--color-border, #e2e8f0)',
-  borderRadius: 4,
-  background: 'transparent',
-  color: 'var(--color-text-secondary, #475569)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-};
-
-const primaryBtnStyle: CSSProperties = {
-  padding: '8px 16px',
-  fontSize: 13,
-  fontWeight: 600,
-  border: 'none',
-  borderRadius: 4,
-  background: 'var(--color-primary, #6366f1)',
-  color: 'var(--color-surface)',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-};
