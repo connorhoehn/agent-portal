@@ -1,5 +1,11 @@
 import {
-  Card, Chip, EntityCell, Inline, MetaLine, ProgressBar, Stack,
+  Card,
+  Chip,
+  EntityCell,
+  Inline,
+  MetaLine,
+  ProgressBar,
+  Stack,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { CRAWL_STATUS_TONE, durationOf, formatDuration } from './types';
@@ -18,11 +24,11 @@ export function ActiveRunsStrip({
   onOpen: (id: string) => void;
 }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <Stack gap="none" className="flex flex-col gap-3">
       {sessions.map(s => (
         <ActiveRunCard key={s.id} initial={s} onCancel={onCancel} onOpen={onOpen} />
       ))}
-    </div>
+    </Stack>
   );
 }
 
@@ -53,8 +59,8 @@ function ActiveRunCard({
   const tone = CRAWL_STATUS_TONE[session.status];
 
   return (
-    <Card padding="md" style={{ borderLeft: '3px solid var(--color-warning)' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+    <Card padding="md" className="border-l-[3px] border-l-warning">
+      <Inline gap="lg" align="start" wrap={false}>
         {/* Thumbnail of latest page */}
         {latestPage ? (
           <Thumbnail
@@ -65,22 +71,9 @@ function ActiveRunCard({
             onClick={() => onOpen(session.id)}
           />
         ) : (
-          <div
-            style={{
-              width: 140,
-              height: 88,
-              borderRadius: 4,
-              border: '1px solid var(--color-border)',
-              background: 'var(--color-surface-raised)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 10,
-              color: 'var(--color-text-tertiary)',
-            }}
-          >
+          <Inline gap="none" justify="center" className="w-[140px] h-[88px] rounded border border-border shrink-0 bg-surface-inset">
             warming up…
-          </div>
+          </Inline>
         )}
 
         {/* Body */}
@@ -130,7 +123,7 @@ function ActiveRunCard({
             </Button>
           )}
         </Stack>
-      </div>
+      </Inline>
     </Card>
   );
 }

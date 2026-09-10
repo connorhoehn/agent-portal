@@ -1,5 +1,13 @@
 import {
-  Table, TableHead, TableBody, TableRow, TableTh, TableTd, Chip,
+  Chip,
+  FilterChip,
+  Inline,
+  Table,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableTd,
+  TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { CRAWL_STATUS_TONE, durationOf, formatCost, formatDuration } from './types';
 import type { CrawlSession, CrawlStatus, CrawlTarget } from './types';
@@ -33,28 +41,23 @@ export function RunHistoryTable({
 
   return (
     <>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+      <Inline gap="none" className="flex gap-1.5 mb-3 flex-wrap">
         {FILTERS.map(f => {
           const active = f.value === filter;
+          // One-of-many status filter — FilterChip is exactly that shape, and
+          // it owns the active treatment these two ternaries were hand-rolling.
           return (
-            <button
+            <FilterChip
               key={f.value}
+              active={active}
+              size="sm"
               onClick={() => onFilter(f.value)}
-              style={{
-                fontSize: 11,
-                padding: '4px 10px',
-                background: active ? 'var(--color-primary)' : 'transparent',
-                color: active ? '#fff' : 'var(--color-text-secondary)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-sm)',
-                cursor: 'pointer',
-              }}
             >
               {f.label}
-            </button>
+            </FilterChip>
           );
         })}
-      </div>
+      </Inline>
 
       <Table>
         <TableHead>
@@ -64,8 +67,8 @@ export function RunHistoryTable({
             <TableTh>Mode</TableTh>
             <TableTh>Status</TableTh>
             <TableTh>Duration</TableTh>
-            <TableTh style={{ textAlign: 'right' }}>Pages</TableTh>
-            <TableTh style={{ textAlign: 'right' }}>Cost</TableTh>
+            <TableTh className="text-right">Pages</TableTh>
+            <TableTh className="text-right">Cost</TableTh>
             <TableTh></TableTh>
           </TableRow>
         </TableHead>
@@ -75,42 +78,23 @@ export function RunHistoryTable({
             return (
               <TableRow key={s.id}>
                 <TableTd
-                  style={{
-                    fontSize: 11,
-                    color: 'var(--color-text-tertiary)',
-                    whiteSpace: 'nowrap',
-                  }}
+                  className="text-[11px] text-text-tertiary whitespace-nowrap"
                 >
                   {new Date(s.startedAt).toLocaleString()}
                 </TableTd>
                 <TableTd>
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 500,
-                      maxWidth: 280,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
+                  <Inline gap="none"
+                    className="text-[12px] font-medium max-w-[280px] overflow-hidden truncate whitespace-nowrap"
                     title={target?.label ?? s.startUrl}
                   >
                     {target?.label ?? '(ad-hoc)'}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 10,
-                      fontFamily: 'monospace',
-                      color: 'var(--color-text-tertiary)',
-                      maxWidth: 280,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
+                  </Inline>
+                  <Inline gap="none"
+                    className="text-[10px] font-mono text-text-tertiary max-w-[280px] overflow-hidden truncate whitespace-nowrap"
                     title={s.startUrl}
                   >
                     {s.startUrl}
-                  </div>
+                  </Inline>
                 </TableTd>
                 <TableTd>
                   <Chip tone="neutral" size="xs">{s.mode}</Chip>
@@ -118,26 +102,21 @@ export function RunHistoryTable({
                 <TableTd>
                   <Chip tone={CRAWL_STATUS_TONE[s.status]} size="xs">{s.status}</Chip>
                 </TableTd>
-                <TableTd style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
+                <TableTd className="text-[11px] text-text-tertiary">
                   {formatDuration(durationOf(s))}
                 </TableTd>
-                <TableTd style={{ textAlign: 'right', fontSize: 12, fontWeight: 600 }}>
+                <TableTd className="text-right text-[12px] font-semibold">
                   {s.pages.length}
-                  <span style={{ color: 'var(--color-text-tertiary)', fontWeight: 400 }}>
+                  <Inline as="span" gap="none" className="text-text-tertiary font-normal">
                     {' / '}{s.maxPages}
-                  </span>
+                  </Inline>
                 </TableTd>
                 <TableTd
-                  style={{
-                    textAlign: 'right',
-                    fontSize: 11,
-                    color: 'var(--color-text-secondary)',
-                    fontFamily: 'monospace',
-                  }}
+                  className="text-right text-[11px] text-text-secondary font-mono"
                 >
                   {formatCost(s.estimatedCostUsd)}
                 </TableTd>
-                <TableTd style={{ textAlign: 'right' }}>
+                <TableTd className="text-right">
                   <Button variant="secondary" size="sm" onClick={() => onOpen(s.id)}>
                     Open
                   </Button>
