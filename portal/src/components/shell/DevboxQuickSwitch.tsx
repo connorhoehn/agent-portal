@@ -4,6 +4,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useCompute, type Computer } from '@connorhoehnslalom/ui-components/compute';
+import {
+  Card, EntityCell, Inline, InlineAlert, MetaLine, SectionLabel, Stack,
+} from '@connorhoehnslalom/ui-components/shared';
 
 const mono = 'font-["Fira_Code","Cascadia_Code","JetBrains_Mono",monospace]';
 
@@ -102,73 +105,92 @@ export function DevboxQuickSwitch() {
   if (!open) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-[200] bg-black/40 flex items-start justify-center pt-[15vh]"
+    <Inline
+      gap="none"
+      align="start"
+      justify="center"
+      wrap={false}
+      className="fixed inset-0 z-[200] bg-black/40 pt-[15vh]"
       onClick={() => setOpen(false)}
     >
-      <div
+      {/* Card takes a ref as of 2.233.0, which is what lets the panel keep
+          taking DOM focus off the terminal underneath. */}
+      <Card
         ref={overlayRef}
         tabIndex={-1}
-        className="w-[440px] max-w-[90vw] rounded-lg border border-border bg-surface shadow-xl overflow-hidden outline-none"
+        className="w-[440px] max-w-[90vw] shadow-xl outline-none"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
-          <span className="text-xs font-semibold text-text-secondary">COMPUTERS</span>
-          <span className="text-[10px] text-text-tertiary">⌘I · ↑↓ / tab · ⏎ · esc</span>
-          <div className="flex-1" />
+        <Inline gap="sm" wrap={false} className="px-4 py-2.5 border-b border-border">
+          <SectionLabel>Computers</SectionLabel>
+          <MetaLine size="xs" items={['⌘I · ↑↓ / tab · ⏎ · esc']} />
+          <Inline as="span" gap="none" className="flex-1" />
           {query
-            ? <span className={`text-[11px] text-text-primary ${mono}`}>{query}</span>
-            : <span className="text-[10px] text-text-tertiary">type to filter</span>}
-        </div>
-        <div className="max-h-[50vh] overflow-y-auto">
+            ? <Inline as="span" gap="none" className={`text-[11px] text-text-primary ${mono}`}>{query}</Inline>
+            : <MetaLine size="xs" items={['type to filter']} />}
+        </Inline>
+        <Stack gap="none" className="max-h-[50vh] overflow-y-auto">
           {/* The switcher used to open onto nothing for a role without
               Computer Lab, or while the fleet was still loading, or when the
               fleet was empty — a blank popover that says "type to filter".
               Every one of those states now says what is true and what to do. */}
           {!canManage && (
-            <div className="px-4 py-3 text-[12px] text-text-secondary">
-              <span className="font-semibold text-text-primary">You don’t have access to computers.</span>{' '}
-              Computer Lab needs the <span className={mono}>ManageDevbox</span> capability (SME or HR admin).
-              Ask an administrator, or sign in as a role that has it.
-            </div>
+            <Stack gap="none" className="px-4 py-3 text-[12px] text-text-secondary">
+              <Inline as="span" gap="none" className="font-semibold text-text-primary">
+                You don’t have access to computers.
+              </Inline>{' '}
+              Computer Lab needs the <Inline as="span" gap="none" className={mono}>ManageDevbox</Inline> capability
+              (SME or HR admin). Ask an administrator, or sign in as a role that has it.
+            </Stack>
           )}
           {canManage && error && (
-            <div className="px-4 py-3 text-[12px] text-danger">Couldn’t load computers: {error}</div>
+            <Stack gap="none" className="px-4 py-3">
+              <InlineAlert tone="error">Couldn’t load computers: {error}</InlineAlert>
+            </Stack>
           )}
           {canManage && !error && isLoading && boxes.length === 0 && (
-            <div className="px-4 py-3 text-[12px] text-text-tertiary">Loading computers…</div>
+            <MetaLine className="px-4 py-3" items={['Loading computers…']} />
           )}
           {canManage && !error && !isLoading && boxes.length === 0 && (
-            <div className="px-4 py-3 text-[12px] text-text-secondary">No computers yet — create one below, or open Computer Lab.</div>
+            <MetaLine tone="secondary" className="px-4 py-3"
+              items={['No computers yet — create one below, or open Computer Lab.']} />
           )}
           {canManage && !error && boxes.length > 0 && matches.length === 0 && (
-            <div className="px-4 py-3 text-[12px] text-text-tertiary">No computer matches “{query}”.</div>
+            <MetaLine className="px-4 py-3" items={[`No computer matches “${query}”.`]} />
           )}
           {matches.map((box, i) => (
-            <div
+            <Inline
               key={box.id}
+              gap="sm"
+              wrap={false}
               onClick={() => go(box)}
               onMouseEnter={() => setHighlight(i)}
-              className={`px-4 py-2.5 flex items-center gap-3 cursor-pointer border-b border-border ${highlight === i ? 'bg-surface-hover' : ''}`}
+              className={`px-4 py-2.5 cursor-pointer border-b border-border ${highlight === i ? 'bg-surface-hover' : ''}`}
             >
-              <span className="text-[13px] font-semibold text-text-primary">{box.label}</span>
-              <span className={`text-[11px] text-text-tertiary ${mono}`}>…{box.sessionId.slice(-10)}</span>
-              <div className="flex-1" />
-              <span className="text-[10px] text-text-tertiary">{new Date(box.createdAt).toLocaleDateString()}</span>
-            </div>
+              <EntityCell label={box.label} labelClassName="text-[13px] font-semibold" />
+              <Inline as="span" gap="none" className={`text-[11px] text-text-tertiary ${mono}`}>
+                …{box.sessionId.slice(-10)}
+              </Inline>
+              <Inline as="span" gap="none" className="flex-1" />
+              <MetaLine size="xs" items={[new Date(box.createdAt).toLocaleDateString()]} />
+            </Inline>
           ))}
           {canManage && (
-            <div
+            <Inline
+              gap="sm"
+              wrap={false}
               onClick={() => void provision()}
               onMouseEnter={() => setHighlight(matches.length)}
-              className={`px-4 py-2.5 flex items-center gap-2 cursor-pointer ${highlight === matches.length ? 'bg-surface-hover' : ''}`}
+              className={`px-4 py-2.5 cursor-pointer ${highlight === matches.length ? 'bg-surface-hover' : ''}`}
             >
-              <span className="text-[13px] font-semibold text-primary">{busy ? '⏳ provisioning…' : '+ New computer'}</span>
-              <span className="text-[11px] text-text-tertiary">fresh microVM workspace</span>
-            </div>
+              <Inline as="span" gap="none" className="text-[13px] font-semibold text-primary">
+                {busy ? '⏳ provisioning…' : '+ New computer'}
+              </Inline>
+              <MetaLine size="xs" items={['fresh microVM workspace']} />
+            </Inline>
           )}
-        </div>
-      </div>
-    </div>
+        </Stack>
+      </Card>
+    </Inline>
   );
 }
