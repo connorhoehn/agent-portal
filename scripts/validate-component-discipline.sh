@@ -88,13 +88,42 @@ count_raw() { # count_raw <files...>
   python3 - "$@" <<'PY'
 import re, sys
 EL = r'div|p|span|h[1-6]|ul|ol|li|section|nav|article|table|tr|td|th|button|a|label|input|textarea|select|form|code|pre'
-rx = re.compile(rf'<({EL})(\s[^>]*?)?\sclassName=', re.S)
+# Brace-aware on purpose. The regex this replaced was
+#   rf'<({EL})(\s[^>]*?)?\sclassName='
+# and `[^>]*?` cannot cross a `>`. Any element carrying an arrow function
+# before its className — `onClick={() => ...}`, which is most interactive
+# elements — was therefore invisible to this gate. It hid five of them,
+# including a <button> this very script had just been used to justify.
+tag_rx = re.compile(rf'<({EL})(?=[\s/>])')
+
+def tag_end(s, i):
+    depth = 0; q = None; j = i
+    while j < len(s):
+        c = s[j]
+        if q:
+            if c == q and s[j - 1] != '\\':
+                q = None
+        elif c in '"\'`':
+            q = c
+        elif c == '{':
+            depth += 1
+        elif c == '}':
+            depth -= 1
+        elif c == '>' and depth == 0:
+            return j
+        j += 1
+    return -1
+
 total = 0
 for path in sys.argv[1:]:
     try:
-        total += len(rx.findall(open(path, encoding='utf-8', errors='ignore').read()))
+        s = open(path, encoding='utf-8', errors='ignore').read()
     except OSError:
-        pass
+        continue
+    for m in tag_rx.finditer(s):
+        end = tag_end(s, m.start())
+        if end > 0 and re.search(r'\sclassName=', s[m.start():end]):
+            total += 1
 print(total, end='')
 PY
 }
@@ -136,7 +165,7 @@ area_files() { # area_files <dir>
 # Raw counts nest (an entry covers its subdirectories), which is deliberate —
 # converting a leaf lowers both its own budget and its parent's.
 AREAS=(
-  "portal/src:0:30:214"
+  "portal/src:0:25:185"
   "portal/src/components/runs:0:0:0"
   "portal/src/components/codebases:0:0:0"
   "portal/src/components/scores:0:0:4"
@@ -144,7 +173,7 @@ AREAS=(
   "portal/src/components/ingest:0:1:58"
   "portal/src/components/canary:0:4:23"
   "portal/src/components/org-graph:2:6:6"
-  "portal/src/components/shell:0:6:40"
+  "portal/src/components/shell:0:1:11"
   "portal/src/components/knowledge:0:0:0"
   "portal/src/components/sdlc:0:0:0"
   "portal/src/components/kb:0:3:54"

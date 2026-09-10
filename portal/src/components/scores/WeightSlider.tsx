@@ -1,4 +1,4 @@
-import { Button, Inline, MetaLine, SectionLabel, Stack } from '@connorhoehnslalom/ui-components/shared';
+import { Button, Inline, MetaLine, SectionLabel, Stack , Slider } from '@connorhoehnslalom/ui-components/shared';
 
 interface WeightSliderProps {
   value: number;
@@ -23,14 +23,13 @@ export function WeightSlider({ value, onChange, label = 'Composite weighting: in
           root, and importing the root pulls @tiptap/react — a peer dep this
           portal never installed — into `vite build`. Queued; this file is on
           the ledger as a local composite for exactly that reason. */}
-      <input
-        type="range"
+      <Slider
         aria-label={label}
         min={0}
         max={100}
         value={infPct}
-        onChange={e => onChange(Number(e.target.value) / 100)}
-        className="w-full cursor-pointer accent-primary"
+        onChange={(v) => onChange(v / 100)}
+        className="w-full"
       />
       <Inline justify="between">
         <MetaLine size="xs" className="text-primary" items={[`Influence ${infPct}%`]} />
