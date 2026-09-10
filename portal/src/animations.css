@@ -18,3 +18,26 @@
   from { opacity: 0; transform: translateX(24px); }
   to   { opacity: 1; transform: translateX(0); }
 }
+
+/* The canary weighted edge's flowing dashes.
+ *
+ * These lived in `components/canary/edges/WeightedEdge.tsx` as a module-level
+ * `document.head.appendChild(<style>)` guarded by an id check — so merely
+ * importing the edge component mutated the document, before React rendered
+ * anything. The sibling RouterNode did the same for its pulse and lost it to
+ * `StatusDot`, which has `pulse` built in; the edge has no library equivalent,
+ * so its keyframes come here instead of into the head at import time.
+ *
+ * The class is applied by name rather than through an arbitrary-value utility
+ * because it sets three properties (dasharray + animation) that React Flow's
+ * `BaseEdge` takes as a `className`, not as a style object.
+ */
+@keyframes canary-edge-dashflow {
+  from { stroke-dashoffset: 16; }
+  to   { stroke-dashoffset: 0; }
+}
+
+.canary-weighted-edge--animated {
+  stroke-dasharray: 6 4;
+  animation: canary-edge-dashflow 0.8s linear infinite;
+}

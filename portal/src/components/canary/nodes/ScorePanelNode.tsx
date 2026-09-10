@@ -5,7 +5,7 @@
 import { memo } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { ResponsiveContainer, LineChart, Line } from 'recharts';
-import { Card, Chip } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Chip, EntityCell, Inline, MetaLine } from '@connorhoehnslalom/ui-components/shared';
 import type { ScorePanelNodeData } from '../types.js';
 
 export type ScorePanelNodeType = Node<
@@ -30,21 +30,23 @@ function ScorePanelNodeImpl({ data }: NodeProps<ScorePanelNodeType>) {
   const hasData = data.sparkline.length > 0;
   return (
     <Card padding="sm" className="w-[200px] text-xs">
-      <div className="flex items-center justify-between gap-2 mb-1.5">
-        <span className="text-xs font-semibold text-text-primary">
-          {`Score (${data.side})`}
-        </span>
+      <Inline gap="sm" justify="between" wrap={false} className="mb-1.5">
+        <EntityCell label={`Score (${data.side})`} labelClassName="text-xs font-semibold" />
         <Chip tone={SIDE_TONE[data.side]} size="xs">{data.side}</Chip>
-      </div>
+      </Inline>
 
-      <div
+      {/* `color` is a runtime value from SIDE_COLOR, so it stays a style —
+          Tailwind cannot build a class from it. */}
+      <Inline
+        as="span"
+        gap="none"
         className="text-[22px] font-bold tabular-nums leading-tight mb-1"
         style={{ color }}
       >
         {data.rollingMean.toFixed(3)}
-      </div>
+      </Inline>
 
-      <div className="w-[140px] h-10">
+      <Inline gap="none" className="w-[140px] h-10">
         {hasData ? (
           <ResponsiveContainer width="100%" height={40}>
             <LineChart data={data.sparkline} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
@@ -59,11 +61,9 @@ function ScorePanelNodeImpl({ data }: NodeProps<ScorePanelNodeType>) {
             </LineChart>
           </ResponsiveContainer>
         ) : (
-          <div className="text-[10px] text-text-tertiary italic">
-            no samples yet
-          </div>
+          <MetaLine size="xs" items={['no samples yet']} className="italic" />
         )}
-      </div>
+      </Inline>
 
       <Handle type="target" position={Position.Top} id="in" />
       <Handle type="source" position={Position.Bottom} id="out" />

@@ -2,7 +2,7 @@
 // Rendered by CanaryPage; reads controllerState from the canary store.
 
 import { useState } from 'react';
-import { Banner, Button, Spinner } from '@connorhoehnslalom/ui-components/shared';
+import { Banner, Button, Inline, Spinner } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useCanaryStore } from './canaryStore.js';
 import { resetCanaryExperiment } from './usePromptLibrary.js';
@@ -66,11 +66,11 @@ export function ExperimentCompleteBanner({ onReset }: ExperimentCompleteBannerPr
           : '✕ Experiment ended — Version A retained, B rolled back'
       }
     >
-      <div className="flex items-center gap-2">
+      <Inline gap="sm" wrap={false}>
         {pinError && (
-          <span className="text-[11px] text-[var(--color-danger)]" title={pinError}>
+          <Inline as="span" gap="none" className="text-[11px] text-danger" title={pinError}>
             Error — see console
-          </span>
+          </Inline>
         )}
         {canManage && (
           <>
@@ -82,9 +82,9 @@ export function ExperimentCompleteBanner({ onReset }: ExperimentCompleteBannerPr
                 disabled={pinning}
               >
                 {pinning && (
-                  <span className="mr-1.5 inline-block align-middle">
+                  <Inline as="span" gap="none" className="mr-1.5 align-middle">
                     <Spinner size="sm" color="var(--color-surface)" />
-                  </span>
+                  </Inline>
                 )}
                 {pinning ? 'Pinning…' : 'Pin as new baseline A'}
               </Button>
@@ -99,7 +99,7 @@ export function ExperimentCompleteBanner({ onReset }: ExperimentCompleteBannerPr
             </Button>
           </>
         )}
-      </div>
+      </Inline>
     </Banner>
   );
 }
