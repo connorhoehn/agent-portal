@@ -11,7 +11,11 @@
 // from, and the choice becomes the crawl target's scope.
 
 import { useCallback, useEffect, useState } from 'react';
-import { Card } from '@connorhoehnslalom/ui-components/shared';
+import {
+  Button, Card, Checkbox, Chip, EntityCell, FormField, Inline, InlineAlert,
+  Input, MetaLine, SectionLabel, Select, Stack, Toolbar,
+} from '@connorhoehnslalom/ui-components/shared';
+import type { ChipTone } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
 
@@ -41,15 +45,18 @@ interface Survey {
   startedAt: string; completedAt: string | null; error: string | null;
 }
 
-const KIND_TONE: Record<SectionKind, string> = {
-  documentation: 'bg-success-bg text-success',
-  'api-reference': 'bg-success-bg text-success',
-  blog: 'bg-surface-hover text-text-tertiary',
-  changelog: 'bg-surface-hover text-text-tertiary',
-  marketing: 'bg-warning-bg text-warning',
-  legal: 'bg-warning-bg text-warning',
-  navigation: 'bg-surface-hover text-text-tertiary',
-  other: 'bg-surface-hover text-text-tertiary',
+// What a section's kind is worth indexing, as a Chip tone rather than a pair of
+// background/foreground classes. Same three buckets as before: reference
+// material reads success, marketing and legal read warning, the rest neutral.
+const KIND_TONE: Record<SectionKind, ChipTone> = {
+  documentation: 'success',
+  'api-reference': 'success',
+  blog: 'neutral',
+  changelog: 'neutral',
+  marketing: 'warning',
+  legal: 'warning',
+  navigation: 'neutral',
+  other: 'neutral',
 };
 
 function chars(n: number): string {
@@ -154,151 +161,183 @@ export function SiteSurveyPanel({ onTargetCreated }: { onTargetCreated?: () => v
 
   return (
     <Card padding="none" className="overflow-hidden mb-4">
-      <div className="px-3.5 py-3 border-b border-border flex items-center gap-2">
-        <span className="text-xs font-semibold text-text-secondary tracking-wide select-none">SURVEY A SITE</span>
-        <span className="text-[11px] text-text-tertiary">
-          see what is there before paying to crawl it
-        </span>
-      </div>
+      <Toolbar bordered size="sm">
+        <SectionLabel>Survey a site</SectionLabel>
+        <MetaLine size="xs" items={['see what is there before paying to crawl it']} />
+      </Toolbar>
 
-      <div className="px-3.5 py-3 flex flex-wrap items-end gap-2.5 border-b border-border">
-        <label className="flex-1 min-w-[260px]">
-          <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">
-            Start URL
-          </span>
-          <input
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') void run(); }}
-            placeholder="https://docs.example.com"
-            className="w-full px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary font-mono"
-          />
-        </label>
-        <label>
-          <span className="block text-[10px] font-semibold uppercase tracking-wide text-text-tertiary mb-1">
-            Look at
-          </span>
-          <select
-            value={maxPages}
-            onChange={(e) => setMaxPages(Number(e.target.value))}
-            className="px-2 py-1.5 rounded-md border border-border bg-surface text-[12px] text-text-primary"
+      <Stack gap="sm" className="px-3.5 py-3 border-b border-border">
+        {/* `labelId` is dropped from every wiring bag: FormField hands it to the
+            consumer but it is not a DOM prop, so spreading it makes React warn. */}
+        <Inline gap="sm" align="end" wrap>
+          <FormField label="Start URL" className="flex-1 min-w-[260px]">
+            {({ labelId: _l, ...w }) => (
+              <Input
+                {...w}
+                size="sm"
+                mono
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void run(); }}
+                placeholder="https://docs.example.com"
+              />
+            )}
+          </FormField>
+
+          <FormField label="Look at">
+            {({ labelId: _l, ...w }) => (
+              <Select
+                {...w}
+                size="sm"
+                value={String(maxPages)}
+                onChange={(e) => setMaxPages(Number(e.target.value))}
+                options={[
+                  { value: '40', label: '40 pages' },
+                  { value: '120', label: '120 pages' },
+                  { value: '250', label: '250 pages' },
+                ]}
+              />
+            )}
+          </FormField>
+
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={starting || !url.trim() || survey?.status === 'running'}
+            onClick={() => void run()}
           >
-            <option value={40}>40 pages</option>
-            <option value={120}>120 pages</option>
-            <option value={250}>250 pages</option>
-          </select>
-        </label>
-        <button
-          disabled={starting || !url.trim() || survey?.status === 'running'}
-          onClick={() => void run()}
-          className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-40"
-        >
-          {survey?.status === 'running' ? 'surveying…' : starting ? 'starting…' : 'Survey'}
-        </button>
-        <div className="w-full text-[11px] text-text-tertiary leading-snug">
-          Reads pages over plain HTTP — no screenshots, no S3 writes, nothing ingested. Pages that only
-          render in JavaScript fall back to the browser, which is the one thing that can see them.
-        </div>
-      </div>
+            {survey?.status === 'running' ? 'surveying…' : starting ? 'starting…' : 'Survey'}
+          </Button>
+        </Inline>
+
+        <MetaLine
+          size="xs"
+          items={['Reads pages over plain HTTP — no screenshots, no S3 writes, nothing ingested. Pages '
+            + 'that only render in JavaScript fall back to the browser, which is the one thing that can '
+            + 'see them.']}
+        />
+      </Stack>
 
       {survey?.status === 'failed' && (
-        <div className="px-3.5 py-3 text-[12px] text-danger">{survey.error}</div>
+        <Stack gap="none" className="px-3.5 py-3">
+          <InlineAlert tone="error">{survey.error}</InlineAlert>
+        </Stack>
       )}
 
       {survey && survey.status !== 'failed' && (
         <>
-          <div className="px-3.5 py-2.5 border-b border-border flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
-            <span className="text-text-secondary">
-              <strong className="text-text-primary">{ok}</strong> pages read
-            </span>
-            {failed > 0 && <span className="text-text-tertiary">{failed} unreadable</span>}
+          {/* Each stat carries its own meaning, so these are toned chips rather
+              than one MetaLine — MetaLine takes a single tone for every item,
+              and "recovered by the browser" and "needed the browser" are not
+              the same news. */}
+          <Inline gap="xs" wrap className="px-3.5 py-2.5 border-b border-border">
+            <Chip tone="neutral" size="xs">{ok} pages read</Chip>
+            {failed > 0 && <Chip tone="neutral" size="xs">{failed} unreadable</Chip>}
             {survey.browserRescued > 0 && (
-              <span className="text-primary" title="Pages plain HTTP saw as empty; the browser rendered them">
+              <Chip tone="info" size="xs" title="Pages plain HTTP saw as empty; the browser rendered them">
                 {survey.browserRescued} recovered by the browser
-              </span>
+              </Chip>
             )}
             {survey.browserSkipped > 0 && (
-              <span className="text-warning" title="The browser fallback is capped so a survey cannot quietly become a full vision crawl">
+              <Chip
+                tone="warning"
+                size="xs"
+                title="The browser fallback is capped so a survey cannot quietly become a full vision crawl"
+              >
                 {survey.browserSkipped} more needed the browser — crawl this one in browser mode
-              </span>
+              </Chip>
             )}
             {survey.robotsExcluded > 0 && (
-              <span className="text-text-tertiary" title="robots.txt asks crawlers not to fetch these">
+              <Chip tone="neutral" size="xs" title="robots.txt asks crawlers not to fetch these">
                 {survey.robotsExcluded} excluded by robots.txt
-              </span>
+              </Chip>
             )}
-            <span className="text-text-tertiary">{survey.sections.length} sections</span>
+            <Chip tone="neutral" size="xs">{survey.sections.length} sections</Chip>
             {survey.status === 'running' && (
-              <span className="text-warning animate-pulse">walking…</span>
+              <Chip tone="warning" size="xs" dot="pulse">walking…</Chip>
             )}
-          </div>
+          </Inline>
 
           {survey.classificationProblem && (
-            <div className="px-3.5 py-2 text-[11px] text-warning border-b border-border">
-              {survey.classificationProblem}
-            </div>
+            <Stack gap="none" className="px-3.5 py-2 border-b border-border">
+              <InlineAlert tone="warning">{survey.classificationProblem}</InlineAlert>
+            </Stack>
           )}
 
           {survey.sections.length > 0 && (
-            <div className="border-b border-border">
+            <Stack gap="none" className="border-b border-border">
               {survey.sections.map((s) => (
-                <label
+                // `as="label"` keeps the whole row a click target for its
+                // checkbox — the native behaviour the raw <label> had — without
+                // a raw styled element.
+                <Inline
                   key={s.prefix}
-                  className="px-3.5 py-2.5 border-b border-border last:border-b-0 flex items-start gap-3 cursor-pointer hover:bg-surface-hover/50"
+                  as="label"
+                  gap="sm"
+                  align="start"
+                  wrap={false}
+                  className="px-3.5 py-2.5 border-b border-border last:border-b-0 cursor-pointer hover:bg-surface-hover/50"
                 >
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={selected.has(s.prefix)}
                     onChange={() => toggle(s.prefix)}
                     className="mt-0.5"
                   />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[12px] font-mono font-semibold text-text-primary">{s.label}</span>
-                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${KIND_TONE[s.kind]}`}>
-                        {s.kind}
-                      </span>
-                      {s.recommended && (
-                        <span className="text-[10px] font-semibold text-success">recommended</span>
-                      )}
-                    </div>
-                    <div className="text-[11px] text-text-secondary mt-0.5 leading-snug">{s.reason}</div>
-                  </div>
-                  <div className="text-[11px] text-text-tertiary text-right shrink-0 tabular-nums">
-                    <div>{s.pages} {s.pages === 1 ? 'page' : 'pages'}</div>
-                    <div>{chars(s.contentChars)} chars</div>
-                  </div>
-                </label>
+                  <Stack gap="none" className="flex-1 min-w-0">
+                    <Inline gap="xs" wrap>
+                      <EntityCell mono label={s.label} />
+                      <Chip tone={KIND_TONE[s.kind]} size="xs">{s.kind}</Chip>
+                      {s.recommended && <Chip tone="success" size="xs">recommended</Chip>}
+                    </Inline>
+                    <MetaLine size="xs" tone="secondary" items={[s.reason]} />
+                  </Stack>
+                  <Stack gap="none" align="end" className="shrink-0 tabular-nums">
+                    <MetaLine size="xs" items={[`${s.pages} ${s.pages === 1 ? 'page' : 'pages'}`]} />
+                    <MetaLine size="xs" items={[`${chars(s.contentChars)} chars`]} />
+                  </Stack>
+                </Inline>
               ))}
-            </div>
+            </Stack>
           )}
 
           {survey.tree && (
+            // <details> stays: the library has no disclosure primitive, and the
+            // native element already does the keyboard and ARIA work a
+            // hand-rolled button+state pair would have to re-earn. Neither tag
+            // carries a className, so nothing here is a styled raw element.
             <details className="border-b border-border">
-              <summary className="px-3.5 py-2 text-[11px] text-text-secondary cursor-pointer select-none">
-                Structure ({survey.tree.pageCount} pages)
+              <summary>
+                <MetaLine
+                  size="xs"
+                  tone="secondary"
+                  className="inline-flex px-3.5 py-2 cursor-pointer select-none"
+                  items={[`Structure (${survey.tree.pageCount} pages)`]}
+                />
               </summary>
-              <div className="px-3.5 pb-3 max-h-[320px] overflow-auto">
+              <Stack gap="none" className="px-3.5 pb-3 max-h-[320px] overflow-auto">
                 <TreeNode node={survey.tree} depth={0} selected={selected} defaultOpen />
-              </div>
+              </Stack>
             </details>
           )}
 
           {survey.status === 'completed' && (
-            <div className="px-3.5 py-3 flex items-center gap-3 flex-wrap">
-              <button
+            <Inline gap="sm" wrap className="px-3.5 py-3">
+              <Button
+                variant="primary"
+                size="sm"
                 disabled={creating || selected.size === 0}
                 onClick={() => void createTarget()}
-                className="px-3 py-1.5 rounded-md border-none bg-primary text-white text-[12px] font-semibold cursor-pointer disabled:opacity-40"
               >
                 {creating ? 'creating…' : 'Create crawl target from selection'}
-              </button>
-              <span className="text-[11px] text-text-tertiary">
-                {selected.size === 0
+              </Button>
+              <MetaLine
+                size="xs"
+                items={[selected.size === 0
                   ? 'Nothing selected.'
-                  : `${selected.size} ${selected.size === 1 ? 'section' : 'sections'} · about ${selectedPages} pages will be crawled and indexed.`}
-              </span>
-            </div>
+                  : `${selected.size} ${selected.size === 1 ? 'section' : 'sections'} · about `
+                    + `${selectedPages} pages will be crawled and indexed.`]}
+              />
+            </Inline>
           )}
         </>
       )}
@@ -320,42 +359,50 @@ function TreeNode({ node, depth, selected, defaultOpen = false }: {
   const hasChildren = node.children.length > 0;
 
   return (
-    <div>
-      <div
-        className={`flex items-center gap-2 py-0.5 text-[11px] ${inScope ? 'text-text-primary' : 'text-text-tertiary'}`}
+    <Stack gap="none">
+      <Inline
+        gap="xs"
+        wrap={false}
+        className={`py-0.5 text-[11px] ${inScope ? 'text-text-primary' : 'text-text-tertiary'}`}
+        // Runtime-derived: Tailwind cannot build a class from `depth * 14`, and
+        // enumerating a padding class per depth would cap the tree's depth.
         style={{ paddingLeft: depth * 14 }}
       >
         {hasChildren ? (
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setOpen((v) => !v)}
             aria-label={open ? 'Collapse' : 'Expand'}
-            className="w-3 shrink-0 bg-transparent border-none cursor-pointer text-text-tertiary p-0 leading-none"
+            className="w-3 shrink-0 p-0 leading-none"
           >
             {open ? '▾' : '▸'}
-          </button>
+          </Button>
         ) : (
-          <span className="w-3 shrink-0" />
+          <Inline gap="none" className="w-3 shrink-0" aria-hidden />
         )}
-        <span className={`font-mono truncate ${inScope ? 'font-semibold' : ''}`}>
-          {node.segment}
-        </span>
+        <EntityCell mono label={node.segment} labelClassName={inScope ? 'font-semibold' : undefined} />
         {node.page && (
-          <span className="text-text-tertiary truncate flex-1 min-w-0" title={node.page.title}>
-            {node.page.title}
-          </span>
+          <MetaLine
+            size="xs"
+            className="truncate flex-1 min-w-0"
+            items={[node.page.title]}
+          />
         )}
         {node.page?.via === 'browser' && (
-          <span className="text-[10px] text-primary shrink-0" title="Only visible through the browser">
+          <Chip tone="info" size="xs" className="shrink-0" title="Only visible through the browser">
             browser
-          </span>
+          </Chip>
         )}
-        <span className="ml-auto shrink-0 tabular-nums text-text-tertiary">
-          {hasChildren ? `${node.pageCount} · ` : ''}{chars(node.contentChars)}
-        </span>
-      </div>
+        <MetaLine
+          size="xs"
+          className="ml-auto shrink-0 tabular-nums"
+          items={[`${hasChildren ? `${node.pageCount} · ` : ''}${chars(node.contentChars)}`]}
+        />
+      </Inline>
       {open && node.children.map((c) => (
         <TreeNode key={c.path} node={c} depth={depth + 1} selected={selected} />
       ))}
-    </div>
+    </Stack>
   );
 }

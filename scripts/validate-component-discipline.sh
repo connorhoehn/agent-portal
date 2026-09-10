@@ -136,12 +136,12 @@ area_files() { # area_files <dir>
 # Raw counts nest (an entry covers its subdirectories), which is deliberate —
 # converting a leaf lowers both its own budget and its parent's.
 AREAS=(
-  "portal/src:212:55:257"
+  "portal/src:176:52:257"
   "portal/src/components/runs:0:0:0"
   "portal/src/components/codebases:0:0:0"
   "portal/src/components/scores:0:0:4"
   "portal/src/components/marketplace:49:3:0"
-  "portal/src/components/ingest:36:4:58"
+  "portal/src/components/ingest:0:1:58"
   "portal/src/components/canary:53:16:64"
   "portal/src/components/org-graph:45:7:8"
   "portal/src/components/shell:27:6:40"
