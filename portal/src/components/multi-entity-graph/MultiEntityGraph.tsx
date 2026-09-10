@@ -16,6 +16,7 @@ import {
   type SimulationLinkDatum,
 } from 'd3-force';
 import type { MENode, MEEdge } from './types';
+import { Button, Inline, Stack } from '@connorhoehnslalom/ui-components/shared';
 
 // ── Department colour palette (matches OrgGraph) ────────────────────────────
 
@@ -400,7 +401,7 @@ export function MultiEntityGraph({ nodes, edges, selectedIds, onToggleSelect, ma
   const handleMouseUp = useCallback(() => setIsPanning(false), []);
 
   return (
-    <div ref={containerRef} className="w-full h-full relative overflow-hidden bg-surface">
+    <Stack ref={containerRef} gap="none" className="w-full h-full relative overflow-hidden bg-surface">
       <svg
         width={dimensions.width} height={dimensions.height}
         onWheel={handleWheel} onMouseDown={handleMouseDown}
@@ -447,15 +448,20 @@ export function MultiEntityGraph({ nodes, edges, selectedIds, onToggleSelect, ma
           })}
         </g>
       </svg>
-      <div className="absolute bottom-3 right-3 flex gap-1">
-        <button onClick={() => setTransform(t => ({ ...t, scale: Math.min(3, t.scale * 1.2) }))} className={zoomBtnClass}>+</button>
-        <button onClick={() => setTransform(t => ({ ...t, scale: Math.max(0.3, t.scale * 0.8) }))} className={zoomBtnClass}>−</button>
-        <button onClick={() => setTransform({ x: 0, y: 0, scale: 1 })} className={zoomBtnClass}>⟲</button>
-      </div>
-    </div>
+      <Inline gap="xs" wrap={false} className="absolute bottom-3 right-3">
+        <Button variant="secondary" size="sm" aria-label="Zoom in" className={zoomBtnClass}
+          onClick={() => setTransform(t => ({ ...t, scale: Math.min(3, t.scale * 1.2) }))}>+</Button>
+        <Button variant="secondary" size="sm" aria-label="Zoom out" className={zoomBtnClass}
+          onClick={() => setTransform(t => ({ ...t, scale: Math.max(0.3, t.scale * 0.8) }))}>−</Button>
+        <Button variant="secondary" size="sm" aria-label="Reset view" className={zoomBtnClass}
+          onClick={() => setTransform({ x: 0, y: 0, scale: 1 })}>⟲</Button>
+      </Inline>
+    </Stack>
   );
 }
 
-const zoomBtnClass =
-  'w-8 h-8 flex items-center justify-center bg-white border border-border rounded-md ' +
-  'text-base cursor-pointer shadow-[0_1px_3px_rgba(0,0,0,0.06)]';
+// Same as the org-graph controls: square and icon-sized, and the `bg-white`
+// that used to be here went with the raw <button> — Button paints bg-surface,
+// so these no longer stay white in dark mode. aria-labels because "+" alone
+// says nothing to a screen reader.
+const zoomBtnClass = 'w-8 h-8 p-0 justify-center text-base';
