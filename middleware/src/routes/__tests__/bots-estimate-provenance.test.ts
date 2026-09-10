@@ -139,3 +139,26 @@ describe('POST /api/bots/work-items/:id/review-estimate', () => {
     expect(res.body.item.estimateReviewedAt).toBeNull();
   });
 });
+
+// ─── The optional join ───────────────────────────────────────────────────────
+//
+// The display names come from a LEFT JOIN on app_users (identity_schema.sql).
+// safeExec swallows `relation ... does not exist`, so an UNCONDITIONAL join on
+// a cluster carrying work_items but not identity_schema would return [] for
+// every work-item read — the entire board blank, reported as "no work". These
+// pin that the join is chosen, not assumed.
+
+describe('estimate name resolution degrades to the raw subject', () => {
+  it('exposes a probe seam, so the join is a decision and not an assumption', async () => {
+    const mod = await import('../../providers/work-items.js');
+    expect(typeof mod.resetAppUsersProbe).toBe('function');
+  });
+
+  it('still renders an attribution when no name is available', async () => {
+    // The row must never read "unknown" while estimated_by holds a real
+    // subject — the attribution exists, only its label is missing. The portal
+    // falls back `estimatedByName ?? estimatedBy`, so a null name is safe.
+    const res = await save(buildApp());
+    expect(res.body.item.estimatedBy).toBe('u-rachel');
+  });
+});

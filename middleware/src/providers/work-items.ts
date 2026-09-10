@@ -251,7 +251,7 @@ const ITEM_COLUMNS = `
       wi.story_points, wi.sprint_id, wi.estimated_cost_usd,
       wi.estimated_by, wi.estimated_at, wi.estimate_model, wi.estimate_forecast,
       wi.estimate_reviewed_by, wi.estimate_reviewed_at,
-      eb.display_name AS estimated_by_name, rb.display_name AS estimate_reviewed_by_name,
+
       wi.pr_url, wi.pr_status,
       wi.created_at, wi.updated_at, wi.completed_at,
       a.id AS assignee_id, a.name AS assignee_name, a.team AS assignee_dept,
@@ -261,15 +261,61 @@ const ITEM_COLUMNS = `
 const ITEM_FROM = `
     FROM work_items wi
     JOIN projects p ON p.id = wi.project_id
-    LEFT JOIN people a ON a.id = wi.assignee_id
-    -- Resolve the attributing subjects to names. LEFT, and app_users rather
-    -- than people, because these columns hold a session subject: an account
-    -- with no linked org-graph person still authorized the spend, and an
-    -- account since deleted must not make the row vanish. A null name falls
-    -- back to the raw subject at the edge rather than printing "unknown",
-    -- which would erase an attribution that does exist.
+    LEFT JOIN people a ON a.id = wi.assignee_id`;
+
+// ─── Estimate-attribution names (app_users) ───────────────────────────────────
+//
+// `estimated_by` / `estimate_reviewed_by` hold a SESSION SUBJECT, so resolving
+// them to a person means joining app_users (identity_schema.sql), not people:
+// an account with no linked org-graph person still authorized the spend.
+//
+// The join is OPTIONAL, and that is the load-bearing part. safeExec swallows
+// `relation ... does not exist` so a pre-schema cluster reads empty rather than
+// 500ing — which means an unconditional `JOIN app_users` on a cluster that has
+// work_items but not identity_schema would blank the ENTIRE work board and
+// report it as "no work". A missing name must cost the name, never the rows.
+//
+// Probed once per process against information_schema, mirroring
+// providers/bots.ts::attributionAvailable — the same problem (middleware ships
+// ahead of schema) already solved the same way there.
+
+let _appUsers: boolean | null = null;
+
+async function appUsersAvailable(): Promise<boolean> {
+  // Mock mode stands in for a fully-migrated cluster; the mock write paths
+  // resolve names themselves via displayNameForSubject.
+  if (config.mock.aurora) return true;
+  if (_appUsers !== null) return _appUsers;
+  try {
+    const rows = await exec(
+      `SELECT 1 AS ok FROM information_schema.tables
+        WHERE table_name = 'app_users' LIMIT 1`,
+    );
+    _appUsers = rows.length > 0;
+  } catch {
+    _appUsers = false;
+  }
+  return _appUsers;
+}
+
+/** Test seam: forget the probe so the next call re-asks. */
+export function resetAppUsersProbe(): void { _appUsers = null; }
+
+/** The name columns, or nothing when identity_schema is not on this cluster. */
+function nameColumns(withNames: boolean): string {
+  return withNames
+    ? `, eb.display_name AS estimated_by_name, rb.display_name AS estimate_reviewed_by_name`
+    : '';
+}
+
+/** The name joins, or nothing. Paired with nameColumns — never use one alone. */
+function nameJoins(withNames: boolean): string {
+  return withNames
+    ? `
     LEFT JOIN app_users eb ON eb.id = wi.estimated_by
-    LEFT JOIN app_users rb ON rb.id = wi.estimate_reviewed_by`;
+    LEFT JOIN app_users rb ON rb.id = wi.estimate_reviewed_by`
+    : '';
+}
 
 // ─── Aurora query wrapper — degrades gracefully if work_items table is missing ─
 
@@ -328,9 +374,10 @@ async function dbSearchWorkItems(opts: SearchWorkItemsOpts): Promise<WorkItem[]>
 
   const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
 
+  const withNames = await appUsersAvailable();
   const sql = `
-    SELECT ${ITEM_COLUMNS}
-    ${ITEM_FROM}
+    SELECT ${ITEM_COLUMNS}${nameColumns(withNames)}
+    ${ITEM_FROM}${nameJoins(withNames)}
     ${where}
     ORDER BY wi.updated_at DESC
     LIMIT :lim
@@ -340,9 +387,10 @@ async function dbSearchWorkItems(opts: SearchWorkItemsOpts): Promise<WorkItem[]>
 }
 
 async function dbGetProjectWorkItems(projectId: string): Promise<WorkItem[]> {
+  const withNames = await appUsersAvailable();
   const sql = `
-    SELECT ${ITEM_COLUMNS}
-    ${ITEM_FROM}
+    SELECT ${ITEM_COLUMNS}${nameColumns(withNames)}
+    ${ITEM_FROM}${nameJoins(withNames)}
     WHERE wi.project_id = :pid
     ORDER BY wi.type DESC, wi.created_at ASC
   `;
@@ -356,9 +404,10 @@ async function dbGetPersonWorkItems(personId: string, opts: { status?: string; l
   const extra = opts.status ? `AND wi.status = :status` : '';
   if (opts.status) params.push(strParam('status', opts.status));
 
+  const withNames = await appUsersAvailable();
   const sql = `
-    SELECT ${ITEM_COLUMNS}
-    ${ITEM_FROM}
+    SELECT ${ITEM_COLUMNS}${nameColumns(withNames)}
+    ${ITEM_FROM}${nameJoins(withNames)}
     WHERE wi.assignee_id = :pid ${extra}
     ORDER BY wi.updated_at DESC
     LIMIT :lim
@@ -1109,9 +1158,10 @@ export async function getWorkItem(id: string): Promise<WorkItem | null> {
     const item = mockWorkItems().find((i) => i.id === id);
     return item ? { ...item } : null;
   }
+  const withNames = await appUsersAvailable();
   const sql = `
-    SELECT ${ITEM_COLUMNS}
-    ${ITEM_FROM}
+    SELECT ${ITEM_COLUMNS}${nameColumns(withNames)}
+    ${ITEM_FROM}${nameJoins(withNames)}
     WHERE wi.id = :id
   `;
   const rows = await safeExec(sql, [strParam('id', id)]);

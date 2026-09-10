@@ -54,13 +54,28 @@ const ROW = {
   child_done_count: 0,
 };
 
-/** The SQL of the nth exec call, whitespace-collapsed for matching. */
+/** Every exec call EXCEPT the app_users capability probe.
+ *
+ *  Reads may now be preceded by an information_schema probe that decides
+ *  whether app_users can be joined (providers/work-items.ts::appUsersAvailable).
+ *  It is infrastructure, not a query any test here is about, and a positional
+ *  `calls[0]` silently started asserting against it. */
+function realCalls() {
+  return execMock.mock.calls.filter((c) => !/information_schema/.test(String(c[0])));
+}
+
+/** The SQL of the nth WORK-ITEM exec call, whitespace-collapsed for matching.
+ *
+ *  Filtered rather than positional: reads may now be preceded by the
+ *  information_schema probe that decides whether app_users can be joined
+ *  (providers/work-items.ts::appUsersAvailable), and a positional `calls[0]`
+ *  silently started asserting against the probe instead. */
 function sqlOf(call = 0): string {
-  return String(execMock.mock.calls[call]![0]).replace(/\s+/g, ' ');
+  return String(realCalls()[call]![0]).replace(/\s+/g, ' ');
 }
 function paramsOf(call = 0): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const p of (execMock.mock.calls[call]![1] ?? []) as { name: string; value: Record<string, unknown> }[]) {
+  for (const p of (realCalls()[call]?.[1] ?? []) as { name: string; value: Record<string, unknown> }[]) {
     out[p.name] = p.value['stringValue'] ?? p.value['longValue'] ?? p.value['doubleValue'] ?? null;
   }
   return out;

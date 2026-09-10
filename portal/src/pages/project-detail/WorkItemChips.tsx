@@ -52,6 +52,21 @@ export function PrBadge({ prStatus, prUrl }: { prStatus: PrStatus; prUrl: string
 
 /** The Estimate control — opens the estimate → authorize drawer. Only on open,
  *  pointed stories and bugs, and only for sessions holding DispatchAgentRun. */
+/**
+ * The run controls on a work row.
+ *
+ * WHY "RUN" AND NOT "ESTIMATE". This used to render a single ⚡ Estimate
+ * button, which put an authorize-a-forecast step in front of every dispatch —
+ * on a row that was already showing 5 story points. That is asking someone to
+ * approve a COMPUTATION: the forecast is derived deterministically from
+ * (points, model) through the repo-calibrated curve, so there is no decision in
+ * producing it. The decision is whether to SPEND, and that is what ▶ Run is.
+ *
+ * The cost is still never hidden before money moves. Run on an item with no
+ * standing estimate opens the drawer, which computes the forecast and shows it
+ * behind Authorize — the same confirmation as before, reached by pressing the
+ * button that says what the operator actually wants to do.
+ */
 export function EstimateChip({
   item, onEstimate,
 }: {
@@ -71,31 +86,20 @@ export function EstimateChip({
     && item.estimateModel === DEFAULT_DEVBOX_MODEL
     && item.estimateForecast != null;
 
-  if (!standing) {
-    return (
-      <Button
-        size="sm"
-        variant="secondary"
-        className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide text-primary"
-        title="Estimate cost & duration, then authorize an agent run"
-        // A stable, re-queryable handle for the Estimate drawer to refocus on
-        // close — see the comment on EstimateDrawer's handleClose. A re-query
-        // by id survives whatever opened this row unmounting.
-        data-estimate-trigger={item.id}
-        onClick={(e) => { e.stopPropagation(); onEstimate(item); }}
-      >
-        ⚡ Estimate
-      </Button>
-    );
-  }
+  // Who signed off, and when. Shown only once an estimate has actually been
+  // authorized — a derived forecast carries no name, and labelling one would
+  // invent an author.
+  const reviewed = item.estimateReviewedBy != null;
+  const estBy = item.estimatedByName ?? item.estimatedBy ?? 'unknown';
+  const revBy = item.estimateReviewedByName ?? item.estimateReviewedBy;
 
   // Re-run against the estimate already on the record.
   //
   // This still spends money and still faces every gate — grant-scoped 403,
   // per-run cap, allocation, envelope. It does not bypass them; it skips the
-  // DRAWER, which exists to produce an estimate this item already has. Any
-  // refusal hands off to that drawer, because it is the surface that knows how
-  // to explain all four and to collect the right confirm flag.
+  // DRAWER, which exists to produce and authorize a forecast this item already
+  // has. Any refusal hands off to that drawer, because it is the surface that
+  // knows how to explain all four and to collect the right confirm flag.
   async function dispatchStanding(e: React.MouseEvent) {
     e.stopPropagation();
     if (dispatching) return;
@@ -116,9 +120,6 @@ export function EstimateChip({
         toastSuccess(tid, 'Agent dispatched', `${item.title} — on the standing estimate.`);
         return;
       }
-      // Every gate, and every shape refusal, goes to the drawer rather than a
-      // toast: a 409 that names a budget needs its confirm flag, and inventing
-      // a second place to answer that would be two surfaces disagreeing.
       toastError(tid, 'Needs authorizing', 'Opening the estimate drawer.');
       onEstimate(item);
     } catch (err) {
@@ -128,52 +129,61 @@ export function EstimateChip({
     }
   }
 
-  // Who signed off, and when. The user's ask was explicit that a number on a
-  // money path needs a name against it — a `title` tooltip does not count,
-  // because nothing that matters should require hovering to discover.
-  const reviewed = item.estimateReviewedBy != null;
-  // Name if the subject still has an account row, else the raw subject. Never
-  // "unknown": the attribution exists, and only its label is missing.
-  const estBy = item.estimatedByName ?? item.estimatedBy ?? 'unknown';
-  const revBy = item.estimateReviewedByName ?? item.estimateReviewedBy;
   return (
     <Inline gap="xs" wrap={false} className="shrink-0">
-      <Chip
-        size="sm"
-        // Truncate rather than wrap: this sits in a fixed-width table column,
-        // and a wrapped chip changes the row height for one row only.
-        className="min-w-0 max-w-[112px] truncate"
-        tone={reviewed ? 'success' : 'neutral'}
-        title={reviewed
-          ? `Estimate by ${estBy} ${relativeTime(item.estimatedAt)}; reviewed by ${revBy} ${relativeTime(item.estimateReviewedAt)}`
-          : `Estimate by ${estBy} ${relativeTime(item.estimatedAt)} — not yet reviewed`}
-      >
-        {/* Name inline, timing in the tooltip and in full in the drawer. The
-            whole sentence does not fit a dense table column without either
-            overflowing the panel or truncating the name away — and WHO is the
-            half that cannot be recovered from anywhere else on this row. */}
-        {reviewed ? '✓ ' : ''}{estBy}
-      </Chip>
+      {standing && (
+        <Chip
+          size="sm"
+          // Truncate rather than wrap: this sits in a fixed-width table column,
+          // and a wrapped chip changes the row height for one row only.
+          className="min-w-0 max-w-[112px] truncate"
+          tone={reviewed ? 'success' : 'neutral'}
+          title={reviewed
+            ? `Estimate by ${estBy} ${relativeTime(item.estimatedAt)}; reviewed by ${revBy} ${relativeTime(item.estimateReviewedAt)}`
+            : `Estimate by ${estBy} ${relativeTime(item.estimatedAt)} — not yet reviewed`}
+        >
+          {/* Name inline, timing in the tooltip and in full in the drawer. The
+              whole sentence does not fit a dense table column without either
+              overflowing the panel or truncating the name away — and WHO is the
+              half that cannot be recovered from anywhere else on this row. */}
+          {reviewed ? '✓ ' : ''}{estBy}
+        </Chip>
+      )}
       <Button
         size="sm"
         variant="primary"
         disabled={dispatching}
         className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide"
-        title={`Run on the standing estimate — by ${estBy}`}
-        onClick={(e) => { void dispatchStanding(e); }}
+        title={standing
+          ? `Run on the standing estimate — by ${estBy}`
+          : `Run an agent on this ${item.storyPoints}-point item — you will see the forecast before it spends`}
+        // No standing estimate → the drawer, which computes the forecast and
+        // shows it behind Authorize. Same confirmation, reached by pressing the
+        // button that names the intent instead of one that names a prerequisite.
+        onClick={(e) => {
+          if (standing) { void dispatchStanding(e); return; }
+          e.stopPropagation();
+          onEstimate(item);
+        }}
+        // A stable, re-queryable handle for the Estimate drawer to refocus on
+        // close — see the comment on EstimateDrawer's handleClose. A re-query
+        // by id survives whatever opened this row unmounting.
+        {...(standing ? {} : { 'data-estimate-trigger': item.id })}
       >
         {dispatching ? '…' : '▶ Run'}
       </Button>
-      <Button
-        size="sm"
-        variant="secondary"
-        className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide text-primary"
-        title="Review or re-estimate before running"
-        data-estimate-trigger={item.id}
-        onClick={(e) => { e.stopPropagation(); onEstimate(item); }}
-      >
-        ⚡
-      </Button>
+      {standing && (
+        <Button
+          size="sm"
+          variant="secondary"
+          className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tracking-wide text-primary"
+          title="Review, re-estimate, cap or add an instruction before running"
+          data-estimate-trigger={item.id}
+          onClick={(e) => { e.stopPropagation(); onEstimate(item); }}
+        >
+          ⚡
+        </Button>
+      )}
     </Inline>
   );
 }
