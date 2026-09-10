@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ReactElement } from 'react';
 import { useNavigate } from 'react-router';
+import { Button, Inline } from '@connorhoehnslalom/ui-components/shared';
 
 interface KBHealthEntry {
   id: string;
@@ -86,29 +87,21 @@ export function KBHealthBadge(): ReactElement | null {
   const tooltip = problems ? `KB health — ${label}\n${problems}` : `KB health: ${label} — click to view`;
 
   return (
-    <button
-      type="button"
+    // `c` is the severity palette — border, background, text and dot all come
+    // from it at run time, so those four stay inline. Everything static about
+    // the pill is a class, and the tags are primitives.
+    <Button
+      variant="ghost"
+      size="sm"
       onClick={() => navigate('/admin/knowledge')}
       title={tooltip}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 5,
-        padding: '3px 8px',
-        borderRadius: 12,
-        border: `1px solid ${c.border}`,
-        background: c.bg,
-        color: c.text,
-        fontSize: 11,
-        fontWeight: 600,
-        cursor: 'pointer',
-        lineHeight: 1.4,
-        letterSpacing: '0.01em',
-        whiteSpace: 'nowrap',
-      }}
+      className="gap-[5px] px-2 py-[3px] rounded-xl border text-[11px] font-semibold leading-snug tracking-[0.01em] whitespace-nowrap"
+      style={{ borderColor: c.border, background: c.bg, color: c.text }}
     >
-      <span style={{ color: c.dot, fontSize: 10, lineHeight: 1 }}>{SYMBOL[severity]}</span>
-      <span>{label}</span>
-    </button>
+      <Inline as="span" gap="none" className="text-[10px] leading-none" style={{ color: c.dot }}>
+        {SYMBOL[severity]}
+      </Inline>
+      <Inline as="span" gap="none">{label}</Inline>
+    </Button>
   );
 }

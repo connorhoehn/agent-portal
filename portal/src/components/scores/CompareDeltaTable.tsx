@@ -1,6 +1,4 @@
-import {
-  Stack, Table, TableBody, TableHead, TableRow, TableTd, TableTh,
-} from '@connorhoehnslalom/ui-components/shared';
+import { Inline, Stack, Table, TableBody, TableHead, TableRow, TableTd, TableTh } from '@connorhoehnslalom/ui-components/shared';
 import { RadarBatchEntry, RadarAxes } from './OverlayRadar';
 
 const AXIS_ORDER: Array<{ key: keyof RadarAxes; label: string }> = [
@@ -36,7 +34,7 @@ export function CompareDeltaTable({ entries }: CompareDeltaTableProps) {
               // it — so it stays a style. Everything else the table used to
               // paint by hand (padding, borders, weights) is the library's.
               <TableTh key={e.personId} align="right" className="min-w-[80px]">
-                <span style={{ color: colorFor(i) }}>{e.name}</span>
+                <Inline as="span" gap="none" style={{ color: colorFor(i) }}>{e.name}</Inline>
               </TableTh>
             ))}
             <TableTh align="right" className="min-w-[70px]">&#916; (max-min)</TableTh>
@@ -65,7 +63,7 @@ export function CompareDeltaTable({ entries }: CompareDeltaTableProps) {
                       {/* The leader in a row is tinted with its own series
                           colour, which is the only reason this cell carries a
                           style at all. */}
-                      {isMax ? <span style={{ color: colorFor(i) }}>{Math.round(val)}</span> : Math.round(val)}
+                      {isMax ? <Inline as="span" gap="none" style={{ color: colorFor(i) }}>{Math.round(val)}</Inline> : Math.round(val)}
                     </TableTd>
                   );
                 })}

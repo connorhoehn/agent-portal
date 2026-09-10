@@ -1,6 +1,4 @@
-import {
-  Card, Chip, EntityCell, Inline, MetaLine, SectionLabel, Stack, StatusDot,
-} from '@connorhoehnslalom/ui-components/shared';
+import { Card, Chip, EntityCell, Inline, MetaLine, SectionLabel, Stack, StatusDot } from '@connorhoehnslalom/ui-components/shared';
 import { DEPT_COLORS } from './types';
 import { HistogramBar } from './HistogramBar';
 
@@ -45,7 +43,7 @@ export function CohortCard({ cohort }: CohortCardProps) {
       {/* Left colour stripe. The colour is per-department data from the graph's
           own palette, so it stays a style — Tailwind cannot build a class from
           a runtime key. */}
-      <div className="w-[5px] shrink-0" style={{ backgroundColor: deptColor }} />
+      <Inline gap="none" aria-hidden className="w-[5px] shrink-0" style={{ backgroundColor: deptColor }} />
 
       <Stack gap="none" className="flex-1 py-4 px-[18px] min-w-0">
         <Inline align="start" justify="between" gap="md" className="mb-3">

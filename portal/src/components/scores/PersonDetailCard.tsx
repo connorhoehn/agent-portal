@@ -1,6 +1,4 @@
-import {
-  Button, Card, Chip, CollapsibleSection, EntityCell, Inline, MetaLine, SectionLabel, Stack,
-} from '@connorhoehnslalom/ui-components/shared';
+import { Button, Card, Chip, CollapsibleSection, EntityCell, Inline, MetaLine, SectionLabel, Stack } from '@connorhoehnslalom/ui-components/shared';
 import { PersonDetail, formatRelativeTime } from './types';
 import { formatScore } from './scoresFormat';
 import { RadarChart, type RadarAxes } from './RadarChart';
@@ -68,7 +66,7 @@ export function PersonDetailCard({ detail, compositeScore, influenceScore, deptC
           <MetaLine
             size="xs"
             className="mt-0.5"
-            items={[<span key="d" style={{ color: deptColors[detail.department] ?? 'var(--color-text-tertiary)' }}>{detail.department}</span>]}
+            items={[<Inline as="span" gap="none" key="d" style={{ color: deptColors[detail.department] ?? 'var(--color-text-tertiary)' }}>{detail.department}</Inline>]}
           />
         </Stack>
         <Button variant="ghost" size="sm" onClick={onClose}>Close</Button>

@@ -8,6 +8,7 @@ import { ASSESSMENT_ENABLED } from './lib/features';
 import { resolveHome } from './lib/tenantHome';
 import { GatewaySocketProvider } from '@connorhoehnslalom/realtime-modules/client/ws';
 import { ComputeHost } from './components/compute/ComputeHost';
+import { MetaLine } from '@connorhoehnslalom/ui-components/shared';
 
 const AgentFlowPage = lazy(() => import('./pages/AgentFlowPage'));
 const AgentDetailPage = lazy(() => import('./pages/iq/AgentDetailPage'));
@@ -133,7 +134,7 @@ const GATEWAY_WS_URL = _RAW_GATEWAY_URL
 // ---------------------------------------------------------------------------
 
 function Loading() {
-  return <div style={{ padding: 24, color: 'var(--color-text-tertiary)' }}>Loading...</div>;
+  return <MetaLine className="p-6" items={['Loading...']} />;
 }
 
 function Page({ element }: { element: React.ReactNode }) {
