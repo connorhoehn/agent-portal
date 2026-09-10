@@ -4,6 +4,7 @@ import type { CrawlMode, CrawlTarget } from './types';
 import { Button } from './ui';
 import {
   Checkbox, FormField, InlineAlert, Inline, Input, MetaLine, SectionLabel, Select, Stack,
+  Slider,
 } from '@connorhoehnslalom/ui-components/shared';
 
 const CRON_PRESETS = [
@@ -155,21 +156,23 @@ export function NewTargetModal({
             </FormField>
 
             <FormField label={`Max pages: ${draft.maxPages}`}>
-              {({ labelId: _l, ...w }) => (
+              {/* `id` is dropped alongside `labelId`: Slider exposes neither,
+                  so there is nothing for FormField's label to point `for` at.
+                  Its aria-label carries the accessible name. Filed upstream. */}
+              {({ labelId: _l, id: _id, ...w }) => (
                 <Stack gap="none">
-                  {/* Raw range input: `Slider` is exported only from the package
-                      root, and importing the root pulls @tiptap/react — a peer
-                      dep this portal never installed — into `vite build`.
-                      Already queued. */}
-                  <input
+                  {/* Slider became reachable from /shared in 2.241.0. Until
+                      then it was root-barrel only, and the root pulls
+                      @tiptap/react — a peer this portal never installed — into
+                      `vite build`, which is why this was a raw range input. */}
+                  <Slider
                     {...w}
-                    type="range"
                     min={1}
                     max={50}
                     value={draft.maxPages}
-                    onChange={e => patch('maxPages', Number(e.target.value))}
+                    onChange={(v) => patch('maxPages', v)}
                     aria-label="Maximum pages to crawl"
-                    className="w-full accent-primary"
+                    className="w-full"
                   />
                   <Inline justify="between">
                     <MetaLine size="xs" items={['1']} />

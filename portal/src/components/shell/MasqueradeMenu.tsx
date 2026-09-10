@@ -1,4 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
+import {
+  Button, Card, Inline, InlineAlert, MetaLine, SectionLabel, Stack, StatusDot,
+} from '@connorhoehnslalom/ui-components/shared';
 import { useSession, type SessionRole } from '../../lib/auth';
 
 const ROLE_LABELS: Record<string, string> = {
@@ -77,128 +80,84 @@ export function MasqueradeMenu() {
   };
 
   return (
-    <div
+    <Stack
+      gap="none"
       ref={menuRef}
-      style={{ position: 'relative' }}
+      className="relative"
       onKeyDown={e => { if (e.key === 'Escape' && open) { e.stopPropagation(); closeAndRefocus(); } }}
     >
-      <button
+      {/* Button takes a ref as of 2.242.0 — this trigger stayed a raw
+          <button> until then, because Escape must return focus to it. */}
+      <Button
         ref={triggerRef}
+        variant="secondary"
+        size="sm"
         onClick={() => setOpen(o => !o)}
         disabled={busy}
         aria-haspopup="true"
         aria-expanded={open}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '6px 12px',
-          background: session.masquerading ? 'var(--color-warning-bg, rgba(217,119,6,0.12))' : 'var(--color-surface)',
-          border: `1px solid ${session.masquerading ? 'var(--color-warning)' : 'var(--color-border)'}`,
-          borderRadius: 'var(--radius-md)',
-          color: 'var(--color-text-primary)',
-          cursor: busy ? 'wait' : 'pointer',
-          fontSize: 13,
-        }}
+        className={session.masquerading ? 'bg-warning-bg border-warning' : undefined}
       >
-        <span aria-hidden="true" style={{
-          width: 8, height: 8, borderRadius: '50%',
-          background: roleColor(session.role),
-        }} />
-        <span style={{ fontWeight: 500 }}>{session.name}</span>
-        <span style={{ color: 'var(--color-text-tertiary)', fontSize: 11 }}>
+        <StatusDot aria-hidden color={roleColor(session.role)} size="sm" />
+        <Inline as="span" gap="none" className="font-medium">{session.name}</Inline>
+        <Inline as="span" gap="none" className="text-text-tertiary text-[11px]">
           {tenantLabel(session.tenant)} · {roleLabel(session.role)}{session.masquerading ? ' · masquerade' : ''} <span aria-hidden="true">▾</span>
-        </span>
-      </button>
+        </Inline>
+      </Button>
 
       {open && (
-        <div ref={panelRef} tabIndex={-1} style={{
-          position: 'absolute',
-          top: 'calc(100% + 6px)',
-          right: 0,
-          minWidth: 280,
-          maxHeight: 480,
-          overflowY: 'auto',
-          background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-md)',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
-          padding: 6,
-          zIndex: 100,
-          outline: 'none',
-        }}>
+        <Card
+          ref={panelRef}
+          tabIndex={-1}
+          padding="none"
+          className="absolute top-[calc(100%+6px)] right-0 min-w-[280px] max-h-[480px] overflow-y-auto shadow-[0_8px_24px_rgba(0,0,0,0.3)] p-1.5 z-[100] outline-none"
+        >
           {/* Current identity — always visible so "who/what am I now" is unambiguous. */}
-          <div style={{ padding: '8px 10px 10px', borderBottom: '1px solid var(--color-border)', marginBottom: 4 }}>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>{session.name}</div>
-            <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)', marginBottom: 8 }}>{session.sub}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-              <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: roleColor(session.role) }} />
+          <Stack gap="none" className="px-2.5 pt-2 pb-2.5 border-b border-border mb-1">
+            <Inline as="div" gap="none" className="text-[13px] font-semibold">{session.name}</Inline>
+            <MetaLine size="xs" className="mb-2" items={[session.sub]} />
+            <Inline gap="xs" wrap={false} className="text-[12px]">
+              <StatusDot aria-hidden color={roleColor(session.role)} size="xs" />
               <strong>{tenantLabel(session.tenant)}</strong>
-              <span style={{ color: 'var(--color-text-tertiary)' }}>·</span>
-              <span>{roleLabel(session.role)}</span>
+              <Inline as="span" gap="none" className="text-text-tertiary">·</Inline>
+              <Inline as="span" gap="none">{roleLabel(session.role)}</Inline>
               {session.masquerading && (
-                <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--color-warning)' }}>
-                  masquerading
-                </span>
+                <SectionLabel className="ml-auto text-warning">masquerading</SectionLabel>
               )}
-            </div>
-          </div>
+            </Inline>
+          </Stack>
 
           {session.masquerading && (
-            <div style={{
-              margin: '2px 4px 6px',
-              padding: '8px 10px',
-              borderRadius: 'var(--radius-sm, 4px)',
-              background: 'var(--color-warning-bg, rgba(217,119,6,0.12))',
-              border: '1px solid var(--color-warning)',
-              fontSize: 12,
-            }}>
-              <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                Viewing as {session.name}
-              </div>
-              <div style={{ color: 'var(--color-text-secondary)', marginBottom: 6 }}>
-                Signed in as {session.masquerading.actor}
-              </div>
-              <button
-                onClick={() => void run(stopMasquerade)}
-                disabled={busy}
-                style={{
-                  padding: '4px 10px',
-                  fontSize: 12,
-                  borderRadius: 'var(--radius-sm, 4px)',
-                  border: '1px solid var(--color-warning)',
-                  background: 'transparent',
-                  color: 'var(--color-text-primary)',
-                  cursor: busy ? 'wait' : 'pointer',
-                }}
-              >
-                Stop masquerade
-              </button>
-            </div>
+            <Stack gap="none" className="mx-1 mt-0.5 mb-1.5">
+              <InlineAlert tone="warning">
+                <Inline as="div" gap="none" className="font-semibold mb-1">
+                  Viewing as {session.name}
+                </Inline>
+                <Inline as="div" gap="none" className="text-text-secondary mb-1.5">
+                  Signed in as {session.masquerading.actor}
+                </Inline>
+                <Button variant="secondary" size="sm" disabled={busy} onClick={() => void run(stopMasquerade)}>
+                  Stop masquerade
+                </Button>
+              </InlineAlert>
+            </Stack>
           )}
 
           {ssoEnabled && (
             <>
-              <SectionLabel>Enterprise sign-in</SectionLabel>
-              <div style={{ display: 'flex', gap: 8, padding: '2px 10px 10px' }}>
-                <button
-                  type="button"
-                  onClick={() => signInWithSso()}
-                  style={{
-                    flex: 1, padding: '7px 10px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
-                    borderRadius: 6, border: 'none', background: 'var(--color-primary)', color: '#fff',
-                  }}
-                >
+              <SectionLabel className="px-2.5 pt-2 pb-1.5">Enterprise sign-in</SectionLabel>
+              <Inline gap="sm" wrap={false} className="px-2.5 pt-0.5 pb-2.5">
+                <Button variant="primary" size="sm" fullWidth onClick={() => signInWithSso()}>
                   Sign in with SSO
-                </button>
-              </div>
+                </Button>
+              </Inline>
             </>
           )}
 
           {/* ROLE — within the current account only. Switching the account
               (tenant) is deliberately NOT offered here: the workspace boundary
               lives on /select, reached via "Switch workspace…" below. */}
-          <SectionLabel>Role in {tenantLabel(session.tenant)}</SectionLabel>
+          <SectionLabel className="px-2.5 pt-2 pb-1.5">Role in {tenantLabel(session.tenant)}</SectionLabel>
           {session.availableRoles.map(role => {
             const active = role === session.role;
             return (
@@ -229,64 +188,39 @@ export function MasqueradeMenu() {
               dev-only "Sign in as". Masquerade is untouched server-side — the
               banner above still exits a live one. */}
 
-          <div style={{ borderTop: '1px solid var(--color-border)', marginTop: 6, paddingTop: 6 }}>
+          <Stack gap="none" className="border-t border-border mt-1.5 pt-1.5">
             {/* Hard navigation, not a router push: the chooser must re-drive
                 from the server session, so it stays the authoritative tenant
                 boundary rather than a client-side route. */}
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
+              fullWidth
+              className="justify-start text-left text-primary font-semibold"
               onClick={() => { setOpen(false); window.location.assign('/select'); }}
-              style={{
-                width: '100%', textAlign: 'left', padding: '8px 10px', background: 'transparent',
-                border: 'none', borderRadius: 'var(--radius-sm, 4px)', color: 'var(--color-primary)',
-                cursor: 'pointer', fontSize: 12.5, fontWeight: 600,
-              }}
             >
               Switch workspace…
-            </button>
-            <button
-              type="button"
-              onClick={() => void run(logout)}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              fullWidth
               disabled={busy}
-              style={{
-                width: '100%', textAlign: 'left', padding: '8px 10px', background: 'transparent',
-                border: 'none', borderRadius: 'var(--radius-sm, 4px)', color: 'var(--color-text-secondary)',
-                cursor: busy ? 'wait' : 'pointer', fontSize: 12.5,
-              }}
+              className="justify-start text-left text-text-secondary"
+              onClick={() => void run(logout)}
             >
               Sign out
-            </button>
-          </div>
+            </Button>
+          </Stack>
 
           {error && (
-            <div style={{
-              margin: '6px 4px 2px',
-              padding: '6px 10px',
-              fontSize: 12,
-              borderRadius: 'var(--radius-sm, 4px)',
-              background: 'var(--color-danger-bg, rgba(220,38,38,0.12))',
-              color: 'var(--color-danger, #dc2626)',
-            }}>
-              {error}
-            </div>
+            <Stack gap="none" className="mx-1 mt-1.5 mb-0.5">
+              <InlineAlert tone="error">{error}</InlineAlert>
+            </Stack>
           )}
-        </div>
+        </Card>
       )}
-    </div>
-  );
-}
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{
-      padding: '8px 10px 6px',
-      fontSize: 10,
-      color: 'var(--color-text-tertiary)',
-      textTransform: 'uppercase',
-      letterSpacing: 0.6,
-    }}>
-      {children}
-    </div>
+    </Stack>
   );
 }
 
@@ -299,34 +233,33 @@ function MenuItem({ active, busy, onClick, title, hint, dotColor }: {
   dotColor: string;
 }) {
   return (
-    <button
-      onClick={onClick}
+    // A ghost Button laid out as a stacked row. `dotColor` is the one runtime
+    // value — a per-role colour Tailwind cannot build a class from — and it
+    // rides on StatusDot, which owns the dot shape.
+    <Button
+      variant="ghost"
+      size="sm"
+      fullWidth
       disabled={busy}
-      style={{
-        width: '100%',
-        textAlign: 'left',
-        padding: '8px 10px',
-        background: active ? 'var(--color-surface-hover)' : 'transparent',
-        border: 'none',
-        borderRadius: 'var(--radius-sm, 4px)',
-        color: 'var(--color-text-primary)',
-        cursor: busy ? 'wait' : 'pointer',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 2,
-      }}
+      onClick={onClick}
+      className={[
+        'flex-col items-start gap-0.5 justify-start text-left px-2.5 py-2',
+        active ? 'bg-surface-hover' : '',
+      ].join(' ')}
     >
-      <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: active ? 600 : 400 }}>
-        <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: dotColor }} />
+      <Inline as="span" gap="xs" wrap={false} className={`text-[13px] w-full ${active ? 'font-semibold' : 'font-normal'}`}>
+        <StatusDot aria-hidden color={dotColor} size="xs" />
         {title}
-        {active && <span style={{ marginLeft: 'auto', color: 'var(--color-text-tertiary)', fontSize: 10 }}>active</span>}
-      </span>
+        {active && (
+          <Inline as="span" gap="none" className="ml-auto text-text-tertiary text-[10px]">active</Inline>
+        )}
+      </Inline>
       {hint && (
-        <span style={{ fontSize: 11, color: 'var(--color-text-secondary)', paddingLeft: 14 }}>
+        <Inline as="span" gap="none" className="text-[11px] text-text-secondary pl-3.5">
           {hint}
-        </span>
+        </Inline>
       )}
-    </button>
+    </Button>
   );
 }
 
