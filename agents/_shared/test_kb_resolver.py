@@ -185,5 +185,62 @@ class SlugLookup(_Base):
             self.assertIsNone(kb.resolve_kb_id_by_slug("articles"))
 
 
+class SearchType(unittest.TestCase):
+    """The search type must reach Bedrock on every retrieve.
+
+    Bedrock's default search type against this Aurora/pgvector store returns the
+    correct nearest neighbours in exactly REVERSE relevance order, reporting
+    cosine distance in the `score` field. Measured top-1 accuracy over eight
+    representative queries was 0/8 on the default and 8/8 on HYBRID, so a
+    missing `overrideSearchType` is not a tuning nicety — it silently makes
+    every consumer read the least relevant documents while the correct answer
+    falls off the end of the list. Nothing downstream re-sorts, and the
+    middleware trims oversized result lists from the tail, so the failure is
+    invisible: real org documents come back and look like a working search.
+
+    These assert the *presence and value* of the key, because the bug was an
+    omission, not a wrong value.
+    """
+
+    def test_default_search_type_is_hybrid(self):
+        self.assertEqual(kb.KB_SEARCH_TYPE, "HYBRID")
+
+    def test_config_pins_override_search_type(self):
+        cfg = kb.vector_search_config(5)
+        self.assertEqual(cfg["overrideSearchType"], "HYBRID")
+        self.assertEqual(cfg["numberOfResults"], 5)
+
+    def test_config_never_omits_the_search_type(self):
+        for n in (1, 5, 20):
+            self.assertIn("overrideSearchType", kb.vector_search_config(n))
+
+    def test_extra_keys_pass_through_without_dropping_search_type(self):
+        # The gateway tool adds a metadata `filter`; adding one must not
+        # displace the search type.
+        flt = {"equals": {"key": "team", "value": {"stringValue": "t-data"}}}
+        cfg = kb.vector_search_config(3, filter=flt)
+        self.assertEqual(cfg["filter"], flt)
+        self.assertEqual(cfg["overrideSearchType"], "HYBRID")
+
+    def test_env_can_override_for_diagnosis(self):
+        # KB_SEARCH_TYPE=SEMANTIC reproduces the inversion on purpose. The module
+        # reads the env at import, so this reloads under a patched environ — and
+        # the restoring reload must happen AFTER the patch is lifted, or it
+        # re-reads the patched value and leaks SEMANTIC into every later test.
+        import importlib
+
+        try:
+            with mock.patch.dict(os.environ, {"KB_SEARCH_TYPE": "SEMANTIC"}):
+                reloaded = importlib.reload(kb)
+                self.assertEqual(reloaded.KB_SEARCH_TYPE, "SEMANTIC")
+                self.assertEqual(
+                    reloaded.vector_search_config(5)["overrideSearchType"], "SEMANTIC"
+                )
+        finally:
+            os.environ.pop("KB_SEARCH_TYPE", None)
+            importlib.reload(kb)
+        self.assertEqual(kb.KB_SEARCH_TYPE, "HYBRID")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

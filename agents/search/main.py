@@ -56,6 +56,7 @@ app = BedrockAgentCoreApp()
 
 REGION = os.environ.get("AWS_REGION", "us-east-1")
 from _shared.kb_resolver import resolve_kb_id as _resolve_kb_id
+from _shared.kb_resolver import vector_search_config as _vector_search_config
 KB_ID: str = _resolve_kb_id("orgiq", "default") or ""
 AURORA_CLUSTER_ARN = os.environ.get("AURORA_CLUSTER_ARN", "")
 AURORA_SECRET_ARN = os.environ.get("AURORA_SECRET_ARN", "")
@@ -106,7 +107,9 @@ def query_knowledge_base(query: str, max_results: int = 5) -> str:
             knowledgeBaseId=KB_ID,
             retrievalQuery={"text": query},
             retrievalConfiguration={
-                "vectorSearchConfiguration": {"numberOfResults": min(max_results, 20)}
+                # Search type is pinned in _shared/kb_resolver — the Bedrock
+                # default ranks this store's results worst-first.
+                "vectorSearchConfiguration": _vector_search_config(min(max_results, 20))
             },
         )
         results = [
@@ -336,40 +339,59 @@ SYSTEM_PROMPT = (
     "- query_knowledge_base: document/semantic search (use for 'tell me about', summaries, document content)\n"
     "- query_graph(sql): relational traversal via SQL (use for specific lookups, counts, rankings, relationships)\n"
     "- fetch_web_page(url): live external web content (only for genuinely external info)\n\n"
+    # Keep this block in step with `query_graph`'s docstring above and with
+    # schema/orgiq_schema.sql. It drifted once — advertising `department`,
+    # `skills.category`, `person_skills.proficiency`,
+    # `collaborations.source_id/target_id/context`, `decisions.title`,
+    # `documents.author_id` and `mentions.person_id`, none of which exist — so
+    # every example below produced invalid SQL on the one path this literal is
+    # for: the fallback taken when Prompt Management is unreachable.
     "Schema (Aurora PostgreSQL):\n"
-    "  people(id, name, title, department, expertise_score, pagerank_score, composite_score)\n"
-    "  skills(id, name, category)\n"
-    "  person_skills(person_id, skill_id, proficiency)\n"
-    "  teams(id, name, department)\n"
-    "  team_memberships(person_id, team_id, role)\n"
-    "  projects(id, name, status, priority, department)\n"
+    "  people(id, name, email, title, team, expertise_score, pagerank_score, composite_score)\n"
+    "  skills(id, name, domain)\n"
+    "  person_skills(person_id, skill_id, weight, source)\n"
+    "  teams(id, name, parent_id)\n"
+    "  team_memberships(person_id, team_id, role, weight)\n"
+    "  projects(id, name, status, summary, description, owner_id, sponsor_person_id)\n"
     "  project_contributions(person_id, project_id, role, weight)\n"
-    "  collaborations(source_id, target_id, weight, context)\n"
-    "  decisions(id, title, status, decided_at)\n"
-    "  decision_participants(decision_id, person_id, role)\n"
-    "  documents(id, title, doc_type, author_id)\n"
-    "  mentions(document_id, person_id, context)\n\n"
+    "  collaborations(person_a_id, person_b_id, weight, last_seen)\n"
+    "  decisions(id, topic, summary, status, decided_at, resolution, project_id)\n"
+    "  decision_participants(person_id, decision_id, role, weight)\n"
+    "  documents(id, source, source_uri, title, doc_type, headline, published_at, section)\n"
+    "  mentions(document_id, entity_type, entity_id, count)\n\n"
+    "Notes: a person's team is the text column people.team (teams.parent_id is "
+    "the org hierarchy). Edge strength is `weight` everywhere. A collaboration "
+    "pair is unordered — match the person against BOTH person_a_id and "
+    "person_b_id. mentions is polymorphic: filter entity_type ('person', "
+    "'team', 'project', 'skill') and join entity_id to that table's id.\n\n"
     "Example queries:\n"
-    "- Find experts: SELECT p.name, p.title, ps.proficiency FROM people p "
+    "- Find experts: SELECT p.name, p.title, ps.weight FROM people p "
     "JOIN person_skills ps ON ps.person_id = p.id "
     "JOIN skills s ON s.id = ps.skill_id "
-    "WHERE LOWER(s.name) LIKE '%kubernetes%' ORDER BY ps.proficiency DESC\n"
+    "WHERE LOWER(s.name) LIKE '%kubernetes%' ORDER BY ps.weight DESC\n"
     "- Person's projects: SELECT p.name, proj.name AS project, pc.role FROM people p "
     "JOIN project_contributions pc ON pc.person_id = p.id "
     "JOIN projects proj ON proj.id = pc.project_id "
     "WHERE LOWER(p.name) LIKE '%sarah%'\n"
-    "- Person's collaborators: SELECT p2.name, c.weight, c.context FROM people p1 "
-    "JOIN collaborations c ON c.source_id = p1.id "
-    "JOIN people p2 ON p2.id = c.target_id "
-    "WHERE LOWER(p1.name) LIKE '%sarah%' ORDER BY c.weight DESC\n"
+    "- Person's collaborators (the pair is unordered — match both sides): "
+    "SELECT p2.name, c.weight FROM people p1 "
+    "JOIN collaborations c ON p1.id IN (c.person_a_id, c.person_b_id) "
+    "JOIN people p2 ON p2.id = CASE WHEN c.person_a_id = p1.id "
+    "THEN c.person_b_id ELSE c.person_a_id END "
+    "WHERE LOWER(p1.name) LIKE '%theo%' ORDER BY c.weight DESC\n"
     "- Team members: SELECT p.name, tm.role FROM people p "
     "JOIN team_memberships tm ON tm.person_id = p.id "
     "JOIN teams t ON t.id = tm.team_id "
     "WHERE LOWER(t.name) LIKE '%platform%'\n"
-    "- Person's skills: SELECT s.name, s.category, ps.proficiency FROM skills s "
+    "- Person's skills: SELECT s.name, s.domain, ps.weight FROM skills s "
     "JOIN person_skills ps ON ps.skill_id = s.id "
     "JOIN people p ON p.id = ps.person_id "
-    "WHERE LOWER(p.name) LIKE '%theo%' ORDER BY ps.proficiency DESC\n\n"
+    "WHERE LOWER(p.name) LIKE '%theo%' ORDER BY ps.weight DESC\n"
+    "- Documents mentioning a person: SELECT d.title, d.doc_type, m.count "
+    "FROM documents d "
+    "JOIN mentions m ON m.document_id = d.id "
+    "JOIN people p ON p.id = m.entity_id AND m.entity_type = 'person' "
+    "WHERE LOWER(p.name) LIKE '%theo%' ORDER BY m.count DESC\n\n"
     "IMPORTANT: Always use query_graph for relationship questions (projects, collaborators, "
     "skills, teams). Use LOWER() and LIKE for name matching. "
     "Combine tools for comprehensive answers.\n"

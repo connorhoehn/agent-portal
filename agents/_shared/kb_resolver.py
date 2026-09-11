@@ -50,6 +50,56 @@ _cache: dict = {}
 _cache_lock = threading.Lock()
 
 
+# ---------------------------------------------------------------------------
+# Search type — why every retrieve MUST pass this explicitly.
+# ---------------------------------------------------------------------------
+#
+# Bedrock's DEFAULT search type against this Aurora/pgvector store returns the
+# correct k nearest neighbours **sorted worst-first**, and reports cosine
+# *distance* in a field named `score` that every caller reads as "higher is
+# better". Measured against ground truth (`ORDER BY embedding <=> query` on
+# `bedrock_kb`, the very table Bedrock reads) over 8 representative queries:
+#
+#     default/SEMANTIC  top-1 correct: 0/8
+#     HYBRID            top-1 correct: 8/8
+#
+# For every query the returned SET matched the true nearest neighbours exactly
+# while the ORDER was the exact reverse — e.g. "Why did we choose Aurora over
+# Neptune?" put `adr-d-iceberg.md` first (distance 0.831) and the actual
+# `adr-d-aurora.md` LAST (0.492, i.e. the nearest chunk).
+#
+# This is the whole reason the knowledge base read as a "false flag": retrieval
+# returned plausible, real org documents, so nothing looked broken, while every
+# consumer taking the top-N got the LEAST relevant hits and the right answer
+# fell off the end. Two things downstream compound it — nothing in the agents
+# sorts by `score` (results are passed to the model in Bedrock's order), and
+# `middleware/src/lib/turn-tool-calls.ts` trims oversized result lists from the
+# TAIL, which discards the most relevant document first.
+#
+# HYBRID is a supported configuration here, not a workaround: it needs the GIN
+# full-text index on `bedrock_kb`, which `infra/lib/knowledge-base-stack.ts`
+# creates as `bedrock_kb_text_idx` (the `DbInitTextIndex` custom resource). It
+# is also the better retrieval mode for this corpus independently — the queries
+# carry exact proper nouns ("Neptune", "Kubernetes", "SOC2") that lexical
+# matching nails and pure vector search blurs.
+#
+# Override only to diagnose: KB_SEARCH_TYPE=SEMANTIC reproduces the inversion.
+KB_SEARCH_TYPE = os.environ.get("KB_SEARCH_TYPE", "HYBRID")
+
+
+def vector_search_config(num_results: int, **extra) -> dict:
+    """Build a `vectorSearchConfiguration` with the search type pinned.
+
+    Every KB retrieve in this repo goes through here so the search type cannot
+    be omitted at a call site — omitting it is what produced anti-relevant
+    ranking on all three production call sites at once. `extra` carries
+    per-caller keys such as `filter`.
+    """
+    cfg = {"numberOfResults": num_results, "overrideSearchType": KB_SEARCH_TYPE}
+    cfg.update(extra)
+    return cfg
+
+
 def _cached(key):
     with _cache_lock:
         return _cache.get(key)
