@@ -452,7 +452,19 @@ const SPENDS: Family[] = [
   { pattern: 'POST /api/admin/kb-registry', what: 'INSERTs through the RDS Data API with no mock branch' },
   { pattern: 'POST /api/admin/kb-registry/upload-links', what: 'INSERTs through the RDS Data API with no mock branch' },
   { pattern: 'POST /api/admin/kb-registry/*/landing-zone/upload', what: 'writes the uploaded object to S3' },
-  { pattern: 'POST /api/admin/kb-registry/*/sync', what: 'calls Bedrock Agent StartIngestionJob directly from the handler' },
+
+  // `POST /api/admin/kb-registry/*/sync` LEFT this list, and the entry was
+  // right when it was written: the handler built its own
+  // StartIngestionJobCommand and sent it, so offline it reached the real
+  // account and answered a live AccessDeniedException — the Knowledge page's
+  // primary button could not work under dev:mock at all. This list correctly
+  // recorded that and correctly kept the capture away from it, which is also
+  // why nothing ever forced the fix: an accurate note about a broken button is
+  // still a broken button. It now delegates to `startIngestionJob`, the same
+  // provider `POST /api/ingest/start` uses, so it inherits the MOCK_AGENTCORE
+  // branch, the already-running guard and the shared failure classifier. It is
+  // on the allowlist behind `intercepts: ['agentcore']`, where the claim is
+  // checked against a running server instead of asserted here.
 
   // SDLC: all three left this list, for the same reading. `/rereview` said
   // "sends the diff to Bedrock Converse (lib/change-reviewer.ts, no mock
@@ -1448,7 +1460,7 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
   {
     route: 'POST /api/ingest/crawl/:id/sync',
     persona: 'orgiq/admin',
-    safe: '`triggerKbSyncForCrawl` returns null immediately when no knowledge base is configured, so the route answers 502 before any AWS call.',
+    safe: '`triggerKbSyncForCrawl` refuses immediately when no knowledge base is configured, so the route answers 409 ("KNOWLEDGE_BASE_ID is unset") before any AWS call. It used to answer a flat 502 for this and every other cause alike; the status now distinguishes them, and the no-AWS-call guarantee is unchanged.',
     bodyFrom: 'routes/ingest.ts: no body.',
   },
   {
@@ -1473,6 +1485,14 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
       if (dataSourceId === null) return unsynthesisable('GET /api/knowledge-base/data-sources listed no data source');
       return { dataSourceId };
     },
+  },
+  {
+    route: 'POST /api/admin/kb-registry/:id/sync',
+    persona: 'orgiq/admin',
+    safe: '`startIngestionJob` short-circuits to the mock job under MOCK_AGENTCORE and unshifts a row into the registered kb-ingestion-jobs fixture. It used to build and send its own StartIngestionJobCommand — this route was the one KB write with no mock branch, so offline it reached the real account and answered a live AccessDeniedException; it now shares the provider with POST /api/ingest/start. The minted job id comes off a module-level counter reset cannot lower, and `jobId` is not a wire-shaped field, so no snapshot value churns on it.',
+    bodyFrom: 'routes/kb-admin.ts: `description` is optional and defaults to a timestamped label; `:id` resolves off GET /api/admin/kb-registry.',
+    intercepts: ['agentcore'],
+    build: ok({}),
   },
   {
     route: 'PATCH /api/admin/kb-registry/:id',

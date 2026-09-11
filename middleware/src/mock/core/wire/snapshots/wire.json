@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-11T18:16:43.467Z",
-  "serverHandlerSha": "78071310546f3f155efb0f1e5fa5e1780206d1c0531e46ab037616c704552420",
+  "capturedAt": "2026-09-11T18:34:41.265Z",
+  "serverHandlerSha": "53e3fd2df5eb266a1ec5a13f91dee05717f3d4911d105f2309bcc4b90f783293",
   "baseUrl": "http://127.0.0.1:3011",
   "personas": [
     "orgiq/admin",
@@ -342,11 +342,28 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "degraded": "boolean",
-        "error": "string",
-        "jobs": "array"
+        "jobs": "array",
+        "jobs[]": "object",
+        "jobs[].dataSourceId": "string",
+        "jobs[].description": "string",
+        "jobs[].documentsDeleted": "number",
+        "jobs[].documentsFailed": "number",
+        "jobs[].documentsIndexed": "number",
+        "jobs[].documentsScanned": "number",
+        "jobs[].durationMs": "number",
+        "jobs[].failureReasons": "array",
+        "jobs[].failureReasons[]": "string",
+        "jobs[].jobId": "string",
+        "jobs[].startedAt": "string",
+        "jobs[].status": "string",
+        "jobs[].updatedAt": "string"
       },
-      "values": {}
+      "values": {
+        "jobs[].status": [
+          "COMPLETE",
+          "FAILED"
+        ]
+      }
     },
     "GET /api/admin/kb-registry/:id/landing-zone/files": {
       "persona": "orgiq/admin",
@@ -426,6 +443,7 @@
         "entries[].registryKbId": "string",
         "entries[].registryStatus": "string",
         "entries[].slug": "string",
+        "entries[].syncStateKnown": "boolean",
         "entries[].tenant": "string"
       },
       "values": {
@@ -991,11 +1009,13 @@
           "ms_forms_export"
         ],
         "envelopes[].status": [
+          "committed",
           "processed",
           "staged",
           "superseded"
         ],
         "groups[].status": [
+          "committed",
           "processed",
           "staged"
         ]
@@ -2152,7 +2172,7 @@
       },
       "values": {
         "kind": [
-          "gotcha"
+          "decision"
         ],
         "level": [
           "L0"
@@ -3076,8 +3096,7 @@
       "values": {
         "jobs[].status": [
           "COMPLETE",
-          "FAILED",
-          "IN_PROGRESS"
+          "FAILED"
         ]
       }
     },
@@ -3166,8 +3185,7 @@
       "values": {
         "recentJobs[].status": [
           "COMPLETE",
-          "FAILED",
-          "IN_PROGRESS"
+          "FAILED"
         ]
       }
     },
@@ -6133,6 +6151,7 @@
         "candidate",
         "changes_requested",
         "claim_open",
+        "committed",
         "completed",
         "connected",
         "current",

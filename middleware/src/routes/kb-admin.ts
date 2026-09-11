@@ -21,7 +21,6 @@ import {
   BedrockAgentClient,
   GetKnowledgeBaseCommand,
   ListDataSourcesCommand,
-  StartIngestionJobCommand,
   ListIngestionJobsCommand,
 } from '@aws-sdk/client-bedrock-agent';
 import { asyncHandler, ValidationError, NotFoundError } from '../lib/async-handler.js';
@@ -40,7 +39,8 @@ import { provisioningBroker, type ProvisioningBrokerEvent } from '../lib/provisi
 import { exec } from '../providers/aurora.js';
 import { config } from '../config.js';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
-import { reconcileKnowledgeBases, adoptKnowledgeBase } from '../providers/kb-reconcile.js';
+import { reconcileKnowledgeBases, adoptKnowledgeBase, syncState } from '../providers/kb-reconcile.js';
+import { startIngestionJob, listIngestionJobs } from '../providers/knowledge-base.js';
 import express from 'express';
 import {
   createUploadLink, listUploadLinks, revokeUploadLink, listLinkFiles,
@@ -119,8 +119,22 @@ kbAdminRouter.get('/health', asyncHandler(async (_req, res) => {
   // surface is a demo highlight, so it should show a plausible
   // healthy-with-one-drift picture every time, not a slow timeout.
   if (config.mock.aurora) {
-    const summary = kbs.map((kb) => {
+    // The three sync fields are DERIVED, not stated. They were
+    // `dataSourceCount: 1`, `lastSyncStatus: 'COMPLETE'` and
+    // `new Date(Date.now() - 3 * 3_600_000)` — the same three literals
+    // `providers/kb-reconcile.ts::syncState` already had removed for breaking
+    // contract rule 1, living on in a second copy here. What the copy cost is
+    // specific: this widget claimed "synced 3h ago" while the job list beside it
+    // read 6h, no scenario could move it (pin `kb-ingestion-jobs` to `error` and
+    // it still said COMPLETE over a FAILED head), and the raw `Date.now()` meant
+    // freezing the clock did not freeze it. `syncState` is now shared, so the
+    // widget and the reconcile page cannot disagree about the same knowledge
+    // base by construction rather than by review.
+    const summary = await Promise.all(kbs.map(async (kb) => {
       const gone = kb.bedrockKbId === 'KBMOCK-GONE';
+      const sync = kb.bedrockKbId && !gone
+        ? (await syncState(kb.bedrockKbId)).items
+        : { dataSourceCount: null, lastSyncStatus: null, lastSyncAt: null };
       return {
         id: kb.id,
         slug: kb.slug,
@@ -128,14 +142,14 @@ kbAdminRouter.get('/health', asyncHandler(async (_req, res) => {
         status: kb.status,
         reachable: !gone,
         awsStatus: gone ? null : 'ACTIVE',
-        dataSourceCount: gone ? null : 1,
-        lastSyncStatus: gone ? null : 'COMPLETE',
-        lastSyncAt: gone ? null : new Date(Date.now() - 3 * 3_600_000).toISOString(),
+        dataSourceCount: sync.dataSourceCount,
+        lastSyncStatus: sync.lastSyncStatus,
+        lastSyncAt: sync.lastSyncAt,
         problem: gone
           ? `knowledge base ${kb.bedrockKbId} no longer exists in AWS — registered here but deleted upstream; agents will fail KB retrieval`
           : null,
       };
-    });
+    }));
     const broken = summary.filter((s) => s.reachable === false && s.status !== 'PENDING').length;
     const healthy = summary.filter((s) => s.reachable && !s.problem).length;
     const degraded = summary.filter((s) => s.reachable && Boolean(s.problem)).length;
@@ -586,21 +600,41 @@ kbAdminRouter.post('/:id/sync', asyncHandler(async (req, res) => {
     ? body.description
     : `Manual sync from portal at ${new Date().toISOString()}`;
 
-  const resp = await agentClient().send(
-    new StartIngestionJobCommand({
-      knowledgeBaseId: entry.bedrockKbId,
-      dataSourceId: entry.dataSourceId,
-      description,
-    }),
-  );
-
-  const jobId = resp.ingestionJob?.ingestionJobId;
-  if (!jobId) {
+  // Delegated to the provider rather than calling StartIngestionJob here, and
+  // both halves of that mattered.
+  //
+  // 1. THIS ROUTE HAD NO MOCK BRANCH. It sent to Bedrock unconditionally, so
+  //    under `dev:mock` — where the contract is that no AWS call is made — it
+  //    reached the real account with whatever credentials the developer had.
+  //    Offline it answered a genuine `AccessDeniedException` from a live STS
+  //    role, which means the Knowledge page's primary button, "Sync now", could
+  //    not work offline at all and failed in a way that looks like a broken
+  //    pipeline rather than an unmocked call. It is not listed in
+  //    `mock/core/wire/write-policy.ts`, which is why the floor never caught it.
+  //
+  // 2. Uncaught, the send() reached `asyncHandler`, which answers an
+  //    unrecognised error with a bare 500 "Internal server error" and drops the
+  //    message — so a `ConflictException` meaning "the sync is already running"
+  //    was the most alarming response the platform can give, about the platform
+  //    working.
+  //
+  // `startIngestionJob` already owns the mock branch, the already-running guard
+  // and `classifyStartJobFailure`, so /ingest/start and this button now answer
+  // the same condition the same way instead of two hand-rolled Bedrock calls
+  // drifting apart.
+  const outcome = await startIngestionJob(entry.dataSourceId, description, entry.bedrockKbId);
+  if (!outcome.ok) {
+    res.status(outcome.status).json({
+      ok: false, error: outcome.error, conflict: outcome.conflict,
+    });
+    return;
+  }
+  if (!outcome.jobId) {
     res.status(500).json({ ok: false, error: 'StartIngestionJob returned no jobId' });
     return;
   }
 
-  res.json({ ok: true, jobId });
+  res.json({ ok: true, jobId: outcome.jobId });
 }));
 
 // ─── GET /:id/jobs ────────────────────────────────────────────────────────────
@@ -616,6 +650,28 @@ kbAdminRouter.get('/:id/jobs', asyncHandler(async (req, res) => {
 
   const limitRaw = req.query['limit'];
   const limit = limitRaw ? Math.min(Math.max(1, parseInt(String(limitRaw), 10) || 20), 100) : 20;
+
+  // The read half of the same gap as POST /:id/sync, and it hid better.
+  //
+  // This handler called ListIngestionJobs unconditionally, so offline it
+  // reached the real account and Bedrock refused — landing in the catch below,
+  // which answers `degraded({ jobs: [] })`. The marking is right and the
+  // diagnosis it carries is right, but under dev:mock the page's job history
+  // was permanently empty: press "Sync now", get a job id back, and see no job.
+  // A sync you can start and cannot observe is indistinguishable from a sync
+  // that did nothing, which is exactly the complaint this whole pass is about.
+  //
+  // Keyed on `agentcore` rather than `aurora` because that is what the
+  // provider's own `mockAws()` reads — MOCK_AGENTCORE without MOCK_AURORA must
+  // still not call Bedrock. `listIngestionJobs` ignores the entry's kbId under
+  // mock (the fixture is keyed on data source alone), which is why this is a
+  // branch rather than a full delegation: on the real path the registry entry's
+  // `bedrockKbId` is the whole point of a multi-KB registry, and the provider
+  // pins `config.knowledgeBase.id` instead.
+  if (config.mock.agentcore) {
+    res.json({ jobs: await listIngestionJobs(entry.dataSourceId, limit) });
+    return;
+  }
 
   try {
     const resp = await agentClient().send(
@@ -645,6 +701,13 @@ kbAdminRouter.get('/:id/jobs', asyncHandler(async (req, res) => {
           Number(stats['numberOfModifiedDocumentsIndexed'] ?? 0),
         documentsFailed: Number(stats['numberOfDocumentsFailed'] ?? 0),
         documentsDeleted: Number(stats['numberOfDocumentsDeleted'] ?? 0),
+        // Always present, always empty here: Bedrock's ListIngestionJobs
+        // summary carries statistics but no failure reasons — only
+        // GetIngestionJob does, which is what the portal's "details" button
+        // fetches. Emitted anyway so this path and the mock branch above have
+        // the same shape; the portal types the field as required and a key that
+        // exists offline but not online is how a mock stops being a contract.
+        failureReasons: [] as string[],
       };
     });
 

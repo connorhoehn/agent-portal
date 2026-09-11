@@ -621,6 +621,26 @@ Say it out loud so nobody over-trusts it.
   named function into the route makes the pairs disappear, because the scan
   stops at a guarded function — which is suppression unless a real offline path
   is behind it.
+- **Nor a route that builds its own AWS SDK client.** Same cause as the bullet
+  above, one step wider: findings may only name a leaf in `src/lib/**` or
+  `src/providers/**`, so a handler that constructs a client and `send`s a
+  command *itself* is not a finding at all — not over-reported, not
+  under-reported, simply never looked at. `routes/kb-admin.ts` had a local
+  `agentClient()` and used it four times, and two of those were the KB's whole
+  sync journey: `POST /:id/sync` and `GET /:id/jobs` called Bedrock
+  unconditionally, so under `dev:mock` they reached the real account with
+  whatever credentials the developer's shell had. What that cost is worth
+  stating, because it is the failure mode this document keeps calling the worst
+  one: the page appeared to work. "Sync now" answered a live
+  `AccessDeniedException` — a red banner about IAM on a page with no AWS in it —
+  and the job list swallowed its own refusal into `degraded({ jobs: [] })`,
+  which renders as *this knowledge base has never synced*. Every number beside
+  them was correctly mocked. Both now go through
+  `providers/knowledge-base.ts`, which is scannable and branched. Note the write
+  budget did not move when they were fixed (34 before, 34 after): they were
+  never counted, so a green ratchet was never evidence about them. If you add a
+  `new SomethingClient()` to a file under `src/routes/**`, no rule here will
+  object — the reviewer is the judge.
 - **Rule 1 matches a shape, not a bug.** `documentCount: 1247` on a line of its
   own is what it looks for. It cannot tell a *drifting* aggregate (the rows are
   right there in the same fixture — `mock/traces.ts`'s `totalDurationMs` beside

@@ -83,6 +83,22 @@ import { startLocalController } from './lib/canary-local-controller.js';
 
 const app = express();
 
+// One proxy hop — the ALB in front of the ECS service (OrgIQ-MiddlewareService).
+//
+// Load-bearing for two things that both failed silently without it:
+//  1. `req.secure`, which `lib/session.ts::cookieSecure` reads to decide whether
+//     the session cookie is `Secure`. With no trust setting Express reports the
+//     scheme of the proxy→app hop and ignores `X-Forwarded-Proto`.
+//  2. `req.ip`, which express-rate-limit keys on. Behind an untrusted proxy
+//     every request carries the ALB's address, so per-client login limits were
+//     really one shared global bucket — strict for everyone, no protection at
+//     all against one caller.
+//
+// `1`, not `true`: trust exactly the immediate peer. `true` trusts the whole
+// chain, which lets a client spoof `X-Forwarded-For`/`-Proto` and pick its own
+// rate-limit bucket. There is one proxy here, so one hop is the honest number.
+app.set('trust proxy', 1);
+
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());

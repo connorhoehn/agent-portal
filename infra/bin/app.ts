@@ -118,7 +118,7 @@ const agents = new AgentsStack(app, 'OrgIQ-Agents', {
   artifactsBucketArn: foundation.artifactsBucket.bucketArn,
   scoresTableArn: foundation.scoresTable.tableArn,
   sessionsTableArn: foundation.sessionsTable.tableArn,
-  description: 'OrgIQ Agents: IAM roles for 6 AgentCore agents + Managed Prompts',
+  description: 'OrgIQ Agents: IAM roles for 8 AgentCore agents + Managed Prompts',
 });
 agents.addDependency(foundation);
 agents.addDependency(aurora);
@@ -185,7 +185,7 @@ const agentCoreCapabilities = new AgentCoreCapabilitiesStack(app, 'OrgIQ-AgentCo
 });
 
 // -------------------------------------------------------------------
-// Stack 10: AgentCore Runtime (6 agent runtimes)
+// Stack 10: AgentCore Runtime (8 agent runtimes — 6 OrgIQ + 2 assessment)
 // -------------------------------------------------------------------
 // Use Fn.importValue with stable exportNames to avoid CDK auto-generated hash-based
 // exports (ExportsOutputFnGetAtt...) whose hashes change when the runtime stack template
@@ -230,7 +230,7 @@ const agentCoreRuntime = new AgentCoreRuntimeStack(app, 'OrgIQ-AgentCoreRuntime'
   approvalsRequestSecret: app.node.tryGetContext('approvalsRequestSecret') as string | undefined,
   harnessTraceSecret: app.node.tryGetContext('harnessTraceSecret') as string | undefined,
   assessmentRunCompleteSecret: app.node.tryGetContext('assessmentRunCompleteSecret') as string | undefined,
-  description: 'OrgIQ AgentCore Runtime: 6 agent runtimes with lifecycle and endpoint config',
+  description: 'OrgIQ AgentCore Runtime: 8 agent runtimes with lifecycle and endpoint config',
 });
 agentCoreRuntime.addDependency(agents);
 agentCoreRuntime.addDependency(agentCoreMemory);
@@ -394,9 +394,12 @@ const middlewareService = new MiddlewareServiceStack(app, 'OrgIQ-MiddlewareServi
   // FoundationStack (which is an existing deployed stack).
   sessionsTableArn: `arn:aws:dynamodb:${env.region ?? 'us-east-1'}:${env.account ?? '*'}:table/${prefix}-sessions`,
 
-  // S3 bucket ARNs
+  // S3 buckets — ARNs for the IAM grants, names for the container env.
+  // FoundationStack already exports both, so the names cost no new export.
   documentsBucketArn: cdk.Fn.importValue(`${prefix}-documents-bucket-arn`),
   artifactsBucketArn: cdk.Fn.importValue(`${prefix}-artifacts-bucket-arn`),
+  documentsBucketName: cdk.Fn.importValue(`${prefix}-documents-bucket-name`),
+  artifactsBucketName: cdk.Fn.importValue(`${prefix}-artifacts-bucket-name`),
 
   // Authorization
   sessionSigningSecretArn: cdk.Fn.importValue(`${prefix}-session-signing-secret-arn`),

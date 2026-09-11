@@ -15,6 +15,14 @@ export interface KbAction {
   loading: boolean;
   /** Backend `{ error }` text, or null. */
   error: string | null;
+  /**
+   * The refusal was "already running", not "broken" — see
+   * `writeJson`'s `conflict`. A caller that ignores this renders a working
+   * pipeline as a red alert, which is the exact reading this pass is undoing.
+   * `onDone` fires for a conflict too: the refusal means a job IS in flight, so
+   * refreshing is the useful response.
+   */
+  conflict: boolean;
   run: () => void;
 }
 
@@ -27,14 +35,21 @@ export function useKbAction(
   const { settleOnSuccess = true } = opts;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conflict, setConflict] = useState(false);
 
   const run = useCallback(() => {
     setLoading(true);
     setError(null);
+    setConflict(false);
     void writeJson(url, method).then((res) => {
       if (!res.ok) {
         setError(res.error);
+        setConflict(res.conflict);
         setLoading(false);
+        // A conflict means the work is under way, so the list beside the button
+        // has something new to show — the same reason the Ingest and Knowledge
+        // surfaces refresh on it.
+        if (res.conflict) onDone();
         return;
       }
       if (settleOnSuccess) setLoading(false);
@@ -42,5 +57,5 @@ export function useKbAction(
     });
   }, [url, method, onDone, settleOnSuccess]);
 
-  return { loading, error, run };
+  return { loading, error, conflict, run };
 }

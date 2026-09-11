@@ -19,6 +19,8 @@ export interface Reconciled {
   lastSyncStatus: string | null;
   lastSyncAt: string | null;
   lastSyncScanned: number | null;
+  /** False when the sync read failed — the three nulls above mean nothing. */
+  syncStateKnown: boolean;
   documentCount: number | null;
   drift: DriftKind;
   detail: string;
@@ -82,6 +84,10 @@ export interface EntrySummary {
   problems: Reconciled[];
   docs: number;
   dataSources: number;
+  /** False when any live row's data-source count could not be read, so
+   *  `dataSources` is a floor rather than a total — and in particular a zero
+   *  must not be rendered as "no data source attached". */
+  dataSourcesKnown: boolean;
 }
 
 export function summarizeEntries(entries: Reconciled[]): EntrySummary {
@@ -89,7 +95,8 @@ export function summarizeEntries(entries: Reconciled[]): EntrySummary {
   const problems = entries.filter((e) => e.drift !== 'ok');
   const docs = entries.reduce((n, e) => n + (e.documentCount ?? 0), 0);
   const dataSources = live.reduce((n, e) => n + (e.dataSourceCount ?? 0), 0);
-  return { live, problems, docs, dataSources };
+  const dataSourcesKnown = live.every((e) => e.dataSourceCount !== null);
+  return { live, problems, docs, dataSources, dataSourcesKnown };
 }
 
 /**
@@ -111,7 +118,42 @@ export interface SyncGap {
   behind: boolean;
   /** No sync has ever completed for any live knowledge base. */
   neverRan: boolean;
+  /**
+   * The sync history of at least one live knowledge base could not be read, so
+   * neither `behind` nor `neverRan` is assertable. Both are forced false here
+   * and a UI should say it cannot tell instead of picking the scarier story.
+   */
+  syncUnknown: boolean;
+  /** A sync is in flight on the sync target right now. */
+  running: boolean;
+  /** The sync target's newest job ended without finishing the index. */
+  failed: boolean;
+  /** The newest job's raw Bedrock status, so a UI can name it rather than
+   *  paraphrase it. Null when unknown or when nothing has ever run. */
+  lastSyncStatus: string | null;
   lastSync: string | null;
+}
+
+// Bedrock `IngestionJobStatus`. Split by the only question this page asks of
+// it: is the index still being built, and did the last attempt finish?
+const RUNNING_STATUSES = new Set(['STARTING', 'IN_PROGRESS', 'STOPPING']);
+const UNFINISHED_STATUSES = new Set(['FAILED', 'STOPPED']);
+
+/**
+ * How to render one row's last sync.
+ *
+ * A bare timestamp reads as success. `lastSyncAt` is the newest job's
+ * `updatedAt` **whatever its status**, so a job that failed two minutes ago
+ * rendered as "2m ago" beside a document count — which is the sentence a
+ * healthy, current index produces. The status is already on the wire; the only
+ * reason it read as success is that nothing printed it.
+ */
+export function lastSyncLabel(e: Reconciled): string {
+  if (!e.syncStateKnown) return 'unreadable';
+  if (!e.lastSyncAt) return 'never';
+  const status = (e.lastSyncStatus ?? '').toUpperCase();
+  if (!status || status === 'COMPLETE') return when(e.lastSyncAt);
+  return `${status.replace(/_/g, ' ').toLowerCase()} · ${when(e.lastSyncAt)}`;
 }
 
 export function computeSyncGap(entries: Reconciled[], storedObjects: number): SyncGap {
@@ -130,8 +172,42 @@ export function computeSyncGap(entries: Reconciled[], storedObjects: number): Sy
     (e) => e.id && e.drift === 'ok' && e.liveKbId && (e.dataSourceCount ?? 0) > 0,
   ) ?? null;
 
+  // `lastSync` is a maximum over every live row, so ONE unreadable row is
+  // enough to make its absence meaningless — the newest sync could be the one
+  // we could not see. This is the portal half of the bug the IAM fix removed
+  // the symptom of: with `bedrock:ListIngestionJobs` denied the server returned
+  // three honest nulls, and `neverRan = !lastSync` turned them into "this
+  // knowledge base has never been indexed" on a page about 157 indexed
+  // documents. The next unreadable sync history should read as unreadable.
+  const syncUnknown = live.some((e) => !e.syncStateKnown);
+
+  // The status of the run the "Sync now" button would be starting another of.
+  // Read from `syncTarget` rather than across every row, because that is the
+  // row the button acts on.
+  const rawStatus = syncUnknown ? null : syncTarget?.lastSyncStatus ?? null;
+  const lastSyncStatus = rawStatus;
+  const status = (rawStatus ?? '').toUpperCase();
+  const running = RUNNING_STATUSES.has(status);
+  const failed = UNFINISHED_STATUSES.has(status);
+
+  // `running` suppresses `behind`, and that is a fix rather than a preference.
+  //
+  // A job that has started but not finished reports no `numberOfDocumentsScanned`
+  // and a fresh `updatedAt`. So `lastSync` was truthy and `scanned` was null,
+  // the comparison below fell through to false, and the banner *vanished* the
+  // instant a sync began — the page went from "behind" to showing nothing at
+  // all while zero documents had been indexed. Suppressing it explicitly means
+  // the caller has a `running` state to render instead of an accidental
+  // silence.
   const scanned = syncTarget?.lastSyncScanned ?? null;
-  const behind = storedObjects > 0 && (!lastSync || (scanned !== null && scanned < storedObjects));
-  const neverRan = !lastSync;
-  return { syncTarget, behind, neverRan, lastSync };
+  const behind = !syncUnknown
+    && !running
+    && storedObjects > 0
+    && (!lastSync || (scanned !== null && scanned < storedObjects));
+
+  // A failed run is not "nobody has synced yet". `neverRan` drives the copy
+  // that says documents "have never been indexed", which invites the operator
+  // to press the button that just failed instead of reading why.
+  const neverRan = !syncUnknown && !lastSync;
+  return { syncTarget, behind, neverRan, syncUnknown, running, failed, lastSyncStatus, lastSync };
 }

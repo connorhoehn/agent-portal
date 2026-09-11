@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-11T18:16:44.243Z",
-  "serverHandlerSha": "78071310546f3f155efb0f1e5fa5e1780206d1c0531e46ab037616c704552420",
+  "capturedAt": "2026-09-11T18:34:46.375Z",
+  "serverHandlerSha": "53e3fd2df5eb266a1ec5a13f91dee05717f3d4911d105f2309bcc4b90f783293",
   "baseUrl": "http://127.0.0.1:3011",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -684,10 +684,15 @@
       }
     },
     "POST /api/admin/kb-registry/:id/sync": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: calls Bedrock Agent StartIngestionJob directly from the handler."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "jobId": "string",
+        "ok": "boolean"
+      },
+      "values": {},
+      "sent": []
     },
     "POST /api/admin/kb-registry/reconcile/adopt": {
       "skipped": "no body: `kbId` is a live Bedrock knowledge-base id. Nothing offline enumerates one — GET /reconcile does not surface live AWS ids under the mock providers — and a made-up id would prove nothing."
@@ -1998,7 +2003,29 @@
       "sent": []
     },
     "POST /api/observability/approvals/:id/decision": {
-      "skipped": "no value found for :id under /api/observability/approvals (orgiq/admin)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "agentId": "string",
+        "approvalId": "string",
+        "decidedAt": "string",
+        "decidedBy": "string",
+        "decidedNote": "null",
+        "payload": "object",
+        "reason": "null",
+        "requestedAt": "string",
+        "status": "string",
+        "txId": "string"
+      },
+      "values": {
+        "status": [
+          "APPROVED"
+        ]
+      },
+      "sent": [
+        "decision"
+      ]
     },
     "POST /api/observability/approvals/request": {
       "persona": "orgiq/admin",

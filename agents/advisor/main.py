@@ -50,6 +50,7 @@ app = BedrockAgentCoreApp()
 
 REGION = os.environ.get("AWS_REGION", "us-east-1")
 from _shared.kb_resolver import resolve_kb_id as _resolve_kb_id
+from _shared.kb_resolver import vector_search_config as _vector_search_config
 KB_ID: str = _resolve_kb_id("orgiq", "default") or ""
 AURORA_CLUSTER_ARN = os.environ.get("AURORA_CLUSTER_ARN", "")
 AURORA_SECRET_ARN = os.environ.get("AURORA_SECRET_ARN", "")
@@ -172,7 +173,9 @@ def retrieve_context(query: str, max_results: int = 5) -> str:
             knowledgeBaseId=KB_ID,
             retrievalQuery={"text": query},
             retrievalConfiguration={
-                "vectorSearchConfiguration": {"numberOfResults": min(max_results, 10)}
+                # Search type is pinned in _shared/kb_resolver — the Bedrock
+                # default ranks this store's results worst-first.
+                "vectorSearchConfiguration": _vector_search_config(min(max_results, 10))
             },
         )
         results = [

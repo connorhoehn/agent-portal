@@ -25,7 +25,16 @@
 //     poll for six minutes.
 
 jest.mock('../../config.js', () => ({
-  config: { region: 'us-east-1', mock: { aurora: false } },
+  config: {
+    region: 'us-east-1',
+    mock: { aurora: false, agentcore: false },
+    // `knowledgeBase.id` is the env-pinned default the provider falls back to
+    // when a caller names no kbId. Every call from this router names one — the
+    // registry entry's own `bedrockKbId`, which is the point of the registry —
+    // but the provider reads the default before it branches, so leaving the key
+    // off made the read a TypeError rather than a fallback.
+    knowledgeBase: { id: '', serviceRoleArn: '' },
+  },
 }));
 
 const agentSend = jest.fn();
@@ -71,6 +80,8 @@ import {
 } from '../../providers/upload-links.js';
 import { listLandingZoneFiles, uploadToLandingZone } from '../../providers/landing-zones.js';
 import { exec } from '../../providers/aurora.js';
+import { config } from '../../config.js';
+import { fixtureRegistry } from '../../mock/core/index.js';
 
 const m = <T,>(fn: T): jest.Mock => fn as unknown as jest.Mock;
 
@@ -491,6 +502,110 @@ describe('POST /:id/sync', () => {
     expect(res.status).toBe(500);
     expect(res.body).toEqual({ ok: false, error: 'StartIngestionJob returned no jobId' });
   });
+
+  it('answers a sync that is ALREADY RUNNING with 409 conflict, not a bare 500', async () => {
+    // The reason this route was routed through the provider. It used to build
+    // and send its own command, so an unhandled ConflictException reached
+    // `asyncHandler`, which does not recognise it and answers 500 "Internal
+    // server error" with the message dropped. The most alarming response the
+    // platform can give, about the platform working correctly.
+    m(getKb).mockResolvedValue(KB);
+    agentSend.mockRejectedValue(Object.assign(
+      new Error('An ingestion job is already in progress for this data source'),
+      { name: 'ConflictException' },
+    ));
+    const res = await request(buildApp()).post('/api/admin/kb-registry/kb-row-1/sync').send({});
+    expect(res.status).toBe(409);
+    expect(res.body.conflict).toBe(true);
+    // Names the state and the target, so the operator knows to wait rather than
+    // to go reading logs.
+    expect(res.body.error).toMatch(/already running on KB123\/DS123/);
+    expect(res.body.error).not.toMatch(/Internal server error/);
+  });
+
+  it('does not name Bedrock as the culprit when the middleware lacks the grant', async () => {
+    // 403 rather than 502: a missing IAM action is not a pipeline failure, and
+    // the two send an operator to different places.
+    m(getKb).mockResolvedValue(KB);
+    agentSend.mockRejectedValue(Object.assign(
+      new Error('is not authorized to perform: bedrock:StartIngestionJob'),
+      { name: 'AccessDeniedException' },
+    ));
+    const res = await request(buildApp()).post('/api/admin/kb-registry/kb-row-1/sync').send({});
+    expect(res.status).toBe(403);
+    expect(res.body.conflict).toBe(false);
+    expect(res.body.error).toMatch(/bedrock:StartIngestionJob/);
+  });
+});
+
+describe('offline (MOCK_AGENTCORE), the two Bedrock-backed routes', () => {
+  // This pair was the last KB surface with no mock branch, and it failed in the
+  // shape docs/mock-floor.md calls the worst one: the page appeared to work.
+  // Both handlers sent to Bedrock unconditionally, so under `dev:mock` they
+  // reached the real account with whatever credentials the developer had —
+  // verified by hand, an honest AccessDeniedException from a live STS role.
+  // /sync surfaced it as a red banner and /jobs swallowed it into
+  // `degraded({ jobs: [] })`, i.e. "this knowledge base has never synced". Net
+  // effect: the Knowledge page's primary button could not be pressed offline,
+  // and if it had been, nothing would have shown for it.
+  //
+  // `agentSend` is the assertion. It is the only way into the SDK from this
+  // router, so "not called" is the whole claim.
+  beforeEach(() => {
+    (config as unknown as { mock: Record<string, boolean> }).mock.agentcore = true;
+    // Offline the registry row IS a mock registry row, so it names the pair the
+    // ingestion-job fixture is keyed on. `KB`'s KB123/DS123 are stand-ins for
+    // the live path and match no fixture row — which is itself correct: a
+    // second knowledge base in the registry has its own data source and an
+    // honestly empty history, not this one's jobs.
+    m(getKb).mockResolvedValue({
+      ...KB, bedrockKbId: 'KBMOCK0001AB', dataSourceId: 'DSMOCK0001AB',
+    });
+  });
+  afterEach(() => {
+    (config as unknown as { mock: Record<string, boolean> }).mock.agentcore = false;
+    fixtureRegistry.resetAll('default');
+  });
+
+  it('start a sync and it shows up in the history, with no AWS call either way', async () => {
+    const app = buildApp();
+    const before = await request(app).get('/api/admin/kb-registry/kb-row-1/jobs');
+    expect(before.status).toBe(200);
+    expect(before.body.jobs.length).toBeGreaterThan(0);
+    // Not `degraded` — that flag is how a refused listing used to read, and it
+    // is the difference between "Bedrock said no" and "nothing has run".
+    expect(before.body.degraded).toBeUndefined();
+
+    const started = await request(app).post('/api/admin/kb-registry/kb-row-1/sync').send({});
+    expect(started.status).toBe(200);
+    expect(started.body.jobId).toBeTruthy();
+
+    const after = await request(app).get('/api/admin/kb-registry/kb-row-1/jobs');
+    expect(after.body.jobs.length).toBe(before.body.jobs.length + 1);
+    expect(after.body.jobs[0].jobId).toBe(started.body.jobId);
+    expect(after.body.jobs[0].status).toBe('STARTING');
+
+    // Pressing it again is the 409, reached by doing it — which is also the only
+    // way an operator reaches it.
+    const again = await request(app).post('/api/admin/kb-registry/kb-row-1/sync').send({});
+    expect(again.status).toBe(409);
+    expect(again.body.conflict).toBe(true);
+
+    expect(agentSend).not.toHaveBeenCalled();
+  });
+
+  it('lists a job with the same keys the live path emits', async () => {
+    // A key that exists offline but not online is how a mock stops being a
+    // contract, so the two shapes are pinned against each other rather than
+    // each against a hand-typed list.
+    const res = await request(buildApp()).get('/api/admin/kb-registry/kb-row-1/jobs');
+    expect(Object.keys(res.body.jobs[0]!).sort()).toEqual([
+      'dataSourceId', 'description', 'documentsDeleted', 'documentsFailed',
+      'documentsIndexed', 'documentsScanned', 'durationMs', 'failureReasons',
+      'jobId', 'startedAt', 'status', 'updatedAt',
+    ]);
+    expect(agentSend).not.toHaveBeenCalled();
+  });
 });
 
 // ── Jobs + docs ────────────────────────────────────────────────────────────
@@ -527,6 +642,13 @@ describe('GET /:id/jobs', () => {
       startedAt: '2026-08-20T09:00:00.000Z', updatedAt: '2026-08-20T09:02:30.000Z',
       description: 'nightly', durationMs: 150_000,
       documentsScanned: 163, documentsIndexed: 15, documentsFailed: 1, documentsDeleted: 2,
+      // Present and empty even though this job failed a document: the summary
+      // shape Bedrock returns from ListIngestionJobs carries no reasons at all
+      // (GetIngestionJob does, which is the portal's "details" button). It is
+      // emitted so the mock branch and this path have one shape — a key that
+      // exists offline but not online is how a mock stops being a contract —
+      // and `toEqual` is doing its job by refusing to ignore it.
+      failureReasons: [],
     });
   });
 

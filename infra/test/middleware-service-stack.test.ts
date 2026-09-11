@@ -326,3 +326,81 @@ describe('websocket-gateway wiring', () => {
     assert.ok(!secretNames.includes('GATEWAY_SERVICE_AUTH_SECRET'));
   });
 });
+
+// ─── The KB surface's grants and the config that names them ──────────────────
+//
+// The deployed middleware reported an EMPTY knowledge base that held 157 indexed
+// documents behind an AVAILABLE data source with two COMPLETE sync jobs:
+// /api/ingest/jobs returned `[]`, /api/ingest/storage returned
+// `bucket: "", totalObjects: 0, kb.totalDocuments: 0`, the reconcile page's
+// last-sync column read "—", and its banner claimed the documents had never
+// been indexed. Two independent causes, both of this stack's making, both of
+// which fail by reporting nothing rather than by erroring:
+//
+//   1. The task role granted `bedrock:ListDataSources` but none of the three
+//      Ingestion* actions, so every "when did this sync" read got AccessDenied
+//      and fell into a catch.
+//   2. Only the bucket ARNs were passed, never the NAMES — so the task held S3
+//      permissions on a bucket it could not name, and read an empty one.
+//
+// Neither shows up in stack status, the health check, or the page. These tests
+// are the judge, because there is nothing else to notice them.
+
+describe('the KB surface has the grants and the config it needs', () => {
+  function statementBySid(template: Template, sid: string): any {
+    const s = Object.values<any>(template.findResources('AWS::IAM::Policy')).flatMap(
+      (p) => (p.Properties?.PolicyDocument?.Statement ?? []) as any[],
+    ).find((st) => st.Sid === sid);
+    assert.ok(s, `expected an IAM statement with Sid ${sid}`);
+    return s;
+  }
+
+  test('the ingestion-job actions are granted — without them the KB reads as empty', () => {
+    const kb = statementBySid(closedTemplate, 'BedrockKBProvisioning');
+    const actions: string[] = Array.isArray(kb.Action) ? kb.Action : [kb.Action];
+    for (const action of [
+      'bedrock:ListIngestionJobs',   // sync history: /api/ingest/jobs, the reconcile columns
+      'bedrock:GetIngestionJob',     // the live SSE job monitor in routes/ingest.ts
+      'bedrock:StartIngestionJob',   // every Sync button
+    ]) {
+      assert.ok(
+        actions.includes(action),
+        `${action} is missing — the KB surface will report empty instead of failing`,
+      );
+    }
+  });
+
+  test('the data-source actions it already relied on are still there', () => {
+    // The asymmetry is the whole bug: with List*DataSources granted and
+    // ListIngestionJobs denied, the page found the source and then threw the
+    // finding away. Pinning both halves keeps them from drifting apart again.
+    const kb = statementBySid(closedTemplate, 'BedrockKBProvisioning');
+    const actions: string[] = Array.isArray(kb.Action) ? kb.Action : [kb.Action];
+    for (const action of ['bedrock:ListDataSources', 'bedrock:ListKnowledgeBases']) {
+      assert.ok(actions.includes(action), `${action} is missing`);
+    }
+  });
+
+  test('the bucket NAMES reach the container, not just the ARNs in IAM', () => {
+    // config.foundation.documentsBucket reads DOCUMENTS_BUCKET. With it unset,
+    // /api/ingest/storage answered `bucket: ""` on a bucket holding the corpus.
+    const env = (containerDefinition(closedTemplate).Environment ?? []) as any[];
+    const names = env.map((e) => e.Name);
+    for (const key of ['DOCUMENTS_BUCKET', 'ARTIFACTS_BUCKET']) {
+      assert.ok(names.includes(key), `${key} must be in the container environment`);
+    }
+  });
+
+  test('KB_SERVICE_ROLE_ARN is set — the PassRole grant is useless without it', () => {
+    // providers/kb-registry.ts fails KB provisioning at step 4 with
+    // "KB_SERVICE_ROLE_ARN not configured" when this is absent, while the
+    // iam:PassRole grant for that exact role sits right there unused.
+    const env = (containerDefinition(closedTemplate).Environment ?? []) as any[];
+    const entry = env.find((e) => e.Name === 'KB_SERVICE_ROLE_ARN');
+    assert.ok(entry, 'KB_SERVICE_ROLE_ARN must be in the container environment');
+    assert.ok(
+      JSON.stringify(entry.Value).includes('kb-service-role'),
+      'KB_SERVICE_ROLE_ARN must name the KB service role that PassRole allows',
+    );
+  });
+});

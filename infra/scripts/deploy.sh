@@ -167,9 +167,12 @@ echo "── Checking for orphaned ECR repositories ──"
 # from this list survives a teardown, and its stack then fails to create with
 # "Resource of type 'AWS::ECR::Repository' ... already exists" — which is how
 # OrgIQ-MiddlewareService blocked a rebuild here, three stacks from the end.
-# Repos a stack CREATES. A leftover one blocks its stack from creating with
-# "Resource of type 'AWS::ECR::Repository' ... already exists", which is how
-# OrgIQ-MiddlewareService blocked a rebuild here three stacks from the end.
+#
+# Keep this in step with the repos AgentCoreRuntimeStack actually creates. The
+# two assessment agents were absent for exactly the reason the comment above
+# warns about — the list was written when there were six agents and did not
+# grow when the fleet did, so an orphaned orgiq-assessment-* repo would have
+# sailed past the sweep and failed OrgIQ-AgentCoreRuntime on create.
 ECR_REPOS=(
   "${PREFIX}-supervisor"
   "${PREFIX}-search"
@@ -177,6 +180,8 @@ ECR_REPOS=(
   "${PREFIX}-advisor"
   "${PREFIX}-ingestion"
   "${PREFIX}-graph-builder"
+  "${PREFIX}-assessment-scorer"
+  "${PREFIX}-assessment-drafter"
   "${PREFIX}-agent-base"
   "${PREFIX}-devbox"
   "${PREFIX}-middleware"
@@ -353,6 +358,76 @@ if [[ "${KB_RETRIED:-false}" == "false" ]] && kb_expected && kb_hit_datapi_race;
   aws cloudformation wait stack-delete-complete --stack-name OrgIQ-KnowledgeBase --region "$REGION" 2>/dev/null || true
   echo "  Re-running the deploy once (Data API endpoint is stable by now)..."
   KB_RETRIED=true
+  DEPLOY_RC=0
+  run_cdk_deploy || DEPLOY_RC=$?
+fi
+
+# ── Targeted single-shot recovery for a replacement blocked by --no-rollback ──
+#
+# `--no-rollback` above is a real win when iterating, and it has one hard edge:
+# CloudFormation REFUSES outright any update that would REPLACE a resource while
+# rollback is disabled — "Replacement type updates not supported on stack with
+# disable-rollback" — and the stack lands in UPDATE_FAILED having changed
+# nothing. An ECS TaskDefinition is replaced on every change, so this made
+# OrgIQ-MiddlewareService's task definition permanently un-updatable *through
+# this script*: every image push, env var and IAM change failed identically, and
+# the recovery had to be run by hand each time.
+#
+# Two things made it worse than a plain failure. The stack is left in a
+# NON-terminal state, so the obvious next move — re-run the deploy — fails with
+# a completely different error ("please use the disable-rollback parameter")
+# that reads like a new problem. And `cdk deploy` exits 0 through both, so
+# without the reconciliation below the script would have called it a success.
+#
+# So: detect exactly that reason, roll the affected stacks back to a terminal
+# state, and re-run the deploy ONCE with rollback enabled — which permits
+# replacements. Bounded to a single shot (REPLACE_RETRIED) so a genuinely broken
+# deploy cannot loop, and scoped to EXPECTED_STACKS so it never rolls back a
+# stack this invocation was not asked to touch.
+replacement_blocked() {
+  local stack="$1" reason
+  [[ "$(stack_status "$stack")" == "UPDATE_FAILED" ]] || return 1
+  reason=$(aws cloudformation describe-stack-events \
+    --stack-name "$stack" --region "$REGION" \
+    --query "StackEvents[?ResourceStatus=='UPDATE_FAILED'].ResourceStatusReason" \
+    --output text 2>/dev/null || echo "")
+  echo "$reason" | grep -qi 'Replacement type updates not supported'
+}
+
+# Back to a terminal state. `rollback-stack` is the documented way out of a
+# non-terminal UPDATE_FAILED; there is no waiter for it — `stack-update-complete`
+# treats UPDATE_ROLLBACK_COMPLETE as a failure — so poll for any status that is
+# not still in progress.
+await_terminal() {
+  local stack="$1" i st
+  for i in $(seq 1 60); do
+    st=$(stack_status "$stack")
+    case "$st" in *_IN_PROGRESS) sleep 10 ;; *) echo "$st"; return 0 ;; esac
+  done
+  stack_status "$stack"
+}
+
+BLOCKED=()
+if [[ "${REPLACE_RETRIED:-false}" == "false" ]]; then
+  for stack in "${EXPECTED_STACKS[@]}"; do
+    replacement_blocked "$stack" && BLOCKED+=("$stack")
+  done
+fi
+if [[ ${#BLOCKED[@]} -gt 0 ]]; then
+  echo ""
+  echo "── ${#BLOCKED[@]} stack(s) need a resource REPLACEMENT, which --no-rollback forbids ──"
+  for stack in "${BLOCKED[@]}"; do
+    echo "  ${stack}: rolling back to a terminal state..."
+    aws cloudformation rollback-stack --stack-name "$stack" --region "$REGION" >/dev/null 2>&1 || true
+    echo "  ${stack}: now $(await_terminal "$stack")"
+  done
+  echo "  Re-running the deploy once WITH rollback enabled (replacements allowed)..."
+  KEEP_FLAGS=()
+  for f in "${CDK_FLAGS[@]}"; do
+    [[ "$f" == "--no-rollback" ]] || KEEP_FLAGS+=("$f")
+  done
+  CDK_FLAGS=("${KEEP_FLAGS[@]}")
+  REPLACE_RETRIED=true
   DEPLOY_RC=0
   run_cdk_deploy || DEPLOY_RC=$?
 fi

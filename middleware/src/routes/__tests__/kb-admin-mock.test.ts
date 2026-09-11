@@ -57,6 +57,33 @@ describe('GET /api/admin/kb-registry/health (mock)', () => {
     const drifted = res.body.kbs.find((k: { reachable: boolean }) => k.reachable === false);
     expect(drifted.problem).toMatch(/no longer exists in AWS/);
   });
+
+  it('reports each KB\'s OWN sync state, so a KB that never synced does not borrow one', async () => {
+    // These three fields were literals — `dataSourceCount: 1`,
+    // `lastSyncStatus: 'COMPLETE'`, `Date.now() - 3h` — applied to every
+    // reachable row alike. The widget therefore claimed a successful recent sync
+    // for a knowledge base with no ingestion history at all, and disagreed with
+    // the job list beside it about the one that does. They now come from
+    // `syncState`, the same function the reconcile page uses, scoped by the
+    // row's own data source.
+    const res = await request(buildApp()).get('/api/admin/kb-registry/health');
+    const bySlug = (slug: string) => res.body.kbs.find((k: { slug: string }) => k.slug === slug);
+
+    // The fixture's ingestion history belongs to this one.
+    const seeded = bySlug('orgiq-default');
+    expect(seeded.lastSyncStatus).toBe('COMPLETE');
+    expect(seeded.dataSourceCount).toBeGreaterThan(0);
+    // Derived from a fixture stamp, not minted here: an offset off the wall
+    // clock is unfreezable, which is how this one escaped the clock rule.
+    expect(Date.parse(seeded.lastSyncAt)).toBeLessThanOrEqual(Date.now());
+
+    // This one has a data source and no jobs. "Never synced" is the answer, and
+    // it must not read as a failure either.
+    const never = bySlug('orgiq-onboarding');
+    expect(never.dataSourceCount).toBe(1);
+    expect(never.lastSyncStatus).toBeNull();
+    expect(never.lastSyncAt).toBeNull();
+  });
 });
 
 describe('GET /api/admin/kb-registry (mock)', () => {

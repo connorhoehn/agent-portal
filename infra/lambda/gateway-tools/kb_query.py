@@ -13,6 +13,15 @@ import boto3
 KB_ID = os.environ['KB_ID']
 REGION = os.environ.get('REGION', 'us-east-1')
 
+# Bedrock's DEFAULT search type against this Aurora/pgvector store returns the
+# right nearest neighbours in EXACTLY REVERSE relevance order (it reports cosine
+# distance in the `score` field), so a caller taking the top-N gets the least
+# relevant hits. Measured top-1 accuracy over 8 queries: default 0/8, HYBRID 8/8.
+# Kept as a literal rather than imported because this Lambda ships on its own —
+# `agents/_shared/kb_resolver.py::KB_SEARCH_TYPE` is the same decision with the
+# full write-up, and the two must be changed together.
+KB_SEARCH_TYPE = os.environ.get('KB_SEARCH_TYPE', 'HYBRID')
+
 bedrock_agent = boto3.client('bedrock-agent-runtime', region_name=REGION)
 
 
@@ -31,6 +40,7 @@ def handler(event: dict, context) -> dict:
     retrieval_config = {
         'vectorSearchConfiguration': {
             'numberOfResults': max_results,
+            'overrideSearchType': KB_SEARCH_TYPE,
         }
     }
 

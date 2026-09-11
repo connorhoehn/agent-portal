@@ -319,15 +319,49 @@ export async function verifySession(cookieValue: string): Promise<Session | null
   }
 }
 
+/**
+ * Whether to mark a session-shaped cookie `Secure`.
+ *
+ * This was `process.env['NODE_ENV'] === 'production'`, which conflates "this is
+ * a production build" with "this connection is encrypted". They came apart on
+ * the deployed ECS middleware: the ALB serves plain **http** (deliberately —
+ * Cognito rejects non-localhost http callbacks, so the stack leaves
+ * COGNITO_CALLBACK_URL unset and the user picker is the intended login there),
+ * while NODE_ENV is `production`. So `POST /api/session/login` answered **200**
+ * with a complete, correct session body and a `Set-Cookie` no client would
+ * store. Login succeeded, nothing errored, and every subsequent request was
+ * `Unauthenticated` — the whole app unreachable behind a green health check.
+ *
+ * `req.secure` is the honest predicate: it reads the real scheme, and behind a
+ * proxy it reads `X-Forwarded-Proto` — which is why `index.ts` sets
+ * `trust proxy`. The two move together; changing one alone re-breaks this.
+ *
+ * The upside over a hardcoded flag is that it needs no revisiting: put TLS in
+ * front of this service and the cookie becomes `Secure` on its own. Set
+ * `SESSION_COOKIE_SECURE=true|false` to override when the proxy cannot be
+ * trusted to report the scheme.
+ */
+function cookieSecure(res: Response): boolean {
+  const override = process.env['SESSION_COOKIE_SECURE'];
+  if (override === 'true') return true;
+  if (override === 'false') return false;
+  return res.req?.secure === true;
+}
+
 export function setSessionCookie(res: Response, value: string): void {
   res.cookie(COOKIE_NAME, value, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env['NODE_ENV'] === 'production',
+    secure: cookieSecure(res),
     maxAge: COOKIE_MAX_AGE_MS,
     path: '/',
   });
 }
+
+/** Shared with routes/auth.ts so the OIDC state cookie cannot drift from the
+ *  session cookie's rule — a `Secure` state cookie over http breaks the SSO
+ *  round trip in exactly the same silent way. */
+export { cookieSecure };
 
 export function clearSessionCookie(res: Response): void {
   res.clearCookie(COOKIE_NAME, { path: '/' });

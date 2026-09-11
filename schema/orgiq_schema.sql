@@ -92,6 +92,26 @@ CREATE TABLE IF NOT EXISTS documents (
   ingested_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Corpus metadata, written by `schema/synth/load.py::upsert_document` for every
+-- doc type: `doc_type` classifies the doc (adr | postmortem | perf_review |
+-- slack_thread | all_hands), and `headline`/`published_at`/`section` carry the
+-- per-type metadata `schema/synth/generate.py` derives (an ADR's title and
+-- decision date under section 'decisions', an incident's title and date under
+-- 'incidents', and so on).
+--
+-- These are ADD COLUMN rather than part of the CREATE above because a retired
+-- tenant's schema file originally added them, and deleting that file took the
+-- only definition with it — so a cluster loaded from this file alone had none
+-- of them and the corpus load failed on `column "doc_type" does not exist`,
+-- while a cluster loaded before the removal still had all four. Defining them
+-- here converges both. IF NOT EXISTS keeps that idempotent.
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS doc_type     TEXT;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS headline     TEXT;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS section      TEXT;
+
+CREATE INDEX IF NOT EXISTS documents_doc_type_idx ON documents (doc_type);
+
 -- ---------------------------------------------------------------------------
 -- Edges — one table per relationship type (mirrors the former Cypher labels).
 -- Each row has an optional `weight` so PageRank-style scoring can use it.

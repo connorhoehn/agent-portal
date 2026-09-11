@@ -256,11 +256,17 @@ ingestRouter.post('/start', asyncHandler(async (req, res) => {
       });
       return;
     }
-    const job = await startIngestionJob(entry.dataSourceId, description, entry.bedrockKbId);
-    if (!job) {
-      res.status(500).json({ error: 'StartIngestionJob failed — check middleware logs' });
+    const outcome = await startIngestionJob(entry.dataSourceId, description, entry.bedrockKbId);
+    // The provider classifies; the route relays. This used to be a flat 500
+    // "check middleware logs" for every failure — including Bedrock refusing
+    // because the sync is ALREADY RUNNING, which is the platform working and
+    // read on screen as the pipeline being broken. `conflict` is surfaced so
+    // the portal can say "already running" rather than colour it as an error.
+    if (!outcome.ok) {
+      res.status(outcome.status).json({ error: outcome.error, conflict: outcome.conflict });
       return;
     }
+    const { ok: _ok, ...job } = outcome;
     res.json({ ok: true, job, kbSlug, knowledgeBaseId: job.knowledgeBaseId });
     return;
   }
@@ -269,11 +275,12 @@ ingestRouter.post('/start', asyncHandler(async (req, res) => {
     res.status(400).json({ error: 'dataSourceId required' });
     return;
   }
-  const job = await startIngestionJob(dataSourceId, description);
-  if (!job) {
-    res.status(500).json({ error: 'StartIngestionJob failed — check middleware logs' });
+  const outcome = await startIngestionJob(dataSourceId, description);
+  if (!outcome.ok) {
+    res.status(outcome.status).json({ error: outcome.error, conflict: outcome.conflict });
     return;
   }
+  const { ok: _ok, ...job } = outcome;
   res.json({ ok: true, job, knowledgeBaseId: job.knowledgeBaseId });
 }));
 
@@ -492,11 +499,12 @@ ingestRouter.get('/crawl/:id/manifest', (req, res) => {
 ingestRouter.post('/crawl/:id/sync', asyncHandler(async (req, res) => {
   const session = getCrawl(String(req.params['id']));
   if (!session) { res.status(404).json({ error: 'Crawl not found' }); return; }
-  const job = await triggerKbSyncForCrawl(session.id);
-  if (!job) {
-    res.status(502).json({ error: 'StartIngestionJob failed — check middleware logs' });
+  const outcome = await triggerKbSyncForCrawl(session.id);
+  if (!outcome.ok) {
+    res.status(outcome.status).json({ error: outcome.error, conflict: outcome.conflict });
     return;
   }
+  const { ok: _ok, ...job } = outcome;
   res.status(202).json({ ok: true, job });
 }));
 

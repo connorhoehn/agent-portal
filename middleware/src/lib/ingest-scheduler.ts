@@ -36,8 +36,16 @@ function registerTask(s: IngestSchedule): void {
     const entry = schedules.find(x => x.id === s.id);
     if (entry) {
       entry.lastRunAt = new Date().toISOString();
-      entry.lastJobId = result?.jobId ?? null;
-      entry.lastStatus = result ? result.status : 'FAILED';
+      entry.lastJobId = result.ok ? result.jobId : null;
+      // A schedule that fires while a manual sync is still running is not a
+      // failed schedule — Bedrock runs one job per data source, so the corpus
+      // is being indexed either way. Recording SKIPPED keeps the operator from
+      // chasing a red row in the schedule list that describes nothing wrong;
+      // every other failure still records FAILED, and the reason is logged.
+      if (result.ok) entry.lastStatus = result.status;
+      else if (result.conflict) entry.lastStatus = 'SKIPPED';
+      else entry.lastStatus = 'FAILED';
+      if (!result.ok) console.warn(`[scheduler] ${s.id}: ${result.error}`);
       persist();
     }
   }, { scheduled: true, timezone: 'UTC' });

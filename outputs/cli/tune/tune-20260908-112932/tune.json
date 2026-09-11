@@ -1,0 +1,836 @@
+{
+  "action": "tune",
+  "artifacts": {
+    "root": "/Users/connor.hoehn/projects/aws-agentcore/outputs/cli/tune/tune-20260908-112932",
+    "summary": "/Users/connor.hoehn/projects/aws-agentcore/outputs/cli/tune/tune-20260908-112932/tune.json"
+  },
+  "backend": {
+    "custom_qmv_or_qmm_env": {},
+    "mlx_core_path": "/opt/homebrew/var/mtplx/venv-2.11.2/lib/python3.13/site-packages/mlx/core.cpython-313-darwin.so",
+    "mlx_lm_version": "0.31.3",
+    "mlx_version": "0.32.2",
+    "stock_mlx_likely": true
+  },
+  "best": {
+    "control_field": "depth",
+    "depth": 2,
+    "draft_block_size": null,
+    "mode": "D2",
+    "multiplier_vs_ar": 2.9001677722766614,
+    "tok_s": 33.98911440505076
+  },
+  "best_multiplier": {
+    "acceptance_collapsed": [],
+    "ar_tok_s": 11.719706263189375,
+    "available": true,
+    "failure_reasons": [],
+    "quality_rejected": [],
+    "raw_winner": {
+      "control_field": "depth",
+      "depth": 2,
+      "draft_block_size": null,
+      "mode": "D2",
+      "multiplier_vs_ar": 2.9001677722766614,
+      "tok_s": 33.98911440505076
+    },
+    "tie_breaker": {
+      "applied": false,
+      "prefer_deeper_within_pct": 2.0
+    },
+    "verdict": "mtp_depth_wins",
+    "winner": {
+      "control_field": "depth",
+      "depth": 2,
+      "draft_block_size": null,
+      "mode": "D2",
+      "multiplier_vs_ar": 2.9001677722766614,
+      "tok_s": 33.98911440505076
+    }
+  },
+  "control_field": "depth",
+  "diagnostics": {
+    "fans_pinned": true,
+    "model_source_notes": [],
+    "telemetry_enabled": false,
+    "telemetry_env": "MTPLX_BENCH_TUNE_TELEMETRY"
+  },
+  "fans_pinned": true,
+  "hardware": {
+    "arm64": 1,
+    "chip": "Apple M4 Pro",
+    "chip_family": "Apple M4 Pro",
+    "efficiency_cores": 4,
+    "hw_model": "Mac16,7",
+    "logical_cpu": 14,
+    "machine": "arm64",
+    "macos_build": "25G83",
+    "macos_version": "26.6.2",
+    "memory_gib": 48.0,
+    "perf_cores": 10,
+    "physical_cpu": 14,
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "system": "Darwin"
+  },
+  "model": "/Users/connor.hoehn/.mtplx/models/Youssofal--Qwen3.8-27B-MTPLX-Optimized-Speed",
+  "profile": "turbo",
+  "results": [
+    {
+      "artifact": "/Users/connor.hoehn/projects/aws-agentcore/outputs/cli/tune/tune-20260908-112932/ar.json",
+      "candidate": "ar",
+      "command": [
+        "/opt/homebrew/var/mtplx/venv-2.11.2/bin/python",
+        "-P",
+        "-m",
+        "mtplx.cli",
+        "tune",
+        "--_candidate",
+        "ar",
+        "--_candidate-output",
+        "/Users/connor.hoehn/projects/aws-agentcore/outputs/cli/tune/tune-20260908-112932/ar.json",
+        "--model",
+        "/Users/connor.hoehn/.mtplx/models/Youssofal--Qwen3.8-27B-MTPLX-Optimized-Speed",
+        "--profile",
+        "turbo",
+        "--max-tokens",
+        "512",
+        "--limit",
+        "1",
+        "--seed",
+        "0",
+        "--depths",
+        "1,2,3",
+        "--yes",
+        "--mtp-cache-policy",
+        "persistent",
+        "--mtp-history-policy",
+        "committed",
+        "--temperature",
+        "1.0",
+        "--top-p",
+        "0.95",
+        "--top-k",
+        "20"
+      ],
+      "control_field": "depth",
+      "decode_elapsed_s": 43.687101749994326,
+      "decode_tok_s": 11.719706263189375,
+      "depth": null,
+      "draft_block_size": null,
+      "elapsed_s": 45.27647562499624,
+      "end_to_end_tok_s": 11.308300677832243,
+      "finish_reasons": {
+        "length": 1
+      },
+      "generated_tokens": 512,
+      "generation_window_s": 45.2774658203125,
+      "generation_windows": [
+        {
+          "duration_s": 45.2774658203125,
+          "end": 1788881460.710687,
+          "start": 1788881415.433221
+        }
+      ],
+      "hit_token_budget": true,
+      "hit_token_budget_count": 1,
+      "mode": "AR",
+      "multiplier_vs_ar": 1.0,
+      "prompt_eval_time_s": 1.5889160429942422,
+      "quality_failure_validations": [],
+      "quality_inconclusive_validations": [
+        {
+          "detail": "unclosed delimiter(s): (",
+          "name": "balanced_delimiters",
+          "row_index": 0
+        }
+      ],
+      "quality_passed": true,
+      "returncode": 0,
+      "stdout": "/Users/connor.hoehn/projects/aws-agentcore/outputs/cli/tune/tune-20260908-112932/ar.log",
+      "tok_s": 11.719706263189375,
+      "validations_passed": 1,
+      "validations_total": 2,
+      "verify_ms_per_call": null
+    },
+    {
+      "acceptance_by_depth": [
+        0.9732620320855615
+      ],
+      "acceptance_percent_by_depth": [
+        97.32620320855615
+      ],
+      "accepted_by_depth": [
+        182
+      ],
+      "artifact": "/Users/connor.hoehn/projects/aws-agentcore/outputs/cli/tune/tune-20260908-112932/d1.json",
+      "candidate": "1",
+      "command": [
+        "/opt/homebrew/var/mtplx/venv-2.11.2/bin/python",
+        "-P",
+        "-m",
+        "mtplx.cli",
+        "tune",
+        "--_candidate",
+        "1",
+        "--_candidate-output",
+        "/Users/connor.hoehn/projects/aws-agentcore/outputs/cli/tune/tune-20260908-112932/d1.json",
+        "--model",
+        "/Users/connor.hoehn/.mtplx/models/Youssofal--Qwen3.8-27B-MTPLX-Optimized-Speed",
+        "--profile",
+        "turbo",
+        "--max-tokens",
+        "512",
+        "--limit",
+        "1",
+        "--seed",
+        "0",
+        "--depths",
+        "1,2,3",
+        "--yes",
+        "--mtp-cache-policy",
+        "persistent",
+        "--mtp-history-policy",
+        "committed",
+        "--temperature",
+        "1.0",
+        "--top-p",
+        "0.95",
+        "--top-k",
+        "20"
+      ],
+      "control_field": "depth",
+      "decode_elapsed_s": 20.00715545908315,
+      "decode_tok_s": 25.590844288039683,
+      "depth": 1,
+      "draft_block_size": null,
+      "drafted_by_depth": [
+        187
+      ],
+      "elapsed_s": 21.613600000040606,
+      "end_to_end_tok_s": 23.68878854050404,
+      "finish_reasons": {
+        "length": 1
+      },
+      "generated_tokens": 512,
+      "generation_window_s": 21.61473774909973,
+      "generation_windows": [
+        {
+          "duration_s": 21.61473774909973,
+          "end": 1788881500.3084779,
+          "start": 1788881478.6937401
+        }
+      ],
+      "hit_token_budget": true,
+      "hit_token_budget_count": 1,
+      "mean_accept_probability_by_depth": [
+        0.978896694355772
+      ],
+      "mode": "D1",
+      "multiplier_vs_ar": 2.1835738638278337,
+      "prompt_eval_time_s": 1.6057282100082375,
+      "quality_failure_validations": [],
+      "quality_inconclusive_validations": [],
+      "quality_passed": true,
+      "returncode": 0,
+      "stdout": "/Users/connor.hoehn/projects/aws-agentcore/outputs/cli/tune/tune-20260908-112932/d1.log",
+      "tok_s": 25.590844288039683,
+      "validations_passed": 2,
+      "validations_total": 2,
+      "verify_calls": 194,
+      "verify_eval_ms_per_call": 14.385976177249008,
+      "verify_forward_ms_per_call": 82.60844801114536,
+      "verify_hidden_eval_ms_per_call": 13.147511994154144,
+      "verify_ms_per_call": 96.99442418839436,
+      "verify_time_s": 18.816918292548507
+    },
+    {
+      "acceptance_by_depth": [
+        0.992,
+        0.9758064516129032
+      ],
+      "acceptance_percent_by_depth": [
+        99.2,
+        97.58064516129032
+      ],
+      "accepted_by_depth": [
+        124,
+        121
+      ],
+      "artifact": "/Users/connor.hoehn/projects/aws-agentcore/outputs/cli/tune/tune-20260908-112932/d2.json",
+      "candidate": "2",
+      "command": [
+        "/opt/homebrew/var/mtplx/venv-2.11.2/bin/python",
+        "-P",
+        "-m",
+        "mtplx.cli",
+        "tune",
+        "--_candidate",
+        "2",
+        "--_candidate-output",
+        "/Users/connor.hoehn/projects/aws-agentcore/outputs/cli/tune/tune-20260908-112932/d2.json",
+        "--model",
+        "/Users/connor.hoehn/.mtplx/models/Youssofal--Qwen3.8-27B-MTPLX-Optimized-Speed",
+        "--profile",
+        "turbo",
+        "--max-tokens",
+        "512",
+        "--limit",
+        "1",
+        "--seed",
+        "0",
+        "--depths",
+        "1,2,3",
+        "--yes",
+        "--mtp-cache-policy",
+        "persistent",
+        "--mtp-history-policy",
+        "committed",
+        "--temperature",
+        "1.0",
+        "--top-p",
+        "0.95",
+        "--top-k",
+        "20"
+      ],
+      "control_field": "depth",
+      "decode_elapsed_s": 15.063646375085227,
+      "decode_tok_s": 33.98911440505076,
+      "depth": 2,
+      "draft_block_size": null,
+      "drafted_by_depth": [
+        125,
+        124
+      ],
+      "elapsed_s": 16.702222375024576,
+      "end_to_end_tok_s": 30.65460323205921,
+      "finish_reasons": {
+        "length": 1
+      },
+      "generated_tokens": 512,
+      "generation_window_s": 16.703472137451172,
+      "generation_windows": [
+        {
+          "duration_s": 16.703472137451172,
+          "end": 1788881533.996877,
+          "start": 1788881517.2934048
+        }
+      ],
+      "hit_token_budget": true,
+      "hit_token_budget_count": 1,
+      "mean_accept_probability_by_depth": [
+        0.985792675968254,
+        0.9644876834631808
+      ],
+      "mode": "D2",
+      "multiplier_vs_ar": 2.9001677722766614,
+      "prompt_eval_time_s": 1.6379178749630228,
+      "quality_failure_validations": [],
+      "quality_inconclusive_validations": [],
+      "quality_passed": true,
+      "returncode": 0,
+      "stdout": "/Users/connor.hoehn/projects/aws-agentcore/outputs/cli/tune/tune-20260908-112932/d2.log",
+      "tok_s": 33.98911440505076,
+      "validations_passed": 2,
+      "validations_total": 2,
+      "verify_calls": 132,
+      "verify_eval_ms_per_call": 14.74941687863038,
+      "verify_forward_ms_per_call": 88.4447524960816,
+      "verify_hidden_eval_ms_per_call": 13.101812249232987,
+      "verify_ms_per_call": 103.19416937471198,
+      "verify_time_s": 13.621630357461981
+    },
+    {
+      "acceptance_by_depth": [
+        0.9809523809523809,
+        0.8761904761904762,
+        0.7904761904761904
+      ],
+      "acceptance_percent_by_depth": [
+        98.09523809523809,
+        87.61904761904762,
+        79.04761904761905
+      ],
+      "accepted_by_depth": [
+        103,
+        92,
+        83
+      ],
+      "artifact": "/Users/connor.hoehn/projects/aws-agentcore/outputs/cli/tune/tune-20260908-112932/d3.json",
+      "candidate": "3",
+      "command": [
+        "/opt/homebrew/var/mtplx/venv-2.11.2/bin/python",
+        "-P",
+        "-m",
+        "mtplx.cli",
+        "tune",
+        "--_candidate",
+        "3",
+        "--_candidate-output",
+        "/Users/connor.hoehn/projects/aws-agentcore/outputs/cli/tune/tune-20260908-112932/d3.json",
+        "--model",
+        "/Users/connor.hoehn/.mtplx/models/Youssofal--Qwen3.8-27B-MTPLX-Optimized-Speed",
+        "--profile",
+        "turbo",
+        "--max-tokens",
+        "512",
+        "--limit",
+        "1",
+        "--seed",
+        "0",
+        "--depths",
+        "1,2,3",
+        "--yes",
+        "--mtp-cache-policy",
+        "persistent",
+        "--mtp-history-policy",
+        "committed",
+        "--temperature",
+        "1.0",
+        "--top-p",
+        "0.95",
+        "--top-k",
+        "20"
+      ],
+      "control_field": "depth",
+      "decode_elapsed_s": 19.876923623960465,
+      "decode_tok_s": 25.758513222982558,
+      "depth": 3,
+      "draft_block_size": null,
+      "drafted_by_depth": [
+        105,
+        105,
+        105
+      ],
+      "elapsed_s": 21.556621207972057,
+      "end_to_end_tok_s": 23.751403109994456,
+      "finish_reasons": {
+        "length": 1
+      },
+      "generated_tokens": 512,
+      "generation_window_s": 21.62542724609375,
+      "generation_windows": [
+        {
+          "duration_s": 21.62542724609375,
+          "end": 1788881573.0665221,
+          "start": 1788881551.4410949
+        }
+      ],
+      "hit_token_budget": true,
+      "hit_token_budget_count": 1,
+      "mean_accept_probability_by_depth": [
+        0.9858350765970191,
+        0.8854897384905878,
+        0.7929912129184177
+      ],
+      "mode": "D3",
+      "multiplier_vs_ar": 2.197880445509792,
+      "prompt_eval_time_s": 1.6790665850276127,
+      "quality_failure_validations": [],
+      "quality_inconclusive_validations": [
+        {
+          "detail": "unclosed delimiter(s): ((",
+          "name": "balanced_delimiters",
+          "row_index": 0
+        }
+      ],
+      "quality_passed": true,
+      "returncode": 0,
+      "stdout": "/Users/connor.hoehn/projects/aws-agentcore/outputs/cli/tune/tune-20260908-112932/d3.log",
+      "tok_s": 25.758513222982558,
+      "validations_passed": 1,
+      "validations_total": 2,
+      "verify_calls": 113,
+      "verify_eval_ms_per_call": 15.145429269414791,
+      "verify_forward_ms_per_call": 115.25267144032564,
+      "verify_hidden_eval_ms_per_call": 12.992453484268513,
+      "verify_ms_per_call": 130.39810070974045,
+      "verify_time_s": 14.73498538020067
+    }
+  ],
+  "run_id": "tune-20260908-112932",
+  "saved": true,
+  "settings": {
+    "base_hidden_variant": null,
+    "candidate_settle_s": 5.0,
+    "concat_order": null,
+    "control_field": "depth",
+    "depths": "1,2,3",
+    "draft_core": null,
+    "draft_temperature": null,
+    "draft_top_k": null,
+    "draft_top_p": null,
+    "limit": 1,
+    "max_tokens": 512,
+    "mtp_cache_policy": "persistent",
+    "mtp_hidden_variant": null,
+    "mtp_history_policy": "committed",
+    "profile": "turbo",
+    "seed": 0,
+    "suite": "cold-long-code-192",
+    "temperature": 1.0,
+    "thinking": "disabled",
+    "tie_prefer_deeper_within_pct": 2.0,
+    "top_k": 20,
+    "top_p": 0.95
+  },
+  "software": {
+    "git_branch": "main",
+    "git_status": "## main...origin/main\n M schema/load_schema.py",
+    "mlx_lm_version": "0.31.3",
+    "mlx_version": "0.32.2",
+    "mtplx_version": "2.11.2",
+    "numpy_version": "2.5.3",
+    "python_executable": "/opt/homebrew/var/mtplx/venv-2.11.2/bin/python",
+    "python_version": "3.13.15 (main, Aug  5 2026, 12:25:43) [Clang 21.0.0 (clang-2100.1.1.101)]"
+  },
+  "state_key": "2e7c4a9e3a51131cdbebb92b702ca8b82ee2da7821eaa1b5d4569f10d92b47e2",
+  "state_path": "/Users/connor.hoehn/.mtplx/tuning.json",
+  "suite": "cold-long-code-192",
+  "thermal": {
+    "enabled": true,
+    "recovery": {
+      "recovered": false,
+      "stale_pid": null,
+      "still_running": false
+    },
+    "restore": {
+      "ok": true,
+      "reason": "max_owner_changed",
+      "skipped": true
+    },
+    "start": {
+      "attempts": [
+        {
+          "command": [
+            "sudo",
+            "-n",
+            "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+            "max"
+          ],
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "Fan 0: 1044 RPM \u2192 max (5777 RPM)\nFan 1: 1045 RPM \u2192 max (5777 RPM)"
+        }
+      ],
+      "command": [
+        "sudo",
+        "-n",
+        "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+        "max"
+      ],
+      "detection": {
+        "available": true,
+        "clock_anchor_enabled": false,
+        "clock_anchor_policy": "explicit experimental only; never used for product claims",
+        "instructions": "Install ThermalForge and ensure the thermalforge CLI is on PATH.",
+        "selected": {
+          "kind": "thermalforge",
+          "path": "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+          "version": {
+            "command": [
+              "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+              "--version"
+            ],
+            "ok": true,
+            "returncode": 0,
+            "stderr": "",
+            "stdout": "0.1.0"
+          }
+        },
+        "tools": [
+          {
+            "kind": "thermalforge",
+            "path": "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+            "version": {
+              "command": [
+                "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+                "--version"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "0.1.0"
+            }
+          }
+        ]
+      },
+      "dry_run": false,
+      "ok": true,
+      "profile": "performance"
+    },
+    "verified": {
+      "after": {
+        "actual_max_rpm": 5799,
+        "actual_min_rpm": 5675,
+        "capacity_max_rpm": 5777,
+        "capacity_min_rpm": 5777,
+        "fans": [
+          {
+            "actual_rpm": 5799,
+            "max_capacity_rpm": 5777,
+            "mode": "manual",
+            "raw": {
+              "actual_rpm": 5799,
+              "index": 0,
+              "max_rpm": 5777,
+              "min_rpm": 1350,
+              "mode": "manual",
+              "target_rpm": 5777
+            },
+            "rpm": 5799,
+            "target_rpm": 5777
+          },
+          {
+            "actual_rpm": 5675,
+            "max_capacity_rpm": 5777,
+            "mode": "manual",
+            "raw": {
+              "actual_rpm": 5675,
+              "index": 1,
+              "max_rpm": 5777,
+              "min_rpm": 1350,
+              "mode": "manual",
+              "target_rpm": 5777
+            },
+            "rpm": 5675,
+            "target_rpm": 5777
+          }
+        ],
+        "max_rpm": 5799,
+        "min_rpm": 5675,
+        "ok": true,
+        "raw": {
+          "attempts": [
+            {
+              "command": [
+                "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+                "status"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "{\n  \"fans\" : [\n    {\n      \"actual_rpm\" : 5799,\n      \"index\" : 0,\n      \"max_rpm\" : 5777,\n      \"min_rpm\" : 1350,\n      \"mode\" : \"manual\",\n      \"target_rpm\" : 5777\n    },\n    {\n      \"actual_rpm\" : 5675,\n      \"index\" : 1,\n      \"max_rpm\" : 5777,\n      \"min_rpm\" : 1350,\n      \"mode\" : \"manual\",\n      \"target_rpm\" : 5777\n    }\n  ],\n  \"temperatures\" : {\n    \"TAOL\" : 24.9,\n    \"TB0T\" : 28.3,\n    \"TCHP\" : 29.9,\n    \"TCMb\" : 47.1,\n    \"TG0B\" : 28.3,\n    \"TG0H\" : 28,\n    \"TG0V\" : 28.3,\n    \"TH0x\" : 27.9,\n    \"TMVR\" : 31,\n    \"TPDX\" : 37.8,\n    \"TRDX\" : 33.7,\n    \"TS0P\" : 33.7,\n    \"Tg05\" : 43.4,\n    \"Tg0L\" : 35.6,\n    \"Tg0j\" : 35.7,\n    \"Tp01\" : 40,\n    \"Tp02\" : 40,\n    \"Tp04\" : 40,\n    \"Tp05\" : 40,\n    \"Tp06\" : 40,\n    \"Tp08\" : 40,\n    \"Tp09\" : 40,\n    \"Tp0A\" : 40,\n    \"Tp0C\" : 40,\n    \"Tp0D\" : 40,\n    \"Tp0G\" : 40,\n    \"Tp0H\" : 40,\n    \"Tp0L\" : 40,\n    \"Tp0P\" : 40,\n    \"Tp0S\" : 40,\n    \"Tp0T\" : 40,\n    \"Tp0W\" : 40,\n    \"Tp0X\" : 40,\n    \"Tp0b\" : 40\n  }\n}"
+            }
+          ],
+          "detection": {
+            "available": true,
+            "clock_anchor_enabled": false,
+            "clock_anchor_policy": "explicit experimental only; never used for product claims",
+            "instructions": "Install ThermalForge and ensure the thermalforge CLI is on PATH.",
+            "selected": {
+              "kind": "thermalforge",
+              "path": "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+              "version": {
+                "command": [
+                  "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+                  "--version"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "0.1.0"
+              }
+            },
+            "tools": [
+              {
+                "kind": "thermalforge",
+                "path": "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+                "version": {
+                  "command": [
+                    "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+                    "--version"
+                  ],
+                  "ok": true,
+                  "returncode": 0,
+                  "stderr": "",
+                  "stdout": "0.1.0"
+                }
+              }
+            ]
+          },
+          "ok": true,
+          "status": {
+            "command": [
+              "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+              "status"
+            ],
+            "ok": true,
+            "returncode": 0,
+            "stderr": "",
+            "stdout": "{\n  \"fans\" : [\n    {\n      \"actual_rpm\" : 5799,\n      \"index\" : 0,\n      \"max_rpm\" : 5777,\n      \"min_rpm\" : 1350,\n      \"mode\" : \"manual\",\n      \"target_rpm\" : 5777\n    },\n    {\n      \"actual_rpm\" : 5675,\n      \"index\" : 1,\n      \"max_rpm\" : 5777,\n      \"min_rpm\" : 1350,\n      \"mode\" : \"manual\",\n      \"target_rpm\" : 5777\n    }\n  ],\n  \"temperatures\" : {\n    \"TAOL\" : 24.9,\n    \"TB0T\" : 28.3,\n    \"TCHP\" : 29.9,\n    \"TCMb\" : 47.1,\n    \"TG0B\" : 28.3,\n    \"TG0H\" : 28,\n    \"TG0V\" : 28.3,\n    \"TH0x\" : 27.9,\n    \"TMVR\" : 31,\n    \"TPDX\" : 37.8,\n    \"TRDX\" : 33.7,\n    \"TS0P\" : 33.7,\n    \"Tg05\" : 43.4,\n    \"Tg0L\" : 35.6,\n    \"Tg0j\" : 35.7,\n    \"Tp01\" : 40,\n    \"Tp02\" : 40,\n    \"Tp04\" : 40,\n    \"Tp05\" : 40,\n    \"Tp06\" : 40,\n    \"Tp08\" : 40,\n    \"Tp09\" : 40,\n    \"Tp0A\" : 40,\n    \"Tp0C\" : 40,\n    \"Tp0D\" : 40,\n    \"Tp0G\" : 40,\n    \"Tp0H\" : 40,\n    \"Tp0L\" : 40,\n    \"Tp0P\" : 40,\n    \"Tp0S\" : 40,\n    \"Tp0T\" : 40,\n    \"Tp0W\" : 40,\n    \"Tp0X\" : 40,\n    \"Tp0b\" : 40\n  }\n}"
+          }
+        },
+        "target_max_rpm": 5777,
+        "target_min_rpm": 5777
+      },
+      "baseline": {
+        "actual_max_rpm": 0,
+        "actual_min_rpm": 0,
+        "capacity_max_rpm": 5777,
+        "capacity_min_rpm": 5777,
+        "fans": [
+          {
+            "actual_rpm": 0,
+            "max_capacity_rpm": 5777,
+            "mode": "system",
+            "raw": {
+              "actual_rpm": 0,
+              "index": 0,
+              "max_rpm": 5777,
+              "min_rpm": 1350,
+              "mode": "system",
+              "target_rpm": 0
+            },
+            "rpm": 0,
+            "target_rpm": 0
+          },
+          {
+            "actual_rpm": 0,
+            "max_capacity_rpm": 5777,
+            "mode": "system",
+            "raw": {
+              "actual_rpm": 0,
+              "index": 1,
+              "max_rpm": 5777,
+              "min_rpm": 1350,
+              "mode": "system",
+              "target_rpm": 0
+            },
+            "rpm": 0,
+            "target_rpm": 0
+          }
+        ],
+        "max_rpm": 0,
+        "min_rpm": 0,
+        "ok": true,
+        "raw": {
+          "attempts": [
+            {
+              "command": [
+                "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+                "status"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "{\n  \"fans\" : [\n    {\n      \"actual_rpm\" : 0,\n      \"index\" : 0,\n      \"max_rpm\" : 5777,\n      \"min_rpm\" : 1350,\n      \"mode\" : \"system\",\n      \"target_rpm\" : 0\n    },\n    {\n      \"actual_rpm\" : 0,\n      \"index\" : 1,\n      \"max_rpm\" : 5777,\n      \"min_rpm\" : 1350,\n      \"mode\" : \"system\",\n      \"target_rpm\" : 0\n    }\n  ],\n  \"temperatures\" : {\n    \"TAOL\" : 24.9,\n    \"TB0T\" : 28.3,\n    \"TCHP\" : 29.5,\n    \"TCMb\" : 44.3,\n    \"TG0B\" : 28.3,\n    \"TG0H\" : 28,\n    \"TG0V\" : 28.3,\n    \"TH0x\" : 28.1,\n    \"TMVR\" : 30.4,\n    \"TPDX\" : 33.7,\n    \"TRDX\" : 32.3,\n    \"TS0P\" : 32.4,\n    \"Tg05\" : 41.5,\n    \"Tg0L\" : 33.7,\n    \"Tg0j\" : 33.6,\n    \"Tp01\" : 3.4,\n    \"Tp05\" : 2.2,\n    \"Tp09\" : 3.4,\n    \"Tp0D\" : 2.2,\n    \"Tp0H\" : 3.4,\n    \"Tp0L\" : 2.2,\n    \"Tp0P\" : 3.4,\n    \"Tp0T\" : 2.2,\n    \"Tp0X\" : 3.4,\n    \"Tp0b\" : 2.2\n  }\n}"
+            }
+          ],
+          "detection": {
+            "available": true,
+            "clock_anchor_enabled": false,
+            "clock_anchor_policy": "explicit experimental only; never used for product claims",
+            "instructions": "Install ThermalForge and ensure the thermalforge CLI is on PATH.",
+            "selected": {
+              "kind": "thermalforge",
+              "path": "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+              "version": {
+                "command": [
+                  "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+                  "--version"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "0.1.0"
+              }
+            },
+            "tools": [
+              {
+                "kind": "thermalforge",
+                "path": "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+                "version": {
+                  "command": [
+                    "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+                    "--version"
+                  ],
+                  "ok": true,
+                  "returncode": 0,
+                  "stderr": "",
+                  "stdout": "0.1.0"
+                }
+              }
+            ]
+          },
+          "ok": true,
+          "status": {
+            "command": [
+              "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+              "status"
+            ],
+            "ok": true,
+            "returncode": 0,
+            "stderr": "",
+            "stdout": "{\n  \"fans\" : [\n    {\n      \"actual_rpm\" : 0,\n      \"index\" : 0,\n      \"max_rpm\" : 5777,\n      \"min_rpm\" : 1350,\n      \"mode\" : \"system\",\n      \"target_rpm\" : 0\n    },\n    {\n      \"actual_rpm\" : 0,\n      \"index\" : 1,\n      \"max_rpm\" : 5777,\n      \"min_rpm\" : 1350,\n      \"mode\" : \"system\",\n      \"target_rpm\" : 0\n    }\n  ],\n  \"temperatures\" : {\n    \"TAOL\" : 24.9,\n    \"TB0T\" : 28.3,\n    \"TCHP\" : 29.5,\n    \"TCMb\" : 44.3,\n    \"TG0B\" : 28.3,\n    \"TG0H\" : 28,\n    \"TG0V\" : 28.3,\n    \"TH0x\" : 28.1,\n    \"TMVR\" : 30.4,\n    \"TPDX\" : 33.7,\n    \"TRDX\" : 32.3,\n    \"TS0P\" : 32.4,\n    \"Tg05\" : 41.5,\n    \"Tg0L\" : 33.7,\n    \"Tg0j\" : 33.6,\n    \"Tp01\" : 3.4,\n    \"Tp05\" : 2.2,\n    \"Tp09\" : 3.4,\n    \"Tp0D\" : 2.2,\n    \"Tp0H\" : 3.4,\n    \"Tp0L\" : 2.2,\n    \"Tp0P\" : 3.4,\n    \"Tp0T\" : 2.2,\n    \"Tp0X\" : 3.4,\n    \"Tp0b\" : 2.2\n  }\n}"
+          }
+        },
+        "target_max_rpm": 0,
+        "target_min_rpm": 0
+      },
+      "message": "fans ramped to max (actual 5675-5799 RPM; target 5777 RPM)",
+      "ok": true,
+      "profile": "performance",
+      "set_result": {
+        "attempts": [
+          {
+            "command": [
+              "sudo",
+              "-n",
+              "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+              "max"
+            ],
+            "ok": true,
+            "returncode": 0,
+            "stderr": "",
+            "stdout": "Fan 0: 1044 RPM \u2192 max (5777 RPM)\nFan 1: 1045 RPM \u2192 max (5777 RPM)"
+          }
+        ],
+        "command": [
+          "sudo",
+          "-n",
+          "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+          "max"
+        ],
+        "detection": {
+          "available": true,
+          "clock_anchor_enabled": false,
+          "clock_anchor_policy": "explicit experimental only; never used for product claims",
+          "instructions": "Install ThermalForge and ensure the thermalforge CLI is on PATH.",
+          "selected": {
+            "kind": "thermalforge",
+            "path": "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+            "version": {
+              "command": [
+                "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+                "--version"
+              ],
+              "ok": true,
+              "returncode": 0,
+              "stderr": "",
+              "stdout": "0.1.0"
+            }
+          },
+          "tools": [
+            {
+              "kind": "thermalforge",
+              "path": "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+              "version": {
+                "command": [
+                  "/Users/connor.hoehn/.mtplx/bin/thermalforge",
+                  "--version"
+                ],
+                "ok": true,
+                "returncode": 0,
+                "stderr": "",
+                "stdout": "0.1.0"
+              }
+            }
+          ]
+        },
+        "dry_run": false,
+        "ok": true,
+        "profile": "performance"
+      }
+    }
+  }
+}

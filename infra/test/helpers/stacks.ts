@@ -231,6 +231,8 @@ export function middlewareServiceStack(
     sessionsTableArn: SESSIONS_TABLE_ARN,
     documentsBucketArn: DOCS_BUCKET_ARN,
     artifactsBucketArn: ARTIFACTS_BUCKET_ARN,
+    documentsBucketName: `${PREFIX}-documents-111111111111-us-east-1`,
+    artifactsBucketName: `${PREFIX}-artifacts-111111111111-us-east-1`,
     sessionSigningSecretArn: SIGNING_SECRET_ARN,
     policyStoreId: 'PSTORE123456',
     auroraClusterArn: CLUSTER_ARN,

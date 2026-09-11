@@ -26,12 +26,14 @@ import {
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
-import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
+import {
+  toastPending, toastSuccess, toastError, toastInfo, dismissToast,
+} from '../../lib/toastStore';
 import { DocumentDropzone } from '../../components/knowledge/DocumentDropzone';
 import { ShareLinks } from '../../components/knowledge/ShareLinks';
 import {
   DRIFT_LABEL, DRIFT_TONE, adoptableEntries, bytes, computeSyncGap, filterEntries,
-  summarizeEntries, when, type EntryStatusFilter, type Reconciled,
+  lastSyncLabel, summarizeEntries, when, type EntryStatusFilter, type Reconciled,
 } from './knowledgeFormat';
 
 interface IngestJob { jobId?: string; status?: string; startedAt?: string }
@@ -72,7 +74,7 @@ export default function KnowledgeHomePage() {
   const [statusFilter, setStatusFilter] = useState<EntryStatusFilter>('all');
 
   const entries = rec?.entries ?? [];
-  const { live, problems, docs, dataSources } = summarizeEntries(entries);
+  const { live, problems, docs, dataSources, dataSourcesKnown } = summarizeEntries(entries);
   const adopters = adoptableEntries(entries);
   const filtered = useMemo(
     () => filterEntries(entries, { search, status: statusFilter }),
@@ -80,7 +82,9 @@ export default function KnowledgeHomePage() {
   );
 
   const stored = storage?.totalObjects ?? 0;
-  const { syncTarget, behind, neverRan, lastSync } = computeSyncGap(entries, stored);
+  const {
+    syncTarget, behind, neverRan, syncUnknown, running, failed, lastSyncStatus, lastSync,
+  } = computeSyncGap(entries, stored);
 
   const adopt = useCallback(async (slug: string, kbId: string) => {
     setBusy(slug);
@@ -109,7 +113,18 @@ export default function KnowledgeHomePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ description: 'Manual sync from Knowledge' }),
       });
-      const body = await res.json() as { jobId?: string; error?: string };
+      const body = await res.json() as { jobId?: string; error?: string; conflict?: boolean };
+      // A 409 with `conflict` means Bedrock refused because a sync is ALREADY
+      // running on this data source. That is not a failed action — the indexing
+      // the operator wanted is under way — and "Could not start ingestion" in
+      // red is the false flag this page exists to stop telling. Resolve the
+      // pending toast as information and refresh, so the running banner appears.
+      if (res.status === 409 && body.conflict) {
+        dismissToast(tid);
+        toastInfo('A sync is already running', body.error ?? 'Wait for the current job to finish.');
+        refreshRec();
+        return;
+      }
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
       toastSuccess(tid, 'Ingestion started', `Job ${body.jobId} — this runs in the background.`);
       refreshRec();
@@ -171,10 +186,13 @@ export default function KnowledgeHomePage() {
       key: 'lastSyncAt',
       header: 'Last sync',
       sortable: true,
+      // `lastSyncLabel`, not `when` — see its doc comment. `lastSyncAt` is the
+      // newest job's timestamp regardless of outcome, so a bare "2m ago" here
+      // rendered a failed sync as a successful one.
       render: (e) => (
         <MetaLine
           size="xs" tone="tertiary"
-          items={[when(e.lastSyncAt), e.documentCount != null ? `${e.documentCount.toLocaleString()} docs` : null]}
+          items={[lastSyncLabel(e), e.documentCount != null ? `${e.documentCount.toLocaleString()} docs` : null]}
         />
       ),
     },
@@ -312,6 +330,66 @@ export default function KnowledgeHomePage() {
           ACTIVE), and only the seam between them is broken. It is also the
           state a fresh environment starts in, so it is worth an action rather
           than a number. */}
+      {/* The same seam, when we could not see it. This case used to render as
+          the banner below with `neverRan` true — "never been indexed" — which
+          was the most alarming reading of a failed read and, against a
+          knowledge base holding 157 documents, simply false. An unreadable
+          sync history is its own state and says so; `problem` above carries
+          the reason and the permission. */}
+      {syncUnknown && stored > 0 && (
+        <Banner variant="warning" className="mb-5">
+          {stored.toLocaleString()} documents are in storage, but the knowledge base&apos;s
+          ingestion history could not be read — so this page cannot tell you whether they
+          have been indexed. Treat the sync figures below as unknown, not as zero.
+        </Banner>
+      )}
+
+      {/* A sync is in flight. This had no representation at all: starting one
+          made the "behind" banner disappear (a running job reports no scanned
+          count, so the gap could not be computed) and the page then looked
+          settled while nothing had been indexed yet. Worse, the operator's next
+          reading of a still-empty index was "behind" again, and the offered
+          action was to start a SECOND ingestion job over the same documents —
+          embedding tokens spent twice for one sync. */}
+      {running && syncTarget && (
+        <Banner variant="info" className="mb-5">
+          A sync is running over <strong>{syncTarget.name}</strong>
+          {lastSyncStatus ? ` (${lastSyncStatus.replace(/_/g, ' ').toLowerCase()})` : ''} — started{' '}
+          {when(syncTarget.lastSyncAt)}. Bedrock reports coverage only when the job finishes, so the
+          figures below still describe the previous run. Nothing to do but wait; starting another job
+          now would re-embed the same documents.
+        </Banner>
+      )}
+
+      {/* A run that ended without finishing. Previously this was rendered by
+          the banner below as plain "behind", whose copy reads as "nobody has
+          synced yet" and whose button is the one that just failed. The status
+          is the whole difference between "press sync" and "find out why sync
+          does not work", so it is named rather than paraphrased. */}
+      {failed && syncTarget && (
+        <Banner variant="error" className="mb-5">
+          The last sync of <strong>{syncTarget.name}</strong> ended{' '}
+          <strong>{(lastSyncStatus ?? 'unsuccessfully').replace(/_/g, ' ').toLowerCase()}</strong>{' '}
+          {when(syncTarget.lastSyncAt)}, so the index holds whatever the run before it left. Retrying
+          without a cause will most likely fail the same way — check the job's failure reasons in{' '}
+          {canIngest
+            ? <Link to="/admin/ingest/sources" className="text-primary no-underline hover:underline">ingestion history</Link>
+            : <>ingestion history</>}{' '}
+          first.
+          {canManage && (
+            <Inline className="mt-2">
+              <Button
+                variant="secondary" size="sm"
+                disabled={busy === 'sync'}
+                onClick={() => void startSync(syncTarget.id as string, syncTarget.name)}
+              >
+                {busy === 'sync' ? 'starting…' : 'Retry sync'}
+              </Button>
+            </Inline>
+          )}
+        </Banner>
+      )}
+
       {behind && syncTarget && (
         <Banner variant="warning" className="mb-5">
           {neverRan
@@ -376,7 +454,16 @@ export default function KnowledgeHomePage() {
             value: recError ? '—' : String(live.length),
             hint: (
               <>
-                {dataSources === 0 ? 'no data source attached' : `${dataSources} data source${dataSources === 1 ? '' : 's'} · last sync ${when(lastSync)}`}
+                {/* Three states, not two. A null count and a counted zero used
+                    to collapse into "no data source attached" — the flat
+                    falsehood the reconcile fix was about — and `when(null)`
+                    renders an unreadable history as the equally confident
+                    "never". */}
+                {!dataSourcesKnown
+                  ? 'data sources unreadable'
+                  : dataSources === 0
+                    ? 'no data source attached'
+                    : `${dataSources} data source${dataSources === 1 ? '' : 's'} · last sync ${syncUnknown ? 'unreadable' : when(lastSync)}`}
                 {' '}· <Link to="/admin/knowledge/registry" className="text-primary no-underline hover:underline">registry →</Link>
               </>
             ),

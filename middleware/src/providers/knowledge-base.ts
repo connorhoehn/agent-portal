@@ -230,9 +230,20 @@ function mockBucket(): string {
  * A job's statistics, counted rather than stored.
  *
  * A Bedrock S3 sync scans the whole data source every run, so `scanned` is the
- * corpus as of the moment the job settled and a COMPLETE run indexes all of it.
- * `documentsFailed` is the number of failures the job actually names — a job
- * cannot report a failure count it has no reason for.
+ * corpus as of the moment the job settled. `documentsFailed` is the number of
+ * failures the job actually names — a job cannot report a failure count it has
+ * no reason for.
+ *
+ * `indexed` is a DELTA, and getting that wrong here hid a real bug for as long
+ * as this fixture has existed. It used to be `corpus.length` — "a COMPLETE run
+ * indexes all of it" — but the real API reports
+ * `numberOfNewDocumentsIndexed + numberOfModifiedDocumentsIndexed` (see the two
+ * live call sites below), i.e. only what CHANGED. Live, a job that scanned 157
+ * indexed 0 because nothing had changed since the run before it. So the mock
+ * and the account used the same field name for different quantities, and every
+ * consumer that read `documentsIndexed` as "how many documents exist" looked
+ * correct in dev and reported 0 in the account. Counting the corpus that landed
+ * inside this job's own window makes the mock's meaning match the wire's.
  */
 function mockJobSummary(job: {
   jobId: string; dataSourceId: string; status: string;
@@ -257,7 +268,16 @@ function mockJobSummary(job: {
     description: job.description,
     durationMs: Number.isFinite(startMs) ? Math.max(0, endMs - startMs) : 0,
     documentsScanned: corpus.length,
-    documentsIndexed: job.status === 'COMPLETE' ? corpus.length : 0,
+    // Only the documents that landed during THIS run — the delta the real
+    // statistics report. A run that scans a corpus it has already indexed
+    // indexes nothing, which is the healthy case the old `corpus.length` could
+    // not express.
+    documentsIndexed: job.status === 'COMPLETE'
+      ? corpus.filter((d) => {
+          const ms = Date.parse(String(d.ingestedAt ?? ''));
+          return Number.isFinite(ms) && ms >= startMs;
+        }).length
+      : 0,
     documentsFailed: job.failureReasons.length,
     documentsDeleted: 0,
     failureReasons: job.failureReasons,
@@ -488,17 +508,134 @@ export async function listIngestionJobs(dataSourceId?: string, limit = 20): Prom
  * ran against, so a caller never has to infer them from what it hoped it
  * passed — and `/ingest/stream` needs the data source id to poll the job.
  */
+export interface StartedJob {
+  jobId: string;
+  status: string;
+  knowledgeBaseId: string;
+  dataSourceId: string;
+}
+
+/** Why a sync could not be started — a status a route can answer with, and a
+ *  sentence an operator can act on. */
+export interface StartJobFailure {
+  status: number;
+  error: string;
+  /** True when the sync the caller asked for is *already happening*. Callers
+   *  that record run history use this to avoid filing a success as a failure. */
+  conflict: boolean;
+}
+
+export type StartJobOutcome =
+  | ({ ok: true } & StartedJob)
+  | ({ ok: false } & StartJobFailure);
+
+/**
+ * Turn a StartIngestionJob exception into an answer.
+ *
+ * WHY THIS EXISTS. `startIngestionJob` used to `catch`, `console.warn` and
+ * return `null`, and four surfaces then invented their own wrong answer from
+ * that one null:
+ *
+ *   - `POST /api/ingest/start`      → 500 "StartIngestionJob failed — check
+ *                                     middleware logs"
+ *   - `POST /api/knowledge-bases/:id/sync` → the throw reached `asyncHandler`,
+ *                                     which discards unknown messages entirely:
+ *                                     500 "Internal server error"
+ *   - `POST /api/ingest/crawl/:id/sync`    → 502
+ *   - the ingest scheduler          → recorded `lastStatus: 'FAILED'`
+ *
+ * The case that makes this a false flag rather than a rough edge: Bedrock
+ * answers `ConflictException` when an ingestion job is **already running** for
+ * that data source. So the operator presses "Sync now" while a sync is in
+ * flight, the platform tells them it failed and to go read server logs, and the
+ * truth is that the thing they asked for is already happening. A working
+ * pipeline reporting as broken is the specific complaint this whole pass is
+ * about — and it is the write-side twin of the read-side gap where a running
+ * job made the "behind" banner vanish.
+ *
+ * Second, quieter half: `AccessDeniedException` (no `bedrock:StartIngestionJob`
+ * on the task role) and `ResourceNotFoundException` (the data source was deleted
+ * out of band) produced the *identical* message, so the one field that
+ * distinguishes "already running" from "you lack the permission" from "the
+ * target is gone" was in the exception and thrown away. Same lesson as
+ * `kb-reconcile.ts::syncState`: the reason was there the whole time.
+ *
+ * Matching is on the SDK's `name`, with a message fallback because Bedrock has
+ * also been observed reporting an in-flight job as a `ValidationException`.
+ */
+export function classifyStartJobFailure(err: unknown, target: string): StartJobFailure {
+  const e = err as { name?: string; message?: string };
+  const name = e?.name ?? '';
+  const message = e?.message ?? String(err);
+  const inFlight = /already\s+(a\s+)?(job|ingestion)|in\s*progress|ongoing/i.test(message);
+
+  if (name === 'ConflictException' || inFlight) {
+    return {
+      status: 409,
+      conflict: true,
+      error: `A sync is already running on ${target}. Wait for it to finish — `
+        + `starting another job now would re-embed the same documents.`,
+    };
+  }
+  if (name === 'AccessDeniedException') {
+    return {
+      status: 403,
+      conflict: false,
+      error: `Not allowed to start a sync on ${target}: the middleware's role is `
+        + `missing bedrock:StartIngestionJob. (${message})`,
+    };
+  }
+  if (name === 'ResourceNotFoundException') {
+    return {
+      status: 404,
+      conflict: false,
+      error: `${target} does not exist in this account — the knowledge base or its `
+        + `data source was deleted out of band. Reconcile it from /admin/knowledge. (${message})`,
+    };
+  }
+  if (name === 'ThrottlingException' || name === 'TooManyRequestsException') {
+    return { status: 429, conflict: false, error: `Bedrock throttled the sync request: ${message}` };
+  }
+  return { status: 502, conflict: false, error: `Could not start a sync on ${target}: ${message}` };
+}
+
 export async function startIngestionJob(
   dataSourceId: string,
   description?: string,
   kbId?: string,
-): Promise<{ jobId: string; status: string; knowledgeBaseId: string; dataSourceId: string } | null> {
+): Promise<StartJobOutcome> {
   const targetKbId = kbId || config.knowledgeBase.id;
+  const target = targetKbId ? `${targetKbId}/${dataSourceId}` : dataSourceId;
   if (mockAws()) {
+    // Refuse offline for the same reason Bedrock refuses: one data source runs
+    // one job at a time. Without this the 409 branch is unreachable under
+    // `dev:mock` — and an unreachable state is how the read-side version of
+    // this gap survived long enough to ship (see mock/knowledge-base.ts).
+    const running = kbIngestionJobRows.rows().find(
+      (j) => j.dataSourceId === dataSourceId
+        && ['STARTING', 'IN_PROGRESS', 'STOPPING'].includes(j.status),
+    );
+    if (running) {
+      return {
+        ok: false,
+        ...classifyStartJobFailure(
+          { name: 'ConflictException', message: `job ${running.jobId} is already in progress` },
+          target,
+        ),
+      };
+    }
     const job = mockStartJob(dataSourceId, description ?? 'Manual sync triggered from portal');
-    return { jobId: job.jobId, status: job.status, knowledgeBaseId: targetKbId, dataSourceId };
+    return {
+      ok: true, jobId: job.jobId, status: job.status, knowledgeBaseId: targetKbId, dataSourceId,
+    };
   }
-  if (!targetKbId) return null;
+  if (!targetKbId) {
+    return {
+      ok: false, status: 409, conflict: false,
+      error: 'No knowledge base is configured (KNOWLEDGE_BASE_ID is unset), so there is '
+        + 'nothing to sync.',
+    };
+  }
   try {
     const resp = await _client().send(
       new StartIngestionJobCommand({
@@ -508,14 +645,18 @@ export async function startIngestionJob(
       }),
     );
     return {
+      ok: true,
       jobId: resp.ingestionJob?.ingestionJobId ?? '',
       status: String(resp.ingestionJob?.status ?? 'UNKNOWN'),
       knowledgeBaseId: targetKbId,
       dataSourceId,
     };
   } catch (err) {
-    console.warn('[kb] startIngestionJob failed:', (err as Error).message);
-    return null;
+    const failure = classifyStartJobFailure(err, target);
+    // Still logged — but the reason now also reaches the caller, which is the
+    // whole point. `conflict` is not a warning: it is the platform working.
+    console.warn(`[kb] startIngestionJob ${failure.conflict ? 'conflict' : 'failed'}:`, failure.error);
+    return { ok: false, ...failure };
   }
 }
 
@@ -774,25 +915,40 @@ export async function countS3Documents(lastSyncAt?: string, s3Prefix?: string): 
 // source attached to the KB and stamp the crawl id into the description so the
 // UI can correlate the job back to the run.
 
-export async function triggerKbSyncForCrawl(
-  crawlId: string,
-): Promise<{ jobId: string; status: string; dataSourceId: string } | null> {
+export type CrawlSyncOutcome =
+  | { ok: true; jobId: string; status: string; dataSourceId: string }
+  | ({ ok: false } & StartJobFailure);
+
+export async function triggerKbSyncForCrawl(crawlId: string): Promise<CrawlSyncOutcome> {
   const kbId = config.knowledgeBase.id;
-  if (!kbId) return null;
+  // Kept as a distinct sentence rather than folded into the generic failure:
+  // "nothing is configured" is a deploy state, not a broken sync.
+  if (!kbId) {
+    return {
+      ok: false, status: 409, conflict: false,
+      error: 'No knowledge base is configured (KNOWLEDGE_BASE_ID is unset), so a crawl '
+        + 'cannot be synced into one.',
+    };
+  }
   try {
     const sources = await listDataSources();
     // Prefer S3-backed sources; otherwise fall back to the first one available.
     const target = sources.find(s => s.type === 'S3') ?? sources[0];
     if (!target) {
-      console.warn('[kb] triggerKbSyncForCrawl: no data sources attached to KB');
-      return null;
+      return {
+        ok: false, status: 409, conflict: false,
+        error: `Knowledge base ${kbId} has no data source attached, so StartIngestionJob `
+          + 'has no target.',
+      };
     }
     const job = await startIngestionJob(target.id, `Crawl sync: ${crawlId}`);
-    if (!job) return null;
-    return { ...job, dataSourceId: target.id };
+    // Relay the reason instead of collapsing it back to a null. This route
+    // answered a flat 502 for every case, including the one where the sync the
+    // caller wants is already running.
+    if (!job.ok) return job;
+    return { ok: true, jobId: job.jobId, status: job.status, dataSourceId: target.id };
   } catch (err) {
-    console.warn('[kb] triggerKbSyncForCrawl failed:', (err as Error).message);
-    return null;
+    return { ok: false, ...classifyStartJobFailure(err, kbId) };
   }
 }
 
@@ -812,7 +968,13 @@ export async function getStorageBreakdown(s3Prefix?: string): Promise<StorageBre
     const byPrefix = [...groupBy(objects, (o) => topPrefixOf(o.key))]
       .map(([prefix, rows]) => ({ prefix, count: rows.length, bytes: sumBy(rows, 'sizeBytes') }))
       .sort((a, b) => b.count - a.count);
-    // Same proxy the real path uses: the newest COMPLETE job's indexed count.
+    // Counted from the corpus fixture, matching what the real path now does:
+    // documents the knowledge base HOLDS, not what the last run happened to
+    // index. It used to be `lastComplete.documentsIndexed`, which made the mock
+    // faithfully reproduce the deployed bug — the second wave indexed 4, so the
+    // page read "4 documents" over a 14-document corpus the same fixture
+    // exports. A fixture must never state a number it could count from rows it
+    // also exports (docs/mock-floor.md).
     const lastComplete = (await listIngestionJobs(undefined, 10)).find(j => j.status === 'COMPLETE');
     return {
       bucket: mockBucket(),
@@ -821,7 +983,7 @@ export async function getStorageBreakdown(s3Prefix?: string): Promise<StorageBre
       byType,
       byPrefix,
       kb: {
-        totalDocuments: lastComplete?.documentsIndexed ?? 0,
+        totalDocuments: kbDocumentRows.rows().length,
         lastIngestedAt: lastComplete?.updatedAt ?? null,
       },
     };
@@ -868,20 +1030,46 @@ export async function getStorageBreakdown(s3Prefix?: string): Promise<StorageBre
     .map(([prefix, v]) => ({ prefix, ...v }))
     .sort((a, b) => b.count - a.count);
 
-  // KB doc count: use the most recent COMPLETE ingestion job's indexed count.
-  // The bedrock-agent SDK pinned in this repo doesn't ship
-  // ListKnowledgeBaseDocuments, so the last-job snapshot is our best proxy.
-  let totalDocuments = 0;
+  // How many documents the knowledge base HOLDS — counted, not inferred.
+  //
+  // This used to be the newest COMPLETE ingestion job's `documentsIndexed`,
+  // described as "our best proxy" because the pinned bedrock-agent SDK ships no
+  // ListKnowledgeBaseDocuments. It is not a proxy for holdings at all: it is
+  // how many documents that RUN newly indexed, which is **0 for any knowledge
+  // base that is already current**. Deployed, the newest job scanned 157 and
+  // indexed 0 (nothing had changed since the run before it), so the page
+  // reported "0 documents" about a knowledge base holding 157 — and it reported
+  // it most confidently exactly when the pipeline was healthiest. A fresh sync
+  // that correctly finds nothing to do made the KB look empty.
+  //
+  // The real number was in the same database the whole time. `bedrock_kb` IS
+  // the vector store Bedrock reads (see the KB stack), one row per chunk with
+  // the S3 URI in `metadata.sourceUrl`, so distinct URIs are documents. Live
+  // that is 157 distinct URIs across 158 chunks — matching S3's 157 objects,
+  // which is the agreement the whole page is built to check.
+  let totalDocuments: number | null = null;
   let lastIngestedAt: string | null = null;
+  try {
+    const rows = await exec(
+      `SELECT count(DISTINCT metadata->>'sourceUrl')::int AS n FROM bedrock_kb`,
+    );
+    const n = rows[0]?.['n'];
+    if (n != null) totalDocuments = Number(n);
+  } catch (err) {
+    // Left null on purpose. A missing table (a cluster the KB stack never
+    // built) and an empty one are different facts, and a 0 here would be
+    // indistinguishable from the bug above.
+    console.warn('[kb] getStorageBreakdown document count failed:', (err as Error).message);
+  }
   try {
     const recent = await listIngestionJobs(undefined, 10);
     const lastComplete = recent.find(j => j.status === 'COMPLETE');
-    if (lastComplete) {
-      totalDocuments = lastComplete.documentsIndexed;
-      lastIngestedAt = lastComplete.updatedAt;
-    }
+    if (lastComplete) lastIngestedAt = lastComplete.updatedAt;
   } catch (err) {
-    console.warn('[kb] getStorageBreakdown kb stats failed:', (err as Error).message);
+    // Separately caught: a denied ListIngestionJobs must not erase a document
+    // count that was read successfully — the same coupling that made
+    // kb-reconcile's syncState report "no data source" about a live one.
+    console.warn('[kb] getStorageBreakdown last-ingested failed:', (err as Error).message);
   }
 
   return {

@@ -71,8 +71,27 @@ export interface KbIngestionJobRow {
 
 const daysAgoPlus = (days: number, minutes = 0): string =>
   new Date(Date.parse(clock.daysAgo(days)) + minutes * 60_000).toISOString();
-const hoursAgoPlus = (hours: number, minutes = 0): string =>
-  new Date(Date.parse(clock.hoursAgo(hours)) + minutes * 60_000).toISOString();
+
+/**
+ * An instant `hours` (plus `minutes`) before now, kept inside the current UTC
+ * day — and never in the future.
+ *
+ * Every caller below is a sub-day offset that *means today*: "this morning's
+ * wave" of documents, `uploads/<today>/…` objects, the sync running right now.
+ * Booted near UTC midnight an unclamped offset puts all of them on yesterday,
+ * and two of them then contradict something else in the same fixture — an
+ * object whose key says `uploads/2026-03-12/` carrying a `lastModified` on the
+ * 11th, and a "synced this morning" job dated the previous day. `keepWithinToday`
+ * is why `clock.hoursAgo` takes the option; this helper was the one path that
+ * dropped it.
+ *
+ * The `minutes` addend is clamped too, because at exactly 00:00 UTC the hours
+ * clamp resolves to *now* and adding to it would mint a future timestamp.
+ */
+const hoursAgoPlus = (hours: number, minutes = 0): string => {
+  const base = Date.parse(clock.hoursAgo(hours, { keepWithinToday: true }));
+  return new Date(Math.min(base + minutes * 60_000, Date.parse(clock.nowIso()))).toISOString();
+};
 
 /** The all-hands recap's id and title carry its date (`all-hands-YYYY-MM-DD`). */
 const allHandsDate = (daysAgo: number): string => clock.daysAgo(daysAgo).slice(0, 10);
@@ -232,12 +251,25 @@ export const kbDataSourceRows = defineFixture<DataSourceSummary>({
 export const kbIngestionJobRows = defineFixture<KbIngestionJobRow>({
   key: 'kb-ingestion-jobs',
   scenarios: {
+    // The newest job has SETTLED, and that is a deliberate choice about which
+    // world is the default one.
+    //
+    // The head used to be an IN_PROGRESS job. Harmless while nothing read the
+    // status — but once the Knowledge page renders a "sync running" state and
+    // `startIngestionJob` refuses a second job the way Bedrock does, a
+    // permanently-running head makes the default world one where the primary
+    // action can never succeed: every "Sync now" answers 409. It also mutes the
+    // story the fixtures above are built to tell, since a running job reports no
+    // coverage, so "two files have landed since the last sync" cannot be
+    // computed and the "behind" banner is suppressed.
+    //
+    // Settled head instead, and the running state is reached by DOING it: the
+    // default world reads "the index is behind by the two uploads", pressing
+    // Sync now succeeds and pushes a STARTING job, the page then shows the
+    // running banner, and a second press correctly conflicts. Every state has a
+    // path through the UI rather than only through the control plane — which is
+    // the opposite of the failure that let the running-sync gap ship.
     default: () => [
-      {
-        jobId: 'IJMOCK0004', dataSourceId: 'DSMOCK0001AB', status: 'IN_PROGRESS',
-        startedAt: hoursAgoPlus(0.4), finishedAt: null,
-        description: 'Manual sync triggered from portal', failureReasons: [],
-      },
       {
         jobId: 'IJMOCK0003', dataSourceId: 'DSMOCK0001AB', status: 'COMPLETE',
         startedAt: hoursAgoPlus(6), finishedAt: hoursAgoPlus(6, 8),
@@ -261,5 +293,28 @@ export const kbIngestionJobRows = defineFixture<KbIngestionJobRow>({
     // A knowledge base with a data source and no run history — "never synced",
     // which the page must say differently from "sync failed".
     empty: () => [],
+    // The newest job FAILED — the other half of that sentence, and this
+    // fixture's reading of the shared `error` scenario ("a surface has to
+    // render an error state"). The `default` set already contains a failed run,
+    // but not as the newest one, and only the newest is what `syncState`
+    // reports; so without this the Knowledge page's failure banner could not be
+    // seen without waiting for a real ingestion to break. Same rows, different
+    // head — the provider is not down, the last job is.
+    error: () => [
+      {
+        jobId: 'IJMOCK0005', dataSourceId: 'DSMOCK0001AB', status: 'FAILED',
+        startedAt: hoursAgoPlus(0.6), finishedAt: hoursAgoPlus(0.6, 4),
+        description: 'Manual sync triggered from portal',
+        failureReasons: [
+          'Access denied reading s3://orgiq-documents-647757222309-us-east-1/synth/internal/: '
+          + 'the knowledge base service role cannot list the prefix',
+        ],
+      },
+      {
+        jobId: 'IJMOCK0003', dataSourceId: 'DSMOCK0001AB', status: 'COMPLETE',
+        startedAt: hoursAgoPlus(6), finishedAt: hoursAgoPlus(6, 8),
+        description: 'Scheduled sync (daily 06:00 UTC)', failureReasons: [],
+      },
+    ],
   },
 });

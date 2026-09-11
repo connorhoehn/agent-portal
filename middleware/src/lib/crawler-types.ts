@@ -126,7 +126,16 @@ export interface StorageBreakdown {
   byType: Array<{ extension: string; count: number; bytes: number }>;
   byPrefix: Array<{ prefix: string; count: number; bytes: number }>;
   kb: {
-    totalDocuments: number;
+    /**
+     * Distinct documents the vector store actually holds — null when it could
+     * not be counted.
+     *
+     * Null rather than 0 for the reason the reconcile page learned the hard
+     * way: on this surface "we could not count" and "there are none" are the
+     * failure and the finding, and rendering them as the same number makes the
+     * page unable to report the thing it exists to report.
+     */
+    totalDocuments: number | null;
     lastIngestedAt: string | null;
   };
 }

@@ -21,7 +21,7 @@ import {
 } from '../lib/oidc.js';
 import {
   signValue, verifyValue, mintSession, signSession,
-  setSessionCookie, clearSessionCookie,
+  setSessionCookie, clearSessionCookie, cookieSecure,
 } from '../lib/session.js';
 import { getUserByExternalSub, getUserByEmail, linkExternalSub } from '../providers/identity.js';
 import { eventFromSession, logAuthz } from '../lib/audit.js';
@@ -80,7 +80,11 @@ authRouter.get('/login', loginLimit, asyncHandler(async (req, res) => {
   res.cookie(OIDC_STATE_COOKIE, cookie, {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env['NODE_ENV'] === 'production',
+    // Same rule as the session cookie, from the same helper on purpose: a
+    // `Secure` state cookie over plain http is dropped by the browser, so the
+    // callback finds no state and the SSO round trip fails as "invalid state"
+    // rather than as the scheme mismatch it is.
+    secure: cookieSecure(res),
     maxAge: STATE_TTL_MS,
     path: '/',
   });

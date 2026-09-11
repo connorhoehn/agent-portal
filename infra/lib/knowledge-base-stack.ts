@@ -292,7 +292,7 @@ def handler(event, context):
     // S3 Data Source
     // -------------------------------------------------------------------
 
-    new cdk.aws_bedrock.CfnDataSource(this, 'S3DataSource', {
+    const s3DataSource = new cdk.aws_bedrock.CfnDataSource(this, 'S3DataSource', {
       name: `${prefix}-documents-source`,
       description: 'S3 data source for organizational documents',
       knowledgeBaseId: knowledgeBase.attrKnowledgeBaseId,
@@ -326,6 +326,21 @@ def handler(event, context):
     new cdk.CfnOutput(this, 'KnowledgeBaseArn', {
       value: knowledgeBase.attrKnowledgeBaseArn,
       exportName: `${prefix}-knowledge-base-arn`,
+    });
+
+    // `schema/synth/load.py::sync_knowledge_base` reads BOTH `KnowledgeBaseId`
+    // and `DataSourceId` from this stack's outputs and skips the ingestion job
+    // when either is missing — it logs one warning and exits 0, so a full
+    // corpus run reported success while the knowledge base stayed empty and
+    // `query_knowledge_base` returned nothing. Only `KnowledgeBaseId` was
+    // published, so that skip was unconditional.
+    //
+    // No exportName on purpose: the consumer reads stack outputs via
+    // describe-stacks, and a CFN export cannot be changed or removed once
+    // another stack imports it.
+    new cdk.CfnOutput(this, 'DataSourceId', {
+      value: s3DataSource.attrDataSourceId,
+      description: 'S3 data source id — required by the corpus KB sync',
     });
   }
 }
