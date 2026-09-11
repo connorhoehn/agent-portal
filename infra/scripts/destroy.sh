@@ -24,6 +24,18 @@
 
 set -euo pipefail
 
+# Run from the CDK app root regardless of where the caller invoked this from.
+#
+# WHY. This script had no `cd` at all, so it silently required being run FROM
+# `infra/`. Invoked as `./infra/scripts/destroy.sh` from the repo root it got
+# all the way through the pre-drain -- runtimes, endpoints, KB and the Aurora
+# cluster genuinely deleted -- and then skipped the ENTIRE CloudFormation
+# teardown, because `npx cdk` could not see `infra/node_modules` and there is
+# no `cdk.json` at the repo root. All 18 stacks survived, OpenSearch Serverless
+# kept billing, and it took two runs to notice. deploy.sh already did this.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${SCRIPT_DIR}/.."
+
 PREFIX="${PREFIX:-orgiq}"
 REGION="${AWS_DEFAULT_REGION:-us-east-1}"
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
@@ -32,6 +44,28 @@ ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 # at the end. The old behavior (|| true everywhere + unconditional "✓ Destroy
 # complete") once reported success after cdk destroy died on expired
 # credentials at stack 1/17 — with OpenSearch still billing.
+# The CDK binary, resolved ONCE and never through a bare `npx`.
+#
+# WHY. The executable is `cdk` but the package is `aws-cdk`. A bare `npx cdk`
+# outside this directory does not find the local binary and offers to install
+# the unrelated registry package literally named `cdk` -- an interactive prompt
+# in a non-interactive script. Answer anything but `y` and npm cancels; answer
+# `y` and you get a stranger's package, which then dies on `--app is required`.
+# Both happened, on a teardown path, and neither failed until after the
+# pre-drain had already deleted real infrastructure.
+#
+# `--no-install` is the load-bearing flag: it makes a missing dependency an
+# immediate loud error instead of a silent trip to the registry.
+if [[ -x "node_modules/.bin/cdk" ]]; then
+  CDK=("node_modules/.bin/cdk")
+else
+  CDK=(npx --no-install cdk)
+fi
+if ! "${CDK[@]}" --version >/dev/null 2>&1; then
+  echo "✗ aws-cdk is not installed here. Run 'npm ci' in infra/ first." >&2
+  exit 1
+fi
+
 FAILURES=()
 
 # aws-azure-login sessions expire mid-run on long teardowns. Call before any
@@ -448,7 +482,7 @@ echo ""
 # cdk then fails on stack 1 with UnresolvedAccount. Fail loudly instead.
 require_creds
 
-if ! npx cdk destroy --all --force; then
+if ! "${CDK[@]}" destroy --all --force; then
   FAILURES+=("cdk destroy --all exited non-zero — one or more stacks not destroyed")
 fi
 

@@ -16,6 +16,28 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}/.."
 
+# The CDK binary, resolved ONCE and never through a bare `npx`.
+#
+# WHY. The executable is `cdk` but the package is `aws-cdk`. A bare `npx cdk`
+# outside this directory does not find the local binary and offers to install
+# the unrelated registry package literally named `cdk` -- an interactive prompt
+# in a non-interactive script. Answer anything but `y` and npm cancels; answer
+# `y` and you get a stranger's package, which then dies on `--app is required`.
+# Both happened, on a teardown path, and neither failed until after the
+# pre-drain had already deleted real infrastructure.
+#
+# `--no-install` is the load-bearing flag: it makes a missing dependency an
+# immediate loud error instead of a silent trip to the registry.
+if [[ -x "node_modules/.bin/cdk" ]]; then
+  CDK=("node_modules/.bin/cdk")
+else
+  CDK=(npx --no-install cdk)
+fi
+if ! "${CDK[@]}" --version >/dev/null 2>&1; then
+  echo "✗ aws-cdk is not installed here. Run 'npm ci' in infra/ first." >&2
+  exit 1
+fi
+
 PREFIX="${PREFIX:-orgiq}"
 REGION="${AWS_DEFAULT_REGION:-us-east-1}"
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
@@ -210,7 +232,7 @@ EXISTING_STACKS=$(aws cloudformation list-stacks \
   --query 'StackSummaries[?starts_with(StackName, `OrgIQ`)].StackName' \
   --output text 2>/dev/null || echo "")
 
-STACKS_TO_DEPLOY=$(npx cdk ls 2>/dev/null | grep "^OrgIQ" || echo "")
+STACKS_TO_DEPLOY=$("${CDK[@]}" ls 2>/dev/null | grep "^OrgIQ" || echo "")
 ALL_EXIST=true
 while IFS= read -r stack; do
   [[ -z "$stack" ]] && continue
@@ -255,9 +277,9 @@ echo ""
 
 run_cdk_deploy() {
   if [[ ${#CDK_ARGS[@]} -eq 0 ]]; then
-    npx cdk deploy --all "${CDK_FLAGS[@]}"
+    "${CDK[@]}" deploy --all "${CDK_FLAGS[@]}"
   else
-    npx cdk deploy "${CDK_ARGS[@]}" "${CDK_FLAGS[@]}"
+    "${CDK[@]}" deploy "${CDK_ARGS[@]}" "${CDK_FLAGS[@]}"
   fi
 }
 
