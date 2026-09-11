@@ -78,7 +78,13 @@ function DataSourcesPage() {
   const jobs = jobsData?.jobs ?? [];
 
   const [triggering, setTriggering] = useState<string | null>(null);
-  const [actionMessage, setActionMessage] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
+  // `busy` is a third outcome, not a shade of `err`. The server answers 409
+  // with `conflict: true` when Bedrock refuses because a sync is ALREADY
+  // running on that data source — the thing the operator asked for is happening,
+  // so painting it red says the pipeline broke when nothing did.
+  const [actionMessage, setActionMessage] = useState<
+    { tone: 'ok' | 'err' | 'busy'; text: string } | null
+  >(null);
 
   const activeJob = jobs.find(j => ACTIVE_STATUSES.has(j.status)) ?? null;
 
@@ -97,9 +103,17 @@ function DataSourcesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dataSourceId }),
       });
-      const body = await r.json() as { ok?: boolean; error?: string; job?: { jobId: string; status: string } };
+      const body = await r.json() as {
+        ok?: boolean; error?: string; conflict?: boolean;
+        job?: { jobId: string; status: string };
+      };
       if (!r.ok || !body.ok) {
-        setActionMessage({ tone: 'err', text: body.error ?? 'Sync failed' });
+        setActionMessage({
+          tone: body.conflict ? 'busy' : 'err',
+          text: body.error ?? 'Sync failed',
+        });
+        // A conflict means a job IS running — showing it is the useful response.
+        if (body.conflict) refreshJobs();
       } else {
         setActionMessage({ tone: 'ok', text: `Job ${body.job?.jobId.slice(0, 12) ?? 'unknown'}… started` });
         refreshJobs();
@@ -119,7 +133,13 @@ function DataSourcesPage() {
     >
       <Stack gap="md">
         {actionMessage && (
-          <InlineAlert tone={actionMessage.tone === 'ok' ? 'success' : 'error'}>
+          <InlineAlert
+            tone={
+              actionMessage.tone === 'ok' ? 'success'
+                : actionMessage.tone === 'busy' ? 'info'
+                  : 'error'
+            }
+          >
             {actionMessage.text}
           </InlineAlert>
         )}

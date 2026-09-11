@@ -97,7 +97,8 @@ export interface StorageBreakdown {
   byType: Array<{ extension: string; count: number; bytes: number }>;
   byPrefix: Array<{ prefix: string; count: number; bytes: number }>;
   kb: {
-    totalDocuments: number;
+    /** Null when the vector store could not be counted — not zero. */
+    totalDocuments: number | null;
     lastIngestedAt: string | null;
   };
 }

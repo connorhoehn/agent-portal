@@ -26,7 +26,7 @@ jest.mock('../../config.js', () => ({
 }));
 
 import { fixtureRegistry, sumBy } from '../../mock/core/index.js';
-import { kbDocumentRows, kbObjectRows } from '../../mock/knowledge-base.js';
+import { kbDocumentRows, kbIngestionJobRows, kbObjectRows } from '../../mock/knowledge-base.js';
 import {
   countS3Documents,
   getIngestStats,
@@ -71,18 +71,40 @@ describe('the knowledge base in dev:mock', () => {
     const lastComplete = jobs.find((j) => j.status === 'COMPLETE');
 
     expect(lastComplete).toBeDefined();
-    // The newest COMPLETE sync re-indexed the whole corpus: the "documents
-    // indexed" number and the document list are the same rows.
-    expect(lastComplete!.documentsIndexed).toBe(docs.length);
+    // A Bedrock S3 sync scans the whole data source every run, so `scanned` is
+    // the corpus.
     expect(lastComplete!.documentsScanned).toBe(docs.length);
+
+    // `indexed` is what THIS run changed, and it is deliberately smaller.
+    //
+    // This used to assert `documentsIndexed === docs.length` — "the newest
+    // COMPLETE sync re-indexed the whole corpus" — which is not what the field
+    // means. The real statistics report new + modified documents only, so a
+    // sync over an already-current corpus indexes 0. Because the mock said 14
+    // where the account said 0, `getStorageBreakdown` reading the field as a
+    // holdings count passed every test here and reported "0 documents" over 157
+    // deployed. The fixture's corpus lands in two waves; the newest job covers
+    // the later one.
+    const startedMs = Date.parse(lastComplete!.startedAt);
+    const wave = docs.filter((d) => Date.parse(String(d.ingestedAt ?? '')) >= startedMs);
+    expect(wave.length).toBeGreaterThan(0);
+    expect(wave.length).toBeLessThan(docs.length);
+    expect(lastComplete!.documentsIndexed).toBe(wave.length);
 
     // A job reports exactly the failures it can name.
     for (const job of jobs) {
       expect(job.documentsFailed).toBe(job.failureReasons.length);
     }
-    // A running job has not scanned anything yet.
-    const running = jobs.find((j) => j.status === 'IN_PROGRESS');
-    expect(running?.documentsScanned).toBe(0);
+    // A running job has not scanned anything yet. The seeded world has no job
+    // in flight any more — the head settled deliberately, so that "Sync now"
+    // is a legal action in the default world — so start one to get the state
+    // rather than asserting against a row that is no longer there.
+    const started = await startIngestionJob('DSMOCK0001AB', 'running-job probe');
+    expect(started.ok).toBe(true);
+    const running = (await listIngestionJobs(undefined, 50))
+      .find((j) => ['STARTING', 'IN_PROGRESS'].includes(j.status));
+    expect(running).toBeDefined();
+    expect(running!.documentsScanned).toBe(0);
   });
 
   it('sums storage from the object rows, never from a stored total', async () => {
@@ -98,8 +120,18 @@ describe('the knowledge base in dev:mock', () => {
     const stats = await getIngestStats();
     expect(stats.s3.total).toBe(objects.length);
     expect(stats.s3.totalSizeBytes).toBe(breakdown.totalBytes);
-    // The KB tile and the job history agree, because one is read off the other.
-    expect(stats.lastSync.documentsIndexed).toBe(breakdown.kb.totalDocuments);
+
+    // The KB tile counts the corpus, not the last run's delta.
+    //
+    // This assertion used to read `expect(stats.lastSync.documentsIndexed)
+    // .toBe(breakdown.kb.totalDocuments)` — "one is read off the other" — and
+    // it was pinning the bug in place. `documentsIndexed` is what a single run
+    // NEWLY indexed, which is 0 for a knowledge base that is already current,
+    // so the deployed page reported 0 documents over 157. The two numbers
+    // answer different questions and must now be allowed to differ: the
+    // fixture's second wave indexed 4 of a 14-document corpus.
+    expect(breakdown.kb.totalDocuments).toBe(kbDocumentRows.rows().length);
+    expect(stats.lastSync.documentsIndexed).not.toBe(breakdown.kb.totalDocuments);
   });
 
   it('counts the queue as the objects newer than the last sync', async () => {
@@ -116,17 +148,49 @@ describe('the knowledge base in dev:mock', () => {
     expect((await countS3Documents()).pendingSinceLastSync).toBe(queue.total);
   });
 
+  it('refuses a second sync while one is in flight, the way Bedrock does', async () => {
+    // Reached by DOING it, which is also how an operator reaches it: the
+    // default world is behind, so the first sync succeeds; pressing again while
+    // that job is still STARTING is the state Bedrock answers ConflictException
+    // for. The mock has to answer the same, or the 409 path is unreachable
+    // offline — and an unreachable state is how the read-side half of this gap
+    // shipped (see mock/knowledge-base.ts).
+    const first = await startIngestionJob('DSMOCK0001AB', 'first sync');
+    expect(first.ok).toBe(true);
+
+    const before = (await listIngestionJobs(undefined, 50)).length;
+    const outcome = await startIngestionJob('DSMOCK0001AB', 'second sync');
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error('unreachable');
+    expect(outcome.status).toBe(409);
+    expect(outcome.conflict).toBe(true);
+    // The reason names the state, not the log file. "check middleware logs" was
+    // the old answer and it is what made a working pipeline read as broken.
+    expect(outcome.error).toMatch(/already running/i);
+    expect(outcome.error).not.toMatch(/middleware logs/i);
+    // And it started nothing: a refused sync must not leave a job behind.
+    expect((await listIngestionJobs(undefined, 50)).length).toBe(before);
+  });
+
   it('makes a sync and an upload visible to the next read', async () => {
+    // Nothing is in flight in the default world — the newest job has settled,
+    // which is why "Sync now" is a legal request here at all.
+    expect(kbIngestionJobRows.rows().some(
+      (j) => ['STARTING', 'IN_PROGRESS', 'STOPPING'].includes(j.status),
+    )).toBe(false);
+
     const before = (await listIngestionJobs(undefined, 50)).length;
     const started = await startIngestionJob('DSMOCK0001AB', 'test sync');
-    expect(started).not.toBeNull();
+    expect(started.ok).toBe(true);
+    if (!started.ok) throw new Error(started.error);
 
     const after = await listIngestionJobs(undefined, 50);
     expect(after.length).toBe(before + 1);
-    expect(after[0]!.jobId).toBe(started!.jobId);
+    expect(after[0]!.jobId).toBe(started.jobId);
     // The data-source row picks the new job up as its latest.
     const sources = await listDataSourcesWithStatus('');
-    expect(sources[0]!.lastJobStatus).toBe(started!.status);
+    expect(sources[0]!.lastJobStatus).toBe(started.status);
 
     const objectsBefore = kbObjectRows.rows().length;
     const uploaded = await uploadDocument('team charter.md', Buffer.from('# charter'), 'text/markdown');

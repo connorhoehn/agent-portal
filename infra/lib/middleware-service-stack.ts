@@ -28,9 +28,16 @@ export interface MiddlewareServiceStackProps extends cdk.StackProps {
   readonly scoresTableArn: string;
   readonly sessionsTableArn: string;
 
-  // ── S3 bucket names ────────────────────────────────────────────────────────
+  // ── S3 buckets ─────────────────────────────────────────────────────────────
+  // ARNs are for the IAM grants; the NAMES are what the middleware actually
+  // needs at run time (`config.foundation.documentsBucket` reads
+  // DOCUMENTS_BUCKET). Only the ARNs used to be passed, so the task held S3
+  // permissions on a bucket it could not name: /api/ingest/storage answered
+  // `bucket: "", totalObjects: 0` on a bucket with the whole corpus in it.
   readonly documentsBucketArn: string;
   readonly artifactsBucketArn: string;
+  readonly documentsBucketName: string;
+  readonly artifactsBucketName: string;
 
   // ── Secrets / IDs populated by other stacks ───────────────────────────────
   /** Secrets Manager ARN for the HMAC session signing key (AuthorizationStack) */
@@ -524,6 +531,21 @@ export class MiddlewareServiceStack extends cdk.Stack {
     // Bedrock KB provisioning — allows middleware to create/delete KBs and data
     // sources on behalf of the portal wizard. The iam:PassRole grant lets
     // Bedrock assume the existing orgiq-kb-service-role when creating new KBs.
+    //
+    // The three Ingestion* actions are the reason this statement is worth
+    // reading twice. Without them the KB surface does not fail — it reports
+    // EMPTY, which is far worse. `ListDataSources` is granted, so the data
+    // source is found; `ListIngestionJobs` was not, so every caller that asks
+    // "when did this last sync, and what did it cover" got AccessDenied and
+    // fell into a catch. Measured against a knowledge base holding 157 indexed
+    // documents with two COMPLETE jobs: /api/ingest/jobs returned `[]`,
+    // /api/ingest/storage returned `kb.totalDocuments: 0`, the reconcile page's
+    // last-sync column read "—", and its stuck-pipeline banner claimed the
+    // documents "have never been indexed" — then offered a Sync button that
+    // needed StartIngestionJob and would have been denied too. Nothing in the
+    // stack status, the service health check or the page said a permission was
+    // missing. Keep all three: List for the history, Get for the live SSE job
+    // monitor (routes/ingest.ts), Start for every sync path.
     taskRole.addToPolicy(new iam.PolicyStatement({
       sid: 'BedrockKBProvisioning',
       actions: [
@@ -537,6 +559,9 @@ export class MiddlewareServiceStack extends cdk.Stack {
         'bedrock:GetDataSource',
         'bedrock:UpdateDataSource',
         'bedrock:ListDataSources',
+        'bedrock:StartIngestionJob',
+        'bedrock:GetIngestionJob',
+        'bedrock:ListIngestionJobs',
       ],
       resources: ['*'],
     }));
@@ -588,6 +613,19 @@ export class MiddlewareServiceStack extends cdk.Stack {
       // Foundation tables
       SCORES_TABLE: props.scoresTableName,
       SESSIONS_TABLE: props.sessionsTableName,
+
+      // Foundation buckets. The task role is granted S3 on both above; without
+      // these two it could not name the bucket it had access to, so every
+      // storage read answered an empty bucket instead of an error.
+      DOCUMENTS_BUCKET: props.documentsBucketName,
+      ARTIFACTS_BUCKET: props.artifactsBucketName,
+
+      // Passed to Bedrock as iam:PassRole when the portal wizard creates a new
+      // knowledge base. The PassRole grant for this exact role already exists
+      // (BedrockKBProvisioning above); with the env unset, provisioning failed
+      // at step 4 with "KB_SERVICE_ROLE_ARN not configured" — a grant with no
+      // way to use it.
+      KB_SERVICE_ROLE_ARN: `arn:aws:iam::${this.account}:role/${prefix}-kb-service-role`,
 
       // Authorization
       POLICY_STORE_ID: props.policyStoreId,

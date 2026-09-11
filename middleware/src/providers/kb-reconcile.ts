@@ -25,8 +25,9 @@ import { exec } from './aurora.js';
 import { config } from '../config.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 import { mockKbRegistry } from '../mock/kb-registry.js';
+import { kbDataSourceRows, kbDocumentRows, kbIngestionJobRows } from '../mock/knowledge-base.js';
 import { clock } from '../mock/core/index.js';
-import { problemFrom, reached, unreachable, type Upstream } from '../lib/upstream.js';
+import { attempt, problemFrom, reached, unreachable, type Upstream } from '../lib/upstream.js';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
 function toStr(v: unknown, f = ''): string { return typeof v === 'string' ? v : v == null ? f : String(v); }
@@ -64,6 +65,18 @@ export interface ReconciledKb {
   lastSyncAt: string | null;
   /** Documents the last completed sync actually scanned. */
   lastSyncScanned: number | null;
+  /**
+   * Whether the three fields above are an *answer*. False means the read
+   * failed, so their nulls carry no information.
+   *
+   * Without this the wire shape is ambiguous in the one way that matters: a
+   * knowledge base that has genuinely never synced and one whose history we
+   * were denied both arrive as three nulls, and a UI cannot help but pick a
+   * story. It picked "never indexed" — about a knowledge base with two
+   * COMPLETE jobs. `problem` says *that* something failed but not *which row*,
+   * so the distinction has to live on the row.
+   */
+  syncStateKnown: boolean;
   documentCount: number | null;
   drift: DriftKind;
   /** Plain sentence naming the disagreement, for a UI to show verbatim. */
@@ -91,53 +104,143 @@ async function liveKnowledgeBases(): Promise<Array<{ id: string; name: string; s
   return out;
 }
 
-/** Sync state for one knowledge base, or nulls when it cannot be read. */
-async function syncState(kbId: string): Promise<{
+interface SyncState {
   dataSourceCount: number | null; lastSyncStatus: string | null; lastSyncAt: string | null;
   lastSyncScanned: number | null;
-}> {
-  if (config.mock.aurora) {
-    return {
-      dataSourceCount: 1,
-      lastSyncStatus: 'COMPLETE',
-      // "synced this morning" — the claim is the DAY, not the age, because
-      // that is what the reconcile page reads it as ("last sync: today,
-      // COMPLETE" versus a stale index). `keepWithinToday` clamps the three
-      // hours to the elapsed part of the UTC day, so a page opened at 00:20
-      // UTC does not report the last sync as yesterday's; the age is flavor.
-      lastSyncAt: clock.hoursAgo(3, { keepWithinToday: true }),
-      lastSyncScanned: 6,
-    };
-  }
-  try {
-    const ds = await client().send(new ListDataSourcesCommand({ knowledgeBaseId: kbId, maxResults: 20 }));
-    const sources = ds.dataSourceSummaries ?? [];
-    const first = sources[0]?.dataSourceId;
-    if (!first) return { dataSourceCount: sources.length, lastSyncStatus: null, lastSyncAt: null, lastSyncScanned: null };
+}
 
-    // Newest first, explicitly. ListIngestionJobs does not promise an order,
-    // and unsorted `maxResults: 1` returned the *oldest* job — so after a
-    // second sync the page still reported the first one's coverage and went
-    // on claiming the index was behind when it had just caught up.
-    const jobs = await client().send(new ListIngestionJobsCommand({
-      knowledgeBaseId: kbId,
-      dataSourceId: first,
-      maxResults: 1,
-      sortBy: { attribute: 'STARTED_AT', order: 'DESCENDING' },
-    }));
-    const job = (jobs.ingestionJobSummaries ?? [])[0];
-    return {
-      dataSourceCount: sources.length,
-      lastSyncStatus: job?.status ?? null,
-      lastSyncAt: job?.updatedAt ? new Date(job.updatedAt).toISOString() : null,
-      // What the last run covered. Comparing this with what is in storage is
-      // the only way to tell a current index from one that ran once and has
-      // been behind ever since — both report a recent, successful sync.
-      lastSyncScanned: job?.statistics?.numberOfDocumentsScanned ?? null,
-    };
-  } catch {
-    return { dataSourceCount: null, lastSyncStatus: null, lastSyncAt: null, lastSyncScanned: null };
+/** Nothing known yet — the shape a caller renders when a read did not land. */
+const NO_SYNC_STATE: SyncState = {
+  dataSourceCount: null, lastSyncStatus: null, lastSyncAt: null, lastSyncScanned: null,
+};
+
+/**
+ * Sync state for one knowledge base — and whether it could be read.
+ *
+ * This used to be one try/catch returning four bare nulls, which is how a
+ * missing IAM permission became a confident, wrong answer. The task role held
+ * `bedrock:ListDataSources` but not `bedrock:ListIngestionJobs`, so the first
+ * call succeeded, the second threw AccessDenied, and the catch discarded BOTH —
+ * including the data source count it had already read. Against a knowledge base
+ * with an AVAILABLE data source and two COMPLETE jobs the page then said "no
+ * data source attached" and "never indexed", named no permission, and offered a
+ * Sync button that needed a third missing action. The reason was in the
+ * exception the whole time.
+ *
+ * So: two reads, caught separately, each keeping what the other learned, and
+ * the reason returned rather than swallowed. `Upstream` is this module's
+ * existing convention (see `documentCounts`) — the caller folds `error` into
+ * the envelope's `problem` field, which the route already passes through.
+ */
+export async function syncState(kbId: string): Promise<Upstream<SyncState>> {
+  if (config.mock.aurora) {
+    // Derived from the same registered fixtures `/api/ingest/*` reads, not
+    // stated. This branch used to be four literals — `dataSourceCount: 1`,
+    // `lastSyncStatus: 'COMPLETE'`, `lastSyncScanned: 6` — which broke contract
+    // rule 1 twice over and cost more than tidiness.
+    //
+    // `kbIngestionJobRows`' newest row is IN_PROGRESS and its `empty` scenario
+    // exists precisely so the page can be seen saying "never synced" rather
+    // than "sync failed" (its own comment says so). The literal `COMPLETE`
+    // overrode both: no scenario could move the reconcile page off "synced this
+    // morning", so a running sync and a failed one were unreachable offline —
+    // the two states the page had no rendering for. A fixture that hides the
+    // state it already models is worse than one that omits it.
+    //
+    // SCOPED TO THIS KNOWLEDGE BASE'S OWN DATA SOURCE, because the live branch
+    // below is: it calls ListDataSources on `kbId` and lists jobs for the data
+    // source it finds. Offline this read every job row regardless of which KB
+    // they belonged to, so all three registry rows reported the default KB's
+    // history — `orgiq-onboarding`, which has never synced, claimed a COMPLETE
+    // run, and so did an unregistered knowledge base that by definition has no
+    // fixture at all. Same class of answer as the literals it replaced: a
+    // confident one nobody counted. A KB whose registry row names no data
+    // source now returns the same "nothing to fail to read" answer the live
+    // path gives, with `dataSourceCount: 0` — a fact, not the null that means
+    // we could not look.
+    const row = mockKbRegistry.find((k) => k.bedrockKbId === kbId);
+    const dsId = row?.dataSourceId ?? null;
+    // The fixture's data-source rows model the default knowledge base; a
+    // registry row that names a data source the fixture does not carry still
+    // has one, and `1` is what the account would report for it.
+    const owned = kbDataSourceRows.rows().filter((d) => d.id === dsId);
+    const dataSourceCount = owned.length || (dsId ? 1 : 0);
+    if (!dsId) return reached({ ...NO_SYNC_STATE, dataSourceCount: 0 });
+    const jobs = kbIngestionJobRows.rows()
+      .filter((j) => j.dataSourceId === dsId)
+      .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
+    const latest = jobs[0];
+    return reached({
+      dataSourceCount,
+      lastSyncStatus: latest?.status ?? null,
+      lastSyncAt: latest ? (latest.finishedAt ?? latest.startedAt) : null,
+      // Bedrock reports coverage when a job settles, so only a COMPLETE run has
+      // a scanned count — and an S3 sync scans the whole data source, which is
+      // the corpus. A running or failed run reports null, which is what makes
+      // "a sync is in flight" distinguishable from "the index is behind".
+      lastSyncScanned: latest?.status === 'COMPLETE' ? kbDocumentRows.rows().length : null,
+    });
   }
+
+  const sources = await attempt(
+    async () => {
+      const ds = await client().send(
+        new ListDataSourcesCommand({ knowledgeBaseId: kbId, maxResults: 20 }),
+      );
+      return ds.dataSourceSummaries ?? [];
+    },
+    [],
+    `${kbId}: data sources unreadable`,
+  );
+  if (sources.degraded) {
+    return { items: { ...NO_SYNC_STATE }, degraded: true, error: sources.error };
+  }
+
+  const dataSourceCount = sources.items.length;
+  const first = sources.items[0]?.dataSourceId;
+  // A knowledge base with no data source has no sync history to fail to read.
+  // That is a complete answer, not a degraded one — and `dataSourceCount: 0`
+  // here is a fact we counted, which is why it must not share a shape with the
+  // null that means "we could not count".
+  if (!first) return reached({ ...NO_SYNC_STATE, dataSourceCount });
+
+  const latest = await attempt(
+    async () => {
+      // Newest first, explicitly. ListIngestionJobs does not promise an order,
+      // and unsorted `maxResults: 1` returned the *oldest* job — so after a
+      // second sync the page still reported the first one's coverage and went
+      // on claiming the index was behind when it had just caught up.
+      const jobs = await client().send(new ListIngestionJobsCommand({
+        knowledgeBaseId: kbId,
+        dataSourceId: first,
+        maxResults: 1,
+        sortBy: { attribute: 'STARTED_AT', order: 'DESCENDING' },
+      }));
+      return (jobs.ingestionJobSummaries ?? [])[0];
+    },
+    undefined,
+    `${kbId}: ingestion history unreadable`,
+  );
+  if (latest.degraded) {
+    // Keep the count that WAS read. Losing it here is what turned "we cannot
+    // see the sync history" into the flatly false "there is no data source".
+    return {
+      items: { ...NO_SYNC_STATE, dataSourceCount },
+      degraded: true,
+      error: latest.error,
+    };
+  }
+
+  const job = latest.items;
+  return reached({
+    dataSourceCount,
+    lastSyncStatus: job?.status ?? null,
+    lastSyncAt: job?.updatedAt ? new Date(job.updatedAt).toISOString() : null,
+    // What the last run covered. Comparing this with what is in storage is
+    // the only way to tell a current index from one that ran once and has
+    // been behind ever since — both report a recent, successful sync.
+    lastSyncScanned: job?.statistics?.numberOfDocumentsScanned ?? null,
+  });
 }
 
 /**
@@ -219,7 +322,10 @@ export async function reconcileKnowledgeBases(): Promise<{
           registryKbId: r['bedrock_kb_id'] ? toStr(r['bedrock_kb_id']) : null,
           registryStatus: toStr(r['status']) || null,
           liveKbId: null, liveStatus: null, dataSourceCount: null,
-          lastSyncStatus: null, lastSyncAt: null, lastSyncScanned: null, documentCount: null,
+          lastSyncStatus: null, lastSyncAt: null, lastSyncScanned: null,
+          // We never got as far as asking, so no row here knows its sync state.
+          syncStateKnown: false,
+          documentCount: null,
           drift: 'ok' as DriftKind,
           detail: 'Could not read the account to compare.',
         })),
@@ -229,6 +335,9 @@ export async function reconcileKnowledgeBases(): Promise<{
   }
 
   const counted = await documentCounts();
+  // Reasons the per-KB sync reads did not land, folded into `problem` below.
+  // A page that shows "—" for last sync now also says why it is a dash.
+  const syncProblems: string[] = [];
   const docs = counted.items;
   const liveById = new Map(live.map((k) => [k.id, k]));
   const claimed = new Set<string>();
@@ -254,16 +363,16 @@ export async function reconcileKnowledgeBases(): Promise<{
       detail = `Registry says ACTIVE; the account reports ${match.status}.`;
     }
 
-    const sync = match
-      ? await syncState(match.id)
-      : { dataSourceCount: null, lastSyncStatus: null, lastSyncAt: null, lastSyncScanned: null };
+    const sync = match ? await syncState(match.id) : reached({ ...NO_SYNC_STATE });
+    if (sync.degraded) syncProblems.push(sync.error);
     entries.push({
       id: toStr(r['id']) || null,
       slug, name: toStr(r['name']), tenant: toStr(r['tenant']) || null,
       registryKbId, registryStatus,
       liveKbId: match?.id ?? null,
       liveStatus: match?.status ?? null,
-      ...sync,
+      ...sync.items,
+      syncStateKnown: !sync.degraded,
       // Null, not 0, when the count could not be read — "we did not count" is
       // not "there are none", and on this page the difference is the diagnosis.
       documentCount: counted.degraded ? null : docs[slug] ?? 0,
@@ -277,11 +386,13 @@ export async function reconcileKnowledgeBases(): Promise<{
   for (const k of live) {
     if (claimed.has(k.id)) continue;
     const sync = await syncState(k.id);
+    if (sync.degraded) syncProblems.push(sync.error);
     entries.push({
       id: null, slug: null, name: k.name, tenant: null,
       registryKbId: null, registryStatus: null,
       liveKbId: k.id, liveStatus: k.status,
-      ...sync,
+      ...sync.items,
+      syncStateKnown: !sync.degraded,
       documentCount: null,
       drift: 'unregistered',
       detail: 'This knowledge base exists in the account but no registry entry claims it.',
@@ -292,7 +403,7 @@ export async function reconcileKnowledgeBases(): Promise<{
   // passes the whole envelope through with `res.json(await
   // reconcileKnowledgeBases())`, so a partial reconciliation reaches the wire
   // with no route change at all.
-  const problem = problemFrom(counted.error);
+  const problem = problemFrom(counted.error, ...syncProblems);
   return { entries, ...(problem ? { problem } : {}) };
 }
 

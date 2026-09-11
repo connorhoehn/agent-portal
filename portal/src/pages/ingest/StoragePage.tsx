@@ -30,7 +30,14 @@ function StoragePage() {
             <EmptyState title="Loading storage breakdown…" />
           ) : (
             <KPIGrid columns={2}>
-              <StatCard label="KB Documents Indexed" value={storage.kb.totalDocuments.toLocaleString()} />
+              {/* "Indexed" was the wrong noun as well as the wrong number: the
+                  value was the last run's newly-indexed count, which is 0 for a
+                  current index. It is now what the vector store holds, and a
+                  failed count shows a dash rather than a confident zero. */}
+              <StatCard
+                label="KB Documents"
+                value={storage.kb.totalDocuments != null ? storage.kb.totalDocuments.toLocaleString() : '—'}
+              />
               <StatCard
                 label="Last KB Ingest"
                 value={storage.kb.lastIngestedAt ? new Date(storage.kb.lastIngestedAt).toLocaleString() : '—'}

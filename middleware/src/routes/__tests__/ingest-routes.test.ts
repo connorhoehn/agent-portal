@@ -527,22 +527,49 @@ describe('GET /api/ingest/crawl/:id/manifest', () => {
 });
 
 describe('POST /api/ingest/crawl/:id/sync', () => {
-  it('404s an unknown crawl, 502s a failed StartIngestionJob, 202s a started one', async () => {
+  it('404s an unknown crawl, relays the provider\'s reason, 202s a started one', async () => {
     m(getCrawl).mockReturnValue(undefined);
     expect((await request(buildApp()).post('/api/ingest/crawl/cr-x/sync').send({})).status).toBe(404);
 
     m(getCrawl).mockReturnValue(crawlSession());
-    m(triggerKbSyncForCrawl).mockResolvedValue(null);
+    // This route answered a flat 502 "StartIngestionJob failed — check
+    // middleware logs" for every failure, because the provider collapsed every
+    // exception to `null`. It now carries a status and a sentence, so the route
+    // relays them instead of inventing one.
+    m(triggerKbSyncForCrawl).mockResolvedValue({
+      ok: false, status: 502, conflict: false,
+      error: 'Could not start a sync on KB123: something broke',
+    });
     const failed = await request(buildApp()).post('/api/ingest/crawl/cr-1/sync').send({});
     expect(failed.status).toBe(502);
-    expect(failed.body.error).toMatch(/StartIngestionJob failed/);
+    expect(failed.body.error).toMatch(/something broke/);
 
-    m(triggerKbSyncForCrawl).mockResolvedValue({ jobId: 'j-9', status: 'STARTING' });
+    m(triggerKbSyncForCrawl).mockResolvedValue({ ok: true, jobId: 'j-9', status: 'STARTING' });
     const ok = await request(buildApp()).post('/api/ingest/crawl/cr-1/sync').send({});
     expect(ok.status).toBe(202);
     expect(ok.body).toEqual({ ok: true, job: { jobId: 'j-9', status: 'STARTING' } });
     expect(triggerKbSyncForCrawl).toHaveBeenCalledWith('cr-1');
   });
+
+  it('a sync already running is a 409 that says so, not a 502 that blames the pipeline',
+    async () => {
+      // The case that made this a false flag: Bedrock refuses because the sync
+      // the caller wants is ALREADY HAPPENING, and the platform reported a bad
+      // gateway and told the operator to read server logs.
+      m(getCrawl).mockReturnValue(crawlSession());
+      m(triggerKbSyncForCrawl).mockResolvedValue({
+        ok: false, status: 409, conflict: true,
+        error: 'A sync is already running on KB123/DS456. Wait for it to finish — '
+          + 'starting another job now would re-embed the same documents.',
+      });
+      const res = await request(buildApp()).post('/api/ingest/crawl/cr-1/sync').send({});
+      expect(res.status).toBe(409);
+      expect(res.body.conflict).toBe(true);
+      expect(res.body.error).toMatch(/already running/i);
+      // `conflict` reaches the wire so the portal can render this as a state
+      // rather than colouring it as an error.
+      expect(res.body.error).not.toMatch(/middleware logs/i);
+    });
 });
 
 // ── Crawl targets ──────────────────────────────────────────────────────────

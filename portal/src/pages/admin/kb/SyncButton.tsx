@@ -16,7 +16,9 @@ export function SyncButton({
   size?: 'sm' | 'md';
 }) {
   const { can, ready } = useCapabilities();
-  const { loading, error, run } = useKbAction(`/api/admin/kb-registry/${kbId}/sync`, 'POST', onDone);
+  const { loading, error, conflict, run } = useKbAction(
+    `/api/admin/kb-registry/${kbId}/sync`, 'POST', onDone,
+  );
 
   if (!ready || !can('ManageKB')) return null;
   // No data source means nothing to ingest FROM — the verb would 400.
@@ -27,7 +29,9 @@ export function SyncButton({
       <Button variant="primary" size={size} disabled={loading} onClick={run}>
         {loading ? 'Starting…' : 'Sync Now'}
       </Button>
-      {error && <InlineAlert tone="error">{error}</InlineAlert>}
+      {/* "A sync is already running" is the pipeline working, so it reads as
+          information. Red here trains an operator to distrust the page. */}
+      {error && <InlineAlert tone={conflict ? 'info' : 'error'}>{error}</InlineAlert>}
     </Stack>
   );
 }
