@@ -36,6 +36,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
+import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
 
 type Verdict = 'approve' | 'request_changes' | 'reject';
@@ -86,8 +87,7 @@ function severityOf(s: string | undefined): 'critical' | 'warning' | 'info' {
 }
 
 function when(iso: string): string {
-  const d = new Date(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+  return parsePgTimestampAsUtc(iso)?.toLocaleString() ?? iso;
 }
 
 /** Label:value rail row — `Inline` in `as="span"` mode for both halves, so

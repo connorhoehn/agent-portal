@@ -23,7 +23,12 @@ import { initLandingZone } from './landing-zones.js';
 import { provisioningBroker } from '../lib/provisioning-broker.js';
 import { config } from '../config.js';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
-import { mockKbRegistry } from '../mock/kb-registry.js';
+import {
+  mockKbRegistry,
+  mockCreateKbEntry,
+  mockDeleteKbEntry,
+  mockPatchKb,
+} from '../mock/kb-registry.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -160,6 +165,26 @@ export async function createKbEntry(input: CreateKbInput): Promise<KbRegistryEnt
   const auroraTable = `bedrock_kb_${input.slug.replace(/-/g, '_')}`;
   const kbServiceRoleArn = config.knowledgeBase.serviceRoleArn || null;
 
+  // The row is inserted into the fixture the reads above already serve, so
+  // `POST /api/admin/kb-registry` followed by `GET /api/admin/kb-registry`
+  // shows the knowledge base that was just registered — and
+  // `POST /api/__mock/reset` un-registers it. The branch is here rather than
+  // in routes/kb-admin.ts because this function is what owns the INSERT.
+  if (config.mock.aurora) {
+    return mockCreateKbEntry({
+      name: input.name,
+      slug: input.slug,
+      tenant: input.tenant,
+      purpose: input.purpose,
+      description: input.description ?? null,
+      s3Prefix: input.s3Prefix,
+      auroraTable,
+      chunkingStrategy,
+      maxTokens,
+      kbServiceRoleArn,
+    });
+  }
+
   const rows = await exec(
     `INSERT INTO knowledge_bases
        (name, slug, tenant, purpose, description, s3_prefix, aurora_table,
@@ -191,6 +216,14 @@ export async function updateKbEntry(
   id: string,
   patch: { name?: string; description?: string },
 ): Promise<void> {
+  if (config.mock.aurora) {
+    mockPatchKb(id, {
+      ...(patch.name !== undefined ? { name: patch.name } : {}),
+      ...(patch.description !== undefined ? { description: patch.description ?? null } : {}),
+    });
+    return;
+  }
+
   const parts: string[] = [];
   const params: SqlParameter[] = [];
 
@@ -213,6 +246,7 @@ export async function updateKbEntry(
 
 /** Hard-delete a registry entry by ID. */
 export async function deleteKbEntry(id: string): Promise<void> {
+  if (config.mock.aurora) { mockDeleteKbEntry(id); return; }
   await exec(`DELETE FROM knowledge_bases WHERE id = :id::uuid`, [strParam('id', id)]);
 }
 
@@ -226,6 +260,16 @@ async function patchKbStatus(
     dataSourceId?: string;
   } = {},
 ): Promise<void> {
+  if (config.mock.aurora) {
+    mockPatchKb(id, {
+      status,
+      ...(opts.bedrockKbId !== undefined ? { bedrockKbId: opts.bedrockKbId } : {}),
+      ...(opts.dataSourceId !== undefined ? { dataSourceId: opts.dataSourceId } : {}),
+      ...(opts.errorMessage !== undefined ? { errorMessage: opts.errorMessage } : {}),
+    });
+    return;
+  }
+
   const parts: string[] = ['status = :status'];
   const params: SqlParameter[] = [strParam('status', status)];
 
@@ -282,6 +326,39 @@ export async function provisionKb(id: string): Promise<void> {
   const entry = await getKb(id).catch(() => null);
   if (!entry) {
     console.error(`[kb-registry] provisionKb: entry ${id} not found`);
+    return;
+  }
+
+  // ── Offline ───────────────────────────────────────────────────────────────
+  //
+  // Every step below is a Bedrock or Aurora call, so offline this used to fail
+  // at step 4 (`KB_SERVICE_ROLE_ARN not configured`) and then lose even that:
+  // `fail` writes FAILED through `patchKbStatus`, whose `exec` threw and was
+  // swallowed, so a KB created in dev:mock sat at CREATING for the life of the
+  // process with no error anywhere. That is a write that looks half-done and
+  // reports nothing.
+  //
+  // The offline provisioner walks the SAME seven steps through the SAME
+  // broker, so ProvisioningProgress.tsx renders a genuine sequence, and lands
+  // the row ACTIVE with `MOCK`-prefixed Bedrock ids — spelled that way so a
+  // fixture-provisioned KB can never be mistaken for one Bedrock created. It
+  // is a real state transition over fixture data; nothing is faked except the
+  // account the ids belong to.
+  if (config.mock.aurora) {
+    const steps = [
+      'create_aurora_table', 'create_vector_index', 'create_text_index',
+      'create_bedrock_kb', 'wait_kb_active', 'create_data_source', 'init_landing_zone',
+    ];
+    const bedrockKbId = entry.bedrockKbId ?? `KBMOCK-${entry.slug.toUpperCase().replace(/-/g, '')}`.slice(0, 24);
+    const dataSourceId = entry.dataSourceId ?? `DSMOCK-${entry.slug.toUpperCase().replace(/-/g, '')}`.slice(0, 24);
+    for (const step of steps) {
+      emit(step, 'running');
+      if (step === 'init_landing_zone') await initLandingZone(entry.s3Prefix);
+      emit(step, 'done', step === 'create_bedrock_kb' ? bedrockKbId
+        : step === 'create_data_source' ? dataSourceId : undefined);
+    }
+    await patchKbStatus(id, 'ACTIVE', { bedrockKbId, dataSourceId, errorMessage: null });
+    provisioningBroker.emit(`kb:${id}`, { type: 'complete', kbId: bedrockKbId });
     return;
   }
 
@@ -486,6 +563,16 @@ export async function deprovisionKb(id: string): Promise<void> {
   }
 
   await patchKbStatus(id, 'DELETING');
+
+  // Offline the three cleanups below (Bedrock DeleteKnowledgeBase, DROP TABLE,
+  // DELETE FROM) have exactly one counterpart: dropping the fixture row. The
+  // registry row IS the knowledge base in this world, so removing it is the
+  // whole deprovision rather than a stand-in for one.
+  if (config.mock.aurora) {
+    mockDeleteKbEntry(id);
+    console.log(`[kb-registry] deprovisioned fixture entry ${id} (slug=${entry.slug})`);
+    return;
+  }
 
   const client = new BedrockAgentClient({ region: config.region });
 

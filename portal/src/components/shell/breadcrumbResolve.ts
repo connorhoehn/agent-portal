@@ -18,6 +18,7 @@ const OBS_LABELS: Record<string, string> = {
   sessions: 'Sessions', authz: 'Authz Log', drift: 'Drift', quality: 'Quality',
   cost: 'Cost', calibration: 'Calibration', 'model-compare': 'Model Compare',
   memory: 'Memory', 'guardrail-rules': 'Guardrail Rules', traffic: 'Traffic',
+  tools: 'Tool Calls',
   approvals: 'Approvals',
 };
 const INGEST_LABELS: Record<string, string> = {

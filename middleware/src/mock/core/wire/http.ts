@@ -192,6 +192,12 @@ export const PARAM_SOURCES: Record<string, string> = {
   // Write-only prefixes: a `:id` under a path with no collection of its own,
   // or a collection that spells the id differently from the param.
   'id@/api/sdlc/changes': '/api/sdlc/changes#id',
+  // `/api/agent-projects/runs` is a write-only prefix — there is no collection
+  // there, and `pluralCandidate` gives up on a word that already ends in `s`.
+  // The runs ride along on the project list instead, so a key path is the only
+  // way in; `[]` skips the repositories that have no runs rather than stopping
+  // at the first one.
+  'runId@/api/agent-projects/runs': '/api/agent-projects#projects[].runs[].id',
   'id@/api/designs': '/api/designs#id',
   'id@/api/lab/consults': '/api/lab/consults#id',
   'id@/api/work/findings': '/api/work/findings?sweep=stale_docs#id',

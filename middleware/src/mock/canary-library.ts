@@ -18,7 +18,17 @@
 // sets MOCK_AURORA=true alongside MOCK_AGENTCORE/MOCK_GUARDRAILS/
 // MOCK_CLOUDWATCH, so this is consistent with "the mock is the contract".
 
-import { clock } from './core/clock.js';
+// ⚠️ The library is a REGISTERED fixture, not a module-scope array. It was an
+// array until the write half of this router was closed: `POST /library`,
+// `PUT /library/:id/draft` and `POST /library/:id/publish` called
+// CreatePrompt/UpdatePrompt/CreatePromptVersion against real Bedrock even in
+// dev:mock — the three `config.mock` branches on this router were all on GETs,
+// so Prompt Studio read as mocked while its writes were live. A write has to
+// land somewhere `POST /api/__mock/reset` can take it back from, and that
+// means a fixture.
+
+import { clock, defineFixture } from './core/index.js';
+import { liveRows } from './live.js';
 
 const ago = (h: number) => clock.hoursAgo(h);
 
@@ -83,7 +93,8 @@ function draft(
   };
 }
 
-export const MOCK_PROMPT_LIBRARY: MockPrompt[] = [
+function seedLibrary(): MockPrompt[] {
+  return [
   draft(
     'supervisor', 'Supervisor · system prompt',
     'Routes an org question to the right sub-agent and composes the answer.',
@@ -132,8 +143,152 @@ export const MOCK_PROMPT_LIBRARY: MockPrompt[] = [
       'schema before every write.',
     26,
   ),
-];
+  ];
+}
+
+/**
+ * `default` — one system prompt per deployed agent, each with a DRAFT.
+ * `empty`   — the account holds no prompts at all, which is what Prompt
+ *             Studio's "create your first prompt" state is written for and
+ *             what a fresh account actually looks like.
+ */
+export const promptLibrary = defineFixture<MockPrompt>({
+  key: 'canary-prompt-library',
+  scenarios: {
+    default: seedLibrary,
+    empty: () => [],
+  },
+});
+
+/** Live view — see mock/live.ts. Callers keep reading it as an array. */
+export const MOCK_PROMPT_LIBRARY: MockPrompt[] = liveRows(promptLibrary);
 
 export function findMockPrompt(promptId: string): MockPrompt | undefined {
-  return MOCK_PROMPT_LIBRARY.find((p) => p.id === promptId);
+  return promptLibrary.rows().find((p) => p.id === promptId);
+}
+
+// ─── Writes ──────────────────────────────────────────────────────────────────
+
+/** The ARN shape every row in this fixture uses. One place, so a created
+ *  prompt is addressable by exactly the same rule as a seeded one. */
+function promptArn(id: string): string {
+  return `arn:aws:bedrock:us-east-1:000000000000:prompt/${id}`;
+}
+
+/** `{{var}}` names in a template — what CreatePrompt derives inputVariables
+ *  from, reproduced here so a created prompt carries the same list. */
+function templateVariables(templateText: string): string[] {
+  return [...new Set(
+    [...templateText.matchAll(/{{([^}]+)}}/g)].map((m) => (m[1] ?? '').trim()),
+  )].filter(Boolean);
+}
+
+export interface MockCreatePromptInput {
+  name: string;
+  description?: string;
+  templateText: string;
+  modelId: string;
+  temperature: number;
+  maxTokens: number;
+}
+
+/**
+ * CreatePrompt: a new prompt whose only version is DRAFT.
+ *
+ * Bedrock mints an opaque 10-character id; a slug of the name is used here
+ * instead so an offline id is legible in a URL and stable across a rerun of
+ * the same request. The `mock-` prefix keeps it impossible to mistake for one
+ * Bedrock issued.
+ */
+export function mockCreatePrompt(input: MockCreatePromptInput): MockPrompt {
+  const slug = input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const id = `mock-${slug || 'prompt'}`;
+  const now = clock.nowIso();
+  const prompt: MockPrompt = {
+    id,
+    name: input.name,
+    description: input.description ?? '',
+    versions: [
+      {
+        version: 'DRAFT',
+        arn: `${promptArn(id)}:DRAFT`,
+        description: input.description ?? '',
+        createdAt: now,
+        updatedAt: now,
+        variant: {
+          name: 'default',
+          modelId: input.modelId,
+          templateType: 'TEXT',
+          templateText: input.templateText,
+          inputVariables: templateVariables(input.templateText),
+          inferenceConfig: { temperature: input.temperature, maxTokens: input.maxTokens },
+        },
+      },
+    ],
+  };
+  promptLibrary.rows().push(prompt);
+  return prompt;
+}
+
+/**
+ * UpdatePrompt on the DRAFT variant.
+ *
+ * Returns null when there is no such prompt, so the route can answer 404
+ * rather than report a save that moved nothing — the failure mode this whole
+ * slice exists to remove.
+ */
+export function mockUpdateDraft(
+  promptId: string,
+  patch: { name: string; templateText: string; modelId?: string; temperature?: number; maxTokens?: number },
+): MockPrompt | null {
+  const prompt = findMockPrompt(promptId);
+  const draftVersion = prompt?.versions.find((v) => v.version === 'DRAFT');
+  if (!prompt || !draftVersion) return null;
+  prompt.name = patch.name;
+  draftVersion.updatedAt = clock.nowIso();
+  draftVersion.variant = {
+    ...draftVersion.variant,
+    templateText: patch.templateText,
+    inputVariables: templateVariables(patch.templateText),
+    ...(patch.modelId ? { modelId: patch.modelId } : {}),
+    inferenceConfig: {
+      temperature: patch.temperature ?? draftVersion.variant.inferenceConfig.temperature,
+      maxTokens: patch.maxTokens ?? draftVersion.variant.inferenceConfig.maxTokens,
+    },
+  };
+  return prompt;
+}
+
+/**
+ * CreatePromptVersion: freeze the current DRAFT as the next numbered version.
+ *
+ * The number is derived from the versions already present rather than stored
+ * as a counter (contract.ts rule 1), so it stays right across a reset.
+ */
+export function mockPublishVersion(
+  promptId: string,
+  description?: string,
+): { prompt: MockPrompt; version: MockPromptVersion } | null {
+  const prompt = findMockPrompt(promptId);
+  const draftVersion = prompt?.versions.find((v) => v.version === 'DRAFT');
+  if (!prompt || !draftVersion) return null;
+  const highest = prompt.versions
+    .map((v) => Number.parseInt(v.version, 10))
+    .filter((n) => Number.isFinite(n))
+    .reduce((a, b) => Math.max(a, b), 0);
+  const version = String(highest + 1);
+  const frozen: MockPromptVersion = {
+    version,
+    arn: `${promptArn(prompt.id)}:${version}`,
+    description: description ?? draftVersion.description,
+    createdAt: clock.nowIso(),
+    updatedAt: clock.nowIso(),
+    // A published version is a COPY of the draft: editing the draft afterwards
+    // must not retroactively change what was published.
+    variant: { ...draftVersion.variant },
+  };
+  // DRAFT stays first — every reader of this fixture takes versions[0] as the
+  // draft, and the router's own list is DRAFT-first too.
+  prompt.versions.splice(1, 0, frozen);
+  return { prompt, version: frozen };
 }

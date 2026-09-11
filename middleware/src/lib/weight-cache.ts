@@ -17,8 +17,10 @@ import {
 import type { CanaryControlState } from './canary-types.js';
 import {
   mockGetControl,
+  mockGetSubjectArns,
   mockGetWeightB,
   mockSetControl,
+  mockSetSubjectArns,
   mockSetWeightB,
 } from '../mock/canary-weight.js';
 import { config } from '../config.js';
@@ -178,7 +180,25 @@ const SUBJECT_B_PARAM = '/orgiq/canary/subject_b_arn';
 let cachedSubjectA = '';
 let cachedSubjectB = '';
 
+/**
+ * The subject parameters, offline.
+ *
+ * These three were the last unmocked writes on the canary: `getWeightB` and
+ * `getControl` had mock branches, so the surface *read* as if it worked while
+ * `POST /start` still called PutParameter against the real
+ * `/orgiq/canary/subject_{a,b}_arn` — the worst arrangement, because nothing
+ * in dev:mock hinted that the write was live. The branch is here rather than
+ * in routes/canary.ts because this module is what owns the SSM client; a
+ * guard in the handler would have hidden the pair from
+ * mock/core/wire/mock-branches.ts without giving anything an offline path.
+ *
+ * The in-memory `cachedSubject*` are deliberately NOT consulted or filled in
+ * mock mode: the fixture is the parameter store, and a process-lifetime cache
+ * in front of it would survive `POST /api/__mock/reset` and hand back an ARN
+ * the fixture no longer holds.
+ */
 export async function getSubjectAArn(): Promise<string> {
+  if (config.mock.agentcore) return mockGetSubjectArns().a;
   if (cachedSubjectA) return cachedSubjectA;
   try {
     const res = await client.send(new GetParameterCommand({ Name: SUBJECT_A_PARAM }));
@@ -193,6 +213,7 @@ export async function getSubjectAArn(): Promise<string> {
 }
 
 export async function getSubjectBArn(): Promise<string> {
+  if (config.mock.agentcore) return mockGetSubjectArns().b;
   if (cachedSubjectB) return cachedSubjectB;
   try {
     const res = await client.send(new GetParameterCommand({ Name: SUBJECT_B_PARAM }));
@@ -207,6 +228,12 @@ export async function getSubjectBArn(): Promise<string> {
 }
 
 export async function setSubjectArns(aArn: string, bArn: string): Promise<void> {
+  if (config.mock.agentcore) {
+    // Move the same row the getters read, so `POST /start` followed by
+    // `GET /prompts` shows the experiment that was just started.
+    mockSetSubjectArns(aArn, bArn);
+    return;
+  }
   await Promise.all([
     client.send(new PutParameterCommand({
       Name: SUBJECT_A_PARAM,

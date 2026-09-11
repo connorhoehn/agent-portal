@@ -112,10 +112,46 @@ async function probe(
   }
 }
 
+
+/**
+ * Drain a paginated AgentCore/Bedrock listing.
+ *
+ * ⚠️ Every one of these listings used to be a single `maxResults: 50` call. An
+ * un-paginated list is the worst possible shape for THIS function, because the
+ * whole job is deciding whether a configured id exists: an id sitting on page
+ * two is absent from page one, so the reconciler reports a perfectly healthy
+ * capability as **STALE** and invites an operator to "fix" it by overwriting a
+ * working id. CLAUDE.md records the same bug class for `ListPrompts`, where the
+ * un-paginated call silently missed prompts.
+ *
+ * `pages` is bounded so a paging bug upstream cannot spin forever; hitting the
+ * bound is itself worth knowing, so it throws rather than returning a short
+ * list that would read as a definitive "not here".
+ */
+async function drain<Item>(
+  label: string,
+  call: (nextToken: string | undefined) => Promise<{ items: Item[]; nextToken: string | undefined }>,
+): Promise<Item[]> {
+  const out: Item[] = [];
+  let nextToken: string | undefined;
+  for (let page = 0; page < 20; page += 1) {
+    const { items, nextToken: next } = await call(nextToken);
+    out.push(...items);
+    if (!next) return out;
+    nextToken = next;
+  }
+  throw new Error(`${label}: still paginating after 20 pages — refusing to report a partial listing as complete`);
+}
+
 /** Guardrail ids, listed once per reconciliation rather than per role. */
 async function listGuardrails(): Promise<Array<{ id: string; status: string | null }>> {
-  const r = await bedrock().send(new ListGuardrailsCommand({ maxResults: 50 }));
-  return (r.guardrails ?? []).map((g) => ({ id: g.id ?? '', status: g.status ?? null }));
+  return drain('ListGuardrails', async (nextToken) => {
+    const r = await bedrock().send(new ListGuardrailsCommand({ maxResults: 50, nextToken }));
+    return {
+      items: (r.guardrails ?? []).map((g) => ({ id: g.id ?? '', status: g.status ?? null })),
+      nextToken: r.nextToken,
+    };
+  });
 }
 
 /**
@@ -154,20 +190,40 @@ export async function reconcileCapabilities(): Promise<{ capabilities: Capabilit
   const ac = config.agentcore;
   const capabilities = await Promise.all([
     probe('browser', 'Browser', 'BROWSER_ID', ac.browserId, async () => {
-      const r = await client().send(new ListBrowsersCommand({ maxResults: 50 }));
-      return (r.browserSummaries ?? []).map((b) => ({ id: b.browserId ?? '', status: b.status ?? null }));
+      return drain('ListBrowsers', async (nextToken) => {
+        const r = await client().send(new ListBrowsersCommand({ maxResults: 50, nextToken }));
+        return {
+          items: (r.browserSummaries ?? []).map((b) => ({ id: b.browserId ?? '', status: b.status ?? null })),
+          nextToken: r.nextToken,
+        };
+      });
     }),
     probe('browserProfile', 'Browser profile', 'BROWSER_PROFILE_ID', ac.browserProfileId, async () => {
-      const r = await client().send(new ListBrowserProfilesCommand({ maxResults: 50 }));
-      return (r.profileSummaries ?? []).map((b) => ({ id: b.profileId ?? '', status: b.status ?? null }));
+      return drain('ListBrowserProfiles', async (nextToken) => {
+        const r = await client().send(new ListBrowserProfilesCommand({ maxResults: 50, nextToken }));
+        return {
+          items: (r.profileSummaries ?? []).map((b) => ({ id: b.profileId ?? '', status: b.status ?? null })),
+          nextToken: r.nextToken,
+        };
+      });
     }),
     probe('codeInterpreter', 'Code Interpreter', 'CODE_INTERPRETER_ID', ac.codeInterpreterId, async () => {
-      const r = await client().send(new ListCodeInterpretersCommand({ maxResults: 50 }));
-      return (r.codeInterpreterSummaries ?? []).map((c) => ({ id: c.codeInterpreterId ?? '', status: c.status ?? null }));
+      return drain('ListCodeInterpreters', async (nextToken) => {
+        const r = await client().send(new ListCodeInterpretersCommand({ maxResults: 50, nextToken }));
+        return {
+          items: (r.codeInterpreterSummaries ?? []).map((c) => ({ id: c.codeInterpreterId ?? '', status: c.status ?? null })),
+          nextToken: r.nextToken,
+        };
+      });
     }),
     probe('memory', 'Memory', 'MEMORY_ID', ac.memoryId, async () => {
-      const r = await client().send(new ListMemoriesCommand({ maxResults: 50 }));
-      return (r.memories ?? []).map((m) => ({ id: m.id ?? '', status: m.status ?? null }));
+      return drain('ListMemories', async (nextToken) => {
+        const r = await client().send(new ListMemoriesCommand({ maxResults: 50, nextToken }));
+        return {
+          items: (r.memories ?? []).map((m) => ({ id: m.id ?? '', status: m.status ?? null })),
+          nextToken: r.nextToken,
+        };
+      });
     }),
 
     // Guardrails belong here for the same reason as the rest, and they matter

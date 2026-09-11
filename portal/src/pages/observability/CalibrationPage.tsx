@@ -66,6 +66,7 @@ import { SmartEmptyState } from '../../components/observability/SmartEmptyState'
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { firstDegraded } from '../../lib/degraded';
 import { T } from './Text';
+import { parsePgTimestamp } from '../../lib/pgTimestamp';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -295,7 +296,7 @@ function CalibrationPage() {
             <>
               <T className="text-text-tertiary">·</T>
               <T className="text-[11px] text-text-tertiary">
-                {new Date(runs[0].startedAt.replace(' ', 'T')).toLocaleString()}
+                {parsePgTimestamp(runs[0].startedAt)?.toLocaleString() ?? runs[0].startedAt}
               </T>
             </>
           ) : null}
@@ -569,7 +570,7 @@ function CalibrationPage() {
                   <TableTd className="text-[12px] text-text-secondary tabular-nums">{fmt2(c.humanScore)}</TableTd>
                   <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
                     {c.updatedAt
-                      ? new Date(c.updatedAt.replace(' ', 'T')).toLocaleDateString()
+                      ? (parsePgTimestamp(c.updatedAt)?.toLocaleDateString() ?? c.updatedAt)
                       : '—'}
                   </TableTd>
                   <TableTd className="whitespace-nowrap text-right">

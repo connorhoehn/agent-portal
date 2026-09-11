@@ -18,14 +18,34 @@
 // confirmed by the next poll instead of snapping back.
 
 import { defineFixture } from './core/index.js';
+import { MOCK_PROMPT_LIBRARY } from './canary-library.js';
 import type { CanaryControlState } from '../lib/canary-types.js';
 
-/** The pair of SSM parameters, as one row. */
+/** The four SSM parameters the canary runs on, as one row. */
 export interface CanaryWeightState {
   /** `/orgiq/canary/weight_b` — 0..100, the share of traffic on the B prompt. */
   weightB: number;
   /** `/orgiq/canary/control` — the JSON blob, field for field. */
   control: CanaryControlState;
+  /** `/orgiq/canary/subject_a_arn` — the baseline prompt the router falls back to. */
+  subjectAArn: string;
+  /** `/orgiq/canary/subject_b_arn` — the challenger. */
+  subjectBArn: string;
+}
+
+/**
+ * The DRAFT ARN of a prompt in the offline library, or ''.
+ *
+ * The subjects are not free-form strings: a canary compares two prompts that
+ * exist, and `GET /prompts` renders each one's template by ARN. Pointing the
+ * fixture at `mock/canary-library.ts` — the same rows Prompt Studio lists —
+ * is what keeps "start an experiment" and "read the prompt it started" in
+ * agreement offline. Inventing an ARN here would give the page a subject that
+ * resolves to nothing, which is contract.ts rule 2.
+ */
+function libraryArn(agentId: string): string {
+  const prompt = MOCK_PROMPT_LIBRARY.find((p) => p.id === `mock-${agentId}-system-prompt`);
+  return prompt?.versions[0]?.arn ?? '';
 }
 
 /**
@@ -51,12 +71,20 @@ export const canaryWeight = defineFixture<CanaryWeightState>({
       {
         weightB: 25,
         control: { manual_override_until: '', cooldown_until: '', halted: false },
+        subjectAArn: libraryArn('supervisor'),
+        subjectBArn: libraryArn('search'),
       },
     ],
     empty: () => [
       {
         weightB: 0,
         control: { manual_override_until: '', cooldown_until: '', halted: false },
+        // No experiment has ever been started, so neither subject parameter
+        // exists. `/ask` answers 500 "Canary subject A ARN not configured" in
+        // this world exactly as it does against a fresh account — that refusal
+        // is the state the "start an experiment" call to action is written for.
+        subjectAArn: '',
+        subjectBArn: '',
       },
     ],
   },
@@ -68,6 +96,8 @@ function state(): CanaryWeightState {
     canaryWeight.rows()[0] ?? {
       weightB: 0,
       control: { manual_override_until: '', cooldown_until: '', halted: false },
+      subjectAArn: '',
+      subjectBArn: '',
     }
   );
 }
@@ -83,6 +113,23 @@ export function mockGetControl(): CanaryControlState {
 export function mockSetWeightB(weightB: number): void {
   const row = canaryWeight.rows()[0];
   if (row) row.weightB = weightB;
+}
+
+export function mockGetSubjectArns(): { a: string; b: string } {
+  const row = state();
+  return { a: row.subjectAArn, b: row.subjectBArn };
+}
+
+/**
+ * Write both subject parameters, as `setSubjectArns` writes both in one
+ * `Promise.all`. A start that stored one of the two would leave the router
+ * picking a version it cannot invoke.
+ */
+export function mockSetSubjectArns(aArn: string, bArn: string): void {
+  const row = canaryWeight.rows()[0];
+  if (!row) return;
+  row.subjectAArn = aArn;
+  row.subjectBArn = bArn;
 }
 
 /** Merge, exactly as `setControl` does — a partial update must not clobber the rest. */

@@ -25,6 +25,14 @@ import {
 import { emitCanaryScore } from './emf-emitter.js';
 import { canaryBroker } from './canary-broker.js';
 import { getJudgeConfig, weightedComposite } from './judge-config.js';
+import { config } from '../config.js';
+import { clock } from '../mock/core/clock.js';
+import {
+  measureAnswer,
+  offlineRubricRationale,
+  offlineRubricScores,
+  OFFLINE_JUDGE_MODEL,
+} from '../mock/answer-check.js';
 import type { CanaryVersionLabel } from './canary-types.js';
 
 const MAX_INFLIGHT = 8;
@@ -40,6 +48,12 @@ const TEMPLATE_TTL_MS = 5 * 60 * 1000;
 let cachedTemplate: { text: string; fetchedAt: number } | null = null;
 
 async function getJudgeTemplate(): Promise<string | null> {
+  // Offline the GetPrompt below throws before it reaches Bedrock. There is no
+  // judge template to fetch because there is no judge model to send it to —
+  // `fireJudge` takes the `config.mock.agentcore` path and reads the answer
+  // itself. Saying "no template" is the truthful answer here; returning an
+  // invented one would put a string in the cache that no prompt library holds.
+  if (config.mock.agentcore) return null;
   if (!JUDGE_PROMPT_ARN) return null;
   const now = Date.now();
   if (cachedTemplate && now - cachedTemplate.fetchedAt < TEMPLATE_TTL_MS) {
@@ -108,6 +122,54 @@ export function fireJudge(params: JudgeParams): void {
         topic: params.topic,
         response: params.response,
       };
+
+      // OFFLINE. The same reading `lib/judge.ts` takes — `measureAnswer` plus
+      // `offlineRubricScores` over the operator's own rubric — not a second
+      // judge with a rubric of its own, so a canary score and a trace's
+      // judge_score can never disagree about the same text.
+      //
+      // Two things follow from that reader and both are deliberate. It scores
+      // on the 0–10 scale the harness judge speaks, so it is divided by ten
+      // onto the canary's 0–1 scale before `weightedComposite`. And it
+      // ABSTAINS on a dimension it cannot measure — `tone` for anything that
+      // is not a refusal — so that key is ABSENT from the event and the EMF
+      // record rather than present as a zero. `weightedComposite` renormalises
+      // over the keys it was given, so an abstention costs the composite
+      // nothing and buys the answer nothing; a zero would have read as "judged
+      // badly", which is a different and false claim.
+      //
+      // The branch is here, above the Converse, because this function owns the
+      // model call — and everything after it is the real tail: the same broker
+      // event, the same rubric weighting, the same EMF emission.
+      if (config.mock.agentcore) {
+        const measurement = measureAnswer(params.question, params.response);
+        const tenPoint = offlineRubricScores(measurement, cfg.dimensions);
+        const offline: Record<string, number> = {};
+        for (const [key, value] of Object.entries(tenPoint)) offline[key] = value / 10;
+        const offlineComposite = weightedComposite(offline, cfg.dimensions);
+        console.log(`[canary-judge] ${offlineRubricRationale(measurement)}`);
+        canaryBroker.publish({
+          type: 'judge_score',
+          request_id: params.requestId,
+          scores: offline,
+          composite: offlineComposite,
+          pass: offlineComposite * 10 >= cfg.failThreshold,
+          judged_by: OFFLINE_JUDGE_MODEL,
+          ts: clock.nowIso(),
+        });
+        await emitCanaryScore({
+          canary_name: params.canaryName,
+          version_label: params.versionLabel,
+          prompt_arn: params.versionArn,
+          request_id: params.requestId,
+          composite_score: offlineComposite,
+          latency_ms: params.latencyMs,
+          error: 0,
+          judged_by: OFFLINE_JUDGE_MODEL,
+          ...offline,
+        });
+        return;
+      }
 
       // Prefer local render + configured model; fall back to the prompt ARN
       // (which pins its own model) if the template isn't available.

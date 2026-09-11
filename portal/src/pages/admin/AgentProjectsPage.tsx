@@ -40,6 +40,7 @@ import { useCapabilities } from '../../lib/capabilities';
 import { toastError, toastSuccess, toastPending } from '../../lib/toastStore';
 import { openShell, useCompute, type Computer } from '@connorhoehnslalom/ui-components/compute';
 import { DEVBOX_MODELS, DEFAULT_DEVBOX_MODEL } from '../../lib/devboxModels';
+import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
 import { ConnectionSetup } from '../../components/codebases/ConnectionSetup';
 import { RepoDiscovery } from '../../components/codebases/RepoDiscovery';
 
@@ -66,11 +67,12 @@ const STATUS_TONE: Record<Run['status'], 'warning' | 'success' | 'danger'> = {
   running: 'warning', done: 'success', failed: 'danger',
 };
 
+/** Aurora stamps carry a `+00` offset ISO 8601 does not allow — shared parser. */
 function when(iso: string | null): string {
   if (!iso) return 'never';
-  const d = new Date(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`);
+  const d = parsePgTimestampAsUtc(iso);
+  if (d === null) return '—';
   const mins = Math.round((Date.now() - d.getTime()) / 60000);
-  if (Number.isNaN(mins)) return '—';
   if (mins < 1) return 'just now';
   if (mins < 60) return `${mins}m ago`;
   if (mins < 1440) return `${Math.round(mins / 60)}h ago`;

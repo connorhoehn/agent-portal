@@ -5,6 +5,7 @@
 // for this item" tiebreak — lives here so it can be read and tested on its own.
 
 import type { ChipTone } from '@connorhoehnslalom/ui-components/shared';
+import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp.ts';
 import type { BotRun } from '../bots/BotsPage';
 import type {
   MyScopedSprint,
@@ -159,9 +160,16 @@ export function flattenByType(nodes: WorkItemTree[], types: WorkItemType[]): Wor
 
 // ─── Run selection ────────────────────────────────────────────────────────────
 
-/** Aurora timestamps arrive without T/Z — same normalization as the bots pages. */
+/**
+ * Aurora hands a `timestamptz` over as `2026-09-08 08:19:23+00`: a space where
+ * ISO 8601 wants a `T`, and a bare-hour offset the standard does not allow. The
+ * old fix here appended `Z` to anything without a `T`, which turned a stamp
+ * that already carried `+00` into `…+00Z` — invalid twice over, and silent,
+ * because every caller falls back to the raw string. `parsePgTimestampAsUtc`
+ * pads the offset first and only assumes UTC when no zone is named at all.
+ */
 export function parseTs(iso: string): number {
-  return new Date(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`).getTime();
+  return parsePgTimestampAsUtc(iso)?.getTime() ?? Number.NaN;
 }
 
 /** The run that speaks for each work item: a running one wins, else the newest. */
@@ -297,7 +305,7 @@ export function assigneeFacets(items: FlatWorkItem[]): FacetOption[] {
 /** Whole days between `iso` and `now`, or null when the date is unusable. */
 export function daysRunning(iso: string | null, now: number = Date.now()): number | null {
   if (!iso) return null;
-  const started = new Date(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`).getTime();
+  const started = parseTs(iso);
   if (Number.isNaN(started)) return null;
   // A start date in the future is bad data, not a negative age.
   return Math.max(0, Math.floor((now - started) / 86_400_000));
@@ -338,9 +346,8 @@ export interface ActivityBuckets {
 
 /** UTC day key for a timestamp, tolerating Aurora's "YYYY-MM-DD HH:MM:SS". */
 function dayKey(iso: string | null): string | null {
-  if (!iso) return null;
-  const d = new Date(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+  const d = parsePgTimestampAsUtc(iso);
+  return d === null ? null : d.toISOString().slice(0, 10);
 }
 
 /**

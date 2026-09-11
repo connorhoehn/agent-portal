@@ -35,12 +35,20 @@ export type CanaryEvent =
   | {
       type: 'judge_score';
       request_id: string;
-      scores: {
-        helpfulness: number;
-        factuality: number;
-        tone: number;
-        conciseness: number;
-      };
+      /**
+       * Only the dimensions the judge actually scored.
+       *
+       * A judge ABSTAINS on a dimension it cannot measure rather than awarding
+       * marks for it: the offline `offline/lexical-answer-check` judge, for
+       * instance, omits `tone` entirely unless there is a refusal to report.
+       * That is load-bearing — `weightedComposite` renormalises over the keys
+       * present, so abstaining costs nothing and buys nothing, whereas scoring
+       * an unmeasurable dimension 1.0 was worth 20% of the composite for free.
+       * Typed as an open record for exactly that reason: ANY dimension may be
+       * absent, and a consumer must render "not judged" rather than defaulting
+       * it to 0 — a bar at the floor is a claim, and the wrong one.
+       */
+      scores: Record<string, number>;
       composite: number;
       ts: string;
     }
@@ -88,12 +96,9 @@ export interface ModelNodeData {
 
 export interface JudgeNodeData {
   judgeVersion: string;
-  lastScores?: {
-    helpfulness: number;
-    factuality: number;
-    tone: number;
-    conciseness: number;
-  };
+  /** The dimensions the last judgement actually scored — see `judge_score`.
+   *  A missing key means "not judged", never "judged zero". */
+  lastScores?: Record<string, number>;
   lastJudgedAt?: string;
 }
 

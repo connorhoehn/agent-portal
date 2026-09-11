@@ -9,16 +9,15 @@ import type { Response } from 'express';
 import {
   assessmentBroker,
   decideReplay,
+  partitionKeyFor,
+  channelOf,
+  REPLAY_CHANNELS,
   REPLAY_MAX_AGE_MS,
+  MAX_PARTITIONS,
   type AssessmentEvent,
   type BufferedAssessmentEvent,
 } from '../assessment-broker.js';
 import { initSSE } from '../sse.js';
-
-// Mirrors the ring buffer's private BUFFER_CAPACITY (assessment-broker.ts) —
-// not exported, so the gap tests below flood past it by this literal count
-// to force real evictions.
-const RING_BUFFER_CAPACITY = 500;
 
 function pullEvent(section: string): AssessmentEvent {
   return { type: 'knowledge.pulled', section, pages: 3, files_pulled: 3, ts: new Date().toISOString() };
@@ -363,9 +362,12 @@ describe('assessmentBroker.catchUp / gapFrame — wiring decideReplay to the liv
     expect(events.some((e) => e.seq === b.seq)).toBe(true);
   });
 
-  it('catchUp is gapped once the ring buffer evicts the client\'s anchor', () => {
-    const marker = assessmentBroker.publish(pullEvent('marker'));
-    for (let i = 0; i < RING_BUFFER_CAPACITY + 10; i++) assessmentBroker.publish(pullEvent(`flood-${i}`));
+  it('catchUp is gapped once the client\'s own partition evicts past its anchor', () => {
+    const section = `evict-${Math.random()}`;
+    const marker = assessmentBroker.publish(pullEvent(section));
+    // Same section => same partition, so this is a real same-resource
+    // eviction rather than unrelated traffic crowding the anchor out.
+    for (let i = 0; i < REPLAY_CHANNELS.pull.capacity + 2; i++) assessmentBroker.publish(pullEvent(section));
     const { gapped } = assessmentBroker.catchUp(marker.seq);
     expect(gapped).toBe(true);
   });
@@ -426,5 +428,135 @@ describe('initSSE (finding #9 — a socket error must not crash the process)', (
     } finally {
       jest.useRealTimers();
     }
+  });
+});
+
+// ─── Partitioned replay retention (REVIEW-2026-09-05 finding #7) ────────────
+//
+// The store was ONE 500-slot ring for the whole process, so the loudest event
+// type (`knowledge.presence`) evicted the most valuable (`knowledge.doc.saved`)
+// and the reconnecting client got an honest `stream.gap` for something it need
+// never have lost. It is now `Map<'<channel>:<resource>', ring>`. These tests
+// pin all four properties the fix has to hold at once: the isolation, the
+// still-honest gap signal, the memory bound, and the age bound.
+
+describe('replay partitioning — the key', () => {
+  it('maps every event variant to its <channel>:<resource> key', () => {
+    const ts = new Date().toISOString();
+    const cases: Array<[AssessmentEvent, string]> = [
+      [{ type: 'knowledge.presence', doc_id: 'rule:a.md', viewers: [], ts }, 'presence:rule:a.md'],
+      [{ type: 'knowledge.doc.saved', id: 'rule:a.md', stamp: 's', by: 'u', ts }, 'doc:rule:a.md'],
+      [{ type: 'knowledge.published', id: 'rule:a.md', page_id: 'p', version: 1, ts }, 'doc:rule:a.md'],
+      [{ type: 'knowledge.comment.created', id: 'c1', doc_id: 'rule:a.md', by: 'u', body: 'b', ts }, 'doc:rule:a.md'],
+      [{ type: 'knowledge.pulled', section: 'confluence-eng', pages: 1, files_pulled: 1, ts }, 'pull:confluence-eng'],
+      [{ type: 'run.progress', run_id: 'r1', command: 'c', team_id: null, percent: 10, ts }, 'run-progress:r1'],
+      [{ type: 'run.started', run_id: 'r1', command: 'c', team_id: null, ts }, 'run:r1'],
+      [{ type: 'run.completed', run_id: 'r1', command: 'c', team_id: null, summary: 's', ts }, 'run:r1'],
+      [{ type: 'run.failed', run_id: 'r1', command: 'c', team_id: null, reason: 'x', ts }, 'run:r1'],
+    ];
+    for (const [event, key] of cases) {
+      expect(partitionKeyFor(event)).toBe(key);
+      // Doc ids contain colons themselves — the channel is the FIRST segment.
+      expect(REPLAY_CHANNELS[channelOf(key)]).toBeDefined();
+    }
+  });
+
+  it('a save and its doc\'s presence roster live in different partitions (that is the whole fix)', () => {
+    const ts = new Date().toISOString();
+    expect(partitionKeyFor({ type: 'knowledge.presence', doc_id: 'rule:x.md', viewers: [], ts }))
+      .not.toBe(partitionKeyFor({ type: 'knowledge.doc.saved', id: 'rule:x.md', stamp: 's', by: 'u', ts }));
+  });
+});
+
+describe('replay partitioning — the regression this item exists for', () => {
+  it('a presence flood far past the OLD 500-slot buffer does not evict a knowledge save, and does not gap the reconnect', () => {
+    const docId = `rule:flood-${Math.random()}.md`;
+    const anchor = assessmentBroker.publish(pullEvent(`flood-anchor-${Math.random()}`));
+    const save = assessmentBroker.publish({ type: 'knowledge.doc.saved', id: docId, stamp: 's-flood', by: 'u-jonas', ts: new Date().toISOString() });
+
+    // 20 docs x 40 roster updates = 800 presence events. Under the old flat
+    // ring this alone pushed `save` out of retention.
+    for (let round = 0; round < 40; round += 1) {
+      for (let doc = 0; doc < 20; doc += 1) {
+        assessmentBroker.publish({
+          type: 'knowledge.presence', doc_id: `flood-doc-${doc}`,
+          viewers: [{ sub: 'u-amina', name: 'Amina', tab_id: `tab-${round}`, since: new Date().toISOString() }],
+          ts: new Date().toISOString(),
+        });
+      }
+    }
+
+    const { events, gapped } = assessmentBroker.catchUp(anchor.seq);
+    expect(events.some((e) => e.seq === save.seq)).toBe(true);
+    expect(gapped).toBe(false);
+    // 800 events collapsed into 20 single-slot presence partitions.
+    const stats = assessmentBroker.replayStats();
+    expect(stats.keys.filter((k) => k.startsWith('presence:flood-doc-'))).toHaveLength(20);
+    expect(events.filter((e) => e.event.type === 'knowledge.presence')).toHaveLength(20);
+  });
+
+  it('run.progress supersedes per run without gapping, while the run\'s lifecycle events keep their history', () => {
+    const runId = `run-${Math.random()}`;
+    const anchor = assessmentBroker.publish(pullEvent(`run-anchor-${Math.random()}`));
+    const started = assessmentBroker.publish({ type: 'run.started', run_id: runId, command: 'score-dimensions', team_id: null, ts: new Date().toISOString() });
+    for (let p = 1; p <= 100; p += 1) {
+      assessmentBroker.publish({ type: 'run.progress', run_id: runId, command: 'score-dimensions', team_id: null, percent: p, ts: new Date().toISOString() });
+    }
+    const done = assessmentBroker.publish({ type: 'run.completed', run_id: runId, command: 'score-dimensions', team_id: null, summary: 'ok', ts: new Date().toISOString() });
+
+    const { events, gapped } = assessmentBroker.catchUp(anchor.seq);
+    expect(gapped).toBe(false);
+    expect(events.map((e) => e.seq)).toEqual(expect.arrayContaining([started.seq, done.seq]));
+    const progress = events.filter((e) => e.event.type === 'run.progress');
+    expect(progress).toHaveLength(1);
+    expect(progress[0]!.event).toMatchObject({ percent: 100 });
+  });
+});
+
+describe('replay partitioning — the gap signal stays honest', () => {
+  it('a same-partition eviction still gaps the client (a partition is not a licence to drop quietly)', () => {
+    const section = `honest-${Math.random()}`;
+    const anchor = assessmentBroker.publish(pullEvent(section));
+    for (let i = 0; i < REPLAY_CHANNELS.pull.capacity + 2; i += 1) assessmentBroker.publish(pullEvent(section));
+    expect(assessmentBroker.catchUp(anchor.seq).gapped).toBe(true);
+  });
+
+  it('an event retired for age is gapped, not silently absent', () => {
+    const stale = new Date(Date.now() - 40 * 60 * 1000).toISOString(); // bound is 30m
+    const aged = assessmentBroker.publish({ type: 'knowledge.doc.saved', id: `rule:aged-${Math.random()}.md`, stamp: 's', by: 'u', ts: stale });
+    // Its partition is gone entirely — an all-stale key does not occupy the map.
+    expect(assessmentBroker.replayStats().keys).not.toContain(partitionKeyFor(aged.event));
+    expect(assessmentBroker.catchUp(aged.seq - 1).gapped).toBe(true);
+    // A client already past it is not gapped by it.
+    const fresh = assessmentBroker.publish(pullEvent(`aged-follow-${Math.random()}`));
+    expect(assessmentBroker.catchUp(fresh.seq).gapped).toBe(false);
+  });
+
+  it('a fresh connection is still never gapped and still replays nothing, however full the store is', () => {
+    const { events, gapped } = assessmentBroker.catchUp(undefined);
+    expect(events).toEqual([]);
+    expect(gapped).toBe(false);
+  });
+});
+
+// Deliberately last: this test drives the partition map to its cap, which
+// raises the drop watermark, and the watermark is monotonic for the life of
+// the process-wide singleton.
+describe('replay partitioning — the memory bound', () => {
+  it('caps the number of live partitions, retiring least-recently-published keys and gapping anyone who needed them', () => {
+    const victim = assessmentBroker.publish({ type: 'knowledge.doc.saved', id: `rule:victim-${Math.random()}.md`, stamp: 's', by: 'u', ts: new Date().toISOString() });
+    const victimKey = partitionKeyFor(victim.event);
+    expect(assessmentBroker.replayStats().keys).toContain(victimKey);
+
+    // MAX_PARTITIONS distinct resources published after it push it out.
+    for (let i = 0; i < MAX_PARTITIONS + 5; i += 1) {
+      assessmentBroker.publish({ type: 'knowledge.doc.saved', id: `rule:lru-${i}-${Math.random()}.md`, stamp: 's', by: 'u', ts: new Date().toISOString() });
+    }
+
+    const stats = assessmentBroker.replayStats();
+    expect(stats.partitions).toBeLessThanOrEqual(MAX_PARTITIONS);
+    expect(stats.keys).not.toContain(victimKey);
+    // Retired, not disappeared: a client that had not seen it is told so.
+    expect(assessmentBroker.catchUp(victim.seq - 1).gapped).toBe(true);
   });
 });

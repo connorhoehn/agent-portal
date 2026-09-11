@@ -1,6 +1,7 @@
 // Pure formatting/parsing logic for AgentDetailPage, split out so it can be
 // unit-tested without mounting the page.
 import type { ChipTone, LogLevel } from '@connorhoehnslalom/ui-components/shared';
+import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp.ts';
 
 export function ms(n: number | null | undefined): string {
   if (n == null || n === 0) return '—';
@@ -9,9 +10,9 @@ export function ms(n: number | null | undefined): string {
 
 export function when(iso: string | null): string {
   if (!iso) return '—';
-  const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z');
+  const d = parsePgTimestampAsUtc(iso);
+  if (d === null) return iso;
   const mins = Math.round((Date.now() - d.getTime()) / 60000);
-  if (Number.isNaN(mins)) return iso;
   if (mins < 1) return 'just now';
   if (mins < 60) return `${mins}m ago`;
   if (mins < 1440) return `${Math.round(mins / 60)}h ago`;

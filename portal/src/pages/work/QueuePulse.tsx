@@ -11,6 +11,7 @@ import {
   Card, Chip, Inline, SectionLabel, Stack, StatStrip, StatusDot, Toolbar,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
 import { useSession } from '../../lib/auth';
 import { BOTS_ROLES } from './automateNav';
 import { T } from './workShared';
@@ -34,9 +35,9 @@ interface PulseBot {
 
 function lastRan(iso: string | null): string {
   if (!iso) return 'never ran';
-  const d = new Date(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`);
+  const d = parsePgTimestampAsUtc(iso);
+  if (d === null) return '—';
   const mins = Math.round((Date.now() - d.getTime()) / 60_000);
-  if (Number.isNaN(mins)) return '—';
   if (mins < 1) return 'ran just now';
   if (mins < 60) return `ran ${mins}m ago`;
   if (mins < 1440) return `ran ${Math.round(mins / 60)}h ago`;

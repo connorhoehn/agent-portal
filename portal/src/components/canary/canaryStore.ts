@@ -29,7 +29,9 @@ export interface JudgeHistoryEntry {
   ts: string;
   side: 'A' | 'B' | 'unknown';
   composite: number;
-  scores: { helpfulness: number; factuality: number; tone: number; conciseness: number };
+  /** Only the dimensions the judge scored — an absent key is an abstention,
+   *  not a zero. See the `judge_score` event in ./types.ts. */
+  scores: Record<string, number>;
 }
 
 export interface CanaryState {
@@ -276,7 +278,7 @@ export function dispatch(e: CanaryEvent): void {
           ts: e.ts,
           side: (side as 'A' | 'B') ?? 'unknown',
           composite: e.composite,
-          scores: e.scores as { helpfulness: number; factuality: number; tone: number; conciseness: number },
+          scores: e.scores,
         };
         const judgeHistory = pushCapped(s.judgeHistory, historyEntry, 50);
         return {

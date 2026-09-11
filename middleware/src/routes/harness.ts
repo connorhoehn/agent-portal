@@ -33,13 +33,21 @@
 // (`mock/core/wire/mock-branches.ts`) only names an unmocked leaf in
 // `src/lib/**` or `src/providers/**`, and `exec` is excluded everywhere as
 // transport — so a route handler calling `exec` directly, which is what all
-// three did, is structurally invisible to it. THREE ROUTES ARE STILL LIKE THAT
-// HERE and are on that scan's list for the libraries below them rather than for
-// their own `exec` calls: `POST /trace` (lib/trace-sink.ts), `POST
+// three did, is structurally invisible to it. THREE ROUTES WERE STILL LIKE THAT
+// HERE and were on that scan's list for the libraries below them rather than
+// for their own `exec` calls: `POST /trace` (lib/trace-sink.ts), `POST
 // /runs/:id/execute` (lib/harness-runner.ts) and `POST
-// /results/:invocationId/rejudge` (lib/judge.ts). Each wants a mock branch in
+// /results/:invocationId/rejudge` (lib/judge.ts). Each wanted a mock branch in
 // the library it calls — the transport, where every caller gets it — not a
-// second pipeline behind a branch in this file.
+// second pipeline behind a branch in this file, and each now has one.
+//
+// Two of the three needed a branch here as well, and the distinction matters:
+// `/runs/:id/execute` and `/results/:invocationId/rejudge` each run their OWN
+// `exec` before the library is ever reached, so the library branch alone left
+// them 500ing offline on their first statement. Those two branches are lookups
+// only — they read the run's status and the trace's text out of the fixtures —
+// and every decision after them is the same code the Aurora path runs.
+// `POST /trace` needed nothing here: it calls `processTrace` and nothing else.
 
 import { Router } from 'express';
 import { randomUUID } from 'node:crypto';
@@ -62,6 +70,7 @@ import {
   mockUpsertResult, mockPatchRun, type MockRunPatch,
 } from '../mock/harness.js';
 import { mockListPromotedVersions, mockPromotePromptVersion } from '../mock/prompt-versions.js';
+import { sinkTraceById } from '../mock/trace-sink.js';
 
 export const harnessRouter = Router();
 
@@ -378,6 +387,19 @@ harnessRouter.post('/trace', requireTraceAuth, asyncHandler(async (req, res) => 
   }
   if (Array.isArray(body.toolCalls)) {
     input.toolCalls = body.toolCalls;
+  }
+  // `memoryEvents` and `guardrailInterventions` are the other two substance
+  // axes `processTrace` persists, and they were the only ones with no way in
+  // through this route — so an agent could report the tool calls it made but
+  // not the memory it read or the guardrail that fired, and the memory half of
+  // the observability surface was reachable only by calling processTrace
+  // directly. They are passed through on the same terms as toolCalls: shape is
+  // the sink's problem, presence is ours.
+  if (Array.isArray(body.memoryEvents)) {
+    input.memoryEvents = body.memoryEvents as TraceInput['memoryEvents'];
+  }
+  if (Array.isArray(body.guardrailInterventions)) {
+    input.guardrailInterventions = body.guardrailInterventions as TraceInput['guardrailInterventions'];
   }
 
   // 30s ceiling — embedding + judge + INSERT must complete inside this window.
@@ -728,11 +750,21 @@ harnessRouter.post('/runs', runnerOr(requireAction('ManageCanary')), asyncHandle
 
 harnessRouter.post('/runs/:id/execute', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
   const runId = String(req.params['id'] ?? '');
-  const rows = await exec(
-    `SELECT status, judge_model_id FROM observability.test_runs
-      WHERE run_id = CAST(:id AS uuid)`,
-    [strParam('id', runId)],
-  );
+  // FORCED ROUTE BRANCH — this handler's OWN `exec`, not the library's.
+  // `lib/harness-runner.ts` now has a mock branch at every layer, but this
+  // lookup runs before any of it, so offline the route still 500'd on the very
+  // first statement and the runner below was unreachable. That is the same
+  // structural blind spot this file's header describes: rule 4's write scan
+  // excludes `exec` as transport everywhere, so a handler calling it directly
+  // is invisible to the ratchet — the identical fix landed here for
+  // `POST /runs/:runId/results`, `PATCH /runs/:id` and `POST /promote`.
+  const rows = config.mock.aurora
+    ? (() => { const r = mockGetRun(runId); return r ? [{ status: r.status, judge_model_id: r.judgeModelId }] : []; })()
+    : await exec(
+      `SELECT status, judge_model_id FROM observability.test_runs
+        WHERE run_id = CAST(:id AS uuid)`,
+      [strParam('id', runId)],
+    );
   if (rows.length === 0) { res.status(404).json({ error: 'run not found' }); return; }
   const status = String(rows[0]?.['status'] ?? 'pending');
   if (status === 'running') { res.status(409).json({ error: 'run is already executing' }); return; }
@@ -1096,12 +1128,26 @@ harnessRouter.post('/results/:invocationId/rejudge', requireAction('ManageCanary
   if (!/^[0-9a-f-]{36}$/i.test(invocationId)) {
     throw new ValidationError('invocationId must be a UUID');
   }
-  const rows = await exec(
-    `SELECT prompt_snippet, response_snippet
-       FROM observability.invocation_traces
-      WHERE invocation_id = CAST(:id AS uuid)`,
-    [strParam('id', invocationId)],
-  );
+  // FORCED ROUTE BRANCH — same reason as `/runs/:id/execute` above: the
+  // handler's own `exec` runs before `lib/judge.ts`'s mock branch can, so
+  // offline the route 500'd before it could re-judge anything.
+  //
+  // Offline the table is `mock/trace-sink.ts`'s `trace-sink-traces` fixture —
+  // what `processTrace` actually wrote this run — and NOT the seeded day of
+  // traffic in `mock/observability.ts`, whose ids (`mock-inv-0`) are not uuids
+  // and are rejected by the guard above. So the offline sequence is the real
+  // one: post a trace, take the uuid it returns, re-judge that.
+  const rows = config.mock.aurora
+    ? (() => {
+      const t = sinkTraceById(invocationId);
+      return t ? [{ prompt_snippet: t.prompt_snippet, response_snippet: t.response_snippet }] : [];
+    })()
+    : await exec(
+      `SELECT prompt_snippet, response_snippet
+         FROM observability.invocation_traces
+        WHERE invocation_id = CAST(:id AS uuid)`,
+      [strParam('id', invocationId)],
+    );
   if (rows.length === 0) throw new NotFoundError('trace not found');
   const trace = rows[0]!;
   const prompt = String(trace['prompt_snippet'] ?? '');

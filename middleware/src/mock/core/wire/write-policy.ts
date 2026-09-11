@@ -128,9 +128,13 @@
 //
 // WHAT IS STILL UNDECLARED. `intercepts` was retrofitted onto every entry
 // already on this list whose own `safe` sentence NAMES the flag it leans on —
-// `MOCK_AGENTCORE`, `MOCK_AURORA`, `config.mock.aurora`; fifteen of them — so
-// each label is copied from the reading that entry was written from rather
-// than from a fresh guess. Four entries say only "under the mock providers"
+// `MOCK_AGENTCORE`, `MOCK_AURORA`, `config.mock.aurora` — so each label is
+// copied from the reading that entry was written from rather than from a fresh
+// guess. (This paragraph used to say "fifteen of them" and was wrong within two
+// slices: it is a count of a list this file keeps growing. A number that has to
+// be re-derived on every edit is a stale reason waiting to happen, which is the
+// exact failure the rest of this header is about, so it is gone.) Four entries
+// say only "under the mock providers"
 // (`POST /api/assessment/teams/:id/intake/text`, `POST
 // /api/assessment/knowledge/doc/comment`, `POST
 // /api/work/findings/analyze-batch`, `POST /api/designs/:id/signoff`). Those
@@ -139,6 +143,75 @@
 // instead — a printed gap, and a small one to close by reading four
 // providers. Undeclared means they replay exactly as they did before; it does
 // NOT mean somebody checked and found them independent of the mocks.
+//
+// ── Re-reading the refusals, and why it keeps paying ────────────────────────
+//
+// A refusal is not written once. The reasons below describe HANDLERS, and the
+// handlers move — usually because somebody gave a provider a mock branch, which
+// is a good thing that silently falsifies a sentence in this file. Three sweeps
+// have now been run over the whole refusal list and every one found rot: a
+// route refused as "answers 503 without writing" that returned 200 and wrote;
+// three refused as "drives a devbox microVM" when none did; one pattern that
+// matched no live route at all. The third sweep (2026-09) found SIXTEEN more,
+// all of the same shape — the mock branch arrived and the reason did not:
+//
+//   * `POST /harness/runs/:runId/results` and `POST /harness/promote` —
+//     "through the RDS Data API with no mock branch"; both branch now.
+//   * `POST /calibration/cases`, `POST /quality/feedback`, `POST
+//     /memory/events` — the same sentence, the same answer.
+//   * `POST /devbox/:sessionId/task`, `/command`, `/shell-url` — all three
+//     named a microVM or a ListAgentRuntimes call that MOCK_AGENTCORE has not
+//     made for some time; `/shell-url` has its own mock branch above the
+//     resolver.
+//   * `POST /agent-projects/:id/runs` and `POST /sdlc/changes/:id/address` —
+//     "drives a devbox microVM"; what they really do is return before their
+//     own work finishes, which is `fires`, not `spends`.
+//   * `POST /agent-projects/:id/clone-command` — "borrows the connection's real
+//     API key"; `borrowApiKey` throws under MOCK_AGENTCORE on purpose, and no
+//     seeded repository carries a connection to borrow for.
+//   * `POST /sdlc/changes/:id/rereview` — "no mock branch" above a Converse
+//     that has had one, deliberately placed above the try, since the offline
+//     reviewer shipped.
+//   * `POST /agents/:agentId/invoke` — "invokes an AgentCore runtime", which
+//     `mockAgentCore.invokeAgentStreaming` makes false. It STAYS refused, on a
+//     reason the old one never mentioned: the unawaited session-title Converse
+//     in `lib/session-titles.ts`. Re-reading a refusal is not a search for
+//     routes to release; it is a search for sentences that are no longer true,
+//     and one of them was hiding a spend the file had never named.
+//   * `POST /harness/trace`, `POST /harness/results/:id/rejudge`, `POST
+//     /harness/runs/:id/execute`, `POST /calibration/runs` — the judge and the
+//     embedder. These five paragraphs were WRITTEN, in this file, saying those
+//     four still spent, and were false within the hour: `lib/judge.ts`,
+//     `lib/trace-sink.ts` and `lib/harness-runner.ts` all gained
+//     `config.mock` branches mid-sweep. `/invocations/:id/replay` kept its
+//     refusal by a hair — its libraries are mocked too, but the handler's own
+//     source `SELECT` is a bare `exec` — so its reason had to be rewritten
+//     around what is left rather than deleted.
+//
+// That last bullet is the lesson worth keeping. A refusal reason is a claim
+// about somebody else's file, and it can be falsified by an edit that lands
+// while you are typing. That is not an argument for vaguer reasons — a vague
+// reason cannot be checked, and an unfalsifiable claim is worse than a stale
+// one. It is an argument for re-reading, for saying which reading a sentence
+// came from, and for taking the capture LAST: `serverHandlerSha` in the
+// snapshot exists precisely so a capture taken against a process older than
+// these edits is caught rather than trusted.
+//
+// What did NOT move is worth recording too, because "I checked" is only
+// evidence if the negatives are written down. `POST /environments`,
+// `POST /admin/kb-registry`, `/upload-links` and `POST /iq/prompts/*` still
+// reach the Data API raw; `POST /test-fixtures/*` still DELETEs and UPDATEs
+// through it; `POST /canary/start` still PutParameters two ARNs to SSM and the
+// canary LIBRARY writes still create and publish real Bedrock managed prompts
+// (the three `config.mock` branches in routes/canary-library.ts are all on
+// GETs); `POST /gateway/channels/*` still signs and POSTs to the gateway;
+// `lib/crawler.ts` and `lib/site-survey.ts` still fetch. In `FIRES`, every
+// reason was re-read against its handler: `addSchedule` still persists the
+// JSON and calls `registerTask`, `resume` still calls `registerBot`,
+// `enqueueJob`'s mock branch still pushes a `queued` job the dispatcher polls,
+// and the assessment-run and compaction timers are still there. Every pattern
+// in `SPENDS` and `FIRES` was also matched against the live router table —
+// none is dead.
 //
 // ── How a future route gets classified ──────────────────────────────────────
 //
@@ -320,7 +393,13 @@ interface Family {
  * bound. See the header's "it spends vs it would spend" section.
  */
 const SPENDS: Family[] = [
-  { pattern: 'POST /api/agents/*', what: 'invokes an AgentCore runtime' },
+  // The reason here used to be "invokes an AgentCore runtime", and that half is
+  // now false wherever agentcore is intercepted: `providers/index.ts` binds
+  // `agentcore` to `mockAgentCore`, whose `invokeAgentStreaming` yields a canned
+  // AG-UI stream and reaches no runtime. What keeps this route in `spends` is a
+  // different call the reason never named, and one no configuration mocks —
+  // which is exactly why the reason had to be re-read rather than deleted.
+  { pattern: 'POST /api/agents/*', what: "after the answer streams it calls `maybeGenerateTitle`, and lib/session-titles.ts sends a Bedrock ConverseCommand with no mock branch above it — unawaited, so the spend outlives the request" },
 
   // Capabilities, narrowed. This used to be a bare `POST /api/capabilities/*`
   // ("opens a real Browser or Code Interpreter session") plus `PATCH
@@ -335,30 +414,32 @@ const SPENDS: Family[] = [
   { pattern: 'POST /api/capabilities/browser/web-qa', what: "builds its own BedrockRuntimeClient in the handler and Converses with Nova Lite — `_bedrockRt` is module-scope in routes/capabilities.ts, with no provider and no mock branch above it" },
   { pattern: 'POST /api/capabilities/browser/crawl', what: 'starts a crawl loop (lib/crawler.ts) that fetches the start URL and every page it discovers' },
 
-  // Devbox, narrowed for the same reason. `POST /api/devbox/*` and `PATCH
-  // /api/devbox/*` both read "drives a devbox microVM"; that is true of the
-  // three routes below and of none of the others. `POST /sessions` mints a
-  // session id from a pure function and is on the allowlist; `POST /boxes`
-  // registers a box the reaper will later act on, which is `fires`, not
-  // `spends`; `PATCH /boxes/:boxId` renames a row in an in-memory registry and
-  // falls to `unclassified` — the honest answer, since no spec has been
-  // written for it.
-  { pattern: 'POST /api/devbox/*/task', what: 'invokes the devbox runtime to run a Claude Code task' },
-  { pattern: 'POST /api/devbox/*/command', what: 'invokes the devbox runtime to run a shell command' },
-  { pattern: 'POST /api/devbox/*/shell-url', what: 'resolves the devbox runtime via ListAgentRuntimes, then presigns a live socket into the microVM' },
-  // Agent projects, narrowed. This used to be `POST /api/agent-projects` plus a
-  // bare `POST /api/agent-projects/*`, both reading "drives a devbox microVM
-  // (lib/project-runner.ts)". That is true of ONE of the five write routes
-  // under this prefix. `POST /` (linkAgentProject), `POST /:id/cloned`
-  // (markCloned) and `POST /runs/:runId/finish` (finishRun) are an INSERT and
-  // two UPDATEs — in real mode they reach Aurora, in mock mode they take a
-  // `config.mock.aurora` branch into the registered `agent-projects` /
-  // `agent-project-runs` fixtures. No microVM in any mode. They now fall to
-  // `unclassified`, which is the honest answer: nobody has written a WriteSpec
-  // for them yet. That is a printed gap, and a printed gap beats a refusal
-  // whose stated reason is fiction.
-  { pattern: 'POST /api/agent-projects/*/runs', what: 'drives a devbox microVM (lib/project-runner.ts)' },
-  { pattern: 'POST /api/agent-projects/*/clone-command', what: "borrows the connection's real API key through AgentCore Identity (providers/connected-sources.ts borrowApiKey) whenever the project carries one" },
+  // Devbox: GONE from this list entirely, and that is the second half of the
+  // same correction. `POST /*/task`, `POST /*/command` and `POST /*/shell-url`
+  // read "invokes the devbox runtime" / "resolves it via ListAgentRuntimes,
+  // then presigns a live socket". None of the three is true under
+  // MOCK_AGENTCORE: `lib/devbox-arn.ts` returns a `…-MOCK` ARN without calling
+  // ListAgentRuntimes and `devboxDataClient()` returns `mock/devbox-shell.ts`,
+  // a fake microVM (routes/devbox.ts keeps its own copy of both, same
+  // branches); `shell-url` never even reaches the resolver — it has its own
+  // `mockAgentCore()` branch that answers with a `mock-shell://` URL. Verified
+  // by hand against a running mock server: `POST /command` with `git status`
+  // streamed `fatal: mock devbox: unsupported command …` back from the fixture
+  // workspace and `shell-url` answered `{"url":"mock-shell://…","mock":true}`.
+  // `/task` moved to `fires` (it registers a box for the reaper), and
+  // `/command` and `/shell-url` are on the allowlist behind
+  // `intercepts: ['agentcore']`, where the claim is checked against the server
+  // rather than asserted here.
+  //
+  // Agent projects, narrowed again. `POST /*/runs` read "drives a devbox
+  // microVM (lib/project-runner.ts)" — it drives the fake one, and what it
+  // really does that outlives the request is leave `executeProjectRun`
+  // unawaited, so it moved to `fires`. `POST /*/clone-command` read "borrows
+  // the connection's real API key through AgentCore Identity"; `borrowApiKey`
+  // THROWS under MOCK_AGENTCORE by design (providers/connected-sources.ts
+  // refuses to hand out a fake token), and every seeded project carries
+  // `connectionName: null` so the branch is not taken at all — it is on the
+  // allowlist now.
   { pattern: 'POST /api/drop/*', what: 'reaches the RDS Data API unguarded, then S3' },
   { pattern: 'POST /api/gateway/channels/*', what: 'signs and POSTs to the real MCP gateway when a gateway URL is set' },
 
@@ -373,32 +454,59 @@ const SPENDS: Family[] = [
   { pattern: 'POST /api/admin/kb-registry/*/landing-zone/upload', what: 'writes the uploaded object to S3' },
   { pattern: 'POST /api/admin/kb-registry/*/sync', what: 'calls Bedrock Agent StartIngestionJob directly from the handler' },
 
-  { pattern: 'POST /api/sdlc/changes/*/rereview', what: 'sends the diff to Bedrock Converse (lib/change-reviewer.ts, no mock branch)' },
-  { pattern: 'POST /api/sdlc/changes/*/address', what: 'resolves the devbox runtime via ListAgentRuntimes, then invokes it' },
-  { pattern: 'POST /api/sdlc/changes/*/deliver', what: 'resolves the devbox runtime via ListAgentRuntimes' },
+  // SDLC: all three left this list, for the same reading. `/rereview` said
+  // "sends the diff to Bedrock Converse (lib/change-reviewer.ts, no mock
+  // branch)" — there IS a branch, `if (config.mock.agentcore)` above the try,
+  // handing the diff to `mock/static-review.ts`; replayed by hand it answered
+  // 200 and recorded a review whose model reads `offline/static-diff-review`,
+  // and reset dropped it. `/address` and `/deliver` both said "resolves the
+  // devbox runtime via ListAgentRuntimes", which `lib/devbox-arn.ts` has not
+  // done under MOCK_AGENTCORE for some time. `/address` is `fires` (it goes
+  // through the same unawaited `dispatchGovernedRun` as a project run);
+  // `/rereview` and `/deliver` are on the allowlist behind `intercepts`.
 
   { pattern: 'POST /api/environments', what: 'INSERTs through the RDS Data API with no mock branch' },
 
-  { pattern: 'POST /api/observability/harness/trace', what: 'runs Titan embedding AND the Nova judge — it spends even with Aurora down' },
-  // `POST /runs/*` used to be one wildcard reading "invokes the fleet and the
-  // judge per case". Only `/execute` does that; `/runs/:runId/results` is a
-  // single INSERT ... ON CONFLICT into observability.test_results through the
-  // RDS Data API, with no mock branch and no model call anywhere in it. Two
-  // routes, two different reasons, so two patterns.
-  { pattern: 'POST /api/observability/harness/runs/*/execute', what: 'invokes the fleet and the judge per case' },
-  { pattern: 'POST /api/observability/harness/runs/*/results', what: 'upserts through the RDS Data API with no mock branch' },
-  { pattern: 'POST /api/observability/harness/results/*', what: 're-judges with three Nova calls' },
-  { pattern: 'POST /api/observability/harness/promote', what: 'writes through the RDS Data API with no mock branch' },
+  // THE WHOLE HARNESS/JUDGE FAMILY LEFT THIS LIST, and it left in one day.
+  // `/trace` read "runs Titan embedding AND the Nova judge — it spends even
+  // with Aurora down", which was the strongest claim in this file and is now
+  // the most comprehensively false one: `lib/trace-sink.ts` embeds through
+  // `mock/embedding.ts`'s lexical projection under `config.mock.agentcore`,
+  // `lib/judge.ts` answers from `mock/answer-check.ts` under the same flag,
+  // and every persistence step branches on `config.mock.aurora` into the
+  // `trace-sink-*` fixtures. Replayed by hand it answered 200 with
+  // `judgeRationale: "offline/lexical-answer-check: … No model was called."`.
+  // `/results/*/rejudge` ("re-judges with three Nova calls") is the same
+  // judge, three times — it returned three identical offline verdicts.
+  // `/runs/*/execute` ("invokes the fleet and the judge per case") invokes the
+  // MOCK fleet now, and what actually disqualifies it is that it answers 202
+  // and leaves `void executeRun(...)` behind, so it is `fires`.
+  // `/calibration/runs` is the one that refuses ITSELF: routes/calibration.ts
+  // answers 503 under `config.mock.aurora` rather than synthesising an MAE for
+  // a judge nobody ran. All four are on the allowlist with `intercepts`, where
+  // the interception is checked against the server instead of assumed.
+  //
+  // `/runs/:runId/results` and `/promote` were the same story a slice earlier —
+  // "through the RDS Data API with no mock branch" against handlers that now
+  // branch into `mockUpsertResult` / `mockPromotePromptVersion`.
+  //
   // `PATCH /api/observability/harness/runs/*/results` was here too and matched
   // nothing: the only PATCH under /runs is `PATCH /runs/:id`, which the
   // allowlist covers. A pattern that matches no live route is dead weight that
   // reads like a guarded surface.
-  { pattern: 'POST /api/observability/calibration/cases', what: 'INSERTs through the RDS Data API with no mock branch' },
-  { pattern: 'POST /api/observability/calibration/runs', what: 'runs the Nova judge once per active case' },
-  { pattern: 'POST /api/observability/quality/feedback', what: 'UPDATEs through the RDS Data API with no mock branch' },
-  { pattern: 'POST /api/observability/memory/events', what: 'INSERTs through the RDS Data API with no mock branch' },
+  //
+  // Three more "no mock branch" claims died the same way and left this list:
+  // `POST /calibration/cases` (branches into `mockInsertCalibrationCase`),
+  // `POST /quality/feedback` (into `mockSetHumanLabel`) and `POST
+  // /memory/events` (into `mockInsertMemoryEvent`).
   { pattern: 'POST /api/observability/test-fixtures/*', what: 'DELETEs and UPDATEs through the RDS Data API with no mock branch' },
-  { pattern: 'POST /api/observability/invocations/*', what: 'resolves and invokes a deployed agent, then embeds and judges the reply' },
+  // Survives the same sweep, and only just: the LIBRARIES it calls are all
+  // mocked now, but the handler's own source lookup is a bare `exec` with no
+  // branch above it (routes/invocations.ts, `SELECT agent_id … FROM
+  // observability.invocation_traces`), so the Data API is still reached before
+  // anything else happens. The old reason named the model calls, which is the
+  // half that stopped being true.
+  { pattern: 'POST /api/observability/invocations/*', what: "the handler's own source-row `SELECT` is a bare `exec` with no mock branch, so it reaches the RDS Data API before the (now-mocked) invoke, embed and judge are ever entered" },
   { pattern: 'PUT /api/observability/evaluations/config', what: 'writes the judge config to SSM, changing live judging for the whole fleet' },
   { pattern: 'POST /api/observability/canary/ask', what: 'streams from a Bedrock prompt ARN and fires the judge' },
   { pattern: 'POST /api/observability/canary/start', what: 'writes both subject ARNs to SSM' },
@@ -426,6 +534,28 @@ const FIRES: Family[] = [
   // /api/__mock/reset` cannot take the box back either — the capture would
   // leave a timer's worth of work behind it, which is rule 4 exactly.
   { pattern: 'POST /api/devbox/boxes', what: 'registers a box the already-running devbox reaper will stop, through the runtime transport, twenty idle minutes later' },
+  // Moved out of `spends`, which said "invokes the devbox runtime to run a
+  // Claude Code task" — under MOCK_AGENTCORE it invokes `mock/devbox-shell.ts`.
+  // What it does in EVERY configuration is the line above `dataClient().send`:
+  // `getBoxBySession(sessionId) ?? registerBox({ sessionId })`, which is the
+  // identical rule-4 problem `POST /boxes` is refused for, plus a task-event
+  // tee into that box's buffer.
+  { pattern: 'POST /api/devbox/*/task', what: 'auto-registers the session as a box (`getBoxBySession(...) ?? registerBox(...)`) and tees its events there, handing the already-running reaper a box to stop — and lib/devbox-fleet.ts holds that registry in a module Map reset cannot empty' },
+  // Both of these go through `dispatchGovernedRun` (lib/sdlc-pipeline.ts),
+  // which returns after starting `void executeProjectRun(...)`: the run, the
+  // diff capture, the review and the gate evaluation all happen after the 202.
+  // It registers a box on the way, too. Their old `spends` reasons named
+  // ListAgentRuntimes and a microVM, neither of which is reached under
+  // MOCK_AGENTCORE; this is what is true whatever the flags say.
+  { pattern: 'POST /api/agent-projects/*/runs', what: 'answers 202 and leaves `executeProjectRun` running unawaited (`void` in lib/sdlc-pipeline.ts), which then captures a diff, reviews it and evaluates gates — and registers a box for the reaper on the way' },
+  { pattern: 'POST /api/sdlc/changes/*/address', what: 'the same unawaited `dispatchGovernedRun` as a project run, with the reviewer’s findings as the prompt' },
+  // Also out of `spends`, where it read "invokes the fleet and the judge per
+  // case": lib/harness-runner.ts branches on `config.mock.agentcore` for both.
+  // What is true in every configuration is the shape of the handler — it
+  // answers 202 and leaves the suite running, which is why the client polls
+  // /runs/:id/status. Replayed by hand it returned `{started: true,
+  // totalCases: 4}` and went on writing results after the response.
+  { pattern: 'POST /api/observability/harness/runs/*/execute', what: 'answers 202 and leaves `void executeRun(...)` walking the whole case suite behind it, writing a result row per case long after the request is over' },
 
   { pattern: 'POST /api/bots/*/run', what: 'fires the bot now' },
   { pattern: 'POST /api/bots/*/resume', what: 'arms the bot on the live cron scheduler' },
@@ -471,6 +601,14 @@ const UNRESETTABLE: Family[] = [
   //                        heartbeat, a session end and a spent pairing code
   //                        all come back on `POST /api/__mock/reset` (verified
   //                        by hand against a running dev:mock).
+  //
+  // The rule is not idle, though — one provider still has exactly the shape it
+  // describes, and the allowlist handles it the other way the header allows.
+  // `lib/devbox-fleet.ts` holds the box registry in a module `Map` with no
+  // fixture, so `PATCH /api/devbox/boxes/:boxId` may not RENAME a box. It is on
+  // the allowlist as an ECHO-BACK — it writes the box's own label back, leaving
+  // the row byte-identical — which is rule 5's other permitted move and needs
+  // no entry here. This list is for a route with no such move available.
   //
   // The six local-compute routes fell to `unclassified` after that migration —
   // "nobody has written a WriteSpec for them yet", which was true and is now
@@ -1075,6 +1213,21 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     build: ok({ decision: 'approve' }),
   },
   {
+    route: 'POST /api/sdlc/changes/:id/rereview',
+    persona: 'orgiq/admin',
+    safe: 'A REAL re-review, end to end, with no model in it. Refused as `spends` for "sends the diff to Bedrock Converse (lib/change-reviewer.ts, no mock branch)" — there is one, `if (config.mock.agentcore)` ABOVE the try, handing the diff to `mock/static-review.ts`; and it is above the try on purpose, so a real outage still degrades to `request_changes`. The verdict then flows through the genuine `evaluate()`. Everything it writes — the in_review stamp, the appended review, the re-evaluated gates and status — lives in the registered `sdlc-changes`/`sdlc-change-reviews`/`sdlc-change-gates` fixtures. Verified by hand: one review became two, the new one recorded as `offline/static-diff-review`, and reset put it back to one.',
+    bodyFrom: 'routes/sdlc.ts: no body at all. The change named by `:id` must carry a stored diff, or the route 400s — GET /api/sdlc/changes lists whether it does.',
+    intercepts: ['aurora', 'agentcore'],
+  },
+  {
+    route: 'POST /api/sdlc/changes/:id/deliver',
+    persona: 'orgiq/admin',
+    safe: 'Under MOCK_AGENTCORE `deliverApprovedChange` runs its real workspace checks against the fake microVM and then takes a branch into `mockDeliverChange`, which appends to the registered `devbox-deliveries` fixture — no credential is borrowed (`borrowApiKey` throws in mock mode) and github.com is never reached. Its old reason, "resolves the devbox runtime via ListAgentRuntimes", describes something `lib/devbox-arn.ts` does not do under interception. In practice this pins the REFUSAL: no seeded change is `approved`, so it answers 409 "change is needs_approval, not approved" before any of the above runs — verified by hand — and that 409 is a real shape worth having.',
+    bodyFrom: 'routes/sdlc.ts: no body. `:id` is a change off GET /api/sdlc/changes.',
+    intercepts: ['aurora', 'agentcore'],
+    alsoAccept: [409],
+  },
+  {
     route: 'POST /api/designs/:id/answer',
     persona: 'orgiq/admin',
     safe: 'Mutates the registered `design-reviews` fixture; reset restores the thread. No AWS, no model.',
@@ -1385,6 +1538,102 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     build: ok({}),
   },
   {
+    route: 'POST /api/observability/harness/runs/:runId/results',
+    persona: 'orgiq/admin',
+    safe: 'A REAL upsert of a seeded result row. It was refused as `spends` — "upserts through the RDS Data API with no mock branch" — and routes/harness.ts now takes a `config.mock.aurora` branch into `mockUpsertResult` above that statement, against the REGISTERED `harness-results` fixture (mock/harness.ts). The mock deliberately REPLACES the row rather than merging, exactly as `ON CONFLICT (run_id, test_id) DO UPDATE` assigns every column from EXCLUDED, so a body carrying only `testId` blanks the seeded judge score — which is precisely why it needs a fixture, and it has one: verified by hand, the seeded 0.74 and its rationale came back on `POST /api/__mock/reset`. No model, no AWS, no timer.',
+    bodyFrom: "routes/harness.ts: `testId` is the only requirement (`ValidationError` otherwise); `invocationId` must match /^[0-9a-f-]{36}$/i to be stored and is omitted. The id is read off GET /api/observability/harness/runs/:runId — this run's OWN results — so the upsert lands on a row that exists rather than appending a result for a case the run never ran; GET /cases is the fallback when the run has none.",
+    intercepts: ['aurora'],
+    build: async (ctx) => {
+      const run = await ctx.get(ctx.path.replace(/\/results$/, ''));
+      const mine = str(objectsWith(run, 'testId', 'passed')[0]?.['testId']);
+      const testId = mine ?? await ctx.pick('/api/observability/harness/cases', 'testId');
+      if (testId === null) {
+        return unsynthesisable('neither this run nor GET /api/observability/harness/cases listed a testId to record a result against');
+      }
+      return { testId };
+    },
+  },
+  {
+    route: 'POST /api/observability/harness/promote',
+    persona: 'orgiq/admin',
+    safe: 'A REAL promotion — a seeded registry row goes from unpromoted to blessed. Refused as `spends` for "writes through the RDS Data API with no mock branch"; routes/harness.ts now branches into `mockPromotePromptVersion` against the REGISTERED `prompt-versions` fixture (mock/prompt-versions.ts), which stamps `promotedAt`/`promotedBy`/`promoteNotes` on the row in place. Replayable because that fixture is registered: verified by hand, promoting the advisor revision made GET /promoted-versions list three rows and reset put it back to the seeded two. Nothing is recomputed — `promptVersion` stays the short SHA of the content — so no id can end up disagreeing with its own text.',
+    bodyFrom: 'routes/harness.ts: `promptVersion` and `agentId` both required and non-blank, and the fixture 409s a SHA that belongs to a different agent. Both are read as a PAIR off GET /api/observability/prompt-versions, so the two always agree and the success path is what gets pinned rather than the mismatch. `promotedBy` is omitted, taking the handler’s own `harness-runner` default.',
+    intercepts: ['aurora'],
+    build: async (ctx) => {
+      const row = objectsWith(await ctx.get('/api/observability/prompt-versions'), 'promptVersion', 'agentId')[0];
+      const promptVersion = str(row?.['promptVersion']);
+      const agentId = str(row?.['agentId']);
+      if (promptVersion === null || agentId === null) {
+        return unsynthesisable('GET /api/observability/prompt-versions listed no registered prompt to promote');
+      }
+      return { promptVersion, agentId };
+    },
+  },
+  {
+    route: 'POST /api/observability/harness/trace',
+    persona: 'orgiq/admin',
+    safe: 'The whole sink pipeline, offline. This carried the strongest refusal in the file — "runs Titan embedding AND the Nova judge; it spends even with Aurora down" — and every clause of it has since been closed: `embedForTrace` takes `mock/embedding.ts`\'s lexical projection under `config.mock.agentcore`, `judgeResponse` takes `mock/answer-check.ts` under the same flag, and each persistence step branches on `config.mock.aurora` into the registered `trace-sink-*` fixtures. Verified by hand: 200, `judgeRationale` reading `offline/lexical-answer-check: … No model was called.`, `trace-sink-traces` 0 rows -> 1 -> 0 across reset. It APPENDS; nothing seeded moves. Note it is a machine callback (`requireTraceAuth`, open while the secret is unset) — the sweep calls it as a persona, which is allowed.',
+    bodyFrom: "routes/harness.ts: `agentId` non-empty, `prompt` non-empty, `response` a string — the three ValidationErrors; every other field is optional and omitted. The agent id is read off GET /api/agents. `response` is deliberately non-empty: `processTrace` drops a bundle with no substance on any axis as a phantom row, so an empty one would prove nothing.",
+    intercepts: ['aurora', 'agentcore'],
+    build: async (ctx) => {
+      const agentId = await ctx.pick('/api/agents', 'id');
+      if (agentId === null) return unsynthesisable('GET /api/agents listed no agent');
+      return { agentId, prompt: ctx.label(), response: ctx.label() };
+    },
+  },
+  {
+    route: 'POST /api/observability/harness/results/:invocationId/rejudge',
+    persona: 'orgiq/admin',
+    safe: 'It writes NOTHING — it reads one trace and returns three judge verdicts. Refused as `spends` for "re-judges with three Nova calls"; `lib/judge.ts` now answers from `mock/answer-check.ts` under `config.mock.agentcore`, and the handler reads its trace from the registered `trace-sink-traces` fixture under `config.mock.aurora`. Verified by hand: three identical `offline/lexical-answer-check` verdicts, no model. In practice this records as UNCAPTURED — the route demands a uuid, the seeded traffic ids (`mock-inv-0`) are not uuids, and the only uuids offline belong to traces `POST /trace` created in this process, which the reset before each replay removes. Safe, and nothing to run it against.',
+    bodyFrom: 'routes/harness.ts: no body. `:invocationId` must match /^[0-9a-f-]{36}$/i and name a row the sink holds.',
+    intercepts: ['aurora', 'agentcore'],
+  },
+  {
+    route: 'POST /api/observability/calibration/runs',
+    persona: 'orgiq/admin',
+    safe: 'It refuses ITSELF offline, and that refusal is the shape worth pinning: routes/calibration.ts answers 503 under `config.mock.aurora` — "calibration runs invoke the Nova-Pro judge — no Bedrock in dev:mock" — after loading the active cases and BEFORE the run row is inserted, deliberately rather than synthesising an MAE about a judge nobody ran. Verified by hand. Nothing is written, so there is nothing for reset to undo. The `intercepts` is what makes that true: against an un-mocked server this route really does call the judge once per active case, which is why it may not be replayed there.',
+    bodyFrom: 'routes/calibration.ts: `label`, `judgeModelId` and `notes` are all optional and defaulted, so `{}` is the whole valid body. The 503 needs at least one active case, which GET /api/observability/calibration/cases lists.',
+    intercepts: ['aurora'],
+    alsoAccept: [503],
+    build: ok({}),
+  },
+  {
+    route: 'POST /api/observability/calibration/cases',
+    persona: 'orgiq/admin',
+    safe: 'Appends one row to the registered `calibration-cases` fixture (mock/calibration.ts); reset drops it and nothing seeded moves. It was refused as `spends` for "INSERTs through the RDS Data API with no mock branch", which routes/calibration.ts contradicts: `mockInsertCalibrationCase` runs above the INSERT under `config.mock.aurora`. No judge runs here — that is `POST /calibration/runs`, which is still refused.',
+    bodyFrom: "routes/calibration.ts: `agentId` non-blank, `prompt` non-empty, `response` a string, `humanScore` a finite number (clamped 0..1). The agent id is read off GET /api/agents; prompt/response/score are free text and a mid-scale number, none of them wire-shaped fields.",
+    intercepts: ['aurora'],
+    build: async (ctx) => {
+      const agentId = await ctx.pick('/api/agents', 'id');
+      if (agentId === null) return unsynthesisable('GET /api/agents listed no agent');
+      return { agentId, prompt: ctx.label(), response: ctx.label(), humanScore: 0.5 };
+    },
+  },
+  {
+    route: 'POST /api/observability/quality/feedback',
+    persona: 'orgiq/admin',
+    safe: 'A REAL relabel of a seeded trace. Refused as `spends` for "UPDATEs through the RDS Data API with no mock branch"; routes/quality.ts branches into `mockSetHumanLabel` against the registered `observability-human-labels` fixture (mock/observability.ts), which ships five labelled invocations. Verified by hand: `mock-inv-0` reads `bad`, the write makes it `good`, reset makes it `bad` again.',
+    bodyFrom: "routes/quality.ts: `invocationId` required and, offline, must name a row the trace tail serves (the mock reproduces the real query's `RETURNING` miss as a 404); `label` ∈ ALLOWED_LABELS ('good'|'bad'|'fixed'), spelled in the handler. The id comes off GET /api/observability/recent-invocations; `note` is free text.",
+    intercepts: ['aurora'],
+    build: async (ctx) => {
+      const invocationId = await ctx.pick('/api/observability/recent-invocations', 'invocationId');
+      if (invocationId === null) return unsynthesisable('GET /api/observability/recent-invocations listed no invocation to label');
+      return { invocationId, label: 'good', note: ctx.label() };
+    },
+  },
+  {
+    route: 'POST /api/observability/memory/events',
+    persona: 'orgiq/admin',
+    safe: 'Appends one row to the registered `observability-memory-writes` fixture (mock/observability.ts), which the events feed concatenates onto the fleet’s derived ops; reset drops it. Refused as `spends` for "INSERTs through the RDS Data API with no mock branch" — routes/memory.ts branches into `mockInsertMemoryEvent` inside the `try`, above the statement. Verified by hand: one event carrying a distinctive queryText appears in GET /events and is gone after reset.',
+    bodyFrom: "routes/memory.ts: `agentId` non-blank and `kind` accepted by `isValidKind` ('retrieve'|'write'|'summarize'|'expire'), or the route 400s. The kind is a literal that function spells; the agent id is read off GET /api/agents. Everything else is optional and omitted.",
+    intercepts: ['aurora'],
+    build: async (ctx) => {
+      const agentId = await ctx.pick('/api/agents', 'id');
+      if (agentId === null) return unsynthesisable('GET /api/agents listed no agent');
+      return { agentId, kind: 'retrieve', queryText: ctx.label() };
+    },
+  },
+  {
     route: 'PATCH /api/observability/calibration/cases/:id',
     persona: 'orgiq/admin',
     safe: 'An empty patch returns `{ ok, changed: 0 }` without touching the RDS Data API.',
@@ -1551,12 +1800,102 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
   },
 
   // ── devbox ────────────────────────────────────────────────────────────────
+  //
+  // Three of these were refused as `spends` under reasons that named a real
+  // microVM. Under MOCK_AGENTCORE there is none: `lib/devbox-arn.ts` (and
+  // routes/devbox.ts's own copy of the same two functions) returns a `…-MOCK`
+  // ARN without calling ListAgentRuntimes, and hands every caller
+  // `mock/devbox-shell.ts`. Hence `intercepts: ['agentcore']` — asked of the
+  // server rather than asserted here.
   {
     route: 'POST /api/devbox/sessions',
     persona: 'orgiq/admin',
     safe: 'The whole handler is `normalizeRuntimeSessionId` — pad a caller-supplied id, or mint one from randomUUID — and a 201. No client is constructed, no ARN is resolved, no registry is touched, in mock mode or out of it. It is the one write on this surface that needs no interception to be safe, which is why it carries no `intercepts`.',
     bodyFrom: 'routes/devbox.ts: `sessionId` is optional; an absent one is minted. `{}` is the whole valid body.',
     build: ok({}),
+  },
+  {
+    route: 'PATCH /api/devbox/boxes/:boxId',
+    persona: 'orgiq/admin',
+    safe: 'An ECHO-BACK rename, and it has to be one. `renameBox` (lib/devbox-fleet.ts) assigns `s.box.label = label` and touches nothing else, but the fleet lives in a module `Map` that registers NO fixture — so reset cannot undo a real rename, and rule 5 allows only a value written back unchanged. Writing the box’s own label back leaves the row byte-identical while the handler, its `canSee` check and the response shape all run for real. Nothing outside the process is reached in any configuration (`canSee` short-circuits on the persona’s org-wide `admin` role before any lookup), which is why this carries no `intercepts`. In practice it records as UNCAPTURED: the fleet registry ships empty, `GET /api/devbox/boxes` lists nothing, and `:boxId` never resolves. That is the honest state — the route is safe, and offline there is no box to run it against.',
+    bodyFrom: "routes/devbox.ts: `label` must be a non-blank string or the route 400s with 'label is required'; `:boxId` must name a box `canSee` allows. The label is the box's own, read off GET /api/devbox/boxes.",
+    build: async (ctx) => {
+      const boxId = decodeURIComponent(ctx.path.split('/').pop() ?? '');
+      const label = str(objectsWith(await ctx.get('/api/devbox/boxes'), 'id', 'label')
+        .find((b) => b['id'] === boxId)?.['label']);
+      if (label === null) return unsynthesisable(`GET /api/devbox/boxes does not list ${boxId} with a label to write back`);
+      return { label };
+    },
+  },
+  {
+    route: 'POST /api/devbox/:sessionId/command',
+    persona: 'orgiq/admin',
+    safe: 'Under MOCK_AGENTCORE this runs one shell command against `mock/devbox-workspace.ts` through the fake client, registers no box (unlike `/task` next door) and writes nothing durable. Verified by hand: `git status` streamed back `fatal: mock devbox: unsupported command …` from the fixture and `GET /api/devbox/boxes` was still empty afterwards. Its answer is `text/event-stream`, so the capture records it as uncaptured rather than pinning a shape — as it does `:sessionId`, which nothing offline enumerates.',
+    bodyFrom: "routes/devbox.ts: `command` 1–4000 chars, free of shell metacharacters in safe mode, and prefixed by one of `commandAllowlist()`. The prefix is not typed here — it is read off GET /api/devbox/status, which returns that same array, so the one closed-set value in this body comes from the server. `cwd` defaults to /mnt/workspace and `mode` defaults to 'safe', both omitted.",
+    intercepts: ['agentcore'],
+    build: async (ctx) => {
+      const allowlist = objectsWith(await ctx.get('/api/devbox/status'), 'commandAllowlist')[0]?.['commandAllowlist'];
+      const command = Array.isArray(allowlist) ? str(allowlist[0]) : null;
+      if (command === null) return unsynthesisable('GET /api/devbox/status reported no commandAllowlist to take a prefix from');
+      return { command };
+    },
+  },
+  {
+    route: 'POST /api/devbox/:sessionId/shell-url',
+    persona: 'orgiq/admin',
+    safe: 'The handler’s OWN `mockAgentCore()` branch answers before `requireArn` is ever called, with `{ url: "mock-shell://…", mock: true }` — no ARN resolution, no presign, no socket, and nothing written anywhere. Verified by hand against a running mock server. Its old `spends` reason ("resolves the devbox runtime via ListAgentRuntimes, then presigns a live socket into the microVM") described the branch below it. Records as uncaptured offline: `:sessionId` has no collection to come from.',
+    bodyFrom: 'routes/devbox.ts: `shellId` and `expiresIn` are both optional — an absent shellId defaults to `portal-<session tail>`. `{}` is the whole valid body.',
+    intercepts: ['agentcore'],
+    build: ok({}),
+  },
+
+  // ── agent projects ────────────────────────────────────────────────────────
+  //
+  // These four were refused as `spends` under "drives a devbox microVM
+  // (lib/project-runner.ts)" and, for clone-command, "borrows the connection's
+  // real API key through AgentCore Identity". Neither describes them: the link
+  // /clone/finish trio is an INSERT and two UPDATEs that branch on
+  // `config.mock.aurora` into the registered `agent-projects` /
+  // `agent-project-runs` fixtures, and clone-command builds a string. They
+  // then sat at `unclassified` — "nobody has written a WriteSpec" — which was
+  // true and is now not. Each round trip below was run by hand against a mock
+  // server and undone by `POST /api/__mock/reset`.
+  {
+    route: 'POST /api/agent-projects',
+    persona: 'orgiq/admin',
+    safe: 'Appends one repository to the registered `agent-projects` fixture (mock/agent-projects.ts); verified by hand — 14 rows, 15 after, 14 after reset. The conflict target is `repo_full_name`, so a NEW name appends rather than editing a seeded row. No AWS, no fs, no timer.',
+    bodyFrom: "routes/agent-projects.ts: `repoFullName` must match /^[\\w.-]+\\/[\\w.-]+$/ — everything else is optional and omitted, so no initiative is charged and no connection is attached. The owner half of the name is read off an existing repo on GET /api/agent-projects rather than invented; the name half is `ctx.label()`, free text the shape check never asserts on.",
+    intercepts: ['aurora'],
+    build: async (ctx) => {
+      const existing = str(objectsWith(await ctx.get('/api/agent-projects'), 'id', 'repoFullName')[0]?.['repoFullName']);
+      const owner = existing?.split('/')[0] ?? null;
+      if (owner === null || owner === '') return unsynthesisable('GET /api/agent-projects listed no repository to copy an owner from');
+      return { repoFullName: `${owner}/${ctx.label()}` };
+    },
+  },
+  {
+    route: 'POST /api/agent-projects/:id/cloned',
+    persona: 'orgiq/admin',
+    safe: 'A REAL flip of a seeded repository: `markCloned` stamps `sessionId` and `clonedAt` on the row, which is what moves it from "linked" to "in workspace". Replayable because `agent-projects` is registered — verified by hand, both fields go back to null on reset. Nothing is cloned: the route only records that a clone the caller already ran succeeded, and the mock stamp comes from mock/core/clock.ts.',
+    bodyFrom: 'routes/agent-projects.ts: `sessionId` must be a non-blank string; it is stored verbatim as an opaque workspace handle and never resolved against the devbox, so `ctx.label()` invents no wire value. `:id` is a repository off GET /api/agent-projects.',
+    intercepts: ['aurora'],
+    build: async (ctx) => ({ sessionId: ctx.label() }),
+  },
+  {
+    route: 'POST /api/agent-projects/runs/:runId/finish',
+    persona: 'orgiq/admin',
+    safe: 'A REAL close of a seeded run — `mockFinishRun` rewrites `status`, `finishedAt`, and (from the omitted fields) clears `filesChanged`/`diffSummary`/`error`/`costUsd`, exactly as the real UPDATE assigns all of them. Replayable because `agent-project-runs` is registered: verified by hand, the auth-service run went `failed` -> `done` and came back `failed` with its $0.81 and its error string after reset. No devbox is touched — this is the callback a finished run makes, not the run.',
+    bodyFrom: "routes/agent-projects.ts: `status` collapses to 'failed' for the literal 'failed' and to 'done' for anything else — both spelled in the handler; every other field is optional. `:runId` is resolved by key path (`projects[].runs[].id` in http.ts) off GET /api/agent-projects, because `/api/agent-projects/runs` is a write-only prefix with no collection of its own.",
+    intercepts: ['aurora'],
+    build: ok({ status: 'done' }),
+  },
+  {
+    route: 'POST /api/agent-projects/:id/clone-command',
+    persona: 'orgiq/admin',
+    safe: 'It builds a string and returns it. `buildCloneCommand` reaches `borrowApiKey` only when the project carries a `connectionName`, and every seeded repository carries null — so the AgentCore Identity call its old reason named is not made. It could not succeed anyway: `borrowApiKey` THROWS under MOCK_AGENTCORE by design, rather than handing out a fake token. Deliberately NOT paired with `/cloned`: generating the command is not the clone, and the handler is explicit that it must not mark the project cloned.',
+    bodyFrom: 'routes/agent-projects.ts: `sessionId` must be a non-blank string; it is not resolved against the devbox and does not reach the response. `:id` is a repository off GET /api/agent-projects.',
+    intercepts: ['aurora', 'agentcore'],
+    build: async (ctx) => ({ sessionId: ctx.label() }),
   },
 
   // ── local compute ─────────────────────────────────────────────────────────

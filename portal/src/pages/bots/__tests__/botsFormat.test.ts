@@ -237,3 +237,41 @@ test('estimateSummaryText states sample-backed bases with the sample count and b
     'Similar runs: $2.00–$3.00 · 10–15 min · based on 3 runs with this model',
   );
 });
+
+
+// ─── Postgres `+00` stamps ───────────────────────────────────────────────────
+// The bots surfaces used to normalise a wire timestamp by appending `Z` to
+// anything without a `T`. Aurora's timestamptz has no `T` *and* carries a `+00`
+// offset, so that produced `…+00Z` — Invalid Date — and every "last ran" claim
+// on the page collapsed to "no runs yet". Only mock mode was immune.
+test('botRunSummary reads a Postgres `+00` timestamp, not just an ISO one', () => {
+  // An unparseable stamp is not loudly wrong here — `hasRun` still says true
+  // and `lastRunAt` echoes back. It goes wrong quietly, in todayRunCount:
+  // NaN is never "today", so the guardrails footer reported 0 of N runs used
+  // for a bot that had already fired, and the list's "Last ran" said "—".
+  // Built from `now` so the two are the same LOCAL day in every zone.
+  const now = new Date('2026-09-08T18:00:00Z');
+  const isoStamp = new Date(now.getTime() - 3_600_000).toISOString();
+  const pgStamp = isoStamp.replace('T', ' ').replace(/\.\d+Z$/, '+00');
+  const pg = botRunSummary([{ startedAt: pgStamp }], now);
+  const iso = botRunSummary([{ startedAt: isoStamp }], now);
+  assert.equal(pg.todayRunCount, iso.todayRunCount);
+  assert.equal(pg.todayRunCount, 1);
+});
+
+
+// ─── "Today" is the server's day, not the viewer's ───────────────────────────
+// `maxRunsPerDay` is enforced in SQL against `date_trunc('day', NOW())` on the
+// cluster. Counting the browser's local day instead put the detail page's
+// guardrails footer ("today: 1/4 run") one run behind the list column beside it
+// ("2/4 runs") for every viewer west of UTC after 20:00 local — understating
+// how close a bot was to the cap that would refuse its next run.
+test('todayRunCount uses the UTC day the budget brake is judged against', () => {
+  const now = new Date('2026-09-08T10:21:59Z'); // 06:21 in New York
+  const runs = [
+    { startedAt: '2026-09-08T08:36:49.383Z' }, // today in both readings
+    { startedAt: '2026-09-08T00:00:00.000Z' }, // today in UTC, YESTERDAY in NY
+    { startedAt: '2026-09-05T09:36:49.383Z' }, // neither
+  ];
+  assert.equal(botRunSummary(runs, now).todayRunCount, 2);
+});

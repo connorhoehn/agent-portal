@@ -241,17 +241,52 @@ describe('project_contributions: the later seed is authoritative, by DELETE', ()
   });
 });
 
-describe('DEFECT: the leaderboard invents the scores it attributes to seeded people', () => {
-  it('detects the expertise and composite drift, naming both numbers', async () => {
+// CLOSED — and the test is inverted rather than deleted, because the shape of
+// the bug is worth keeping.
+//
+// `mock/scores.ts` used to carry five axes it typed by hand for 12 people it
+// named correctly, unrelated to the `people.expertise_score` /
+// `composite_score` the seed writes. So `/iq/scores` ranked Hiro Green FIRST
+// where the seed ranks him 47th of 56, and contradicted `mock/people.ts` in
+// the same process — the graph said 0.47 for the person the leaderboard put at
+// the top. Names and departments agreed, which is exactly why it read as real.
+//
+// Both fixtures now derive from the same seeded columns, so there is no drift
+// left to detect and the old "prove it is detectable" test is unreachable by
+// construction. What is pinned here instead is the property that replaced it:
+// the two surfaces cannot disagree, because they are one number.
+describe('the leaderboard and the graph are one number', () => {
+  it('reports no drift at all — the DEFECT is closed, not exempted', async () => {
     const leaderboard = entityNamed('leaderboard people');
-    expect(await report(leaderboard)).toBe(''); // tolerated as shipped
-    const broken = await report(withoutDrift(leaderboard));
-    expect(broken).toContain('expertise_score');
-    expect(broken).toContain('composite_score');
-    // p-023 is the top of the mock leaderboard and 46.98 in the seed.
-    expect(broken).toContain('p-023');
-    expect(broken).toContain('seed 46.98');
-    expect(broken).toContain('mock 89');
+    expect(await report(leaderboard)).toBe('');
+    // Stripping knownDrift changes nothing: there is none to strip for the
+    // score columns. A future hand-typed score would fail this immediately.
+    expect(await report(withoutDrift(leaderboard))).toBe('');
+  });
+
+  it('a leaderboard composite is exactly 100x the graph influence score', async () => {
+    // `mockState.people` is the real cast here (set in beforeEach), and
+    // `mock/scores.ts` derives from the same getter — which is the whole point:
+    // one source, so the two surfaces cannot disagree.
+    const scores = await import('../../../scores.js') as {
+      mockScores: Array<{ personId: string; composite: number }>;
+    };
+    const graph = new Map<string, number>(
+      mockState.people.map((p) => [p.id, p.influenceScore]),
+    );
+    const rows = scores.mockScores;
+    expect(rows.length).toBeGreaterThan(12); // it was 12 hand-typed people
+    let compared = 0;
+    for (const row of rows) {
+      const influence = graph.get(row.personId);
+      if (influence === undefined) continue;
+      compared += 1;
+      expect([row.personId, Math.round(influence * 10000) / 100])
+        .toEqual([row.personId, Math.round(row.composite * 100) / 100]);
+    }
+    // Guard against passing vacuously: if the ids stopped lining up, the loop
+    // above would compare nothing and say so by succeeding.
+    expect(compared).toBeGreaterThan(12);
   });
 
   it('still fails on identity, which the leaderboard does claim to mirror', async () => {

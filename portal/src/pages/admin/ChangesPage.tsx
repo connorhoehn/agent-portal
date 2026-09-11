@@ -32,6 +32,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
+import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
 import { PolicyEditor } from '../../components/sdlc/PolicyEditor';
 
@@ -73,18 +74,18 @@ const VERDICT_TONE: Record<Verdict, 'success' | 'danger' | 'warning'> = {
   approve: 'success', reject: 'danger', request_changes: 'warning',
 };
 
-/** Parse a DB timestamp (with or without a T/Z) to millis. */
+/** Parse a DB timestamp — naive, `+00`-zoned or proper ISO — to millis. */
 function tsOf(iso: string): number {
-  return new Date(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`).getTime();
+  return parsePgTimestampAsUtc(iso)?.getTime() ?? Number.NaN;
 }
 
 /** Terminal states — a real final outcome, never "superseded" even if older. */
 const TERMINAL = new Set(['delivered', 'rejected', 'blocked']);
 
 function when(iso: string): string {
-  const d = new Date(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`);
+  const d = parsePgTimestampAsUtc(iso);
+  if (d === null) return '';
   const mins = Math.round((Date.now() - d.getTime()) / 60000);
-  if (Number.isNaN(mins)) return '';
   if (mins < 1) return 'just now';
   if (mins < 60) return `${mins}m ago`;
   if (mins < 1440) return `${Math.round(mins / 60)}h ago`;

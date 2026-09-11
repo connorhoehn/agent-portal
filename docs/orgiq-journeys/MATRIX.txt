@@ -17,6 +17,7 @@ scores-cohorts | /iq/scores/cohorts | L | org-leader,hr-admin
 architecture | /iq/agents | - | org-leader,hr-admin
 health | /admin/observability/summary | L | org-leader,hr-admin
 invocations | /admin/observability/invocations | L | org-leader,hr-admin
+tool-calls | /admin/observability/tools | L | org-leader,hr-admin
 knowledge | /admin/knowledge | L | org-leader,hr-admin
 capabilities | /admin/capabilities | - | org-leader,hr-admin
 prompt-studio | /iq/prompts | L | org-leader,hr-admin

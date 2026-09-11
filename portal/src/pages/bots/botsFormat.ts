@@ -1,6 +1,7 @@
 // Pure derivations shared across the bots surfaces (list, wizard, detail).
 // Nothing here is React — see `__tests__/botsFormat.test.ts`.
 
+import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp.ts';
 import type { Bot, BotRun } from './BotsPage';
 
 // ─── List filtering ──────────────────────────────────────────────────────────
@@ -104,21 +105,34 @@ export function reviewTriggerText(step4: { trigger: 'manual' | 'cron' | 'pr_watc
 // the table already renders makes that impossible: no runs can never coexist
 // with a "last ran" claim, in mock or in Aurora.
 
-/** Parse an Aurora-style timestamp ("2026-09-04 06:00:00", no T/Z) or a
- *  proper ISO string alike. Mirrors the normalization every bots surface
- *  already applies to these wire timestamps (BotsPage `when`, BotDetailPage
- *  `parseTs`), duplicated here so this module stays framework-free and
- *  import-cycle-free (BotsPage imports FROM botsFormat, not the reverse). */
+/** Parse an Aurora timestamp — naive ("2026-09-04 06:00:00") or zoned
+ *  ("2026-09-04 06:00:00+00", whose `+00` is not a legal ISO offset) — or a
+ *  proper ISO string, alike. This used to be a private copy of the same three
+ *  lines every bots surface carried; they all now share `lib/pgTimestamp`,
+ *  which is what stopped the `+00` case from being wrong in five places. */
 function parseBotTs(iso: string): number {
-  return new Date(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`).getTime();
+  return parsePgTimestampAsUtc(iso)?.getTime() ?? Number.NaN;
 }
 
-function isSameLocalDay(a: number, b: number): boolean {
+/**
+ * "Today" here means the SERVER'S day, not the browser's.
+ *
+ * This counted the viewer's local calendar day until 2026-09-08, and that is a
+ * different day from the one the budget brake uses. `maxRunsPerDay` is enforced
+ * in SQL against `r.started_at >= date_trunc('day', NOW())` on the cluster
+ * (providers/bots.ts BOT_SELECT), i.e. UTC — so a bot with runs at 00:00Z and
+ * 08:36Z has used 2 of its 4 for the purposes of the gate that will actually
+ * refuse the third. Counted in New York the 00:00Z run falls on *yesterday*,
+ * and the guardrails footer read "today: 1/4 run" beside a list row reading
+ * "2/4 runs", understating how close the bot was to the cap for every viewer
+ * west of UTC, every evening. Observed live on obs-nightly-maintenance.
+ */
+function isSameServerDay(a: number, b: number): boolean {
   const da = new Date(a);
   const db = new Date(b);
-  return da.getFullYear() === db.getFullYear()
-    && da.getMonth() === db.getMonth()
-    && da.getDate() === db.getDate();
+  return da.getUTCFullYear() === db.getUTCFullYear()
+    && da.getUTCMonth() === db.getUTCMonth()
+    && da.getUTCDate() === db.getUTCDate();
 }
 
 export interface BotRunSummary {
@@ -129,10 +143,11 @@ export interface BotRunSummary {
    *  Callers format it (e.g. with the existing `when()`) — this module stays
    *  string-in/string-out, no relative-time formatting of its own. */
   lastRunAt: string | null;
-  /** Count of runs (any status) that started on today's local calendar day,
-   *  counted from the SAME array — replaces `bot.todayRunCount` for display
-   *  so the guardrails footer can never claim runs the RUNS table doesn't
-   *  also show. */
+  /** Count of runs (any status) that started on the SERVER's current day —
+   *  the same day boundary `maxRunsPerDay` is enforced against — counted from
+   *  the SAME array, so the guardrails footer can neither claim runs the RUNS
+   *  table doesn't show nor disagree with the cap that will refuse the next
+   *  one. See `isSameServerDay`. */
   todayRunCount: number;
 }
 
@@ -151,7 +166,7 @@ export function botRunSummary(
   for (const r of runs) {
     const ms = parseBotTs(r.startedAt);
     if (ms > newestMs) { newest = r; newestMs = ms; }
-    if (isSameLocalDay(ms, nowMs)) todayRunCount += 1;
+    if (isSameServerDay(ms, nowMs)) todayRunCount += 1;
   }
   return { hasRun: true, lastRunAt: newest.startedAt, todayRunCount };
 }

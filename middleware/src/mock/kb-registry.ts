@@ -29,6 +29,7 @@
 // the correct behaviour for the pre-migration state this fixture represents,
 // not a bug to paper over by inventing a prefix the corpus doesn't use.
 
+import { randomUUID } from 'node:crypto';
 import { clock, defineFixture } from './core/index.js';
 import { liveRows } from './live.js';
 import type { KbRegistryEntry } from '../providers/kb-registry.js';
@@ -132,3 +133,93 @@ export const kbRegistry = defineFixture<KbRegistryEntry>({
 
 /** Live view — see mock/live.ts. Consumers keep reading it as an array. */
 export const mockKbRegistry: KbRegistryEntry[] = liveRows(kbRegistry);
+
+// ─── Writes ──────────────────────────────────────────────────────────────────
+//
+// `createKbEntry`, `updateKbEntry`, `deleteKbEntry` and `patchKbStatus` all
+// called `exec` unconditionally, so registering, renaming or deprovisioning a
+// knowledge base offline 500'd on the RDS Data API — while every read on the
+// same page was served from the rows above. These four move the same rows the
+// reads serve, which is what makes `POST /api/__mock/reset` an undo.
+
+/**
+ * A registry id in the shape `getKb`'s UUID guard accepts.
+ *
+ * `getKb` refuses anything that is not a UUID before it looks, so a
+ * fixture-minted id has to be one or the row would be created and then be
+ * unreadable by the very next GET. `randomUUID` is not a clock read — it is an
+ * identity, and contract.ts rule 3 is about timestamps.
+ */
+function newKbId(): string {
+  return randomUUID();
+}
+
+export interface MockCreateKbInput {
+  name: string;
+  slug: string;
+  tenant: string;
+  purpose: string;
+  description: string | null;
+  s3Prefix: string;
+  auroraTable: string;
+  chunkingStrategy: string;
+  maxTokens: number;
+  kbServiceRoleArn: string | null;
+}
+
+/**
+ * Insert a row exactly as the INSERT does: status CREATING, no Bedrock ids
+ * yet, `created_at`/`updated_at` at NOW(). The caller (`provisionKb`) is what
+ * moves it to ACTIVE, offline as online.
+ */
+export function mockCreateKbEntry(input: MockCreateKbInput): KbRegistryEntry {
+  const row: KbRegistryEntry = {
+    id: newKbId(),
+    bedrockKbId: null,
+    dataSourceId: null,
+    name: input.name,
+    slug: input.slug,
+    tenant: input.tenant,
+    purpose: input.purpose,
+    description: input.description,
+    s3Prefix: input.s3Prefix,
+    auroraTable: input.auroraTable,
+    // The INSERT hard-codes this one; the fixture must not drift from it.
+    embeddingModel: 'amazon.titan-embed-text-v2:0',
+    chunkingStrategy: input.chunkingStrategy,
+    maxTokens: input.maxTokens,
+    status: 'CREATING',
+    errorMessage: null,
+    kbServiceRoleArn: input.kbServiceRoleArn,
+    createdAt: clock.nowIso(),
+    updatedAt: clock.nowIso(),
+  };
+  kbRegistry.rows().push(row);
+  return row;
+}
+
+/** The columns any of the four write paths can move. */
+export type MockKbPatch = Partial<
+  Pick<KbRegistryEntry, 'name' | 'description' | 'status' | 'bedrockKbId' | 'dataSourceId' | 'errorMessage'>
+>;
+
+/**
+ * Patch one row in place, stamping `updatedAt` the way the table's own trigger
+ * does. A miss is a no-op, matching `UPDATE … WHERE id = :id` over zero rows.
+ */
+export function mockPatchKb(id: string, patch: MockKbPatch): KbRegistryEntry | null {
+  const row = kbRegistry.rows().find((k) => k.id === id);
+  if (!row) return null;
+  Object.assign(row, patch);
+  row.updatedAt = clock.nowIso();
+  return row;
+}
+
+/** Hard-delete, as `DELETE FROM knowledge_bases`. Returns whether a row went. */
+export function mockDeleteKbEntry(id: string): boolean {
+  const rows = kbRegistry.rows();
+  const i = rows.findIndex((k) => k.id === id);
+  if (i < 0) return false;
+  rows.splice(i, 1);
+  return true;
+}

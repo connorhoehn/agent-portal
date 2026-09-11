@@ -1,5 +1,21 @@
-// Canary JudgeNode — the LLM-as-judge scoring each variant's outputs across
-// four axes. Each axis renders as a mini horizontal bar (0–100 scale).
+// Canary JudgeNode — the LLM-as-judge scoring each variant's outputs, one mini
+// horizontal bar per dimension (0–100 scale).
+//
+// THE ABSTENTION. A judge does not score every dimension of every answer: it
+// ABSTAINS on one it cannot measure. `offline/lexical-answer-check` omits
+// `tone` unless there is a refusal to report, so a real event reads
+// `{helpfulness: 0.9, factuality: 0.167, conciseness: 0.925}` — four labels,
+// three numbers. The server treats that correctly: `weightedComposite`
+// renormalises over the keys present, so abstaining neither costs nor buys
+// anything, where awarding an unmeasurable dimension full marks was worth 20%
+// of the composite for free and could lift an answer covering 2 of 8 asked
+// terms over its threshold.
+//
+// This node used to render `(s?.tone ?? 0) * 100`, which turns "not judged"
+// into "judged zero" — a bar pinned at the floor, i.e. the worst possible score
+// on that dimension, stated confidently about a dimension nobody looked at.
+// Absent is now its own state: the label stays (so you can see WHICH dimension
+// went unjudged) and the bar is replaced by "not judged".
 
 import { memo, useEffect, useState, useCallback } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
@@ -11,7 +27,8 @@ export type JudgeNodeType = Node<JudgeNodeData & Record<string, unknown>, 'judge
 
 interface BarProps {
   label: string;
-  value: number; // 0–100
+  /** `undefined` means the judge abstained — NOT zero. */
+  value: number | undefined; // 0–100 when scored
   color: string;
 }
 
@@ -26,24 +43,57 @@ interface BarProps {
  * track, not on either side of it.
  */
 function Bar({ label, value, color }: BarProps) {
-  const pct = Math.max(0, Math.min(100, value));
+  const judged = value !== undefined && Number.isFinite(value);
+  const pct = judged ? Math.max(0, Math.min(100, value)) : 0;
   return (
     <Inline gap="xs" wrap={false}>
       <Inline as="span" gap="none" className="w-16 text-[10px] text-text-tertiary shrink-0">
         {label}
       </Inline>
-      <ProgressBar value={pct} size="sm" color={color} aria-label={label} className="flex-1" />
-      <Inline
-        as="span"
-        gap="none"
-        justify="end"
-        className="w-[26px] text-[10px] tabular-nums text-text-secondary"
-      >
-        {Math.round(pct)}
-      </Inline>
+      {judged ? (
+        <>
+          <ProgressBar value={pct} size="sm" color={color} aria-label={label} className="flex-1" />
+          <Inline
+            as="span"
+            gap="none"
+            justify="end"
+            className="w-[26px] text-[10px] tabular-nums text-text-secondary"
+          >
+            {Math.round(pct)}
+          </Inline>
+        </>
+      ) : (
+        // No track at all: an empty rail still reads as a measurement at zero.
+        // The words are the affordance, and the dash in the value column keeps
+        // the row aligned with its scored siblings.
+        <>
+          <Inline
+            as="span"
+            gap="none"
+            className="flex-1 text-[10px] italic text-text-tertiary"
+            title={`The judge abstained on ${label} — it is not scored, not scored zero. The composite renormalises over the dimensions that were judged.`}
+          >
+            not judged
+          </Inline>
+          <Inline as="span" gap="none" justify="end" className="w-[26px] text-[10px] text-text-tertiary">
+            —
+          </Inline>
+        </>
+      )}
     </Inline>
   );
 }
+
+/** The dimensions this node names, in display order, with their bar colour.
+ *  A dimension is listed here so its ABSENCE is visible; the judge may also
+ *  return a dimension not on this list, which is appended after them. */
+const DIMENSIONS: Array<[key: string, color: string]> = [
+  ['helpfulness', '#6366f1'],
+  ['factuality', '#16a34a'],
+  ['tone', '#0891b2'],
+  ['conciseness', '#f59e0b'],
+];
+const EXTRA_COLOR = '#64748b';
 
 function formatRelative(iso: string | undefined, now: number): string {
   if (!iso) return '—';
@@ -70,6 +120,18 @@ function JudgeNodeImpl({ data }: NodeProps<JudgeNodeType>) {
   }, [navigate]);
 
   const s = data.lastScores;
+  // Named dimensions first so a missing one keeps its place in the list, then
+  // anything else the judge returned. `pct` is `undefined` — not 0 — for a
+  // dimension the judge did not score.
+  const rows: Array<[key: string, color: string, pct: number | undefined]> = [
+    ...DIMENSIONS.map(([key, color]) => {
+      const raw = s?.[key];
+      return [key, color, typeof raw === 'number' ? raw * 100 : undefined] as [string, string, number | undefined];
+    }),
+    ...Object.entries(s ?? {})
+      .filter(([key]) => !DIMENSIONS.some(([k]) => k === key))
+      .map(([key, v]) => [key, EXTRA_COLOR, v * 100] as [string, string, number | undefined]),
+  ];
   return (
     <Card
       padding="sm"
@@ -95,10 +157,9 @@ function JudgeNodeImpl({ data }: NodeProps<JudgeNodeType>) {
       </Inline>
 
       <Stack gap="xs">
-        <Bar label="helpfulness" value={(s?.helpfulness ?? 0) * 100} color="#6366f1" />
-        <Bar label="factuality"  value={(s?.factuality  ?? 0) * 100} color="#16a34a" />
-        <Bar label="tone"        value={(s?.tone        ?? 0) * 100} color="#0891b2" />
-        <Bar label="conciseness" value={(s?.conciseness ?? 0) * 100} color="#f59e0b" />
+        {rows.map(([key, color, value]) => (
+          <Bar key={key} label={key} value={value} color={color} />
+        ))}
       </Stack>
 
       <Handle type="target" position={Position.Top} id="in" />

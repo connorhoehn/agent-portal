@@ -21,15 +21,35 @@
 //      and reference similarity are computed in code; only the qualitative
 //      score comes from a model. A case can fail on a missing required tag
 //      even when the judge liked the prose.
+//
+// OFFLINE. Six functions here reached AWS with no mock branch, so a `dev:mock`
+// run could be created and never executed. Each now has one, at its own layer:
+// the agent invocation is swapped AT THE TRANSPORT for `mockAgentCore` (the
+// same canned answers the chat serves), the judge is swapped for a derived
+// reading in `mock/answer-check.ts`, and the four Aurora statements are swapped
+// for the registered `harness-*` fixtures. Everything BETWEEN them is the
+// production code: the concurrency, the per-case error capture, the
+// expectation-unreadable refusal, the tag check, the reference similarity, the
+// threshold comparison and the recount-from-results. An offline run therefore
+// fails cases — the canned answers do not contain every expected tag, and they
+// should not be made to.
 
 import { BedrockAgentCoreClient, InvokeAgentRuntimeCommand } from '@aws-sdk/client-bedrock-agentcore';
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
 import { exec } from '../providers/aurora.js';
+import { agentcore as agentCoreProvider } from '../providers/index.js';
 import { config } from '../config.js';
 import { getJudgeConfig, weightedComposite } from './judge-config.js';
 import { firstLine } from './upstream.js';
 import { getRuntimeArn } from '../routes/invocations.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
+import { clock } from '../mock/core/index.js';
+import {
+  measureAnswer, offlineRubricRationale, offlineRubricScores,
+} from '../mock/answer-check.js';
+import {
+  mockGetRun, mockListCases, mockPatchRun, mockUpsertResult,
+} from '../mock/harness.js';
 
 /** Cases run concurrently. Small: these are real agent invocations. */
 const CASE_CONCURRENCY = Number(process.env['HARNESS_CONCURRENCY'] ?? 3);
@@ -90,6 +110,28 @@ export interface RunReport {
 // ── Inputs ───────────────────────────────────────────────────────────────────
 
 export async function loadCasesForRun(agentId?: string): Promise<TestCase[]> {
+  // OFFLINE. The same active-only, agent-filtered, agent_id/test_id-ordered,
+  // capped set, out of the registered `harness-cases` fixture — which is the
+  // same rows `GET /cases` serves, so a run offline covers exactly the cases
+  // the page says exist. `expectedTags` is already a list there, so no case can
+  // arrive with an unreadable expectation; `expectationProblem` is set to null
+  // EXPLICITLY rather than omitted, because "read cleanly" is an assertion this
+  // path has to make for `runCase` to be allowed to pass anything.
+  if (config.mock.aurora) {
+    return mockListCases(false)
+      .filter((c) => !agentId || c.agentId === agentId)
+      .slice(0, MAX_CASES_PER_RUN)
+      .map((c) => ({
+        testId: c.testId,
+        agentId: c.agentId,
+        prompt: c.prompt,
+        referenceOutput: c.referenceOutput,
+        expectedTags: c.expectedTags,
+        expectationProblem: null,
+        rubricOverride: c.rubricOverride,
+        passThreshold: c.passThreshold,
+      }));
+  }
   const rows = await exec(
     `SELECT test_id, agent_id, prompt, reference_output,
             expected_tags::text AS expected_tags, rubric_override, pass_threshold
@@ -196,6 +238,29 @@ export function extractAnswer(raw: string): string {
 }
 
 async function invokeAgent(agentId: string, prompt: string): Promise<{ answer: string; durationMs: number }> {
+  // OFFLINE, AT THE TRANSPORT. `mockAgentCore.invokeAgent` already answers an
+  // agent invocation in `dev:mock` — it is what the chat surface streams — so
+  // the runner borrows the fleet's own mock rather than growing a second,
+  // harness-only idea of what an agent says. Two consequences worth stating:
+  //
+  //   * The RUNTIME-MISSING path stays reachable. A case whose agent is not in
+  //     the fleet still throws here and is recorded as a failed case with its
+  //     reason, exactly as it would be live — which also means asking for
+  //     `{"scenario":"empty","fixture":"agent-fleet"}` produces a run where
+  //     every case errors, an audit state that had no other way to exist.
+  //   * The answers are the four canned ones, so an offline run is a run
+  //     against a fixed corpus, not against the agent. It exercises the
+  //     harness; it says nothing about the fleet.
+  //
+  // `clock.now()` rather than `Date.now()` for the stopwatch so a frozen-clock
+  // test gets a stable 0 instead of a racy 1.
+  if (config.mock.agentcore) {
+    const runtime = await agentCoreProvider.getRuntime(agentId);
+    if (!runtime) throw new Error(`no deployed runtime for agent '${agentId}'`);
+    const t0 = clock.now().getTime();
+    const out = await agentCoreProvider.invokeAgent(agentId, { message: prompt });
+    return { answer: extractAnswer(out.text ?? ''), durationMs: clock.now().getTime() - t0 };
+  }
   const arn = await getRuntimeArn(agentId);
   if (!arn) throw new Error(`no deployed runtime for agent '${agentId}'`);
   const t0 = Date.now();
@@ -234,6 +299,34 @@ async function judge(
   const cfg = await getJudgeConfig().catch(() => null);
   const dims = cfg?.dimensions ?? [];
   if (dims.length === 0) return { score: null, rationale: null };
+
+  // OFFLINE. Scored per DIMENSION and folded with the real `weightedComposite`,
+  // so the operator's rubric keys and weights are honoured offline too — the
+  // whole reason this judge is not `lib/judge.ts`'s. `mock/answer-check.ts`
+  // maps each known key to the measurement honestly closest to it and says
+  // which of them it cannot really measure (tone). A rubric with no dimensions
+  // still returns no score above, exactly as live: an operator who emptied the
+  // rubric has switched the judge off, and offline must not quietly re-enable
+  // it.
+  //
+  // The reference answer is read here and nowhere else in the judge: a case
+  // that declares one is scored on how much of it the answer reached, which is
+  // the closest an offline reader gets to factuality and is still not
+  // factuality — it cannot tell whether either text is true.
+  if (config.mock.agentcore) {
+    const m = measureAnswer(testCase.prompt, answer, testCase.referenceOutput);
+    if (m.empty) return { score: null, rationale: null };
+    const scores = offlineRubricScores(m, dims);
+    // Every declared dimension abstained — a rubric of nothing but tone, say.
+    // `weightedComposite` would answer 0 for that, and 0 is a verdict; "no
+    // dimension could be measured" is not one.
+    if (Object.keys(scores).length === 0) return { score: null, rationale: null };
+    const composite = weightedComposite(scores, dims);
+    return {
+      score: Number.isFinite(composite) ? Number((composite / 10).toFixed(3)) : null,
+      rationale: offlineRubricRationale(m),
+    };
+  }
 
   const rubric = testCase.rubricOverride
     ?? dims.map((d) => `- ${d.key} (weight ${d.weight}): ${d.description ?? d.key}`).join('\n');
@@ -352,6 +445,23 @@ export async function runCase(testCase: TestCase, judgeModelId: string): Promise
 // ── Persistence ──────────────────────────────────────────────────────────────
 
 export async function recordOutcome(runId: string, o: CaseOutcome): Promise<void> {
+  // OFFLINE. `mockUpsertResult` REPLACES the row for the (run, case) pair,
+  // which is what `ON CONFLICT (run_id, test_id) DO UPDATE SET … = EXCLUDED.…`
+  // does: a retried case must not inherit the previous attempt's rationale.
+  if (config.mock.aurora) {
+    mockUpsertResult(runId, {
+      testId: o.testId,
+      passed: o.passed,
+      judgeScore: o.judgeScore,
+      judgeRationale: o.judgeRationale,
+      tagHits: o.tagHits,
+      referenceSimilarity: o.referenceSimilarity,
+      responseSnippet: o.responseSnippet,
+      failReasons: o.failReasons,
+      durationMs: o.durationMs,
+    });
+    return;
+  }
   await exec(
     `INSERT INTO observability.test_results
        (run_id, test_id, passed, judge_score, judge_rationale, tag_hits,
@@ -384,6 +494,19 @@ export async function recordOutcome(runId: string, o: CaseOutcome): Promise<void
 
 /** Recompute the run's counters from its results — never from a running tally. */
 async function syncRunProgress(runId: string, status: string): Promise<void> {
+  // OFFLINE. The statement recomputes five counters from `test_results` and
+  // writes them onto the run row; the fixture does not store them at all —
+  // `withCounts` in mock/harness.ts counts them from the result rows on every
+  // read. Same guarantee, one layer earlier: a run can never report a total the
+  // rows cannot support. So only the two storable fields are patched here.
+  if (config.mock.aurora) {
+    const done = status === 'done' || status === 'failed';
+    mockPatchRun(runId, {
+      status: status as 'pending' | 'running' | 'done' | 'failed',
+      ...(done ? { finishedAt: 'now' as const } : {}),
+    });
+    return;
+  }
   await exec(
     `UPDATE observability.test_runs r
         SET completed = c.total, passed = c.passed, failed = c.failed,
@@ -417,12 +540,20 @@ export async function executeRun(
   const cases = await loadCasesForRun(opts.agentId);
   const judgeModelId = opts.judgeModelId ?? 'amazon.nova-pro-v1:0';
 
-  await exec(
-    `UPDATE observability.test_runs
-        SET status = 'running', total_cases = :total, started_at = now()
-      WHERE run_id = CAST(:run_id AS uuid)`,
-    [s('run_id', runId), i('total', cases.length)],
-  );
+  // OFFLINE. `total_cases` is deliberately dropped rather than stored: it is a
+  // count over the run's result rows and `mock/harness.ts` derives it, so a run
+  // that claims four cases before producing one cannot exist there. `started_at`
+  // is stamped when the run is created, from the mock clock.
+  if (config.mock.aurora) {
+    mockPatchRun(runId, { status: 'running' });
+  } else {
+    await exec(
+      `UPDATE observability.test_runs
+          SET status = 'running', total_cases = :total, started_at = now()
+        WHERE run_id = CAST(:run_id AS uuid)`,
+      [s('run_id', runId), i('total', cases.length)],
+    );
+  }
 
   if (cases.length === 0) {
     await syncRunProgress(runId, 'done');
@@ -457,6 +588,22 @@ export async function executeRun(
 
   await Promise.all(Array.from({ length: Math.min(CASE_CONCURRENCY, cases.length) }, () => worker()));
   await syncRunProgress(runId, 'done');
+
+  // The closing report is counted from the recorded results, never from a
+  // running tally — offline that count is `mockGetRun`'s `withCounts`, the same
+  // selector `GET /runs/:id` answers with, so the report and the page agree by
+  // construction rather than by coincidence.
+  if (config.mock.aurora) {
+    const run = mockGetRun(runId);
+    return {
+      runId,
+      status: 'done',
+      total: cases.length,
+      passed: run?.passed ?? 0,
+      failed: run?.failed ?? 0,
+      errors,
+    };
+  }
 
   const rows = await exec(
     `SELECT count(*) FILTER (WHERE passed)::int AS passed,

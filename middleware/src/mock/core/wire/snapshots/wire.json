@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-10T18:30:51.535Z",
-  "serverHandlerSha": "fc37ecf71fff0d26ac89939fa7e4aa329404ca9878454a8b939d2e8079ad5941",
-  "baseUrl": "http://127.0.0.1:3001",
+  "capturedAt": "2026-09-11T00:12:27.041Z",
+  "serverHandlerSha": "40b16737a2aeda33f46771b3be88c6f7317cb0e3b1dc0d60d6a9fc3d154c8639",
+  "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -53,6 +53,9 @@
           "budget-grants",
           "calibration-cases",
           "calibration-runs",
+          "canary-prompt-library",
+          "canary-scores",
+          "canary-subject-answers",
           "canary-weight",
           "capability-config",
           "capability-inventory",
@@ -86,14 +89,18 @@
           "harness-runs",
           "initiative-budgets",
           "invocation-tail",
+          "judge-config",
           "kb-data-sources",
           "kb-documents",
           "kb-ingestion-jobs",
           "kb-registry",
           "kb-s3-objects",
           "kb-summary",
+          "kb-upload-link-files",
+          "kb-upload-links",
           "lab-consults",
           "lab-experiences",
+          "landing-zone-objects",
           "library-assets",
           "local-presence",
           "observability-agent-profiles",
@@ -111,6 +118,12 @@
           "sdlc-policies",
           "session-bundles",
           "sprints",
+          "trace-sink-guardrail-interventions",
+          "trace-sink-memory-events",
+          "trace-sink-metrics",
+          "trace-sink-sampling",
+          "trace-sink-tool-calls",
+          "trace-sink-traces",
           "traces",
           "work-item-comments",
           "work-items"
@@ -160,6 +173,9 @@
           "budget-grants",
           "calibration-cases",
           "calibration-runs",
+          "canary-prompt-library",
+          "canary-scores",
+          "canary-subject-answers",
           "canary-weight",
           "capability-config",
           "capability-inventory",
@@ -193,14 +209,18 @@
           "harness-runs",
           "initiative-budgets",
           "invocation-tail",
+          "judge-config",
           "kb-data-sources",
           "kb-documents",
           "kb-ingestion-jobs",
           "kb-registry",
           "kb-s3-objects",
           "kb-summary",
+          "kb-upload-link-files",
+          "kb-upload-links",
           "lab-consults",
           "lab-experiences",
+          "landing-zone-objects",
           "library-assets",
           "local-presence",
           "observability-agent-profiles",
@@ -218,6 +238,12 @@
           "sdlc-policies",
           "session-bundles",
           "sprints",
+          "trace-sink-guardrail-interventions",
+          "trace-sink-memory-events",
+          "trace-sink-metrics",
+          "trace-sink-sampling",
+          "trace-sink-tool-calls",
+          "trace-sink-traces",
           "traces",
           "work-item-comments",
           "work-items"
@@ -413,12 +439,44 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "links": "array"
+        "links": "array",
+        "links[]": "object",
+        "links[].bytesUsed": "number",
+        "links[].createdAt": "string",
+        "links[].createdBy": "string",
+        "links[].expiresAt": "string",
+        "links[].filesUsed": "number",
+        "links[].id": "string",
+        "links[].kbSlug": "string",
+        "links[].label": "string",
+        "links[].lastUsedAt": "null|string",
+        "links[].maxBytes": "number",
+        "links[].maxFiles": "number",
+        "links[].revokedAt": "null|string",
+        "links[].status": "string"
       },
-      "values": {}
+      "values": {
+        "links[].status": [
+          "expired",
+          "live",
+          "revoked"
+        ]
+      }
     },
     "GET /api/admin/kb-registry/upload-links/:linkId/files": {
-      "skipped": "no value found for :linkId under /api/admin/kb-registry/upload-links (orgiq/admin); no value found for :linkId under /api/admin/kb-registry/upload-links (assessment/admin); no value found for :linkId under /api/admin/kb-registry/upload-links (anonymous)"
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "files": "array",
+        "files[]": "object",
+        "files[].bytes": "number",
+        "files[].contentType": "string",
+        "files[].filename": "string",
+        "files[].s3Key": "string",
+        "files[].uploadedAt": "string"
+      },
+      "values": {}
     },
     "GET /api/agent-detail/:agentId": {
       "persona": "orgiq/admin",
@@ -933,11 +991,13 @@
           "ms_forms_export"
         ],
         "envelopes[].status": [
+          "committed",
           "processed",
           "staged",
           "superseded"
         ],
         "groups[].status": [
+          "committed",
           "processed",
           "staged"
         ]
@@ -1917,38 +1977,12 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "boxes": "array",
-        "boxes[]": "object",
-        "boxes[].activeModel": "string",
-        "boxes[].contextUsed": "number",
-        "boxes[].createdAt": "string",
-        "boxes[].currentTask": "string",
-        "boxes[].id": "string",
-        "boxes[].idleMsLeft": "number",
-        "boxes[].label": "string",
-        "boxes[].lastActivityAt": "string",
-        "boxes[].lastResult": "object",
-        "boxes[].lastResult.costUsd": "number",
-        "boxes[].lastResult.durationMs": "number",
-        "boxes[].lastResult.subtype": "string",
-        "boxes[].lastResult.turns": "number",
-        "boxes[].lifetimeMsLeft": "number",
-        "boxes[].ownerId": "string",
-        "boxes[].sessionId": "string",
-        "boxes[].spendUsd": "number",
-        "boxes[].status": "string",
-        "boxes[].stopsInMs": "number",
-        "boxes[].tokensUsed": "number"
+        "boxes": "array"
       },
-      "values": {
-        "boxes[].status": [
-          "idle",
-          "waiting"
-        ]
-      }
+      "values": {}
     },
     "GET /api/devbox/boxes/:boxId/tail": {
-      "skipped": "server-sent event stream (orgiq/admin); server-sent event stream (assessment/admin); no value found for :boxId under /api/devbox/boxes (anonymous)"
+      "skipped": "no value found for :boxId under /api/devbox/boxes (orgiq/admin); no value found for :boxId under /api/devbox/boxes (assessment/admin); no value found for :boxId under /api/devbox/boxes (anonymous)"
     },
     "GET /api/devbox/status": {
       "persona": "orgiq/admin",
@@ -2119,7 +2153,7 @@
       },
       "values": {
         "kind": [
-          "convention"
+          "decision"
         ],
         "level": [
           "L0"
@@ -3676,9 +3710,7 @@
       },
       "values": {
         "events[].action": [
-          "DispatchAgentRun",
           "Login",
-          "ManageDevbox",
           "ManageIngest",
           "ViewAssessment",
           "ViewIdentityAdmin",
@@ -3690,9 +3722,7 @@
           "ALLOW"
         ],
         "events[].role": [
-          "admin",
-          "hr-admin",
-          "org-leader"
+          "admin"
         ],
         "events[].tenant": [
           "orgiq"
@@ -3840,9 +3870,11 @@
         "subject_a": "object",
         "subject_a.arn": "string",
         "subject_a.label": "string",
+        "subject_a.template": "string",
         "subject_b": "object",
         "subject_b.arn": "string",
-        "subject_b.label": "string"
+        "subject_b.label": "string",
+        "subject_b.template": "string"
       },
       "values": {}
     },
@@ -4957,6 +4989,19 @@
       "shape": {
         "$": "object",
         "entries": "array",
+        "entries[]": "object",
+        "entries[].collaboration": "number",
+        "entries[].composite": "number",
+        "entries[].department": "string",
+        "entries[].expertise": "number",
+        "entries[].influence": "number",
+        "entries[].name": "string",
+        "entries[].personId": "string",
+        "entries[].quality": "number",
+        "entries[].scoredAt": "null",
+        "entries[].trend": "array",
+        "entries[].trend[]": "number",
+        "entries[].velocity": "number",
         "mostRecentScoredAt": "null",
         "total": "number"
       },
@@ -5014,7 +5059,11 @@
       "persona": "orgiq/admin",
       "status": 200,
       "shape": {
-        "$": "array"
+        "$": "array",
+        "$[]": "object",
+        "$[].id": "string",
+        "$[].mentionCount": "number",
+        "$[].name": "string"
       },
       "values": {}
     },
@@ -5581,10 +5630,10 @@
         "jobs": "array",
         "jobs[]": "object",
         "jobs[].attempts": "number",
-        "jobs[].botId": "null|string",
-        "jobs[].botName": "null|string",
-        "jobs[].botTrigger": "null|string",
-        "jobs[].boxId": "null|string",
+        "jobs[].botId": "string",
+        "jobs[].botName": "string",
+        "jobs[].botTrigger": "string",
+        "jobs[].boxId": "null",
         "jobs[].claimedAt": "string",
         "jobs[].createdAt": "string",
         "jobs[].createdBy": "string",
@@ -5603,9 +5652,7 @@
         "jobs[].result.costUsd": "number",
         "jobs[].result.durationMs": "number",
         "jobs[].result.summary": "string",
-        "jobs[].result.toolCalls": "number",
-        "jobs[].result.turns": "number",
-        "jobs[].sessionId": "null|string",
+        "jobs[].sessionId": "null",
         "jobs[].startedAt": "string",
         "jobs[].status": "string",
         "jobs[].title": "string"
@@ -5625,10 +5672,10 @@
       "shape": {
         "$": "object",
         "attempts": "number",
-        "botId": "null",
-        "botName": "null",
-        "botTrigger": "null",
-        "boxId": "string",
+        "botId": "string",
+        "botName": "string",
+        "botTrigger": "string",
+        "boxId": "null",
         "claimedAt": "string",
         "createdAt": "string",
         "createdBy": "string",
@@ -5638,6 +5685,7 @@
         "kind": "string",
         "maxAttempts": "number",
         "payload": "object",
+        "payload.botId": "string",
         "payload.model": "string",
         "payload.prompt": "string",
         "payload.requiresReview": "boolean",
@@ -5646,9 +5694,7 @@
         "result.costUsd": "number",
         "result.durationMs": "number",
         "result.summary": "string",
-        "result.toolCalls": "number",
-        "result.turns": "number",
-        "sessionId": "string",
+        "sessionId": "null",
         "startedAt": "string",
         "status": "string",
         "title": "string"
@@ -5752,9 +5798,7 @@
       "values": [
         "ANONYMIZE",
         "BLOCK",
-        "DispatchAgentRun",
         "Login",
-        "ManageDevbox",
         "ManageIngest",
         "ViewAssessment",
         "ViewIdentityAdmin",
@@ -5845,6 +5889,9 @@
         "budget-grants",
         "calibration-cases",
         "calibration-runs",
+        "canary-prompt-library",
+        "canary-scores",
+        "canary-subject-answers",
         "canary-weight",
         "capability-config",
         "capability-inventory",
@@ -5890,14 +5937,18 @@
         "initiative-budgets",
         "internal-tooling-no-deploy",
         "invocation-tail",
+        "judge-config",
         "kb-data-sources",
         "kb-documents",
         "kb-ingestion-jobs",
         "kb-registry",
         "kb-s3-objects",
         "kb-summary",
+        "kb-upload-link-files",
+        "kb-upload-links",
         "lab-consults",
         "lab-experiences",
+        "landing-zone-objects",
         "library-assets",
         "local-presence",
         "memory",
@@ -5920,6 +5971,12 @@
         "session-bundles",
         "sprints",
         "tone",
+        "trace-sink-guardrail-interventions",
+        "trace-sink-memory-events",
+        "trace-sink-metrics",
+        "trace-sink-sampling",
+        "trace-sink-tool-calls",
+        "trace-sink-traces",
         "traces",
         "work-item-comments",
         "work-items"
@@ -6005,7 +6062,6 @@
         "admin",
         "contributor",
         "decider",
-        "hr-admin",
         "org-leader",
         "owner",
         "sme"
@@ -6072,6 +6128,7 @@
         "candidate",
         "changes_requested",
         "claim_open",
+        "committed",
         "completed",
         "connected",
         "current",
@@ -6085,7 +6142,6 @@
         "failed",
         "healthy",
         "ideating",
-        "idle",
         "in_progress",
         "in_review",
         "live",
@@ -6104,14 +6160,14 @@
         "requested",
         "resolved",
         "retired",
+        "revoked",
         "running",
         "staged",
         "stale",
         "stalled",
         "succeeded",
         "superseded",
-        "verified",
-        "waiting"
+        "verified"
       ]
     },
     "tenant": {

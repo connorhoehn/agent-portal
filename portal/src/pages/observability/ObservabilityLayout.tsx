@@ -47,6 +47,7 @@ function ObservabilityLayout() {
     { group: 'Health', path: 'authz',           label: 'Authz Log',       hint: 'Live AVP decisions' },
 
     { group: 'Runs', path: 'invocations/search', label: 'Search',            hint: 'Filter by prompt / agent / score' },
+    { group: 'Runs', path: 'tools',              label: 'Tool Calls',        hint: 'Per-tool latency + failures' },
     { group: 'Runs', path: 'sessions',           label: 'Sessions',          hint: 'Chat thread replay' },
     { group: 'Runs', path: 'capability-events',  label: 'Capability Events', hint: 'Browser + code interpreter' },
     { group: 'Runs', path: 'memory',             label: 'Memory',            hint: 'Memory ops + cold sessions' },

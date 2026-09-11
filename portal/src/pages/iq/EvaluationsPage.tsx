@@ -189,6 +189,26 @@ function WeightSlider({
   );
 }
 
+/**
+ * The four named dimensions in a stable order, then anything else the judge
+ * returned — with `undefined` for one it ABSTAINED on.
+ *
+ * `judge_score.scores` carries only the dimensions actually measured:
+ * `offline/lexical-answer-check` omits `tone` unless there is a refusal to
+ * report. Iterating the object alone made an abstention invisible (the cell
+ * just vanished, and the four-column grid grew a hole), which reads as "this
+ * judge has three dimensions" rather than "nobody looked at tone here". Naming
+ * all four and marking the gap says which one, and the tooltip says why it is
+ * not a zero — the composite renormalises over what WAS judged.
+ */
+function dimensionCells(scores: Record<string, number>): Array<[string, number | undefined]> {
+  const named = Object.keys(DIM_COLOR_CLASS);
+  return [
+    ...named.map((k) => [k, scores[k]] as [string, number | undefined]),
+    ...Object.entries(scores).filter(([k]) => !named.includes(k)),
+  ];
+}
+
 function ScoreRow({ entry, i }: { entry: JudgeHistoryEntry; i: number }) {
   const [open, setOpen] = useState(false);
   const composite01 = entry.composite; // already 0–1
@@ -215,10 +235,19 @@ function ScoreRow({ entry, i }: { entry: JudgeHistoryEntry; i: number }) {
       {open && (
         <Stack gap="none" className="border-t border-surface-hover bg-surface-panel px-3 py-2">
           <Inline gap="sm" wrap className="grid grid-cols-4 gap-2">
-            {Object.entries(entry.scores).map(([k, v]) => (
+            {dimensionCells(entry.scores).map(([k, v]) => (
               <Stack key={k} gap="none">
                 <T className={`text-[9px] font-bold uppercase tracking-wide ${DIM_COLOR_CLASS[k] ?? 'text-text-tertiary'}`}>{k}</T>
-                <T className={`text-[16px] font-bold ${scoreColorClass(v)}`}>{fmt01(v)}</T>
+                {v === undefined ? (
+                  <T
+                    className="text-[11px] italic leading-[1.45] text-text-tertiary"
+                    title={`The judge abstained on ${k} — not scored, not scored zero. The composite renormalises over the dimensions that were judged.`}
+                  >
+                    not judged
+                  </T>
+                ) : (
+                  <T className={`text-[16px] font-bold ${scoreColorClass(v)}`}>{fmt01(v)}</T>
+                )}
               </Stack>
             ))}
           </Inline>

@@ -11,7 +11,9 @@
 //                                        prompt_snippet + filters)
 //   GET  /:invocationId                — full row + tool calls + parent +
 //                                        child invocations (depth 2)
-//   POST /:invocationId/replay         — stub (501) — wired in M4 finalisation
+//   POST /:invocationId/replay         — re-invoke the agent with the source
+//                                        prompt and sink the result as a child
+//                                        trace
 //
 // All Aurora I/O goes through providers/aurora.ts exec(). All endpoints
 // degrade defensively: missing tables or empty result sets yield empty
@@ -32,6 +34,9 @@ import {
 } from '@aws-sdk/client-bedrock-agentcore-control';
 import { asyncHandler } from '../lib/async-handler.js';
 import { exec } from '../providers/aurora.js';
+import { agentcore as agentCoreProvider } from '../providers/index.js';
+import { mockRuntimeArn } from '../lib/devbox-arn.js';
+import { clock } from '../mock/core/index.js';
 import { config } from '../config.js';
 import { processTrace } from '../lib/trace-sink.js';
 import {
@@ -603,7 +608,24 @@ invocationsRouter.get('/:invocationId', asyncHandler(async (req, res) => {
 // Body: { newPrompt?: string }  — when omitted, the source prompt is reused.
 //
 // Returns: { invocationId, response, durationMs, agentId, parentInvocationId,
-//            judgeScore }
+//            judgeScore, persisted, notPersisted? }
+//
+// OFFLINE (`dev:mock`). This route 500'd long after the libraries beneath it
+// were mocked, because all three of its blockers were in the handler ITSELF —
+// a bare `exec` source lookup, `getRuntimeArn`'s `ListAgentRuntimes`, and a raw
+// `InvokeAgentRuntimeCommand`. Rule 4's write scan reports leaves in
+// `src/lib/**` and `src/providers/**` and excludes `exec` everywhere as
+// transport, so a handler reaching AWS directly is structurally invisible to
+// it: the budget said this route was fine for as long as it was broken. Fixing
+// it moves no number, and that is the point of writing it down here.
+//
+// All three now borrow a seam that already existed rather than inventing a
+// fourth: the source row comes from `mockInvocationDetailRow` (the same
+// counterpart `GET /:invocationId` reads), the ARN from `lib/devbox-arn.ts`'s
+// `mockRuntimeArn` gated on the fleet fixture, and the invocation from
+// `mockAgentCore.invokeAgent` — the transport the chat surface and the harness
+// runner already speak through. Everything after the invoke is the production
+// path unchanged, sampling and the phantom guard included.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ARN cache for deployed runtimes — refreshed lazily on cache miss. AgentCore
@@ -615,6 +637,25 @@ const RUNTIME_CACHE_TTL_MS = 5 * 60_000;
 /** Exported so the harness runner resolves runtimes exactly as replay does. */
 export async function getRuntimeArn(agentId: string): Promise<string | null> {
   const runtimeName = agentId.replace(/-/g, '_'); // orgiq-supervisor → orgiq_supervisor
+
+  // OFFLINE. `ListAgentRuntimes` is the second of replay's three handler-level
+  // AWS calls, and its failure mode is the quiet one: it catches, returns null,
+  // and every caller says "no deployed runtime" — a sentence about the fleet
+  // that is really a sentence about the credentials.
+  //
+  // The answer offline is the same one `lib/devbox-arn.ts` gives for the
+  // devbox, from the same function (`mockRuntimeArn`), so there is one spelling
+  // of a runtime that was never deployed rather than two. What decides whether
+  // there IS one is the fleet fixture, not this function: an agent the mock
+  // fleet does not carry still resolves to null, so the 503 stays reachable and
+  // `{"scenario":"empty","fixture":"agent-fleet"}` makes every replay 503 —
+  // an audit state that otherwise had no way to exist. Not cached: the cache
+  // bounds a live ListAgentRuntimes call and there is none to bound.
+  if (config.mock.agentcore) {
+    const runtime = await agentCoreProvider.getRuntime(agentId);
+    return runtime ? mockRuntimeArn(runtimeName) : null;
+  }
+
   const now = Date.now();
   if (
     _runtimeArnCache &&
@@ -657,6 +698,21 @@ interface ReplayResponse {
   agentId: string;
   parentInvocationId: string;
   judgeScore: number | null;
+  /** Did the sink actually write a row? False when sampled out or dropped. */
+  persisted: boolean;
+  /** Present only when `persisted` is false: which rule refused it. */
+  notPersisted?: string;
+  /**
+   * Did the stored trace keep the link back to its source?
+   *
+   * `observability.invocation_traces.parent_invocation_id` is a uuid column, so
+   * `processTrace` drops a parent id that is not one. Live that never bites —
+   * the id shape check above guarantees a uuid. Offline the seeded corpus is
+   * keyed on `mock-inv-<n>`, so the replay persists with a NULL parent and does
+   * not appear as a child in the trace tree. `parentInvocationId` above says
+   * what was replayed; this says whether the row remembers it.
+   */
+  parentLinked: boolean;
 }
 
 // Mirror harness.py::_parse_agent_response — try common shapes.
@@ -697,7 +753,12 @@ function parseAgentResponse(text: string): string {
 // that member/sme hold — that would bypass the ManageIngest direct-invoke gate.
 invocationsRouter.post('/:invocationId/replay', requireAction('ManageCanary'), asyncHandler(async (req, res) => {
   const id = String(req.params['invocationId'] ?? '').trim();
-  if (!isUuid(id)) {
+  const useMock = config.mock.aurora;
+  // The id shape check is the live path's, for the same reason it is on
+  // `GET /:invocationId`: `:id::uuid` requires a UUID, while the offline
+  // corpus is keyed on the invocation tail's ids (`mock-inv-33`). An id
+  // neither path can resolve still 404s below, on the lookup itself.
+  if (!useMock && !isUuid(id)) {
     res.status(404).json({ error: 'invocation_not_found', invocationId: id });
     return;
   }
@@ -714,7 +775,15 @@ invocationsRouter.post('/:invocationId/replay', requireAction('ManageCanary'), a
   let sourceUserId: string | null = null;
   let sourceSessionId: string | null = null;
   try {
-    const rows = await exec(
+    // OFFLINE. The same seam `GET /:invocationId` reads — one statement, one
+    // mock counterpart. This SELECT asks for five of the columns
+    // `mockInvocationDetailRow` already returns, so borrowing it keeps the
+    // corpus with one definition instead of giving replay a private idea of
+    // what a source row is. It was the first of the three handler-level AWS
+    // calls, and the one the write-route scan structurally cannot see: `exec`
+    // is excluded everywhere as transport, so a bare `exec` in a handler is
+    // invisible to it.
+    const rows = useMock ? mockInvocationDetailRow(id) : await exec(
       `SELECT agent_id,
               COALESCE(prompt_snippet, '') AS prompt_snippet,
               template_id,
@@ -770,23 +839,52 @@ invocationsRouter.post('/:invocationId/replay', requireAction('ManageCanary'), a
   let responseText = '';
   let durationMs = 0;
   try {
-    const client = new BedrockAgentCoreClient({ region: config.region });
-    const t0 = Date.now();
-    const out = await client.send(
-      new InvokeAgentRuntimeCommand({
-        agentRuntimeArn: arn,
-        qualifier: 'DEFAULT',
-        payload,
-      }),
-    );
-    durationMs = Date.now() - t0;
-    const stream = out.response;
-    if (stream) {
-      // SdkStream — transformToString() is the canonical drain.
-      const text = await (stream as unknown as {
-        transformToString: () => Promise<string>;
-      }).transformToString();
-      responseText = parseAgentResponse(text);
+    // OFFLINE, AT THE TRANSPORT — the third handler-level AWS call, and the
+    // same seam `lib/harness-runner.ts` invokes through. `mockAgentCore
+    // .invokeAgent` is what the chat surface streams, so a replay offline
+    // re-asks the fleet's own mock rather than growing a third idea of what an
+    // agent says. Everything after this line is the production path: the
+    // response goes through the same `parseAgentResponse`, into the same
+    // `processTrace`, under the same sampling die and the same phantom rule.
+    //
+    // `clock.now()` rather than `Date.now()` for the stopwatch so a
+    // frozen-clock test reads a stable 0 instead of a racy 1.
+    //
+    // What this does NOT do is answer as the deployed agent would. The four
+    // canned responses are a fixed corpus keyed on the prompt, so an offline
+    // replay exercises the replay pipeline and says nothing about the fleet —
+    // which is why the reply carries `degraded` saying exactly that. A replay
+    // that always looks like a real answer is worse than one that admits it
+    // is not.
+    if (config.mock.agentcore) {
+      const t0 = clock.now().getTime();
+      const out = await agentCoreProvider.invokeAgent(sourceAgentId, {
+        message: finalPrompt,
+        ...(sourceSessionId ? { sessionId: sourceSessionId } : {}),
+        ...(sourceUserId ? { userId: sourceUserId } : {}),
+      });
+      durationMs = clock.now().getTime() - t0;
+      responseText = parseAgentResponse(out.text ?? '');
+      // Fall through to step 4 — one persistence path, both modes.
+    } else {
+      const client = new BedrockAgentCoreClient({ region: config.region });
+      const t0 = Date.now();
+      const out = await client.send(
+        new InvokeAgentRuntimeCommand({
+          agentRuntimeArn: arn,
+          qualifier: 'DEFAULT',
+          payload,
+        }),
+      );
+      durationMs = Date.now() - t0;
+      const stream = out.response;
+      if (stream) {
+        // SdkStream — transformToString() is the canonical drain.
+        const text = await (stream as unknown as {
+          transformToString: () => Promise<string>;
+        }).transformToString();
+        responseText = parseAgentResponse(text);
+      }
     }
   } catch (err) {
     console.warn('[invocations] /replay InvokeAgentRuntime failed:',
@@ -831,6 +929,13 @@ invocationsRouter.post('/:invocationId/replay', requireAction('ManageCanary'), a
     return;
   }
 
+  // `processTrace` returning is not the same as a trace existing. The sampling
+  // die and the write-side phantom guard BOTH answer by returning a result
+  // with `inserted: false`, and a 200 carrying a fresh `invocationId` reads as
+  // a row that was written. Both rules are load-bearing (CLAUDE.md's two
+  // observability gotchas) and neither is touched here — but a caller is
+  // entitled to know which of the three things happened, so say it. Derived
+  // from the result, never stored.
   const out: ReplayResponse = {
     invocationId: result.invocationId,
     response: responseText,
@@ -838,6 +943,29 @@ invocationsRouter.post('/:invocationId/replay', requireAction('ManageCanary'), a
     agentId: sourceAgentId,
     parentInvocationId: id,
     judgeScore: result.judgeScore,
+    persisted: result.inserted,
+    // The sink's own rule, not a second one: `isValidUuid` there is this
+    // module's `isUuid`, and it is what decides whether the row keeps a parent.
+    parentLinked: result.inserted && isUuid(id),
+    ...(result.inserted ? {} : {
+      notPersisted: result.skipped
+        ? 'the write-side phantom guard dropped the bundle: no model, no response, no tokens, no tool calls, no guardrail signal, no memory events'
+        : !result.sampled
+          ? 'the sampling die rolled against this trace (observability.sampling_config)'
+          : 'the trace insert did not report a row',
+    }),
   };
-  res.status(200).json(out);
+  // OFFLINE the answer came from the fleet's canned corpus, not the agent, so
+  // the reply says so in the shape `/search` above already uses for a filter
+  // it could not honour. Everything else on this response is real: a real
+  // source row, a real invocation through the real transport seam, and a real
+  // trace through the real sink.
+  res.status(200).json(
+    config.mock.agentcore
+      ? degraded(out, new Error(
+        'dev:mock — the replayed answer came from the offline agent corpus '
+        + '(mock/responses.ts), not from a deployed runtime',
+      ))
+      : out,
+  );
 }));

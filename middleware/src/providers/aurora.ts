@@ -1177,6 +1177,24 @@ async function mockFetchPersonGraph(personId: string): Promise<PersonDetail | nu
   return { ...p, scoredAt: null, connections };
 }
 
+/**
+ * Latest `scoredAt` across the rows being shipped — the same reduction
+ * realGetLeaderboard does, rather than a typed null beside rows that might
+ * carry a date (mock/core/contract.ts, rule 1).
+ */
+function mostRecentOf(entries: ScoreEntry[]): string | null {
+  const dates = entries.map((e) => e.scoredAt).filter((d): d is string => d !== null);
+  return dates.length > 0 ? dates.reduce((a, b) => (a > b ? a : b)) : null;
+}
+
+/**
+ * `ORDER BY composite_score DESC LIMIT :lim`, over the seeded `people` rows —
+ * mock/scores.ts projects them, so this ranks the same cast, in the same
+ * order, as the Aurora query it stands in for. `total` counts the rows it
+ * ships beside — the page, the way realGetLeaderboard reports it — not the
+ * size of the unpaged set, which would make the number disagree with the list
+ * under it the moment the cast outgrew the limit.
+ */
 async function mockGetLeaderboard(opts: { department?: string; limit?: number }): Promise<Leaderboard> {
   const limit = Math.max(1, Math.min(opts.limit ?? 25, 200));
   let entries = [...mockScores];
@@ -1185,19 +1203,60 @@ async function mockGetLeaderboard(opts: { department?: string; limit?: number })
     entries = entries.filter((e) => e.department.toLowerCase().includes(needle));
   }
   entries.sort((a, b) => b.composite - a.composite);
-  return { entries: entries.slice(0, limit), total: entries.length, mostRecentScoredAt: null };
+  const page = entries.slice(0, limit);
+  return { entries: page, total: page.length, mostRecentScoredAt: mostRecentOf(page) };
 }
 
 async function mockGetScore(personId: string): Promise<ScoreEntry | null> {
   return mockScores.find((s) => s.personId === personId) ?? null;
 }
 
-async function mockGetSkillLeaderboard(_opts: { skill: string; limit?: number }): Promise<Leaderboard> {
-  return { entries: [], total: 0, mostRecentScoredAt: null };
+/**
+ * Who holds a named skill, mirroring realGetSkillLeaderboard's join
+ * (`people ⋈ person_skills ⋈ skills WHERE lower(s.name) = lower(:skill)`).
+ *
+ * Both of these used to return an empty array, so the skill filter on
+ * /iq/scores looked like a feature nobody had seeded rather than a branch
+ * nobody had written (contract.ts bug class 5).
+ *
+ * ORDERING IS THE ONE DRIFT. Aurora orders by `SUM(ps.weight) DESC` — how
+ * strong each person is in THAT skill. mock/people.ts carries the seed's
+ * `person_skills` edges as an ordered list of names per person, so the weight
+ * survives only as the order *within* one person and is not comparable across
+ * them. Composite descending is the honest stand-in and is the same ordering
+ * the main leaderboard uses; it is not a claim about skill depth.
+ */
+async function mockGetSkillLeaderboard(opts: { skill: string; limit?: number }): Promise<Leaderboard> {
+  const limit = Math.max(1, Math.min(opts.limit ?? 25, 100));
+  const needle = opts.skill.toLowerCase();
+  const holders = new Set(
+    (mockPeople as Person[]).filter((p) => p.skills.some((s) => s.toLowerCase() === needle))
+      .map((p) => p.id),
+  );
+  const entries = mockScores
+    .filter((s) => holders.has(s.personId))
+    .sort((a, b) => b.composite - a.composite)
+    .slice(0, limit);
+  return { entries, total: entries.length, mostRecentScoredAt: mostRecentOf(entries) };
 }
 
-async function mockGetTopSkills(_limit?: number): Promise<SkillSummary[]> {
-  return [];
+/**
+ * The skill catalogue with its mention count — `mentionCount` COUNTED from the
+ * seeded person_skills edges (`mockPeople[].skills`), never stored beside the
+ * skill row (mock/core/contract.ts, rule 1). Skills nobody holds are dropped,
+ * which is what the real query's INNER JOIN does.
+ */
+async function mockGetTopSkills(limit = 30): Promise<SkillSummary[]> {
+  const lim = Math.max(1, Math.min(limit, 100));
+  const mentions = new Map<string, number>();
+  for (const person of mockPeople as Person[]) {
+    for (const skill of person.skills) mentions.set(skill, (mentions.get(skill) ?? 0) + 1);
+  }
+  return mockSkills
+    .filter((s) => mentions.has(s.name))
+    .map((s) => ({ id: s.id, name: s.name, mentionCount: mentions.get(s.name) ?? 0 }))
+    .sort((a, b) => b.mentionCount - a.mentionCount || a.name.localeCompare(b.name))
+    .slice(0, lim);
 }
 
 async function mockGetCohorts(): Promise<CohortStats[]> {
@@ -1229,7 +1288,9 @@ async function mockGetCohorts(): Promise<CohortStats[]> {
     const compositeBuckets: [number, number, number, number, number] = [0, 0, 0, 0, 0];
     for (const e of entries) compositeBuckets[bucket(e.composite)]++;
 
-    // Gini on expertise_score within dept.
+    // Gini on expertise_score within dept. The fixture carries `expertise` as
+    // a 0-1 fraction and Aurora's query reads the 0-100 column; Gini is a
+    // ratio of sums, so it is scale-invariant and the two agree to the digit.
     const expertiseVals = [...entries].map((e) => e.expertise).sort((a, b) => a - b);
     const total = expertiseVals.reduce((s, v) => s + v, 0);
     let gini = 0;

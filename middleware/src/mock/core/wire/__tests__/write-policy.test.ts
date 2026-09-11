@@ -96,15 +96,38 @@ describe('write policy — the decision', () => {
   it('a route that spends in every configuration is refused even by a fully mocked server', () => {
     // The interception carve-out must not have leaked into the family that has
     // no mock branch at all. web-qa builds its own BedrockRuntimeClient in the
-    // handler; crawl fetches real pages.
+    // handler; crawl fetches real pages; agents/:id/invoke fires an unawaited
+    // session-title Converse (lib/session-titles.ts) after the answer streams —
+    // that last one used to be listed here as "invokes an AgentCore runtime",
+    // which `mockAgentCore.invokeAgentStreaming` makes false, so the ROUTE
+    // stayed refused while the reason had to be replaced.
     for (const r of [
       'POST /api/capabilities/browser/web-qa',
       'POST /api/capabilities/browser/crawl',
-      'POST /api/devbox/:sessionId/task',
+      'POST /api/agents/:agentId/invoke',
     ]) {
       const v = classifyWrite(r, FULLY_MOCKED);
       expect(v.kind).toBe('refused');
       if (v.kind === 'refused') expect(v.rule).toBe('spends');
+    }
+  });
+
+  it('a route whose spend is intercepted but which still arms something is refused as `fires`', () => {
+    // `POST /devbox/:sessionId/task` was on the `spends` list above until a
+    // re-read: under MOCK_AGENTCORE it invokes `mock/devbox-shell.ts`, not a
+    // microVM. It is still refused, because before the invoke it does
+    // `getBoxBySession(id) ?? registerBox({ sessionId })` and lib/devbox-fleet.ts
+    // holds that Map with no fixture behind it — the same rule-4 problem
+    // `POST /devbox/boxes` is refused for. Moving a route between rules must
+    // never mean releasing it, and this is the test that says so.
+    for (const r of [
+      'POST /api/devbox/:sessionId/task',
+      'POST /api/agent-projects/:id/runs',
+      'POST /api/sdlc/changes/:id/address',
+    ]) {
+      const v = classifyWrite(r, FULLY_MOCKED);
+      expect(v.kind).toBe('refused');
+      if (v.kind === 'refused') expect(v.rule).toBe('fires');
     }
   });
 
@@ -114,16 +137,37 @@ describe('write policy — the decision', () => {
     }
   });
 
-  it('refuses the two writes that spend even with Aurora down', () => {
-    // harness/trace runs Titan + the Nova judge before any database call, so it
-    // is the one route where "it fails offline anyway" is simply untrue.
+  it('refuses a write that spends even with Aurora down', () => {
+    // This test used to name `POST /harness/trace` as well, on the grounds that
+    // it ran Titan and the Nova judge BEFORE any database call, so "it fails
+    // offline anyway" was untrue of it. That reading was correct and is now
+    // out of date: `lib/trace-sink.ts` embeds through `mock/embedding.ts` and
+    // `lib/judge.ts` answers from `mock/answer-check.ts`, both on
+    // `config.mock.agentcore`, so the route is on the allowlist behind an
+    // `intercepts` declaration and the next assertion covers it. What is left
+    // here is a route with no mock branch at any layer: an optimize call
+    // creates and optimizes a real Bedrock managed prompt whatever the flags
+    // say.
+    const v = classifyWrite('POST /api/observability/canary/library/:promptId/optimize');
+    expect(v.kind).toBe('refused');
+    if (v.kind === 'refused') expect(v.rule).toBe('spends');
+  });
+
+  it('refuses the offline judge’s own routes until the SERVER reports agentcore', () => {
+    // The corollary of the note above. These four are only safe because the
+    // judge and the embedder are intercepted, and this file may not decide
+    // that on its own: with no report they refuse, and they refuse again on a
+    // server running everything except agentcore.
+    const withoutAgentcore: Intercepted = new Set<MockProvider>(['aurora', 'guardrails', 'cloudwatch']);
     for (const r of [
       'POST /api/observability/harness/trace',
-      'POST /api/observability/canary/library/:promptId/optimize',
+      'POST /api/observability/harness/results/:invocationId/rejudge',
+      'POST /api/sdlc/changes/:id/rereview',
+      'POST /api/agent-projects/:id/clone-command',
     ]) {
-      const v = classifyWrite(r);
-      expect(v.kind).toBe('refused');
-      if (v.kind === 'refused') expect(v.rule).toBe('spends');
+      expect(classifyWrite(r).kind).toBe('refused');
+      expect(classifyWrite(r, withoutAgentcore).kind).toBe('refused');
+      expect(classifyWrite(r, FULLY_MOCKED).kind).toBe('replay');
     }
   });
 

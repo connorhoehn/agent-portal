@@ -22,6 +22,7 @@ import {
 import { readDegraded } from '../../lib/degraded';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
+import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
 import { CostVsEstimate, runEstimate } from './EstimateDrawer';
 import {
   TEMPLATE_TONE,
@@ -40,9 +41,9 @@ const RUN_STATUS_TONE: Record<BotRun['status'], 'warning' | 'success' | 'danger'
   skipped: 'neutral',
 };
 
-/** Aurora timestamps arrive without T/Z — same normalization as BotsPage.when. */
+/** Aurora stamps carry a `+00` offset ISO 8601 does not allow — shared parser. */
 function parseTs(iso: string): number {
-  return new Date(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`).getTime();
+  return parsePgTimestampAsUtc(iso)?.getTime() ?? Number.NaN;
 }
 
 const OUTCOMES_LIMIT = 10;

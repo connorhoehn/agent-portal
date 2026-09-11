@@ -38,6 +38,8 @@ import {
 } from '../lib/weight-cache.js';
 import { resetLocalController } from '../lib/canary-local-controller.js';
 import { fireJudge } from '../lib/canary-judge.js';
+import { offlineSubjectAnswer } from '../mock/canary-ask.js';
+import { findMockPrompt } from '../mock/canary-library.js';
 import type { CanaryEvent, CanaryVersionLabel } from '../lib/canary-types.js';
 
 export const canaryRouter = Router();
@@ -116,22 +118,44 @@ canaryRouter.post('/ask', asyncHandler(async (req, res) => {
   let streamErr: Error | null = null;
 
   try {
-    const out = await bedrock().send(new ConverseStreamCommand({
-      modelId: promptArn,
-      promptVariables: {
-        person_name: { text: personName },
-        topic: { text: topic },
-        summary: { text: summary },
-      },
-    }));
-
-    if (out.stream) {
-      for await (const event of out.stream) {
+    if (config.mock.agentcore) {
+      // Offline, the subject's answer is DECLARED rather than generated — a
+      // mock cannot write prose any more than it can write code. The branch is
+      // here because this handler is what owns the ConverseStream client; the
+      // text, and the reason each subject has the text it has, are in
+      // mock/canary-ask.ts. Everything after this block — the broker events,
+      // the judge, the EMF record — is the real path, unchanged.
+      const declared = offlineSubjectAnswer(version, { personName, topic });
+      if (declared === null) {
+        throw new Error(
+          `mock canary: no declared answer for subject ${version} in the current scenario`,
+        );
+      }
+      // Chunked the way a model streams, so the client's incremental render is
+      // exercised rather than handed one frame.
+      for (const chunk of declared.match(/\S+\s*/g) ?? []) {
         if (res.writableEnded) break;
-        const deltaText = event.contentBlockDelta?.delta?.text;
-        if (typeof deltaText === 'string' && deltaText.length > 0) {
-          fullText += deltaText;
-          writeSSE(res, { type: 'delta', text: deltaText });
+        fullText += chunk;
+        writeSSE(res, { type: 'delta', text: chunk });
+      }
+    } else {
+      const out = await bedrock().send(new ConverseStreamCommand({
+        modelId: promptArn,
+        promptVariables: {
+          person_name: { text: personName },
+          topic: { text: topic },
+          summary: { text: summary },
+        },
+      }));
+
+      if (out.stream) {
+        for await (const event of out.stream) {
+          if (res.writableEnded) break;
+          const deltaText = event.contentBlockDelta?.delta?.text;
+          if (typeof deltaText === 'string' && deltaText.length > 0) {
+            fullText += deltaText;
+            writeSSE(res, { type: 'delta', text: deltaText });
+          }
         }
       }
     }
@@ -215,6 +239,14 @@ interface PromptsResponse {
 
 async function fetchTemplate(arn: string): Promise<string | undefined> {
   if (!arn) return undefined;
+  if (config.mock.agentcore) {
+    // The subject ARNs the fixture stores are ARNs of prompts in the offline
+    // library (mock/canary-library.ts), so the template is a lookup rather
+    // than a GetPrompt. Resolving it here is what keeps "which prompt is
+    // subject B" and "what does subject B say" from disagreeing offline.
+    const id = arn.split('/').pop()?.split(':')[0] ?? '';
+    return findMockPrompt(id)?.versions[0]?.variant.templateText;
+  }
   try {
     const out = await bedrockAgent().send(new GetPromptCommand({ promptIdentifier: arn }));
     // Pick the default variant, falling back to the first one.

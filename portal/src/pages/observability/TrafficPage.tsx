@@ -47,6 +47,7 @@ import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { firstDegraded } from '../../lib/degraded';
 import { TrafficHeatmapFrame } from './TrafficHeatmapFrame';
 import { T } from './Text';
+import { normalizePgTimestamp, parsePgTimestamp } from '../../lib/pgTimestamp';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -165,7 +166,7 @@ function fmtPct(n: number | null | undefined, digits = 1): string {
 }
 
 function shortTime(iso: string, hours: number): string {
-  const norm = iso.includes('T') ? iso : iso.replace(' ', 'T');
+  const norm = normalizePgTimestamp(iso);
   const d = new Date(norm);
   if (Number.isNaN(d.getTime())) return iso;
   if (hours <= 6 || hours <= 48) {
@@ -441,7 +442,7 @@ function TrafficPage() {
                   <TableTd className="text-[12px] text-text-secondary tabular-nums">{fmtUsd(u.totalCostUsd, 4)}</TableTd>
                   <TableTd className="text-[11px] text-text-tertiary whitespace-nowrap">
                     {u.lastSeenAt
-                      ? new Date(u.lastSeenAt.replace(' ', 'T')).toLocaleString()
+                      ? (parsePgTimestamp(u.lastSeenAt)?.toLocaleString() ?? u.lastSeenAt)
                       : '—'}
                   </TableTd>
                   <TableTd className="text-right whitespace-nowrap">

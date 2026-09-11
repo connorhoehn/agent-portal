@@ -72,8 +72,15 @@ function group<T>(rows: readonly T[], key: (row: T) => string): Map<string, T[]>
   return out;
 }
 
-function sum(values: readonly number[]): number {
-  return values.reduce((a, b) => a + b, 0);
+/**
+ * `SUM(x)` — NULLs skipped, exactly as the aggregate does. A missing cost is
+ * not a zero cost, and folding one in as zero is how a total starts claiming
+ * that rows it could not price were free.
+ */
+function sum(values: readonly (number | null | undefined)[]): number {
+  let total = 0;
+  for (const v of values) if (typeof v === 'number' && Number.isFinite(v)) total += v;
+  return total;
 }
 
 /** `ts > now() - INTERVAL '1 day' * days`, for the reads that speak in days. */

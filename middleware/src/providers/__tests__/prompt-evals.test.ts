@@ -161,9 +161,17 @@ describe('runEvals — the mock flow end-to-end', () => {
     expect(adversarial?.output).toMatch(/"verdict":"UNSAFE"/);
   });
 
-  it('persists the pass rate to Aurora, and still returns the run when that write fails', async () => {
+  // WAS: "persists the pass rate to Aurora, and still returns the run when that
+  // write fails" — asserting `exec` was called under `mock: { aurora: true }`.
+  // That pinned the shape the mock floor exists to remove: the Data API call was
+  // made offline, failed, and was swallowed by the catch, so the run "worked"
+  // only because losing the write was tolerated. `runEvals` now returns before
+  // the cache write when there is no Aurora to cache into. What has to stay
+  // true is the part the caller depends on — the run itself is the source of
+  // truth and comes back whole either way.
+  it('returns the run whole offline, without a doomed Data API round trip', async () => {
     const run = await runEvals('lib-stakeholder-email', '3', 'tester');
-    expect(exec).toHaveBeenCalled();
+    expect(exec).not.toHaveBeenCalled();
     expect(run.passRate).not.toBeNull();
     expect(run.assetId).toBe('lib-stakeholder-email');
   });

@@ -1,11 +1,45 @@
 // The expertise leaderboard (providers/aurora.ts's mock score reads).
 //
-// Two floor rules meet here.
+// WHERE THE NUMBERS COME FROM. Every row here is a projection of a
+// `seededPeople` row in mock/people.ts, which is schema/seed.sql's `people`
+// table. Nothing on this surface is typed.
 //
-// `composite` is DERIVED from the five sub-scores in the same row rather than
-// typed beside them — it used to be typed as 0 and patched in by a trailing
-// `.map`, which worked but left a literal in the source that reads as data and
-// is not. Anyone editing an influence score now moves the composite with it.
+// It used to be a hand-written `SEEDS` array of twelve people with five
+// invented axes. The names and departments agreed with the seed, so it read as
+// the seed's cast — and the numbers beside them were unrelated to
+// `people.expertise_score` / `composite_score`. providers/aurora.ts served that
+// array offline and the real columns online, so /iq/scores showed two different
+// ORDERINGS of the same twelve people depending which mode you were in: the
+// fixture ranked p-023 Hiro Green first, the seed ranks him 47th of 56. And it
+// contradicted mock/people.ts inside one process — p-023 was `composite` 89 on
+// the leaderboard and `influenceScore` 0.47 (= the seed's 46.98) on the graph.
+//
+// THE SCALE, ONCE, OUT LOUD. The seed stores all three score columns on 0–100.
+// This wire carries:
+//
+//   composite                     0–100  — the seed's `composite_score`, as-is
+//   influence                     0–1    — `pagerank_score` / 100
+//   expertise                     0–1    — `expertise_score` / 100
+//   collaboration/velocity/quality 0–1   — the neutral 0.5 placeholder
+//
+// `composite` stays 0–100 because everything downstream reads it that way:
+// providers/aurora.ts's cohort histogram buckets on `< 20 / < 40 / < 60 / < 80`
+// and reports `meanComposite`/`medianComposite`, and realGetLeaderboard sends
+// the column unscaled. Rescaling it would silently move every bar on the cohort
+// chart. The other four are fractions because that is what the leaderboard
+// surface has always carried, what mock/core/parity/entities.ts's
+// 'leaderboard people' row compares against (it normalizes the seed side by
+// /100 to meet them), and what mock/people.ts's `influenceScore` uses — so
+// `composite / 100` on this wire and `influenceScore` on the graph are the
+// same number for the same person, which is the whole point.
+// The portal's `formatScore` (portal/src/components/scores/scoresFormat.ts)
+// renders a value in (0,1) as a percentage and one >= 1 as-is, so both halves
+// display as the same 0–100 integer.
+//
+// The three axes Aurora has no column for — collaboration, velocity, quality —
+// are a placeholder on both sides, not data: realGetLeaderboard writes the
+// literal 50 into them (0–100), and this writes 0.5 (0–1). Same midpoint, each
+// on its own surface's scale.
 //
 // `trend` used to call `Math.random()` at module scope. That is two bugs at
 // once: the sparkline changed on every process start, so no screenshot could
@@ -14,14 +48,15 @@
 // It is now a deterministic function of the person id, so p-023's sparkline is
 // p-023's sparkline forever, and it is computed inside the rows factory.
 //
-// personId/name/department must agree with schema/seed.sql's `people` rows —
-// this list previously carried a pre-seed cast, so a leaderboard entry for
-// p-004 named someone /api/graph/people had never heard of.
-// `mock/core/parity/invariants.ts` pins that agreement; it imports `mockScores`
-// as an array, which is why the export below stays one.
+// `scoredAt` stays null offline. The seed writes `NOW()`, which is not a
+// literal any fixture can copy, and the wire snapshot in
+// mock/core/wire/snapshots/wire.json records this field as null for both the
+// leaderboard and `/api/scores/:personId`.
 
 import { defineFixture } from './core/index.js';
 import { liveRows } from './live.js';
+import { mockPeople, type Person } from './people.js';
+import { asFraction, scoreColumnsFor } from './people-scores.js';
 
 export interface ScoreEntry {
   personId: string;
@@ -37,17 +72,12 @@ export interface ScoreEntry {
   scoredAt: string | null;
 }
 
-/** The five axes a composite is the mean of. */
-type Axes = Pick<ScoreEntry, 'influence' | 'collaboration' | 'expertise' | 'velocity' | 'quality'>;
-
-/** A person as the fixture stores them: identity plus the five axes. */
-type ScoreSeed = Pick<ScoreEntry, 'personId' | 'name' | 'department'> & Axes;
-
-function composite(axes: Axes): number {
-  const mean =
-    (axes.influence + axes.collaboration + axes.expertise + axes.velocity + axes.quality) / 5;
-  return Math.round(mean * 100);
-}
+/**
+ * The midpoint of an axis the seed has no column for. Aurora's own leaderboard
+ * query writes the same neutral value (as 50, on its 0–100 axes) rather than
+ * pretending to a measurement it does not have.
+ */
+const UNMEASURED_AXIS = 0.5;
 
 /**
  * A stable pseudo-random stream seeded by a string. Same person, same
@@ -65,33 +95,47 @@ function seeded(seed: string): () => number {
   };
 }
 
-/** Seven days of composite history, rising toward the person's current score. */
-function trend(seed: ScoreSeed): number[] {
-  const next = seeded(seed.personId);
-  const end = composite(seed);
+/**
+ * Seven days of composite history, rising toward the person's current score.
+ * Derived from the seeded composite, so a person whose seed row moves takes
+ * their sparkline with them.
+ */
+function trend(personId: string, composite: number): number[] {
+  const next = seeded(personId);
   return Array.from({ length: 7 }, (_, day) =>
-    Math.max(0, Math.min(100, Math.round(end - (6 - day) * 1.5 + (next() - 0.5) * 8))),
+    Math.max(0, Math.min(100, Math.round(composite - (6 - day) * 1.5 + (next() - 0.5) * 8))),
   );
 }
 
-const SEEDS: ScoreSeed[] = [
-  { personId: 'p-023', name: 'Hiro Green', department: 'Data Platform', influence: 0.93, collaboration: 0.88, expertise: 0.96, velocity: 0.72, quality: 0.94 },
-  { personId: 'p-010', name: 'Tara Chen', department: 'Platform Engineering', influence: 0.91, collaboration: 0.78, expertise: 0.72, velocity: 0.85, quality: 0.80 },
-  { personId: 'p-001', name: 'Theo Chang', department: 'Platform Engineering', influence: 0.89, collaboration: 0.82, expertise: 0.91, velocity: 0.75, quality: 0.88 },
-  { personId: 'p-020', name: 'Henry Hassan', department: 'Data Platform', influence: 0.88, collaboration: 0.85, expertise: 0.76, velocity: 0.72, quality: 0.90 },
-  { personId: 'p-011', name: 'Eli Garcia', department: 'Platform Engineering', influence: 0.85, collaboration: 0.90, expertise: 0.88, velocity: 0.70, quality: 0.92 },
-  { personId: 'p-005', name: 'Sienna Garcia', department: 'Platform Engineering', influence: 0.82, collaboration: 0.88, expertise: 0.70, velocity: 0.80, quality: 0.75 },
-  { personId: 'p-015', name: 'Raj Mehta', department: 'Data Platform', influence: 0.79, collaboration: 0.84, expertise: 0.73, velocity: 0.77, quality: 0.81 },
-  { personId: 'p-006', name: 'Maria Johnson', department: 'Platform Engineering', influence: 0.76, collaboration: 0.80, expertise: 0.68, velocity: 0.82, quality: 0.74 },
-  { personId: 'p-021', name: 'James Thompson', department: 'Data Platform', influence: 0.74, collaboration: 0.77, expertise: 0.82, velocity: 0.70, quality: 0.85 },
-  { personId: 'p-002', name: 'Vera Green', department: 'Platform Engineering', influence: 0.72, collaboration: 0.75, expertise: 0.80, velocity: 0.78, quality: 0.82 },
-  { personId: 'p-016', name: 'Tara Wright', department: 'Data Platform', influence: 0.71, collaboration: 0.82, expertise: 0.77, velocity: 0.68, quality: 0.86 },
-  { personId: 'p-004', name: 'Nora DaSilva', department: 'Platform Engineering', influence: 0.68, collaboration: 0.72, expertise: 0.84, velocity: 0.73, quality: 0.79 },
-];
+/**
+ * One person from mock/people.ts, as the score surface reads them. Identity
+ * comes off the graph's own row and the numbers off that person's score
+ * columns, so there is no third place for either to drift to.
+ */
+export function toScoreEntry(person: Person): ScoreEntry {
+  const columns = scoreColumnsFor(person.id);
+  return {
+    personId: person.id,
+    name: person.name,
+    department: person.department,
+    influence: asFraction(columns.pagerankScore),
+    collaboration: UNMEASURED_AXIS,
+    expertise: asFraction(columns.expertiseScore),
+    velocity: UNMEASURED_AXIS,
+    quality: UNMEASURED_AXIS,
+    composite: columns.compositeScore,
+    trend: trend(person.id, columns.compositeScore),
+    scoredAt: null,
+  };
+}
 
 /**
  * Scores.
  *
+ * `default` — every one of the seed's 56 people, because that is what
+ *           `SELECT ... FROM people ORDER BY composite_score DESC` returns
+ *           online. The old twelve-person cast covered two of the six
+ *           departments, so the cohort page offline was missing four of them.
  * `empty` — nobody has been scored yet. The leaderboard, the cohort
  *           distribution and every person page's score panel have to say so
  *           rather than render an axis with no bars, which is the state a
@@ -100,8 +144,7 @@ const SEEDS: ScoreSeed[] = [
 export const scores = defineFixture<ScoreEntry>({
   key: 'scores',
   scenarios: {
-    default: () =>
-      SEEDS.map((seed) => ({ ...seed, composite: composite(seed), trend: trend(seed), scoredAt: null })),
+    default: () => mockPeople.map(toScoreEntry),
     empty: () => [],
   },
 });

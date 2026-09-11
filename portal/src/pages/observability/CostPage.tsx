@@ -54,6 +54,7 @@ import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { CostChip } from '../../components/observability/CostChip';
 import { SmartEmptyState } from '../../components/observability/SmartEmptyState';
 import { T } from './Text';
+import { normalizePgTimestamp, parsePgTimestamp, pgTimestampMs } from '../../lib/pgTimestamp';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -211,7 +212,7 @@ function fmtInt(n: number | null | undefined): string {
 
 function shortTime(iso: string, hours: number): string {
   // Aurora returns 'YYYY-MM-DD HH:MM:SS+TZ' or ISO — normalise.
-  const norm = iso.includes('T') ? iso : iso.replace(' ', 'T');
+  const norm = normalizePgTimestamp(iso);
   const d = new Date(norm);
   if (Number.isNaN(d.getTime())) return iso;
   if (hours <= 6)  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -348,7 +349,7 @@ function CostPage() {
     if (chartData.length === 0 || markers.length === 0) return [];
     const buckets = chartData
       .map((r) => ({
-        start: new Date(String(r.bucketStart).replace(' ', 'T')).getTime(),
+        start: pgTimestampMs(String(r.bucketStart)),
         label: String(r.label),
       }))
       .filter((b) => Number.isFinite(b.start));
@@ -357,7 +358,7 @@ function CostPage() {
     const lastStart = buckets[buckets.length - 1].start;
     const out: Array<{ label: string; marker: CostDeployMarker; key: string }> = [];
     for (const m of markers) {
-      const t = new Date(m.registeredAt.replace(' ', 'T')).getTime();
+      const t = pgTimestampMs(m.registeredAt);
       if (!Number.isFinite(t)) continue;
       if (t < firstStart || t > lastStart + 60 * 60 * 1000) continue;
       // Pick the bucket whose start is closest to (and not after) the marker.
@@ -628,7 +629,7 @@ function CostPage() {
                   }
                 >
                   <TableTd className={tsCellCls}>
-                    {r.ts ? new Date(r.ts.replace(' ', 'T')).toLocaleString() : '—'}
+                    {r.ts ? (parsePgTimestamp(r.ts)?.toLocaleString() ?? r.ts) : '—'}
                   </TableTd>
                   <TableTd className={agentCellCls}>{r.agentId || '—'}</TableTd>
                   <TableTd className={monoCellCls}>

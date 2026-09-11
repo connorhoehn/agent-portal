@@ -25,17 +25,24 @@ let _control: BedrockAgentCoreControlClient | null = null;
 let _arnCache: { ts: number; arn: string | null } | null = null;
 
 /**
- * The offline runtime's ARN.
+ * An offline runtime's ARN.
  *
  * Built from the same region and account the real one would carry, with an
  * account of all zeroes when none is configured, and a runtime id that says
  * what it is. Nothing dereferences it offline — `mockDevboxClient` ignores the
- * ARN entirely — so the only job it has is to be recognisable in a log line as
- * a runtime that was never deployed.
+ * ARN entirely, and so does `mockAgentCore.invokeAgent` — so the only job it
+ * has is to be recognisable in a log line as a runtime that was never
+ * deployed.
+ *
+ * WHY IT TAKES A NAME. It was `mockDevboxArn()`, private, because the devbox
+ * was the only runtime `dev:mock` had to name. `routes/invocations.ts`'s
+ * replay needs the same sentence for a *fleet* runtime, and the alternative
+ * was a second spelling of "-MOCK" in another file — the drift this repo has
+ * already been bitten by twice. One function, two callers, one suffix.
  */
-function mockDevboxArn(): string {
+export function mockRuntimeArn(runtimeName: string): string {
   const account = config.accountId || '000000000000';
-  return `arn:aws:bedrock-agentcore:${config.region}:${account}:runtime/${DEVBOX_RUNTIME_NAME}-MOCK`;
+  return `arn:aws:bedrock-agentcore:${config.region}:${account}:runtime/${runtimeName}-MOCK`;
 }
 
 /**
@@ -74,7 +81,7 @@ export async function resolveDevboxArn(): Promise<string | null> {
   // says "the devbox runtime is not deployed" and stops, before any provider
   // (mocked or not) is reached. Not cached: the cache exists to bound a live
   // ListAgentRuntimes call, and there is none to bound.
-  if (config.mock.agentcore) return mockDevboxArn();
+  if (config.mock.agentcore) return mockRuntimeArn(DEVBOX_RUNTIME_NAME);
 
   const now = Date.now();
   if (_arnCache && now - _arnCache.ts < ARN_CACHE_TTL_MS) return _arnCache.arn;

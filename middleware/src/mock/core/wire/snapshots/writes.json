@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-10T18:30:52.051Z",
-  "serverHandlerSha": "fc37ecf71fff0d26ac89939fa7e4aa329404ca9878454a8b939d2e8079ad5941",
-  "baseUrl": "http://127.0.0.1:3001",
+  "capturedAt": "2026-09-11T00:12:30.968Z",
+  "serverHandlerSha": "40b16737a2aeda33f46771b3be88c6f7317cb0e3b1dc0d60d6a9fc3d154c8639",
+  "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -281,10 +281,7 @@
       ]
     },
     "PATCH /api/devbox/boxes/:boxId": {
-      "refused": {
-        "rule": "unclassified",
-        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
-      }
+      "skipped": "no value found for :boxId under /api/devbox/boxes (orgiq/admin)"
     },
     "PATCH /api/environments/:id": {
       "persona": "orgiq/admin",
@@ -573,6 +570,9 @@
           "budget-grants",
           "calibration-cases",
           "calibration-runs",
+          "canary-prompt-library",
+          "canary-scores",
+          "canary-subject-answers",
           "canary-weight",
           "capability-config",
           "capability-inventory",
@@ -606,14 +606,18 @@
           "harness-runs",
           "initiative-budgets",
           "invocation-tail",
+          "judge-config",
           "kb-data-sources",
           "kb-documents",
           "kb-ingestion-jobs",
           "kb-registry",
           "kb-s3-objects",
           "kb-summary",
+          "kb-upload-link-files",
+          "kb-upload-links",
           "lab-consults",
           "lab-experiences",
+          "landing-zone-objects",
           "library-assets",
           "local-presence",
           "observability-agent-profiles",
@@ -631,6 +635,12 @@
           "sdlc-policies",
           "session-bundles",
           "sprints",
+          "trace-sink-guardrail-interventions",
+          "trace-sink-memory-events",
+          "trace-sink-metrics",
+          "trace-sink-sampling",
+          "trace-sink-tool-calls",
+          "trace-sink-traces",
           "traces",
           "work-item-comments",
           "work-items"
@@ -687,39 +697,77 @@
       }
     },
     "POST /api/agent-projects": {
-      "refused": {
-        "rule": "unclassified",
-        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
-      }
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "project": "object",
+        "project.clonedAt": "null",
+        "project.connectionName": "null",
+        "project.createdAt": "string",
+        "project.defaultBranch": "string",
+        "project.id": "string",
+        "project.orgProjectId": "null",
+        "project.orgProjectName": "null",
+        "project.owners": "array",
+        "project.repoFullName": "string",
+        "project.sessionId": "null",
+        "project.workspacePath": "string"
+      },
+      "values": {},
+      "sent": [
+        "repoFullName"
+      ]
     },
     "POST /api/agent-projects/:id/clone-command": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: borrows the connection's real API key through AgentCore Identity (providers/connected-sources.ts borrowApiKey) whenever the project carries one."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "checkout": "string",
+        "command": "string",
+        "cwd": "string",
+        "redacted": "string"
+      },
+      "values": {},
+      "sent": [
+        "sessionId"
+      ]
     },
     "POST /api/agent-projects/:id/cloned": {
-      "refused": {
-        "rule": "unclassified",
-        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean"
+      },
+      "values": {},
+      "sent": [
+        "sessionId"
+      ]
     },
     "POST /api/agent-projects/:id/runs": {
       "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: drives a devbox microVM (lib/project-runner.ts)."
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: answers 202 and leaves `executeProjectRun` running unawaited (`void` in lib/sdlc-pipeline.ts), which then captures a diff, reviews it and evaluates gates — and registers a box for the reaper on the way."
       }
     },
     "POST /api/agent-projects/runs/:runId/finish": {
-      "refused": {
-        "rule": "unclassified",
-        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean"
+      },
+      "values": {},
+      "sent": [
+        "status"
+      ]
     },
     "POST /api/agents/:agentId/invoke": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: invokes an AgentCore runtime."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: after the answer streams it calls `maybeGenerateTitle`, and lib/session-titles.ts sends a Bedrock ConverseCommand with no mock branch above it — unawaited, so the spend outlives the request."
       }
     },
     "POST /api/assessment/feedback": {
@@ -1456,21 +1504,15 @@
       ]
     },
     "POST /api/devbox/:sessionId/command": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: invokes the devbox runtime to run a shell command."
-      }
+      "skipped": "no value found for :sessionId under /api/devbox (orgiq/admin)"
     },
     "POST /api/devbox/:sessionId/shell-url": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: resolves the devbox runtime via ListAgentRuntimes, then presigns a live socket into the microVM."
-      }
+      "skipped": "no value found for :sessionId under /api/devbox (orgiq/admin)"
     },
     "POST /api/devbox/:sessionId/task": {
       "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: invokes the devbox runtime to run a Claude Code task."
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: auto-registers the session as a box (`getBoxBySession(...) ?? registerBox(...)`) and tees its events there, handing the already-running reaper a box to stop — and lib/devbox-fleet.ts holds that registry in a module Map reset cannot empty."
       }
     },
     "POST /api/devbox/boxes": {
@@ -1921,16 +1963,30 @@
       ]
     },
     "POST /api/observability/calibration/cases": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: INSERTs through the RDS Data API with no mock branch."
-      }
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "calibrationId": "string"
+      },
+      "values": {},
+      "sent": [
+        "agentId",
+        "humanScore",
+        "prompt",
+        "response"
+      ]
     },
     "POST /api/observability/calibration/runs": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: runs the Nova judge once per active case."
-      }
+      "persona": "orgiq/admin",
+      "status": 503,
+      "shape": {
+        "$": "object",
+        "detail": "string",
+        "error": "string"
+      },
+      "values": {},
+      "sent": []
     },
     "POST /api/observability/canary/ask": {
       "refused": {
@@ -2002,16 +2058,21 @@
       ]
     },
     "POST /api/observability/harness/promote": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: writes through the RDS Data API with no mock branch."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean",
+        "promotedAt": "string"
+      },
+      "values": {},
+      "sent": [
+        "agentId",
+        "promptVersion"
+      ]
     },
     "POST /api/observability/harness/results/:invocationId/rejudge": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: re-judges with three Nova calls."
-      }
+      "skipped": "no value found for :invocationId under /api/observability/harness/results (orgiq/admin)"
     },
     "POST /api/observability/harness/runs": {
       "persona": "orgiq/admin",
@@ -2030,33 +2091,66 @@
     },
     "POST /api/observability/harness/runs/:id/execute": {
       "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: invokes the fleet and the judge per case."
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: answers 202 and leaves `void executeRun(...)` walking the whole case suite behind it, writing a result row per case long after the request is over."
       }
     },
     "POST /api/observability/harness/runs/:runId/results": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: upserts through the RDS Data API with no mock branch."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean"
+      },
+      "values": {},
+      "sent": [
+        "testId"
+      ]
     },
     "POST /api/observability/harness/trace": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: runs Titan embedding AND the Nova judge — it spends even with Aurora down."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "embeddingComputed": "boolean",
+        "estCostUsd": "null",
+        "inputTokens": "null",
+        "invocationId": "string",
+        "judgeCostUsd": "number",
+        "judgeInputTokens": "number",
+        "judgeOutputTokens": "number",
+        "judgeRationale": "string",
+        "judgeScore": "number",
+        "outputTokens": "null",
+        "schemaValid": "null",
+        "totalCostUsd": "number"
+      },
+      "values": {},
+      "sent": [
+        "agentId",
+        "prompt",
+        "response"
+      ]
     },
     "POST /api/observability/invocations/:invocationId/replay": {
       "refused": {
         "rule": "spends",
-        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: resolves and invokes a deployed agent, then embeds and judges the reply."
+        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: the handler's own source-row `SELECT` is a bare `exec` with no mock branch, so it reaches the RDS Data API before the (now-mocked) invoke, embed and judge are ever entered."
       }
     },
     "POST /api/observability/memory/events": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: INSERTs through the RDS Data API with no mock branch."
-      }
+      "persona": "orgiq/admin",
+      "status": 201,
+      "shape": {
+        "$": "object",
+        "memoryEventId": "string"
+      },
+      "values": {},
+      "sent": [
+        "agentId",
+        "kind",
+        "queryText"
+      ]
     },
     "POST /api/observability/prompt-versions": {
       "persona": "orgiq/admin",
@@ -2072,10 +2166,21 @@
       ]
     },
     "POST /api/observability/quality/feedback": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: UPDATEs through the RDS Data API with no mock branch."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "invocationId": "string",
+        "label": "string",
+        "note": "string",
+        "ok": "boolean"
+      },
+      "values": {},
+      "sent": [
+        "invocationId",
+        "label",
+        "note"
+      ]
     },
     "POST /api/observability/test-fixtures/refresh-seed-timestamps": {
       "refused": {
@@ -2172,8 +2277,8 @@
     },
     "POST /api/sdlc/changes/:id/address": {
       "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: resolves the devbox runtime via ListAgentRuntimes, then invokes it."
+        "rule": "fires",
+        "reason": "Arms or fires something that outlives the capture — a cron registration, an agent job enqueued for the fleet dispatcher, a background sweep. The seeded bots are parked deliberately so the scheduler cannot fire against repos that do not exist yet. Here: the same unawaited `dispatchGovernedRun` as a project run, with the reviewer’s findings as the prompt."
       }
     },
     "POST /api/sdlc/changes/:id/decide": {
@@ -2194,16 +2299,33 @@
       ]
     },
     "POST /api/sdlc/changes/:id/deliver": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: resolves the devbox runtime via ListAgentRuntimes."
-      }
+      "persona": "orgiq/admin",
+      "status": 409,
+      "shape": {
+        "$": "object",
+        "error": "string"
+      },
+      "values": {},
+      "sent": []
     },
     "POST /api/sdlc/changes/:id/rereview": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: sends the diff to Bedrock Converse (lib/change-reviewer.ts, no mock branch)."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "ok": "boolean",
+        "status": "string",
+        "verdict": "string"
+      },
+      "values": {
+        "status": [
+          "needs_approval"
+        ],
+        "verdict": [
+          "approve"
+        ]
+      },
+      "sent": []
     },
     "POST /api/sdlc/policies": {
       "persona": "orgiq/admin",

@@ -24,9 +24,18 @@
 
 const gateActions: string[] = [];
 
+// `mock` is all false on purpose: everything pinned below is the REAL path —
+// the ConverseStream against the picked ARN, the GetPrompt behind /prompts,
+// and the degradations when either is refused. The offline branches this
+// router grew (a declared subject answer, a template resolved from the offline
+// library) are covered in `src/mock/__tests__/canary-offline.test.ts`, where
+// the fixtures and the clock are. Omitting the key entirely, which this mock
+// did until the branches landed, is not "mock off" — it is a TypeError on the
+// first `config.mock.agentcore` read.
 jest.mock('../../config.js', () => ({
   config: {
     region: 'us-east-1',
+    mock: { aurora: false, agentcore: false, guardrails: false, cloudwatch: false },
     canary: { name: 'orgiq-canary', judgeArn: 'arn:judge' },
   },
 }));

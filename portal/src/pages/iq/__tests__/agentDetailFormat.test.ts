@@ -70,3 +70,12 @@ test('toLogLevel maps envelope severities onto the LogStream level enum', () => 
   assert.equal(toLogLevel(null), undefined);
   assert.equal(toLogLevel('WEIRD'), undefined);
 });
+
+
+// Aurora hands `startedAt` over as `2026-09-08 08:19:23+00`. Appending `Z`
+// (the old fix) yields `…+00Z`, Invalid Date, and this column echoed the raw
+// database row back at the reader instead of saying how long ago it was.
+test('when() reads a Postgres `+00` stamp', () => {
+  const raw = new Date(Date.now() - 5 * 60_000).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '+00');
+  assert.equal(when(raw), '5m ago');
+});

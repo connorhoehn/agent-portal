@@ -16,6 +16,8 @@ import {
   GetParameterCommand,
   PutParameterCommand,
 } from '@aws-sdk/client-ssm';
+import { config } from '../config.js';
+import { mockGetJudgeConfig, mockSetJudgeConfig } from '../mock/judge-config.js';
 
 const PARAM = '/orgiq/canary/judge_config';
 const TTL_MS = 20_000;
@@ -100,6 +102,25 @@ let entry: CacheEntry | null = null;
 
 export async function getJudgeConfig(): Promise<JudgeConfig> {
   const now = Date.now();
+
+  // OFFLINE. Read the fixture, not SSM. This is not just noise suppression:
+  // without it every read past the 20-second cache window made a doomed
+  // `GetParameter` call — there is no credential offline, so the SDK throws
+  // `UnrecognizedClientException` before Parameter Store is ever reached — and
+  // the first of them logged `[judge-config] SSM read failed, using defaults
+  // UnrecognizedClientException`, which reads exactly like a real
+  // misconfiguration on a run where nothing is wrong. (Only the first, because
+  // the catch then caches the defaults and later failures serve stale; the
+  // wasted round trip is what repeats.) The fallback below made the BEHAVIOUR
+  // right and the signal useless.
+  //
+  // Deliberately ahead of the cache check, so a `PUT /config` in `dev:mock` is
+  // visible to the next GET immediately rather than up to 20 seconds later:
+  // the fixture IS the store here, and there is nothing to cache away from.
+  // An absent parameter reads as `null`, which is the `ParameterNotFound`
+  // branch's answer — the shipped defaults — so the two states stay distinct.
+  if (config.mock.agentcore) return mockGetJudgeConfig() ?? DEFAULT_JUDGE_CONFIG;
+
   if (entry && now - entry.fetchedAt < TTL_MS) return entry.value;
 
   try {
@@ -120,6 +141,18 @@ export async function getJudgeConfig(): Promise<JudgeConfig> {
 
 export async function setJudgeConfig(raw: unknown): Promise<JudgeConfig> {
   const cfg = sanitize(raw);
+
+  // OFFLINE. `PutParameter … Overwrite: true` against the fixture. The value
+  // written is the SANITISED one, so the offline store can never hold a shape
+  // the real path would have rejected — a rubric weight outside 0–100 offline
+  // and inside it in production is the kind of divergence that makes a mock
+  // worse than no mock at all.
+  if (config.mock.agentcore) {
+    mockSetJudgeConfig(cfg);
+    entry = { value: cfg, fetchedAt: Date.now() };
+    return cfg;
+  }
+
   await client.send(
     new PutParameterCommand({
       Name: PARAM,

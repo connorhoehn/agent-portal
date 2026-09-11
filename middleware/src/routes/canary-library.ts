@@ -31,7 +31,14 @@ import { requireAction } from '../lib/authz.js';
 import { prepareValues, EMPTY_CONTRACT, type PromptContract } from '../lib/prompt-contract.js';
 import { exec as auroraExec } from '../providers/aurora.js';
 import { config } from '../config.js';
-import { MOCK_PROMPT_LIBRARY, findMockPrompt } from '../mock/canary-library.js';
+import {
+  MOCK_PROMPT_LIBRARY,
+  findMockPrompt,
+  mockCreatePrompt,
+  mockPublishVersion,
+  mockUpdateDraft,
+} from '../mock/canary-library.js';
+import { offlineInvokePrompt, offlineOptimize } from '../mock/prompt-studio.js';
 
 export const canaryLibraryRouter = Router();
 
@@ -313,6 +320,30 @@ canaryLibraryRouter.post(
       },
     };
 
+    // Offline the prompt is created in the fixture Prompt Studio already
+    // lists, so the list, the rail and the version panel all show it — and
+    // `POST /api/__mock/reset` un-creates it. The branch is in the handler
+    // because the handler is what owns the CreatePrompt client; there is no
+    // provider under this router to put it in.
+    if (config.mock.aurora) {
+      const created = mockCreatePrompt({
+        name,
+        ...(description ? { description } : {}),
+        templateText,
+        modelId,
+        temperature: inferenceConfiguration.text?.temperature ?? 0.7,
+        maxTokens: inferenceConfiguration.text?.maxTokens ?? 2048,
+      });
+      res.json({
+        ok: true,
+        id: created.id,
+        arn: created.versions[0]?.arn ?? '',
+        name: created.name,
+        version: 'DRAFT',
+      });
+      return;
+    }
+
     try {
       const out = await bedrockAgent().send(
         new CreatePromptCommand({
@@ -373,6 +404,26 @@ canaryLibraryRouter.put(
       body.inference_config != null && typeof body.inference_config === 'object'
         ? (body.inference_config as Record<string, unknown>)
         : undefined;
+
+    if (config.mock.aurora) {
+      const updated = mockUpdateDraft(promptId, {
+        name,
+        templateText,
+        ...(modelIdOverride ? { modelId: modelIdOverride } : {}),
+        ...(typeof inferenceConfigOverride?.['temperature'] === 'number'
+          ? { temperature: inferenceConfigOverride['temperature'] } : {}),
+        ...(typeof inferenceConfigOverride?.['maxTokens'] === 'number'
+          ? { maxTokens: inferenceConfigOverride['maxTokens'] } : {}),
+      });
+      // A save that moved nothing must not answer `ok: true` — that is the
+      // exact failure this slice exists to remove.
+      if (!updated) {
+        res.status(404).json({ error: `No prompt with id "${promptId}"` });
+        return;
+      }
+      res.json({ ok: true, version: 'DRAFT' });
+      return;
+    }
 
     try {
       // Fetch current DRAFT to preserve variant name and other fields.
@@ -469,6 +520,16 @@ canaryLibraryRouter.post(
     const body = (req.body ?? {}) as PublishBody;
     const description =
       typeof body.description === 'string' ? body.description : undefined;
+
+    if (config.mock.aurora) {
+      const published = mockPublishVersion(promptId, description);
+      if (!published) {
+        res.status(404).json({ error: `No prompt with id "${promptId}"` });
+        return;
+      }
+      res.json({ ok: true, version: published.version.version, arn: published.version.arn });
+      return;
+    }
 
     try {
       const out = await bedrockAgent().send(
@@ -570,6 +631,28 @@ canaryLibraryRouter.post(
       console.log(`[prompt] fenced ${prepared.fenced.join(', ')} for ${promptId}@${version ?? 'DRAFT'}`);
     }
 
+    if (config.mock.aurora) {
+      // No model runs. What is streamed is the prompt as it would have been
+      // sent, rendered with these variables and labelled as such — see
+      // mock/prompt-studio.ts for why that and not a synthesised answer.
+      const rendered = offlineInvokePrompt(promptId, version, variables);
+      if (rendered === null) {
+        res.status(503).json({
+          error: 'Bedrock unavailable',
+          detail: `No prompt "${promptId}" at version "${version ?? 'DRAFT'}" in the offline library`,
+        });
+        return;
+      }
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache');
+      for (const chunk of rendered.match(/\S+\s*/g) ?? []) {
+        res.write(JSON.stringify({ text: chunk }) + '\n');
+      }
+      res.write(JSON.stringify({ done: true }) + '\n');
+      res.end();
+      return;
+    }
+
     // Fetch the prompt ARN (the ARN is the modelId for ConverseStream).
     let modelId: string;
     try {
@@ -648,6 +731,14 @@ canaryLibraryRouter.post(
     const body = (req.body ?? {}) as OptimizeBody;
     const templateText = typeof body.templateText === 'string' ? body.templateText.trim() : '';
     if (!templateText) throw new ValidationError('templateText is required');
+
+    // Deliberately a refusal, not a fixture. A rewrite is the whole product of
+    // this endpoint; handing back the input and calling it optimized would be
+    // the rubber stamp docs/mock-floor.md rules out.
+    if (config.mock.aurora) {
+      res.status(503).json(offlineOptimize());
+      return;
+    }
 
     try {
       const out = await bedrockAgentRuntime().send(

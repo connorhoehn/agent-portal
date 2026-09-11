@@ -22,13 +22,28 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  * silently rotting across rebuilds.
  */
 const envPath = resolve(__dirname, '../.env.aws');
+/**
+ * Keys the file supplied a value for that the process environment had already
+ * claimed. "Process env wins" is the rule, and it is invisible: an operator who
+ * edits .env.aws and restarts sees no change and no explanation. Recorded here
+ * because module load is the only moment where the two sources are still
+ * distinguishable — afterwards process.env is one flat map.
+ */
+const shadowedByShell = new Map<string, { shell: string; file: string }>();
+
 try {
   if (process.env['DEV_OFFLINE'] === 'true') throw new Error('offline');
   const text = readFileSync(envPath, 'utf8');
   for (const line of text.split('\n')) {
     const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
-    if (m && process.env[m[1]!] === undefined) {
-      process.env[m[1]!] = m[2];
+    if (!m) continue;
+    const key = m[1]!;
+    const fileValue = m[2]!;
+    const shellValue = process.env[key];
+    if (shellValue === undefined) {
+      process.env[key] = fileValue;
+    } else if (shellValue !== fileValue) {
+      shadowedByShell.set(key, { shell: shellValue, file: fileValue });
     }
   }
 } catch {
@@ -157,3 +172,133 @@ export const config = {
     scoresLogGroup: process.env.CANARY_SCORES_LOG_GROUP ?? '/orgiq/canary/scores',
   },
 } as const;
+
+// ---------------------------------------------------------------------------
+// Startup capability check — make a stale id loud.
+//
+// Every AgentCore capability id above is minted fresh when
+// OrgIQ-AgentCoreCapabilities is recreated, and nothing regenerates .env.aws.
+// The resulting failures are quiet, and each one is quiet differently: the
+// Code Interpreter says "not found" naming an id nobody recognises, a dead
+// browser *profile* surfaces as a bare 500, and site-survey's browser fallback
+// fails SOFT — a dead BROWSER_ID is indistinguishable from "this site has no
+// JavaScript-only pages". Three symptoms, one cause, and the cause is never
+// named at the point of failure.
+//
+// So ask at boot instead of at the 500. /api/capabilities/reconcile already
+// answers this on demand; the answer is only useful if somebody thinks to go
+// look, and after a rebuild nobody does. This logs it unprompted.
+//
+// It must never be able to break a boot, so:
+//   - it runs on a deferred, unref'd timer, so it cannot delay listen() or
+//     hold the process open;
+//   - the AWS SDK is pulled in by dynamic import, so a mock/offline run never
+//     loads it and the module cycle (config -> reconcile -> config) resolves
+//     after this module is fully initialised;
+//   - every failure is swallowed. A probe that cannot reach AWS reports
+//     'unknown', and 'unknown' is deliberately not logged as a problem — a
+//     laptop with expired credentials must not read as "your fleet is gone".
+//
+// Silent under `npm run dev:mock` (DEV_OFFLINE + MOCK_AGENTCORE, where none of
+// these ids means anything), silent under jest, and switchable off entirely
+// with CAPABILITY_STARTUP_CHECK=off.
+//
+// For the operator-facing version — which also proposes the fix and can
+// rewrite .env.aws — see schema/reconcile_capabilities.py.
+// ---------------------------------------------------------------------------
+
+/**
+ * What a dead id actually looks like from the outside. This is the whole point
+ * of the check: the symptoms do not resemble each other and none of them
+ * mentions configuration, so an operator who hits one has no reason to suspect
+ * the others share a cause.
+ */
+const CAPABILITY_SYMPTOM: Readonly<Record<string, string>> = {
+  MEMORY_ID: 'agent memory reads/writes fail and conversations lose continuity',
+  BROWSER_ID: 'site-survey\'s browser fallback fails SOFT, reading as "this site has no JavaScript-only pages"',
+  BROWSER_PROFILE_ID: '"Browser profile not found", surfaced as a bare 500',
+  CODE_INTERPRETER_ID: 'the Code Interpreter says "not found", naming an id nobody recognises',
+  GUARDRAIL_ID_MEMBER: 'answers to members go out without their guardrail',
+  GUARDRAIL_ID_ORG_LEADER: 'answers to org leaders go out without their guardrail',
+  GUARDRAIL_ID_HR_ADMIN: 'answers to HR admins go out without their guardrail',
+};
+
+const CAPABILITY_ENV_KEYS = Object.keys(CAPABILITY_SYMPTOM);
+
+/** Why the check is not going to run, or null if it will. */
+export function capabilityCheckSkipReason(
+  e: NodeJS.ProcessEnv = process.env,
+): string | null {
+  if (e['CAPABILITY_STARTUP_CHECK'] === 'off') return 'disabled';
+  // Jest sets both; neither should ever produce boot noise or an AWS call.
+  if (e['NODE_ENV'] === 'test' || e['JEST_WORKER_ID'] !== undefined) return 'test';
+  // The two flags `npm run dev:mock` sets. Offline, none of these ids means
+  // anything and every one of them would report as broken — which is how a
+  // check like this gets ignored, and then muted, and then deleted.
+  if (e['DEV_OFFLINE'] === 'true') return 'offline';
+  if (e['MOCK_AGENTCORE'] === 'true') return 'mock';
+  if (!CAPABILITY_ENV_KEYS.some((k) => (e[k] ?? '').trim() !== '')) return 'unconfigured';
+  return null;
+}
+
+export interface StaleCapability {
+  envVar: string;
+  configuredId: string | null;
+  detail: string;
+}
+
+/**
+ * The boot warning, as lines. Pure, so it is testable without AWS.
+ *
+ * One line per dead id, because the thing an operator needs is the id, what it
+ * breaks, and where the value came from — not a paragraph they will scroll
+ * past. Provenance is on the line for a specific reason: config.ts only fills
+ * vars that are `undefined`, so a shell export beats the file, and telling
+ * someone to rewrite .env.aws when the process is reading their shell would be
+ * a new way to be confidently wrong.
+ */
+export function staleCapabilityLines(
+  stale: readonly StaleCapability[],
+  shadowed: ReadonlyMap<string, { shell: string; file: string }> = shadowedByShell,
+): string[] {
+  if (stale.length === 0) return [];
+  const lines = stale.map((c) => {
+    const source = shadowed.has(c.envVar)
+      ? 'exported by your shell, overriding .env.aws'
+      : 'from middleware/.env.aws';
+    const symptom = CAPABILITY_SYMPTOM[c.envVar] ?? c.detail;
+    return `[capabilities] ${c.envVar}=${c.configuredId ?? '(unset)'} (${source}) does not exist in this account — ${symptom}.`;
+  });
+  const blocked = stale.filter((c) => shadowed.has(c.envVar)).map((c) => c.envVar);
+  lines.push(
+    `[capabilities] Fix: .venv-synth/bin/python -m schema.reconcile_capabilities --write` +
+      (blocked.length ? ` — and \`unset ${blocked.join(' ')}\` first, or the file edit will have no effect.` : ''),
+  );
+  return lines;
+}
+
+function startupCapabilityCheck(): void {
+  if (capabilityCheckSkipReason() !== null) return;
+
+  const timer = setTimeout(() => {
+    void (async () => {
+      try {
+        const { reconcileCapabilities } = await import('./providers/capability-reconcile.js');
+        const { capabilities } = await reconcileCapabilities();
+        // Only 'missing' is a verdict. 'unknown' means AWS could not be asked
+        // and 'unconfigured' means the capability was never set up; shouting
+        // about either is how a boot warning earns its way into a filter.
+        for (const line of staleCapabilityLines(capabilities.filter((c) => c.state === 'missing'))) {
+          console.warn(line);
+        }
+      } catch {
+        // Unreachable AWS, a throttle, a module that failed to load — none of
+        // it is news about the ids, and none of it may reach the caller.
+      }
+    })();
+  }, 2_000);
+  // Boot diagnostics must not be the reason a process refuses to exit.
+  timer.unref?.();
+}
+
+startupCapabilityCheck();

@@ -42,6 +42,7 @@ import {
 import { useFetch } from '../../hooks/useFetch';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { T } from './Text';
+import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
 
 // ── API contracts (mirrors middleware/src/routes/oncall.ts) ────────────────
 
@@ -590,7 +591,7 @@ function EmptyState({ text }: { text: string }) {
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function shortTime(iso: string, hours: number): string {
-  const d = new Date(iso.replace(' ', 'T') + (iso.includes('Z') ? '' : 'Z'));
+  const d = parsePgTimestampAsUtc(iso) ?? new Date(Number.NaN);
   if (Number.isNaN(d.getTime())) return iso;
   if (hours <= 48) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' +

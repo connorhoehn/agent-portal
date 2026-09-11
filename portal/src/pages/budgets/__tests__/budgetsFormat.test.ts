@@ -150,3 +150,11 @@ test('mergeInitiativesWithBudgets: a budget row missing from the initiative list
   assert.equal(merged.length, 2);
   assert.ok(merged.some((r) => r.orgProjectId === 'p-stale' && r.spentThisPeriodUsd === 5));
 });
+
+
+// A Postgres `timestamptz` is `2026-09-08 08:19:23+00`; the old normalisation
+// appended `Z` to it and made an already-invalid offset invalid twice over.
+test('ago() reads a Postgres `+00` stamp instead of printing an em dash', () => {
+  const out = ago(new Date(Date.now() - 3 * 3_600_000).toISOString().replace('T', ' ').replace(/\.\d+Z$/, '+00'));
+  assert.equal(out, '3h ago');
+});

@@ -48,6 +48,7 @@ import { SmartEmptyState } from '../../components/observability/SmartEmptyState'
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { firstDegraded } from '../../lib/degraded';
 import { T } from './Text';
+import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
 
 interface DriftSummary {
   agentId: string;
@@ -638,7 +639,7 @@ function WindowPicker({ value, onChange }: { value: number; onChange: (i: number
 }
 
 function shortTime(iso: string, hours: number): string {
-  const d = new Date(iso.replace(' ', 'T') + 'Z');
+  const d = parsePgTimestampAsUtc(iso) ?? new Date(Number.NaN);
   if (Number.isNaN(d.getTime())) return iso;
   if (hours <= 6) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   if (hours <= 48) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });

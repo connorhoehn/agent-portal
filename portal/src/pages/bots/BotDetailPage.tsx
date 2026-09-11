@@ -38,6 +38,7 @@ import { toastError, toastSuccess } from '../../lib/toastStore';
 import { CostVsEstimate, runEstimate } from '../../components/marketplace/EstimateDrawer';
 import { RunTimeline } from '../../components/runs/RunTimeline';
 import { DEVBOX_MODELS } from '../../lib/devboxModels';
+import { parsePgTimestampAsUtc } from '../../lib/pgTimestamp';
 import { botRunSummary, inputWiring, lastRanText } from './botsFormat';
 import { TEMPLATE_TONE, triggerSummary, when, type Bot, type BotRun } from './BotsPage';
 
@@ -50,8 +51,9 @@ const RUN_STATUS_TONE: Record<BotRun['status'], 'warning' | 'success' | 'danger'
   skipped: 'neutral',
 };
 
+/** Aurora stamps carry a `+00` offset ISO 8601 does not allow — shared parser. */
 function parseTs(iso: string): number {
-  return new Date(iso.includes('T') ? iso : `${iso.replace(' ', 'T')}Z`).getTime();
+  return parsePgTimestampAsUtc(iso)?.getTime() ?? Number.NaN;
 }
 
 /** How long the run took, or why we can't say.

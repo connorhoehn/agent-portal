@@ -6,6 +6,15 @@
 // a week, one never did, one stopped at hours and reported a two-day-old
 // session as "51h ago". They now share this module. Other pages still carrying
 // a private copy should adopt it as they are touched.
+//
+// Both entry points parse through `lib/pgTimestamp` rather than `new Date`,
+// because several of the fields fed to them are Postgres `timestamptz` values
+// rendered as `2026-09-08 08:19:23+00` — a string V8 refuses (`+00` is not a
+// legal ISO 8601 offset). The `isNaN` guard below meant that failure printed
+// the raw database row instead of "3h ago", and only ever in AWS: `dev:mock`
+// mints its fixtures through `mock/core/clock.ts`, which emits `…Z`.
+
+import { parsePgTimestamp } from './pgTimestamp.ts';
 
 /**
  * "just now" · "12m ago" · "5h ago" · "3d ago" · "Aug 4, 2026".
@@ -16,8 +25,8 @@
  */
 export function relativeTime(iso: string | null | undefined): string {
   if (!iso) return '';
-  const then = new Date(iso);
-  if (isNaN(then.getTime())) return iso;
+  const then = parsePgTimestamp(iso);
+  if (then === null) return iso;
 
   const diffMs = Date.now() - then.getTime();
   const mins = Math.floor(diffMs / 60_000);
@@ -40,8 +49,8 @@ export function relativeTime(iso: string | null | undefined): string {
  */
 export function relativeTimeSeconds(iso: string | null | undefined): string {
   if (!iso) return '';
-  const then = new Date(iso);
-  if (isNaN(then.getTime())) return iso;
+  const then = parsePgTimestamp(iso);
+  if (then === null) return iso;
 
   const secs = Math.floor((Date.now() - then.getTime()) / 1000);
   if (secs < 60) return `${secs}s ago`;

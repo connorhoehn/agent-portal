@@ -7,11 +7,23 @@
 // the bounds are columns in a table, not a policy document someone has to get
 // right, and revoking is an UPDATE rather than a role rotation.
 
-import { randomBytes, createHash } from 'node:crypto';
+import { randomBytes, createHash, randomUUID } from 'node:crypto';
 import { exec } from './aurora.js';
 import { uploadToLandingZone } from './landing-zones.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 import { config } from '../config.js';
+import { clock } from '../mock/core/clock.js';
+import {
+  claimUploadSlot,
+  filesForLink,
+  findLinkByTokenHash,
+  insertLink,
+  linksForKb,
+  recordLinkFile,
+  releaseUploadSlot,
+  revokeLink,
+  type MockUploadLink,
+} from '../mock/upload-links.js';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
 function n(name: string, value: number): SqlParameter { return { name, value: { longValue: value } }; }
@@ -44,11 +56,21 @@ export interface UploadLink {
   status: 'live' | 'expired' | 'revoked' | 'exhausted';
 }
 
+/**
+ * `now` through the clock rather than `Date.now()`.
+ *
+ * `clock.now()` IS `Date.now()` unless a test froze it, so nothing changes in
+ * production. What it buys is that the offline path is coherent with itself: a
+ * link whose `expires_at` was derived from a frozen clock has to be judged
+ * against the same instant, or a link minted "48 hours from now" in a test
+ * reads as already expired. That is not hypothetical — it is what this
+ * function did until the frozen-clock test below caught it.
+ */
 function statusOf(row: {
   revokedAt: string | null; expiresAt: string; filesUsed: number; maxFiles: number;
 }): UploadLink['status'] {
   if (row.revokedAt) return 'revoked';
-  if (new Date(row.expiresAt).getTime() <= Date.now()) return 'expired';
+  if (new Date(row.expiresAt).getTime() <= clock.now().getTime()) return 'expired';
   if (row.filesUsed >= row.maxFiles) return 'exhausted';
   return 'live';
 }
@@ -76,6 +98,31 @@ function hashToken(token: string): string {
 }
 
 /**
+ * A fixture row in the shape `rowToLink` produces from a database row.
+ *
+ * The two sides share `statusOf` rather than each deciding what "live" means:
+ * status is derived from the same three columns on both paths, so an offline
+ * link and a real one can never disagree about whether they are usable.
+ */
+function mockRowToLink(row: MockUploadLink): UploadLink {
+  const base = {
+    id: row.id,
+    kbSlug: row.kbSlug,
+    label: row.label,
+    createdBy: row.createdBy,
+    expiresAt: row.expiresAt,
+    revokedAt: row.revokedAt,
+    maxFiles: row.maxFiles,
+    maxBytes: row.maxBytes,
+    filesUsed: row.filesUsed,
+    bytesUsed: row.bytesUsed,
+    createdAt: row.createdAt,
+    lastUsedAt: row.lastUsedAt,
+  };
+  return { ...base, status: statusOf(base) };
+}
+
+/**
  * Create a link and return the token exactly once.
  *
  * The token is not stored, only its hash, so this return value is the single
@@ -93,6 +140,32 @@ export async function createUploadLink(input: {
   const expiresInHours = Math.min(Math.max(input.expiresInHours ?? 72, 1), 24 * 30);
   const maxFiles = Math.min(Math.max(input.maxFiles ?? 25, 1), 500);
   const maxBytes = Math.min(Math.max(input.maxBytes ?? 25 * 1024 * 1024, 1024), ABSOLUTE_MAX_BYTES);
+
+  // Offline the row lands in the fixture, and the token contract is identical:
+  // the token above is a real 256-bit secret, only its hash is stored, and
+  // this return value is still the single opportunity to capture it. The
+  // branch is in this function rather than in routes/kb-admin.ts because this
+  // is what owns the INSERT — a guard in the handler would have hidden the
+  // pair from the write-route scan without giving the write anywhere to go.
+  if (config.mock.aurora) {
+    const created = insertLink({
+      id: randomUUID(),
+      tokenHash: hashToken(token),
+      kbSlug: input.kbSlug,
+      label: input.label,
+      createdBy: input.createdBy ?? null,
+      // `NOW() + (:hours || ' hours')::interval`, from the clock.
+      expiresAt: new Date(Date.parse(clock.nowIso()) + expiresInHours * 3_600_000).toISOString(),
+      revokedAt: null,
+      maxFiles,
+      maxBytes,
+      filesUsed: 0,
+      bytesUsed: 0,
+      createdAt: clock.nowIso(),
+      lastUsedAt: null,
+    });
+    return { link: mockRowToLink(created), token };
+  }
 
   const rows = await exec(
     `INSERT INTO kb_upload_links (token_hash, kb_slug, label, created_by, expires_at, max_files, max_bytes)
@@ -114,13 +187,14 @@ export async function createUploadLink(input: {
 }
 
 export async function listUploadLinks(kbSlug?: string): Promise<UploadLink[]> {
-  // GET /api/admin/kb-registry/upload-links has no try/catch and, unlike most
-  // of this provider, is a genuine page-load path — ShareLinks.tsx fetches it
-  // as soon as KnowledgeHomePage picks a real kbSlug, which it now can since
-  // the KB registry itself is mocked (see mock/kb-registry.ts). No upload
-  // links have ever been minted for a fixture KB, so honest fixture data here
-  // is simply none — the page's own empty state ("no links yet") covers it.
-  if (config.mock.aurora) return [];
+  // This used to return `[]` — honest at the time, because nothing offline
+  // could mint a link, so "no links" was the whole truth. It stopped being
+  // true the moment `createUploadLink` gained a fixture to write into: a
+  // create that returned 201 and a list that still said none would be a write
+  // that reports success and cannot be seen. Reads the same rows the writes
+  // move (mock/upload-links.ts), which also gives the panel its three
+  // statuses to render.
+  if (config.mock.aurora) return linksForKb(kbSlug).map(mockRowToLink);
   const rows = kbSlug
     ? await exec(
         `SELECT * FROM kb_upload_links WHERE kb_slug = :slug ORDER BY created_at DESC LIMIT 100`,
@@ -131,6 +205,10 @@ export async function listUploadLinks(kbSlug?: string): Promise<UploadLink[]> {
 }
 
 export async function revokeUploadLink(id: string): Promise<boolean> {
+  // `revokeLink` reproduces the statement's `AND revoked_at IS NULL`, so
+  // revoking twice returns false offline exactly as it does online and the
+  // route's 404 keeps meaning what it says.
+  if (config.mock.aurora) return revokeLink(id);
   const rows = await exec(
     `UPDATE kb_upload_links SET revoked_at = NOW()
       WHERE id = :id::uuid AND revoked_at IS NULL
@@ -144,6 +222,15 @@ export async function revokeUploadLink(id: string): Promise<boolean> {
 export async function listLinkFiles(id: string): Promise<Array<{
   filename: string; s3Key: string; bytes: number; contentType: string | null; uploadedAt: string;
 }>> {
+  if (config.mock.aurora) {
+    return filesForLink(id).map((f) => ({
+      filename: f.filename,
+      s3Key: f.s3Key,
+      bytes: f.bytes,
+      contentType: f.contentType,
+      uploadedAt: f.uploadedAt,
+    }));
+  }
   const rows = await exec(
     `SELECT filename, s3_key, bytes, content_type, uploaded_at
        FROM kb_upload_link_files WHERE link_id = :id::uuid
@@ -167,6 +254,11 @@ export async function listLinkFiles(id: string): Promise<Array<{
 async function linkForToken(token: string): Promise<UploadLink | null> {
   if (!token || token.length < 20 || token.length > 200) return null;
   const hash = hashToken(token);
+  if (config.mock.aurora) {
+    // By hash, never by token — see the note below, which applies unchanged.
+    const row = findLinkByTokenHash(hash);
+    return row ? mockRowToLink(row) : null;
+  }
   const rows = await exec(
     `SELECT * FROM kb_upload_links WHERE token_hash = :hash LIMIT 1`,
     [s('hash', hash)],
@@ -268,7 +360,13 @@ export async function uploadViaLink(
   // and the link exceeds its quota. Since a leaked link's blast radius is
   // exactly this number, the check has to be the write. The same statement
   // re-tests revocation and expiry, which close the same way.
-  const claimed = await exec(
+  // Offline the claim is `claimUploadSlot`, which re-tests revocation, expiry
+  // and the file ceiling in one call for the same reason the statement does:
+  // the check IS the write, and a mock that incremented without re-testing
+  // would make a quota look enforced when it is not.
+  const claimed = config.mock.aurora
+    ? (claimUploadSlot(link.id, body.length) ? [{ id: link.id }] : [])
+    : await exec(
     `UPDATE kb_upload_links
         SET files_used = files_used + 1,
             bytes_used = bytes_used + :bytes,
@@ -292,24 +390,39 @@ export async function uploadViaLink(
     result = await uploadToLandingZone(link.kbSlug, filename, body, contentType);
   } catch (err) {
     // Give the slot back — a failed upload should not consume quota.
-    await exec(
-      `UPDATE kb_upload_links
-          SET files_used = GREATEST(0, files_used - 1),
-              bytes_used = GREATEST(0, bytes_used - :bytes)
-        WHERE id = :id::uuid`,
-      [n('bytes', body.length), s('id', link.id)],
-    ).catch(() => { /* the counter is now slightly high; the file did not land */ });
+    if (config.mock.aurora) {
+      releaseUploadSlot(link.id, body.length);
+    } else {
+      await exec(
+        `UPDATE kb_upload_links
+            SET files_used = GREATEST(0, files_used - 1),
+                bytes_used = GREATEST(0, bytes_used - :bytes)
+          WHERE id = :id::uuid`,
+        [n('bytes', body.length), s('id', link.id)],
+      ).catch(() => { /* the counter is now slightly high; the file did not land */ });
+    }
     throw err;
   }
 
-  await exec(
-    `INSERT INTO kb_upload_link_files (link_id, s3_key, filename, bytes, content_type)
-     VALUES (:id::uuid, :key, :name, :bytes, :ct)`,
-    [
-      s('id', link.id), s('key', result.key),
-      s('name', filename.slice(0, 512)), n('bytes', body.length), s('ct', contentType),
-    ],
-  );
+  if (config.mock.aurora) {
+    recordLinkFile({
+      linkId: link.id,
+      s3Key: result.key,
+      filename: filename.slice(0, 512),
+      bytes: body.length,
+      contentType,
+      uploadedAt: clock.nowIso(),
+    });
+  } else {
+    await exec(
+      `INSERT INTO kb_upload_link_files (link_id, s3_key, filename, bytes, content_type)
+       VALUES (:id::uuid, :key, :name, :bytes, :ct)`,
+      [
+        s('id', link.id), s('key', result.key),
+        s('name', filename.slice(0, 512)), n('bytes', body.length), s('ct', contentType),
+      ],
+    );
+  }
 
   return { ok: true, key: result.key, bytes: body.length };
 }

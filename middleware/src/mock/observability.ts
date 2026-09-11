@@ -10,12 +10,21 @@
 // gap visible; this file is the other half — the data that makes the surface
 // answer for real offline.
 //
-// THERE IS ONE FLEET. Every row below is derived from `mock/invocations.ts`'s
-// `invocationTail` — the same 24 hours the Invocations list, Health's summary
-// and the Architecture graph already count. Nothing here stores a total: a
-// per-agent error count, a p99, an intervention tally and a tool error rate are
-// all selectors over the rows this module projects, so "25 errors over a list
-// that can only produce 6" cannot happen a second time. (contract.ts bug #1.)
+// THERE IS ONE FLEET. The seeded rows below are derived from
+// `mock/invocations.ts`'s `invocationTail` — the same 24 hours the Invocations
+// list, Health's summary and the Architecture graph already count. Nothing here
+// stores a total: a per-agent error count, a p99, an intervention tally and a
+// tool error rate are all selectors over the rows this module projects, so "25
+// errors over a list that can only produce 6" cannot happen a second time.
+// (contract.ts bug #1.)
+//
+// AND THERE IS ONE TABLE. `traceRows()` unions the seeded day with whatever
+// `lib/trace-sink.ts` has WRITTEN this run (`mock/trace-sink.ts`). Before that
+// union the two were separate worlds: a trace posted offline was judged and
+// stored and readable by id, and appeared in no list and no rollup — the same
+// count-vs-list defect in its widest form, two views of one table disagreeing
+// with nothing saying so. The rules the union follows, and what it preserves,
+// are at `traceRows()`.
 //
 // WHAT IS AUTHORED AND WHAT IS DERIVED. Authored — and therefore a registered
 // fixture — is what the tail does not already say: which prompt templates an
@@ -45,19 +54,30 @@
 //     back — an ISO string here would be a second shape the server never sends.
 //
 // THE ONE MODELLED SCALAR. `output_embedding` is a vector(1024) and the drift
-// queries compute `embedding <=> centroid` in the database. There are no
-// embeddings offline, so `modelledDistance()` stands in for that expression: a
-// deterministic per-row scalar drawn from the agent's authored drift band. It
-// is not presented as a column and nothing stores a p95 — the rollups compute
-// PERCENTILE_CONT over these per-row values exactly as Postgres would. This is
-// the only number on this surface that is modelled rather than counted, and it
-// is called out again where it is used.
+// queries compute `embedding <=> centroid` in the database. A SEEDED row has no
+// embedding — there is nothing to embed a fictional answer with — so
+// `modelledDistance()` stands in for that expression: a deterministic per-row
+// scalar drawn from the agent's authored drift band. It is not presented as a
+// column and nothing stores a p95 — the rollups compute PERCENTILE_CONT over
+// these per-row values exactly as Postgres would. This is the only number on
+// this surface that is modelled rather than counted, and it is called out again
+// where it is used. A WRITTEN row is the exception: the offline sink embeds for
+// real, so its distance is measured against the mean of that agent's written
+// vectors rather than modelled at all.
 
 import { clock, defineFixture, type ScenarioName } from './core/index.js';
 import { agentFleet } from './agent-statuses.js';
-import { invocationsInWindow, mockInvocationRows } from './invocations.js';
+import { mockInvocationRows } from './invocations.js';
 import { mockListPromptVersions } from './prompt-versions.js';
 import { mockGuardrailRow } from './capabilities.js';
+import {
+  cosineDistance,
+  sinkAgentCentroid,
+  sinkGuardrailInterventions,
+  sinkMemoryEvents,
+  sinkToolCalls,
+  sinkTraces,
+} from './trace-sink.js';
 
 // ── Deterministic pseudo-randomness ────────────────────────────────────────
 //
@@ -123,8 +143,18 @@ export function bucketStart(iso: string, bucketMin: number): string {
  * discrete percentile would disagree with the deployed surface by a few
  * milliseconds for reasons no reader could ever reconstruct.
  */
-export function percentileCont(values: readonly number[], p: number): number | null {
-  const sorted = values.filter((v) => Number.isFinite(v)).slice().sort((a, b) => a - b);
+export function percentileCont(
+  values: readonly (number | null | undefined)[],
+  p: number,
+): number | null {
+  // NULLs are skipped, not zero-filled — `PERCENTILE_CONT` is an aggregate and
+  // aggregates ignore NULL. Averaging a missing duration in as 0 would drag
+  // every percentile toward a value no request took, which is the same class of
+  // mistake as counting an ungraded row as a zero judge score.
+  const sorted = values
+    .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+    .slice()
+    .sort((a, b) => a - b);
   if (sorted.length === 0) return null;
   if (sorted.length === 1) return sorted[0]!;
   const idx = p * (sorted.length - 1);
@@ -325,27 +355,57 @@ export interface MockTraceRow {
   schema_valid: boolean | null;
   pii_detected: boolean;
   guardrail_action: string | null;
-  duration_ms: number;
-  input_tokens: number;
-  output_tokens: number;
+  // Nullable, because the schema says so and a WRITTEN row can leave them
+  // unset. Every seeded row carries all of them — it is projected from a tail
+  // row that has a duration and a token count — but a trace posted to
+  // `POST /api/observability/harness/trace` need not, and narrowing the type
+  // to what the seed happens to hold is how a mock ends up disagreeing with
+  // the column it is standing in for.
+  duration_ms: number | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
   judge_input_tokens: number | null;
   judge_output_tokens: number | null;
-  est_cost_usd: number;
+  est_cost_usd: number | null;
   judge_cost_usd: number | null;
-  total_cost_usd: number;
+  total_cost_usd: number | null;
   prompt_version: string | null;
-  model_id: string;
-  runtime_image_digest: string;
+  model_id: string | null;
+  runtime_image_digest: string | null;
   parent_invocation_id: string | null;
   user_id: string | null;
   session_id: string | null;
   human_label: string | null;
   human_note: string | null;
   ts: string;
+  /**
+   * `vector(1024)`, and the only real one on this surface. NULL on every seeded
+   * row — there is nothing to embed a fictional answer with — and populated on
+   * a written row, because the offline sink embeds for real
+   * (`lexicalEmbedding`, mock/trace-sink's `embedText` branch). `modelledDistance`
+   * branches on exactly this: a row with a vector gets a measured distance, a
+   * row without gets the modelled one.
+   */
+  output_embedding: number[] | null;
   /** ISO form of `ts`, for windowing. Not a column — never sent to a route. */
   tsIso: string;
-  /** The agent's authored profile, for the selectors. Not a column either. */
-  profile: AgentTelemetryProfile;
+  /**
+   * Where the row came from. Not a column: `observability.invocation_traces`
+   * cannot tell you whether a row was seeded, because in production nothing is.
+   * It is here because the two halves of this union must be treated
+   * differently by the DERIVED feeds — a written row brings its own tool
+   * calls, its own fired rules and its own memory events, and synthesising a
+   * second set beside them would be inventing telemetry for a real request.
+   */
+  source: 'seed' | 'sink';
+  /**
+   * The agent's authored profile, for the selectors. Not a column either, and
+   * null on a written row: the profile is the fiction the seeded corpus is
+   * drawn from, and a real row is not drawn from it. A written row for an
+   * agent that HAS a profile still carries null here, because borrowing the
+   * band would make a measured row report a modelled number.
+   */
+  profile: AgentTelemetryProfile | null;
 }
 
 /**
@@ -391,38 +451,122 @@ function promptVersionFor(agentId: string): string | null {
 }
 
 /**
- * The modelled `output_embedding <=> centroid`.
+ * `output_embedding <=> centroid`, per row.
  *
- * THIS IS THE ONE NUMBER ON THIS SURFACE THAT IS NOT COUNTED. There are no
- * 1024-dimension embeddings in `dev:mock`, so there is no cosine distance to
- * take; the drift queries' whole subject is that expression. Rather than leave
- * four reads permanently degraded, each row gets a deterministic scalar from
- * its agent's authored drift band, and every drift rollup is then a real
+ * TWO HALVES, AND ONLY ONE OF THEM IS MODELLED.
+ *
+ * A SEEDED row has no embedding — there are no 1024-dimension vectors behind a
+ * fictional answer — so there is no cosine distance to take, and the drift
+ * queries' whole subject is that expression. Rather than leave four reads
+ * permanently degraded, each seeded row gets a deterministic scalar from its
+ * agent's authored drift band, and every drift rollup is then a real
  * PERCENTILE_CONT over those per-row values — so the p95 a page shows is still
  * the p95 of the rows it can list, and switching an agent's band moves the
- * headline and the outlier list together.
+ * headline and the outlier list together. This is still the only number on
+ * this surface that is not counted.
+ *
+ * A WRITTEN row is measured, not modelled. The offline sink embeds for real,
+ * so the row carries a vector, and its distance is the genuine cosine distance
+ * to the mean of that agent's written vectors — `AVG(output_embedding)`, which
+ * is the centroid the drift SQL itself subqueries. One written row is its own
+ * centroid and therefore sits at distance 0, which is exactly what the SQL
+ * returns for a single-row window; it is not a stand-in for anything.
  *
  * A row with no graded output (an error, or a blocked answer) has no embedding
  * to compare, exactly as it would have none in the database: null, and the
  * drift queries skip it via their `output_embedding IS NOT NULL` predicate.
  */
 export function modelledDistance(row: MockTraceRow): number | null {
+  if (row.source === 'sink') {
+    if (!row.output_embedding) return null;
+    const centroid = sinkAgentCentroid(row.agent_id);
+    if (!centroid) return null;
+    return round(cosineDistance(row.output_embedding, centroid), 4);
+  }
   if (row.response_snippet === '') return null;
+  if (!row.profile) return null;
   const { driftCentre, driftSpread } = row.profile;
   const jitter = (unit(`${row.invocation_id}:dist`) - 0.5) * 2 * driftSpread;
   return round(Math.max(0, driftCentre + jitter), 4);
 }
 
 /**
- * The day of traffic as `observability.invocation_traces` holds it.
+ * The whole of `observability.invocation_traces`, offline: the seeded day of
+ * traffic with everything this process has WRITTEN layered on top of it.
  *
- * Every row here corresponds one-to-one with a row of `invocationTail`, so the
- * Invocations list, Health's summary, the Architecture graph and every rollup
- * on this surface are four readings of one fleet. An agent with no telemetry
- * profile contributes nothing — that is what makes the `empty` profile
- * scenario a true "the projector has written nothing" rather than a half-world.
+ * ── The seeded half ────────────────────────────────────────────────────────
+ * Every seeded row corresponds one-to-one with a row of `invocationTail`, so
+ * the Invocations list, Health's summary, the Architecture graph and every
+ * rollup on this surface are four readings of one fleet. An agent with no
+ * telemetry profile contributes nothing — that is what makes the `empty`
+ * profile scenario a true "the projector has written nothing" rather than a
+ * half-world.
+ *
+ * ── The written half, and why it had to be unioned in ──────────────────────
+ * `lib/trace-sink.ts` writes into `mock/trace-sink.ts` offline. Until this
+ * union those rows were reachable only by id: a trace posted to
+ * `POST /api/observability/harness/trace` was sampled, embedded, judged and
+ * stored, was counted in `GET /api/__mock/state`, could be re-judged — and
+ * did not appear in `GET /api/observability/invocations/search` or in a single
+ * rollup, because both read this function. Two views of one table that
+ * disagreed, with nothing saying so, which is the class of defect this whole
+ * fixture directory exists to remove.
+ *
+ * ── What the union preserves, exactly ──────────────────────────────────────
+ * The seeded tail is LOAD-BEARING for six other surfaces and is left bit-for-bit
+ * alone:
+ *
+ *   * The seeded rows are built first and unchanged — same ids, same instants,
+ *     same bands. Nothing is re-derived from the union, and no seeded row can
+ *     see a written one.
+ *   * `linkA2aParents` runs over the seeded rows ONLY, before the merge. A
+ *     written row carries the `parent_invocation_id` it was posted with; it
+ *     neither acquires a fictional parent nor becomes one.
+ *   * The two halves are MERGED by instant, newest first — the order each
+ *     half already had — never re-sorted. Written rows are stamped at write
+ *     time and so land ahead of the whole day, which is what "layered on
+ *     top" means; neither half can be reordered within itself, so with
+ *     nothing written this function returns the identical array it returned
+ *     before the union existed.
+ *   * The DERIVED feeds — tool calls, guardrail interventions, memory events —
+ *     synthesise from the seeded half only. A written trace brings its own,
+ *     which `mock/trace-sink.ts` already holds, and manufacturing a second set
+ *     beside them would be inventing telemetry for a request that really ran.
+ *
+ * A written row is therefore additive: with an empty sink every number on
+ * every rollup is unmoved, and each posted trace moves them by exactly the one
+ * row it is.
  */
 export function traceRows(scenario?: ScenarioName): MockTraceRow[] {
+  return mergeByInstant(seededTraceRows(scenario), writtenTraceRows(scenario));
+}
+
+/**
+ * Newest first, stable.
+ *
+ * Both inputs are already in that order, so this is a merge rather than a
+ * sort — and being a merge is the point: `Array.prototype.sort` is stable in
+ * V8, but a merge cannot reorder within either input at all, which is the
+ * guarantee the seeded tail needs.
+ */
+function mergeByInstant(seeded: MockTraceRow[], written: MockTraceRow[]): MockTraceRow[] {
+  if (written.length === 0) return seeded;
+  const out: MockTraceRow[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < written.length && j < seeded.length) {
+    // `>=` keeps a written row ahead of a seeded row stamped at the same
+    // instant: it is the newer of the two, since the seeded instant is a
+    // rounded offset from the same clock.
+    out.push(written[i]!.tsIso >= seeded[j]!.tsIso ? written[i++]! : seeded[j++]!);
+  }
+  while (i < written.length) out.push(written[i++]!);
+  while (j < seeded.length) out.push(seeded[j++]!);
+  return out;
+}
+
+/** The seeded day, exactly as it was before the sink was unioned in. */
+function seededTraceRows(scenario?: ScenarioName): MockTraceRow[] {
   const profiles = new Map(agentTelemetryProfiles.rows(scenario).map((p) => [p.agentId, p]));
   if (profiles.size === 0) return [];
 
@@ -507,14 +651,79 @@ export function traceRows(scenario?: ScenarioName): MockTraceRow[] {
       session_id: sessionId,
       human_label: label?.label ?? null,
       human_note: label?.note ?? null,
+      // Seeded answers were never embedded — there is no vector behind a
+      // sentence nobody generated. `modelledDistance` is what stands in.
+      output_embedding: null,
       ts: pgTimestamp(src.startedAt),
       tsIso: src.startedAt,
+      source: 'seed',
       profile,
     });
   }
 
   linkA2aParents(rows);
   return rows;
+}
+
+/**
+ * The rows `lib/trace-sink.ts` has written this run, in the same shape.
+ *
+ * A projection, not a second corpus: every value comes off the written row,
+ * and the two fields `invocation_traces` has no column for — `source` and
+ * `profile` — say what the row is rather than dressing it as a seeded one.
+ * Human labels are joined in because the label table keys on `invocation_id`
+ * and nothing about it cares which half of the union the trace came from: a
+ * posted trace can be labelled, and `mockSetHumanLabel` accepts it for exactly
+ * that reason.
+ *
+ * Newest first, matching the seeded half. The sink appends, so its array is
+ * oldest-first and is reversed here rather than sorted — the sink's own order
+ * is the order the writes happened in and must not be re-derived.
+ */
+function writtenTraceRows(scenario?: ScenarioName): MockTraceRow[] {
+  const written = sinkTraces.rows(scenario);
+  if (written.length === 0) return [];
+  const labels = new Map(humanLabels.rows(scenario).map((l) => [l.invocationId, l]));
+
+  return written
+    .map((r): MockTraceRow => {
+      const label = labels.get(r.invocation_id) ?? null;
+      return {
+        invocation_id: r.invocation_id,
+        agent_id: r.agent_id,
+        agent_name: r.agent_name,
+        template_id: r.template_id,
+        prompt_snippet: r.prompt_snippet,
+        response_snippet: r.response_snippet,
+        judge_score: r.judge_score,
+        judge_rationale: r.judge_rationale,
+        schema_valid: r.schema_valid,
+        pii_detected: r.pii_detected,
+        guardrail_action: r.guardrail_action,
+        duration_ms: r.duration_ms,
+        input_tokens: r.input_tokens,
+        output_tokens: r.output_tokens,
+        judge_input_tokens: r.judge_input_tokens,
+        judge_output_tokens: r.judge_output_tokens,
+        est_cost_usd: r.est_cost_usd,
+        judge_cost_usd: r.judge_cost_usd,
+        total_cost_usd: r.total_cost_usd,
+        prompt_version: r.prompt_version,
+        model_id: r.model_id,
+        runtime_image_digest: r.runtime_image_digest,
+        parent_invocation_id: r.parent_invocation_id,
+        user_id: r.user_id,
+        session_id: r.session_id,
+        human_label: label?.label ?? null,
+        human_note: label?.note ?? null,
+        output_embedding: r.output_embedding,
+        ts: pgTimestamp(r.ts),
+        tsIso: r.ts,
+        source: 'sink',
+        profile: null,
+      };
+    })
+    .reverse();
 }
 
 /**
@@ -561,8 +770,19 @@ function linkA2aParents(rows: MockTraceRow[]): void {
  * stamped in the future did not happen in the last day.
  */
 export function tracesInWindow(hours: number, scenario?: ScenarioName): MockTraceRow[] {
-  const ids = new Set(invocationsInWindow(hours, scenario).map((r) => r.id));
-  return traceRows(scenario).filter((r) => ids.has(r.invocation_id));
+  // The predicate is applied to these rows' OWN instants, not resolved through
+  // the invocation tail's ids. It used to be the latter, and that is precisely
+  // what made a written trace invisible to every windowed rollup: a row the
+  // tail has never heard of could not be in any window, however recently it was
+  // written. On the seeded half the two are the same test over the same
+  // instants — `mock/invocations.ts` `invocationsInWindow` bounds at both ends
+  // for the reason stated there, and so does this.
+  const now = clock.now().getTime();
+  const span = Math.max(0, hours) * 3_600_000;
+  return traceRows(scenario).filter((r) => {
+    const ms = new Date(r.tsIso).getTime();
+    return Number.isFinite(ms) && ms <= now && now - ms <= span;
+  });
 }
 
 /**
@@ -582,9 +802,12 @@ export interface MockToolCallRow {
   invocation_id: string;
   tool_name: string;
   started_at: string;
-  duration_ms: number;
-  input_size: number;
-  output_size: number;
+  // Nullable for the reason `MockTraceRow`'s numerics are: the schema says so,
+  // and a WRITTEN tool call may carry none of them. Every derived row has all
+  // three, because it is derived from a trace that does.
+  duration_ms: number | null;
+  input_size: number | null;
+  output_size: number | null;
   errored: boolean;
   error_message: string | null;
   input_sample: string | null;
@@ -609,12 +832,21 @@ export interface MockToolCallRow {
  * already used — `invocation_traces` has no error column, so an agent-level
  * failure surfaces as an errored tool row — and it means `GET /tools/errors`
  * and the Invocations list are showing the same failures, not two sets.
+ *
+ * ONLY THE SEEDED HALF IS SYNTHESISED. A written trace declares the tools it
+ * called and `lib/trace-sink.ts` stores them; those rows are unioned in below
+ * rather than replaced by a fresh invention, because a real request that called
+ * one tool must not be shown as having called three.
  */
 export function toolCallRows(scenario?: ScenarioName): MockToolCallRow[] {
+  return [...derivedToolCalls(scenario), ...writtenToolCalls(scenario)];
+}
+
+function derivedToolCalls(scenario?: ScenarioName): MockToolCallRow[] {
   const fleet = new Map(agentFleet.rows(scenario).map((a) => [a.id, a]));
   const out: MockToolCallRow[] = [];
 
-  for (const trace of traceRows(scenario)) {
+  for (const trace of seededTraceRows(scenario)) {
     const tools = fleet.get(trace.agent_id)?.tools ?? [];
     if (tools.length === 0) continue;
 
@@ -622,14 +854,18 @@ export function toolCallRows(scenario?: ScenarioName): MockToolCallRow[] {
     // the agent's first tool so a fleet-wide latency panel has a stable spine.
     const calls = 1 + (hash32(`${trace.invocation_id}:tools`) % Math.min(3, tools.length));
     const errored = trace.schema_valid === false;
-    let offsetMs = Math.round(trace.duration_ms * 0.08);
+    // Seeded rows always carry a duration — they are projected from a tail row
+    // that has one — so the `?? 0` is a type narrowing, not a default anybody
+    // reaches.
+    const traceMs = trace.duration_ms ?? 0;
+    let offsetMs = Math.round(traceMs * 0.08);
 
     for (let i = 0; i < calls; i++) {
       const toolName = tools[(hash32(`${trace.invocation_id}:t${i}`) + i) % tools.length]!;
       // Each call takes a slice of the invocation it belongs to, so a tool p99
       // can never exceed the invocation p99 that contains it.
       const share = 0.18 + unit(`${trace.invocation_id}:d${i}`) * 0.35;
-      const durationMs = Math.max(1, Math.round(trace.duration_ms * share / calls));
+      const durationMs = Math.max(1, Math.round(traceMs * share / calls));
       const isLast = i === calls - 1;
       const thisErrored = errored && isLast;
       const startedIso = new Date(new Date(trace.tsIso).getTime() + offsetMs).toISOString();
@@ -674,6 +910,57 @@ function errorMessageFor(trace: MockTraceRow): string | null {
   return src?.error ?? null;
 }
 
+/**
+ * The tool calls `lib/trace-sink.ts` has written this run.
+ *
+ * `observability.tool_calls` has its own `ts DEFAULT now()`, which the sink
+ * fixture does not carry; `started_at` — which it does, either from the caller
+ * or from the clock at write time — is what every read here windows and orders
+ * on, so it stands for both. That is the instant the call actually happened,
+ * which is a better answer than a second stamp taken when the row was stored.
+ *
+ * A call whose trace is not in the union is DROPPED rather than shown
+ * parentless: the rollups read `c.trace` for the agent and the test-traffic
+ * filter, and a row that cannot answer those is a row no query could have
+ * returned. That is also the honest handling of a phantom-dropped bundle whose
+ * tool rows landed anyway.
+ */
+function writtenToolCalls(scenario?: ScenarioName): MockToolCallRow[] {
+  const written = sinkToolCalls.rows(scenario);
+  if (written.length === 0) return [];
+  const traces = new Map(writtenTraceRows(scenario).map((t) => [t.invocation_id, t]));
+  const seen = new Map<string, number>();
+  const out: MockToolCallRow[] = [];
+
+  for (const c of written) {
+    const trace = traces.get(c.invocation_id);
+    if (!trace) continue;
+    const n = seen.get(c.invocation_id) ?? 0;
+    seen.set(c.invocation_id, n + 1);
+    out.push({
+      // The DB mints a uuid. Offline the key has to be derivable from the row,
+      // because the detail view links to it — invocation plus ordinal is the
+      // same shape the derived half uses.
+      tool_call_id: `${c.invocation_id}-stc${n}`,
+      invocation_id: c.invocation_id,
+      tool_name: c.tool_name,
+      started_at: pgTimestamp(c.started_at),
+      duration_ms: c.duration_ms,
+      input_size: c.input_size,
+      output_size: c.output_size,
+      errored: c.errored,
+      error_message: c.error_message,
+      input_sample: c.input_sample,
+      output_sample: c.output_sample,
+      est_cost_usd: c.est_cost_usd,
+      ts: pgTimestamp(c.started_at),
+      tsIso: new Date(c.started_at).toISOString(),
+      trace,
+    });
+  }
+  return out;
+}
+
 // ── Guardrail interventions ────────────────────────────────────────────────
 
 /** One row of `observability.guardrail_interventions`, in `exec()` shape. */
@@ -682,8 +969,12 @@ export interface MockInterventionRow {
   invocation_id: string;
   agent_id: string;
   rule_name: string;
-  rule_category: string;
-  severity: string;
+  // Both nullable in the schema, and a WRITTEN row is where that shows: the
+  // sink accepts a fired rule with no category and keeps a severity only when
+  // it is one of LOW/MEDIUM/HIGH. Every derived row carries both, because the
+  // rule it came from is one the guardrail fixture declares.
+  rule_category: string | null;
+  severity: string | null;
   action: string;
   matched_text: string | null;
   ts: string;
@@ -737,13 +1028,22 @@ function configuredRules(): ConfiguredRule[] {
  * One row per fired rule. A single invocation can trip more than one — that is
  * why this table exists beside the opaque `invocation_traces.guardrail_action`
  * — so a blocked row trips one or two.
+ *
+ * Seeded rows only. A written trace posts the rules that actually fired and
+ * `lib/trace-sink.ts` stores them; those come in below, unchanged. Firing a
+ * fixture rule at a real request would be inventing an intervention, and the
+ * by-rule breakdown is meant to be a list an operator can go and act on.
  */
 export function interventionRows(scenario?: ScenarioName): MockInterventionRow[] {
+  return [...derivedInterventions(scenario), ...writtenInterventions(scenario)];
+}
+
+function derivedInterventions(scenario?: ScenarioName): MockInterventionRow[] {
   const rules = configuredRules();
   if (rules.length === 0) return [];
   const out: MockInterventionRow[] = [];
 
-  for (const trace of traceRows(scenario)) {
+  for (const trace of seededTraceRows(scenario)) {
     if (trace.guardrail_action === null) continue;
     const fired = 1 + (hash32(`${trace.invocation_id}:fired`) % Math.min(2, rules.length));
     for (let i = 0; i < fired; i++) {
@@ -762,6 +1062,43 @@ export function interventionRows(scenario?: ScenarioName): MockInterventionRow[]
         tsIso: trace.tsIso,
       });
     }
+  }
+  return out;
+}
+
+/**
+ * The interventions `lib/trace-sink.ts` has written this run.
+ *
+ * `observability.guardrail_interventions.ts` is `DEFAULT now()` and the sink
+ * fixture carries no column for it, so the instant is taken from the trace the
+ * rows belong to — which is the same transaction's `now()` in the real table,
+ * to within the milliseconds nothing here measures. A row whose trace is not in
+ * the union is dropped, on the same argument as the written tool calls.
+ */
+function writtenInterventions(scenario?: ScenarioName): MockInterventionRow[] {
+  const written = sinkGuardrailInterventions.rows(scenario);
+  if (written.length === 0) return [];
+  const traces = new Map(writtenTraceRows(scenario).map((t) => [t.invocation_id, t]));
+  const seen = new Map<string, number>();
+  const out: MockInterventionRow[] = [];
+
+  for (const g of written) {
+    const trace = traces.get(g.invocation_id);
+    if (!trace) continue;
+    const n = seen.get(g.invocation_id) ?? 0;
+    seen.set(g.invocation_id, n + 1);
+    out.push({
+      intervention_id: `${g.invocation_id}-sgi${n}`,
+      invocation_id: g.invocation_id,
+      agent_id: g.agent_id,
+      rule_name: g.rule_name,
+      rule_category: g.rule_category,
+      severity: g.severity,
+      action: g.action,
+      matched_text: g.matched_text,
+      ts: trace.ts,
+      tsIso: trace.tsIso,
+    });
   }
   return out;
 }
@@ -829,18 +1166,21 @@ const MEMORY_ID = 'orgiq-memory-mock';
  * writes after it succeeds. A retrieve that comes back with nothing is a COLD
  * session — the thing `/stats` exists to count — and it happens for the first
  * invocation of a session, which is exactly when it happens in production.
+ *
+ * Seeded rows only — a written trace posts its own memory events, and they are
+ * unioned in by `memoryEventRows` rather than modelled a second time here.
  */
 function derivedMemoryOps(scenario?: ScenarioName): MemoryOp[] {
   const ops: MemoryOp[] = [];
   const seenSession = new Set<string>();
 
   // Oldest first, so "the first invocation of a session" means the first one.
-  const traces = traceRows(scenario)
+  const traces = seededTraceRows(scenario)
     .slice()
     .sort((a, b) => a.tsIso.localeCompare(b.tsIso));
 
   for (const trace of traces) {
-    if (!trace.profile.usesMemory) continue;
+    if (!trace.profile?.usesMemory) continue;
     const sessionKey = `${trace.agent_id}|${trace.session_id ?? ''}`;
     const cold = trace.session_id !== null && !seenSession.has(sessionKey);
     if (trace.session_id !== null) seenSession.add(sessionKey);
@@ -880,7 +1220,9 @@ function derivedMemoryOps(scenario?: ScenarioName): MemoryOp[] {
         durationMs: 9 + (hash32(`${trace.invocation_id}:mw`) % 60),
         errored: false,
         errorMessage: null,
-        tsIso: new Date(new Date(trace.tsIso).getTime() + trace.duration_ms).toISOString(),
+        // The write lands when the invocation finishes. Seeded rows always
+        // carry a duration, so `?? 0` narrows rather than defaults.
+        tsIso: new Date(new Date(trace.tsIso).getTime() + (trace.duration_ms ?? 0)).toISOString(),
       });
     }
   }
@@ -907,10 +1249,54 @@ function toMemoryRow(op: MemoryOp, index: number): MockMemoryEventRow {
   };
 }
 
-/** The whole memory feed: the fleet's own ops plus anything POSTed here. */
+/**
+ * The whole memory feed: the fleet's own ops, anything POSTed to
+ * `/api/observability/memory/events`, and the events a written trace declared.
+ */
 export function memoryEventRows(scenario?: ScenarioName): MockMemoryEventRow[] {
   const derived = derivedMemoryOps(scenario).map(toMemoryRow);
-  return [...derived, ...memoryEventWrites.rows(scenario)];
+  return [...derived, ...memoryEventWrites.rows(scenario), ...writtenMemoryEvents(scenario)];
+}
+
+/**
+ * The memory events `lib/trace-sink.ts` has written this run.
+ *
+ * Same timestamp argument as the written interventions: `memory_events.ts` is
+ * `DEFAULT now()`, the sink fixture has no column for it, and the trace's own
+ * instant is the one the real row would carry. A row whose trace is not in the
+ * union is dropped — `/stats`' cold-session rollup groups by (agent, session)
+ * and an orphan would be a session that never happened.
+ */
+function writtenMemoryEvents(scenario?: ScenarioName): MockMemoryEventRow[] {
+  const written = sinkMemoryEvents.rows(scenario);
+  if (written.length === 0) return [];
+  const traces = new Map(writtenTraceRows(scenario).map((t) => [t.invocation_id, t]));
+  const seen = new Map<string, number>();
+  const out: MockMemoryEventRow[] = [];
+
+  for (const e of written) {
+    const trace = traces.get(e.invocation_id);
+    if (!trace) continue;
+    const n = seen.get(e.invocation_id) ?? 0;
+    seen.set(e.invocation_id, n + 1);
+    out.push({
+      memory_event_id: `${e.invocation_id}-sme${n}-${e.kind}`,
+      invocation_id: e.invocation_id,
+      agent_id: e.agent_id,
+      session_id: e.session_id,
+      kind: e.kind,
+      memory_id: e.memory_id,
+      query_text: e.query_text,
+      result_count: e.result_count,
+      duration_ms: e.duration_ms,
+      retrieved_summary: e.retrieved_summary,
+      errored: e.errored,
+      error_message: e.error_message,
+      ts: trace.ts,
+      tsIso: trace.tsIso,
+    });
+  }
+  return out;
 }
 
 /** `POST /events` — append one manual row and hand back its id. */

@@ -171,7 +171,7 @@ describe('every rollup is reachable from the list beneath it', () => {
       expect(row['p50']).toBe(percentileCont(mine.map((t) => t.duration_ms), 0.5));
       expect(row['p99']).toBe(percentileCont(mine.map((t) => t.duration_ms), 0.99));
       expect(row['total_cost_usd'] as number)
-        .toBeCloseTo(mine.reduce((a, t) => a + t.total_cost_usd, 0), 10);
+        .toBeCloseTo(mine.reduce((a, t) => a + (t.total_cost_usd ?? 0), 0), 10);
     }
   });
 

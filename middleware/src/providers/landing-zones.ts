@@ -14,6 +14,26 @@ import { S3Client, ListObjectsV2Command, PutObjectCommand, DeleteObjectCommand }
 import { basename } from 'node:path';
 import { config } from '../config.js';
 import { getKbBySlug } from './kb-registry.js';
+import { clock } from '../mock/core/clock.js';
+import {
+  MOCK_DOCUMENTS_BUCKET,
+  bytesUnder,
+  deleteObject,
+  objectsUnder,
+  putObject,
+} from '../mock/landing-zone.js';
+
+/**
+ * The bucket these five functions read and write.
+ *
+ * Offline it is the fixture in `mock/landing-zone.ts`, and the name is
+ * returned rather than `''` on purpose: `getLandingZoneStats` reports `bucket`
+ * to the UI, and an empty string there is how "DOCUMENTS_BUCKET is not
+ * configured" used to render identically to "this prefix has no objects".
+ */
+function documentsBucket(): string {
+  return config.mock.aurora ? MOCK_DOCUMENTS_BUCKET : config.foundation.documentsBucket;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -67,6 +87,33 @@ function fileExtension(key: string): string {
  * Returns zeroed stats (bucket = '') when the documents bucket is not configured.
  */
 export async function getLandingZoneStats(prefix: string): Promise<LandingZoneStats> {
+  if (config.mock.aurora) {
+    // Every number here is counted from the fixture rows, never stored beside
+    // them — the same reason `byExtension` is built from the listing below
+    // rather than written down (contract.ts rule 1).
+    const objects = objectsUnder(prefix);
+    const extMap = new Map<string, { count: number; bytes: number }>();
+    for (const o of objects) {
+      const ext = fileExtension(o.key) || '(none)';
+      const slot = extMap.get(ext) ?? { count: 0, bytes: 0 };
+      slot.count++;
+      slot.bytes += o.size;
+      extMap.set(ext, slot);
+    }
+    const newest = objects[0] ?? null;
+    return {
+      bucket: MOCK_DOCUMENTS_BUCKET,
+      prefix,
+      objectCount: objects.length,
+      totalBytes: bytesUnder(prefix),
+      byExtension: Array.from(extMap.entries())
+        .map(([extension, v]) => ({ extension, ...v }))
+        .sort((a, b) => b.bytes - a.bytes),
+      newestKey: newest?.key ?? null,
+      newestAt: newest?.lastModified ?? null,
+    };
+  }
+
   const bucket = config.foundation.documentsBucket;
   if (!bucket) {
     return {
@@ -145,6 +192,23 @@ export async function listLandingZoneFiles(
   prefix: string,
   opts: { limit?: number; continuationToken?: string } = {},
 ): Promise<LandingZonePage> {
+  if (config.mock.aurora) {
+    // `.keep` is filtered here exactly as it is on the real path — the marker
+    // is provisioning bookkeeping, not a document someone dropped.
+    const files: LandingZoneFile[] = objectsUnder(prefix)
+      .filter((o) => !o.key.slice(prefix.length).endsWith('.keep'))
+      .slice(0, opts.limit ?? 50)
+      .map((o) => ({
+        key: o.key,
+        size: o.size,
+        lastModified: o.lastModified,
+        extension: fileExtension(o.key) || '(none)',
+      }));
+    // One page: the fixture is smaller than any limit a caller can ask for, so
+    // claiming a continuation token would name a page that does not exist.
+    return { files, nextToken: null, prefix };
+  }
+
   const bucket = config.foundation.documentsBucket;
   if (!bucket) {
     return { files: [], nextToken: null, prefix };
@@ -196,16 +260,28 @@ export async function uploadToLandingZone(
   const entry = await getKbBySlug(kbSlug);
   if (!entry) throw new Error(`KB not found: ${kbSlug}`);
 
-  const bucket = config.foundation.documentsBucket;
+  const bucket = documentsBucket();
   if (!bucket) throw new Error('DOCUMENTS_BUCKET not configured');
 
-  const s3 = s3Client();
   const prefix = entry.s3Prefix.endsWith('/') ? entry.s3Prefix : `${entry.s3Prefix}/`;
-  const date = new Date().toISOString().slice(0, 10);
+  // Through the clock, not `new Date()`: this is the date segment the key is
+  // filed under, so a frozen-clock test asserts the exact key, and a mint here
+  // is the provider-mock-branch bug scripts/validate-mock-floor.sh rule 3 was
+  // widened to catch.
+  const now = clock.nowIso();
+  const date = now.slice(0, 10);
   const safeFilename = basename(filename).replace(/[^a-zA-Z0-9._-]/g, '_');
   const key = `${prefix}${date}/${safeFilename}`;
-  const now = new Date().toISOString();
 
+  if (config.mock.aurora) {
+    // The object really lands — in the fixture bucket, where the file browser
+    // that reads it offline will list it and `POST /api/__mock/reset` will
+    // take it away again.
+    putObject({ key, size: body.length, lastModified: now, contentType });
+    return { key, bucket, size: body.length, contentType, s3Uri: `s3://${bucket}/${key}` };
+  }
+
+  const s3 = s3Client();
   await s3.send(
     new PutObjectCommand({
       Bucket: bucket,
@@ -236,11 +312,22 @@ export async function uploadToLandingZone(
  * visible in the S3 console and the KB data source can reference it.
  */
 export async function initLandingZone(prefix: string): Promise<void> {
-  const bucket = config.foundation.documentsBucket;
+  const bucket = documentsBucket();
   if (!bucket) throw new Error('DOCUMENTS_BUCKET not configured');
 
-  const s3 = s3Client();
   const normalizedPrefix = prefix.endsWith('/') ? prefix : `${prefix}/`;
+
+  if (config.mock.aurora) {
+    putObject({
+      key: `${normalizedPrefix}.keep`,
+      size: 0,
+      lastModified: clock.nowIso(),
+      contentType: 'application/octet-stream',
+    });
+    return;
+  }
+
+  const s3 = s3Client();
   await s3.send(
     new PutObjectCommand({
       Bucket: bucket,
@@ -269,8 +356,10 @@ export async function deleteFromLandingZone(prefix: string, key: string): Promis
     );
   }
 
-  const bucket = config.foundation.documentsBucket;
+  const bucket = documentsBucket();
   if (!bucket) throw new Error('DOCUMENTS_BUCKET not configured');
+
+  if (config.mock.aurora) { deleteObject(key); return; }
 
   const s3 = s3Client();
   await s3.send(

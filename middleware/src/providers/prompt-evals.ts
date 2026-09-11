@@ -17,6 +17,7 @@
 
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
 import { exec } from './aurora.js';
+import { config } from '../config.js';
 // Every stamp through the one clock, so a run is pinnable under freezeClock.
 import { clock } from '../mock/core/index.js';
 import { nextMockEvalRunId, promptEvalCases, promptEvalRuns } from '../mock/prompt-evals.js';
@@ -278,6 +279,14 @@ export async function runEvals(assetId: string, version: string, ranBy: string):
     results,
   };
   promptEvalRuns.rows().unshift(run);
+
+  // The run itself is already fixture-backed; only this cache write reaches
+  // Aurora, and it was reaching it offline too — the Data API call was made,
+  // failed, and was swallowed by the catch below. Naming the offline case is
+  // what turns "the write threw and we ignored it" into "there is no column to
+  // cache into here", and it stops a dev:mock run paying a Data API round trip
+  // per eval. `decideDeploy` reads `run.passRate` in this world.
+  if (config.mock.aurora) return run;
 
   try {
     await exec(

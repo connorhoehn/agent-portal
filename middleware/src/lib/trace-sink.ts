@@ -13,6 +13,21 @@
 //
 // Every step swallows its own errors. The agent invocation path NEVER awaits
 // the pipeline and NEVER sees a failure here.
+//
+// OFFLINE. Every one of those nine backends now has a mock branch, and they are
+// per-STEP rather than one branch around the pipeline on purpose: the two rules
+// this file exists to enforce — sampling gates persistence, and a phantom row
+// is dropped only when every substance axis is empty — must run offline exactly
+// as they run live, or `dev:mock` would be exercising a different sink. So the
+// sampling decision, the die roll, the phantom predicate, the cost arithmetic,
+// the conflict rule and the best-effort isolation of the child-table inserts
+// are all the production code; only the six Aurora statements, the two Bedrock
+// calls and the CloudWatch publish are swapped. What they are swapped for is in
+// `mock/trace-sink.ts` (the rows), `mock/answer-check.ts` (the judge) and
+// `mock/embedding.ts` (the vector), each of which says what it can and cannot
+// claim. Neither rule is softened offline: a `test:*` template still always
+// samples, a non-test bundle still rolls against the configured rate, and a
+// bundle empty on every axis is still dropped before any of it happens.
 
 import { randomUUID } from 'node:crypto';
 import type { SqlParameter } from '@aws-sdk/client-rds-data';
@@ -32,6 +47,13 @@ import { judgeResponse, NOVA_PRO_MODEL_ID } from './judge.js';
 import { validate, tryParseJson } from './schema-validator.js';
 import { estimateCost, estimateCostOrNull } from './pricing.js';
 import { config } from '../config.js';
+import { clock } from '../mock/core/index.js';
+import { lexicalEmbedding } from '../mock/embedding.js';
+import {
+  insertSinkTrace, recordSinkMetric, sinkCentroid, sinkGuardrailInterventions,
+  sinkMemoryEvents, sinkSamplingConfig, sinkToolCalls,
+  type SinkGuardrailRow, type SinkMemoryEventRow, type SinkToolCallRow,
+} from '../mock/trace-sink.js';
 
 // ── Public input shape ─────────────────────────────────────────────────────────
 //
@@ -165,6 +187,31 @@ const FALLBACK_RATE = 0.1;
 
 async function loadSamplingConfig(): Promise<void> {
   const now = Date.now();
+  // OFFLINE. The rows come from `mock/trace-sink.ts`'s `trace-sink-sampling`
+  // fixture, which mirrors the one row `schema/observability_schema.sql` seeds
+  // (`'default'`, rate 1.0). Read on EVERY call rather than through the TTL:
+  // the TTL exists to stop a cold Aurora being hammered, there is no Aurora
+  // here, and honouring it would mean a control-plane scenario switch
+  // (`POST /api/__mock/scenario {"scenario":"empty","fixture":"trace-sink-sampling"}`)
+  // took up to a minute to reach the sampler — which is exactly the rule an
+  // auditor asked to stand in front of.
+  if (config.mock.aurora) {
+    _samplingCache.clear();
+    for (const r of sinkSamplingConfig.rows()) {
+      if (!r.template_id) continue;
+      let schema: object | null = null;
+      if (typeof r.schema_json === 'string' && r.schema_json.trim()) {
+        try { schema = JSON.parse(r.schema_json) as object; } catch { schema = null; }
+      }
+      const rate = Number(r.rate);
+      _samplingCache.set(r.template_id, {
+        rate: Number.isFinite(rate) ? Math.max(0, Math.min(1, rate)) : FALLBACK_RATE,
+        schema,
+      });
+    }
+    _samplingFetchedAt = now;
+    return;
+  }
   if (now - _samplingFetchedAt < SAMPLING_TTL_MS && _samplingCache.size > 0) return;
   try {
     const rows = await exec(
@@ -226,6 +273,12 @@ const _centroidCache = new Map<string, CentroidEntry>();
 const CENTROID_TTL_MS = 60_000;
 const CENTROID_LOOKBACK_HOURS = 24;
 const CENTROID_MIN_SAMPLES = 5;
+/**
+ * "Good enough to be part of normal": a row the judge did not clearly dislike.
+ * Named rather than repeated so the SQL predicate and the offline selector in
+ * `mock/trace-sink.ts` cannot drift into disagreeing about what a centroid is.
+ */
+const CENTROID_TRUST_FLOOR = 0.6;
 
 function parsePgVector(text: string): number[] | null {
   // pgvector text format: "[v1,v2,...,vN]". Trim brackets, split, parse.
@@ -249,6 +302,19 @@ async function getCentroid(agentId: string): Promise<number[] | null> {
   const cached = _centroidCache.get(agentId);
   if (cached && now - cached.fetchedAt < CENTROID_TTL_MS) return cached.vec;
 
+  // OFFLINE. The same aggregate, over the rows this process actually wrote:
+  // same 24-hour window, same "judge did not dislike it" filter, same
+  // five-sample floor — so a cold offline sink returns null exactly as a cold
+  // Aurora does, and drift is not published until there is something to
+  // measure drift against.
+  if (config.mock.aurora) {
+    const vec = sinkCentroid(
+      agentId, CENTROID_MIN_SAMPLES, CENTROID_LOOKBACK_HOURS, CENTROID_TRUST_FLOOR,
+    );
+    if (vec) _centroidCache.set(agentId, { vec, fetchedAt: now });
+    return vec;
+  }
+
   try {
     // Use the pgvector aggregate `avg(vector)` which returns the mean vector
     // (centroid). We restrict to "trusted" recent rows where the judge wasn't
@@ -259,7 +325,7 @@ async function getCentroid(agentId: string): Promise<number[] | null> {
         WHERE agent_id = :agent
           AND output_embedding IS NOT NULL
           AND ts > now() - INTERVAL '${CENTROID_LOOKBACK_HOURS} hours'
-          AND (judge_score IS NULL OR judge_score >= 0.6)`,
+          AND (judge_score IS NULL OR judge_score >= ${CENTROID_TRUST_FLOOR})`,
       [{ name: 'agent', value: { stringValue: agentId } }],
     );
     if (rows.length === 0) return null;
@@ -337,6 +403,45 @@ async function insertTrace(args: {
   userId: string | null;
   sessionId: string | null;
 }): Promise<void> {
+  // OFFLINE. One row into the `trace-sink-traces` fixture, with the
+  // statement's own conflict rule: `insertSinkTrace` refuses a duplicate
+  // invocation_id, which is what `ON CONFLICT (invocation_id) DO NOTHING`
+  // means, so a retried bundle leaves the first row standing here too.
+  if (config.mock.aurora) {
+    insertSinkTrace({
+      invocation_id: args.invocationId,
+      agent_id: args.agentId,
+      agent_name: args.agentName,
+      template_id: args.templateId ?? null,
+      prompt_snippet: args.promptSnippet,
+      response_snippet: args.responseSnippet,
+      output_embedding: args.embedding,
+      judge_score: args.judgeScore,
+      judge_rationale: args.judgeRationale,
+      schema_valid: args.schemaValid,
+      pii_detected: args.piiDetected,
+      guardrail_action: args.guardrailAction ?? null,
+      duration_ms: args.durationMs ?? null,
+      input_tokens: args.inputTokens,
+      output_tokens: args.outputTokens,
+      judge_input_tokens: args.judgeInputTokens,
+      judge_output_tokens: args.judgeOutputTokens,
+      est_cost_usd: args.estCostUsd,
+      judge_cost_usd: args.judgeCostUsd,
+      total_cost_usd: args.totalCostUsd,
+      prompt_version: args.promptVersion,
+      model_id: args.modelId,
+      runtime_image_digest: args.runtimeImageDigest,
+      parent_invocation_id: args.parentInvocationId,
+      user_id: args.userId,
+      session_id: args.sessionId,
+      // `ts` is `DEFAULT now()` in the schema — the server's clock, never the
+      // caller's — so offline it is the mock clock's, never `new Date()`.
+      ts: clock.nowIso(),
+    });
+    return;
+  }
+
   // Embed the vector literal directly into the SQL (it's an internally-
   // generated array of numbers, not user input). RDS Data API has no
   // parameter binding for pgvector; we cast on the server with ::vector.
@@ -442,6 +547,10 @@ async function insertToolCalls(
   const params: SqlParameter[] = [
     strParam('iid', invocationId),
   ];
+  // Offline rows, filled by the SAME loop that builds the statement, so the
+  // cap, the blank-name skip and the sample truncation are applied once and
+  // both paths accept exactly the same entries.
+  const accepted: SinkToolCallRow[] = [];
 
   let validCount = 0;
   for (let i = 0; i < slice.length; i++) {
@@ -488,10 +597,25 @@ async function insertToolCalls(
     params.push(nullableStr(osm, snipSample(tc.outputSample)));
     params.push(nullableNumber(ec, tc.estCostUsd ?? null));
 
+    accepted.push({
+      invocation_id: invocationId,
+      tool_name: toolName,
+      started_at: bindStartedAt ? (tc.startedAt as string) : clock.nowIso(),
+      duration_ms: tc.durationMs ?? null,
+      input_size: tc.inputSize ?? null,
+      output_size: tc.outputSize ?? null,
+      errored: tc.errored ?? false,
+      error_message: tc.errorMessage ?? null,
+      input_sample: snipSample(tc.inputSample),
+      output_sample: snipSample(tc.outputSample),
+      est_cost_usd: tc.estCostUsd ?? null,
+    });
+
     validCount++;
   }
 
   if (validCount === 0) return;
+  if (config.mock.aurora) { sinkToolCalls.rows().push(...accepted); return; }
 
   const sql = `INSERT INTO observability.tool_calls (
       invocation_id, tool_name, started_at, duration_ms,
@@ -524,6 +648,7 @@ async function insertMemoryEvents(
     strParam('iid', invocationId),
     strParam('agent_id', agentId),
   ];
+  const accepted: SinkMemoryEventRow[] = [];
 
   let validCount = 0;
   for (let i = 0; i < slice.length; i++) {
@@ -554,10 +679,25 @@ async function insertMemoryEvents(
     params.push(nullableBool(er, me.errored ?? false));
     params.push(nullableStr(em,  me.errorMessage ?? null));
 
+    accepted.push({
+      invocation_id: invocationId,
+      agent_id: agentId,
+      session_id: me.sessionId ?? null,
+      kind: me.kind,
+      memory_id: me.memoryId ?? null,
+      query_text: me.queryText ?? null,
+      result_count: me.resultCount ?? null,
+      duration_ms: me.durationMs ?? null,
+      retrieved_summary: snipSample(me.retrievedSummary, MEMORY_SUMMARY_MAX),
+      errored: me.errored ?? false,
+      error_message: me.errorMessage ?? null,
+    });
+
     validCount++;
   }
 
   if (validCount === 0) return;
+  if (config.mock.aurora) { sinkMemoryEvents.rows().push(...accepted); return; }
 
   const sql = `INSERT INTO observability.memory_events (
       invocation_id, agent_id, session_id, kind, memory_id, query_text,
@@ -590,6 +730,7 @@ async function insertGuardrailInterventions(
     strParam('iid', invocationId),
     strParam('agent_id', agentId),
   ];
+  const accepted: SinkGuardrailRow[] = [];
 
   let validCount = 0;
   for (let i = 0; i < slice.length; i++) {
@@ -618,10 +759,21 @@ async function insertGuardrailInterventions(
     params.push(strParam(ac, action));
     params.push(nullableStr(mt, snipSample(gi.matchedText, GUARDRAIL_MATCHED_TEXT_MAX)));
 
+    accepted.push({
+      invocation_id: invocationId,
+      agent_id: agentId,
+      rule_name: ruleName,
+      rule_category: gi.ruleCategory ?? null,
+      severity,
+      action,
+      matched_text: snipSample(gi.matchedText, GUARDRAIL_MATCHED_TEXT_MAX),
+    });
+
     validCount++;
   }
 
   if (validCount === 0) return;
+  if (config.mock.aurora) { sinkGuardrailInterventions.rows().push(...accepted); return; }
 
   const sql = `INSERT INTO observability.guardrail_interventions (
       invocation_id, agent_id, rule_name, rule_category, severity, action, matched_text
@@ -692,6 +844,49 @@ function isPhantomTrace(input: TraceInput): boolean {
 function snip(text: string, max = 500): string {
   if (!text) return '';
   return text.length > max ? text.slice(0, max - 1) + '...' : text;
+}
+
+/**
+ * Step 1's embedding.
+ *
+ * OFFLINE this is `mock/embedding.ts`'s bag-of-words projection rather than
+ * Titan V2 — the same dimensionality, so `cosineDistance` and the centroid
+ * average are the real functions over real vectors, but a LEXICAL space, not a
+ * semantic one. Offline drift therefore means "the fleet started using
+ * different words", never "the fleet changed its mind"; that weaker claim is
+ * the honest one and the module says so at length.
+ *
+ * Guarded here rather than inside `lib/embedding.ts` because that module is the
+ * Bedrock wire — the same argument that keeps `providers/aurora.ts` `exec` out
+ * of the mock-branch scan.
+ */
+async function embedForTrace(text: string): Promise<number[] | null> {
+  if (config.mock.agentcore) return lexicalEmbedding(text, EMBEDDING_DIMENSIONS);
+  return embedText(text).catch(() => null);
+}
+
+/**
+ * Step 4's metric publish.
+ *
+ * OFFLINE the datapoint goes into the `trace-sink-metrics` fixture instead of
+ * CloudWatch. Recorded rather than dropped because with the calls simply
+ * skipped, "the sink stored the row and published nothing" and "the sink ran to
+ * completion" are indistinguishable — and step 4 is the half of this pipeline
+ * that has no other observable output.
+ */
+function publishTraceMetric(
+  metricName: 'JudgeScore' | 'SchemaConformance' | 'EmbeddingDriftP95',
+  agentId: string,
+  value: number,
+  templateId?: string,
+): Promise<unknown> {
+  if (config.mock.cloudwatch) {
+    recordSinkMetric(metricName, agentId, value, templateId ?? null);
+    return Promise.resolve();
+  }
+  if (metricName === 'JudgeScore') return putQualityMetric(agentId, value);
+  if (metricName === 'SchemaConformance') return putSchemaMetric(agentId, value);
+  return putDriftMetric(agentId, templateId ?? 'default', value);
 }
 
 /**
@@ -807,7 +1002,7 @@ export async function processTrace(input: TraceInput): Promise<TraceResult> {
 
   // 1. Embed in parallel with judge — neither depends on the other.
   const [embedding, judge] = await Promise.all([
-    embedText(input.response).catch(() => null),
+    embedForTrace(input.response),
     judgeResponse(input.prompt, input.response).catch(() => null),
   ]);
 
@@ -944,10 +1139,10 @@ export async function processTrace(input: TraceInput): Promise<TraceResult> {
   const metricCalls: Promise<unknown>[] = [];
 
   if (judge) {
-    metricCalls.push(putQualityMetric(agentId, judge.score));
+    metricCalls.push(publishTraceMetric('JudgeScore', agentId, judge.score));
   }
   if (schemaValid !== null) {
-    metricCalls.push(putSchemaMetric(agentId, schemaValid ? 1 : 0));
+    metricCalls.push(publishTraceMetric('SchemaConformance', agentId, schemaValid ? 1 : 0));
   }
   if (embedding) {
     // Drift: cosine distance to centroid. If we don't have a centroid yet
@@ -957,7 +1152,7 @@ export async function processTrace(input: TraceInput): Promise<TraceResult> {
       if (centroid) {
         const dist = cosineDistance(embedding, centroid);
         metricCalls.push(
-          putDriftMetric(agentId, templateId ?? 'default', dist),
+          publishTraceMetric('EmbeddingDriftP95', agentId, dist, templateId ?? 'default'),
         );
       }
     } catch (err) {

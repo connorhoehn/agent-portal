@@ -1513,82 +1513,82 @@
     {
       "method": "POST",
       "path": "/api/observability/canary/ask",
-      "source": "src/routes/canary.ts:71"
+      "source": "src/routes/canary.ts:73"
     },
     {
       "method": "GET",
       "path": "/api/observability/canary/events",
-      "source": "src/routes/canary.ts:186"
+      "source": "src/routes/canary.ts:210"
     },
     {
       "method": "POST",
       "path": "/api/observability/canary/halt",
-      "source": "src/routes/canary.ts:307"
+      "source": "src/routes/canary.ts:339"
     },
     {
       "method": "GET",
       "path": "/api/observability/canary/library",
-      "source": "src/routes/canary-library.ts:66"
+      "source": "src/routes/canary-library.ts:73"
     },
     {
       "method": "POST",
       "path": "/api/observability/canary/library",
-      "source": "src/routes/canary-library.ts:270"
+      "source": "src/routes/canary-library.ts:277"
     },
     {
       "method": "PUT",
       "path": "/api/observability/canary/library/:promptId/draft",
-      "source": "src/routes/canary-library.ts:355"
+      "source": "src/routes/canary-library.ts:386"
     },
     {
       "method": "POST",
       "path": "/api/observability/canary/library/:promptId/invoke",
-      "source": "src/routes/canary-library.ts:531"
+      "source": "src/routes/canary-library.ts:592"
     },
     {
       "method": "POST",
       "path": "/api/observability/canary/library/:promptId/optimize",
-      "source": "src/routes/canary-library.ts:644"
+      "source": "src/routes/canary-library.ts:727"
     },
     {
       "method": "POST",
       "path": "/api/observability/canary/library/:promptId/publish",
-      "source": "src/routes/canary-library.ts:464"
+      "source": "src/routes/canary-library.ts:515"
     },
     {
       "method": "GET",
       "path": "/api/observability/canary/library/:promptId/version/:version",
-      "source": "src/routes/canary-library.ts:198"
+      "source": "src/routes/canary-library.ts:205"
     },
     {
       "method": "GET",
       "path": "/api/observability/canary/library/:promptId/versions",
-      "source": "src/routes/canary-library.ts:126"
+      "source": "src/routes/canary-library.ts:133"
     },
     {
       "method": "GET",
       "path": "/api/observability/canary/prompts",
-      "source": "src/routes/canary.ts:234"
+      "source": "src/routes/canary.ts:266"
     },
     {
       "method": "POST",
       "path": "/api/observability/canary/reset",
-      "source": "src/routes/canary.ts:368"
+      "source": "src/routes/canary.ts:400"
     },
     {
       "method": "POST",
       "path": "/api/observability/canary/start",
-      "source": "src/routes/canary.ts:333"
+      "source": "src/routes/canary.ts:365"
     },
     {
       "method": "GET",
       "path": "/api/observability/canary/weight",
-      "source": "src/routes/canary.ts:266"
+      "source": "src/routes/canary.ts:298"
     },
     {
       "method": "PUT",
       "path": "/api/observability/canary/weight",
-      "source": "src/routes/canary.ts:279"
+      "source": "src/routes/canary.ts:311"
     },
     {
       "method": "GET",
@@ -1688,107 +1688,107 @@
     {
       "method": "GET",
       "path": "/api/observability/harness/cases",
-      "source": "src/routes/harness.ts:422"
+      "source": "src/routes/harness.ts:444"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/cases",
-      "source": "src/routes/harness.ts:483"
+      "source": "src/routes/harness.ts:505"
     },
     {
       "method": "DELETE",
       "path": "/api/observability/harness/cases/:id",
-      "source": "src/routes/harness.ts:640"
+      "source": "src/routes/harness.ts:662"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/cases/:id",
-      "source": "src/routes/harness.ts:442"
+      "source": "src/routes/harness.ts:464"
     },
     {
       "method": "PATCH",
       "path": "/api/observability/harness/cases/:id",
-      "source": "src/routes/harness.ts:558"
+      "source": "src/routes/harness.ts:580"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/coverage",
-      "source": "src/routes/harness.ts:1133"
+      "source": "src/routes/harness.ts:1179"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/promote",
-      "source": "src/routes/harness.ts:1500"
+      "source": "src/routes/harness.ts:1546"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/promoted-versions",
-      "source": "src/routes/harness.ts:1610"
+      "source": "src/routes/harness.ts:1656"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/results/:invocationId/rejudge",
-      "source": "src/routes/harness.ts:1094"
+      "source": "src/routes/harness.ts:1126"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs",
-      "source": "src/routes/harness.ts:761"
+      "source": "src/routes/harness.ts:793"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/runs",
-      "source": "src/routes/harness.ts:670"
+      "source": "src/routes/harness.ts:692"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs/:id",
-      "source": "src/routes/harness.ts:784"
+      "source": "src/routes/harness.ts:816"
     },
     {
       "method": "PATCH",
       "path": "/api/observability/harness/runs/:id",
-      "source": "src/routes/harness.ts:1005"
+      "source": "src/routes/harness.ts:1037"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/runs/:id/execute",
-      "source": "src/routes/harness.ts:729"
+      "source": "src/routes/harness.ts:751"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs/:id/status",
-      "source": "src/routes/harness.ts:842"
+      "source": "src/routes/harness.ts:874"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/runs/:runId/results",
-      "source": "src/routes/harness.ts:903"
+      "source": "src/routes/harness.ts:935"
     },
     {
       "method": "GET",
       "path": "/api/observability/harness/runs/:runIdA/compare/:runIdB",
-      "source": "src/routes/harness.ts:1365"
+      "source": "src/routes/harness.ts:1411"
     },
     {
       "method": "POST",
       "path": "/api/observability/harness/trace",
-      "source": "src/routes/harness.ts:327"
+      "source": "src/routes/harness.ts:336"
     },
     {
       "method": "GET",
       "path": "/api/observability/invocations/:invocationId",
-      "source": "src/routes/invocations.ts:365"
+      "source": "src/routes/invocations.ts:370"
     },
     {
       "method": "POST",
       "path": "/api/observability/invocations/:invocationId/replay",
-      "source": "src/routes/invocations.ts:698"
+      "source": "src/routes/invocations.ts:754"
     },
     {
       "method": "GET",
       "path": "/api/observability/invocations/search",
-      "source": "src/routes/invocations.ts:121"
+      "source": "src/routes/invocations.ts:126"
     },
     {
       "method": "GET",

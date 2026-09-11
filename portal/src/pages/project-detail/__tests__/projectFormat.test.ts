@@ -375,3 +375,13 @@ test('junk timestamps are skipped rather than throwing or landing on NaN', () =>
   const b = activityBuckets([{ startedAt: 'not a date', costUsd: 5 }], [], 3, T);
   assert.equal(b.totals.runs, 0);
 });
+
+
+// Same `+00` trap as the bots pages: parseTs feeds run selection and the
+// activity sparkline, so an unparseable stamp silently emptied both.
+test('parseTs accepts a Postgres `+00` stamp, a naive one, and plain ISO', () => {
+  assert.equal(parseTs('2026-09-08 08:19:23+00'), Date.parse('2026-09-08T08:19:23Z'));
+  assert.equal(parseTs('2026-09-08 08:19:23'), Date.parse('2026-09-08T08:19:23Z'));
+  assert.equal(parseTs('2026-09-08T08:19:23Z'), Date.parse('2026-09-08T08:19:23Z'));
+  assert.equal(Number.isNaN(parseTs('not a date')), true);
+});

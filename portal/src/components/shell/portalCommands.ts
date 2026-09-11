@@ -114,6 +114,7 @@ const PAGES: PageEntry[] = [
   { label: 'Runs',               hint: 'Last 50 agent calls',                 path: '/admin/observability/invocations',            tenant: 'admin',  group: 'Operate', roles: PLATFORM },
   { label: 'Invocations Search', hint: 'Triage by prompt / agent / score',    path: '/admin/observability/invocations/search',     tenant: 'admin',  group: 'Operate', roles: PLATFORM },
   { label: 'Capability Events',  hint: 'Browser & code-interpreter events',   path: '/admin/observability/capability-events',      tenant: 'admin',  group: 'Operate', roles: PLATFORM },
+  { label: 'Tool Calls',         hint: 'Per-tool latency, volume, failures',  path: '/admin/observability/tools',                  tenant: 'admin',  group: 'Operate', roles: PLATFORM },
   { label: 'Agent Metrics',      hint: 'Per-agent stats',                     path: '/admin/observability/agents',                 tenant: 'admin',  group: 'Operate', roles: PLATFORM },
   { label: 'Sessions',           hint: 'Chat threads',                        path: '/admin/observability/sessions',               tenant: 'admin',  group: 'Operate', roles: PLATFORM },
   { label: 'Authz Log',          hint: 'Live AVP / Cedar decisions',          path: '/admin/observability/authz',                  tenant: 'admin',  group: 'Operate', roles: PLATFORM },

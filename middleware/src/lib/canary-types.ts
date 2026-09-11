@@ -32,15 +32,22 @@ export type CanaryEvent =
   | {
       type: 'judge_score';
       request_id: string;
-      scores: {
-        helpfulness: number;
-        factuality: number;
-        tone: number;
-        conciseness: number;
-      };
+      /**
+       * Score per rubric dimension, 0–1, keyed by the operator's own rubric
+       * keys (`/iq/evaluations`) — which is why this is a record rather than
+       * the four fixed fields it used to be. A dimension the judge ABSTAINED
+       * on is ABSENT, never zero: the offline reader
+       * (`mock/answer-check.ts`) cannot hear register, so it omits `tone`
+       * rather than award it marks, and `weightedComposite` renormalises over
+       * the keys it was given. "Not measured" and "measured and bad" are
+       * different claims and a zero would assert the wrong one.
+       */
+      scores: Record<string, number>;
       composite: number;
       /** composite×10 vs the configured fail threshold (judge-config.ts). */
       pass?: boolean;
+      /** Set only when a model did not do the scoring — e.g. the offline reader. */
+      judged_by?: string;
       ts: string;
     }
   | {
