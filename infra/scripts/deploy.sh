@@ -167,9 +167,12 @@ echo "── Checking for orphaned ECR repositories ──"
 # from this list survives a teardown, and its stack then fails to create with
 # "Resource of type 'AWS::ECR::Repository' ... already exists" — which is how
 # OrgIQ-MiddlewareService blocked a rebuild here, three stacks from the end.
-# Repos a stack CREATES. A leftover one blocks its stack from creating with
-# "Resource of type 'AWS::ECR::Repository' ... already exists", which is how
-# OrgIQ-MiddlewareService blocked a rebuild here three stacks from the end.
+#
+# Keep this in step with the repos AgentCoreRuntimeStack actually creates. The
+# two assessment agents were absent for exactly the reason the comment above
+# warns about — the list was written when there were six agents and did not
+# grow when the fleet did, so an orphaned orgiq-assessment-* repo would have
+# sailed past the sweep and failed OrgIQ-AgentCoreRuntime on create.
 ECR_REPOS=(
   "${PREFIX}-supervisor"
   "${PREFIX}-search"
@@ -177,6 +180,8 @@ ECR_REPOS=(
   "${PREFIX}-advisor"
   "${PREFIX}-ingestion"
   "${PREFIX}-graph-builder"
+  "${PREFIX}-assessment-scorer"
+  "${PREFIX}-assessment-drafter"
   "${PREFIX}-agent-base"
   "${PREFIX}-devbox"
   "${PREFIX}-middleware"

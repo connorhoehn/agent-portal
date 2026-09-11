@@ -185,7 +185,7 @@ const agentCoreCapabilities = new AgentCoreCapabilitiesStack(app, 'OrgIQ-AgentCo
 });
 
 // -------------------------------------------------------------------
-// Stack 10: AgentCore Runtime (6 agent runtimes)
+// Stack 10: AgentCore Runtime (8 agent runtimes — 6 OrgIQ + 2 assessment)
 // -------------------------------------------------------------------
 // Use Fn.importValue with stable exportNames to avoid CDK auto-generated hash-based
 // exports (ExportsOutputFnGetAtt...) whose hashes change when the runtime stack template
@@ -230,7 +230,7 @@ const agentCoreRuntime = new AgentCoreRuntimeStack(app, 'OrgIQ-AgentCoreRuntime'
   approvalsRequestSecret: app.node.tryGetContext('approvalsRequestSecret') as string | undefined,
   harnessTraceSecret: app.node.tryGetContext('harnessTraceSecret') as string | undefined,
   assessmentRunCompleteSecret: app.node.tryGetContext('assessmentRunCompleteSecret') as string | undefined,
-  description: 'OrgIQ AgentCore Runtime: 6 agent runtimes with lifecycle and endpoint config',
+  description: 'OrgIQ AgentCore Runtime: 8 agent runtimes with lifecycle and endpoint config',
 });
 agentCoreRuntime.addDependency(agents);
 agentCoreRuntime.addDependency(agentCoreMemory);
