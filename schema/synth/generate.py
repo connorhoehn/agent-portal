@@ -13,6 +13,7 @@ import json
 import logging
 import sys
 import time
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -45,6 +46,25 @@ log = logging.getLogger(__name__)
 
 STAGE_DIR = SYNTH_DIR / "staged"
 STAGE_DIR.mkdir(exist_ok=True)
+
+# The doc types this pipeline generates — one per `plan_*` planner below, and the
+# single source of truth for what `load_staged()` is willing to load.
+#
+# `staged/` is gitignored scratch that accumulates across runs, so it outlives
+# the code that wrote it. A retired tenant's generator was deleted while its 46
+# `news_article` JSONs stayed on disk, and because `load_staged()` used to glob
+# the directory blind, every subsequent `load` re-uploaded them to S3, re-upserted
+# them into `documents`, and re-indexed them into the knowledge base — press
+# releases outranking the authoritative ADRs on the very queries this product
+# answers. Filtering on this tuple means an orphaned artifact stays inert: no
+# generator, no load. Adding a doc type means adding a planner AND a name here.
+DOC_TYPES: tuple[str, ...] = (
+    "adr",
+    "postmortem",
+    "perf_review",
+    "slack_thread",
+    "all_hands",
+)
 
 
 @dataclass
@@ -448,8 +468,26 @@ def _stage(doc: LoadableDoc) -> None:
 
 
 def load_staged() -> list[LoadableDoc]:
-    """Read every JSON under staged/ as a LoadableDoc — used by the load cmd."""
-    return [
-        LoadableDoc(**json.loads(p.read_text()))
-        for p in sorted(STAGE_DIR.glob("*.json"))
-    ]
+    """Read the staged JSON for every live doc type as a LoadableDoc.
+
+    Docs whose `doc_type` is not in DOC_TYPES are skipped and counted, not
+    loaded — see the note on DOC_TYPES for why the directory is not trusted on
+    its own. The skip is logged at WARNING because a non-empty count means
+    there is scratch on disk that no generator claims any more.
+    """
+    docs: list[LoadableDoc] = []
+    skipped: Counter[str] = Counter()
+    for p in sorted(STAGE_DIR.glob("*.json")):
+        doc = LoadableDoc(**json.loads(p.read_text()))
+        if doc.doc_type not in DOC_TYPES:
+            skipped[doc.doc_type or "<none>"] += 1
+            continue
+        docs.append(doc)
+    if skipped:
+        detail = ", ".join(f"{n}× {t}" for t, n in sorted(skipped.items()))
+        log.warning(
+            "load_staged: skipped %d staged doc(s) of retired type(s) (%s) — "
+            "no generator produces these; they will not be loaded or indexed",
+            sum(skipped.values()), detail,
+        )
+    return docs

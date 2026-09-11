@@ -75,5 +75,15 @@ class SynthConfig:
 
     s3_internal_prefix: str = "synth/internal/"
 
+    # The `knowledge_bases.slug` every corpus doc is attributed to.
+    #
+    # `documents.kb_registry_slug` is a nullable FK to that registry, and the
+    # loader used not to write it at all — so all 157 corpus docs sat with a
+    # NULL slug while the row that describes their knowledge base sat beside
+    # them, unlinked. Nothing joined the two, which is why a document could be
+    # indexed in Bedrock and still look unattached to any knowledge base from
+    # the admin surface. The CDK-provisioned KB is the `default` row.
+    kb_registry_slug: str = os.environ.get("SYNTH_KB_REGISTRY_SLUG", "default")
+
 
 CONFIG = SynthConfig()

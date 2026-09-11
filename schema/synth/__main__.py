@@ -57,11 +57,16 @@ def _load_graph(snapshot: str | None) -> dict:
     return aurora.fetch_seed_graph()
 
 
-DOC_TYPES = ["adr", "postmortem", "perf_review", "slack_thread", "all_hands"]
+def _doc_types() -> list[str]:
+    """The live doc types, from generate.DOC_TYPES — imported lazily because
+    `generate` pulls in botocore and this module is imported to parse args."""
+    from .generate import DOC_TYPES
+    return list(DOC_TYPES)
 
 
 def cmd_docs(args) -> int:
     from . import generate, personas
+    DOC_TYPES = _doc_types()
     graph = _load_graph(args.snapshot)
     personas_list = personas.load_personas()
     personas_by_pid = {p.person_id: p.model_dump() for p in personas_list}
@@ -230,7 +235,7 @@ SUBCOMMANDS = {
     "snapshot": (cmd_snapshot, lambda p: p.add_argument("--out", default="schema/synth/seed-graph.json")),
     "personas": (cmd_personas, lambda p: p.add_argument("--snapshot", help="Read seed graph from this JSON instead of Aurora")),
     "docs":     (cmd_docs,     lambda p: (
-        p.add_argument("--type", default="all", choices=["all"] + DOC_TYPES),
+        p.add_argument("--type", default="all", choices=["all"] + _doc_types()),
         p.add_argument("--snapshot", help="Read seed graph from this JSON instead of Aurora"),
     )),
     "stats":    (cmd_stats,    lambda p: None),
