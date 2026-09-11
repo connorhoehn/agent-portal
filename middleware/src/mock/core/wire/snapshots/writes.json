@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-11T00:12:30.968Z",
-  "serverHandlerSha": "40b16737a2aeda33f46771b3be88c6f7317cb0e3b1dc0d60d6a9fc3d154c8639",
+  "capturedAt": "2026-09-11T17:53:12.782Z",
+  "serverHandlerSha": "e268b5fe1d8eda0839cd56bf1832c90d87e217c0f4e1c88080ec243be661a7f1",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -682,10 +682,15 @@
       }
     },
     "POST /api/admin/kb-registry/:id/sync": {
-      "refused": {
-        "rule": "spends",
-        "reason": "Reaches a real cloud resource IN EVERY CONFIGURATION: a Bedrock model, an AgentCore runtime, a devbox microVM, S3, SSM, the RDS Data API, or an outbound fetch, with no mock branch above it. Replaying it costs money or mutates something outside this process, neither of which a snapshot script gets to do. A route that would spend but whose provider the serving process INTERCEPTS is a different question and a different rule — see `not-intercepted`, which asks the server rather than assuming; this one is for routes no configuration makes safe. Here: calls Bedrock Agent StartIngestionJob directly from the handler."
-      }
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "jobId": "string",
+        "ok": "boolean"
+      },
+      "values": {},
+      "sent": []
     },
     "POST /api/admin/kb-registry/reconcile/adopt": {
       "skipped": "no body: `kbId` is a live Bedrock knowledge-base id. Nothing offline enumerates one — GET /reconcile does not surface live AWS ids under the mock providers — and a made-up id would prove nothing."

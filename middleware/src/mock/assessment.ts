@@ -6250,7 +6250,26 @@ const seedSubmissions = (): Record<string, Record<string, SubmissionEnvelope>> =
     "is_primary_contact": true
    },
    "submitted_at": "8/20/2026 13:26",
-   "ingested_at": daysAgo(14),
+   // daysAgo(13), not daysAgo(14), and the day matters more than it looks.
+   //
+   // TEAM-002's dimension history is stamped daysAgo(14) throughout, so this
+   // envelope used to be ingested at the SAME nominal instant as the scoring
+   // pass that would mark it processed. `isSubmissionProcessed` compares them
+   // with `>=`, and each stamp is sampled independently when its own fixture
+   // materializes — so which side of the boundary this landed on was decided by
+   // milliseconds of fixture-materialization order, not by the story. The wire
+   // capture caught it: `envelopes[].status` held "committed" in one run and
+   // dropped it in the next with nothing in the repo changed between them.
+   //
+   // Deciding it also fills a real gap. TEAM-005's envelope already covers
+   // "processed" strictly (ingested daysAgo(6), scored daysAgo(5)), so with this
+   // one processed too, `committed` appeared NOWHERE on the wire — the state a
+   // resubmission sits in while it waits to be rescored had no fixture, which is
+   // exactly the recency case `isSubmissionProcessed` was written for and the one
+   // the DEFECTS.md filing was about. r3 supersedes r2 and arrived a day after
+   // the team was last scored: the team reads ASSESSED, its latest submission
+   // reads Committed, and someone has to look at it. That is the honest world.
+   "ingested_at": daysAgo(13),
    "assessment_date": "8/20/2026",
    "self_certified": true,
    "supersedes": "sub-20260810T091500Z-form5-jordan-lee-r2",

@@ -28,6 +28,15 @@
  * The one clock. Fixtures express age relative to `now()` at READ time, so a
  * module that loads at 23:59 and is read at 00:01 still reports "today"
  * correctly, and a test can freeze the instant it cares about.
+ *
+ * Read time means each call samples separately, so EQUAL AGES ARE NOT EQUAL
+ * INSTANTS and two of them are not safely comparable. When a rule reads one
+ * stamp against another — "was this scored after it arrived?" — express the
+ * order as a gap, not as the same age in two fixtures: `daysAgo(14)` in one and
+ * `daysAgo(14)` in the other differ by however long apart the two fixtures
+ * materialized, and a `>=` between them is decided by that. It cost a submission
+ * envelope that read "committed" in one process and "processed" in the next with
+ * nothing changed, and it churned the wire snapshot rather than failing a test.
  */
 export interface MockClock {
   now(): Date;

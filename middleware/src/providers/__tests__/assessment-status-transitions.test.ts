@@ -245,3 +245,40 @@ describe('applyScores derives team.status from dimension scores (never a hand-se
     expect(M.teamStatus(TEAM_ID)).toBe('ASSESSED');
   });
 });
+
+// The tests above build their own teams, so none of them says anything about the
+// world a developer running `dev:mock` actually opens. That world decided one of
+// these statuses by a coin flip.
+describe('the seeded submissions cover both settled statuses, and not by a race', () => {
+  it('shows one committed envelope awaiting scoring and one already processed', async () => {
+    const listing = await provider.listSubmissions();
+    const statuses = new Set(listing.envelopes.map((e) => e.status));
+
+    // TEAM-002's r3 revision arrived AFTER the team's last scoring pass, so it
+    // waits. Every seeded dimension for that team is stamped daysAgo(14) and the
+    // envelope used to be daysAgo(14) too — `isSubmissionProcessed` compares the
+    // two with `>=`, and each stamp is sampled when its own fixture materializes,
+    // so this row flipped between "committed" and "processed" run to run with
+    // nothing changed. The wire snapshot caught it churning.
+    const awaiting = listing.envelopes.find(
+      (e) => e.envelope_id === 'sub-20260810T091500Z-form5-jordan-lee-r3',
+    );
+    expect(awaiting?.status).toBe('committed');
+    expect(Date.parse(awaiting!.ingested_at))
+      .toBeGreaterThan(Date.parse(M.scoresFor('TEAM-002')!['1']!.history.at(-1)!.changed_at));
+
+    // And TEAM-005's, scored a day after it landed, is the processed case — so
+    // both states have a fixture and neither depends on the other.
+    const done = listing.envelopes.find(
+      (e) => e.envelope_id === 'sub-20260819T134500Z-form9-dana-whitfield',
+    );
+    expect(done?.status).toBe('processed');
+
+    // The filter pills on /assessment/submissions are only reachable if the
+    // vocabulary is actually present offline.
+    expect(statuses).toContain('committed');
+    expect(statuses).toContain('processed');
+    expect(statuses).toContain('staged');
+    expect(statuses).toContain('superseded');
+  });
+});

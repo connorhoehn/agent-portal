@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-11T00:12:27.041Z",
-  "serverHandlerSha": "40b16737a2aeda33f46771b3be88c6f7317cb0e3b1dc0d60d6a9fc3d154c8639",
+  "capturedAt": "2026-09-11T17:53:12.128Z",
+  "serverHandlerSha": "e268b5fe1d8eda0839cd56bf1832c90d87e217c0f4e1c88080ec243be661a7f1",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -342,11 +342,28 @@
       "status": 200,
       "shape": {
         "$": "object",
-        "degraded": "boolean",
-        "error": "string",
-        "jobs": "array"
+        "jobs": "array",
+        "jobs[]": "object",
+        "jobs[].dataSourceId": "string",
+        "jobs[].description": "string",
+        "jobs[].documentsDeleted": "number",
+        "jobs[].documentsFailed": "number",
+        "jobs[].documentsIndexed": "number",
+        "jobs[].documentsScanned": "number",
+        "jobs[].durationMs": "number",
+        "jobs[].failureReasons": "array",
+        "jobs[].failureReasons[]": "string",
+        "jobs[].jobId": "string",
+        "jobs[].startedAt": "string",
+        "jobs[].status": "string",
+        "jobs[].updatedAt": "string"
       },
-      "values": {}
+      "values": {
+        "jobs[].status": [
+          "COMPLETE",
+          "FAILED"
+        ]
+      }
     },
     "GET /api/admin/kb-registry/:id/landing-zone/files": {
       "persona": "orgiq/admin",
@@ -426,6 +443,7 @@
         "entries[].registryKbId": "string",
         "entries[].registryStatus": "string",
         "entries[].slug": "string",
+        "entries[].syncStateKnown": "boolean",
         "entries[].tenant": "string"
       },
       "values": {
@@ -2153,7 +2171,7 @@
       },
       "values": {
         "kind": [
-          "decision"
+          "worked"
         ],
         "level": [
           "L0"
@@ -3077,8 +3095,7 @@
       "values": {
         "jobs[].status": [
           "COMPLETE",
-          "FAILED",
-          "IN_PROGRESS"
+          "FAILED"
         ]
       }
     },
@@ -3167,8 +3184,7 @@
       "values": {
         "recentJobs[].status": [
           "COMPLETE",
-          "FAILED",
-          "IN_PROGRESS"
+          "FAILED"
         ]
       }
     },
@@ -3283,8 +3299,7 @@
       },
       "values": {
         "consults[].status": [
-          "expired",
-          "pending"
+          "expired"
         ]
       }
     },
@@ -3309,7 +3324,7 @@
       },
       "values": {
         "consult.status": [
-          "pending"
+          "expired"
         ]
       }
     },
@@ -3612,35 +3627,12 @@
         "nodes[].presence.lastSeenAt": "string",
         "nodes[].presence.nodeId": "string",
         "nodes[].presence.sessions": "array",
-        "nodes[].presence.sessions[]": "object",
-        "nodes[].presence.sessions[].branch": "string",
-        "nodes[].presence.sessions[].contextUsed": "number",
-        "nodes[].presence.sessions[].harness": "string",
-        "nodes[].presence.sessions[].intent": "string",
-        "nodes[].presence.sessions[].lastSeenAt": "string",
-        "nodes[].presence.sessions[].memory": "object",
-        "nodes[].presence.sessions[].memory.lastPushAt": "number",
-        "nodes[].presence.sessions[].memory.mode": "string",
-        "nodes[].presence.sessions[].memory.pullCursorAgeS": "number",
-        "nodes[].presence.sessions[].model": "string",
-        "nodes[].presence.sessions[].modelProvider": "string",
-        "nodes[].presence.sessions[].projectId": "string",
-        "nodes[].presence.sessions[].repo": "string",
-        "nodes[].presence.sessions[].sessionId": "string",
-        "nodes[].presence.sessions[].startedAt": "number",
-        "nodes[].presence.sessions[].touching": "array",
-        "nodes[].presence.sessions[].touching[]": "string",
-        "nodes[].presence.sessions[].worktree": "string",
         "nodes[].presence.status": "string",
         "nodes[].revokedAt": "null"
       },
       "values": {
-        "nodes[].presence.sessions[].memory.mode": [
-          "synced"
-        ],
         "nodes[].presence.status": [
-          "offline",
-          "stale"
+          "offline"
         ]
       }
     },
@@ -3670,8 +3662,7 @@
       "values": {
         "nodes[].presence.status": [
           "connected",
-          "offline",
-          "stale"
+          "offline"
         ]
       }
     },
@@ -6045,8 +6036,7 @@
     "mode": {
       "open": false,
       "values": [
-        "sim",
-        "synced"
+        "sim"
       ]
     },
     "outcome": {
