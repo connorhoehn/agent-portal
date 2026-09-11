@@ -37,6 +37,7 @@ import { getWorkItem, updateWorkItem, addWorkItemComment, type WorkItem } from '
 import {
   enqueueJob, claimJob, markRunning, completeJob, cancelJob,
 } from '../providers/agent-jobs.js';
+import { asModelProvider } from './run-cost.js';
 import { dispatchGovernedRun } from './sdlc-pipeline.js';
 import { runDevboxShell } from './project-runner.js';
 import { resolveDevboxArn, devboxDataClient } from './devbox-arn.js';
@@ -1445,6 +1446,10 @@ async function settleSimulatedRun(input: {
   await finalizeBotRun(input.runId, {
     status: 'done',
     costUsd: SIMULATED_RESULT.costUsd,
+    // The provider column's third value earns its place here: this run's cost is
+    // a plausible fiction (SIMULATED_RESULT), and without a marker saying so it
+    // merges into the same rollup as money that really left the account.
+    modelProvider: 'simulated',
     outcome: { filesChanged: 0, summary },
   });
 }
@@ -1559,8 +1564,14 @@ export async function reconcileBotRuns(): Promise<{ settled: number }> {
   // Queue jobs. awaiting_review counts as done for the bot — the work is
   // finished; what remains is the human decision, which lives on the Work
   // surface. cancelled is terminal too, else the bot_run runs forever.
+  // `result->>'provider'` rides along because the executor is the only thing
+  // that knows what served the run, and by the time reconcile sees the row the
+  // executor is gone. A pull-side worker writes it into the job result; the
+  // in-process dispatcher does not, so a cloud job leaves it NULL rather than
+  // claiming a provenance nobody recorded.
   const jobBacked = await exec(
     `SELECT br.id, j.status AS job_status, (j.result->>'costUsd')::float8 AS cost_usd,
+            j.result->>'provider' AS provider,
             b.budget_per_run_usd::float8 AS budget_per_run_usd
        FROM bot_runs br
        JOIN agent_jobs j ON j.id = br.job_id
@@ -1572,11 +1583,17 @@ export async function reconcileBotRuns(): Promise<{ settled: number }> {
     try {
       const jobStatus = toStr(row['job_status']);
       const costUsd = row['cost_usd'] == null ? null : Number(row['cost_usd']);
+      const provider = asModelProvider(row['provider']);
       const budget = row['budget_per_run_usd'] == null ? null : Number(row['budget_per_run_usd']);
+      // A local run's cost is a confident 0, so this comparison is `0 > budget`
+      // — false for every non-negative budget, which is right: no money left the
+      // account, so no per-run cap was exceeded. The flag would otherwise fire
+      // on a bot whose budget is 0 and mark a free run as over its cap.
       const overRunBudget = budget != null && costUsd != null && costUsd > budget;
       await finalizeBotRun(toStr(row['id']), {
         status: jobStatus === 'done' || jobStatus === 'awaiting_review' ? 'done' : 'failed',
         costUsd,
+        ...(provider ? { modelProvider: provider } : {}),
         outcome: {
           ...(jobStatus === 'awaiting_review' ? { awaitingReview: true } : {}),
           ...(overRunBudget ? { overRunBudget: true } : {}),

@@ -32,8 +32,21 @@ import {
 import { dispatcherEvents, dispatchOnce, busyBoxes } from '../lib/job-dispatcher.js';
 import { analyzeDocumentLinks, analyzeDocumentFindings } from '../providers/doc-linker.js';
 import { listConsults } from '../providers/lab.js';
+import { LOCAL_JOB_KINDS } from '../lib/local-work.js';
 
 export const workRouter = Router();
+
+/**
+ * The kinds a person may put on the queue.
+ *
+ * `devbox:task` is the cloud fleet's kind and the default. The `local:*` kinds
+ * are claimable ONLY by a paired workstation that registered for them, so
+ * queueing one is a deliberate choice to spend a machine's own capacity instead
+ * of an initiative's budget — which is why they are offered here rather than
+ * being reachable only from a script. What is NOT offered is a free-form string:
+ * see the note at the call site.
+ */
+const QUEUEABLE_KINDS: readonly string[] = ['devbox:task', ...LOCAL_JOB_KINDS];
 
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
@@ -219,9 +232,20 @@ workRouter.post('/jobs', requireAction('ManageDevbox'), asyncHandler(async (req,
   const prompt = (body.prompt ?? '').trim();
   if (!title) throw new ValidationError('title is required');
   if (!prompt) throw new ValidationError('prompt is required — it is what the worker runs');
+  // Validated rather than passed through, because a kind nothing claims is a row
+  // that sits in `queued` forever looking like pending work. Two executors read
+  // this table and each takes a disjoint set: the in-process dispatcher claims
+  // everything EXCEPT `local:*` (providers/agent-jobs.ts `claimNextJob`), and a
+  // paired workstation claims only `local:*` and only what it registered for. A
+  // typo'd kind belongs to neither, and there is nothing downstream that would
+  // ever report it as stuck.
+  const kind = (body.kind ?? 'devbox:task').trim();
+  if (!QUEUEABLE_KINDS.includes(kind)) {
+    throw new ValidationError(`kind must be one of ${QUEUEABLE_KINDS.join(', ')}`);
+  }
 
   const job = await enqueueJob({
-    kind: body.kind ?? 'devbox:task',
+    kind,
     title,
     payload: {
       prompt,

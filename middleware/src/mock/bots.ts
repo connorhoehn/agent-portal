@@ -75,6 +75,13 @@ function genRun(botId: string, seq: number, startedAtIso: string, costUsd: numbe
     workItemId: null,
     status: 'done',
     costUsd,
+    // Null, not 'bedrock', because schema/seed_program.sql does not write the
+    // column and this fixture mirrors that seed. These rows are exactly the
+    // history the migration deliberately leaves un-backfilled, so offline they
+    // must read the same way they read on the cluster: cost recorded, provenance
+    // not. Typing 'bedrock' here would make the one state the column exists to
+    // expose — "we do not know what served this" — unreachable in dev:mock.
+    modelProvider: null,
     startedAt: startedAt.toISOString(),
     finishedAt: finishedAt.toISOString(),
     outcome: { reason: 'scheduled maintenance' },

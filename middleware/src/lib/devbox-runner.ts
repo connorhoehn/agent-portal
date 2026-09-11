@@ -10,6 +10,7 @@ import {
   BedrockAgentCoreClient,
   InvokeAgentRuntimeCommand as InvokeRuntime,
 } from '@aws-sdk/client-bedrock-agentcore';
+import { parseReportedCost, resultEventError, resultEventSucceeded } from './run-cost.js';
 
 /**
  * One line of what the worker actually did.
@@ -45,7 +46,29 @@ export interface DevboxRunOutcome {
   summary: string;
   turns: number;
   durationMs: number;
-  costUsd: number;
+  /**
+   * What the run cost, or `null` when no trustworthy figure arrived.
+   *
+   * `null`, never `0`. This used to be `Number(ev['total_cost_usd'] ?? 0)`,
+   * which turned "the result event carried no cost" into a countable zero —
+   * the exact value `lib/pricing.ts` spends thirty lines arguing must never be
+   * recorded, because a 0 beside real token counts reads as *free* rather than
+   * as unpriced. It spends nobody's envelope and trips none of the three
+   * brakes in `bot-runner.ts`.
+   *
+   * Every consumer already handles null: `providers/bots.ts` writes
+   * `cost_usd = COALESCE(:cost, cost_usd)`, `providers/budgets.ts` filters on
+   * `cost_usd IS NOT NULL`, and `agent_run_attribution_schema.sql` states the
+   * doctrine outright — degrade to "burn unknown", never to "burn zero".
+   *
+   * A run served by a LOCAL model reports a figure that is present, non-zero
+   * and fictional (Claude Code prices it from its own table at Sonnet rates for
+   * tokens that cost nothing). That is not fixable here — this module only ever
+   * sees AgentCore runs, so what it reports is genuinely billed. `lib/run-cost.ts`
+   * owns that rule, and both parsers below live there so the fleet's independent
+   * copy cannot drift from this one again.
+   */
+  costUsd: number | null;
   toolCalls: number;
   exitCode: number | null;
   error?: string;
@@ -78,7 +101,7 @@ export interface DevboxRunOptions {
 export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxRunOutcome> {
   const started = Date.now();
   const outcome: DevboxRunOutcome = {
-    ok: false, summary: '', turns: 0, durationMs: 0, costUsd: 0, toolCalls: 0, exitCode: null,
+    ok: false, summary: '', turns: 0, durationMs: 0, costUsd: null, toolCalls: 0, exitCode: null,
     transcript: [],
   };
 
@@ -155,10 +178,16 @@ export async function executeDevboxTask(opts: DevboxRunOptions): Promise<DevboxR
           }
         } else if (type === 'result') {
           outcome.turns = Number(ev['num_turns'] ?? 0);
-          outcome.costUsd = Number(ev['total_cost_usd'] ?? 0);
+          outcome.costUsd = parseReportedCost(ev);
           if (typeof ev['result'] === 'string') outcome.summary = ev['result'];
-          // subtype 'success' is Claude Code's own verdict for the run.
-          outcome.ok = String(ev['subtype'] ?? '') === 'success';
+          outcome.ok = resultEventSucceeded(ev);
+          if (!outcome.ok) {
+            const err = resultEventError(ev);
+            if (err) {
+              outcome.error ??= err;
+              record({ t: 'error', detail: err, ts });
+            }
+          }
         } else if (type === 'devbox_end') {
           outcome.exitCode = (ev['exit_code'] ?? null) as number | null;
           if (outcome.exitCode !== 0 && outcome.exitCode !== null) {

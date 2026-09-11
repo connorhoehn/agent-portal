@@ -27,6 +27,9 @@ import {
   mockUnlinkAgentProject,
 } from '../mock/agent-projects.js';
 import { config } from '../config.js';
+import { hasColumns } from './column-probe.js';
+// One vocabulary for "who served this inference", shared with providers/bots.ts.
+import type { ModelProvider } from '../lib/run-cost.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
@@ -329,6 +332,19 @@ export async function startRun(input: {
 export async function finishRun(id: string, outcome: {
   status: 'done' | 'failed'; filesChanged?: number | null; diffSummary?: string | null; error?: string | null;
   costUsd?: number | null;
+  /**
+   * What served the inference. See lib/run-cost.ts: `cost_usd` on its own cannot
+   * distinguish "cost nothing because it ran on hardware we own" from "cost
+   * unknown because nothing reported a figure", and this run feeds the cost
+   * ESTIMATOR (`runPercentiles`) — so an unmarked free run would drag every
+   * future forecast toward zero.
+   *
+   * Omitted leaves the column alone. Dropped silently on a cluster without
+   * schema/local_compute_worker_schema.sql, the same way `dispatchedBy` is on a
+   * cluster without the attribution migration: a run that cannot record its
+   * provenance is still a run worth recording.
+   */
+  modelProvider?: ModelProvider | null;
 }): Promise<void> {
   // `duration_ms` is not written here in mock mode and is not stored in the
   // fixture: the row carries `started_at` and `finished_at`, and the duration
@@ -344,6 +360,14 @@ export async function finishRun(id: string, outcome: {
     });
     return;
   }
+  // The provider column joins the statement only when there is one to write and
+  // the cluster has it — every other finish keeps the previous statement
+  // byte-for-byte. providers/column-probe.ts explains why that rule is absolute
+  // here: this runs on the governed-run path that worked before local compute.
+  const provider = outcome.modelProvider != null
+    && await hasColumns('agent_project_runs', ['model_provider'])
+    ? outcome.modelProvider
+    : null;
   await exec(
     `UPDATE agent_project_runs
         SET status = :status,
@@ -352,10 +376,12 @@ export async function finishRun(id: string, outcome: {
             files_changed = :files,
             diff_summary = :diff,
             error = :err,
+            ${provider ? 'model_provider = :provider,' : ''}
             cost_usd = :cost
       WHERE id = :id::uuid`,
     [
       s('status', outcome.status), s('id', id),
+      ...(provider ? [s('provider', provider)] : []),
       outcome.filesChanged == null ? nul('files') : { name: 'files', value: { longValue: outcome.filesChanged } },
       maybe('diff', outcome.diffSummary ?? null),
       maybe('err', outcome.error ?? null),

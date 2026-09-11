@@ -16,6 +16,8 @@
 // and re-adopts boxes if the middleware restarts, so dev-loop restarts don't
 // strand sessions. Promote to Aurora when fleets need to survive deploys.
 
+import { parseReportedCost } from './run-cost.js';
+
 export type BoxStatus = 'idle' | 'running' | 'waiting' | 'stopped' | 'error';
 
 export interface FleetBox {
@@ -47,7 +49,8 @@ export interface FleetBox {
   projectId?: string;
   /** Prompt of the current/last task (truncated). */
   currentTask?: string;
-  lastResult?: { subtype: string; turns: number; durationMs: number; costUsd: number };
+  /** `costUsd` is null when the run reported no figure — see `parseReportedCost`. */
+  lastResult?: { subtype: string; turns: number; durationMs: number; costUsd: number | null };
   /**
    * Dollars charged to this box, summed across every `result` event it has
    * ever produced — lifetime, not per-task, because that is what a cost
@@ -445,17 +448,21 @@ export function appendEvent(id: string, ev: FleetEvent): void {
     s.contextTokens = 0;
     s.box.contextUsed = 0;
   } else if (type === 'result') {
+    // One parser for the reported cost, shared with `lib/devbox-runner.ts`,
+    // which reads the same event on the durable path. This was independently
+    // `Number(ev['total_cost_usd'] ?? 0)` in both places, and only one of them
+    // got fixed the first time.
+    const cost = parseReportedCost(ev);
     s.box.lastResult = {
       subtype: String(ev['subtype'] ?? ''),
       turns: Number(ev['num_turns'] ?? 0),
       durationMs: Number(ev['duration_ms'] ?? 0),
-      costUsd: Number(ev['total_cost_usd'] ?? 0),
+      costUsd: cost,
     };
     // Lifetime spend, summed rather than replaced — a box racks up cost
     // across every run it has ever played, which is the whole point of a
     // cost centre: it bills against the box's life, not its last task.
-    const cost = Number(ev['total_cost_usd'] ?? 0);
-    if (Number.isFinite(cost) && cost > 0) {
+    if (cost !== null && cost > 0) {
       s.box.spendUsd = (s.box.spendUsd ?? 0) + cost;
     }
     if (typeof ev['result'] === 'string') s.lastResultText = ev['result'];

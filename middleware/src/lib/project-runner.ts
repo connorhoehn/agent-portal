@@ -194,6 +194,12 @@ export async function executeProjectRun(req: ProjectRunRequest): Promise<void> {
       // Real spend as the runtime reported it — the estimation engine's whole
       // data supply. Recorded even for failed runs; failures cost money too.
       costUsd: outcome.costUsd,
+      // This path is AgentCore Runtime by construction (it invokes one), so the
+      // provenance is known and worth stating rather than left NULL. Stated at
+      // the call site, never inferred inside the provider: the provider cannot
+      // see which executor called it, and that is exactly the gap that let a
+      // local run's self-reported first-party price look like Bedrock spend.
+      modelProvider: 'bedrock',
     });
 
     // Hand a changed run to governance. Fired only when the tree actually

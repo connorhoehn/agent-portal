@@ -32,6 +32,41 @@ import { localPresence, presenceRowFor, upsertPresenceRow } from '../mock/local-
 
 export type NodePresenceStatus = 'connected' | 'stale' | 'offline';
 
+/**
+ * How a paired workstation appears in `agent_jobs.box_id`.
+ *
+ * The queue's `box_id` is a bare TEXT column with no foreign key — deliberately,
+ * so a non-devbox executor can hold a claim — but everything that walks the
+ * queue assumed a box id names a *microVM* it can invoke, stop and tail through
+ * AgentCore. A local node cannot be any of those things, so the id has to say
+ * which kind it is, and the prefix is that discriminator.
+ *
+ * Three places branch on it, each of which did the wrong thing without it:
+ * `job-dispatcher.ts` (do not adopt it as an idle box, do not push work to it),
+ * `devbox-reaper.ts` (do not try to stop it through an API that has never heard
+ * of it), and the queue's own boot recovery (do not requeue its in-flight work).
+ *
+ * A prefix rather than a column because it travels with the id itself. The value
+ * is read back out of Aurora by code paths that never see the node row, and a
+ * discriminator that requires a join is a discriminator someone will forget.
+ */
+export const LOCAL_BOX_PREFIX = 'local:';
+
+/** The `agent_jobs.box_id` a paired node claims work under. */
+export function localBoxId(nodeId: string): string {
+  return `${LOCAL_BOX_PREFIX}${nodeId}`;
+}
+
+/** Whether a queue `box_id` belongs to a paired workstation rather than a microVM. */
+export function isLocalBoxId(boxId: string | null | undefined): boolean {
+  return typeof boxId === 'string' && boxId.startsWith(LOCAL_BOX_PREFIX);
+}
+
+/** The node id inside a local box id, or null if it is not one. */
+export function nodeIdFromBoxId(boxId: string | null | undefined): string | null {
+  return isLocalBoxId(boxId) ? boxId!.slice(LOCAL_BOX_PREFIX.length) : null;
+}
+
 /** The local memory sidecar's own account of how synced it is. Computed on the
  *  machine (outbox depth, hub cursor age), relayed verbatim — the middleware
  *  has no better source of truth about a laptop's SQLite than the laptop. */

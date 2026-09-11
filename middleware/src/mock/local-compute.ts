@@ -175,6 +175,11 @@ function seededNodes(): ComputeNodeRow[] {
       platform: 'darwin/arm64',
       acceptJobs: false,
       localModels: ['qwen2.5-coder:14b'],
+      // Advertises nothing and holds one job: the state a machine is in after
+      // pairing and before its worker has ever announced capabilities. Paired
+      // with acceptJobs false, this is the "presence only" machine.
+      jobKinds: [],
+      maxConcurrency: 1,
       createdAt: clock.daysAgo(41),
       // A machine that is announcing has a last_seen_at; the route bumps this
       // column and the presence row together on every announce/heartbeat, so
@@ -192,6 +197,11 @@ function seededNodes(): ComputeNodeRow[] {
       // control has both states on screen.
       acceptJobs: true,
       localModels: ['llama3.1:8b', 'nomic-embed-text'],
+      // The one machine that has actually registered a worker, so the claim
+      // path has a node it can legitimately hand work to. Two slots, matching
+      // the reference workstation's llama-server (2 slots, kv_unified).
+      jobKinds: ['local:distill', 'local:consolidate'],
+      maxConcurrency: 2,
       // Paired earlier today — this one IS a day claim, so it takes the clamp
       // that keeps it inside today at 00:05 UTC.
       createdAt: clock.hoursAgo(5, { keepWithinToday: true }),
@@ -206,6 +216,8 @@ function seededNodes(): ComputeNodeRow[] {
       platform: 'darwin/x64',
       acceptJobs: false,
       localModels: [],
+      jobKinds: [],
+      maxConcurrency: 1,
       createdAt: clock.daysAgo(96),
       lastSeenAt: minutesAgo(20),
       revokedAt: null,
@@ -348,6 +360,8 @@ function largeNodes(): ComputeNodeRow[] {
       platform: n % 3 === 0 ? 'linux/x64' : 'darwin/arm64',
       acceptJobs: n % 4 === 0,
       localModels: n % 4 === 0 ? ['llama3.1:8b'] : [],
+      jobKinds: n % 4 === 0 ? ['local:distill'] : [],
+      maxConcurrency: n % 4 === 0 ? 2 : 1,
       createdAt: clock.daysAgo(LARGE_FLEET - i),
       lastSeenAt: minutesAgo(fleetAgeMinutes(n)),
       revokedAt: null,
@@ -465,6 +479,8 @@ function toNode(row: ComputeNodeRow): ComputeNode {
     platform: row.platform,
     acceptJobs: row.acceptJobs,
     localModels: [...row.localModels],
+    jobKinds: [...row.jobKinds],
+    maxConcurrency: row.maxConcurrency,
     createdAt: row.createdAt,
     lastSeenAt: row.lastSeenAt,
     revokedAt: row.revokedAt,
@@ -526,6 +542,29 @@ export function mockRenameNode(id: string, ownerId: string, label: string): Comp
   const row = byId(id);
   if (!row || row.ownerId !== ownerId) return null;
   row.label = label;
+  return toNode(row);
+}
+
+/**
+ * `UPDATE compute_nodes SET local_models, job_kinds, max_concurrency,
+ *  last_seen_at = NOW() WHERE id = :id AND revoked_at IS NULL RETURNING *`.
+ *
+ * Note what it does NOT set: `accept_jobs`. That is the owner's switch, and a
+ * worker process announcing itself must not be able to opt its owner's machine
+ * into the queue. Matching the SQL exactly matters here — the mock is the only
+ * place most people will ever exercise this path.
+ */
+export function mockSetCapabilities(id: string, caps: {
+  localModels: string[];
+  jobKinds: string[];
+  maxConcurrency: number;
+}): ComputeNode | null {
+  const row = byId(id);
+  if (!row || row.revokedAt) return null;
+  row.localModels = [...caps.localModels];
+  row.jobKinds = [...caps.jobKinds];
+  row.maxConcurrency = caps.maxConcurrency;
+  row.lastSeenAt = clock.nowIso();
   return toNode(row);
 }
 
@@ -594,6 +633,8 @@ export function mockClaimPairingCode(
     platform: node.platform,
     acceptJobs: false,
     localModels: [],
+    jobKinds: [],
+    maxConcurrency: 1,
     createdAt: clock.nowIso(),
     lastSeenAt: null,
     revokedAt: null,

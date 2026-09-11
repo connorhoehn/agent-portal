@@ -12,6 +12,12 @@
 import { randomUUID } from 'node:crypto';
 import { exec } from './aurora.js';
 import { config } from '../config.js';
+import { hasColumns } from './column-probe.js';
+// The vocabulary for "who served this inference". Imported rather than
+// re-declared: bot_runs.model_provider and agent_project_runs.model_provider
+// must mean the same three things, and a second copy of the union is how two
+// tables come to disagree about what 'local' costs.
+import type { ModelProvider } from '../lib/run-cost.js';
 // The attribution model of record for "which initiative did this run spend
 // against" (imported, never re-derived — two copies of that predicate is how
 // two surfaces come to disagree about the same dollar).
@@ -102,6 +108,15 @@ export interface BotRun {
   workItemId: string | null;
   status: 'running' | 'done' | 'failed' | 'skipped';
   costUsd: number | null;
+  /**
+   * What served the inference: `bedrock`, `local`, `simulated`.
+   *
+   * Null on every run that predates schema/local_compute_worker_schema.sql, and
+   * deliberately NOT backfilled — see the column comment there. Read it as "not
+   * recorded", never as "bedrock": a `costUsd` of 0 means something entirely
+   * different depending on which of those two it is.
+   */
+  modelProvider: ModelProvider | null;
   startedAt: string;
   finishedAt: string | null;
   outcome: Record<string, unknown>;
@@ -153,6 +168,8 @@ function rowToRun(r: Record<string, unknown>): BotRun {
     workItemId: r['work_item_id'] ? toStr(r['work_item_id']) : null,
     status: toStr(r['status'], 'running') as BotRun['status'],
     costUsd: r['cost_usd'] == null ? null : toNum(r['cost_usd']),
+    // Absent on a pre-migration cluster, exactly like dispatched_by below.
+    modelProvider: r['model_provider'] ? toStr(r['model_provider']) as ModelProvider : null,
     startedAt: toStr(r['started_at']),
     finishedAt: r['finished_at'] ? toStr(r['finished_at']) : null,
     outcome: parseJson<Record<string, unknown>>(r['outcome'], {}),
@@ -862,6 +879,10 @@ export async function createBotRun(input: {
       workItemId: input.workItemId ?? null,
       status,
       costUsd: null,
+      // Unknown at insert, on both paths and on purpose: a run is recorded when
+      // it is dispatched and nothing has served any inference yet. The provider
+      // is written by finalizeBotRun, by whoever actually ran it.
+      modelProvider: null,
       startedAt,
       // Mirrors the INSERT's CASE: a run that never dispatched is finished the
       // moment it is recorded.
@@ -917,6 +938,22 @@ export async function createBotRun(input: {
 export async function finalizeBotRun(id: string, result: {
   status: 'done' | 'failed' | 'skipped';
   costUsd?: number | null;
+  /**
+   * Which kind of inference served the run — `bedrock`, `local`, `simulated`.
+   *
+   * Recorded because `cost_usd` alone cannot answer "why is this run's spend
+   * zero", and the two answers are opposites: a local run is zero because the
+   * electricity was somebody's own, and a cloud run reading zero is a run whose
+   * figure was never reported. Without the column the only way to tell them
+   * apart is to guess, and a rollup that guesses wrong understates the fleet's
+   * real burn. See lib/run-cost.ts for the doctrine and
+   * schema/local_compute_worker_schema.sql for the column.
+   *
+   * Omitted leaves the column alone (NULL on a row that predates the feature),
+   * never defaulted to 'bedrock' — inventing a provenance is the failure this
+   * column exists to prevent.
+   */
+  modelProvider?: ModelProvider | null;
   outcome?: Record<string, unknown>;
 }): Promise<void> {
   if (config.mock.aurora) {
@@ -926,6 +963,7 @@ export async function finalizeBotRun(id: string, result: {
     // COALESCE and `||` respectively: a null cost leaves the recorded one
     // alone, and the outcome merges rather than replaces.
     if (result.costUsd != null) run.costUsd = result.costUsd;
+    if (result.modelProvider != null) run.modelProvider = result.modelProvider;
     run.outcome = { ...run.outcome, ...(result.outcome ?? {}) };
     // NOW() in the UPDATE below; clock.nowIso() here, for the same reason the
     // insert's startedAt is — one clock, so a frozen test freezes both ends of
@@ -934,16 +972,26 @@ export async function finalizeBotRun(id: string, result: {
     return;
   }
   if (!isUuid(id)) return;
+  // The provider column appears in the statement ONLY when there is a provider
+  // to write and the cluster has the column. Every other finalize — which is
+  // every cloud run today — keeps the previous statement byte-for-byte, because
+  // this one runs on the push path that was working before local compute
+  // existed. See providers/column-probe.ts.
+  const provider = result.modelProvider != null && await hasColumns('bot_runs', ['model_provider'])
+    ? result.modelProvider
+    : null;
   await exec(
     `UPDATE bot_runs
         SET status = :status,
             cost_usd = COALESCE(:cost, cost_usd),
+            ${provider ? 'model_provider = :provider,' : ''}
             outcome = COALESCE(outcome, '{}'::jsonb) || :outcome::jsonb,
             finished_at = NOW()
       WHERE id = :id::uuid`,
     [
       s('id', id), s('status', result.status),
       num('cost', result.costUsd ?? null),
+      ...(provider ? [s('provider', provider)] : []),
       s('outcome', JSON.stringify(result.outcome ?? {})),
     ],
   );

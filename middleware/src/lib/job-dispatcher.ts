@@ -20,10 +20,20 @@ import {
   claimNextJob, markRunning, completeJob, reapStaleJobs, listJobs, type AgentJob,
 } from '../providers/agent-jobs.js';
 import { listBoxes, appendEvent, getBox, registerBox } from './devbox-fleet.js';
+import { isLocalBoxId } from './local-compute-fleet.js';
 import { runDevboxTask } from '../routes/devbox.js';
 
 const TICK_MS = Number(process.env['JOB_DISPATCH_INTERVAL_MS'] ?? 10_000);
-const STALE_MINUTES = Number(process.env['JOB_STALE_MINUTES'] ?? 30);
+/**
+ * How long a claim may go quiet before the reaper takes it back.
+ *
+ * Exported because a pull-side worker has to be TOLD this rather than guessing
+ * it: the number is the deadline its heartbeat is racing, and a worker holding a
+ * different figure from the reaper's would either heartbeat too slowly (its work
+ * requeued and re-run while it is still running) or pointlessly often. One env
+ * var, read once, quoted to the worker in the claim response.
+ */
+export const STALE_MINUTES = Number(process.env['JOB_STALE_MINUTES'] ?? 30);
 
 /**
  * Emits 'job' events so SSE consumers can watch the queue without polling.
@@ -147,8 +157,15 @@ async function tick(): Promise<void> {
     }
 
     // Idle = registered, not stopped/error, and not already running a job.
+    //
+    // Local box ids are excluded belt-and-braces. Nothing should register one —
+    // that was the bug in recoverOrphanedWork below — but if one ever appears
+    // here the consequence is worse than a wasted tick: `runJob` would call
+    // `runDevboxTask`, which is hard-wired to AgentCore `InvokeRuntime`, against
+    // a session id that only ever existed on somebody's laptop. A paired machine
+    // gets work by CLAIMING it (routes/local-compute.ts), never by being pushed.
     const idle = listBoxes().filter(
-      (b) => (b.status === 'idle' || b.status === 'waiting') && !busy.has(b.id),
+      (b) => (b.status === 'idle' || b.status === 'waiting') && !busy.has(b.id) && !isLocalBoxId(b.id),
     );
     for (const box of idle) {
       const job = await claimNextJob(box.id, box.sessionId);
@@ -176,6 +193,26 @@ async function tick(): Promise<void> {
  * reaping with a zero window requeues the orphans immediately, because in a
  * single-process middleware any job still marked live at boot is orphaned by
  * definition — there is no run left to wait for.
+ *
+ * ⚠️ That last sentence is the reason both halves now skip LOCAL work, and it is
+ * the sharpest edge local compute cut into this file. A job claimed by a paired
+ * workstation is running in a process the middleware does not own, so at boot it
+ * is not orphaned — it is somebody else's, and still going. Unguarded, this
+ * function did two damaging things to it on every restart, including every `tsx
+ * watch` save in dev:
+ *
+ *   1. `registerBox({id: job.boxId, sessionId: job.sessionId})` minted a phantom
+ *      devbox box for `local:<nodeId>`, which the dispatcher then read as idle
+ *      and handed cloud work to, and which `devbox-reaper` then tried to stop
+ *      through AgentCore — an API call against a session that never existed.
+ *   2. `reapStaleJobs(0)` requeued the laptop's in-flight job with no window at
+ *      all, so the work ran twice and the second copy was billed. The laptop's
+ *      eventual completion then overwrote the newer attempt's result, which is
+ *      the race `claim_token` fences.
+ *
+ * Local claims are left to the periodic sweep, which reaps them once their
+ * heartbeat actually goes quiet — the honest test for a worker the middleware
+ * cannot see.
  */
 async function recoverOrphanedWork(): Promise<void> {
   try {
@@ -184,18 +221,21 @@ async function recoverOrphanedWork(): Promise<void> {
       ...(await listJobs({ status: 'claimed', limit: 100 })),
     ];
     let adopted = 0;
+    let skippedLocal = 0;
     for (const job of live) {
       if (!job.boxId || !job.sessionId) continue;
+      if (isLocalBoxId(job.boxId)) { skippedLocal++; continue; }
       if (getBox(job.boxId)) continue;
       registerBox({ id: job.boxId, sessionId: job.sessionId });
       adopted++;
     }
 
-    const reaped = await reapStaleJobs(0);
-    if (adopted || reaped.requeued || reaped.failed) {
+    const reaped = await reapStaleJobs(0, { includeFenced: false });
+    if (adopted || skippedLocal || reaped.requeued || reaped.failed) {
       console.log(
         `[dispatcher] restart recovery: re-registered ${adopted} worker(s), ` +
-        `requeued ${reaped.requeued}, failed ${reaped.failed}`,
+        `requeued ${reaped.requeued}, failed ${reaped.failed}` +
+        (skippedLocal ? `, left ${skippedLocal} local claim(s) alone` : ''),
       );
     }
   } catch (err) {

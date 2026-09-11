@@ -22,6 +22,7 @@ import {
   StopRuntimeSessionCommand,
 } from '@aws-sdk/client-bedrock-agentcore';
 import { listBoxes, markStopped, appendEvent, type FleetBox } from './devbox-fleet.js';
+import { isLocalBoxId } from './local-compute-fleet.js';
 
 const MINUTE = 60_000;
 
@@ -54,11 +55,23 @@ export interface ReapDecision {
  * but not from the maximum. That asymmetry is the point: an agent stuck in a
  * loop keeps its box looking busy indefinitely, and a timer that defers to
  * "busy" would never fire on the one case that costs the most.
+ *
+ * A LOCAL box is exempt from both, and the reason is that every premise above
+ * fails for it. This module's entire justification is "stop paying for microVMs
+ * nobody is using" — a paired workstation is not billed, so there is nothing to
+ * reap for cost; the ceiling exists to catch a runaway agent that an idle timer
+ * cannot see, and a laptop's owner is sitting in front of it; and the stop itself
+ * is a `StopRuntimeSessionCommand` against a session id that never existed
+ * outside somebody's machine, which is an API call that cannot succeed. Worse
+ * than useless: `markStopped` would then flip a live worker to `stopped` in the
+ * registry on nothing but a failed call, and the 20-minute idle rule would fire
+ * on a machine that is simply between jobs.
  */
 export function decideReaping(boxes: FleetBox[], now = Date.now()): ReapDecision[] {
   const out: ReapDecision[] = [];
   for (const box of boxes) {
     if (box.status === 'stopped') continue;
+    if (isLocalBoxId(box.id)) continue;
 
     const age = now - new Date(box.createdAt).getTime();
     if (Number.isFinite(age) && age >= MAX_LIFETIME_MS) {

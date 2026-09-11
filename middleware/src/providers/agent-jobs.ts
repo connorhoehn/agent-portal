@@ -15,6 +15,7 @@
 import { randomUUID } from 'node:crypto';
 import { exec } from './aurora.js';
 import { config } from '../config.js';
+import { hasColumns, _resetColumnProbes } from './column-probe.js';
 import { type SqlParameter } from '@aws-sdk/client-rds-data';
 // Every timestamp the mock queue writes comes from here, never `new Date()`:
 // the mock branches below are fixture writes living outside src/mock, and a
@@ -26,6 +27,12 @@ import { clock } from '../mock/core/index.js';
 // (see seedMockJobsFromBotRuns below). bots.ts never imports this module, so
 // this is a one-way dependency, not a cycle.
 import { MOCK_BOTS, MOCK_BOT_RUNS, type BotRun } from './bots.js';
+// The kinds only a paired workstation may run. Imported here rather than
+// duplicated because `claimNextJob` (push side) must EXCLUDE exactly the set
+// `claimNextJobForWorker` (pull side) selects — two copies that drifted apart
+// would leave a kind claimable by both executors or by neither. `local-work.ts`
+// imports nothing from this module, so this is one-way.
+import { LOCAL_JOB_KINDS } from '../lib/local-work.js';
 
 export type JobStatus =
   | 'queued' | 'claimed' | 'running' | 'awaiting_review' | 'done' | 'failed' | 'cancelled';
@@ -366,11 +373,28 @@ export async function getJob(id: string): Promise<AgentJob | null> {
  * SKIP LOCKED is what makes this safe under concurrency: a second dispatcher
  * running the same statement skips the row this one has locked instead of
  * blocking on it or — worse — reading it as available.
+ *
+ * ⚠️ The kind exclusion is the other half of the local-compute namespace, and
+ * without it that namespace is decorative. This statement carried NO predicate
+ * on kind — right while the middleware was the only executor, since it can run
+ * anything it is handed — so the first idle microVM to tick claimed the oldest
+ * queued row whatever it was, including a `local:*` job somebody queued
+ * specifically to run on their own machine. It would not even fail loudly:
+ * `local:task` carries `payload.prompt`, so `runDevboxTask` would invoke
+ * AgentCore and bill the run, and the work would simply have happened in the
+ * cloud. The whole premise — "choosing local is an explicit act by whoever
+ * queued it, not a race between two executors polling the same rows"
+ * (lib/local-work.ts) — depends on this line.
+ *
+ * Excluded here rather than in `job-dispatcher.ts` so every push-side caller is
+ * covered by construction, present and future. `kind` is an existing column, so
+ * this is not gated on a migration probe.
  */
 export async function claimNextJob(boxId: string, sessionId: string): Promise<AgentJob | null> {
+  const pullOnly = LOCAL_JOB_KINDS as readonly string[];
   if (config.mock.aurora) {
     const next = MOCK_JOBS
-      .filter((j) => j.status === 'queued')
+      .filter((j) => j.status === 'queued' && !pullOnly.includes(j.kind))
       .sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt))[0];
     if (!next) return null;
     next.status = 'claimed';
@@ -380,18 +404,23 @@ export async function claimNextJob(boxId: string, sessionId: string): Promise<Ag
     next.attempts += 1;
     return { ...next };
   }
+  // No array parameter in the RDS Data API, so the exclusion list is expanded
+  // into named placeholders — the same shape claimNextJobForWorker's allowlist
+  // uses. Bounded by LOCAL_JOB_KINDS, which is a module constant.
+  const kindParams = pullOnly.map((k, i) => strParam(`x${i}`, k));
+  const kindList = pullOnly.map((_, i) => `:x${i}`).join(', ');
   const rows = await exec(
     `UPDATE agent_jobs
         SET status = 'claimed', box_id = :box, session_id = :session,
             claimed_at = NOW(), attempts = attempts + 1, updated_at = NOW()
       WHERE id = (
             SELECT id FROM agent_jobs
-             WHERE status = 'queued'
+             WHERE status = 'queued' AND kind NOT IN (${kindList})
              ORDER BY priority, created_at
              FOR UPDATE SKIP LOCKED
              LIMIT 1)
       RETURNING ${COLUMNS}`,
-    [strParam('box', boxId), strParam('session', sessionId)],
+    [strParam('box', boxId), strParam('session', sessionId), ...kindParams],
   );
   return rows[0] ? rowToJob(rows[0]) : null;
 }
@@ -430,47 +459,294 @@ export async function claimJob(id: string, boxId: string, sessionId: string): Pr
   return rows[0] ? rowToJob(rows[0]) : null;
 }
 
-export async function markRunning(id: string): Promise<void> {
-  if (config.mock.aurora) {
-    const job = MOCK_JOBS.find((j) => j.id === id);
-    if (job) { job.status = 'running'; job.startedAt = clock.nowIso(); }
-    return;
-  }
-  await exec(
-    `UPDATE agent_jobs SET status='running', started_at=NOW(), updated_at=NOW() WHERE id=:id`,
-    [strParam('id', id)],
-  );
+// ─── Pull-side claims (local compute) ────────────────────────────────────────
+//
+// Everything above assumes the middleware is the executor: it claims a job,
+// invokes AgentCore, watches the stream, and writes the outcome. It cannot race
+// itself, which is why `completeJob` below needs no ownership guard and why
+// `reapStaleJobs(0)` at boot is safe — see recoverOrphanedWork's own comment,
+// "in a single-process middleware any job still marked live at boot is orphaned
+// by definition."
+//
+// A paired workstation breaks that assumption. It has no inbound path (a stated
+// non-goal, not an omission), so it CLAIMS work, runs it out of sight, and
+// reports back. Now a claim can outlive the process that granted it, and a job
+// still marked live at boot may have a laptop happily working on it.
+//
+// Three things follow, and they are the whole of this section:
+//
+//   * a claim is FENCED — `claim_token`, minted here, returned once, required on
+//     every subsequent write, cleared on requeue;
+//   * a claim is FILTERED — a local node may only take kinds it advertised and
+//     the server allows, or it takes whatever is at the head of the queue,
+//     including interactive cloud-only work it cannot perform;
+//   * a claim is COUNTED — a node holds at most what it said it can hold.
+//
+// Schema: schema/local_compute_worker_schema.sql.
+
+/** Minted per claim. Long enough that guessing it is not an attack path. */
+function mintClaimToken(): string {
+  return `clm_${randomUUID().replace(/-/g, '')}`;
 }
 
+export interface PullClaim {
+  job: AgentJob;
+  /**
+   * The fencing token, returned to the claimant exactly once. Never re-read
+   * from a later `getJob` — the point is that only the holder has it.
+   */
+  claimToken: string;
+}
+
+/**
+ * Whether this cluster has the pull-side columns applied.
+ *
+ * Probed once and cached, because the honest failure for a cluster running
+ * ahead of `schema/local_compute_worker_schema.sql` is a clear 503 to the
+ * worker, not an accepted-but-unfenced claim. Degrading to "claim it anyway
+ * without a token" would silently reintroduce the overwrite this section exists
+ * to prevent, and it would do so on exactly the clusters least likely to notice.
+ */
+export async function hasPullSideColumns(): Promise<boolean> {
+  return hasColumns('agent_jobs', ['claim_token', 'heartbeat_at']);
+}
+
+/** Test hook — forget the cached probe. */
+export function _resetPullSideProbe(): void { _resetColumnProbes(); }
+
+/**
+ * Atomically claim the next queued job a pull-side worker is allowed to run.
+ *
+ * Differs from `claimNextJob` in three ways, each load-bearing:
+ *
+ *   1. **Filtered by kind.** `claimNextJob` selects the head of the queue with
+ *      no predicate. That is right for the dispatcher, which can run anything
+ *      it is handed, and wrong for a laptop: `docs/local-compute-presence.md`
+ *      describes local work as nightly distillation and consolidation, and a
+ *      node taking an interactive `devbox:task` would strand a person waiting
+ *      on a stream that never arrives. An empty `kinds` claims nothing rather
+ *      than everything — a worker that advertised no capability has none.
+ *
+ *   2. **Fenced.** Mints and stores `claim_token`.
+ *
+ *   3. **Heartbeat-stamped at claim time**, so the reaper's window starts from
+ *      the claim rather than from whenever the worker first checks in.
+ *
+ * Still `FOR UPDATE SKIP LOCKED`: two workstations running this concurrently
+ * skip each other's locked rows rather than reading them as available.
+ */
+export async function claimNextJobForWorker(opts: {
+  boxId: string;
+  sessionId: string;
+  kinds: readonly string[];
+}): Promise<PullClaim | null> {
+  if (opts.kinds.length === 0) return null;
+  const claimToken = mintClaimToken();
+
+  if (config.mock.aurora) {
+    const next = MOCK_JOBS
+      .filter((j) => j.status === 'queued' && opts.kinds.includes(j.kind))
+      .sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt))[0];
+    if (!next) return null;
+    next.status = 'claimed';
+    next.boxId = opts.boxId;
+    next.sessionId = opts.sessionId;
+    next.claimedAt = clock.nowIso();
+    next.attempts += 1;
+    MOCK_CLAIM_TOKENS.set(next.id, claimToken);
+    return { job: { ...next }, claimToken };
+  }
+
+  // The RDS Data API has no array parameter, so the allowlist is expanded into
+  // named placeholders. Bounded by the caller (the route intersects the node's
+  // advertised kinds with the server's own set), so this cannot grow unbounded.
+  const kindParams = opts.kinds.map((k, i) => strParam(`k${i}`, k));
+  const kindList = opts.kinds.map((_, i) => `:k${i}`).join(', ');
+
+  const rows = await exec(
+    `UPDATE agent_jobs
+        SET status = 'claimed', box_id = :box, session_id = :session,
+            claim_token = :token, claimed_at = NOW(), heartbeat_at = NOW(),
+            attempts = attempts + 1, updated_at = NOW()
+      WHERE id = (
+            SELECT id FROM agent_jobs
+             WHERE status = 'queued' AND kind IN (${kindList})
+             ORDER BY priority, created_at
+             FOR UPDATE SKIP LOCKED
+             LIMIT 1)
+      RETURNING ${COLUMNS}`,
+    [strParam('box', opts.boxId), strParam('session', opts.sessionId),
+      strParam('token', claimToken), ...kindParams],
+  );
+  return rows[0] ? { job: rowToJob(rows[0]), claimToken } : null;
+}
+
+/**
+ * How many jobs a box is currently holding.
+ *
+ * The concurrency cap has to be enforced against the DATABASE, not against
+ * whatever the worker believes it is running. A worker that crashed and
+ * restarted has forgotten its claims; the rows have not.
+ */
+export async function countLiveJobsForBox(boxId: string): Promise<number> {
+  if (config.mock.aurora) {
+    return MOCK_JOBS.filter((j) => j.boxId === boxId && (j.status === 'claimed' || j.status === 'running')).length;
+  }
+  const rows = await exec(
+    `SELECT count(*)::int AS n FROM agent_jobs
+      WHERE box_id = :box AND status IN ('claimed','running')`,
+    [strParam('box', boxId)],
+  );
+  return Number(rows[0]?.['n'] ?? 0);
+}
+
+/**
+ * Liveness ping from a pull-side worker, guarded by its fencing token.
+ *
+ * Returns false when the claim is gone — requeued by the reaper, cancelled, or
+ * never held — which is the signal for the worker to abandon the run rather than
+ * finish it and post a result that would overwrite a newer attempt. Told, not
+ * silently ignored: a worker that learns its claim expired can stop burning its
+ * own slots on work somebody else is now doing.
+ *
+ * Bumps `heartbeat_at` and NOT `updated_at`: `updated_at` means "the job
+ * changed", and a heartbeat is precisely the case where it did not. Conflating
+ * them would make "still running" and "transitioned" indistinguishable in the
+ * queue's own audit trail.
+ */
+export async function heartbeatJob(id: string, claimToken: string): Promise<boolean> {
+  if (config.mock.aurora) {
+    const job = MOCK_JOBS.find((j) => j.id === id);
+    if (!job || MOCK_CLAIM_TOKENS.get(id) !== claimToken) return false;
+    return job.status === 'claimed' || job.status === 'running';
+  }
+  const rows = await exec(
+    `UPDATE agent_jobs SET heartbeat_at = NOW()
+      WHERE id = :id AND claim_token = :token AND status IN ('claimed','running')
+      RETURNING id`,
+    [strParam('id', id), strParam('token', claimToken)],
+  );
+  return rows.length > 0;
+}
+
+/** Mock-mode fencing tokens. Not persisted — the mock queue is in-process. */
+const MOCK_CLAIM_TOKENS = new Map<string, string>();
+
+/**
+ * Move a claimed job to `running`.
+ *
+ * `claimToken` fences the transition for pull-side workers and is omitted by the
+ * in-process dispatcher, which cannot race itself. Returns whether the
+ * transition applied — false means the claim was already gone.
+ */
+export async function markRunning(id: string, claimToken?: string): Promise<boolean> {
+  if (config.mock.aurora) {
+    const job = MOCK_JOBS.find((j) => j.id === id);
+    if (!job) return false;
+    if (claimToken !== undefined && MOCK_CLAIM_TOKENS.get(id) !== claimToken) return false;
+    job.status = 'running';
+    job.startedAt = clock.nowIso();
+    return true;
+  }
+  // The new columns appear ONLY on the fenced path. A cluster that has not
+  // applied schema/local_compute_worker_schema.sql must keep working exactly as
+  // before — naming claim_token in the dispatcher's own statement would take the
+  // whole push-side queue down on every pre-migration cluster to serve a feature
+  // it is not running. The fenced path is unreachable there, because the route
+  // checks hasPullSideColumns() first.
+  if (claimToken === undefined) {
+    await exec(
+      `UPDATE agent_jobs SET status='running', started_at=NOW(), updated_at=NOW() WHERE id=:id`,
+      [strParam('id', id)],
+    );
+    return true;
+  }
+  const rows = await exec(
+    `UPDATE agent_jobs SET status='running', started_at=NOW(), heartbeat_at=NOW(), updated_at=NOW()
+      WHERE id=:id AND claim_token=:token RETURNING id`,
+    [strParam('id', id), strParam('token', claimToken)],
+  );
+  return rows.length > 0;
+}
+
+/**
+ * Record a job's terminal state.
+ *
+ * `claimToken` is the fencing guard for pull-side workers, and it is the reason
+ * this returns a boolean rather than void. Without it the statement was
+ * `WHERE id = :id` — correct while the middleware was the only caller, since it
+ * could not race itself, and wrong the moment a laptop holds a claim across a
+ * middleware restart: a late completion from a worker whose job has since been
+ * requeued and re-run would overwrite the newer result with the older one, and
+ * both runs were billed. The guard also clears `claim_token`, so the same worker
+ * retrying its POST cannot double-write.
+ *
+ * Returns false when nothing was updated — the claim expired, or the job is
+ * already terminal. Callers that hold no token (the dispatcher) get the old
+ * unguarded behaviour and can keep ignoring the result.
+ */
 export async function completeJob(id: string, opts: {
   status: 'awaiting_review' | 'done' | 'failed';
   result?: Record<string, unknown>;
   error?: string;
-}): Promise<void> {
+  /** Pull-side fencing token. Omitted by the in-process dispatcher. */
+  claimToken?: string;
+}): Promise<boolean> {
   if (config.mock.aurora) {
     const job = MOCK_JOBS.find((j) => j.id === id);
-    if (job) {
-      job.status = opts.status;
-      if (opts.result) job.result = opts.result;
-      job.error = opts.error ?? null;
-      job.finishedAt = clock.nowIso();
+    if (!job) return false;
+    if (opts.claimToken !== undefined) {
+      if (MOCK_CLAIM_TOKENS.get(id) !== opts.claimToken) return false;
+      if (job.status !== 'claimed' && job.status !== 'running') return false;
+      MOCK_CLAIM_TOKENS.delete(id);
     }
-    return;
+    job.status = opts.status;
+    if (opts.result) job.result = opts.result;
+    job.error = opts.error ?? null;
+    job.finishedAt = clock.nowIso();
+    return true;
   }
-  await exec(
+  const params = [
+    strParam('id', id),
+    strParam('status', opts.status),
+    strParam('result', opts.result ? JSON.stringify(opts.result) : ''),
+    strParam('error', opts.error ?? ''),
+  ];
+  // Unfenced (the in-process dispatcher): byte-for-byte the previous statement.
+  // A cluster that has not applied schema/local_compute_worker_schema.sql must
+  // keep working — naming claim_token here would take the push-side queue down
+  // on every pre-migration cluster to serve a feature it is not running. The
+  // fenced path is unreachable there, because the route checks
+  // hasPullSideColumns() before handing out a claim.
+  if (opts.claimToken === undefined) {
+    await exec(
+      `UPDATE agent_jobs
+          SET status = :status,
+              result = COALESCE(:result::jsonb, result),
+              error = NULLIF(:error, ''),
+              finished_at = NOW(), updated_at = NOW()
+        WHERE id = :id`,
+      params,
+    );
+    return true;
+  }
+  // Fenced callers must also still hold a LIVE claim: a job the reaper already
+  // failed for good is terminal, and re-opening it from a straggler's POST would
+  // resurrect work nobody is waiting for. Clearing the token makes the write
+  // once-only, so a worker retrying its POST after a network blip cannot
+  // double-write a result.
+  const rows = await exec(
     `UPDATE agent_jobs
         SET status = :status,
             result = COALESCE(:result::jsonb, result),
             error = NULLIF(:error, ''),
+            claim_token = NULL,
             finished_at = NOW(), updated_at = NOW()
-      WHERE id = :id`,
-    [
-      strParam('id', id),
-      strParam('status', opts.status),
-      strParam('result', opts.result ? JSON.stringify(opts.result) : ''),
-      strParam('error', opts.error ?? ''),
-    ],
+      WHERE id = :id AND claim_token = :token AND status IN ('claimed','running')
+      RETURNING id`,
+    [...params, strParam('token', opts.claimToken)],
   );
+  return rows.length > 0;
 }
 
 /** Human accepted or rejected the artifact an awaiting_review job produced. */
@@ -514,18 +790,65 @@ export async function cancelJob(id: string): Promise<boolean> {
   return rows.length > 0;
 }
 
+export interface ReapOptions {
+  /**
+   * Whether jobs held by a FENCED (pull-side) claim are eligible.
+   *
+   * Defaults true, which is right for the periodic sweep: a workstation that has
+   * not heartbeated for the whole stale window is gone, laptop or not, and its
+   * work should go back to the queue.
+   *
+   * The boot-time sweep passes false, and that is the one call where the
+   * difference matters. `recoverOrphanedWork` calls `reapStaleJobs(0)` —
+   * requeueing EVERY live job with no window at all — justified in its own
+   * comment because "in a single-process middleware any job still marked live at
+   * boot is orphaned by definition; there is no run left to wait for." A paired
+   * workstation mid-job is exactly the counterexample. Left alone, every
+   * middleware restart — every `tsx watch` save in dev — would requeue a
+   * laptop's in-flight work, and both copies would run and both would be
+   * recorded.
+   *
+   * A fenced claim is skipped rather than trusted forever: it still gets reaped
+   * by the periodic sweep once its heartbeat goes quiet. The boot sweep just
+   * stops asserting that a claim it did not grant is dead.
+   */
+  includeFenced?: boolean;
+}
+
 /**
- * Recover jobs whose worker vanished (middleware restart, runtime timeout).
+ * Recover jobs whose worker vanished (middleware restart, runtime timeout, a
+ * laptop that closed its lid).
+ *
  * Requeues while attempts remain so transient failures self-heal, and fails
- * loudly rather than silently retrying forever.
+ * loudly rather than silently retrying forever. Requeueing CLEARS the fencing
+ * token, which is what makes the straggler's later completion a no-op instead of
+ * an overwrite.
+ *
+ * Staleness is measured from the later of `updated_at` and `heartbeat_at`: a
+ * pull-side worker proves liveness without changing state, so reading
+ * `updated_at` alone would reap a job that is visibly still being worked on.
  */
-export async function reapStaleJobs(staleMinutes = 30): Promise<{ requeued: number; failed: number }> {
+export async function reapStaleJobs(
+  staleMinutes = 30,
+  opts: ReapOptions = {},
+): Promise<{ requeued: number; failed: number }> {
   if (config.mock.aurora) return { requeued: 0, failed: 0 };
+  const fenced = await hasPullSideColumns();
+  const includeFenced = opts.includeFenced ?? true;
+
+  // Pre-migration clusters keep the original statements exactly. There are no
+  // fenced claims there to protect, and naming the columns would fail the sweep
+  // outright — turning a recovery mechanism into a source of stuck jobs.
+  const liveness = fenced ? 'GREATEST(updated_at, COALESCE(heartbeat_at, updated_at))' : 'updated_at';
+  const skipFenced = fenced && !includeFenced ? ' AND claim_token IS NULL' : '';
+  const clearToken = fenced ? ', claim_token=NULL' : '';
+  const stale = `status IN ('claimed','running')
+        AND ${liveness} < NOW() - (INTERVAL '1 minute' * :mins)${skipFenced}`;
+
   const requeued = await exec(
     `UPDATE agent_jobs
-        SET status='queued', box_id=NULL, session_id=NULL, claimed_at=NULL, updated_at=NOW()
-      WHERE status IN ('claimed','running')
-        AND updated_at < NOW() - (INTERVAL '1 minute' * :mins)
+        SET status='queued', box_id=NULL, session_id=NULL, claimed_at=NULL, updated_at=NOW()${clearToken}
+      WHERE ${stale}
         AND attempts < max_attempts
       RETURNING id`,
     [intParam('mins', staleMinutes)],
@@ -533,9 +856,8 @@ export async function reapStaleJobs(staleMinutes = 30): Promise<{ requeued: numb
   const failed = await exec(
     `UPDATE agent_jobs
         SET status='failed', error='worker did not report back before the stale window elapsed',
-            finished_at=NOW(), updated_at=NOW()
-      WHERE status IN ('claimed','running')
-        AND updated_at < NOW() - (INTERVAL '1 minute' * :mins)
+            finished_at=NOW(), updated_at=NOW()${clearToken}
+      WHERE ${stale}
         AND attempts >= max_attempts
       RETURNING id`,
     [intParam('mins', staleMinutes)],
@@ -560,4 +882,21 @@ export async function queueStats(): Promise<Record<JobStatus | 'total', number>>
     base.total += n;
   }
   return base;
+}
+
+/**
+ * Test hook — put the mock queue back to the seeded history and nothing else.
+ *
+ * The array is module-level and lives for the whole process, so a test that
+ * enqueues leaks a claimable row into every later test in the file. That matters
+ * specifically for the pull-side claim, which takes the OLDEST matching queued
+ * row: the leftover wins, the test's own job is not the one claimed, and the
+ * failure reads as a bug in the route rather than as shared state. Spliced in
+ * place rather than reassigned because every function above closes over this
+ * exact array.
+ */
+export function _resetMockQueue(): void {
+  MOCK_JOBS.length = 0;
+  MOCK_CLAIM_TOKENS.clear();
+  if (config.mock.aurora) seedMockJobsFromBotRuns();
 }

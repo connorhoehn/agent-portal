@@ -1,9 +1,9 @@
-// routes/local-compute.ts — all ten routes, and the thing that makes this
-// router different from every other one: it is mounted UNGATED in index.ts.
+// routes/local-compute.ts — every route, and the thing that makes this router
+// different from every other one: it is mounted UNGATED in index.ts.
 //
 // That is deliberate (`app.use('/api/local-compute', localComputeRouter)`,
-// index.ts:337). Three of its routes are MACHINE callbacks — a developer's
-// laptop POSTing presence with a node token and no cookie — so a blanket
+// index.ts:337). Most of its routes are MACHINE callbacks — a developer's
+// laptop POSTing presence and pulling work with a node token and no cookie — so a blanket
 // `requireSession` at the mount would 401 the whole fleet's presence writes,
 // exactly the way a blanket mount once silently killed the agents' trace
 // emission (CLAUDE.md, "the auth floor"). The price of an ungated mount is
@@ -91,6 +91,7 @@ import { resetRateLimits } from '../../lib/rate-limit.js';
 import { freezeClock, unfreezeClock } from '../../mock/core/index.js';
 import { _resetLocalComputeMocks } from '../../providers/local-compute.js';
 import { _resetLocalFleet } from '../../lib/local-compute-fleet.js';
+import { enqueueJob, getJob, _resetMockQueue } from '../../providers/agent-jobs.js';
 import { exec } from '../../providers/aurora.js';
 import { type Role, type Session } from '../../lib/session.js';
 
@@ -149,6 +150,7 @@ function bearer(token: string) {
 beforeEach(() => {
   _resetLocalComputeMocks();
   _resetLocalFleet();
+  _resetMockQueue();
   resetRateLimits();
   clearAuthzCache();
   execMock.mockReset();
@@ -558,14 +560,21 @@ describe('GET /api/local-compute/nodes', () => {
 
     const row = res.body.nodes.find((n: { id: string }) => n.id === node.nodeId);
     expect(Object.keys(row).sort()).toEqual([
-      'acceptJobs', 'createdAt', 'id', 'label', 'lastSeenAt', 'localModels',
-      'ownerId', 'platform', 'presence', 'revokedAt',
+      'acceptJobs', 'createdAt', 'id', 'jobKinds', 'label', 'lastSeenAt',
+      'localModels', 'maxConcurrency', 'ownerId', 'platform', 'presence', 'revokedAt',
     ]);
     expect(row.ownerId).toBe('u-mia');
     expect(row.label).toBe('mia-mbp');
     expect(row.platform).toBe('darwin/arm64');
     expect(row.acceptJobs).toBe(false);
     expect(row.localModels).toEqual([]);
+    // A freshly paired machine has advertised NOTHING. Both defaults are the
+    // conservative reading and both are load-bearing: empty `jobKinds` makes
+    // the claim route refuse (an unregistered worker has no capabilities, it does
+    // not inherit the server's whole set), and `maxConcurrency: 1` means a
+    // machine that never says otherwise runs one job at a time.
+    expect(row.jobKinds).toEqual([]);
+    expect(row.maxConcurrency).toBe(1);
     expect(row.revokedAt).toBeNull();
     expect(Date.parse(row.createdAt)).not.toBeNaN();
     expect(Date.parse(row.lastSeenAt)).not.toBeNaN(); // stamped by touchNode
@@ -690,8 +699,8 @@ describe('GET /api/local-compute/nodes/all', () => {
 
     const row = res.body.nodes.find((n: { id: string }) => n.id === mine.nodeId);
     expect(Object.keys(row).sort()).toEqual([
-      'acceptJobs', 'createdAt', 'id', 'label', 'lastSeenAt', 'localModels',
-      'ownerId', 'platform', 'presence', 'revokedAt',
+      'acceptJobs', 'createdAt', 'id', 'jobKinds', 'label', 'lastSeenAt',
+      'localModels', 'maxConcurrency', 'ownerId', 'platform', 'presence', 'revokedAt',
     ]);
   });
 
@@ -842,8 +851,8 @@ describe('PATCH /api/local-compute/nodes/:id', () => {
     expect(res.status).toBe(200);
     expect(res.body.label).toBe('N'.repeat(80));
     expect(Object.keys(res.body).sort()).toEqual([
-      'acceptJobs', 'createdAt', 'id', 'label', 'lastSeenAt', 'localModels',
-      'ownerId', 'platform', 'presence', 'revokedAt',
+      'acceptJobs', 'createdAt', 'id', 'jobKinds', 'label', 'lastSeenAt',
+      'localModels', 'maxConcurrency', 'ownerId', 'platform', 'presence', 'revokedAt',
     ]);
     expect(res.body.presence).toMatchObject({ nodeId: node.nodeId, status: 'offline', sessions: [] });
   });
@@ -930,5 +939,494 @@ describe('DELETE /api/local-compute/nodes/:id', () => {
     expect(listed.body.nodes.map((n: { id: string }) => n.id)).not.toContain(node.nodeId);
     const announce = await request(anon()).post('/api/local-compute/announce').set(bearer(node.nodeToken)).send({ sessions: [] });
     expect(announce.status).toBe(401);
+  });
+});
+
+// ─── POST /register — requireNodeToken, self-reported capabilities ────────────
+//
+// The trust boundary in one block. Everything a machine asserts here can only
+// NARROW what it is offered, which is what makes a bearer token sitting on
+// somebody's laptop an acceptable credential for this surface: kinds are
+// intersected with the server's own allowlist, concurrency is capped by the
+// server's own ceiling, and `accept_jobs` is not settable here at all. If any of
+// the three ever widens, a stolen node token becomes a way to take work off the
+// shared queue.
+
+/** A machine whose owner has switched it on, registered for local:task. */
+async function readyWorker(
+  opts: { sub?: string; label?: string; maxConcurrency?: number; kinds?: string[] } = {},
+): Promise<Paired> {
+  const sub = opts.sub ?? 'u-mia';
+  const node = await pair({ sub }, { label: opts.label ?? 'mia-mbp' });
+  const on = await request(as('member', sub)).patch(`${BASE}/nodes/${node.nodeId}`).send({ acceptJobs: true });
+  expect(on.status).toBe(200);
+  const reg = await request(anon()).post(`${BASE}/register`).set(bearer(node.nodeToken)).send({
+    localModels: ['qwen3.6-35b'],
+    jobKinds: opts.kinds ?? ['local:task'],
+    maxConcurrency: opts.maxConcurrency ?? 2,
+  });
+  expect(reg.status).toBe(200);
+  return node;
+}
+
+async function queueLocal(title: string, payload: Record<string, unknown> = {}) {
+  const job = await enqueueJob({ kind: 'local:task', title, payload, createdBy: 'u-mia' });
+  expect(job).not.toBeNull();
+  return job!;
+}
+
+describe('POST /api/local-compute/register', () => {
+  it('401s with no token, and with a browser session instead of one', async () => {
+    expect((await request(anon()).post(`${BASE}/register`).send({})).status).toBe(401);
+    expect((await request(as('admin')).post(`${BASE}/register`).send({})).status).toBe(401);
+  });
+
+  it('records what the machine advertised and echoes back the owner\'s switch', async () => {
+    const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+    const res = await request(anon()).post(`${BASE}/register`).set(bearer(node.nodeToken)).send({
+      localModels: ['qwen3.6-35b', 'nomic-embed'], jobKinds: ['local:task', 'local:distill'], maxConcurrency: 2,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      nodeId: node.nodeId,
+      label: 'mia-mbp',
+      // False, because registering is not opting in. A worker process starting
+      // up must not be able to enrol its owner's machine — this is the one field
+      // here the machine cannot write, and it is the owner's switch.
+      acceptJobs: false,
+      localModels: ['qwen3.6-35b', 'nomic-embed'],
+      jobKinds: ['local:task', 'local:distill'],
+      maxConcurrency: 2,
+      // Quoted to the worker rather than left for it to guess: this is the
+      // deadline its heartbeat is racing, and the reaper reads the same env var.
+      heartbeatIntervalS: 30,
+      staleMinutes: 30,
+    });
+  });
+
+  it('drops a kind local execution does not allow, and SAYS it dropped it', async () => {
+    const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+    const res = await request(anon()).post(`${BASE}/register`).set(bearer(node.nodeToken))
+      .send({ jobKinds: ['local:task', 'devbox:task', 'sudo:make-me-a-sandwich'] });
+    expect(res.status).toBe(200);
+    expect(res.body.jobKinds).toEqual(['local:task']);
+    // Silent narrowing is indistinguishable from an empty queue: a worker that
+    // asked for devbox:task and was quietly refused would poll forever and
+    // conclude there was no work. `devbox:task` is the one that matters — it is
+    // the kind almost everything enqueues today.
+    expect(res.body.rejectedKinds).toEqual(['devbox:task', 'sudo:make-me-a-sandwich']);
+    expect(res.body.runnableKinds).toEqual(['local:task', 'local:distill', 'local:consolidate']);
+  });
+
+  it('orders kinds by the SERVER\'s list, so a node cannot choose what it is offered first', async () => {
+    const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+    const res = await request(anon()).post(`${BASE}/register`).set(bearer(node.nodeToken))
+      .send({ jobKinds: ['local:consolidate', 'local:task', 'local:consolidate'] });
+    expect(res.body.jobKinds).toEqual(['local:task', 'local:consolidate']);
+  });
+
+  it('caps maxConcurrency at the server ceiling and floors nonsense at 1', async () => {
+    const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+    const post = (maxConcurrency: unknown) => request(anon()).post(`${BASE}/register`)
+      .set(bearer(node.nodeToken)).send({ jobKinds: ['local:task'], maxConcurrency });
+
+    // The ceiling is the reference workstation's real slot count. A node asking
+    // for 64 does not get 64: llama-server queues the overflow rather than
+    // failing it, so the extra claims would heartbeat, hold their rows, and blow
+    // past the stale window having done nothing — while evicting each other's
+    // prompt prefix and making every run on the machine slower.
+    expect((await post(64)).body.maxConcurrency).toBe(2);
+    expect((await post(1)).body.maxConcurrency).toBe(1);
+    for (const bad of [0, -5, 'lots', null, Number.NaN]) {
+      expect([bad, (await post(bad)).body.maxConcurrency]).toEqual([bad, 1]);
+    }
+    // Omitted entirely is the same as unparseable: one job.
+    const bare = await request(anon()).post(`${BASE}/register`).set(bearer(node.nodeToken)).send({});
+    expect(bare.body.maxConcurrency).toBe(1);
+  });
+
+  it('treats a garbled advertisement as none rather than 400ing the worker out of the fleet', async () => {
+    const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+    const res = await request(anon()).post(`${BASE}/register`).set(bearer(node.nodeToken))
+      .send({ localModels: 'qwen', jobKinds: { local: true } });
+    expect(res.status).toBe(200);
+    expect(res.body.localModels).toEqual([]);
+    expect(res.body.jobKinds).toEqual([]);
+  });
+
+  it('is visible to the owner on GET /nodes — registration is durable, not presence', async () => {
+    const node = await readyWorker();
+    const listed = await request(as('member', 'u-mia')).get(`${BASE}/nodes`);
+    const row = listed.body.nodes.find((n: { id: string }) => n.id === node.nodeId);
+    expect(row.jobKinds).toEqual(['local:task']);
+    expect(row.maxConcurrency).toBe(2);
+    expect(row.localModels).toEqual(['qwen3.6-35b']);
+    expect(row.acceptJobs).toBe(true);
+  });
+
+  it('dies with the token: a revoked machine cannot re-register itself', async () => {
+    const node = await readyWorker();
+    expect((await request(as('member', 'u-mia')).delete(`${BASE}/nodes/${node.nodeId}`)).status).toBe(200);
+    const res = await request(anon()).post(`${BASE}/register`).set(bearer(node.nodeToken))
+      .send({ jobKinds: ['local:task'] });
+    expect(res.status).toBe(401);
+  });
+});
+
+// ─── The work loop: claim → start → heartbeat → complete ─────────────────────
+
+describe('POST /api/local-compute/claim', () => {
+  it('401s every work-loop route with no token, and with a browser session', async () => {
+    for (const path of ['/claim', '/jobs/job-1/start', '/jobs/job-1/heartbeat', '/jobs/job-1/complete']) {
+      expect([path, (await request(anon()).post(`${BASE}${path}`).send({})).status]).toEqual([path, 401]);
+      expect([path, (await request(as('admin')).post(`${BASE}${path}`).send({})).status]).toEqual([path, 401]);
+    }
+  });
+
+  it('409s a machine whose owner has not switched it on, naming the gate', async () => {
+    const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+    await request(anon()).post(`${BASE}/register`).set(bearer(node.nodeToken)).send({ jobKinds: ['local:task'] });
+    await queueLocal('nightly distill');
+
+    const res = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
+    expect(res.status).toBe(409);
+    // The gate is named because the worker has to know what to DO: this one is
+    // "tell your owner to flip a switch", which is not a retry.
+    expect(res.body.gate).toBe('accept_jobs');
+    expect(res.body.error).toMatch(/not accepting jobs/);
+  });
+
+  it('409s a machine that advertised no runnable kind — an empty advertisement is not "everything"', async () => {
+    const node = await pair({ sub: 'u-mia' }, { label: 'mia-mbp' });
+    await request(as('member', 'u-mia')).patch(`${BASE}/nodes/${node.nodeId}`).send({ acceptJobs: true });
+    await queueLocal('nightly distill');
+
+    const res = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
+    expect(res.status).toBe(409);
+    expect(res.body.gate).toBe('kinds');
+  });
+
+  it('204s a quiet queue — polling an empty queue is the common case, not an error', async () => {
+    const node = await readyWorker();
+    const res = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
+    expect(res.status).toBe(204);
+    expect(res.body).toEqual({});
+  });
+
+  it('never offers a kind the node did not advertise, even when it is the only work queued', async () => {
+    const node = await readyWorker({ kinds: ['local:distill'] });
+    await queueLocal('a repo task');       // local:task — advertised by nobody here
+    expect((await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({})).status).toBe(204);
+  });
+
+  it('never offers devbox:task — the queue is full of them and a laptop cannot run one', async () => {
+    // The seeded mock queue is entirely devbox:task, and its payload assumes an
+    // AgentCore workspace this machine does not have. A node that advertised the
+    // kind had it dropped at registration, so there is nothing here to take.
+    const node = await readyWorker({ kinds: ['local:task', 'devbox:task'] });
+    await enqueueJob({ kind: 'devbox:task', title: 'interactive work', createdBy: 'u-mia' });
+    expect((await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({})).status).toBe(204);
+  });
+
+  it('hands out the job, a fencing token and ONE session id, and marks the row claimed', async () => {
+    const node = await readyWorker();
+    const queued = await queueLocal('nightly distill', { repo: 'aws-agentcore', prompt: 'distil' });
+
+    const res = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
+    expect(res.status).toBe(200);
+    expect(res.body.job.id).toBe(queued.id);
+    expect(res.body.job.payload).toEqual({ repo: 'aws-agentcore', prompt: 'distil' });
+    expect(res.body.claimToken).toMatch(/^clm_[0-9a-f]{32}$/);
+    expect(res.body.heartbeatIntervalS).toBe(30);
+    expect(res.body.staleMinutes).toBe(30);
+    expect(res.body.slots).toEqual({ held: 1, limit: 2 });
+    // One id for the queue row AND the presence session, so the fleet view can
+    // join a running local job to the machine session showing it. Two
+    // independently invented ids could not be joined at all.
+    expect(res.body.sessionId).toContain(node.nodeId);
+
+    const row = await getJob(queued.id);
+    expect(row!.status).toBe('claimed');
+    expect(row!.boxId).toBe(`local:${node.nodeId}`);
+    expect(row!.sessionId).toBe(res.body.sessionId);
+    expect(row!.attempts).toBe(1);
+  });
+
+  it('does not hand the fencing token back on a later read — only the holder has it', async () => {
+    const node = await readyWorker();
+    const queued = await queueLocal('nightly distill');
+    const claim = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
+    expect(claim.body.claimToken).toBeTruthy();
+    // The claim response is the one and only delivery. A worker that loses it
+    // has lost the claim, which is the property the fence depends on.
+    expect(JSON.stringify(await getJob(queued.id))).not.toContain(claim.body.claimToken);
+  });
+
+  it('429s at the node\'s own slot limit, and the limit is counted from the ROWS', async () => {
+    const node = await readyWorker({ maxConcurrency: 2 });
+    await queueLocal('one');
+    await queueLocal('two');
+    await queueLocal('three');
+
+    const first = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
+    const second = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
+    expect([first.status, second.status]).toEqual([200, 200]);
+    expect(second.body.slots).toEqual({ held: 2, limit: 2 });
+
+    const third = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
+    expect(third.status).toBe(429);
+    expect(third.body.gate).toBe('concurrency');
+    // Told apart from the per-IP rate limiter, which answers the SAME status and
+    // means the opposite thing. The limiter sends `bucket`; the brake sends
+    // `gate`. A worker cannot distinguish "slow down" from "you are full" by
+    // status code alone, and the two want different responses.
+    expect(third.body).not.toHaveProperty('bucket');
+
+    // Finishing one frees exactly one slot — the count comes from the rows, not
+    // from whatever the worker believes it is running, so a worker that crashed
+    // and forgot its claims still cannot exceed its cap.
+    await request(anon()).post(`${BASE}/jobs/${first.body.job.id}/complete`).set(bearer(node.nodeToken))
+      .send({ claimToken: first.body.claimToken, status: 'done' });
+    expect((await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({})).status).toBe(200);
+  });
+
+  it('gives two machines different jobs — the claim is atomic, not read-then-write', async () => {
+    const mia = await readyWorker({ sub: 'u-mia', label: 'mia-mbp' });
+    const raj = await readyWorker({ sub: 'u-raj', label: 'raj-mbp' });
+    await queueLocal('one');
+    await queueLocal('two');
+
+    const a = await request(anon()).post(`${BASE}/claim`).set(bearer(mia.nodeToken)).send({});
+    const b = await request(anon()).post(`${BASE}/claim`).set(bearer(raj.nodeToken)).send({});
+    expect([a.status, b.status]).toEqual([200, 200]);
+    expect(a.body.job.id).not.toBe(b.body.job.id);
+    expect(a.body.claimToken).not.toBe(b.body.claimToken);
+  });
+});
+
+describe('the fenced job writes', () => {
+  async function claimed(opts: { sub?: string; label?: string } = {}) {
+    const node = await readyWorker(opts);
+    await queueLocal('nightly distill');
+    const res = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
+    expect(res.status).toBe(200);
+    return { node, jobId: res.body.job.id as string, claimToken: res.body.claimToken as string };
+  }
+
+  const paths = (jobId: string) => [
+    `/jobs/${jobId}/start`, `/jobs/${jobId}/heartbeat`, `/jobs/${jobId}/complete`,
+  ];
+
+  it('400s every fenced write with no claimToken — it was returned once, by the claim', async () => {
+    const held = await claimed();
+    for (const path of paths(held.jobId)) {
+      const res = await request(anon()).post(`${BASE}${path}`).set(bearer(held.node.nodeToken)).send({ status: 'done' });
+      expect([path, res.status]).toEqual([path, 400]);
+      expect(res.body.error).toMatch(/claimToken is required/);
+    }
+    expect((await getJob(held.jobId))!.status).toBe('claimed');
+  });
+
+  it('404s a job this machine does not hold, and says nothing about whose it is', async () => {
+    const mine = await claimed({ sub: 'u-mia', label: 'mia-mbp' });
+    const theirs = await claimed({ sub: 'u-raj', label: 'raj-mbp' });
+
+    for (const path of paths(theirs.jobId)) {
+      // Mia's token against Raj's job — carrying Raj's REAL claim token, so this
+      // is the ownership check doing the work rather than the fence. A 409 here
+      // would confirm that somebody else's job exists.
+      const res = await request(anon()).post(`${BASE}${path}`).set(bearer(mine.node.nodeToken))
+        .send({ claimToken: theirs.claimToken, status: 'done' });
+      expect([path, res.status]).toEqual([path, 404]);
+      expect(res.body).toEqual({ error: 'no such claim on this machine' });
+    }
+    for (const path of paths('job-does-not-exist')) {
+      const res = await request(anon()).post(`${BASE}${path}`).set(bearer(mine.node.nodeToken))
+        .send({ claimToken: mine.claimToken, status: 'done' });
+      // Identical body for "not yours" and "not there", so a node cannot probe
+      // the queue for ids it does not hold.
+      expect([path, res.body.error]).toEqual([path, 'no such claim on this machine']);
+    }
+    expect((await getJob(theirs.jobId))!.status).toBe('claimed');
+  });
+
+  it('409s a fenced write carrying the wrong token, without touching the row', async () => {
+    const held = await claimed();
+    for (const path of paths(held.jobId)) {
+      const res = await request(anon()).post(`${BASE}${path}`).set(bearer(held.node.nodeToken))
+        .send({ claimToken: 'clm_deadbeef', status: 'done' });
+      expect([path, res.status]).toEqual([path, 409]);
+      expect(res.body.gate).toBe('claim_lost');
+    }
+    expect((await getJob(held.jobId))!.status).toBe('claimed');
+  });
+
+  it('runs the loop: start → heartbeat → complete', async () => {
+    const held = await claimed();
+    const fenced = (path: string, body: Record<string, unknown> = {}) => request(anon())
+      .post(`${BASE}${path}`).set(bearer(held.node.nodeToken)).send({ claimToken: held.claimToken, ...body });
+
+    const started = await fenced(`/jobs/${held.jobId}/start`);
+    expect(started.status).toBe(200);
+    expect(started.body).toEqual({ ok: true, jobId: held.jobId });
+    expect((await getJob(held.jobId))!.status).toBe('running');
+
+    const beat = await fenced(`/jobs/${held.jobId}/heartbeat`);
+    expect(beat.status).toBe(200);
+    expect(beat.body).toEqual({ ok: true, jobId: held.jobId });
+    // A machine mid-job is the most alive it ever is. The heartbeat moves node
+    // presence too, or the fleet view shows a running job on an offline machine.
+    const listed = await request(as('member', 'u-mia')).get(`${BASE}/nodes`);
+    const row = listed.body.nodes.find((n: { id: string }) => n.id === held.node.nodeId);
+    expect(Date.parse(row.lastSeenAt)).not.toBeNaN();
+
+    const done = await fenced(`/jobs/${held.jobId}/complete`, { status: 'awaiting_review' });
+    expect(done.status).toBe(200);
+    expect(done.body).toEqual({
+      ok: true, jobId: held.jobId, status: 'awaiting_review', costUsd: 0, provider: 'local',
+    });
+    expect((await getJob(held.jobId))!.status).toBe('awaiting_review');
+  });
+
+  it('400s a completion with no usable status — the write that ends a job gets no default', async () => {
+    const held = await claimed();
+    for (const status of [undefined, 'finished', 'queued', 'running', 42]) {
+      const res = await request(anon()).post(`${BASE}/jobs/${held.jobId}/complete`)
+        .set(bearer(held.node.nodeToken)).send({ claimToken: held.claimToken, status });
+      expect([status, res.status]).toEqual([status, 400]);
+      expect(res.body.error).toMatch(/status must be one of/);
+    }
+    // Guessing 'done' for a worker that forgot the field would record a success
+    // nobody claimed — the same shape as the `subtype: success` producer bug.
+    expect((await getJob(held.jobId))!.status).toBe('claimed');
+  });
+
+  it('prices a local run at a confident 0 and keeps what the run CLAIMED beside it', async () => {
+    const held = await claimed();
+    const res = await request(anon()).post(`${BASE}/jobs/${held.jobId}/complete`)
+      .set(bearer(held.node.nodeToken)).send({
+        claimToken: held.claimToken, status: 'done',
+        // The measured lie: Claude Code 2.1.236 reports first-party Sonnet list
+        // price for tokens generated on loopback. 0.003711 is the figure a real
+        // run against llama-server on 127.0.0.1 came back with.
+        costUsd: 0.003711,
+        model: 'claude-sonnet-4-5-20250929', tokensIn: 1227, tokensOut: 2,
+        result: { summary: 'distilled 14 notes' },
+      });
+    expect(res.status).toBe(200);
+
+    const row = await getJob(held.jobId);
+    expect(row!.result).toMatchObject({
+      provider: 'local',
+      costUsd: 0,
+      reportedCostUsd: 0.003711,
+      // The override is auditable rather than silent: $0 with no explanation,
+      // beside a run that reported otherwise, is indistinguishable from a bug.
+      costNote: 'run reported $0.003711; recorded $0 — served by local inference',
+      summary: 'distilled 14 notes',
+      nodeId: held.node.nodeId,
+      nodeLabel: 'mia-mbp',
+      // The model id is recorded and is NOT evidence of who served the run:
+      // Claude Code rejects an unknown --model client-side, so a local run must
+      // send a real Anthropic id that llama.cpp then ignores. `provider` is the
+      // only field that answers "where did this actually run".
+      model: 'claude-sonnet-4-5-20250929',
+      tokensIn: 1227, tokensOut: 2,
+    });
+  });
+
+  it('leaves reportedCostUsd ABSENT when the run claimed nothing, rather than writing 0', async () => {
+    // The other half of run-cost.ts's doctrine. For a local run the recorded 0
+    // is a confident zero, so there is nothing to be unknown about — but the
+    // claimed figure is a separate fact, and "the run reported $0" is not the
+    // same statement as "the run reported nothing". Writing 0 into the field
+    // would invent the first from the second.
+    const held = await claimed();
+    await request(anon()).post(`${BASE}/jobs/${held.jobId}/complete`)
+      .set(bearer(held.node.nodeToken)).send({ claimToken: held.claimToken, status: 'done' });
+    const row = await getJob(held.jobId);
+    expect(row!.result).toMatchObject({ provider: 'local', costUsd: 0 });
+    expect(row!.result).not.toHaveProperty('reportedCostUsd');
+    expect(row!.result).not.toHaveProperty('costNote');
+  });
+
+  it('will not let the machine name its own provider or price — this is a trust boundary', async () => {
+    const held = await claimed();
+    await request(anon()).post(`${BASE}/jobs/${held.jobId}/complete`)
+      .set(bearer(held.node.nodeToken)).send({
+        claimToken: held.claimToken, status: 'done',
+        // A laptop asserting Bedrock spend would bill an initiative's allocation
+        // and an SME's sprint envelope for money nobody spent. `provider` is
+        // set by which ROUTE the completion arrived on, never by the body.
+        result: { provider: 'bedrock', costUsd: 4.2, nodeId: 'somebody-else' },
+      });
+    const row = await getJob(held.jobId);
+    expect(row!.result).toMatchObject({ provider: 'local', costUsd: 0, nodeId: held.node.nodeId });
+  });
+
+  it('records a failure with its error text, and prices it the same', async () => {
+    const held = await claimed();
+    const res = await request(anon()).post(`${BASE}/jobs/${held.jobId}/complete`)
+      .set(bearer(held.node.nodeToken)).send({
+        claimToken: held.claimToken, status: 'failed',
+        error: 'llama-server was not listening on 127.0.0.1:8080',
+      });
+    expect(res.status).toBe(200);
+    const row = await getJob(held.jobId);
+    expect(row!.status).toBe('failed');
+    expect(row!.error).toBe('llama-server was not listening on 127.0.0.1:8080');
+    // A failed run still ran, and still ran locally — the provenance is not
+    // conditional on the outcome.
+    expect(row!.result).toMatchObject({ provider: 'local', costUsd: 0 });
+  });
+
+  it('is once-only: the same completion POSTed twice does not double-write', async () => {
+    const held = await claimed();
+    const send = (summary: string) => request(anon()).post(`${BASE}/jobs/${held.jobId}/complete`)
+      .set(bearer(held.node.nodeToken))
+      .send({ claimToken: held.claimToken, status: 'done', result: { summary } });
+
+    expect((await send('first')).status).toBe(200);
+    const second = await send('second');
+    // Completing clears the token, so a worker retrying after a network blip
+    // cannot overwrite the result it already wrote — and neither can a late
+    // completion from a claim the reaper has since requeued and re-run.
+    expect(second.status).toBe(409);
+    expect(second.body.gate).toBe('claim_lost');
+    expect((await getJob(held.jobId))!.result).toMatchObject({ summary: 'first' });
+  });
+
+  it('ends the presence session the claim minted, so a finished job leaves no ghost', async () => {
+    const node = await readyWorker();
+    await queueLocal('nightly distill');
+    const claim = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
+    const sessionId = claim.body.sessionId as string;
+
+    // The worker announces the session the SERVER minted, which is the whole
+    // reason the claim returns one instead of letting both sides invent their own.
+    await request(anon()).post(`${BASE}/announce`).set(bearer(node.nodeToken))
+      .send({ sessions: [{ sessionId, harness: 'claude-code', intent: 'nightly distill' }] });
+    const during = await request(as('member', 'u-mia')).get(`${BASE}/nodes`);
+    expect(during.body.nodes[0].presence.sessions.map((s: { sessionId: string }) => s.sessionId)).toEqual([sessionId]);
+
+    await request(anon()).post(`${BASE}/jobs/${claim.body.job.id}/complete`).set(bearer(node.nodeToken))
+      .send({ claimToken: claim.body.claimToken, status: 'done' });
+
+    const after = await request(as('member', 'u-mia')).get(`${BASE}/nodes`);
+    expect(after.body.nodes[0].presence.sessions).toEqual([]);
+  });
+
+  it('stops the whole loop the moment the owner revokes the machine', async () => {
+    const held = await claimed();
+    expect((await request(as('member', 'u-mia')).delete(`${BASE}/nodes/${held.node.nodeId}`)).status).toBe(200);
+    for (const path of ['/claim', ...paths(held.jobId)]) {
+      const res = await request(anon()).post(`${BASE}${path}`).set(bearer(held.node.nodeToken))
+        .send({ claimToken: held.claimToken, status: 'done' });
+      expect([path, res.status]).toEqual([path, 401]);
+    }
+    // The job it was holding is left for the reaper rather than silently
+    // finished or failed: revoking a credential says nothing about the work's
+    // outcome, and the run may well still be going on that machine.
+    expect((await getJob(held.jobId))!.status).toBe('claimed');
   });
 });

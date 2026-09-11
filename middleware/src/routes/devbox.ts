@@ -824,6 +824,11 @@ export async function runDevboxTask(opts: {
   const arn = await resolveDevboxArn();
   if (!arn) {
     return {
+      // A legitimate zero rather than a null: this run provably never reached a
+      // model, so $0 is a fact, not an absence. `costUsd` is `number | null`
+      // precisely so the two can be told apart — "no figure was reported" is
+      // null (see lib/run-cost.ts), "nothing was spent because nothing ran" is
+      // 0, and there are no token counts beside it to make it read as free.
       ok: false, summary: '', turns: 0, durationMs: 0, costUsd: 0, toolCalls: 0,
       exitCode: null, error: 'devbox runtime not deployed', transcript: [],
     };

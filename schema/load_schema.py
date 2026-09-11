@@ -257,6 +257,12 @@ def main():
         # with no fallback, so a rebuilt cluster without them 500s every
         # pairing and presence call.
         'local_compute_schema.sql',
+        # Local compute P2 — cost provenance (bot_runs/agent_project_runs
+        # model_provider) plus the fencing columns a pull-side claim needs.
+        # All additive ALTERs, so it loads after agent_bots_schema.sql,
+        # agent_projects_schema.sql, agentic_work_schema.sql and
+        # local_compute_schema.sql have created the four tables it touches.
+        'local_compute_worker_schema.sql',
     ]
 
     # Track genuine failures — statements that erred for a non-transient reason
