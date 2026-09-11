@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-11T00:12:27.041Z",
-  "serverHandlerSha": "40b16737a2aeda33f46771b3be88c6f7317cb0e3b1dc0d60d6a9fc3d154c8639",
-  "baseUrl": "http://127.0.0.1:3012",
+  "capturedAt": "2026-09-11T18:16:43.467Z",
+  "serverHandlerSha": "78071310546f3f155efb0f1e5fa5e1780206d1c0531e46ab037616c704552420",
+  "baseUrl": "http://127.0.0.1:3011",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -991,13 +991,11 @@
           "ms_forms_export"
         ],
         "envelopes[].status": [
-          "committed",
           "processed",
           "staged",
           "superseded"
         ],
         "groups[].status": [
-          "committed",
           "processed",
           "staged"
         ]
@@ -1568,6 +1566,7 @@
         "runs[].finishedAt": "string",
         "runs[].id": "string",
         "runs[].jobId": "string",
+        "runs[].modelProvider": "null",
         "runs[].outcome": "object",
         "runs[].outcome.reason": "string",
         "runs[].runId": "null",
@@ -2153,7 +2152,7 @@
       },
       "values": {
         "kind": [
-          "decision"
+          "gotcha"
         ],
         "level": [
           "L0"
@@ -3602,10 +3601,13 @@
         "nodes[].acceptJobs": "boolean",
         "nodes[].createdAt": "string",
         "nodes[].id": "string",
+        "nodes[].jobKinds": "array",
+        "nodes[].jobKinds[]": "string",
         "nodes[].label": "string",
         "nodes[].lastSeenAt": "string",
         "nodes[].localModels": "array",
         "nodes[].localModels[]": "string",
+        "nodes[].maxConcurrency": "number",
         "nodes[].ownerId": "string",
         "nodes[].platform": "string",
         "nodes[].presence": "object",
@@ -3654,10 +3656,13 @@
         "nodes[].acceptJobs": "boolean",
         "nodes[].createdAt": "string",
         "nodes[].id": "string",
+        "nodes[].jobKinds": "array",
+        "nodes[].jobKinds[]": "string",
         "nodes[].label": "string",
         "nodes[].lastSeenAt": "string",
         "nodes[].localModels": "array",
         "nodes[].localModels[]": "string",
+        "nodes[].maxConcurrency": "number",
         "nodes[].ownerId": "string",
         "nodes[].platform": "string",
         "nodes[].presence": "object",
@@ -6128,7 +6133,6 @@
         "candidate",
         "changes_requested",
         "claim_open",
-        "committed",
         "completed",
         "connected",
         "current",

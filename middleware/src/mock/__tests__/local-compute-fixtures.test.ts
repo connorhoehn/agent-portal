@@ -137,8 +137,8 @@ describe('the seeded fleet', () => {
   it('never projects the token hash onto the wire', async () => {
     const node = await getNode(DEMO_NODE_ID);
     expect(Object.keys(node!).sort()).toEqual([
-      'acceptJobs', 'createdAt', 'id', 'label', 'lastSeenAt',
-      'localModels', 'ownerId', 'platform', 'revokedAt',
+      'acceptJobs', 'createdAt', 'id', 'jobKinds', 'label', 'lastSeenAt',
+      'localModels', 'maxConcurrency', 'ownerId', 'platform', 'revokedAt',
     ]);
     expect(JSON.stringify(node)).not.toContain('tokenHash');
   });
@@ -170,7 +170,7 @@ describe('pairing', () => {
     const created = await getNode('node-new');
     expect(created).toEqual({
       id: 'node-new', ownerId: 'u-operator', label: 'new-laptop', platform: null,
-      acceptJobs: false, localModels: [],
+      acceptJobs: false, localModels: [], jobKinds: [], maxConcurrency: 1,
       createdAt: '2026-09-07T12:00:00.000Z', lastSeenAt: null, revokedAt: null,
     });
     // The token it handed back authenticates, and only that one.

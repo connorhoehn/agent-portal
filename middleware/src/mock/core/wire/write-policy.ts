@@ -1953,6 +1953,15 @@ export const WRITE_SPECS: readonly WriteSpec[] = [
     headers: { authorization: `Bearer ${MOCK_NODE_TOKEN}` },
   },
   {
+    route: 'POST /api/local-compute/register',
+    persona: 'anonymous',
+    safe: 'The worker announcing its own capabilities. `recordNodeCapabilities` rewrites `localModels`/`jobKinds`/`maxConcurrency` on the demo machine’s row in the registered `compute-nodes` fixture, and reset restores the seeded values. It only NARROWS — jobKinds are intersected with LOCAL_JOB_KINDS and maxConcurrency is capped at 2 — so nothing outside the seeded shape can be written, and `acceptJobs` (the owner’s switch, which the machine cannot set) is left untouched. No AWS under MOCK_AURORA, no timer, no job claimed.',
+    bodyFrom: 'routes/local-compute.ts: `localModels`/`jobKinds`/`maxConcurrency` all optional. The kinds are closed-set values the handler itself spells via LOCAL_JOB_KINDS (lib/local-work.ts); `devbox:task` is sent alongside `local:task` to exercise the documented rejection path, so the response’s `rejectedKinds`/`runnableKinds` shape comes from the handler rather than from imagination. Model ids are free text — an open set the shape check never asserts on. Auth is the node token, `MOCK_NODE_TOKEN` in mock/local-compute.ts.',
+    intercepts: ['aurora'],
+    headers: { authorization: `Bearer ${MOCK_NODE_TOKEN}` },
+    build: async () => ({ jobKinds: ['local:task', 'devbox:task'], maxConcurrency: 4 }),
+  },
+  {
     route: 'POST /api/local-compute/sessions/:sessionId/end',
     persona: 'anonymous',
     safe: 'Ends a REAL session — the seeded `demo-local-session-…` on the demo machine — so the response carries `removed: true` rather than the empty-handed shape a made-up id would produce. The session lives in the registered `local-presence` fixture, so reset announces it back.',

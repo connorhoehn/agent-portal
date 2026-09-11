@@ -9,6 +9,7 @@ import { exec } from '../aurora.js';
 import {
   enqueueJob, claimNextJob, completeJob, reviewJob, cancelJob, reapStaleJobs, listJobs, queueStats,
 } from '../agent-jobs.js';
+import { _resetColumnProbes } from '../column-probe.js';
 
 const execMock = exec as unknown as jest.Mock;
 
@@ -19,7 +20,12 @@ const ROW = {
   claimed_at: null, started_at: null, finished_at: null,
 };
 
-beforeEach(() => execMock.mockReset());
+beforeEach(() => {
+  execMock.mockReset();
+  // reapStaleJobs probes for the pull-side columns, and the probe answer is
+  // cached process-wide — reset it so each test controls the exec call sequence.
+  _resetColumnProbes();
+});
 
 describe('claim protocol', () => {
   it('claims with FOR UPDATE SKIP LOCKED so two dispatchers cannot take one job', async () => {
@@ -77,10 +83,13 @@ describe('lifecycle', () => {
 
 describe('stale recovery', () => {
   it('requeues while attempts remain and fails once exhausted', async () => {
-    execMock.mockResolvedValueOnce([{ id: 'job-1' }]).mockResolvedValueOnce([{ id: 'job-2' }]);
+    execMock
+      .mockResolvedValueOnce([{ n: 0 }]) // pull-side column probe: not migrated
+      .mockResolvedValueOnce([{ id: 'job-1' }])
+      .mockResolvedValueOnce([{ id: 'job-2' }]);
     const out = await reapStaleJobs(30);
-    const requeueSql = execMock.mock.calls[0][0] as string;
-    const failSql = execMock.mock.calls[1][0] as string;
+    const requeueSql = execMock.mock.calls[1][0] as string;
+    const failSql = execMock.mock.calls[2][0] as string;
     expect(requeueSql).toMatch(/SET status='queued'/);
     expect(requeueSql).toMatch(/attempts < max_attempts/);
     expect(failSql).toMatch(/attempts >= max_attempts/);

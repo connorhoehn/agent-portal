@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-11T00:12:30.968Z",
-  "serverHandlerSha": "40b16737a2aeda33f46771b3be88c6f7317cb0e3b1dc0d60d6a9fc3d154c8639",
-  "baseUrl": "http://127.0.0.1:3012",
+  "capturedAt": "2026-09-11T18:16:44.243Z",
+  "serverHandlerSha": "78071310546f3f155efb0f1e5fa5e1780206d1c0531e46ab037616c704552420",
+  "baseUrl": "http://127.0.0.1:3011",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -422,9 +422,11 @@
         "acceptJobs": "boolean",
         "createdAt": "string",
         "id": "string",
+        "jobKinds": "array",
         "label": "string",
         "lastSeenAt": "string",
         "localModels": "array",
+        "maxConcurrency": "number",
         "ownerId": "string",
         "platform": "string",
         "presence": "object",
@@ -1900,6 +1902,12 @@
         "sessions"
       ]
     },
+    "POST /api/local-compute/claim": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
     "POST /api/local-compute/heartbeat": {
       "persona": "anonymous",
       "status": 200,
@@ -1909,6 +1917,24 @@
       },
       "values": {},
       "sent": []
+    },
+    "POST /api/local-compute/jobs/:jobId/complete": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/local-compute/jobs/:jobId/heartbeat": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/local-compute/jobs/:jobId/start": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
     },
     "POST /api/local-compute/pair/claim": {
       "persona": "anonymous",
@@ -1934,6 +1960,31 @@
       },
       "values": {},
       "sent": []
+    },
+    "POST /api/local-compute/register": {
+      "persona": "anonymous",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "acceptJobs": "boolean",
+        "heartbeatIntervalS": "number",
+        "jobKinds": "array",
+        "jobKinds[]": "string",
+        "label": "string",
+        "localModels": "array",
+        "maxConcurrency": "number",
+        "nodeId": "string",
+        "rejectedKinds": "array",
+        "rejectedKinds[]": "string",
+        "runnableKinds": "array",
+        "runnableKinds[]": "string",
+        "staleMinutes": "number"
+      },
+      "values": {},
+      "sent": [
+        "jobKinds",
+        "maxConcurrency"
+      ]
     },
     "POST /api/local-compute/sessions/:sessionId/end": {
       "persona": "anonymous",
