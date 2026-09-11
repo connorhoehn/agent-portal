@@ -355,6 +355,62 @@ export async function listJobs(opts: { status?: string; limit?: number } = {}): 
   return rows.map(rowToJob);
 }
 
+/**
+ * Every job that has run, is running, or is queued FOR a given set of boxes.
+ *
+ * The local-compute page's run list. Scoped by box rather than by creator on
+ * purpose: the question that surface answers is "what has my machine been
+ * doing", and a bot or a teammate can legitimately have queued the work — the
+ * machine is still the thing whose history is being read. The caller resolves
+ * which boxes it may ask about (its own machines), which is where the
+ * authorization lives; this function does not know about owners.
+ *
+ * A queued job has no `box_id` yet, so a targeted one is matched by
+ * `payload.nodeId` instead — otherwise work you just handed to a machine would
+ * be invisible until the moment it was claimed, which is exactly the window a
+ * person is watching.
+ */
+export async function listJobsForBoxes(
+  boxIds: readonly string[],
+  opts: { nodeIds?: readonly string[]; limit?: number } = {},
+): Promise<AgentJob[]> {
+  if (boxIds.length === 0) return [];
+  const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
+  const nodeIds = opts.nodeIds ?? [];
+  const boxSet = new Set(boxIds);
+  const nodeSet = new Set(nodeIds);
+
+  if (config.mock.aurora) {
+    return MOCK_JOBS
+      .filter((j) => (j.boxId && boxSet.has(j.boxId))
+        || (typeof j.payload['nodeId'] === 'string' && nodeSet.has(j.payload['nodeId'] as string)))
+      .sort(mockOrder)
+      .slice(0, limit)
+      .map((j) => ({ ...j }));
+  }
+
+  // No array parameter in the RDS Data API, so both lists expand into named
+  // placeholders. Bounded by how many machines one person has paired.
+  const boxParams = boxIds.map((b, i) => strParam(`b${i}`, b));
+  const boxList = boxIds.map((_, i) => `:b${i}`).join(', ');
+  const nodeParams = nodeIds.map((n, i) => strParam(`n${i}`, n));
+  const nodeClause = nodeIds.length
+    ? ` OR j.payload->>'nodeId' IN (${nodeIds.map((_, i) => `:n${i}`).join(', ')})`
+    : '';
+
+  const rows = await exec(
+    `SELECT ${COLUMNS_WITH_BOT} FROM ${JOBS_WITH_BOT}
+      WHERE j.box_id IN (${boxList})${nodeClause}
+      ORDER BY CASE j.status
+                 WHEN 'running' THEN 0 WHEN 'claimed' THEN 1
+                 WHEN 'awaiting_review' THEN 2 WHEN 'queued' THEN 3 ELSE 4 END,
+               j.priority, j.created_at DESC
+      LIMIT :lim`,
+    [intParam('lim', limit), ...boxParams, ...nodeParams],
+  );
+  return rows.map(rowToJob);
+}
+
 export async function getJob(id: string): Promise<AgentJob | null> {
   if (config.mock.aurora) {
     const job = MOCK_JOBS.find((j) => j.id === id);
@@ -534,18 +590,37 @@ export function _resetPullSideProbe(): void { _resetColumnProbes(); }
  *
  * Still `FOR UPDATE SKIP LOCKED`: two workstations running this concurrently
  * skip each other's locked rows rather than reading them as available.
+ *
+ * **Targeting.** `payload.nodeId`, when a job carries one, names the ONLY machine
+ * that may claim it, and `nodeId` here is the asking machine. The local pull
+ * queue is otherwise global: every paired workstation registered for a kind
+ * competes for the same rows, so "run this on my laptop" was not a thing anyone
+ * could ask for — a second machine (or another person's) would win the race
+ * about as often. That is not only surprising, it puts the prompt text of a run
+ * you scoped to your own hardware on somebody else's disk. A job with no
+ * `nodeId` stays claimable by any eligible machine, which is the behaviour every
+ * existing caller already relies on; the portal always targets.
  */
 export async function claimNextJobForWorker(opts: {
   boxId: string;
   sessionId: string;
   kinds: readonly string[];
+  /** The claiming machine's node id — matched against `payload.nodeId`. */
+  nodeId?: string;
 }): Promise<PullClaim | null> {
   if (opts.kinds.length === 0) return null;
   const claimToken = mintClaimToken();
 
+  /** A job is claimable by this machine if it names no machine, or names this one. */
+  const targetOk = (payload: Record<string, unknown>): boolean => {
+    const want = payload['nodeId'];
+    if (typeof want !== 'string' || !want) return true;
+    return want === opts.nodeId;
+  };
+
   if (config.mock.aurora) {
     const next = MOCK_JOBS
-      .filter((j) => j.status === 'queued' && opts.kinds.includes(j.kind))
+      .filter((j) => j.status === 'queued' && opts.kinds.includes(j.kind) && targetOk(j.payload))
       .sort((a, b) => a.priority - b.priority || a.createdAt.localeCompare(b.createdAt))[0];
     if (!next) return null;
     next.status = 'claimed';
@@ -571,12 +646,13 @@ export async function claimNextJobForWorker(opts: {
       WHERE id = (
             SELECT id FROM agent_jobs
              WHERE status = 'queued' AND kind IN (${kindList})
+               AND (payload->>'nodeId' IS NULL OR payload->>'nodeId' = :node)
              ORDER BY priority, created_at
              FOR UPDATE SKIP LOCKED
              LIMIT 1)
       RETURNING ${COLUMNS}`,
     [strParam('box', opts.boxId), strParam('session', opts.sessionId),
-      strParam('token', claimToken), ...kindParams],
+      strParam('token', claimToken), strParam('node', opts.nodeId ?? ''), ...kindParams],
   );
   return rows[0] ? { job: rowToJob(rows[0]), claimToken } : null;
 }

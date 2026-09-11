@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-11T18:34:41.265Z",
-  "serverHandlerSha": "53e3fd2df5eb266a1ec5a13f91dee05717f3d4911d105f2309bcc4b90f783293",
-  "baseUrl": "http://127.0.0.1:3011",
+  "capturedAt": "2026-09-11T20:01:23.657Z",
+  "serverHandlerSha": "2abf23742a78710703a021fd675f9394255c9c8eed4d6cf0a16cc3660bac55df",
+  "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
     "assessment/admin",
@@ -3609,6 +3609,12 @@
     "GET /api/library/evals/runs/:runId": {
       "skipped": "no value found for :runId under /api/library/evals/runs (orgiq/admin); no value found for :runId under /api/library/evals/runs (assessment/admin); no value found for :runId under /api/library/evals/runs (anonymous)"
     },
+    "GET /api/local-compute/jobs/:jobId/log": {
+      "skipped": "no value found for :jobId under /api/local-compute/jobs (orgiq/admin); no value found for :jobId under /api/local-compute/jobs (assessment/admin); no value found for :jobId under /api/local-compute/jobs (anonymous)"
+    },
+    "GET /api/local-compute/jobs/:jobId/log/stream": {
+      "skipped": "no value found for :jobId under /api/local-compute/jobs (orgiq/admin); no value found for :jobId under /api/local-compute/jobs (assessment/admin); no value found for :jobId under /api/local-compute/jobs (anonymous)"
+    },
     "GET /api/local-compute/nodes": {
       "persona": "orgiq/admin",
       "status": 200,
@@ -3697,6 +3703,15 @@
           "stale"
         ]
       }
+    },
+    "GET /api/local-compute/runs": {
+      "persona": "orgiq/admin",
+      "status": 200,
+      "shape": {
+        "$": "object",
+        "runs": "array"
+      },
+      "values": {}
     },
     "GET /api/local-compute/stream": {
       "skipped": "server-sent event stream (orgiq/admin); server-sent event stream (assessment/admin); server-sent event stream (anonymous)"

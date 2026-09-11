@@ -93,6 +93,7 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
         const page = b ?? 'overview';
         return [{ label: 'Build' }, { label: 'Distillation', path: '/iq/distillation' }, { label: DISTILLATION_LABELS[page] ?? page }];
       }
+      case 'local-compute': return [{ label: 'Build' }, { label: 'Local compute' }];
       default:
         if (a && PROMPT_PAGES[a]) {
           return [{ label: 'Operate' }, { label: 'Prompts', path: '/iq/prompt-ops' }, { label: PROMPT_PAGES[a] }];

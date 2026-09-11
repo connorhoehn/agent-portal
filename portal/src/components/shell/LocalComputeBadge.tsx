@@ -80,7 +80,7 @@ export function LocalComputeBadge() {
   return (
     <MachinePresenceMenu
       nodes={nodes}
-      onOpenLab={() => navigate('/admin/devbox')}
+      onOpenLab={() => navigate('/iq/local-compute')}
       data-testid="local-compute-badge"
     />
   );

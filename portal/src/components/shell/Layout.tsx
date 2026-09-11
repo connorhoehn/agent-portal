@@ -75,6 +75,7 @@ const NAV_ITEMS: NavItem[] = [
   // is what it LEARNED — the run log of the pipeline that turns session
   // observations into reusable runbooks and skills.
   { path: '/iq/distillation', label: 'Distillation', tenant: 'orgiq',   group: 'Build' },
+  { path: '/iq/local-compute', label: 'Local compute', tenant: 'orgiq', group: 'Build' },
   { path: '/iq/invoke',     label: 'Ask',         tenant: 'orgiq',     group: 'Org' },
   { path: '/iq/explore',    label: 'Explore',     tenant: 'orgiq',     group: 'Org' },
   // Ask is also the "find help" surface: its empty state offers questions

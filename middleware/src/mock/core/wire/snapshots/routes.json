@@ -1383,77 +1383,102 @@
     {
       "method": "POST",
       "path": "/api/local-compute/announce",
-      "source": "src/routes/local-compute.ts:228"
+      "source": "src/routes/local-compute.ts:242"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/claim",
-      "source": "src/routes/local-compute.ts:350"
+      "source": "src/routes/local-compute.ts:364"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/heartbeat",
-      "source": "src/routes/local-compute.ts:239"
+      "source": "src/routes/local-compute.ts:253"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/jobs/:jobId/complete",
-      "source": "src/routes/local-compute.ts:430"
+      "source": "src/routes/local-compute.ts:448"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/jobs/:jobId/heartbeat",
-      "source": "src/routes/local-compute.ts:409"
+      "source": "src/routes/local-compute.ts:427"
+    },
+    {
+      "method": "GET",
+      "path": "/api/local-compute/jobs/:jobId/log",
+      "source": "src/routes/local-compute.ts:571"
+    },
+    {
+      "method": "POST",
+      "path": "/api/local-compute/jobs/:jobId/log",
+      "source": "src/routes/local-compute.ts:531"
+    },
+    {
+      "method": "GET",
+      "path": "/api/local-compute/jobs/:jobId/log/stream",
+      "source": "src/routes/local-compute.ts:589"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/jobs/:jobId/start",
-      "source": "src/routes/local-compute.ts:394"
+      "source": "src/routes/local-compute.ts:412"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/nodes",
-      "source": "src/routes/local-compute.ts:526"
+      "source": "src/routes/local-compute.ts:633"
     },
     {
       "method": "DELETE",
       "path": "/api/local-compute/nodes/:id",
-      "source": "src/routes/local-compute.ts:603"
+      "source": "src/routes/local-compute.ts:710"
     },
     {
       "method": "PATCH",
       "path": "/api/local-compute/nodes/:id",
-      "source": "src/routes/local-compute.ts:581"
+      "source": "src/routes/local-compute.ts:688"
+    },
+    {
+      "method": "POST",
+      "path": "/api/local-compute/nodes/:nodeId/work",
+      "source": "src/routes/local-compute.ts:755"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/nodes/all",
-      "source": "src/routes/local-compute.ts:538"
+      "source": "src/routes/local-compute.ts:645"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/pair/claim",
-      "source": "src/routes/local-compute.ts:168"
+      "source": "src/routes/local-compute.ts:182"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/pair/start",
-      "source": "src/routes/local-compute.ts:157"
+      "source": "src/routes/local-compute.ts:171"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/register",
-      "source": "src/routes/local-compute.ts:274"
+      "source": "src/routes/local-compute.ts:288"
+    },
+    {
+      "method": "GET",
+      "path": "/api/local-compute/runs",
+      "source": "src/routes/local-compute.ts:842"
     },
     {
       "method": "POST",
       "path": "/api/local-compute/sessions/:sessionId/end",
-      "source": "src/routes/local-compute.ts:245"
+      "source": "src/routes/local-compute.ts:259"
     },
     {
       "method": "GET",
       "path": "/api/local-compute/stream",
-      "source": "src/routes/local-compute.ts:562"
+      "source": "src/routes/local-compute.ts:669"
     },
     {
       "method": "GET",

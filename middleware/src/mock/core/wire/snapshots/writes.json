@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-09-11T18:34:46.375Z",
-  "serverHandlerSha": "53e3fd2df5eb266a1ec5a13f91dee05717f3d4911d105f2309bcc4b90f783293",
-  "baseUrl": "http://127.0.0.1:3011",
+  "capturedAt": "2026-09-11T20:01:24.239Z",
+  "serverHandlerSha": "2abf23742a78710703a021fd675f9394255c9c8eed4d6cf0a16cc3660bac55df",
+  "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
     "agentcore",
@@ -1935,7 +1935,19 @@
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
       }
     },
+    "POST /api/local-compute/jobs/:jobId/log": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
     "POST /api/local-compute/jobs/:jobId/start": {
+      "refused": {
+        "rule": "unclassified",
+        "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
+      }
+    },
+    "POST /api/local-compute/nodes/:nodeId/work": {
       "refused": {
         "rule": "unclassified",
         "reason": "No allowlist entry. A write is replayed only once someone has read its handler and written down why the six safety rules hold and where its body comes from. Until then this is a visible gap, which is the point."
@@ -2003,29 +2015,7 @@
       "sent": []
     },
     "POST /api/observability/approvals/:id/decision": {
-      "persona": "orgiq/admin",
-      "status": 200,
-      "shape": {
-        "$": "object",
-        "agentId": "string",
-        "approvalId": "string",
-        "decidedAt": "string",
-        "decidedBy": "string",
-        "decidedNote": "null",
-        "payload": "object",
-        "reason": "null",
-        "requestedAt": "string",
-        "status": "string",
-        "txId": "string"
-      },
-      "values": {
-        "status": [
-          "APPROVED"
-        ]
-      },
-      "sent": [
-        "decision"
-      ]
+      "skipped": "no value found for :id under /api/observability/approvals (orgiq/admin)"
     },
     "POST /api/observability/approvals/request": {
       "persona": "orgiq/admin",

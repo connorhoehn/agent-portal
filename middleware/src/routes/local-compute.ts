@@ -10,9 +10,14 @@
 //   POST   /api/local-compute/jobs/:id/start      claimed → running (machine, fenced)
 //   POST   /api/local-compute/jobs/:id/heartbeat  still working (machine, fenced)
 //   POST   /api/local-compute/jobs/:id/complete   terminal state + cost (machine, fenced)
+//   POST   /api/local-compute/jobs/:id/log        ship a chunk of run output (machine, fenced)
+//   GET    /api/local-compute/jobs/:id/log        read the run log (browser session, owner-scoped)
+//   GET    /api/local-compute/jobs/:id/log/stream tail the run log, as SSE (browser session, owner-scoped)
 //   GET    /api/local-compute/nodes           my machines + live sessions (browser session)
 //   GET    /api/local-compute/stream          same, as SSE (browser session)
+//   GET    /api/local-compute/runs            what my machines have been doing (browser session, owner-scoped)
 //   PATCH  /api/local-compute/nodes/:id       rename / accept-jobs toggle (owner)
+//   POST   /api/local-compute/nodes/:id/work  hand this machine a job (owner)
 //   DELETE /api/local-compute/nodes/:id       revoke the machine's token (owner)
 //
 // ⚠️ Gate machine-callback routes per-route, never at the mount (CLAUDE.md:
@@ -56,7 +61,16 @@ import {
   type NodePresence,
 } from '../lib/local-compute-fleet.js';
 import {
+  appendLog,
+  markLogDone,
+  getLog,
+  subscribeLog,
+  MAX_LOG_CHUNK,
+} from '../lib/local-compute-logs.js';
+import {
   getJob,
+  enqueueJob,
+  listJobsForBoxes,
   hasPullSideColumns,
   claimNextJobForWorker,
   countLiveJobsForBox,
@@ -370,7 +384,11 @@ localComputeRouter.post('/claim', workLoopLimit, requireNodeToken(async (_req, r
   // no way to join them — which is how a running local job showed up as an
   // anonymous session next to a job with an anonymous worker.
   const sessionId = `local-${node.id}-${randomUUID()}`;
-  const claim = await claimNextJobForWorker({ boxId, sessionId, kinds: verdict.kinds });
+  // `nodeId` is what makes a targeted job reachable by exactly one machine — see
+  // claimNextJobForWorker's targeting note. It comes from the authenticated node,
+  // never from the request, so a worker cannot claim another machine's work by
+  // asking for it.
+  const claim = await claimNextJobForWorker({ boxId, sessionId, kinds: verdict.kinds, nodeId: node.id });
   await touchNode(node.id);
 
   if (!claim) {
@@ -484,6 +502,9 @@ localComputeRouter.post('/jobs/:jobId/complete', workLoopLimit, requireNodeToken
   // whether the write applied — either way this machine is no longer running it,
   // and a leftover session would keep the job's worktree and intent on screen.
   if (held.job.sessionId) endSession(node.id, held.job.sessionId);
+  // The run is over — tell any tailing browser to stop polling. Done regardless
+  // of whether the fence applied: either way this machine has stopped emitting.
+  markLogDone(held.job.id);
   await touchNode(node.id);
 
   if (!ok) {
@@ -498,6 +519,92 @@ localComputeRouter.post('/jobs/:jobId/complete', workLoopLimit, requireNodeToken
   }
   res.json({ ok: true, jobId: held.job.id, status, costUsd: cost.costUsd, provider: cost.provider });
 }));
+
+// ─── Run logs ────────────────────────────────────────────────────────────────
+//
+// The machine ships stdout/stderr chunks while a claimed job runs (fenced, like
+// every other post-claim write); a browser reads or tails them. The ingest side
+// is a node-token callback; the read side is owner-scoped exactly like the
+// presence reads — a run's output is a person's work, so it stays with the owner
+// of the machine that produced it, even from a fleet-wide role.
+
+localComputeRouter.post('/jobs/:jobId/log', workLoopLimit, requireNodeToken(async (req, res, node) => {
+  const held = await fencedJob(req, res, node);
+  if (!held) return;
+  const body = (req.body ?? {}) as { seq?: unknown; chunk?: unknown };
+  const seq = Number(body.seq);
+  if (!Number.isFinite(seq) || seq < 0) {
+    res.status(400).json({ error: 'seq must be a non-negative number' });
+    return;
+  }
+  const chunk = typeof body.chunk === 'string' ? body.chunk : '';
+  if (!chunk) {
+    res.status(400).json({ error: 'chunk must be a non-empty string' });
+    return;
+  }
+  appendLog(held.job.id, Math.floor(seq), chunk.slice(0, MAX_LOG_CHUNK));
+  res.json({ ok: true });
+}));
+
+/** The job named by `:jobId` if it runs on a machine THIS session owns, else a
+ *  flat 404 — the same opacity fencedJob gives the machine side, so a browser
+ *  cannot probe the queue for run ids it has no claim to see. */
+async function ownedLocalJob(
+  req: Request, res: Response,
+): Promise<{ jobId: string } | null> {
+  const session = resolveSession(req)!;
+  const jobId = String(req.params['jobId'] ?? '');
+  const job = await getJob(jobId);
+  if (!job || !job.boxId) {
+    res.status(404).json({ error: 'no such run log' });
+    return null;
+  }
+  const own = await listNodesByOwner(session.sub);
+  const ownBoxIds = new Set(own.map((n) => localBoxId(n.id)));
+  if (!ownBoxIds.has(job.boxId)) {
+    res.status(404).json({ error: 'no such run log' });
+    return null;
+  }
+  return { jobId };
+}
+
+localComputeRouter.get(
+  '/jobs/:jobId/log',
+  browserTenant,
+  requireSession('ViewLocalCompute'),
+  asyncHandler(async (req, res) => {
+    const owned = await ownedLocalJob(req, res);
+    if (!owned) return;
+    const sinceRaw = Number(req.query['since']);
+    const since = Number.isFinite(sinceRaw) ? sinceRaw : -1;
+    // A run that has shipped nothing yet is not an error — return the empty
+    // shape so a poller that opened before the first chunk sees `done:false`
+    // and keeps polling rather than 404ing.
+    res.json(getLog(owned.jobId, since) ?? {
+      jobId: owned.jobId, entries: [], lastSeq: -1, bytes: 0, updatedAt: null, done: false,
+    });
+  }),
+);
+
+localComputeRouter.get(
+  '/jobs/:jobId/log/stream',
+  browserTenant,
+  requireSession('ViewLocalCompute'),
+  asyncHandler(async (req, res) => {
+    const owned = await ownedLocalJob(req, res);
+    if (!owned) return;
+    initSSE(res);
+    const snap = getLog(owned.jobId);
+    if (snap) {
+      for (const e of snap.entries) writeSSE(res, { type: 'log', seq: e.seq, chunk: e.text });
+      if (snap.done) writeSSE(res, { type: 'done' });
+    }
+    const unsubscribe = subscribeLog(owned.jobId, (entry) => {
+      writeSSE(res, { type: 'log', seq: entry.seq, chunk: entry.text });
+    });
+    req.on('close', unsubscribe);
+  }),
+);
 
 // ─── Presence reads (browser) ────────────────────────────────────────────────
 
@@ -609,5 +716,157 @@ localComputeRouter.delete(
     const revoked = await revokeNode(String(req.params['id']), session.sub);
     if (!revoked) { res.status(404).json({ error: 'node not found' }); return; }
     res.json({ ok: true });
+  }),
+);
+
+// ─── Handing work to a machine (owner) ───────────────────────────────────────
+//
+// A machine that shows as CONNECTED and cannot be given anything to do is a
+// status light, not a fleet participant. This is the control that makes the
+// pull-side loop reachable from the browser instead of only from a script.
+//
+// Why it lives here rather than on `POST /api/work/jobs`, which can already
+// enqueue a `local:*` kind: that route is gated on `ManageDevbox`, which is the
+// right gate for spending an initiative's shared microVM capacity and the wrong
+// one for spending your own laptop's. The right question for local work is "is
+// this your machine", and the capability that means "you may drive a machine of
+// your own" is `ConnectLocalCompute` — the same one that pairs it and flips its
+// accept-jobs switch. The generic route stays as it is; nothing here widens it.
+//
+// The gates are the SAME ones the claim would hit, checked at dispatch instead
+// of silently later: queueing into a machine that is switched off, or that never
+// registered the kind, produces a row nothing will ever claim and no error
+// anybody sees. `decideClaim` is not reused wholesale because concurrency is not
+// a dispatch-time question — a full machine is exactly what a queue is for.
+
+/** The machine named by `:nodeId` if this session owns it and it is live. */
+async function ownedNode(req: Request, res: Response): Promise<ComputeNode | null> {
+  const session = resolveSession(req)!;
+  const nodeId = String(req.params['nodeId'] ?? '');
+  const own = await listNodesByOwner(session.sub);
+  const node = own.find((n) => n.id === nodeId);
+  if (!node) {
+    res.status(404).json({ error: 'node not found' });
+    return null;
+  }
+  return node;
+}
+
+localComputeRouter.post(
+  '/nodes/:nodeId/work',
+  browserTenant,
+  requireAction('ConnectLocalCompute'),
+  asyncHandler(async (req, res) => {
+    const session = resolveSession(req)!;
+    const node = await ownedNode(req, res);
+    if (!node) return;
+
+    const body = (req.body ?? {}) as {
+      title?: unknown; prompt?: unknown; kind?: unknown; repo?: unknown;
+      requiresReview?: unknown; priority?: unknown;
+    };
+    const title = typeof body.title === 'string' ? body.title.trim().slice(0, 200) : '';
+    const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
+    if (!prompt) {
+      res.status(400).json({ error: 'prompt is required — it is what the machine will be asked to do' });
+      return;
+    }
+    const kind = typeof body.kind === 'string' && body.kind ? body.kind : 'local:task';
+    if (!(LOCAL_JOB_KINDS as readonly string[]).includes(kind)) {
+      res.status(400).json({ error: `kind must be one of ${LOCAL_JOB_KINDS.join(', ')}` });
+      return;
+    }
+
+    if (!node.acceptJobs) {
+      res.status(409).json({
+        gate: 'accept_jobs',
+        error: 'this machine is not accepting jobs — switch it on before handing it work',
+      });
+      return;
+    }
+    const runnable = allowedKinds(node.jobKinds);
+    if (!runnable.includes(kind as typeof runnable[number])) {
+      res.status(409).json({
+        gate: 'kinds',
+        error: runnable.length
+          ? `this machine runs ${runnable.join(', ')} — it has not registered for ${kind}`
+          : 'this machine has registered no runnable kinds — start its worker so it can announce them',
+      });
+      return;
+    }
+
+    // `repo` is a plain URL the worker clones with ITS OWN git credentials
+    // (tools/local-compute-worker.mjs `ensureRepo`). No token travels with the
+    // job: a node token that leaked would otherwise become a way to read every
+    // private repo the service account can reach.
+    const repo = typeof body.repo === 'string' && body.repo.trim() ? body.repo.trim().slice(0, 400) : null;
+
+    const job = await enqueueJob({
+      kind,
+      title: title || prompt.slice(0, 80),
+      payload: {
+        prompt,
+        // The targeting field. Without it this row is claimable by any paired
+        // machine registered for the kind, including someone else's — which
+        // would put the prompt text on a stranger's disk.
+        nodeId: node.id,
+        // Honoured on the local path by the worker, which completes with
+        // `awaiting_review` rather than `done` when this is not false. A payload
+        // field nothing reads is worse than no field at all.
+        requiresReview: body.requiresReview !== false,
+        ...(repo ? { repo } : {}),
+      },
+      ...(typeof body.priority === 'number' ? { priority: body.priority } : {}),
+      createdBy: session.sub,
+    });
+    if (!job) {
+      res.status(503).json({ error: 'queue unavailable (Aurora mocked or unreachable)' });
+      return;
+    }
+    res.status(201).json(job);
+  }),
+);
+
+/**
+ * What this person's machines have been doing.
+ *
+ * Owner-scoped like the presence reads and for the same reason: a run's prompt,
+ * repo and output are a person's work. A fleet-wide role sees that machines
+ * exist (`/nodes/all`), not what they were asked to do.
+ *
+ * Includes the still-queued rows, matched by their targeting `nodeId` — a job
+ * has no `box_id` until it is claimed, and work you just handed to a machine
+ * being invisible until a worker picks it up is precisely the window someone is
+ * standing there watching.
+ */
+localComputeRouter.get(
+  '/runs',
+  browserTenant,
+  requireSession('ViewLocalCompute'),
+  asyncHandler(async (req, res) => {
+    const session = resolveSession(req)!;
+    const own = await listNodesByOwner(session.sub);
+    if (own.length === 0) { res.json({ runs: [] }); return; }
+    const limitRaw = Number(req.query['limit']);
+    const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 200) : 50;
+    const runs = await listJobsForBoxes(
+      own.map((n) => localBoxId(n.id)),
+      { nodeIds: own.map((n) => n.id), limit },
+    );
+    // The node id each run belongs to, resolved here rather than left for the
+    // browser to slice out of a box id — `local:` prefixing is this module's
+    // convention and not something a client should have to know.
+    const byBox = new Map(own.map((n) => [localBoxId(n.id), n]));
+    res.json({
+      runs: runs.map((job) => {
+        const node = (job.boxId ? byBox.get(job.boxId) : undefined)
+          ?? own.find((n) => n.id === job.payload['nodeId']);
+        return {
+          ...job,
+          nodeId: node?.id ?? null,
+          nodeLabel: node?.label ?? null,
+        };
+      }),
+    });
   }),
 );

@@ -92,6 +92,7 @@ import { freezeClock, unfreezeClock } from '../../mock/core/index.js';
 import { _resetLocalComputeMocks } from '../../providers/local-compute.js';
 import { _resetLocalFleet } from '../../lib/local-compute-fleet.js';
 import { enqueueJob, getJob, _resetMockQueue } from '../../providers/agent-jobs.js';
+import { _resetLocalComputeLogs } from '../../lib/local-compute-logs.js';
 import { exec } from '../../providers/aurora.js';
 import { type Role, type Session } from '../../lib/session.js';
 
@@ -150,6 +151,7 @@ function bearer(token: string) {
 beforeEach(() => {
   _resetLocalComputeMocks();
   _resetLocalFleet();
+  _resetLocalComputeLogs();
   _resetMockQueue();
   resetRateLimits();
   clearAuthzCache();
@@ -723,12 +725,12 @@ describe('GET /api/local-compute/nodes/all', () => {
 function readStream(
   app: express.Express,
   until: (buf: string) => boolean,
-  opts: { headers?: Record<string, string>; timeoutMs?: number } = {},
+  opts: { headers?: Record<string, string>; timeoutMs?: number; path?: string } = {},
 ): Promise<string> {
   const { port, headers: appHeaders } = attachToSharedServer(app);
   return new Promise((resolve, reject) => {
     const req = http.get(
-      { host: '127.0.0.1', port, path: '/api/local-compute/stream', headers: { ...appHeaders, ...(opts.headers ?? {}) } },
+      { host: '127.0.0.1', port, path: opts.path ?? '/api/local-compute/stream', headers: { ...appHeaders, ...(opts.headers ?? {}) } },
       (res) => {
         let buf = '';
         const done = () => { clearTimeout(timer); req.destroy(); resolve(buf); };
@@ -1428,5 +1430,377 @@ describe('the fenced job writes', () => {
     // finished or failed: revoking a credential says nothing about the work's
     // outcome, and the run may well still be going on that machine.
     expect((await getJob(held.jobId))!.status).toBe('claimed');
+  });
+});
+
+// Handing a machine work, and reading back what it did.
+//
+// The control that makes a CONNECTED machine a fleet participant rather than a
+// status light. Two properties are load-bearing and neither is visible from the
+// happy path: the dispatch gates are the SAME ones the claim would hit (so
+// queueing into a switched-off machine is refused at the door instead of
+// producing a row nothing will ever claim), and a dispatched job is TARGETED —
+// claimable by exactly the machine it was handed to. Without targeting the local
+// pull queue is global, and "run this on my laptop" puts the prompt text on
+// whichever paired machine wins the race, including someone else's.
+describe('handing a machine work', () => {
+  const workPath = (nodeId: string) => `${BASE}/nodes/${nodeId}/work`;
+
+  const hand = (
+    app: express.Express, nodeId: string, body: Record<string, unknown> = {},
+  ) => request(app).post(workPath(nodeId)).send({ prompt: 'distill yesterday', ...body });
+
+  describe('POST /nodes/:nodeId/work', () => {
+    it('401s a cookie-less caller and a node token — dispatching is a person, not a machine', async () => {
+      const node = await readyWorker();
+      expect((await hand(anon(), node.nodeId)).status).toBe(401);
+      const withToken = await request(anon()).post(workPath(node.nodeId))
+        .set(bearer(node.nodeToken)).send({ prompt: 'x' });
+      expect(withToken.status).toBe(401);
+    });
+
+    it('403s a role without ConnectLocalCompute — the same gate that pairs a machine', async () => {
+      const node = await readyWorker({ sub: 'u-mia' });
+      // Same person, a role whose Cedar seed does not list the capability. The
+      // capability is checked before ownership, so this is a 403 and not a 404.
+      const res = await hand(as('program-owner', 'u-mia'), node.nodeId);
+      expect(res.status).toBe(403);
+    });
+
+    it("404s somebody else's machine, and says nothing about whose it is", async () => {
+      const theirs = await readyWorker({ sub: 'u-raj', label: 'raj-mbp' });
+      const res = await hand(as('member', 'u-mia'), theirs.nodeId);
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: 'node not found' });
+      // Identical body for a machine that does not exist at all.
+      const missing = await hand(as('member', 'u-mia'), 'node-nope');
+      expect(missing.body).toEqual({ error: 'node not found' });
+    });
+
+    it('400s an empty prompt and a kind local execution does not allow', async () => {
+      const node = await readyWorker();
+      const app = as('member', 'u-mia');
+      for (const prompt of [undefined, '', '   ']) {
+        const res = await request(app).post(workPath(node.nodeId)).send({ prompt });
+        expect([prompt, res.status]).toEqual([prompt, 400]);
+        expect(res.body.error).toMatch(/prompt is required/);
+      }
+      // `devbox:task` is the kind almost everything enqueues and the one a laptop
+      // must never be handed — it assumes an AgentCore workspace, and somebody
+      // may be tailing a stream that a local claim would never produce.
+      const wrongKind = await hand(app, node.nodeId, { kind: 'devbox:task' });
+      expect(wrongKind.status).toBe(400);
+      expect(wrongKind.body.error).toMatch(/kind must be one of local:task/);
+    });
+
+    it('409s a machine that is switched off, naming the gate rather than queueing into a void', async () => {
+      const node = await readyWorker();
+      expect((await request(as('member', 'u-mia')).patch(`${BASE}/nodes/${node.nodeId}`)
+        .send({ acceptJobs: false })).status).toBe(200);
+
+      const res = await hand(as('member', 'u-mia'), node.nodeId);
+      expect(res.status).toBe(409);
+      expect(res.body.gate).toBe('accept_jobs');
+      // The refusal has to happen HERE. Accepting it would write a queued row
+      // that the claim route then declines to hand out forever, with nothing on
+      // any page saying why the machine never picked it up.
+      expect((await request(as('member', 'u-mia')).get(`${BASE}/runs`)).body.runs).toEqual([]);
+    });
+
+    it('409s a kind the machine never registered for, and names what it does run', async () => {
+      const node = await readyWorker({ kinds: ['local:distill'] });
+      const res = await hand(as('member', 'u-mia'), node.nodeId, { kind: 'local:task' });
+      expect(res.status).toBe(409);
+      expect(res.body.gate).toBe('kinds');
+      expect(res.body.error).toMatch(/runs local:distill/);
+    });
+
+    it('queues the job TARGETED at that machine, with the repo and the review flag', async () => {
+      const node = await readyWorker();
+      const res = await hand(as('member', 'u-mia'), node.nodeId, {
+        title: 'nightly distill', repo: 'git@github.com:acme/api.git',
+      });
+      expect(res.status).toBe(201);
+      expect(res.body.kind).toBe('local:task');
+      expect(res.body.title).toBe('nightly distill');
+      expect(res.body.status).toBe('queued');
+
+      const row = await getJob(res.body.id);
+      expect(row!.payload).toMatchObject({
+        prompt: 'distill yesterday',
+        // The whole point: without this the row is claimable by any paired
+        // machine registered for the kind.
+        nodeId: node.nodeId,
+        repo: 'git@github.com:acme/api.git',
+        requiresReview: true,
+      });
+      // Attribution comes from the session, never the body.
+      expect(row!.createdBy).toBe('u-mia');
+    });
+
+    it('titles an untitled job from its prompt rather than leaving a blank row', async () => {
+      const node = await readyWorker();
+      const res = await hand(as('member', 'u-mia'), node.nodeId, { prompt: 'summarise the ADRs' });
+      expect(res.body.title).toBe('summarise the ADRs');
+    });
+
+    it('omits repo when none was given, rather than writing an empty string', async () => {
+      const node = await readyWorker();
+      const res = await hand(as('member', 'u-mia'), node.nodeId, { repo: '   ' });
+      const row = await getJob(res.body.id);
+      expect(row!.payload).not.toHaveProperty('repo');
+    });
+  });
+
+  describe('the targeting the dispatch writes', () => {
+    it('will not let another machine claim work handed to this one', async () => {
+      const mine = await readyWorker({ sub: 'u-mia', label: 'mia-mbp' });
+      const theirs = await readyWorker({ sub: 'u-raj', label: 'raj-mbp' });
+      const handed = await hand(as('member', 'u-mia'), mine.nodeId, { title: 'mine alone' });
+      expect(handed.status).toBe(201);
+
+      // Raj's machine is registered for the same kind and polls the same queue.
+      const stolen = await request(anon()).post(`${BASE}/claim`).set(bearer(theirs.nodeToken)).send({});
+      expect(stolen.status).toBe(204);
+      expect((await getJob(handed.body.id))!.status).toBe('queued');
+
+      // The machine it was handed to gets it.
+      const claimed = await request(anon()).post(`${BASE}/claim`).set(bearer(mine.nodeToken)).send({});
+      expect(claimed.status).toBe(200);
+      expect(claimed.body.job.id).toBe(handed.body.id);
+    });
+
+    it('leaves an untargeted local job claimable by any eligible machine', async () => {
+      // The pre-existing contract, and the reason targeting is a payload field
+      // rather than a schema change: a script or a bot that enqueues local work
+      // without naming a machine still gets whichever one is free.
+      const other = await readyWorker({ sub: 'u-raj', label: 'raj-mbp' });
+      const job = await queueLocal('anyone can take this');
+      const claimed = await request(anon()).post(`${BASE}/claim`).set(bearer(other.nodeToken)).send({});
+      expect(claimed.status).toBe(200);
+      expect(claimed.body.job.id).toBe(job.id);
+    });
+  });
+
+  describe('GET /runs', () => {
+    it('401s a cookie-less caller and a node token', async () => {
+      const node = await readyWorker();
+      expect((await request(anon()).get(`${BASE}/runs`)).status).toBe(401);
+      expect((await request(anon()).get(`${BASE}/runs`).set(bearer(node.nodeToken))).status).toBe(401);
+    });
+
+    it('shows a run the moment it is queued, before any machine has claimed it', async () => {
+      // A queued row has no box_id yet, so matching on box alone would hide work
+      // for exactly as long as somebody is standing there watching for it.
+      const node = await readyWorker();
+      const handed = await hand(as('member', 'u-mia'), node.nodeId, { title: 'nightly distill' });
+      const res = await request(as('member', 'u-mia')).get(`${BASE}/runs`);
+      expect(res.status).toBe(200);
+      expect(res.body.runs).toHaveLength(1);
+      expect(res.body.runs[0]).toMatchObject({
+        id: handed.body.id, title: 'nightly distill', status: 'queued',
+        // Resolved server-side: `local:` prefixing is the router's convention
+        // and not something the browser should have to slice off a box id.
+        nodeId: node.nodeId, nodeLabel: 'mia-mbp',
+      });
+    });
+
+    it('follows the run through claim and completion, keeping the local $0', async () => {
+      const node = await readyWorker();
+      const handed = await hand(as('member', 'u-mia'), node.nodeId);
+      const claim = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
+      expect(claim.body.job.id).toBe(handed.body.id);
+      await request(anon()).post(`${BASE}/jobs/${handed.body.id}/complete`)
+        .set(bearer(node.nodeToken)).send({
+          claimToken: claim.body.claimToken, status: 'awaiting_review',
+          costUsd: 0.0172, result: { summary: 'distilled 14 notes' },
+        });
+
+      const res = await request(as('member', 'u-mia')).get(`${BASE}/runs`);
+      expect(res.body.runs[0]).toMatchObject({
+        id: handed.body.id, status: 'awaiting_review', nodeLabel: 'mia-mbp',
+      });
+      expect(res.body.runs[0].result).toMatchObject({ provider: 'local', costUsd: 0 });
+    });
+
+    it("never shows another person's runs, not even to a fleet-wide role", async () => {
+      const theirs = await readyWorker({ sub: 'u-raj', label: 'raj-mbp' });
+      await hand(as('member', 'u-raj'), theirs.nodeId, { title: 'raj private work' });
+
+      // A run's prompt, repo and output are a person's work. /nodes/all is where
+      // a leader learns that machines exist; it is not a way into their content.
+      for (const role of ['member', 'org-leader', 'hr-admin'] as const) {
+        const res = await request(as(role, 'u-mia')).get(`${BASE}/runs`);
+        expect([role, res.status]).toEqual([role, 200]);
+        expect([role, res.body.runs]).toEqual([role, []]);
+      }
+    });
+
+    it('returns an empty list for a person with no machines at all', async () => {
+      const res = await request(as('member', 'u-nobody')).get(`${BASE}/runs`);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ runs: [] });
+    });
+  });
+});
+
+// The run logs a machine ships while it works, and the browser view that tails
+// them. Two halves with opposite floors: ingest is a fenced node-token callback
+// (a browser cannot write a run's log), the reads are owner-scoped browser
+// routes (a node token cannot read one, and a fleet-wide role sees only its own
+// machines' runs — a run's output is a person's work).
+describe('the run logs', () => {
+  async function claimed(opts: { sub?: string; label?: string } = {}) {
+    const node = await readyWorker(opts);
+    await queueLocal('nightly distill');
+    const res = await request(anon()).post(`${BASE}/claim`).set(bearer(node.nodeToken)).send({});
+    expect(res.status).toBe(200);
+    return { node, jobId: res.body.job.id as string, claimToken: res.body.claimToken as string };
+  }
+
+  const ship = (held: { node: Paired; jobId: string; claimToken: string }, body: Record<string, unknown>) =>
+    request(anon()).post(`${BASE}/jobs/${held.jobId}/log`).set(bearer(held.node.nodeToken))
+      .send({ claimToken: held.claimToken, ...body });
+
+  describe('POST /jobs/:jobId/log (ingest — node token, fenced)', () => {
+    it('401s a browser session — a cookie cannot write a machine log', async () => {
+      const held = await claimed();
+      const res = await request(as('member', 'u-mia')).post(`${BASE}/jobs/${held.jobId}/log`)
+        .send({ claimToken: held.claimToken, seq: 0, chunk: 'hi' });
+      expect(res.status).toBe(401);
+    });
+
+    it('400s with no claimToken, and 404s a job this machine does not hold', async () => {
+      const held = await claimed();
+      const noToken = await request(anon()).post(`${BASE}/jobs/${held.jobId}/log`)
+        .set(bearer(held.node.nodeToken)).send({ seq: 0, chunk: 'hi' });
+      expect(noToken.status).toBe(400);
+      expect(noToken.body.error).toMatch(/claimToken is required/);
+
+      const notHeld = await request(anon()).post(`${BASE}/jobs/job-nope/log`)
+        .set(bearer(held.node.nodeToken)).send({ claimToken: held.claimToken, seq: 0, chunk: 'hi' });
+      expect(notHeld.status).toBe(404);
+      expect(notHeld.body).toEqual({ error: 'no such claim on this machine' });
+    });
+
+    it('400s a chunk that is missing or not a non-empty string, and a bad seq', async () => {
+      const held = await claimed();
+      for (const chunk of [undefined, '', 42, {}]) {
+        const res = await ship(held, { seq: 0, chunk });
+        expect([chunk, res.status]).toEqual([chunk, 400]);
+        expect(res.body.error).toMatch(/chunk must be a non-empty string/);
+      }
+      for (const seq of [undefined, -1, 'x']) {
+        const res = await ship(held, { seq, chunk: 'hi' });
+        expect([seq, res.status]).toEqual([seq, 400]);
+        expect(res.body.error).toMatch(/seq must be a non-negative number/);
+      }
+    });
+
+    it('appends chunks the owner can then read back, in arrival order', async () => {
+      const held = await claimed();
+      expect((await ship(held, { seq: 0, chunk: 'first line\n' })).status).toBe(200);
+      expect((await ship(held, { seq: 1, chunk: 'second line\n' })).status).toBe(200);
+
+      const view = await request(as('member', 'u-mia')).get(`${BASE}/jobs/${held.jobId}/log`);
+      expect(view.status).toBe(200);
+      expect(view.body.jobId).toBe(held.jobId);
+      expect(view.body.done).toBe(false);
+      expect(view.body.lastSeq).toBe(1);
+      expect(view.body.entries.map((e: { seq: number; text: string }) => [e.seq, e.text]))
+        .toEqual([[0, 'first line\n'], [1, 'second line\n']]);
+    });
+
+    it('is idempotent on seq — a re-shipped chunk is dropped, not duplicated', async () => {
+      const held = await claimed();
+      await ship(held, { seq: 0, chunk: 'once\n' });
+      await ship(held, { seq: 0, chunk: 'once\n' });
+      const view = await request(as('member', 'u-mia')).get(`${BASE}/jobs/${held.jobId}/log`);
+      expect(view.body.entries).toHaveLength(1);
+    });
+
+    it('marks the log done when the job completes, so a tailer stops polling', async () => {
+      const held = await claimed();
+      await ship(held, { seq: 0, chunk: 'working\n' });
+      await request(anon()).post(`${BASE}/jobs/${held.jobId}/complete`)
+        .set(bearer(held.node.nodeToken)).send({ claimToken: held.claimToken, status: 'done' });
+      const view = await request(as('member', 'u-mia')).get(`${BASE}/jobs/${held.jobId}/log`);
+      expect(view.body.done).toBe(true);
+    });
+  });
+
+  describe('GET /jobs/:jobId/log (read — browser, owner-scoped)', () => {
+    it('401s a cookie-less caller and a node token — the read side is a browser floor', async () => {
+      const held = await claimed();
+      await ship(held, { seq: 0, chunk: 'hi\n' });
+
+      expect((await request(anon()).get(`${BASE}/jobs/${held.jobId}/log`)).status).toBe(401);
+      const withToken = await request(anon()).get(`${BASE}/jobs/${held.jobId}/log`).set(bearer(held.node.nodeToken));
+      expect(withToken.status).toBe(401);
+    });
+
+    it('404s a run on a machine the caller does not own, and says nothing about whose it is', async () => {
+      const mine = await claimed({ sub: 'u-mia', label: 'mia-mbp' });
+      const theirs = await claimed({ sub: 'u-raj', label: 'raj-mbp' });
+      await ship(theirs, { seq: 0, chunk: 'secret\n' });
+
+      const res = await request(as('member', 'u-mia')).get(`${BASE}/jobs/${theirs.jobId}/log`);
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: 'no such run log' });
+
+      // Same body for a job that does not exist at all, so a browser cannot probe.
+      const missing = await request(as('member', 'u-mia')).get(`${BASE}/jobs/job-nope/log`);
+      expect(missing.status).toBe(404);
+      expect(missing.body).toEqual({ error: 'no such run log' });
+
+      // The owner still reads their own run fine.
+      expect((await request(as('member', 'u-mia')).get(`${BASE}/jobs/${mine.jobId}/log`)).status).toBe(200);
+    });
+
+    it('returns the empty shape for a claimed run that has shipped nothing yet', async () => {
+      const held = await claimed();
+      const res = await request(as('member', 'u-mia')).get(`${BASE}/jobs/${held.jobId}/log`);
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({
+        jobId: held.jobId, entries: [], lastSeq: -1, bytes: 0, updatedAt: null, done: false,
+      });
+    });
+
+    it('honours ?since to return only chunks after a poller cursor', async () => {
+      const held = await claimed();
+      await ship(held, { seq: 0, chunk: 'a\n' });
+      await ship(held, { seq: 1, chunk: 'b\n' });
+      await ship(held, { seq: 2, chunk: 'c\n' });
+
+      const res = await request(as('member', 'u-mia')).get(`${BASE}/jobs/${held.jobId}/log`).query({ since: 1 });
+      expect(res.status).toBe(200);
+      expect(res.body.entries.map((e: { seq: number }) => e.seq)).toEqual([2]);
+      expect(res.body.lastSeq).toBe(2);
+    });
+  });
+
+  describe('GET /jobs/:jobId/log/stream (tail — browser, owner-scoped)', () => {
+    it('401s a cookie-less caller', async () => {
+      const held = await claimed();
+      const res = await request(anon()).get(`${BASE}/jobs/${held.jobId}/log/stream`);
+      expect(res.status).toBe(401);
+    });
+
+    it('replays the backlog then pushes a live chunk over SSE', async () => {
+      const held = await claimed();
+      await ship(held, { seq: 0, chunk: 'backlog\n' });
+
+      const streamPath = `${BASE}/jobs/${held.jobId}/log/stream`;
+      const app = as('member', 'u-mia');
+      const streamed = readStream(app, (buf) => buf.includes('live'), { path: streamPath, timeoutMs: 5000 });
+
+      // Give the stream a tick to open and replay before shipping the live chunk.
+      await new Promise((r) => setTimeout(r, 100));
+      await ship(held, { seq: 1, chunk: 'live\n' });
+
+      const body = await streamed;
+      expect(body).toContain('backlog');
+      expect(body).toContain('live');
+    });
   });
 });

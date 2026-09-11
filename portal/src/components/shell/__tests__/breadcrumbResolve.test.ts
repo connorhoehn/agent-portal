@@ -7,7 +7,7 @@ import { resolveBreadcrumbs } from '../breadcrumbResolve.ts';
 // header rhythm (title 16px under the trail) breaks on that page alone.
 const RAIL_PATHS = [
   '/iq/projects', '/iq/projects/p-observability', '/iq/sprints', '/iq/work', '/iq/work/findings', '/iq/work/queue',
-  '/iq/distillation', '/iq/distillation/overview', '/iq/invoke', '/iq/explore', '/iq/scores', '/iq/scores/cohorts',
+  '/iq/distillation', '/iq/distillation/overview', '/iq/local-compute', '/iq/invoke', '/iq/explore', '/iq/scores', '/iq/scores/cohorts',
   '/iq/library', '/iq/library/lib-stakeholder-email', '/iq/promotions', '/iq/designs', '/iq/designs/dr-1',
   '/iq/release', '/iq/agents', '/iq/prompts', '/iq/history', '/iq/diff', '/iq/evaluations', '/iq/canary', '/iq/prompt-ops',
   '/admin/budgets', '/admin/projects', '/admin/devbox', '/admin/observability', '/admin/observability/invocations',

@@ -68,6 +68,7 @@ const DesignThreadPage = lazy(() => import('./pages/designs/DesignThreadPage'));
 const WorkFindingsPage = lazy(() => import('./pages/work/FindingsPage'));
 const JobDetailPage = lazy(() => import('./pages/work/JobDetailPage'));
 const GraphChangesPage = lazy(() => import('./pages/work/GraphChangesPage'));
+const LocalComputePage = lazy(() => import('./pages/local-compute/LocalComputePage'));
 const DiffPage = lazy(() => import('./pages/iq/DiffPage'));
 const EvaluationsPage = lazy(() => import('./pages/iq/EvaluationsPage'));
 
@@ -331,6 +332,7 @@ export function App() {
             <Route path="compactions" element={<Page element={<DistillationCompactionsPage />} />} />
             <Route path="review" element={<Page element={<DistillationReviewPage />} />} />
           </Route>
+          <Route path="local-compute" element={<Page element={<LocalComputePage />} />} />
           <Route path="designs" element={<Page element={<DesignsPage />} />} />
           <Route path="designs/:id" element={<Page element={<DesignThreadPage />} />} />
           <Route path="work" element={<Page element={<WorkHomePage />} />} />
