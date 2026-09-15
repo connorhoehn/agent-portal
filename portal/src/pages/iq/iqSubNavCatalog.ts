@@ -29,11 +29,6 @@ export interface IqSubNavSpec {
 
 // ── Static catalogs ─────────────────────────────────────────────────────────
 
-const ARCHITECTURE_ITEMS: SubNavItem[] = [
-  { path: 'agents?window=1h',  label: '1 hour',  hint: 'Last 60 min of traffic',  group: 'Window' },
-  { path: 'agents?window=24h', label: '24 hours', hint: 'Default window',         group: 'Window' },
-  { path: 'agents?window=7d',  label: '7 days',  hint: 'Trend view',              group: 'Window' },
-];
 
 // Invoke reads ?session= (deep-links from Memory/Sessions) but none of the
 // old focus/prompt params — its own session sidebar covers navigation.
@@ -114,14 +109,11 @@ export function useIqSubNav(pathname: string): IqSubNavSpec | null {
       } : {}),
     };
   }
-  if (pathname.startsWith('/iq/agents')) {
-    // The window filter belongs to the fleet graph. On a single agent's page
-    // it inherited into the rail and did nothing — a control that looks live,
-    // changes the URL, and moves nothing on screen.
-    const isSingleAgent = /^\/iq\/agents\/[^/]+/.test(pathname);
-    if (isSingleAgent) return null;
-    return { title: 'Architecture', items: ARCHITECTURE_ITEMS, storageKey: 'iq-agents-subnav' };
-  }
+  // /iq/agents has no rail. The only thing it ever held was the Window
+  // filter (1 hour / 24 hours / 7 days), and the fleet graph's own toolbar
+  // carries the same three-way choice — one setting drawn twice, and a 200px
+  // column spent on it. The toolbar keeps it; the graph gets the width.
+  if (pathname.startsWith('/iq/agents')) return null;
   // /iq/search is a redirect to /iq/invoke — no rail of its own. Ask carries
   // its own session picker in-page, so a rail here was a dead 200px column.
   if (pathname.startsWith('/iq/invoke')) return null;

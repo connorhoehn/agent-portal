@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { MarkerType, type Node, type Edge } from '@xyflow/react';
 import { Link, useSearchParams } from 'react-router';
-import { Button, Card, Chip, Drawer, Inline, InlineAlert, Stack, StatusDot } from '@connorhoehnslalom/ui-components/shared';
+import { Card, Chip, Drawer, Inline, InlineAlert, SegmentedControl, Stack, StatusDot } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../hooks/useFetch';
 import { UnavailableNotice } from '../components/UnavailableNotice';
 import { AgentFlowFrame, NODE_HEIGHT, NODE_WIDTH, STATUS_COLORS, fmtCount, fmtMs } from './AgentFlowFrame';
@@ -335,19 +335,15 @@ function AgentFlowPage() {
         </Inline>
         <Inline align="center" gap="xs">
           <T className="text-[11px] text-text-secondary">Window</T>
-          {WINDOWS.map(w => {
-            const active = w.hours === windowHours;
-            return (
-              <Button
-                key={w.hours}
-                size="sm"
-                variant={active ? 'primary' : 'secondary'}
-                onClick={() => setWindowLabel(w.label)}
-              >
-                {w.label}
-              </Button>
-            );
-          })}
+          {/* One setting with three values, not three buttons — and the only
+              place it lives now that the Architecture rail is gone. */}
+          <SegmentedControl
+            size="sm"
+            aria-label="Traffic window"
+            value={windowLabel}
+            onChange={setWindowLabel}
+            options={WINDOWS.map((w) => ({ label: w.label, value: w.label }))}
+          />
         </Inline>
       </Inline>
 
