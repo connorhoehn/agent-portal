@@ -7,6 +7,7 @@ import {
   Chip,
   CodeBlock,
   CollapsibleSection,
+  Inline,
   InlineAlert,
   InlinePlaceholder,
   MetaLine,
@@ -238,16 +239,23 @@ print(f"mean={statistics.mean(nums):.2f}, stdev={statistics.stdev(nums):.2f}")`)
                     ]}
                   />
                 )}
-                badge={canManage && (
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={(e) => { e.stopPropagation(); terminateSession(session.sessionId); }}
-                  >
-                    Terminate
-                  </Button>
-                )}
               >
+                {/* Terminate lives in the body, not the header: CollapsibleSection's
+                    header is itself a button element, and its `badge` slot renders
+                    inside it, so a Button there nested one button in another —
+                    invalid HTML that React flags on every render. A header-side
+                    action slot is queued for the library. */}
+                {canManage && (
+                  <Inline justify="end" className="mb-2">
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={() => terminateSession(session.sessionId)}
+                    >
+                      Terminate
+                    </Button>
+                  </Inline>
+                )}
                 <CatalogGrid columns={2} dense>
                   <Stack gap="xs">
                     <SectionLabel>Last executed code</SectionLabel>
