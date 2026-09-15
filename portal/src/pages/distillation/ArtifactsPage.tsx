@@ -6,11 +6,13 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
-  Button, Chip, DataTable, DetailSection, Drawer, EmptyState, EventRow, FilterChip, Inline, LoadingState,
-  MarkdownView, MetaLine, PageSection, SearchInput, Stack, StackDiagram, Toolbar, ToolbarGroup, ToolbarLabel,
+  Banner, Button, Chip, DataTable, DetailSection, Drawer, EmptyState, EventRow, FilterChip, FormField, Inline,
+  LoadingState, MarkdownView, MetaLine, PageSection, SearchInput, SegmentedControl, Select, Stack, StackDiagram,
+  Textarea, Toolbar, ToolbarGroup, ToolbarLabel,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useCapabilities } from '../../lib/capabilities';
 import { relativeTime } from '../../lib/relativeTime';
 import { LineageFrame } from './LineageFrame';
 import { T } from './Text';
@@ -20,7 +22,7 @@ import {
   stepsFromLineage, stepsLabel,
 } from './distillationFormat';
 import type {
-  ApplicationsResponse, Artifact, ArtifactsResponse, ArtifactStatus, ArtifactType, Lineage,
+  ApplicationOutcome, ApplicationsResponse, Artifact, ArtifactsResponse, ArtifactStatus, ArtifactType, Lineage,
 } from './types';
 
 const TYPE_FILTERS: Array<{ value: ArtifactType | 'all'; label: string }> = [
@@ -244,9 +246,105 @@ function PublishedAs({ libraryItemId }: { libraryItemId: string }) {
  *  after), and the replay ledger those tones come from. Steps are facts
  *  with an ordinal, so they arrive through the same lineage fetch the
  *  drawer already makes; the runs are their own read. */
+/** The one write on this surface: a person recording that a procedure was
+ *  run and how it went. Same gate as Review (ManageBots); the route is
+ *  `POST /procedures/:id/apply`. A failed run names the step it stopped on
+ *  — that is what tones the steps above and what the Overview's verdict
+ *  counts — so the step picker only appears for `failed`. */
+function RecordRunForm({
+  artifactId, steps, onRecorded,
+}: {
+  artifactId: string;
+  steps: Array<{ id: string; ordinal: number; label: string }>;
+  onRecorded: () => void;
+}) {
+  const [outcome, setOutcome] = useState<ApplicationOutcome>('succeeded');
+  const [stepId, setStepId] = useState<string>('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/distillation/procedures/${encodeURIComponent(artifactId)}/apply`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          outcome,
+          ...(outcome === 'failed' ? { failed_at_step_id: stepId || null } : {}),
+          ...(note.trim() ? { note: note.trim() } : {}),
+        }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) { setError(body.error ?? `HTTP ${res.status}`); return; }
+      setNote('');
+      setStepId('');
+      setOutcome('succeeded');
+      onRecorded();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <DetailSection title="Record a run" hint="what happened when a session ran this">
+      <Stack gap="sm">
+        <SegmentedControl
+          size="sm"
+          aria-label="Outcome"
+          value={outcome}
+          onChange={(v) => setOutcome(v as ApplicationOutcome)}
+          options={[
+            { label: 'Succeeded', value: 'succeeded' },
+            { label: 'Failed', value: 'failed' },
+            { label: 'Abandoned', value: 'abandoned' },
+          ]}
+        />
+        {outcome === 'failed' && (
+          <FormField label="Stopped at step" required>
+            {/* FormField hands its render prop a `labelId` that is not a DOM
+                attribute (queue: FormField `labelId` DOM leak) — dropped
+                before the spread so React does not warn on every render. */}
+            {({ labelId: _labelId, ...p }) => (
+              <Select
+                {...p}
+                value={stepId}
+                onChange={(e) => setStepId(e.target.value)}
+                placeholder="Pick the step it failed on"
+                options={steps.map((s) => ({ value: s.id, label: `${s.ordinal}. ${s.label}` }))}
+              />
+            )}
+          </FormField>
+        )}
+        <FormField label="Note" hint="one line: what you saw">
+          {({ labelId: _labelId, ...p }) => (
+            <Textarea {...p} autoResize minRows={2} maxRows={5} value={note} onChange={(e) => setNote(e.target.value)} />
+          )}
+        </FormField>
+        {error && <Banner variant="error">{error}</Banner>}
+        <Inline className="justify-end">
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={() => { void submit(); }}
+            disabled={busy || (outcome === 'failed' && !stepId)}
+          >
+            Record run
+          </Button>
+        </Inline>
+      </Stack>
+    </DetailSection>
+  );
+}
+
 function ProcedureSections({ artifact: a, lineage }: { artifact: Artifact; lineage: Lineage | null }) {
-  const { data: runsData, isLoading: runsLoading } =
+  const { data: runsData, isLoading: runsLoading, refresh: refreshRuns } =
     useFetch<ApplicationsResponse>(`/api/distillation/procedures/${encodeURIComponent(a.id)}/applications`, 0);
+  const { can, ready } = useCapabilities();
+  const canRecord = ready && can('ManageBots');
   const runs = runsData?.applications ?? [];
   const latest = runs[0] ?? null;
   const steps = lineage ? stepsFromLineage(lineage) : [];
@@ -275,6 +373,10 @@ function ProcedureSections({ artifact: a, lineage }: { artifact: Artifact; linea
           />
         )}
       </DetailSection>
+
+      {canRecord && steps.length > 0 && (
+        <RecordRunForm artifactId={a.id} steps={steps} onRecorded={() => { void refreshRuns(); }} />
+      )}
 
       <DetailSection title="Runs" hint={runsData ? runsLabel({
         total: runs.length,
