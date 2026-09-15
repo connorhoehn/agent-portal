@@ -9,6 +9,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router';
+import { useCrumbLabel } from '../../lib/crumbLabels';
 import {
   Button,
   Card,
@@ -117,6 +118,8 @@ function InvocationDetailPage() {
   const [detail, setDetail] = useState<DetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // The trail names the agent this run belongs to; the id stays in the URL.
+  useCrumbLabel(invocationId, detail?.invocation?.agentName ?? undefined);
 
   // Detail pages fetch only on mount — no polling.
   useEffect(() => {

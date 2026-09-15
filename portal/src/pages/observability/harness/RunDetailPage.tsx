@@ -4,7 +4,7 @@
 //   GET /api/observability/harness/runs?limit=14       → used to find prev run
 //   GET /api/observability/harness/runs/:prevId        → previous results for delta
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, Fragment } from 'react';
 import { Link, useParams, useNavigate } from 'react-router';
 import {
   Button,
@@ -25,6 +25,7 @@ import {
   TableTh,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../../hooks/useFetch';
+import { useCrumbLabel } from '../../../lib/crumbLabels';
 import { CostChip } from '../../../components/observability/CostChip';
 import { ModeChip } from '../../../components/observability/ModeChip';
 import { T } from '../Text';
@@ -159,6 +160,8 @@ function RunDetailPage() {
     5_000,
   );
   const run = detailData?.run ?? null;
+  // The trail reads the run's label ("nightly-2026-08-24"), not "Run b000…".
+  useCrumbLabel(runId, run?.label);
   const results = useMemo<TestResult[]>(
     () => (detailData?.results ? [...detailData.results] : []),
     [detailData],
@@ -482,7 +485,7 @@ function RunDetailPage() {
                 {sortedResults.map((r) => {
                   const isOpen = expanded === r.testId;
                   return (
-                    <>
+                    <Fragment key={r.testId}>
                       <TableRow
                         key={r.testId}
                         onClick={() => setExpanded(isOpen ? null : r.testId)}
@@ -538,7 +541,7 @@ function RunDetailPage() {
                           </TableTd>
                         </TableRow>
                       )}
-                    </>
+                    </Fragment>
                   );
                 })}
               </TableBody>

@@ -34,6 +34,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch.js';
+import { useCrumbLabel } from '../../lib/crumbLabels';
 import type { Reconciled } from '../knowledge/knowledgeFormat';
 import { ConfigurationTab } from './kb/ConfigurationTab';
 import { DeleteButton } from './kb/DeleteButton';
@@ -81,6 +82,8 @@ export function KBDetailPage() {
   );
 
   const kb = data?.kb;
+  // The trail reads the knowledge base's name, not its shortened id.
+  useCrumbLabel(id, kb?.name);
   const reconciled = kb ? (reconcileData?.entries.find((e) => e.id === kb.id) ?? null) : null;
 
   // No breadcrumb row here: the app shell already renders one above this page.
