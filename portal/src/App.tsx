@@ -279,9 +279,24 @@ export function App() {
           <Route path="invoke" element={<Page element={<InvokePage />} />} />
           {/* Find Help folded into Ask — the chat is the org search. */}
           <Route path="help" element={<Navigate to="/iq/invoke" replace />} />
-          <Route path="scores" element={<Page element={<ScoresPage />} />} />
-          <Route path="scores/cohorts" element={<Page element={<ScoresCohortPage />} />} />
-          <Route path="scores/compare" element={<Page element={<ScoresComparePage />} />} />
+          {/* Scores is leadership-only in the rail and the palette; the routes
+              were open, so /scores → /iq/scores walked any role into a raw
+              API 403. Same guard as Architecture and Prompt Studio. */}
+          <Route path="scores" element={
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<HomeRedirect />}>
+              <Page element={<ScoresPage />} />
+            </RequireRole>
+          } />
+          <Route path="scores/cohorts" element={
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<HomeRedirect />}>
+              <Page element={<ScoresCohortPage />} />
+            </RequireRole>
+          } />
+          <Route path="scores/compare" element={
+            <RequireRole roles={['org-leader', 'hr-admin']} fallback={<HomeRedirect />}>
+              <Page element={<ScoresComparePage />} />
+            </RequireRole>
+          } />
           <Route path="decisions" element={<Navigate to="/iq/projects" replace />} />
           <Route path="decisions/:id" element={<Navigate to="/iq/projects" replace />} />
           <Route path="projects" element={<Page element={<ProjectsPage />} />} />

@@ -216,7 +216,7 @@ function ScoresPage() {
   // into one FilterBar row, and the explainer is now a closed disclosure
   // below the table.
   return (
-    <PageSection title="Scoring Dashboard">
+    <PageSection title="Scores">
       <StatCards
         peopleScored={filtered.length}
         avgComposite={avg}

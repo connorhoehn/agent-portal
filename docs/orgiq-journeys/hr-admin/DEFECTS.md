@@ -13,6 +13,17 @@ hr-admin, or are new to this role's write/admin surfaces, are listed.
 
 ## Open
 
+Nothing is open for this role right now — #32 was closed on 2026-09-15 (see Closed).
+
+_(Otherwise nothing is open for hr-admin. The Prompt Studio header squeeze that was
+filed under org-leader as **#29** was re-audited and closed there on
+2026-09-06; `hr-admin/prompt-studio.md` still records the measurement in its
+`layout:` line and keeps `verdict: pass`, because the surface answers its
+question. #24 — Prompt Studio's focus hand-backs — also stays closed: all four
+legs (Test enter/exit, Edit enter/exit) hold for hr-admin.)_
+
+## Closed
+
 32. **Computer Lab: the terminal pane is a keyboard trap, and it strands the
     user before the Broadcast instruction box.** `/admin/devbox` — the surface
     is `ComputerLab` from `@connorhoehnslalom/ui-components/compute`
@@ -38,14 +49,14 @@ hr-admin, or are new to this role's write/admin surfaces, are listed.
     back out to the rail. The mouse is the only exit. WCAG 2.1.2 (No Keyboard
     Trap).
 
-_(Otherwise nothing is open for hr-admin. The Prompt Studio header squeeze that was
-filed under org-leader as **#29** was re-audited and closed there on
-2026-09-06; `hr-admin/prompt-studio.md` still records the measurement in its
-`layout:` line and keeps `verdict: pass`, because the surface answers its
-question. #24 — Prompt Studio's focus hand-backs — also stays closed: all four
-legs (Test enter/exit, Edit enter/exit) hold for hr-admin.)_
-
-## Closed
+    **Closed 2026-09-15 07:25.** Fixed in the library: ui-components 2.260.0 adds a
+    `leave-pane` command bound to ⇧esc (leader `q`) — a chord no shell wants —
+    that moves focus from a pane to the Broadcast instruction textarea; the
+    lab already listened in the capture phase, so it fires from inside
+    xterm's helper textarea, and the ⌘/ shortcut sheet lists it. Verified
+    live as hr-admin with a provisioned computer: focus in the pane, ⇧esc,
+    `document.activeElement` is the prompt bar; plain Tab still belongs to
+    the shell. Portal pinned to 2.260.0 (`8b96a107`).
 
 31. **Ask's work starters clip the initiative name — the one word that says
     which initiative the card is about.** `/iq/invoke` —

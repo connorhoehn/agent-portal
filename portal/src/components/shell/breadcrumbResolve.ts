@@ -88,7 +88,9 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
       case 'agents':
         if (!b) return [{ label: 'Operate' }, { label: 'Architecture' }];
         return [{ label: 'Operate' }, { label: 'Architecture', path: '/iq/agents' }, { label: b }];
-      case 'prompt-ops': return [{ label: 'Operate' }, { label: 'Prompts' }];
+      // Prompt management is the Library's rail (Design); the rail lights
+      // Library on these pages, so the crumb says the same.
+      case 'prompt-ops': return [{ label: 'Design' }, { label: 'Library', path: '/iq/library' }, { label: 'Prompts' }];
       case 'distillation': {
         const page = b ?? 'overview';
         return [{ label: 'Build' }, { label: 'Distillation', path: '/iq/distillation' }, { label: DISTILLATION_LABELS[page] ?? page }];
@@ -96,7 +98,7 @@ export function resolveBreadcrumbs(pathname: string): Crumb[] {
       case 'local-compute': return [{ label: 'Build' }, { label: 'Local compute' }];
       default:
         if (a && PROMPT_PAGES[a]) {
-          return [{ label: 'Operate' }, { label: 'Prompts', path: '/iq/prompt-ops' }, { label: PROMPT_PAGES[a] }];
+          return [{ label: 'Design' }, { label: 'Library', path: '/iq/library' }, { label: 'Prompts', path: '/iq/prompt-ops' }, { label: PROMPT_PAGES[a] }];
         }
         return [];
     }

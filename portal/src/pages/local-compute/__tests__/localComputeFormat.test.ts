@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { statusLabel, statusTone, when } from '../localComputeFormat.js';
+import { statusLabel, statusTone, when } from '../localComputeFormat.ts';
 
 test('statusLabel normalizes job statuses', () => {
   assert.equal(statusLabel('queued'), 'queued');

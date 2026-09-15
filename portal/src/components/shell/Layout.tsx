@@ -87,14 +87,17 @@ const NAV_ITEMS: NavItem[] = [
   // DESIGN — before anything runs. Designs: the ADR threads where agents
   // ideate a plan on an initiative, people resolve intent and sign off, and
   // the approved decision gates other designs + feeds the knowledge base.
-  // The Design front door: one catalog of everything the fleet is instructed
-  // by. Filtered to kind=skill it is the skill browser — a skill and a prompt
-  // differ in who invokes them, which is a facet, not a separate product.
-  { path: '/iq/library',    label: 'Library',     tenant: 'orgiq',     group: 'Design' },
+  // Rail order follows the loop: the decision that gates the work (Designs),
+  // then what is earning its way in (Promotions), then the approved catalog
+  // (Library). Leading with the catalog put the decision third.
+  { path: '/iq/designs',    label: 'Designs',     tenant: 'orgiq',     group: 'Design' },
   // What the fleet learned, waiting to become reusable: observations clustered
   // into patterns, promoted by a human into insights, runbooks and skills.
   { path: '/iq/promotions', label: 'Promotions',  tenant: 'orgiq',     group: 'Design' },
-  { path: '/iq/designs',    label: 'Designs',     tenant: 'orgiq',     group: 'Design' },
+  // The Design catalog: everything the fleet is instructed by. Filtered to
+  // kind=skill it is the skill browser — a skill and a prompt differ in who
+  // invokes them, which is a facet, not a separate product.
+  { path: '/iq/library',    label: 'Library',     tenant: 'orgiq',     group: 'Design' },
   // No standalone "Prompts" door: /iq/prompt-ops ("What is deployed") already
   // sits inside the Library's rail, and a second top-level entry to the same
   // page is the duplication this IA keeps removing everywhere else. The
@@ -133,7 +136,6 @@ const PLATFORM_ITEMS: NavItem[] = [
   // (pages/work/automateNav.tsx), not top-level destinations.
   // 'Codebases', not 'Projects': /iq/projects is already the org's initiatives —
   // epics, features, the people who own them. This is the code that delivers them.
-  { path: '/admin/projects',        label: 'Codebases',       tenant: 'admin', requireRoles: ['hr-admin'], group: 'Build' },
   // RELEASE — what ships to the fleet itself. Session config is the first
   // citizen: the SessionStart hook and bundled skills every Claude Code devbox
   // session boots with. The GitHub pipeline surfaces join this group when they
@@ -149,14 +151,19 @@ const PLATFORM_ITEMS: NavItem[] = [
   // ones shared on their initiatives (middleware lib/devbox-visibility.ts), so
   // this is a door, not a key.
   { path: '/admin/devbox',          label: 'Computer Lab',    tenant: 'admin', requireRoles: ['hr-admin', 'sme'], group: 'Build' }, // mirrors ManageDevbox in Cedar
+  // After Computer Lab so the two machine doors (Local compute — your own
+  // paired laptop; Computer Lab — the microVM fleet) sit together rather than
+  // with the repos wedged between them.
+  { path: '/admin/projects',        label: 'Codebases',       tenant: 'admin', requireRoles: ['hr-admin'], group: 'Build' },
   // OPERATE — platform + ops.
   { path: '/admin/observability',   label: 'Health',          tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'], group: 'Operate' },
-  { path: '/iq/agents',             label: 'Architecture',    tenant: 'admin', group: 'Operate' },
+  { path: '/iq/agents',             label: 'Architecture',    tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'], group: 'Operate' }, // matches the route guard in App.tsx
   // One entry, not two: sources, ingestion, storage and knowledge bases are
-  // consecutive stages of one pipeline.
-  // Knowledge is design-time: what the agents know is authored and curated
-  // before a single run consumes it.
-  { path: '/admin/knowledge',       label: 'Knowledge',       tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'], group: 'Design' },
+  // consecutive stages of one pipeline. Operate, not Design: the page is the
+  // running pipeline — sources pulled, ingestion runs, registry vs the live
+  // account — and the palette and the breadcrumb already said so; the rail
+  // was the odd one out.
+  { path: '/admin/knowledge',       label: 'Knowledge',       tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'], group: 'Operate' },
   { path: '/admin/capabilities',    label: 'Capabilities',    tenant: 'admin', requireRoles: ['org-leader', 'hr-admin'], group: 'Operate' },
   // SYSTEM — administration, not runtime. Identity sits with Settings: who can
   // do what is configuration of the platform, not operating it.
