@@ -435,6 +435,10 @@ function InvokePage() {
     const firstUser = messages.find((m) => m.role === 'user')?.content;
     setLocalSessions((prev) => {
       const existing = prev[sessionId];
+      // No row until the session has a first turn: "+ New" used to mint an
+      // "Untitled session" rail row with a timestamp before anything was
+      // said, so the rail counted conversations that did not exist yet.
+      if (!existing && !firstUser) return prev;
       const title = firstUser ? firstUser.slice(0, 60) : existing?.title;
       // Cache real content once it exists; never overwrite a cached
       // transcript with an empty one (the "not stored here" reload path
@@ -710,6 +714,9 @@ function InvokePage() {
                   if (found) send(found.prompt);
                 }}
                 title={askSuggestions.length > 0 ? 'Or try:' : 'Try asking:'}
+                // Full width, like the work cards above it — the starters
+                // used to sit in a 525px block under a 964px card row.
+                className="w-full"
               />
             </Stack>
           )}
