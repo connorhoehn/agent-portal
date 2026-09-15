@@ -88,6 +88,7 @@ function emptyBudgetRow(orgProjectId: string, orgProjectName: string | null): Bu
     allocatedUsd: null,
     period: null,
     updatedBy: null,
+    updatedByName: null,
     updatedAt: null,
     spentThisPeriodUsd: 0,
     runCountThisPeriod: 0,

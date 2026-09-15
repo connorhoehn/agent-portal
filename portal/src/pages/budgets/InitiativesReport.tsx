@@ -369,7 +369,7 @@ export function InitiativesReport({ budgets, summary, error, hasData, canManage,
                         title="Cron-triggered bot runs — the recurring floor of keeping this initiative's repos alive. Part of the figure above, not additional to it."
                       >
                         {row.maintenanceUsd >= row.spentThisPeriodUsd
-                          ? 'all of it maintenance'
+                          ? 'all maintenance'
                           : `${usd(row.maintenanceUsd)} maintenance`}
                       </T>
                     )}
@@ -402,7 +402,9 @@ export function InitiativesReport({ budgets, summary, error, hasData, canManage,
                     </T>
                   </TableTd>
                   <TableTd>
-                    <T className="text-text-tertiary">{row.updatedBy ?? '—'}</T>
+                    <T className="text-text-tertiary" title={row.updatedByName ? row.updatedBy ?? undefined : undefined}>
+                      {row.updatedByName ?? row.updatedBy ?? '—'}
+                    </T>
                   </TableTd>
                   {canManage && (
                     <TableTd>

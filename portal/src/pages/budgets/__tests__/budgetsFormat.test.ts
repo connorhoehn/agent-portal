@@ -15,7 +15,7 @@ import type { BudgetRow } from '../types.ts';
 function budgetRow(over: Partial<BudgetRow> & { orgProjectId: string }): BudgetRow {
   return {
     orgProjectName: null, allocatedUsd: null, period: null, updatedBy: null,
-    updatedAt: null, spentThisPeriodUsd: 0, runCountThisPeriod: 0,
+    updatedByName: null, updatedAt: null, spentThisPeriodUsd: 0, runCountThisPeriod: 0,
     lastAgentActivityAt: null, maintenanceUsd: 0,
     ...over,
   };

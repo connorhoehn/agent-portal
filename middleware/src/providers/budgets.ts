@@ -33,6 +33,7 @@ import { liveArrayView } from '../mock/live-view.js';
 // gets for free. Lazy like every other use in this module — see the note on the
 // bots.ts import above for why nothing here may read at module scope.
 import { mockProjectName } from './projects.js';
+import { displayNameForSubject } from './identity.js';
 
 function s(name: string, value: string): SqlParameter { return { name, value: { stringValue: value } }; }
 function nul(name: string): SqlParameter { return { name, value: { isNull: true } }; }
@@ -51,6 +52,10 @@ export interface BudgetRow {
   allocatedUsd: number | null;
   period: string | null;
   updatedBy: string | null;
+  /** The person behind `updatedBy`, resolved from app_users (Aurora) or the
+   *  seed cast (mock). Null when the subject is unknown — the ledger then
+   *  shows the raw subject rather than inventing a name. */
+  updatedByName: string | null;
   updatedAt: string | null;
   spentThisPeriodUsd: number;
   runCountThisPeriod: number;
@@ -307,6 +312,7 @@ export function mockBudgetRow(m: MockBudget): BudgetRow {
     allocatedUsd: m.allocated,
     period: m.allocated == null ? null : 'monthly',
     updatedBy: m.allocated == null ? null : 'u-release',
+    updatedByName: m.allocated == null ? null : displayNameForSubject('u-release'),
     updatedAt: m.allocated == null ? null : new Date(clock.now().getTime() - 6 * 86_400_000).toISOString(),
     spentThisPeriodUsd: spend.spentUsd,
     runCountThisPeriod: spend.runCount,
@@ -403,6 +409,7 @@ function rowToBudget(r: Record<string, unknown>): BudgetRow {
     allocatedUsd: r['allocated_usd'] == null ? null : toNum(r['allocated_usd']),
     period: r['period'] != null ? toStr(r['period']) : null,
     updatedBy: r['updated_by'] != null ? toStr(r['updated_by']) : null,
+    updatedByName: r['updated_by_name'] != null ? toStr(r['updated_by_name']) : null,
     updatedAt: r['updated_at'] != null ? toStr(r['updated_at']) : null,
     spentThisPeriodUsd: toNum(r['spent_this_period_usd']),
     runCountThisPeriod: toNum(r['run_count_this_period']),
@@ -441,6 +448,7 @@ function budgetSelectSql(scopeToId: boolean): string {
            ib.allocated_usd::float8 AS allocated_usd,
            ib.period,
            ib.updated_by,
+           au.display_name AS updated_by_name,
            ib.updated_at,
            COALESCE(ps.spent_this_period_usd, 0)::float8 AS spent_this_period_usd,
            COALESCE(ps.run_count_this_period, 0)::int AS run_count_this_period,
@@ -457,6 +465,8 @@ function budgetSelectSql(scopeToId: boolean): string {
            COALESCE(ps.maintenance_usd, 0)::float8 AS maintenance_usd
       FROM ids
       LEFT JOIN initiative_budgets ib ON ib.org_project_id = ids.org_project_id
+      -- updated_by is a session subject; the ledger renders the person.
+      LEFT JOIN app_users au ON au.id = ib.updated_by
       LEFT JOIN period_spend ps ON ps.org_project_id = ids.org_project_id
       LEFT JOIN projects p ON p.id = ids.org_project_id
       ${scope}

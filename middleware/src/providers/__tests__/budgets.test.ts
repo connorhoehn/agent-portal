@@ -86,6 +86,7 @@ describe('listBudgets', () => {
     expect(rows[0]).toEqual({
       orgProjectId: 'p-observability', orgProjectName: 'Observability Platform',
       allocatedUsd: 250, period: 'monthly', updatedBy: 'pm@example.com',
+      updatedByName: null,
       updatedAt: '2026-08-01T00:00:00Z', spentThisPeriodUsd: 42.5,
       runCountThisPeriod: 7, lastAgentActivityAt: '2026-08-20T12:00:00Z',
       maintenanceUsd: 12.25,

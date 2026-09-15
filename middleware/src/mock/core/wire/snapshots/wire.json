@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-15T16:23:55.563Z",
-  "serverHandlerSha": "5922cf0760c407ede8d9b02cf3c39f9044041e51e8634c5dd5371aa7892c94d7",
+  "capturedAt": "2026-09-15T17:17:29.113Z",
+  "serverHandlerSha": "c11f636d84b1cc72b09718351236d949e7342db5245c1f6c1ac4e5a3e22aaba4",
   "baseUrl": "http://127.0.0.1:3012",
   "personas": [
     "orgiq/admin",
@@ -1635,6 +1635,7 @@
         "budgets[].spentThisPeriodUsd": "number",
         "budgets[].updatedAt": "null|string",
         "budgets[].updatedBy": "null|string",
+        "budgets[].updatedByName": "null|string",
         "summary": "object",
         "summary.byModel": "array",
         "summary.byModel[]": "object",

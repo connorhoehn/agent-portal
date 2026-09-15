@@ -1,6 +1,6 @@
 {
-  "capturedAt": "2026-09-15T16:23:56.185Z",
-  "serverHandlerSha": "5922cf0760c407ede8d9b02cf3c39f9044041e51e8634c5dd5371aa7892c94d7",
+  "capturedAt": "2026-09-15T17:17:29.733Z",
+  "serverHandlerSha": "c11f636d84b1cc72b09718351236d949e7342db5245c1f6c1ac4e5a3e22aaba4",
   "baseUrl": "http://127.0.0.1:3012",
   "policy": "middleware/src/mock/core/wire/write-policy.ts",
   "intercepted": [
@@ -2719,7 +2719,8 @@
         "budget.runCountThisPeriod": "number",
         "budget.spentThisPeriodUsd": "number",
         "budget.updatedAt": "string",
-        "budget.updatedBy": "string"
+        "budget.updatedBy": "string",
+        "budget.updatedByName": "string"
       },
       "values": {},
       "sent": [

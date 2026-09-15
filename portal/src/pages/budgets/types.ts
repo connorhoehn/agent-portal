@@ -9,6 +9,8 @@ export interface BudgetRow {
   allocatedUsd: number | null;
   period: string | null;
   updatedBy: string | null;
+  /** The person behind updatedBy, when the server could resolve one. */
+  updatedByName: string | null;
   updatedAt: string | null;
   spentThisPeriodUsd: number;
   runCountThisPeriod: number;
