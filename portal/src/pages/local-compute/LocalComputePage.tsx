@@ -26,6 +26,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { UnavailableNotice } from '../../components/UnavailableNotice';
 import { writeJson } from './writeJson';
+import { PairMachineDialog } from './PairMachineDialog';
 import { statusLabel, statusTone, when, type JobStatus } from './localComputeFormat';
 
 // ─── Wire shapes ─────────────────────────────────────────────────────────────
@@ -86,6 +87,10 @@ export default function LocalComputePage() {
   // including the automation that audits this page. It is a Banner now, next
   // to the composer that caused it.
   const [dispatchError, setDispatchError] = useState<string | null>(null);
+  // The pairing door. Anyone who may hand a machine work may pair one
+  // (ConnectLocalCompute gates both routes); everyone else sees the empty
+  // state without a dead-end call to action.
+  const [pairOpen, setPairOpen] = useState(false);
 
   const nodes = useMemo(
     () => (nodesData?.nodes ?? []).map((n) => (
@@ -259,11 +264,20 @@ export default function LocalComputePage() {
       {!nodesFailure && nodes.length === 0 ? (
         <EmptyState
           title="No paired machines"
-          description="Pair a machine from its terminal or IDE with the pairing flow — then it will appear here, ready to accept work."
+          description={canDispatch
+            ? 'Pair a machine and it appears here, ready to accept work — the dialog gives you a code and the one command to run on it.'
+            : 'Pairing a machine needs the ConnectLocalCompute capability; ask a platform operator to pair one for you.'}
+          {...(canDispatch ? { actionLabel: 'Pair a machine', onAction: () => setPairOpen(true) } : {})}
         />
       ) : (
         <Stack gap="lg">
-          <DetailSection first title="Your machines">
+          <DetailSection
+            first
+            title="Your machines"
+            actions={canDispatch ? (
+              <Button size="sm" variant="secondary" onClick={() => setPairOpen(true)}>Pair another</Button>
+            ) : undefined}
+          >
             <Stack gap="sm">
               {acceptError && (
                 <Banner variant="error">{acceptError}</Banner>
@@ -335,6 +349,7 @@ export default function LocalComputePage() {
           )}
         </Stack>
       )}
+      <PairMachineDialog open={pairOpen} onClose={() => setPairOpen(false)} />
     </PageSection>
   );
 }
