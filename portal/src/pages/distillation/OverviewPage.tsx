@@ -98,8 +98,10 @@ export default function DistillationOverviewPage() {
     },
     {
       key: 'runs',
-      header: 'Runs · 14d',
+      header: 'Runs',
       render: (p) => (
+        // The sparkline is the last 14 UTC days; the caption beside it is the
+        // lifetime count — two windows, so each is labelled as its own.
         <Inline gap="sm" align="center" wrap={false}>
           <TrendSparkline
             points={p.applied_per_day}
@@ -107,7 +109,7 @@ export default function DistillationOverviewPage() {
             width={96}
             height={24}
             showFill={false}
-            ariaLabel={`${p.runs.total} runs in 14 days`}
+            ariaLabel={`${p.applied_per_day.reduce((a, b) => a + b, 0)} runs in the last 14 days`}
           />
           <T className="text-[11px] text-text-tertiary">{runsLabel(p.runs)}</T>
         </Inline>
@@ -144,7 +146,9 @@ export default function DistillationOverviewPage() {
             label: 'Proven procedures',
             value: proceduresData ? `${rollup.proven}/${rollup.total}` : '—',
             tone: rollup.drifting > 0 ? 'danger' : 'default',
-            hint: !proceduresData ? undefined : rollup.drifting > 0 ? `${rollup.drifting} drifting` : 'all holding',
+            hint: !proceduresData ? undefined
+              : rollup.total === 0 ? 'none yet'
+                : rollup.drifting > 0 ? `${rollup.drifting} drifting` : 'all holding',
           },
         ]}
       />

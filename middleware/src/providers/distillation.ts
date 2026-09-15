@@ -298,6 +298,7 @@ export interface ProcedureHealth {
 /** "1h ago" / "3d ago" — the age a reason quotes, never a raw ISO string. */
 function ageLabel(iso: string, nowMs: number): string {
   const ms = Math.max(0, nowMs - Date.parse(iso));
+  if (ms < 60_000) return 'just now';
   if (ms < 60 * 60_000) return `${Math.round(ms / 60_000)}m ago`;
   if (ms < DAY_MS) return `${Math.round(ms / 3_600_000)}h ago`;
   return `${Math.round(ms / DAY_MS)}d ago`;
@@ -1161,7 +1162,10 @@ function nodeForApplication(p: ProcedureApplication): LineageNode {
     meta: {
       outcome: p.outcome, applied_at: p.applied_at, session_id: p.session_id, box_id: p.box_id,
       failed_at_step_id: p.failed_at_step_id,
-      subtitle: `${p.box_id} · ${ageLabel(p.applied_at, clock.now().getTime())}`,
+      // No age here: the portal formats `applied_at` with its one shared
+      // relativeTime, and a second formatter baked in server-side read a
+      // different number beside the ledger a few lines away.
+      subtitle: p.box_id,
     },
   };
 }
@@ -1248,6 +1252,14 @@ export async function buildLineage(startId: string, depth: number): Promise<Line
 /** GET /items/:id/lineage — any level, caller-chosen depth. */
 export async function lineageFor(id: string, depth: number): Promise<Lineage> {
   return buildLineage(id, depth);
+}
+
+/** Can `/items/:id/lineage` be rooted here? Items, and the run nodes the
+ *  `applied_in` edge makes reachable from every procedure — "Focus here" on
+ *  a run used to 404 because getItem only knows the three tiers. */
+export async function isLineageRoot(id: string): Promise<boolean> {
+  if (await getItem(id)) return true;
+  return applicationRows().some((p) => p.id === id);
 }
 
 /** GET /facts/:id/lineage — a fixed, generous depth so a fact's evidence
@@ -1362,11 +1374,18 @@ function stepsOf(artifactId: string): Fact[] {
 
 function procedureView(artifact: Artifact, nowMs: number): ProcedureView {
   const repo = repoOf(tagArtifact(artifact)) ?? null;
+  // Newest first, id DESC on a tie — the SAME order listApplications hands the
+  // drawer, so "the latest run" means one thing on both surfaces. "Since the
+  // last success" is then a POSITION in this list, not a strict timestamp
+  // compare: two runs recorded in one clock tick (or under a frozen clock)
+  // would otherwise let a failure hide behind the success it followed.
   const apps = applicationRows()
     .filter((p) => p.procedure_id === artifact.id)
-    .sort((a, b) => b.applied_at.localeCompare(a.applied_at) || a.id.localeCompare(b.id));
+    .sort((a, b) => b.applied_at.localeCompare(a.applied_at) || b.id.localeCompare(a.id));
   const byOutcome = countBy(apps, 'outcome');
-  const lastSuccess = apps.find((p) => p.outcome === 'succeeded') ?? null;
+  const lastSuccessIdx = apps.findIndex((p) => p.outcome === 'succeeded');
+  const lastSuccess = lastSuccessIdx >= 0 ? apps[lastSuccessIdx]! : null;
+  const runsSinceSuccess = lastSuccessIdx >= 0 ? apps.slice(0, lastSuccessIdx) : apps;
   const since = lastSuccess?.applied_at ?? artifact.created_at;
 
   const applied_per_day = new Array<number>(APPLIED_WINDOW_DAYS).fill(0);
@@ -1391,7 +1410,7 @@ function procedureView(artifact: Artifact, nowMs: number): ProcedureView {
     last_succeeded_by: lastSuccess?.session_id ?? null,
     applied_per_day,
     drift: {
-      failed_runs: apps.filter((p) => p.outcome !== 'succeeded' && p.applied_at > since).length,
+      failed_runs: runsSinceSuccess.filter((p) => p.outcome !== 'succeeded').length,
       new_gotcha_clusters: clusterRows().filter((c) =>
         c.repo === repo && TRIGGER_KINDS.has(c.kind) && c.created_at > since).length,
     },
@@ -1454,6 +1473,12 @@ export async function applyProcedure(
   const stepId = input.failed_at_step_id ?? null;
   if (input.outcome === 'succeeded' && stepId !== null) {
     throw new ValidationError('failed_at_step_id must be null for a succeeded run');
+  }
+  if (input.outcome === 'abandoned' && stepId !== null) {
+    // Only a FAILED run names the step it stopped on; an abandoned run stopped
+    // for a reason outside the procedure, and a step id here would make the
+    // drawer blame a step the ledger says was never reached.
+    throw new ValidationError('failed_at_step_id must be null for an abandoned run');
   }
   if (input.outcome === 'failed' && stepId === null) {
     throw new ValidationError('failed_at_step_id is required for a failed run');

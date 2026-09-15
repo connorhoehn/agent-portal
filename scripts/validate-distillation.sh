@@ -63,7 +63,7 @@ grep -rq "distillation/library/" portal/src/pages/library 2>/dev/null && grep -r
 # ─────────────────────────────────────────────────────────────────────────────
 section "middleware contract"
 ROUTER=middleware/src/routes/distillation.ts
-for p in "/items" "/items/:id" "/items/:id/lineage" "/artifacts" "/review" "/review/:id" "/library/:libraryItemId/provenance"; do
+for p in "/items" "/items/:id" "/items/:id/lineage" "/artifacts" "/review" "/review/:id" "/library/:libraryItemId/provenance" "/procedures" "/procedures/:id" "/procedures/:id/applications" "/procedures/:id/apply"; do
   grep -qF "'$p'" "$ROUTER" || fail "route missing: $p"
 done
 grep -qE "produced\??: *\{" middleware/src/providers/distillation.ts && grep -q "artifact_ids" middleware/src/providers/distillation.ts && ok "compaction jobs carry produced{}" || fail "CompactionJob has no produced{cluster_ids,artifact_ids}"
@@ -78,10 +78,15 @@ done < <(grep -oE "distillationRouter\.(get|post|put|patch|delete)\('[^']+'" "$R
 # mock richness — the contract's minimums
 mock=middleware/src/mock/distillation.ts
 if [ -f "$mock" ]; then
-  na=$(grep -cE "^\s+id: '(art|artifact)-" "$mock"); nf=$(grep -cE "^\s+id: 'fact-" "$mock"); nc=$(grep -cE "^\s+id: '(cl|cluster)-" "$mock")
+  # facts are written two ways: `id: 'fact-…'` rows and the `['fact-…', …]` tuples the steps() helper takes
+  na=$(grep -cE "^\s+id: '(art|artifact)-" "$mock"); nf=$(grep -cE "^\s+(id: |\[)'fact-" "$mock"); nc=$(grep -cE "^\s+id: '(cl|cluster)-" "$mock")
+  np=$(grep -cE "^\s+type: 'procedure'" "$mock"); napp=$(grep -cE "^\s+applied\('art-" "$mock")
   [ "$na" -ge 8 ] && ok "≥ 8 artifacts in mock ($na)" || fail "mock has $na artifacts (need ≥ 8)"
   [ "$nc" -ge 18 ] && ok "≥ 18 clusters in mock ($nc)" || fail "mock has $nc clusters (need ≥ 18)"
   [ "$nf" -ge 12 ] && ok "≥ 12 facts in mock ($nf)" || fail "mock has $nf facts (need ≥ 12)"
+  [ "$np" -ge 3 ] && ok "≥ 3 procedures in mock ($np)" || fail "mock has $np procedures (need ≥ 3)"
+  [ "$napp" -ge 5 ] && ok "≥ 5 procedure applications in mock ($napp)" || fail "mock has $napp procedure applications (need ≥ 5)"
+  grep -q "isProceduralChunk" middleware/src/providers/distillation.ts && grep -q "procedureHealth" middleware/src/providers/distillation.ts && ok "procedure minting + health rules present" || fail "isProceduralChunk / procedureHealth missing from the provider"
 else fail "middleware/src/mock/distillation.ts missing"; fi
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -15,7 +15,7 @@ import { asyncHandler, NotFoundError, ValidationError } from '../lib/async-handl
 import { requireAction, resolveSession } from '../lib/authz.js';
 import {
   compactionHealth, compactNow, ingest, levels, listCompactions, sampling, samplingVerdict,
-  listItems, getItem, lineageFor, listArtifacts, factLineage, listReview, decideReview, libraryProvenance,
+  listItems, getItem, lineageFor, isLineageRoot, listArtifacts, factLineage, listReview, decideReview, libraryProvenance,
   listProcedures, getProcedure, listApplications, applyProcedure,
   type CompactableLevel, type CompactionStatus, type Level,
   type ArtifactStatus, type ArtifactType, type ReviewVerdict, type ApplicationOutcome,
@@ -142,8 +142,7 @@ distillationRouter.get('/items/:id', asyncHandler(async (req, res) => {
 distillationRouter.get('/items/:id/lineage', asyncHandler(async (req, res) => {
   const id = requireId(String(req.params['id']));
   const depth = intInRange(req.query['depth'], 'depth', 1, 4, 2);
-  const item = await getItem(id);
-  if (!item) throw new NotFoundError(`item ${id} not found`);
+  if (!(await isLineageRoot(id))) throw new NotFoundError(`item ${id} not found`);
   res.json(await lineageFor(id, depth));
 }));
 

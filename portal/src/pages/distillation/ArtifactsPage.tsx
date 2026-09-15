@@ -60,6 +60,12 @@ export default function DistillationArtifactsPage() {
   const setFacet = (key: 'type' | 'status', value: string) => {
     const next = new URLSearchParams(params);
     if (value === 'all') next.delete(key); else next.set(key, value);
+    // A facet change is a new list; the drawer that a deep link opened does
+    // not survive it, and neither does the `open` param — otherwise the
+    // drawer vanished when the filter dropped its artifact and popped back
+    // unasked when the filter brought it back.
+    next.delete('open');
+    setOpenId(null);
     setParams(next, { replace: true });
   };
 

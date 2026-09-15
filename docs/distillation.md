@@ -40,8 +40,9 @@ into a verdict per procedure:
 - **proven** — it succeeded recently and nothing has moved since.
 - **drifting** — since it last succeeded, a run failed, or a new `failed` /
   `gotcha` cluster was minted in the same repo, or the last success is older
-  than two weeks. Drift is measured at L1 rather than L0 so one noisy
-  session cannot flip every procedure amber.
+  than two weeks. Drift is measured at L1 rather than L0, so it moves when
+  a compaction lands a new failed or gotcha cluster in that repo, not on
+  every raw write.
 - **unproven** — published, never run to completion.
 
 The artifact drawer shows the steps toned by the latest run (proven up to

@@ -347,6 +347,15 @@ describe('GET /api/distillation/procedures/:id', () => {
   });
 });
 
+describe('GET /api/distillation/items/:id/lineage rooted at a run', () => {
+  it('a procedure application is a lineage root, so "Focus here" on a run node does not 404', async () => {
+    const res = await request(buildApp()).get('/api/distillation/items/papp-001/lineage?depth=2');
+    expect(res.status).toBe(200);
+    expect(res.body.nodes.some((n: { id: string; kind: string }) => n.id === 'papp-001' && n.kind === 'application')).toBe(true);
+    expect(res.body.edges.some((e: { relation: string; to: string }) => e.relation === 'applied_in' && e.to === 'papp-001')).toBe(true);
+  });
+});
+
 describe('GET /api/distillation/procedures/:id/applications', () => {
   beforeEach(() => { __resetDistillationMock(); });
 
@@ -392,6 +401,30 @@ describe('POST /api/distillation/procedures/:id/apply', () => {
   it('404s on a non-procedure id', async () => {
     const res = await request(buildApp()).post('/api/distillation/procedures/art-001/apply').send({ outcome: 'succeeded' });
     expect(res.status).toBe(404);
+  });
+
+  it('400s an abandoned run that names a step — only a failed run stops ON a step', async () => {
+    // The drawer would otherwise print "Abandoned … stopped at step 2" while
+    // the step tones (all neutral for abandoned) say no step was blamed.
+    const res = await request(buildApp()).post('/api/distillation/procedures/art-009/apply')
+      .send({ outcome: 'abandoned', failed_at_step_id: 'fact-013' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/abandoned/);
+  });
+
+  it('a failure recorded right after a success counts against it, even in the same clock tick', async () => {
+    // "Since the last success" is a position in the newest-first list, not a
+    // strict timestamp compare — the same order /applications hands the
+    // drawer, so the Overview's verdict and the drawer's latest run agree.
+    const app = buildApp();
+    const ok = await request(app).post('/api/distillation/procedures/art-011/apply').send({ outcome: 'succeeded' });
+    const bad = await request(app).post('/api/distillation/procedures/art-011/apply').send({ outcome: 'failed', failed_at_step_id: 'fact-022' });
+    expect([ok.status, bad.status]).toEqual([201, 201]);
+    const view = await request(app).get('/api/distillation/procedures/art-011');
+    expect(view.body.health.status).toBe('drifting');
+    expect(view.body.drift.failed_runs).toBe(1);
+    const apps = await request(app).get('/api/distillation/procedures/art-011/applications');
+    expect(apps.body.applications[0].id).toBe(bad.body.id);
   });
 
   it('201s, lands in the registered fixture, moves the verdict, and reset takes it back', async () => {

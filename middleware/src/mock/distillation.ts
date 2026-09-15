@@ -37,7 +37,7 @@
 // insight-arm64-fargate, lib-csrf-check, lib-pii-scan,
 // skill-sso-origin-bringup, skill-teardown-proposal) via the library-links
 // fixture, 3 still draft, 1 retired. 24 facts cite real observation ids as
-// evidence; 12 of them are the ordered STEPS of the three `procedure`
+// evidence; 11 of them are the ordered STEPS of the three `procedure`
 // artifacts (art-009..011), which is how a procedure is stored — a step is a
 // fact with an `ordinal`, not a `steps[]` list beside the facts. The review
 // samples give the human sample queue a real backlog and a real history. The
