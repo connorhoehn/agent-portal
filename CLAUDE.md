@@ -214,7 +214,7 @@ python3.11 -m venv .venv-synth && .venv-synth/bin/pip install -r schema/synth/re
 ## Project dependencies
 
 - **ui-components** (`~/projects/ui-components`): `@connorhoehnslalom/ui-components`,
-  installed at **2.131.0**. The portal pins it by **git sha** in `package.json`
+  installed at **2.260.0** (sha `8b96a107`, 2026-09-15). The portal pins it by **git sha** in `package.json`
   (`github:connorhoehnslalom/ui-components#<sha>`) rather than resolving a range
   from GitHub Packages — bump by moving the sha. It resolves over SSH, so no
   `GITHUB_TOKEN` and no registry `.npmrc` are needed; `portal/.npmrc` holds only
