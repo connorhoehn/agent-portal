@@ -26,6 +26,15 @@ const BOTS_ITEM: SubNavItem = {
   path: '/admin/bots', label: 'Bots', hint: 'The standing missions that feed the queue', group: 'Configure',
 };
 
+// What reached the org graph. It always lived inside the Automate frame
+// (breadcrumb Build › Automate › Graph updates, a palette entry, a link from
+// the Queue page) but had no rail row, so it opened with nothing lit beside
+// a row named "Changes" that is the code-review queue — a different page.
+// Readable by every signed-in role, like the Run pages.
+const GRAPH_UPDATES_ITEM: SubNavItem = {
+  path: '/iq/work/changes', label: 'Graph updates', hint: 'What reached the org graph', group: 'Review',
+};
+
 const CHANGES_ITEM: SubNavItem = {
   path: '/admin/changes', label: 'Changes', hint: 'Human review of what the bots shipped', group: 'Review',
 };
@@ -54,6 +63,7 @@ export function useAutomateSpec(): AutomateSpec {
     items: [
       ...RUN_ITEMS,
       ...(BOTS_ROLES.includes(role) ? [BOTS_ITEM] : []),
+      GRAPH_UPDATES_ITEM,
       ...(CHANGES_ROLES.includes(role) ? [CHANGES_ITEM] : []),
     ],
     storageKey: 'automate-subnav',

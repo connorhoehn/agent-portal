@@ -204,7 +204,7 @@ function QualityPage() {
 
   return (
     <PageSection
-      title="Judge Scores"
+      title="Quality"
       description={`Last 24h · 30s refresh · ${scores.length} sample${scores.length === 1 ? '' : 's'}`}
       actions={
         <Select
