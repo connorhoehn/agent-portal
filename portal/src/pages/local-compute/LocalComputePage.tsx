@@ -16,6 +16,7 @@ import {
   PageSection,
   Select,
   Stack,
+  Switch,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
 import { TaskComposer, LogStream, type LogLine } from '@connorhoehnslalom/ui-components/shared';
@@ -72,8 +73,24 @@ export default function LocalComputePage() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [dispatching, setDispatching] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  // The accept-jobs switch, while its PATCH is in flight: the row shows the
+  // requested state immediately rather than the 15s-poll-old one, and a
+  // failure snaps it back and says why. Keyed by node so two machines can be
+  // flipped without one clobbering the other.
+  const [pendingAccept, setPendingAccept] = useState<Record<string, boolean>>({});
+  const [acceptError, setAcceptError] = useState<string | null>(null);
+  // A refused dispatch (paused machine, no registered kinds, queue down) used
+  // to go through window.alert — a modal that blocks every browser event,
+  // including the automation that audits this page. It is a Banner now, next
+  // to the composer that caused it.
+  const [dispatchError, setDispatchError] = useState<string | null>(null);
 
-  const nodes = nodesData?.nodes ?? [];
+  const nodes = useMemo(
+    () => (nodesData?.nodes ?? []).map((n) => (
+      n.id in pendingAccept ? { ...n, acceptJobs: pendingAccept[n.id]! } : n
+    )),
+    [nodesData, pendingAccept],
+  );
   const runs = runsData?.runs ?? [];
   const nodesFailure = nodesError ?? nodesDegraded;
   const runsFailure = runsError ?? runsDegraded;
@@ -88,8 +105,28 @@ export default function LocalComputePage() {
 
   const selectedNode = useMemo(() => nodes.find((n) => n.id === selectedNodeId), [nodes, selectedNodeId]);
 
+  // "Switch it on before handing it work" has to be doable HERE: the paused
+  // banner below used to point at a control that existed only on the wire
+  // (PATCH /nodes/:id already took `acceptJobs`), so a freshly paired machine
+  // was a dead end from the browser.
+  const handleAcceptJobs = async (node: ComputeNode, acceptJobs: boolean) => {
+    setAcceptError(null);
+    setPendingAccept((prev) => ({ ...prev, [node.id]: acceptJobs }));
+    const res = await writeJson<ComputeNode>(`/api/local-compute/nodes/${node.id}`, 'PATCH', { acceptJobs });
+    if (!res.ok) {
+      setAcceptError(`Could not ${acceptJobs ? 'resume' : 'pause'} ${node.label}: ${res.error ?? 'request failed'}`);
+    }
+    await refreshNodes();
+    setPendingAccept((prev) => {
+      const next = { ...prev };
+      delete next[node.id];
+      return next;
+    });
+  };
+
   const handleDispatch = async (submission: { title?: string; prompt: string }) => {
     if (!selectedNode) return;
+    setDispatchError(null);
     setDispatching(true);
     const res = await writeJson<{ id: string }>(
       `/api/local-compute/nodes/${selectedNode.id}/work`,
@@ -100,7 +137,7 @@ export default function LocalComputePage() {
     if (res.ok) {
       refreshRuns();
     } else {
-      alert(res.error ?? 'Failed to dispatch work');
+      setDispatchError(res.error ?? 'Failed to dispatch work');
     }
   };
 
@@ -112,13 +149,13 @@ export default function LocalComputePage() {
         <Inline gap="xs" align="center">
           <span className="text-sm font-semibold text-text-primary">{n.label}</span>
           <Chip
-            tone={n.presence.status === 'connected' ? 'success' : n.presence.status === 'stale' ? 'warning' : 'tertiary'}
+            tone={n.presence.status === 'connected' ? 'success' : n.presence.status === 'stale' ? 'warning' : 'neutral'}
             size="xs"
             dot={n.presence.status === 'connected' ? 'pulse' : 'static'}
           >
             {n.presence.status}
           </Chip>
-          {!n.acceptJobs && <Chip tone="tertiary" size="xs">paused</Chip>}
+          {!n.acceptJobs && <Chip tone="neutral" size="xs">paused</Chip>}
         </Inline>
       ),
     },
@@ -143,6 +180,24 @@ export default function LocalComputePage() {
         const count = n.presence.sessions.length;
         return <MetaLine size="xs" items={[`${count} ${count === 1 ? 'session' : 'sessions'}`]} />;
       },
+    },
+    {
+      key: 'acceptJobs',
+      header: 'Accepting work',
+      render: (n) => (
+        // Stop the row's click so flipping the switch doesn't also read as
+        // "select this machine" (which would be harmless, but surprising).
+        <span onClick={(e) => e.stopPropagation()}>
+          <Switch
+            checked={n.acceptJobs}
+            disabled={!canDispatch || n.id in pendingAccept}
+            onChange={(next) => { void handleAcceptJobs(n, next); }}
+            size="sm"
+            aria-label={`${n.acceptJobs ? 'Pause' : 'Resume'} work on ${n.label}`}
+            data-testid={`accept-jobs-${n.id}`}
+          />
+        </span>
+      ),
     },
   ];
 
@@ -180,7 +235,7 @@ export default function LocalComputePage() {
       key: 'cost',
       header: 'Cost',
       render: (r) => {
-        if (r.result?.provider === 'local') return <MetaLine size="xs" tone="success" items={['$0']} />;
+        if (r.result?.provider === 'local') return <Chip tone="success" size="xs">$0</Chip>;
         if (r.result?.costUsd != null) return <MetaLine size="xs" items={[`$${r.result.costUsd.toFixed(2)}`]} />;
         return <MetaLine size="xs" tone="tertiary" items={['—']} />;
       },
@@ -211,6 +266,9 @@ export default function LocalComputePage() {
         <Stack gap="lg">
           <div>
             <h3 className="text-base font-semibold text-text-primary mb-2">Your machines</h3>
+            {acceptError && (
+              <Banner variant="error" className="mb-3">{acceptError}</Banner>
+            )}
             <DataTable
               data={nodes}
               keyField={(n) => n.id}
@@ -227,14 +285,17 @@ export default function LocalComputePage() {
                 Hand work to {selectedNode.label}
               </h3>
               {!selectedNode.acceptJobs ? (
-                <Banner tone="warning" className="mb-3">
-                  This machine is paused — switch it on before handing it work.
+                <Banner variant="warning" className="mb-3">
+                  This machine is paused — switch on “Accepting work” in the row above before handing it work.
                 </Banner>
               ) : selectedNode.presence.status === 'offline' ? (
-                <Banner tone="warning" className="mb-3">
+                <Banner variant="warning" className="mb-3">
                   This machine is offline — work queued here will wait until it reconnects.
                 </Banner>
               ) : null}
+              {dispatchError && (
+                <Banner variant="error" className="mb-3">{dispatchError}</Banner>
+              )}
               <TaskComposer
                 title="Dispatch work"
                 promptPlaceholder="What should this machine do?"

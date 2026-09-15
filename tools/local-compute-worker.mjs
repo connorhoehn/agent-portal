@@ -3,34 +3,52 @@
 //
 // The laptop half of the governed work loop: a paired machine registers its
 // capabilities (models, kinds, concurrency), claims jobs from the queue, clones
-// or updates the target repo, runs Claude Code against a local inference server
-// (llama-server, Ollama, vLLM, anything speaking the Anthropic Messages API),
-// and posts a fenced completion with token counts.
+// or updates the target repo, runs `claude -p` against it, and posts a fenced
+// completion with token counts.
+//
+// Two inference modes, chosen by whether ANTHROPIC_BASE_URL is set:
+//
+//   anthropic (default) — `claude -p` exactly as the operator would run it at
+//     the terminal: the machine's own Claude Code login, whatever model that
+//     account defaults to (or ANTHROPIC_MODEL), no env override injected. The
+//     run is billed to whoever is signed in on this machine. This is the mode
+//     for a laptop whose local model turned out too weak to be worth the watts.
+//
+//   loopback — a local inference server (llama-server, Ollama, vLLM, anything
+//     speaking the Anthropic Messages API) at ANTHROPIC_BASE_URL. Claude Code
+//     is pointed at it through --settings with a placeholder key, and told a
+//     real Anthropic model id the server then ignores. Marginal cost $0.
 //
 // Setup:
 //   1. Pair the machine first (orgiq-presence.mjs or the portal header menu):
 //        node orgiq-presence.mjs pair <CODE> [--base http://localhost:3001]
-//   2. Switch on "accept jobs" for the machine in the portal under Local compute.
-//   3. Start the local inference server (e.g. `cclocal up` for llama-server).
+//   2. Switch on "Accepting work" for the machine in the portal under Local compute.
+//   3. (loopback only) start the inference server and export ANTHROPIC_BASE_URL.
 //   4. Run this worker:
-//        node local-compute-worker.mjs [--base http://localhost:3001] [--poll 10]
+//        node local-compute-worker.mjs
 //
 // The worker reads ~/.claude-mem/orgiq-presence.json for the node token (written
 // by the pairing step) and announces its capabilities on every boot, so a
 // restart picks up changes to the env vars below without requiring re-pairing.
 //
 // Environment (all optional, with sane defaults):
-//   LOCAL_MODELS           comma-separated model list, e.g. "qwen3.6-35b,llama3.3:70b"
+//   LOCAL_MODELS           comma-separated model list the machine advertises
+//                          (default: ANTHROPIC_MODEL, else "claude-code" in
+//                          anthropic mode; "qwen3.6-35b" in loopback mode)
 //   JOB_KINDS              comma-separated, e.g. "local:task,local:distill"
 //   MAX_CONCURRENCY        how many jobs to hold at once (default: 2, the reference
 //                          workstation's real slot count)
-//   ANTHROPIC_BASE_URL     loopback inference endpoint (default: http://127.0.0.1:8080)
-//   ANTHROPIC_API_KEY      any non-empty string for local servers (default: "local")
-//   ANTHROPIC_MODEL        the model id Claude Code will be told to use; must be
-//                          recognized by Claude Code even though llama.cpp ignores it
-//                          (default: claude-sonnet-4-5-20250929)
+//   ANTHROPIC_BASE_URL     set it to run in loopback mode (e.g. http://127.0.0.1:8080)
+//   ANTHROPIC_API_KEY      loopback only: any non-empty string (default: "local")
+//   ANTHROPIC_MODEL        the model id passed as --model. Loopback mode needs one
+//                          Claude Code recognizes even though the server ignores it
+//                          (default there: claude-sonnet-4-5-20250929); anthropic
+//                          mode passes none and lets the account's default apply.
 //   POLL_INTERVAL_S        how often to poll /claim when idle (default: 10)
 //   REPOS_DIR              where to clone/update repos (default: ~/repos-worker)
+//   ORGIQ_PRESENCE_CONFIG  path of the pairing file to read instead of the
+//                          default — for running a second worker (or a mock-mode
+//                          audit with MOCK_NODE_TOKEN) without touching the real one
 //
 // The worker does NOT daemonize. Run it under systemd, launchd, tmux, or a plain
 // shell — a failed claim, a dead network, or a revoked token all exit non-zero,
@@ -41,22 +59,31 @@ import { execSync, spawn } from 'node:child_process';
 import { join, basename } from 'node:path';
 import { homedir } from 'node:os';
 
-const CONFIG_PATH = join(homedir(), '.claude-mem', 'orgiq-presence.json');
+const CONFIG_PATH = process.env.ORGIQ_PRESENCE_CONFIG ?? join(homedir(), '.claude-mem', 'orgiq-presence.json');
 const REPOS_DIR = process.env.REPOS_DIR ?? join(homedir(), 'repos-worker');
 // Per-job run logs, tail-able while a job runs (`tail -f`), and the source the
 // worker ships to the middleware for the browser log view. Kept out of the repo
 // checkout so `git clean -fd` in ensureRepo never deletes a live log.
 const LOG_DIR = process.env.WORKER_LOG_DIR ?? join(homedir(), '.claude-mem', 'orgiq-worker-logs');
 const POLL_INTERVAL_S = parseInt(process.env.POLL_INTERVAL_S ?? '10', 10) || 10;
-const ANTHROPIC_BASE_URL = process.env.ANTHROPIC_BASE_URL ?? 'http://127.0.0.1:8080';
+// See the header: loopback iff a base URL is given. Nothing is defaulted to
+// 127.0.0.1 any more — a worker that silently pointed `claude` at a server
+// nobody started failed every job with a connection refusal.
+const ANTHROPIC_BASE_URL = process.env.ANTHROPIC_BASE_URL || null;
+const INFERENCE = ANTHROPIC_BASE_URL ? 'loopback' : 'anthropic';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? 'local';
-const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-5-20250929';
+// `null` means "pass no --model": in anthropic mode the signed-in account's
+// default is the right answer and a hard-coded id would pin every machine to
+// whatever this file said the day it was written.
+const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL
+  ?? (INFERENCE === 'loopback' ? 'claude-sonnet-4-5-20250929' : null);
 
 // The worker self-reports these on every boot. Each can only NARROW what it is
 // offered, never widen: kinds are intersected with the server's allowlist,
 // concurrency is capped by the server's ceiling, and `accept_jobs` is the
 // owner's switch — so a bearer token on somebody's laptop is acceptable.
-const LOCAL_MODELS = (process.env.LOCAL_MODELS ?? 'qwen3.6-35b')
+const LOCAL_MODELS = (process.env.LOCAL_MODELS
+  ?? (INFERENCE === 'loopback' ? 'qwen3.6-35b' : (ANTHROPIC_MODEL ?? 'claude-code')))
   .split(',').map((s) => s.trim()).filter(Boolean);
 const JOB_KINDS = (process.env.JOB_KINDS ?? 'local:task')
   .split(',').map((s) => s.trim()).filter(Boolean);
@@ -190,8 +217,8 @@ function presenceSessions() {
       sessionId: jobId,
       harness: 'claude-code',
       intent: h.title,
-      model: ANTHROPIC_MODEL,
-      modelProvider: 'local',
+      model: h.model ?? ANTHROPIC_MODEL ?? LOCAL_MODELS[0],
+      modelProvider: INFERENCE === 'loopback' ? 'local' : 'anthropic',
       startedAt: h.startedAt,
       ...(h.repo ? { repo: h.repo } : {}),
     });
@@ -253,13 +280,18 @@ function ensureRepo(repoUrl) {
 
 function runTask(config, jobId, cwd, prompt) {
   const started = Date.now();
-  const settingsOverride = JSON.stringify({
-    env: {
-      CLAUDE_CODE_USE_BEDROCK: '0',
-      ANTHROPIC_BASE_URL,
-      ANTHROPIC_API_KEY,
-    },
-  });
+  // Loopback only. In anthropic mode NO settings block is passed: `claude -p`
+  // resolves auth and model exactly as it would for the operator at a terminal,
+  // and an injected placeholder key would override that login and 401.
+  const settingsOverride = INFERENCE === 'loopback'
+    ? JSON.stringify({
+      env: {
+        CLAUDE_CODE_USE_BEDROCK: '0',
+        ANTHROPIC_BASE_URL,
+        ANTHROPIC_API_KEY,
+      },
+    })
+    : null;
 
   // The command built here is what the devbox agent does, minus the microVM
   // glue: `claude -p` with --model (must be recognized by Claude Code even
@@ -291,22 +323,29 @@ function runTask(config, jobId, cwd, prompt) {
     '-p', prompt,
     '--output-format', 'stream-json',
     '--verbose',
-    '--model', ANTHROPIC_MODEL,
+    ...(ANTHROPIC_MODEL ? ['--model', ANTHROPIC_MODEL] : []),
     '--dangerously-skip-permissions',
-    '--settings', settingsOverride,
+    ...(settingsOverride ? ['--settings', settingsOverride] : []),
   ];
+  const inferenceLabel = INFERENCE === 'loopback' ? ANTHROPIC_BASE_URL : 'anthropic (this machine\'s Claude Code login)';
+  const modelLabel = ANTHROPIC_MODEL ?? 'account default';
 
   console.log(`  running: claude -p "${prompt.slice(0, 60)}${prompt.length > 60 ? '...' : ''}"`);
-  console.log(`  inference: ${ANTHROPIC_BASE_URL}, model: ${ANTHROPIC_MODEL}`);
+  console.log(`  inference: ${inferenceLabel}, model: ${modelLabel}`);
 
   if (!existsSync(LOG_DIR)) mkdirSync(LOG_DIR, { recursive: true });
   const logPath = join(LOG_DIR, `${jobId}.log`);
   const logFile = createWriteStream(logPath, { flags: 'w' });
-  logFile.write(`[worker] job ${jobId}\n[worker] model ${ANTHROPIC_MODEL} via ${ANTHROPIC_BASE_URL}\n[worker] cwd ${cwd}\n[worker] started\n\n`);
+  logFile.write(`[worker] job ${jobId}\n[worker] model ${modelLabel} via ${inferenceLabel}\n[worker] cwd ${cwd}\n[worker] started\n\n`);
   console.log(`  log: ${logPath}`);
 
   return new Promise((resolve) => {
-    const child = spawn('claude', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+    // Claude Code refuses to start inside another Claude Code session (it
+    // reads CLAUDECODE / CLAUDE_CODE_ENTRYPOINT). A worker launched from a
+    // Claude terminal would inherit those and fail every job, so the child
+    // gets a copy of the environment with them removed.
+    const { CLAUDECODE: _cc, CLAUDE_CODE_ENTRYPOINT: _ep, ...childEnv } = process.env;
+    const child = spawn('claude', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], env: childEnv });
     const h = held.get(jobId);
     if (h) h.child = child;
 
@@ -350,6 +389,14 @@ function runTask(config, jobId, cwd, prompt) {
       }
       if (result.output_tokens === undefined && usage.output_tokens !== undefined) {
         result.output_tokens = usage.output_tokens;
+      }
+      // Which model actually answered. In anthropic mode nothing was passed as
+      // --model, so the only place the id exists is the result's `modelUsage`
+      // map (one key per model the run touched); the first key is recorded and
+      // shown on the machine's presence card while the run is live.
+      if (!ANTHROPIC_MODEL && result.modelUsage && typeof result.modelUsage === 'object') {
+        const [served] = Object.keys(result.modelUsage);
+        if (served) result.model = served;
       }
       logFile.write(`\n[worker] exit ${exitCode} after ${(durationMs / 1000).toFixed(1)}s\n`);
       logFile.end();
@@ -426,7 +473,7 @@ async function complete(config, jobId, status, outcome) {
     status,
     ...(outcome.result.result ? { result: { summary: outcome.result.result } } : {}),
     ...(outcome.result.total_cost_usd !== undefined ? { costUsd: outcome.result.total_cost_usd } : {}),
-    ...(ANTHROPIC_MODEL ? { model: ANTHROPIC_MODEL } : {}),
+    ...((outcome.result.model ?? ANTHROPIC_MODEL) ? { model: outcome.result.model ?? ANTHROPIC_MODEL } : {}),
     ...(outcome.result.input_tokens ? { tokensIn: outcome.result.input_tokens } : {}),
     ...(outcome.result.output_tokens ? { tokensOut: outcome.result.output_tokens } : {}),
     ...(outcome.ok ? {} : { error: outcome.result.error ?? `exit code ${outcome.exitCode}` }),

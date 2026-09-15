@@ -14,8 +14,8 @@ test('statusTone maps statuses to tones', () => {
   assert.equal(statusTone('awaiting_review'), 'info');
   assert.equal(statusTone('running'), 'info');
   assert.equal(statusTone('failed'), 'danger');
-  assert.equal(statusTone('cancelled'), 'tertiary');
-  assert.equal(statusTone('queued'), 'tertiary');
+  assert.equal(statusTone('cancelled'), 'neutral');
+  assert.equal(statusTone('queued'), 'neutral');
 });
 
 test('when formats timestamps', () => {

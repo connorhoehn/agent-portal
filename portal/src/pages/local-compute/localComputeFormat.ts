@@ -9,14 +9,14 @@ export function statusLabel(status: JobStatus): string {
   }
 }
 
-export function statusTone(status: JobStatus): 'success' | 'warning' | 'danger' | 'info' | 'tertiary' {
+export function statusTone(status: JobStatus): 'success' | 'warning' | 'danger' | 'info' | 'neutral' {
   switch (status) {
     case 'done': return 'success';
     case 'awaiting_review': return 'info';
     case 'running': return 'info';
     case 'failed': return 'danger';
-    case 'cancelled': return 'tertiary';
-    default: return 'tertiary';
+    case 'cancelled': return 'neutral';
+    default: return 'neutral';
   }
 }
 
@@ -24,7 +24,8 @@ export function when(iso: string | null | undefined): string {
   if (!iso) return 'never';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  const mins = Math.round((Date.now() - d.getTime()) / 60000);
+  // floor, not round: 30 seconds ago is "just now", not "1m ago".
+  const mins = Math.floor((Date.now() - d.getTime()) / 60000);
   if (mins < 1) return 'just now';
   if (mins < 60) return `${mins}m ago`;
   if (mins < 1440) return `${Math.round(mins / 60)}h ago`;
