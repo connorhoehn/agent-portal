@@ -19,6 +19,7 @@ import {
 } from '@connorhoehnslalom/ui-components/shared';
 import { useCapabilities } from '../../lib/capabilities';
 import { useFetch } from '../../hooks/useFetch';
+import { useCrumbLabel } from '../../lib/crumbLabels';
 import { toastPending, toastSuccess, toastError } from '../../lib/toastStore';
 import { JobStatusPill, LIVE_STATUSES, T, money } from './workShared';
 import { isNotFoundFetchError } from './jobFetchStatus';
@@ -114,6 +115,8 @@ export default function JobDetailPage() {
   // Poll fast while the job is live so status transitions land quickly; the
   // SSE tail carries the activity, this carries the state machine.
   const { data: job, error, refresh } = useFetch<Job>(jobId ? `/api/work/jobs/${jobId}` : null, 5_000);
+  // The trail reads the job's title once it loads, not "Job 3f9a…".
+  useCrumbLabel(jobId, job?.title);
 
   // What this job produced downstream: graph proposals carry the jobId that
   // raised them, so the job page can point at its own output instead of

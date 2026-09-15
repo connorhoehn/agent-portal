@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
-  Button, Card, Chip, ConsultCard, EmptyState, Inline, PageSection, SectionLabel, Stack, StatStrip, Toolbar,
+  Button, Card, Chip, ConsultCard, Inline, InlineAlert, PageSection, SectionLabel, Stack, StatStrip, Toolbar,
 } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
@@ -150,75 +150,9 @@ export default function WorkHomePage() {
         </Card>
       )}
 
-      {/* ── The queue's pulse: depth, the bots pulling from it, drain ETA ── */}
-      <QueuePulse
-        summary={s ? { jobs: s.jobs, busyBoxes: s.busyBoxes } : null}
-        jobs={jobs}
-        degraded={!!summaryError}
-      />
-
-      {/* ── The four numbers, each a door to its lane. A single StatStrip
-          row, not a stack of cards — the review lane below is the page. ── */}
-      <StatStrip
-        aria-label="Automate summary"
-        className="mt-3"
-        items={[
-          {
-            label: 'Needs you',
-            value: summaryError ? '—' : needsYou,
-            tone: !summaryError && needsYou > 0 ? 'danger' : 'default',
-            hint: summaryError
-              ? 'unknown'
-              : `${needsReview} for review · ${pendingProposals} graph change${pendingProposals === 1 ? '' : 's'} · ${consultCount} agent question${consultCount === 1 ? '' : 's'}`,
-          },
-          {
-            label: 'Workers',
-            value: summaryError ? '—' : active,
-            onSelect: () => navigate('/iq/work/queue'),
-            hint: summaryError
-              ? 'unknown'
-              : active > 0
-                ? `busy: ${(s?.busyBoxes ?? []).join(', ') || '—'}`
-                : 'all idle — the next queued job dispatches within ~10s',
-          },
-          {
-            label: 'Findings + DLQ',
-            value: summaryError ? '—' : (s?.findings.open ?? 0) + failedCount,
-            tone: !summaryError && ((s?.findings.critical ?? 0) > 0 || failedCount > 0) ? 'danger' : 'default',
-            onSelect: () => navigate('/iq/work/findings'),
-            hint: summaryError
-              ? 'unknown'
-              : `${s?.findings.open ?? 0} open finding${(s?.findings.open ?? 0) === 1 ? '' : 's'} · ${failedCount} dead-lettered job${failedCount === 1 ? '' : 's'}`,
-          },
-          {
-            label: 'Rediscovery avoided',
-            value: rediscovery ? `$${rediscovery.usdAvoided.toFixed(2)}` : '—',
-            hint: rediscovery
-              ? `${rediscovery.shortCircuits} short-circuits · ${rediscovery.dismissals} dismissed · ${rediscovery.windowDays}d`
-              : 'unknown',
-          },
-        ]}
-      />
-
-      {/* `T`'s wrap mode is built on the flex-row `Inline` primitive, which
-          wraps each contiguous run of JSX text in its own anonymous
-          block-level flex item (CSS Flexbox §4) — a plain space at the seam
-          next to an inline <Link>/<T> then lands as leading/trailing
-          whitespace of that block's own line box and paints with zero
-          width, so "the" and "queue" visually touch ("thequeue"). A
-          non-breaking space at each seam is real, non-collapsible content
-          instead of trimmable whitespace, so it always renders. */}
-      <T as="div" wrap className="text-[12px] text-text-tertiary mt-3 mb-5 leading-relaxed">
-        {'Bots and people put work on the'}{' '}
-        <Link to="/iq/work/queue" className="text-primary no-underline hover:underline">queue</Link>
-        {', computers in the'}{' '}
-        {canOpenDevbox
-          ? <Link to="/admin/devbox" className="text-primary no-underline hover:underline">Computer Lab</Link>
-          : <T title="Not visible to this role">Computer Lab</T>}
-        {' '}
-        {'drain it, and anything that would change the org graph or ship code waits below for a person.'}
-      </T>
-
+      {/* ── What needs a person comes first: the review lane IS the page.
+          The pulse, the four numbers and the bots roster follow — they
+          describe the loop; this is the part of it that is waiting on you. ── */}
       {/* ── Agent questions first: a pending consult is a RUNNING computer
           blocked on a person. ── */}
       {pendingConsults.length > 0 && (
@@ -327,16 +261,86 @@ export default function WorkHomePage() {
         </Card>
       )}
 
-      {/* The copy above promises "anything ... waits below for a person" —
+      {/* The loop sentence below promises "anything ... waits ... for a person" —
           when the queue genuinely has nothing for a human, say so explicitly
           instead of leaving blank space that reads as a page that failed to
           render, not a page reporting zero. */}
       {!summaryError && pendingConsults.length === 0 && needsReview === 0 && pendingProposals === 0 && (
-        <EmptyState
-          title="Nothing needs your attention right now"
-          description="Agent questions and finished work awaiting review will show up here."
-        />
+        <InlineAlert tone="info" className="mb-5">
+          Nothing needs your attention right now — agent questions and finished work awaiting review will show up here.
+        </InlineAlert>
       )}
+
+      {/* ── The queue's pulse: depth, the bots pulling from it, drain ETA ── */}
+      <QueuePulse
+        summary={s ? { jobs: s.jobs, busyBoxes: s.busyBoxes } : null}
+        jobs={jobs}
+        degraded={!!summaryError}
+      />
+
+      {/* ── The four numbers, each a door to its lane. A single StatStrip
+          row, not a stack of cards — the review lane below is the page. ── */}
+      <StatStrip
+        aria-label="Automate summary"
+        className="mt-3"
+        items={[
+          {
+            label: 'Needs you',
+            value: summaryError ? '—' : needsYou,
+            tone: !summaryError && needsYou > 0 ? 'danger' : 'default',
+            hint: summaryError
+              ? 'unknown'
+              // Short enough to fit the tile at the shell's narrowest content
+              // width — the long form clipped to "0 for review · 0 graph…".
+              : `${needsReview} review · ${pendingProposals} graph · ${consultCount} question${consultCount === 1 ? '' : 's'}`,
+          },
+          {
+            label: 'Workers',
+            value: summaryError ? '—' : active,
+            href: '/iq/work/queue',
+            hint: summaryError
+              ? 'unknown'
+              : active > 0
+                ? `busy: ${(s?.busyBoxes ?? []).join(', ') || '—'}`
+                : 'all idle · next job within ~10s',
+          },
+          {
+            label: 'Findings + DLQ',
+            value: summaryError ? '—' : (s?.findings.open ?? 0) + failedCount,
+            tone: !summaryError && ((s?.findings.critical ?? 0) > 0 || failedCount > 0) ? 'danger' : 'default',
+            href: '/iq/work/findings',
+            hint: summaryError
+              ? 'unknown'
+              : `${s?.findings.open ?? 0} open finding${(s?.findings.open ?? 0) === 1 ? '' : 's'} · ${failedCount} dead-lettered job${failedCount === 1 ? '' : 's'}`,
+          },
+          {
+            label: 'Rediscovery avoided',
+            value: rediscovery ? `$${rediscovery.usdAvoided.toFixed(2)}` : '—',
+            hint: rediscovery
+              ? `${rediscovery.shortCircuits} short-circuits · ${rediscovery.dismissals} dismissed · ${rediscovery.windowDays}d`
+              : 'unknown',
+          },
+        ]}
+      />
+
+      {/* `T`'s wrap mode is built on the flex-row `Inline` primitive, which
+          wraps each contiguous run of JSX text in its own anonymous
+          block-level flex item (CSS Flexbox §4) — a plain space at the seam
+          next to an inline <Link>/<T> then lands as leading/trailing
+          whitespace of that block's own line box and paints with zero
+          width, so "the" and "queue" visually touch ("thequeue"). A
+          non-breaking space at each seam is real, non-collapsible content
+          instead of trimmable whitespace, so it always renders. */}
+      <T as="div" wrap className="text-[12px] text-text-tertiary mt-3 mb-5 leading-relaxed">
+        {'Bots and people put work on the'}{' '}
+        <Link to="/iq/work/queue" className="text-primary no-underline hover:underline">queue</Link>
+        {', computers in the'}{' '}
+        {canOpenDevbox
+          ? <Link to="/admin/devbox" className="text-primary no-underline hover:underline">Computer Lab</Link>
+          : <T title="Not visible to this role">Computer Lab</T>}
+        {' '}
+        {'drain it, and anything that would change the org graph or ship code waits at the top of this page for a person.'}
+      </T>
     </PageSection>
   );
 }
