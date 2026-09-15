@@ -10,7 +10,9 @@ import {
   Button,
   Chip,
   DataTable,
+  DetailSection,
   EmptyState,
+  EntityCell,
   Inline,
   MetaLine,
   PageSection,
@@ -147,7 +149,7 @@ export default function LocalComputePage() {
       header: 'Machine',
       render: (n) => (
         <Inline gap="xs" align="center">
-          <span className="text-sm font-semibold text-text-primary">{n.label}</span>
+          <EntityCell label={n.label} />
           <Chip
             tone={n.presence.status === 'connected' ? 'success' : n.presence.status === 'stale' ? 'warning' : 'neutral'}
             size="xs"
@@ -207,12 +209,9 @@ export default function LocalComputePage() {
       header: 'Run',
       sortable: true,
       render: (r) => (
-        <button
-          onClick={() => setSelectedRunId(r.id)}
-          className="text-left text-sm font-medium text-primary hover:underline"
-        >
+        <Button variant="ghost" size="sm" onClick={() => setSelectedRunId(r.id)}>
           {r.title}
-        </button>
+        </Button>
       ),
     },
     {
@@ -264,61 +263,58 @@ export default function LocalComputePage() {
         />
       ) : (
         <Stack gap="lg">
-          <div>
-            <h3 className="text-base font-semibold text-text-primary mb-2">Your machines</h3>
-            {acceptError && (
-              <Banner variant="error" className="mb-3">{acceptError}</Banner>
-            )}
-            <DataTable
-              data={nodes}
-              keyField={(n) => n.id}
-              columns={nodeColumns}
-              onRowClick={(n) => setSelectedNodeId(n.id)}
-              striped
-              emptyMessage="No machines."
-            />
-          </div>
+          <DetailSection first title="Your machines">
+            <Stack gap="sm">
+              {acceptError && (
+                <Banner variant="error">{acceptError}</Banner>
+              )}
+              <DataTable
+                data={nodes}
+                keyField={(n) => n.id}
+                columns={nodeColumns}
+                onRowClick={(n) => setSelectedNodeId(n.id)}
+                striped
+                emptyMessage="No machines."
+              />
+            </Stack>
+          </DetailSection>
 
           {canDispatch && selectedNode && (
-            <div>
-              <h3 className="text-base font-semibold text-text-primary mb-2">
-                Hand work to {selectedNode.label}
-              </h3>
-              {!selectedNode.acceptJobs ? (
-                <Banner variant="warning" className="mb-3">
-                  This machine is paused — switch on “Accepting work” in the row above before handing it work.
-                </Banner>
-              ) : selectedNode.presence.status === 'offline' ? (
-                <Banner variant="warning" className="mb-3">
-                  This machine is offline — work queued here will wait until it reconnects.
-                </Banner>
-              ) : null}
-              {dispatchError && (
-                <Banner variant="error" className="mb-3">{dispatchError}</Banner>
-              )}
-              <TaskComposer
-                title="Dispatch work"
-                promptPlaceholder="What should this machine do?"
-                onSubmit={handleDispatch}
-                submitLabel="Dispatch"
-                hint={selectedNode.localModels.length > 0 ? `Using ${selectedNode.localModels[0]}` : undefined}
-                busy={dispatching}
-              />
-            </div>
+            <DetailSection title={`Hand work to ${selectedNode.label}`}>
+              <Stack gap="sm">
+                {!selectedNode.acceptJobs ? (
+                  <Banner variant="warning">
+                    This machine is paused — switch on “Accepting work” in the row above before handing it work.
+                  </Banner>
+                ) : selectedNode.presence.status === 'offline' ? (
+                  <Banner variant="warning">
+                    This machine is offline — work queued here will wait until it reconnects.
+                  </Banner>
+                ) : null}
+                {dispatchError && (
+                  <Banner variant="error">{dispatchError}</Banner>
+                )}
+                <TaskComposer
+                  title="Dispatch work"
+                  promptPlaceholder="What should this machine do?"
+                  onSubmit={handleDispatch}
+                  submitLabel="Dispatch"
+                  hint={selectedNode.localModels.length > 0 ? `Using ${selectedNode.localModels[0]}` : undefined}
+                  busy={dispatching}
+                />
+              </Stack>
+            </DetailSection>
           )}
 
-          <div>
-            <h3 className="text-base font-semibold text-text-primary mb-2">Your runs</h3>
-            {runsFailure && (
+          <DetailSection title="Your runs">
+            {runsFailure ? (
               <UnavailableNotice
                 error={runsFailure}
                 what="run history"
                 source="Runs are read from Aurora"
                 onRetry={refreshRuns}
-                className="mb-3"
               />
-            )}
-            {!runsFailure && (
+            ) : (
               <DataTable
                 data={runs}
                 keyField={(r) => r.id}
@@ -327,16 +323,15 @@ export default function LocalComputePage() {
                 emptyMessage="No runs yet."
               />
             )}
-          </div>
+          </DetailSection>
 
           {selectedRunId && (
-            <div>
-              <Inline align="center" gap="sm" className="mb-2">
-                <h3 className="text-base font-semibold text-text-primary">Log</h3>
-                <Button variant="ghost" size="sm" onClick={() => setSelectedRunId(null)}>Close</Button>
-              </Inline>
+            <DetailSection
+              title="Log"
+              actions={<Button variant="ghost" size="sm" onClick={() => setSelectedRunId(null)}>Close</Button>}
+            >
               <RunLog jobId={selectedRunId} />
-            </div>
+            </DetailSection>
           )}
         </Stack>
       )}
