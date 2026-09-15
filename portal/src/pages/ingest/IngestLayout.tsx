@@ -1,7 +1,9 @@
 import { NavLink, Outlet } from 'react-router';
 import { SubNavLayout, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
 import { useFetch } from '../../hooks/useFetch';
+import { useSession } from '../../lib/auth';
 import type { CrawlSession, CrawlTarget } from '../../components/ingest/types';
+import { knowledgeItemsFor } from '../knowledge/knowledgeNav';
 
 function IngestLayout() {
   // Lightweight polling for nav badges. Same endpoints the sub-pages use,
@@ -17,25 +19,25 @@ function IngestLayout() {
 
   const targetCount = targetsData?.targets.length;
   const crawlCount = crawlsData?.crawls.length;
+  const { session } = useSession();
 
-  // Ordered as the pipeline runs, not alphabetically and not by how the pages
-  // happened to be built: content is pulled from a source, the run is recorded,
-  // the result lands in storage, storage is registered as a knowledge-base data
-  // source, and a schedule keeps it current. The old first item was "Summary",
-  // which put a dashboard at the head of a sequence of steps; the summary is
-  // now the Knowledge home, linked back to from the top.
-  const items: SubNavItem[] = [
-    { path: '/admin/knowledge', label: '← Knowledge', hint: 'Overview & health' },
-    { path: 'crawl',     label: '1 · Sources',      hint: 'What content is pulled in', count: targetCount },
-    { path: 'history',   label: '2 · Runs',         hint: 'What each pull did',        count: crawlCount },
-    { path: 'storage',   label: '3 · Storage',      hint: 'Where documents land' },
-    { path: 'sources',   label: '4 · KB sync',      hint: 'Storage → knowledge base' },
-    { path: 'schedules', label: '5 · Schedule',     hint: 'How often it re-syncs' },
-  ];
+  // The SAME rail the Knowledge home shows (knowledgeNav.ts) — Overview and
+  // Registry stay in view, the pipeline stages keep the words the Knowledge
+  // rail used for them, and the two live counts ride on their rows. A second
+  // rail titled "Knowledge pipeline" with "1 · Sources" and a back-link used
+  // to replace it the moment a pipeline page opened.
+  const counts: Record<string, number | undefined> = {
+    '/admin/ingest/crawl': targetCount,
+    '/admin/ingest/history': crawlCount,
+  };
+  const items: SubNavItem[] = knowledgeItemsFor(session?.role).map((i) =>
+    counts[i.path] !== undefined ? { ...i, count: counts[i.path] } : i,
+  );
 
   return (
     <SubNavLayout
-      title="Knowledge pipeline"
+      title="Knowledge"
+      storageKey="knowledge"
       items={items}
       renderNavItem={(item, children) => (
         <NavLink

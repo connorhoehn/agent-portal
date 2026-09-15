@@ -90,6 +90,10 @@ export function useIqSubNav(pathname: string): IqSubNavSpec | null {
   if (pathname.startsWith('/iq/work')) return automateSpec;
 
   if (pathname.startsWith('/iq/library') || pathname.startsWith('/iq/prompt-ops') || pathname.startsWith('/iq/prompts') || pathname.startsWith('/iq/history') || pathname.startsWith('/iq/diff') || pathname.startsWith('/iq/evaluations')) {
+    // A role that only sees Browse gets a one-row rail titled "Prompt
+    // Management" whose only link is the page it is on — 200px of chrome
+    // for a self-link. No rail at all: the Library renders full-width.
+    if (promptItems.length < 2) return null;
     return {
       title: 'Prompt Management',
       items: promptItems,

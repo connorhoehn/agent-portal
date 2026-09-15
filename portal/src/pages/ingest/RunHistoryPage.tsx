@@ -38,7 +38,7 @@ function RunHistoryPage() {
 
   return (
     <PageSection
-      title="2 · Runs"
+      title="Runs"
       description="What each pull actually did — pages fetched, documents produced, and where a run stopped. Refreshes every 10s."
     >
       <Card padding="md">

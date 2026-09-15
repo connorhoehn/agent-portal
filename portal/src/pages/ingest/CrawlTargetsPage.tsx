@@ -134,7 +134,7 @@ function CrawlTargetsPage() {
 
   return (
     <PageSection
-      title="1 · Sources"
+      title="Sources"
       description="What content gets pulled in. Each target is a site the crawler reads and turns into documents."
     >
       <Stack gap="md">

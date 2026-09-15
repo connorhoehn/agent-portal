@@ -128,7 +128,7 @@ function DataSourcesPage() {
 
   return (
     <PageSection
-      title="4 · KB sync"
+      title="KB sync"
       description="The data sources that carry storage into the knowledge base, and the jobs that ran."
     >
       <Stack gap="md">

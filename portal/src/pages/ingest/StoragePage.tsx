@@ -12,7 +12,7 @@ function StoragePage() {
 
   return (
     <PageSection
-      title="3 · Storage"
+      title="Storage"
       description="Where ingested documents land in S3, and how much of it the knowledge base has chunked."
     >
       <Stack gap="md">

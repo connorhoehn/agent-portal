@@ -6,33 +6,19 @@
 // click from the Knowledge home.
 
 import { NavLink, Outlet } from 'react-router';
-import { SubNavLayout, type SubNavItem } from '@connorhoehnslalom/ui-components/shared';
+import { SubNavLayout } from '@connorhoehnslalom/ui-components/shared';
 import { useSession } from '../../lib/auth';
-
-const KNOWLEDGE_ITEMS: SubNavItem[] = [
-  { path: '/admin/knowledge',          label: 'Overview', hint: 'Sources, ingestion, and the KBs agents retrieve from', group: 'Knowledge' },
-  { path: '/admin/knowledge/registry', label: 'Registry', hint: 'Knowledge bases',          group: 'Knowledge' },
-];
-
-// The ingest pipeline, in run order — same stages IngestLayout shows, hoisted
-// here so they're discoverable from Knowledge. hr-admin only: /admin/ingest/*
-// routes are hr-admin-gated, so showing these to an org-leader gave them five
-// links that all silently bounced to /.
-const PIPELINE_ITEMS: SubNavItem[] = [
-  { path: '/admin/ingest/crawl',       label: 'Sources',  hint: 'What content is pulled in', group: 'Pipeline' },
-  { path: '/admin/ingest/history',     label: 'Runs',     hint: 'What each pull did',        group: 'Pipeline' },
-  { path: '/admin/ingest/storage',     label: 'Storage',  hint: 'Where documents land',      group: 'Pipeline' },
-  { path: '/admin/ingest/sources',     label: 'KB sync',  hint: 'Storage → knowledge base',  group: 'Pipeline' },
-  { path: '/admin/ingest/schedules',   label: 'Schedule', hint: 'How often it re-syncs',     group: 'Pipeline' },
-];
+import { knowledgeItemsFor } from './knowledgeNav';
 
 export default function KnowledgeLayout() {
   const { session } = useSession();
-  const canIngest = session?.role === 'hr-admin' || session?.role === 'admin';
-  const items = canIngest ? [...KNOWLEDGE_ITEMS, ...PIPELINE_ITEMS] : KNOWLEDGE_ITEMS;
+  // One spec with IngestLayout (knowledgeNav.ts), so the pipeline pages keep
+  // this exact rail instead of swapping in a second one.
+  const items = knowledgeItemsFor(session?.role);
   return (
     <SubNavLayout
       title="Knowledge"
+      storageKey="knowledge"
       items={items}
       renderNavItem={(item, children) => (
         <NavLink

@@ -51,7 +51,7 @@ function SchedulesPage() {
 
   return (
     <PageSection
-      title="5 · Schedule"
+      title="Schedule"
       description="How often the knowledge base re-syncs. Without a schedule it only updates when someone presses Sync now."
     >
       <SchedulesPanel sources={sources} />
