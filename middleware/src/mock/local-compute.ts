@@ -174,7 +174,13 @@ function seededNodes(): ComputeNodeRow[] {
       label: 'demo-macbook',
       platform: 'darwin/arm64',
       acceptJobs: false,
-      localModels: ['qwen2.5-coder:14b'],
+      // What tools/local-compute-worker.mjs advertises in its default
+      // (anthropic) mode: the Sonnet it pins `claude -p` to on this machine's
+      // own login (local compute runs Sonnet or Haiku only — a frontier model
+      // on a feature ticket is cost without a better outcome). The local qwen this used to name was retired on
+      // 2026-09-14 — the laptop's compute was not worth the watts — so a
+      // seed still naming it would be a demo of a machine nobody has.
+      localModels: ['claude-sonnet-5'],
       // Advertises nothing and holds one job: the state a machine is in after
       // pairing and before its worker has ever announced capabilities. Paired
       // with acceptJobs false, this is the "presence only" machine.
@@ -252,8 +258,11 @@ function seededPresence(): NodePresenceRow[] {
           repo: 'connorhoehnslalom/orgiq-stream-analytics',
           branch: 'feat/presence-mesh',
           intent: 'wire the presence mesh into the gateway',
-          modelProvider: 'ollama',
-          model: 'qwen2.5-coder:14b',
+          // The shape tools/local-compute-plugin/orgiq-presence.mjs announces
+          // for a plain Claude Code session: `anthropic` unless
+          // CLAUDE_CODE_USE_BEDROCK is set, model from the hook event.
+          modelProvider: 'anthropic',
+          model: 'claude-sonnet-5',
           contextUsed: 0.31,
           memory: { mode: 'pending', pendingOps: 7 },
           startedAt: Date.parse(minutesAgo(52)),

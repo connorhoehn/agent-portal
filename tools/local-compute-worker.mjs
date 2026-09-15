@@ -9,10 +9,13 @@
 // Two inference modes, chosen by whether ANTHROPIC_BASE_URL is set:
 //
 //   anthropic (default) — `claude -p` exactly as the operator would run it at
-//     the terminal: the machine's own Claude Code login, whatever model that
-//     account defaults to (or ANTHROPIC_MODEL), no env override injected. The
-//     run is billed to whoever is signed in on this machine. This is the mode
-//     for a laptop whose local model turned out too weak to be worth the watts.
+//     the terminal: the machine's own Claude Code login, no env override
+//     injected. The run is billed to whoever is signed in on this machine.
+//     This is the mode for a laptop whose local model turned out too weak to
+//     be worth the watts. The model is ALWAYS pinned, to Sonnet by default:
+//     the account's interactive default may be a frontier model, and a fleet
+//     of feature tickets is not what that is for. ANTHROPIC_MODEL may name a
+//     Sonnet or Haiku id; anything else refuses to start.
 //
 //   loopback — a local inference server (llama-server, Ollama, vLLM, anything
 //     speaking the Anthropic Messages API) at ANTHROPIC_BASE_URL. Claude Code
@@ -40,10 +43,11 @@
 //                          workstation's real slot count)
 //   ANTHROPIC_BASE_URL     set it to run in loopback mode (e.g. http://127.0.0.1:8080)
 //   ANTHROPIC_API_KEY      loopback only: any non-empty string (default: "local")
-//   ANTHROPIC_MODEL        the model id passed as --model. Loopback mode needs one
-//                          Claude Code recognizes even though the server ignores it
-//                          (default there: claude-sonnet-4-5-20250929); anthropic
-//                          mode passes none and lets the account's default apply.
+//   ANTHROPIC_MODEL        the model id passed as --model. Anthropic mode:
+//                          default claude-sonnet-5, must match /sonnet|haiku/.
+//                          Loopback mode needs one Claude Code recognizes even
+//                          though the server ignores it (default there:
+//                          claude-sonnet-4-5-20250929).
 //   POLL_INTERVAL_S        how often to poll /claim when idle (default: 10)
 //   REPOS_DIR              where to clone/update repos (default: ~/repos-worker)
 //   ORGIQ_PRESENCE_CONFIG  path of the pairing file to read instead of the
@@ -72,11 +76,18 @@ const POLL_INTERVAL_S = parseInt(process.env.POLL_INTERVAL_S ?? '10', 10) || 10;
 const ANTHROPIC_BASE_URL = process.env.ANTHROPIC_BASE_URL || null;
 const INFERENCE = ANTHROPIC_BASE_URL ? 'loopback' : 'anthropic';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? 'local';
-// `null` means "pass no --model": in anthropic mode the signed-in account's
-// default is the right answer and a hard-coded id would pin every machine to
-// whatever this file said the day it was written.
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL
-  ?? (INFERENCE === 'loopback' ? 'claude-sonnet-4-5-20250929' : null);
+  ?? (INFERENCE === 'loopback' ? 'claude-sonnet-4-5-20250929' : 'claude-sonnet-5');
+// The cost ceiling for work handed to a laptop. Simple tickets on a frontier
+// model (Opus, Fable) burn an order of magnitude more per run for no better
+// outcome, and because this mode bills the operator's own account the number
+// never shows up in the org's allocation where a brake would catch it. The
+// check is on the id string rather than a fixed list so a new Sonnet/Haiku
+// release works without editing this file.
+if (INFERENCE === 'anthropic' && !/sonnet|haiku/i.test(ANTHROPIC_MODEL)) {
+  console.error(`ANTHROPIC_MODEL=${ANTHROPIC_MODEL} is not a Sonnet or Haiku id — local compute runs only those (set ANTHROPIC_MODEL=claude-sonnet-5 or claude-haiku-4-5-20251001)`);
+  process.exit(1);
+}
 
 // The worker self-reports these on every boot. Each can only NARROW what it is
 // offered, never widen: kinds are intersected with the server's allowlist,
@@ -390,11 +401,11 @@ function runTask(config, jobId, cwd, prompt) {
       if (result.output_tokens === undefined && usage.output_tokens !== undefined) {
         result.output_tokens = usage.output_tokens;
       }
-      // Which model actually answered. In anthropic mode nothing was passed as
-      // --model, so the only place the id exists is the result's `modelUsage`
-      // map (one key per model the run touched); the first key is recorded and
-      // shown on the machine's presence card while the run is live.
-      if (!ANTHROPIC_MODEL && result.modelUsage && typeof result.modelUsage === 'object') {
+      // Which model actually answered, from the result's `modelUsage` map (one
+      // key per model the run touched). `--model` names a family alias like
+      // `claude-sonnet-5`; the key here is the dated id that served it, and
+      // that is the one worth recording against the run.
+      if (result.modelUsage && typeof result.modelUsage === 'object') {
         const [served] = Object.keys(result.modelUsage);
         if (served) result.model = served;
       }

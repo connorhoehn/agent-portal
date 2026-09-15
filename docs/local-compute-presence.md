@@ -213,7 +213,7 @@ chrome for a feature you haven't paired).
 - **Dropdown panel**, per session:
   - project + branch (`p-realtime · worktree-local-compute-presence`)
   - intent / current task, one line
-  - model provider chip — `bedrock · nova-pro` vs `ollama · qwen2.5-coder:14b` (the local-model case rendered distinctly; this is the demo moment)
+  - model provider chip — `bedrock · nova-pro` vs `anthropic · claude-sonnet-5` vs `ollama · qwen2.5-coder:14b` (each provider rendered distinctly; the seeded demo machine shows the anthropic case, since the worker runs plain `claude -p` on the operator's own login by default, pinned to Sonnet or Haiku — never a frontier model for ticket work)
   - context meter (fraction, `DotMeter`)
   - memory sync line — `● synced`, `◐ 14 pending`, `○ offline — queuing`, with pull-cursor age on hover
   - footer: node totals + "Open in Computer Lab" deep link (`/admin/devbox?box=local:<nodeId>`), "Manage machines" → settings page (revoke, rename, pairing)
