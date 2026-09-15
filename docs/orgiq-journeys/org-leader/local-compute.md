@@ -1,0 +1,14 @@
+surface: local-compute
+role: org-leader
+user: u-vera (Vera Green) — GET /api/session/me on this surface: sub u-vera, tenant orgiq, role org-leader
+url: /iq/local-compute
+pages: portal/src/pages/local-compute
+audited: 2026-09-15 08:22 local, Chrome window (innerWidth 1692, innerHeight 858), middleware dev:mock (first audit of this surface — it entered the rail with the local-compute work of 2026-09-14 and the pairing flow of 2026-09-15)
+screenshot: local-compute.jpg
+verdict: pass
+console errors: 0
+layout: pass — content col left 224px; breadcrumb "Build › Local compute"; no horizontal scroll (scrollWidth 1692 = innerWidth 1692). Not a list surface for this persona: no machine is paired to u-vera in the seed, so the page is the title, one description line and the empty state ("No paired machines / Pair a machine and it appears here, ready to accept work — the dialog gives you a code and the one command to run on it." with a "Pair a machine" button). When a machine is paired the page becomes three DetailSections — Your machines (a DataTable with an "Accepting work" Switch per row), Hand work to <machine> (the TaskComposer, with a banner while the machine is paused or offline) and Your runs — observed as org-leader after claiming a code
+keyboard: pass — 26 tabbable controls and all 26 accept focus (`.focus()` walk asserting `document.activeElement`); "Pair a machine" opens a Modal whose focus lands inside it, Escape closes it and focus returns to the button
+empty-state: pass — the empty state IS the seeded state for this persona; it names the next action and offers it. The dialog's own quiet states: "Minting a pairing code…" while the POST is in flight, a danger Banner if it fails
+role-gating: org-leader holds ConnectLocalCompute (member.cedar's rationale: pairing is personal, not fleet authority — every node is bound to the pairing session's sub), so "Pair a machine" is present and POST /api/local-compute/pair/start returns 200 with an 8-character code; dispatching work to a machine is a separate question answered per row once one exists. Rail for this role: Initiatives · Budgets · Designs · Promotions · Library · Automate · Distillation · Local compute · Session config · Health · Architecture · Knowledge · Capabilities · Ask · Explore · Scores · Settings
+notes: The full flow was exercised as this role: "Pair a machine" minted 59DSW7K5, the code was claimed with the label vera-macbook (POST /pair/claim → 201 with a node token), and within one poll the page showed the machine row (offline · paused · no models · default kind · 0 sessions) with its "Accepting work" Switch, the "Hand work to vera-macbook" section with the paused banner, "Your runs" empty, "Pair another" beside the table, and the header badge "vera-macbook · 0". POST /api/__mock/reset removed it again.
