@@ -14,6 +14,7 @@ import {
   PageSection, Stack, StatStrip, Toolbar, ToolbarGroup, ToolbarLabel,
   type DataTableColumn,
 } from '@connorhoehnslalom/ui-components/shared';
+import { Link } from 'react-router';
 import { useFetch } from '../../hooks/useFetch';
 import { useCapabilities } from '../../lib/capabilities';
 import { relativeTime } from '../../lib/relativeTime';
@@ -106,7 +107,11 @@ function PublishAction({ bundle, onPublished }: { bundle: SessionBundleDetail; o
   }
 
   if (ready && !can('ManageDevbox')) {
-    return <T className="text-[11px] text-text-tertiary">Publishing this bundle needs Manage devbox.</T>;
+    return (
+      <T className="text-[11px] text-text-tertiary" wrap>
+        Publishing this bundle needs Manage devbox — an SME or HR admin can publish it from this page.
+      </T>
+    );
   }
 
   return (
@@ -125,7 +130,9 @@ function PublishAction({ bundle, onPublished }: { bundle: SessionBundleDetail; o
       )}
       {!staticReason && (
         <T className="text-[11px] text-text-tertiary" wrap>
-          Needs a dry run and a named approver — a real refusal from the server will show here if either is missing.
+          Needs a passing dry run on a box — start one in{' '}
+          <Link to="/admin/devbox" className="text-primary hover:underline">Computer Lab</Link>
+          {' '}— and a named approver; a real refusal from the server will show here if either is missing.
         </T>
       )}
     </Stack>
@@ -169,6 +176,15 @@ export default function SessionConfigPage() {
           />
 
           <section>
+            <Toolbar size="sm" aria-label="Bundled skills">
+              <ToolbarGroup>
+                <ToolbarLabel>Bundled skills</ToolbarLabel>
+              </ToolbarGroup>
+            </Toolbar>
+            <SkillsTable skills={live.skills} />
+          </section>
+
+          <section>
             <Toolbar size="sm" aria-label="Hooks">
               <ToolbarGroup>
                 <ToolbarLabel>Hooks</ToolbarLabel>
@@ -181,15 +197,6 @@ export default function SessionConfigPage() {
                 {live.hooks.map((h, i) => <HookCard key={`${h.event}-${i}`} hook={h} />)}
               </Inline>
             )}
-          </section>
-
-          <section>
-            <Toolbar size="sm" aria-label="Bundled skills">
-              <ToolbarGroup>
-                <ToolbarLabel>Bundled skills</ToolbarLabel>
-              </ToolbarGroup>
-            </Toolbar>
-            <SkillsTable skills={live.skills} />
           </section>
 
           {Object.keys(live.settings).length > 0 && (

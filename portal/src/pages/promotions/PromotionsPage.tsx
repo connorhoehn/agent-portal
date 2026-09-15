@@ -9,7 +9,7 @@
 
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
-import { DetailSection,
+import { DetailSection, Tooltip,
   Button,
   Chip,
   ConfirmDialog,
@@ -297,7 +297,11 @@ export default function PromotionsPage() {
       render: (c) => (
         <Inline gap="xs" wrap={false}>
           <Chip tone={STATUS_TONE[c.status]} size="xs" dot="static">{STATUS_LABEL[c.status]}</Chip>
-          {c.driftedFrom && <Chip tone="warning" size="xs" title={`drifted from ${c.driftedFrom}`}>drifted</Chip>}
+          {c.driftedFrom && (
+            <Tooltip content={`Drift detection sent this back from the skill ${c.driftedFrom} — its recorded steps no longer matched observed behavior.`}>
+              <Chip tone="warning" size="xs">drifted</Chip>
+            </Tooltip>
+          )}
         </Inline>
       ),
     },
